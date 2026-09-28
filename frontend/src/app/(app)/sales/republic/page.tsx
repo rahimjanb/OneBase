@@ -21,7 +21,7 @@ export default async function RepublicPage({ searchParams }: { searchParams: Pro
       period={data.period}
       returnTo="/sales/republic"
     >
-      <GroupPage data={data} sp={sp} query={q} cardsTitle="Региональные менеджеры" cardLink="direction" regionsTitle="Все регионы" />
+      <GroupPage data={data} sp={sp} query={q} regionsTitle="Все регионы" />
     </SalesFrame>
   );
 }

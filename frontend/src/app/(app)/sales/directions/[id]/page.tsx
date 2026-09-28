@@ -28,7 +28,7 @@ export default async function DirectionPage({
       period={data.period}
       returnTo={path}
     >
-      <GroupPage data={data} sp={sp} query={q} cardsTitle="Регионы" cardLink="region" regionsTitle="Сравнение регионов" />
+      <GroupPage data={data} sp={sp} query={q} regionsTitle="Сравнение регионов" />
     </SalesFrame>
   );
 }

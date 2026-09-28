@@ -64,19 +64,35 @@ public sealed class SalesAnalytics
     {
         var agents = AgentsIn(null).ToList();
         return new OverviewView(Period, Kpi(null), agents.Count(a => !IsVacancy(a)), FlagCountsOf(agents),
-            agents.Count(IsVacancy), Unit("republic", "Республика", null, null));
+            agents.Count(IsVacancy), Unit("republic", "Республика", null, null, UnitKinds.Republic));
     }
 
+    /// <summary>
+    /// Республика: карточки РМ/направлений, а регионы, не назначенные ни одному РМ, — отдельными карточками регионов.
+    /// Служебная группа «Без направления» не показывается.
+    /// </summary>
     public GroupView Republic(DateOnly visitsFrom, DateOnly visitsTo)
     {
-        var cards = DirectionGroups()
-            .Select(g => Unit(g.Id, g.Name, g.Subtitle, g.Regions))
+        var groups = DirectionGroups();
+        var directionCards = groups
+            .Where(g => g.Id != NoDirectionId)
+            .Select(g => Unit(g.Id, g.Name, g.Subtitle, g.Regions, UnitKinds.Direction))
+            .ToList();
+        var regionCards = (groups.FirstOrDefault(g => g.Id == NoDirectionId)?.Regions ?? [])
+            .Select(RegionUnit)
+            .Where(c => c.FactKg != 0 || c.PlanKg != null) // регионы без продаж и планов в месяце не показываем
+            .OrderByDescending(c => c.PlanKg ?? 0).ThenByDescending(c => c.FactKg)
             .ToList();
 
         var regions = RegionIds(null).Count(r => r != NoRegionId);
-        var subtitle = $"{cards.Count} {SalesFormat.Plural(cards.Count, "направление", "направления", "направлений")} · " +
-            $"{regions} {SalesFormat.Plural(regions, "регион", "региона", "регионов")}";
-        return Group("Республика", subtitle, null, cards, visitsFrom, visitsTo);
+        var parts = new List<string>();
+        if (directionCards.Count > 0)
+        {
+            parts.Add($"{directionCards.Count} {SalesFormat.Plural(directionCards.Count, "направление", "направления", "направлений")}");
+        }
+
+        parts.Add($"{regions} {SalesFormat.Plural(regions, "регион", "региона", "регионов")}");
+        return Group("Республика", string.Join(" · ", parts), null, [.. directionCards, .. regionCards], visitsFrom, visitsTo);
     }
 
     public GroupView Direction(string id, DateOnly visitsFrom, DateOnly visitsTo)
@@ -382,7 +398,7 @@ public sealed class SalesAnalytics
 
     private UnitRow RegionUnit(Guid id) => Unit(id.ToString(), _regions[id].Name, DirectionName(id), [id]);
 
-    private UnitRow Unit(string id, string name, string? subtitle, IReadOnlyCollection<Guid>? scope)
+    private UnitRow Unit(string id, string name, string? subtitle, IReadOnlyCollection<Guid>? scope, string kind = UnitKinds.Region)
     {
         var set = scope?.ToHashSet();
         var kpi = Kpi(set);
@@ -391,7 +407,7 @@ public sealed class SalesAnalytics
 
         return new UnitRow(id, name, subtitle, kpi.PlanKg, kpi.FactKg, kpi.Execution, kpi.ForecastKg, kpi.ForecastExecution,
             kpi.Revenue, kpi.Akb, kpi.Conversion.Value, kpi.VisitsWithoutOrder, agents.Count(a => !IsVacancy(a)),
-            regionNames.Count, regionNames, FlagCountsOf(agents), kpi.PlanFactKg);
+            regionNames.Count, regionNames, FlagCountsOf(agents), kpi.PlanFactKg, kind);
     }
 
     private UnassignedFact Unassigned(IReadOnlySet<Guid>? scope)

@@ -3,24 +3,39 @@ import { VisitCalendarTable } from "./calendars";
 import { NotBoughtTable, RegionsTable, SameDaysTable } from "./tables";
 import { monthGenitive, monthName } from "@/lib/sales/format";
 import { param, withQuery, type SalesSearchParams } from "@/lib/sales/query";
-import type { GroupView } from "@/lib/sales/types";
+import type { GroupView, UnitRow } from "@/lib/sales/types";
 
 const NO_REGION = "00000000-0000-0000-0000-000000000000";
+
+function cardHref(card: UnitRow, query: string): string | null {
+  if (card.kind === "direction") return withQuery(`/sales/directions/${card.id}`, query);
+  return card.id === NO_REGION ? null : withQuery(`/sales/regions/${card.id}`, query);
+}
+
+function Cards({ title, cards, query }: { title: string; cards: UnitRow[]; query: string }) {
+  if (cards.length === 0) return null;
+  return (
+    <>
+      <h2 className="mt-8 text-lg font-semibold text-ink">{title}</h2>
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {cards.map((c) => (
+          <UnitCard key={c.id} unit={c} href={cardHref(c, query)} />
+        ))}
+      </div>
+    </>
+  );
+}
 
 /** Содержимое уровней «Республика» и «РМ / направление». */
 export function GroupPage({
   data,
   sp,
   query,
-  cardsTitle,
-  cardLink,
   regionsTitle,
 }: {
   data: GroupView;
   sp: SalesSearchParams;
   query: string;
-  cardsTitle: string;
-  cardLink: "direction" | "region";
   regionsTitle: string;
 }) {
   const { period } = data;
@@ -29,27 +44,16 @@ export function GroupPage({
   const prevMonth = period.month === 1 ? 12 : period.month - 1;
   const cutoffDay = Number(period.previousCutoff.slice(8, 10));
 
+  const directions = data.cards.filter((c) => c.kind === "direction");
+  const regions = data.cards.filter((c) => c.kind !== "direction");
+
   return (
     <>
       <KpiRow kpi={data.kpi} period={period} />
       <UnassignedWarning kgValue={data.unassigned.kg} share={data.unassigned.share} />
 
-      <h2 className="mt-8 text-lg font-semibold text-ink">{cardsTitle}</h2>
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {data.cards.map((c) => (
-          <UnitCard
-            key={c.id}
-            unit={c}
-            href={
-              cardLink === "direction"
-                ? withQuery(`/sales/directions/${c.id}`, query)
-                : c.id === NO_REGION
-                  ? null
-                  : withQuery(`/sales/regions/${c.id}`, query)
-            }
-          />
-        ))}
-      </div>
+      <Cards title="Региональные менеджеры" cards={directions} query={query} />
+      <Cards title={directions.length > 0 ? "Регионы без РМ" : "Регионы"} cards={regions} query={query} />
 
       <RegionsTable
         rows={data.regions}

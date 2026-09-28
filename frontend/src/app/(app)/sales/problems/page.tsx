@@ -30,22 +30,25 @@ export default async function ProblemsPage({ searchParams }: { searchParams: Pro
   const direction = param(sp, "direction") ?? "";
   const criterion = param(sp, "criterion") ?? "";
   const vacancies = param(sp, "vacancies") === "true";
+  const directions = republic.cards.filter((c) => c.kind === "direction");
 
   return (
     <SalesFrame title="Проблемные агенты" subtitle="Кого проверить в первую очередь — по тяжести замечаний" tab="problems" sp={sp} period={data.period} returnTo="/sales/problems">
       <form method="get" className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-surface p-4">
         {["year", "month", "plan"].map((k) => param(sp, k) && <input key={k} type="hidden" name={k} value={param(sp, k)} />)}
-        <label className="block">
-          <span className="mb-1 block text-xs text-ink-2">РМ / направление</span>
-          <select name="direction" defaultValue={direction} className={select}>
-            <option value="">Все</option>
-            {republic.cards.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {directions.length > 0 && (
+          <label className="block">
+            <span className="mb-1 block text-xs text-ink-2">РМ / направление</span>
+            <select name="direction" defaultValue={direction} className={select}>
+              <option value="">Все</option>
+              {directions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="block">
           <span className="mb-1 block text-xs text-ink-2">Критерий</span>
           <select name="criterion" defaultValue={criterion} className={select}>

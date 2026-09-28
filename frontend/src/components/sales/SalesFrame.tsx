@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChartColumn, Target, TriangleAlert } from "lucide-react";
 import { PageBody, PageHeader, type Crumb } from "@/components/shell/PageHeader";
 import { SalesToolbar } from "./SalesToolbar";
 import { SyncButton } from "./SyncButton";
@@ -10,11 +10,11 @@ import type { Period, SalesMonth, SyncStatus } from "@/lib/sales/types";
 
 export type SalesTab = "analytics" | "plans" | "problems" | "setup";
 
-const tabs: { key: SalesTab; label: string; href: string }[] = [
-  { key: "analytics", label: "Аналитика", href: "/sales" },
-  { key: "plans", label: "Планы", href: "/sales/plans" },
-  { key: "problems", label: "Проблемные агенты", href: "/sales/problems" },
-  { key: "setup", label: "Настройки", href: "/sales/setup" },
+/** Разделы продаж — кнопки, каждая открывает свою страницу. Настройки продаж — в «Настройки → Интеграции → Linko». */
+const tabs: { key: SalesTab; label: string; href: string; icon: typeof ChartColumn }[] = [
+  { key: "analytics", label: "Аналитика", href: "/sales", icon: ChartColumn },
+  { key: "plans", label: "Планы", href: "/sales/plans", icon: Target },
+  { key: "problems", label: "Проблемные агенты", href: "/sales/problems", icon: TriangleAlert },
 ];
 
 /** Чип «данные по …» — время последней успешной синхронизации с Linko. */
@@ -80,16 +80,25 @@ export async function SalesFrame({
       />
       <PageBody>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
-          <nav className="flex gap-1 overflow-x-auto" aria-label="Разделы продаж">
-            {tabs.map((t) => (
-              <Link
-                key={t.key}
-                href={query ? `${t.href}?${query}` : t.href}
-                className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${tab === t.key ? "bg-accent-soft font-semibold text-accent-strong" : "text-ink-2 hover:bg-muted"}`}
-              >
-                {t.label}
-              </Link>
-            ))}
+          <nav className="flex flex-wrap gap-2" aria-label="Разделы продаж">
+            {tabs.map((t) => {
+              const active = tab === t.key;
+              return (
+                <Link
+                  key={t.key}
+                  href={query ? `${t.href}?${query}` : t.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border px-4 text-sm font-medium shadow-sm transition-colors ${
+                    active
+                      ? "border-accent bg-accent text-white hover:bg-accent-strong"
+                      : "border-line bg-surface text-ink hover:border-accent/40 hover:bg-muted"
+                  }`}
+                >
+                  <t.icon className="size-4" />
+                  {t.label}
+                </Link>
+              );
+            })}
           </nav>
           <div className="flex flex-wrap items-center gap-2">
             {tab !== "setup" && <SalesToolbar months={months} year={year} month={month} plan={param(sp, "plan") ?? "Rop"} />}

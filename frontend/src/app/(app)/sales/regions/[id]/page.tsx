@@ -27,9 +27,11 @@ export default async function RegionPage({
   const prevMonth = period.month === 1 ? 12 : period.month - 1;
   const cutoffDay = Number(period.previousCutoff.slice(8, 10));
 
+  // Регион без РМ: крошки «Республика → Регион», без служебной группы «Без направления».
+  const republic = { label: "Республика", href: withQuery("/sales/republic", q) };
   const parent = data.directionId
     ? { label: data.directionName ?? "Направление", href: withQuery(`/sales/directions/${data.directionId}`, q) }
-    : { label: "Без направления", href: withQuery("/sales/directions/none", q) };
+    : null;
 
   const people = [data.supervisor && `СВР: ${data.supervisor}`, data.dealer && `дилер: ${data.dealer}`].filter(Boolean).join(", ");
 
@@ -37,8 +39,8 @@ export default async function RegionPage({
     <SalesFrame
       title={data.name}
       subtitle={people || "СВР и дилер не указаны — их можно задать в настройках продаж"}
-      crumbs={[{ label: "Республика", href: withQuery("/sales/republic", q) }, parent, { label: data.name }]}
-      back={parent.href}
+      crumbs={[republic, ...(parent ? [parent] : []), { label: data.name }]}
+      back={(parent ?? republic).href}
       sp={sp}
       period={period}
       returnTo={path}

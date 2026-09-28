@@ -107,6 +107,7 @@ export type UnitRow = {
   regionNames: string[];
   flags: FlagCounts;
   planFactKg: number | null;
+  kind: "republic" | "direction" | "region";
 };
 
 export type VisitCalendarRow = {

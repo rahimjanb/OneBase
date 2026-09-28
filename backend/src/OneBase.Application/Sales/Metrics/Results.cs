@@ -55,7 +55,15 @@ public sealed record UnitRow(
     int RegionCount,
     IReadOnlyList<string> RegionNames,
     FlagCounts Flags,
-    decimal? PlanFactKg = null);
+    decimal? PlanFactKg = null,
+    string Kind = UnitKinds.Region);
+
+public static class UnitKinds
+{
+    public const string Republic = "republic";
+    public const string Direction = "direction";
+    public const string Region = "region";
+}
 
 public sealed record UnassignedFact(decimal Kg, decimal? Share);
 

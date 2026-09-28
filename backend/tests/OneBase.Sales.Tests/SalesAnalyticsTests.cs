@@ -15,7 +15,8 @@ public class SalesAnalyticsTests
     private static MonthData Data(
         IReadOnlyList<SaleLine>? previous = null,
         IReadOnlyList<PlanRow>? plans = null,
-        IReadOnlyList<PlanRow>? revenuePlans = null) => new()
+        IReadOnlyList<PlanRow>? revenuePlans = null,
+        IReadOnlyList<DirectionInfo>? directions = null) => new()
     {
         Year = 2026,
         Month = 9,
@@ -42,7 +43,7 @@ public class SalesAnalyticsTests
             [3] = new(3, "Агент 3", true, South, false, true),
         },
         Regions = [new RegionInfo(North, 101, "Север", Rm1, null, null), new RegionInfo(South, 102, "Юг", Rm1, null, null)],
-        Directions = [new DirectionInfo(Rm1, "РМ 1", false, null, null, 1)],
+        Directions = directions ?? [new DirectionInfo(Rm1, "РМ 1", false, null, null, 1)],
         Markets = new Dictionary<long, MarketInfo>(),
         Categories = new Dictionary<long, string> { [1] = "Печенье" },
         MarketAssignments = [],
@@ -70,6 +71,25 @@ public class SalesAnalyticsTests
         Assert.Equal(25m, region.Unassigned.Kg);
         Assert.Equal(region.Kpi.FactKg, region.Team.Sum(t => t.FactKg) + region.Unassigned.Kg);
         Assert.Equal(175m / 300m, region.Kpi.Execution);
+    }
+
+    [Fact]
+    public void Republic_shows_regions_directly_when_no_directions_are_set_up()
+    {
+        var republic = new SalesAnalytics(Data(directions: [])).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
+
+        Assert.All(republic.Cards, c => Assert.Equal(UnitKinds.Region, c.Kind));
+        Assert.DoesNotContain(republic.Cards, c => c.Name == "Без направления");
+        Assert.Contains(republic.Cards, c => c.Id == North.ToString());
+    }
+
+    [Fact]
+    public void Republic_shows_direction_cards_when_regions_are_assigned()
+    {
+        var republic = new SalesAnalytics(Data()).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
+
+        var card = Assert.Single(republic.Cards, c => c.Kind == UnitKinds.Direction);
+        Assert.Equal("РМ 1", card.Name);
     }
 
     [Fact]

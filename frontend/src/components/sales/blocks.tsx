@@ -86,7 +86,7 @@ export function UnitCard({ unit, href }: { unit: UnitRow; href: string | null })
           <div className="font-semibold text-ink">{unit.name}</div>
           <div className="mt-0.5 text-xs text-ink-3">
             {unit.subtitle ? `${unit.subtitle} · ` : ""}
-            {unit.regionCount > 0 ? `${num(unit.regionCount)} рег. · ` : ""}
+            {unit.kind !== "region" && unit.regionCount > 0 ? `${num(unit.regionCount)} рег. · ` : ""}
             {num(unit.agents)} ТП
           </div>
         </div>
