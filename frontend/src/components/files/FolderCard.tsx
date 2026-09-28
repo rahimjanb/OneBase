@@ -18,7 +18,7 @@ export function FolderCard({
     <div className="relative">
       <Link
         href={href}
-        className={`block rounded-xl border border-line bg-white p-4 pr-10 transition-colors hover:border-accent/40 ${compact ? "" : "min-h-[88px]"}`}
+        className={`block rounded-xl border border-line bg-surface p-4 pr-10 transition-colors hover:border-accent/40 ${compact ? "" : "min-h-[88px]"}`}
       >
         <div className="flex items-start gap-3">
           <FolderIcon className="mt-px size-5 shrink-0 text-warn" strokeWidth={1.75} />

@@ -63,7 +63,7 @@ export default function DashboardPage() {
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <button
             type="button"
-            className="flex min-h-[64px] items-center justify-center gap-2 rounded-xl border border-line bg-white/60 text-sm font-medium text-accent-strong transition-colors hover:border-accent/40 hover:bg-white xl:self-start"
+            className="flex min-h-[64px] items-center justify-center gap-2 rounded-xl border border-line bg-surface/60 text-sm font-medium text-accent-strong transition-colors hover:border-accent/40 hover:bg-surface xl:self-start"
           >
             <Plus className="size-4" />
             Добавить отдел

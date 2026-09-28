@@ -105,14 +105,14 @@ export function FolderBrowser({
     <>
       {/* Адресная строка и поиск */}
       <div className="flex flex-wrap gap-3">
-        <div className="flex h-11 min-w-0 flex-1 items-center gap-1 rounded-lg border border-line bg-white px-2">
-          <button type="button" aria-label="Назад" onClick={() => router.back()} className="grid size-8 place-items-center rounded-md text-ink-3 hover:bg-slate-50 hover:text-ink">
+        <div className="flex h-11 min-w-0 flex-1 items-center gap-1 rounded-lg border border-line bg-surface px-2">
+          <button type="button" aria-label="Назад" onClick={() => router.back()} className="grid size-8 place-items-center rounded-md text-ink-3 hover:bg-muted hover:text-ink">
             <ArrowLeft className="size-4" />
           </button>
-          <button type="button" aria-label="Вперёд" onClick={() => router.forward()} className="grid size-8 place-items-center rounded-md text-ink-3 hover:bg-slate-50 hover:text-ink">
+          <button type="button" aria-label="Вперёд" onClick={() => router.forward()} className="grid size-8 place-items-center rounded-md text-ink-3 hover:bg-muted hover:text-ink">
             <ArrowRight className="size-4" />
           </button>
-          <Link href={parentHref} aria-label="Вверх" className="grid size-8 place-items-center rounded-md text-ink-3 hover:bg-slate-50 hover:text-ink">
+          <Link href={parentHref} aria-label="Вверх" className="grid size-8 place-items-center rounded-md text-ink-3 hover:bg-muted hover:text-ink">
             <ArrowUp className="size-4" />
           </Link>
           <nav className="ml-3 flex min-w-0 items-center gap-1.5 overflow-x-auto text-sm text-ink">
@@ -209,7 +209,7 @@ export function FolderBrowser({
                   setMenuId(file.id);
                 }}
                 className={`relative grid ${columns} cursor-default items-center gap-4 rounded-lg border-b border-line px-3 py-3.5 text-sm last:border-b-0 ${
-                  isSelected ? "bg-accent-soft/70" : "hover:bg-slate-50"
+                  isSelected ? "bg-accent-soft/70" : "hover:bg-muted"
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-3">
@@ -230,7 +230,7 @@ export function FolderBrowser({
                     setSelectedId(file.id);
                     setMenuId(menuId === file.id ? null : file.id);
                   }}
-                  className="grid size-8 place-items-center justify-self-end rounded-md text-ink-3 hover:bg-white hover:text-ink"
+                  className="grid size-8 place-items-center justify-self-end rounded-md text-ink-3 hover:bg-surface hover:text-ink"
                 >
                   <Ellipsis className="size-4" />
                 </button>
@@ -240,7 +240,7 @@ export function FolderBrowser({
                     ref={menuRef}
                     role="menu"
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute right-12 top-10 z-30 w-52 rounded-xl border border-line bg-white py-1.5 shadow-xl"
+                    className="absolute right-12 top-10 z-30 w-52 rounded-xl border border-line bg-surface py-1.5 shadow-xl"
                   >
                     {menuItems.map((item) => (
                       <div key={item.label}>
@@ -249,7 +249,7 @@ export function FolderBrowser({
                           type="button"
                           role="menuitem"
                           onClick={() => runMenu(item, file)}
-                          className={`block w-full px-4 py-2 text-left text-sm hover:bg-slate-50 ${item.danger ? "text-bad" : "text-ink"}`}
+                          className={`block w-full px-4 py-2 text-left text-sm hover:bg-muted ${item.danger ? "text-bad" : "text-ink"}`}
                         >
                           {item.label}
                         </button>

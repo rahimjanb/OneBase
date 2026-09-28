@@ -73,7 +73,10 @@ public sealed class SalesAnalytics
             .Select(g => Unit(g.Id, g.Name, g.Subtitle, g.Regions))
             .ToList();
 
-        return Group("Республика", $"{cards.Count} направлений · {RegionIds(null).Count(r => r != NoRegionId)} регионов", null, cards, visitsFrom, visitsTo);
+        var regions = RegionIds(null).Count(r => r != NoRegionId);
+        var subtitle = $"{cards.Count} {SalesFormat.Plural(cards.Count, "направление", "направления", "направлений")} · " +
+            $"{regions} {SalesFormat.Plural(regions, "регион", "региона", "регионов")}";
+        return Group("Республика", subtitle, null, cards, visitsFrom, visitsTo);
     }
 
     public GroupView Direction(string id, DateOnly visitsFrom, DateOnly visitsTo)

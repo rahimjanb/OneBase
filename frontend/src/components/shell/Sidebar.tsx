@@ -11,6 +11,7 @@ import {
   Rows3,
   Settings,
   Sparkle,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 const workspace: NavItem[] = [
   { href: "/", label: "Dashboard", icon: Columns2 },
   { href: "/departments", label: "Отделы", icon: Grid3x3 },
+  { href: "/sales", label: "Продажи", icon: TrendingUp },
   { href: "/tasks", label: "Задачи", icon: Check },
   { href: "/reports", label: "Отчёты", icon: Rows3 },
   { href: "/base", label: "Общая база", icon: CircleDot },

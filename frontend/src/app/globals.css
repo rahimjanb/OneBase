@@ -9,6 +9,8 @@
   --color-sidebar-muted: #7f8ba3;
 
   --color-page: #f6f8fb;
+  --color-surface: #ffffff;
+  --color-muted: #f1f4f8;
   --color-line: #e3e8ef;
   --color-ink: #111b2e;
   --color-ink-2: #56657d;
@@ -19,8 +21,58 @@
   --color-accent-soft: #eaf1ff;
 
   --color-ok: #1f9d6b;
+  --color-ok-soft: #e6f6ef;
   --color-warn: #e0922f;
+  --color-warn-soft: #fdf2e3;
   --color-bad: #dc4c4c;
+  --color-bad-soft: #fdecec;
+}
+
+/* Тёмная тема: явный выбор (data-theme) или системная, если выбор не сделан. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-sidebar: #0b1220;
+  --color-sidebar-active: #1b2742;
+  --color-page: #0e1422;
+  --color-surface: #151d2e;
+  --color-muted: #1c2538;
+  --color-line: #27324a;
+  --color-ink: #e7ebf3;
+  --color-ink-2: #a7b2c6;
+  --color-ink-3: #7a869d;
+  --color-accent: #5b8cff;
+  --color-accent-strong: #7aa2ff;
+  --color-accent-soft: #1b2a4d;
+  --color-ok: #3cc28a;
+  --color-ok-soft: #13301f;
+  --color-warn: #f0a94a;
+  --color-warn-soft: #3a2a12;
+  --color-bad: #f07070;
+  --color-bad-soft: #3a1818;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-sidebar: #0b1220;
+    --color-sidebar-active: #1b2742;
+    --color-page: #0e1422;
+    --color-surface: #151d2e;
+    --color-muted: #1c2538;
+    --color-line: #27324a;
+    --color-ink: #e7ebf3;
+    --color-ink-2: #a7b2c6;
+    --color-ink-3: #7a869d;
+    --color-accent: #5b8cff;
+    --color-accent-strong: #7aa2ff;
+    --color-accent-soft: #1b2a4d;
+    --color-ok: #3cc28a;
+    --color-ok-soft: #13301f;
+    --color-warn: #f0a94a;
+    --color-warn-soft: #3a2a12;
+    --color-bad: #f07070;
+    --color-bad-soft: #3a1818;
+  }
 }
 
 :root {
@@ -29,4 +81,9 @@
 
 body {
   @apply bg-page text-ink antialiased;
+}
+
+/* Штриховка для шкал без плана. */
+.hatched {
+  background-image: repeating-linear-gradient(-45deg, var(--color-line) 0 4px, transparent 4px 8px);
 }

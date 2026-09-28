@@ -1,0 +1,40 @@
+"use server";
+
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { API_URL, SESSION_COOKIE } from "@/lib/server-api";
+
+export type LoginState = { error?: string };
+
+export async function login(_: LoginState, form: FormData): Promise<LoginState> {
+  const email = String(form.get("email") ?? "").trim();
+  const password = String(form.get("password") ?? "");
+  const next = String(form.get("next") ?? "/sales");
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+      cache: "no-store",
+    });
+  } catch {
+    return { error: "Сервер OneBase недоступен. Попробуйте позже." };
+  }
+
+  if (response.status === 401) return { error: "Неверный email или пароль." };
+  if (response.status === 429) return { error: "Слишком много попыток. Подождите минуту." };
+  if (!response.ok) return { error: `Ошибка входа (${response.status}).` };
+
+  const { accessToken, expiresAt } = (await response.json()) as { accessToken: string; expiresAt: string };
+  (await cookies()).set(SESSION_COOKIE, accessToken, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    expires: new Date(expiresAt),
+  });
+
+  redirect(next.startsWith("/") ? next : "/sales");
+}

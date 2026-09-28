@@ -11,18 +11,18 @@ export function Button({ variant = "outline", size = "md", className = "", ...pr
   const sizes = { sm: "h-8 px-3 text-xs", md: "h-9 px-4 text-sm" };
   const variants = {
     primary: "bg-accent text-white hover:bg-accent-strong",
-    outline: "border border-line bg-white text-ink hover:bg-slate-50",
+    outline: "border border-line bg-surface text-ink hover:bg-muted",
   };
   return <button type="button" className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} {...props} />;
 }
 
 export function Card({ className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={`rounded-xl border border-line bg-white ${className}`} {...props} />;
+  return <div className={`rounded-xl border border-line bg-surface ${className}`} {...props} />;
 }
 
 export function ProgressBar({ value, tone = "accent" }: { value: number; tone?: "accent" | "warn" }) {
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
       <div
         className={`h-full rounded-full ${tone === "warn" ? "bg-warn" : "bg-accent"}`}
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
@@ -56,7 +56,7 @@ export function SearchInput({
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
       <input
         type="search"
-        className="h-10 w-full rounded-lg border border-line bg-white pl-9 pr-3 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="h-10 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         {...props}
       />
     </label>
@@ -68,7 +68,7 @@ export function SelectField({ label, options }: { label: string; options: string
     <label className="block">
       <span className="mb-2 block text-sm text-ink-2">{label}</span>
       <span className="relative block">
-        <select className="h-11 w-full min-w-[160px] appearance-none rounded-lg border border-line bg-white pl-3.5 pr-9 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20">
+        <select className="h-11 w-full min-w-[160px] appearance-none rounded-lg border border-line bg-surface pl-3.5 pr-9 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20">
           {options.map((o) => (
             <option key={o}>{o}</option>
           ))}
@@ -101,7 +101,7 @@ export function SectionTitle({
 
 export function EmptyState({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-line bg-white/60 px-6 py-10 text-center text-sm text-ink-3">
+    <div className="rounded-xl border border-dashed border-line bg-surface/60 px-6 py-10 text-center text-sm text-ink-3">
       {children}
     </div>
   );

@@ -29,7 +29,7 @@ export default function AiPage() {
             <Card key={agent.code} className="p-5">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">{agent.name}</span>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-ink-2">{agent.code}</span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-ink-2">{agent.code}</span>
               </div>
               <p className="mt-2 text-sm text-ink-2">{agent.scope}</p>
             </Card>

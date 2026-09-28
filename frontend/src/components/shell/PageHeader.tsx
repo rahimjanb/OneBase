@@ -1,19 +1,21 @@
 import Link from "next/link";
 import { Bell, ChevronDown } from "lucide-react";
 import { currentUser } from "@/lib/demo-data";
+import { ThemeToggle } from "./ThemeToggle";
 
 export type Crumb = { label: string; href?: string };
 
 function UserBar() {
   return (
-    <div className="flex shrink-0 items-center gap-4">
+    <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+      <ThemeToggle />
       <button
         type="button"
         aria-label="Уведомления"
-        className="relative grid size-9 place-items-center rounded-full border border-line bg-white text-ink-2 hover:text-ink"
+        className="relative grid size-9 place-items-center rounded-full border border-line bg-surface text-ink-2 hover:text-ink"
       >
         <Bell className="size-4" strokeWidth={1.75} />
-        <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-accent ring-2 ring-white" />
+        <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-accent ring-2 ring-surface" />
       </button>
       <button type="button" className="flex items-center gap-3 text-left">
         <span className="grid size-10 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent-strong">

@@ -84,7 +84,7 @@ export function UploadToast({ upload }: { upload: UploadState | null }) {
   return (
     <div
       role="status"
-      className="fixed bottom-6 right-6 z-40 w-[calc(100%-3rem)] max-w-xs rounded-xl border border-line bg-white p-4 shadow-lg"
+      className="fixed bottom-6 right-6 z-40 w-[calc(100%-3rem)] max-w-xs rounded-xl border border-line bg-surface p-4 shadow-lg"
     >
       <div className="text-sm font-semibold text-ink">
         {done ? "Файл загружен" : `Загрузка файлов · ${upload.progress}%`}
