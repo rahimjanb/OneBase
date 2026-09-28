@@ -94,10 +94,31 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .Where(p => p.Year == year && p.Kind == kind)
             .Select(p => new PlanRow(p.RegionId, null, p.Month, p.CategoryId, p.PlanKg))
             .ToListAsync(ct);
-        var agentPlans = await db.SalesAgentPlans.AsNoTracking()
-            .Where(p => p.Year == year && p.Month == month && p.Kind == kind)
+        var manualAgentPlans = await db.SalesAgentPlans.AsNoTracking()
+            .Where(p => p.Year == year && p.Kind == kind)
             .Select(p => new PlanRow(null, p.LinkoUserId, p.Month, p.CategoryId, p.PlanKg))
             .ToListAsync(ct);
+
+        // Планы агентов из Linko (staff_balance) — это план РОП. Ручной план OneBase на тот же месяц важнее.
+        var staff = kind == PlanKind.Rop
+            ? await db.SalesStaffPlans.AsNoTracking().Where(p => p.Year == year).ToListAsync(ct)
+            : [];
+        var manualKeys = manualAgentPlans.Select(p => (p.AgentId, p.Month)).ToHashSet();
+        var staffIds = staff.Select(s => s.LinkoUserId).Distinct().ToList();
+        var excludedStaff = (await db.LinkoUsers.AsNoTracking()
+                .Where(u => staffIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.JobName })
+                .ToListAsync(ct))
+            .Where(u => u.JobName is { } job && options.StaffPlanExcludeJobs.Any(x => job.Contains(x, StringComparison.OrdinalIgnoreCase)))
+            .Select(u => u.Id)
+            .ToHashSet();
+        var autoAgentPlans = staff
+            .Where(s => s.PlanType == StaffPlanTypes.SalesWeight && !excludedStaff.Contains(s.LinkoUserId))
+            .GroupBy(s => (AgentId: (long?)s.LinkoUserId, s.Month))
+            .Where(g => !manualKeys.Contains(g.Key))
+            .Select(g => new PlanRow(null, g.Key.AgentId, g.Key.Month, null, g.Sum(s => s.PlanAmount)));
+        var yearAgentPlans = manualAgentPlans.Concat(autoAgentPlans).ToList();
+        var agentPlans = yearAgentPlans.Where(p => p.Month == month).ToList();
 
         var profiles = await db.SalesAgentProfiles.AsNoTracking().ToDictionaryAsync(p => p.LinkoUserId, ct);
         var users = await db.LinkoUsers.AsNoTracking().ToListAsync(ct);
@@ -116,6 +137,11 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             History = await HistoryAsync(historyFrom, monthEnd, ct),
             Plans = regionPlans.Where(p => p.Month == month).Concat(agentPlans).ToList(),
             YearRegionPlans = regionPlans,
+            YearAgentPlans = yearAgentPlans,
+            Indicators = staff
+                .Where(s => s.Month == month)
+                .Select(s => new StaffIndicator(s.LinkoUserId, s.IndicatorId, CleanIndicatorName(s.IndicatorName), s.PlanType, s.PlanAmount, s.FactAmount))
+                .ToList(),
             Agents = users.ToDictionary(u => u.Id, u =>
             {
                 var profile = profiles.GetValueOrDefault(u.Id);
@@ -195,6 +221,13 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         return sales.Concat(returns).ToList();
     }
+
+    private static readonly System.Text.RegularExpressions.Regex MonthPrefix = new(
+        "^(январь|февраль|март|апрель|май|июнь|июль|август|сентябрь|октябрь|ноябрь|декабрь)\\s+",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>«Сентябрь Кекс Коканд / Бекобод» → «Кекс Коканд / Бекобод»: месяц и так выбран в фильтре.</summary>
+    internal static string CleanIndicatorName(string name) => MonthPrefix.Replace(name.Trim(), string.Empty);
 
     private static VisitStatus ParseStatus(string status) => status switch
     {

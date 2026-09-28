@@ -39,6 +39,9 @@ public sealed record MonthlyFact(int Year, int Month, long? AgentId, long? Branc
 
 public sealed record PlanRow(Guid? RegionId, long? AgentId, int Month, long? CategoryId, decimal PlanKg);
 
+/// <summary>KPI-показатель агента из Linko (staff_balance): план и факт так, как их считает Linko.</summary>
+public sealed record StaffIndicator(long AgentId, long IndicatorId, string Name, string PlanType, decimal Plan, decimal Fact);
+
 public sealed record SalesTargets(decimal Conversion, decimal RevenuePerOutlet, decimal AkbPerAgent, decimal CategoriesPerOutlet);
 
 /// <summary>Всё, что нужно для расчёта одного месяца.</summary>
@@ -67,6 +70,12 @@ public sealed class MonthData
 
     /// <summary>Планы регионов на весь год выбранного месяца (для графика по месяцам).</summary>
     public required IReadOnlyList<PlanRow> YearRegionPlans { get; init; }
+
+    /// <summary>Итоговые планы агентов на весь год (ручные или из Linko) — план региона без ручного = сумма планов его агентов.</summary>
+    public IReadOnlyList<PlanRow> YearAgentPlans { get; init; } = [];
+
+    /// <summary>KPI-показатели агентов из Linko за выбранный месяц.</summary>
+    public IReadOnlyList<StaffIndicator> Indicators { get; init; } = [];
 
     public required IReadOnlyDictionary<long, AgentInfo> Agents { get; init; }
     public required IReadOnlyList<RegionInfo> Regions { get; init; }

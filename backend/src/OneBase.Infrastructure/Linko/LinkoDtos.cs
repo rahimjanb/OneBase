@@ -103,6 +103,27 @@ public sealed record LinkoVisitDto(
     bool? IsInPlan,
     DateTime Date);
 
+// ---------- API планов (staff_balance) ----------
+// Читаются только нужные поля: зарплата, бонусы и контакты сотрудников не загружаются.
+
+public sealed record LinkoStaffLastDate(DateTime? LastDate);
+
+public sealed record LinkoStaffUserRef(long Id);
+
+public sealed record LinkoStaffIndicator(long Id, string? Name, string? PlanType);
+
+public sealed record LinkoStaffBalanceDto(
+    LinkoStaffUserRef? User,
+    int? Level,
+    decimal? PlanAmount,
+    decimal? SalesAmount,
+    decimal? ReturnAmount,
+    decimal? FactAmount,
+    decimal? PlanForecast,
+    decimal? FactPercent,
+    decimal? ForecastPercent,
+    LinkoStaffIndicator? PerformanceIndicator);
+
 public sealed record LinkoKpiPlanDto(
     long Id,
     LinkoRef? User,

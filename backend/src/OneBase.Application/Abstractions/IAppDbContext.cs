@@ -42,6 +42,7 @@ public interface IAppDbContext
     DbSet<SalesRegionPlan> SalesRegionPlans { get; }
     DbSet<SalesAgentPlan> SalesAgentPlans { get; }
     DbSet<SalesTarget> SalesTargets { get; }
+    DbSet<SalesStaffPlan> SalesStaffPlans { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

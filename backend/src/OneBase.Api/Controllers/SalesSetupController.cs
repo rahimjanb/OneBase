@@ -13,7 +13,7 @@ namespace OneBase.Api.Controllers;
 [Route("api/sales/setup")]
 [HasPermission(Permissions.SalesRead)]
 [InvalidateSalesCache]
-public sealed class SalesSetupController(IAppDbContext db, ISalesPlanImporter importer) : ControllerBase
+public sealed class SalesSetupController(IAppDbContext db, ISalesPlanImporter importer, SalesOptions salesOptions) : ControllerBase
 {
     public sealed record DirectionInput(string Name, DirectionKind Kind, string? ManagerName, string? Description, int SortOrder);
 
@@ -24,6 +24,8 @@ public sealed class SalesSetupController(IAppDbContext db, ISalesPlanImporter im
     public sealed record RegionPlanInput(Guid RegionId, PlanKind Kind, int Year, int Month, long? CategoryId, decimal? PlanKg);
 
     public sealed record AgentPlanInput(long LinkoUserId, PlanKind Kind, int Year, int Month, long? CategoryId, decimal? PlanKg);
+
+    public sealed record AutoPlan(long LinkoUserId, decimal PlanKg, int Indicators);
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct)
@@ -191,7 +193,26 @@ public sealed class SalesSetupController(IAppDbContext db, ISalesPlanImporter im
                 .Where(p => p.Year == year && p.Month == month && p.Kind == kind)
                 .Select(p => new { p.Id, p.LinkoUserId, p.CategoryId, p.PlanKg })
                 .ToListAsync(ct),
+            // Планы агентов из Linko (staff_balance, кг) — действуют, если в OneBase не задан ручной.
+            AutoAgentPlans = kind != PlanKind.Rop ? [] : await AutoAgentPlansAsync(year, month, ct),
         });
+    }
+
+    /// <summary>Автопланы ТП из Linko без супервайзеров (их план — план команды, см. Sales:StaffPlanExcludeJobs).</summary>
+    private async Task<List<AutoPlan>> AutoAgentPlansAsync(int year, int month, CancellationToken ct)
+    {
+        var plans = await db.SalesStaffPlans.AsNoTracking()
+            .Where(p => p.Year == year && p.Month == month && p.PlanType == StaffPlanTypes.SalesWeight)
+            .GroupBy(p => p.LinkoUserId)
+            .Select(g => new AutoPlan(g.Key, g.Sum(p => p.PlanAmount), g.Count()))
+            .ToListAsync(ct);
+
+        var ids = plans.Select(p => p.LinkoUserId).ToList();
+        var excluded = (await db.LinkoUsers.AsNoTracking().Where(u => ids.Contains(u.Id)).Select(u => new { u.Id, u.JobName }).ToListAsync(ct))
+            .Where(u => u.JobName is { } job && salesOptions.StaffPlanExcludeJobs.Any(x => job.Contains(x, StringComparison.OrdinalIgnoreCase)))
+            .Select(u => u.Id)
+            .ToHashSet();
+        return plans.Where(p => !excluded.Contains(p.LinkoUserId)).ToList();
     }
 
     [HttpPut("plans/region")]

@@ -84,7 +84,14 @@ public sealed class LinkoSyncService(
         results.Add(await RunStepAsync("visits", phase, accumulate: false, _ => SyncVisitsAsync(full, recentFrom, recentTo, ct), ct));
 
         await EnsureRegionsAsync(ct);
-        cacheSignal.Invalidate(); // свежие месяцы уже видны в дашбордах
+
+        // Планы агентов из API планов Linko (staff_balance) — если задан его токен.
+        if (connection.HasPlanCredentials)
+        {
+            results.Add(await RunStepAsync("staff_balance", "Планы агентов", accumulate: false, state => SyncStaffPlansAsync(full || state.LastTm is null, state.LastTm, ct), ct));
+        }
+
+        cacheSignal.Invalidate(); // свежие месяцы и планы уже видны в дашбордах
 
         // 3. История — после того как свежие данные уже доступны.
         if (full)
@@ -136,6 +143,7 @@ public sealed class LinkoSyncService(
                      linko."Visits", linko."Markets", linko."MarketUsers", linko."Users", linko."Products",
                      linko."ProductTypes", linko."Borders", linko."KpiPlans", linko."SyncState"
             """, ct);
+        await db.SalesStaffPlans.ExecuteDeleteAsync(ct);
         await db.SalesAgentPlans.ExecuteDeleteAsync(ct);
         await db.SalesRegionPlans.ExecuteDeleteAsync(ct);
         await db.SalesAgentProfiles.ExecuteDeleteAsync(ct);
@@ -541,6 +549,86 @@ public sealed class LinkoSyncService(
             }, ct), ct);
         return (rows, null);
     }
+    // ---------- Планы агентов (staff_balance) ----------
+
+    /// <summary>
+    /// Полная загрузка — все месяцы окна истории. Обычное обновление — только если Linko сделал новый пересчёт
+    /// (last_date изменился): текущий месяц, а в первые 5 дней месяца — и прошлый.
+    /// </summary>
+    private async Task<(int, decimal?)> SyncStaffPlansAsync(bool full, decimal? lastStamp, CancellationToken ct)
+    {
+        var lastDate = await client.StaffLastDateAsync(ct);
+        decimal? stamp = lastDate is { } d ? d.Ticks / TimeSpan.TicksPerSecond : null;
+
+        if (!full && stamp is not null && lastStamp is not null && stamp <= lastStamp)
+        {
+            return (0, lastStamp); // пересчёта не было — нечего обновлять
+        }
+
+        var today = Today();
+        var current = MonthStart(today);
+        var months = new List<DateOnly> { current };
+        if (full)
+        {
+            var (from, _) = BackfillWindow();
+            for (var m = current.AddMonths(-1); m >= from; m = m.AddMonths(-1))
+            {
+                months.Add(m);
+            }
+        }
+        else if (today.Day <= 5)
+        {
+            months.Add(current.AddMonths(-1));
+        }
+
+        var total = 0;
+        foreach (var month in months)
+        {
+            var rows = await client.StaffBalanceAsync(month.Year, month.Month, ct);
+            total += await ReplaceStaffMonthAsync(month.Year, month.Month, rows, ct);
+        }
+
+        return (total, stamp);
+    }
+
+    private async Task<int> ReplaceStaffMonthAsync(int year, int month, IReadOnlyList<LinkoStaffBalanceDto> rows, CancellationToken ct)
+    {
+        var now = time.GetUtcNow();
+        var entities = rows
+            .Where(r => r.User is not null && r.PerformanceIndicator is not null)
+            .DistinctBy(r => (r.User!.Id, r.PerformanceIndicator!.Id))
+            .Select(r => new SalesStaffPlan
+            {
+                Year = year,
+                Month = month,
+                LinkoUserId = r.User!.Id,
+                IndicatorId = r.PerformanceIndicator!.Id,
+                IndicatorName = r.PerformanceIndicator.Name ?? $"Показатель {r.PerformanceIndicator.Id}",
+                PlanType = r.PerformanceIndicator.PlanType ?? "unknown",
+                Level = r.Level ?? 0,
+                PlanAmount = r.PlanAmount ?? 0,
+                SalesAmount = r.SalesAmount ?? 0,
+                ReturnAmount = r.ReturnAmount ?? 0,
+                FactAmount = r.FactAmount ?? 0,
+                PlanForecast = r.PlanForecast ?? 0,
+                FactPercent = r.FactPercent,
+                ForecastPercent = r.ForecastPercent,
+                LoadedAt = now,
+            })
+            .ToList();
+
+        db.ChangeTracker.Clear();
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.SalesStaffPlans.Where(p => p.Year == year && p.Month == month).ExecuteDeleteAsync(ct);
+        db.SalesStaffPlans.AddRange(entities);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        db.ChangeTracker.Clear();
+
+        progress.AddRows(entities.Count);
+        return entities.Count;
+    }
+
     // ---------- Общее ----------
 
     private async Task UpsertAsync<TDto, TEntity>(

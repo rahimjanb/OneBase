@@ -24,6 +24,12 @@ public sealed class SalesOptions
 
     public SalesSyncOptions Sync { get; set; } = new();
 
+    /// <summary>
+    /// Должности Linko, чьи планы из staff_balance не считаются планом ТП: у супервайзеров план — это план их команды,
+    /// и при суммировании он задвоил бы планы агентов. Сравнение — «содержит», без учёта регистра.
+    /// </summary>
+    public string[] StaffPlanExcludeJobs { get; set; } = ["Супервайзер", "Supervisor"];
+
     public FlagThresholds Flags { get; set; } = new();
 }
 

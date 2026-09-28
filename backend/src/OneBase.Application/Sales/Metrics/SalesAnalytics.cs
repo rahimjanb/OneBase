@@ -126,7 +126,18 @@ public sealed class SalesAnalytics
 
         var plans = _d.Plans.Where(p => p.AgentId == id).ToList();
         var plan = SalesMath.PlanTotal(plans);
+        var indicators = _d.Indicators.Where(i => i.AgentId == id)
+            .OrderBy(i => i.PlanType == "product_sales_weight" ? 0 : 1)
+            .ThenByDescending(i => i.Plan)
+            .Select(i => new IndicatorPlan(i.IndicatorId, i.Name, i.PlanType, i.Plan, i.Fact, SalesMath.Ratio(i.Fact, i.Plan)))
+            .ToList();
+
+        // «Категорий в плане»: категории ручного плана OneBase, иначе — весовые показатели Linko.
         var planCategories = plans.Where(p => p.CategoryId != null).Select(p => p.CategoryId).Distinct().Count();
+        if (planCategories == 0)
+        {
+            planCategories = indicators.Count(i => i.PlanType == "product_sales_weight");
+        }
 
         var lines = _currentByAgent[id].ToList();
         var prevLines = _previousByAgent[id].ToList();
@@ -174,6 +185,7 @@ public sealed class SalesAnalytics
             stats.Tempo,
             FlagsOf(id),
             CategoryPlanOf(plans, lines),
+            indicators,
             Compare(id.ToString(), AgentName(id), null, lines, prevLines),
             prevMarkets.Count,
             silent.Sum(s => s.PrevRevenue),
@@ -414,7 +426,7 @@ public sealed class SalesAnalytics
     private List<MonthPlanFact> MonthsOf(RegionInfo region) =>
         Enumerable.Range(1, 12).Select(m =>
         {
-            var plan = SalesMath.PlanTotal(_d.YearRegionPlans.Where(p => p.RegionId == region.Id && p.Month == m));
+            var plan = RegionPlan(region.Id, _d.YearRegionPlans.Where(p => p.Month == m).Concat(_d.YearAgentPlans.Where(p => p.Month == m)).ToList());
             decimal? fact = m > _d.Month
                 ? null
                 : _d.History.Where(h => h.Year == _d.Year && h.Month == m && (region.Id == NoRegionId ? h.BranchId == null || !_regionByBranch.ContainsKey(h.BranchId.Value) : h.BranchId == region.BranchId))
@@ -545,9 +557,11 @@ public sealed class SalesAnalytics
             return scope;
         }
 
-        // Все регионы с данными или планами + «Без региона», если в нём есть продажи.
+        // Все регионы + «Без региона», если в нём есть продажи или планы агентов, чей регион не определился.
+        var noRegion = RegionPlan(NoRegionId, _d.Plans) is not null ? [NoRegionId] : Array.Empty<Guid>();
         return _d.Regions.Select(r => r.Id)
             .Concat(_currentByRegion.Select(g => g.Key))
+            .Concat(noRegion)
             .Distinct();
     }
 
@@ -559,13 +573,31 @@ public sealed class SalesAnalytics
 
     private IEnumerable<VisitRecord> VisitsOf(long agent) => _visitsByAgent[agent].Where(v => v.Date <= _d.DataThrough);
 
+    /// <summary>План подразделения = сумма планов его регионов (все регионы, включая «Без региона»).</summary>
     private decimal? PlanOf(IReadOnlySet<Guid>? scope)
     {
-        var plans = RegionIds(scope?.ToList())
-            .Select(r => SalesMath.PlanTotal(_d.Plans.Where(p => p.RegionId == r)))
-            .Where(p => p != null)
-            .ToList();
+        var regions = scope?.ToList() ?? _regions.Keys.ToList();
+        var plans = regions.Select(r => RegionPlan(r, _d.Plans)).Where(p => p != null).ToList();
         return plans.Count == 0 ? null : plans.Sum();
+    }
+
+    /// <summary>План региона: заданный вручную в OneBase, иначе — сумма планов его агентов (из Linko или ручных).</summary>
+    private decimal? RegionPlan(Guid region, IEnumerable<PlanRow> monthPlans)
+    {
+        var plans = monthPlans as IReadOnlyCollection<PlanRow> ?? monthPlans.ToList();
+        var manual = SalesMath.PlanTotal(plans.Where(p => p.RegionId == region));
+        if (manual is not null)
+        {
+            return manual;
+        }
+
+        var agents = plans
+            .Where(p => p.AgentId is { } a && _agentRegion.GetValueOrDefault(a, NoRegionId) == region)
+            .GroupBy(p => p.AgentId)
+            .Select(g => SalesMath.PlanTotal(g))
+            .Where(t => t != null)
+            .ToList();
+        return agents.Count == 0 ? null : agents.Sum();
     }
 
     private FlagCounts FlagCountsOf(IEnumerable<long> agents)
@@ -667,10 +699,11 @@ public sealed class SalesAnalytics
         }
     }
 
-    /// <summary>Действующие ТП месяца: есть продажи или визиты, плюс все из оргструктуры.</summary>
+    /// <summary>Действующие ТП месяца: есть продажи, визиты или план, плюс все из оргструктуры.</summary>
     private HashSet<long> BuildRoster() =>
         _currentByAgent.Select(g => g.Key)
             .Concat(_d.Visits.Where(v => v.Date <= _d.DataThrough).Select(v => v.AgentId))
+            .Concat(_d.Plans.Where(p => p.AgentId != null).Select(p => p.AgentId!.Value))
             .Concat(_d.Agents.Values.Where(a => a.InDirectory).Select(a => a.Id))
             .ToHashSet();
 

@@ -32,9 +32,9 @@ public sealed class IntegrationsController(
 
     public sealed record IntegrationSummary(string Code, string Name, string Description, string Status, DateTimeOffset? DataAsOf);
 
-    public sealed record LinkoInput(string? BaseUrl, string? Token, bool Enabled);
+    public sealed record LinkoInput(string? BaseUrl, string? Token, bool Enabled, string? PlanToken = null);
 
-    public sealed record LinkoTestInput(string? BaseUrl, string? Token);
+    public sealed record LinkoTestInput(string? BaseUrl, string? Token, string? PlanToken = null);
 
     [HttpGet]
     public async Task<IActionResult> Departments(CancellationToken ct)
@@ -71,9 +71,9 @@ public sealed class IntegrationsController(
             return BadRequest(new { error = "Адрес сервера должен начинаться с https:// — например https://имя.linko.uz" });
         }
 
-        await linko.SaveAsync(baseUrl, input.Token, input.Enabled, User.GetUserId(), ct);
+        await linko.SaveAsync(baseUrl, input.Token, input.PlanToken, input.Enabled, User.GetUserId(), ct);
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "integration.linko.updated", "integration", LinkoSettingsStore.Code,
-            new { baseUrl, input.Enabled, tokenChanged = input.Token is not null }, ct);
+            new { baseUrl, input.Enabled, tokenChanged = input.Token is not null, planTokenChanged = input.PlanToken is not null }, ct);
         return Ok(await LinkoDetailsAsync(ct));
     }
 
@@ -88,7 +88,8 @@ public sealed class IntegrationsController(
         var baseUrl = string.IsNullOrWhiteSpace(input.BaseUrl) ? current.BaseUrl : input.BaseUrl;
         var token = string.IsNullOrWhiteSpace(input.Token) ? current.Token : input.Token;
 
-        var result = await client.TestAsync(baseUrl, token, ct);
+        var planToken = string.IsNullOrWhiteSpace(input.PlanToken) ? current.PlanToken : input.PlanToken;
+        var result = await client.TestAsync(baseUrl, token, planToken, ct);
         await linko.SaveTestResultAsync(result.Ok, result.Message, ct);
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "integration.linko.tested", "integration", LinkoSettingsStore.Code,
             new { result.Ok, result.Message }, ct);
@@ -186,6 +187,9 @@ public sealed class IntegrationsController(
             HasToken = !string.IsNullOrEmpty(settings.Token),
             settings.TokenHint,
             TokenSource = settings.TokenSource.ToString(),
+            HasPlanToken = !string.IsNullOrEmpty(settings.PlanToken),
+            settings.PlanTokenHint,
+            PlanTokenSource = settings.PlanTokenSource.ToString(),
             UpdatedAt = row?.UpdatedAt,
             LastTest = row?.LastTestAt is null ? null : new { At = row.LastTestAt, Ok = row.LastTestOk, Message = row.LastTestMessage },
             Sync = new

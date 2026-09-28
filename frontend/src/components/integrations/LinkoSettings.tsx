@@ -38,13 +38,14 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
+  const [planToken, setPlanToken] = useState("");
   const [enabled, setEnabled] = useState(initial.enabled);
   const [busy, setBusy] = useState<"test" | "save" | "sync" | "clear" | "reset" | "verify" | null>(null);
   const [verify, setVerify] = useState<{ from: string; to: string; ok: boolean; rows: { entity: string; linko: number; oneBase: number; ok: boolean }[] } | null>(null);
   const [test, setTest] = useState<LinkoTestResult | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
 
-  const dirty = baseUrl.trim() !== data.baseUrl || token.trim() !== "" || enabled !== data.enabled;
+  const dirty = baseUrl.trim() !== data.baseUrl || token.trim() !== "" || planToken.trim() !== "" || enabled !== data.enabled;
 
   const reload = async () => setData(await call<LinkoDetails>("integrations/linko"));
 
@@ -59,7 +60,7 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
     setBusy("test");
     setMessage(null);
     try {
-      setTest(await call<LinkoTestResult>("integrations/linko/test", { method: "POST", body: JSON.stringify({ baseUrl: baseUrl.trim(), token: token.trim() || null }) }));
+      setTest(await call<LinkoTestResult>("integrations/linko/test", { method: "POST", body: JSON.stringify({ baseUrl: baseUrl.trim(), token: token.trim() || null, planToken: planToken.trim() || null }) }));
       await reload();
     } catch (e) {
       setMessage({ tone: "bad", text: (e as Error).message });
@@ -74,11 +75,12 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
     try {
       const saved = await call<LinkoDetails>("integrations/linko", {
         method: "PUT",
-        body: JSON.stringify({ baseUrl: baseUrl.trim(), token: tokenValue, enabled }),
+        body: JSON.stringify({ baseUrl: baseUrl.trim(), token: tokenValue, planToken: kind === "save" ? planToken.trim() || null : null, enabled }),
       });
       setData(saved);
       setBaseUrl(saved.baseUrl);
       setToken("");
+      setPlanToken("");
       setMessage({ tone: "ok", text: kind === "clear" ? "Токен удалён из OneBase." : "Настройки сохранены." });
     } catch (e) {
       setMessage({ tone: "bad", text: (e as Error).message });
@@ -186,6 +188,24 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
           </label>
         </div>
 
+        <label className="mt-5 block lg:max-w-[calc(50%-10px)]">
+          <span className="mb-1.5 block text-sm font-medium text-ink">Токен планов (staff_balance)</span>
+          <input
+            className={field}
+            type="password"
+            value={planToken}
+            onChange={(e) => setPlanToken(e.target.value)}
+            placeholder={data.hasPlanToken ? `${data.planTokenHint} — оставьте пустым, чтобы не менять` : "Токен API пересчёта планов Linko"}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <span className="mt-1 block text-xs text-ink-3">
+            {data.hasPlanToken
+              ? `Токен ${data.planTokenHint} ${sourceLabel[data.planTokenSource]}. Планы агентов загружаются автоматически после каждого пересчёта в Linko.`
+              : "Без него планы не загружаются — выполнение плана будет «—»."}
+          </span>
+        </label>
+
         <label className="mt-5 flex items-center gap-2.5 text-sm text-ink">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
           Интеграция включена — данные загружаются автоматически каждые 20 минут
@@ -222,6 +242,12 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
                 </div>
               )}
               {!test.ok && <div className="mt-0.5 text-ink-2">Настройки не изменены. Исправьте адрес или токен и проверьте ещё раз.</div>}
+              {test.plansOk != null && (
+                <div className={`mt-1 ${test.plansOk ? "text-ok" : "text-bad"}`}>
+                  Планы: {test.plansMessage}
+                  {test.plansOk && test.plansLastDate && ` Последний пересчёт в Linko — ${dateTime(test.plansLastDate)}.`}
+                </div>
+              )}
             </div>
           </div>
         )}

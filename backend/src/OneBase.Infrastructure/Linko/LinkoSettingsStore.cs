@@ -19,9 +19,20 @@ public enum LinkoSettingsSource
     OneBase,
 }
 
-public sealed record LinkoConnectionSettings(string BaseUrl, string Token, bool Enabled, LinkoSettingsSource TokenSource, string? TokenHint)
+public sealed record LinkoConnectionSettings(
+    string BaseUrl,
+    string Token,
+    bool Enabled,
+    LinkoSettingsSource TokenSource,
+    string? TokenHint,
+    string PlanToken = "",
+    LinkoSettingsSource PlanTokenSource = LinkoSettingsSource.None,
+    string? PlanTokenHint = null)
 {
     public bool HasCredentials => !string.IsNullOrWhiteSpace(BaseUrl) && !string.IsNullOrWhiteSpace(Token);
+
+    /// <summary>Есть токен API планов (staff_balance).</summary>
+    public bool HasPlanCredentials => !string.IsNullOrWhiteSpace(BaseUrl) && !string.IsNullOrWhiteSpace(PlanToken);
 
     /// <summary>Можно синхронизировать: включено и есть адрес с токеном.</summary>
     public bool IsReady => Enabled && HasCredentials;
@@ -41,6 +52,7 @@ public sealed class LinkoSettingsStore(
     public const string Department = "sales";
 
     private readonly IDataProtector _protector = dataProtection.CreateProtector("OneBase.Integrations.Linko.Token");
+    private readonly IDataProtector _planProtector = dataProtection.CreateProtector("OneBase.Integrations.Linko.PlanToken");
     private volatile LinkoConnectionSettings? _cached;
 
     public async Task<LinkoConnectionSettings> GetAsync(CancellationToken ct = default)
@@ -55,7 +67,7 @@ public sealed class LinkoSettingsStore(
         var row = await db.Integrations.AsNoTracking().FirstOrDefaultAsync(i => i.Code == Code, ct);
 
         var baseUrl = !string.IsNullOrWhiteSpace(row?.BaseUrl) ? row!.BaseUrl! : environment.BaseUrl;
-        var token = Unprotect(row?.ProtectedSecret);
+        var token = Unprotect(_protector, row?.ProtectedSecret);
         var source = LinkoSettingsSource.OneBase;
         var hint = row?.SecretHint;
 
@@ -66,15 +78,26 @@ public sealed class LinkoSettingsStore(
             hint = string.IsNullOrEmpty(token) ? null : Hint(token);
         }
 
-        var settings = new LinkoConnectionSettings(Normalize(baseUrl), token, row?.Enabled ?? true, source, hint);
+        var planToken = Unprotect(_planProtector, row?.ProtectedPlanSecret);
+        var planSource = LinkoSettingsSource.OneBase;
+        var planHint = row?.PlanSecretHint;
+        if (string.IsNullOrEmpty(planToken))
+        {
+            planToken = environment.PlanToken;
+            planSource = string.IsNullOrEmpty(planToken) ? LinkoSettingsSource.None : LinkoSettingsSource.Environment;
+            planHint = string.IsNullOrEmpty(planToken) ? null : Hint(planToken);
+        }
+
+        var settings = new LinkoConnectionSettings(
+            Normalize(baseUrl), token, row?.Enabled ?? true, source, hint, planToken, planSource, planHint);
         _cached = settings;
         return settings;
     }
 
     /// <summary>
-    /// Сохраняет настройки. newToken: null — оставить текущий, "" — удалить сохранённый в OneBase (вернуться к .env).
+    /// Сохраняет настройки. Токены: null — оставить текущий, "" — удалить сохранённый в OneBase (вернуться к .env).
     /// </summary>
-    public async Task SaveAsync(string baseUrl, string? newToken, bool enabled, Guid userId, CancellationToken ct = default)
+    public async Task SaveAsync(string baseUrl, string? newToken, string? newPlanToken, bool enabled, Guid userId, CancellationToken ct = default)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
@@ -87,6 +110,13 @@ public sealed class LinkoSettingsStore(
             var token = newToken.Trim();
             row.ProtectedSecret = token.Length == 0 ? null : _protector.Protect(token);
             row.SecretHint = token.Length == 0 ? null : Hint(token);
+        }
+
+        if (newPlanToken is not null)
+        {
+            var planToken = newPlanToken.Trim();
+            row.ProtectedPlanSecret = planToken.Length == 0 ? null : _planProtector.Protect(planToken);
+            row.PlanSecretHint = planToken.Length == 0 ? null : Hint(planToken);
         }
 
         row.UpdatedAt = DateTimeOffset.UtcNow;
@@ -133,7 +163,7 @@ public sealed class LinkoSettingsStore(
         return row;
     }
 
-    private string? Unprotect(string? protectedSecret)
+    private string? Unprotect(IDataProtector protector, string? protectedSecret)
     {
         if (string.IsNullOrEmpty(protectedSecret))
         {
@@ -142,7 +172,7 @@ public sealed class LinkoSettingsStore(
 
         try
         {
-            return _protector.Unprotect(protectedSecret);
+            return protector.Unprotect(protectedSecret);
         }
         catch (CryptographicException ex)
         {

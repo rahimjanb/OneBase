@@ -11,7 +11,11 @@ type Direction = { id: string; name: string; kind: "RegionalManager" | "Channel"
 type Region = { id: string; linkoBranchId: number; name: string; directionId: string | null; supervisorName: string | null; dealerName: string | null };
 type Agent = { linkoUserId: number; name: string; isActive: boolean; job: string | null; hasSales: boolean; inDirectory: boolean; regionId: string | null; isVacancy: boolean; note: string | null };
 type Setup = { directions: Direction[]; regions: Region[]; agents: Agent[]; categories: { id: number; name: string }[]; targets: Record<string, number> };
-type Plans = { regionPlans: { regionId: string; categoryId: number | null; planKg: number }[]; agentPlans: { linkoUserId: number; categoryId: number | null; planKg: number }[] };
+type Plans = {
+  regionPlans: { regionId: string; categoryId: number | null; planKg: number }[];
+  agentPlans: { linkoUserId: number; categoryId: number | null; planKg: number }[];
+  autoAgentPlans?: { linkoUserId: number; planKg: number; indicators: number }[];
+};
 type KpiPlan = { id: number; userId: number | null; userName: string | null; indicatorName: string | null; plan: number };
 
 const control = "h-8 rounded-md border border-line bg-surface px-2 text-sm text-ink focus:border-accent focus:outline-none";
@@ -537,7 +541,13 @@ function PlansSection({ regions, agents, run }: { regions: Region[]; agents: Age
         />
         <PlanTable
           title="Торговые представители"
-          rows={planAgents.map((a) => ({ id: a.linkoUserId, name: a.name || `Агент ${a.linkoUserId}`, total: agentTotal(a.linkoUserId), categories: agentCategories(a.linkoUserId) }))}
+          rows={planAgents.map((a) => ({
+            id: a.linkoUserId,
+            name: a.name || `Агент ${a.linkoUserId}`,
+            total: agentTotal(a.linkoUserId),
+            categories: agentCategories(a.linkoUserId),
+            auto: plans?.autoAgentPlans?.find((p) => p.linkoUserId === a.linkoUserId)?.planKg ?? null,
+          }))}
           onSave={saveAgent}
         />
       </div>
@@ -577,9 +587,10 @@ function PlanTable<Id extends string | number>({
   onSave,
 }: {
   title: string;
-  rows: { id: Id; name: string; total: number | null; categories: { planKg: number }[] }[];
+  rows: { id: Id; name: string; total: number | null; categories: { planKg: number }[]; auto?: number | null }[];
   onSave: (id: Id, value: string) => void;
 }) {
+  const hasAuto = rows.some((r) => r.auto != null);
   return (
     <div>
       <h3 className="mb-2 text-sm font-semibold text-ink">{title}</h3>
@@ -589,6 +600,11 @@ function PlanTable<Id extends string | number>({
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
               <th className="py-2 pr-2 font-semibold">Название</th>
               <th className="py-2 pr-2 font-semibold">По категориям</th>
+              {hasAuto && (
+                <th className="py-2 pr-2 text-right font-semibold" title="План из Linko (пересчёт) — действует, если справа не задан ручной">
+                  Из Linko, кг
+                </th>
+              )}
               <th className="py-2 font-semibold">Итого, кг</th>
             </tr>
           </thead>
@@ -599,6 +615,7 @@ function PlanTable<Id extends string | number>({
                 <td className="py-1.5 pr-2 text-xs tabular-nums text-ink-3">
                   {r.categories.length > 0 ? `${r.categories.length} кат. · ${kg(r.categories.reduce((s, c) => s + c.planKg, 0))} кг` : "—"}
                 </td>
+                {hasAuto && <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-ink-2">{r.auto != null ? kg(r.auto) : "—"}</td>}
                 <td className="py-1.5">
                   <input
                     key={`${r.id}-${r.total}`}
@@ -606,7 +623,7 @@ function PlanTable<Id extends string | number>({
                     type="number"
                     step="any"
                     defaultValue={r.total ?? ""}
-                    placeholder="нет"
+                    placeholder={r.auto != null ? "из Linko" : "нет"}
                     onBlur={(e) => {
                       const value = e.target.value;
                       if (value !== String(r.total ?? "")) onSave(r.id, value);

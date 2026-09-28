@@ -12,7 +12,7 @@ public class SalesAnalyticsTests
     private static SaleLine Line(int day, long? agent, long market, long branch, decimal kg, decimal revenue, long? order, int month = 9) =>
         new(new DateOnly(2026, month, day), agent, market, branch, 1, 100, kg, revenue, order);
 
-    private static MonthData Data(IReadOnlyList<SaleLine>? previous = null) => new()
+    private static MonthData Data(IReadOnlyList<SaleLine>? previous = null, IReadOnlyList<PlanRow>? plans = null) => new()
     {
         Year = 2026,
         Month = 9,
@@ -29,7 +29,7 @@ public class SalesAnalyticsTests
         Previous = previous ?? [],
         Visits = [],
         History = [],
-        Plans = [new PlanRow(North, null, 9, null, 300), new PlanRow(South, null, 9, null, 60)],
+        Plans = plans ?? [new PlanRow(North, null, 9, null, 300), new PlanRow(South, null, 9, null, 60)],
         YearRegionPlans = [],
         Agents = new Dictionary<long, AgentInfo>
         {
@@ -66,6 +66,25 @@ public class SalesAnalyticsTests
         Assert.Equal(25m, region.Unassigned.Kg);
         Assert.Equal(region.Kpi.FactKg, region.Team.Sum(t => t.FactKg) + region.Unassigned.Kg);
         Assert.Equal(175m / 300m, region.Kpi.Execution);
+    }
+
+    [Fact]
+    public void Region_without_own_plan_uses_sum_of_its_agents_plans()
+    {
+        // Планы агентов (как из Linko): 1 и 2 — в «Севере», 3 — в «Юге»; у «Юга» есть ручной план региона.
+        var plans = new[]
+        {
+            new PlanRow(null, 1, 9, null, 100),
+            new PlanRow(null, 2, 9, null, 50),
+            new PlanRow(null, 3, 9, null, 40),
+            new PlanRow(South, null, 9, null, 60),
+        };
+
+        var republic = new SalesAnalytics(Data(plans: plans)).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
+
+        Assert.Equal(150m, republic.Regions.Single(r => r.Id == North.ToString()).PlanKg);
+        Assert.Equal(60m, republic.Regions.Single(r => r.Id == South.ToString()).PlanKg); // ручной план важнее
+        Assert.Equal(210m, republic.Kpi.PlanKg);
     }
 
     [Fact]

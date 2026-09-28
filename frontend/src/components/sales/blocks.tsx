@@ -162,6 +162,41 @@ export function CategoryShares({ categories }: { categories: { categoryId: numbe
   );
 }
 
+const indicatorUnit = (type: string) =>
+  type === "product_sales_weight" ? "кг" : type === "active_client_count" ? "ТТ" : "сум";
+
+const indicatorValue = (type: string, v: number) =>
+  type === "product_sales_weight" ? kg(v) : type === "active_client_count" ? num(v) : money(v);
+
+/** KPI-показатели агента из Linko: план и факт так, как их считает Linko (кг по группам товаров, АКБ, суммы). */
+export function IndicatorBars({ rows }: { rows: { indicatorId: number; name: string; planType: string; plan: number; fact: number; execution: number | null }[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <Section title="Планы Linko" hint="KPI-показатели агента — план и факт по расчёту Linko">
+      <div className="space-y-2.5">
+        {rows.map((r) => (
+          <div
+            key={r.indicatorId}
+            className="grid grid-cols-1 items-center gap-x-4 gap-y-1 text-xs sm:grid-cols-[minmax(0,280px)_1fr_minmax(0,220px)]"
+            title={`План ${indicatorValue(r.planType, r.plan)} ${indicatorUnit(r.planType)} · факт ${indicatorValue(r.planType, r.fact)} ${indicatorUnit(r.planType)}`}
+          >
+            <span className="truncate text-ink-2">{r.name}</span>
+            <ExecutionBar value={r.execution} tone={r.execution != null && r.execution < 0.7 ? (r.execution < 0.4 ? "bad" : "warn") : "accent"} />
+            <span className="text-right tabular-nums text-ink">
+              {indicatorValue(r.planType, r.fact)} из {indicatorValue(r.planType, r.plan)} {indicatorUnit(r.planType)}
+              <span className={`ml-2 font-semibold ${execClass(r.execution)}`}>{pct(r.execution)}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      <Note>
+        Планы загружаются из Linko автоматически после каждого пересчёта. План ТП в плитке — сумма весовых показателей (кг). Факт здесь —
+        по расчёту Linko, он может немного отличаться от факта OneBase из заказов.
+      </Note>
+    </Section>
+  );
+}
+
 /** Выполнение плана по категориям (карточка агента). */
 export function CategoryPlanBars({ rows }: { rows: { categoryId: number | null; name: string; planKg: number | null; factKg: number; revenue: number; execution: number | null }[] }) {
   const limit = 15;

@@ -206,6 +206,7 @@ export type AgentView = {
   tempo: number | null;
   flags: AgentFlag[];
   categoryPlan: { categoryId: number | null; name: string; planKg: number | null; factKg: number; revenue: number; execution: number | null }[];
+  indicators: { indicatorId: number; name: string; planType: string; plan: number; fact: number; execution: number | null }[];
   sameDays: SameDaysRow;
   silentBase: number;
   silentPrevRevenue: number;

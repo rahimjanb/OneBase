@@ -25,6 +25,9 @@ export type LinkoDetails = {
   hasToken: boolean;
   tokenHint: string | null;
   tokenSource: "OneBase" | "Environment" | "None";
+  hasPlanToken: boolean;
+  planTokenHint: string | null;
+  planTokenSource: "OneBase" | "Environment" | "None";
   updatedAt: string | null;
   lastTest: { at: string; ok: boolean | null; message: string | null } | null;
   sync: {
@@ -42,6 +45,9 @@ export type LinkoTestResult = {
   markets: number | null;
   orders: number | null;
   elapsedMs: number;
+  plansOk: boolean | null;
+  plansMessage: string | null;
+  plansLastDate: string | null;
 };
 
 /** Названия данных Linko для людей. */
@@ -58,6 +64,7 @@ export const linkoEntityLabels: Record<string, string> = {
   kpi_plans: "Планы KPI",
   visits_month: "Визиты за месяц (полное обновление)",
   source: "Источник данных",
+  staff_balance: "Планы агентов (пересчёт Linko)",
 };
 
 export const statusView: Record<IntegrationStatus, { label: string; className: string }> = {

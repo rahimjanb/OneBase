@@ -53,6 +53,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<SalesRegionPlan> SalesRegionPlans => Set<SalesRegionPlan>();
     public DbSet<SalesAgentPlan> SalesAgentPlans => Set<SalesAgentPlan>();
     public DbSet<SalesTarget> SalesTargets => Set<SalesTarget>();
+    public DbSet<SalesStaffPlan> SalesStaffPlans => Set<SalesStaffPlan>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {

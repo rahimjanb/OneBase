@@ -162,6 +162,9 @@ public sealed record MedianValue(decimal? Value, decimal? RegionMedian);
 
 public sealed record CategoryPlanFact(long? CategoryId, string Name, decimal? PlanKg, decimal FactKg, decimal Revenue, decimal? Execution);
 
+/// <summary>План и факт по KPI-показателю Linko (кг по группе товаров, АКБ и т.п.).</summary>
+public sealed record IndicatorPlan(long IndicatorId, string Name, string PlanType, decimal Plan, decimal Fact, decimal? Execution);
+
 /// <summary>Уровень 4: карточка агента.</summary>
 public sealed record AgentView(
     PeriodInfo Period,
@@ -187,6 +190,7 @@ public sealed record AgentView(
     decimal? Tempo,
     IReadOnlyList<AgentFlag> Flags,
     IReadOnlyList<CategoryPlanFact> CategoryPlan,
+    IReadOnlyList<IndicatorPlan> Indicators,
     SameDaysRow SameDays,
     int SilentBase,
     decimal SilentPrevRevenue,

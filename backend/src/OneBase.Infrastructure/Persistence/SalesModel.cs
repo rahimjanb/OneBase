@@ -148,6 +148,14 @@ internal static class SalesModel
             e.HasIndex(x => new { x.LinkoUserId, x.Kind, x.Year, x.Month, x.CategoryId }).IsUnique().AreNullsDistinct(false);
         });
 
+        b.Entity<SalesStaffPlan>(e =>
+        {
+            e.ToTable("StaffPlans", "sales");
+            e.Property(x => x.IndicatorName).HasMaxLength(300);
+            e.Property(x => x.PlanType).HasMaxLength(64);
+            e.HasIndex(x => new { x.Year, x.Month, x.LinkoUserId, x.IndicatorId }).IsUnique();
+        });
+
         b.Entity<SalesTarget>(e =>
         {
             e.ToTable("Targets", "sales");

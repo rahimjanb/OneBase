@@ -68,6 +68,7 @@ public static class DependencyInjection
         var linko = config.GetSection(LinkoOptions.Section).Get<LinkoOptions>() ?? new LinkoOptions();
         linko.BaseUrl = config["LINKO_BASE_URL"] ?? string.Empty;
         linko.Token = config["LINKO_TOKEN"] ?? string.Empty;
+        linko.PlanToken = config["LINKO_PLAN_TOKEN"] ?? string.Empty;
         services.AddSingleton(linko);
         services.AddSingleton<LinkoSettingsStore>();
         services.AddSingleton<LinkoSyncProgress>();
