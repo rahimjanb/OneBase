@@ -23,7 +23,7 @@ export async function login(_: LoginState, form: FormData): Promise<LoginState> 
     return { error: "Сервер OneBase недоступен. Попробуйте позже." };
   }
 
-  if (response.status === 401) return { error: "Неверный email или пароль." };
+  if (response.status === 401) return { error: "Неверный логин или пароль." };
   if (response.status === 429) return { error: "Слишком много попыток. Подождите минуту." };
   if (!response.ok) return { error: `Ошибка входа (${response.status}).` };
 
