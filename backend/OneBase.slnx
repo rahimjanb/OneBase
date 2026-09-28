@@ -6,4 +6,7 @@
         <Project Path="src/OneBase.Infrastructure/OneBase.Infrastructure.csproj" />
         <Project Path="src/OneBase.Api/OneBase.Api.csproj" />
     </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/OneBase.Sales.Tests/OneBase.Sales.Tests.csproj" />
+    </Folder>
 </Solution>
