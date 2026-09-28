@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using OneBase.Domain.Integrations;
 using OneBase.Application.Abstractions;
 using OneBase.Domain.AI;
 using OneBase.Domain.Audit;
@@ -8,8 +10,13 @@ using OneBase.Domain.Sales;
 
 namespace OneBase.Infrastructure.Persistence;
 
-public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options) : DbContext(options), IAppDbContext
+public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
+    : DbContext(options), IAppDbContext, IDataProtectionKeyContext
 {
+    // Интеграции и ключи шифрования их секретов
+    public DbSet<IntegrationConnection> Integrations => Set<IntegrationConnection>();
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Department> Departments => Set<Department>();
@@ -51,6 +58,17 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     {
         SalesModel.ConfigureLinko(b);
         SalesModel.ConfigureSales(b);
+
+        b.Entity<IntegrationConnection>(e =>
+        {
+            e.ToTable("Integrations");
+            e.HasKey(x => x.Code);
+            e.Property(x => x.Code).HasMaxLength(64);
+            e.Property(x => x.DepartmentCode).HasMaxLength(64);
+            e.Property(x => x.BaseUrl).HasMaxLength(500);
+            e.Property(x => x.SecretHint).HasMaxLength(16);
+            e.Property(x => x.LastTestMessage).HasMaxLength(500);
+        });
 
         // Identity
         b.Entity<Department>(e =>

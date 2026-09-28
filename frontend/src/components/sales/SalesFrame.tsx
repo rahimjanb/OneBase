@@ -18,7 +18,11 @@ const tabs: { key: SalesTab; label: string; href: string }[] = [
 /** Чип «данные по …» — время последней успешной синхронизации с Linko. */
 function DataChip({ status }: { status: SyncStatus }) {
   if (!status.configured) {
-    return <span className="rounded-full bg-warn-soft px-3 py-1 text-xs font-medium text-warn">Linko не настроен</span>;
+    return (
+      <Link href="/settings/integrations/sales/linko" className="rounded-full bg-warn-soft px-3 py-1 text-xs font-medium text-warn hover:underline">
+        Linko не настроен — подключить
+      </Link>
+    );
   }
   if (status.hasErrors) {
     return (

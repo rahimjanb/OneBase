@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, RefreshCw, Trash2, Upload } from "lucide-react";
 import { Note, Section } from "./bits";
 import { dateTime, kg, monthLabel, num } from "@/lib/sales/format";
+import { linkoEntityLabels } from "@/lib/integrations";
 import type { SyncStatus } from "@/lib/sales/types";
 
 type Direction = { id: string; name: string; kind: "RegionalManager" | "Channel"; managerName: string | null; description: string | null; sortOrder: number };
@@ -121,7 +122,13 @@ function SyncSection({ status, run }: { status: SyncStatus | null; run: Run }) {
         </>
       }
     >
-      {!status?.configured && <p className="text-sm text-warn">Не заданы LINKO_BASE_URL и LINKO_TOKEN в .env сервера.</p>}
+      <p className={`mb-2 text-sm ${status?.configured ? "text-ink-2" : "text-warn"}`}>
+        {status?.configured ? "Адрес, токен и проверка подключения — в " : "Linko не настроен или выключен. Задайте адрес и токен в "}
+        <a href="/settings/integrations/sales/linko" className="font-medium text-accent-strong hover:underline">
+          Настройки → Интеграции → Продажи → Linko
+        </a>
+        .
+      </p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-max text-sm">
           <thead>
@@ -135,7 +142,7 @@ function SyncSection({ status, run }: { status: SyncStatus | null; run: Run }) {
           <tbody>
             {status?.entities.map((e) => (
               <tr key={e.entity} className="border-b border-line last:border-b-0">
-                <td className="py-2 pr-3 font-medium text-ink">{e.entity}</td>
+                <td className="py-2 pr-3 font-medium text-ink">{linkoEntityLabels[e.entity] ?? e.entity}</td>
                 <td className="py-2 pr-3 tabular-nums text-ink-2">{dateTime(e.lastSuccessAt)}</td>
                 <td className="py-2 pr-3 text-right tabular-nums">{num(e.lastRows)}</td>
                 <td className="py-2 text-xs text-bad">{e.lastError ?? ""}</td>

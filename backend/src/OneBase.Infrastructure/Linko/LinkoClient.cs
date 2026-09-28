@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -11,17 +12,15 @@ public sealed class LinkoOptions
 {
     public const string Section = "Linko";
 
-    /// <summary>Из .env: LINKO_BASE_URL, например https://sfademo.linko.uz</summary>
+    /// <summary>Запасной адрес из окружения (LINKO_BASE_URL), если он не задан в OneBase.</summary>
     public string BaseUrl { get; set; } = string.Empty;
 
-    /// <summary>Из .env: LINKO_TOKEN.</summary>
+    /// <summary>Запасной токен из окружения (LINKO_TOKEN), если он не задан в OneBase.</summary>
     public string Token { get; set; } = string.Empty;
 
     public int PageSize { get; set; } = 1000;
     public int TimeoutSeconds { get; set; } = 60;
     public int MaxRetries { get; set; } = 4;
-
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(BaseUrl) && !string.IsNullOrWhiteSpace(Token);
 }
 
 public sealed class LinkoApiException(string message, HttpStatusCode? status = null) : Exception(message)
@@ -29,8 +28,13 @@ public sealed class LinkoApiException(string message, HttpStatusCode? status = n
     public HttpStatusCode? Status { get; } = status;
 }
 
-/// <summary>Клиент Linko External API: пагинация limit/offset, повторы с backoff, разбор поля errors.</summary>
-public sealed class LinkoClient(HttpClient http, LinkoOptions options, ILogger<LinkoClient> logger)
+public sealed record LinkoTestResult(bool Ok, string Message, long? Users, long? Markets, long? Orders, long ElapsedMs);
+
+/// <summary>
+/// Клиент Linko External API: пагинация limit/offset, повторы с backoff, разбор поля errors.
+/// Адрес и токен берутся из LinkoSettingsStore на каждый запрос — изменения в настройках действуют сразу.
+/// </summary>
+public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSettingsStore settings, ILogger<LinkoClient> logger)
 {
     private const string Prefix = "api/v1/integration/external-api/";
 
@@ -41,17 +45,9 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, ILogger<L
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
 
-    public static void Configure(HttpClient http, LinkoOptions options)
-    {
-        http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
-        http.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("External", options.Token);
-        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-    }
-
     public async Task<long> CountAsync(string entity, IDictionary<string, string?>? filters = null, CancellationToken ct = default)
     {
-        var result = await SendAsync<LinkoCount>($"{entity}_count/", filters, ct);
+        var result = await SendAsync<LinkoCount>(await ReadyAsync(ct), $"{entity}_count/", filters, options.MaxRetries, ct);
         return result.Count;
     }
 
@@ -65,6 +61,7 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, ILogger<L
         Func<IReadOnlyList<T>, Task> onPage,
         CancellationToken ct = default)
     {
+        var connection = await ReadyAsync(ct);
         var total = 0;
         for (var offset = 0; ; offset += options.PageSize)
         {
@@ -74,7 +71,7 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, ILogger<L
                 ["offset"] = offset.ToString(),
             };
 
-            var page = await SendAsync<LinkoPage<T>>($"{entity}/", query, ct);
+            var page = await SendAsync<LinkoPage<T>>(connection, $"{entity}/", query, options.MaxRetries, ct);
             if (page.Errors is { Count: > 0 })
             {
                 logger.LogWarning("Linko {Entity}: {Count} ошибок в ответе, например: {Error}",
@@ -95,15 +92,79 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, ILogger<L
         }
     }
 
-    private async Task<T> SendAsync<T>(string path, IDictionary<string, string?>? query, CancellationToken ct)
+    /// <summary>
+    /// Проверка подключения: три лёгких запроса *_count. Без повторов и с коротким таймаутом,
+    /// чтобы пользователь быстро получил ответ. Токен в сообщениях не показывается.
+    /// </summary>
+    public async Task<LinkoTestResult> TestAsync(string baseUrl, string token, CancellationToken ct = default)
     {
-        var url = Prefix + path + BuildQuery(query);
+        var watch = Stopwatch.StartNew();
+        if (!LinkoSettingsStore.IsValidUrl(baseUrl))
+        {
+            return new LinkoTestResult(false, "Укажите адрес сервера Linko, например https://имя.linko.uz", null, null, null, 0);
+        }
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return new LinkoTestResult(false, "Токен не задан.", null, null, null, 0);
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        var connection = new LinkoConnectionSettings(LinkoSettingsStore.Normalize(baseUrl), token.Trim(), true, LinkoSettingsSource.OneBase, null);
+
+        try
+        {
+            var users = (await SendAsync<LinkoCount>(connection, "users_count/", null, 0, timeout.Token)).Count;
+            var markets = (await SendAsync<LinkoCount>(connection, "markets_count/", null, 0, timeout.Token)).Count;
+            var orders = (await SendAsync<LinkoCount>(connection, "orders_count/", null, 0, timeout.Token)).Count;
+            return new LinkoTestResult(true, "Подключение работает.", users, markets, orders, watch.ElapsedMilliseconds);
+        }
+        catch (LinkoApiException ex)
+        {
+            var message = ex.Status switch
+            {
+                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => $"Сервер Linko не принял токен (HTTP {(int)ex.Status}).",
+                HttpStatusCode.NotFound => "По этому адресу нет Linko External API (HTTP 404). Проверьте адрес сервера.",
+                { } status => $"Сервер Linko ответил ошибкой HTTP {(int)status}.",
+                null => $"Сервер недоступен: {ex.Message}",
+            };
+            return new LinkoTestResult(false, message, null, null, null, watch.ElapsedMilliseconds);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return new LinkoTestResult(false, "Сервер Linko не ответил за 20 секунд.", null, null, null, watch.ElapsedMilliseconds);
+        }
+        catch (JsonException)
+        {
+            return new LinkoTestResult(false, "Сервер ответил не в формате Linko API. Проверьте адрес сервера.", null, null, null, watch.ElapsedMilliseconds);
+        }
+    }
+
+    private async Task<LinkoConnectionSettings> ReadyAsync(CancellationToken ct)
+    {
+        var connection = await settings.GetAsync(ct);
+        if (!connection.HasCredentials)
+        {
+            throw new LinkoApiException("Linko не настроен: задайте адрес и токен в «Настройки → Интеграции → Продажи → Linko».");
+        }
+
+        return connection;
+    }
+
+    private async Task<T> SendAsync<T>(LinkoConnectionSettings connection, string path, IDictionary<string, string?>? query, int maxRetries, CancellationToken ct)
+    {
+        var url = new Uri(new Uri(connection.BaseUrl.TrimEnd('/') + "/"), Prefix + path + BuildQuery(query));
 
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                using var response = await http.GetAsync(url, ct);
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue("External", connection.Token);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                using var response = await http.SendAsync(request, ct);
                 if (response.IsSuccessStatusCode)
                 {
                     return await response.Content.ReadFromJsonAsync<T>(Json, ct)
@@ -112,7 +173,7 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, ILogger<L
 
                 var body = await response.Content.ReadAsStringAsync(ct);
                 var retryable = response.StatusCode is HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500;
-                if (!retryable || attempt > options.MaxRetries)
+                if (!retryable || attempt > maxRetries)
                 {
                     throw new LinkoApiException(
                         $"Linko {path}: HTTP {(int)response.StatusCode} {Truncate(body)}", response.StatusCode);
@@ -122,7 +183,7 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, ILogger<L
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
             {
-                if (attempt > options.MaxRetries)
+                if (attempt > maxRetries)
                 {
                     throw new LinkoApiException($"Linko {path}: {ex.Message}");
                 }

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -58,18 +59,18 @@ public static class DependencyInjection
         services.AddSingleton(sales);
         services.TryAddSingleton(TimeProvider.System);
 
-        // Адрес и токен Linko — только из окружения (.env), не из appsettings.
+        // Секреты интеграций шифруются Data Protection; ключи хранятся в БД, чтобы переживать перезапуск контейнера.
+        services.AddDataProtection()
+            .SetApplicationName("OneBase")
+            .PersistKeysToDbContext<OneBaseDbContext>();
+
+        // Адрес и токен Linko задаются в «Настройки → Интеграции»; LINKO_BASE_URL / LINKO_TOKEN из .env — запасной вариант.
         var linko = config.GetSection(LinkoOptions.Section).Get<LinkoOptions>() ?? new LinkoOptions();
         linko.BaseUrl = config["LINKO_BASE_URL"] ?? string.Empty;
         linko.Token = config["LINKO_TOKEN"] ?? string.Empty;
         services.AddSingleton(linko);
-        services.AddHttpClient<LinkoClient>(http =>
-        {
-            if (linko.IsConfigured)
-            {
-                LinkoClient.Configure(http, linko);
-            }
-        });
+        services.AddSingleton<LinkoSettingsStore>();
+        services.AddHttpClient<LinkoClient>(http => http.Timeout = TimeSpan.FromSeconds(linko.TimeoutSeconds));
         services.AddScoped<LinkoSyncService>();
         services.AddScoped<ISalesPlanImporter, SalesPlanImporter>();
         services.AddMemoryCache();

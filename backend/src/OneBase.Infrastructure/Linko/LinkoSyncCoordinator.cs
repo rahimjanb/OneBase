@@ -62,15 +62,15 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
 /// <summary>Периодическая синхронизация Linko (Sales:Sync:IntervalMinutes).</summary>
 internal sealed class LinkoSyncWorker(
     LinkoSyncCoordinator coordinator,
-    LinkoOptions linko,
+    LinkoSettingsStore settings,
     SalesOptions sales,
     ILogger<LinkoSyncWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!linko.IsConfigured || !sales.Sync.Enabled)
+        if (!sales.Sync.Enabled)
         {
-            logger.LogInformation("Синхронизация Linko выключена (нет LINKO_BASE_URL/LINKO_TOKEN или Sales:Sync:Enabled=false)");
+            logger.LogInformation("Фоновая синхронизация Linko выключена (Sales:Sync:Enabled=false)");
             return;
         }
 
@@ -80,7 +80,11 @@ internal sealed class LinkoSyncWorker(
         {
             try
             {
-                await coordinator.RunAsync(full: false, stoppingToken);
+                // Настройки читаются на каждом цикле: подключение можно включить или поменять без перезапуска.
+                if ((await settings.GetAsync(stoppingToken)).IsReady)
+                {
+                    await coordinator.RunAsync(full: false, stoppingToken);
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

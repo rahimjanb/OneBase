@@ -11,9 +11,11 @@ public static class Permissions
     public const string AuditRead = "audit.read";
     public const string SalesRead = "sales.read";
     public const string SalesManage = "sales.manage";
+    public const string IntegrationsManage = "integrations.manage";
 
     public static readonly IReadOnlyList<string> All =
     [
+        IntegrationsManage,
         UsersManage,
         FilesRead,
         FilesWrite,

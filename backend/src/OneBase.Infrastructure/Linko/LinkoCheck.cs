@@ -13,10 +13,10 @@ public static class LinkoCheck
 {
     public static async Task<int> RunAsync(IServiceProvider services, bool full)
     {
-        var linko = services.GetRequiredService<LinkoOptions>();
-        if (!linko.IsConfigured)
+        var linko = await services.GetRequiredService<LinkoSettingsStore>().GetAsync();
+        if (!linko.HasCredentials)
         {
-            Console.Error.WriteLine("LINKO_BASE_URL / LINKO_TOKEN не заданы (.env).");
+            Console.Error.WriteLine("Linko не настроен: задайте адрес и токен в «Настройки → Интеграции → Продажи → Linko» или LINKO_BASE_URL / LINKO_TOKEN в .env.");
             return 1;
         }
 

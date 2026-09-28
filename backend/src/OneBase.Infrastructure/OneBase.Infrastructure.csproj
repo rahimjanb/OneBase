@@ -10,6 +10,7 @@
 
     <ItemGroup>
       <PackageReference Include="ClosedXML" Version="0.105.1" />
+      <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.12" />
       <PackageReference Include="Minio" Version="7.0.0" />
       <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
       <PackageReference Include="Qdrant.Client" Version="1.19.0" />
