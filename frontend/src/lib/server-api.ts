@@ -25,7 +25,11 @@ export async function apiGet<T>(path: string, returnTo = "/sales"): Promise<T> {
   });
 
   if (response.status === 401) redirect(`/login?next=${encodeURIComponent(returnTo)}`);
-  if (!response.ok) throw new ApiRequestError(response.status, await response.text());
+  if (response.status === 403) redirect(`/no-access?from=${encodeURIComponent(returnTo)}`);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiRequestError(response.status, text || `Сервер OneBase ответил HTTP ${response.status}`);
+  }
   return (await response.json()) as T;
 }
 
