@@ -104,4 +104,55 @@ internal static class SalesModel
             e.Property(x => x.Entity).HasMaxLength(64);
         });
     }
+
+    public static void ConfigureSales(ModelBuilder b)
+    {
+        b.Entity<SalesDirection>(e =>
+        {
+            e.ToTable("Directions", "sales");
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.ManagerName).HasMaxLength(200);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(32);
+        });
+
+        b.Entity<SalesRegion>(e =>
+        {
+            e.ToTable("Regions", "sales");
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.SupervisorName).HasMaxLength(200);
+            e.Property(x => x.DealerName).HasMaxLength(200);
+            e.HasIndex(x => x.LinkoBranchId).IsUnique();
+            e.HasOne(x => x.Direction).WithMany(x => x.Regions).HasForeignKey(x => x.DirectionId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<SalesAgentProfile>(e =>
+        {
+            e.ToTable("AgentProfiles", "sales");
+            e.HasKey(x => x.LinkoUserId);
+            e.Property(x => x.LinkoUserId).ValueGeneratedNever();
+            e.HasOne(x => x.Region).WithMany().HasForeignKey(x => x.RegionId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<SalesRegionPlan>(e =>
+        {
+            e.ToTable("RegionPlans", "sales");
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            e.HasOne(x => x.Region).WithMany().HasForeignKey(x => x.RegionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.RegionId, x.Kind, x.Year, x.Month, x.CategoryId }).IsUnique().AreNullsDistinct(false);
+        });
+
+        b.Entity<SalesAgentPlan>(e =>
+        {
+            e.ToTable("AgentPlans", "sales");
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            e.HasIndex(x => new { x.LinkoUserId, x.Kind, x.Year, x.Month, x.CategoryId }).IsUnique().AreNullsDistinct(false);
+        });
+
+        b.Entity<SalesTarget>(e =>
+        {
+            e.ToTable("Targets", "sales");
+            e.HasKey(x => x.Key);
+            e.Property(x => x.Key).HasMaxLength(64);
+        });
+    }
 }

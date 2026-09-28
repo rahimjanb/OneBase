@@ -9,6 +9,8 @@ public static class Permissions
     public const string AgentsRun = "ai.agents.run";
     public const string ApprovalsDecide = "ai.approvals.decide";
     public const string AuditRead = "audit.read";
+    public const string SalesRead = "sales.read";
+    public const string SalesManage = "sales.manage";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -18,5 +20,7 @@ public static class Permissions
         AgentsRun,
         ApprovalsDecide,
         AuditRead,
+        SalesRead,
+        SalesManage,
     ];
 }

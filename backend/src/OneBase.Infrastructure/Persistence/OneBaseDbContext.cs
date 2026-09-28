@@ -39,9 +39,18 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<LinkoKpiPlan> LinkoKpiPlans => Set<LinkoKpiPlan>();
     public DbSet<LinkoSyncState> LinkoSyncStates => Set<LinkoSyncState>();
 
+    // Продажи: оргструктура, планы, цели
+    public DbSet<SalesDirection> SalesDirections => Set<SalesDirection>();
+    public DbSet<SalesRegion> SalesRegions => Set<SalesRegion>();
+    public DbSet<SalesAgentProfile> SalesAgentProfiles => Set<SalesAgentProfile>();
+    public DbSet<SalesRegionPlan> SalesRegionPlans => Set<SalesRegionPlan>();
+    public DbSet<SalesAgentPlan> SalesAgentPlans => Set<SalesAgentPlan>();
+    public DbSet<SalesTarget> SalesTargets => Set<SalesTarget>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         SalesModel.ConfigureLinko(b);
+        SalesModel.ConfigureSales(b);
 
         // Identity
         b.Entity<Department>(e =>

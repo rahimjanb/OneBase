@@ -36,5 +36,12 @@ public interface IAppDbContext
     DbSet<LinkoKpiPlan> LinkoKpiPlans { get; }
     DbSet<LinkoSyncState> LinkoSyncStates { get; }
 
+    DbSet<SalesDirection> SalesDirections { get; }
+    DbSet<SalesRegion> SalesRegions { get; }
+    DbSet<SalesAgentProfile> SalesAgentProfiles { get; }
+    DbSet<SalesRegionPlan> SalesRegionPlans { get; }
+    DbSet<SalesAgentPlan> SalesAgentPlans { get; }
+    DbSet<SalesTarget> SalesTargets { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

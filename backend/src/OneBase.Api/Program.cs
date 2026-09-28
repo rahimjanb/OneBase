@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using OneBase.AI;
 using OneBase.Api;
@@ -13,7 +14,8 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAi();
 builder.Services.AddJwtAuth(builder.Configuration);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddDbContextCheck<OneBaseDbContext>("postgres");

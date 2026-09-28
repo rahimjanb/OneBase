@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using OneBase.Application.Security;
 using OneBase.Domain.AI;
 using OneBase.Domain.Identity;
+using OneBase.Domain.Sales;
 
 namespace OneBase.Infrastructure.Persistence;
 
@@ -64,6 +65,12 @@ public static class DbSeeder
             {
                 db.AgentToolGrants.Add(new AgentToolGrant { AgentCode = agent, ToolName = "delegate_to_agent" });
             }
+        }
+
+        var targetKeys = await db.SalesTargets.Select(t => t.Key).ToListAsync(cancellationToken);
+        foreach (var (key, value) in SalesTargetKeys.Defaults.Where(t => !targetKeys.Contains(t.Key)))
+        {
+            db.SalesTargets.Add(new SalesTarget { Key = key, Value = value });
         }
 
         var email = config["Seed:AdminEmail"]?.Trim().ToLowerInvariant();

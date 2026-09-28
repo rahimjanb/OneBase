@@ -10,6 +10,7 @@ using OneBase.Infrastructure.Linko;
 using OneBase.Domain.Identity;
 using OneBase.Infrastructure.Audit;
 using OneBase.Infrastructure.Persistence;
+using OneBase.Infrastructure.Sales;
 using OneBase.Infrastructure.Storage;
 using OneBase.Infrastructure.Vector;
 using Qdrant.Client;
@@ -70,6 +71,7 @@ public static class DependencyInjection
             }
         });
         services.AddScoped<LinkoSyncService>();
+        services.AddScoped<ISalesPlanImporter, SalesPlanImporter>();
         services.AddSingleton<LinkoSyncCoordinator>();
         services.AddHostedService<LinkoSyncWorker>();
 

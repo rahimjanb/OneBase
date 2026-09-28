@@ -42,7 +42,28 @@ public sealed class LinkoSyncService(
             results.Add(await RunStepAsync(entity, full, ct));
         }
 
+        await EnsureRegionsAsync(ct);
         return new LinkoSyncReport(started, time.GetUtcNow(), results);
+    }
+
+    /// <summary>Каждый филиал (branch) из заказов становится регионом OneBase — без направления, пока его не назначат.</summary>
+    private async Task EnsureRegionsAsync(CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        var known = await db.SalesRegions.Select(r => r.LinkoBranchId).ToListAsync(ct);
+        var branches = await db.LinkoOrders
+            .Where(o => o.BranchId != null && !known.Contains(o.BranchId!.Value))
+            .GroupBy(o => o.BranchId!.Value)
+            .Select(g => new { Id = g.Key, Name = g.Max(o => o.BranchName) })
+            .ToListAsync(ct);
+
+        foreach (var branch in branches)
+        {
+            db.SalesRegions.Add(new SalesRegion { LinkoBranchId = branch.Id, Name = branch.Name ?? $"Филиал {branch.Id}" });
+        }
+
+        await db.SaveChangesAsync(ct);
+        db.ChangeTracker.Clear();
     }
 
     /// <summary>Окно первичной загрузки документов: с 1-го числа (BackfillMonths назад) по конец текущего месяца.</summary>
