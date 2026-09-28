@@ -1,3 +1,5 @@
+import type { SyncProgress } from "@/lib/sales/types";
+
 export type IntegrationStatus = "connected" | "error" | "disabled" | "not_configured";
 
 export type IntegrationSummary = {
@@ -27,6 +29,7 @@ export type LinkoDetails = {
   lastTest: { at: string; ok: boolean | null; message: string | null } | null;
   sync: {
     isRunning: boolean;
+    progress: SyncProgress | null;
     dataAsOf: string | null;
     entities: { entity: string; lastSuccessAt: string | null; lastRows: number; lastError: string | null }[];
   };
@@ -53,6 +56,8 @@ export const linkoEntityLabels: Record<string, string> = {
   borders: "Территории",
   market_users: "Закрепление ТТ за агентами",
   kpi_plans: "Планы KPI",
+  visits_month: "Визиты за месяц (полное обновление)",
+  source: "Источник данных",
 };
 
 export const statusView: Record<IntegrationStatus, { label: string; className: string }> = {
@@ -61,3 +66,11 @@ export const statusView: Record<IntegrationStatus, { label: string; className: s
   disabled: { label: "Выключено", className: "bg-muted text-ink-2" },
   not_configured: { label: "Не настроено", className: "bg-muted text-ink-2" },
 };
+
+/** «Заказы · текущий и прошлый месяц · 12 000 строк». */
+export function progressText(progress: SyncProgress | null): string {
+  if (!progress) return "Обновляется…";
+  const entity = progress.entity ? linkoEntityLabels[progress.entity] ?? progress.entity : null;
+  const rows = progress.rows > 0 ? ` · ${new Intl.NumberFormat("ru-RU").format(progress.rows)} строк` : "";
+  return [entity, progress.phase].filter(Boolean).join(" · ") + rows;
+}

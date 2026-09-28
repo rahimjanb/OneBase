@@ -70,8 +70,10 @@ public static class DependencyInjection
         linko.Token = config["LINKO_TOKEN"] ?? string.Empty;
         services.AddSingleton(linko);
         services.AddSingleton<LinkoSettingsStore>();
+        services.AddSingleton<LinkoSyncProgress>();
         services.AddHttpClient<LinkoClient>(http => http.Timeout = TimeSpan.FromSeconds(linko.TimeoutSeconds));
         services.AddScoped<LinkoSyncService>();
+        services.AddScoped<LinkoVerifier>();
         services.AddScoped<ISalesPlanImporter, SalesPlanImporter>();
         services.AddMemoryCache();
         services.AddSingleton<SalesCacheSignal>();

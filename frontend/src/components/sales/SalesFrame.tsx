@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { PageBody, PageHeader, type Crumb } from "@/components/shell/PageHeader";
 import { SalesToolbar } from "./SalesToolbar";
+import { SyncButton } from "./SyncButton";
 import { apiGet } from "@/lib/server-api";
 import { dateTime } from "@/lib/sales/format";
 import { param, periodQuery, type SalesSearchParams } from "@/lib/sales/query";
@@ -33,7 +34,7 @@ function DataChip({ status }: { status: SyncStatus }) {
   }
   return (
     <span className="rounded-full border border-line bg-surface px-3 py-1 text-xs tabular-nums text-ink-2">
-      {status.isRunning ? "Обновляется… · " : ""}данные по {dateTime(status.dataAsOf)}
+данные по {dateTime(status.dataAsOf)}
     </span>
   );
 }
@@ -92,6 +93,7 @@ export async function SalesFrame({
           <div className="flex flex-wrap items-center gap-2">
             {tab !== "setup" && <SalesToolbar months={months} year={year} month={month} plan={param(sp, "plan") ?? "Rop"} />}
             <DataChip status={status} />
+            <SyncButton initial={status} />
           </div>
         </div>
 

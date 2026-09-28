@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OneBase.Application.Sales;
+using OneBase.Domain.Integrations;
 using OneBase.Domain.Sales;
 using OneBase.Infrastructure.Persistence;
 
@@ -16,35 +17,164 @@ public sealed record LinkoSyncReport(DateTimeOffset StartedAt, DateTimeOffset Fi
 
 /// <summary>
 /// Загружает данные Linko в нашу БД. Только чтение из Linko: POST sync/synced не вызываются.
-/// Справочники — инкрементально по last_tm (где он есть), документы — окном по датам при первой загрузке,
-/// дальше — изменения по last_tm. Визиты (без tm) — окном текущего месяца.
+/// Полная загрузка идёт в два этапа — сначала текущий и прошлый месяц (дашборды работают сразу), потом история.
+/// Обычное обновление — изменения по last_tm; визиты (без tm) — за последние дни, раз в 6 часов — за весь месяц.
+/// Данные разных серверов Linko не смешиваются: при смене сервера нужно очистить данные.
 /// </summary>
 public sealed class LinkoSyncService(
     LinkoClient client,
     OneBaseDbContext db,
     SalesOptions options,
+    LinkoSettingsStore settings,
+    LinkoSyncProgress progress,
+    SalesCacheSignal cacheSignal,
     TimeProvider time,
     ILogger<LinkoSyncService> logger)
 {
-    public static readonly string[] Entities =
-    [
-        "users", "product_types", "products", "borders", "markets", "market_users",
-        "orders", "order_returns", "visits", "kpi_plans",
-    ];
+    public const string SourceState = "source";
+    private const string VisitsMonthState = "visits_month";
+    private static readonly TimeSpan VisitsMonthInterval = TimeSpan.FromHours(6);
 
-    public async Task<LinkoSyncReport> SyncAsync(bool full, CancellationToken ct = default)
+    private static readonly string[] Dictionaries = ["users", "product_types", "products", "borders", "markets", "market_users"];
+
+    public async Task<LinkoSyncReport> SyncAsync(LinkoSyncMode mode, CancellationToken ct = default)
     {
         var started = time.GetUtcNow();
         var results = new List<LinkoEntityResult>();
+        var connection = await settings.GetAsync(ct);
 
-        foreach (var entity in Entities)
+        if (mode == LinkoSyncMode.Reset)
         {
-            results.Add(await RunStepAsync(entity, full, ct));
+            progress.Step("Очистка старых данных", null);
+            await PurgeAsync(ct);
+        }
+        else if (await SourceChangedAsync(connection.BaseUrl, ct) is { } message)
+        {
+            await SetErrorAsync(SourceState, message, ct);
+            return new LinkoSyncReport(started, time.GetUtcNow(), [new LinkoEntityResult(SourceState, 0, message)]);
         }
 
+        await MarkSourceAsync(connection.BaseUrl, ct);
+
+        // Первая загрузка (или после очистки) — всегда полная.
+        var full = mode != LinkoSyncMode.Incremental
+            || !await db.LinkoSyncStates.AnyAsync(s => s.Entity == "orders" && s.LastSuccessAt != null, ct);
+
+        // 1. Справочники.
+        foreach (var entity in Dictionaries)
+        {
+            results.Add(await RunStepAsync(entity, "Справочники", accumulate: false, state => entity switch
+            {
+                "users" => SyncUsersAsync(ct),
+                "product_types" => SyncProductTypesAsync(full ? null : state.LastTm, ct),
+                "products" => SyncProductsAsync(full ? null : state.LastTm, ct),
+                "borders" => SyncBordersAsync(full ? null : state.LastTm, ct),
+                "markets" => SyncMarketsAsync(full ? null : state.LastTm, ct),
+                _ => SyncMarketUsersAsync(ct),
+            }, ct));
+        }
+
+        // 2. Документы: текущий и прошлый месяц (при полной загрузке) или изменения.
+        var (recentFrom, recentTo) = RecentWindow();
+        var phase = full ? "Текущий и прошлый месяц" : "Обновление";
+        results.Add(await RunStepAsync("orders", phase, accumulate: false, state =>
+            SyncOrdersAsync(full || state.LastTm is null ? Window(recentFrom, recentTo) : Since(state.LastTm), ct), ct));
+        results.Add(await RunStepAsync("order_returns", phase, accumulate: false, state =>
+            SyncReturnsAsync(full || state.LastTm is null ? Window(recentFrom, recentTo) : Since(state.LastTm), ct), ct));
+        results.Add(await RunStepAsync("visits", phase, accumulate: false, _ => SyncVisitsAsync(full, recentFrom, recentTo, ct), ct));
+
         await EnsureRegionsAsync(ct);
+        cacheSignal.Invalidate(); // свежие месяцы уже видны в дашбордах
+
+        // 3. История — после того как свежие данные уже доступны.
+        if (full)
+        {
+            var (historyFrom, _) = BackfillWindow();
+            var historyTo = recentFrom.AddDays(-1);
+            if (historyFrom <= historyTo)
+            {
+                results.Add(await RunStepAsync("orders", "История", accumulate: true, _ => SyncOrdersAsync(Window(historyFrom, historyTo), ct), ct));
+                results.Add(await RunStepAsync("order_returns", "История", accumulate: true, _ => SyncReturnsAsync(Window(historyFrom, historyTo), ct), ct));
+                results.Add(await RunStepAsync("visits", "История", accumulate: true, _ => SyncVisitRangeAsync(historyFrom, historyTo, ct), ct));
+                await EnsureRegionsAsync(ct);
+            }
+        }
+
+        results.Add(await RunStepAsync("kpi_plans", "Планы Linko", accumulate: false, _ => SyncKpiPlansAsync(ct), ct));
         return new LinkoSyncReport(started, time.GetUtcNow(), results);
     }
+
+    /// <summary>Окно полной загрузки документов: с 1-го числа (BackfillMonths назад) по конец текущего месяца.</summary>
+    public (DateOnly From, DateOnly To) BackfillWindow()
+    {
+        var first = MonthStart(Today());
+        return (first.AddMonths(-options.Sync.BackfillMonths), first.AddMonths(1).AddDays(-1));
+    }
+
+    /// <summary>Свежее окно: с 1-го числа прошлого месяца по конец текущего.</summary>
+    private (DateOnly From, DateOnly To) RecentWindow()
+    {
+        var first = MonthStart(Today());
+        return (first.AddMonths(-1), first.AddMonths(1).AddDays(-1));
+    }
+
+    private DateOnly Today() => DateOnly.FromDateTime(time.GetLocalNow().DateTime);
+
+    private static DateOnly MonthStart(DateOnly d) => new(d.Year, d.Month, 1);
+
+    // ---------- Очистка и источник данных ----------
+
+    /// <summary>
+    /// Удаляет всё загруженное из Linko и связанное с его идентификаторами в OneBase:
+    /// регионы (branch), профили агентов и планы. Направления, цели и настройки подключения сохраняются.
+    /// </summary>
+    private async Task PurgeAsync(CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            TRUNCATE linko."OrderLines", linko."Orders", linko."OrderReturnLines", linko."OrderReturns",
+                     linko."Visits", linko."Markets", linko."MarketUsers", linko."Users", linko."Products",
+                     linko."ProductTypes", linko."Borders", linko."KpiPlans", linko."SyncState"
+            """, ct);
+        await db.SalesAgentPlans.ExecuteDeleteAsync(ct);
+        await db.SalesRegionPlans.ExecuteDeleteAsync(ct);
+        await db.SalesAgentProfiles.ExecuteDeleteAsync(ct);
+        await db.SalesRegions.ExecuteDeleteAsync(ct);
+        cacheSignal.Invalidate();
+        logger.LogWarning("Данные Linko очищены перед полной загрузкой");
+    }
+
+    private async Task<string?> SourceChangedAsync(string baseUrl, CancellationToken ct)
+    {
+        var row = await db.Integrations.AsNoTracking().FirstOrDefaultAsync(i => i.Code == LinkoSettingsStore.Code, ct);
+        if (row?.DataSourceUrl is not { Length: > 0 } source || SameHost(source, baseUrl))
+        {
+            return null;
+        }
+
+        return $"Сервер Linko изменён: данные в OneBase загружены с {Host(source)}, а подключение настроено на {Host(baseUrl)}. " +
+               "Чтобы не смешивать данные, нажмите «Очистить данные и загрузить заново».";
+    }
+
+    private async Task MarkSourceAsync(string baseUrl, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        var row = await db.Integrations.FirstOrDefaultAsync(i => i.Code == LinkoSettingsStore.Code, ct);
+        if (row is null)
+        {
+            row = new IntegrationConnection { Code = LinkoSettingsStore.Code, DepartmentCode = LinkoSettingsStore.Department };
+            db.Integrations.Add(row);
+        }
+
+        row.DataSourceUrl = baseUrl;
+        await db.LinkoSyncStates.Where(s => s.Entity == SourceState).ExecuteDeleteAsync(ct);
+        await db.SaveChangesAsync(ct);
+        db.ChangeTracker.Clear();
+    }
+
+    private static bool SameHost(string a, string b) => string.Equals(Host(a), Host(b), StringComparison.OrdinalIgnoreCase);
+
+    private static string Host(string url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : url;
 
     /// <summary>Каждый филиал (branch) из заказов становится регионом OneBase — без направления, пока его не назначат.</summary>
     private async Task EnsureRegionsAsync(CancellationToken ct)
@@ -66,58 +196,50 @@ public sealed class LinkoSyncService(
         db.ChangeTracker.Clear();
     }
 
-    /// <summary>Окно первичной загрузки документов: с 1-го числа (BackfillMonths назад) по конец текущего месяца.</summary>
-    public (DateOnly From, DateOnly To) BackfillWindow()
-    {
-        var today = DateOnly.FromDateTime(time.GetLocalNow().DateTime);
-        var first = new DateOnly(today.Year, today.Month, 1);
-        return (first.AddMonths(-options.Sync.BackfillMonths), first.AddMonths(1).AddDays(-1));
-    }
+    // ---------- Шаги ----------
 
-    private async Task<LinkoEntityResult> RunStepAsync(string entity, bool full, CancellationToken ct)
+    private async Task<LinkoEntityResult> RunStepAsync(
+        string entity,
+        string phase,
+        bool accumulate,
+        Func<LinkoSyncState, Task<(int Rows, decimal? MaxTm)>> work,
+        CancellationToken ct)
     {
+        progress.Step(phase, entity);
         var state = await ReloadStateAsync(entity, ct);
         state.LastRunAt = time.GetUtcNow();
-        var cursor = full ? null : state.LastTm;
-        var firstRun = state.LastSuccessAt is null;
         await db.SaveChangesAsync(ct);
+        var snapshot = new LinkoSyncState { Entity = entity, LastTm = state.LastTm, LastRows = state.LastRows };
 
         try
         {
-            var (rows, maxTm) = entity switch
-            {
-                "users" => await SyncUsersAsync(ct),
-                "product_types" => await SyncProductTypesAsync(cursor, ct),
-                "products" => await SyncProductsAsync(cursor, ct),
-                "borders" => await SyncBordersAsync(cursor, ct),
-                "markets" => await SyncMarketsAsync(cursor, ct),
-                "market_users" => await SyncMarketUsersAsync(ct),
-                "orders" => await SyncOrdersAsync(cursor, ct),
-                "order_returns" => await SyncReturnsAsync(cursor, ct),
-                "visits" => await SyncVisitsAsync(full || firstRun, ct),
-                "kpi_plans" => await SyncKpiPlansAsync(ct),
-                _ => throw new ArgumentOutOfRangeException(nameof(entity)),
-            };
+            var (rows, maxTm) = await work(snapshot);
 
             state = await ReloadStateAsync(entity, ct);
-            state.LastTm = maxTm ?? state.LastTm;
+            state.LastTm = Max(state.LastTm, maxTm);
             state.LastSuccessAt = time.GetUtcNow();
             state.LastError = null;
-            state.LastRows = rows;
+            state.LastRows = accumulate ? state.LastRows + rows : rows;
             await db.SaveChangesAsync(ct);
 
-            logger.LogInformation("Linko {Entity}: {Rows} записей", entity, rows);
+            logger.LogInformation("Linko {Entity} ({Phase}): {Rows} записей", entity, phase, rows);
             return new LinkoEntityResult(entity, rows, null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Linko {Entity}: ошибка синхронизации", entity);
-            db.ChangeTracker.Clear();
-            state = await ReloadStateAsync(entity, ct);
-            state.LastError = ex.Message;
-            await db.SaveChangesAsync(ct);
+            await SetErrorAsync(entity, ex.Message, ct);
             return new LinkoEntityResult(entity, 0, ex.Message);
         }
+    }
+
+    private async Task SetErrorAsync(string entity, string message, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        var state = await ReloadStateAsync(entity, ct);
+        state.LastRunAt = time.GetUtcNow();
+        state.LastError = message.Length > 1000 ? message[..1000] : message;
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task<LinkoSyncState> ReloadStateAsync(string entity, CancellationToken ct)
@@ -270,9 +392,8 @@ public sealed class LinkoSyncService(
 
     // ---------- Документы ----------
 
-    private async Task<(int, decimal?)> SyncOrdersAsync(decimal? cursor, CancellationToken ct)
+    private async Task<(int, decimal?)> SyncOrdersAsync(Dictionary<string, string?> filters, CancellationToken ct)
     {
-        var filters = cursor is null ? Window(BackfillWindow()) : Since(cursor);
         decimal? maxTm = null;
 
         var rows = await client.ReadAllAsync<LinkoOrderDto>("orders", filters, async page =>
@@ -321,9 +442,8 @@ public sealed class LinkoSyncService(
         return (rows, maxTm);
     }
 
-    private async Task<(int, decimal?)> SyncReturnsAsync(decimal? cursor, CancellationToken ct)
+    private async Task<(int, decimal?)> SyncReturnsAsync(Dictionary<string, string?> filters, CancellationToken ct)
     {
-        var filters = cursor is null ? Window(BackfillWindow()) : Since(cursor);
         decimal? maxTm = null;
 
         var rows = await client.ReadAllAsync<LinkoReturnDto>("order_returns", filters, async page =>
@@ -366,21 +486,47 @@ public sealed class LinkoSyncService(
         return (rows, maxTm);
     }
 
-    private async Task<(int, decimal?)> SyncVisitsAsync(bool backfill, CancellationToken ct)
+    /// <summary>
+    /// Визиты (у них нет tm): при полной загрузке — свежее окно; при обновлении — за последние 3 дня,
+    /// а раз в 6 часов — за весь текущий месяц (в первые дни месяца — и прошлый): статусы доезжают с опозданием.
+    /// </summary>
+    private async Task<(int, decimal?)> SyncVisitsAsync(bool full, DateOnly recentFrom, DateOnly recentTo, CancellationToken ct)
     {
-        // У визитов нет tm: при первой загрузке — всё окно, дальше — текущий месяц
-        // (в первые дни месяца — ещё и прошлый: статусы визитов могут доезжать с опозданием).
-        var (from, to) = BackfillWindow();
-        if (!backfill)
+        if (full)
         {
-            var today = DateOnly.FromDateTime(time.GetLocalNow().DateTime);
-            from = new DateOnly(today.Year, today.Month, 1);
-            if (today.Day <= 3)
-            {
-                from = from.AddMonths(-1);
-            }
+            var result = await SyncVisitRangeAsync(recentFrom, recentTo, ct);
+            await MarkVisitsMonthAsync(ct);
+            return result;
         }
 
+        var today = Today();
+        var monthState = await db.LinkoSyncStates.AsNoTracking().FirstOrDefaultAsync(s => s.Entity == VisitsMonthState, ct);
+        if (monthState?.LastSuccessAt is { } last && time.GetUtcNow() - last < VisitsMonthInterval)
+        {
+            return await SyncVisitRangeAsync(today.AddDays(-2), today, ct);
+        }
+
+        var from = MonthStart(today);
+        if (today.Day <= 3)
+        {
+            from = from.AddMonths(-1);
+        }
+
+        var monthResult = await SyncVisitRangeAsync(from, today, ct);
+        await MarkVisitsMonthAsync(ct);
+        return monthResult;
+    }
+
+    private async Task MarkVisitsMonthAsync(CancellationToken ct)
+    {
+        var state = await ReloadStateAsync(VisitsMonthState, ct);
+        state.LastRunAt = state.LastSuccessAt = time.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        db.ChangeTracker.Clear();
+    }
+
+    private async Task<(int, decimal?)> SyncVisitRangeAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    {
         var rows = await client.ReadAllAsync<LinkoVisitDto>("visits", Window(from, to), page => UpsertAsync(
             page, d => d.Id, db.LinkoVisits,
             d => new LinkoVisit { Id = d.Id, Status = "" },
@@ -395,7 +541,6 @@ public sealed class LinkoSyncService(
             }, ct), ct);
         return (rows, null);
     }
-
     // ---------- Общее ----------
 
     private async Task UpsertAsync<TDto, TEntity>(
@@ -407,6 +552,7 @@ public sealed class LinkoSyncService(
         CancellationToken ct)
         where TEntity : class
     {
+        progress.AddRows(page.Count);
         var ids = page.Select(key).Distinct().ToList();
         var existing = await set
             .Where(e => ids.Contains(EF.Property<long>(e, "Id")))

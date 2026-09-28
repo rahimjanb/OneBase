@@ -6,7 +6,7 @@ using OneBase.Application.Sales;
 namespace OneBase.Infrastructure.Linko;
 
 /// <summary>Не даёт запускать синхронизацию параллельно (фон + кнопка «Обновить»).</summary>
-public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCacheSignal cacheSignal, ILogger<LinkoSyncCoordinator> logger)
+public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCacheSignal cacheSignal, LinkoSyncProgress progress, ILogger<LinkoSyncCoordinator> logger)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -15,7 +15,7 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
     public LinkoSyncReport? LastReport { get; private set; }
 
     /// <summary>Запускает синхронизацию и ждёт её. null — если уже идёт другая.</summary>
-    public async Task<LinkoSyncReport?> RunAsync(bool full, CancellationToken ct = default)
+    public async Task<LinkoSyncReport?> RunAsync(LinkoSyncMode mode, CancellationToken ct = default)
     {
         if (!await _gate.WaitAsync(0, ct))
         {
@@ -24,20 +24,22 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
 
         try
         {
+            progress.Start(mode);
             using var scope = scopes.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<LinkoSyncService>();
-            LastReport = await service.SyncAsync(full, ct);
+            LastReport = await service.SyncAsync(mode, ct);
             cacheSignal.Invalidate();
             return LastReport;
         }
         finally
         {
+            progress.Finish();
             _gate.Release();
         }
     }
 
     /// <summary>Запускает синхронизацию в фоне. false — если она уже идёт.</summary>
-    public bool TryStartInBackground(bool full)
+    public bool TryStartInBackground(LinkoSyncMode mode)
     {
         if (IsRunning)
         {
@@ -48,7 +50,7 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
         {
             try
             {
-                await RunAsync(full);
+                await RunAsync(mode);
             }
             catch (Exception ex)
             {
@@ -83,7 +85,7 @@ internal sealed class LinkoSyncWorker(
                 // Настройки читаются на каждом цикле: подключение можно включить или поменять без перезапуска.
                 if ((await settings.GetAsync(stoppingToken)).IsReady)
                 {
-                    await coordinator.RunAsync(full: false, stoppingToken);
+                    await coordinator.RunAsync(LinkoSyncMode.Incremental, stoppingToken);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

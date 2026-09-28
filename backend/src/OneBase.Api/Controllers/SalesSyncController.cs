@@ -11,7 +11,7 @@ namespace OneBase.Api.Controllers;
 [ApiController]
 [Route("api/sales")]
 [HasPermission(Permissions.SalesRead)]
-public sealed class SalesSyncController(IAppDbContext db, LinkoSyncCoordinator coordinator, LinkoSettingsStore linko, IAuditLogger audit) : ControllerBase
+public sealed class SalesSyncController(IAppDbContext db, LinkoSyncCoordinator coordinator, LinkoSettingsStore linko, LinkoSyncProgress progress, IAuditLogger audit) : ControllerBase
 {
     /// <summary>Когда данные Linko последний раз успешно загружены и нет ли ошибок.</summary>
     [HttpGet("status")]
@@ -25,6 +25,7 @@ public sealed class SalesSyncController(IAppDbContext db, LinkoSyncCoordinator c
         {
             Configured = connection.IsReady,
             IsRunning = coordinator.IsRunning,
+            Progress = progress.Current,
             DataAsOf = documents.Count == 3 && documents.All(s => s.LastSuccessAt != null)
                 ? documents.Min(s => s.LastSuccessAt)
                 : null,
@@ -43,7 +44,7 @@ public sealed class SalesSyncController(IAppDbContext db, LinkoSyncCoordinator c
             return Problem("Linko не настроен или выключен: «Настройки → Интеграции → Продажи → Linko».", statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
-        if (!coordinator.TryStartInBackground(full))
+        if (!coordinator.TryStartInBackground(full ? LinkoSyncMode.Full : LinkoSyncMode.Incremental))
         {
             return Conflict(new { error = "Синхронизация уже идёт." });
         }

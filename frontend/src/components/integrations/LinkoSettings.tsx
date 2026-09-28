@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Loader2, PlugZap, RefreshCw, XCircle } from "lucide-react";
 import { Note, Section } from "@/components/sales/bits";
-import { linkoEntityLabels, statusView, type LinkoDetails, type LinkoTestResult } from "@/lib/integrations";
+import { linkoEntityLabels, progressText, statusView, type LinkoDetails, type LinkoTestResult } from "@/lib/integrations";
 import { dateTime, num } from "@/lib/sales/format";
 
 const field =
@@ -39,7 +39,8 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [enabled, setEnabled] = useState(initial.enabled);
-  const [busy, setBusy] = useState<"test" | "save" | "sync" | "clear" | null>(null);
+  const [busy, setBusy] = useState<"test" | "save" | "sync" | "clear" | "reset" | "verify" | null>(null);
+  const [verify, setVerify] = useState<{ from: string; to: string; ok: boolean; rows: { entity: string; linko: number; oneBase: number; ok: boolean }[] } | null>(null);
   const [test, setTest] = useState<LinkoTestResult | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
 
@@ -79,6 +80,38 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
       setBaseUrl(saved.baseUrl);
       setToken("");
       setMessage({ tone: "ok", text: kind === "clear" ? "Токен удалён из OneBase." : "Настройки сохранены." });
+    } catch (e) {
+      setMessage({ tone: "bad", text: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const reset = async () => {
+    const ok = confirm(
+      `Удалить все данные, загруженные из Linko, и загрузить их заново с ${data.baseUrl}?\n\n` +
+        "Будут удалены: заказы, возвраты, визиты, торговые точки, агенты, товары, а также регионы, профили агентов и планы в OneBase " +
+        "(они привязаны к данным Linko).\nСохранятся: направления, цели и настройки подключения.",
+    );
+    if (!ok) return;
+    setBusy("reset");
+    setMessage(null);
+    try {
+      await call("integrations/linko/reset", { method: "POST" });
+      setMessage({ tone: "ok", text: "Старые данные удаляются, идёт загрузка с сервера. Сначала загрузится текущий и прошлый месяц, потом история." });
+      await reload();
+    } catch (e) {
+      setMessage({ tone: "bad", text: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runVerify = async () => {
+    setBusy("verify");
+    setMessage(null);
+    try {
+      setVerify(await call("integrations/linko/verify", { method: "POST" }));
     } catch (e) {
       setMessage({ tone: "bad", text: (e as Error).message });
     } finally {
@@ -206,9 +239,16 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
 
       <Section
         title="Синхронизация"
-        hint={data.sync.isRunning ? "идёт загрузка…" : undefined}
+        hint={data.sync.isRunning ? progressText(data.sync.progress) : undefined}
         actions={
           <>
+            <button className={danger} onClick={reset} disabled={busy !== null || data.sync.isRunning || data.status === "not_configured" || !data.enabled}>
+              Очистить данные и загрузить заново
+            </button>
+            <button className={button} onClick={runVerify} disabled={busy !== null || data.status === "not_configured"}>
+              {busy === "verify" && <Loader2 className="size-4 animate-spin" />}
+              Сверить с Linko
+            </button>
             <Link href="/sales/setup" className={button}>
               Оргструктура и планы
             </Link>
@@ -219,13 +259,50 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
           </>
         }
       >
+        {data.sync.isRunning && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent-strong">
+            <Loader2 className="size-4 animate-spin" />
+            Загрузка: {progressText(data.sync.progress)}
+          </div>
+        )}
+        {data.sync.entities.find((e) => e.entity === "source" && e.lastError) && (
+          <div className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-ink">{data.sync.entities.find((e) => e.entity === "source")?.lastError}</div>
+        )}
+        {verify && (
+          <div className="mb-4 rounded-lg border border-line p-3">
+            <div className={`mb-2 text-sm font-semibold ${verify.ok ? "text-ok" : "text-warn"}`}>
+              {verify.ok ? "Всё сходится: в OneBase столько же записей, сколько в Linko." : "Есть расхождения — если загрузка ещё идёт, это нормально; иначе нажмите «Синхронизировать сейчас»."}
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-ink-3">
+                  <th className="py-1 pr-3 font-semibold">Данные</th>
+                  <th className="py-1 pr-3 text-right font-semibold">В Linko</th>
+                  <th className="py-1 pr-3 text-right font-semibold">В OneBase</th>
+                  <th className="py-1 font-semibold" />
+                </tr>
+              </thead>
+              <tbody>
+                {verify.rows.map((r) => (
+                  <tr key={r.entity} className="border-t border-line">
+                    <td className="py-1.5 pr-3">{linkoEntityLabels[r.entity] ?? r.entity}</td>
+                    <td className="py-1.5 pr-3 text-right tabular-nums">{num(r.linko)}</td>
+                    <td className="py-1.5 pr-3 text-right tabular-nums">{num(r.oneBase)}</td>
+                    <td className={`py-1.5 text-xs font-medium ${r.ok ? "text-ok" : "text-warn"}`}>{r.ok ? "сходится" : "расхождение"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-2 text-xs text-ink-3">Заказы, возвраты и визиты сверяются за окно истории {verify.from} – {verify.to}.</p>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-max text-sm">
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
                 <th className="py-2 pr-3 font-semibold">Данные</th>
                 <th className="py-2 pr-3 font-semibold">Последняя загрузка</th>
-                <th className="py-2 pr-3 text-right font-semibold">Строк</th>
+                <th className="py-2 pr-3 text-right font-semibold" title="Сколько записей пришло при последней загрузке: при обычном обновлении — только изменения">Строк за раз</th>
                 <th className="py-2 font-semibold">Ошибка</th>
               </tr>
             </thead>

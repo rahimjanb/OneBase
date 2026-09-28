@@ -135,7 +135,7 @@ function SyncSection({ status, run }: { status: SyncStatus | null; run: Run }) {
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
               <th className="py-2 pr-3 font-semibold">Сущность</th>
               <th className="py-2 pr-3 font-semibold">Последний успех</th>
-              <th className="py-2 pr-3 text-right font-semibold">Строк</th>
+              <th className="py-2 pr-3 text-right font-semibold" title="Сколько записей пришло при последней загрузке: при обычном обновлении — только изменения">Строк за раз</th>
               <th className="py-2 font-semibold">Ошибка</th>
             </tr>
           </thead>

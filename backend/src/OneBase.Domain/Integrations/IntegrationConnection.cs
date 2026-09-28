@@ -24,6 +24,9 @@ public class IntegrationConnection
     public DateTimeOffset? UpdatedAt { get; set; }
     public Guid? UpdatedById { get; set; }
 
+    /// <summary>С какого сервера загружены данные, лежащие сейчас в БД. Защищает от смешивания данных разных серверов.</summary>
+    public string? DataSourceUrl { get; set; }
+
     public DateTimeOffset? LastTestAt { get; set; }
     public bool? LastTestOk { get; set; }
     public string? LastTestMessage { get; set; }

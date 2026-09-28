@@ -229,9 +229,12 @@ export type ProblemAgent = {
 
 export type ProblemsView = { period: Period; vacancies: number; agents: ProblemAgent[] };
 
+export type SyncProgress = { mode: string; phase: string; entity: string | null; rows: number; startedAt: string };
+
 export type SyncStatus = {
   configured: boolean;
   isRunning: boolean;
+  progress: SyncProgress | null;
   dataAsOf: string | null;
   hasErrors: boolean;
   entities: { entity: string; lastRunAt: string | null; lastSuccessAt: string | null; lastRows: number; lastError: string | null }[];

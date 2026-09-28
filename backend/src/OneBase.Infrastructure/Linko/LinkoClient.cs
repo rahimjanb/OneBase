@@ -19,6 +19,9 @@ public sealed class LinkoOptions
     public string Token { get; set; } = string.Empty;
 
     public int PageSize { get; set; } = 1000;
+
+    /// <summary>Сколько страниц запрашивать одновременно при выгрузке списков.</summary>
+    public int Parallelism { get; set; } = 4;
     public int TimeoutSeconds { get; set; } = 60;
     public int MaxRetries { get; set; } = 4;
 }
@@ -62,35 +65,46 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
         CancellationToken ct = default)
     {
         var connection = await ReadyAsync(ct);
+        var parallel = Math.Clamp(options.Parallelism, 1, 8);
         var total = 0;
-        for (var offset = 0; ; offset += options.PageSize)
+
+        // Страницы запрашиваются пачками по `parallel` штук одновременно, а обрабатываются строго по порядку.
+        for (var offset = 0; ; offset += options.PageSize * parallel)
         {
-            var query = new Dictionary<string, string?>(filters ?? new Dictionary<string, string?>())
-            {
-                ["limit"] = options.PageSize.ToString(),
-                ["offset"] = offset.ToString(),
-            };
+            var batch = Enumerable.Range(0, parallel)
+                .Select(i => SendAsync<LinkoPage<T>>(connection, $"{entity}/", PageQuery(filters, offset + i * options.PageSize), options.MaxRetries, ct))
+                .ToList();
+            var pages = await Task.WhenAll(batch);
 
-            var page = await SendAsync<LinkoPage<T>>(connection, $"{entity}/", query, options.MaxRetries, ct);
-            if (page.Errors is { Count: > 0 })
+            foreach (var page in pages)
             {
-                logger.LogWarning("Linko {Entity}: {Count} ошибок в ответе, например: {Error}",
-                    entity, page.Errors.Count, page.Errors[0].Error?.ToString());
-            }
+                if (page.Errors is { Count: > 0 })
+                {
+                    logger.LogWarning("Linko {Entity}: {Count} ошибок в ответе, например: {Error}",
+                        entity, page.Errors.Count, page.Errors[0].Error?.ToString());
+                }
 
-            var items = page.Results ?? [];
-            if (items.Count > 0)
-            {
-                await onPage(items);
-            }
+                var items = page.Results ?? [];
+                if (items.Count > 0)
+                {
+                    await onPage(items);
+                }
 
-            total += items.Count;
-            if (items.Count < options.PageSize)
-            {
-                return total;
+                total += items.Count;
+                if (items.Count < options.PageSize)
+                {
+                    return total;
+                }
             }
         }
     }
+
+    private Dictionary<string, string?> PageQuery(IDictionary<string, string?>? filters, int offset) =>
+        new(filters ?? new Dictionary<string, string?>())
+        {
+            ["limit"] = options.PageSize.ToString(),
+            ["offset"] = offset.ToString(),
+        };
 
     /// <summary>
     /// Проверка подключения: три лёгких запроса *_count. Без повторов и с коротким таймаутом,

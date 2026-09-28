@@ -17,6 +17,8 @@ public sealed class IntegrationsController(
     LinkoSettingsStore linko,
     LinkoClient client,
     LinkoSyncCoordinator coordinator,
+    LinkoSyncProgress progress,
+    LinkoVerifier verifier,
     IAuditLogger audit) : ControllerBase
 {
     private sealed record CatalogItem(string Code, string Department, string Name, string Description);
@@ -93,6 +95,47 @@ public sealed class IntegrationsController(
         return result;
     }
 
+    /// <summary>
+    /// Удалить все данные, загруженные из Linko (и связанные с ними регионы, агентов и планы OneBase),
+    /// и загрузить заново с текущего сервера. Направления, цели и настройки подключения сохраняются.
+    /// </summary>
+    [HttpPost("linko/reset")]
+    public async Task<IActionResult> ResetLinko(CancellationToken ct)
+    {
+        if (!(await linko.GetAsync(ct)).IsReady)
+        {
+            return BadRequest(new { error = "Сначала задайте адрес и токен и включите интеграцию." });
+        }
+
+        if (!coordinator.TryStartInBackground(LinkoSyncMode.Reset))
+        {
+            return Conflict(new { error = "Синхронизация уже идёт — дождитесь окончания." });
+        }
+
+        await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "integration.linko.reset", "integration", LinkoSettingsStore.Code,
+            new { (await linko.GetAsync(ct)).BaseUrl }, ct);
+        return Accepted();
+    }
+
+    /// <summary>Сверка полноты загрузки: количество записей в Linko и в OneBase.</summary>
+    [HttpPost("linko/verify")]
+    public async Task<ActionResult<LinkoVerifyResult>> VerifyLinko(CancellationToken ct)
+    {
+        if (!(await linko.GetAsync(ct)).HasCredentials)
+        {
+            return BadRequest(new { error = "Сначала задайте адрес и токен." });
+        }
+
+        try
+        {
+            return await verifier.VerifyAsync(ct);
+        }
+        catch (LinkoApiException ex)
+        {
+            return Problem(ex.Message, statusCode: StatusCodes.Status502BadGateway);
+        }
+    }
+
     private async Task<List<IntegrationSummary>> SummariesAsync(string department, CancellationToken ct)
     {
         var list = new List<IntegrationSummary>();
@@ -148,6 +191,7 @@ public sealed class IntegrationsController(
             Sync = new
             {
                 coordinator.IsRunning,
+                Progress = progress.Current,
                 DataAsOf = dataAsOf,
                 Entities = states.Select(s => new { s.Entity, s.LastSuccessAt, s.LastRows, s.LastError }),
             },
