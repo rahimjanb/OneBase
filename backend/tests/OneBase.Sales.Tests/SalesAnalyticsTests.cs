@@ -12,16 +12,24 @@ public class SalesAnalyticsTests
     private static SaleLine Line(int day, long? agent, long market, long branch, decimal kg, decimal revenue, long? order, int month = 9) =>
         new(new DateOnly(2026, month, day), agent, market, branch, 1, 100, kg, revenue, order);
 
+    /// <summary>Позиция заказа конкретного SKU (агент 1, регион «Север»); выручка = кг × 10.</summary>
+    private static SaleLine Sku(long product, long category, long market, decimal kg, int month = 9) =>
+        new(new DateOnly(2026, month, 2), 1, market, 101, category, product, kg, kg * 10, product * 1000 + market * 10 + month);
+
     private static MonthData Data(
         IReadOnlyList<SaleLine>? previous = null,
         IReadOnlyList<PlanRow>? plans = null,
         IReadOnlyList<PlanRow>? revenuePlans = null,
-        IReadOnlyList<DirectionInfo>? directions = null) => new()
+        IReadOnlyList<DirectionInfo>? directions = null,
+        IReadOnlyList<SaleLine>? current = null,
+        IReadOnlyDictionary<long, string>? categories = null,
+        IReadOnlyDictionary<long, ProductInfo>? products = null,
+        IReadOnlySet<long>? activeSkus = null) => new()
     {
         Year = 2026,
         Month = 9,
         DataThrough = new DateOnly(2026, 9, 10),
-        Current =
+        Current = current ??
         [
             Line(1, 1, 10, branch: 101, kg: 100, revenue: 1000, order: 1),
             Line(2, 2, 11, branch: 101, kg: 50, revenue: 500, order: 2),
@@ -30,6 +38,8 @@ public class SalesAnalyticsTests
             Line(5, 3, 13, branch: 102, kg: -10, revenue: -100, order: null), // возврат
             Line(6, 4, 14, branch: 999, kg: 5, revenue: 50, order: 5), // филиал без региона
         ],
+        Products = products ?? new Dictionary<long, ProductInfo>(),
+        ActiveSkus = activeSkus ?? new HashSet<long>(),
         Previous = previous ?? [],
         Visits = [],
         History = [],
@@ -45,7 +55,7 @@ public class SalesAnalyticsTests
         Regions = [new RegionInfo(North, 101, "Север", Rm1, null, null), new RegionInfo(South, 102, "Юг", Rm1, null, null)],
         Directions = directions ?? [new DirectionInfo(Rm1, "РМ 1", false, null, null, 1)],
         Markets = new Dictionary<long, MarketInfo>(),
-        Categories = new Dictionary<long, string> { [1] = "Печенье" },
+        Categories = categories ?? new Dictionary<long, string> { [1] = "Печенье" },
         MarketAssignments = [],
         Targets = new SalesTargets(0.7m, 1_439_000m, 125m, 4m),
         Thresholds = new FlagThresholds(),
@@ -143,6 +153,67 @@ public class SalesAnalyticsTests
         var south = new SalesAnalytics(Data(revenuePlans: [new PlanRow(null, 1, 9, null, 2000)]))
             .Region(South, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10), "kg", null);
         Assert.Null(south.Kpi.RevenuePlan);
+    }
+
+    [Fact]
+    public void Category_cards_count_sku_silent_lost_share_and_distribution()
+    {
+        // «Помадка 0,5 кг» — подтип «Помадки»: одна карточка. SKU 103 в ассортименте, но не продаётся; 102 продавался в августе.
+        var data = Data(
+            current: [Sku(100, 1, market: 10, kg: 60), Sku(101, 2, market: 11, kg: 40), Sku(200, 3, market: 12, kg: 100)],
+            previous: [Sku(102, 2, market: 12, kg: 30, month: 8), Sku(200, 3, market: 12, kg: 50, month: 8)],
+            categories: new Dictionary<long, string> { [1] = "Помадка", [2] = "Помадка 0,5 кг", [3] = "Печенье" },
+            products: new Dictionary<long, ProductInfo>
+            {
+                [100] = new(100, "Помадка А", "A", 1),
+                [101] = new(101, "Помадка Б", "B", 2),
+                [102] = new(102, "Помадка В", "C", 2),
+                [103] = new(103, "Помадка Г", "D", 1),
+                [200] = new(200, "Печенье А", "E", 3),
+            },
+            activeSkus: new HashSet<long> { 100, 101, 102, 103, 200 });
+
+        var cards = new SalesAnalytics(data).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10)).CategoryCards;
+
+        Assert.Equal(2, cards.Count);
+        var fondant = Assert.Single(cards, c => c.Name == "Помадка");
+        Assert.Equal(2, fondant.SkuSold);
+        Assert.Equal(4, fondant.SkuTotal);
+        Assert.Equal(2, fondant.Silent);
+        Assert.Equal(1, fondant.Lost);
+        Assert.Equal(100m, fondant.FactKg);
+        Assert.Equal(0.5m, fondant.WeightShare); // 100 из 200 кг
+        Assert.Equal(2, fondant.Akb);
+        Assert.Equal(2m / 3m, fondant.Distribution); // 2 из 3 ТТ с покупкой
+        Assert.Equal(300m, fondant.ForecastKg); // 100 кг за 10 дней × 30
+        Assert.Equal(9m, fondant.VsPrevMonth); // прогноз 300 к 30 кг августа
+        Assert.Equal(SkuStatuses.Lost, fondant.Skus.Single(s => s.ProductId == 102).Status);
+        Assert.Equal(SkuStatuses.Silent, fondant.Skus.Single(s => s.ProductId == 103).Status);
+        Assert.Equal(SkuStatuses.Selling, fondant.Skus[0].Status);
+
+        var cookies = Assert.Single(cards, c => c.Name == "Печенье");
+        Assert.Equal((1, 1, 0, 0), (cookies.SkuSold, cookies.SkuTotal, cookies.Silent, cookies.Lost));
+        Assert.Equal(5m, cookies.VsPrevMonth); // прогноз 300 к 50 кг августа
+    }
+
+    [Fact]
+    public void Sku_whose_returns_exceed_sales_is_not_selling()
+    {
+        var data = Data(
+            current:
+            [
+                Sku(100, 1, market: 10, kg: 60),
+                Sku(101, 1, market: 11, kg: 5),
+                new SaleLine(new DateOnly(2026, 9, 3), 1, 11, 101, 1, 101, -8, -80, null), // возврат больше продажи
+            ],
+            categories: new Dictionary<long, string> { [1] = "Бамбук" },
+            products: new Dictionary<long, ProductInfo> { [100] = new(100, "А", null, 1), [101] = new(101, "Б", null, 1) },
+            activeSkus: new HashSet<long> { 100, 101 });
+
+        var card = Assert.Single(new SalesAnalytics(data).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10)).CategoryCards);
+
+        Assert.Equal((1, 2, 1), (card.SkuSold, card.SkuTotal, card.Silent));
+        Assert.Equal(SkuStatuses.Silent, card.Skus.Single(s => s.ProductId == 101).Status);
     }
 
     [Fact]

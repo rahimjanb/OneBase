@@ -1,5 +1,6 @@
 import { KpiRow, UnassignedWarning, UnitCard } from "./blocks";
 import { VisitCalendarTable } from "./calendars";
+import { CategoryCards } from "./categories";
 import { NotBoughtTable, RegionsTable, SameDaysTable } from "./tables";
 import { monthGenitive, monthName } from "@/lib/sales/format";
 import { param, withQuery, type SalesSearchParams } from "@/lib/sales/query";
@@ -32,11 +33,14 @@ export function GroupPage({
   sp,
   query,
   regionsTitle,
+  scopeName,
 }: {
   data: GroupView;
   sp: SalesSearchParams;
   query: string;
   regionsTitle: string;
+  /** «в республике», «в направлении» — для пояснений. */
+  scopeName: string;
 }) {
   const { period } = data;
   const from = Number(param(sp, "from") ?? 1);
@@ -54,6 +58,8 @@ export function GroupPage({
 
       <Cards title="Региональные менеджеры" cards={directions} query={query} />
       <Cards title={directions.length > 0 ? "Регионы без РМ" : "Регионы"} cards={regions} query={query} />
+
+      <CategoryCards cards={data.categoryCards} scope={scopeName} />
 
       <RegionsTable
         rows={data.regions}

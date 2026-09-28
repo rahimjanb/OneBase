@@ -126,4 +126,24 @@ public class SalesMathTests
         Assert.Equal(2m, SalesMath.Median([3, 1, 2]));
         Assert.Null(SalesMath.Median([]));
     }
+
+    [Fact]
+    public void Category_subtypes_are_grouped_by_name_prefix()
+    {
+        var groups = SalesMath.CategoryGroups(new Dictionary<long, string>
+        {
+            [8] = "Помадка",
+            [20] = "Помадка 0,420 кг",
+            [21] = "Помадка 0,5 кг",
+            [5] = "Шоколад",
+            [15] = "Импорт Шоколад",
+            [9] = "Трубочки",
+        });
+
+        Assert.Equal(8, groups[20]);
+        Assert.Equal(8, groups[21]);
+        Assert.Equal(8, groups[8]);
+        Assert.Equal(15, groups[15]); // «Импорт Шоколад» — не подтип «Шоколада»
+        Assert.Equal(9, groups[9]);
+    }
 }

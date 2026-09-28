@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace OneBase.Infrastructure.Linko;
@@ -39,5 +40,61 @@ public static class LinkoCheck
         }
 
         return result.Ok && report.Success ? 0 : 2;
+    }
+
+    /// <summary>
+    /// Команда `linko-fields <сущность>`: какие поля реально приходят из Linko (только имена полей и типы значений,
+    /// без самих данных; у логических полей — число true/false). Нужна, чтобы не гадать о структуре ответа.
+    /// </summary>
+    public static async Task<int> FieldsAsync(IServiceProvider services, string entity)
+    {
+        var fields = new SortedDictionary<string, SortedDictionary<string, int>>(StringComparer.Ordinal);
+        var total = await services.GetRequiredService<LinkoClient>().ReadAllAsync<JsonElement>(entity, null, page =>
+        {
+            foreach (var item in page)
+            {
+                Collect(item, "", fields);
+            }
+
+            return Task.CompletedTask;
+        });
+
+        Console.WriteLine($"{entity}: {total} записей");
+        foreach (var (path, kinds) in fields)
+        {
+            Console.WriteLine($"  {path,-40} {string.Join(", ", kinds.Select(k => $"{k.Key}={k.Value}"))}");
+        }
+
+        return 0;
+    }
+
+    private static void Collect(JsonElement element, string prefix, SortedDictionary<string, SortedDictionary<string, int>> fields)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    Collect(property.Value, prefix.Length == 0 ? property.Name : $"{prefix}.{property.Name}", fields);
+                }
+
+                return;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    Collect(item, $"{prefix}[]", fields);
+                }
+
+                return;
+        }
+
+        var kind = element.ValueKind switch
+        {
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => element.ValueKind.ToString().ToLowerInvariant(),
+        };
+        var kinds = fields.TryGetValue(prefix, out var existing) ? existing : fields[prefix] = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        kinds[kind] = kinds.GetValueOrDefault(kind) + 1;
     }
 }

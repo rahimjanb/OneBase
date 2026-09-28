@@ -34,6 +34,8 @@ public sealed record DirectionInfo(Guid Id, string Name, bool IsChannel, string?
 
 public sealed record MarketInfo(long Id, string Name, long? ResponsibleAgentId, long? BranchId);
 
+public sealed record ProductInfo(long Id, string Name, string? Code, long? CategoryId);
+
 /// <summary>Факт кг по месяцам (история для «План и факт по месяцам» и темпа агента).</summary>
 public sealed record MonthlyFact(int Year, int Month, long? AgentId, long? BranchId, decimal Kg);
 
@@ -88,6 +90,15 @@ public sealed class MonthData
     public required IReadOnlyList<DirectionInfo> Directions { get; init; }
     public required IReadOnlyDictionary<long, MarketInfo> Markets { get; init; }
     public required IReadOnlyDictionary<long, string> Categories { get; init; }
+
+    /// <summary>Справочник товаров (SKU).</summary>
+    public IReadOnlyDictionary<long, ProductInfo> Products { get; init; } = new Dictionary<long, ProductInfo>();
+
+    /// <summary>
+    /// «Живой» ассортимент — SKU, которые продавались за последние полгода (по всей компании).
+    /// Признака «товар активен» в Linko нет, поэтому ассортимент определяется по продажам.
+    /// </summary>
+    public IReadOnlySet<long> ActiveSkus { get; init; } = new HashSet<long>();
 
     /// <summary>ТТ, закреплённые за агентами через market_users (агент → ТТ).</summary>
     public required IReadOnlyList<(long AgentId, long MarketId)> MarketAssignments { get; init; }

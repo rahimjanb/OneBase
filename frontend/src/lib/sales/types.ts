@@ -180,6 +180,41 @@ export type GroupView = {
   visitCalendar: VisitCalendarRow[];
   sameDays: SameDaysRow[];
   notBought: NotBoughtRow[];
+  categoryCards: CategoryCard[];
+};
+
+export type SkuStatus = "selling" | "silent" | "lost";
+
+export type SkuRow = {
+  productId: number;
+  name: string;
+  code: string | null;
+  factKg: number;
+  revenue: number;
+  akb: number;
+  distribution: number | null;
+  prevMonthKg: number;
+  status: SkuStatus;
+};
+
+/** Карточка категории: «продаётся N из M SKU», факт, доля, АКБ, дистрибуция, прогноз, «молчат / пропало». */
+export type CategoryCard = {
+  id: string;
+  name: string;
+  skuSold: number;
+  skuTotal: number;
+  factKg: number;
+  weightShare: number | null;
+  revenue: number;
+  akb: number;
+  distribution: number | null;
+  forecastKg: number | null;
+  forecastRevenue: number | null;
+  prevMonthKg: number;
+  vsPrevMonth: number | null;
+  silent: number;
+  lost: number;
+  skus: SkuRow[];
 };
 
 export type TeamRow = {
@@ -228,6 +263,7 @@ export type RegionView = {
   sameDays: SameDaysRow[];
   notBought: NotBoughtRow[];
   notInDirectory: { agentId: number; name: string; kg: number; revenue: number }[];
+  categoryCards: CategoryCard[];
 };
 
 export type MedianValue = { value: number | null; regionMedian: number | null };

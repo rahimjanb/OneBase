@@ -127,7 +127,55 @@ public sealed record GroupView(
     IReadOnlyList<UnitRow> Regions,
     IReadOnlyList<VisitCalendarRow> VisitCalendar,
     IReadOnlyList<SameDaysRow> SameDays,
-    IReadOnlyList<NotBoughtRow> NotBought);
+    IReadOnlyList<NotBoughtRow> NotBought,
+    IReadOnlyList<CategoryCard> CategoryCards);
+
+/// <summary>Статус SKU в подразделении за месяц.</summary>
+public static class SkuStatuses
+{
+    /// <summary>Продаётся в этом месяце.</summary>
+    public const string Selling = "selling";
+
+    /// <summary>Не продаётся, и в прошлом месяце тоже не продавался.</summary>
+    public const string Silent = "silent";
+
+    /// <summary>Пропал: в прошлом месяце продавался, в этом — нет.</summary>
+    public const string Lost = "lost";
+}
+
+/// <summary>Артикул категории. Дистрибуция — доля АКБ подразделения, купившей этот SKU.</summary>
+public sealed record SkuRow(
+    long ProductId,
+    string Name,
+    string? Code,
+    decimal FactKg,
+    decimal Revenue,
+    int Akb,
+    decimal? Distribution,
+    decimal PrevMonthKg,
+    string Status);
+
+/// <summary>
+/// Карточка категории. SKU в категории — «живой» ассортимент: товары, которые продавались за последние полгода.
+/// «Молчат» — SKU ассортимента без продаж в этом месяце, из них «пропало» — продавались в прошлом месяце.
+/// </summary>
+public sealed record CategoryCard(
+    string Id,
+    string Name,
+    int SkuSold,
+    int SkuTotal,
+    decimal FactKg,
+    decimal? WeightShare,
+    decimal Revenue,
+    int Akb,
+    decimal? Distribution,
+    decimal? ForecastKg,
+    decimal? ForecastRevenue,
+    decimal PrevMonthKg,
+    decimal? VsPrevMonth,
+    int Silent,
+    int Lost,
+    IReadOnlyList<SkuRow> Skus);
 
 public sealed record MonthPlanFact(int Month, decimal? PlanKg, decimal? FactKg);
 
@@ -175,7 +223,8 @@ public sealed record RegionView(
     IReadOnlyList<TeamRow> Team,
     IReadOnlyList<SameDaysRow> SameDays,
     IReadOnlyList<NotBoughtRow> NotBought,
-    IReadOnlyList<NotInDirectoryRow> NotInDirectory);
+    IReadOnlyList<NotInDirectoryRow> NotInDirectory,
+    IReadOnlyList<CategoryCard> CategoryCards);
 
 public sealed record MedianValue(decimal? Value, decimal? RegionMedian);
 

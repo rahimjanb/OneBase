@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
-import { CategoryShares, KpiRow, PlanFactMonths, UnassignedWarning } from "@/components/sales/blocks";
+import { KpiRow, PlanFactMonths, UnassignedWarning } from "@/components/sales/blocks";
 import { MonthCalendarTable, VisitCalendarTable } from "@/components/sales/calendars";
+import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { NotBoughtTable, NotInDirectoryTable, SameDaysTable, TeamTable } from "@/components/sales/tables";
 import { apiGetOrNull } from "@/lib/server-api";
@@ -48,10 +49,8 @@ export default async function RegionPage({
       <KpiRow kpi={data.kpi} period={period} />
       <UnassignedWarning kgValue={data.unassigned.kg} share={data.unassigned.share} />
 
-      <div className="grid gap-x-6 lg:grid-cols-2">
-        <PlanFactMonths months={data.months} current={period.month} />
-        <CategoryShares categories={data.categories} />
-      </div>
+      <PlanFactMonths months={data.months} current={period.month} />
+      <CategoryCards cards={data.categoryCards} scope="регионе" />
 
       <MonthCalendarTable
         calendar={data.calendar}

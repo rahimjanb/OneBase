@@ -25,6 +25,7 @@ public sealed class SalesAnalytics
     private readonly Dictionary<long, AgentStats> _stats = [];
     private readonly Dictionary<Guid, RegionMedians> _medians = [];
     private readonly Dictionary<long, IReadOnlyList<AgentFlag>> _flags = [];
+    private readonly Dictionary<long, long> _categoryGroup;
     private readonly DateOnly _previousStart;
     private readonly DateOnly _previousCutoff;
 
@@ -35,6 +36,7 @@ public sealed class SalesAnalytics
         _regions[NoRegionId] = new RegionInfo(NoRegionId, 0, "Без региона", null, null, null);
         _regionByBranch = data.Regions.ToDictionary(r => r.BranchId, r => r.Id);
         _directions = data.Directions.ToDictionary(x => x.Id);
+        _categoryGroup = SalesMath.CategoryGroups(data.Categories);
 
         _currentByRegion = data.Current.ToLookup(RegionOf);
         _previousByRegion = data.Previous.ToLookup(RegionOf);
@@ -129,7 +131,8 @@ public sealed class SalesAnalytics
                     _currentByRegion[id].Where(l => l.AgentId == a), _previousByRegion[id].Where(l => l.AgentId == a)))
                 .OrderByDescending(r => r.KgNow).ToList(),
             AgentNotBought(id),
-            NotInDirectory(id));
+            NotInDirectory(id),
+            CategoryCardsOf(scope));
     }
 
     public AgentView Agent(long id)
@@ -268,7 +271,8 @@ public sealed class SalesAnalytics
             regionIds.Select(r => RegionVisitRow(r, from, to)).Where(r => r.Plan + r.DoneAll + r.OrdersTotal > 0).OrderBy(r => r.Name).ToList(),
             regionIds.Select(r => Compare(r.ToString(), _regions[r].Name, DirectionName(r), _currentByRegion[r], _previousByRegion[r]))
                 .OrderBy(r => r.Name).ToList(),
-            regionIds.Select(RegionNotBought).OrderBy(r => r.Name).ToList());
+            regionIds.Select(RegionNotBought).OrderBy(r => r.Name).ToList(),
+            CategoryCardsOf(set));
     }
 
     private KpiTiles Kpi(IReadOnlySet<Guid>? scope)
@@ -566,6 +570,90 @@ public sealed class SalesAnalytics
             .OrderByDescending(x => x.Revenue)
             .ToList();
     }
+
+    /// <summary>
+    /// Карточки категорий подразделения (клик — артикулы). Подтипы («Помадка 0,5 кг») объединены с категорией («Помадка»).
+    /// Доля по весу и дистрибуция — от итога подразделения; «к прошлому месяцу» — прогноз месяца к факту всего прошлого месяца.
+    /// </summary>
+    private List<CategoryCard> CategoryCardsOf(IReadOnlySet<Guid>? scope)
+    {
+        var lines = Lines(scope).ToList();
+        var previousLines = scope is null ? _d.Previous : scope.SelectMany(r => _previousByRegion[r]).ToList();
+        var totalKg = lines.Sum(l => l.Kg);
+        var akb = SalesMath.Akb(lines);
+
+        var current = lines.ToLookup(l => GroupOf(l.CategoryId));
+        var previous = previousLines.ToLookup(l => GroupOf(l.CategoryId));
+        var assortment = _d.ActiveSkus
+            .Where(_d.Products.ContainsKey)
+            .ToLookup(p => GroupOf(_d.Products[p].CategoryId));
+
+        // «Продаётся» — как и для АКБ: чистая выручка SKU (продажи минус возвраты) больше нуля.
+        static HashSet<long> Sold(IEnumerable<SaleLine> source) =>
+            source.Where(l => l.ProductId != null)
+                .GroupBy(l => l.ProductId!.Value)
+                .Where(g => g.Sum(l => l.Revenue) > 0)
+                .Select(g => g.Key)
+                .ToHashSet();
+
+        return current.Select(g => g.Key).Concat(previous.Select(g => g.Key)).Distinct()
+            .Select(category =>
+            {
+                var now = current[category].ToList();
+                var before = previous[category].ToList();
+                var soldNow = Sold(now);
+                var soldBefore = Sold(before);
+                var universe = assortment[category].Concat(soldNow).Concat(soldBefore).ToHashSet();
+
+                var nowByProduct = now.Where(l => l.ProductId != null).ToLookup(l => l.ProductId!.Value);
+                var beforeByProduct = before.Where(l => l.ProductId != null).ToLookup(l => l.ProductId!.Value);
+                var skus = universe
+                    .Select(p =>
+                    {
+                        var sl = nowByProduct[p].ToList();
+                        var skuAkb = SalesMath.Akb(sl);
+                        var status = soldNow.Contains(p) ? SkuStatuses.Selling : soldBefore.Contains(p) ? SkuStatuses.Lost : SkuStatuses.Silent;
+                        var product = _d.Products.GetValueOrDefault(p);
+                        return new SkuRow(p, product?.Name ?? $"Товар {p}", product?.Code, sl.Sum(l => l.Kg), sl.Sum(l => l.Revenue),
+                            skuAkb, SalesMath.Ratio(skuAkb, akb), beforeByProduct[p].Sum(l => l.Kg), status);
+                    })
+                    .OrderBy(s => s.Status == SkuStatuses.Selling ? 0 : s.Status == SkuStatuses.Lost ? 1 : 2)
+                    .ThenByDescending(s => s.FactKg)
+                    .ThenByDescending(s => s.PrevMonthKg)
+                    .ThenBy(s => s.Name)
+                    .ToList();
+
+                var fact = now.Sum(l => l.Kg);
+                var revenue = now.Sum(l => l.Revenue);
+                var categoryAkb = SalesMath.Akb(now);
+                var forecast = SalesMath.Forecast(fact, _d.WorkedDays, _d.DaysInMonth);
+                var prevKg = before.Sum(l => l.Kg);
+
+                return new CategoryCard(
+                    category?.ToString() ?? "none",
+                    CategoryName(category),
+                    soldNow.Count,
+                    universe.Count,
+                    fact,
+                    SalesMath.Ratio(fact, totalKg),
+                    revenue,
+                    categoryAkb,
+                    SalesMath.Ratio(categoryAkb, akb),
+                    forecast,
+                    SalesMath.Forecast(revenue, _d.WorkedDays, _d.DaysInMonth),
+                    prevKg,
+                    SalesMath.Delta(prevKg, forecast ?? fact),
+                    universe.Count - soldNow.Count,
+                    soldBefore.Count(p => !soldNow.Contains(p)),
+                    skus);
+            })
+            .Where(c => c.FactKg != 0 || c.PrevMonthKg != 0) // без веса в обоих месяцах (бонусы) — не показываем
+            .OrderByDescending(c => c.FactKg)
+            .ThenByDescending(c => c.Revenue)
+            .ToList();
+    }
+
+    private long? GroupOf(long? category) => category is { } c ? _categoryGroup.GetValueOrDefault(c, c) : null;
 
     /// <summary>Календарь месяца по ТП: kg | sum | akb | akb по категории. null — нет данных за день.</summary>
     private MonthCalendar Calendar(Guid region, IReadOnlyList<long> team, string metric, long? category)

@@ -161,41 +161,6 @@ export function PlanFactMonths({ months, current }: { months: { month: number; p
   );
 }
 
-/** Из чего складывается объём: доля выручки по категориям. */
-export function CategoryShares({ categories }: { categories: { categoryId: number | null; name: string; revenue: number; share: number | null }[] }) {
-  const top = categories.slice(0, 12);
-  const rest = categories.slice(12);
-  const restRevenue = rest.reduce((s, c) => s + c.revenue, 0);
-  const restShare = rest.reduce((s, c) => s + (c.share ?? 0), 0);
-  const max = Math.max(0.0001, ...top.map((c) => c.share ?? 0));
-
-  return (
-    <Section title="Из чего складывается объём" hint="выручка за месяц">
-      <div className="space-y-1.5">
-        {top.map((c) => (
-          <div key={c.categoryId ?? "none"} className="grid grid-cols-[minmax(0,140px)_1fr_48px] items-center gap-3 text-xs" title={`${c.name}: ${money(c.revenue)}`}>
-            <span className="truncate text-ink-2">{c.name}</span>
-            <div className="h-2.5 rounded bg-muted">
-              <div className="h-full rounded bg-accent" style={{ width: `${((c.share ?? 0) / max) * 100}%` }} />
-            </div>
-            <span className="text-right tabular-nums text-ink">{pct(c.share)}</span>
-          </div>
-        ))}
-        {rest.length > 0 && (
-          <div className="grid grid-cols-[minmax(0,140px)_1fr_48px] items-center gap-3 text-xs" title={money(restRevenue)}>
-            <span className="text-ink-3">Остальные ({rest.length})</span>
-            <div className="h-2.5 rounded bg-muted">
-              <div className="h-full rounded bg-ink-3/50" style={{ width: `${(restShare / max) * 100}%` }} />
-            </div>
-            <span className="text-right tabular-nums text-ink-3">{pct(restShare)}</span>
-          </div>
-        )}
-      </div>
-      {categories.length === 0 && <p className="py-4 text-center text-sm text-ink-3">Продаж за период нет</p>}
-    </Section>
-  );
-}
-
 const indicatorUnit = (type: string) =>
   type === "product_sales_weight" ? "кг" : type === "active_client_count" ? "ТТ" : "сум";
 

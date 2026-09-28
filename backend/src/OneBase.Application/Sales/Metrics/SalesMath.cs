@@ -54,6 +54,20 @@ public static class SalesMath
             .GroupBy(l => l.CategoryId)
             .Count(g => g.Sum(l => l.Revenue) > 0);
 
+    /// <summary>
+    /// Группы категорий для карточек: подтип «Помадка 0,5 кг» объединяется с категорией «Помадка»
+    /// (имя начинается с имени другой категории и пробела). Возвращает категория → категория-группа.
+    /// </summary>
+    public static Dictionary<long, long> CategoryGroups(IReadOnlyDictionary<long, string> categories)
+    {
+        var names = categories.ToDictionary(c => c.Key, c => c.Value.Trim());
+        return names.ToDictionary(c => c.Key, c => names
+            .Where(p => p.Key != c.Key && p.Value.Length > 0 && c.Value.StartsWith(p.Value + " ", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Value.Length)
+            .Select(p => (long?)p.Key)
+            .FirstOrDefault() ?? c.Key);
+    }
+
     /// <summary>Медиана; null для пустого набора.</summary>
     public static decimal? Median(IEnumerable<decimal> values)
     {

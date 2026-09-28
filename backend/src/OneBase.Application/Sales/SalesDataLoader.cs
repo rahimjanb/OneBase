@@ -163,6 +163,10 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                 .Select(x => new MarketInfo(x.Id, x.Name, x.ResponsibleAgentId, x.BranchId))
                 .ToDictionaryAsync(x => x.Id, ct),
             Categories = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct),
+            Products = await db.LinkoProducts.AsNoTracking()
+                .Select(p => new ProductInfo(p.Id, p.Name, p.Code, p.TypeId))
+                .ToDictionaryAsync(p => p.Id, ct),
+            ActiveSkus = await ActiveSkusAsync(monthStart.AddMonths(-AssortmentMonths), dataThrough < monthStart ? monthEnd : dataThrough, ct),
             MarketAssignments = (await db.LinkoMarketUsers.AsNoTracking().Where(x => !x.IsDelete)
                     .Select(x => new { x.UserId, x.MarketId }).ToListAsync(ct))
                 .Select(x => (x.UserId, x.MarketId)).ToList(),
@@ -205,6 +209,22 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         orders.AddRange(returns);
         return orders;
+    }
+
+    /// <summary>«Живой» ассортимент: SKU, проданные за столько месяцев до выбранного (плюс сам месяц).</summary>
+    private const int AssortmentMonths = 6;
+
+    private async Task<HashSet<long>> ActiveSkusAsync(DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        var sold = options.SoldStatuses;
+        var ids = await (
+                from l in db.LinkoOrderLines
+                join o in db.LinkoOrders on l.OrderId equals o.Id
+                where sold.Contains(o.Status) && o.CreatedDate >= start && o.CreatedDate <= end && l.ProductId != null
+                select l.ProductId!.Value)
+            .Distinct()
+            .ToListAsync(ct);
+        return ids.ToHashSet();
     }
 
     /// <summary>Факт кг по месяцам в разрезе агента и филиала (продажи минус возвраты). Месяц — по дате создания.</summary>
