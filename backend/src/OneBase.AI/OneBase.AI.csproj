@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <ProjectReference Include="..\OneBase.Application\OneBase.Application.csproj" />
+    </ItemGroup>
+
+</Project>

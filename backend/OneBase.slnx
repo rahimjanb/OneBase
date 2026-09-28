@@ -1,0 +1,9 @@
+<Solution>
+    <Folder Name="/src/">
+        <Project Path="src/OneBase.Domain/OneBase.Domain.csproj" />
+        <Project Path="src/OneBase.Application/OneBase.Application.csproj" />
+        <Project Path="src/OneBase.AI/OneBase.AI.csproj" />
+        <Project Path="src/OneBase.Infrastructure/OneBase.Infrastructure.csproj" />
+        <Project Path="src/OneBase.Api/OneBase.Api.csproj" />
+    </Folder>
+</Solution>
