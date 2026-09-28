@@ -26,7 +26,7 @@ public enum VisitStatus
 
 public sealed record VisitRecord(DateOnly Date, long AgentId, long MarketId, VisitStatus Status, bool InPlan);
 
-public sealed record AgentInfo(long Id, string Name, bool IsActive, Guid? ProfileRegionId, bool IsVacancy, bool InDirectory);
+public sealed record AgentInfo(long Id, string Name, bool IsActive, Guid? ProfileRegionId, bool IsVacancy, bool InDirectory, string? Job = null);
 
 public sealed record RegionInfo(Guid Id, long BranchId, string Name, Guid? DirectionId, string? Supervisor, string? Dealer);
 
@@ -74,8 +74,14 @@ public sealed class MonthData
     /// <summary>Итоговые планы агентов на весь год (ручные или из Linko) — план региона без ручного = сумма планов его агентов.</summary>
     public IReadOnlyList<PlanRow> YearAgentPlans { get; init; } = [];
 
-    /// <summary>KPI-показатели агентов из Linko за выбранный месяц.</summary>
+    /// <summary>KPI-показатели агентов из Linko за выбранный месяц (включая супервайзеров).</summary>
     public IReadOnlyList<StaffIndicator> Indicators { get; init; } = [];
+
+    /// <summary>Планы агентов по выручке (sales_sum), сум, за выбранный месяц. PlanKg здесь — сумма.</summary>
+    public IReadOnlyList<PlanRow> RevenuePlans { get; init; } = [];
+
+    /// <summary>Сотрудники, чей план — план команды (супервайзеры): не суммируется с планами агентов.</summary>
+    public IReadOnlySet<long> TeamPlanStaff { get; init; } = new HashSet<long>();
 
     public required IReadOnlyDictionary<long, AgentInfo> Agents { get; init; }
     public required IReadOnlyList<RegionInfo> Regions { get; init; }

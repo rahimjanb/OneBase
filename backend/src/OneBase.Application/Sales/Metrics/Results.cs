@@ -23,7 +23,17 @@ public sealed record KpiTiles(
     TargetValue AkbPerAgent,
     int VisitsWithoutOrder,
     int VisitsDone,
-    int ActiveAgents);
+    int ActiveAgents,
+    RevenuePlanTile? RevenuePlan = null,
+    decimal? PlanFactKg = null,
+    decimal? PlanForecastKg = null,
+    int PlanAgents = 0);
+
+/// <summary>
+/// План по выручке: только агенты, у которых он есть в Linko (sales_sum).
+/// Fact — наша выручка этих же агентов, поэтому выполнение не завышается продажами агентов без плана.
+/// </summary>
+public sealed record RevenuePlanTile(decimal Plan, decimal Fact, decimal? Execution, decimal? Forecast, decimal? ForecastExecution, int Agents);
 
 public sealed record FlagCounts(int Critical, int Risk);
 
@@ -44,7 +54,8 @@ public sealed record UnitRow(
     int Agents,
     int RegionCount,
     IReadOnlyList<string> RegionNames,
-    FlagCounts Flags);
+    FlagCounts Flags,
+    decimal? PlanFactKg = null);
 
 public sealed record UnassignedFact(decimal Kg, decimal? Share);
 
@@ -179,6 +190,8 @@ public sealed record AgentView(
     decimal? Execution,
     decimal FactKg,
     decimal Revenue,
+    decimal? RevenuePlan,
+    decimal? RevenueExecution,
     int Visits,
     int VisitsWithOrder,
     MedianValue Conversion,
@@ -211,3 +224,36 @@ public sealed record ProblemAgent(
     IReadOnlyList<AgentFlag> Flags);
 
 public sealed record ProblemsView(PeriodInfo Period, int Vacancies, IReadOnlyList<ProblemAgent> Agents);
+
+/// <summary>Планы сотрудника из Linko за месяц: итоги по типам и все показатели. Факт — по расчёту Linko.</summary>
+public sealed record PlanPersonRow(
+    long AgentId,
+    string Name,
+    string? Job,
+    string? RegionId,
+    string? RegionName,
+    bool IsTeamPlan,
+    decimal? WeightPlan,
+    decimal WeightFact,
+    decimal? WeightExecution,
+    decimal? RevenuePlan,
+    decimal RevenueFact,
+    decimal? AkbPlan,
+    decimal AkbFact,
+    IReadOnlyList<IndicatorPlan> Indicators);
+
+public sealed record PlanRegionRow(string Id, string Name, int Agents, decimal? WeightPlan, decimal WeightFact, decimal? WeightExecution, decimal? RevenuePlan, decimal RevenueFact);
+
+/// <summary>Вкладка «Планы»: всё, что загружено из Linko за месяц.</summary>
+public sealed record PlansView(
+    PeriodInfo Period,
+    decimal? WeightPlan,
+    decimal WeightFact,
+    decimal? WeightExecution,
+    decimal? RevenuePlan,
+    decimal RevenueFact,
+    int AgentsWithPlan,
+    int Indicators,
+    IReadOnlyList<PlanRegionRow> Regions,
+    IReadOnlyList<PlanPersonRow> Agents,
+    IReadOnlyList<PlanPersonRow> TeamPlans);

@@ -126,6 +126,8 @@ public sealed class SalesAnalytics
 
         var plans = _d.Plans.Where(p => p.AgentId == id).ToList();
         var plan = SalesMath.PlanTotal(plans);
+        var revenuePlans = _d.RevenuePlans.Where(p => p.AgentId == id).ToList();
+        decimal? revenuePlan = revenuePlans.Count == 0 ? null : revenuePlans.Sum(p => p.PlanKg);
         var indicators = _d.Indicators.Where(i => i.AgentId == id)
             .OrderBy(i => i.PlanType == "product_sales_weight" ? 0 : 1)
             .ThenByDescending(i => i.Plan)
@@ -174,6 +176,8 @@ public sealed class SalesAnalytics
             SalesMath.Ratio(stats.Kg, plan),
             stats.Kg,
             stats.Revenue,
+            revenuePlan,
+            SalesMath.Ratio(stats.Revenue, revenuePlan),
             stats.Visits.Done,
             stats.Visits.WithOrder,
             new MedianValue(stats.Conversion, medians.Conversion),
@@ -257,17 +261,19 @@ public sealed class SalesAnalytics
         var fact = lines.Sum(l => l.Kg);
         var revenue = lines.Sum(l => l.Revenue);
         var akb = SalesMath.Akb(lines);
-        var plan = PlanOf(scope);
+        var coverage = PlanScope(scope);
+        var plan = coverage.Plan;
         var forecast = SalesMath.Forecast(fact, _d.WorkedDays, _d.DaysInMonth);
+        var planForecast = SalesMath.Forecast(coverage.Fact, _d.WorkedDays, _d.DaysInMonth);
         var visits = VisitSummary.Of(AgentsIn(scope).SelectMany(VisitsOf), lines);
         var active = AgentsIn(scope).Count(a => !IsVacancy(a));
 
         return new KpiTiles(
             fact,
             plan,
-            SalesMath.Ratio(fact, plan),
+            plan is null ? null : SalesMath.Ratio(coverage.Fact, plan),
             forecast,
-            forecast is null ? null : SalesMath.Ratio(forecast.Value, plan),
+            planForecast is null ? null : SalesMath.Ratio(planForecast.Value, plan),
             revenue,
             akb,
             TargetValue.Of(visits.Conversion, _d.Targets.Conversion),
@@ -275,7 +281,103 @@ public sealed class SalesAnalytics
             TargetValue.Of(SalesMath.Ratio(akb, active), _d.Targets.AkbPerAgent),
             visits.WithoutOrder,
             visits.Done,
-            active);
+            active,
+            RevenuePlanOf(scope, lines),
+            plan is null ? null : coverage.Fact,
+            planForecast,
+            coverage.Agents);
+    }
+
+    /// <summary>План по выручке подразделения: агенты с планом sales_sum и их же выручка (без агентов без плана).</summary>
+    private RevenuePlanTile? RevenuePlanOf(IReadOnlySet<Guid>? scope, IReadOnlyList<SaleLine> scopeLines)
+    {
+        var plans = _d.RevenuePlans
+            .Where(p => p.AgentId is { } a && (scope is null || scope.Contains(_agentRegion.GetValueOrDefault(a, NoRegionId))))
+            .GroupBy(p => p.AgentId!.Value)
+            .Select(g => (Agent: g.Key, Plan: g.Sum(p => p.PlanKg)))
+            .Where(x => x.Plan > 0)
+            .ToList();
+        if (plans.Count == 0)
+        {
+            return null;
+        }
+
+        var agents = plans.Select(x => x.Agent).ToHashSet();
+        var plan = plans.Sum(x => x.Plan);
+        var fact = scopeLines.Where(l => l.AgentId is { } a && agents.Contains(a)).Sum(l => l.Revenue);
+        var forecast = SalesMath.Forecast(fact, _d.WorkedDays, _d.DaysInMonth);
+        return new RevenuePlanTile(plan, fact, SalesMath.Ratio(fact, plan), forecast,
+            forecast is null ? null : SalesMath.Ratio(forecast.Value, plan), plans.Count);
+    }
+
+    /// <summary>Вкладка «Планы»: все планы Linko за месяц. Факт здесь — по расчёту Linko.</summary>
+    public PlansView Plans()
+    {
+        static bool Weight(string t) => t == "product_sales_weight";
+        static bool Money(string t) => t == "sales_sum";
+        static bool Akb(string t) => t == "active_client_count";
+        static decimal? SumOrNull(IEnumerable<decimal> values)
+        {
+            var list = values.ToList();
+            return list.Count == 0 ? null : list.Sum();
+        }
+
+        var people = _d.Indicators.GroupBy(i => i.AgentId).Select(g =>
+        {
+            var agent = g.Key;
+            var list = g.OrderBy(i => Weight(i.PlanType) ? 0 : Money(i.PlanType) ? 1 : 2).ThenByDescending(i => i.Plan).ToList();
+            var team = _d.TeamPlanStaff.Contains(agent);
+            var regionId = _agentRegion.GetValueOrDefault(agent, NoRegionId);
+            var weightPlan = SumOrNull(list.Where(i => Weight(i.PlanType)).Select(i => i.Plan));
+            var weightFact = list.Where(i => Weight(i.PlanType)).Sum(i => i.Fact);
+
+            return new PlanPersonRow(
+                agent,
+                AgentName(agent),
+                _d.Agents.TryGetValue(agent, out var info) ? info.Job : null,
+                team || regionId == NoRegionId ? null : regionId.ToString(),
+                team ? null : _regions[regionId].Name,
+                team,
+                weightPlan,
+                weightFact,
+                SalesMath.Ratio(weightFact, weightPlan),
+                SumOrNull(list.Where(i => Money(i.PlanType)).Select(i => i.Plan)),
+                list.Where(i => Money(i.PlanType)).Sum(i => i.Fact),
+                SumOrNull(list.Where(i => Akb(i.PlanType)).Select(i => i.Plan)),
+                list.Where(i => Akb(i.PlanType)).Sum(i => i.Fact),
+                list.Select(i => new IndicatorPlan(i.IndicatorId, i.Name, i.PlanType, i.Plan, i.Fact, SalesMath.Ratio(i.Fact, i.Plan))).ToList());
+        }).ToList();
+
+        var agents = people.Where(p => !p.IsTeamPlan).OrderByDescending(p => p.WeightPlan ?? 0).ToList();
+        var teamPlans = people.Where(p => p.IsTeamPlan).OrderByDescending(p => p.WeightPlan ?? 0).ToList();
+
+        var regions = agents
+            .GroupBy(p => p.RegionId ?? NoRegionId.ToString())
+            .Select(g =>
+            {
+                var weightPlan = SumOrNull(g.Where(p => p.WeightPlan != null).Select(p => p.WeightPlan!.Value));
+                var weightFact = g.Sum(p => p.WeightFact);
+                return new PlanRegionRow(g.Key, g.First().RegionName ?? "Без региона", g.Count(), weightPlan, weightFact,
+                    SalesMath.Ratio(weightFact, weightPlan), SumOrNull(g.Where(p => p.RevenuePlan != null).Select(p => p.RevenuePlan!.Value)),
+                    g.Sum(p => p.RevenueFact));
+            })
+            .OrderByDescending(r => r.WeightPlan ?? 0)
+            .ToList();
+
+        var totalWeightPlan = SumOrNull(agents.Where(p => p.WeightPlan != null).Select(p => p.WeightPlan!.Value));
+        var totalWeightFact = agents.Sum(p => p.WeightFact);
+        return new PlansView(
+            Period,
+            totalWeightPlan,
+            totalWeightFact,
+            SalesMath.Ratio(totalWeightFact, totalWeightPlan),
+            SumOrNull(agents.Where(p => p.RevenuePlan != null).Select(p => p.RevenuePlan!.Value)),
+            agents.Sum(p => p.RevenueFact),
+            agents.Count(p => p.WeightPlan != null || p.RevenuePlan != null),
+            _d.Indicators.Count,
+            regions,
+            agents,
+            teamPlans);
     }
 
     private UnitRow RegionUnit(Guid id) => Unit(id.ToString(), _regions[id].Name, DirectionName(id), [id]);
@@ -289,7 +391,7 @@ public sealed class SalesAnalytics
 
         return new UnitRow(id, name, subtitle, kpi.PlanKg, kpi.FactKg, kpi.Execution, kpi.ForecastKg, kpi.ForecastExecution,
             kpi.Revenue, kpi.Akb, kpi.Conversion.Value, kpi.VisitsWithoutOrder, agents.Count(a => !IsVacancy(a)),
-            regionNames.Count, regionNames, FlagCountsOf(agents));
+            regionNames.Count, regionNames, FlagCountsOf(agents), kpi.PlanFactKg);
     }
 
     private UnassignedFact Unassigned(IReadOnlySet<Guid>? scope)
@@ -573,13 +675,49 @@ public sealed class SalesAnalytics
 
     private IEnumerable<VisitRecord> VisitsOf(long agent) => _visitsByAgent[agent].Where(v => v.Date <= _d.DataThrough);
 
-    /// <summary>План подразделения = сумма планов его регионов (все регионы, включая «Без региона»).</summary>
-    private decimal? PlanOf(IReadOnlySet<Guid>? scope)
+    private sealed record PlanCoverage(decimal? Plan, decimal Fact, int Agents);
+
+    /// <summary>
+    /// План подразделения и факт, с которым его честно сравнивать.
+    /// Регион с ручным планом — весь факт региона; регион без него — план и факт только тех ТП, у кого есть план
+    /// (иначе продажи агентов без плана «выполняли» бы чужой план).
+    /// </summary>
+    private PlanCoverage PlanScope(IReadOnlySet<Guid>? scope)
     {
-        var regions = scope?.ToList() ?? _regions.Keys.ToList();
-        var plans = regions.Select(r => RegionPlan(r, _d.Plans)).Where(p => p != null).ToList();
-        return plans.Count == 0 ? null : plans.Sum();
+        decimal? plan = null;
+        decimal fact = 0;
+        var agents = 0;
+
+        foreach (var region in scope?.ToList() ?? _regions.Keys.ToList())
+        {
+            var manual = SalesMath.PlanTotal(_d.Plans.Where(p => p.RegionId == region));
+            if (manual is not null)
+            {
+                plan = (plan ?? 0) + manual;
+                fact += _currentByRegion[region].Sum(l => l.Kg);
+                continue;
+            }
+
+            var agentPlans = _d.Plans
+                .Where(p => p.AgentId is { } a && _agentRegion.GetValueOrDefault(a, NoRegionId) == region)
+                .GroupBy(p => p.AgentId!.Value)
+                .Select(g => (Agent: g.Key, Plan: SalesMath.PlanTotal(g)))
+                .Where(x => x.Plan != null)
+                .ToList();
+            if (agentPlans.Count == 0)
+            {
+                continue;
+            }
+
+            plan = (plan ?? 0) + agentPlans.Sum(x => x.Plan!.Value);
+            fact += agentPlans.Sum(x => _currentByAgent[x.Agent].Sum(l => l.Kg));
+            agents += agentPlans.Count;
+        }
+
+        return new PlanCoverage(plan, fact, agents);
     }
+
+    private decimal? PlanOf(IReadOnlySet<Guid>? scope) => PlanScope(scope).Plan;
 
     /// <summary>План региона: заданный вручную в OneBase, иначе — сумма планов его агентов (из Linko или ручных).</summary>
     private decimal? RegionPlan(Guid region, IEnumerable<PlanRow> monthPlans)

@@ -4,6 +4,13 @@ import { Alert, ExecutionBar, FlagCountPills, KpiTile, Note, Section, TargetBadg
 import { kg, money, monthShort, num, pct } from "@/lib/sales/format";
 import type { KpiTiles, Period, UnitRow } from "@/lib/sales/types";
 
+/** Плашка «X% плана»: ≥100% зелёная, 70–99% оранжевая, меньше — красная. */
+export function PlanBadge({ share }: { share: number | null }) {
+  if (share == null) return null;
+  const tone = share >= 1 ? "bg-ok-soft text-ok" : share >= 0.7 ? "bg-warn-soft text-warn" : "bg-bad-soft text-bad";
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{pct(share)} плана</span>;
+}
+
 /** Шесть плиток KPI — одинаковые на всех уровнях. */
 export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
   return (
@@ -11,9 +18,15 @@ export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
       <KpiTile label="Выполнение плана" value={pct(kpi.execution, 1)}>
         {kpi.planKg != null ? (
           <>
-            {kg(kpi.factKg)} из {kg(kpi.planKg)} кг
+            {kg(kpi.planFactKg)} из {kg(kpi.planKg)} кг{kpi.planAgents > 0 && ` · ${num(kpi.planAgents)} ТП с планом`}
             <br />
-            прогноз {kg(kpi.forecastKg)} кг ({pct(kpi.forecastExecution)}) по темпу {period.workedDays} из {period.daysInMonth} дн.
+            прогноз {kg(kpi.planForecastKg)} кг ({pct(kpi.forecastExecution)}) по темпу {period.workedDays} из {period.daysInMonth} дн.
+            {kpi.planFactKg != null && kpi.planFactKg !== kpi.factKg && (
+              <>
+                <br />
+                всего продано {kg(kpi.factKg)} кг
+              </>
+            )}
           </>
         ) : (
           <>
@@ -23,8 +36,21 @@ export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
           </>
         )}
       </KpiTile>
-      <KpiTile label="Выручка" value={money(kpi.revenue)} unit="сум">
+      <KpiTile
+        label="Выручка"
+        value={money(kpi.revenue)}
+        unit="сум"
+        badge={kpi.revenuePlan && <PlanBadge share={kpi.revenuePlan.execution} />}
+      >
         АКБ {num(kpi.akb)}
+        {kpi.revenuePlan && (
+          <>
+            <br />
+            план по выручке: {money(kpi.revenuePlan.fact)} из {money(kpi.revenuePlan.plan)} ({num(kpi.revenuePlan.agents)} ТП с планом)
+            <br />
+            прогноз {money(kpi.revenuePlan.forecast)} ({pct(kpi.revenuePlan.forecastExecution)})
+          </>
+        )}
       </KpiTile>
       <KpiTile label="Конверсия визита" value={pct(kpi.conversion.value, 1)} badge={<TargetBadge target={kpi.conversion} />}>
         цель {pct(kpi.conversion.target)}
@@ -71,9 +97,17 @@ export function UnitCard({ unit, href }: { unit: UnitRow; href: string | null })
       </div>
       <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 text-xs">
         <Metric label="План, кг" value={kg(unit.planKg)} />
-        <Metric label="Факт, кг" value={kg(unit.factKg)} />
+        {unit.planKg != null ? (
+          <Metric label="Факт в плане, кг" value={kg(unit.planFactKg)} />
+        ) : (
+          <Metric label="Факт, кг" value={kg(unit.factKg)} />
+        )}
         <Metric label="Вып." value={<span className={execClass(unit.execution)}>{pct(unit.execution)}</span>} />
-        <Metric label="Прогноз, кг" value={kg(unit.forecastKg)} />
+        {unit.planKg != null ? (
+          <Metric label="Прогноз вып." value={<span className={execClass(unit.forecastExecution)}>{pct(unit.forecastExecution)}</span>} />
+        ) : (
+          <Metric label="Прогноз, кг" value={kg(unit.forecastKg)} />
+        )}
         <Metric label="Страйк" value={pct(unit.strike)} />
         <Metric label="Выручка" value={money(unit.revenue)} />
       </dl>

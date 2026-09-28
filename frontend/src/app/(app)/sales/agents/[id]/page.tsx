@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { FlagPills, KpiTile, Section } from "@/components/sales/bits";
-import { CategoryPlanBars, IndicatorBars } from "@/components/sales/blocks";
+import { CategoryPlanBars, IndicatorBars, PlanBadge } from "@/components/sales/blocks";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { NewMarketsTable, SameDaysTable, SilentMarketsTable } from "@/components/sales/tables";
 import { apiGetOrNull } from "@/lib/server-api";
@@ -74,8 +74,14 @@ export default async function AgentPage({
         <KpiTile label="План ТП на месяц" value={kg(data.planKg)} unit={data.planKg != null ? "кг" : undefined}>
           {data.planKg != null ? `выполнено ${pct(data.execution)}` : "плана нет"}
         </KpiTile>
-        <KpiTile label="Выручка за месяц" value={money(data.revenue)} unit="сум">
+        <KpiTile
+          label="Выручка за месяц"
+          value={money(data.revenue)}
+          unit="сум"
+          badge={data.revenuePlan != null ? <PlanBadge share={data.revenueExecution} /> : undefined}
+        >
           {kg(data.factKg)} кг
+          {data.revenuePlan != null && <> · план {money(data.revenuePlan)}</>}
         </KpiTile>
         <KpiTile label="Визиты" value={num(data.visits)}>
           {num(data.visitsWithOrder)} с заказом

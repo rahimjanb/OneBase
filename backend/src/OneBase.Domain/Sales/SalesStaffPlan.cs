@@ -34,4 +34,10 @@ public static class StaffPlanTypes
 {
     public const string SalesWeight = "product_sales_weight";
     public const string ActiveClients = "active_client_count";
+
+    /// <summary>План по выручке, сум.</summary>
+    public const string SalesSum = "sales_sum";
+
+    /// <summary>План в штуках по группе товаров (не деньги).</summary>
+    public const string SalesPieces = "product_sales_amount";
 }

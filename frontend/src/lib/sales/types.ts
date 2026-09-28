@@ -37,6 +37,54 @@ export type KpiTiles = {
   visitsWithoutOrder: number;
   visitsDone: number;
   activeAgents: number;
+  revenuePlan: RevenuePlanTile | null;
+  /** Факт, с которым сравнивается план: ТП с планом (или весь регион, если у него ручной план). */
+  planFactKg: number | null;
+  planForecastKg: number | null;
+  planAgents: number;
+};
+
+/** План по выручке: только агенты с планом в Linko; fact — их выручка. */
+export type RevenuePlanTile = {
+  plan: number;
+  fact: number;
+  execution: number | null;
+  forecast: number | null;
+  forecastExecution: number | null;
+  agents: number;
+};
+
+export type IndicatorPlan = { indicatorId: number; name: string; planType: string; plan: number; fact: number; execution: number | null };
+
+export type PlanPersonRow = {
+  agentId: number;
+  name: string;
+  job: string | null;
+  regionId: string | null;
+  regionName: string | null;
+  isTeamPlan: boolean;
+  weightPlan: number | null;
+  weightFact: number;
+  weightExecution: number | null;
+  revenuePlan: number | null;
+  revenueFact: number;
+  akbPlan: number | null;
+  akbFact: number;
+  indicators: IndicatorPlan[];
+};
+
+export type PlansView = {
+  period: Period;
+  weightPlan: number | null;
+  weightFact: number;
+  weightExecution: number | null;
+  revenuePlan: number | null;
+  revenueFact: number;
+  agentsWithPlan: number;
+  indicators: number;
+  regions: { id: string; name: string; agents: number; weightPlan: number | null; weightFact: number; weightExecution: number | null; revenuePlan: number | null; revenueFact: number }[];
+  agents: PlanPersonRow[];
+  teamPlans: PlanPersonRow[];
 };
 
 export type FlagCounts = { critical: number; risk: number };
@@ -58,6 +106,7 @@ export type UnitRow = {
   regionCount: number;
   regionNames: string[];
   flags: FlagCounts;
+  planFactKg: number | null;
 };
 
 export type VisitCalendarRow = {
@@ -195,6 +244,8 @@ export type AgentView = {
   execution: number | null;
   factKg: number;
   revenue: number;
+  revenuePlan: number | null;
+  revenueExecution: number | null;
   visits: number;
   visitsWithOrder: number;
   conversion: MedianValue;

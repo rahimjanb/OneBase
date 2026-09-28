@@ -12,7 +12,10 @@ public class SalesAnalyticsTests
     private static SaleLine Line(int day, long? agent, long market, long branch, decimal kg, decimal revenue, long? order, int month = 9) =>
         new(new DateOnly(2026, month, day), agent, market, branch, 1, 100, kg, revenue, order);
 
-    private static MonthData Data(IReadOnlyList<SaleLine>? previous = null, IReadOnlyList<PlanRow>? plans = null) => new()
+    private static MonthData Data(
+        IReadOnlyList<SaleLine>? previous = null,
+        IReadOnlyList<PlanRow>? plans = null,
+        IReadOnlyList<PlanRow>? revenuePlans = null) => new()
     {
         Year = 2026,
         Month = 9,
@@ -30,6 +33,7 @@ public class SalesAnalyticsTests
         Visits = [],
         History = [],
         Plans = plans ?? [new PlanRow(North, null, 9, null, 300), new PlanRow(South, null, 9, null, 60)],
+        RevenuePlans = revenuePlans ?? [],
         YearRegionPlans = [],
         Agents = new Dictionary<long, AgentInfo>
         {
@@ -85,6 +89,40 @@ public class SalesAnalyticsTests
         Assert.Equal(150m, republic.Regions.Single(r => r.Id == North.ToString()).PlanKg);
         Assert.Equal(60m, republic.Regions.Single(r => r.Id == South.ToString()).PlanKg); // ручной план важнее
         Assert.Equal(210m, republic.Kpi.PlanKg);
+    }
+
+    [Fact]
+    public void Plan_execution_without_region_plan_uses_fact_of_agents_with_plans_only()
+    {
+        // В «Севере» план только у агента 1 (100 кг, факт 100). Агент 2 (без плана, 50 кг) не должен «выполнять» его план.
+        var plans = new[] { new PlanRow(null, 1, 9, null, 100) };
+
+        var region = new SalesAnalytics(Data(plans: plans)).Region(North, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10), "kg", null);
+
+        Assert.Equal(175m, region.Kpi.FactKg); // факт региона — всё, включая агента без плана и факт без агента
+        Assert.Equal(100m, region.Kpi.PlanKg);
+        Assert.Equal(100m, region.Kpi.PlanFactKg);
+        Assert.Equal(1m, region.Kpi.Execution);
+        Assert.Equal(1, region.Kpi.PlanAgents);
+    }
+
+    [Fact]
+    public void Revenue_plan_counts_only_revenue_of_agents_that_have_a_revenue_plan()
+    {
+        // План по выручке есть только у агента 1 (2000); его выручка — 1000. Выручка остальных не должна «выполнять» его план.
+        var republic = new SalesAnalytics(Data(revenuePlans: [new PlanRow(null, 1, 9, null, 2000)]))
+            .Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
+
+        var tile = republic.Kpi.RevenuePlan!;
+        Assert.Equal(2000m, tile.Plan);
+        Assert.Equal(1000m, tile.Fact);
+        Assert.Equal(0.5m, tile.Execution);
+        Assert.Equal(1, tile.Agents);
+
+        // В «Юге» агентов с планом по выручке нет — и плана нет.
+        var south = new SalesAnalytics(Data(revenuePlans: [new PlanRow(null, 1, 9, null, 2000)]))
+            .Region(South, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10), "kg", null);
+        Assert.Null(south.Kpi.RevenuePlan);
     }
 
     [Fact]

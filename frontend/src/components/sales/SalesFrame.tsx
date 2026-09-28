@@ -8,10 +8,11 @@ import { dateTime } from "@/lib/sales/format";
 import { param, periodQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { Period, SalesMonth, SyncStatus } from "@/lib/sales/types";
 
-export type SalesTab = "analytics" | "problems" | "setup";
+export type SalesTab = "analytics" | "plans" | "problems" | "setup";
 
 const tabs: { key: SalesTab; label: string; href: string }[] = [
   { key: "analytics", label: "Аналитика", href: "/sales" },
+  { key: "plans", label: "Планы", href: "/sales/plans" },
   { key: "problems", label: "Проблемные агенты", href: "/sales/problems" },
   { key: "setup", label: "Настройки", href: "/sales/setup" },
 ];

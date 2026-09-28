@@ -68,6 +68,11 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         return analytics.HasAgent(id) ? analytics.Agent(id) : NotFound();
     }
 
+    /// <summary>Все планы из Linko (staff_balance) за месяц: агенты по регионам и планы команд (супервайзеров).</summary>
+    [HttpGet("plans")]
+    public async Task<PlansView> Plans([FromQuery] PeriodQuery q, CancellationToken ct) =>
+        (await Load(q with { Plan = PlanKind.Rop }, ct)).Plans();
+
     [HttpGet("problems")]
     public async Task<ProblemsView> Problems(
         [FromQuery] PeriodQuery q,

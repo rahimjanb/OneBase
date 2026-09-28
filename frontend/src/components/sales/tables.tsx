@@ -15,8 +15,9 @@ export function RegionsTable({ rows, query, title, hint }: { rows: UnitRow[]; qu
   const columns: Column<UnitRow>[] = [
     { key: "name", label: "Регион", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.subtitle} /> },
     { key: "plan", label: "План, кг", align: "right", value: (r) => r.planKg, render: (r) => kg(r.planKg) },
-    { key: "fact", label: "Факт, кг", align: "right", value: (r) => r.factKg, render: (r) => kg(r.factKg) },
+    { key: "planFact", label: "Факт в плане, кг", align: "right", value: (r) => r.planFactKg, render: (r) => kg(r.planFactKg) },
     { key: "exec", label: "Вып.", align: "right", value: (r) => r.execution, render: (r) => <span className={execClass(r.execution)}>{pct(r.execution)}</span> },
+    { key: "fact", label: "Факт всего, кг", align: "right", value: (r) => r.factKg, render: (r) => kg(r.factKg) },
     { key: "forecast", label: "Прогноз, кг", align: "right", value: (r) => r.forecastKg, render: (r) => kg(r.forecastKg) },
     {
       key: "forecastExec",
@@ -45,7 +46,7 @@ export function RegionsTable({ rows, query, title, hint }: { rows: UnitRow[]; qu
       rows={rows}
       rowKey={(r) => r.id}
       rowHref={(r) => (r.id === NO_REGION ? null : withQuery(`/sales/regions/${r.id}`, query))}
-      note="Прогноз — факт, растянутый на весь месяц по текущему темпу. Страйк — доля визитов, после которых в тот же день был заказ в этой ТТ."
+      note="«Факт в плане» — продажи тех ТП, у кого есть план (если у региона свой ручной план — все продажи региона); выполнение считается по нему. «Факт всего» — все продажи региона. Прогноз — факт всего, растянутый на месяц по текущему темпу. Страйк — доля визитов, после которых в тот же день был заказ в этой ТТ."
     />
   );
 }

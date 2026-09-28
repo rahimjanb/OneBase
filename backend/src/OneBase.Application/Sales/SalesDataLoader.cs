@@ -142,10 +142,16 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                 .Where(s => s.Month == month)
                 .Select(s => new StaffIndicator(s.LinkoUserId, s.IndicatorId, CleanIndicatorName(s.IndicatorName), s.PlanType, s.PlanAmount, s.FactAmount))
                 .ToList(),
+            RevenuePlans = staff
+                .Where(s => s.Month == month && s.PlanType == StaffPlanTypes.SalesSum && !excludedStaff.Contains(s.LinkoUserId))
+                .GroupBy(s => s.LinkoUserId)
+                .Select(g => new PlanRow(null, g.Key, month, null, g.Sum(s => s.PlanAmount)))
+                .ToList(),
+            TeamPlanStaff = excludedStaff,
             Agents = users.ToDictionary(u => u.Id, u =>
             {
                 var profile = profiles.GetValueOrDefault(u.Id);
-                return new AgentInfo(u.Id, u.DisplayName, u.IsActive, profile?.RegionId, profile?.IsVacancy ?? false, profile is not null);
+                return new AgentInfo(u.Id, u.DisplayName, u.IsActive, profile?.RegionId, profile?.IsVacancy ?? false, profile is not null, u.JobName);
             }),
             Regions = await db.SalesRegions.AsNoTracking()
                 .Select(r => new RegionInfo(r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName))
