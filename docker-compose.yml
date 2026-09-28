@@ -42,7 +42,8 @@ services:
       - "127.0.0.1:6334:6334" # gRPC
 
   minio:
-    image: minio/minio:latest # закрепить версию перед продакшеном
+    # Официальные образы minio/minio больше не публикуются; pgsty/minio — поддерживаемый форк community-версии.
+    image: pgsty/minio:latest # закрепить версию перед продакшеном
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
