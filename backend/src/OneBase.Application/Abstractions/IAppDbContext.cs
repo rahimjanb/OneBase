@@ -3,6 +3,7 @@ using OneBase.Domain.AI;
 using OneBase.Domain.Audit;
 using OneBase.Domain.Files;
 using OneBase.Domain.Identity;
+using OneBase.Domain.Sales;
 
 namespace OneBase.Application.Abstractions;
 
@@ -21,6 +22,19 @@ public interface IAppDbContext
 
     DbSet<AgentToolGrant> AgentToolGrants { get; }
     DbSet<ApprovalRequest> ApprovalRequests { get; }
+
+    DbSet<LinkoUser> LinkoUsers { get; }
+    DbSet<LinkoMarket> LinkoMarkets { get; }
+    DbSet<LinkoProduct> LinkoProducts { get; }
+    DbSet<LinkoProductType> LinkoProductTypes { get; }
+    DbSet<LinkoMarketUser> LinkoMarketUsers { get; }
+    DbSet<LinkoOrder> LinkoOrders { get; }
+    DbSet<LinkoOrderLine> LinkoOrderLines { get; }
+    DbSet<LinkoOrderReturn> LinkoOrderReturns { get; }
+    DbSet<LinkoOrderReturnLine> LinkoOrderReturnLines { get; }
+    DbSet<LinkoVisit> LinkoVisits { get; }
+    DbSet<LinkoKpiPlan> LinkoKpiPlans { get; }
+    DbSet<LinkoSyncState> LinkoSyncStates { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

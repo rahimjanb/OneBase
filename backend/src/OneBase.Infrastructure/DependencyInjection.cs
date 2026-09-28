@@ -2,8 +2,11 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Minio;
 using OneBase.Application.Abstractions;
+using OneBase.Application.Sales;
+using OneBase.Infrastructure.Linko;
 using OneBase.Domain.Identity;
 using OneBase.Infrastructure.Audit;
 using OneBase.Infrastructure.Persistence;
@@ -48,6 +51,27 @@ public static class DependencyInjection
         var qdrant = config.GetSection(QdrantOptions.Section).Get<QdrantOptions>() ?? new QdrantOptions();
         services.AddSingleton(_ => new QdrantClient(qdrant.Host, qdrant.Port, qdrant.UseHttps, qdrant.ApiKey));
         services.AddSingleton<IVectorStore, QdrantVectorStore>();
+
+        // Продажи: настройки и синхронизация с Linko SFA
+        var sales = config.GetSection(SalesOptions.Section).Get<SalesOptions>() ?? new SalesOptions();
+        services.AddSingleton(sales);
+        services.TryAddSingleton(TimeProvider.System);
+
+        // Адрес и токен Linko — только из окружения (.env), не из appsettings.
+        var linko = config.GetSection(LinkoOptions.Section).Get<LinkoOptions>() ?? new LinkoOptions();
+        linko.BaseUrl = config["LINKO_BASE_URL"] ?? string.Empty;
+        linko.Token = config["LINKO_TOKEN"] ?? string.Empty;
+        services.AddSingleton(linko);
+        services.AddHttpClient<LinkoClient>(http =>
+        {
+            if (linko.IsConfigured)
+            {
+                LinkoClient.Configure(http, linko);
+            }
+        });
+        services.AddScoped<LinkoSyncService>();
+        services.AddSingleton<LinkoSyncCoordinator>();
+        services.AddHostedService<LinkoSyncWorker>();
 
         return services;
     }

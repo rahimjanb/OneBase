@@ -1,0 +1,107 @@
+using Microsoft.EntityFrameworkCore;
+using OneBase.Domain.Sales;
+
+namespace OneBase.Infrastructure.Persistence;
+
+/// <summary>Конфигурация таблиц продаж: зеркало Linko (схема linko) и данные OneBase (схема sales).</summary>
+internal static class SalesModel
+{
+    public static void ConfigureLinko(ModelBuilder b)
+    {
+        b.Entity<LinkoUser>(e =>
+        {
+            e.ToTable("Users", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Ignore(x => x.DisplayName);
+        });
+
+        b.Entity<LinkoMarket>(e =>
+        {
+            e.ToTable("Markets", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.HasIndex(x => x.ResponsibleAgentId);
+            e.HasIndex(x => x.BranchId);
+        });
+
+        b.Entity<LinkoProduct>(e =>
+        {
+            e.ToTable("Products", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<LinkoProductType>(e =>
+        {
+            e.ToTable("ProductTypes", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<LinkoBorder>(e =>
+        {
+            e.ToTable("Borders", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<LinkoMarketUser>(e =>
+        {
+            e.ToTable("MarketUsers", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.HasIndex(x => x.UserId);
+            e.HasIndex(x => x.MarketId);
+        });
+
+        b.Entity<LinkoOrder>(e =>
+        {
+            e.ToTable("Orders", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.CreatedAt).HasColumnType("timestamp without time zone");
+            e.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.OrderId);
+            e.HasIndex(x => x.CreatedDate);
+            e.HasIndex(x => x.DeliveryDate);
+            e.HasIndex(x => x.AgentId);
+            e.HasIndex(x => x.MarketId);
+        });
+
+        b.Entity<LinkoOrderLine>(e =>
+        {
+            e.ToTable("OrderLines", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.HasIndex(x => x.ProductId);
+        });
+
+        b.Entity<LinkoOrderReturn>(e =>
+        {
+            e.ToTable("OrderReturns", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.ReturnId);
+            e.HasIndex(x => x.CreatedDate);
+        });
+
+        b.Entity<LinkoOrderReturnLine>(e =>
+        {
+            e.ToTable("OrderReturnLines", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<LinkoVisit>(e =>
+        {
+            e.ToTable("Visits", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Date).HasColumnType("timestamp without time zone");
+            e.HasIndex(x => x.Day);
+            e.HasIndex(x => x.UserId);
+        });
+
+        b.Entity<LinkoKpiPlan>(e =>
+        {
+            e.ToTable("KpiPlans", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<LinkoSyncState>(e =>
+        {
+            e.ToTable("SyncState", "linko");
+            e.HasKey(x => x.Entity);
+            e.Property(x => x.Entity).HasMaxLength(64);
+        });
+    }
+}

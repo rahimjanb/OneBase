@@ -1,9 +1,12 @@
 using System.Threading.RateLimiting;
 using OneBase.AI;
+using OneBase.Api;
 using OneBase.Api.Auth;
 using OneBase.Infrastructure;
+using OneBase.Infrastructure.Linko;
 using OneBase.Infrastructure.Persistence;
 
+DotEnv.Load();
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -43,4 +46,10 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
     await DbSeeder.SeedAsync(app.Services);
 }
 
+if (args.Contains("linko-check"))
+{
+    return await LinkoCheck.RunAsync(app.Services, full: args.Contains("--full"));
+}
+
 app.Run();
+return 0;

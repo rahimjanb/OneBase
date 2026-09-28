@@ -77,6 +77,8 @@ services:
       Llm__ApiKey: ${LLM_API_KEY}
       Llm__Model: ${LLM_MODEL}
       Llm__EmbeddingModel: ${EMBEDDING_MODEL}
+      LINKO_BASE_URL: ${LINKO_BASE_URL}
+      LINKO_TOKEN: ${LINKO_TOKEN}
     depends_on:
       postgres:
         condition: service_healthy

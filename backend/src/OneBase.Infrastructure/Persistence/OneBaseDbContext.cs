@@ -4,6 +4,7 @@ using OneBase.Domain.AI;
 using OneBase.Domain.Audit;
 using OneBase.Domain.Files;
 using OneBase.Domain.Identity;
+using OneBase.Domain.Sales;
 
 namespace OneBase.Infrastructure.Persistence;
 
@@ -23,8 +24,25 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<AgentToolGrant> AgentToolGrants => Set<AgentToolGrant>();
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
 
+    // Linko (зеркало SFA)
+    public DbSet<LinkoUser> LinkoUsers => Set<LinkoUser>();
+    public DbSet<LinkoMarket> LinkoMarkets => Set<LinkoMarket>();
+    public DbSet<LinkoProduct> LinkoProducts => Set<LinkoProduct>();
+    public DbSet<LinkoProductType> LinkoProductTypes => Set<LinkoProductType>();
+    public DbSet<LinkoBorder> LinkoBorders => Set<LinkoBorder>();
+    public DbSet<LinkoMarketUser> LinkoMarketUsers => Set<LinkoMarketUser>();
+    public DbSet<LinkoOrder> LinkoOrders => Set<LinkoOrder>();
+    public DbSet<LinkoOrderLine> LinkoOrderLines => Set<LinkoOrderLine>();
+    public DbSet<LinkoOrderReturn> LinkoOrderReturns => Set<LinkoOrderReturn>();
+    public DbSet<LinkoOrderReturnLine> LinkoOrderReturnLines => Set<LinkoOrderReturnLine>();
+    public DbSet<LinkoVisit> LinkoVisits => Set<LinkoVisit>();
+    public DbSet<LinkoKpiPlan> LinkoKpiPlans => Set<LinkoKpiPlan>();
+    public DbSet<LinkoSyncState> LinkoSyncStates => Set<LinkoSyncState>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
+        SalesModel.ConfigureLinko(b);
+
         // Identity
         b.Entity<Department>(e =>
         {

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OneBase.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using OneBase.Infrastructure.Persistence;
 namespace OneBase.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(OneBaseDbContext))]
-    partial class OneBaseDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260928173541_LinkoMirror")]
+    partial class LinkoMirror
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
