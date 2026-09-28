@@ -12,6 +12,7 @@ namespace OneBase.Api.Controllers;
 [ApiController]
 [Route("api/sales/setup")]
 [HasPermission(Permissions.SalesRead)]
+[InvalidateSalesCache]
 public sealed class SalesSetupController(IAppDbContext db, ISalesPlanImporter importer) : ControllerBase
 {
     public sealed record DirectionInput(string Name, DirectionKind Kind, string? ManagerName, string? Description, int SortOrder);

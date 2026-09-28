@@ -72,6 +72,9 @@ public static class DependencyInjection
         });
         services.AddScoped<LinkoSyncService>();
         services.AddScoped<ISalesPlanImporter, SalesPlanImporter>();
+        services.AddMemoryCache();
+        services.AddSingleton<SalesCacheSignal>();
+        services.AddScoped<SalesDataLoader>();
         services.AddSingleton<LinkoSyncCoordinator>();
         services.AddHostedService<LinkoSyncWorker>();
 

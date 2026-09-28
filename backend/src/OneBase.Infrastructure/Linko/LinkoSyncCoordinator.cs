@@ -6,7 +6,7 @@ using OneBase.Application.Sales;
 namespace OneBase.Infrastructure.Linko;
 
 /// <summary>Не даёт запускать синхронизацию параллельно (фон + кнопка «Обновить»).</summary>
-public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, ILogger<LinkoSyncCoordinator> logger)
+public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCacheSignal cacheSignal, ILogger<LinkoSyncCoordinator> logger)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -27,6 +27,7 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, ILogger<Li
             using var scope = scopes.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<LinkoSyncService>();
             LastReport = await service.SyncAsync(full, ct);
+            cacheSignal.Invalidate();
             return LastReport;
         }
         finally
