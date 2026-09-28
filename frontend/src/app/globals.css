@@ -2,12 +2,31 @@
 
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-sidebar: #16213a;
+  --color-sidebar-active: #25324f;
+  --color-sidebar-text: #c3cbd9;
+  --color-sidebar-muted: #7f8ba3;
+
+  --color-page: #f6f8fb;
+  --color-line: #e3e8ef;
+  --color-ink: #111b2e;
+  --color-ink-2: #56657d;
+  --color-ink-3: #8793a7;
+
+  --color-accent: #3b76f6;
+  --color-accent-strong: #2563eb;
+  --color-accent-soft: #eaf1ff;
+
+  --color-ok: #1f9d6b;
+  --color-warn: #e0922f;
+  --color-bad: #dc4c4c;
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+  @apply bg-page text-ink antialiased;
 }
