@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { GroupPage } from "@/components/sales/GroupPage";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGetOrNull } from "@/lib/server-api";
-import { apiQuery, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
+import { apiQuery, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { GroupView } from "@/lib/sales/types";
 
 export default async function DirectionPage({
@@ -26,7 +26,14 @@ export default async function DirectionPage({
       back={withQuery("/sales/republic", q)}
       sp={sp}
     >
-      <GroupPage data={data} sp={sp} query={q} regionsTitle="Сравнение регионов" scopeName="направлении" />
+      <GroupPage
+        data={data}
+        sp={sp}
+        query={q}
+        categoryQuery={queryWith(q, { direction: id })}
+        regionsTitle="Сравнение регионов"
+        scopeName="направлении"
+      />
     </SalesFrame>
   );
 }

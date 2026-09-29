@@ -1,4 +1,5 @@
 import { AkbChart } from "./AkbChart";
+import { CollapsedSections } from "./bits";
 import { DataQualityNotes, KpiRow, UnassignedWarning, UnitCard } from "./blocks";
 import { VisitCalendarTable } from "./calendars";
 import { CategoryCards } from "./categories";
@@ -33,12 +34,15 @@ export function GroupPage({
   data,
   sp,
   query,
+  categoryQuery,
   regionsTitle,
   scopeName,
 }: {
   data: GroupView;
   sp: SalesSearchParams;
   query: string;
+  /** Период и охват для страницы категории («direction=…» у направления). */
+  categoryQuery: string;
   regionsTitle: string;
   /** «в республике», «в направлении» — для пояснений. */
   scopeName: string;
@@ -60,31 +64,33 @@ export function GroupPage({
       <Cards title="Региональные менеджеры" cards={directions} query={query} />
       <Cards title={directions.length > 0 ? "Регионы без РМ" : "Регионы"} cards={regions} query={query} />
 
-      <CategoryCards cards={data.categoryCards} scope={scopeName} />
-      <AkbChart data={data.akbMonths} />
+      <CategoryCards cards={data.categoryCards} scope={scopeName} query={categoryQuery} />
 
-      <RegionsTable
-        rows={data.regions}
-        query={query}
-        title={regionsTitle}
-        hint={`текущий темп × ${period.daysInMonth} дн. (отработано ${period.workedDays})`}
-      />
-      <VisitCalendarTable rows={data.visitCalendar} totalName="Итого" from={from} to={to} maxDay={period.daysInMonth} />
-      <SameDaysTable
-        rows={data.sameDays}
-        nameLabel="Регион"
-        hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`}
-        link="region"
-        query={query}
-      />
-      <NotBoughtTable
-        rows={data.notBought}
-        nameLabel="Регион"
-        hint={`база — ${monthName(prevMonth)}, кто пока молчит`}
-        workedDays={period.workedDays}
-        daysInMonth={period.daysInMonth}
-      />
-      <DataQualityNotes quality={data.quality} />
+      <CollapsedSections>
+        <AkbChart data={data.akbMonths} />
+        <RegionsTable
+          rows={data.regions}
+          query={query}
+          title={regionsTitle}
+          hint={`текущий темп × ${period.daysInMonth} дн. (отработано ${period.workedDays})`}
+        />
+        <VisitCalendarTable rows={data.visitCalendar} totalName="Итого" from={from} to={to} maxDay={period.daysInMonth} />
+        <SameDaysTable
+          rows={data.sameDays}
+          nameLabel="Регион"
+          hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`}
+          link="region"
+          query={query}
+        />
+        <NotBoughtTable
+          rows={data.notBought}
+          nameLabel="Регион"
+          hint={`база — ${monthName(prevMonth)}, кто пока молчит`}
+          workedDays={period.workedDays}
+          daysInMonth={period.daysInMonth}
+        />
+        <DataQualityNotes quality={data.quality} />
+      </CollapsedSections>
     </>
   );
 }

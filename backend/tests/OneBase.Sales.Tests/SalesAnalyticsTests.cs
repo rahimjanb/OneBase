@@ -360,4 +360,76 @@ public class SalesAnalyticsTests
         Assert.Equal(300m, north.SilentPrevRevenue);
         Assert.Equal(2, north.New); // ТТ 11 и 12 — новые
     }
+
+    /// <summary>Позиция заказа категории 1 («Бамбук»): агент, филиал, артикул, магазин; выручка = кг × 10.</summary>
+    private static SaleLine At(long agent, long branch, long product, long market, decimal kg, int month = 9) =>
+        new(new DateOnly(2026, month, 2), agent, market, branch, 1, product, kg, kg * 10, product * 1000 + market * 10 + month);
+
+    /// <summary>
+    /// Север: ТП 1 продаёт 100 в ТТ 10, ТП 2 — 101 в ТТ 11. Юг: ТП 3 продаёт 101 в ТТ 20, а в августе продавал 102.
+    /// 103 в ассортименте, но не продаётся нигде.
+    /// </summary>
+    private static MonthData CatalogData() => Data(
+        current: [At(1, 101, 100, 10, 60), At(2, 101, 101, 11, 10), At(3, 102, 101, 20, 20)],
+        previous: [At(3, 102, 102, 20, 5, month: 8)],
+        categories: new Dictionary<long, string> { [1] = "Бамбук" },
+        reportCategories: new Dictionary<string, string> { ["Бамбук"] = "1" },
+        products: new Dictionary<long, ProductInfo>
+        {
+            [100] = new(100, "Бамбук А", "A", 1),
+            [101] = new(101, "Бамбук Б", "B", 1),
+            [102] = new(102, "Бамбук В", "C", 1),
+            [103] = new(103, "Бамбук Г", "D", 1),
+        },
+        activeSkus: new HashSet<long> { 100, 101, 102, 103 });
+
+    [Fact]
+    public void Category_page_in_a_region_marks_sku_sold_elsewhere_as_not_carried()
+    {
+        var analytics = new SalesAnalytics(CatalogData());
+        var id = Assert.Single(analytics.Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10)).CategoryCards).Id;
+
+        var south = analytics.Category(id, new AssortmentScope(null, South, null, false))!;
+        string StatusOf(CategoryView view, long product) => view.Card!.Skus.Single(s => s.ProductId == product).Status;
+
+        Assert.Equal(("Юг", "Бамбук"), (south.ScopeName, south.Name));
+        Assert.Equal(SkuStatuses.Selling, StatusOf(south, 101));
+        Assert.Equal(SkuStatuses.Lost, StatusOf(south, 102));
+        Assert.Equal(SkuStatuses.Elsewhere, StatusOf(south, 100)); // здесь ноль, а на Севере идёт
+        Assert.Equal(SkuStatuses.Silent, StatusOf(south, 103)); // не продаётся нигде
+        Assert.Empty(south.Regions); // у одного региона сводки по регионам нет
+
+        var republic = analytics.Category(id, new AssortmentScope(null, null, null, false))!;
+        Assert.Equal(SkuStatuses.Silent, StatusOf(republic, 103)); // у республики «не возят» не бывает
+        var rows = republic.Regions.ToDictionary(r => r.Name);
+        Assert.Equal((2, 0, 0), (rows["Север"].SkuSelling, rows["Север"].SkuNotCarried, rows["Север"].SkuLost));
+        Assert.Equal((1, 1, 1), (rows["Юг"].SkuSelling, rows["Юг"].SkuNotCarried, rows["Юг"].SkuLost)); // база — 100 и 101, что идут по республике
+        Assert.Equal("Север", republic.Regions[0].Name); // по убыванию веса
+
+        Assert.Null(analytics.Category(id, new AssortmentScope(null, Guid.NewGuid(), null, false))); // неизвестный регион
+    }
+
+    [Fact]
+    public void Product_page_shows_where_the_product_sells_by_region_agent_and_store()
+    {
+        var analytics = new SalesAnalytics(CatalogData());
+
+        var republic = analytics.Product(101, new AssortmentScope(null, null, null, false))!;
+        Assert.Equal((ProductBreakdowns.Regions, 30m, 300m, 10m), (republic.Breakdown, republic.FactKg, republic.Revenue, republic.PricePerKg!.Value));
+        Assert.Equal((2, 3), (republic.Tt, republic.Outlets)); // ТТ 11 и 20 из 10, 11, 20
+        var north = republic.Rows.Single(r => r.Name == "Север");
+        Assert.Equal((SkuStatuses.Selling, 10m, 1, 2, 0.5m), (north.Status, north.Kg, north.Tt, north.Outlets, north.Distribution!.Value));
+
+        var inSouth = analytics.Product(100, new AssortmentScope(null, South, null, false))!;
+        Assert.Equal((ProductBreakdowns.Agents, SkuStatuses.Elsewhere), (inSouth.Breakdown, inSouth.Status));
+        var agent = Assert.Single(inSouth.Rows);
+        Assert.Equal(("3", SkuStatuses.Elsewhere, 0, 1), (agent.Id, agent.Status, agent.Tt, agent.Outlets));
+
+        var ofAgent = analytics.Product(101, new AssortmentScope(null, null, 1, false))!;
+        Assert.Equal((ProductBreakdowns.Stores, SkuStatuses.Elsewhere), (ofAgent.Breakdown, ofAgent.Status));
+        var store = Assert.Single(ofAgent.Rows);
+        Assert.Equal(("10", SkuStatuses.Silent), (store.Id, store.Status)); // ТТ 10 у ТП 1 этот артикул не брала
+
+        Assert.Null(analytics.Product(999, new AssortmentScope(null, null, null, false))); // нет ни в справочнике, ни в продажах
+    }
 }

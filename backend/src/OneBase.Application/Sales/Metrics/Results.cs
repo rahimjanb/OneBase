@@ -172,6 +172,18 @@ public static class SkuStatuses
 
     /// <summary>Пропал: в прошлом месяце продавался, в этом — нет.</summary>
     public const string Lost = "lost";
+
+    /// <summary>Не возят: здесь ни в этом, ни в прошлом месяце, а по республике в этом месяце продаётся.</summary>
+    public const string Elsewhere = "elsewhere";
+
+    /// <summary>Порядок в таблицах: продаётся, пропал, не возят, молчит.</summary>
+    public static int Rank(string status) => status switch
+    {
+        Selling => 0,
+        Lost => 1,
+        Elsewhere => 2,
+        _ => 3,
+    };
 }
 
 /// <summary>Артикул категории. Дистрибуция — доля АКБ подразделения, купившей этот SKU.</summary>

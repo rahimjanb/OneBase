@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { FlagPills, KpiTile, Section } from "@/components/sales/bits";
+import { CollapsedSections, FlagPills, KpiTile, Section } from "@/components/sales/bits";
 import { CategoryPlanBars, IndicatorBars, PlanBadge } from "@/components/sales/blocks";
 import { AgentStoresTable, LaggingTable, ProductsTable } from "@/components/sales/assortment-tables";
 import { CategoryCards } from "@/components/sales/categories";
@@ -7,7 +7,7 @@ import { SalesFrame } from "@/components/sales/SalesFrame";
 import { NewMarketsTable, SameDaysTable, SilentMarketsTable } from "@/components/sales/tables";
 import { apiGetOrNull } from "@/lib/server-api";
 import { kg, money, monthGenitive, num, pct } from "@/lib/sales/format";
-import { apiQuery, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
+import { apiQuery, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { AgentFlag, AgentView } from "@/lib/sales/types";
 
 const findingStyles = {
@@ -104,25 +104,30 @@ export default async function AgentPage({
       </div>
 
       <Findings flags={data.flags} />
-      {data.assortment && <CategoryCards cards={data.assortment.categories} scope="продажах этого ТП" />}
-      <IndicatorBars rows={data.indicators} />
-      <CategoryPlanBars rows={data.categoryPlan} />
       {data.assortment && (
-        <>
-          <AgentStoresTable rows={data.assortment.stores} agentId={data.agentId} query={q} />
-          <ProductsTable rows={data.assortment.products} />
-          <LaggingTable rows={data.assortment.lagging} />
-        </>
+        <CategoryCards cards={data.assortment.categories} scope="продажах этого ТП" query={queryWith(q, { agent: data.agentId })} />
       )}
-      <SameDaysTable rows={[data.sameDays]} nameLabel="ТП" hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`} query={q} />
-      <SilentMarketsTable
-        rows={data.silent}
-        base={data.silentBase}
-        revenue={data.silentPrevRevenue}
-        workedDays={period.workedDays}
-        daysInMonth={period.daysInMonth}
-      />
-      <NewMarketsTable rows={data.newMarkets} />
+
+      <CollapsedSections>
+        <IndicatorBars rows={data.indicators} />
+        <CategoryPlanBars rows={data.categoryPlan} />
+        {data.assortment && (
+          <>
+            <AgentStoresTable rows={data.assortment.stores} agentId={data.agentId} query={q} />
+            <ProductsTable rows={data.assortment.products} />
+            <LaggingTable rows={data.assortment.lagging} />
+          </>
+        )}
+        <SameDaysTable rows={[data.sameDays]} nameLabel="ТП" hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`} query={q} />
+        <SilentMarketsTable
+          rows={data.silent}
+          base={data.silentBase}
+          revenue={data.silentPrevRevenue}
+          workedDays={period.workedDays}
+          daysInMonth={period.daysInMonth}
+        />
+        <NewMarketsTable rows={data.newMarkets} />
+      </CollapsedSections>
     </SalesFrame>
   );
 }

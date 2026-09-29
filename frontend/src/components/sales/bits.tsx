@@ -101,33 +101,8 @@ export function Note({ children }: { children: React.ReactNode }) {
   return <p className="mt-3 border-l-2 border-line pl-3 text-xs leading-relaxed text-ink-3">{children}</p>;
 }
 
-/** Секция-карточка с заголовком, пояснением и действиями справа. */
-export function Section({
-  title,
-  hint,
-  actions,
-  children,
-  className = "",
-}: {
-  title: string;
-  hint?: React.ReactNode;
-  actions?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={`mt-6 rounded-xl border border-line bg-surface p-4 sm:p-5 ${className}`}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 className="text-base font-semibold text-ink">{title}</h2>
-          {hint && <span className="text-xs text-ink-3">{hint}</span>}
-        </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-      </div>
-      {children}
-    </section>
-  );
-}
+// Секция живёт в клиентском модуле: под карточками категорий она сворачивается (CollapsedSections).
+export { CollapsedSections, Section } from "./Section";
 
 export function Alert({ tone = "warn", children }: { tone?: "warn" | "bad" | "info"; children: React.ReactNode }) {
   const styles = { warn: "border-warn/30 bg-warn-soft text-ink", bad: "border-bad/30 bg-bad-soft text-ink", info: "border-line bg-muted text-ink-2" };

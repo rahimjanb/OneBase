@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { AkbChart } from "@/components/sales/AkbChart";
+import { CollapsedSections } from "@/components/sales/bits";
 import { DataQualityNotes, KpiRow, PlanFactMonths, UnassignedWarning } from "@/components/sales/blocks";
 import { MonthCalendarTable, VisitCalendarTable } from "@/components/sales/calendars";
 import { CategoryCards } from "@/components/sales/categories";
@@ -7,7 +8,7 @@ import { SalesFrame } from "@/components/sales/SalesFrame";
 import { NotBoughtTable, NotInDirectoryTable, SameDaysTable, TeamTable } from "@/components/sales/tables";
 import { apiGetOrNull } from "@/lib/server-api";
 import { monthGenitive, monthName } from "@/lib/sales/format";
-import { apiQuery, param, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
+import { apiQuery, param, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { RegionView } from "@/lib/sales/types";
 
 export default async function RegionPage({
@@ -49,28 +50,30 @@ export default async function RegionPage({
       <UnassignedWarning kgValue={data.unassigned.kg} share={data.unassigned.share} />
 
       <PlanFactMonths months={data.months} current={period.month} />
-      <CategoryCards cards={data.categoryCards} scope="регионе" />
-      <AkbChart data={data.akbMonths} />
+      <CategoryCards cards={data.categoryCards} scope="регионе" query={queryWith(q, { region: id })} />
 
-      <MonthCalendarTable
-        calendar={data.calendar}
-        year={period.year}
-        month={period.month}
-        categories={data.categories.filter((c) => c.categoryId != null).map((c) => ({ id: c.categoryId!, name: c.name }))}
-      />
-      <VisitCalendarTable rows={data.visitCalendar} flatten totalName={data.name} from={from} to={to} maxDay={period.daysInMonth} />
-      <TeamTable rows={data.team} query={q} />
-      <SameDaysTable rows={data.sameDays} nameLabel="ТП" hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`} link="agent" query={q} />
-      <NotBoughtTable
-        rows={data.notBought}
-        nameLabel="ТП"
-        hint={`база — ${monthName(prevMonth)}, кто пока молчит`}
-        workedDays={period.workedDays}
-        daysInMonth={period.daysInMonth}
-        expandable
-      />
-      {data.notInDirectory.length > 0 && <NotInDirectoryTable rows={data.notInDirectory} query={q} />}
-      <DataQualityNotes quality={data.quality} />
+      <CollapsedSections>
+        <AkbChart data={data.akbMonths} />
+        <MonthCalendarTable
+          calendar={data.calendar}
+          year={period.year}
+          month={period.month}
+          categories={data.categories.filter((c) => c.categoryId != null).map((c) => ({ id: c.categoryId!, name: c.name }))}
+        />
+        <VisitCalendarTable rows={data.visitCalendar} flatten totalName={data.name} from={from} to={to} maxDay={period.daysInMonth} />
+        <TeamTable rows={data.team} query={q} />
+        <SameDaysTable rows={data.sameDays} nameLabel="ТП" hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`} link="agent" query={q} />
+        <NotBoughtTable
+          rows={data.notBought}
+          nameLabel="ТП"
+          hint={`база — ${monthName(prevMonth)}, кто пока молчит`}
+          workedDays={period.workedDays}
+          daysInMonth={period.daysInMonth}
+          expandable
+        />
+        {data.notInDirectory.length > 0 && <NotInDirectoryTable rows={data.notInDirectory} query={q} />}
+        <DataQualityNotes quality={data.quality} />
+      </CollapsedSections>
     </SalesFrame>
   );
 }

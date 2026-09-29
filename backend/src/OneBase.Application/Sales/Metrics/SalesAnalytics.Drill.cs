@@ -181,7 +181,7 @@ public sealed partial class SalesAnalytics
             })
             .ToList();
 
-        return new AgentAssortment(CategoryCardsFor(lines, _previousByAgent[agent].ToList()), stores, ProductsOf(lines), lagging);
+        return new AgentAssortment(CategoryCardsFor(lines, _previousByAgent[agent].ToList(), republic: false), stores, ProductsOf(lines), lagging);
     }
 
     public ExportView Export()
@@ -200,7 +200,7 @@ public sealed partial class SalesAnalytics
             .OrderByDescending(a => a.Kg)
             .ToList();
 
-        return new ExportView(Period, Excluded(), CategoryCardsFor(now, before), markets, agents, ProductsOf(now), _d.ExcludedOtherCurrency);
+        return new ExportView(Period, Excluded(), CategoryCardsFor(now, before, republic: false), markets, agents, ProductsOf(now), _d.ExcludedOtherCurrency);
     }
 
     public AssortmentView Assortment(string? direction, Guid? region)
@@ -215,27 +215,9 @@ public sealed partial class SalesAnalytics
             : "Республика";
 
         var lines = Lines(scope).ToList();
-        var categories = CategoryCardsFor(lines, scope is null ? _d.Previous : scope.SelectMany(x => _previousByRegion[x]).ToList());
+        var categories = CategoryCardsFor(lines, scope is null ? _d.Previous : scope.SelectMany(x => _previousByRegion[x]).ToList(), republic: scope is null);
         var products = ProductsOf(lines);
-
-        static HashSet<long> Sold(IEnumerable<SaleLine> source) =>
-            source.Where(l => l.ProductId != null).GroupBy(l => l.ProductId!.Value).Where(g => g.Sum(l => l.Revenue) > 0).Select(g => g.Key).ToHashSet();
-
-        var universe = _d.ActiveSkus.Where(p => _d.Products.TryGetValue(p, out var info) && InReport(GroupOf(info.CategoryId))).ToHashSet();
-        var regionIds = RegionIds(scope).Where(x => x != NoRegionId).ToList();
-        var regionRows = regionIds
-            .Select(id =>
-            {
-                var now = _currentByRegion[id].ToList();
-                var before = _previousByRegion[id].ToList();
-                var selling = Sold(now);
-                var lost = Sold(before).Where(p => !selling.Contains(p)).Count();
-                return new AssortmentRegionRow(id.ToString(), _regions[id].Name, now.Sum(l => l.Kg), now.Sum(l => l.Revenue),
-                    selling.Count(universe.Contains), universe.Count(p => !selling.Contains(p)), lost, SalesMath.Akb(now));
-            })
-            .Where(x => x.Kg != 0 || x.Akb > 0)
-            .OrderBy(x => x.Name)
-            .ToList();
+        var regionRows = RegionRowsOf(scope, category: null);
 
         // Матрица: топ товаров категорий отчёта по выручке × регионы с продажами.
         var matrixRegions = regionRows.Where(x => x.Akb > 0).Select(x => new UnitRef(x.Id, x.Name)).ToList();

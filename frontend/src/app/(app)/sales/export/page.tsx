@@ -1,10 +1,10 @@
-import { KpiTile, Note } from "@/components/sales/bits";
+import { CollapsedSections, KpiTile, Note } from "@/components/sales/bits";
 import { CategoryCards } from "@/components/sales/categories";
 import { ExportAgentsTable, ExportMarketsTable, ProductsTable } from "@/components/sales/assortment-tables";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGet } from "@/lib/server-api";
 import { delta, kg, money, num } from "@/lib/sales/format";
-import { apiQuery, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
+import { apiQuery, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { ExportView } from "@/lib/sales/types";
 
 export const metadata = { title: "Экспорт и опт · Продажи" };
@@ -56,10 +56,12 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
               . Курса в данных нет — эти суммы в выручку не сложены, вес заказов учтён.
             </p>
           )}
-          <CategoryCards cards={data.categories} scope="экспорте" />
-          <ExportMarketsTable rows={data.markets} />
-          <ExportAgentsTable rows={data.agents} />
-          <ProductsTable rows={data.products} />
+          <CategoryCards cards={data.categories} scope="экспорте" query={queryWith(q, { export: true })} />
+          <CollapsedSections>
+            <ExportMarketsTable rows={data.markets} />
+            <ExportAgentsTable rows={data.agents} />
+            <ProductsTable rows={data.products} />
+          </CollapsedSections>
           <Note>
             Разбивки по странам в Linko External API нет: в артефакте «Полевого контроля» она шла из отдельных файлов по странам. Здесь — то, что
             Linko отдаёт по филиалу «Завод»: покупатели, агенты и товары. Суммы — в валюте заказов, без пересчёта.

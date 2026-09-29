@@ -64,10 +64,11 @@ public sealed partial class SalesAnalytics
     // SalesAnalytics живёт в кэше, пока не изменились данные, поэтому посчитанный уровень можно отдавать повторно:
     // переходы между страницами не пересчитывают одно и то же.
 
-    private readonly ConcurrentDictionary<string, Lazy<object>> _views = new();
+    private readonly ConcurrentDictionary<string, Lazy<object?>> _views = new();
 
-    private T View<T>(string key, Func<T> build) where T : class =>
-        (T)_views.GetOrAdd(key, _ => new Lazy<object>(() => build(), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+    /// <summary>Посчитанный ответ по ключу. null тоже запоминается: «такой категории в охвате нет» не пересчитывается.</summary>
+    private T View<T>(string key, Func<T> build) where T : class? =>
+        (T)_views.GetOrAdd(key, _ => new Lazy<object?>(() => build(), LazyThreadSafetyMode.ExecutionAndPublication)).Value!;
 
     /// <summary>Дни календаря визитов: по умолчанию с 1-го по последний день данных.</summary>
     public (DateOnly From, DateOnly To) VisitRange(int? from, int? to)
@@ -667,10 +668,13 @@ public sealed partial class SalesAnalytics
     /// Типы вне настройки (импорт, бонус) сюда не входят — они в диагностике (QualityOf).
     /// </summary>
     private List<CategoryCard> CategoryCardsOf(IReadOnlySet<Guid>? scope) =>
-        CategoryCardsFor(Lines(scope).ToList(), scope is null ? _d.Previous : scope.SelectMany(r => _previousByRegion[r]).ToList());
+        CategoryCardsFor(Lines(scope).ToList(), scope is null ? _d.Previous : scope.SelectMany(r => _previousByRegion[r]).ToList(), republic: scope is null);
 
-    /// <summary>Карточки категорий по произвольному набору строк (подразделение, агент, экспорт).</summary>
-    private List<CategoryCard> CategoryCardsFor(IReadOnlyList<SaleLine> lines, IReadOnlyList<SaleLine> previousLines)
+    /// <summary>
+    /// Карточки категорий по произвольному набору строк (подразделение, агент, экспорт).
+    /// republic — набор и есть республика: статуса «не возят» (здесь ноль, а по республике идёт) у неё быть не может.
+    /// </summary>
+    private List<CategoryCard> CategoryCardsFor(IReadOnlyList<SaleLine> lines, IReadOnlyList<SaleLine> previousLines, bool republic)
     {
         var totalKg = lines.Sum(l => l.Kg);
         var akb = SalesMath.Akb(lines);
@@ -680,15 +684,6 @@ public sealed partial class SalesAnalytics
         var assortment = _d.ActiveSkus
             .Where(_d.Products.ContainsKey)
             .ToLookup(p => GroupOf(_d.Products[p].CategoryId));
-
-        // «Продаётся» SKU — чистая выручка SKU (продажи минус возвраты) больше нуля: артикул, который вернули целиком,
-        // не продаётся. (АКБ считается иначе — по факту заказа, возврат его не уменьшает.)
-        static HashSet<long> Sold(IEnumerable<SaleLine> source) =>
-            source.Where(l => l.ProductId != null)
-                .GroupBy(l => l.ProductId!.Value)
-                .Where(g => g.Sum(l => l.Revenue) > 0)
-                .Select(g => g.Key)
-                .ToHashSet();
 
         return current.Select(g => g.Key).Concat(previous.Select(g => g.Key)).Distinct()
             .Where(InReport)
@@ -707,12 +702,12 @@ public sealed partial class SalesAnalytics
                     {
                         var sl = nowByProduct[p].ToList();
                         var skuAkb = SalesMath.Akb(sl);
-                        var status = soldNow.Contains(p) ? SkuStatuses.Selling : soldBefore.Contains(p) ? SkuStatuses.Lost : SkuStatuses.Silent;
+                        var status = SkuStatusOf(p, soldNow.Contains(p), soldBefore.Contains(p), republic);
                         var product = _d.Products.GetValueOrDefault(p);
                         return new SkuRow(p, product?.Name ?? $"Товар {p}", product?.Code, sl.Sum(l => l.Kg), sl.Sum(l => l.Revenue),
                             skuAkb, SalesMath.Ratio(skuAkb, akb), beforeByProduct[p].Sum(l => l.Kg), status);
                     })
-                    .OrderBy(s => s.Status == SkuStatuses.Selling ? 0 : s.Status == SkuStatuses.Lost ? 1 : 2)
+                    .OrderBy(s => SkuStatuses.Rank(s.Status))
                     .ThenByDescending(s => s.FactKg)
                     .ThenByDescending(s => s.PrevMonthKg)
                     .ThenBy(s => s.Name)

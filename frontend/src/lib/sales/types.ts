@@ -196,7 +196,8 @@ export type AkbByMonth = {
   categories: { id: string; name: string; values: (number | null)[] }[];
 };
 
-export type SkuStatus = "selling" | "silent" | "lost";
+/** elsewhere — «не возят»: здесь ноль, а по республике в этом месяце идёт. */
+export type SkuStatus = "selling" | "silent" | "lost" | "elsewhere";
 
 export type SkuRow = {
   productId: number;
@@ -437,12 +438,63 @@ export type ExportView = {
 
 export type MatrixLevel = "none" | "low" | "ok";
 
+export type AssortmentRegionRow = { id: string; name: string; kg: number; revenue: number; skuSelling: number; skuNotCarried: number; skuLost: number; akb: number };
+
+/** Охват страниц категории и артикула — откуда пришли. */
+export type ScopeKind = "republic" | "direction" | "region" | "agent" | "export";
+
+/** Категория в охвате: плитки и артикулы (card), для республики и направления — регионы. */
+export type CategoryView = {
+  period: Period;
+  scope: ScopeKind;
+  scopeName: string;
+  categoryId: string;
+  name: string;
+  card: CategoryCard | null;
+  regions: AssortmentRegionRow[];
+};
+
+export type ProductBreakdownRow = {
+  id: string;
+  name: string;
+  sub: string | null;
+  status: SkuStatus;
+  kg: number;
+  revenue: number;
+  tt: number;
+  outlets: number;
+  distribution: number | null;
+  prevMonthKg: number;
+};
+
+/** Артикул в охвате: где идёт, а где нет — по регионам, ТП региона или магазинам ТП / экспорта. */
+export type ProductView = {
+  period: Period;
+  scope: ScopeKind;
+  scopeName: string;
+  productId: number;
+  name: string;
+  code: string | null;
+  categoryId: string;
+  category: string;
+  status: SkuStatus;
+  factKg: number;
+  revenue: number;
+  tt: number;
+  outlets: number;
+  distribution: number | null;
+  pricePerKg: number | null;
+  prevMonthKg: number;
+  breakdown: "regions" | "agents" | "stores";
+  rows: ProductBreakdownRow[];
+};
+
 export type AssortmentView = {
   period: Period;
   scopeName: string;
   categories: CategoryCard[];
   akbMonths: AkbByMonth;
-  regions: { id: string; name: string; kg: number; revenue: number; skuSelling: number; skuNotCarried: number; skuLost: number; akb: number }[];
+  regions: AssortmentRegionRow[];
   products: ProductRow[];
   matrixRegions: { id: string; name: string }[];
   matrix: {

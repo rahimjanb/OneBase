@@ -94,6 +94,38 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     public async Task<AssortmentView> Assortment([FromQuery] PeriodQuery q, [FromQuery] string? direction, [FromQuery] Guid? region, CancellationToken ct) =>
         (await Load(q, ct)).CachedAssortment(string.IsNullOrEmpty(direction) ? null : direction, region);
 
+    /// <summary>
+    /// Категория отчёта (id карточки) в охвате: республика, направление (direction), регион (region), ТП (agent) или экспорт (export=true).
+    /// </summary>
+    [HttpGet("categories/{id}")]
+    public async Task<ActionResult<CategoryView>> Category(
+        string id,
+        [FromQuery] PeriodQuery q,
+        [FromQuery] string? direction,
+        [FromQuery] Guid? region,
+        [FromQuery] long? agent,
+        [FromQuery] bool export = false,
+        CancellationToken ct = default)
+    {
+        var view = (await Load(q, ct)).CachedCategory(id, Scope(direction, region, agent, export));
+        return view is null ? NotFound() : view;
+    }
+
+    /// <summary>Артикул в охвате (как у категории): где товар идёт, а где нет — по регионам, ТП региона или магазинам.</summary>
+    [HttpGet("products/{id:long}")]
+    public async Task<ActionResult<ProductView>> Product(
+        long id,
+        [FromQuery] PeriodQuery q,
+        [FromQuery] string? direction,
+        [FromQuery] Guid? region,
+        [FromQuery] long? agent,
+        [FromQuery] bool export = false,
+        CancellationToken ct = default)
+    {
+        var view = (await Load(q, ct)).CachedProduct(id, Scope(direction, region, agent, export));
+        return view is null ? NotFound() : view;
+    }
+
     /// <summary>Рекомендуемый остаток: остатки Linko (штуки → кг → коробки) по складам регионов и скорость продаж.</summary>
     [HttpGet("stock")]
     public Task<StockView> Stock([FromServices] StockService stock, [FromQuery] string? region, CancellationToken ct) =>
@@ -105,4 +137,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         primary.GetAsync(year, month, ct);
 
     private Task<SalesAnalytics> Load(PeriodQuery q, CancellationToken ct) => loader.LoadAsync(q.Year, q.Month, q.Plan, ct);
+
+    private static AssortmentScope Scope(string? direction, Guid? region, long? agent, bool export) =>
+        new(string.IsNullOrEmpty(direction) ? null : direction, region, agent, export);
 }

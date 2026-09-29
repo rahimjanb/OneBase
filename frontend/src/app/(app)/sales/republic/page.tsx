@@ -19,7 +19,7 @@ export default async function RepublicPage({ searchParams }: { searchParams: Pro
       back={withQuery("/sales", q)}
       sp={sp}
     >
-      <GroupPage data={data} sp={sp} query={q} regionsTitle="Все регионы" scopeName="республике" />
+      <GroupPage data={data} sp={sp} query={q} categoryQuery={q} regionsTitle="Все регионы" scopeName="республике" />
     </SalesFrame>
   );
 }
