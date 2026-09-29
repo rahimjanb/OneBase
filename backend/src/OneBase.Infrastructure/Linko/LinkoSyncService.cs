@@ -148,7 +148,7 @@ public sealed class LinkoSyncService(
         await db.SalesRegionPlans.ExecuteDeleteAsync(ct);
         await db.SalesAgentProfiles.ExecuteDeleteAsync(ct);
         await db.SalesRegions.ExecuteDeleteAsync(ct);
-        cacheSignal.Invalidate();
+        cacheSignal.InvalidateHistory();
         logger.LogWarning("Данные Linko очищены перед полной загрузкой");
     }
 

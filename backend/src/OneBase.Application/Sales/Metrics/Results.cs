@@ -128,7 +128,16 @@ public sealed record GroupView(
     IReadOnlyList<VisitCalendarRow> VisitCalendar,
     IReadOnlyList<SameDaysRow> SameDays,
     IReadOnlyList<NotBoughtRow> NotBought,
-    IReadOnlyList<CategoryCard> CategoryCards);
+    IReadOnlyList<CategoryCard> CategoryCards,
+    AkbByMonth AkbMonths);
+
+public sealed record AkbSeries(string Id, string Name, IReadOnlyList<int?> Values);
+
+/// <summary>
+/// АКБ по месяцам года: итог и по категориям (те же, что в карточках). null — данных за месяц нет.
+/// LastPartial — последний месяц ещё не закончился.
+/// </summary>
+public sealed record AkbByMonth(int Year, IReadOnlyList<int> Months, bool LastPartial, IReadOnlyList<int?> Total, IReadOnlyList<AkbSeries> Categories);
 
 /// <summary>Статус SKU в подразделении за месяц.</summary>
 public static class SkuStatuses
@@ -224,7 +233,8 @@ public sealed record RegionView(
     IReadOnlyList<SameDaysRow> SameDays,
     IReadOnlyList<NotBoughtRow> NotBought,
     IReadOnlyList<NotInDirectoryRow> NotInDirectory,
-    IReadOnlyList<CategoryCard> CategoryCards);
+    IReadOnlyList<CategoryCard> CategoryCards,
+    AkbByMonth AkbMonths);
 
 public sealed record MedianValue(decimal? Value, decimal? RegionMedian);
 

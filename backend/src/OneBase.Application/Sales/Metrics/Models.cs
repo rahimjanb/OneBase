@@ -39,6 +39,11 @@ public sealed record ProductInfo(long Id, string Name, string? Code, long? Categ
 /// <summary>Факт кг по месяцам (история для «План и факт по месяцам» и темпа агента).</summary>
 public sealed record MonthlyFact(int Year, int Month, long? AgentId, long? BranchId, decimal Kg);
 
+/// <summary>
+/// АКБ за прошлый месяц из БД: по республике (ByBranch = false) или по филиалу; итог (IsTotal) или по категории-группе.
+/// </summary>
+public sealed record MonthlyAkb(int Year, int Month, bool ByBranch, long? BranchId, bool IsTotal, long? CategoryId, int Akb);
+
 public sealed record PlanRow(Guid? RegionId, long? AgentId, int Month, long? CategoryId, decimal PlanKg);
 
 /// <summary>KPI-показатель агента из Linko (staff_balance): план и факт так, как их считает Linko.</summary>
@@ -99,6 +104,12 @@ public sealed class MonthData
     /// Признака «товар активен» в Linko нет, поэтому ассортимент определяется по продажам.
     /// </summary>
     public IReadOnlySet<long> ActiveSkus { get; init; } = new HashSet<long>();
+
+    /// <summary>
+    /// АКБ по месяцам года до прошлого месяца (не включая его): текущий и прошлый месяц считаются из строк продаж.
+    /// Категории уже объединены в группы (см. SalesMath.CategoryGroups).
+    /// </summary>
+    public IReadOnlyList<MonthlyAkb> AkbHistory { get; init; } = [];
 
     /// <summary>ТТ, закреплённые за агентами через market_users (агент → ТТ).</summary>
     public required IReadOnlyList<(long AgentId, long MarketId)> MarketAssignments { get; init; }

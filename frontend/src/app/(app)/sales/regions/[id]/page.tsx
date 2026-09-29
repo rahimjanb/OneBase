@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { AkbChart } from "@/components/sales/AkbChart";
 import { KpiRow, PlanFactMonths, UnassignedWarning } from "@/components/sales/blocks";
 import { MonthCalendarTable, VisitCalendarTable } from "@/components/sales/calendars";
 import { CategoryCards } from "@/components/sales/categories";
@@ -51,6 +52,7 @@ export default async function RegionPage({
 
       <PlanFactMonths months={data.months} current={period.month} />
       <CategoryCards cards={data.categoryCards} scope="регионе" />
+      <AkbChart data={data.akbMonths} />
 
       <MonthCalendarTable
         calendar={data.calendar}

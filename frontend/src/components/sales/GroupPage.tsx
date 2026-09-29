@@ -1,3 +1,4 @@
+import { AkbChart } from "./AkbChart";
 import { KpiRow, UnassignedWarning, UnitCard } from "./blocks";
 import { VisitCalendarTable } from "./calendars";
 import { CategoryCards } from "./categories";
@@ -60,6 +61,7 @@ export function GroupPage({
       <Cards title={directions.length > 0 ? "Регионы без РМ" : "Регионы"} cards={regions} query={query} />
 
       <CategoryCards cards={data.categoryCards} scope={scopeName} />
+      <AkbChart data={data.akbMonths} />
 
       <RegionsTable
         rows={data.regions}

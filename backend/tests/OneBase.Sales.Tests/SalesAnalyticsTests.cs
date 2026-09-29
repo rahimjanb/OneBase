@@ -24,8 +24,10 @@ public class SalesAnalyticsTests
         IReadOnlyList<SaleLine>? current = null,
         IReadOnlyDictionary<long, string>? categories = null,
         IReadOnlyDictionary<long, ProductInfo>? products = null,
-        IReadOnlySet<long>? activeSkus = null) => new()
+        IReadOnlySet<long>? activeSkus = null,
+        IReadOnlyList<MonthlyAkb>? akbHistory = null) => new()
     {
+        AkbHistory = akbHistory ?? [],
         Year = 2026,
         Month = 9,
         DataThrough = new DateOnly(2026, 9, 10),
@@ -84,13 +86,13 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
-    public void Republic_shows_regions_directly_when_no_directions_are_set_up()
+    public void Republic_has_no_region_cards_regions_are_in_the_table()
     {
         var republic = new SalesAnalytics(Data(directions: [])).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
 
-        Assert.All(republic.Cards, c => Assert.Equal(UnitKinds.Region, c.Kind));
-        Assert.DoesNotContain(republic.Cards, c => c.Name == "Без направления");
-        Assert.Contains(republic.Cards, c => c.Id == North.ToString());
+        Assert.Empty(republic.Cards);
+        Assert.Contains(republic.Regions, r => r.Id == North.ToString());
+        Assert.DoesNotContain(republic.Regions, r => r.Name == "Без направления");
     }
 
     [Fact]
@@ -98,8 +100,44 @@ public class SalesAnalyticsTests
     {
         var republic = new SalesAnalytics(Data()).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
 
-        var card = Assert.Single(republic.Cards, c => c.Kind == UnitKinds.Direction);
+        var card = Assert.Single(republic.Cards);
+        Assert.Equal(UnitKinds.Direction, card.Kind);
         Assert.Equal("РМ 1", card.Name);
+    }
+
+    [Fact]
+    public void Akb_by_month_takes_old_months_from_history_and_recent_ones_from_sales()
+    {
+        var history = new[]
+        {
+            new MonthlyAkb(2026, 1, ByBranch: false, BranchId: null, IsTotal: true, CategoryId: null, Akb: 40),
+            new MonthlyAkb(2026, 1, false, null, false, 1, 30),
+            new MonthlyAkb(2026, 1, true, 101, true, null, 25),
+            new MonthlyAkb(2026, 1, true, 101, false, 1, 20),
+            new MonthlyAkb(2025, 1, false, null, true, null, 99), // другой год — не берётся
+        };
+        var previous = new[]
+        {
+            Line(5, 1, 10, branch: 101, kg: 1, revenue: 100, order: 90, month: 8),
+            Line(6, 3, 20, branch: 102, kg: 1, revenue: 100, order: 91, month: 8),
+        };
+        var analytics = new SalesAnalytics(Data(previous, akbHistory: history));
+
+        var republic = analytics.Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
+        var akb = republic.AkbMonths;
+        Assert.Equal(Enumerable.Range(1, 9), akb.Months);
+        Assert.Equal(40, akb.Total[0]);
+        Assert.Null(akb.Total[1]); // за февраль данных нет
+        Assert.Equal(2, akb.Total[7]); // август — из строк продаж
+        Assert.Equal(republic.Kpi.Akb, akb.Total[8]); // сентябрь — как плитка АКБ
+        Assert.True(akb.LastPartial);
+        Assert.Equal(30, Assert.Single(akb.Categories).Values[0]);
+
+        var north = analytics.Region(North, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10), "kg", null).AkbMonths;
+        Assert.Equal(25, north.Total[0]);
+        Assert.Equal(20, north.Categories.Single().Values[0]);
+        Assert.Equal(1, north.Total[7]);
+        Assert.Equal(3, north.Total[8]); // ТТ 10, 11, 12
     }
 
     [Fact]

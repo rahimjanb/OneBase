@@ -181,6 +181,16 @@ export type GroupView = {
   sameDays: SameDaysRow[];
   notBought: NotBoughtRow[];
   categoryCards: CategoryCard[];
+  akbMonths: AkbByMonth;
+};
+
+/** АКБ по месяцам года: итог и по категориям. null — данных за месяц нет. */
+export type AkbByMonth = {
+  year: number;
+  months: number[];
+  lastPartial: boolean;
+  total: (number | null)[];
+  categories: { id: string; name: string; values: (number | null)[] }[];
 };
 
 export type SkuStatus = "selling" | "silent" | "lost";
@@ -264,6 +274,7 @@ export type RegionView = {
   notBought: NotBoughtRow[];
   notInDirectory: { agentId: number; name: string; kg: number; revenue: number }[];
   categoryCards: CategoryCard[];
+  akbMonths: AkbByMonth;
 };
 
 export type MedianValue = { value: number | null; regionMedian: number | null };

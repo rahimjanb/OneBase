@@ -11,23 +11,44 @@ namespace OneBase.Application.Sales;
 public sealed class SalesCacheSignal
 {
     private CancellationTokenSource _cts = new();
+    private CancellationTokenSource _history = new();
 
     public IChangeToken Token => new CancellationChangeToken(_cts.Token);
 
-    public void Invalidate()
+    /// <summary>Кэш агрегатов по давним месяцам: сбрасывается только полной загрузкой или очисткой данных.</summary>
+    public IChangeToken HistoryToken => new CancellationChangeToken(_history.Token);
+
+    public void Invalidate() => Reset(ref _cts);
+
+    /// <summary>Полная перезагрузка данных: сбрасывает и кэш давних месяцев.</summary>
+    public void InvalidateHistory()
     {
-        var old = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+        Reset(ref _history);
+        Reset(ref _cts);
+    }
+
+    private static void Reset(ref CancellationTokenSource source)
+    {
+        var old = Interlocked.Exchange(ref source, new CancellationTokenSource());
         old.Cancel();
         old.Dispose();
     }
 }
 
+/// <summary>Агрегаты по прошлым месяцам, которые дешевле посчитать в БД, чем выгружать строки продаж.</summary>
+public interface ISalesHistoryReader
+{
+    /// <summary>АКБ по месяцам периода: по республике и по филиалам, итог и по категориям (с объединением подтипов).</summary>
+    Task<IReadOnlyList<MonthlyAkb>> AkbByMonthAsync(DateOnly from, DateOnly to, IReadOnlyDictionary<long, long> categoryGroups, CancellationToken ct);
+}
+
 public sealed record SalesMonth(int Year, int Month);
 
 /// <summary>Читает данные месяца из нашей БД (не из Linko) и собирает SalesAnalytics. Результат кэшируется.</summary>
-public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMemoryCache cache, SalesCacheSignal signal)
+public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMemoryCache cache, SalesCacheSignal signal, ISalesHistoryReader history)
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan HistoryCacheTtl = TimeSpan.FromHours(6);
 
     /// <summary>Месяцы, за которые есть продажи — от новых к старым.</summary>
     public async Task<IReadOnlyList<SalesMonth>> MonthsAsync(CancellationToken ct = default)
@@ -126,6 +147,13 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         decimal Target(string k) => targets.TryGetValue(k, out var v) ? v : SalesTargetKeys.Defaults[k];
 
+        var categories = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+        var yearStart = new DateOnly(year, 1, 1);
+        var akbHistoryTo = previousStart.AddDays(-1); // прошлый и текущий месяц считаются из строк продаж
+        IReadOnlyList<MonthlyAkb> akbHistory = yearStart <= akbHistoryTo
+            ? await AkbHistoryAsync(yearStart, akbHistoryTo, SalesMath.CategoryGroups(categories), ct)
+            : [];
+
         return new MonthData
         {
             Year = year,
@@ -162,7 +190,8 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             Markets = await db.LinkoMarkets.AsNoTracking()
                 .Select(x => new MarketInfo(x.Id, x.Name, x.ResponsibleAgentId, x.BranchId))
                 .ToDictionaryAsync(x => x.Id, ct),
-            Categories = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct),
+            Categories = categories,
+            AkbHistory = akbHistory,
             Products = await db.LinkoProducts.AsNoTracking()
                 .Select(p => new ProductInfo(p.Id, p.Name, p.Code, p.TypeId))
                 .ToDictionaryAsync(p => p.Id, ct),
@@ -209,6 +238,26 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         orders.AddRange(returns);
         return orders;
+    }
+
+    /// <summary>
+    /// АКБ давних месяцев — тяжёлый агрегат по всем строкам. Эти месяцы почти не меняются, поэтому кэш живёт дольше
+    /// и не сбрасывается обычной синхронизацией (только полной загрузкой или очисткой).
+    /// </summary>
+    private async Task<IReadOnlyList<MonthlyAkb>> AkbHistoryAsync(DateOnly from, DateOnly to, Dictionary<long, long> groups, CancellationToken ct)
+    {
+        var merged = groups.Where(g => g.Key != g.Value).OrderBy(g => g.Key).ToDictionary();
+        var key = $"sales:akb:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}:{options.DateField}:{string.Join(",", merged.Select(g => $"{g.Key}>{g.Value}"))}";
+        if (cache.TryGetValue(key, out IReadOnlyList<MonthlyAkb>? cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        var rows = await history.AkbByMonthAsync(from, to, merged, ct);
+        cache.Set(key, rows, new MemoryCacheEntryOptions()
+            .SetAbsoluteExpiration(HistoryCacheTtl)
+            .AddExpirationToken(signal.HistoryToken));
+        return rows;
     }
 
     /// <summary>«Живой» ассортимент: SKU, проданные за столько месяцев до выбранного (плюс сам месяц).</summary>

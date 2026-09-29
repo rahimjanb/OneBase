@@ -28,7 +28,14 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
             using var scope = scopes.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<LinkoSyncService>();
             LastReport = await service.SyncAsync(mode, ct);
-            cacheSignal.Invalidate();
+            if (mode == LinkoSyncMode.Incremental)
+            {
+                cacheSignal.Invalidate();
+            }
+            else
+            {
+                cacheSignal.InvalidateHistory(); // полная загрузка могла поменять и давние месяцы
+            }
             return LastReport;
         }
         finally

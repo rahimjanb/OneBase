@@ -70,20 +70,14 @@ public sealed class SalesAnalytics
     }
 
     /// <summary>
-    /// Республика: карточки РМ/направлений, а регионы, не назначенные ни одному РМ, — отдельными карточками регионов.
-    /// Служебная группа «Без направления» не показывается.
+    /// Республика: карточки РМ/направлений (если они заведены), дальше — категории. Карточек регионов нет:
+    /// регионы — в таблице «Все регионы». Служебная группа «Без направления» не показывается.
     /// </summary>
     public GroupView Republic(DateOnly visitsFrom, DateOnly visitsTo)
     {
-        var groups = DirectionGroups();
-        var directionCards = groups
+        var directionCards = DirectionGroups()
             .Where(g => g.Id != NoDirectionId)
             .Select(g => Unit(g.Id, g.Name, g.Subtitle, g.Regions, UnitKinds.Direction))
-            .ToList();
-        var regionCards = (groups.FirstOrDefault(g => g.Id == NoDirectionId)?.Regions ?? [])
-            .Select(RegionUnit)
-            .Where(c => c.FactKg != 0 || c.PlanKg != null) // регионы без продаж и планов в месяце не показываем
-            .OrderByDescending(c => c.PlanKg ?? 0).ThenByDescending(c => c.FactKg)
             .ToList();
 
         var regions = RegionIds(null).Count(r => r != NoRegionId);
@@ -94,7 +88,7 @@ public sealed class SalesAnalytics
         }
 
         parts.Add($"{regions} {SalesFormat.Plural(regions, "регион", "региона", "регионов")}");
-        return Group("Республика", string.Join(" · ", parts), null, [.. directionCards, .. regionCards], visitsFrom, visitsTo);
+        return Group("Республика", string.Join(" · ", parts), null, directionCards, visitsFrom, visitsTo);
     }
 
     public GroupView Direction(string id, DateOnly visitsFrom, DateOnly visitsTo)
@@ -111,6 +105,7 @@ public sealed class SalesAnalytics
         var scope = new HashSet<Guid> { id };
         var direction = region.DirectionId is { } dirId && _directions.TryGetValue(dirId, out var dir) ? dir : null;
         var team = TeamOf(id);
+        var categories = CategoryCardsOf(scope);
 
         return new RegionView(
             Period,
@@ -132,7 +127,8 @@ public sealed class SalesAnalytics
                 .OrderByDescending(r => r.KgNow).ToList(),
             AgentNotBought(id),
             NotInDirectory(id),
-            CategoryCardsOf(scope));
+            categories,
+            AkbMonthsOf(scope, categories));
     }
 
     public AgentView Agent(long id)
@@ -259,6 +255,7 @@ public sealed class SalesAnalytics
     {
         var regionIds = RegionIds(scope).ToList();
         var set = scope?.ToHashSet();
+        var categories = CategoryCardsOf(set);
 
         return new GroupView(
             Period,
@@ -272,7 +269,8 @@ public sealed class SalesAnalytics
             regionIds.Select(r => Compare(r.ToString(), _regions[r].Name, DirectionName(r), _currentByRegion[r], _previousByRegion[r]))
                 .OrderBy(r => r.Name).ToList(),
             regionIds.Select(RegionNotBought).OrderBy(r => r.Name).ToList(),
-            CategoryCardsOf(set));
+            categories,
+            AkbMonthsOf(set, categories));
     }
 
     private KpiTiles Kpi(IReadOnlySet<Guid>? scope)
@@ -654,6 +652,52 @@ public sealed class SalesAnalytics
     }
 
     private long? GroupOf(long? category) => category is { } c ? _categoryGroup.GetValueOrDefault(c, c) : null;
+
+    /// <summary>
+    /// АКБ по месяцам года (январь — выбранный месяц): итог и по категориям карточек.
+    /// Текущий и прошлый месяц — из строк продаж (как плитка АКБ), более ранние — из агрегатов БД.
+    /// Для направления АКБ более ранних месяцев — сумма по его филиалам.
+    /// </summary>
+    private AkbByMonth AkbMonthsOf(IReadOnlySet<Guid>? scope, IReadOnlyList<CategoryCard> cards)
+    {
+        var months = Enumerable.Range(1, _d.Month).ToList();
+        var history = _d.AkbHistory
+            .Where(r => r.Year == _d.Year && (scope is null ? !r.ByBranch : r.ByBranch && scope.Contains(BranchRegion(r.BranchId))))
+            .ToList();
+        var previousLines = scope is null ? _d.Previous : scope.SelectMany(r => _previousByRegion[r]).ToList();
+
+        IReadOnlyList<SaleLine>? LinesOf(int month) =>
+            month == _d.Month ? Lines(scope).ToList()
+            : _previousStart.Year == _d.Year && month == _previousStart.Month ? previousLines
+            : null;
+
+        var monthLines = months.ToDictionary(m => m, LinesOf);
+        var monthHistory = history.ToLookup(r => r.Month);
+
+        int? Value(int month, Func<SaleLine, bool>? inCategory, Func<MonthlyAkb, bool> row)
+        {
+            if (monthLines[month] is { } lines)
+            {
+                return lines.Count == 0 ? null : SalesMath.Akb(inCategory is null ? lines : lines.Where(inCategory));
+            }
+
+            var rows = monthHistory[month].ToList();
+            return rows.Count == 0 ? null : rows.Where(row).Sum(r => r.Akb);
+        }
+
+        var total = months.Select(m => Value(m, null, r => r.IsTotal)).ToList();
+        var series = cards.Select(card =>
+        {
+            long? id = long.TryParse(card.Id, out var parsed) ? parsed : null;
+            var values = months.Select(m => Value(m, l => GroupOf(l.CategoryId) == id, r => !r.IsTotal && r.CategoryId == id)).ToList();
+            return new AkbSeries(card.Id, card.Name, values);
+        }).ToList();
+
+        var lastPartial = _d.DataThrough < _d.MonthStart.AddMonths(1).AddDays(-1);
+        return new AkbByMonth(_d.Year, months, lastPartial, total, series);
+    }
+
+    private Guid BranchRegion(long? branch) => branch is { } b && _regionByBranch.TryGetValue(b, out var id) ? id : NoRegionId;
 
     /// <summary>Календарь месяца по ТП: kg | sum | akb | akb по категории. null — нет данных за день.</summary>
     private MonthCalendar Calendar(Guid region, IReadOnlyList<long> team, string metric, long? category)
