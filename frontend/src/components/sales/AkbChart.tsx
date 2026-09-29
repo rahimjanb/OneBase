@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { Download } from "lucide-react";
 import { Note, Section } from "./bits";
 import { CopyButton } from "./DataTable";
@@ -62,13 +62,13 @@ function downloadCsv(name: string, rows: (string | number | null)[][]) {
 
 /** АКБ по месяцам: итог и линии категорий. Клик по линии или легенде — подсветить, ещё раз — снять. */
 export function AkbChart({ data }: { data: AkbByMonth }) {
-  const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<string | null>(null);
   const [hover, setHover] = useState<number | null>(null);
 
-  useEffect(() => {
-    const el = box.current;
+  // Ширину меряем, когда поле графика появляется в DOM: в свёрнутой секции его нет,
+  // и замер «один раз при загрузке страницы» оставил бы график пустым после раскрытия.
+  const box = useCallback((el: HTMLDivElement | null) => {
     if (!el) return;
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
     observer.observe(el);
