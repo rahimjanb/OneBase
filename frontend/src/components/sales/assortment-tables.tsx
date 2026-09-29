@@ -42,6 +42,7 @@ export function ProductsTable({ rows, title = "Товары", hint = "по вы�
       columns={columns}
       rows={rows}
       rowKey={(r) => String(r.productId)}
+      limit={30}
       note="Доля — от выручки набора. ТТ — точек, купивших товар; дистрибуция — их доля от всех ТТ с покупкой. * — тип товара вне восьми категорий отчёта."
     />
   );
@@ -69,6 +70,7 @@ export function AgentStoresTable({ rows, agentId, query }: { rows: AgentAssortme
       rows={rows}
       rowKey={(r) => String(r.marketId)}
       rowHref={(r) => `/sales/stores/${r.marketId}?${base}`}
+      limit={30}
     />
   );
 }

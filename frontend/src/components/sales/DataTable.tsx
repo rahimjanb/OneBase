@@ -133,6 +133,7 @@ export function DataTable<T>({
   expand,
   footer,
   empty = "Нет данных за период",
+  limit,
 }: {
   title: string;
   hint?: React.ReactNode;
@@ -146,11 +147,16 @@ export function DataTable<T>({
   expand?: (row: T) => React.ReactNode | null;
   footer?: React.ReactNode;
   empty?: string;
+  /** Сколько строк показать до «Показать все». Сортировка и «Копировать» — по всем строкам. */
+  limit?: number;
 }) {
   const router = useRouter();
   const [sort, setSort] = useState<Sort>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const sorted = useMemo(() => sortRows(rows, columns, sort), [rows, columns, sort]);
+  const cut = limit != null && !showAll && sorted.length > limit;
+  const visible = cut ? sorted.slice(0, limit) : sorted;
 
   return (
     <Section
@@ -167,7 +173,7 @@ export function DataTable<T>({
         <table className="w-full min-w-max border-collapse text-sm">
           <TableHead columns={columns} sort={sort} onSort={(key) => setSort((s) => nextSort(s, key))} />
           <tbody>
-            {sorted.map((row) => {
+            {visible.map((row) => {
               const key = rowKey(row);
               const href = rowHref?.(row) ?? null;
               const details = expand && expanded === key ? expand(row) : null;
@@ -204,6 +210,15 @@ export function DataTable<T>({
         </table>
       </div>
       {rows.length === 0 && <p className="py-6 text-center text-sm text-ink-3">{empty}</p>}
+      {limit != null && sorted.length > limit && (
+        <button
+          type="button"
+          onClick={() => setShowAll((s) => !s)}
+          className="mt-3 text-sm font-medium text-accent hover:underline"
+        >
+          {showAll ? "Свернуть" : `Показать все (${sorted.length})`}
+        </button>
+      )}
       {note && <Note>{note}</Note>}
     </Section>
   );
