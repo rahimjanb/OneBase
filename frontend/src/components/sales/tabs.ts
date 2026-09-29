@@ -1,4 +1,4 @@
-import { BookOpen, Boxes, ChartColumn, Factory, LayoutGrid, Target, TriangleAlert } from "lucide-react";
+import { Boxes, ChartColumn, Factory, LayoutGrid, Target, TriangleAlert } from "lucide-react";
 
 export type SalesTab = "analytics" | "assortment" | "primary" | "stock" | "plans" | "problems" | "method";
 
@@ -10,7 +10,7 @@ export const salesTabs: { key: SalesTab; label: string; href: string; icon: type
   { key: "stock", label: "Остатки", href: "/sales/stock", icon: Boxes },
   { key: "plans", label: "Планы", href: "/sales/plans", icon: Target },
   { key: "problems", label: "Проблемные агенты", href: "/sales/problems", icon: TriangleAlert },
-  { key: "method", label: "Как считается", href: "/sales/method", icon: BookOpen },
+  // «Как считается» (/sales/method) без кнопки: страница открывается по адресу.
 ];
 
 /** Раздел, к которому относится страница: регион, агент, магазин, экспорт — это «Вторичка», категория и артикул — «Ассортимент». */
