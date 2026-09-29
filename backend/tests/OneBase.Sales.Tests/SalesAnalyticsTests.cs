@@ -28,8 +28,11 @@ public class SalesAnalyticsTests
         IReadOnlyList<MonthlyAkb>? akbHistory = null,
         IReadOnlyDictionary<string, string>? reportCategories = null,
         IReadOnlyList<SaleLine>? visitOrders = null,
-        IReadOnlyList<VisitRecord>? visits = null) => new()
+        IReadOnlyList<VisitRecord>? visits = null,
+        IReadOnlyList<RegionInfo>? regions = null,
+        IReadOnlyDictionary<long, Guid>? branchAliases = null) => new()
     {
+        BranchAliases = branchAliases ?? new Dictionary<long, Guid>(),
         AkbHistory = akbHistory ?? [],
         CategoryMap = reportCategories is null ? null : SalesCategories.Build(reportCategories, categories ?? new Dictionary<long, string> { [1] = "Печенье" }),
         VisitOrders = visitOrders,
@@ -59,7 +62,7 @@ public class SalesAnalyticsTests
             [2] = new(2, "Агент 2", true, North, false, true),
             [3] = new(3, "Агент 3", true, South, false, true),
         },
-        Regions = [new RegionInfo(North, 101, "Север", Rm1, null, null), new RegionInfo(South, 102, "Юг", Rm1, null, null)],
+        Regions = regions ?? [new RegionInfo(North, 101, "Север", Rm1, null, null), new RegionInfo(South, 102, "Юг", Rm1, null, null)],
         Directions = directions ?? [new DirectionInfo(Rm1, "РМ 1", false, null, null, 1)],
         Markets = new Dictionary<long, MarketInfo>(),
         Categories = categories ?? new Dictionary<long, string> { [1] = "Печенье" },
@@ -359,6 +362,30 @@ public class SalesAnalyticsTests
         Assert.Equal(1, north.Silent);
         Assert.Equal(300m, north.SilentPrevRevenue);
         Assert.Equal(2, north.New); // ТТ 11 и 12 — новые
+    }
+
+    [Fact]
+    public void Old_branch_is_counted_in_the_current_region_with_the_same_name()
+    {
+        // «Юг (эски) 2» — прежний филиал Юга: точки перенесли в новый филиал, продажи прошлого остались на старом.
+        var old = Guid.Parse("00000000-0000-0000-0000-000000000003");
+        var (regions, aliases) = OldBranches.Merge(
+            [new RegionInfo(North, 101, "Север", Rm1, null, null), new RegionInfo(South, 102, "Юг", Rm1, null, null), new RegionInfo(old, 103, "Юг (эски) 2", Rm1, null, null)],
+            new SalesOptions().OldBranchSuffix);
+
+        Assert.Equal(["Север", "Юг"], regions.Select(r => r.Name));
+        Assert.Equal(South, aliases[103]);
+
+        var data = Data(
+            current: [Line(1, 3, 20, branch: 103, kg: 30, revenue: 300, order: 9), Line(2, 3, 21, branch: 102, kg: 10, revenue: 100, order: 10)],
+            regions: regions,
+            branchAliases: aliases);
+        var republic = new SalesAnalytics(data).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
+
+        var south = Assert.Single(republic.Regions, r => r.Id == South.ToString());
+        Assert.Equal((40m, 2), (south.FactKg, south.Akb)); // продажи старого филиала — в Юге
+        Assert.DoesNotContain(republic.Regions, r => r.Name.Contains("эски"));
+        Assert.Empty(OldBranches.Merge(regions, "").Aliases); // пустая настройка — без объединения
     }
 
     /// <summary>Позиция заказа категории 1 («Бамбук»): агент, филиал, артикул, магазин; выручка = кг × 10.</summary>

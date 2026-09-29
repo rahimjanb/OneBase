@@ -92,6 +92,10 @@ public sealed class MonthData
 
     public required IReadOnlyDictionary<long, AgentInfo> Agents { get; init; }
     public required IReadOnlyList<RegionInfo> Regions { get; init; }
+
+    /// <summary>Старые филиалы Linko → регион, в котором они считаются (см. OldBranches).</summary>
+    public IReadOnlyDictionary<long, Guid> BranchAliases { get; init; } = new Dictionary<long, Guid>();
+
     public required IReadOnlyList<DirectionInfo> Directions { get; init; }
     public required IReadOnlyDictionary<long, MarketInfo> Markets { get; init; }
     public required IReadOnlyDictionary<long, string> Categories { get; init; }

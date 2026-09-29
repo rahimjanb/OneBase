@@ -39,6 +39,10 @@ public sealed partial class SalesAnalytics
         _regions = data.Regions.ToDictionary(r => r.Id);
         _regions[NoRegionId] = new RegionInfo(NoRegionId, 0, "Без региона", null, null, null);
         _regionByBranch = data.Regions.ToDictionary(r => r.BranchId, r => r.Id);
+        foreach (var (branch, region) in data.BranchAliases)
+        {
+            _regionByBranch.TryAdd(branch, region); // старый филиал («Жиззах (эски)») — в текущем регионе
+        }
         _directions = data.Directions.ToDictionary(x => x.Id);
         _cats = data.CategoryMap ?? SalesCategories.Build(new Dictionary<string, string>(), data.Categories);
 
@@ -606,7 +610,7 @@ public sealed partial class SalesAnalytics
             var plan = RegionPlan(region.Id, _d.YearRegionPlans.Where(p => p.Month == m).Concat(_d.YearAgentPlans.Where(p => p.Month == m)).ToList());
             decimal? fact = m > _d.Month
                 ? null
-                : _d.History.Where(h => h.Year == _d.Year && h.Month == m && (region.Id == NoRegionId ? h.BranchId == null || !_regionByBranch.ContainsKey(h.BranchId.Value) : h.BranchId == region.BranchId))
+                : _d.History.Where(h => h.Year == _d.Year && h.Month == m && BranchRegion(h.BranchId) == region.Id)
                     .Sum(h => h.Kg);
             return new MonthPlanFact(m, plan, fact);
         }).ToList();

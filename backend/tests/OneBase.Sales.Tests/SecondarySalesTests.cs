@@ -104,12 +104,12 @@ public class SecondarySalesTests
     }
 
     [Fact]
-    public void Returns_do_not_reduce_akb()
+    public void Outlet_that_returned_the_whole_purchase_is_not_in_akb()
     {
         var result = Build([Order(1, kg: 5, market: 100)], [Return(9, 5)]); // вернули всё, что купили
 
         Assert.Equal(0m, result.Lines.Sum(l => l.Kg));
-        Assert.Equal(1, SalesMath.Akb(result.Lines));
+        Assert.Equal(0, SalesMath.Akb(result.Lines));
     }
 
     [Fact]

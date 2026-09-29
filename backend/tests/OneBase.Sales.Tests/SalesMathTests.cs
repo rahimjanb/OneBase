@@ -37,17 +37,18 @@ public class SalesMathTests
     }
 
     [Fact]
-    public void Returns_do_not_reduce_akb()
+    public void Akb_counts_outlets_with_positive_net_weight()
     {
         var lines = new[]
         {
-            Sale(agent: 1, market: 10, revenue: 100),
-            Sale(agent: 1, market: 10, revenue: -100, order: null), // возврат всей покупки
-            Sale(agent: 1, market: 11, revenue: 30, order: 2),
-            Sale(agent: 1, market: 12, revenue: -50, order: null), // возврат без заказа в месяце
+            Sale(agent: 1, market: 10, revenue: 100, kg: 5),
+            Sale(agent: 1, market: 10, revenue: -100, kg: -5, order: null), // вернули всю покупку
+            Sale(agent: 1, market: 11, revenue: 30, kg: 3, order: 2),
+            Sale(agent: 1, market: 11, revenue: -10, kg: -1, order: null), // частичный возврат
+            Sale(agent: 1, market: 12, revenue: -50, kg: -2, order: null), // возврат без заказа в месяце
         };
 
-        Assert.Equal(2, SalesMath.Akb(lines)); // ТТ 10 покупку делала — остаётся в АКБ; ТТ 12 без заказа — не входит
+        Assert.Equal(1, SalesMath.Akb(lines)); // только ТТ 11: у ТТ 10 чистый вес 0, у ТТ 12 — минус (как в «Полевом контроле»)
         Assert.Equal(2, SalesMath.OrderCount(lines)); // возврат не заказ
     }
 

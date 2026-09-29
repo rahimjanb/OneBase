@@ -32,15 +32,18 @@ public static class SalesMath
         workedDays <= 0 ? null : fact / workedDays * daysInMonth;
 
     /// <summary>
-    /// АКБ — число уникальных ТТ (market.id), у которых в наборе есть хотя бы один включённый заказ.
-    /// Возвраты АКБ не уменьшают: магазин покупку всё-таки делал. Каждая ТТ считается один раз,
-    /// даже если ей продавали несколько агентов.
+    /// АКБ — число уникальных ТТ (market.id), у которых чистый вес в наборе (продажи минус возвраты) больше нуля.
+    /// Так считает «Полевой контроль»: точка, вернувшая всю покупку, в базу месяца не входит (сверено по всем
+    /// регионам за август 2026 — совпадение до точки). Каждая ТТ считается один раз, даже если ей продавали несколько агентов.
     /// </summary>
     public static int Akb(IEnumerable<SaleLine> lines) => ActiveMarkets(lines).Count;
 
+    /// <summary>ТТ с чистым весом больше нуля — те, что входят в АКБ набора.</summary>
     public static HashSet<long> ActiveMarkets(IEnumerable<SaleLine> lines) =>
-        lines.Where(l => l.OrderId != null && l.MarketId != null)
-            .Select(l => l.MarketId!.Value)
+        lines.Where(l => l.MarketId != null)
+            .GroupBy(l => l.MarketId!.Value)
+            .Where(g => g.Sum(l => l.Kg) > 0)
+            .Select(g => g.Key)
             .ToHashSet();
 
     /// <summary>Число заказов (возвраты не считаются).</summary>

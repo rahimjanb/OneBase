@@ -281,7 +281,7 @@ public sealed partial class SalesAnalytics
 
     /// <summary>
     /// «Продаётся» — чистая выручка артикула (продажи минус возвраты) больше нуля: артикул, который вернули целиком,
-    /// не продаётся. (АКБ считается иначе — по факту заказа, возврат его не уменьшает.)
+    /// не продаётся.
     /// </summary>
     private static HashSet<long> Sold(IEnumerable<SaleLine> source) =>
         source.Where(l => l.ProductId != null)

@@ -259,7 +259,15 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             : [];
 
         // Регионы — филиалы вторички: исключённые («Завод») в структуре не показываются, у них отдельный блок.
+        // Старые филиалы («Жиззах (эски)») считаются в текущем регионе с тем же названием.
         var excludedBranchIds = await ExcludedBranchIdsAsync(ct);
+        var (regions, branchAliases) = OldBranches.Merge(
+            (await db.SalesRegions.AsNoTracking()
+                .Select(r => new RegionInfo(r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName))
+                .ToListAsync(ct))
+            .Where(r => !excludedBranchIds.Contains(r.BranchId))
+            .ToList(),
+            options.OldBranchSuffix);
 
         return new MonthData
         {
@@ -294,11 +302,8 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                 var profile = profiles.GetValueOrDefault(u.Id);
                 return new AgentInfo(u.Id, u.DisplayName, u.IsActive, profile?.RegionId, profile?.IsVacancy ?? false, profile is not null, u.JobName);
             }),
-            Regions = (await db.SalesRegions.AsNoTracking()
-                    .Select(r => new RegionInfo(r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName))
-                    .ToListAsync(ct))
-                .Where(r => !excludedBranchIds.Contains(r.BranchId))
-                .ToList(),
+            Regions = regions,
+            BranchAliases = branchAliases,
             Directions = await db.SalesDirections.AsNoTracking()
                 .Select(d => new DirectionInfo(d.Id, d.Name, d.Kind == DirectionKind.Channel, d.ManagerName, d.Description, d.SortOrder))
                 .ToListAsync(ct),
