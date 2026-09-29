@@ -10,10 +10,8 @@ export default async function SalesSetupPage({ searchParams }: { searchParams: P
     <SalesFrame
       title="Настройки продаж"
       subtitle="Оргструктура, цели и планы — то, чего нет в Linko"
-      tab="setup"
       back="/settings"
       sp={sp}
-      returnTo="/sales/setup"
     >
       <SetupClient />
     </SalesFrame>

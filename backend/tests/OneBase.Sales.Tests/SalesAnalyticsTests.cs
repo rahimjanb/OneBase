@@ -255,6 +255,17 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
+    public void Cached_views_are_computed_once_per_parameters()
+    {
+        var analytics = new SalesAnalytics(Data());
+
+        Assert.Same(analytics.CachedRepublic(null, null), analytics.CachedRepublic(1, 10)); // по умолчанию — с 1-го по 10-е
+        Assert.NotSame(analytics.CachedRepublic(null, null), analytics.CachedRepublic(2, 10));
+        Assert.Same(analytics.CachedAgent(1), analytics.CachedAgent(1));
+        Assert.Equal((new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10)), analytics.VisitRange(null, null));
+    }
+
+    [Fact]
     public void Returns_are_subtracted_in_the_region_of_the_return()
     {
         var region = new SalesAnalytics(Data()).Region(South, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10), "kg", null);

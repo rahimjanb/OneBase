@@ -44,8 +44,6 @@ export default async function RegionPage({
       crumbs={[republic, ...(parent ? [parent] : []), { label: data.name }]}
       back={(parent ?? republic).href}
       sp={sp}
-      period={period}
-      returnTo={path}
     >
       <KpiRow kpi={data.kpi} period={period} />
       <UnassignedWarning kgValue={data.unassigned.kg} share={data.unassigned.share} />

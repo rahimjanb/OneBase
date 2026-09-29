@@ -25,8 +25,6 @@ export default async function DirectionPage({
       crumbs={[{ label: "Республика", href: withQuery("/sales/republic", q) }, { label: data.name }]}
       back={withQuery("/sales/republic", q)}
       sp={sp}
-      period={data.period}
-      returnTo={path}
     >
       <GroupPage data={data} sp={sp} query={q} regionsTitle="Сравнение регионов" scopeName="направлении" />
     </SalesFrame>

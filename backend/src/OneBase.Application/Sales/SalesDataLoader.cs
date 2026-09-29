@@ -50,24 +50,28 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan HistoryCacheTtl = TimeSpan.FromHours(6);
 
-    /// <summary>Месяцы, за которые есть продажи — от новых к старым.</summary>
-    public async Task<IReadOnlyList<SalesMonth>> MonthsAsync(CancellationToken ct = default)
-    {
-        var sold = options.SoldStatuses;
-        var months = await db.LinkoOrders
-            .Where(o => sold.Contains(o.Status))
-            .Select(o => new { o.CreatedDate.Year, o.CreatedDate.Month })
-            .Distinct()
-            .ToListAsync(ct);
+    /// <summary>Один пересчёт за раз: запрос пользователя и прогрев после синхронизации не считают одно и то же дважды.</summary>
+    private static readonly SemaphoreSlim BuildGate = new(1, 1);
 
-        return months.OrderByDescending(m => m.Year).ThenByDescending(m => m.Month)
-            .Select(m => new SalesMonth(m.Year, m.Month))
-            .ToList();
-    }
+    /// <summary>Месяцы, за которые есть продажи — от новых к старым.</summary>
+    public async Task<IReadOnlyList<SalesMonth>> MonthsAsync(CancellationToken ct = default) =>
+        await Cached("sales:months", async () =>
+        {
+            var sold = options.SoldStatuses;
+            var months = await db.LinkoOrders
+                .Where(o => sold.Contains(o.Status))
+                .Select(o => new { o.CreatedDate.Year, o.CreatedDate.Month })
+                .Distinct()
+                .ToListAsync(ct);
+
+            return (IReadOnlyList<SalesMonth>)months.OrderByDescending(m => m.Year).ThenByDescending(m => m.Month)
+                .Select(m => new SalesMonth(m.Year, m.Month))
+                .ToList();
+        });
 
     public async Task<SalesAnalytics> LoadAsync(int? year, int? month, PlanKind kind, CancellationToken ct = default)
     {
-        var lastData = await LastDataDateAsync(ct);
+        var lastData = await Cached("sales:last-data", () => LastDataDateAsync(ct));
         var y = year ?? lastData?.Year ?? DateTime.Today.Year;
         var m = month is >= 1 and <= 12 ? month.Value : lastData?.Month ?? DateTime.Today.Month;
 
@@ -77,12 +81,40 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             return cached;
         }
 
-        var data = await BuildAsync(y, m, kind, lastData, ct);
-        var analytics = new SalesAnalytics(data);
-        cache.Set(key, analytics, new MemoryCacheEntryOptions()
-            .SetAbsoluteExpiration(CacheTtl)
-            .AddExpirationToken(signal.Token));
-        return analytics;
+        await BuildGate.WaitAsync(ct);
+        try
+        {
+            if (cache.TryGetValue(key, out cached) && cached is not null)
+            {
+                return cached; // пока ждали, этот месяц уже посчитал другой запрос
+            }
+
+            var token = signal.Token; // до загрузки: если данные обновятся во время расчёта, результат сразу устареет
+            var data = await BuildAsync(y, m, kind, lastData, ct);
+            var analytics = new SalesAnalytics(data);
+            cache.Set(key, analytics, new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(CacheTtl)
+                .AddExpirationToken(token));
+            return analytics;
+        }
+        finally
+        {
+            BuildGate.Release();
+        }
+    }
+
+    /// <summary>Небольшие справочные запросы (месяцы, дата последних данных) — до следующей синхронизации.</summary>
+    private async Task<T> Cached<T>(string key, Func<Task<T>> load)
+    {
+        if (cache.TryGetValue(key, out T? value))
+        {
+            return value!;
+        }
+
+        var token = signal.Token;
+        value = await load();
+        cache.Set(key, value, new MemoryCacheEntryOptions().SetAbsoluteExpiration(CacheTtl).AddExpirationToken(token));
+        return value;
     }
 
     private async Task<DateOnly?> LastDataDateAsync(CancellationToken ct)
@@ -143,6 +175,12 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         var profiles = await db.SalesAgentProfiles.AsNoTracking().ToDictionaryAsync(p => p.LinkoUserId, ct);
         var users = await db.LinkoUsers.AsNoTracking().ToListAsync(ct);
+
+        // Доставщики и т.п.: их «визиты» — доставки, в работу ТП они не входят.
+        var nonSales = users
+            .Where(u => u.JobName is { } job && options.NonSalesJobs.Any(x => job.Contains(x, StringComparison.OrdinalIgnoreCase)))
+            .Select(u => u.Id)
+            .ToHashSet();
         var targets = await db.SalesTargets.AsNoTracking().ToDictionaryAsync(t => t.Key, t => t.Value, ct);
 
         decimal Target(string k) => targets.TryGetValue(k, out var v) ? v : SalesTargetKeys.Defaults[k];
@@ -161,7 +199,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             DataThrough = dataThrough,
             Current = lines.Where(l => l.Date >= monthStart && l.Date <= dataThrough).ToList(),
             Previous = lines.Where(l => l.Date >= previousStart && l.Date < monthStart).ToList(),
-            Visits = visits.Select(v => new VisitRecord(v.Day, v.UserId!.Value, v.MarketId!.Value, ParseStatus(v.Status), v.IsInPlan)).ToList(),
+            Visits = visits.Where(v => !nonSales.Contains(v.UserId!.Value)).Select(v => new VisitRecord(v.Day, v.UserId!.Value, v.MarketId!.Value, ParseStatus(v.Status), v.IsInPlan)).ToList(),
             History = await HistoryAsync(historyFrom, monthEnd, ct),
             Plans = regionPlans.Where(p => p.Month == month).Concat(agentPlans).ToList(),
             YearRegionPlans = regionPlans,

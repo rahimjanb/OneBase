@@ -30,6 +30,13 @@ public sealed class SalesOptions
     /// </summary>
     public string[] StaffPlanExcludeJobs { get; set; } = ["Супервайзер", "Supervisor"];
 
+    /// <summary>
+    /// Должности Linko, которые не продают: их визиты — это доставки, а не визиты ТП. Такие сотрудники не попадают
+    /// в список ТП, конверсию, «визиты без заказа» и «Проблемных агентов». Их заказы (если есть) остаются в факте.
+    /// Сравнение — «содержит», без учёта регистра.
+    /// </summary>
+    public string[] NonSalesJobs { get; set; } = ["Доставщик", "Курьер", "Экспедитор"];
+
     public FlagThresholds Flags { get; set; } = new();
 }
 

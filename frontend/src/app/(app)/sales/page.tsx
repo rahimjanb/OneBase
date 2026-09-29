@@ -14,7 +14,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const q = periodQuery(sp);
 
   return (
-    <SalesFrame title="Продажи" subtitle="Полевой контроль: план, факт и работа торговых представителей" sp={sp} period={data.period} returnTo="/sales">
+    <SalesFrame title="Продажи" subtitle="Полевой контроль: план, факт и работа торговых представителей" sp={sp}>
       <KpiRow kpi={data.kpi} period={data.period} />
 
       <p className="mt-4 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink-2">

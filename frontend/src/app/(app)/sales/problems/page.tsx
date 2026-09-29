@@ -33,7 +33,7 @@ export default async function ProblemsPage({ searchParams }: { searchParams: Pro
   const directions = republic.cards.filter((c) => c.kind === "direction");
 
   return (
-    <SalesFrame title="Проблемные агенты" subtitle="Кого проверить в первую очередь — по тяжести замечаний" tab="problems" sp={sp} period={data.period} returnTo="/sales/problems">
+    <SalesFrame title="Проблемные агенты" subtitle="Кого проверить в первую очередь — по тяжести замечаний" sp={sp}>
       <form method="get" className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-surface p-4">
         {["year", "month", "plan"].map((k) => param(sp, k) && <input key={k} type="hidden" name={k} value={param(sp, k)} />)}
         {directions.length > 0 && (

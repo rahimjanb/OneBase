@@ -130,7 +130,7 @@ public static class AgentFlags
         }
         else if (a.SumPerVisit is { } spv && Below(spv, m.SumPerVisit, t.SumPerVisitRiskOfMedian))
         {
-            flags.Add(new AgentFlag(FlagKind.VisitsNoSales, FlagSeverity.Risk, "Без продаж", "Визиты дают мало выручки",
+            flags.Add(new AgentFlag(FlagKind.VisitsNoSales, FlagSeverity.Risk, "Мало с визита", "Визиты дают мало выручки",
                 $"{SalesFormat.Money(spv)} сум с визита против {SalesFormat.Money(m.SumPerVisit!.Value)} у медианного агента региона."));
         }
 

@@ -63,8 +63,6 @@ export default async function AgentPage({
       crumbs={[...crumbs, { label: data.name }]}
       back={data.regionId ? withQuery(`/sales/regions/${data.regionId}`, q) : withQuery("/sales/republic", q)}
       sp={sp}
-      period={period}
-      returnTo={path}
     >
       <div className="mb-4 flex justify-end">
         <FlagPills flags={data.flags.filter((f) => f.severity !== "Info")} empty={null} />

@@ -19,10 +19,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
     <SalesFrame
       title="Планы"
       subtitle={`Все планы из Linko за ${monthLabel(period.year, period.month).toLowerCase()} — обновляются автоматически после каждого пересчёта`}
-      tab="plans"
       sp={sp}
-      period={period}
-      returnTo="/sales/plans"
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiTile label="План ТП, кг" value={kg(data.weightPlan)} badge={<PlanBadge share={data.weightExecution} />}>

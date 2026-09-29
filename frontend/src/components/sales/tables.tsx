@@ -301,7 +301,7 @@ export function NotInDirectoryTable({ rows, query }: { rows: { agentId: number; 
       rows={rows}
       rowKey={(r) => String(r.agentId)}
       rowHref={(r) => withQuery(`/sales/agents/${r.agentId}`, query)}
-      note="Добавьте их в «Продажи → Настройки → Агенты», чтобы назначить регион, план и отметить вакансии."
+      note="Добавьте их в «Настройки → Продажи: оргструктура и планы → Агенты», чтобы назначить регион, план и отметить вакансии."
     />
   );
 }

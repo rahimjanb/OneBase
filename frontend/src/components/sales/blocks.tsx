@@ -207,7 +207,7 @@ export function CategoryPlanBars({ rows }: { rows: { categoryId: number | null; 
     <Section title="Выполнение плана по категориям" hint="наведите на полосу — план, факт и выручка">
       {noPlans && rows.length > 0 && (
         <p className="mb-3 rounded-lg bg-muted px-3 py-2 text-xs text-ink-2">
-          Плана по категориям у агента нет — показан только факт. План можно загрузить в «Продажи → Настройки → Планы».
+          Плана по категориям у агента нет — показан только факт. План можно загрузить в «Настройки → Продажи: оргструктура и планы → Планы».
         </p>
       )}
       <div className="space-y-2">

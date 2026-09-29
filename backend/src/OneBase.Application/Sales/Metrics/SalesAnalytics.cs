@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace OneBase.Application.Sales.Metrics;
 
 /// <summary>
@@ -53,6 +55,51 @@ public sealed class SalesAnalytics
     }
 
     public PeriodInfo Period => new(_d.Year, _d.Month, _d.DataThrough, _d.WorkedDays, _d.DaysInMonth, _previousCutoff);
+
+    // ================= Готовые ответы =================
+    // SalesAnalytics живёт в кэше, пока не изменились данные, поэтому посчитанный уровень можно отдавать повторно:
+    // переходы между страницами не пересчитывают одно и то же.
+
+    private readonly ConcurrentDictionary<string, Lazy<object>> _views = new();
+
+    private T View<T>(string key, Func<T> build) where T : class =>
+        (T)_views.GetOrAdd(key, _ => new Lazy<object>(() => build(), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+
+    /// <summary>Дни календаря визитов: по умолчанию с 1-го по последний день данных.</summary>
+    public (DateOnly From, DateOnly To) VisitRange(int? from, int? to)
+    {
+        var last = Math.Max(1, _d.WorkedDays);
+        var f = Math.Clamp(from ?? 1, 1, _d.DaysInMonth);
+        var t = Math.Clamp(to ?? last, f, _d.DaysInMonth);
+        return (new DateOnly(_d.Year, _d.Month, f), new DateOnly(_d.Year, _d.Month, t));
+    }
+
+    public OverviewView CachedOverview() => View("overview", Overview);
+
+    public GroupView CachedRepublic(int? from, int? to)
+    {
+        var (f, t) = VisitRange(from, to);
+        return View($"republic:{f}:{t}", () => Republic(f, t));
+    }
+
+    public GroupView CachedDirection(string id, int? from, int? to)
+    {
+        var (f, t) = VisitRange(from, to);
+        return View($"direction:{id}:{f}:{t}", () => Direction(id, f, t));
+    }
+
+    public RegionView CachedRegion(Guid id, int? from, int? to, string metric, long? category)
+    {
+        var (f, t) = VisitRange(from, to);
+        return View($"region:{id}:{f}:{t}:{metric}:{category}", () => Region(id, f, t, metric, category));
+    }
+
+    public AgentView CachedAgent(long id) => View($"agent:{id}", () => Agent(id));
+
+    public PlansView CachedPlans() => View("plans", Plans);
+
+    public ProblemsView CachedProblems(string? direction, FlagKind? criterion, bool vacancies) =>
+        View($"problems:{direction}:{criterion}:{vacancies}", () => Problems(direction, criterion, vacancies));
 
     public bool HasRegion(Guid id) => _regions.ContainsKey(id);
 

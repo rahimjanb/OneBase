@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OneBase.Application.Sales;
+using OneBase.Domain.Sales;
 
 namespace OneBase.Infrastructure.Linko;
 
@@ -36,12 +37,36 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
             {
                 cacheSignal.InvalidateHistory(); // полная загрузка могла поменять и давние месяцы
             }
+
+            progress.Step("Пересчёт отчётов", null);
+            await WarmUpAsync(ct);
             return LastReport;
         }
         finally
         {
             progress.Finish();
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// После обновления данных заранее считает текущий месяц и частые страницы, чтобы первый переход пользователя
+    /// не ждал пересчёта. Ошибка прогрева не ломает синхронизацию — страница просто посчитается по запросу.
+    /// </summary>
+    private async Task WarmUpAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            var analytics = await scope.ServiceProvider.GetRequiredService<SalesDataLoader>().LoadAsync(null, null, PlanKind.Rop, ct);
+            analytics.CachedOverview();
+            analytics.CachedRepublic(null, null);
+            analytics.CachedProblems(null, null, false);
+            analytics.CachedPlans();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Не удалось заранее пересчитать отчёты продаж");
         }
     }
 

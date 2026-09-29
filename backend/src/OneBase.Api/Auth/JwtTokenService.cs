@@ -13,7 +13,11 @@ public sealed class JwtOptions
     public string Issuer { get; set; } = "onebase";
     public string Audience { get; set; } = "onebase";
     public string SigningKey { get; set; } = string.Empty;
-    public int AccessTokenMinutes { get; set; } = 60;
+    /// <summary>
+    /// Срок сессии — рабочий день. Права и активность пользователя всё равно проверяются по БД на каждом запросе
+    /// (UserAccessCache), поэтому отключённый пользователь теряет доступ сразу, а не через 12 часов.
+    /// </summary>
+    public int AccessTokenMinutes { get; set; } = 720;
 
     public SymmetricSecurityKey GetSigningKey() => new(Encoding.UTF8.GetBytes(SigningKey));
 }

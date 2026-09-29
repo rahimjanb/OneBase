@@ -18,8 +18,6 @@ export default async function RepublicPage({ searchParams }: { searchParams: Pro
       crumbs={[{ label: "Республика" }]}
       back={withQuery("/sales", q)}
       sp={sp}
-      period={data.period}
-      returnTo="/sales/republic"
     >
       <GroupPage data={data} sp={sp} query={q} regionsTitle="Все регионы" scopeName="республике" />
     </SalesFrame>
