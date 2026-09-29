@@ -358,7 +358,12 @@ export type DataQuality = {
   returnsWithoutLines: number;
   returnsWithoutLinesHeaderKg: number;
   uncategorized: UncategorizedType[];
+  acceptedInFuture: number;
+  otherCurrency: CurrencyTotal[] | null;
 };
+
+/** Выручка в другой валюте: курса нет, с сумами не складывается. */
+export type CurrencyTotal = { currency: string; amount: number; orders: number };
 
 /** Филиал «Завод» (экспорт и опт) — отдельно от вторички. */
 export type ExcludedSummary = {
@@ -427,6 +432,7 @@ export type ExportView = {
   markets: { marketId: number; name: string; kg: number; revenue: number; orders: number; prevMonthKg: number }[];
   agents: { agentId: number | null; name: string; kg: number; revenue: number; markets: number }[];
   products: ProductRow[];
+  otherCurrency: CurrencyTotal[];
 };
 
 export type MatrixLevel = "none" | "low" | "ok";
@@ -515,8 +521,10 @@ export type PrimaryView = {
   prevMonthKg: number;
   toFactoryKg: number;
   toFactoryTransfers: number;
+  toExportKg: number;
+  exportStock: string | null;
   monthsAvailable: number[];
-  months: { month: number; kg: number; sum: number; toFactoryKg: number }[];
+  months: { month: number; kg: number; sum: number; toFactoryKg: number; toExportKg: number }[];
   dealerRows: {
     stockId: number;
     name: string;

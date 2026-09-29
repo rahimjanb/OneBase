@@ -72,7 +72,15 @@ export function SalesNav({ months, status }: { months: SalesMonth[]; status: Syn
         })}
       </nav>
       <div className="flex flex-wrap items-center gap-2">
-        {!withoutPeriod.includes(active) && <SalesToolbar months={months} year={year} month={month} plan={params.get("plan") ?? "Rop"} />}
+        {!withoutPeriod.includes(active) && (
+          <SalesToolbar
+            months={months}
+            year={year}
+            month={month}
+            plan={params.get("plan") ?? "Rop"}
+            showPlan={active === "analytics" || active === "problems"}
+          />
+        )}
         <SyncControls initial={status} />
       </div>
     </div>

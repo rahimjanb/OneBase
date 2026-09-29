@@ -146,7 +146,9 @@ public sealed record DataQualityView(
     decimal ZeroHeaderReturnsKg,
     int ReturnsWithoutLines,
     decimal ReturnsWithoutLinesHeaderKg,
-    IReadOnlyList<UncategorizedType> Uncategorized);
+    IReadOnlyList<UncategorizedType> Uncategorized,
+    int AcceptedInFuture = 0,
+    IReadOnlyList<CurrencyTotal>? OtherCurrency = null);
 
 /// <summary>Исключённые из вторички филиалы («Завод» — экспорт и опт): факт отдельной строкой.</summary>
 public sealed record ExcludedSummary(decimal FactKg, decimal Revenue, int Orders, int Akb, decimal? ForecastKg, decimal PrevMonthKg, decimal? VsPrevMonth);

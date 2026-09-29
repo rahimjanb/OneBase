@@ -113,6 +113,21 @@ public class SecondarySalesTests
     }
 
     [Fact]
+    public void Revenue_in_another_currency_is_not_added_to_the_base_currency()
+    {
+        var usd = Order(7, branch: "Завод", kg: 100) with { Revenue = 21_231, Currency = "USD" };
+        var sum = Order(8, branch: "Завод", kg: 50) with { Currency = "SUM" };
+
+        var result = Build([usd, sum, Order(9, kg: 10)]);
+
+        Assert.Equal(150m, result.Excluded.Sum(l => l.Kg)); // вес заказа в долларах учитывается
+        Assert.Equal(50_000m, result.Excluded.Sum(l => l.Revenue)); // а доллары с сумами не складываются
+        var dollars = Assert.Single(result.ExcludedOtherCurrency!);
+        Assert.Equal(("USD", 21_231m, 1), (dollars.Currency, dollars.Amount, dollars.Orders));
+        Assert.Empty(result.OtherCurrency!);
+    }
+
+    [Fact]
     public void Visit_orders_are_dated_by_creation_while_the_sale_is_dated_by_acceptance()
     {
         var order = Order(1, created: "2026-09-10", accepted: "2026-09-11");

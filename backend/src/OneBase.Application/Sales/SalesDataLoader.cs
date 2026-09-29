@@ -155,11 +155,30 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         return value;
     }
 
-    /// <summary>Последний день, за который есть продажи (по дате реализации).</summary>
+    /// <summary>
+    /// Последний день, за который есть продажи (по дате реализации), но не позже сегодняшнего: у части заказов Linko
+    /// дата приёмки стоит в будущем (например, завтра) — отчётный день из-за них не должен уезжать вперёд.
+    /// </summary>
     private async Task<DateOnly?> LastDataDateAsync(CancellationToken ct)
     {
         var sold = options.SoldStatuses;
-        return await Dated().Where(o => sold.Contains(o.Status)).MaxAsync(o => o.Date, ct);
+        var today = Today;
+        return await Dated().Where(o => sold.Contains(o.Status) && o.Date <= today).MaxAsync(o => o.Date, ct);
+    }
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Now);
+
+    /// <summary>Проданные заказы с датой приёмки позже сегодняшнего дня: в факт попадут, когда этот день наступит.</summary>
+    private async Task<int> AcceptedInFutureAsync(CancellationToken ct)
+    {
+        if (options.DateField != SaleDateField.Accepted)
+        {
+            return 0;
+        }
+
+        var sold = options.SoldStatuses;
+        var today = Today;
+        return await db.LinkoOrders.CountAsync(o => sold.Contains(o.Status) && o.AcceptedDate > today, ct);
     }
 
     private async Task<MonthData> BuildAsync(int year, int month, PlanKind kind, DateOnly? lastData, CancellationToken ct)
@@ -180,6 +199,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         var missingAcceptance = await DeliveredWithoutAcceptanceAsync(monthStart.AddDays(-45), salesEnd, ct);
 
         var current = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, monthStart, dataThrough, options, missingAcceptance);
+        current = current with { Quality = current.Quality with { AcceptedInFuture = await AcceptedInFutureAsync(ct) } };
         var previous = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, previousStart, monthStart.AddDays(-1), options);
         var historyFrom = new[] { new DateOnly(year, 1, 1), monthStart.AddMonths(-3) }.Min();
 
@@ -251,6 +271,8 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             VisitOrders = SecondarySales.VisitOrders(rawOrders, monthStart, salesEnd, options),
             ExcludedCurrent = current.Excluded,
             ExcludedPrevious = previous.Excluded,
+            OtherCurrency = current.OtherCurrency ?? [],
+            ExcludedOtherCurrency = current.ExcludedOtherCurrency ?? [],
             Quality = current.Quality,
             Visits = visits.Where(v => !nonSales.Contains(v.UserId!.Value)).Select(v => new VisitRecord(v.Day, v.UserId!.Value, v.MarketId!.Value, ParseStatus(v.Status), v.IsInPlan)).ToList(),
             History = await HistoryAsync(historyFrom, monthEnd, ct),
@@ -323,7 +345,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                           || (!byAccepted && !byDelivery && o.CreatedDate >= saleFrom && o.CreatedDate <= saleTo)
                           || (o.CreatedDate >= createdFrom && o.CreatedDate <= createdTo))
                 select new RawOrderLine(o.Id, o.Status, o.CreatedDate, o.DeliveryDate, o.AcceptedDate, o.BranchId, o.BranchName,
-                    o.AgentId, o.MarketId, l.ProductId, p.TypeId, l.TotalWeight, l.TotalPrice))
+                    o.AgentId, o.MarketId, l.ProductId, p.TypeId, l.TotalWeight, l.TotalPrice, o.Currency))
             .AsNoTracking()
             .ToListAsync(ct);
     }

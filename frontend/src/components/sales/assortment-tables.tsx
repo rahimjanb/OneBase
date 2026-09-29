@@ -7,6 +7,15 @@ import type { AgentAssortment, AssortmentView, ExportView, PrimaryView, ProductR
 
 const withQuery = (path: string, query: string) => (query ? `${path}?${query}` : path);
 
+/** Название с переносом: длинные наименования товаров иначе растягивают таблицу и уводят цифры за край. */
+function WrapName({ name, sub }: { name: string; sub?: string | null }) {
+  return (
+    <span className="block max-w-[320px] whitespace-normal">
+      <NameCell name={name} sub={sub} />
+    </span>
+  );
+}
+
 const categoryCell = (name: string, inReport = true) => (
   <span className={inReport ? "text-ink-2" : "text-ink-3"} title={inReport ? undefined : "вне категорий отчёта"}>
     {name}
@@ -18,7 +27,7 @@ const categoryCell = (name: string, inReport = true) => (
 
 export function ProductsTable({ rows, title = "Товары", hint = "по выручке за месяц" }: { rows: ProductRow[]; title?: string; hint?: string }) {
   const columns: Column<ProductRow>[] = [
-    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
+    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
     { key: "cat", label: "Категория", value: (r) => r.category, render: (r) => categoryCell(r.category, r.inReport) },
     { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
@@ -43,7 +52,7 @@ export function ProductsTable({ rows, title = "Товары", hint = "по вы�
 export function AgentStoresTable({ rows, agentId, query }: { rows: AgentAssortment["stores"]; agentId: number; query: string }) {
   type Row = AgentAssortment["stores"][number];
   const columns: Column<Row>[] = [
-    { key: "name", label: "Магазин", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={`№ ${r.marketId}`} /> },
+    { key: "name", label: "Магазин", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={`№ ${r.marketId}`} /> },
     { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
     { key: "cats", label: "Категорий", align: "right", value: (r) => r.categories, render: (r) => num(r.categories) },
@@ -67,7 +76,7 @@ export function AgentStoresTable({ rows, agentId, query }: { rows: AgentAssortme
 export function LaggingTable({ rows }: { rows: AgentAssortment["lagging"] }) {
   type Row = AgentAssortment["lagging"][number];
   const columns: Column<Row>[] = [
-    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <NameCell name={r.name} /> },
+    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <WrapName name={r.name} /> },
     { key: "cat", label: "Категория", value: (r) => r.category },
     { key: "tt", label: "ТТ у ТП", align: "right", value: (r) => r.agentAkb, render: (r) => num(r.agentAkb) },
     { key: "own", label: "У ТП", align: "right", value: (r) => r.agentDistribution, render: (r) => <span className="text-bad">{pct(r.agentDistribution)}</span> },
@@ -92,7 +101,7 @@ export function LaggingTable({ rows }: { rows: AgentAssortment["lagging"] }) {
 export function StoreProductsTable({ rows }: { rows: StoreView["products"] }) {
   type Row = StoreView["products"][number];
   const columns: Column<Row>[] = [
-    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
+    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
     { key: "cat", label: "Категория", value: (r) => r.category },
     { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
@@ -105,7 +114,7 @@ export function StoreProductsTable({ rows }: { rows: StoreView["products"] }) {
 export function ExportMarketsTable({ rows }: { rows: ExportView["markets"] }) {
   type Row = ExportView["markets"][number];
   const columns: Column<Row>[] = [
-    { key: "name", label: "Покупатель", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={`№ ${r.marketId}`} /> },
+    { key: "name", label: "Покупатель", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={`№ ${r.marketId}`} /> },
     { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
     { key: "orders", label: "Заказов", align: "right", value: (r) => r.orders, render: (r) => num(r.orders) },
@@ -117,7 +126,7 @@ export function ExportMarketsTable({ rows }: { rows: ExportView["markets"] }) {
 export function ExportAgentsTable({ rows }: { rows: ExportView["agents"] }) {
   type Row = ExportView["agents"][number];
   const columns: Column<Row>[] = [
-    { key: "name", label: "ТП", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.agentId ? `ID ${r.agentId}` : null} /> },
+    { key: "name", label: "ТП", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.agentId ? `ID ${r.agentId}` : null} /> },
     { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
     { key: "markets", label: "Точек", align: "right", value: (r) => r.markets, render: (r) => num(r.markets) },
@@ -130,7 +139,7 @@ export function ExportAgentsTable({ rows }: { rows: ExportView["agents"] }) {
 export function AssortmentRegionsTable({ rows, query }: { rows: AssortmentView["regions"]; query: string }) {
   type Row = AssortmentView["regions"][number];
   const columns: Column<Row>[] = [
-    { key: "name", label: "Регион", value: (r) => r.name, render: (r) => <NameCell name={r.name} /> },
+    { key: "name", label: "Регион", value: (r) => r.name, render: (r) => <WrapName name={r.name} /> },
     { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
     { key: "sku", label: "SKU идёт", align: "right", value: (r) => r.skuSelling, render: (r) => num(r.skuSelling) },
@@ -211,7 +220,7 @@ export function StockTable({ data, unit }: { data: StockView; unit: "kg" | "boxe
   const value = (r: StockItem) => (unit === "boxes" ? r.boxes : unit === "pieces" ? r.pieces : r.kg);
   const fmt = (v: number | null) => (unit === "kg" ? kg(v) : num(v, unit === "boxes" ? 1 : 0));
   const columns: Column<StockItem>[] = [
-    { key: "name", label: "Наименование", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
+    { key: "name", label: "Наименование", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
     { key: "cat", label: "Категория", value: (r) => r.category, render: (r) => categoryCell(r.category, r.inReport) },
     {
       key: "unit",
@@ -247,7 +256,7 @@ export function StockTable({ data, unit }: { data: StockView; unit: "kg" | "boxe
 export function OtherStocksTable({ rows }: { rows: StockView["otherStocks"] }) {
   type Row = StockView["otherStocks"][number];
   const columns: Column<Row>[] = [
-    { key: "name", label: "Склад", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={`ID ${r.stockId}`} /> },
+    { key: "name", label: "Склад", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={`ID ${r.stockId}`} /> },
     { key: "items", label: "Товаров", align: "right", value: (r) => r.items, render: (r) => num(r.items) },
     { key: "pieces", label: "Штук", align: "right", value: (r) => r.pieces, render: (r) => num(r.pieces) },
     { key: "kg", label: "Кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
@@ -270,7 +279,7 @@ export function OtherStocksTable({ rows }: { rows: StockView["otherStocks"] }) {
 export function PrimaryDealersTable({ data }: { data: PrimaryView }) {
   type Row = PrimaryView["dealerRows"][number];
   const columns: Column<Row>[] = [
-    { key: "name", label: "Дилер (склад)", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.regionId ? null : "склад без региона"} /> },
+    { key: "name", label: "Дилер (склад)", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.regionId ? null : "склад без региона"} /> },
     { key: "kg", label: "Отгружено, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
     { key: "sum", label: "Сумма", align: "right", value: (r) => r.sum, render: (r) => money(r.sum) },
     { key: "share", label: "Доля", align: "right", value: (r) => r.share, render: (r) => pct(r.share, 1) },
@@ -298,7 +307,7 @@ export function PrimaryCategoriesTable({ data }: { data: PrimaryView }) {
 export function PrimaryItemsTable({ data }: { data: PrimaryView }) {
   type Row = PrimaryView["items"][number];
   const columns: Column<Row>[] = [
-    { key: "name", label: "Наименование", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
+    { key: "name", label: "Наименование", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
     { key: "cat", label: "Категория", value: (r) => r.category },
     { key: "pieces", label: "Штук", align: "right", value: (r) => r.pieces, render: (r) => num(r.pieces) },
     { key: "kg", label: "Вес, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },

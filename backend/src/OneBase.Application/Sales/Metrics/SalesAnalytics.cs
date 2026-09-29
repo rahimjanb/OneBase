@@ -642,7 +642,7 @@ public sealed partial class SalesAnalytics
             .OrderByDescending(x => x.Revenue)
             .ToList();
         return new DataQualityView(q.DeliveredWithoutAcceptance, q.ZeroHeaderReturns, q.ZeroHeaderReturnsKg, q.ReturnsWithoutLines,
-            q.ReturnsWithoutLinesHeaderKg, uncategorized);
+            q.ReturnsWithoutLinesHeaderKg, uncategorized, q.AcceptedInFuture, scope is null ? _d.OtherCurrency : null);
     }
 
     /// <summary>Исключённые филиалы («Завод»): экспорт и опт — отдельно от вторички, чтобы не завышать республику.</summary>
@@ -859,18 +859,22 @@ public sealed partial class SalesAnalytics
             .OrderByDescending(r => r.Kg)
             .ToList();
 
+    /// <summary>
+    /// План и факт агента по категориям отчёта: ручные планы OneBase заведены по типам Linko, поэтому и план,
+    /// и факт сводятся к категориям отчёта (фасовки помадки — одна строка).
+    /// </summary>
     private List<CategoryPlanFact> CategoryPlanOf(IReadOnlyList<PlanRow> plans, IReadOnlyList<SaleLine> lines)
     {
-        var categories = plans.Where(p => p.CategoryId != null).Select(p => p.CategoryId)
-            .Concat(lines.GroupBy(l => l.CategoryId).Where(g => g.Sum(l => l.Revenue) > 0).Select(g => g.Key))
+        var categories = plans.Where(p => p.CategoryId != null).Select(p => GroupOf(p.CategoryId))
+            .Concat(lines.GroupBy(l => GroupOf(l.CategoryId)).Where(g => g.Sum(l => l.Revenue) > 0).Select(g => g.Key))
             .Distinct();
 
         return categories.Select(c =>
             {
-                var plan = SalesMath.PlanTotal(plans.Where(p => p.CategoryId == c && c != null));
-                var cl = lines.Where(l => l.CategoryId == c).ToList();
+                var plan = SalesMath.PlanTotal(plans.Where(p => p.CategoryId != null && GroupOf(p.CategoryId) == c));
+                var cl = lines.Where(l => GroupOf(l.CategoryId) == c).ToList();
                 var fact = cl.Sum(l => l.Kg);
-                return new CategoryPlanFact(c, TypeName(c), plan, fact, cl.Sum(l => l.Revenue), SalesMath.Ratio(fact, plan));
+                return new CategoryPlanFact(c, _cats.NameOf(c), plan, fact, cl.Sum(l => l.Revenue), SalesMath.Ratio(fact, plan));
             })
             .OrderBy(x => x.PlanKg is null)
             .ThenByDescending(x => x.FactKg)
@@ -1008,10 +1012,6 @@ public sealed partial class SalesAnalytics
         _d.Agents.TryGetValue(agent, out var a) && !string.IsNullOrWhiteSpace(a.Name) ? a.Name : $"Агент {agent}";
 
     private string MarketName(long market) => _d.Markets.TryGetValue(market, out var m) ? m.Name : $"ТТ {market}";
-
-    /// <summary>Название типа товара Linko (планы по категориям в OneBase заведены по типам).</summary>
-    private string TypeName(long? category) =>
-        category is { } c && _d.Categories.TryGetValue(c, out var name) ? name : "Без категории";
 
     private AgentStats StatsOf(long agent) =>
         _stats.TryGetValue(agent, out var s) ? s : new AgentStats(agent, 0, 0, 0, 0, new VisitSummary(0, 0, 0), null, IsVacancy(agent));

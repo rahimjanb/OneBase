@@ -5,7 +5,20 @@ import { monthLabel } from "@/lib/sales/format";
 import type { SalesMonth } from "@/lib/sales/types";
 
 /** Период (месяц) и план (РОП / Завод). Меняют параметры адреса — сервер пересчитывает страницу. */
-export function SalesToolbar({ months, year, month, plan }: { months: SalesMonth[]; year: number; month: number; plan: string }) {
+export function SalesToolbar({
+  months,
+  year,
+  month,
+  plan,
+  showPlan = true,
+}: {
+  months: SalesMonth[];
+  year: number;
+  month: number;
+  plan: string;
+  /** План РОП / «Завод» меняет только вторичку — на первичке и в ассортименте переключатель не нужен. */
+  showPlan?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -38,21 +51,23 @@ export function SalesToolbar({ months, year, month, plan }: { months: SalesMonth
           </option>
         ))}
       </select>
-      <div className="flex overflow-hidden rounded-lg border border-line text-sm" role="group" aria-label="План">
-        {[
-          { key: "Rop", label: "План РОП" },
-          { key: "Factory", label: "Завод" },
-        ].map((p) => (
-          <button
-            key={p.key}
-            type="button"
-            onClick={() => go({ plan: p.key === "Rop" ? null : p.key })}
-            className={`px-3 py-1.5 ${plan === p.key ? "bg-accent text-white" : "bg-surface text-ink hover:bg-muted"}`}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
+      {showPlan && (
+        <div className="flex overflow-hidden rounded-lg border border-line text-sm" role="group" aria-label="План">
+          {[
+            { key: "Rop", label: "План РОП" },
+            { key: "Factory", label: "Завод" },
+          ].map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => go({ plan: p.key === "Rop" ? null : p.key })}
+              className={`px-3 py-1.5 ${plan === p.key ? "bg-accent text-white" : "bg-surface text-ink hover:bg-muted"}`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

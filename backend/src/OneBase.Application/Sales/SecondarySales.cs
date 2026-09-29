@@ -19,7 +19,8 @@ public sealed record RawOrderLine(
     long? ProductId,
     long? TypeId,
     decimal Kg,
-    decimal Revenue);
+    decimal Revenue,
+    string? Currency = null);
 
 /// <summary>Строка возврата (returned_products) — до применения правил. Вес и сумма — по строке, не по шапке.</summary>
 public sealed record RawReturnLine(
@@ -47,12 +48,21 @@ public sealed record SalesDataQuality(
     int ZeroHeaderReturns,
     decimal ZeroHeaderReturnsKg,
     int ReturnsWithoutLines,
-    decimal ReturnsWithoutLinesHeaderKg)
+    decimal ReturnsWithoutLinesHeaderKg,
+    int AcceptedInFuture = 0)
 {
     public static readonly SalesDataQuality Empty = new(0, 0, 0, 0, 0);
 }
 
-public sealed record SecondarySalesResult(IReadOnlyList<SaleLine> Lines, IReadOnlyList<SaleLine> Excluded, SalesDataQuality Quality);
+/// <summary>Выручка заказов в валюте, отличной от основной: курса нет, поэтому с сумами не складывается.</summary>
+public sealed record CurrencyTotal(string Currency, decimal Amount, int Orders);
+
+public sealed record SecondarySalesResult(
+    IReadOnlyList<SaleLine> Lines,
+    IReadOnlyList<SaleLine> Excluded,
+    SalesDataQuality Quality,
+    IReadOnlyList<CurrencyTotal>? OtherCurrency = null,
+    IReadOnlyList<CurrencyTotal>? ExcludedOtherCurrency = null);
 
 public static class SecondarySales
 {
@@ -84,6 +94,7 @@ public static class SecondarySales
         var returned = options.ReturnStatuses.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var lines = new List<SaleLine>();
         var excluded = new List<SaleLine>();
+        var otherCurrency = new List<(string Currency, decimal Amount, long OrderId, bool Excluded)>();
 
         foreach (var o in orders)
         {
@@ -92,9 +103,24 @@ public static class SecondarySales
                 continue;
             }
 
-            var line = new SaleLine(date, o.AgentId, o.MarketId, o.BranchId, o.TypeId, o.ProductId, o.Kg, o.Revenue, o.OrderId);
-            (options.IsExcludedBranch(o.BranchName) ? excluded : lines).Add(line);
+            var isExcluded = options.IsExcludedBranch(o.BranchName);
+            var revenue = o.Revenue;
+            if (!options.IsBaseCurrency(o.Currency))
+            {
+                // Курса в данных нет — выручку в долларах и т.п. с сумами не складываем; вес заказа учитывается.
+                otherCurrency.Add((o.Currency!.Trim(), o.Revenue, o.OrderId, isExcluded));
+                revenue = 0;
+            }
+
+            var line = new SaleLine(date, o.AgentId, o.MarketId, o.BranchId, o.TypeId, o.ProductId, o.Kg, revenue, o.OrderId);
+            (isExcluded ? excluded : lines).Add(line);
         }
+
+        static List<CurrencyTotal> Totals(IEnumerable<(string Currency, decimal Amount, long OrderId, bool Excluded)> source) =>
+            source.GroupBy(x => x.Currency, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new CurrencyTotal(g.Key, g.Sum(x => x.Amount), g.Select(x => x.OrderId).Distinct().Count()))
+                .OrderBy(x => x.Currency)
+                .ToList();
 
         foreach (var r in returns)
         {
@@ -114,11 +140,13 @@ public static class SecondarySales
         var noLines = headers.Where(h => h.Lines == 0 && h.HeaderKg > 0).ToList();
 
         return new SecondarySalesResult(lines, excluded, new SalesDataQuality(
-            deliveredWithoutAcceptance,
-            zeroHeader.Count,
-            zeroHeader.Sum(h => h.LinesKg),
-            noLines.Count,
-            noLines.Sum(h => h.HeaderKg)));
+                deliveredWithoutAcceptance,
+                zeroHeader.Count,
+                zeroHeader.Sum(h => h.LinesKg),
+                noLines.Count,
+                noLines.Sum(h => h.HeaderKg)),
+            Totals(otherCurrency.Where(x => !x.Excluded)),
+            Totals(otherCurrency.Where(x => x.Excluded)));
     }
 
     /// <summary>

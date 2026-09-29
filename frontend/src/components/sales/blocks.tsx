@@ -163,7 +163,8 @@ function deltaClass(value: number | null): string {
  */
 export function DataQualityNotes({ quality }: { quality: DataQuality }) {
   const serious = quality.deliveredWithoutAcceptance > 0 || quality.returnsWithoutLines > 0;
-  const info = quality.zeroHeaderReturns > 0 || quality.uncategorized.length > 0;
+  const otherCurrency = quality.otherCurrency ?? [];
+  const info = quality.zeroHeaderReturns > 0 || quality.uncategorized.length > 0 || quality.acceptedInFuture > 0 || otherCurrency.length > 0;
   if (!serious && !info) return null;
 
   return (
@@ -179,6 +180,18 @@ export function DataQualityNotes({ quality }: { quality: DataQuality }) {
           <Alert>
             <b>{num(quality.returnsWithoutLines)}</b> возвратов без строк товара (по шапке {kg(quality.returnsWithoutLinesHeaderKg)} кг) — не вычтены:
             неизвестно, какой товар вернули. Проверьте эти документы в Linko.
+          </Alert>
+        )}
+        {otherCurrency.map((c) => (
+          <Alert key={c.currency} tone="info">
+            Выручка в {c.currency}: <b>{num(c.amount)}</b> ({num(c.orders)} заказов) — курса в данных нет, поэтому с сумами не складывается; вес этих
+            заказов в факт входит.
+          </Alert>
+        ))}
+        {quality.acceptedInFuture > 0 && (
+          <Alert tone="info">
+            У <b>{num(quality.acceptedInFuture)}</b> доставленных заказов дата приёмки в Linko стоит в будущем. В факт они попадут, когда этот день наступит, —
+            отчётный день не уезжает вперёд.
           </Alert>
         )}
         {quality.zeroHeaderReturns > 0 && (

@@ -4,7 +4,7 @@ using OneBase.Application.Sales.Metrics;
 
 namespace OneBase.Application.Sales.Primary;
 
-public sealed record PrimaryMonth(int Month, decimal Kg, decimal Sum, decimal ToFactoryKg);
+public sealed record PrimaryMonth(int Month, decimal Kg, decimal Sum, decimal ToFactoryKg, decimal ToExportKg = 0);
 
 public sealed record PrimaryDealer(long StockId, string Name, string? RegionId, decimal Kg, decimal Sum, int Shipments, decimal? Share,
     IReadOnlyList<decimal?> Days, IReadOnlyList<decimal> Months);
@@ -29,6 +29,8 @@ public sealed record PrimaryView(
     decimal PrevMonthKg,
     decimal ToFactoryKg,
     int ToFactoryTransfers,
+    decimal ToExportKg,
+    string? ExportStock,
     IReadOnlyList<int> MonthsAvailable,
     IReadOnlyList<PrimaryMonth> Months,
     IReadOnlyList<PrimaryDealer> DealerRows,
@@ -36,7 +38,7 @@ public sealed record PrimaryView(
     IReadOnlyList<PrimaryItem> Items);
 
 /// <summary>
-/// Первичка — отгрузка завода дилерам: перемещения Linko со склада завода на склады регионов в статусах
+/// Первичка — отгрузка завода дилерам: перемещения Linko со склада завода на склады дилеров (кроме склада экспорта) в статусах
 /// «отдано» или «принято». Дата отгрузки — время выдачи (given_time), без него — время приёмки.
 /// Вес — брутто строк перемещения, сумма — по прайс-листу перемещения (какой это прайс — завода или дилера — в API не указано).
 /// Перемещения на склад завода показываются отдельно и не вычитаются: их смысл (возврат, внутреннее перемещение) не подтверждён.
@@ -53,6 +55,8 @@ public sealed class PrimaryService(IAppDbContext db, SalesOptions options, Micro
         var stocks = await db.LinkoStocks.AsNoTracking().Select(s => new { s.Id, s.Name }).ToListAsync(ct);
         var factoryIds = stocks.Where(s => options.IsFactoryStock(s.Name)).Select(s => s.Id).ToHashSet();
         var factoryName = stocks.FirstOrDefault(s => factoryIds.Contains(s.Id))?.Name;
+        var exportIds = stocks.Where(s => options.IsExportStock(s.Name)).Select(s => s.Id).ToHashSet();
+        var exportName = stocks.FirstOrDefault(s => exportIds.Contains(s.Id))?.Name;
         var shipped = options.ShippedTransferStatuses;
 
         var raw = await (
@@ -70,7 +74,10 @@ public sealed class PrimaryService(IAppDbContext db, SalesOptions options, Micro
             .Select(x => new Shipment(x.r.Id, x.r.FromStockId, x.r.ToStockId, DateOnly.FromDateTime(x.Date!.Value), x.r.ProductId, x.r.Amount, x.r.TotalWeight, x.r.TotalPrice))
             .ToList();
         bool IsFactory(long? id) => id is { } s && factoryIds.Contains(s);
-        var outbound = all.Where(s => IsFactory(s.From) && !IsFactory(s.To)).ToList();
+        bool IsExport(long? id) => id is { } s && exportIds.Contains(s);
+        // С завода на склад экспорта — экспорт, не отгрузка дилеру: в первичку не входит, показывается отдельно.
+        var outbound = all.Where(s => IsFactory(s.From) && !IsFactory(s.To) && !IsExport(s.To)).ToList();
+        var toExport = all.Where(s => IsFactory(s.From) && IsExport(s.To)).ToList();
         var toFactory = all.Where(s => !IsFactory(s.From) && IsFactory(s.To)).ToList();
 
         var last = outbound.Count == 0 ? (DateOnly?)null : outbound.Max(s => s.Date);
@@ -155,11 +162,14 @@ public sealed class PrimaryService(IAppDbContext db, SalesOptions options, Micro
             outbound.Where(s => s.Date.Year == prevStart.Year && s.Date.Month == prevStart.Month).Sum(s => s.Kg),
             toFactoryMonth.Sum(s => s.Kg),
             toFactoryMonth.Select(s => s.Id).Distinct().Count(),
+            toExport.Where(s => s.Date.Year == year && s.Date.Month == month).Sum(s => s.Kg),
+            exportName,
             outbound.Where(s => s.Date.Year == year).Select(s => s.Date.Month).Distinct().Order().ToList(),
             Enumerable.Range(1, 12).Select(m => new PrimaryMonth(m,
                 yearRows.Where(s => s.Date.Month == m).Sum(s => s.Kg),
                 yearRows.Where(s => s.Date.Month == m).Sum(s => s.Sum),
-                toFactory.Where(s => s.Date.Year == year && s.Date.Month == m).Sum(s => s.Kg))).ToList(),
+                toFactory.Where(s => s.Date.Year == year && s.Date.Month == m).Sum(s => s.Kg),
+                toExport.Where(s => s.Date.Year == year && s.Date.Month == m).Sum(s => s.Kg))).ToList(),
             dealers,
             categoryRows,
             items);

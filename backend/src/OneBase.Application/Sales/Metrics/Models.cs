@@ -129,6 +129,11 @@ public sealed class MonthData
 
     public SalesDataQuality Quality { get; init; } = SalesDataQuality.Empty;
 
+    /// <summary>Выручка заказов месяца в других валютах (вторичка / исключённые филиалы) — не складывается с основной.</summary>
+    public IReadOnlyList<CurrencyTotal> OtherCurrency { get; init; } = [];
+
+    public IReadOnlyList<CurrencyTotal> ExcludedOtherCurrency { get; init; } = [];
+
     /// <summary>ТТ, закреплённые за агентами через market_users (агент → ТТ).</summary>
     public required IReadOnlyList<(long AgentId, long MarketId)> MarketAssignments { get; init; }
 

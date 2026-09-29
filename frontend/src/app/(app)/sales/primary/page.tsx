@@ -49,7 +49,11 @@ export default async function PrimaryPage({ searchParams }: { searchParams: Prom
             </div>
           ))}
         </div>
-        <Note>Текущий месяц ещё идёт — его полоса контуром. {data.toFactoryKg > 0 && `Перемещения на склад завода в этом месяце: ${kg(data.toFactoryKg)} кг (${num(data.toFactoryTransfers)} шт.) — показаны отдельно и не вычитаются.`}</Note>
+        <Note>
+          Текущий месяц ещё идёт — его полоса контуром.{" "}
+          {data.toExportKg > 0 && `С завода на склад «${data.exportStock ?? "Экспорт"}» в этом месяце: ${kg(data.toExportKg)} кг — это экспорт, в первичку не входит. `}
+          {data.toFactoryKg > 0 && `Перемещения на склад завода: ${kg(data.toFactoryKg)} кг (${num(data.toFactoryTransfers)} шт.) — показаны отдельно и не вычитаются.`}
+        </Note>
       </Section>
 
       <PrimaryDealersTable data={data} />

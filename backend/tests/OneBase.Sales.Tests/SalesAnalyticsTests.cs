@@ -257,6 +257,20 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
+    public void Agent_category_plan_uses_report_categories_not_linko_types()
+    {
+        var data = Data(
+            current: [Sku(100, 1, market: 10, kg: 60), Sku(101, 2, market: 11, kg: 40)],
+            plans: [new PlanRow(null, 1, 9, 2, 50)], // ручной план по фасовке «Помадка 0,5 кг»
+            categories: new Dictionary<long, string> { [1] = "Помадка", [2] = "Помадка 0,5 кг" },
+            reportCategories: new Dictionary<string, string> { ["Помадка"] = "1,2" });
+
+        var row = Assert.Single(new SalesAnalytics(data).Agent(1).CategoryPlan);
+
+        Assert.Equal(("Помадка", 100m, 50m), (row.Name, row.FactKg, row.PlanKg!.Value));
+    }
+
+    [Fact]
     public void Visit_matches_the_order_by_creation_date_not_by_acceptance_date()
     {
         // Агент был в ТТ 10-го и ввёл заказ; магазин принял товар 11-го — продажа 11-го, а визит «с заказом» — 10-го.

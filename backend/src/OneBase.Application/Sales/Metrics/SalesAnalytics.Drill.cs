@@ -54,7 +54,8 @@ public sealed record ExportView(
     IReadOnlyList<CategoryCard> Categories,
     IReadOnlyList<ExportMarketRow> Markets,
     IReadOnlyList<ExportAgentRow> Agents,
-    IReadOnlyList<ProductRow> Products);
+    IReadOnlyList<ProductRow> Products,
+    IReadOnlyList<CurrencyTotal> OtherCurrency);
 
 public sealed record UnitRef(string Id, string Name);
 
@@ -199,7 +200,7 @@ public sealed partial class SalesAnalytics
             .OrderByDescending(a => a.Kg)
             .ToList();
 
-        return new ExportView(Period, Excluded(), CategoryCardsFor(now, before), markets, agents, ProductsOf(now));
+        return new ExportView(Period, Excluded(), CategoryCardsFor(now, before), markets, agents, ProductsOf(now), _d.ExcludedOtherCurrency);
     }
 
     public AssortmentView Assortment(string? direction, Guid? region)

@@ -41,6 +41,21 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
               прошлый месяц {kg(s.prevMonthKg)} кг
             </KpiTile>
           </div>
+          {data.otherCurrency.length > 0 && (
+            <p className="mt-4 rounded-lg border border-line bg-muted px-4 py-3 text-sm text-ink-2">
+              Кроме сумов:{" "}
+              {data.otherCurrency.map((c, i) => (
+                <span key={c.currency}>
+                  {i > 0 && ", "}
+                  <b className="text-ink">
+                    {num(c.amount)} {c.currency}
+                  </b>{" "}
+                  ({num(c.orders)} заказов)
+                </span>
+              ))}
+              . Курса в данных нет — эти суммы в выручку не сложены, вес заказов учтён.
+            </p>
+          )}
           <CategoryCards cards={data.categories} scope="экспорте" />
           <ExportMarketsTable rows={data.markets} />
           <ExportAgentsTable rows={data.agents} />

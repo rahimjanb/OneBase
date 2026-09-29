@@ -64,6 +64,14 @@ public sealed class SalesOptions
     /// </summary>
     public string[] FactoryStocks { get; set; } = ["Завод"];
 
+    /// <summary>
+    /// Склады экспорта: перемещение с завода туда — экспорт, а не отгрузка дилеру; в первичку не входит, показывается отдельно.
+    /// </summary>
+    public string[] ExportStocks { get; set; } = ["Экспорт"];
+
+    public bool IsExportStock(string? stockName) =>
+        stockName is { } name && ExportStocks.Any(s => string.Equals(s.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
+
     /// <summary>Статусы перемещений, которые считаются отгрузкой: отдано (given) или уже принято (accepted).</summary>
     public string[] ShippedTransferStatuses { get; set; } = ["given", "accepted"];
 
@@ -72,6 +80,15 @@ public sealed class SalesOptions
 
     public bool IsFactoryStock(string? stockName) =>
         stockName is { } name && FactoryStocks.Any(s => string.Equals(s.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Основная валюта выручки (как Linko пишет её в заказе: «SUM»). Выручку в других валютах курса нет —
+    /// она не складывается с основной, а показывается отдельно. Заказ без валюты считается в основной.
+    /// </summary>
+    public string BaseCurrency { get; set; } = "SUM";
+
+    public bool IsBaseCurrency(string? currency) =>
+        string.IsNullOrWhiteSpace(currency) || string.Equals(currency.Trim(), BaseCurrency.Trim(), StringComparison.OrdinalIgnoreCase);
 
     public bool IsExcludedBranch(string? branchName) =>
         branchName is { } name && ExcludedBranches.Any(b => string.Equals(b.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
