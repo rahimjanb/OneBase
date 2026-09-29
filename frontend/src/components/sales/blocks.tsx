@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { Alert, ExecutionBar, FlagCountPills, KpiTile, Note, Section, TargetBadge, execClass } from "./bits";
-import { kg, money, monthShort, num, pct } from "@/lib/sales/format";
-import type { KpiTiles, Period, UnitRow } from "@/lib/sales/types";
+import { delta, kg, money, monthShort, num, pct } from "@/lib/sales/format";
+import type { DataQuality, ExcludedSummary, KpiTiles, Period, UnitRow } from "@/lib/sales/types";
 
 /** Плашка «X% плана»: ≥100% зелёная, 70–99% оранжевая, меньше — красная. */
 export function PlanBadge({ share }: { share: number | null }) {
@@ -124,6 +124,89 @@ export function UnitCard({ unit, href }: { unit: UnitRow; href: string | null })
     </Link>
   ) : (
     body
+  );
+}
+
+/** Плитка «Экспорт и опт»: филиал «Завод» из Linko — отдельно от вторички, чтобы не завышать республику. */
+export function ExportCard({ data, href }: { data: ExcludedSummary; href: string }) {
+  return (
+    <Link href={href} className="group block">
+      <div className="flex h-full flex-col rounded-xl border border-line bg-surface p-4 transition-colors group-hover:border-accent/40">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-semibold text-ink">Экспорт и опт</div>
+            <div className="mt-0.5 text-xs text-ink-3">филиал «Завод» в Linko · не входит во вторичку</div>
+          </div>
+          <ArrowUpRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />
+        </div>
+        <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-2 text-xs">
+          <Metric label="Факт, кг" value={kg(data.factKg)} />
+          <Metric label="Выручка" value={money(data.revenue)} />
+          <Metric label="АКБ" value={num(data.akb)} />
+          <Metric label="Прогноз, кг" value={kg(data.forecastKg)} />
+          <Metric label="Заказов" value={num(data.orders)} />
+          <Metric label="К прошлому мес." value={<span className={deltaClass(data.vsPrevMonth)}>{delta(data.vsPrevMonth)}</span>} />
+        </dl>
+      </div>
+    </Link>
+  );
+}
+
+function deltaClass(value: number | null): string {
+  if (value == null) return "text-ink-3";
+  return value >= 0 ? "text-ok" : value > -0.1 ? "text-warn" : "text-bad";
+}
+
+/**
+ * Качество данных: что не попало в факт или учтено иначе, чем выглядит в Linko.
+ * Серьёзное (заказы без даты приёмки, возвраты без строк) — предупреждением, остальное — справкой.
+ */
+export function DataQualityNotes({ quality }: { quality: DataQuality }) {
+  const serious = quality.deliveredWithoutAcceptance > 0 || quality.returnsWithoutLines > 0;
+  const info = quality.zeroHeaderReturns > 0 || quality.uncategorized.length > 0;
+  if (!serious && !info) return null;
+
+  return (
+    <Section title="Качество данных" hint="что учтено иначе, чем выглядит в Linko">
+      <div className="space-y-2 text-sm">
+        {quality.deliveredWithoutAcceptance > 0 && (
+          <Alert tone="bad">
+            <b>{num(quality.deliveredWithoutAcceptance)}</b> доставленных заказов без даты приёмки — в факт не попали. Обычно это значит, что копия
+            Linko загружена не до конца: запустите полную перезагрузку в «Настройки → Интеграции → Linko».
+          </Alert>
+        )}
+        {quality.returnsWithoutLines > 0 && (
+          <Alert>
+            <b>{num(quality.returnsWithoutLines)}</b> возвратов без строк товара (по шапке {kg(quality.returnsWithoutLinesHeaderKg)} кг) — не вычтены:
+            неизвестно, какой товар вернули. Проверьте эти документы в Linko.
+          </Alert>
+        )}
+        {quality.zeroHeaderReturns > 0 && (
+          <Alert tone="info">
+            <b>{num(quality.zeroHeaderReturns)}</b> возвратов с нулевым весом в шапке учтены по строкам: {kg(quality.zeroHeaderReturnsKg)} кг. Шапке
+            документа верить нельзя — у них вес лежит только в строках.
+          </Alert>
+        )}
+      </div>
+      {quality.uncategorized.length > 0 && (
+        <div className="mt-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-ink-3">Вне категорий отчёта</div>
+          <table className="mt-2 w-full text-sm">
+            <tbody>
+              {quality.uncategorized.map((u) => (
+                <tr key={u.id} className="border-b border-line last:border-0">
+                  <td className="py-1.5 text-ink">{u.name}</td>
+                  <td className="py-1.5 text-right tabular-nums text-ink-2">{kg(u.kg)} кг</td>
+                  <td className="py-1.5 text-right tabular-nums text-ink-2">{money(u.revenue)}</td>
+                  <td className="py-1.5 text-right tabular-nums text-ink-3">{num(u.orders)} заказов</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Note>Типы товаров Linko, которых нет в восьми категориях отчёта (импорт, бонус, оборудование…). В итог они входят, в карточки категорий — нет.</Note>
+        </div>
+      )}
+    </Section>
   );
 }
 

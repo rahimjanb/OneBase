@@ -81,6 +81,8 @@ public static class DependencyInjection
         services.AddMemoryCache();
         services.AddSingleton<SalesCacheSignal>();
         services.AddScoped<SalesDataLoader>();
+        services.AddScoped<OneBase.Application.Sales.Stock.StockService>();
+        services.AddScoped<OneBase.Application.Sales.Primary.PrimaryService>();
         services.AddSingleton<LinkoSyncCoordinator>();
         services.AddHostedService<LinkoSyncWorker>();
 

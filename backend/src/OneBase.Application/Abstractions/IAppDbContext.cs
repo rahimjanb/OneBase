@@ -35,6 +35,16 @@ public interface IAppDbContext
     DbSet<LinkoVisit> LinkoVisits { get; }
     DbSet<LinkoKpiPlan> LinkoKpiPlans { get; }
     DbSet<LinkoSyncState> LinkoSyncStates { get; }
+    DbSet<LinkoStock> LinkoStocks { get; }
+    DbSet<LinkoProductBalance> LinkoProductBalances { get; }
+    DbSet<LinkoStockTransfer> LinkoStockTransfers { get; }
+    DbSet<LinkoStockTransferLine> LinkoStockTransferLines { get; }
+    DbSet<LinkoPayment> LinkoPayments { get; }
+    DbSet<LinkoPriceList> LinkoPriceLists { get; }
+    DbSet<LinkoPriceListItem> LinkoPriceListItems { get; }
+    DbSet<LinkoProvider> LinkoProviders { get; }
+    DbSet<LinkoCurrency> LinkoCurrencies { get; }
+    DbSet<LinkoContract> LinkoContracts { get; }
 
     DbSet<SalesDirection> SalesDirections { get; }
     DbSet<SalesRegion> SalesRegions { get; }

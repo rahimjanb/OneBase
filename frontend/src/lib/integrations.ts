@@ -65,6 +65,15 @@ export const linkoEntityLabels: Record<string, string> = {
   visits_month: "Визиты за месяц (полное обновление)",
   source: "Источник данных",
   staff_balance: "Планы агентов (пересчёт Linko)",
+  stocks: "Склады",
+  product_balances: "Остатки (штуки)",
+  stock_transfers: "Перемещения между складами",
+  payments: "Платежи",
+  price_lists: "Прайс-листы",
+  price_list_items: "Цены прайс-листов",
+  providers: "Поставщики",
+  currencies: "Валюты",
+  contracts: "Договоры",
 };
 
 export const statusView: Record<IntegrationStatus, { label: string; className: string }> = {

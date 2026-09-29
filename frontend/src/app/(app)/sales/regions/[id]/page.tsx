@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { AkbChart } from "@/components/sales/AkbChart";
-import { KpiRow, PlanFactMonths, UnassignedWarning } from "@/components/sales/blocks";
+import { DataQualityNotes, KpiRow, PlanFactMonths, UnassignedWarning } from "@/components/sales/blocks";
 import { MonthCalendarTable, VisitCalendarTable } from "@/components/sales/calendars";
 import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
@@ -70,6 +70,7 @@ export default async function RegionPage({
         expandable
       />
       {data.notInDirectory.length > 0 && <NotInDirectoryTable rows={data.notInDirectory} query={q} />}
+      <DataQualityNotes quality={data.quality} />
     </SalesFrame>
   );
 }

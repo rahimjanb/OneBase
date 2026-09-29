@@ -58,6 +58,21 @@ public sealed class SalesOptions
             .GroupBy(x => x.Id)
             .ToDictionary(g => g.Key, g => g.First().Name);
 
+    /// <summary>
+    /// Склады завода. Перемещение со склада завода на склад региона — отгрузка дилеру (первичка);
+    /// остаток завода в остаток страны не входит — он ещё не отгружен дилерам.
+    /// </summary>
+    public string[] FactoryStocks { get; set; } = ["Завод"];
+
+    /// <summary>Статусы перемещений, которые считаются отгрузкой: отдано (given) или уже принято (accepted).</summary>
+    public string[] ShippedTransferStatuses { get; set; } = ["given", "accepted"];
+
+    /// <summary>За сколько дней считать скорость продаж для запаса на складах.</summary>
+    public int StockVelocityDays { get; set; } = 90;
+
+    public bool IsFactoryStock(string? stockName) =>
+        stockName is { } name && FactoryStocks.Any(s => string.Equals(s.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
+
     public bool IsExcludedBranch(string? branchName) =>
         branchName is { } name && ExcludedBranches.Any(b => string.Equals(b.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
 

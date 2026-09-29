@@ -35,7 +35,11 @@ public sealed class LinkoSyncService(
     private const string VisitsMonthState = "visits_month";
     private static readonly TimeSpan VisitsMonthInterval = TimeSpan.FromHours(6);
 
-    private static readonly string[] Dictionaries = ["users", "product_types", "products", "borders", "markets", "market_users"];
+    private static readonly string[] Dictionaries =
+    [
+        "users", "product_types", "products", "borders", "markets", "market_users",
+        "stocks", "price_lists", "price_list_items", "providers", "currencies", "contracts",
+    ];
 
     public async Task<LinkoSyncReport> SyncAsync(LinkoSyncMode mode, CancellationToken ct = default)
     {
@@ -70,7 +74,14 @@ public sealed class LinkoSyncService(
                 "products" => SyncProductsAsync(full ? null : state.LastTm, ct),
                 "borders" => SyncBordersAsync(full ? null : state.LastTm, ct),
                 "markets" => SyncMarketsAsync(full ? null : state.LastTm, ct),
-                _ => SyncMarketUsersAsync(ct),
+                "market_users" => SyncMarketUsersAsync(ct),
+                "stocks" => SyncStocksAsync(full ? null : state.LastTm, ct),
+                "price_lists" => SyncPriceListsAsync(full ? null : state.LastTm, ct),
+                "price_list_items" => SyncPriceListItemsAsync(full ? null : state.LastTm, ct),
+                "providers" => SyncProvidersAsync(ct),
+                "currencies" => SyncCurrenciesAsync(ct),
+                "contracts" => SyncContractsAsync(full ? null : state.LastTm, ct),
+                _ => throw new InvalidOperationException($"Неизвестный справочник Linko: {entity}"),
             }, ct));
         }
 
@@ -82,6 +93,14 @@ public sealed class LinkoSyncService(
         results.Add(await RunStepAsync("order_returns", phase, accumulate: false, state =>
             SyncReturnsAsync(full || state.LastTm is null ? Window(recentFrom, recentTo) : Since(state.LastTm), ct), ct));
         results.Add(await RunStepAsync("visits", phase, accumulate: false, _ => SyncVisitsAsync(full, recentFrom, recentTo, ct), ct));
+
+        // Склад и деньги: остатки (штуки), перемещения (завод → склады регионов — первичка), платежи.
+        results.Add(await RunStepAsync("product_balances", phase, accumulate: false, state =>
+            SyncProductBalancesAsync(full || state.LastTm is null, state.LastTm, ct), ct));
+        results.Add(await RunStepAsync("stock_transfers", phase, accumulate: false, state =>
+            SyncStockTransfersAsync(full || state.LastTm is null, state.LastTm, ct), ct));
+        results.Add(await RunStepAsync("payments", phase, accumulate: false, state =>
+            SyncPaymentsAsync(full || state.LastTm is null ? Window(recentFrom, recentTo) : Since(state.LastTm), ct), ct));
 
         await EnsureRegionsAsync(ct);
 
@@ -141,7 +160,10 @@ public sealed class LinkoSyncService(
             """
             TRUNCATE linko."OrderLines", linko."Orders", linko."OrderReturnLines", linko."OrderReturns",
                      linko."Visits", linko."Markets", linko."MarketUsers", linko."Users", linko."Products",
-                     linko."ProductTypes", linko."Borders", linko."KpiPlans", linko."SyncState"
+                     linko."ProductTypes", linko."Borders", linko."KpiPlans", linko."SyncState",
+                     linko."Stocks", linko."ProductBalances", linko."StockTransferLines", linko."StockTransfers",
+                     linko."Payments", linko."PriceLists", linko."PriceListItems", linko."Providers",
+                     linko."Currencies", linko."Contracts"
             """, ct);
         await db.SalesStaffPlans.ExecuteDeleteAsync(ct);
         await db.SalesAgentPlans.ExecuteDeleteAsync(ct);
@@ -378,6 +400,240 @@ public sealed class LinkoSyncService(
                 e.IsDelete = d.IsDelete ?? false;
             }, ct), ct);
         return (rows, null);
+    }
+
+    private async Task<(int, decimal?)> SyncStocksAsync(decimal? cursor, CancellationToken ct)
+    {
+        decimal? maxTm = null;
+        var rows = await client.ReadAllAsync<LinkoStockDto>("stocks", Since(cursor), page =>
+        {
+            maxTm = Max(maxTm, page.Max(p => p.Tm));
+            return UpsertAsync(page, d => d.Id, db.LinkoStocks,
+                d => new LinkoStock { Id = d.Id, Name = d.Name ?? "" },
+                (d, e) =>
+                {
+                    e.Name = d.Name ?? "";
+                    e.Code = d.Code;
+                    e.Address = d.Address;
+                    e.Tm = d.Tm ?? 0;
+                }, ct);
+        }, ct);
+        return (rows, maxTm);
+    }
+
+    private async Task<(int, decimal?)> SyncPriceListsAsync(decimal? cursor, CancellationToken ct)
+    {
+        decimal? maxTm = null;
+        var rows = await client.ReadAllAsync<LinkoPriceListDto>("price_lists", Since(cursor), page =>
+        {
+            maxTm = Max(maxTm, page.Max(p => p.Tm));
+            return UpsertAsync(page, d => d.Id, db.LinkoPriceLists,
+                d => new LinkoPriceList { Id = d.Id, Name = d.Name ?? "" },
+                (d, e) =>
+                {
+                    e.Name = d.Name ?? "";
+                    e.CurrencyId = d.CurrencyId;
+                    e.Code = d.Code;
+                    e.Tm = d.Tm ?? 0;
+                }, ct);
+        }, ct);
+        return (rows, maxTm);
+    }
+
+    private async Task<(int, decimal?)> SyncPriceListItemsAsync(decimal? cursor, CancellationToken ct)
+    {
+        decimal? maxTm = null;
+        var rows = await client.ReadAllAsync<LinkoPriceListItemDto>("price_list_items", Since(cursor), page =>
+        {
+            maxTm = Max(maxTm, page.Max(p => p.Tm));
+            return UpsertAsync(page, d => d.Id, db.LinkoPriceListItems,
+                d => new LinkoPriceListItem { Id = d.Id },
+                (d, e) =>
+                {
+                    e.ProductId = d.ProductId;
+                    e.PriceListId = d.PriceListId;
+                    e.Price = d.Price ?? 0;
+                    e.CurrencyId = d.CurrencyId;
+                    e.Tm = d.Tm ?? 0;
+                }, ct);
+        }, ct);
+        return (rows, maxTm);
+    }
+
+    private async Task<(int, decimal?)> SyncProvidersAsync(CancellationToken ct)
+    {
+        var rows = await client.ReadAllAsync<LinkoProviderDto>("providers", null, page => UpsertAsync(
+            page, d => d.Id, db.LinkoProviders,
+            d => new LinkoProvider { Id = d.Id, Name = d.Name ?? "" },
+            (d, e) =>
+            {
+                e.Name = d.Name ?? "";
+                e.Tm = d.Tm ?? 0;
+            }, ct), ct);
+        return (rows, null);
+    }
+
+    /// <summary>Валюты Linko отдаёт простым массивом, без results и без пагинации.</summary>
+    private async Task<(int, decimal?)> SyncCurrenciesAsync(CancellationToken ct)
+    {
+        var list = await client.ListAsync<LinkoCurrencyDto>("currencies/", ct);
+        await UpsertAsync(list, d => d.Id, db.LinkoCurrencies,
+            d => new LinkoCurrency { Id = d.Id, Name = d.Name ?? "" },
+            (d, e) => e.Name = d.Name ?? "", ct);
+        return (list.Count, null);
+    }
+
+    private async Task<(int, decimal?)> SyncContractsAsync(decimal? cursor, CancellationToken ct)
+    {
+        decimal? maxTm = null;
+        var rows = await client.ReadAllAsync<LinkoContractDto>("contracts", Since(cursor), page =>
+        {
+            maxTm = Max(maxTm, page.Max(p => p.Tm));
+            return UpsertAsync(page, d => d.Id, db.LinkoContracts,
+                d => new LinkoContract { Id = d.Id },
+                (d, e) =>
+                {
+                    e.Date = d.Date is { } date ? DateOnly.FromDateTime(date) : null;
+                    e.Number = d.Number;
+                    e.Status = d.Status;
+                    e.IsDelete = d.IsDelete ?? false;
+                    e.Tm = d.Tm ?? 0;
+                }, ct);
+        }, ct);
+        return (rows, maxTm);
+    }
+
+    /// <summary>
+    /// Остатки (в штуках). Полная загрузка — снимок целиком: строки, которых в Linko больше нет, удаляются из копии.
+    /// Обновление — только изменённые (tm ≥ last_tm).
+    /// </summary>
+    private async Task<(int, decimal?)> SyncProductBalancesAsync(bool full, decimal? cursor, CancellationToken ct)
+    {
+        decimal? maxTm = null;
+        var seen = new HashSet<(long, long)>();
+        var rows = await client.ReadAllAsync<LinkoProductBalanceDto>("product_balances", full ? null : Since(cursor), async page =>
+        {
+            maxTm = Max(maxTm, page.Max(p => p.Tm));
+            progress.AddRows(page.Count);
+            var items = page.Where(p => p.Product is not null && p.Stock is not null)
+                .GroupBy(p => (Product: p.Product!.Id, Stock: p.Stock!.Id))
+                .Select(g => g.Last())
+                .ToList();
+            var products = items.Select(i => i.Product!.Id).Distinct().ToList();
+            var existing = await db.LinkoProductBalances.Where(b => products.Contains(b.ProductId)).ToListAsync(ct);
+            var byKey = existing.ToDictionary(b => (b.ProductId, b.StockId));
+
+            foreach (var item in items)
+            {
+                var k = (item.Product!.Id, item.Stock!.Id);
+                seen.Add(k);
+                if (!byKey.TryGetValue(k, out var entity))
+                {
+                    entity = new LinkoProductBalance { ProductId = k.Item1, StockId = k.Item2 };
+                    db.LinkoProductBalances.Add(entity);
+                    byKey[k] = entity;
+                }
+
+                entity.Balance = item.Balance ?? 0;
+                entity.Tm = item.Tm ?? 0;
+            }
+
+            await db.SaveChangesAsync(ct);
+            db.ChangeTracker.Clear();
+        }, ct);
+
+        if (full && rows > 0)
+        {
+            var stale = (await db.LinkoProductBalances.Select(b => new { b.ProductId, b.StockId }).ToListAsync(ct))
+                .Where(b => !seen.Contains((b.ProductId, b.StockId)))
+                .GroupBy(b => b.StockId);
+            foreach (var group in stale)
+            {
+                var products = group.Select(b => b.ProductId).ToList();
+                await db.LinkoProductBalances.Where(b => b.StockId == group.Key && products.Contains(b.ProductId)).ExecuteDeleteAsync(ct);
+            }
+        }
+
+        return (rows, maxTm);
+    }
+
+    /// <summary>Перемещения между складами: при полной загрузке — все (их немного), при обновлении — изменённые по last_tm.</summary>
+    private async Task<(int, decimal?)> SyncStockTransfersAsync(bool full, decimal? cursor, CancellationToken ct)
+    {
+        decimal? maxTm = null;
+        var rows = await client.ReadAllAsync<LinkoStockTransferDto>("stock_transfers", full ? null : Since(cursor), async page =>
+        {
+            maxTm = Max(maxTm, page.Max(p => p.Tm));
+            var ids = page.Select(p => p.Id).ToList();
+
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            await db.LinkoStockTransferLines.Where(l => ids.Contains(l.TransferId)).ExecuteDeleteAsync(ct);
+            await UpsertAsync(page, d => d.Id, db.LinkoStockTransfers,
+                d => new LinkoStockTransfer { Id = d.Id, Status = "" },
+                (d, e) =>
+                {
+                    e.Status = d.Status ?? "";
+                    e.FromStockId = d.FromStock?.Id;
+                    e.ToStockId = d.ToStock?.Id;
+                    e.CreatedAt = d.CreatedDate;
+                    e.CreatedDate = d.CreatedDate is { } c ? DateOnly.FromDateTime(c) : null;
+                    e.DeliveryDate = d.DateDelivery is { } dd ? DateOnly.FromDateTime(dd) : null;
+                    e.GivenAt = d.GivenTime;
+                    e.AcceptedAt = d.AcceptedTime;
+                    e.AcceptedDate = d.AcceptedTime is { } a ? DateOnly.FromDateTime(a) : null;
+                    e.TotalWeight = d.TotalWeight ?? 0;
+                    e.TotalPrice = d.TotalPrice ?? 0;
+                    e.PriceListId = d.PriceListId;
+                    e.CurrencyId = d.CurrencyId;
+                    e.InvoiceNumber = d.InvoiceNumber;
+                    e.Tm = d.Tm ?? 0;
+                }, ct);
+
+            db.LinkoStockTransferLines.AddRange(page.SelectMany(t => (t.Products ?? []).Select(l => new LinkoStockTransferLine
+            {
+                Id = l.Id,
+                TransferId = t.Id,
+                ProductId = l.Product?.Id,
+                Amount = l.Amount ?? 0,
+                TotalWeight = l.TotalWeight ?? 0,
+                TotalWeightNetto = l.TotalWeightNetto ?? 0,
+                Price = l.Price ?? 0,
+                TotalPrice = l.TotalPrice ?? 0,
+            })));
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            db.ChangeTracker.Clear();
+        }, ct);
+        return (rows, maxTm);
+    }
+
+    /// <summary>Платежи: при полной загрузке — свежее окно (по дате создания), при обновлении — изменённые по last_tm.</summary>
+    private async Task<(int, decimal?)> SyncPaymentsAsync(Dictionary<string, string?> filters, CancellationToken ct)
+    {
+        decimal? maxTm = null;
+        var rows = await client.ReadAllAsync<LinkoPaymentDto>("payments", filters, page =>
+        {
+            maxTm = Max(maxTm, page.Max(p => p.Tm));
+            return UpsertAsync(page, d => d.Id, db.LinkoPayments,
+                d => new LinkoPayment { Id = d.Id },
+                (d, e) =>
+                {
+                    e.Amount = d.Amount ?? 0;
+                    e.CurrencyId = d.Currency?.Id is > 0 ? d.Currency.Id : null;
+                    e.CurrencyName = d.Currency?.Name;
+                    e.MarketId = d.Market?.Id is > 0 ? d.Market.Id : null;
+                    e.PaymentType = d.PaymentType;
+                    e.Type = d.Type;
+                    e.Status = d.Status;
+                    e.UserId = d.User?.Id is > 0 ? d.User.Id : null; // пустой объект {} — нет агента
+                    e.CreatedDate = d.CreatedDate is { } c ? DateOnly.FromDateTime(c) : null;
+                    e.AcceptedAt = d.AcceptedTime;
+                    e.OrderId = d.OrderId;
+                    e.IsDelete = d.IsDelete ?? false;
+                    e.Tm = d.Tm ?? 0;
+                }, ct);
+        }, ct);
+        return (rows, maxTm);
     }
 
     private async Task<(int, decimal?)> SyncKpiPlansAsync(CancellationToken ct)

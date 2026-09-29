@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using OneBase.Api.Auth;
 using OneBase.Application.Sales;
 using OneBase.Application.Sales.Metrics;
+using OneBase.Application.Sales.Primary;
+using OneBase.Application.Sales.Stock;
 using OneBase.Application.Security;
 using OneBase.Domain.Sales;
 
@@ -74,6 +76,33 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         [FromQuery] bool vacancies = false,
         CancellationToken ct = default) =>
         (await Load(q, ct)).CachedProblems(string.IsNullOrEmpty(direction) ? null : direction, criterion, vacancies);
+
+    /// <summary>Магазин за месяц; agent — только продажи этого ТП в магазин.</summary>
+    [HttpGet("stores/{id:long}")]
+    public async Task<ActionResult<StoreView>> Store(long id, [FromQuery] PeriodQuery q, [FromQuery] long? agent, CancellationToken ct)
+    {
+        var analytics = await Load(q, ct);
+        return analytics.HasMarket(id) ? analytics.CachedStore(id, agent) : NotFound();
+    }
+
+    /// <summary>Экспорт и опт — филиал «Завод»: отдельно от вторички.</summary>
+    [HttpGet("export")]
+    public async Task<ExportView> Export([FromQuery] PeriodQuery q, CancellationToken ct) => (await Load(q, ct)).CachedExport();
+
+    /// <summary>Вкладка «Ассортимент»: республика, направление (direction) или регион (region).</summary>
+    [HttpGet("assortment")]
+    public async Task<AssortmentView> Assortment([FromQuery] PeriodQuery q, [FromQuery] string? direction, [FromQuery] Guid? region, CancellationToken ct) =>
+        (await Load(q, ct)).CachedAssortment(string.IsNullOrEmpty(direction) ? null : direction, region);
+
+    /// <summary>Рекомендуемый остаток: остатки Linko (штуки → кг → коробки) по складам регионов и скорость продаж.</summary>
+    [HttpGet("stock")]
+    public Task<StockView> Stock([FromServices] StockService stock, [FromQuery] string? region, CancellationToken ct) =>
+        stock.GetAsync(string.IsNullOrEmpty(region) ? null : region, ct);
+
+    /// <summary>Первичка: отгрузки завода дилерам (перемещения со склада завода) за месяц и год.</summary>
+    [HttpGet("primary")]
+    public Task<PrimaryView> Primary([FromServices] PrimaryService primary, [FromQuery] int? year, [FromQuery] int? month, CancellationToken ct) =>
+        primary.GetAsync(year, month, ct);
 
     private Task<SalesAnalytics> Load(PeriodQuery q, CancellationToken ct) => loader.LoadAsync(q.Year, q.Month, q.Plan, ct);
 }

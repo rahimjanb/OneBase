@@ -104,6 +104,66 @@ public sealed record LinkoVisitDto(
     bool? IsInPlan,
     DateTime Date);
 
+// ---------- Склады, остатки, перемещения ----------
+
+public sealed record LinkoStockDto(long Id, string? Name, string? Code, string? Address, decimal? Tm);
+
+/// <summary>Остаток в штуках. Linko отдаёт balance строкой («0.000000000») — разбирается как число, не как «непустая строка».</summary>
+public sealed record LinkoProductBalanceDto(LinkoRef? Product, LinkoRef? Stock, decimal? Balance, decimal? Tm);
+
+public sealed record LinkoStockTransferLineDto(
+    long Id,
+    LinkoRef? Product,
+    decimal? Amount,
+    decimal? TotalWeight,
+    decimal? TotalWeightNetto,
+    decimal? Price,
+    decimal? TotalPrice);
+
+public sealed record LinkoStockTransferDto(
+    long Id,
+    decimal? Tm,
+    string? Status,
+    LinkoRef? FromStock,
+    LinkoRef? ToStock,
+    List<LinkoStockTransferLineDto>? Products,
+    DateTime? CreatedDate,
+    DateTime? DateDelivery,
+    DateTime? GivenTime,
+    DateTime? AcceptedTime,
+    decimal? TotalWeight,
+    decimal? TotalPrice,
+    long? PriceListId,
+    long? CurrencyId,
+    string? InvoiceNumber);
+
+// ---------- Платежи и справочники ----------
+
+public sealed record LinkoPaymentDto(
+    long Id,
+    decimal? Amount,
+    LinkoRef? Currency,
+    LinkoRef? Market,
+    string? PaymentType,
+    string? Type,
+    string? Status,
+    LinkoRef? User,
+    DateTime? CreatedDate,
+    DateTime? AcceptedTime,
+    long? OrderId,
+    bool? IsDelete,
+    decimal? Tm);
+
+public sealed record LinkoPriceListDto(long Id, string? Name, long? CurrencyId, string? Code, decimal? Tm);
+
+public sealed record LinkoPriceListItemDto(long Id, long? ProductId, long? PriceListId, decimal? Price, long? CurrencyId, decimal? Tm);
+
+public sealed record LinkoProviderDto(long Id, string? Name, decimal? Tm);
+
+public sealed record LinkoCurrencyDto(long Id, string? Name);
+
+public sealed record LinkoContractDto(long Id, DateTime? Date, string? Number, string? Status, bool? IsDelete, decimal? Tm);
+
 // ---------- API планов (staff_balance) ----------
 // Читаются только нужные поля: зарплата, бонусы и контакты сотрудников не загружаются.
 

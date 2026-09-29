@@ -167,6 +167,7 @@ export type OverviewView = {
   flags: FlagCounts;
   vacancies: number;
   republic: UnitRow;
+  excluded: ExcludedSummary | null;
 };
 
 export type GroupView = {
@@ -182,6 +183,8 @@ export type GroupView = {
   notBought: NotBoughtRow[];
   categoryCards: CategoryCard[];
   akbMonths: AkbByMonth;
+  quality: DataQuality;
+  excluded: ExcludedSummary | null;
 };
 
 /** АКБ по месяцам года: итог и по категориям. null — данных за месяц нет. */
@@ -275,6 +278,7 @@ export type RegionView = {
   notInDirectory: { agentId: number; name: string; kg: number; revenue: number }[];
   categoryCards: CategoryCard[];
   akbMonths: AkbByMonth;
+  quality: DataQuality;
 };
 
 export type MedianValue = { value: number | null; regionMedian: number | null };
@@ -311,6 +315,7 @@ export type AgentView = {
   silentPrevRevenue: number;
   silent: SilentMarket[];
   newMarkets: NewMarket[];
+  assortment: AgentAssortment | null;
 };
 
 export type ProblemAgent = {
@@ -341,3 +346,188 @@ export type SyncStatus = {
 };
 
 export type SalesMonth = { year: number; month: number };
+
+// ---------- Качество данных, «Завод», магазин, ассортимент, остатки, первичка ----------
+
+export type UncategorizedType = { id: string; name: string; kg: number; revenue: number; orders: number };
+
+export type DataQuality = {
+  deliveredWithoutAcceptance: number;
+  zeroHeaderReturns: number;
+  zeroHeaderReturnsKg: number;
+  returnsWithoutLines: number;
+  returnsWithoutLinesHeaderKg: number;
+  uncategorized: UncategorizedType[];
+};
+
+/** Филиал «Завод» (экспорт и опт) — отдельно от вторички. */
+export type ExcludedSummary = {
+  factKg: number;
+  revenue: number;
+  orders: number;
+  akb: number;
+  forecastKg: number | null;
+  prevMonthKg: number;
+  vsPrevMonth: number | null;
+};
+
+export type ProductRow = {
+  productId: number;
+  name: string;
+  code: string | null;
+  category: string;
+  inReport: boolean;
+  kg: number;
+  revenue: number;
+  share: number | null;
+  akb: number;
+  distribution: number | null;
+};
+
+export type AgentAssortment = {
+  categories: CategoryCard[];
+  stores: { marketId: number; name: string; kg: number; revenue: number; categories: number; positions: number; share: number | null }[];
+  products: ProductRow[];
+  lagging: {
+    productId: number;
+    name: string;
+    category: string;
+    agentAkb: number;
+    agentDistribution: number | null;
+    regionDistribution: number | null;
+    regionRevenue: number;
+  }[];
+};
+
+export type StoreView = {
+  period: Period;
+  marketId: number;
+  name: string;
+  regionId: string | null;
+  regionName: string | null;
+  agentId: number | null;
+  agentName: string | null;
+  factKg: number;
+  revenue: number;
+  orders: number;
+  categories: number;
+  positions: number;
+  shareOfAgent: number | null;
+  prevMonthKg: number;
+  prevMonthRevenue: number;
+  categoryRows: { name: string; kg: number; revenue: number; share: number | null }[];
+  products: { productId: number; name: string; code: string | null; category: string; kg: number; revenue: number }[];
+  agents: string[];
+};
+
+export type ExportView = {
+  period: Period;
+  summary: ExcludedSummary | null;
+  categories: CategoryCard[];
+  markets: { marketId: number; name: string; kg: number; revenue: number; orders: number; prevMonthKg: number }[];
+  agents: { agentId: number | null; name: string; kg: number; revenue: number; markets: number }[];
+  products: ProductRow[];
+};
+
+export type MatrixLevel = "none" | "low" | "ok";
+
+export type AssortmentView = {
+  period: Period;
+  scopeName: string;
+  categories: CategoryCard[];
+  akbMonths: AkbByMonth;
+  regions: { id: string; name: string; kg: number; revenue: number; skuSelling: number; skuNotCarried: number; skuLost: number; akb: number }[];
+  products: ProductRow[];
+  matrixRegions: { id: string; name: string }[];
+  matrix: {
+    productId: number;
+    name: string;
+    category: string;
+    revenue: number;
+    averageDistribution: number | null;
+    cells: { regionId: string; distribution: number | null; level: MatrixLevel }[];
+  }[];
+  quality: DataQuality;
+};
+
+export type StockStatus = "deficit" | "overstock" | "dead" | "ok" | "unknown";
+
+export type StockCell = { pieces: number; kg: number | null; kgPerDay: number | null; daysOfCover: number | null };
+
+export type StockItem = {
+  productId: number;
+  name: string;
+  code: string | null;
+  category: string;
+  inReport: boolean;
+  unitKg: number | null;
+  unitKgSource: "orders" | "none";
+  boxKg: number | null;
+  boxNote: string;
+  pieces: number;
+  kg: number | null;
+  boxes: number | null;
+  kgPerDay: number | null;
+  daysOfCover: number | null;
+  need15Kg: number | null;
+  status: StockStatus;
+  regions: Record<string, StockCell>;
+  factory: StockCell | null;
+};
+
+export type StockTotals = {
+  kg: number | null;
+  boxes: number | null;
+  kgPerDay: number | null;
+  daysOfCover: number | null;
+  deficit: number;
+  overstock: number;
+  dead: number;
+  withoutWeight: number;
+};
+
+export type StockView = {
+  syncedAt: string | null;
+  velocityDays: number;
+  velocityFrom: string;
+  velocityTo: string;
+  regions: { id: string; name: string; stockId: number }[];
+  factory: { id: string; name: string; stockId: number } | null;
+  items: StockItem[];
+  otherStocks: { stockId: number; name: string; pieces: number; kg: number | null; items: number }[];
+  totals: StockTotals;
+  factoryTotals: StockTotals | null;
+};
+
+export type PrimaryView = {
+  year: number;
+  month: number;
+  dataThrough: string | null;
+  daysInMonth: number;
+  syncedAt: string | null;
+  factoryStock: string | null;
+  kg: number;
+  sum: number;
+  shipments: number;
+  dealers: number;
+  shipmentDays: number;
+  forecastKg: number | null;
+  prevMonthKg: number;
+  toFactoryKg: number;
+  toFactoryTransfers: number;
+  monthsAvailable: number[];
+  months: { month: number; kg: number; sum: number; toFactoryKg: number }[];
+  dealerRows: {
+    stockId: number;
+    name: string;
+    regionId: string | null;
+    kg: number;
+    sum: number;
+    shipments: number;
+    share: number | null;
+    days: (number | null)[];
+    months: number[];
+  }[];
+  categories: { name: string; inReport: boolean; kg: number; sum: number; share: number | null; months: number[] }[];
+  items: { productId: number; name: string; code: string | null; category: string; pieces: number; kg: number; sum: number; sumPerKg: number | null }[];
+};

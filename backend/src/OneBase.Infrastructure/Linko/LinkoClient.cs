@@ -95,6 +95,10 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
         return result.Count;
     }
 
+    /// <summary>Ресурс, который отдаётся простым массивом без пагинации (currencies/).</summary>
+    public async Task<List<T>> ListAsync<T>(string path, CancellationToken ct = default) =>
+        await SendAsync<List<T>>(await ReadyAsync(ct), path, null, options.MaxAttempts, ct);
+
     /// <summary>Один GET с произвольным ответом — для диагностики (команда linko-audit). Только чтение.</summary>
     public async Task<JsonElement> GetJsonAsync(string path, IDictionary<string, string?>? query = null, CancellationToken ct = default) =>
         await SendAsync<JsonElement>(await ReadyAsync(ct), path, query, options.MaxAttempts, ct);

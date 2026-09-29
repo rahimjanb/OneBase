@@ -105,6 +105,78 @@ internal static class SalesModel
             e.HasKey(x => x.Entity);
             e.Property(x => x.Entity).HasMaxLength(64);
         });
+
+        b.Entity<LinkoStock>(e =>
+        {
+            e.ToTable("Stocks", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<LinkoProductBalance>(e =>
+        {
+            e.ToTable("ProductBalances", "linko");
+            e.HasKey(x => new { x.ProductId, x.StockId });
+            e.HasIndex(x => x.StockId);
+        });
+
+        b.Entity<LinkoStockTransfer>(e =>
+        {
+            e.ToTable("StockTransfers", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.CreatedAt).HasColumnType("timestamp without time zone");
+            e.Property(x => x.GivenAt).HasColumnType("timestamp without time zone");
+            e.Property(x => x.AcceptedAt).HasColumnType("timestamp without time zone");
+            e.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.TransferId);
+            e.HasIndex(x => x.CreatedDate);
+            e.HasIndex(x => x.AcceptedDate);
+            e.HasIndex(x => x.FromStockId);
+        });
+
+        b.Entity<LinkoStockTransferLine>(e =>
+        {
+            e.ToTable("StockTransferLines", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<LinkoPayment>(e =>
+        {
+            e.ToTable("Payments", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.AcceptedAt).HasColumnType("timestamp without time zone");
+            e.HasIndex(x => x.CreatedDate);
+            e.HasIndex(x => x.MarketId);
+        });
+
+        b.Entity<LinkoPriceList>(e =>
+        {
+            e.ToTable("PriceLists", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<LinkoPriceListItem>(e =>
+        {
+            e.ToTable("PriceListItems", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.HasIndex(x => new { x.PriceListId, x.ProductId });
+        });
+
+        b.Entity<LinkoProvider>(e =>
+        {
+            e.ToTable("Providers", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<LinkoCurrency>(e =>
+        {
+            e.ToTable("Currencies", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<LinkoContract>(e =>
+        {
+            e.ToTable("Contracts", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
     }
 
     public static void ConfigureSales(ModelBuilder b)

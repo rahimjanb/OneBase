@@ -296,7 +296,8 @@ public sealed record AgentView(
     int SilentBase,
     decimal SilentPrevRevenue,
     IReadOnlyList<SilentMarket> Silent,
-    IReadOnlyList<NewMarket> NewMarkets);
+    IReadOnlyList<NewMarket> NewMarkets,
+    AgentAssortment? Assortment = null);
 
 public sealed record ProblemAgent(
     long AgentId,

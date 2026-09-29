@@ -1,5 +1,5 @@
 import { AkbChart } from "./AkbChart";
-import { KpiRow, UnassignedWarning, UnitCard } from "./blocks";
+import { DataQualityNotes, KpiRow, UnassignedWarning, UnitCard } from "./blocks";
 import { VisitCalendarTable } from "./calendars";
 import { CategoryCards } from "./categories";
 import { NotBoughtTable, RegionsTable, SameDaysTable } from "./tables";
@@ -84,6 +84,7 @@ export function GroupPage({
         workedDays={period.workedDays}
         daysInMonth={period.daysInMonth}
       />
+      <DataQualityNotes quality={data.quality} />
     </>
   );
 }

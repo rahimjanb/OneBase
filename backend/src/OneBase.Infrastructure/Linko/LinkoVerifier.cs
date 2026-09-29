@@ -34,6 +34,14 @@ public sealed class LinkoVerifier(LinkoClient client, OneBaseDbContext db, Linko
             ("orders", window, () => db.LinkoOrders.CountAsync(o => o.CreatedDate >= from && o.CreatedDate <= to, ct)),
             ("order_returns", window, () => db.LinkoOrderReturns.CountAsync(r => r.CreatedDate >= from && r.CreatedDate <= to, ct)),
             ("visits", window, () => db.LinkoVisits.CountAsync(v => v.Day >= from && v.Day <= to, ct)),
+            ("stocks", null, () => db.LinkoStocks.CountAsync(ct)),
+            ("product_balances", null, () => db.LinkoProductBalances.CountAsync(ct)),
+            ("stock_transfers", null, () => db.LinkoStockTransfers.CountAsync(ct)),
+            ("price_lists", null, () => db.LinkoPriceLists.CountAsync(ct)),
+            ("price_list_items", null, () => db.LinkoPriceListItems.CountAsync(ct)),
+            ("providers", null, () => db.LinkoProviders.CountAsync(ct)),
+            ("currencies", null, () => db.LinkoCurrencies.CountAsync(ct)),
+            ("contracts", null, () => db.LinkoContracts.CountAsync(ct)),
         };
 
         var rows = new List<LinkoVerifyRow>();

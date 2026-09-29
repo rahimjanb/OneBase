@@ -45,6 +45,16 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<LinkoVisit> LinkoVisits => Set<LinkoVisit>();
     public DbSet<LinkoKpiPlan> LinkoKpiPlans => Set<LinkoKpiPlan>();
     public DbSet<LinkoSyncState> LinkoSyncStates => Set<LinkoSyncState>();
+    public DbSet<LinkoStock> LinkoStocks => Set<LinkoStock>();
+    public DbSet<LinkoProductBalance> LinkoProductBalances => Set<LinkoProductBalance>();
+    public DbSet<LinkoStockTransfer> LinkoStockTransfers => Set<LinkoStockTransfer>();
+    public DbSet<LinkoStockTransferLine> LinkoStockTransferLines => Set<LinkoStockTransferLine>();
+    public DbSet<LinkoPayment> LinkoPayments => Set<LinkoPayment>();
+    public DbSet<LinkoPriceList> LinkoPriceLists => Set<LinkoPriceList>();
+    public DbSet<LinkoPriceListItem> LinkoPriceListItems => Set<LinkoPriceListItem>();
+    public DbSet<LinkoProvider> LinkoProviders => Set<LinkoProvider>();
+    public DbSet<LinkoCurrency> LinkoCurrencies => Set<LinkoCurrency>();
+    public DbSet<LinkoContract> LinkoContracts => Set<LinkoContract>();
 
     // Продажи: оргструктура, планы, цели
     public DbSet<SalesDirection> SalesDirections => Set<SalesDirection>();

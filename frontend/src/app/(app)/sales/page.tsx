@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { KpiRow, UnitCard } from "@/components/sales/blocks";
+import { ExportCard, KpiRow, UnitCard } from "@/components/sales/blocks";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGet } from "@/lib/server-api";
 import { num } from "@/lib/sales/format";
@@ -33,6 +33,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       <p className="mt-1 text-sm text-ink-2">Нажмите на карточку, чтобы перейти к регионам и торговым представителям.</p>
       <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <UnitCard unit={data.republic} href={withQuery("/sales/republic", q)} />
+        {data.excluded && <ExportCard data={data.excluded} href={withQuery("/sales/export", q)} />}
       </div>
     </SalesFrame>
   );

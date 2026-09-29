@@ -7,7 +7,7 @@ namespace OneBase.Application.Sales.Metrics;
 /// Факт региона считается по branch строк продаж, поэтому:
 /// сумма по регионам = итог республики; сумма по ТП региона + факт без агента = итог региона.
 /// </summary>
-public sealed class SalesAnalytics
+public sealed partial class SalesAnalytics
 {
     public static readonly Guid NoRegionId = Guid.Empty;
     public const string NoDirectionId = "none";
@@ -261,7 +261,8 @@ public sealed class SalesAnalytics
             prevMarkets.Count,
             silent.Sum(s => s.PrevRevenue),
             silent,
-            newMarkets);
+            newMarkets,
+            AgentAssortmentOf(id, regionId));
     }
 
     public ProblemsView Problems(string? directionId, FlagKind? criterion, bool includeVacancies)
@@ -665,10 +666,12 @@ public sealed class SalesAnalytics
     /// Доля по весу и дистрибуция — от итога подразделения; «к прошлому месяцу» — прогноз месяца к факту всего прошлого месяца.
     /// Типы вне настройки (импорт, бонус) сюда не входят — они в диагностике (QualityOf).
     /// </summary>
-    private List<CategoryCard> CategoryCardsOf(IReadOnlySet<Guid>? scope)
+    private List<CategoryCard> CategoryCardsOf(IReadOnlySet<Guid>? scope) =>
+        CategoryCardsFor(Lines(scope).ToList(), scope is null ? _d.Previous : scope.SelectMany(r => _previousByRegion[r]).ToList());
+
+    /// <summary>Карточки категорий по произвольному набору строк (подразделение, агент, экспорт).</summary>
+    private List<CategoryCard> CategoryCardsFor(IReadOnlyList<SaleLine> lines, IReadOnlyList<SaleLine> previousLines)
     {
-        var lines = Lines(scope).ToList();
-        var previousLines = scope is null ? _d.Previous : scope.SelectMany(r => _previousByRegion[r]).ToList();
         var totalKg = lines.Sum(l => l.Kg);
         var akb = SalesMath.Akb(lines);
 

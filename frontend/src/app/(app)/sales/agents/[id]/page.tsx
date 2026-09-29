@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { FlagPills, KpiTile, Section } from "@/components/sales/bits";
 import { CategoryPlanBars, IndicatorBars, PlanBadge } from "@/components/sales/blocks";
+import { AgentStoresTable, LaggingTable, ProductsTable } from "@/components/sales/assortment-tables";
+import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { NewMarketsTable, SameDaysTable, SilentMarketsTable } from "@/components/sales/tables";
 import { apiGetOrNull } from "@/lib/server-api";
@@ -102,8 +104,16 @@ export default async function AgentPage({
       </div>
 
       <Findings flags={data.flags} />
+      {data.assortment && <CategoryCards cards={data.assortment.categories} scope="продажах этого ТП" />}
       <IndicatorBars rows={data.indicators} />
       <CategoryPlanBars rows={data.categoryPlan} />
+      {data.assortment && (
+        <>
+          <AgentStoresTable rows={data.assortment.stores} agentId={data.agentId} query={q} />
+          <ProductsTable rows={data.assortment.products} />
+          <LaggingTable rows={data.assortment.lagging} />
+        </>
+      )}
       <SameDaysTable rows={[data.sameDays]} nameLabel="ТП" hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`} query={q} />
       <SilentMarketsTable
         rows={data.silent}
