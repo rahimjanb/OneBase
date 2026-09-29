@@ -72,7 +72,8 @@ public sealed record LinkoOrderDto(
     bool? IsFullReturn,
     LinkoRef? Currency,
     List<LinkoOrderLineDto>? Products,
-    decimal? Tm);
+    decimal? Tm,
+    DateTime? AcceptedTime = null);
 
 public sealed record LinkoReturnLineDto(
     long Id,

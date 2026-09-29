@@ -37,16 +37,17 @@ public class SalesMathTests
     }
 
     [Fact]
-    public void Akb_ignores_outlet_whose_purchase_was_fully_returned()
+    public void Returns_do_not_reduce_akb()
     {
         var lines = new[]
         {
             Sale(agent: 1, market: 10, revenue: 100),
-            Sale(agent: 1, market: 10, revenue: -100, order: null), // возврат
+            Sale(agent: 1, market: 10, revenue: -100, order: null), // возврат всей покупки
             Sale(agent: 1, market: 11, revenue: 30, order: 2),
+            Sale(agent: 1, market: 12, revenue: -50, order: null), // возврат без заказа в месяце
         };
 
-        Assert.Equal(1, SalesMath.Akb(lines));
+        Assert.Equal(2, SalesMath.Akb(lines)); // ТТ 10 покупку делала — остаётся в АКБ; ТТ 12 без заказа — не входит
         Assert.Equal(2, SalesMath.OrderCount(lines)); // возврат не заказ
     }
 
@@ -128,22 +129,25 @@ public class SalesMathTests
     }
 
     [Fact]
-    public void Category_subtypes_are_grouped_by_name_prefix()
+    public void Report_categories_follow_configured_type_mapping_and_keep_unknown_types_separate()
     {
-        var groups = SalesMath.CategoryGroups(new Dictionary<long, string>
+        var linkoTypes = new Dictionary<long, string>
         {
-            [8] = "Помадка",
-            [20] = "Помадка 0,420 кг",
-            [21] = "Помадка 0,5 кг",
-            [5] = "Шоколад",
-            [15] = "Импорт Шоколад",
-            [9] = "Трубочки",
-        });
+            [8] = "Помадка", [20] = "Помадка 0,420 кг", [21] = "Помадка 0,5 кг", [22] = "Снек", [15] = "Импорт Шоколад", [16] = "бонус",
+        };
+        var cats = OneBase.Application.Sales.SalesCategories.Build(
+            new Dictionary<string, string> { ["Придзел"] = "22", ["Помадка"] = "8,20,21" }, linkoTypes);
 
-        Assert.Equal(8, groups[20]);
-        Assert.Equal(8, groups[21]);
-        Assert.Equal(8, groups[8]);
-        Assert.Equal(15, groups[15]); // «Импорт Шоколад» — не подтип «Шоколада»
-        Assert.Equal(9, groups[9]);
+        Assert.Equal(cats.GroupOf(8), cats.GroupOf(20)); // пять фасовок — одна категория
+        Assert.Equal(cats.GroupOf(8), cats.GroupOf(21));
+        Assert.Equal("Помадка", cats.NameOf(cats.GroupOf(21)));
+        Assert.Equal("Придзел", cats.NameOf(cats.GroupOf(22))); // «Снек» в отчёте — «Придзел»
+        Assert.True(OneBase.Application.Sales.SalesCategories.IsConfigured(cats.GroupOf(22)));
+
+        // Импорт и бонус не входят в категории отчёта, но и не пропадают: у них своя строка с именем из Linko.
+        Assert.False(OneBase.Application.Sales.SalesCategories.IsConfigured(cats.GroupOf(15)));
+        Assert.Equal("Импорт Шоколад", cats.NameOf(cats.GroupOf(15)));
+        Assert.Equal("Тип 99", cats.NameOf(cats.GroupOf(99))); // тип, которого нет даже в справочнике
+        Assert.Null(cats.GroupOf(null));
     }
 }

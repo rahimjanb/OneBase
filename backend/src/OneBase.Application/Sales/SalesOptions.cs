@@ -2,11 +2,14 @@ namespace OneBase.Application.Sales;
 
 public enum SaleDateField
 {
-    /// <summary>Дата создания заказа (created_date).</summary>
+    /// <summary>Дата создания заказа (created_date) — день ввода, для отчёта не годится (заказы вводят задним числом).</summary>
     Created,
 
-    /// <summary>Дата доставки (date_delivery).</summary>
+    /// <summary>Плановая дата доставки (date_delivery) — назначается и на воскресенье, когда приёмок нет.</summary>
     Delivery,
+
+    /// <summary>Приёмка магазином (accepted_time) — дата реализации; так же считает супер-отчёт Linko.</summary>
+    Accepted,
 }
 
 /// <summary>Настройки аналитики продаж (секция "Sales" в appsettings).</summary>
@@ -20,7 +23,43 @@ public sealed class SalesOptions
     /// <summary>Статусы возвратов, которые вычитаются из продаж.</summary>
     public string[] ReturnStatuses { get; set; } = ["delivered"];
 
-    public SaleDateField DateField { get; set; } = SaleDateField.Created;
+    public SaleDateField DateField { get; set; } = SaleDateField.Accepted;
+
+    /// <summary>
+    /// Филиалы заказов, которые не входят во вторичку. «Завод» — экспорт и крупный опт (Казахстан, Монголия,
+    /// Киргизия…), не регион: в республике он завысил бы факт на треть. Показывается отдельным блоком.
+    /// Сравнение по названию филиала, без учёта регистра.
+    /// </summary>
+    public string[] ExcludedBranches { get; set; } = ["Завод"];
+
+    /// <summary>
+    /// Категории отчёта: название → типы товаров Linko (product.type), через запятую. Помадка — пять фасовок
+    /// одной категорией; «Снек» (Twizos) в отчёте называется «Придзел». Типы, которых здесь нет (импорт, бонус,
+    /// оборудование), в восемь категорий не входят и показываются в диагностике с весом и суммой.
+    /// </summary>
+    public Dictionary<string, string> Categories { get; set; } = new()
+    {
+        ["Бамбук"] = "4",
+        ["Кекс"] = "10",
+        ["Трубочки"] = "9",
+        ["Печенье"] = "6",
+        ["Шоколад"] = "5",
+        ["Песочный"] = "7",
+        ["Придзел"] = "22",
+        ["Помадка"] = "8,17,18,19,20,21",
+    };
+
+    /// <summary>Тип товара → название категории отчёта.</summary>
+    public IReadOnlyDictionary<long, string> CategoryByType() =>
+        Categories
+            .SelectMany(c => c.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(t => long.TryParse(t, out var id) ? (Id: id, Name: c.Key) : (Id: -1, Name: c.Key)))
+            .Where(x => x.Id >= 0)
+            .GroupBy(x => x.Id)
+            .ToDictionary(g => g.Key, g => g.First().Name);
+
+    public bool IsExcludedBranch(string? branchName) =>
+        branchName is { } name && ExcludedBranches.Any(b => string.Equals(b.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
 
     public SalesSyncOptions Sync { get; set; } = new();
 

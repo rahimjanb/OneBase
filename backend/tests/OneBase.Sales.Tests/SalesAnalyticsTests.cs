@@ -25,9 +25,14 @@ public class SalesAnalyticsTests
         IReadOnlyDictionary<long, string>? categories = null,
         IReadOnlyDictionary<long, ProductInfo>? products = null,
         IReadOnlySet<long>? activeSkus = null,
-        IReadOnlyList<MonthlyAkb>? akbHistory = null) => new()
+        IReadOnlyList<MonthlyAkb>? akbHistory = null,
+        IReadOnlyDictionary<string, string>? reportCategories = null,
+        IReadOnlyList<SaleLine>? visitOrders = null,
+        IReadOnlyList<VisitRecord>? visits = null) => new()
     {
         AkbHistory = akbHistory ?? [],
+        CategoryMap = reportCategories is null ? null : SalesCategories.Build(reportCategories, categories ?? new Dictionary<long, string> { [1] = "Печенье" }),
+        VisitOrders = visitOrders,
         Year = 2026,
         Month = 9,
         DataThrough = new DateOnly(2026, 9, 10),
@@ -43,7 +48,7 @@ public class SalesAnalyticsTests
         Products = products ?? new Dictionary<long, ProductInfo>(),
         ActiveSkus = activeSkus ?? new HashSet<long>(),
         Previous = previous ?? [],
-        Visits = [],
+        Visits = visits ?? [],
         History = [],
         Plans = plans ?? [new PlanRow(North, null, 9, null, 300), new PlanRow(South, null, 9, null, 60)],
         RevenuePlans = revenuePlans ?? [],
@@ -201,6 +206,7 @@ public class SalesAnalyticsTests
             current: [Sku(100, 1, market: 10, kg: 60), Sku(101, 2, market: 11, kg: 40), Sku(200, 3, market: 12, kg: 100)],
             previous: [Sku(102, 2, market: 12, kg: 30, month: 8), Sku(200, 3, market: 12, kg: 50, month: 8)],
             categories: new Dictionary<long, string> { [1] = "Помадка", [2] = "Помадка 0,5 кг", [3] = "Печенье" },
+            reportCategories: new Dictionary<string, string> { ["Помадка"] = "1,2", ["Печенье"] = "3" },
             products: new Dictionary<long, ProductInfo>
             {
                 [100] = new(100, "Помадка А", "A", 1),
@@ -232,6 +238,38 @@ public class SalesAnalyticsTests
         var cookies = Assert.Single(cards, c => c.Name == "Печенье");
         Assert.Equal((1, 1, 0, 0), (cookies.SkuSold, cookies.SkuTotal, cookies.Silent, cookies.Lost));
         Assert.Equal(5m, cookies.VsPrevMonth); // прогноз 300 к 50 кг августа
+    }
+
+    [Fact]
+    public void Product_types_outside_report_categories_are_not_lost_but_shown_in_diagnostics()
+    {
+        var data = Data(
+            current: [Sku(100, 1, market: 10, kg: 60), Sku(900, 16, market: 11, kg: 2)],
+            categories: new Dictionary<long, string> { [1] = "Бамбук", [16] = "бонус" },
+            reportCategories: new Dictionary<string, string> { ["Бамбук"] = "1" });
+
+        var republic = new SalesAnalytics(data).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
+
+        Assert.Equal("Бамбук", Assert.Single(republic.CategoryCards).Name);
+        var bonus = Assert.Single(republic.Quality.Uncategorized);
+        Assert.Equal(("бонус", 2m, 1), (bonus.Name, bonus.Kg, bonus.Orders));
+        Assert.Equal(62m, republic.Kpi.FactKg); // в итоге они есть — просто не входят в восемь категорий
+    }
+
+    [Fact]
+    public void Visit_matches_the_order_by_creation_date_not_by_acceptance_date()
+    {
+        // Агент был в ТТ 10-го и ввёл заказ; магазин принял товар 11-го — продажа 11-го, а визит «с заказом» — 10-го.
+        var accepted = new SaleLine(new DateOnly(2026, 9, 11), 1, 10, 101, 1, 100, 50, 500, 7);
+        var created = accepted with { Date = new DateOnly(2026, 9, 10) };
+        var visits = new[] { new VisitRecord(new DateOnly(2026, 9, 10), 1, 10, VisitStatus.Done, true) };
+
+        var byCreation = new SalesAnalytics(Data(current: [accepted], visitOrders: [created], visits: visits)).Agent(1);
+        var byAcceptance = new SalesAnalytics(Data(current: [accepted], visits: visits)).Agent(1);
+
+        Assert.Equal(1m, byCreation.Conversion.Value);
+        Assert.Equal(0m, byAcceptance.Conversion.Value); // сшивка по дате приёмки теряет визит
+        Assert.Equal(50m, byCreation.FactKg);
     }
 
     [Fact]

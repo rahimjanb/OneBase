@@ -44,7 +44,11 @@ public interface ISalesHistoryReader
 
 public sealed record SalesMonth(int Year, int Month);
 
-/// <summary>Читает данные месяца из нашей БД (не из Linko) и собирает SalesAnalytics. Результат кэшируется.</summary>
+
+/// <summary>
+/// Читает данные месяца из нашей копии Linko (не из Linko) и собирает SalesAnalytics. Результат кэшируется.
+/// Что считается продажей, возвратом и заказом для визита — решает SecondarySales; здесь только выборка строк.
+/// </summary>
 public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMemoryCache cache, SalesCacheSignal signal, ISalesHistoryReader history)
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
@@ -53,14 +57,48 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
     /// <summary>Один пересчёт за раз: запрос пользователя и прогрев после синхронизации не считают одно и то же дважды.</summary>
     private static readonly SemaphoreSlim BuildGate = new(1, 1);
 
-    /// <summary>Месяцы, за которые есть продажи — от новых к старым.</summary>
+    /// <summary>«Живой» ассортимент: SKU, проданные за столько месяцев до выбранного (плюс сам месяц).</summary>
+    private const int AssortmentMonths = 6;
+
+    /// <summary>Заказ с датой реализации по настройке (по умолчанию — дата приёмки).</summary>
+    private sealed class DatedOrder
+    {
+        public long Id { get; init; }
+        public DateOnly? Date { get; init; }
+        public string Status { get; init; } = "";
+        public string? BranchName { get; init; }
+        public long? BranchId { get; init; }
+        public long? AgentId { get; init; }
+        public decimal TotalWeight { get; init; }
+    }
+
+    private IQueryable<DatedOrder> Dated() => options.DateField switch
+    {
+        SaleDateField.Accepted => db.LinkoOrders.Select(o => new DatedOrder
+        {
+            Id = o.Id, Date = o.AcceptedDate, Status = o.Status, BranchName = o.BranchName, BranchId = o.BranchId, AgentId = o.AgentId, TotalWeight = o.TotalWeight,
+        }),
+        SaleDateField.Delivery => db.LinkoOrders.Select(o => new DatedOrder
+        {
+            Id = o.Id, Date = o.DeliveryDate ?? o.CreatedDate, Status = o.Status, BranchName = o.BranchName, BranchId = o.BranchId, AgentId = o.AgentId, TotalWeight = o.TotalWeight,
+        }),
+        _ => db.LinkoOrders.Select(o => new DatedOrder
+        {
+            Id = o.Id, Date = o.CreatedDate, Status = o.Status, BranchName = o.BranchName, BranchId = o.BranchId, AgentId = o.AgentId, TotalWeight = o.TotalWeight,
+        }),
+    };
+
+    /// <summary>Исключённые филиалы в нижнем регистре — для SQL (lower(branch) in …).</summary>
+    private string[] ExcludedLower => options.ExcludedBranches.Select(b => b.Trim().ToLowerInvariant()).ToArray();
+
+    /// <summary>Месяцы, за которые есть продажи (по дате реализации) — от новых к старым.</summary>
     public async Task<IReadOnlyList<SalesMonth>> MonthsAsync(CancellationToken ct = default) =>
         await Cached("sales:months", async () =>
         {
             var sold = options.SoldStatuses;
-            var months = await db.LinkoOrders
-                .Where(o => sold.Contains(o.Status))
-                .Select(o => new { o.CreatedDate.Year, o.CreatedDate.Month })
+            var months = await Dated()
+                .Where(o => sold.Contains(o.Status) && o.Date != null)
+                .Select(o => new { o.Date!.Value.Year, o.Date!.Value.Month })
                 .Distinct()
                 .ToListAsync(ct);
 
@@ -117,12 +155,11 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         return value;
     }
 
+    /// <summary>Последний день, за который есть продажи (по дате реализации).</summary>
     private async Task<DateOnly?> LastDataDateAsync(CancellationToken ct)
     {
         var sold = options.SoldStatuses;
-        return options.DateField == SaleDateField.Delivery
-            ? await db.LinkoOrders.Where(o => sold.Contains(o.Status)).MaxAsync(o => (DateOnly?)(o.DeliveryDate ?? o.CreatedDate), ct)
-            : await db.LinkoOrders.Where(o => sold.Contains(o.Status)).MaxAsync(o => (DateOnly?)o.CreatedDate, ct);
+        return await Dated().Where(o => sold.Contains(o.Status)).MaxAsync(o => o.Date, ct);
     }
 
     private async Task<MonthData> BuildAsync(int year, int month, PlanKind kind, DateOnly? lastData, CancellationToken ct)
@@ -134,8 +171,16 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         var dataThrough = lastData is null || lastData < monthStart
             ? monthStart.AddDays(-1)
             : lastData > monthEnd ? monthEnd : lastData.Value;
+        var salesEnd = dataThrough < monthStart ? monthEnd : dataThrough;
 
-        var lines = await LinesAsync(previousStart, dataThrough < monthStart ? monthEnd : dataThrough, ct);
+        // Сырые строки: заказы, реализованные с начала прошлого месяца, и заказы, созданные в месяце (для визитов);
+        // возвраты с начала прошлого месяца. Правила применяет SecondarySales.
+        var rawOrders = await RawOrdersAsync(previousStart, salesEnd, monthStart, salesEnd, ct);
+        var (rawReturns, returnHeaders) = await RawReturnsAsync(previousStart, salesEnd, ct);
+        var missingAcceptance = await DeliveredWithoutAcceptanceAsync(monthStart.AddDays(-45), salesEnd, ct);
+
+        var current = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, monthStart, dataThrough, options, missingAcceptance);
+        var previous = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, previousStart, monthStart.AddDays(-1), options);
         var historyFrom = new[] { new DateOnly(year, 1, 1), monthStart.AddMonths(-3) }.Min();
 
         var visits = await db.LinkoVisits.AsNoTracking()
@@ -185,20 +230,28 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         decimal Target(string k) => targets.TryGetValue(k, out var v) ? v : SalesTargetKeys.Defaults[k];
 
-        var categories = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+        var linkoTypes = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+        var categoryMap = SalesCategories.Build(options.Categories, linkoTypes);
         var yearStart = new DateOnly(year, 1, 1);
         var akbHistoryTo = previousStart.AddDays(-1); // прошлый и текущий месяц считаются из строк продаж
         IReadOnlyList<MonthlyAkb> akbHistory = yearStart <= akbHistoryTo
-            ? await AkbHistoryAsync(yearStart, akbHistoryTo, SalesMath.CategoryGroups(categories), ct)
+            ? await AkbHistoryAsync(yearStart, akbHistoryTo, categoryMap.Mapping, ct)
             : [];
+
+        // Регионы — филиалы вторички: исключённые («Завод») в структуре не показываются, у них отдельный блок.
+        var excludedBranchIds = await ExcludedBranchIdsAsync(ct);
 
         return new MonthData
         {
             Year = year,
             Month = month,
             DataThrough = dataThrough,
-            Current = lines.Where(l => l.Date >= monthStart && l.Date <= dataThrough).ToList(),
-            Previous = lines.Where(l => l.Date >= previousStart && l.Date < monthStart).ToList(),
+            Current = current.Lines,
+            Previous = previous.Lines,
+            VisitOrders = SecondarySales.VisitOrders(rawOrders, monthStart, salesEnd, options),
+            ExcludedCurrent = current.Excluded,
+            ExcludedPrevious = previous.Excluded,
+            Quality = current.Quality,
             Visits = visits.Where(v => !nonSales.Contains(v.UserId!.Value)).Select(v => new VisitRecord(v.Day, v.UserId!.Value, v.MarketId!.Value, ParseStatus(v.Status), v.IsInPlan)).ToList(),
             History = await HistoryAsync(historyFrom, monthEnd, ct),
             Plans = regionPlans.Where(p => p.Month == month).Concat(agentPlans).ToList(),
@@ -219,21 +272,24 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                 var profile = profiles.GetValueOrDefault(u.Id);
                 return new AgentInfo(u.Id, u.DisplayName, u.IsActive, profile?.RegionId, profile?.IsVacancy ?? false, profile is not null, u.JobName);
             }),
-            Regions = await db.SalesRegions.AsNoTracking()
-                .Select(r => new RegionInfo(r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName))
-                .ToListAsync(ct),
+            Regions = (await db.SalesRegions.AsNoTracking()
+                    .Select(r => new RegionInfo(r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName))
+                    .ToListAsync(ct))
+                .Where(r => !excludedBranchIds.Contains(r.BranchId))
+                .ToList(),
             Directions = await db.SalesDirections.AsNoTracking()
                 .Select(d => new DirectionInfo(d.Id, d.Name, d.Kind == DirectionKind.Channel, d.ManagerName, d.Description, d.SortOrder))
                 .ToListAsync(ct),
             Markets = await db.LinkoMarkets.AsNoTracking()
                 .Select(x => new MarketInfo(x.Id, x.Name, x.ResponsibleAgentId, x.BranchId))
                 .ToDictionaryAsync(x => x.Id, ct),
-            Categories = categories,
+            Categories = linkoTypes,
+            CategoryMap = categoryMap,
             AkbHistory = akbHistory,
             Products = await db.LinkoProducts.AsNoTracking()
                 .Select(p => new ProductInfo(p.Id, p.Name, p.Code, p.TypeId))
                 .ToDictionaryAsync(p => p.Id, ct),
-            ActiveSkus = await ActiveSkusAsync(monthStart.AddMonths(-AssortmentMonths), dataThrough < monthStart ? monthEnd : dataThrough, ct),
+            ActiveSkus = await ActiveSkusAsync(monthStart.AddMonths(-AssortmentMonths), salesEnd, ct),
             MarketAssignments = (await db.LinkoMarketUsers.AsNoTracking().Where(x => !x.IsDelete)
                     .Select(x => new { x.UserId, x.MarketId }).ToListAsync(ct))
                 .Select(x => (x.UserId, x.MarketId)).ToList(),
@@ -246,46 +302,93 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         };
     }
 
-    /// <summary>Строки продаж (+) и возвратов (−) за период.</summary>
-    private async Task<List<SaleLine>> LinesAsync(DateOnly start, DateOnly end, CancellationToken ct)
+    /// <summary>
+    /// Строки заказов-кандидатов: реализованные в [saleFrom; saleTo] (по дате реализации) или созданные в
+    /// [createdFrom; createdTo] (для сшивки с визитами). Статусы, филиалы и точные даты проверяет SecondarySales.
+    /// </summary>
+    private async Task<List<RawOrderLine>> RawOrdersAsync(DateOnly saleFrom, DateOnly saleTo, DateOnly createdFrom, DateOnly createdTo, CancellationToken ct)
     {
         var sold = options.SoldStatuses;
-        var returned = options.ReturnStatuses;
+        var byAccepted = options.DateField == SaleDateField.Accepted;
         var byDelivery = options.DateField == SaleDateField.Delivery;
 
-        var orders = await (
+        return await (
                 from l in db.LinkoOrderLines
                 join o in db.LinkoOrders on l.OrderId equals o.Id
                 join p in db.LinkoProducts on l.ProductId equals (long?)p.Id into pj
                 from p in pj.DefaultIfEmpty()
-                let date = byDelivery ? o.DeliveryDate ?? o.CreatedDate : o.CreatedDate
-                where sold.Contains(o.Status) && date >= start && date <= end
-                select new SaleLine(date, o.AgentId, o.MarketId, o.BranchId, p.TypeId, l.ProductId, l.TotalWeight, l.TotalPrice, o.Id))
+                where sold.Contains(o.Status)
+                      && ((byAccepted && o.AcceptedDate >= saleFrom && o.AcceptedDate <= saleTo)
+                          || (byDelivery && (o.DeliveryDate ?? o.CreatedDate) >= saleFrom && (o.DeliveryDate ?? o.CreatedDate) <= saleTo)
+                          || (!byAccepted && !byDelivery && o.CreatedDate >= saleFrom && o.CreatedDate <= saleTo)
+                          || (o.CreatedDate >= createdFrom && o.CreatedDate <= createdTo))
+                select new RawOrderLine(o.Id, o.Status, o.CreatedDate, o.DeliveryDate, o.AcceptedDate, o.BranchId, o.BranchName,
+                    o.AgentId, o.MarketId, l.ProductId, p.TypeId, l.TotalWeight, l.TotalPrice))
             .AsNoTracking()
             .ToListAsync(ct);
+    }
 
-        var returns = await (
+    /// <summary>Строки возвратов (вес и сумма по строкам) и шапки для контроля качества.</summary>
+    private async Task<(List<RawReturnLine> Lines, List<RawReturnHeader> Headers)> RawReturnsAsync(DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        var returned = options.ReturnStatuses;
+
+        var lines = await (
                 from l in db.LinkoOrderReturnLines
                 join r in db.LinkoOrderReturns on l.ReturnId equals r.Id
                 join p in db.LinkoProducts on l.ProductId equals (long?)p.Id into pj
                 from p in pj.DefaultIfEmpty()
                 where returned.Contains(r.Status) && r.CreatedDate >= start && r.CreatedDate <= end
-                select new SaleLine(r.CreatedDate, r.AgentId, r.MarketId, r.BranchId, p.TypeId, l.ProductId, -l.TotalWeight, -(l.Price * l.Amount), null))
+                select new RawReturnLine(r.Id, r.Status, r.CreatedDate, r.BranchId, r.BranchName, r.AgentId, r.MarketId,
+                    l.ProductId, p.TypeId, l.TotalWeight, l.Price * l.Amount))
             .AsNoTracking()
             .ToListAsync(ct);
 
-        orders.AddRange(returns);
-        return orders;
+        var headers = await db.LinkoOrderReturns.AsNoTracking()
+            .Where(r => returned.Contains(r.Status) && r.CreatedDate >= start && r.CreatedDate <= end)
+            .Select(r => new RawReturnHeader(r.Id, r.Status, r.CreatedDate, r.BranchName, r.TotalWeight,
+                r.Lines.Count, r.Lines.Sum(x => x.TotalWeight)))
+            .ToListAsync(ct);
+
+        return (lines, headers);
     }
+
+    /// <summary>
+    /// Проданные заказы без даты приёмки, созданные в окне: признак неполной загрузки (копия старше поля accepted_time).
+    /// При дате реализации не по приёмке не считается.
+    /// </summary>
+    private async Task<int> DeliveredWithoutAcceptanceAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        if (options.DateField != SaleDateField.Accepted)
+        {
+            return 0;
+        }
+
+        var sold = options.SoldStatuses;
+        return await db.LinkoOrders.CountAsync(o => sold.Contains(o.Status) && o.AcceptedDate == null && o.CreatedDate >= from && o.CreatedDate <= to, ct);
+    }
+
+    /// <summary>Филиалы, исключённые из вторички (по названию филиала в заказах).</summary>
+    private async Task<HashSet<long>> ExcludedBranchIdsAsync(CancellationToken ct) =>
+        await Cached("sales:excluded-branches", async () =>
+        {
+            var excluded = ExcludedLower;
+            var ids = await db.LinkoOrders
+                .Where(o => o.BranchId != null && o.BranchName != null && excluded.Contains(o.BranchName.ToLower()))
+                .Select(o => o.BranchId!.Value)
+                .Distinct()
+                .ToListAsync(ct);
+            return ids.ToHashSet();
+        });
 
     /// <summary>
     /// АКБ давних месяцев — тяжёлый агрегат по всем строкам. Эти месяцы почти не меняются, поэтому кэш живёт дольше
     /// и не сбрасывается обычной синхронизацией (только полной загрузкой или очисткой).
     /// </summary>
-    private async Task<IReadOnlyList<MonthlyAkb>> AkbHistoryAsync(DateOnly from, DateOnly to, Dictionary<long, long> groups, CancellationToken ct)
+    private async Task<IReadOnlyList<MonthlyAkb>> AkbHistoryAsync(DateOnly from, DateOnly to, IReadOnlyDictionary<long, long> groups, CancellationToken ct)
     {
         var merged = groups.Where(g => g.Key != g.Value).OrderBy(g => g.Key).ToDictionary();
-        var key = $"sales:akb:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}:{options.DateField}:{string.Join(",", merged.Select(g => $"{g.Key}>{g.Value}"))}";
+        var key = $"sales:akb:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}:{options.DateField}:{string.Join(",", ExcludedLower)}:{string.Join(",", merged.Select(g => $"{g.Key}>{g.Value}"))}";
         if (cache.TryGetValue(key, out IReadOnlyList<MonthlyAkb>? cached) && cached is not null)
         {
             return cached;
@@ -298,38 +401,45 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         return rows;
     }
 
-    /// <summary>«Живой» ассортимент: SKU, проданные за столько месяцев до выбранного (плюс сам месяц).</summary>
-    private const int AssortmentMonths = 6;
-
+    /// <summary>«Живой» ассортимент: SKU, проданные во вторичке (без исключённых филиалов) за период.</summary>
     private async Task<HashSet<long>> ActiveSkusAsync(DateOnly start, DateOnly end, CancellationToken ct)
     {
         var sold = options.SoldStatuses;
+        var excluded = ExcludedLower;
         var ids = await (
                 from l in db.LinkoOrderLines
-                join o in db.LinkoOrders on l.OrderId equals o.Id
-                where sold.Contains(o.Status) && o.CreatedDate >= start && o.CreatedDate <= end && l.ProductId != null
+                join o in Dated() on l.OrderId equals o.Id
+                where sold.Contains(o.Status) && o.Date >= start && o.Date <= end && l.ProductId != null
+                      && (o.BranchName == null || !excluded.Contains(o.BranchName.ToLower()))
                 select l.ProductId!.Value)
             .Distinct()
             .ToListAsync(ct);
         return ids.ToHashSet();
     }
 
-    /// <summary>Факт кг по месяцам в разрезе агента и филиала (продажи минус возвраты). Месяц — по дате создания.</summary>
-    private async Task<List<MonthlyFact>> HistoryAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    /// <summary>
+    /// Факт кг по месяцам в разрезе агента и филиала: заказы по дате реализации минус возвраты по строкам
+    /// (по дате возврата), без исключённых филиалов.
+    /// </summary>
+    private async Task<List<MonthlyFact>> HistoryAsync(DateOnly start, DateOnly end, CancellationToken ct)
     {
         var sold = options.SoldStatuses;
         var returned = options.ReturnStatuses;
+        var excluded = ExcludedLower;
 
-        var sales = await db.LinkoOrders
-            .Where(o => sold.Contains(o.Status) && o.CreatedDate >= from && o.CreatedDate <= to)
-            .GroupBy(o => new { o.CreatedDate.Year, o.CreatedDate.Month, o.AgentId, o.BranchId })
+        var sales = await Dated()
+            .Where(o => sold.Contains(o.Status) && o.Date >= start && o.Date <= end && (o.BranchName == null || !excluded.Contains(o.BranchName.ToLower())))
+            .GroupBy(o => new { o.Date!.Value.Year, o.Date!.Value.Month, o.AgentId, o.BranchId })
             .Select(g => new MonthlyFact(g.Key.Year, g.Key.Month, g.Key.AgentId, g.Key.BranchId, g.Sum(o => o.TotalWeight)))
             .ToListAsync(ct);
 
-        var returns = await db.LinkoOrderReturns
-            .Where(r => returned.Contains(r.Status) && r.CreatedDate >= from && r.CreatedDate <= to)
-            .GroupBy(r => new { r.CreatedDate.Year, r.CreatedDate.Month, r.AgentId, r.BranchId })
-            .Select(g => new MonthlyFact(g.Key.Year, g.Key.Month, g.Key.AgentId, g.Key.BranchId, -g.Sum(r => r.TotalWeight)))
+        var returns = await (
+                from l in db.LinkoOrderReturnLines
+                join r in db.LinkoOrderReturns on l.ReturnId equals r.Id
+                where returned.Contains(r.Status) && r.CreatedDate >= start && r.CreatedDate <= end
+                      && (r.BranchName == null || !excluded.Contains(r.BranchName.ToLower()))
+                group l by new { r.CreatedDate.Year, r.CreatedDate.Month, r.AgentId, r.BranchId } into g
+                select new MonthlyFact(g.Key.Year, g.Key.Month, g.Key.AgentId, g.Key.BranchId, -g.Sum(x => x.TotalWeight)))
             .ToListAsync(ct);
 
         return sales.Concat(returns).ToList();

@@ -107,9 +107,27 @@ public sealed class MonthData
 
     /// <summary>
     /// АКБ по месяцам года до прошлого месяца (не включая его): текущий и прошлый месяц считаются из строк продаж.
-    /// Категории уже объединены в группы (см. SalesMath.CategoryGroups).
+    /// Категории уже объединены в категории отчёта (см. SalesCategories).
     /// </summary>
     public IReadOnlyList<MonthlyAkb> AkbHistory { get; init; } = [];
+
+    /// <summary>
+    /// Заказы для сшивки с визитами: созданные в месяце (дата строки — created_date), а не принятые в нём.
+    /// null — сшивать по строкам факта (так в тестах и в старых данных).
+    /// </summary>
+    public IReadOnlyList<SaleLine>? VisitOrders { get; init; }
+
+    public IReadOnlyList<SaleLine> VisitLines => VisitOrders ?? Current;
+
+    /// <summary>Продажи исключённых филиалов («Завод» — экспорт и опт) за месяц и за прошлый месяц: не вторичка, отдельный блок.</summary>
+    public IReadOnlyList<SaleLine> ExcludedCurrent { get; init; } = [];
+
+    public IReadOnlyList<SaleLine> ExcludedPrevious { get; init; } = [];
+
+    /// <summary>Категории отчёта поверх типов Linko. None — каждый тип сам по себе (так в тестах без настройки).</summary>
+    public SalesCategories? CategoryMap { get; init; }
+
+    public SalesDataQuality Quality { get; init; } = SalesDataQuality.Empty;
 
     /// <summary>ТТ, закреплённые за агентами через market_users (агент → ТТ).</summary>
     public required IReadOnlyList<(long AgentId, long MarketId)> MarketAssignments { get; init; }

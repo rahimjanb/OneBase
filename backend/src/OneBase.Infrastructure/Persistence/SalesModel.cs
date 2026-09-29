@@ -54,9 +54,11 @@ internal static class SalesModel
             e.ToTable("Orders", "linko");
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.CreatedAt).HasColumnType("timestamp without time zone");
+            e.Property(x => x.AcceptedAt).HasColumnType("timestamp without time zone"); // местное время Linko, без пояса
             e.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.OrderId);
             e.HasIndex(x => x.CreatedDate);
             e.HasIndex(x => x.DeliveryDate);
+            e.HasIndex(x => x.AcceptedDate);
             e.HasIndex(x => x.AgentId);
             e.HasIndex(x => x.MarketId);
         });

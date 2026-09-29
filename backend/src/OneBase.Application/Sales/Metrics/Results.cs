@@ -114,7 +114,7 @@ public sealed record NotBoughtRow(
     IReadOnlyList<SilentMarket> SilentMarkets);
 
 /// <summary>Уровень 0: старт раздела.</summary>
-public sealed record OverviewView(PeriodInfo Period, KpiTiles Kpi, int ActiveAgents, FlagCounts Flags, int Vacancies, UnitRow Republic);
+public sealed record OverviewView(PeriodInfo Period, KpiTiles Kpi, int ActiveAgents, FlagCounts Flags, int Vacancies, UnitRow Republic, ExcludedSummary? Excluded = null);
 
 /// <summary>Уровни 1 и 2: республика и направление (РМ).</summary>
 public sealed record GroupView(
@@ -129,7 +129,27 @@ public sealed record GroupView(
     IReadOnlyList<SameDaysRow> SameDays,
     IReadOnlyList<NotBoughtRow> NotBought,
     IReadOnlyList<CategoryCard> CategoryCards,
-    AkbByMonth AkbMonths);
+    AkbByMonth AkbMonths,
+    DataQualityView Quality,
+    ExcludedSummary? Excluded = null);
+
+/// <summary>Тип товара Linko вне категорий отчёта (импорт, бонус, оборудование): не пропадает, а показывается отдельно.</summary>
+public sealed record UncategorizedType(string Id, string Name, decimal Kg, decimal Revenue, int Orders);
+
+/// <summary>
+/// Качество данных: заказы без даты приёмки (неполная синхронизация), возвраты с нулевой шапкой (учтены по строкам),
+/// возвраты без строк (не учтены), типы товаров вне категорий отчёта.
+/// </summary>
+public sealed record DataQualityView(
+    int DeliveredWithoutAcceptance,
+    int ZeroHeaderReturns,
+    decimal ZeroHeaderReturnsKg,
+    int ReturnsWithoutLines,
+    decimal ReturnsWithoutLinesHeaderKg,
+    IReadOnlyList<UncategorizedType> Uncategorized);
+
+/// <summary>Исключённые из вторички филиалы («Завод» — экспорт и опт): факт отдельной строкой.</summary>
+public sealed record ExcludedSummary(decimal FactKg, decimal Revenue, int Orders, int Akb, decimal? ForecastKg, decimal PrevMonthKg, decimal? VsPrevMonth);
 
 public sealed record AkbSeries(string Id, string Name, IReadOnlyList<int?> Values);
 
@@ -234,7 +254,8 @@ public sealed record RegionView(
     IReadOnlyList<NotBoughtRow> NotBought,
     IReadOnlyList<NotInDirectoryRow> NotInDirectory,
     IReadOnlyList<CategoryCard> CategoryCards,
-    AkbByMonth AkbMonths);
+    AkbByMonth AkbMonths,
+    DataQualityView Quality);
 
 public sealed record MedianValue(decimal? Value, decimal? RegionMedian);
 

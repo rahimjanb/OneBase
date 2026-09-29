@@ -21,17 +21,46 @@ public sealed class LinkoOptions
     /// <summary>Запасной токен API планов из окружения (LINKO_PLAN_TOKEN).</summary>
     public string PlanToken { get; set; } = string.Empty;
 
+    /// <summary>Размер страницы по умолчанию. Максимум Linko по документации — 1000.</summary>
     public int PageSize { get; set; } = 1000;
 
-    /// <summary>Сколько страниц запрашивать одновременно при выгрузке списков.</summary>
+    /// <summary>
+    /// Свой предел страницы у отдельных ресурсов. Возвраты — 500: так отдаёт сервер (из опыта интеграции);
+    /// если сервер на самом деле отдаёт меньше лимита, клиент это замечает и подстраивается сам.
+    /// </summary>
+    public Dictionary<string, int> PageSizes { get; set; } = new() { ["order_returns"] = 500 };
+
+    /// <summary>
+    /// Сколько запросов к Linko одновременно — на весь процесс, не на одну выгрузку. Больше четырёх нельзя:
+    /// 25.07.2026 двенадцать потоков положили прод Linko, и IP получил блок на сутки.
+    /// </summary>
     public int Parallelism { get; set; } = 4;
+
     public int TimeoutSeconds { get; set; } = 60;
-    public int MaxRetries { get; set; } = 4;
+
+    /// <summary>Попыток на запрос (первая + повторы). Повторяются только сетевые ошибки, таймауты, 429 и 5xx.</summary>
+    public int MaxAttempts { get; set; } = 4;
+
+    /// <summary>Паузы перед повторами, секунды. Retry-After сервера важнее, если он есть (но не дольше MaxRetryAfterSeconds).</summary>
+    public int[] RetryDelaysSeconds { get; set; } = [3, 6, 9];
+
+    public int MaxRetryAfterSeconds { get; set; } = 60;
+
+    public const int MaxParallelism = 4;
+
+    public int PageSizeFor(string entity) =>
+        Math.Clamp(PageSizes.TryGetValue(entity, out var size) ? size : PageSize, 1, 1000);
 }
 
 public sealed class LinkoApiException(string message, HttpStatusCode? status = null) : Exception(message)
 {
     public HttpStatusCode? Status { get; } = status;
+}
+
+/// <summary>Общий на процесс ограничитель одновременных запросов к Linko.</summary>
+public sealed class LinkoThrottle(int parallelism)
+{
+    public SemaphoreSlim Gate { get; } = new(Math.Clamp(parallelism, 1, LinkoOptions.MaxParallelism));
 }
 
 public sealed record LinkoTestResult(
@@ -49,7 +78,7 @@ public sealed record LinkoTestResult(
 /// Клиент Linko External API: пагинация limit/offset, повторы с backoff, разбор поля errors.
 /// Адрес и токен берутся из LinkoSettingsStore на каждый запрос — изменения в настройках действуют сразу.
 /// </summary>
-public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSettingsStore settings, ILogger<LinkoClient> logger)
+public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSettingsStore settings, LinkoThrottle throttle, ILogger<LinkoClient> logger)
 {
     private const string Prefix = "api/v1/integration/external-api/";
 
@@ -62,13 +91,20 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
 
     public async Task<long> CountAsync(string entity, IDictionary<string, string?>? filters = null, CancellationToken ct = default)
     {
-        var result = await SendAsync<LinkoCount>(await ReadyAsync(ct), $"{entity}_count/", filters, options.MaxRetries, ct);
+        var result = await SendAsync<LinkoCount>(await ReadyAsync(ct), $"{entity}_count/", filters, options.MaxAttempts, ct);
         return result.Count;
     }
 
+    /// <summary>Один GET с произвольным ответом — для диагностики (команда linko-audit). Только чтение.</summary>
+    public async Task<JsonElement> GetJsonAsync(string path, IDictionary<string, string?>? query = null, CancellationToken ct = default) =>
+        await SendAsync<JsonElement>(await ReadyAsync(ct), path, query, options.MaxAttempts, ct);
+
     /// <summary>
-    /// Выгружает все страницы списка. Останавливается, когда пришло меньше limit записей.
-    /// Каждая страница передаётся в onPage — так большие выгрузки не держатся в памяти целиком.
+    /// Выгружает все страницы списка (limit/offset). Каждая страница передаётся в onPage — большие выгрузки
+    /// не держатся в памяти целиком. Конец набора — страница короче лимита.
+    /// Защита от потерь: если первая страница короче запрошенного лимита, это может быть не конец, а предел сервера
+    /// (у возвратов он меньше 1000). Тогда запрашивается следующая страница: пустая — набор кончился,
+    /// непустая — дальше идём шагом, который реально отдаёт сервер, иначе строки между ними пропали бы.
     /// </summary>
     public async Task<int> ReadAllAsync<T>(
         string entity,
@@ -77,44 +113,26 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
         CancellationToken ct = default)
     {
         var connection = await ReadyAsync(ct);
-        var parallel = Math.Clamp(options.Parallelism, 1, 8);
-        var total = 0;
 
-        // Страницы запрашиваются пачками по `parallel` штук одновременно, а обрабатываются строго по порядку.
-        for (var offset = 0; ; offset += options.PageSize * parallel)
+        async Task<IReadOnlyList<T>> Page(int offset, int size)
         {
-            var batch = Enumerable.Range(0, parallel)
-                .Select(i => SendAsync<LinkoPage<T>>(connection, $"{entity}/", PageQuery(filters, offset + i * options.PageSize), options.MaxRetries, ct))
-                .ToList();
-            var pages = await Task.WhenAll(batch);
-
-            foreach (var page in pages)
+            var page = await SendAsync<LinkoPage<T>>(connection, $"{entity}/", PageQuery(filters, offset, size), options.MaxAttempts, ct);
+            if (page.Errors is { Count: > 0 })
             {
-                if (page.Errors is { Count: > 0 })
-                {
-                    logger.LogWarning("Linko {Entity}: {Count} ошибок в ответе, например: {Error}",
-                        entity, page.Errors.Count, page.Errors[0].Error?.ToString());
-                }
-
-                var items = page.Results ?? [];
-                if (items.Count > 0)
-                {
-                    await onPage(items);
-                }
-
-                total += items.Count;
-                if (items.Count < options.PageSize)
-                {
-                    return total;
-                }
+                logger.LogWarning("Linko {Entity}: {Count} ошибок в ответе", entity, page.Errors.Count);
             }
+
+            return page.Results ?? [];
         }
+
+        return await LinkoPaging.ReadAllAsync(Page, options.PageSizeFor(entity), Math.Clamp(options.Parallelism, 1, LinkoOptions.MaxParallelism), onPage,
+            size => logger.LogInformation("Linko {Entity}: сервер отдаёт по {Size} строк за страницу", entity, size));
     }
 
-    private Dictionary<string, string?> PageQuery(IDictionary<string, string?>? filters, int offset) =>
+    private static Dictionary<string, string?> PageQuery(IDictionary<string, string?>? filters, int offset, int limit) =>
         new(filters ?? new Dictionary<string, string?>())
         {
-            ["limit"] = options.PageSize.ToString(),
+            ["limit"] = limit.ToString(),
             ["offset"] = offset.ToString(),
         };
 
@@ -218,7 +236,7 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
     {
         var connection = await ReadyPlansAsync(ct);
         var query = new Dictionary<string, string?> { ["by"] = "today", ["token"] = connection.PlanToken };
-        return (await SendAsync<LinkoStaffLastDate>(connection, StaffPrefix, "staff_balance/last_date/", query, false, options.MaxRetries, ct)).LastDate;
+        return (await SendAsync<LinkoStaffLastDate>(connection, StaffPrefix, "staff_balance/last_date/", query, false, options.MaxAttempts, ct)).LastDate;
     }
 
     /// <summary>Планы и факт агентов по KPI-показателям за месяц.</summary>
@@ -232,7 +250,7 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
             ["token"] = connection.PlanToken,
             ["format"] = "json",
         };
-        return await SendAsync<List<LinkoStaffBalanceDto>>(connection, StaffPrefix, "staff_balance/", query, false, options.MaxRetries, ct);
+        return await SendAsync<List<LinkoStaffBalanceDto>>(connection, StaffPrefix, "staff_balance/", query, false, options.MaxAttempts, ct);
     }
 
     private async Task<LinkoConnectionSettings> ReadyPlansAsync(CancellationToken ct)
@@ -246,23 +264,31 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
         return connection;
     }
 
-    private Task<T> SendAsync<T>(LinkoConnectionSettings connection, string path, IDictionary<string, string?>? query, int maxRetries, CancellationToken ct) =>
-        SendAsync<T>(connection, Prefix, path, query, externalAuth: true, maxRetries, ct);
+    private Task<T> SendAsync<T>(LinkoConnectionSettings connection, string path, IDictionary<string, string?>? query, int maxAttempts, CancellationToken ct) =>
+        SendAsync<T>(connection, Prefix, path, query, externalAuth: true, maxAttempts, ct);
 
-    /// <summary>GET с повторами. В сообщения об ошибках попадает только path — без параметров и токенов.</summary>
+    /// <summary>
+    /// GET с ограниченными повторами (только чтение — POST сюда не ходят и не повторяются).
+    /// Повторяются сетевые ошибки, таймауты, 429 и 5xx (в том числе 502 под нагрузкой): паузы 3, 6, 9 с,
+    /// всего не больше MaxAttempts попыток; Retry-After сервера важнее. Одновременно — не больше Parallelism запросов на процесс.
+    /// В сообщения об ошибках попадает только path — без параметров (там бывает токен API планов) и без тела ответа.
+    /// </summary>
     private async Task<T> SendAsync<T>(
         LinkoConnectionSettings connection,
         string prefix,
         string path,
         IDictionary<string, string?>? query,
         bool externalAuth,
-        int maxRetries,
+        int maxAttempts,
         CancellationToken ct)
     {
         var url = new Uri(new Uri(connection.BaseUrl.TrimEnd('/') + "/"), prefix + path + BuildQuery(query));
+        maxAttempts = Math.Max(1, maxAttempts);
 
         for (var attempt = 1; ; attempt++)
         {
+            TimeSpan? retryAfter = null;
+            await throttle.Gate.WaitAsync(ct);
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -276,32 +302,66 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
                 using var response = await http.SendAsync(request, ct);
                 if (response.IsSuccessStatusCode)
                 {
-                    return await response.Content.ReadFromJsonAsync<T>(Json, ct)
-                        ?? throw new LinkoApiException($"Linko {path}: пустой ответ");
+                    try
+                    {
+                        return await response.Content.ReadFromJsonAsync<T>(Json, ct)
+                            ?? throw new LinkoApiException($"Linko {path}: пустой ответ");
+                    }
+                    catch (JsonException)
+                    {
+                        throw new LinkoApiException($"Linko {path}: ответ не в формате JSON API (проверьте адрес сервера)");
+                    }
                 }
 
-                var body = await response.Content.ReadAsStringAsync(ct);
-                var retryable = response.StatusCode is HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500;
-                if (!retryable || attempt > maxRetries)
+                var status = response.StatusCode;
+                if (status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
                 {
-                    throw new LinkoApiException(
-                        $"Linko {path}: HTTP {(int)response.StatusCode} {Truncate(body)}", response.StatusCode);
+                    throw new LinkoApiException($"Linko {path}: сервер не принял токен (HTTP {(int)status})", status);
                 }
 
-                logger.LogWarning("Linko {Path}: HTTP {Status}, попытка {Attempt}", path, (int)response.StatusCode, attempt);
+                var retryable = status is HttpStatusCode.TooManyRequests || (int)status >= 500;
+                if (!retryable || attempt >= maxAttempts)
+                {
+                    throw new LinkoApiException($"Linko {path}: HTTP {(int)status}", status);
+                }
+
+                retryAfter = RetryAfter(response);
+                logger.LogWarning("Linko {Path}: HTTP {Status}, попытка {Attempt} из {Max}", path, (int)status, attempt, maxAttempts);
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
             {
-                if (attempt > maxRetries)
+                if (attempt >= maxAttempts)
                 {
-                    throw new LinkoApiException($"Linko {path}: {ex.Message}");
+                    throw new LinkoApiException(ex is TaskCanceledException
+                        ? $"Linko {path}: нет ответа за {options.TimeoutSeconds} с"
+                        : $"Linko {path}: сетевая ошибка ({ex.GetType().Name})");
                 }
 
-                logger.LogWarning(ex, "Linko {Path}: сетевая ошибка, попытка {Attempt}", path, attempt);
+                logger.LogWarning("Linko {Path}: {Error}, попытка {Attempt} из {Max}", path, ex.GetType().Name, attempt, maxAttempts);
+            }
+            finally
+            {
+                throttle.Gate.Release();
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)), ct);
+            await Task.Delay(retryAfter ?? RetryDelay(attempt), ct);
         }
+    }
+
+    /// <summary>Пауза перед повтором номер `attempt` (1 — после первой неудачи): 3, 6, 9 с.</summary>
+    private TimeSpan RetryDelay(int attempt)
+    {
+        var delays = options.RetryDelaysSeconds is { Length: > 0 } d ? d : [3, 6, 9];
+        return TimeSpan.FromSeconds(delays[Math.Min(attempt, delays.Length) - 1]);
+    }
+
+    private TimeSpan? RetryAfter(HttpResponseMessage response)
+    {
+        var header = response.Headers.RetryAfter;
+        var wait = header?.Delta ?? (header?.Date is { } date ? date - DateTimeOffset.UtcNow : null);
+        return wait is { } w && w > TimeSpan.Zero
+            ? TimeSpan.FromSeconds(Math.Min(w.TotalSeconds, options.MaxRetryAfterSeconds))
+            : null;
     }
 
     private static string BuildQuery(IDictionary<string, string?>? query)
@@ -317,5 +377,4 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
         return "?" + string.Join('&', parts);
     }
 
-    private static string Truncate(string s) => s.Length <= 300 ? s : s[..300] + "…";
 }

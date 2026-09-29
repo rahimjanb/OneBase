@@ -32,41 +32,27 @@ public static class SalesMath
         workedDays <= 0 ? null : fact / workedDays * daysInMonth;
 
     /// <summary>
-    /// АКБ — число уникальных ТТ с продажей (чистая выручка &gt; 0) в наборе строк.
-    /// Каждая ТТ считается один раз, даже если ей продавали несколько агентов.
+    /// АКБ — число уникальных ТТ (market.id), у которых в наборе есть хотя бы один включённый заказ.
+    /// Возвраты АКБ не уменьшают: магазин покупку всё-таки делал. Каждая ТТ считается один раз,
+    /// даже если ей продавали несколько агентов.
     /// </summary>
     public static int Akb(IEnumerable<SaleLine> lines) => ActiveMarkets(lines).Count;
 
     public static HashSet<long> ActiveMarkets(IEnumerable<SaleLine> lines) =>
-        lines.Where(l => l.MarketId != null)
-            .GroupBy(l => l.MarketId!.Value)
-            .Where(g => g.Sum(l => l.Revenue) > 0)
-            .Select(g => g.Key)
+        lines.Where(l => l.OrderId != null && l.MarketId != null)
+            .Select(l => l.MarketId!.Value)
             .ToHashSet();
 
     /// <summary>Число заказов (возвраты не считаются).</summary>
     public static int OrderCount(IEnumerable<SaleLine> lines) =>
         lines.Where(l => l.OrderId != null).Select(l => l.OrderId).Distinct().Count();
 
-    /// <summary>Число различных категорий с чистой продажей &gt; 0.</summary>
-    public static int CategoryCount(IEnumerable<SaleLine> lines) =>
-        lines.Where(l => l.CategoryId != null)
-            .GroupBy(l => l.CategoryId)
-            .Count(g => g.Sum(l => l.Revenue) > 0);
-
-    /// <summary>
-    /// Группы категорий для карточек: подтип «Помадка 0,5 кг» объединяется с категорией «Помадка»
-    /// (имя начинается с имени другой категории и пробела). Возвращает категория → категория-группа.
-    /// </summary>
-    public static Dictionary<long, long> CategoryGroups(IReadOnlyDictionary<long, string> categories)
-    {
-        var names = categories.ToDictionary(c => c.Key, c => c.Value.Trim());
-        return names.ToDictionary(c => c.Key, c => names
-            .Where(p => p.Key != c.Key && p.Value.Length > 0 && c.Value.StartsWith(p.Value + " ", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p.Value.Length)
-            .Select(p => (long?)p.Key)
-            .FirstOrDefault() ?? c.Key);
-    }
+    /// <summary>Число различных категорий отчёта, по которым были заказы. group — тип товара → категория отчёта.</summary>
+    public static int CategoryCount(IEnumerable<SaleLine> lines, Func<long?, long?> group) =>
+        lines.Where(l => l.OrderId != null && l.CategoryId != null)
+            .Select(l => group(l.CategoryId))
+            .Distinct()
+            .Count();
 
     /// <summary>Медиана; null для пустого набора.</summary>
     public static decimal? Median(IEnumerable<decimal> values)

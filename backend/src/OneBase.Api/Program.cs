@@ -53,6 +53,11 @@ if (args.Contains("linko-check"))
     return await LinkoCheck.RunAsync(app.Services, full: args.Contains("--full"));
 }
 
+if (Array.IndexOf(args, "linko-audit") is var auditAt and >= 0)
+{
+    return await LinkoCheck.AuditAsync(app.Services, auditAt + 1 < args.Length ? args[auditAt + 1] : null);
+}
+
 if (Array.IndexOf(args, "linko-fields") is var at and >= 0 && at + 1 < args.Length)
 {
     return await LinkoCheck.FieldsAsync(app.Services, args[at + 1]);

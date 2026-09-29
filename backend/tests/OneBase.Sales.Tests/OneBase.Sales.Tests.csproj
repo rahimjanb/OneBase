@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OneBase.Application\OneBase.Application.csproj" />
+    <ProjectReference Include="..\..\src\OneBase.Infrastructure\OneBase.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

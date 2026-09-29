@@ -418,6 +418,8 @@ public sealed class LinkoSyncService(
                     e.CreatedAt = d.CreatedDate;
                     e.CreatedDate = DateOnly.FromDateTime(d.CreatedDate);
                     e.DeliveryDate = d.DateDelivery is { } dd ? DateOnly.FromDateTime(dd) : null;
+                    e.AcceptedAt = d.AcceptedTime;
+                    e.AcceptedDate = d.AcceptedTime is { } at ? DateOnly.FromDateTime(at) : null;
                     e.Status = d.Status ?? "";
                     e.MarketId = d.Market?.Id;
                     e.BranchId = d.Branch?.Id;

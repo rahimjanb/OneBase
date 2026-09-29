@@ -58,12 +58,16 @@ public sealed record AgentStats(
     int Categories,
     VisitSummary Visits,
     decimal? Tempo,
-    bool IsVacancy)
+    bool IsVacancy,
+    int? SalesOrders = null)
 {
+    /// <summary>Заказы, созданные в месяце (сшиваются с визитами).</summary>
     public int Orders => Visits.Orders;
     public decimal? Conversion => Visits.Conversion;
     public decimal? SumPerVisit => SalesMath.Ratio(Revenue, Visits.Done);
-    public decimal? AvgCheck => SalesMath.Ratio(Revenue, Orders);
+
+    /// <summary>Средний чек — выручка на заказ; заказы — те же, что дали выручку (принятые в месяце).</summary>
+    public decimal? AvgCheck => SalesMath.Ratio(Revenue, SalesOrders ?? Orders);
 }
 
 /// <summary>Медианы региона — без вакансий и без агентов с флагом «данные не сходятся».</summary>

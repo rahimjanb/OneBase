@@ -72,7 +72,19 @@ public class LinkoOrder
     public long Id { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateOnly CreatedDate { get; set; }
+
+    /// <summary>Плановая дата доставки (date_delivery). Для отчёта не годится: на воскресенье назначают, а принимают в понедельник.</summary>
     public DateOnly? DeliveryDate { get; set; }
+
+    /// <summary>
+    /// Момент приёмки товара магазином (accepted_time) — дата реализации. Linko отдаёт его без часового пояса,
+    /// по местному времени (Ташкент, UTC+5): у заказов, не менявшихся после приёмки, accepted_time − tm ровно +5 ч.
+    /// </summary>
+    public DateTime? AcceptedAt { get; set; }
+
+    /// <summary>Дата приёмки — по ней заказ попадает в факт продаж.</summary>
+    public DateOnly? AcceptedDate { get; set; }
+
     public required string Status { get; set; }
     public long? MarketId { get; set; }
     public long? BranchId { get; set; }

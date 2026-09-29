@@ -27,7 +27,9 @@ public sealed class SalesAnalytics
     private readonly Dictionary<long, AgentStats> _stats = [];
     private readonly Dictionary<Guid, RegionMedians> _medians = [];
     private readonly Dictionary<long, IReadOnlyList<AgentFlag>> _flags = [];
-    private readonly Dictionary<long, long> _categoryGroup;
+    private readonly SalesCategories _cats;
+    private readonly ILookup<long, SaleLine> _visitByAgent;
+    private readonly ILookup<Guid, SaleLine> _visitByRegion;
     private readonly DateOnly _previousStart;
     private readonly DateOnly _previousCutoff;
 
@@ -38,13 +40,15 @@ public sealed class SalesAnalytics
         _regions[NoRegionId] = new RegionInfo(NoRegionId, 0, "Без региона", null, null, null);
         _regionByBranch = data.Regions.ToDictionary(r => r.BranchId, r => r.Id);
         _directions = data.Directions.ToDictionary(x => x.Id);
-        _categoryGroup = SalesMath.CategoryGroups(data.Categories);
+        _cats = data.CategoryMap ?? SalesCategories.Build(new Dictionary<string, string>(), data.Categories);
 
         _currentByRegion = data.Current.ToLookup(RegionOf);
         _previousByRegion = data.Previous.ToLookup(RegionOf);
         _currentByAgent = data.Current.Where(l => l.AgentId != null).ToLookup(l => l.AgentId!.Value);
         _previousByAgent = data.Previous.Where(l => l.AgentId != null).ToLookup(l => l.AgentId!.Value);
         _visitsByAgent = data.Visits.ToLookup(v => v.AgentId);
+        _visitByAgent = data.VisitLines.Where(l => l.AgentId != null).ToLookup(l => l.AgentId!.Value);
+        _visitByRegion = data.VisitLines.ToLookup(RegionOf);
 
         _previousStart = data.MonthStart.AddMonths(-1);
         _previousCutoff = SalesMath.SameDaysCutoff(_previousStart, Math.Max(1, data.WorkedDays));
@@ -113,7 +117,7 @@ public sealed class SalesAnalytics
     {
         var agents = AgentsIn(null).ToList();
         return new OverviewView(Period, Kpi(null), agents.Count(a => !IsVacancy(a)), FlagCountsOf(agents),
-            agents.Count(IsVacancy), Unit("republic", "Республика", null, null, UnitKinds.Republic));
+            agents.Count(IsVacancy), Unit("republic", "Республика", null, null, UnitKinds.Republic), Excluded());
     }
 
     /// <summary>
@@ -175,7 +179,8 @@ public sealed class SalesAnalytics
             AgentNotBought(id),
             NotInDirectory(id),
             categories,
-            AkbMonthsOf(scope, categories));
+            AkbMonthsOf(scope, categories),
+            QualityOf(scope));
     }
 
     public AgentView Agent(long id)
@@ -317,7 +322,9 @@ public sealed class SalesAnalytics
                 .OrderBy(r => r.Name).ToList(),
             regionIds.Select(RegionNotBought).OrderBy(r => r.Name).ToList(),
             categories,
-            AkbMonthsOf(set, categories));
+            AkbMonthsOf(set, categories),
+            QualityOf(set),
+            set is null ? Excluded() : null);
     }
 
     private KpiTiles Kpi(IReadOnlySet<Guid>? scope)
@@ -330,7 +337,7 @@ public sealed class SalesAnalytics
         var plan = coverage.Plan;
         var forecast = SalesMath.Forecast(fact, _d.WorkedDays, _d.DaysInMonth);
         var planForecast = SalesMath.Forecast(coverage.Fact, _d.WorkedDays, _d.DaysInMonth);
-        var visits = VisitSummary.Of(AgentsIn(scope).SelectMany(VisitsOf), lines);
+        var visits = VisitSummary.Of(AgentsIn(scope).SelectMany(VisitsOf), scope is null ? _d.VisitLines : scope.SelectMany(r => _visitByRegion[r]));
         var active = AgentsIn(scope).Count(a => !IsVacancy(a));
 
         return new KpiTiles(
@@ -491,7 +498,8 @@ public sealed class SalesAnalytics
         var doneIn = visits.Where(v => v.Status == VisitStatus.Done && v.InPlan).Select(v => (v.MarketId, v.Date)).ToHashSet();
         var doneOff = visits.Where(v => v.Status == VisitStatus.Done && !v.InPlan).Select(v => (v.MarketId, v.Date)).ToHashSet();
 
-        var orders = _currentByAgent[agent]
+        // Заказ относится к визиту по дате ввода (created_date), а не приёмки: агент стоял в магазине в день ввода.
+        var orders = _visitByAgent[agent]
             .Where(l => l.OrderId != null && l.Date >= from && l.Date <= to)
             .GroupBy(l => l.OrderId)
             .Select(g => (Key: (g.First().MarketId ?? 0, g.First().Date), Sum: g.Sum(l => l.Revenue)))
@@ -604,21 +612,58 @@ public sealed class SalesAnalytics
     private List<CategoryShare> CategoriesOf(Guid region)
     {
         var groups = _currentByRegion[region]
-            .GroupBy(l => l.CategoryId)
+            .GroupBy(l => GroupOf(l.CategoryId))
             .Select(g => (Category: g.Key, Revenue: g.Sum(l => l.Revenue)))
             .Where(x => x.Revenue > 0)
             .ToList();
         var total = groups.Sum(x => x.Revenue);
 
         return groups
-            .Select(x => new CategoryShare(x.Category, CategoryName(x.Category), x.Revenue, SalesMath.Ratio(x.Revenue, total)))
+            .Select(x => new CategoryShare(x.Category, _cats.NameOf(x.Category), x.Revenue, SalesMath.Ratio(x.Revenue, total)))
             .OrderByDescending(x => x.Revenue)
             .ToList();
     }
 
+    /// <summary>Есть ли настройка категорий отчёта. Без неё (тесты) каждый тип Linko — своя категория.</summary>
+    private bool HasReportCategories => _cats.Mapping.Values.Any(g => SalesCategories.IsConfigured(g));
+
+    private bool InReport(long? group) => !HasReportCategories || SalesCategories.IsConfigured(group);
+
+    /// <summary>Качество данных подразделения: чего не хватает и что учтено иначе, чем выглядит в Linko.</summary>
+    private DataQualityView QualityOf(IReadOnlySet<Guid>? scope)
+    {
+        var q = _d.Quality;
+        var uncategorized = Lines(scope)
+            .Where(l => !InReport(GroupOf(l.CategoryId)))
+            .GroupBy(l => GroupOf(l.CategoryId))
+            .Select(g => new UncategorizedType(g.Key?.ToString() ?? "none", _cats.NameOf(g.Key), g.Sum(l => l.Kg), g.Sum(l => l.Revenue),
+                SalesMath.OrderCount(g)))
+            .OrderByDescending(x => x.Revenue)
+            .ToList();
+        return new DataQualityView(q.DeliveredWithoutAcceptance, q.ZeroHeaderReturns, q.ZeroHeaderReturnsKg, q.ReturnsWithoutLines,
+            q.ReturnsWithoutLinesHeaderKg, uncategorized);
+    }
+
+    /// <summary>Исключённые филиалы («Завод»): экспорт и опт — отдельно от вторички, чтобы не завышать республику.</summary>
+    public ExcludedSummary? Excluded()
+    {
+        if (_d.ExcludedCurrent.Count == 0 && _d.ExcludedPrevious.Count == 0)
+        {
+            return null;
+        }
+
+        var now = _d.ExcludedCurrent;
+        var fact = now.Sum(l => l.Kg);
+        var forecast = SalesMath.Forecast(fact, _d.WorkedDays, _d.DaysInMonth);
+        var prevKg = _d.ExcludedPrevious.Sum(l => l.Kg);
+        return new ExcludedSummary(fact, now.Sum(l => l.Revenue), SalesMath.OrderCount(now), SalesMath.Akb(now), forecast, prevKg,
+            SalesMath.Delta(prevKg, forecast ?? fact));
+    }
+
     /// <summary>
-    /// Карточки категорий подразделения (клик — артикулы). Подтипы («Помадка 0,5 кг») объединены с категорией («Помадка»).
+    /// Карточки категорий отчёта (клик — артикулы): категории из настройки (фасовки помадки — одна категория).
     /// Доля по весу и дистрибуция — от итога подразделения; «к прошлому месяцу» — прогноз месяца к факту всего прошлого месяца.
+    /// Типы вне настройки (импорт, бонус) сюда не входят — они в диагностике (QualityOf).
     /// </summary>
     private List<CategoryCard> CategoryCardsOf(IReadOnlySet<Guid>? scope)
     {
@@ -633,7 +678,8 @@ public sealed class SalesAnalytics
             .Where(_d.Products.ContainsKey)
             .ToLookup(p => GroupOf(_d.Products[p].CategoryId));
 
-        // «Продаётся» — как и для АКБ: чистая выручка SKU (продажи минус возвраты) больше нуля.
+        // «Продаётся» SKU — чистая выручка SKU (продажи минус возвраты) больше нуля: артикул, который вернули целиком,
+        // не продаётся. (АКБ считается иначе — по факту заказа, возврат его не уменьшает.)
         static HashSet<long> Sold(IEnumerable<SaleLine> source) =>
             source.Where(l => l.ProductId != null)
                 .GroupBy(l => l.ProductId!.Value)
@@ -642,6 +688,7 @@ public sealed class SalesAnalytics
                 .ToHashSet();
 
         return current.Select(g => g.Key).Concat(previous.Select(g => g.Key)).Distinct()
+            .Where(InReport)
             .Select(category =>
             {
                 var now = current[category].ToList();
@@ -676,7 +723,7 @@ public sealed class SalesAnalytics
 
                 return new CategoryCard(
                     category?.ToString() ?? "none",
-                    CategoryName(category),
+                    _cats.NameOf(category),
                     soldNow.Count,
                     universe.Count,
                     fact,
@@ -692,13 +739,14 @@ public sealed class SalesAnalytics
                     soldBefore.Count(p => !soldNow.Contains(p)),
                     skus);
             })
-            .Where(c => c.FactKg != 0 || c.PrevMonthKg != 0) // без веса в обоих месяцах (бонусы) — не показываем
+            .Where(c => c.FactKg != 0 || c.PrevMonthKg != 0 || c.Revenue != 0) // категория без продаж в обоих месяцах — не показываем
             .OrderByDescending(c => c.FactKg)
             .ThenByDescending(c => c.Revenue)
             .ToList();
     }
 
-    private long? GroupOf(long? category) => category is { } c ? _categoryGroup.GetValueOrDefault(c, c) : null;
+    /// <summary>Тип товара Linko → категория отчёта (см. SalesCategories).</summary>
+    private long? GroupOf(long? category) => _cats.GroupOf(category);
 
     /// <summary>
     /// АКБ по месяцам года (январь — выбранный месяц): итог и по категориям карточек.
@@ -753,7 +801,7 @@ public sealed class SalesAnalytics
         var days = _d.DaysInMonth;
         var lastDay = _d.WorkedDays;
         var regionLines = _currentByRegion[region]
-            .Where(l => metric != "akb" || category is null || l.CategoryId == category)
+            .Where(l => metric != "akb" || category is null || GroupOf(l.CategoryId) == category)
             .ToList();
 
         decimal? Cell(IReadOnlyCollection<SaleLine> lines) => lines.Count == 0 ? null : metric switch
@@ -819,7 +867,7 @@ public sealed class SalesAnalytics
                 var plan = SalesMath.PlanTotal(plans.Where(p => p.CategoryId == c && c != null));
                 var cl = lines.Where(l => l.CategoryId == c).ToList();
                 var fact = cl.Sum(l => l.Kg);
-                return new CategoryPlanFact(c, CategoryName(c), plan, fact, cl.Sum(l => l.Revenue), SalesMath.Ratio(fact, plan));
+                return new CategoryPlanFact(c, TypeName(c), plan, fact, cl.Sum(l => l.Revenue), SalesMath.Ratio(fact, plan));
             })
             .OrderBy(x => x.PlanKg is null)
             .ThenByDescending(x => x.FactKg)
@@ -958,7 +1006,8 @@ public sealed class SalesAnalytics
 
     private string MarketName(long market) => _d.Markets.TryGetValue(market, out var m) ? m.Name : $"ТТ {market}";
 
-    private string CategoryName(long? category) =>
+    /// <summary>Название типа товара Linko (планы по категориям в OneBase заведены по типам).</summary>
+    private string TypeName(long? category) =>
         category is { } c && _d.Categories.TryGetValue(c, out var name) ? name : "Без категории";
 
     private AgentStats StatsOf(long agent) =>
@@ -1048,12 +1097,12 @@ public sealed class SalesAnalytics
         foreach (var agent in _roster)
         {
             var lines = _currentByAgent[agent].ToList();
-            var visits = VisitSummary.Of(VisitsOf(agent), lines);
+            var visits = VisitSummary.Of(VisitsOf(agent), _visitByAgent[agent]);
             var kg = lines.Sum(l => l.Kg);
             var past = previousMonths.Select(m => history[agent].Where(h => h.Year == m.Year && h.Month == m.Month).Sum(h => h.Kg));
 
-            _stats[agent] = new AgentStats(agent, kg, lines.Sum(l => l.Revenue), SalesMath.Akb(lines), SalesMath.CategoryCount(lines),
-                visits, SalesMath.TempoToOwnAverage(kg, _d.WorkedDays, _d.DaysInMonth, past), IsVacancy(agent));
+            _stats[agent] = new AgentStats(agent, kg, lines.Sum(l => l.Revenue), SalesMath.Akb(lines), SalesMath.CategoryCount(lines, GroupOf),
+                visits, SalesMath.TempoToOwnAverage(kg, _d.WorkedDays, _d.DaysInMonth, past), IsVacancy(agent), SalesMath.OrderCount(lines));
         }
 
         foreach (var group in _stats.Values.GroupBy(s => _agentRegion.GetValueOrDefault(s.AgentId, NoRegionId)))
