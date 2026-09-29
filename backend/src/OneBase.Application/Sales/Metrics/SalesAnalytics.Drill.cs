@@ -76,7 +76,13 @@ public sealed record MatrixCell(string RegionId, decimal? Distribution, string L
 
 public sealed record MatrixRow(long ProductId, string Name, string Category, decimal Revenue, decimal? AverageDistribution, IReadOnlyList<MatrixCell> Cells);
 
-/// <summary>Вкладка «Ассортимент»: категории, АКБ по месяцам, регионы, товары и матрица «товар × регион».</summary>
+/// <summary>
+/// Плитки над категориями: факт и выручка охвата, факт всего прошлого месяца, SKU в продаже / в ассортименте
+/// и пропавшие (суммы по категориям отчёта), ТТ с покупкой.
+/// </summary>
+public sealed record AssortmentSummary(decimal FactKg, decimal Revenue, decimal PrevMonthKg, int SkuSold, int SkuTotal, int SkuLost, int Outlets);
+
+/// <summary>Вкладка «Ассортимент»: плитки, категории, АКБ по месяцам, регионы, товары и матрица «товар × регион».</summary>
 public sealed record AssortmentView(
     PeriodInfo Period,
     string ScopeName,
@@ -86,7 +92,8 @@ public sealed record AssortmentView(
     IReadOnlyList<ProductRow> Products,
     IReadOnlyList<UnitRef> MatrixRegions,
     IReadOnlyList<MatrixRow> Matrix,
-    DataQualityView Quality);
+    DataQualityView Quality,
+    AssortmentSummary Summary);
 
 public sealed partial class SalesAnalytics
 {
@@ -215,9 +222,12 @@ public sealed partial class SalesAnalytics
             : "Республика";
 
         var lines = Lines(scope).ToList();
-        var categories = CategoryCardsFor(lines, scope is null ? _d.Previous : scope.SelectMany(x => _previousByRegion[x]).ToList(), republic: scope is null);
+        var previous = scope is null ? _d.Previous : scope.SelectMany(x => _previousByRegion[x]).ToList();
+        var categories = CategoryCardsFor(lines, previous, republic: scope is null);
         var products = ProductsOf(lines);
         var regionRows = RegionRowsOf(scope, category: null);
+        var summary = new AssortmentSummary(lines.Sum(l => l.Kg), lines.Sum(l => l.Revenue), previous.Sum(l => l.Kg),
+            categories.Sum(c => c.SkuSold), categories.Sum(c => c.SkuTotal), categories.Sum(c => c.Lost), SalesMath.Akb(lines));
 
         // Матрица: топ товаров категорий отчёта по выручке × регионы с продажами.
         var matrixRegions = regionRows.Where(x => x.Akb > 0).Select(x => new UnitRef(x.Id, x.Name)).ToList();
@@ -239,7 +249,8 @@ public sealed partial class SalesAnalytics
             })
             .ToList();
 
-        return new AssortmentView(Period, scopeName, categories, AkbMonthsOf(scope, categories), regionRows, products, matrixRegions, matrix, QualityOf(scope));
+        return new AssortmentView(Period, scopeName, categories, AkbMonthsOf(scope, categories), regionRows, products, matrixRegions, matrix, QualityOf(scope),
+            summary);
     }
 
     /// <summary>Товары набора с долей выручки, АКБ и дистрибуцией (доля ТТ набора, купивших товар).</summary>

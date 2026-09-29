@@ -46,8 +46,8 @@ function Metric({ label, value, className = "text-ink" }: { label: string; value
   return (
     // Значения ряда — на одной линии, даже если подпись переносится на две строки.
     <div className="flex min-w-0 flex-col justify-between">
-      <dt className="text-[11px] leading-tight text-ink-3">{label}</dt>
-      <dd className={`mt-0.5 whitespace-nowrap font-semibold tabular-nums ${className}`}>{value}</dd>
+      <dt className="text-[10px] font-medium uppercase leading-tight tracking-[0.08em] text-ink-3">{label}</dt>
+      <dd className={`mt-1 whitespace-nowrap text-sm font-semibold tabular-nums ${className}`}>{value}</dd>
     </div>
   );
 }
@@ -56,7 +56,7 @@ function Card({ card, href }: { card: CategoryCard; href: string }) {
   return (
     <Link
       href={href}
-      className="flex h-full flex-col rounded-xl border border-line bg-surface p-4 text-left transition-[border-color,box-shadow] hover:border-accent/40 hover:shadow-md"
+      className="flex h-full flex-col rounded-xl border border-line bg-surface p-4 text-left shadow-sm transition-[border-color,box-shadow] hover:border-accent/40 hover:shadow-md"
     >
       <div className="font-semibold text-ink">{card.name}</div>
       <div className="mt-0.5 text-xs text-ink-3">
@@ -99,7 +99,7 @@ function Card({ card, href }: { card: CategoryCard; href: string }) {
  */
 export function CategoryCards({ cards, scope, query }: { cards: CategoryCard[]; scope: string; query: string }) {
   return (
-    <Section title="Категории" hint="клик — страница категории">
+    <Section title="Категории" hint="клик — артикулы категории">
       {cards.length === 0 ? (
         <p className="py-6 text-center text-sm text-ink-3">Продаж за период нет</p>
       ) : (

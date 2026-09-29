@@ -437,6 +437,15 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
+    public void Assortment_tiles_sum_categories_and_count_outlets()
+    {
+        var summary = new SalesAnalytics(CatalogData()).Assortment(null, null).Summary;
+
+        Assert.Equal((90m, 900m, 5m), (summary.FactKg, summary.Revenue, summary.PrevMonthKg)); // 60 + 10 + 20 кг; август — 5 кг
+        Assert.Equal((2, 4, 1, 3), (summary.SkuSold, summary.SkuTotal, summary.SkuLost, summary.Outlets)); // 102 пропал; ТТ 10, 11, 20
+    }
+
+    [Fact]
     public void Product_page_shows_where_the_product_sells_by_region_agent_and_store()
     {
         var analytics = new SalesAnalytics(CatalogData());

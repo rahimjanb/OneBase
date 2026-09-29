@@ -1,6 +1,7 @@
 import { AkbChart } from "@/components/sales/AkbChart";
 import { AssortmentMatrix, AssortmentRegionsTable, ProductsTable } from "@/components/sales/assortment-tables";
-import { CollapsedSections } from "@/components/sales/bits";
+import { CollapsedSections, KpiTile } from "@/components/sales/bits";
+import { kg, money, num } from "@/lib/sales/format";
 import { DataQualityNotes } from "@/components/sales/blocks";
 import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
@@ -27,6 +28,7 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
       .map((r) => ({ value: `region:${r.id}`, label: r.name, group: "Регионы" })),
   ];
   const scopeLabel = data.scopeName === "Республика" ? "республике" : data.scopeName;
+  const s = data.summary;
 
   return (
     <SalesFrame
@@ -37,6 +39,18 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ScopeSelect options={options} />
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiTile label="Факт, кг" value={kg(s.factKg)} unit="кг">
+          {s.prevMonthKg ? `прошлый месяц целиком: ${kg(s.prevMonthKg)} кг` : "в прошлом месяце продаж не было"}
+        </KpiTile>
+        <KpiTile label="Выручка" value={money(s.revenue)} unit="сум" />
+        <KpiTile label="Продаётся SKU" value={num(s.skuSold)} unit={`/ ${num(s.skuTotal)}`}>
+          {s.skuLost > 0 ? <span className="font-semibold text-bad">пропало {num(s.skuLost)}</span> : "ничего не пропало"}
+        </KpiTile>
+        <KpiTile label="ТТ" value={num(s.outlets)}>
+          точек с покупкой за месяц
+        </KpiTile>
       </div>
       <CategoryCards cards={data.categories} scope={scopeLabel} query={queryWith(q, { direction: param(sp, "direction"), region: param(sp, "region") })} />
       <CollapsedSections>

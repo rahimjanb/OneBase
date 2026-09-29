@@ -489,9 +489,21 @@ export type ProductView = {
   rows: ProductBreakdownRow[];
 };
 
+/** Плитки над категориями «Ассортимента». */
+export type AssortmentSummary = {
+  factKg: number;
+  revenue: number;
+  prevMonthKg: number;
+  skuSold: number;
+  skuTotal: number;
+  skuLost: number;
+  outlets: number;
+};
+
 export type AssortmentView = {
   period: Period;
   scopeName: string;
+  summary: AssortmentSummary;
   categories: CategoryCard[];
   akbMonths: AkbByMonth;
   regions: AssortmentRegionRow[];
