@@ -11,11 +11,12 @@ export function PlanBadge({ share }: { share: number | null }) {
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{pct(share)} плана</span>;
 }
 
-/** Шесть плиток KPI — одинаковые на всех уровнях. */
-export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
+/** Шесть плиток KPI — одинаковые на всех уровнях; на широком экране — в один ряд. plan — «Rop» или «Factory» из адреса. */
+export function KpiRow({ kpi, period, plan }: { kpi: KpiTiles; period: Period; plan?: string | null }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-      <KpiTile label="Выполнение плана" value={pct(kpi.execution, 1)}>
+    // Порог в rem (87.5rem = 1400px): брейкпоинты Tailwind — в rem, и порог в px проигрывает lg по порядку правил.
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[87.5rem]:grid-cols-6">
+      <KpiTile label={plan === "Factory" ? "Выполнение плана «Завод»" : "Выполнение плана РОП"} value={pct(kpi.execution, 1)}>
         {kpi.planKg != null ? (
           <>
             {kg(kpi.planFactKg)} из {kg(kpi.planKg)} кг{kpi.planAgents > 0 && ` · ${num(kpi.planAgents)} ТП с планом`}
@@ -52,15 +53,25 @@ export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
           </>
         )}
       </KpiTile>
-      <KpiTile label="Конверсия визита" value={pct(kpi.conversion.value, 1)} badge={<TargetBadge target={kpi.conversion} />}>
-        цель {pct(kpi.conversion.target)}
-      </KpiTile>
-      <KpiTile label="Выручка на ТТ" value={money(kpi.revenuePerOutlet.value)} badge={<TargetBadge target={kpi.revenuePerOutlet} />}>
-        цель {money(kpi.revenuePerOutlet.target)}
-      </KpiTile>
-      <KpiTile label="АКБ на агента" value={num(kpi.akbPerAgent.value, 1)} badge={<TargetBadge target={kpi.akbPerAgent} />}>
-        цель {num(kpi.akbPerAgent.target)}
-      </KpiTile>
+      <KpiTile
+        label="Конверсия визита"
+        value={pct(kpi.conversion.value, 1)}
+        badge={<TargetBadge target={kpi.conversion} />}
+        note={`цель ${pct(kpi.conversion.target)}`}
+      />
+      <KpiTile
+        label="Выручка на ТТ"
+        value={money(kpi.revenuePerOutlet.value)}
+        unit="сум"
+        badge={<TargetBadge target={kpi.revenuePerOutlet} />}
+        note={`цель ${money(kpi.revenuePerOutlet.target)}`}
+      />
+      <KpiTile
+        label="АКБ на агента"
+        value={num(kpi.akbPerAgent.value, 1)}
+        badge={<TargetBadge target={kpi.akbPerAgent} />}
+        note={`цель ${num(kpi.akbPerAgent.target)}`}
+      />
       <KpiTile label="Визиты без заказа" value={num(kpi.visitsWithoutOrder)}>
         из {num(kpi.visitsDone)} визитов · {num(kpi.activeAgents)} ТП
       </KpiTile>
@@ -80,7 +91,7 @@ export function UnassignedWarning({ kgValue, share }: { kgValue: number; share: 
 /** Карточка РМ / направления / региона. */
 export function UnitCard({ unit, href }: { unit: UnitRow; href: string | null }) {
   const body = (
-    <div className={`flex h-full flex-col rounded-xl border border-line bg-surface p-4 ${href ? "transition-colors group-hover:border-accent/40" : ""}`}>
+    <div className={`@container flex h-full flex-col rounded-xl border border-line bg-surface p-4 shadow-sm ${href ? "transition-colors group-hover:border-accent/40" : ""}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="font-semibold text-ink">{unit.name}</div>
@@ -95,7 +106,7 @@ export function UnitCard({ unit, href }: { unit: UnitRow; href: string | null })
       <div className="mt-3">
         <ExecutionBar value={unit.execution} tone={unit.execution != null && unit.execution < 0.7 ? "bad" : unit.execution != null && unit.execution < 0.9 ? "warn" : "accent"} />
       </div>
-      <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 text-xs">
+      <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-3 text-xs @sm:grid-cols-4">
         <Metric label="План, кг" value={kg(unit.planKg)} />
         {unit.planKg != null ? (
           <Metric label="Факт в плане, кг" value={kg(unit.planFactKg)} />
@@ -131,7 +142,7 @@ export function UnitCard({ unit, href }: { unit: UnitRow; href: string | null })
 export function ExportCard({ data, href }: { data: ExcludedSummary; href: string }) {
   return (
     <Link href={href} className="group block">
-      <div className="flex h-full flex-col rounded-xl border border-line bg-surface p-4 transition-colors group-hover:border-accent/40">
+      <div className="@container flex h-full flex-col rounded-xl border border-line bg-surface p-4 shadow-sm transition-colors group-hover:border-accent/40">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="font-semibold text-ink">Экспорт и опт</div>
@@ -139,7 +150,7 @@ export function ExportCard({ data, href }: { data: ExcludedSummary; href: string
           </div>
           <ArrowUpRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />
         </div>
-        <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-2 text-xs">
+        <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-3 text-xs @sm:grid-cols-4">
           <Metric label="Факт, кг" value={kg(data.factKg)} />
           <Metric label="Выручка" value={money(data.revenue)} />
           <Metric label="АКБ" value={num(data.akb)} />
@@ -225,9 +236,10 @@ export function DataQualityNotes({ quality }: { quality: DataQuality }) {
 
 function Metric({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div>
-      <dt className="text-[11px] text-ink-3">{label}</dt>
-      <dd className="mt-0.5 font-semibold tabular-nums text-ink">{value}</dd>
+    // Значения ряда — на одной линии, даже если подпись переносится на две строки.
+    <div className="flex min-w-0 flex-col justify-between">
+      <dt className="text-[10px] font-medium uppercase leading-tight tracking-[0.08em] text-ink-3">{label}</dt>
+      <dd className="mt-1 whitespace-nowrap text-sm font-semibold tabular-nums text-ink">{value}</dd>
     </div>
   );
 }

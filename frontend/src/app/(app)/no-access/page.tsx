@@ -5,7 +5,7 @@ export const metadata = { title: "Нет доступа · OneBase" };
 
 export default function NoAccessPage() {
   return (
-    <div className="mx-auto max-w-[1240px] px-4 py-16 sm:px-8">
+    <div className="mx-auto max-w-[1800px] px-4 py-16 sm:px-6">
       <div className="max-w-lg rounded-xl border border-line bg-surface p-6">
         <ShieldAlert className="size-7 text-warn" />
         <h1 className="mt-3 text-lg font-semibold text-ink">Недостаточно прав</h1>

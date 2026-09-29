@@ -1,15 +1,22 @@
+import { Suspense } from "react";
 import { Bell, ChevronDown } from "lucide-react";
 import { currentUser } from "@/lib/demo-data";
+import { SectionNav } from "./SectionNav";
 import { ThemeToggle } from "./ThemeToggle";
 
 /**
  * Верхняя панель — одна на все страницы (живёт в layout, поэтому не перерисовывается и не пропадает при переходах).
- * На больших экранах прилипает к верху при прокрутке.
+ * Слева — кнопки разделов открытого раздела (сейчас — только «Продажи»). На больших экранах прилипает к верху.
  */
 export function Topbar() {
   return (
     <div className="z-30 border-b border-line bg-page/90 backdrop-blur lg:sticky lg:top-0">
-      <div className="mx-auto flex h-16 max-w-[1240px] items-center justify-end gap-3 px-4 sm:gap-4 sm:px-8">
+      <div className="mx-auto flex h-16 max-w-[1800px] items-center gap-3 px-4 sm:gap-4 sm:px-6">
+        <div className="min-w-0 flex-1">
+          <Suspense fallback={null}>
+            <SectionNav />
+          </Suspense>
+        </div>
         <ThemeToggle />
         <button
           type="button"

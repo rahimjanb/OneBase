@@ -20,7 +20,8 @@ const levelStyles: Record<TargetLevel, string> = {
 export function TargetBadge({ target }: { target: TargetValue }) {
   if (target.ratio == null || target.level == null) return null;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${levelStyles[target.level]}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${levelStyles[target.level]}`}>
+      <span className="size-1.5 rounded-full bg-current" />
       {pct(target.ratio)} от цели
     </span>
   );
@@ -32,21 +33,29 @@ export function KpiTile({
   unit,
   children,
   badge,
+  note,
 }: {
   label: string;
   value: string;
   unit?: string;
   children?: React.ReactNode;
   badge?: React.ReactNode;
+  /** Короткое пояснение в строку с плашкой: «● 78% от цели · цель 70%». */
+  note?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col rounded-xl border border-line bg-surface p-4">
-      <div className="text-xs text-ink-2">{label}</div>
-      <div className="mt-2 flex items-baseline gap-1.5">
+    <div className="flex min-w-0 flex-col rounded-xl border border-line bg-surface p-4 shadow-sm">
+      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3">{label}</div>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-1.5">
         <span className="text-[26px] font-semibold leading-none tracking-tight tabular-nums text-ink">{value}</span>
         {unit && <span className="text-sm text-ink-3">{unit}</span>}
       </div>
-      {badge && <div className="mt-2">{badge}</div>}
+      {(badge || note) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+          {badge}
+          {note && <span className="text-xs text-ink-2">{note}</span>}
+        </div>
+      )}
       {children && <div className="mt-2 text-xs leading-relaxed text-ink-2">{children}</div>}
     </div>
   );
@@ -85,12 +94,18 @@ export function FlagCountPills({ flags }: { flags: FlagCounts }) {
     return <span className="inline-block whitespace-nowrap rounded-full bg-ok-soft px-2 py-0.5 text-xs font-medium text-ok">Замечаний нет</span>;
   }
   return (
-    <span className="inline-flex flex-wrap gap-1">
+    <span className="inline-flex flex-wrap gap-1.5">
       {flags.critical > 0 && (
-        <span className="whitespace-nowrap rounded-full bg-bad-soft px-2 py-0.5 text-xs font-medium text-bad">{flags.critical} критично</span>
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-bad/25 bg-bad-soft px-2 py-0.5 text-xs font-semibold text-bad">
+          <span className="size-1.5 rounded-full bg-current" />
+          {flags.critical} критично
+        </span>
       )}
       {flags.risk > 0 && (
-        <span className="whitespace-nowrap rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn">{flags.risk} риск</span>
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-warn/25 bg-warn-soft px-2 py-0.5 text-xs font-semibold text-warn">
+          <span className="size-1.5 rounded-full bg-current" />
+          {flags.risk} риск
+        </span>
       )}
     </span>
   );

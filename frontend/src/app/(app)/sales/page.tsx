@@ -1,37 +1,37 @@
 import Link from "next/link";
+import { FlagCountPills } from "@/components/sales/bits";
 import { ExportCard, KpiRow, UnitCard } from "@/components/sales/blocks";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGet } from "@/lib/server-api";
 import { num } from "@/lib/sales/format";
-import { apiQuery, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
+import { apiQuery, param, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { OverviewView } from "@/lib/sales/types";
 
 export const metadata = { title: "Продажи · OneBase" };
 
+/** «Вторичка», верхний уровень: шесть плиток, сводка по флагам и карточки «Республика» и «Экспорт» — как в «Полевом контроле». */
 export default async function SalesPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
   const sp = await searchParams;
   const data = await apiGet<OverviewView>(`/api/sales/overview${apiQuery(sp)}`, "/sales");
   const q = periodQuery(sp);
 
   return (
-    <SalesFrame title="Продажи" subtitle="Полевой контроль: план, факт и работа торговых представителей" sp={sp}>
-      <KpiRow kpi={data.kpi} period={data.period} />
+    <SalesFrame title="Вторичка" subtitle="Полевой контроль: план, факт и работа торговых представителей" sp={sp}>
+      <KpiRow kpi={data.kpi} period={data.period} plan={param(sp, "plan")} />
 
-      <p className="mt-4 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink-2">
-        Из <b className="text-ink">{num(data.activeAgents)}</b> действующих ТП помечены:{" "}
-        <Link href={withQuery("/sales/problems", q)} className="font-semibold text-bad hover:underline">
-          {num(data.flags.critical)} критично
+      <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-l-4 border-line border-l-warn bg-surface px-4 py-3 text-sm text-ink-2 shadow-sm">
+        <span>
+          Из <b className="text-ink">{num(data.activeAgents)}</b> действующих ТП помечены:
+        </span>
+        <Link href={withQuery("/sales/problems", q)} className="hover:opacity-80" title="Открыть «Проблемные агенты»">
+          <FlagCountPills flags={data.flags} />
         </Link>
-        ,{" "}
-        <Link href={withQuery("/sales/problems", q)} className="font-semibold text-warn hover:underline">
-          {num(data.flags.risk)} риск
-        </Link>
-        . Ещё {num(data.vacancies)} — вакансии.
-      </p>
+        <span>
+          Ещё <b className="text-ink">{num(data.vacancies)}</b> — вакансии, они в рейтинг не идут.
+        </span>
+      </div>
 
-      <h2 className="mt-8 text-lg font-semibold text-ink">Подразделения</h2>
-      <p className="mt-1 text-sm text-ink-2">Нажмите на карточку, чтобы перейти к регионам и торговым представителям.</p>
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3 min-[106.25rem]:grid-cols-4">
         <UnitCard unit={data.republic} href={withQuery("/sales/republic", q)} />
         {data.excluded && <ExportCard data={data.excluded} href={withQuery("/sales/export", q)} />}
       </div>

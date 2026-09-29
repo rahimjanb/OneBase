@@ -16,7 +16,7 @@ export default function SalesError({ error, reset }: { error: Error & { digest?:
   }, []);
 
   return (
-    <div className="mx-auto max-w-[1240px] px-4 py-10 sm:px-8">
+    <div className="mx-auto max-w-[1800px] px-4 py-10 sm:px-6">
       <div className="max-w-xl rounded-xl border border-bad/30 bg-bad-soft p-6">
         <h1 className="text-lg font-semibold text-ink">Не удалось загрузить аналитику продаж</h1>
         <p className="mt-2 text-sm text-ink-2">

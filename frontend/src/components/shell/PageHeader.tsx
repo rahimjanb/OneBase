@@ -16,7 +16,7 @@ export function PageHeader({
 }) {
   return (
     <header className="border-b border-line">
-      <div className="mx-auto flex max-w-[1240px] flex-wrap items-start justify-between gap-x-6 gap-y-3 px-4 pb-5 pt-5 sm:px-8">
+      <div className="mx-auto flex max-w-[1800px] flex-wrap items-start justify-between gap-x-6 gap-y-3 px-4 pb-5 pt-5 sm:px-6">
         <div className="min-w-0">
           {breadcrumbs && (
             <nav aria-label="Навигация" className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
@@ -45,5 +45,5 @@ export function PageHeader({
 
 /** Контейнер содержимого страницы под шапкой. */
 export function PageBody({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto max-w-[1240px] px-4 py-6 sm:px-8">{children}</div>;
+  return <div className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6">{children}</div>;
 }

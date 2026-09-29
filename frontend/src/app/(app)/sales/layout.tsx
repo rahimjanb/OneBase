@@ -16,7 +16,7 @@ export default async function SalesLayout({ children }: { children: React.ReactN
   return (
     <>
       <div className="border-b border-line bg-surface">
-        <div className="mx-auto max-w-[1240px] px-4 py-3 sm:px-8">
+        <div className="mx-auto max-w-[1800px] px-4 py-3 sm:px-6">
           <Suspense fallback={<div className="h-9" />}>
             <SalesNav months={months} status={status} />
           </Suspense>
