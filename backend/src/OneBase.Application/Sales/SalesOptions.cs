@@ -79,6 +79,43 @@ public sealed class SalesOptions
     public bool IsExportStock(string? stockName) =>
         stockName is { } name && ExportStocks.Any(s => string.Equals(s.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// Типы торговых точек Linko, заказы которых с филиала «Завод» — экспорт («Первичка → Экспорт»).
+    /// Тип EXPORT стоит и у части магазинов других филиалов — их заказы в экспорт не входят.
+    /// </summary>
+    public string[] ExportMarketTypes { get; set; } = ["EXPORT"];
+
+    public bool IsExportMarketType(string? type) =>
+        type is { } name && ExportMarketTypes.Any(t => string.Equals(t.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Страна экспорта — по словам в названии или адресе торговой точки (отдельного поля страны в Linko нет):
+    /// страна → слова (без учёта регистра). Точка без совпадений показывается своим названием.
+    /// </summary>
+    public Dictionary<string, string[]> ExportCountries { get; set; } = new()
+    {
+        ["Таджикистан"] = ["tojikiston", "tajikistan", "таджикистан", "тожикистон", "dushanbe", "душанбе", "hujand", "khujand", "худжанд"],
+        ["Киргизия"] = ["kyrgyz", "киргиз", "кыргыз", "bishkek", "бишкек"],
+        ["Казахстан"] = ["kazakh", "казахстан", "qazaq", "aktobe", "актобе", "almaty", "алматы"],
+        ["Азербайджан"] = ["azerbaijan", "азербайджан", "baku", "баку"],
+        ["Армения"] = ["armenia", "армения", "yerevan", "ереван"],
+        ["Монголия"] = ["mongolia", "монголия", "ulaanbaatar", "улан-батор"],
+        ["Афганистан"] = ["afghanistan", "афганистан"],
+        ["Ирак"] = ["iraq", "ирак"],
+        ["Латвия"] = ["latvia", "латвия"],
+        ["Россия"] = ["russia", "россия", "dagestan", "дагестан", "ставропол"],
+        ["Туркменистан"] = ["turkmen", "туркмен"],
+        ["Грузия"] = ["georgia", "грузия"],
+        ["Палестина"] = ["palestine", "палестин"],
+    };
+
+    /// <summary>Страна экспортной точки по названию и адресу; null — слова не найдены.</summary>
+    public string? ExportCountryOf(string name, string? address)
+    {
+        var text = $"{name} {address}".ToLowerInvariant();
+        return ExportCountries.FirstOrDefault(c => c.Value.Any(w => text.Contains(w.ToLowerInvariant()))).Key;
+    }
+
     /// <summary>Статусы перемещений, которые считаются отгрузкой: отдано (given) или уже принято (accepted).</summary>
     public string[] ShippedTransferStatuses { get; set; } = ["given", "accepted"];
 

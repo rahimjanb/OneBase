@@ -41,7 +41,7 @@ function Card({ title, sub, card, share, href }: { title: string; sub: string; c
   );
 }
 
-/** «Первичка»: выбор — республика (завод → дилеры) или экспорт (завод → склад экспорта). Цифры — с начала года. */
+/** «Первичка»: выбор — республика (завод → дилеры) или экспорт (заказы «Завода» экспортным точкам). Цифры — с начала года. */
 export default async function PrimaryPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
   const sp = await searchParams;
   const data = await apiGet<PrimaryView>(`/api/sales/primary${apiQuery(sp)}`, "/sales/primary");
@@ -60,14 +60,15 @@ export default async function PrimaryPage({ searchParams }: { searchParams: Prom
         />
         <Card
           title="Экспорт"
-          sub={`завод → склад «${data.exportStock ?? "Экспорт"}» · ${num(data.export.transfers)} перемещений`}
+          sub={`завод → экспорт · ${num(data.export.counterparties)} стран · ${num(data.export.transfers)} заказов`}
           card={data.export}
           share={total ? data.export.kg / total : null}
-          href={null}
+          href={withQuery("/sales/primary/export", q)}
         />
       </div>
       <p className="mt-4 text-xs text-ink-3">
-        Источник — перемещения Linko со склада завода. Экспорт по странам в Linko не разбит: здесь — всё, что завод отправил на склад экспорта.
+        Республика — перемещения Linko со склада завода на склады дилеров. Экспорт — заказы филиала «Завод» торговым точкам с типом EXPORT; страна — по
+        названию или адресу точки в Linko.
       </p>
     </SalesFrame>
   );

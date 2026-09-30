@@ -66,7 +66,8 @@ public sealed record PrimaryView(
     IReadOnlyList<PrimaryRow> Dealers,
     IReadOnlyList<PrimaryItemRow> Items,
     IReadOnlyList<PrimaryLine> MonthLines,
-    IReadOnlyDictionary<long, string> ProductNames);
+    IReadOnlyDictionary<long, string> ProductNames,
+    IReadOnlyList<string>? Notes = null);
 
 /// <summary>
 /// Первичка — отгрузка завода дилерам: перемещения Linko со склада завода на склады дилеров (кроме склада экспорта) в статусах
@@ -74,7 +75,7 @@ public sealed record PrimaryView(
 /// Возвраты — перемещения со склада дилера на склад завода; из отгрузки не вычитаются, показываются отдельно.
 /// План — загруженный в OneBase план вида «Первичка» по регионам (регион = склад дилера с тем же названием).
 /// </summary>
-public sealed class PrimaryService(IAppDbContext db, SalesOptions options, Microsoft.Extensions.Caching.Memory.IMemoryCache cache, SalesCacheSignal signal)
+public sealed partial class PrimaryService(IAppDbContext db, SalesOptions options, Microsoft.Extensions.Caching.Memory.IMemoryCache cache, SalesCacheSignal signal)
 {
     /// <summary>Строка плана без категории (итог региона) — отдельной строкой «Без разбивки» в плане по категориям.</summary>
     private const string NoBreakdown = "Без разбивки";
@@ -115,13 +116,9 @@ public sealed class PrimaryService(IAppDbContext db, SalesOptions options, Micro
 
         Shipment ToShipment(long id, long? from, long? to, DateOnly date, long? productId, decimal amount, decimal kg, decimal sum)
         {
-            // Коробки — по весу коробки из названия: у весового товара (единица учёта — 1 кг) любой, у штучного — если в коробке
-            // целое число штук этой строки. Иначе название не совпадает с тем, как товар учитывается, и коробки не считаются.
-            var pack = productId is { } p ? packs.GetValueOrDefault(p) : null;
-            var unitKg = StockMath.UnitKg(kg, amount);
-            var boxKg = pack?.BoxKg is { } b && unitKg is { } u && (Math.Abs(u - 1) < 0.001m || StockMath.BoxConsistent(b, u)) ? b : (decimal?)null;
             var dealerSum = productId is { } pid && dealerPrices.TryGetValue(pid, out var price) ? amount * price : 0;
-            return new Shipment(id, from, to, date, productId, new PrimaryAmounts(kg, boxKg is { } bk ? kg / bk : 0, sum, dealerSum), boxKg is not null);
+            var (amounts, boxesKnown) = AmountsOf(productId is { } p ? packs.GetValueOrDefault(p) : null, amount, kg, sum, dealerSum);
+            return new Shipment(id, from, to, date, productId, amounts, boxesKnown);
         }
 
         var all = raw
@@ -131,9 +128,9 @@ public sealed class PrimaryService(IAppDbContext db, SalesOptions options, Micro
             .ToList();
         bool IsFactory(long? id) => id is { } s && factoryIds.Contains(s);
         bool IsExport(long? id) => id is { } s && exportIds.Contains(s);
-        // С завода на склад экспорта — экспорт, не отгрузка дилеру: в первичку республики не входит.
+        // С завода на склад экспорта — не отгрузка дилеру: в первичку республики не входит. Сам экспорт — заказы
+        // филиала «Завод» экспортным точкам (PrimaryService.Export.cs).
         var outbound = all.Where(s => IsFactory(s.From) && !IsFactory(s.To) && !IsExport(s.To)).ToList();
-        var toExport = all.Where(s => IsFactory(s.From) && IsExport(s.To)).ToList();
         var returns = all.Where(s => !IsFactory(s.From) && !IsExport(s.From) && IsFactory(s.To)).ToList();
 
         var last = outbound.Count == 0 ? (DateOnly?)null : outbound.Max(s => s.Date);
@@ -261,7 +258,7 @@ public sealed class PrimaryService(IAppDbContext db, SalesOptions options, Micro
         var ytdReturns = returns.Where(s => s.Date.Year == year && s.Date.Month <= month).ToList();
         var ytdRows = yearRows.Where(s => s.Date.Month <= month).ToList();
         var syncedAt = (await db.LinkoSyncStates.AsNoTracking().FirstOrDefaultAsync(s => s.Entity == "stock_transfers", ct))?.LastSuccessAt;
-        var exportYear = toExport.Where(s => s.Date.Year == year).ToList();
+        var export = await LoadExportAsync(ct);
 
         return new PrimaryView(
             year,
@@ -275,8 +272,7 @@ public sealed class PrimaryService(IAppDbContext db, SalesOptions options, Micro
             dealerList?.Name,
             new PrimaryCard(yearRows.Sum(s => s.Amounts.Kg), yearRows.Sum(s => s.Amounts.SumFactory), yearRows.Select(s => s.To).Distinct().Count(),
                 yearRows.Select(s => s.Id).Distinct().Count()),
-            new PrimaryCard(exportYear.Sum(s => s.Amounts.Kg), exportYear.Sum(s => s.Amounts.SumFactory), exportYear.Select(s => s.To).Distinct().Count(),
-                exportYear.Select(s => s.Id).Distinct().Count()),
+            ExportCard(export, year),
             Sum(inMonth),
             planMonths[month - 1],
             running && workedDays > 0 ? SalesMath.Forecast(monthKg, workedDays, days) : null, // идущий месяц; закрытый — это факт

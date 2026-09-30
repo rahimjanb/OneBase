@@ -621,4 +621,5 @@ export type PrimaryView = {
   items: { productId: number; name: string; code: string | null; category: string; ytd: PrimaryAmounts; boxesKnown: boolean }[];
   monthLines: { day: number; dealerId: string; productId: number | null; kg: number; boxes: number; sumFactory: number; sumDealer: number }[];
   productNames: Record<string, string>;
+  notes?: string[];
 };

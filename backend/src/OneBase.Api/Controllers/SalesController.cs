@@ -136,6 +136,13 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     public Task<PrimaryView> Primary([FromServices] PrimaryService primary, [FromQuery] int? year, [FromQuery] int? month, CancellationToken ct) =>
         primary.GetAsync(year, month, ct);
 
+    /// <summary>
+    /// Первичка → Экспорт: заказы филиала «Завод» экспортным точкам (тип EXPORT) за месяц и год, по странам и дням.
+    /// </summary>
+    [HttpGet("primary/export")]
+    public Task<PrimaryView> PrimaryExport([FromServices] PrimaryService primary, [FromQuery] int? year, [FromQuery] int? month, CancellationToken ct) =>
+        primary.GetExportAsync(year, month, ct);
+
     private Task<SalesAnalytics> Load(PeriodQuery q, CancellationToken ct) => loader.LoadAsync(q.Year, q.Month, q.Plan, ct);
 
     private static AssortmentScope Scope(string? direction, Guid? region, long? agent, bool export) =>
