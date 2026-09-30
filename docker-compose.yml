@@ -105,8 +105,11 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    # Шаблон: при старте nginx подставляет PUBLIC_HOST (публичный домен) и пишет conf.d/default.conf.
     volumes:
-      - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/nginx/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-}
     # Снаружи сайт открывается через Cloudflare Tunnel (cloudflared → nginx по сети docker), порт наружу не нужен.
     # 127.0.0.1:8080 — для проверки на самом сервере: curl http://127.0.0.1:8080/health
     ports:

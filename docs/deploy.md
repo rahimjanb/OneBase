@@ -40,7 +40,7 @@ scp $HOME\onebase.dump root@IP_СЕРВЕРА:~/
 git clone https://github.com/rahimjanb/OneBase.git ~/onebase
 cd ~/onebase
 
-bash deploy/setup-env.sh                  # спросит токен туннеля; пароли сгенерирует сам
+bash deploy/setup-env.sh                  # спросит домен и токен туннеля; пароли сгенерирует сам
 bash deploy/restore-db.sh ~/onebase.dump  # только в пустую базу, до первого запуска
 docker compose up -d --build              # первая сборка — 5–10 минут
 
@@ -73,7 +73,8 @@ cd ~/onebase && bash deploy/update.sh
 |---|---|
 | Сайт не открывается | `docker compose logs --tail 50 cloudflared` — токен туннеля, Public hostname → `nginx:80` |
 | 502 / ошибка сервера | `docker compose logs --tail 100 api` и `docker compose logs --tail 100 web` |
-| Не входит, «Invalid Server Actions request» | Public hostname должен вести на `nginx:80`, а не на `web:3000` |
+| «This page couldn't load», в логе web — `does not match origin` | В `.env` нет `PUBLIC_HOST=ваш-домен`; добавить и `docker compose up -d` |
+| После входа снова страница входа | Сайт открыт по http — сессия ставится только по https. nginx перенаправляет сам, если задан `PUBLIC_HOST` |
 | Консультант обрывается | `docker compose logs api` — таймауты; nginx держит поток до 300 с, API шлёт «пульс» каждые 15 с |
 
 Файл `.env` на сервере — секреты (`chmod 600`); в git он не попадает. Храните его копию в надёжном месте.

@@ -13,6 +13,13 @@ fi
 command -v openssl >/dev/null || { echo "Нужен openssl: sudo apt install -y openssl" >&2; exit 1; }
 secret() { openssl rand -hex "$1"; }
 
+read -rp "Домен сайта без https:// (например 1base.uz): " public_host
+public_host="${public_host#https://}"; public_host="${public_host#http://}"; public_host="${public_host%%/*}"
+if [[ -z "$public_host" ]]; then
+  echo "Домен пустой — отмена." >&2
+  exit 1
+fi
+
 read -rsp "Токен Cloudflare Tunnel (ввод не отображается): " tunnel_token
 echo
 if [[ -z "$tunnel_token" ]]; then
@@ -24,6 +31,9 @@ umask 077
 cat > .env <<EOF
 # Создано deploy/setup-env.sh $(date +%F). Не коммитить.
 COMPOSE_PROFILES=tunnel
+
+# Публичный домен: nginx передаёт его в Next.js (проверка формы входа) и перенаправляет http → https.
+PUBLIC_HOST=${public_host}
 
 POSTGRES_DB=onebase
 POSTGRES_USER=onebase
