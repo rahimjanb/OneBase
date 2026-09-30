@@ -149,6 +149,26 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
+    public void Agent_akb_by_month_takes_old_months_from_the_agent_history()
+    {
+        var history = new[]
+        {
+            new MonthlyAkb(2026, 1, false, null, true, null, 7, AgentId: 1),
+            new MonthlyAkb(2026, 1, false, null, false, 1, 5, AgentId: 1),
+            new MonthlyAkb(2026, 1, false, null, true, null, 40), // республика — не этот агент
+        };
+
+        var agent = new SalesAnalytics(Data(akbHistory: history)).Agent(1);
+
+        Assert.Equal(1, agent.Akb); // ТТ 10
+        Assert.Equal(7, agent.AkbMonths!.Total[0]);
+        Assert.Null(agent.AkbMonths.Total[1]); // за февраль данных нет
+        Assert.Equal(1, agent.AkbMonths.Total[8]); // сентябрь — из строк продаж
+        var category = Assert.Single(agent.AkbMonths.Categories);
+        Assert.Equal((5, 1), (category.Values[0], category.Values[8]));
+    }
+
+    [Fact]
     public void Region_without_own_plan_uses_sum_of_its_agents_plans()
     {
         // Планы агентов (как из Linko): 1 и 2 — в «Севере», 3 — в «Юге»; у «Юга» есть ручной план региона.

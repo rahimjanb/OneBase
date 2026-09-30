@@ -40,9 +40,10 @@ public sealed record ProductInfo(long Id, string Name, string? Code, long? Categ
 public sealed record MonthlyFact(int Year, int Month, long? AgentId, long? BranchId, decimal Kg);
 
 /// <summary>
-/// АКБ за прошлый месяц из БД: по республике (ByBranch = false) или по филиалу; итог (IsTotal) или по категории-группе.
+/// АКБ давнего месяца из БД: по республике (ByBranch = false, AgentId = null), по филиалу или по агенту (AgentId);
+/// итог (IsTotal) или по категории-группе.
 /// </summary>
-public sealed record MonthlyAkb(int Year, int Month, bool ByBranch, long? BranchId, bool IsTotal, long? CategoryId, int Akb);
+public sealed record MonthlyAkb(int Year, int Month, bool ByBranch, long? BranchId, bool IsTotal, long? CategoryId, int Akb, long? AgentId = null);
 
 public sealed record PlanRow(Guid? RegionId, long? AgentId, int Month, long? CategoryId, decimal PlanKg);
 

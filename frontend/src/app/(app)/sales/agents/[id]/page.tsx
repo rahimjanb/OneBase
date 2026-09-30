@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { AkbChart } from "@/components/sales/AkbChart";
 import { CollapsedSections, FlagPills, KpiTile, Section } from "@/components/sales/bits";
 import { CategoryPlanBars, IndicatorBars, PlanBadge } from "@/components/sales/blocks";
 import { AgentStoresTable, LaggingTable, ProductsTable } from "@/components/sales/assortment-tables";
@@ -81,7 +82,7 @@ export default async function AgentPage({
         <FlagPills flags={data.flags.filter((f) => f.severity !== "Info")} empty={null} />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 min-[87.5rem]:grid-cols-5">
         <KpiTile label="План ТП на месяц" value={kg(data.planKg)} unit={data.planKg != null ? "кг" : undefined}>
           {data.planKg != null ? `выполнено ${pct(data.execution)}` : planNote(data, monthName(period.month))}
         </KpiTile>
@@ -103,9 +104,13 @@ export default async function AgentPage({
         <KpiTile label="Сум с визита" value={money(data.sumPerVisit.value)}>
           медиана региона {money(data.sumPerVisit.regionMedian)}
         </KpiTile>
+        <KpiTile label="АКБ — точек с отгрузкой" value={num(data.akb)}>
+          {data.akb ? `${money(data.revenue / data.akb)} сум с точки` : "покупок за месяц нет"}
+        </KpiTile>
         <KpiTile label="Средний чек" value={money(data.avgCheck.value)} unit="сум">
           медиана региона {money(data.avgCheck.regionMedian)}
         </KpiTile>
+        <KpiTile label="Вес на точку" value={kg(data.akb ? data.factKg / data.akb : null)} unit={data.akb ? "кг" : undefined} />
         <KpiTile label="Категорий" value={num(data.categories)} unit={data.planCategories ? `из ${data.planCategories} в плане` : undefined}>
           цель — {num(data.categoryTarget)} на активную точку
         </KpiTile>
@@ -120,6 +125,7 @@ export default async function AgentPage({
       )}
 
       <CollapsedSections>
+        {data.akbMonths && <AkbChart data={data.akbMonths} />}
         <IndicatorBars rows={data.indicators} />
         <CategoryPlanBars rows={data.categoryPlan} />
         {data.assortment && (

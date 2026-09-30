@@ -23,11 +23,11 @@ public sealed class SalesHistoryReader(OneBaseDbContext db, SalesOptions options
         };
 
         // АКБ — уникальные ТТ, у которых чистый вес за месяц (заказы минус возвраты) больше нуля: в каждом разрезе
-        // (республика / филиал, все категории / категория) чистый вес считается отдельно.
+        // (республика / филиал / агент, все категории / категория) чистый вес считается отдельно.
         var sql = $$"""
             with s as (
                 select date_trunc('month', {{orderDate}})::date m, o."BranchId" branch, o."MarketId" market,
-                       coalesce(map.grp, p."TypeId") grp, l."TotalWeight" kg
+                       coalesce(map.grp, p."TypeId") grp, l."TotalWeight" kg, o."AgentId" agent
                 from linko."OrderLines" l
                 join linko."Orders" o on o."Id" = l."OrderId"
                 left join linko."Products" p on p."Id" = l."ProductId"
@@ -36,7 +36,7 @@ public sealed class SalesHistoryReader(OneBaseDbContext db, SalesOptions options
                   and lower(coalesce(o."BranchName", '')) <> all({5})
                 union all
                 select date_trunc('month', r."CreatedDate")::date, r."BranchId", r."MarketId",
-                       coalesce(map.grp, p."TypeId"), -l."TotalWeight"
+                       coalesce(map.grp, p."TypeId"), -l."TotalWeight", r."AgentId"
                 from linko."OrderReturnLines" l
                 join linko."OrderReturns" r on r."Id" = l."ReturnId"
                 left join linko."Products" p on p."Id" = l."ProductId"
@@ -45,20 +45,26 @@ public sealed class SalesHistoryReader(OneBaseDbContext db, SalesOptions options
                   and lower(coalesce(r."BranchName", '')) <> all({5})
             ),
             res as (
-                select m, false by_branch, null::bigint branch, false total, grp, count(*) akb
+                select m, false by_branch, null::bigint branch, false total, grp, count(*) akb, null::bigint agent
                 from (select m, market, grp from s group by m, market, grp having sum(kg) > 0) x group by m, grp
                 union all
-                select m, false, null, true, null, count(*)
+                select m, false, null, true, null, count(*), null
                 from (select m, market from s group by m, market having sum(kg) > 0) x group by m
                 union all
-                select m, true, branch, false, grp, count(*)
+                select m, true, branch, false, grp, count(*), null
                 from (select m, branch, market, grp from s group by m, branch, market, grp having sum(kg) > 0) x group by m, branch, grp
                 union all
-                select m, true, branch, true, null, count(*)
+                select m, true, branch, true, null, count(*), null
                 from (select m, branch, market from s group by m, branch, market having sum(kg) > 0) x group by m, branch
+                union all
+                select m, false, null, false, grp, count(*), agent
+                from (select m, agent, market, grp from s where agent is not null group by m, agent, market, grp having sum(kg) > 0) x group by m, agent, grp
+                union all
+                select m, false, null, true, null, count(*), agent
+                from (select m, agent, market from s where agent is not null group by m, agent, market having sum(kg) > 0) x group by m, agent
             )
             select extract(year from m)::int "Year", extract(month from m)::int "Month", by_branch "ByBranch", branch "BranchId",
-                   total "IsTotal", grp "CategoryId", akb::int "Akb"
+                   total "IsTotal", grp "CategoryId", akb::int "Akb", agent "AgentId"
             from res
             where akb > 0
             """;
@@ -74,7 +80,7 @@ public sealed class SalesHistoryReader(OneBaseDbContext db, SalesOptions options
                 options.ReturnStatuses)
             .ToListAsync(ct);
 
-        return rows.Select(r => new MonthlyAkb(r.Year, r.Month, r.ByBranch, r.BranchId, r.IsTotal, r.CategoryId, r.Akb)).ToList();
+        return rows.Select(r => new MonthlyAkb(r.Year, r.Month, r.ByBranch, r.BranchId, r.IsTotal, r.CategoryId, r.Akb, r.AgentId)).ToList();
     }
 
     private sealed class AkbRow
@@ -86,5 +92,6 @@ public sealed class SalesHistoryReader(OneBaseDbContext db, SalesOptions options
         public bool IsTotal { get; set; }
         public long? CategoryId { get; set; }
         public int Akb { get; set; }
+        public long? AgentId { get; set; }
     }
 }

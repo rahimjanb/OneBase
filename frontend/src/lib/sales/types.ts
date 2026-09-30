@@ -317,6 +317,9 @@ export type AgentView = {
   silent: SilentMarket[];
   newMarkets: NewMarket[];
   assortment: AgentAssortment | null;
+  /** Точек с чистой покупкой у агента за месяц. */
+  akb: number;
+  akbMonths: AkbByMonth | null;
 };
 
 export type ProblemAgent = {

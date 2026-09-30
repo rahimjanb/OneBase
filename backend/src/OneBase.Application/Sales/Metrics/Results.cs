@@ -311,7 +311,9 @@ public sealed record AgentView(
     decimal SilentPrevRevenue,
     IReadOnlyList<SilentMarket> Silent,
     IReadOnlyList<NewMarket> NewMarkets,
-    AgentAssortment? Assortment = null);
+    AgentAssortment? Assortment = null,
+    int Akb = 0,
+    AkbByMonth? AkbMonths = null);
 
 public sealed record ProblemAgent(
     long AgentId,

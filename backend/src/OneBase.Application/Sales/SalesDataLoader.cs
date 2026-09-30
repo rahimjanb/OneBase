@@ -417,7 +417,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
     private async Task<IReadOnlyList<MonthlyAkb>> AkbHistoryAsync(DateOnly from, DateOnly to, IReadOnlyDictionary<long, long> groups, CancellationToken ct)
     {
         var merged = groups.Where(g => g.Key != g.Value).OrderBy(g => g.Key).ToDictionary();
-        var key = $"sales:akb:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}:{options.DateField}:{string.Join(",", ExcludedLower)}:{string.Join(",", merged.Select(g => $"{g.Key}>{g.Value}"))}";
+        var key = $"sales:akb:v2:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}:{options.DateField}:{string.Join(",", ExcludedLower)}:{string.Join(",", merged.Select(g => $"{g.Key}>{g.Value}"))}";
         if (cache.TryGetValue(key, out IReadOnlyList<MonthlyAkb>? cached) && cached is not null)
         {
             return cached;

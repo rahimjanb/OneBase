@@ -267,7 +267,9 @@ public sealed partial class SalesAnalytics
             silent.Sum(s => s.PrevRevenue),
             silent,
             newMarkets,
-            AgentAssortmentOf(id, regionId));
+            AgentAssortmentOf(id, regionId),
+            SalesMath.Akb(lines),
+            AgentAkbMonths(id));
     }
 
     public ProblemsView Problems(string? directionId, FlagKind? criterion, bool includeVacancies)
@@ -755,16 +757,42 @@ public sealed partial class SalesAnalytics
     /// Текущий и прошлый месяц — из строк продаж (как плитка АКБ), более ранние — из агрегатов БД.
     /// Для направления АКБ более ранних месяцев — сумма по его филиалам.
     /// </summary>
-    private AkbByMonth AkbMonthsOf(IReadOnlySet<Guid>? scope, IReadOnlyList<CategoryCard> cards)
+    private AkbByMonth AkbMonthsOf(IReadOnlySet<Guid>? scope, IReadOnlyList<CategoryCard> cards) =>
+        AkbMonthsCore(
+            _d.AkbHistory.Where(r => r.Year == _d.Year && r.AgentId == null && (scope is null ? !r.ByBranch : r.ByBranch && scope.Contains(BranchRegion(r.BranchId)))).ToList(),
+            Lines(scope).ToList(),
+            scope is null ? _d.Previous : scope.SelectMany(r => _previousByRegion[r]).ToList(),
+            cards.Select(c => (c.Id, c.Name)).ToList());
+
+    /// <summary>
+    /// АКБ агента по месяцам: итог и категории отчёта, в которых у агента в году была хоть одна точка
+    /// (от самой широкой). Точка агента — ТТ с чистым весом у этого агента за месяц больше нуля.
+    /// </summary>
+    private AkbByMonth AgentAkbMonths(long agent)
+    {
+        var history = _d.AkbHistory.Where(r => r.Year == _d.Year && r.AgentId == agent).ToList();
+        var current = _currentByAgent[agent].ToList();
+        var previous = _previousByAgent[agent].ToList();
+        var series = history.Where(r => !r.IsTotal).Select(r => r.CategoryId)
+            .Concat(current.Concat(previous).Select(l => GroupOf(l.CategoryId)))
+            .Where(InReport)
+            .Distinct()
+            .Select(g => (Id: g?.ToString() ?? "none", Name: _cats.NameOf(g)))
+            .ToList();
+        var result = AkbMonthsCore(history, current, previous, series);
+        return result with { Categories = result.Categories.OrderByDescending(s => s.Values.Sum(v => v ?? 0)).ToList() };
+    }
+
+    private AkbByMonth AkbMonthsCore(
+        IReadOnlyList<MonthlyAkb> history,
+        IReadOnlyList<SaleLine> currentLines,
+        IReadOnlyList<SaleLine> previousLines,
+        IReadOnlyList<(string Id, string Name)> cards)
     {
         var months = Enumerable.Range(1, _d.Month).ToList();
-        var history = _d.AkbHistory
-            .Where(r => r.Year == _d.Year && (scope is null ? !r.ByBranch : r.ByBranch && scope.Contains(BranchRegion(r.BranchId))))
-            .ToList();
-        var previousLines = scope is null ? _d.Previous : scope.SelectMany(r => _previousByRegion[r]).ToList();
 
         IReadOnlyList<SaleLine>? LinesOf(int month) =>
-            month == _d.Month ? Lines(scope).ToList()
+            month == _d.Month ? currentLines
             : _previousStart.Year == _d.Year && month == _previousStart.Month ? previousLines
             : null;
 
