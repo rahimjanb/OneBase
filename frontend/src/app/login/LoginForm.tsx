@@ -14,8 +14,8 @@ export function LoginForm({ next }: { next: string }) {
       <h1 className="text-lg font-semibold text-ink">Вход</h1>
       <input type="hidden" name="next" value={next} />
       <label className="mt-5 block">
-        <span className="mb-1.5 block text-sm text-ink-2">Логин</span>
-        <input name="email" type="text" required autoComplete="username" className={field} />
+        <span className="mb-1.5 block text-sm text-ink-2">Логин или почта</span>
+        <input name="login" type="text" required autoComplete="username" className={field} />
       </label>
       <label className="mt-4 block">
         <span className="mb-1.5 block text-sm text-ink-2">Пароль</span>

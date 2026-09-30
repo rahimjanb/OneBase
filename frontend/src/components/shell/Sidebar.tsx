@@ -63,7 +63,8 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export function Sidebar() {
+/** canOpenSettings — есть права раздела «Настройки»; обычным сотрудникам пункт не показывается. */
+export function Sidebar({ canOpenSettings }: { canOpenSettings: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -82,9 +83,11 @@ export function Sidebar() {
           ))}
         </nav>
 
-        <nav className="mt-6">
-          <NavLink item={settings} active={isActive(pathname, settings)} />
-        </nav>
+        {canOpenSettings && (
+          <nav className="mt-6">
+            <NavLink item={settings} active={isActive(pathname, settings)} />
+          </nav>
+        )}
 
         <div className="mt-auto border-t border-white/10 px-3 pt-4">
           <a href="#" className="flex items-center gap-2 whitespace-nowrap text-sm text-sidebar-text hover:text-white">
@@ -98,7 +101,7 @@ export function Sidebar() {
       <div className="bg-sidebar px-4 pb-2 pt-4 lg:hidden">
         <Logo />
         <nav className="-mx-1 mt-3 flex gap-1 overflow-x-auto pb-1">
-          {[...workspace, settings].map((item) => (
+          {[...workspace, ...(canOpenSettings ? [settings] : [])].map((item) => (
             <Link
               key={item.href}
               href={item.href}

@@ -38,5 +38,8 @@ public sealed class UserAccessCache(IServiceScopeFactory scopes, IMemoryCache ca
         return access;
     }
 
+    /// <summary>Роли или активность пользователя изменились — права перечитываются сразу, а не через минуту.</summary>
+    public void Invalidate(Guid userId) => cache.Remove(Key(userId));
+
     private static string Key(Guid userId) => $"user-access:{userId}";
 }

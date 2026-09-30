@@ -26,6 +26,7 @@ public static class OneBaseClaims
 {
     public const string UserId = "sub";
     public const string Email = "email";
+    public const string Login = "login";
     public const string Name = "name";
     public const string Role = "role";
     public const string Permission = "perm";
@@ -46,9 +47,14 @@ public sealed class JwtTokenService(JwtOptions options)
         var claims = new List<Claim>
         {
             new(OneBaseClaims.UserId, user.Id.ToString()),
-            new(OneBaseClaims.Email, user.Email),
+            new(OneBaseClaims.Login, user.Login),
             new(OneBaseClaims.Name, user.FullName),
         };
+        if (user.Email is { } email)
+        {
+            claims.Add(new Claim(OneBaseClaims.Email, email));
+        }
+
         if (user.DepartmentId is { } departmentId)
         {
             claims.Add(new Claim(OneBaseClaims.Department, departmentId.ToString()));

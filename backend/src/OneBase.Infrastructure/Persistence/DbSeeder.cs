@@ -10,10 +10,10 @@ using OneBase.Domain.Sales;
 
 namespace OneBase.Infrastructure.Persistence;
 
-/// <summary>Применяет миграции и создаёт базовые данные: отделы, роль Admin, первого администратора, гранты агентов.</summary>
+/// <summary>Применяет миграции и создаёт базовые данные: отделы, роли (SystemRoles), первого администратора, гранты агентов.</summary>
 public static class DbSeeder
 {
-    public const string AdminRole = "Admin";
+    public const string AdminRole = SystemRoles.Admin;
 
     private static readonly (string Code, string Name)[] Departments =
     [
@@ -46,17 +46,55 @@ public static class DbSeeder
             }
         }
 
-        var admin = await db.Roles.Include(r => r.Permissions)
-            .FirstOrDefaultAsync(r => r.Name == AdminRole, cancellationToken);
-        if (admin is null)
-        {
-            admin = new Role { Name = AdminRole, Description = "Полный доступ" };
-            db.Roles.Add(admin);
-        }
+        await db.SaveChangesAsync(cancellationToken); // отделы нужны ролям ниже
+        var departments = await db.Departments.ToDictionaryAsync(d => d.Code, d => d.Id, cancellationToken);
 
-        foreach (var code in Permissions.All.Except(admin.Permissions.Select(p => p.Code)))
+        // Роли: недостающие создаются с правами по умолчанию; у администратора всегда все права.
+        // Права уже созданных ролей (кроме администратора) не перезаписываются.
+        Role? admin = null;
+        foreach (var definition in SystemRoles.All)
         {
-            admin.Permissions.Add(new RolePermission { Code = code });
+            var isAdmin = definition.Name == SystemRoles.Admin;
+            var role = await db.Roles.Include(r => r.Permissions).FirstOrDefaultAsync(r => r.Name == definition.Name, cancellationToken);
+            if (role is null && isAdmin)
+            {
+                role = await db.Roles.Include(r => r.Permissions).FirstOrDefaultAsync(r => r.Name == SystemRoles.LegacyAdmin, cancellationToken);
+                if (role is not null)
+                {
+                    role.Name = SystemRoles.Admin;
+                }
+            }
+
+            var created = role is null;
+            if (role is null)
+            {
+                role = new Role { Name = definition.Name };
+                db.Roles.Add(role);
+            }
+
+            role.Description ??= definition.Description;
+            if (isAdmin)
+            {
+                role.Description = definition.Description;
+            }
+
+            if (definition.DepartmentCode is { } code && role.DepartmentId is null && departments.TryGetValue(code, out var departmentId))
+            {
+                role.DepartmentId = departmentId;
+            }
+
+            if (created || isAdmin)
+            {
+                foreach (var permission in definition.Permissions.Except(role.Permissions.Select(p => p.Code)))
+                {
+                    role.Permissions.Add(new RolePermission { Code = permission });
+                }
+            }
+
+            if (isAdmin)
+            {
+                admin = role;
+            }
         }
 
         foreach (var agent in AgentCodes)
@@ -73,16 +111,24 @@ public static class DbSeeder
             db.SalesTargets.Add(new SalesTarget { Key = key, Value = value });
         }
 
-        var email = config["Seed:AdminEmail"]?.Trim().ToLowerInvariant();
+        // Seed:AdminEmail — логин первого администратора (если похож на почту — и почта).
+        var login = config["Seed:AdminEmail"]?.Trim().ToLowerInvariant();
         var password = config["Seed:AdminPassword"];
-        if (!string.IsNullOrEmpty(email) && !string.IsNullOrEmpty(password)
-            && !await db.Users.AnyAsync(u => u.Email == email, cancellationToken))
+        if (!string.IsNullOrEmpty(login) && !string.IsNullOrEmpty(password)
+            && !await db.Users.AnyAsync(u => u.Login == login || u.Email == login, cancellationToken))
         {
-            var user = new User { Email = email, FullName = "Administrator" };
+            var user = new User
+            {
+                Login = login,
+                Email = login.Contains('@') ? login : null,
+                FirstName = "Administrator",
+                FullName = "Administrator",
+                Position = SystemRoles.Admin,
+            };
             user.PasswordHash = services.GetRequiredService<IPasswordHasher<User>>().HashPassword(user, password);
-            user.Roles.Add(new UserRole { Role = admin });
+            user.Roles.Add(new UserRole { Role = admin! });
             db.Users.Add(user);
-            logger.LogInformation("Создан администратор {Email}", email);
+            logger.LogInformation("Создан первый администратор");
         }
 
         await db.SaveChangesAsync(cancellationToken);

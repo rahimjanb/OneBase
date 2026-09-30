@@ -107,8 +107,14 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
 
         b.Entity<User>(e =>
         {
+            e.Property(x => x.Login).HasMaxLength(64);
             e.Property(x => x.Email).HasMaxLength(256);
+            e.Property(x => x.FirstName).HasMaxLength(100);
+            e.Property(x => x.LastName).HasMaxLength(100);
             e.Property(x => x.FullName).HasMaxLength(200);
+            e.Property(x => x.Phone).HasMaxLength(32);
+            e.Property(x => x.Position).HasMaxLength(150);
+            e.HasIndex(x => x.Login).IsUnique();
             e.HasIndex(x => x.Email).IsUnique();
             e.HasOne(x => x.Department).WithMany(x => x.Users).HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.SetNull);
         });
@@ -117,6 +123,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         {
             e.Property(x => x.Name).HasMaxLength(100);
             e.HasIndex(x => x.Name).IsUnique();
+            e.HasOne(x => x.Department).WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<UserRole>(e =>

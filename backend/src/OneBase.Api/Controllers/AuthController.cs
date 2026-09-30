@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using OneBase.Api.Auth;
 using OneBase.Application.Abstractions;
+using OneBase.Application.Security;
 using OneBase.Domain.Audit;
 using OneBase.Domain.Identity;
 
@@ -18,7 +19,8 @@ public sealed class AuthController(
     IPasswordHasher<User> hasher,
     IAuditLogger audit) : ControllerBase
 {
-    public sealed record LoginRequest(string Email, string Password);
+    /// <summary>Login — логин или почта; Email — прежнее имя поля, принимается так же.</summary>
+    public sealed record LoginRequest(string? Login, string? Email, string Password);
 
     public sealed record LoginResponse(string AccessToken, DateTimeOffset ExpiresAt);
 
@@ -27,10 +29,12 @@ public sealed class AuthController(
     [EnableRateLimiting("login")]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request, CancellationToken ct)
     {
-        var email = request.Email.Trim().ToLowerInvariant();
-        var user = await db.Users
-            .Include(u => u.Roles).ThenInclude(ur => ur.Role).ThenInclude(r => r.Permissions)
-            .FirstOrDefaultAsync(u => u.Email == email, ct);
+        var login = (request.Login ?? request.Email ?? string.Empty).Trim().ToLowerInvariant();
+        var user = login.Length == 0
+            ? null
+            : await db.Users
+                .Include(u => u.Roles).ThenInclude(ur => ur.Role).ThenInclude(r => r.Permissions)
+                .FirstOrDefaultAsync(u => u.Login == login || u.Email == login, ct);
 
         var verification = user is { IsActive: true }
             ? hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password)
@@ -38,7 +42,7 @@ public sealed class AuthController(
 
         if (user is null || verification == PasswordVerificationResult.Failed)
         {
-            await audit.LogAsync(ActorType.System, "auth", "auth.login.failed", data: new { email }, cancellationToken: ct);
+            await audit.LogAsync(ActorType.System, "auth", "auth.login.failed", data: new { login }, cancellationToken: ct);
             return Unauthorized();
         }
 
@@ -56,14 +60,31 @@ public sealed class AuthController(
         return new LoginResponse(token, expiresAt);
     }
 
+    /// <summary>Текущий пользователь: профиль — из БД (правки видны сразу), роли и права — актуальные (см. AuthSetup).</summary>
     [HttpGet("me")]
     [Authorize]
-    public IActionResult Me() => Ok(new
+    public async Task<IActionResult> Me(CancellationToken ct)
     {
-        Id = User.GetUserId(),
-        Email = User.FindFirst(OneBaseClaims.Email)?.Value,
-        Name = User.Identity?.Name,
-        Roles = User.FindAll(OneBaseClaims.Role).Select(c => c.Value),
-        Permissions = User.FindAll(OneBaseClaims.Permission).Select(c => c.Value),
-    });
+        var id = User.GetUserId();
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, ct);
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        var permissions = User.FindAll(OneBaseClaims.Permission).Select(c => c.Value).ToList();
+        return Ok(new
+        {
+            user.Id,
+            user.Login,
+            user.Email,
+            Name = user.FullName,
+            user.FirstName,
+            user.LastName,
+            user.Position,
+            Roles = User.FindAll(OneBaseClaims.Role).Select(c => c.Value).OrderBy(SystemRoles.OrderOf),
+            Permissions = permissions,
+            CanOpenSettings = SystemRoles.SettingsPermissions.Any(permissions.Contains),
+        });
+    }
 }

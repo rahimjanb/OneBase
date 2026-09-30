@@ -7,6 +7,10 @@ public class Role : Entity
     public required string Name { get; set; }
     public string? Description { get; set; }
 
+    /// <summary>Отдел роли: пользователь с этой ролью относится к отделу. null — роль не отдела (администратор, директор).</summary>
+    public Guid? DepartmentId { get; set; }
+    public Department? Department { get; set; }
+
     public ICollection<RolePermission> Permissions { get; set; } = [];
     public ICollection<UserRole> Users { get; set; } = [];
 }

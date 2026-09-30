@@ -7,7 +7,7 @@ import { API_URL, SESSION_COOKIE } from "@/lib/server-api";
 export type LoginState = { error?: string };
 
 export async function login(_: LoginState, form: FormData): Promise<LoginState> {
-  const email = String(form.get("email") ?? "").trim();
+  const login = String(form.get("login") ?? "").trim();
   const password = String(form.get("password") ?? "");
   const next = String(form.get("next") ?? "/sales");
 
@@ -16,7 +16,7 @@ export async function login(_: LoginState, form: FormData): Promise<LoginState> 
     response = await fetch(`${API_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ login, password }),
       cache: "no-store",
     });
   } catch {

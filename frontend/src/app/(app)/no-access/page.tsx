@@ -13,9 +13,10 @@ export default function NoAccessPage() {
           У вашей учётной записи нет доступа к этому разделу. Попросите администратора выдать нужное право или войдите под другим пользователем.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
-          <Link href="/logout" className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong">
+          {/* Обычная ссылка, не Link: Link заранее загружает адрес, а /logout при загрузке удаляет сессию. */}
+          <a href="/logout" className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong">
             Войти под другим пользователем
-          </Link>
+          </a>
           <Link href="/" className="inline-flex h-9 items-center rounded-lg border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-muted">
             На главную
           </Link>
