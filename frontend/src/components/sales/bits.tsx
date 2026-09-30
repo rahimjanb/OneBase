@@ -69,19 +69,25 @@ export function DeltaPill({ value }: { value: number | null }) {
 }
 
 const severityStyles = {
-  Critical: "bg-bad-soft text-bad",
-  Risk: "bg-warn-soft text-warn",
-  Info: "bg-muted text-ink-2",
+  Critical: "border-bad/25 bg-bad-soft text-bad",
+  Risk: "border-warn/25 bg-warn-soft text-warn",
+  Info: "border-line bg-muted text-ink-2",
 } as const;
 
+/** Флаги агента: «● Конверсия», «● Темп» — красные критичные, оранжевые риски. */
 export function FlagPills({ flags, empty = "Замечаний нет" }: { flags: AgentFlag[]; empty?: string | null }) {
   if (flags.length === 0) {
     return empty ? <span className="inline-block rounded-full bg-ok-soft px-2 py-0.5 text-xs font-medium text-ok">{empty}</span> : null;
   }
   return (
-    <span className="inline-flex flex-wrap gap-1">
+    <span className="inline-flex flex-wrap gap-1.5">
       {flags.map((f) => (
-        <span key={f.kind} title={f.title} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${severityStyles[f.severity]}`}>
+        <span
+          key={f.kind}
+          title={f.title}
+          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${severityStyles[f.severity]}`}
+        >
+          <span className="size-1.5 rounded-full bg-current" />
           {f.label}
         </span>
       ))}
