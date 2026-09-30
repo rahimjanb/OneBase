@@ -35,6 +35,7 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
   });
   const [temperature, setTemperature] = useState(initial.temperature?.toString() ?? "");
   const [maxTokens, setMaxTokens] = useState(initial.maxOutputTokens.toString());
+  const [reasoning, setReasoning] = useState(initial.reasoningEffort ?? "");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [tests, setTests] = useState<Partial<Record<Slot, AiModelTestResult>>>({});
@@ -56,6 +57,7 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
       embedding: decode(values.embedding),
       temperature: t === "" ? null : Number(t),
       maxOutputTokens: Number(maxTokens),
+      reasoningEffort: reasoning === "" ? null : reasoning,
     };
     if (body.temperature !== null && !Number.isFinite(body.temperature)) {
       setMessage({ tone: "bad", text: "Температура — число от 0 до 1." });
@@ -186,6 +188,19 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
             <span className="mb-1.5 block text-sm font-medium text-ink">Максимум токенов ответа</span>
             <input className={field} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} inputMode="numeric" />
             <span className="mt-1 block text-xs text-ink-3">Ограничивает длину и стоимость одного ответа модели (256–64 000).</span>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-ink">Глубина рассуждений</span>
+            <select className={field} value={reasoning} onChange={(e) => setReasoning(e.target.value)}>
+              <option value="low">Низкая — быстрее и дешевле (рекомендуется)</option>
+              <option value="medium">Средняя</option>
+              <option value="high">Высокая — дольше и дороже</option>
+              <option value="">По умолчанию модели</option>
+            </select>
+            <span className="mt-1 block text-xs text-ink-3">
+              Для reasoning-моделей OpenAI: сколько модель «думает» перед ответом. Выбор AI-сотрудников всегда идёт с низкой. Модели, которые параметр не
+              принимают, и Anthropic работают как раньше.
+            </span>
           </label>
         </div>
         <label className="mt-5 flex items-center gap-2.5 text-sm text-ink">

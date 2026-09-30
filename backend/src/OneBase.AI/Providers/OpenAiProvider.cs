@@ -127,6 +127,11 @@ public sealed class OpenAiProvider(IHttpClientFactory httpFactory) : HttpAiProvi
             body["temperature"] = temperature;
         }
 
+        if (request.ReasoningEffort is { } effort)
+        {
+            body["reasoning_effort"] = effort;
+        }
+
         if (request.Tools.Count > 0)
         {
             body["tools"] = new JsonArray(request.Tools.Select(t => (JsonNode?)new JsonObject
@@ -195,6 +200,11 @@ public sealed class OpenAiProvider(IHttpClientFactory httpFactory) : HttpAiProvi
         if (request.Temperature is { } temperature)
         {
             body["temperature"] = temperature;
+        }
+
+        if (request.ReasoningEffort is { } effort)
+        {
+            body["reasoning"] = new JsonObject { ["effort"] = effort };
         }
 
         if (request.Tools.Count > 0)

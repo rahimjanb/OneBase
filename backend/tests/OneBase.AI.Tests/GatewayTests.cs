@@ -136,6 +136,32 @@ public class GatewayTests
     }
 
     [Fact]
+    public async Task Reasoning_effort_comes_from_settings_unless_the_call_sets_its_own()
+    {
+        var (gateway, openAi, _, _) = Build(new AiSettingsSnapshot(true, Primary, Reserve, null, null, null, 2048, false, "medium"));
+
+        await gateway.CompleteAsync(Question, [], new AiCallOptions());
+        await gateway.CompleteAsync(Question, [], new AiCallOptions { ReasoningEffort = "low" });
+
+        Assert.Equal(["medium", "low"], openAi.Requests.Select(r => r.ReasoningEffort));
+    }
+
+    [Fact]
+    public async Task Model_without_reasoning_effort_support_is_retried_without_it_and_remembered()
+    {
+        var (gateway, openAi, anthropic, _) = Build(new AiSettingsSnapshot(true, Primary, Reserve, null, null, null, 2048, false, "low"));
+        openAi.Fail(new AiProviderException("openai", 400,
+            "Провайдер отклонил запрос (HTTP 400). Ответ провайдера: Unrecognized request argument supplied: reasoning_effort", false), times: 1);
+
+        var first = await gateway.CompleteAsync(Question, [], new AiCallOptions());
+        var second = await gateway.CompleteAsync(Question, [], new AiCallOptions());
+
+        Assert.Equal((Primary, Primary), (first.Model, second.Model));
+        Assert.Empty(anthropic.Requests);
+        Assert.Equal(["low", null, null], openAi.Requests.Select(r => r.ReasoningEffort));
+    }
+
+    [Fact]
     public async Task Empty_answer_cut_by_token_limit_explains_what_to_do()
     {
         var (gateway, openAi, _, _) = Build(new AiSettingsSnapshot(true, Primary, null, null, null, null, 1024, false));

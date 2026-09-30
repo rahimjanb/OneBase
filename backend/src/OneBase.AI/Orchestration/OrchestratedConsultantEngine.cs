@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using OneBase.AI.Agents;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
@@ -21,7 +22,8 @@ public sealed class OrchestratedConsultantEngine(
     AgentOrchestrator orchestrator,
     IAiGateway gateway,
     AiMemoryStore memory,
-    TimeProvider clock) : IConsultantEngine
+    TimeProvider clock,
+    ILogger<OrchestratedConsultantEngine> logger) : IConsultantEngine
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -88,7 +90,15 @@ public sealed class OrchestratedConsultantEngine(
         }, ct);
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Done));
 
-        await memory.SaveAsync(turn.UserId, turn.ConversationId, routing.Tasks, turn.Question, results, ct);
+        // Память — вспомогательная: её сбой не должен отнимать у пользователя готовый ответ.
+        try
+        {
+            await memory.SaveAsync(turn.UserId, turn.ConversationId, routing.Tasks, turn.Question, results, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Консультант: не удалось сохранить память чата {ConversationId}", turn.ConversationId);
+        }
 
         var sources = new List<DataSource>();
         foreach (var s in results.SelectMany(r => r.DataSources))

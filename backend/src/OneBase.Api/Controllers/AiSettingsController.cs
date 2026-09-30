@@ -37,7 +37,8 @@ public sealed class AiSettingsController(
         ModelRefInput? Router,
         ModelRefInput? Embedding,
         double? Temperature,
-        int MaxOutputTokens);
+        int MaxOutputTokens,
+        string? ReasoningEffort = null);
 
     [HttpGet("providers")]
     public async Task<IActionResult> Providers(CancellationToken ct) => Ok(await ProvidersViewAsync(ct));
@@ -153,6 +154,12 @@ public sealed class AiSettingsController(
             return BadRequest(new { error = "Максимум токенов ответа — от 256 до 64 000." });
         }
 
+        var reasoning = string.IsNullOrWhiteSpace(input.ReasoningEffort) ? null : input.ReasoningEffort.Trim().ToLowerInvariant();
+        if (reasoning is not null && !AiReasoning.All.Contains(reasoning))
+        {
+            return BadRequest(new { error = "Глубина рассуждений — low, medium, high или по умолчанию модели." });
+        }
+
         var refs = new List<(string Slot, ModelRefInput? Ref)>
         {
             ("основной", input.Primary), ("резервной", input.Fallback), ("маршрутизации", input.Router), ("эмбеддингов", input.Embedding),
@@ -194,6 +201,7 @@ public sealed class AiSettingsController(
         (row.EmbeddingProvider, row.EmbeddingModel) = Split(input.Embedding);
         row.Temperature = input.Temperature;
         row.MaxOutputTokens = input.MaxOutputTokens;
+        row.ReasoningEffort = reasoning;
         row.UpdatedAt = DateTimeOffset.UtcNow;
         row.UpdatedById = User.GetUserId();
         await db.SaveChangesAsync(ct);
@@ -209,6 +217,7 @@ public sealed class AiSettingsController(
                 embedding = Normalize(input.Embedding)?.ToString(),
                 input.Temperature,
                 input.MaxOutputTokens,
+                reasoning,
             }, ct);
         return Ok(await SettingsViewAsync(ct));
     }
@@ -303,6 +312,7 @@ public sealed class AiSettingsController(
             Embedding = settings.Embedding,
             settings.Temperature,
             settings.MaxOutputTokens,
+            settings.ReasoningEffort,
             Ready = readiness.Ready,
             ReadinessMessage = readiness.Message,
             UpdatedAt = row?.UpdatedAt,

@@ -43,6 +43,8 @@ export type AiSettingsView = {
   embedding: AiModelRef | null;
   temperature: number | null;
   maxOutputTokens: number;
+  /** low | medium | high; null — по умолчанию модели. */
+  reasoningEffort: string | null;
   ready: boolean;
   readinessMessage: string | null;
   updatedAt: string | null;

@@ -84,6 +84,18 @@ public class ProviderTests
     }
 
     [Fact]
+    public void OpenAi_sends_reasoning_effort_only_when_set()
+    {
+        var chat = OpenAiProvider.BuildBody(Conversation() with { ReasoningEffort = "low" });
+        var responses = OpenAiProvider.BuildResponsesBody(Conversation() with { ReasoningEffort = "low" });
+
+        Assert.Equal("low", (string?)chat["reasoning_effort"]);
+        Assert.Equal("low", (string?)responses["reasoning"]!["effort"]);
+        Assert.False(OpenAiProvider.BuildBody(Conversation()).ContainsKey("reasoning_effort"));
+        Assert.False(OpenAiProvider.BuildResponsesBody(Conversation()).ContainsKey("reasoning"));
+    }
+
+    [Fact]
     public void OpenAi_responses_request_maps_messages_calls_outputs_and_tools()
     {
         var body = OpenAiProvider.BuildResponsesBody(Conversation() with { JsonOutput = true });

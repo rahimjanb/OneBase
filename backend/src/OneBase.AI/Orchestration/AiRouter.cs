@@ -4,6 +4,7 @@ using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
+using OneBase.Domain.AI;
 
 namespace OneBase.AI.Orchestration;
 
@@ -40,7 +41,11 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
         var result = await gateway.CompleteAsync(
             [new LlmMessage(LlmRole.System, Prompt(available)), new LlmMessage(LlmRole.User, Request(question, history, memory))],
             [],
-            new AiCallOptions { Model = s.Router, JsonOutput = true, MaxOutputTokens = 2048, Context = context with { Purpose = "consultant.route" } },
+            // Выбор сотрудников — простая задача: рассуждения всегда минимальные, чтобы не ждать десятки секунд.
+            new AiCallOptions
+            {
+                Model = s.Router, JsonOutput = true, MaxOutputTokens = 2048, ReasoningEffort = AiReasoning.Low, Context = context with { Purpose = "consultant.route" },
+            },
             ct);
 
         var json = JsonText.ExtractObject(result.Text);

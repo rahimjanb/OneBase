@@ -23,6 +23,9 @@ public sealed record AiCallOptions
     public double? Temperature { get; init; }
     public int? MaxOutputTokens { get; init; }
 
+    /// <summary>Глубина рассуждений; null — из настроек AI.</summary>
+    public string? ReasoningEffort { get; init; }
+
     /// <summary>Ответ — JSON-объект (у OpenAI включается response_format, у Anthropic — только инструкцией).</summary>
     public bool JsonOutput { get; init; }
 
@@ -90,6 +93,9 @@ internal sealed class AiGateway(
     /// </summary>
     private readonly ConcurrentDictionary<string, bool> _noTemperature = new(StringComparer.Ordinal);
 
+    /// <summary>Модели, которые не принимают глубину рассуждений (не reasoning-модели или другое значение) — параметр не отправляется.</summary>
+    private readonly ConcurrentDictionary<string, bool> _noReasoning = new(StringComparer.Ordinal);
+
     public async Task<AiReadiness> GetReadinessAsync(CancellationToken cancellationToken = default)
     {
         var settings = await store.GetSettingsAsync(cancellationToken);
@@ -143,6 +149,7 @@ internal sealed class AiGateway(
 
         var temperature = options.Temperature ?? settings.Temperature;
         var maxTokens = options.MaxOutputTokens ?? settings.MaxOutputTokens;
+        var reasoning = options.ReasoningEffort ?? settings.ReasoningEffort;
 
         try
         {
@@ -178,7 +185,8 @@ internal sealed class AiGateway(
             }
 
             var key = model.ToString();
-            var request = new AiCompletionRequest(model.Model, messages, tools, _noTemperature.ContainsKey(key) ? null : temperature, maxTokens, options.JsonOutput);
+            var request = new AiCompletionRequest(model.Model, messages, tools, _noTemperature.ContainsKey(key) ? null : temperature, maxTokens, options.JsonOutput,
+                _noReasoning.ContainsKey(key) ? null : reasoning);
             for (var attempt = 1; ; attempt++)
             {
                 var watch = Stopwatch.StartNew();
@@ -200,6 +208,16 @@ internal sealed class AiGateway(
                         _noTemperature[key] = true;
                         logger.LogInformation("AI: модель {Model} не принимает temperature — запросы отправляются без неё", key);
                         request = request with { Temperature = null };
+                        attempt--;
+                        continue;
+                    }
+
+                    // Модель не принимает глубину рассуждений — тоже повторяем без неё и запоминаем.
+                    if (request.ReasoningEffort is not null && ex.StatusCode == 400 && ex.Message.Contains("reasoning", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _noReasoning[key] = true;
+                        logger.LogInformation("AI: модель {Model} не принимает глубину рассуждений — запросы отправляются без неё", key);
+                        request = request with { ReasoningEffort = null };
                         attempt--;
                         continue;
                     }

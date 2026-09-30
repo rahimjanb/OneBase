@@ -63,6 +63,7 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
             analytics.CachedRepublic(null, null);
             analytics.CachedProblems(null, null, false);
             analytics.CachedPlans();
+            analytics.CachedAssortment(null, null); // «Товары и категории» — частый инструмент AI-консультанта
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

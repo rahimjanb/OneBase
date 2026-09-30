@@ -1,5 +1,15 @@
 namespace OneBase.Domain.AI;
 
+/// <summary>Глубина рассуждений моделей (reasoning effort).</summary>
+public static class AiReasoning
+{
+    public const string Low = "low";
+    public const string Medium = "medium";
+    public const string High = "high";
+
+    public static readonly IReadOnlyList<string> All = [Low, Medium, High];
+}
+
 /// <summary>Общие настройки AI: основной и резервный провайдер, модели для задач, параметры генерации. Одна строка.</summary>
 public class AiSettings
 {
@@ -30,6 +40,12 @@ public class AiSettings
     public double? Temperature { get; set; }
 
     public int MaxOutputTokens { get; set; } = 4096;
+
+    /// <summary>
+    /// Глубина рассуждений reasoning-моделей OpenAI: low | medium | high; пусто — по умолчанию модели.
+    /// Чем глубже, тем дольше и дороже ответ.
+    /// </summary>
+    public string? ReasoningEffort { get; set; } = AiReasoning.Low;
 
     public DateTimeOffset? UpdatedAt { get; set; }
     public Guid? UpdatedById { get; set; }

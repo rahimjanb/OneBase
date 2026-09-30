@@ -21,7 +21,8 @@ public sealed record AiCompletionRequest(
     IReadOnlyList<LlmToolDefinition> Tools,
     double? Temperature,
     int MaxOutputTokens,
-    bool JsonOutput = false);
+    bool JsonOutput = false,
+    string? ReasoningEffort = null);
 
 public sealed record AiCompletion(
     string? Text,

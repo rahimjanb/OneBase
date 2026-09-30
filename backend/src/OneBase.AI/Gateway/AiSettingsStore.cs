@@ -50,7 +50,8 @@ public sealed record AiSettingsSnapshot(
     AiModelRef? Embedding,
     double? Temperature,
     int MaxOutputTokens,
-    bool PrimaryFromEnvironment);
+    bool PrimaryFromEnvironment,
+    string? ReasoningEffort = null);
 
 /// <summary>Запасные значения из окружения сервера (.env / docker-compose).</summary>
 public sealed class AiEnvironment
@@ -202,7 +203,8 @@ public sealed class AiSettingsStore(
             embedding,
             row?.Temperature,
             row?.MaxOutputTokens ?? 4096,
-            fromEnvironment);
+            fromEnvironment,
+            row is null ? AiReasoning.Low : row.ReasoningEffort);
         _settings = settings;
         return settings;
     }

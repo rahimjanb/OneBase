@@ -21,23 +21,44 @@ public sealed class AiMemoryStore(IAppDbContext db)
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>Сохраняет результаты сотрудников, у которых есть что вспомнить (не ошибки и не «нет доступа»).</summary>
+    /// <summary>Длина колонки Topic (ai.Memory).</summary>
+    internal const int TopicLength = 500;
+
+    /// <summary>
+    /// Сохраняет результаты сотрудников, у которых есть что вспомнить (не ошибки и не «нет доступа»).
+    /// Если запись не удалась, добавленные строки снимаются с контекста — иначе они сорвали бы сохранение самого ответа.
+    /// </summary>
     public async Task SaveAsync(Guid userId, Guid conversationId, IReadOnlyDictionary<string, string> tasks, string question,
         IReadOnlyList<AgentResult> results, CancellationToken ct)
     {
+        var added = new List<AiMemory>();
         foreach (var r in results.Where(r => r.Status is "completed" or "partial" or "no_data"))
         {
-            var topic = Trim(tasks.GetValueOrDefault(r.Agent) ?? question, 500);
+            var topic = Trim(tasks.GetValueOrDefault(r.Agent) ?? question, TopicLength);
             var content = Summary(r);
             var data = JsonSerializer.Serialize(r, Json);
-            db.AiMemories.Add(new AiMemory { Kind = AiMemoryKind.Analytical, UserId = userId, AgentCode = r.Agent, ConversationId = conversationId, Topic = topic, Content = content, Data = data });
+            added.Add(new AiMemory { Kind = AiMemoryKind.Analytical, UserId = userId, AgentCode = r.Agent, ConversationId = conversationId, Topic = topic, Content = content, Data = data });
             if (r.Status != "no_data")
             {
-                db.AiMemories.Add(new AiMemory { Kind = AiMemoryKind.Agent, UserId = userId, AgentCode = r.Agent, ConversationId = conversationId, Topic = topic, Content = content });
+                added.Add(new AiMemory { Kind = AiMemoryKind.Agent, UserId = userId, AgentCode = r.Agent, ConversationId = conversationId, Topic = topic, Content = content });
             }
         }
 
-        await db.SaveChangesAsync(ct);
+        if (added.Count == 0)
+        {
+            return;
+        }
+
+        db.AiMemories.AddRange(added);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            db.AiMemories.RemoveRange(added); // новые строки просто отсоединяются
+            throw;
+        }
     }
 
     /// <summary>Что уже проанализировано в этом чате — сотрудниками из списка доступных.</summary>
@@ -86,5 +107,6 @@ public sealed class AiMemoryStore(IAppDbContext db)
         return Trim(sb.ToString(), 1500);
     }
 
-    private static string Trim(string text, int max) => text.Length <= max ? text : text[..max] + "…";
+    /// <summary>Не длиннее max вместе с «…».</summary>
+    internal static string Trim(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
 }

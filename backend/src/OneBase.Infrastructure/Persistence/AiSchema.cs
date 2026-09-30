@@ -43,6 +43,7 @@ internal static class AiSchema
             e.Property(x => x.RouterModel).HasMaxLength(200);
             e.Property(x => x.EmbeddingProvider).HasMaxLength(32);
             e.Property(x => x.EmbeddingModel).HasMaxLength(200);
+            e.Property(x => x.ReasoningEffort).HasMaxLength(16);
         });
 
         b.Entity<AiConversation>(e =>
