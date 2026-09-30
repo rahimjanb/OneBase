@@ -216,6 +216,10 @@ public sealed class SalesCategories
     public string NameOf(long? group) =>
         group is { } g ? _names.TryGetValue(g, out var n) ? n : $"Тип {g}" : "Без категории";
 
+    /// <summary>Группа категории отчёта по её названию из настройки; null — такой категории нет.</summary>
+    public long? GroupByName(string name) =>
+        _names.Where(n => n.Key < 0 && string.Equals(n.Value, name, StringComparison.OrdinalIgnoreCase)).Select(n => (long?)n.Key).FirstOrDefault();
+
     /// <summary>Категория из настройки отчёта (а не тип Linko вне её).</summary>
     public static bool IsConfigured(long? group) => group is < 0;
 

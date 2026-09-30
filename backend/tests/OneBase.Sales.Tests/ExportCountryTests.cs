@@ -25,4 +25,19 @@ public class ExportCountryTests
     [Fact]
     public void Only_configured_market_types_are_export() =>
         Assert.True(Options.IsExportMarketType(" export ") && !Options.IsExportMarketType("Оптовая торговля"));
+
+    [Theory]
+    [InlineData("Сентябрь Бамбук Бухоро", "Бамбук")]
+    [InlineData("Сентябрь Могуль + Шоколад Шахрисабз Самарканд", "Помадка,Шоколад")]
+    [InlineData("Сентябрь Трубочка + Печение Шахрисабз Самарканд", "Трубочки,Печенье")]
+    [InlineData("Сентябрь план Самарканд", "")]
+    public void Plan_indicator_is_split_into_report_categories(string indicator, string categories) =>
+        Assert.Equal(categories.Split(',', StringSplitOptions.RemoveEmptyEntries), Options.PlanCategoriesOf(indicator));
+
+    [Theory]
+    [InlineData(0, "Иван", true)]
+    [InlineData(15, "Вакант Самарканд", true)]
+    [InlineData(16, "Агент Ташкент", false)]
+    public void Vacancy_is_marked_by_name_or_zero_id(long id, string name, bool vacancy) =>
+        Assert.Equal(vacancy, Options.IsVacancy(id, name));
 }

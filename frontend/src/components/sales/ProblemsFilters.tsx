@@ -33,14 +33,16 @@ export function ProblemsFilters({ directions, vacancies, found }: { directions: 
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <select key={`d${key}`} aria-label="РМ" defaultValue={params.get("direction") ?? ""} onChange={(e) => set("direction", e.target.value || null)} className={control}>
-        <option value="">Все РМ</option>
-        {directions.map((d) => (
-          <option key={d.id} value={d.id}>
-            {d.name}
-          </option>
-        ))}
-      </select>
+      {directions.length > 0 && (
+        <select key={`d${key}`} aria-label="РМ" defaultValue={params.get("direction") ?? ""} onChange={(e) => set("direction", e.target.value || null)} className={control}>
+          <option value="">Все РМ</option>
+          {directions.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+      )}
       <select key={`c${key}`} aria-label="Критерий" defaultValue={params.get("criterion") ?? ""} onChange={(e) => set("criterion", e.target.value || null)} className={control}>
         <option value="">Любой критерий</option>
         {criteria.map((c) => (

@@ -56,6 +56,45 @@ public sealed class SalesOptions
         ["Помадка"] = "8,17,18,19,20,21",
     };
 
+    /// <summary>
+    /// Категория отчёта → слова в названии весового показателя плана Linko («Сентябрь Бамбук Бухоро»,
+    /// «Сентябрь Могуль + Шоколад …»). «Могуль» — так в планах называется помадка. Показатель без этих слов — план
+    /// без разбивки по категориям.
+    /// </summary>
+    public Dictionary<string, string[]> PlanIndicatorCategories { get; set; } = new()
+    {
+        ["Бамбук"] = ["бамбук"],
+        ["Кекс"] = ["кекс"],
+        ["Трубочки"] = ["трубоч"],
+        ["Печенье"] = ["печен"],
+        ["Шоколад"] = ["шоколад"],
+        ["Песочный"] = ["песоч"],
+        ["Придзел"] = ["придзел", "twizos", "снек"],
+        ["Помадка"] = ["помадк", "могул"],
+    };
+
+    /// <summary>Категории отчёта, к которым относится показатель плана Linko.</summary>
+    public IReadOnlyList<string> PlanCategoriesOf(string? indicatorName)
+    {
+        // В порядке упоминания в названии: «Могуль + Шоколад» → Помадка, Шоколад.
+        var text = (indicatorName ?? string.Empty).ToLowerInvariant();
+        return PlanIndicatorCategories
+            .Select(c => (c.Key, At: c.Value.Select(w => text.IndexOf(w.ToLowerInvariant(), StringComparison.Ordinal)).Where(i => i >= 0).DefaultIfEmpty(-1).Min()))
+            .Where(c => c.At >= 0)
+            .OrderBy(c => c.At)
+            .Select(c => c.Key)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Вакансия в Linko — незакрытая позиция, а не агент: в имени есть «вакант» или ID равен нулю.
+    /// Вакансии не входят в рейтинг «Проблемных агентов» и в численность ТП.
+    /// </summary>
+    public string[] VacancyMarkers { get; set; } = ["вакант"];
+
+    public bool IsVacancy(long id, string? name) =>
+        id == 0 || (name is { } n && VacancyMarkers.Any(m => n.Contains(m, StringComparison.OrdinalIgnoreCase)));
+
     /// <summary>Тип товара → название категории отчёта.</summary>
     public IReadOnlyDictionary<long, string> CategoryByType() =>
         Categories

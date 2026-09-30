@@ -185,6 +185,8 @@ export type GroupView = {
   akbMonths: AkbByMonth;
   quality: DataQuality;
   excluded: ExcludedSummary | null;
+  categoryPlans?: CategoryPlanFact[] | null;
+  nextMonth?: NextMonthPlan | null;
 };
 
 /** АКБ по месяцам года: итог и по категориям. null — данных за месяц нет. */
@@ -283,6 +285,8 @@ export type RegionView = {
   categoryCards: CategoryCard[];
   akbMonths: AkbByMonth;
   quality: DataQuality;
+  categoryPlans?: CategoryPlanFact[] | null;
+  nextMonth?: NextMonthPlan | null;
 };
 
 export type MedianValue = { value: number | null; regionMedian: number | null };
@@ -312,7 +316,7 @@ export type AgentView = {
   categoryTarget: number;
   tempo: number | null;
   flags: AgentFlag[];
-  categoryPlan: { categoryId: number | null; name: string; planKg: number | null; factKg: number; revenue: number; execution: number | null }[];
+  categoryPlan: CategoryPlanFact[];
   indicators: { indicatorId: number; name: string; planType: string; plan: number; fact: number; execution: number | null }[];
   sameDays: SameDaysRow;
   silentBase: number;
@@ -622,4 +626,23 @@ export type PrimaryView = {
   monthLines: { day: number; dealerId: string; productId: number | null; kg: number; boxes: number; sumFactory: number; sumDealer: number }[];
   productNames: Record<string, string>;
   notes?: string[];
+};
+/** План и факт по категории или паре категорий показателя Linko; факт — ТП с этим планом, scopeFactKg — весь факт. */
+export type CategoryPlanFact = {
+  categoryId: number | null;
+  name: string;
+  planKg: number | null;
+  factKg: number;
+  revenue: number;
+  execution: number | null;
+  scopeFactKg?: number | null;
+};
+
+export type NextMonthPlan = {
+  year: number;
+  month: number;
+  planKg: number;
+  currentPlanKg: number | null;
+  agents: number;
+  rows: { id: string; name: string; planKg: number; currentPlanKg: number | null }[];
 };

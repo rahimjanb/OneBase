@@ -185,7 +185,9 @@ public sealed partial class SalesAnalytics
             NotInDirectory(id),
             categories,
             AkbMonthsOf(scope, categories),
-            QualityOf(scope));
+            QualityOf(scope),
+            CategoryPlansOf(scope),
+            NextMonthOf(scope, byCategory: true));
     }
 
     public AgentView Agent(long id)
@@ -206,12 +208,9 @@ public sealed partial class SalesAnalytics
             .Select(i => new IndicatorPlan(i.IndicatorId, i.Name, i.PlanType, i.Plan, i.Fact, SalesMath.Ratio(i.Fact, i.Plan)))
             .ToList();
 
-        // «Категорий в плане»: категории ручного плана OneBase, иначе — весовые показатели Linko.
-        var planCategories = plans.Where(p => p.CategoryId != null).Select(p => p.CategoryId).Distinct().Count();
-        if (planCategories == 0)
-        {
-            planCategories = indicators.Count(i => i.PlanType == "product_sales_weight");
-        }
+        // «Категорий в плане»: категории весовых показателей Linko этого ТП.
+        var categoryPlans = CurrentCategoryPlans().Where(p => p.AgentId == id).ToList();
+        var planCategories = categoryPlans.SelectMany(p => p.Groups).Distinct().Count();
 
         var lines = _currentByAgent[id].ToList();
         var prevLines = _previousByAgent[id].ToList();
@@ -260,7 +259,7 @@ public sealed partial class SalesAnalytics
             _d.Targets.CategoriesPerOutlet,
             stats.Tempo,
             FlagsOf(id),
-            CategoryPlanOf(plans, lines),
+            PlanFacts(categoryPlans, lines),
             indicators,
             Compare(id.ToString(), AgentName(id), null, lines, prevLines),
             prevMarkets.Count,
@@ -333,7 +332,9 @@ public sealed partial class SalesAnalytics
             categories,
             AkbMonthsOf(set, categories),
             QualityOf(set),
-            set is null ? Excluded() : null);
+            set is null ? Excluded() : null,
+            CategoryPlansOf(set),
+            NextMonthOf(set, byCategory: false));
     }
 
     private KpiTiles Kpi(IReadOnlySet<Guid>? scope)
@@ -859,10 +860,12 @@ public sealed partial class SalesAnalytics
         return new MonthCalendar(metric, metric == "akb" ? category : null, sundays, rows, totals, Cell(regionLines) ?? 0);
     }
 
+    /// <summary>Команда региона — ТП из справочника (должность ТП в Linko) и вакансии; остальные продающие — в NotInDirectory.</summary>
     private List<long> TeamOf(Guid region) =>
         _currentByRegion[region].Where(l => l.AgentId != null).Select(l => l.AgentId!.Value)
             .Concat(AgentsIn(new HashSet<Guid> { region }))
             .Distinct()
+            .Where(a => IsSalesRep(a) || IsVacancy(a))
             .ToList();
 
     private Func<long, TeamRow> TeamRowOf(Guid region) => agent =>
@@ -882,31 +885,101 @@ public sealed partial class SalesAnalytics
     private List<NotInDirectoryRow> NotInDirectory(Guid region) =>
         _currentByRegion[region].Where(l => l.AgentId != null)
             .GroupBy(l => l.AgentId!.Value)
-            .Where(g => !(_d.Agents.TryGetValue(g.Key, out var a) && a.InDirectory))
+            .Where(g => !IsSalesRep(g.Key) && !IsVacancy(g.Key))
             .Select(g => new NotInDirectoryRow(g.Key, AgentName(g.Key), g.Sum(l => l.Kg), g.Sum(l => l.Revenue)))
             .OrderByDescending(r => r.Kg)
             .ToList();
 
-    /// <summary>
-    /// План и факт агента по категориям отчёта: ручные планы OneBase заведены по типам Linko, поэтому и план,
-    /// и факт сводятся к категориям отчёта (фасовки помадки — одна строка).
-    /// </summary>
-    private List<CategoryPlanFact> CategoryPlanOf(IReadOnlyList<PlanRow> plans, IReadOnlyList<SaleLine> lines)
-    {
-        var categories = plans.Where(p => p.CategoryId != null).Select(p => GroupOf(p.CategoryId))
-            .Concat(lines.GroupBy(l => GroupOf(l.CategoryId)).Where(g => g.Sum(l => l.Revenue) > 0).Select(g => g.Key))
-            .Distinct();
+    private IEnumerable<CategoryPlanRow> CurrentCategoryPlans() =>
+        _d.CategoryPlans.Where(p => p.Year == _d.Year && p.Month == _d.Month);
 
-        return categories.Select(c =>
+    /// <summary>План по категориям подразделения — сумма планов его ТП по показателям Linko.</summary>
+    private List<CategoryPlanFact> CategoryPlansOf(IReadOnlySet<Guid>? scope)
+    {
+        var agents = AgentsIn(scope).ToHashSet();
+        var rows = CurrentCategoryPlans().Where(p => scope is null || agents.Contains(p.AgentId)).ToList();
+        return PlanFacts(rows, Lines(scope).ToList());
+    }
+
+    /// <summary>
+    /// План и факт по группам категорий показателей Linko. Факт — ТП, у которых есть этот план (как у плитки выполнения),
+    /// рядом — весь факт по этим категориям. Категории с продажами, но без плана — отдельными строками «плана нет».
+    /// </summary>
+    private List<CategoryPlanFact> PlanFacts(IReadOnlyList<CategoryPlanRow> rows, IReadOnlyList<SaleLine> lines)
+    {
+        var result = new List<CategoryPlanFact>();
+        foreach (var g in rows.GroupBy(r => string.Join(",", r.Groups)))
+        {
+            var groups = g.First().Groups;
+            var agents = g.Select(r => r.AgentId).ToHashSet();
+            var inGroups = groups.Count == 0 ? lines : lines.Where(l => GroupOf(l.CategoryId) is { } c && groups.Contains(c)).ToList();
+            var own = inGroups.Where(l => l.AgentId is { } a && agents.Contains(a)).ToList();
+            var plan = g.Sum(r => r.PlanKg);
+            var fact = own.Sum(l => l.Kg);
+            var name = groups.Count == 0 ? "Без разбивки по категориям" : string.Join(" + ", groups.Select(x => _cats.NameOf(x)));
+            result.Add(new CategoryPlanFact(groups.Count == 1 ? groups[0] : null, name, plan, fact, own.Sum(l => l.Revenue),
+                SalesMath.Ratio(fact, plan), inGroups.Sum(l => l.Kg)));
+        }
+
+        var planned = rows.SelectMany(r => r.Groups).ToHashSet();
+        foreach (var g in lines.GroupBy(l => GroupOf(l.CategoryId)).Where(g => g.Key is { } c && SalesCategories.IsConfigured(c) && !planned.Contains(c)))
+        {
+            var kg = g.Sum(l => l.Kg);
+            if (kg > 0)
             {
-                var plan = SalesMath.PlanTotal(plans.Where(p => p.CategoryId != null && GroupOf(p.CategoryId) == c));
-                var cl = lines.Where(l => GroupOf(l.CategoryId) == c).ToList();
-                var fact = cl.Sum(l => l.Kg);
-                return new CategoryPlanFact(c, _cats.NameOf(c), plan, fact, cl.Sum(l => l.Revenue), SalesMath.Ratio(fact, plan));
-            })
+                result.Add(new CategoryPlanFact(g.Key, _cats.NameOf(g.Key), null, kg, g.Sum(l => l.Revenue), null, kg));
+            }
+        }
+
+        return result
             .OrderBy(x => x.PlanKg is null)
-            .ThenByDescending(x => x.FactKg)
+            .ThenByDescending(x => x.PlanKg ?? x.FactKg)
             .ToList();
+    }
+
+    /// <summary>
+    /// План на следующий месяц из Linko: на верхних уровнях — по регионам, в регионе — по категориям.
+    /// null — в Linko планов ТП на следующий месяц ещё нет.
+    /// </summary>
+    private NextMonthPlan? NextMonthOf(IReadOnlySet<Guid>? scope, bool byCategory)
+    {
+        var agents = AgentsIn(scope).ToHashSet();
+        bool InScope(long agent) => scope is null ? true : agents.Contains(agent);
+        var next = _d.NextPlans.Where(p => p.AgentId is { } a && InScope(a)).ToList();
+        if (next.Count == 0)
+        {
+            return null;
+        }
+
+        var current = _d.Plans.Where(p => p.AgentId is { } a && InScope(a)).ToList();
+        List<NextMonthPlanRow> rows;
+        if (byCategory)
+        {
+            var (year, month) = _d.NextMonth;
+            var nextRows = _d.CategoryPlans.Where(p => p.Year == year && p.Month == month && InScope(p.AgentId)).ToList();
+            var currentRows = CurrentCategoryPlans().Where(p => InScope(p.AgentId)).ToList();
+            rows = nextRows.GroupBy(r => string.Join(",", r.Groups))
+                .Select(g =>
+                {
+                    var groups = g.First().Groups;
+                    var name = groups.Count == 0 ? "Без разбивки по категориям" : string.Join(" + ", groups.Select(x => _cats.NameOf(x)));
+                    var was = currentRows.Where(r => string.Join(",", r.Groups) == g.Key).ToList();
+                    return new NextMonthPlanRow(g.Key, name, g.Sum(r => r.PlanKg), was.Count == 0 ? null : was.Sum(r => r.PlanKg));
+                })
+                .OrderByDescending(r => r.PlanKg)
+                .ToList();
+        }
+        else
+        {
+            rows = next.GroupBy(p => _agentRegion.GetValueOrDefault(p.AgentId!.Value, NoRegionId))
+                .Select(g => new NextMonthPlanRow(g.Key.ToString(), _regions.TryGetValue(g.Key, out var r) ? r.Name : "Без региона", g.Sum(p => p.PlanKg),
+                    SalesMath.PlanTotal(current.Where(p => _agentRegion.GetValueOrDefault(p.AgentId!.Value, NoRegionId) == g.Key))))
+                .OrderByDescending(r => r.PlanKg)
+                .ToList();
+        }
+
+        return new NextMonthPlan(_d.NextMonth.Year, _d.NextMonth.Month, next.Sum(p => p.PlanKg), current.Count == 0 ? null : current.Sum(p => p.PlanKg),
+            next.Select(p => p.AgentId).Distinct().Count(), rows);
     }
 
     // ================= Справочники и области =================
@@ -1130,7 +1203,6 @@ public sealed partial class SalesAnalytics
         _currentByAgent.Select(g => g.Key)
             .Concat(_d.Visits.Where(v => v.Date <= _d.DataThrough).Select(v => v.AgentId))
             .Concat(_d.Plans.Where(p => p.AgentId != null).Select(p => p.AgentId!.Value))
-            .Concat(_d.Agents.Values.Where(a => a.InDirectory).Select(a => a.Id))
             .ToHashSet();
 
     private void ComputeAgentStats()

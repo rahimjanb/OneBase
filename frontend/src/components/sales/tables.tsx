@@ -299,12 +299,12 @@ export function NotInDirectoryTable({ rows, query }: { rows: { agentId: number; 
   return (
     <DataTable
       title="Продают, но не заведены в справочнике"
-      hint="есть заказы, но агента нет в оргструктуре OneBase"
+      hint="есть заказы, но в Linko у пользователя не должность «Агент»"
       columns={columns}
       rows={rows}
       rowKey={(r) => String(r.agentId)}
       rowHref={(r) => withQuery(`/sales/agents/${r.agentId}`, query)}
-      note="Добавьте их в «Настройки → Продажи: оргструктура и планы → Агенты», чтобы назначить регион, план и отметить вакансии."
+      note="Справочник ТП ведётся в Linko: чтобы человек вошёл в команду, ему нужна должность «Агент» в Linko. Их продажи в итогах региона уже есть."
     />
   );
 }

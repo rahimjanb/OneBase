@@ -212,7 +212,11 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         // Планы — только из Linko (API планов, staff_balance): план ТП — его план по весу, план региона и республики —
         // сумма планов их ТП. Загруженных файлом и ручных планов в «Продажах» нет — только данные Linko.
-        var staff = await db.SalesStaffPlans.AsNoTracking().Where(p => p.Year == year).ToListAsync(ct);
+        // Год месяца и следующий месяц: для карточки «План на следующий месяц» (появляется, когда он есть в Linko).
+        var next = new DateOnly(year, month, 1).AddMonths(1);
+        var staff = await db.SalesStaffPlans.AsNoTracking()
+            .Where(p => p.Year == year || (p.Year == next.Year && p.Month == next.Month))
+            .ToListAsync(ct);
         var staffIds = staff.Select(s => s.LinkoUserId).Distinct().ToList();
         var excludedStaff = (await db.LinkoUsers.AsNoTracking()
                 .Where(u => staffIds.Contains(u.Id))
@@ -221,14 +225,20 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .Where(u => u.JobName is { } job && options.StaffPlanExcludeJobs.Any(x => job.Contains(x, StringComparison.OrdinalIgnoreCase)))
             .Select(u => u.Id)
             .ToHashSet();
-        var yearAgentPlans = staff
-            .Where(s => s.PlanType == StaffPlanTypes.SalesWeight && !excludedStaff.Contains(s.LinkoUserId))
+        var weight = staff.Where(s => s.PlanType == StaffPlanTypes.SalesWeight && !excludedStaff.Contains(s.LinkoUserId)).ToList();
+        var yearAgentPlans = weight
+            .Where(s => s.Year == year)
             .GroupBy(s => (AgentId: (long?)s.LinkoUserId, s.Month))
             .Select(g => new PlanRow(null, g.Key.AgentId, g.Key.Month, null, g.Sum(s => s.PlanAmount)))
             .ToList();
         var agentPlans = yearAgentPlans.Where(p => p.Month == month).ToList();
+        var nextPlans = weight
+            .Where(s => s.Year == next.Year && s.Month == next.Month)
+            .GroupBy(s => s.LinkoUserId)
+            .Select(g => new PlanRow(null, g.Key, next.Month, null, g.Sum(s => s.PlanAmount)))
+            .ToList();
 
-        var profiles = await db.SalesAgentProfiles.AsNoTracking().ToDictionaryAsync(p => p.LinkoUserId, ct);
+        // Справочник ТП — пользователи Linko с должностью ТП (Sales:SalesRepJobs); вакансия — «вакант» в имени или ID 0.
         var users = await db.LinkoUsers.AsNoTracking().ToListAsync(ct);
 
         // Доставщики и т.п.: их «визиты» — доставки, в работу ТП они не входят.
@@ -242,6 +252,14 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         var linkoTypes = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
         var categoryMap = SalesCategories.Build(options.Categories, linkoTypes);
+
+        // План ТП по категориям — по названию весового показателя Linko; текущий и следующий месяц.
+        var categoryPlans = weight
+            .Where(s => s.PlanAmount > 0 && ((s.Year == year && s.Month == month) || (s.Year == next.Year && s.Month == next.Month)))
+            .Select(s => new CategoryPlanRow(s.LinkoUserId, s.Year, s.Month,
+                options.PlanCategoriesOf(s.IndicatorName).Select(categoryMap.GroupByName).OfType<long>().Distinct().ToList(),
+                s.PlanAmount))
+            .ToList();
         var yearStart = new DateOnly(year, 1, 1);
         var akbHistoryTo = previousStart.AddDays(-1); // прошлый и текущий месяц считаются из строк продаж
         IReadOnlyList<MonthlyAkb> akbHistory = yearStart <= akbHistoryTo
@@ -251,9 +269,10 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         // Регионы — филиалы вторички: исключённые («Завод») в структуре не показываются, у них отдельный блок.
         // Старые филиалы («Жиззах (эски)») считаются в текущем регионе с тем же названием.
         var excludedBranchIds = await ExcludedBranchIdsAsync(ct);
+        // Регионы — филиалы Linko; направлений, СВР и дилеров в Linko нет — оргструктура OneBase не используется.
         var (regions, branchAliases) = OldBranches.Merge(
             (await db.SalesRegions.AsNoTracking()
-                .Select(r => new RegionInfo(r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName))
+                .Select(r => new RegionInfo(r.Id, r.LinkoBranchId, r.Name, null, null, null))
                 .ToListAsync(ct))
             .Where(r => !excludedBranchIds.Contains(r.BranchId))
             .ToList(),
@@ -277,26 +296,30 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             Plans = agentPlans,
             YearRegionPlans = [],
             YearAgentPlans = yearAgentPlans,
+            CategoryPlans = categoryPlans,
+            NextMonth = (next.Year, next.Month),
+            NextPlans = nextPlans,
             Indicators = staff
-                .Where(s => s.Month == month)
+                .Where(s => s.Year == year && s.Month == month)
                 .Select(s => new StaffIndicator(s.LinkoUserId, s.IndicatorId, CleanIndicatorName(s.IndicatorName), s.PlanType, s.PlanAmount, s.FactAmount))
                 .ToList(),
             RevenuePlans = staff
-                .Where(s => s.Month == month && s.PlanType == StaffPlanTypes.SalesSum && !excludedStaff.Contains(s.LinkoUserId))
+                .Where(s => s.Year == year && s.Month == month && s.PlanType == StaffPlanTypes.SalesSum && !excludedStaff.Contains(s.LinkoUserId))
                 .GroupBy(s => s.LinkoUserId)
                 .Select(g => new PlanRow(null, g.Key, month, null, g.Sum(s => s.PlanAmount)))
                 .ToList(),
             TeamPlanStaff = excludedStaff,
-            Agents = users.ToDictionary(u => u.Id, u =>
-            {
-                var profile = profiles.GetValueOrDefault(u.Id);
-                return new AgentInfo(u.Id, u.DisplayName, u.IsActive, profile?.RegionId, profile?.IsVacancy ?? false, profile is not null, u.JobName);
-            }),
+            Agents = users.ToDictionary(u => u.Id, u => new AgentInfo(
+                u.Id,
+                u.DisplayName,
+                u.IsActive,
+                null,
+                options.IsVacancy(u.Id, $"{u.DisplayName} {u.Username}"),
+                u.JobName is { } job && options.SalesRepJobs.Any(j => string.Equals(j.Trim(), job.Trim(), StringComparison.OrdinalIgnoreCase)),
+                u.JobName)),
             Regions = regions,
             BranchAliases = branchAliases,
-            Directions = await db.SalesDirections.AsNoTracking()
-                .Select(d => new DirectionInfo(d.Id, d.Name, d.Kind == DirectionKind.Channel, d.ManagerName, d.Description, d.SortOrder))
-                .ToListAsync(ct),
+            Directions = [],
             Markets = await db.LinkoMarkets.AsNoTracking()
                 .Select(x => new MarketInfo(x.Id, x.Name, x.ResponsibleAgentId, x.BranchId))
                 .ToDictionaryAsync(x => x.Id, ct),

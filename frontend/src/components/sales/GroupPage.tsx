@@ -1,6 +1,6 @@
 import { AkbChart } from "./AkbChart";
 import { CollapsedSections } from "./bits";
-import { DataQualityNotes, KpiRow, UnassignedWarning, UnitCard } from "./blocks";
+import { CategoryPlanTable, DataQualityNotes, KpiRow, NextMonthCard, UnassignedWarning, UnitCard } from "./blocks";
 import { VisitCalendarTable } from "./calendars";
 import { CategoryCards } from "./categories";
 import { NotBoughtTable, RegionsTable, SameDaysTable } from "./tables";
@@ -64,9 +64,11 @@ export function GroupPage({
       <Cards title="Региональные менеджеры" cards={directions} query={query} />
       <Cards title={directions.length > 0 ? "Регионы без РМ" : "Регионы"} cards={regions} query={query} />
 
+      {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle="Регион" />}
       <CategoryCards cards={data.categoryCards} scope={scopeName} query={categoryQuery} />
 
       <CollapsedSections>
+        <CategoryPlanTable rows={data.categoryPlans ?? []} />
         <AkbChart data={data.akbMonths} />
         <RegionsTable
           rows={data.regions}

@@ -825,7 +825,8 @@ public sealed class LinkoSyncService(
 
         var today = Today();
         var current = MonthStart(today);
-        var months = new List<DateOnly> { current };
+        // Следующий месяц — для карточки «План на следующий месяц»: планы на него появляются в Linko заранее.
+        var months = new List<DateOnly> { current, current.AddMonths(1) };
         if (full)
         {
             var (from, _) = BackfillWindow();

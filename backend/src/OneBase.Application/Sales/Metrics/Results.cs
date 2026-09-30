@@ -131,7 +131,9 @@ public sealed record GroupView(
     IReadOnlyList<CategoryCard> CategoryCards,
     AkbByMonth AkbMonths,
     DataQualityView Quality,
-    ExcludedSummary? Excluded = null);
+    ExcludedSummary? Excluded = null,
+    IReadOnlyList<CategoryPlanFact>? CategoryPlans = null,
+    NextMonthPlan? NextMonth = null);
 
 /// <summary>Тип товара Linko вне категорий отчёта (импорт, бонус, оборудование): не пропадает, а показывается отдельно.</summary>
 public sealed record UncategorizedType(string Id, string Name, decimal Kg, decimal Revenue, int Orders);
@@ -271,11 +273,24 @@ public sealed record RegionView(
     IReadOnlyList<NotInDirectoryRow> NotInDirectory,
     IReadOnlyList<CategoryCard> CategoryCards,
     AkbByMonth AkbMonths,
-    DataQualityView Quality);
+    DataQualityView Quality,
+    IReadOnlyList<CategoryPlanFact>? CategoryPlans = null,
+    NextMonthPlan? NextMonth = null);
 
 public sealed record MedianValue(decimal? Value, decimal? RegionMedian);
 
-public sealed record CategoryPlanFact(long? CategoryId, string Name, decimal? PlanKg, decimal FactKg, decimal Revenue, decimal? Execution);
+/// <summary>
+/// План и факт по категории (или паре категорий, если так заведён показатель Linko: «Могуль + Шоколад»).
+/// FactKg — факт ТП, у которых есть этот план; ScopeFactKg — весь факт подразделения по этим категориям.
+/// Строка без плана — категория продаётся, а плана на неё нет.
+/// </summary>
+public sealed record CategoryPlanFact(long? CategoryId, string Name, decimal? PlanKg, decimal FactKg, decimal Revenue, decimal? Execution, decimal? ScopeFactKg = null);
+
+/// <summary>Строка плана на следующий месяц: регион (на верхних уровнях) или категория (в регионе).</summary>
+public sealed record NextMonthPlanRow(string Id, string Name, decimal PlanKg, decimal? CurrentPlanKg);
+
+/// <summary>План на следующий месяц из Linko — появляется, когда в Linko есть планы ТП на этот месяц.</summary>
+public sealed record NextMonthPlan(int Year, int Month, decimal PlanKg, decimal? CurrentPlanKg, int Agents, IReadOnlyList<NextMonthPlanRow> Rows);
 
 /// <summary>План и факт по KPI-показателю Linko (кг по группе товаров, АКБ и т.п.).</summary>
 public sealed record IndicatorPlan(long IndicatorId, string Name, string PlanType, decimal Plan, decimal Fact, decimal? Execution);

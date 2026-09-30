@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { Alert, ExecutionBar, FlagCountPills, KpiTile, Note, Section, TargetBadge, execClass } from "./bits";
-import { delta, kg, money, monthShort, num, pct } from "@/lib/sales/format";
-import type { DataQuality, ExcludedSummary, KpiTiles, Period, UnitRow } from "@/lib/sales/types";
+import { delta, kg, money, monthLabel, monthShort, num, pct } from "@/lib/sales/format";
+import type { CategoryPlanFact, DataQuality, ExcludedSummary, KpiTiles, NextMonthPlan, Period, UnitRow } from "@/lib/sales/types";
 
 /** Плашка «X% плана»: ≥100% зелёная, 70–99% оранжевая, меньше — красная. */
 export function PlanBadge({ share }: { share: number | null }) {
@@ -304,8 +304,8 @@ export function IndicatorBars({ rows }: { rows: { indicatorId: number; name: str
   );
 }
 
-/** Выполнение плана по категориям (карточка агента). */
-export function CategoryPlanBars({ rows }: { rows: { categoryId: number | null; name: string; planKg: number | null; factKg: number; revenue: number; execution: number | null }[] }) {
+/** Выполнение плана по категориям (карточка агента): план — весовые показатели ТП в Linko; «плана нет» — категория продаётся без плана. */
+export function CategoryPlanBars({ rows }: { rows: CategoryPlanFact[] }) {
   const limit = 15;
   const shown = rows.slice(0, limit);
   const hidden = rows.slice(limit);
@@ -314,19 +314,21 @@ export function CategoryPlanBars({ rows }: { rows: { categoryId: number | null; 
   return (
     <Section title="Выполнение плана по категориям" hint="наведите на полосу — план, факт и выручка">
       {noPlans && rows.length > 0 && (
-        <p className="mb-3 rounded-lg bg-muted px-3 py-2 text-xs text-ink-2">
-          Плана по категориям у агента нет — показан только факт. План можно загрузить в «Настройки → Продажи: оргструктура и планы → Планы».
-        </p>
+        <p className="mb-3 rounded-lg bg-muted px-3 py-2 text-xs text-ink-2">У агента в Linko нет плана по категориям — показан только факт.</p>
       )}
       <div className="space-y-2">
         {shown.map((c) => (
           <div
-            key={c.categoryId ?? "none"}
-            className="grid grid-cols-[minmax(0,150px)_1fr_76px] items-center gap-3 text-xs"
+            key={`${c.categoryId ?? c.name}`}
+            className={`grid grid-cols-[minmax(0,170px)_1fr_96px] items-center gap-3 text-xs ${c.planKg == null ? "opacity-60" : ""}`}
             title={`План ${kg(c.planKg)} кг · Факт ${kg(c.factKg)} кг · Выручка ${money(c.revenue)}`}
           >
             <span className="truncate text-ink-2">{c.name}</span>
-            <ExecutionBar value={c.execution} tone={c.execution != null && c.execution < 0.7 ? "warn" : "accent"} />
+            {c.planKg == null ? (
+              <span className="text-ink-3">плана нет</span>
+            ) : (
+              <ExecutionBar value={c.execution} tone={c.execution != null && c.execution < 0.7 ? "warn" : "accent"} />
+            )}
             <span className={`whitespace-nowrap text-right tabular-nums ${c.execution == null ? "text-ink-3" : "text-ink"}`}>
               {c.execution == null ? `${kg(c.factKg)} кг` : pct(c.execution)}
             </span>
@@ -341,8 +343,110 @@ export function CategoryPlanBars({ rows }: { rows: { categoryId: number | null; 
       )}
       {rows.length === 0 && <p className="py-4 text-center text-sm text-ink-3">Нет ни плана, ни продаж по категориям</p>}
       <Note>
-        Процент — факт агента к его собственному плану по категории. Штриховкой — категории без плана: их продажи есть, а плана на них не назначено.
+        План — весовые показатели ТП в Linko по категориям («Могуль + Шоколад» — одной строкой, как заведено в Linko). Процент — факт агента к его
+        собственному плану. Серые строки «плана нет» — категория продаётся, а плана на неё не назначено.
       </Note>
+    </Section>
+  );
+}
+
+/** План и факт по категориям подразделения: сумма планов его ТП в Linko. */
+export function CategoryPlanTable({ rows }: { rows: CategoryPlanFact[] }) {
+  if (rows.length === 0) return null;
+  const planned = rows.filter((r) => r.planKg != null);
+  const plan = planned.reduce((s, r) => s + (r.planKg ?? 0), 0);
+  const fact = planned.reduce((s, r) => s + r.factKg, 0);
+  const th = "py-2 pr-3 text-right text-[11px] font-semibold uppercase tracking-wide text-ink-3";
+  return (
+    <Section title="План и факт по категориям" hint="план — сумма планов ТП по показателям Linko, в кг">
+      <div className="-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
+        <table className="w-full min-w-max text-sm">
+          <thead>
+            <tr className="border-b border-line">
+              <th className={`${th} text-left`}>Категория</th>
+              <th className={th}>План</th>
+              <th className={th} title="Факт ТП, у которых есть этот план">Факт ТП с планом</th>
+              <th className={th}>Выполнение</th>
+              <th className={`${th} w-32`} />
+              <th className={th}>Осталось</th>
+              <th className={th} title="Весь факт подразделения по этим категориям">Весь факт</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={`${r.categoryId ?? r.name}`} className={`border-b border-line last:border-0 ${r.planKg == null ? "text-ink-3" : ""}`}>
+                <td className={`py-2 pr-3 ${r.planKg == null ? "" : "font-medium text-ink"}`}>{r.name}</td>
+                <td className="py-2 pr-3 text-right tabular-nums">{r.planKg == null ? "плана нет" : kg(r.planKg)}</td>
+                <td className="py-2 pr-3 text-right tabular-nums">{r.planKg == null ? "—" : kg(r.factKg)}</td>
+                <td className={`py-2 pr-3 text-right tabular-nums ${execClass(r.execution)}`}>{pct(r.execution)}</td>
+                <td className="py-2 pr-3">{r.planKg != null && <ExecutionBar value={r.execution} tone={r.execution != null && r.execution < 0.7 ? "warn" : "accent"} />}</td>
+                <td className="py-2 pr-3 text-right tabular-nums">{r.planKg == null ? "—" : kg(Math.max(0, r.planKg - r.factKg))}</td>
+                <td className="py-2 pr-3 text-right tabular-nums">{kg(r.scopeFactKg ?? r.factKg)}</td>
+              </tr>
+            ))}
+          </tbody>
+          {planned.length > 0 && (
+            <tfoot>
+              <tr className="bg-muted/60 font-semibold">
+                <td className="py-2 pr-3">Итого с планом</td>
+                <td className="py-2 pr-3 text-right tabular-nums">{kg(plan)}</td>
+                <td className="py-2 pr-3 text-right tabular-nums">{kg(fact)}</td>
+                <td className={`py-2 pr-3 text-right tabular-nums ${execClass(plan ? fact / plan : null)}`}>{pct(plan ? fact / plan : null)}</td>
+                <td />
+                <td className="py-2 pr-3 text-right tabular-nums">{kg(Math.max(0, plan - fact))}</td>
+                <td />
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+      <Note>
+        Показатели плана в Linko заведены по цехам: «Могуль + Шоколад», «Трубочка + Печенье» — одной строкой, так они и показаны. Факт — только ТП с
+        этим планом (как в плитке выполнения), весь факт — справа. Серые строки — категории с продажами, на которые плана нет.
+      </Note>
+    </Section>
+  );
+}
+
+/** «План на следующий месяц» — появляется, когда в Linko заведены планы ТП на него. Плашка — разница с текущим месяцем. */
+export function NextMonthCard({ plan, rowsTitle }: { plan: NextMonthPlan; rowsTitle: string }) {
+  const diff = plan.currentPlanKg ? plan.planKg / plan.currentPlanKg - 1 : null;
+  return (
+    <Section title={`План на ${monthLabel(plan.year, plan.month).toLowerCase()}`} hint={`из Linko · ${num(plan.agents)} ТП с планом`}>
+      <div className="flex flex-wrap items-baseline gap-3">
+        <span className="text-[28px] font-semibold tabular-nums text-ink">{kg(plan.planKg)}</span>
+        <span className="text-sm text-ink-3">кг</span>
+        {diff != null && (
+          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${diff >= 0 ? "bg-ok-soft text-ok" : "bg-bad-soft text-bad"}`}>
+            {delta(diff)} к текущему месяцу
+          </span>
+        )}
+      </div>
+      <div className="-mx-4 mt-3 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
+        <table className="w-full min-w-max text-sm">
+          <thead>
+            <tr className="border-b border-line text-[11px] uppercase tracking-wide text-ink-3">
+              <th className="py-2 pr-3 text-left font-semibold">{rowsTitle}</th>
+              <th className="py-2 pr-3 text-right font-semibold">План</th>
+              <th className="py-2 pr-3 text-right font-semibold">Текущий месяц</th>
+              <th className="py-2 text-right font-semibold">Разница</th>
+            </tr>
+          </thead>
+          <tbody>
+            {plan.rows.map((r) => {
+              const d = r.currentPlanKg ? r.planKg / r.currentPlanKg - 1 : null;
+              return (
+                <tr key={r.id} className="border-b border-line last:border-0">
+                  <td className="py-1.5 pr-3 text-ink">{r.name}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">{kg(r.planKg)}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums text-ink-2">{r.currentPlanKg == null ? "—" : kg(r.currentPlanKg)}</td>
+                  <td className={`py-1.5 text-right tabular-nums ${d == null ? "text-ink-3" : d >= 0 ? "text-ok" : "text-bad"}`}>{d == null ? "новый" : delta(d)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </Section>
   );
 }

@@ -30,8 +30,10 @@ public class SalesAnalyticsTests
         IReadOnlyList<SaleLine>? visitOrders = null,
         IReadOnlyList<VisitRecord>? visits = null,
         IReadOnlyList<RegionInfo>? regions = null,
-        IReadOnlyDictionary<long, Guid>? branchAliases = null) => new()
+        IReadOnlyDictionary<long, Guid>? branchAliases = null,
+        IReadOnlyList<CategoryPlanRow>? categoryPlans = null) => new()
     {
+        CategoryPlans = categoryPlans ?? [],
         BranchAliases = branchAliases ?? new Dictionary<long, Guid>(),
         AkbHistory = akbHistory ?? [],
         CategoryMap = reportCategories is null ? null : SalesCategories.Build(reportCategories, categories ?? new Dictionary<long, string> { [1] = "Печенье" }),
@@ -305,17 +307,25 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
-    public void Agent_category_plan_uses_report_categories_not_linko_types()
+    public void Agent_category_plan_comes_from_linko_indicators_and_shows_categories_without_plan()
     {
+        var types = new Dictionary<long, string> { [1] = "Помадка", [2] = "Помадка 0,5 кг", [3] = "Шоколад", [4] = "Бамбук" };
+        var report = new Dictionary<string, string> { ["Помадка"] = "1,2", ["Шоколад"] = "3", ["Бамбук"] = "4" };
+        var map = SalesCategories.Build(report, types);
+        var pomadka = map.GroupByName("Помадка")!.Value;
+        var chocolate = map.GroupByName("Шоколад")!.Value;
         var data = Data(
-            current: [Sku(100, 1, market: 10, kg: 60), Sku(101, 2, market: 11, kg: 40)],
-            plans: [new PlanRow(null, 1, 9, 2, 50)], // ручной план по фасовке «Помадка 0,5 кг»
-            categories: new Dictionary<long, string> { [1] = "Помадка", [2] = "Помадка 0,5 кг" },
-            reportCategories: new Dictionary<string, string> { ["Помадка"] = "1,2" });
+            current: [Sku(100, 1, market: 10, kg: 60), Sku(101, 2, market: 11, kg: 40), Sku(102, 3, market: 12, kg: 30), Sku(103, 4, market: 13, kg: 20)],
+            categories: types,
+            reportCategories: report,
+            // Показатель Linko «Сентябрь Могуль + Шоколад …» — план на две категории сразу.
+            categoryPlans: [new CategoryPlanRow(1, 2026, 9, [pomadka, chocolate], 200)]);
 
-        var row = Assert.Single(new SalesAnalytics(data).Agent(1).CategoryPlan);
+        var rows = new SalesAnalytics(data).Agent(1).CategoryPlan;
 
-        Assert.Equal(("Помадка", 100m, 50m), (row.Name, row.FactKg, row.PlanKg!.Value));
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(("Помадка + Шоколад", 200m, 130m), (rows[0].Name, rows[0].PlanKg!.Value, rows[0].FactKg)); // 60 + 40 + 30
+        Assert.Equal(("Бамбук", null, 20m), (rows[1].Name, rows[1].PlanKg, rows[1].FactKg)); // продаётся без плана
     }
 
     [Fact]

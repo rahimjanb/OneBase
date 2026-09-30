@@ -47,6 +47,12 @@ public sealed record MonthlyAkb(int Year, int Month, bool ByBranch, long? Branch
 
 public sealed record PlanRow(Guid? RegionId, long? AgentId, int Month, long? CategoryId, decimal PlanKg);
 
+/// <summary>
+/// План ТП по весу из показателя Linko, отнесённый к категориям отчёта по названию показателя:
+/// «Сентябрь Бамбук Бухоро» — одна категория, «Могуль + Шоколад …» — две (Groups — id групп категорий).
+/// </summary>
+public sealed record CategoryPlanRow(long AgentId, int Year, int Month, IReadOnlyList<long> Groups, decimal PlanKg);
+
 /// <summary>KPI-показатель агента из Linko (staff_balance): план и факт так, как их считает Linko.</summary>
 public sealed record StaffIndicator(long AgentId, long IndicatorId, string Name, string PlanType, decimal Plan, decimal Fact);
 
@@ -81,6 +87,14 @@ public sealed class MonthData
 
     /// <summary>Итоговые планы агентов на весь год (ручные или из Linko) — план региона без ручного = сумма планов его агентов.</summary>
     public IReadOnlyList<PlanRow> YearAgentPlans { get; init; } = [];
+
+    /// <summary>Планы ТП по категориям (текущий и следующий месяц) — из показателей Linko.</summary>
+    public IReadOnlyList<CategoryPlanRow> CategoryPlans { get; init; } = [];
+
+    /// <summary>Следующий месяц и планы ТП на него из Linko; пусто — в Linko их ещё нет.</summary>
+    public (int Year, int Month) NextMonth { get; init; }
+
+    public IReadOnlyList<PlanRow> NextPlans { get; init; } = [];
 
     /// <summary>KPI-показатели агентов из Linko за выбранный месяц (включая супервайзеров).</summary>
     public IReadOnlyList<StaffIndicator> Indicators { get; init; } = [];

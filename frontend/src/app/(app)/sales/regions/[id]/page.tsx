@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { AkbChart } from "@/components/sales/AkbChart";
 import { CollapsedSections } from "@/components/sales/bits";
-import { DataQualityNotes, KpiRow, PlanFactMonths, UnassignedWarning } from "@/components/sales/blocks";
+import { CategoryPlanTable, DataQualityNotes, KpiRow, NextMonthCard, PlanFactMonths, UnassignedWarning } from "@/components/sales/blocks";
 import { MonthCalendarTable, VisitCalendarTable } from "@/components/sales/calendars";
 import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
@@ -36,12 +36,9 @@ export default async function RegionPage({
     ? { label: data.directionName ?? "Направление", href: withQuery(`/sales/directions/${data.directionId}`, q) }
     : null;
 
-  const people = [data.supervisor && `СВР: ${data.supervisor}`, data.dealer && `дилер: ${data.dealer}`].filter(Boolean).join(", ");
-
   return (
     <SalesFrame
       title={data.name}
-      subtitle={people || "СВР и дилер не указаны — их можно задать в настройках продаж"}
       crumbs={[republic, ...(parent ? [parent] : []), { label: data.name }]}
       back={(parent ?? republic).href}
       sp={sp}
@@ -50,9 +47,11 @@ export default async function RegionPage({
       <UnassignedWarning kgValue={data.unassigned.kg} share={data.unassigned.share} />
 
       <PlanFactMonths months={data.months} current={period.month} />
+      {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle="Категория" />}
       <CategoryCards cards={data.categoryCards} scope="регионе" query={queryWith(q, { region: id })} />
 
       <CollapsedSections>
+        <CategoryPlanTable rows={data.categoryPlans ?? []} />
         <AkbChart data={data.akbMonths} />
         <MonthCalendarTable
           calendar={data.calendar}
