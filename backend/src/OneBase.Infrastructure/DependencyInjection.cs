@@ -54,6 +54,10 @@ public static class DependencyInjection
         services.AddSingleton(_ => new QdrantClient(qdrant.Host, qdrant.Port, qdrant.UseHttps, qdrant.ApiKey));
         services.AddSingleton<IVectorStore, QdrantVectorStore>();
 
+        // База знаний AI: текст из документов и полнотекстовый поиск PostgreSQL.
+        services.AddSingleton<IDocumentTextExtractor, Knowledge.DocumentTextExtractor>();
+        services.AddScoped<IKnowledgeFullTextSearch, Knowledge.KnowledgeFullTextSearch>();
+
         // Продажи: настройки и синхронизация с Linko SFA
         var sales = config.GetSection(SalesOptions.Section).Get<SalesOptions>() ?? new SalesOptions();
         services.AddSingleton(sales);

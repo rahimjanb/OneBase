@@ -84,5 +84,28 @@ internal static class AiSchema
             e.Property(x => x.AgentCode).HasMaxLength(64);
             e.Property(x => x.SourceCode).HasMaxLength(64);
         });
+
+        b.Entity<AiKnowledgeDocument>(e =>
+        {
+            e.ToTable("KnowledgeDocuments", Schema);
+            e.Property(x => x.Title).HasMaxLength(300);
+            e.Property(x => x.FileName).HasMaxLength(300);
+            e.Property(x => x.ContentType).HasMaxLength(200);
+            e.Property(x => x.ObjectKey).HasMaxLength(512);
+            e.Property(x => x.Sha256).HasMaxLength(64);
+            e.Property(x => x.DepartmentCode).HasMaxLength(64);
+            e.Property(x => x.RequiredPermission).HasMaxLength(100);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Error).HasMaxLength(1000);
+            e.Property(x => x.EmbeddingModel).HasMaxLength(250);
+            e.HasIndex(x => x.Sha256);
+        });
+
+        b.Entity<AiKnowledgeChunk>(e =>
+        {
+            e.ToTable("KnowledgeChunks", Schema);
+            e.HasOne<AiKnowledgeDocument>().WithMany().HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.DocumentId, x.Index }).IsUnique();
+        });
     }
 }

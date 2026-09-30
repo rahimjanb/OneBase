@@ -37,7 +37,7 @@ public abstract class DataTool : ITool
     {
         try
         {
-            return await RunAsync(new ToolArgs(arguments), cancellationToken);
+            return await RunAsync(context, new ToolArgs(arguments), cancellationToken);
         }
         catch (ToolArgumentException ex)
         {
@@ -45,7 +45,11 @@ public abstract class DataTool : ITool
         }
     }
 
-    protected abstract Task<ToolResult> RunAsync(ToolArgs args, CancellationToken ct);
+    /// <summary>Инструменты, которым важен пользователь (доступ к документам), переопределяют эту перегрузку.</summary>
+    protected virtual Task<ToolResult> RunAsync(ToolContext context, ToolArgs args, CancellationToken ct) => RunAsync(args, ct);
+
+    protected virtual Task<ToolResult> RunAsync(ToolArgs args, CancellationToken ct) =>
+        throw new NotSupportedException($"{GetType().Name} должен переопределить RunAsync.");
 
     protected static ToolResult Data(object payload, params DataSource[] sources) =>
         new(true, JsonSerializer.Serialize(payload, Json), null, sources);

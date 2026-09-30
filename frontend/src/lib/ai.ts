@@ -72,6 +72,7 @@ export const aiSettingsTabs = [
   { href: "/settings/ai/models", label: "Модели" },
   { href: "/settings/ai/agents", label: "Агенты" },
   { href: "/settings/ai/tools", label: "Инструменты" },
+  { href: "/settings/ai/knowledge", label: "База знаний" },
 ] as const;
 
 export const modelLabel = (m: AiModelView) => m.displayName ?? m.model;
@@ -134,4 +135,34 @@ export type AiToolView = {
   requiredPermission: string | null;
   inputSchema: { properties?: Record<string, { type: string; description?: string }> };
   agents: string[];
+};
+
+export type KnowledgeDocumentView = {
+  id: string;
+  title: string;
+  fileName: string;
+  sizeBytes: number;
+  departmentCode: string | null;
+  requiredPermission: string | null;
+  status: "Indexing" | "Indexed" | "Failed";
+  error: string | null;
+  chunks: number;
+  characters: number;
+  embeddingModel: string | null;
+  createdAt: string;
+};
+
+export type KnowledgeList = {
+  extensions: string[];
+  maxBytes: number;
+  departments: { code: string; name: string }[];
+  permissions: string[];
+  documents: KnowledgeDocumentView[];
+};
+
+export const permissionLabels: Record<string, string> = {
+  "sales.read": "Просмотр продаж",
+  "finance.read": "Финансовые данные",
+  "hr.read": "Кадровые данные",
+  "files.read": "Просмотр файлов",
 };

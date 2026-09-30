@@ -68,6 +68,10 @@ public static class DependencyInjection
         services.AddScoped<ITool, GetPrimaryShipmentsTool>();
         services.AddScoped<ITool, GetPaymentsTool>();
         services.AddScoped<ITool, GetSuppliersTool>();
+        services.AddScoped<ITool, SearchKnowledgeTool>();
+
+        // База знаний: документы, фрагменты, полнотекстовый и семантический поиск.
+        services.AddScoped<OneBase.AI.Knowledge.KnowledgeService>();
         services.AddScoped<IToolRegistry, ToolRegistry>();
         services.AddScoped<ToolExecutor>();
         services.AddScoped<ApprovalService>();
