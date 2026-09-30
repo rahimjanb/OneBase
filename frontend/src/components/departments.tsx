@@ -36,26 +36,41 @@ const sections: Record<string, string> = {
   sales: "/sales",
 };
 
-/** Карточка показателей отдела (Dashboard, «Отделы»): открывает раздел отдела, а если его нет — файлы в «Общей базе». */
+/**
+ * Карточка показателей отдела (Dashboard, «Отделы»): открывает раздел отдела. Раздела ещё нет — карточка не кликается
+ * (файлы отдела — в «Общей базе»).
+ */
 export function DepartmentStatusCard({ department: d }: { department: Department }) {
-  return (
-    <Link href={sections[d.code] ?? `/base/${d.code}`} className="group block">
-      <Card className="h-full p-5 transition-colors group-hover:border-accent/40">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold text-ink">{d.name}</span>
+  const href = sections[d.code];
+  const card = (
+    <Card className={`h-full p-5 ${href ? "transition-colors group-hover:border-accent/40" : "opacity-70"}`}>
+      <div className="flex items-center justify-between">
+        <span className="font-semibold text-ink">{d.name}</span>
+        {href ? (
           <ArrowUpRight className="size-4 text-ink-3 group-hover:text-accent-strong" />
-        </div>
-        <div className="mt-3 flex items-center gap-4">
-          <span className="text-[28px] font-semibold leading-none tracking-tight">{percent(d.score)}</span>
-          <StatusDot status={d.status} />
-        </div>
-        <div className="mt-4 text-xs text-ink-2">{d.metric.label}</div>
-        <div className="mt-2 flex items-center gap-4">
-          <ProgressBar value={d.metric.value} tone={d.status === "attention" ? "warn" : "accent"} />
-          <span className="w-10 shrink-0 text-right text-xs font-semibold text-ink">{percent(d.metric.value)}</span>
-        </div>
-      </Card>
+        ) : (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-ink-3">скоро</span>
+        )}
+      </div>
+      <div className="mt-3 flex items-center gap-4">
+        <span className="text-[28px] font-semibold leading-none tracking-tight">{percent(d.score)}</span>
+        <StatusDot status={d.status} />
+      </div>
+      <div className="mt-4 text-xs text-ink-2">{d.metric.label}</div>
+      <div className="mt-2 flex items-center gap-4">
+        <ProgressBar value={d.metric.value} tone={d.status === "attention" ? "warn" : "accent"} />
+        <span className="w-10 shrink-0 text-right text-xs font-semibold text-ink">{percent(d.metric.value)}</span>
+      </div>
+    </Card>
+  );
+  return href ? (
+    <Link href={href} className="group block">
+      {card}
     </Link>
+  ) : (
+    <div aria-disabled="true" title="Раздел отдела в разработке">
+      {card}
+    </div>
   );
 }
 

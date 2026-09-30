@@ -14,14 +14,17 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-/** also — разделы, которые открываются из этого пункта и подсвечивают его (продажи — из «Отделов»). */
-type NavItem = { href: string; label: string; icon: LucideIcon; also?: string[] };
+/**
+ * also — разделы, которые открываются из этого пункта и подсвечивают его (продажи — из «Отделов»).
+ * soon — раздел ещё не сделан: пункт виден, но не кликается.
+ */
+type NavItem = { href: string; label: string; icon: LucideIcon; also?: string[]; soon?: boolean };
 
 const workspace: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: Columns2 },
+  { href: "/", label: "Dashboard", icon: Columns2, soon: true },
   { href: "/departments", label: "Отделы", icon: Grid3x3, also: ["/sales"] },
-  { href: "/tasks", label: "Задачи", icon: Check },
-  { href: "/reports", label: "Отчёты", icon: Rows3 },
+  { href: "/tasks", label: "Задачи", icon: Check, soon: true },
+  { href: "/reports", label: "Отчёты", icon: Rows3, soon: true },
   { href: "/base", label: "Общая база", icon: CircleDot },
   { href: "/consultant", label: "Консультант", icon: Sparkle, also: ["/ai"] },
 ];
@@ -35,7 +38,7 @@ function isActive(pathname: string, item: NavItem) {
 
 export function Logo() {
   return (
-    <Link href="/" className="flex items-center gap-2.5 text-white">
+    <Link href="/departments" className="flex items-center gap-2.5 text-white">
       <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
         <path d="M12 2.5 21.5 12 12 21.5 2.5 12Z" strokeLinejoin="round" />
         <path d="M12 8.5 15.5 12 12 15.5 8.5 12Z" fill="currentColor" stroke="none" />
@@ -47,6 +50,15 @@ export function Logo() {
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
+  if (item.soon) {
+    return (
+      <span aria-disabled="true" title="Раздел в разработке" className="flex cursor-default items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-muted">
+        <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+        {item.label}
+        <span className="ml-auto rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] text-sidebar-muted">скоро</span>
+      </span>
+    );
+  }
   return (
     <Link
       href={item.href}
@@ -101,7 +113,7 @@ export function Sidebar({ canOpenSettings }: { canOpenSettings: boolean }) {
       <div className="bg-sidebar px-4 pb-2 pt-4 lg:hidden">
         <Logo />
         <nav className="-mx-1 mt-3 flex gap-1 overflow-x-auto pb-1">
-          {[...workspace, ...(canOpenSettings ? [settings] : [])].map((item) => (
+          {[...workspace, ...(canOpenSettings ? [settings] : [])].filter((item) => !item.soon).map((item) => (
             <Link
               key={item.href}
               href={item.href}
