@@ -196,7 +196,10 @@ export function TeamTable({ rows, query }: { rows: TeamRow[]; query: string }) {
             {r.name}
             {r.isVacancy && <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-2">вакансия</span>}
           </span>
-          <span className="block text-xs text-ink-3">ID {r.agentId}</span>
+          <span className="block text-xs text-ink-3">
+            ID {r.agentId}
+            {!r.isSalesRep && <span title="не ТП: в численность ТП, медианы и рейтинг не входит"> · не ТП{r.job ? ` (${r.job})` : ""}</span>}
+          </span>
         </span>
       ),
     },

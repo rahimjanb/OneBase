@@ -149,6 +149,31 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
+    public void Only_sales_reps_with_sales_count_as_agents()
+    {
+        // ТП 1 и 2 — в оргструктуре; 3 — оператор Linko (не ТП), 4 — «Агент» по должности без оргструктуры.
+        var data = Data();
+        var agents = new Dictionary<long, AgentInfo>(data.Agents)
+        {
+            [3] = new(3, "Оператор", true, South, false, false, "Филиал Оператор"),
+            [4] = new(4, "Агент 4", true, null, false, false, "Агент"),
+        };
+        var analytics = new SalesAnalytics(new MonthData
+        {
+            Year = data.Year, Month = data.Month, DataThrough = data.DataThrough, Current = data.Current, Previous = data.Previous,
+            Visits = data.Visits, History = data.History, Plans = data.Plans, RevenuePlans = data.RevenuePlans, YearRegionPlans = data.YearRegionPlans,
+            Agents = agents, Regions = data.Regions, Directions = data.Directions, Markets = data.Markets, Categories = data.Categories,
+            MarketAssignments = data.MarketAssignments, Targets = data.Targets, Thresholds = data.Thresholds, SalesRepJobs = ["Агент"],
+        });
+
+        var republic = analytics.Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
+
+        Assert.Equal(3, republic.Kpi.ActiveAgents); // 1, 2 и 4; оператор 3 продавал, но не ТП
+        Assert.Equal(5m / 3m, republic.Kpi.AkbPerAgent.Value); // 5 ТТ с покупкой ÷ 3 ТП
+        Assert.Equal(210m, republic.Kpi.FactKg); // продажи оператора остаются в итоге
+    }
+
+    [Fact]
     public void Agent_akb_by_month_takes_old_months_from_the_agent_history()
     {
         var history = new[]

@@ -248,6 +248,9 @@ export type TeamRow = {
   isVacancy: boolean;
   inDirectory: boolean;
   flags: AgentFlag[];
+  /** ТП по должности Linko (Sales:SalesRepJobs) или по оргструктуре; иначе — оператор, супервайзер и т.п. */
+  isSalesRep: boolean;
+  job: string | null;
 };
 
 export type MonthCalendar = {

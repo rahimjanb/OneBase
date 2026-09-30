@@ -244,7 +244,9 @@ public sealed record TeamRow(
     int Categories,
     bool IsVacancy,
     bool InDirectory,
-    IReadOnlyList<AgentFlag> Flags);
+    IReadOnlyList<AgentFlag> Flags,
+    bool IsSalesRep = true,
+    string? Job = null);
 
 public sealed record NotInDirectoryRow(long AgentId, string Name, decimal Kg, decimal Revenue);
 

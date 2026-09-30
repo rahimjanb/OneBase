@@ -145,6 +145,9 @@ public sealed class MonthData
     public required SalesTargets Targets { get; init; }
     public required FlagThresholds Thresholds { get; init; }
 
+    /// <summary>Должности Linko, которые считаются ТП (Sales:SalesRepJobs). Пусто — ТП все, у кого есть продажи или визиты.</summary>
+    public IReadOnlyList<string> SalesRepJobs { get; init; } = [];
+
     public DateOnly MonthStart => new(Year, Month, 1);
     public int DaysInMonth => DateTime.DaysInMonth(Year, Month);
     public int WorkedDays => SalesMath.WorkedDays(MonthStart, DataThrough);

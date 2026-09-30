@@ -120,7 +120,7 @@ public sealed partial class SalesAnalytics
 
     public OverviewView Overview()
     {
-        var agents = AgentsIn(null).ToList();
+        var agents = AgentsIn(null).Where(IsSalesRep).ToList();
         return new OverviewView(Period, Kpi(null), agents.Count(a => !IsVacancy(a)), FlagCountsOf(agents),
             agents.Count(IsVacancy), Unit("republic", "Республика", null, null, UnitKinds.Republic), Excluded());
     }
@@ -274,12 +274,13 @@ public sealed partial class SalesAnalytics
 
     public ProblemsView Problems(string? directionId, FlagKind? criterion, bool includeVacancies)
     {
-        var rank = _roster.Where(a => !IsVacancy(a))
+        var reps = _roster.Where(IsSalesRep).ToList();
+        var rank = reps.Where(a => !IsVacancy(a))
             .OrderByDescending(a => StatsOf(a).Revenue)
             .Select((a, i) => (a, i + 1))
             .ToDictionary(x => x.a, x => x.Item2);
 
-        var list = _roster
+        var list = reps
             .Where(a => directionId is null || DirectionIdOf(a) == directionId)
             .Where(a => includeVacancies ? true : !IsVacancy(a))
             .Where(a =>
@@ -306,7 +307,7 @@ public sealed partial class SalesAnalytics
             .ThenBy(p => p.Revenue)
             .ToList();
 
-        return new ProblemsView(Period, _roster.Count(IsVacancy), list);
+        return new ProblemsView(Period, reps.Count(IsVacancy), list);
     }
 
     // ================= Блоки =================
@@ -346,7 +347,7 @@ public sealed partial class SalesAnalytics
         var forecast = SalesMath.Forecast(fact, _d.WorkedDays, _d.DaysInMonth);
         var planForecast = SalesMath.Forecast(coverage.Fact, _d.WorkedDays, _d.DaysInMonth);
         var visits = VisitSummary.Of(AgentsIn(scope).SelectMany(VisitsOf), scope is null ? _d.VisitLines : scope.SelectMany(r => _visitByRegion[r]));
-        var active = AgentsIn(scope).Count(a => !IsVacancy(a));
+        var active = SellingReps(scope);
 
         return new KpiTiles(
             fact,
@@ -470,7 +471,7 @@ public sealed partial class SalesAnalytics
         var regionNames = RegionIds(scope).Where(r => r != NoRegionId).Select(r => _regions[r].Name).OrderBy(n => n).ToList();
 
         return new UnitRow(id, name, subtitle, kpi.PlanKg, kpi.FactKg, kpi.Execution, kpi.ForecastKg, kpi.ForecastExecution,
-            kpi.Revenue, kpi.Akb, kpi.Conversion.Value, kpi.VisitsWithoutOrder, agents.Count(a => !IsVacancy(a)),
+            kpi.Revenue, kpi.Akb, kpi.Conversion.Value, kpi.VisitsWithoutOrder, agents.Count(a => !IsVacancy(a) && IsSalesRep(a)),
             regionNames.Count, regionNames, FlagCountsOf(agents), kpi.PlanFactKg, kind);
     }
 
@@ -875,7 +876,7 @@ public sealed partial class SalesAnalytics
         return new TeamRow(agent, AgentName(agent), plan, fact, SalesMath.Ratio(fact, plan), forecast,
             forecast is null ? null : SalesMath.Ratio(forecast.Value, plan), lines.Sum(l => l.Revenue),
             stats.Visits.Done, stats.Orders, stats.Conversion, stats.SumPerVisit, stats.Categories,
-            IsVacancy(agent), _d.Agents.TryGetValue(agent, out var info) && info.InDirectory, FlagsOf(agent));
+            IsVacancy(agent), _d.Agents.TryGetValue(agent, out var info) && info.InDirectory, FlagsOf(agent), IsSalesRep(agent), info?.Job);
     };
 
     private List<NotInDirectoryRow> NotInDirectory(Guid region) =>
@@ -1017,9 +1018,22 @@ public sealed partial class SalesAnalytics
 
     private FlagCounts FlagCountsOf(IEnumerable<long> agents)
     {
-        var worst = agents.Where(a => !IsVacancy(a)).Select(a => AgentFlags.Worst(FlagsOf(a))).ToList();
+        var worst = agents.Where(a => !IsVacancy(a) && IsSalesRep(a)).Select(a => AgentFlags.Worst(FlagsOf(a))).ToList();
         return new FlagCounts(worst.Count(w => w == FlagSeverity.Critical), worst.Count(w => w == FlagSeverity.Risk));
     }
+
+    /// <summary>
+    /// ТП — должность Linko из Sales:SalesRepJobs («Агент») или человек из оргструктуры OneBase. Операторы, супервайзеры, админы
+    /// оформляют заказы, но торговыми представителями не считаются: их продажи — в итогах, но не в численности ТП и не в рейтинге.
+    /// </summary>
+    private bool IsSalesRep(long agent) =>
+        _d.SalesRepJobs.Count == 0
+        || (_d.Agents.TryGetValue(agent, out var a)
+            && (a.InDirectory || (a.Job is { } job && _d.SalesRepJobs.Any(j => string.Equals(j.Trim(), job.Trim(), StringComparison.OrdinalIgnoreCase)))));
+
+    /// <summary>ТП с продажами в месяце — знаменатель «АКБ на агента» и число ТП на плитках.</summary>
+    private int SellingReps(IReadOnlySet<Guid>? scope) =>
+        AgentsIn(scope).Count(a => !IsVacancy(a) && IsSalesRep(a) && StatsOf(a).Kg > 0);
 
     private string? DirectionIdOf(long agent)
     {
@@ -1135,7 +1149,8 @@ public sealed partial class SalesAnalytics
                 visits, SalesMath.TempoToOwnAverage(kg, _d.WorkedDays, _d.DaysInMonth, past), IsVacancy(agent), SalesMath.OrderCount(lines));
         }
 
-        foreach (var group in _stats.Values.GroupBy(s => _agentRegion.GetValueOrDefault(s.AgentId, NoRegionId)))
+        // Медиана региона — по ТП: операторы и супервайзеры с их «визитами» сдвинули бы базу сравнения.
+        foreach (var group in _stats.Values.Where(s => IsSalesRep(s.AgentId)).GroupBy(s => _agentRegion.GetValueOrDefault(s.AgentId, NoRegionId)))
         {
             _medians[group.Key] = RegionMedians.Of(group);
         }

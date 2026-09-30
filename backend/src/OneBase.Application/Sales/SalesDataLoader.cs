@@ -328,6 +328,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                 Target(SalesTargetKeys.AkbPerAgent),
                 Target(SalesTargetKeys.CategoriesPerOutlet)),
             Thresholds = options.Flags,
+            SalesRepJobs = options.SalesRepJobs,
         };
     }
 
