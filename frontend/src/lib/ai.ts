@@ -71,6 +71,7 @@ export const aiSettingsTabs = [
   { href: "/settings/ai/providers", label: "Провайдеры" },
   { href: "/settings/ai/models", label: "Модели" },
   { href: "/settings/ai/agents", label: "Агенты" },
+  { href: "/settings/ai/tools", label: "Инструменты" },
 ] as const;
 
 export const modelLabel = (m: AiModelView) => m.displayName ?? m.model;
@@ -122,4 +123,15 @@ export type AiAgentSettings = {
   permissions: { code: string; label: string }[];
   sources: { code: string; name: string; description: string; tables: string; reports: string; requiredPermission: string | null; enabled: boolean }[];
   tools: { name: string; title: string; description: string; source: string; requiredPermission: string | null; enabled: boolean; requiresApproval: boolean }[];
+};
+
+export type AiToolView = {
+  name: string;
+  title: string;
+  description: string;
+  source: string;
+  sourceName: string | null;
+  requiredPermission: string | null;
+  inputSchema: { properties?: Record<string, { type: string; description?: string }> };
+  agents: string[];
 };
