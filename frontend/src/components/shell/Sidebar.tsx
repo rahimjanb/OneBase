@@ -21,7 +21,7 @@ import {
 type NavItem = { href: string; label: string; icon: LucideIcon; also?: string[]; soon?: boolean };
 
 const workspace: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: Columns2, soon: true },
+  { href: "/", label: "Dashboard", icon: Columns2 },
   { href: "/departments", label: "Отделы", icon: Grid3x3, also: ["/sales"] },
   { href: "/tasks", label: "Задачи", icon: Check, soon: true },
   { href: "/reports", label: "Отчёты", icon: Rows3, soon: true },
@@ -38,7 +38,7 @@ function isActive(pathname: string, item: NavItem) {
 
 export function Logo() {
   return (
-    <Link href="/departments" className="flex items-center gap-2.5 text-white">
+    <Link href="/" className="flex items-center gap-2.5 text-white">
       <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
         <path d="M12 2.5 21.5 12 12 21.5 2.5 12Z" strokeLinejoin="round" />
         <path d="M12 8.5 15.5 12 12 15.5 8.5 12Z" fill="currentColor" stroke="none" />
