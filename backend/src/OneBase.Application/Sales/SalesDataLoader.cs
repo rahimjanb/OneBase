@@ -96,8 +96,10 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         await Cached("sales:months", async () =>
         {
             var sold = options.SoldStatuses;
+            // Приёмка «в будущем» (бывает у части заказов) не должна давать в выборе периода месяц, которого ещё нет.
+            var today = DateOnly.FromDateTime(DateTime.Today);
             var months = await Dated()
-                .Where(o => sold.Contains(o.Status) && o.Date != null)
+                .Where(o => sold.Contains(o.Status) && o.Date != null && o.Date <= today)
                 .Select(o => new { o.Date!.Value.Year, o.Date!.Value.Month })
                 .Distinct()
                 .ToListAsync(ct);

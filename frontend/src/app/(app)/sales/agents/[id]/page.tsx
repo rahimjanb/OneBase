@@ -6,7 +6,7 @@ import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { NewMarketsTable, SameDaysTable, SilentMarketsTable } from "@/components/sales/tables";
 import { apiGetOrNull } from "@/lib/server-api";
-import { kg, money, monthGenitive, num, pct } from "@/lib/sales/format";
+import { kg, money, monthGenitive, monthName, num, pct } from "@/lib/sales/format";
 import { apiQuery, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { AgentFlag, AgentView } from "@/lib/sales/types";
 
@@ -33,6 +33,17 @@ function Findings({ flags }: { flags: AgentFlag[] }) {
       )}
     </Section>
   );
+}
+
+/**
+ * Плана в кг нет — что есть в Linko (API планов, staff_balance): план по выручке, план в штуках или ничего.
+ * Штуки в кг не пересчитываются: в показателе нет веса единицы.
+ */
+function planNote(data: AgentView, month: string): string {
+  if (data.revenuePlan != null) return `в кг плана нет; в Linko — план по выручке ${money(data.revenuePlan)} сум`;
+  if (data.indicators.some((i) => i.planType === "product_sales_amount")) return "в кг плана нет; в Linko план в штуках — см. «Планы Linko» ниже";
+  if (data.indicators.length > 0) return "в кг плана нет; в Linko только другие показатели — см. «Планы Linko» ниже";
+  return `в Linko плана на ${month} нет`;
 }
 
 export default async function AgentPage({
@@ -72,7 +83,7 @@ export default async function AgentPage({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiTile label="План ТП на месяц" value={kg(data.planKg)} unit={data.planKg != null ? "кг" : undefined}>
-          {data.planKg != null ? `выполнено ${pct(data.execution)}` : "плана нет"}
+          {data.planKg != null ? `выполнено ${pct(data.execution)}` : planNote(data, monthName(period.month))}
         </KpiTile>
         <KpiTile
           label="Выручка за месяц"
