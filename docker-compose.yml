@@ -33,7 +33,7 @@ services:
       retries: 5
 
   qdrant:
-    image: qdrant/qdrant:latest # закрепить версию перед продакшеном
+    image: qdrant/qdrant@sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10 # v1.19.1
     restart: unless-stopped
     volumes:
       - qdrant-data:/qdrant/storage
@@ -43,7 +43,7 @@ services:
 
   minio:
     # Официальные образы minio/minio больше не публикуются; pgsty/minio — поддерживаемый форк community-версии.
-    image: pgsty/minio:latest # закрепить версию перед продакшеном
+    image: pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372 # RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -60,6 +60,7 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      TZ: Asia/Tashkent # «сегодня» и текущий месяц продаж — по Ташкенту
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD}
       Jwt__Issuer: ${JWT_ISSUER}
@@ -97,6 +98,7 @@ services:
     restart: unless-stopped
     environment:
       API_INTERNAL_URL: http://api:8080
+      TZ: Asia/Tashkent
     depends_on:
       - api
 
@@ -105,8 +107,10 @@ services:
     restart: unless-stopped
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    # Снаружи сайт открывается через Cloudflare Tunnel (cloudflared → nginx по сети docker), порт наружу не нужен.
+    # 127.0.0.1:8080 — для проверки на самом сервере: curl http://127.0.0.1:8080/health
     ports:
-      - "80:80"
+      - "${NGINX_BIND:-127.0.0.1:8080}:80"
     depends_on:
       - api
       - web
@@ -119,7 +123,7 @@ services:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       - nginx
-    profiles: ["tunnel"]
+    profiles: ["tunnel"] # включается COMPOSE_PROFILES=tunnel в .env
 
 volumes:
   postgres-data:

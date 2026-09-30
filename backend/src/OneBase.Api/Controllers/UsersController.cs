@@ -89,7 +89,7 @@ public sealed partial class UsersController(
     public async Task<IActionResult> Create(UserInput input, CancellationToken ct)
     {
         var (values, error) = await ValidateAsync(input, null, ct);
-        if (error is not null)
+        if (error is not null || values is null)
         {
             return BadRequest(new { error });
         }
@@ -99,7 +99,7 @@ public sealed partial class UsersController(
             return BadRequest(new { error = $"Пароль — не короче {MinPasswordLength} символов." });
         }
 
-        var user = new User { Login = values!.Login, FullName = string.Empty };
+        var user = new User { Login = values.Login, FullName = string.Empty };
         Apply(user, values);
         user.PasswordHash = hasher.HashPassword(user, input.Password);
         user.Roles.Add(new UserRole { RoleId = values.Role.Id });
@@ -129,14 +129,16 @@ public sealed partial class UsersController(
             return BadRequest(new { error = "У этого пользователя роль с правами, которых у вас нет, — изменить его может только администратор." });
         }
 
-        var (values, error) = await ValidateAsync(input, user, ct);
-        if (error is not null)
+        var (validated, error) = await ValidateAsync(input, user, ct);
+        if (error is not null || validated is null)
         {
             return BadRequest(new { error });
         }
 
+        var values = validated;
+
         var isMe = user.Id == User.GetUserId();
-        var roleChanged = current.Count != 1 || current[0].Id != values!.Role.Id;
+        var roleChanged = current.Count != 1 || current[0].Id != values.Role.Id;
         if (isMe && roleChanged)
         {
             return BadRequest(new { error = "Свою роль изменить нельзя — иначе можно потерять доступ к этому разделу. Попросите другого администратора." });

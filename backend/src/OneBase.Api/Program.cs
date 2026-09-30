@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using OneBase.AI;
 using OneBase.AI.Agents;
 using OneBase.Api;
@@ -21,6 +22,15 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddDbContextCheck<OneBaseDbContext>("postgres");
 
+// За nginx (и сервером Next.js при входе) IP клиента приходит в X-Forwarded-For. Порт API наружу не публикуется —
+// до него доходят только nginx и web из сети docker, поэтому доверяем им. Лимит входа считается по настоящему IP.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownIPNetworks.Clear();
+    o.KnownProxies.Clear();
+});
+
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -41,6 +51,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseRateLimiter(); // после аутентификации — лимит AI считается по пользователю
