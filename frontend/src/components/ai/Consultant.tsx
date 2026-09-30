@@ -202,7 +202,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
   );
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-8.5rem)] max-w-[1800px] lg:h-[calc(100dvh-4rem)]">
+    <div className="mx-auto flex h-[calc(100dvh-10.5rem)] max-w-[1800px] lg:h-[calc(100dvh-4rem)]">
       <aside className="hidden w-72 shrink-0 border-r border-line bg-surface lg:block">{historyPanel}</aside>
 
       {historyOpen && (

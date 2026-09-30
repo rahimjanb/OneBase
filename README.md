@@ -93,9 +93,11 @@ dotnet ef migrations add <Name> -p src/OneBase.Infrastructure -s src/OneBase.Api
 
 ## Дальше
 
-- [ ] Реализация `ILlmClient` для выбранного LLM-провайдера и embeddings
-- [ ] `IAgentMemory`: working memory в Redis, episodic/semantic в Qdrant
-- [ ] RAG: индексация документов из MinIO в Qdrant
+- [x] AI Gateway: OpenAI и Anthropic, резервная модель, эмбеддинги, учёт токенов и стоимости — см. [docs/ai.md](docs/ai.md)
+- [x] Консультант и шесть AI-сотрудников: маршрутизация, параллельный анализ, инструменты с данными OneBase, память
+- [x] RAG: база знаний (MinIO + PostgreSQL full-text + Qdrant)
+- [x] Проактивный анализ, AI Dashboard, AI-журнал
+- [ ] Данные отделов, которых пока нет в OneBase: финансы (расходы, бюджеты), маркетинг, HR, производство, закупки
 - [ ] Files API: папки, загрузка, версии, права на папки/файлы
 - [ ] Бизнес-инструменты агентов (заявки, счета, закупки…) с грантами и флагом `IsCritical`
 - [ ] Event Bus, Workflow Engine, фоновые задачи, триггеры агентов

@@ -77,6 +77,8 @@ services:
       Llm__ApiKey: ${LLM_API_KEY}
       Llm__Model: ${LLM_MODEL}
       Llm__EmbeddingModel: ${EMBEDDING_MODEL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       LINKO_BASE_URL: ${LINKO_BASE_URL}
       LINKO_TOKEN: ${LINKO_TOKEN}
       LINKO_PLAN_TOKEN: ${LINKO_PLAN_TOKEN}

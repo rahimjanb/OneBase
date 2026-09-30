@@ -91,7 +91,7 @@ export function UsageView({ data, agentNames }: { data: AiUsageView; agentNames:
         />
       </Section>
 
-      <div className="grid gap-x-6 xl:grid-cols-2 min-[106.25rem]:grid-cols-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-6 xl:grid-cols-2 min-[106.25rem]:grid-cols-3">
         <Section title="По пользователям">
           <Table head={["Пользователь", "Запросы", "Токены", "Стоимость"]} rows={data.byUser.map((u) => [u.user, num(u.requests), num(u.tokens), usd(u.costUsd)])} />
         </Section>
