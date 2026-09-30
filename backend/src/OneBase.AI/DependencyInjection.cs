@@ -7,6 +7,7 @@ using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
+using OneBase.AI.Security;
 using OneBase.AI.Tools;
 
 namespace OneBase.AI;
@@ -40,6 +41,11 @@ public static class DependencyInjection
         services.AddSingleton<IAiGateway>(sp => sp.GetRequiredService<AiGateway>());
         services.AddSingleton<ILlmClient>(sp => sp.GetRequiredService<AiGateway>());
         services.AddScoped<AiModelCatalog>();
+
+        // AI-сотрудники: настройки, права пользователя, выполнение задач.
+        services.AddScoped<IUserPermissions, UserPermissions>();
+        services.AddScoped<AiAgentStore>();
+        services.AddScoped<AgentRunner>();
 
         // Консультант: чаты и движок ответа.
         services.AddScoped<IConsultantEngine, DirectConsultantEngine>();

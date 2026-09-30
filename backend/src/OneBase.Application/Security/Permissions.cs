@@ -13,6 +13,12 @@ public static class Permissions
     public const string SalesManage = "sales.manage";
     public const string IntegrationsManage = "integrations.manage";
 
+    /// <summary>Финансовые данные (оплаты и др.) — в том числе в ответах AI.</summary>
+    public const string FinanceRead = "finance.read";
+
+    /// <summary>Кадровые данные — в том числе в ответах AI.</summary>
+    public const string HrRead = "hr.read";
+
     /// <summary>«Настройки → AI»: провайдеры, ключи API, модели, агенты.</summary>
     public const string AiSettingsManage = "ai.settings.manage";
 
@@ -28,5 +34,7 @@ public static class Permissions
         AuditRead,
         SalesRead,
         SalesManage,
+        FinanceRead,
+        HrRead,
     ];
 }

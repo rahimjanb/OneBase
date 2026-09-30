@@ -70,6 +70,7 @@ export const aiSettingsTabs = [
   { href: "/settings/ai", label: "Общие" },
   { href: "/settings/ai/providers", label: "Провайдеры" },
   { href: "/settings/ai/models", label: "Модели" },
+  { href: "/settings/ai/agents", label: "Агенты" },
 ] as const;
 
 export const modelLabel = (m: AiModelView) => m.displayName ?? m.model;
@@ -78,3 +79,47 @@ export const aiCrumbs = [
   { label: "OneBase", href: "/" },
   { label: "Настройки", href: "/settings" },
 ];
+
+export type AiAgentListItem = {
+  code: string;
+  name: string;
+  role: string | null;
+  description: string | null;
+  enabled: boolean;
+  isConsultant: boolean;
+  model: AiModelRef | null;
+  requiredPermission: string | null;
+  sources: number;
+  tools: number;
+  promptIsDefault: boolean;
+};
+
+export type AiAgentPublic = {
+  code: string;
+  name: string;
+  role: string | null;
+  description: string | null;
+  enabled: boolean;
+  isConsultant: boolean;
+  available: boolean;
+};
+
+export type AiAgentSettings = {
+  code: string;
+  name: string;
+  role: string | null;
+  description: string | null;
+  isConsultant: boolean;
+  systemPrompt: string;
+  defaultPrompt: string | null;
+  promptIsDefault: boolean;
+  model: AiModelRef | null;
+  temperature: number | null;
+  maxOutputTokens: number | null;
+  enabled: boolean;
+  requiredPermission: string | null;
+  updatedAt: string | null;
+  permissions: { code: string; label: string }[];
+  sources: { code: string; name: string; description: string; tables: string; reports: string; requiredPermission: string | null; enabled: boolean }[];
+  tools: { name: string; title: string; description: string; source: string; requiredPermission: string | null; enabled: boolean; requiresApproval: boolean }[];
+};

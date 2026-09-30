@@ -412,7 +412,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
 }
 
 function Summary({ details }: { details: ConsultantDetails }) {
-  const agents = details.agents.filter((a) => a.status !== "skipped");
+  const agents = details.agents.filter((a) => a.status !== "disabled" && a.status !== "forbidden");
   if (agents.length === 0) return null;
   const findings = agents.reduce((n, a) => n + a.findings.length + a.problems.length, 0);
   const recommendations = agents.reduce((n, a) => n + a.recommendations.length, 0);
@@ -471,7 +471,16 @@ function Details({ details, durationMs }: { details: ConsultantDetails; duration
   );
 }
 
-function AgentCard({ result }: { result: ConsultantDetails["agents"][number] }) {
+const agentStatus: Record<string, { label: string; className: string }> = {
+  completed: { label: "готово", className: "bg-ok-soft text-ok" },
+  partial: { label: "частично", className: "bg-warn-soft text-warn" },
+  no_data: { label: "нет данных", className: "bg-warn-soft text-warn" },
+  forbidden: { label: "нет доступа", className: "bg-muted text-ink-2" },
+  disabled: { label: "выключен", className: "bg-muted text-ink-2" },
+  failed: { label: "ошибка", className: "bg-bad-soft text-bad" },
+};
+
+export function AgentCard({ result }: { result: ConsultantDetails["agents"][number] }) {
   const section = (title: string, items: string[]) =>
     items.length > 0 && (
       <div className="mt-2">
@@ -487,12 +496,8 @@ function AgentCard({ result }: { result: ConsultantDetails["agents"][number] }) 
     <div className="rounded-xl border border-line bg-surface px-4 py-3">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-semibold text-ink">{result.agentName}</span>
-        <span
-          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-            result.status === "completed" ? "bg-ok-soft text-ok" : result.status === "no_data" ? "bg-warn-soft text-warn" : "bg-bad-soft text-bad"
-          }`}
-        >
-          {result.status === "completed" ? "готово" : result.status === "no_data" ? "нет данных" : "ошибка"}
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${(agentStatus[result.status] ?? agentStatus.failed).className}`}>
+          {(agentStatus[result.status] ?? agentStatus.failed).label}
         </span>
       </div>
       {result.summary && <p className="mt-1 text-sm text-ink-2">{result.summary}</p>}

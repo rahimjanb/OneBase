@@ -18,7 +18,7 @@ internal sealed class LlmAgent(AgentProfile profile, ILlmClient llm, ToolExecuto
 
     public async Task<AgentReply> HandleAsync(AgentMessage message, CancellationToken cancellationToken)
     {
-        var tools = await executor.GetAllowedToolsAsync(profile.Code, cancellationToken);
+        var tools = await executor.GetAllowedToolsAsync(profile.Code, message.InitiatedByUserId, cancellationToken);
         var toolDefinitions = tools.Select(t => new LlmToolDefinition(t.Name, t.Description, t.InputSchema)).ToList();
 
         var messages = new List<LlmMessage>

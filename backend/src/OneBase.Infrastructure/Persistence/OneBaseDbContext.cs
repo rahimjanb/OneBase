@@ -37,6 +37,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<AiSettings> AiSettings => Set<AiSettings>();
     public DbSet<AiConversation> AiConversations => Set<AiConversation>();
     public DbSet<AiMessage> AiMessages => Set<AiMessage>();
+    public DbSet<AiAgent> AiAgents => Set<AiAgent>();
+    public DbSet<AiAgentKnowledgeSource> AiAgentKnowledgeSources => Set<AiAgentKnowledgeSource>();
 
     // Linko (зеркало SFA)
     public DbSet<LinkoUser> LinkoUsers => Set<LinkoUser>();
@@ -181,6 +183,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.Property(x => x.AgentCode).HasMaxLength(64);
             e.Property(x => x.ToolName).HasMaxLength(100);
             e.HasIndex(x => new { x.AgentCode, x.ToolName }).IsUnique();
+            e.Property(x => x.Enabled).HasDefaultValue(true);
         });
 
         b.Entity<ApprovalRequest>(e =>

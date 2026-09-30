@@ -62,5 +62,27 @@ internal static class AiSchema
             e.HasOne(x => x.Conversation).WithMany(x => x.Messages).HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.ConversationId, x.CreatedAt });
         });
+
+        b.Entity<AiAgent>(e =>
+        {
+            e.ToTable("Agents", Schema);
+            e.HasKey(x => x.Code).HasName("PK_AiAgents");
+            e.Property(x => x.Code).HasMaxLength(64);
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.Role).HasMaxLength(200);
+            e.Property(x => x.Description).HasMaxLength(1000);
+            e.Property(x => x.ProviderCode).HasMaxLength(32);
+            e.Property(x => x.ModelId).HasMaxLength(200);
+            e.Property(x => x.DepartmentCode).HasMaxLength(64);
+            e.Property(x => x.RequiredPermission).HasMaxLength(100);
+        });
+
+        b.Entity<AiAgentKnowledgeSource>(e =>
+        {
+            e.ToTable("AgentKnowledgeSources", Schema);
+            e.HasKey(x => new { x.AgentCode, x.SourceCode });
+            e.Property(x => x.AgentCode).HasMaxLength(64);
+            e.Property(x => x.SourceCode).HasMaxLength(64);
+        });
     }
 }

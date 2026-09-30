@@ -10,4 +10,10 @@ public class AgentToolGrant : Entity
 
     /// <summary>Если true — каждый вызов проходит через Human Approval, даже если сам инструмент не критический.</summary>
     public bool RequiresApproval { get; set; }
+
+    /// <summary>
+    /// false — инструмент у агента выключен администратором. Строка не удаляется, чтобы при обновлении
+    /// OneBase инструмент не выдался агенту заново.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
 }

@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using OneBase.AI;
+using OneBase.AI.Agents;
 using OneBase.Api;
 using OneBase.Api.Auth;
 using OneBase.Infrastructure;
@@ -46,6 +47,7 @@ app.MapHealthChecks("/health");
 if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 {
     await DbSeeder.SeedAsync(app.Services);
+    await AiSeeder.SeedAsync(app.Services);
 }
 
 if (args.Contains("linko-check"))
