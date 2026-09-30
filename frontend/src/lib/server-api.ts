@@ -42,3 +42,15 @@ export async function apiGetOrNull<T>(path: string, returnTo?: string): Promise<
     throw error;
   }
 }
+
+/** Запрос для необязательного блока страницы: нет сессии, прав или ответа — null, без перехода на вход или «нет доступа». */
+export async function apiTry<T>(path: string): Promise<T | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const response = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    return response.ok ? ((await response.json()) as T) : null;
+  } catch {
+    return null;
+  }
+}

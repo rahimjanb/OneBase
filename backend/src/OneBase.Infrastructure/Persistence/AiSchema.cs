@@ -118,5 +118,21 @@ internal static class AiSchema
             e.HasIndex(x => new { x.UserId, x.ConversationId, x.CreatedAt });
             e.HasIndex(x => new { x.UserId, x.AgentCode, x.CreatedAt });
         });
+
+        b.Entity<AiAlert>(e =>
+        {
+            e.ToTable("Alerts", Schema);
+            e.Property(x => x.Category).HasMaxLength(32);
+            e.Property(x => x.Rule).HasMaxLength(64);
+            e.Property(x => x.Key).HasMaxLength(200);
+            e.Property(x => x.Severity).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Title).HasMaxLength(300);
+            e.Property(x => x.Message).HasMaxLength(2000);
+            e.Property(x => x.Recommendation).HasMaxLength(2000);
+            e.Property(x => x.Href).HasMaxLength(500);
+            e.Property(x => x.RequiredPermission).HasMaxLength(100);
+            e.HasIndex(x => x.Key);
+            e.HasIndex(x => new { x.ResolvedAt, x.Severity });
+        });
     }
 }

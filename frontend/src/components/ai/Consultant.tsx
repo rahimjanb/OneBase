@@ -37,6 +37,8 @@ type Props = {
   conversations: ConversationSummary[];
   conversation: ConversationView | null;
   canConfigure: boolean;
+  /** Вопрос, подставленный в поле ввода (например, из находки AI Dashboard). */
+  initialQuestion?: string;
 };
 
 const stageLabel: Record<string, string> = {
@@ -45,13 +47,13 @@ const stageLabel: Record<string, string> = {
   memory: "Вспоминаю прошлые анализы",
 };
 
-export function Consultant({ status, conversations: initialList, conversation, canConfigure }: Props) {
+export function Consultant({ status, conversations: initialList, conversation, canConfigure, initialQuestion }: Props) {
   const router = useRouter();
   const [list, setList] = useState(initialList);
   const [activeId, setActiveId] = useState<string | null>(conversation?.id ?? null);
   const [title, setTitle] = useState(conversation?.title ?? "Новый чат");
   const [messages, setMessages] = useState<ChatMessage[]>(conversation?.messages ?? []);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialQuestion ?? "");
   const [pending, setPending] = useState<string | null>(null);
   const [progress, setProgress] = useState<ConsultantProgress[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -222,6 +224,9 @@ export function Consultant({ status, conversations: initialList, conversation, c
           </button>
           <Sparkle className="hidden size-4 text-accent-strong sm:block" />
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-ink">{activeId ? title : "Консультант"}</h1>
+          <Link href="/ai" className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-2 hover:bg-muted hover:text-ink">
+            AI Dashboard
+          </Link>
           {activeId && (
             <button type="button" onClick={rename} aria-label="Переименовать чат" className="grid size-8 place-items-center rounded-md text-ink-3 hover:bg-muted hover:text-ink">
               <Pencil className="size-3.5" />

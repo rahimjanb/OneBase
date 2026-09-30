@@ -2,19 +2,29 @@ import Link from "next/link";
 import { ArrowRight, Sparkle } from "lucide-react";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { Card, SectionTitle } from "@/components/ui";
-import type { AiAgentPublic } from "@/lib/ai";
+import { AlertsDashboard } from "@/components/ai/AlertsDashboard";
+import type { AiAgentPublic, AiAlertsView } from "@/lib/ai";
 import { apiGet } from "@/lib/server-api";
 
-export const metadata = { title: "AI-сотрудники · OneBase" };
+export const metadata = { title: "AI Dashboard · OneBase" };
+
+type Me = { permissions: string[] };
 
 export default async function AiPage() {
-  const agents = await apiGet<AiAgentPublic[]>("/api/ai/agents", "/ai");
+  const [agents, alerts, me] = await Promise.all([
+    apiGet<AiAgentPublic[]>("/api/ai/agents", "/ai"),
+    apiGet<AiAlertsView>("/api/ai/alerts", "/ai"),
+    apiGet<Me>("/api/auth/me", "/ai"),
+  ]);
   const consultant = agents.find((a) => a.isConsultant);
   const departments = agents.filter((a) => !a.isConsultant);
   return (
     <>
-      <PageHeader title="AI-сотрудники" subtitle="Главный консультант и AI-сотрудники отделов" back="/consultant" />
+      <PageHeader title="AI Dashboard" subtitle="Что AI нашёл в данных компании и кто из AI-сотрудников работает" back="/consultant" />
       <PageBody>
+        <AlertsDashboard initial={alerts} canRun={me.permissions.includes("ai.settings.manage")} />
+
+        <div className="mt-10" />
         {consultant && (
           <div className="rounded-xl border border-accent/25 bg-accent-soft p-6">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent-strong">

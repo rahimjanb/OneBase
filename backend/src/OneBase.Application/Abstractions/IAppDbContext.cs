@@ -33,6 +33,7 @@ public interface IAppDbContext
     DbSet<AiKnowledgeDocument> AiKnowledgeDocuments { get; }
     DbSet<AiKnowledgeChunk> AiKnowledgeChunks { get; }
     DbSet<AiMemory> AiMemories { get; }
+    DbSet<AiAlert> AiAlerts { get; }
 
     DbSet<LinkoUser> LinkoUsers { get; }
     DbSet<LinkoMarket> LinkoMarkets { get; }

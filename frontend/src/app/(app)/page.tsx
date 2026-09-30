@@ -3,7 +3,9 @@ import { ArrowRight, ArrowUp, CircleAlert, Clock, Plus, Sparkle } from "lucide-r
 import { DepartmentStatusCard } from "@/components/departments";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { Card, SectionTitle, SelectField } from "@/components/ui";
-import { attentionItems, departments, directorInsight, kpis } from "@/lib/demo-data";
+import { categoryNames, type AiAlertsView } from "@/lib/ai";
+import { attentionItems, departments, kpis } from "@/lib/demo-data";
+import { apiTry } from "@/lib/server-api";
 
 const trendStyles = {
   up: { icon: ArrowUp, className: "text-ok" },
@@ -11,7 +13,10 @@ const trendStyles = {
   warn: { icon: CircleAlert, className: "text-warn" },
 } as const;
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  // Карточка AI — реальные находки проактивного анализа (если у пользователя есть доступ к консультанту).
+  const alerts = await apiTry<AiAlertsView>("/api/ai/alerts");
+  const top = alerts?.alerts.filter((a) => a.severity !== "Opportunity").slice(0, 2) ?? [];
   return (
     <>
       <PageHeader title="Обзор компании" subtitle="Единый центр управления всеми подразделениями" />
@@ -86,11 +91,29 @@ export default function DashboardPage() {
           <div className="rounded-xl border border-accent/25 bg-accent-soft p-5 md:col-span-2 xl:col-span-1">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent-strong">
               <Sparkle className="size-3.5" />
-              AI Director
+              AI-консультант
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-ink">{directorInsight}</p>
-            <Link href="/ai" className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-accent-strong hover:underline">
-              Открыть анализ <ArrowRight className="size-3.5" />
+            {alerts === null ? (
+              <p className="mt-3 text-sm leading-relaxed text-ink">Задайте вопрос о компании — консультант привлечёт AI-сотрудников отделов.</p>
+            ) : top.length === 0 ? (
+              <p className="mt-3 text-sm leading-relaxed text-ink">Проактивный анализ не нашёл проблем в данных OneBase.</p>
+            ) : (
+              <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink">
+                {top.map((a) => (
+                  <li key={a.id}>
+                    <span className={a.severity === "Critical" ? "font-semibold text-bad" : "font-semibold text-warn"}>{categoryNames[a.category] ?? a.category}: </span>
+                    {a.title}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {alerts && alerts.summary.problems > 0 && (
+              <p className="mt-2 text-xs text-ink-2">
+                Проблем: {alerts.summary.problems}, критических: {alerts.summary.critical}, возможностей: {alerts.summary.opportunities}
+              </p>
+            )}
+            <Link href={alerts ? "/ai" : "/consultant"} className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-accent-strong hover:underline">
+              {alerts ? "Открыть AI Dashboard" : "Открыть консультанта"} <ArrowRight className="size-3.5" />
             </Link>
           </div>
         </div>

@@ -6,12 +6,13 @@ export const metadata = { title: "Консультант · OneBase" };
 
 type Me = { permissions: string[] };
 
-export default async function ConsultantPage() {
+export default async function ConsultantPage({ searchParams }: { searchParams: Promise<{ ask?: string }> }) {
+  const { ask } = await searchParams;
   const path = "/consultant";
   const [status, conversations, me] = await Promise.all([
     apiGet<AiStatus>("/api/ai/status", path),
     apiGet<ConversationSummary[]>("/api/ai/conversations", path),
     apiGet<Me>("/api/auth/me", path),
   ]);
-  return <Consultant status={status} conversations={conversations} conversation={null} canConfigure={me.permissions.includes("ai.settings.manage")} />;
+  return <Consultant status={status} conversations={conversations} conversation={null} canConfigure={me.permissions.includes("ai.settings.manage")} initialQuestion={ask?.slice(0, 4000)} />;
 }

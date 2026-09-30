@@ -166,3 +166,40 @@ export const permissionLabels: Record<string, string> = {
   "hr.read": "Кадровые данные",
   "files.read": "Просмотр файлов",
 };
+
+export type AiAlertSeverity = "Critical" | "Warning" | "Opportunity";
+
+export type AiAlert = {
+  id: string;
+  category: string;
+  rule: string;
+  severity: AiAlertSeverity;
+  title: string;
+  message: string;
+  recommendation: string | null;
+  href: string | null;
+  detectedAt: string;
+  lastSeenAt: string;
+  resolvedAt: string | null;
+};
+
+export type AiAlertsView = {
+  summary: {
+    problems: number;
+    critical: number;
+    recommendations: number;
+    opportunities: number;
+    byCategory: { category: string; problems: number; critical: number; opportunities: number }[];
+  };
+  lastRun: { at: string; active: number; created: number; resolved: number; errors: string[] } | null;
+  alerts: AiAlert[];
+};
+
+export const categoryNames: Record<string, string> = {
+  finance: "Финансы",
+  sales: "Продажи",
+  marketing: "Маркетинг",
+  hr: "HR",
+  production: "Производство",
+  supply: "Снабжение",
+};

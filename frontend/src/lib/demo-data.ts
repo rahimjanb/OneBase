@@ -66,7 +66,6 @@ export const attentionItems = [
   { department: "Маркетинг", text: "лиды ниже целевого уровня" },
 ];
 
-export const directorInsight = "Производство опережает план, но запасы сырья снизились на 12%.";
 
 const folder = (
   id: string,

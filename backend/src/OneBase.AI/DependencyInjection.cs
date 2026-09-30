@@ -50,6 +50,15 @@ public static class DependencyInjection
 
         // Консультант: чаты и движок ответа.
         // Консультант: маршрутизация → AI-сотрудники параллельно → единый ответ.
+        // Проактивный анализ: правила по данным OneBase по расписанию → AI Alerts.
+        services.AddSingleton(new OneBase.AI.Proactive.ProactiveOptions
+        {
+            IntervalMinutes = int.TryParse(config["Ai:Proactive:IntervalMinutes"], out var interval) ? interval : 60,
+        });
+        services.AddSingleton<OneBase.AI.Proactive.ProactiveStatus>();
+        services.AddScoped<OneBase.AI.Proactive.ProactiveAnalyzer>();
+        services.AddHostedService<OneBase.AI.Proactive.ProactiveAnalysisWorker>();
+
         services.AddScoped<OneBase.AI.Memory.AiMemoryStore>();
         services.AddScoped<OneBase.AI.Orchestration.AiRouter>();
         services.AddScoped<OneBase.AI.Orchestration.AgentOrchestrator>();
