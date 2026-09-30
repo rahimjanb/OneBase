@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
+using OneBase.AI.Knowledge;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
 using OneBase.AI.Security;
@@ -18,7 +19,13 @@ public sealed record AgentRun(AgentResult Result, AiTokenUsage Usage, string? Mo
 /// Выполняет задачу одного AI-сотрудника: цикл вызова инструментов (данные OneBase) и структурированный итог
 /// agent/status/findings/metrics/problems/recommendations/data_sources.
 /// </summary>
-public sealed class AgentRunner(AiAgentStore agents, IAiGateway gateway, ToolExecutor executor, IUserPermissions permissions, TimeProvider clock)
+public sealed class AgentRunner(
+    AiAgentStore agents,
+    IAiGateway gateway,
+    ToolExecutor executor,
+    IUserPermissions permissions,
+    KnowledgeService knowledge,
+    TimeProvider clock)
 {
     private const int MaxSteps = 8;
 
@@ -49,6 +56,13 @@ public sealed class AgentRunner(AiAgentStore agents, IAiGateway gateway, ToolExe
 
         // Только инструменты данных: взаимодействие отделов идёт через главного консультанта, а не делегированием.
         var tools = (await executor.GetAllowedToolsAsync(agent.Code, task.UserId, ct)).Where(t => t.Source is not null).ToList();
+
+        // Пока в базе знаний нет документов, доступных пользователю, поиск по ней не предлагается: он всегда пуст,
+        // а каждый вызов — лишний круг к модели. С первым проиндексированным документом поиск включается сам.
+        if (tools.Any(t => t.Source == KnowledgeSources.Documents) && (await knowledge.AllowedDocumentsAsync(task.UserId, ct)).Count == 0)
+        {
+            tools = tools.Where(t => t.Source != KnowledgeSources.Documents).ToList();
+        }
         var definitions = tools.Select(t => new LlmToolDefinition(t.Name, t.Description, t.InputSchema)).ToList();
 
         var messages = new List<LlmMessage>
