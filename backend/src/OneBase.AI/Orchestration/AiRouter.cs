@@ -28,7 +28,8 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
     };
 
     public async Task<RoutingDecision> RouteAsync(
-        string question, IReadOnlyList<LlmMessage> history, IReadOnlyList<AgentConfig> available, AiCallContext context, CancellationToken ct)
+        string question, IReadOnlyList<LlmMessage> history, IReadOnlyList<AgentConfig> available, AiCallContext context, CancellationToken ct,
+        string? memory = null)
     {
         if (available.Count == 0)
         {
@@ -37,7 +38,7 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
 
         var s = await settings.GetSettingsAsync(ct);
         var result = await gateway.CompleteAsync(
-            [new LlmMessage(LlmRole.System, Prompt(available)), new LlmMessage(LlmRole.User, Request(question, history))],
+            [new LlmMessage(LlmRole.System, Prompt(available)), new LlmMessage(LlmRole.User, Request(question, history, memory))],
             [],
             new AiCallOptions { Model = s.Router, JsonOutput = true, Temperature = 0, MaxOutputTokens = 1024, Context = context with { Purpose = "consultant.route" } },
             ct);
@@ -113,14 +114,21 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
         return sb.ToString();
     }
 
-    private static string Request(string question, IReadOnlyList<LlmMessage> history)
+    private static string Request(string question, IReadOnlyList<LlmMessage> history, string? memory)
     {
-        if (history.Count == 0)
+        if (history.Count == 0 && memory is null)
         {
             return $"Вопрос: {question}";
         }
 
-        var sb = new StringBuilder("История чата (последние сообщения):\n");
+        var sb = new StringBuilder();
+        if (memory is not null)
+        {
+            sb.AppendLine("Уже проанализировано в этом чате:");
+            sb.AppendLine(memory);
+        }
+
+        sb.AppendLine("История чата (последние сообщения):");
         foreach (var m in history.TakeLast(6))
         {
             var text = m.Content.Length > 600 ? m.Content[..600] + "…" : m.Content;

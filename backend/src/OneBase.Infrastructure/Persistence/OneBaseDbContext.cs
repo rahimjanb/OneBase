@@ -41,6 +41,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<AiAgentKnowledgeSource> AiAgentKnowledgeSources => Set<AiAgentKnowledgeSource>();
     public DbSet<AiKnowledgeDocument> AiKnowledgeDocuments => Set<AiKnowledgeDocument>();
     public DbSet<AiKnowledgeChunk> AiKnowledgeChunks => Set<AiKnowledgeChunk>();
+    public DbSet<AiMemory> AiMemories => Set<AiMemory>();
 
     // Linko (зеркало SFA)
     public DbSet<LinkoUser> LinkoUsers => Set<LinkoUser>();

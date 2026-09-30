@@ -17,7 +17,7 @@ public sealed class AgentOrchestrator(IServiceScopeFactory scopes, ILogger<Agent
         IReadOnlyList<AgentConfig> agents,
         IReadOnlyDictionary<string, string> tasks,
         string question,
-        string? context,
+        IReadOnlyDictionary<string, string?> contexts,
         Guid userId,
         Guid? conversationId,
         Func<ConsultantProgress, Task> progress,
@@ -51,7 +51,7 @@ public sealed class AgentOrchestrator(IServiceScopeFactory scopes, ILogger<Agent
                 using var scope = scopes.CreateScope();
                 var runner = scope.ServiceProvider.GetRequiredService<AgentRunner>();
                 var task = tasks.GetValueOrDefault(a.Code) ?? question;
-                var run = await runner.RunAsync(new AgentTask(a.Code, task, userId, conversationId, context), Report, ct);
+                var run = await runner.RunAsync(new AgentTask(a.Code, task, userId, conversationId, contexts.GetValueOrDefault(a.Code)), Report, ct);
                 var ok = run.Result.Status is "completed" or "partial" or "no_data";
                 await Report(new ConsultantProgress("agent", a.Code, a.Name, ok ? ProgressStatus.Done : ProgressStatus.Failed,
                     run.Result.Status == "no_data" ? "нет данных" : null));

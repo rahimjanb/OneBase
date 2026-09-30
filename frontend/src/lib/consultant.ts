@@ -21,6 +21,7 @@ export type ConsultantDetails = {
   model: string | null;
   usedFallback: boolean;
   routingReason: string | null;
+  memoryUsed?: number;
 };
 
 export type ChatMessage = {

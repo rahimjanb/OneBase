@@ -452,6 +452,7 @@ function Details({ details, durationMs }: { details: ConsultantDetails; duration
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-3">
         {details.model && <span>Модель: {details.model}{details.usedFallback ? " (резервная)" : ""}</span>}
         <span>{(durationMs / 1000).toFixed(1)} с</span>
+        {(details.memoryUsed ?? 0) > 0 && <span>учтены прошлые анализы: {details.memoryUsed}</span>}
         {hasMore && details.agents.length > 0 && (
           <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 font-medium text-accent-strong hover:underline">
             Как получен ответ

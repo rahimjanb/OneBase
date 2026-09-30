@@ -50,6 +50,7 @@ public static class DependencyInjection
 
         // Консультант: чаты и движок ответа.
         // Консультант: маршрутизация → AI-сотрудники параллельно → единый ответ.
+        services.AddScoped<OneBase.AI.Memory.AiMemoryStore>();
         services.AddScoped<OneBase.AI.Orchestration.AiRouter>();
         services.AddScoped<OneBase.AI.Orchestration.AgentOrchestrator>();
         services.AddScoped<IConsultantEngine, OneBase.AI.Orchestration.OrchestratedConsultantEngine>();

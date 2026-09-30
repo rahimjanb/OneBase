@@ -4,6 +4,7 @@ using OneBase.AI.Agents;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
+using OneBase.AI.Memory;
 using OneBase.AI.Providers;
 using OneBase.AI.Security;
 
@@ -19,6 +20,7 @@ public sealed class OrchestratedConsultantEngine(
     AiRouter router,
     AgentOrchestrator orchestrator,
     IAiGateway gateway,
+    AiMemoryStore memory,
     TimeProvider clock) : IConsultantEngine
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -41,21 +43,39 @@ public sealed class OrchestratedConsultantEngine(
         var forbidden = departments.Except(available).ToList();
         var context = new AiCallContext(turn.UserId, AgentDefaults.Consultant, turn.ConversationId, "consultant");
 
+        // Аналитическая память чата: что сотрудники уже выяснили (только доступные пользователю сейчас).
+        var names = all.ToDictionary(a => a.Code, a => a.Name);
+        var remembered = await memory.ConversationAsync(turn.UserId, turn.ConversationId, available.Select(a => a.Code).ToList(), 8, ct);
+        var rememberedText = remembered.Count == 0 ? null : AiMemoryStore.Format(remembered, names);
+        if (remembered.Count > 0)
+        {
+            await progress(new ConsultantProgress("memory", null, null, ProgressStatus.Done, $"прошлых анализов в чате: {remembered.Count}"));
+        }
+
         await progress(new ConsultantProgress("routing", null, null, ProgressStatus.Running));
-        var routing = await router.RouteAsync(turn.Question, turn.History, available, context, ct);
+        var routing = await router.RouteAsync(turn.Question, turn.History, available, context, ct, rememberedText);
         await progress(new ConsultantProgress("routing", null, null, ProgressStatus.Done,
             routing.Agents.Count == 0 ? "без AI-сотрудников" : string.Join(", ", routing.Agents.Select(c => available.First(a => a.Code == c).Name))));
 
         var chosen = available.Where(a => routing.Agents.Contains(a.Code)).ToList();
+        var contexts = new Dictionary<string, string?>();
+        var memoryUsed = remembered.Count;
+        foreach (var a in chosen)
+        {
+            var earlier = await memory.AgentAsync(turn.UserId, a.Code, turn.ConversationId, 3, ct);
+            memoryUsed += earlier.Count;
+            contexts[a.Code] = AgentContext(turn.History, remembered.Where(m => m.AgentCode == a.Code).ToList(), earlier);
+        }
+
         var (runs, agentUsage) = chosen.Count == 0
             ? ([], AiTokenUsage.None)
-            : await orchestrator.RunAsync(chosen, routing.Tasks, turn.Question, HistoryContext(turn.History), turn.UserId, turn.ConversationId, progress, ct);
+            : await orchestrator.RunAsync(chosen, routing.Tasks, turn.Question, contexts, turn.UserId, turn.ConversationId, progress, ct);
 
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Running));
         var results = runs.Select(r => r.Result).ToList();
         List<LlmMessage> messages =
         [
-            new(LlmRole.System, ComposePrompt(consultant, results, forbidden)),
+            new(LlmRole.System, ComposePrompt(consultant, results, forbidden, rememberedText)),
             .. turn.History,
             new(LlmRole.User, turn.Question),
         ];
@@ -68,6 +88,8 @@ public sealed class OrchestratedConsultantEngine(
         }, ct);
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Done));
 
+        await memory.SaveAsync(turn.UserId, turn.ConversationId, routing.Tasks, turn.Question, results, ct);
+
         var sources = new List<DataSource>();
         foreach (var s in results.SelectMany(r => r.DataSources))
         {
@@ -79,29 +101,43 @@ public sealed class OrchestratedConsultantEngine(
 
         return new ConsultantAnswer(
             answer.Text?.Trim() ?? string.Empty,
-            new ConsultantDetails(results, sources, answer.Model.ToString(), answer.UsedFallback, routing.Reason.Length > 0 ? routing.Reason : null),
+            new ConsultantDetails(results, sources, answer.Model.ToString(), answer.UsedFallback, routing.Reason.Length > 0 ? routing.Reason : null, memoryUsed),
             routing.Usage.Add(agentUsage).Add(answer.Usage));
     }
 
-    /// <summary>Контекст для сотрудников: о чём шла речь в чате (для уточняющих вопросов).</summary>
-    private static string? HistoryContext(IReadOnlyList<LlmMessage> history)
+    /// <summary>
+    /// Контекст сотрудника: о чём шла речь в чате, что он уже выяснил в этом чате и его недавние выводы в других чатах
+    /// (с пометкой, что цифры могли устареть — актуальные берутся только из инструментов).
+    /// </summary>
+    private static string? AgentContext(IReadOnlyList<LlmMessage> history, IReadOnlyList<MemoryNote> inChat, IReadOnlyList<MemoryNote> earlier)
     {
-        if (history.Count == 0)
+        var sb = new StringBuilder();
+        if (history.Count > 0)
         {
-            return null;
+            sb.AppendLine("Ранее в чате:");
+            foreach (var m in history.TakeLast(4))
+            {
+                var text = m.Content.Length > 400 ? m.Content[..400] + "…" : m.Content;
+                sb.AppendLine($"{(m.Role == LlmRole.User ? "Вопрос" : "Ответ")}: {text}");
+            }
         }
 
-        var sb = new StringBuilder("Ранее в чате:\n");
-        foreach (var m in history.TakeLast(4))
+        if (inChat.Count > 0)
         {
-            var text = m.Content.Length > 400 ? m.Content[..400] + "…" : m.Content;
-            sb.AppendLine($"{(m.Role == LlmRole.User ? "Вопрос" : "Ответ")}: {text}");
+            sb.AppendLine("Ты уже анализировал в этом чате:");
+            sb.Append(AiMemoryStore.Format(inChat));
         }
 
-        return sb.ToString();
+        if (earlier.Count > 0)
+        {
+            sb.AppendLine("Твои выводы из других чатов (могли устареть — цифры бери только из инструментов):");
+            sb.Append(AiMemoryStore.Format(earlier));
+        }
+
+        return sb.Length == 0 ? null : sb.ToString();
     }
 
-    private string ComposePrompt(AgentConfig? consultant, IReadOnlyList<AgentResult> results, IReadOnlyList<AgentConfig> forbidden)
+    private string ComposePrompt(AgentConfig? consultant, IReadOnlyList<AgentResult> results, IReadOnlyList<AgentConfig> forbidden, string? remembered)
     {
         var today = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(5));
         var sb = new StringBuilder();
@@ -142,6 +178,13 @@ public sealed class OrchestratedConsultantEngine(
                 4. Рекомендации — приоритетные действия, основанные на фактах; отметь, что это рекомендации.
                 Если сотрудник вернул no_data или ошибку — прямо скажи, каких данных нет. Не пересказывай JSON дословно.
                 """);
+        }
+
+        if (remembered is not null)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Что AI-сотрудники выяснили раньше в этом чате (для сравнения и уточняющих вопросов):");
+            sb.AppendLine(remembered);
         }
 
         if (forbidden.Count > 0)

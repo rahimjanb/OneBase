@@ -46,7 +46,8 @@ public sealed record ConsultantDetails(
     IReadOnlyList<DataSource> Sources,
     string? Model,
     bool UsedFallback,
-    string? RoutingReason = null);
+    string? RoutingReason = null,
+    int MemoryUsed = 0);
 
 public sealed record ConsultantAnswer(string Content, ConsultantDetails Details, AiTokenUsage Usage);
 

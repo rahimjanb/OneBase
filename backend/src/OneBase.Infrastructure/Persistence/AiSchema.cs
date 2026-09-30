@@ -107,5 +107,16 @@ internal static class AiSchema
             e.HasOne<AiKnowledgeDocument>().WithMany().HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.DocumentId, x.Index }).IsUnique();
         });
+
+        b.Entity<AiMemory>(e =>
+        {
+            e.ToTable("Memory", Schema);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.AgentCode).HasMaxLength(64);
+            e.Property(x => x.Topic).HasMaxLength(500);
+            e.Property(x => x.Data).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.UserId, x.ConversationId, x.CreatedAt });
+            e.HasIndex(x => new { x.UserId, x.AgentCode, x.CreatedAt });
+        });
     }
 }
