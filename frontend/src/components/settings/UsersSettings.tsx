@@ -5,7 +5,7 @@ import { KeyRound, Loader2, Pencil, UserPlus } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Note, Section } from "@/components/sales/bits";
 import { bff } from "@/lib/bff";
-import type { RoleRow, UserRow, UsersView } from "@/lib/users";
+import type { UserRow, UsersView } from "@/lib/users";
 
 type Form = {
   lastName: string;
@@ -218,18 +218,6 @@ export function UsersSettings({ initial }: { initial: UsersView }) {
           можно, только если у вас есть все её права, — поэтому роль «Администратор» назначает и администраторов меняет только администратор.
         </Note>
       </Section>
-
-      <Section title="Роли" hint="что даёт каждая роль">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {data.roles.map((r) => (
-            <RoleCard key={r.id} role={r} />
-          ))}
-        </div>
-        <Note>
-          «Настройки» видят только роли с правами на них: администратор — все разделы, директор — только «Пользователи и роли». Сотрудникам отделов раздел скрыт.
-          Производство, снабжение и маркетинг смотрят остатки, товары и клиентов в разделе «Продажи» — отдельных данных у этих отделов в OneBase пока нет.
-        </Note>
-      </Section>
     </>
   );
 }
@@ -244,26 +232,5 @@ function Field({ label, required, hint, children }: { label: string; required?: 
       {children}
       {hint && <span className="mt-1 block text-xs text-ink-3">{hint}</span>}
     </label>
-  );
-}
-
-function RoleCard({ role }: { role: RoleRow }) {
-  return (
-    <div className="rounded-lg border border-line p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-ink">{role.name}</span>
-        {role.department && <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-ink-2">отдел: {role.department}</span>}
-        <span className="ml-auto text-xs text-ink-3">{role.users} польз.</span>
-      </div>
-      {role.description && <p className="mt-1.5 text-xs text-ink-2">{role.description}</p>}
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {role.permissions.map((p) => (
-          <span key={p.code} className="rounded-md border border-line bg-surface px-1.5 py-0.5 text-[11px] text-ink-2">
-            {p.label}
-          </span>
-        ))}
-      </div>
-      <p className="mt-2 text-[11px] text-ink-3">{role.opensSettings ? "Видит раздел «Настройки»" : "Раздел «Настройки» скрыт"}</p>
-    </div>
   );
 }
