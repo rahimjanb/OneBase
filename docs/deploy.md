@@ -58,6 +58,32 @@ rm ~/onebase.dump
 - Резервные копии: `bash deploy/backup.sh` — дамп в `~/onebase-backups`, хранятся последние 14. Каждую ночь — строка для
   `crontab -e` есть в начале скрипта. Копии лучше периодически забирать с сервера.
 
+## Перенос только данных Linko
+
+Если на сервере уже свои пользователи и настройки, а данных Linko нет (или полная синхронизация идёт слишком долго),
+переносятся только схемы `linko` и `sales` — вместе с состоянием синхронизации, так что дальше Linko догружается
+с того же места. Пользователи, роли, ключи AI, токены Linko и чаты сервера не трогаются.
+
+На рабочем компьютере (PowerShell):
+
+```powershell
+docker exec onebase-postgres-1 pg_dump -U onebase -d onebase -Fc --data-only --schema=linko --schema=sales -f /tmp/onebase-linko.dump
+docker cp onebase-postgres-1:/tmp/onebase-linko.dump $HOME\onebase-linko.dump
+docker exec onebase-postgres-1 rm /tmp/onebase-linko.dump
+scp $HOME\onebase-linko.dump root@IP_СЕРВЕРА:~/
+```
+
+На сервере:
+
+```bash
+cd ~/onebase && git pull
+bash deploy/restore-linko.sh ~/onebase-linko.dump
+rm ~/onebase-linko.dump
+```
+
+Скрипт останавливает API на время переноса и запускает снова. Всё одной транзакцией: при ошибке данные сервера
+остаются как были.
+
 ## Обновление
 
 ```bash
