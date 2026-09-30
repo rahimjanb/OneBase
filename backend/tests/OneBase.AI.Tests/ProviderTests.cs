@@ -84,6 +84,81 @@ public class ProviderTests
     }
 
     [Fact]
+    public void OpenAi_responses_request_maps_messages_calls_outputs_and_tools()
+    {
+        var body = OpenAiProvider.BuildResponsesBody(Conversation() with { JsonOutput = true });
+        var input = body["input"]!.AsArray();
+
+        Assert.Equal(1024, (int)body["max_output_tokens"]!);
+        Assert.False((bool)body["store"]!);
+        Assert.False(body.ContainsKey("temperature"));
+        Assert.Equal(["system", "user", null, null, null, null], input.Select(i => (string?)i!["role"]));
+        Assert.Equal([null, null, "function_call", "function_call", "function_call_output", "function_call_output"], input.Select(i => (string?)i!["type"]));
+        Assert.Equal(("call_1", "get_sales", "{\"month\":\"2026-09\"}"), ((string?)input[2]!["call_id"], (string?)input[2]!["name"], (string?)input[2]!["arguments"]));
+        Assert.Equal(("call_2", "{\"kg\":200}"), ((string?)input[5]!["call_id"], (string?)input[5]!["output"]));
+
+        var tool = body["tools"]![0]!;
+        Assert.Equal(("function", "get_sales", false), ((string?)tool["type"], (string?)tool["name"], (bool)tool["strict"]!));
+        Assert.Equal("object", (string?)tool["parameters"]!["type"]);
+        Assert.Equal("json_object", (string?)body["text"]!["format"]!["type"]);
+    }
+
+    [Fact]
+    public void OpenAi_responses_answer_gives_text_calls_usage_and_truncation()
+    {
+        using var calls = JsonDocument.Parse("""
+            {"model":"model-x-2026","status":"completed","output":[
+              {"type":"reasoning","summary":[]},
+              {"type":"message","role":"assistant","content":[{"type":"output_text","text":"Смотрю продажи."}]},
+              {"type":"function_call","id":"fc_1","call_id":"call_9","name":"get_sales","arguments":"{\"month\":\"2026-08\"}"}],
+             "usage":{"input_tokens":120,"output_tokens":30}}
+            """);
+        using var truncated = JsonDocument.Parse("""
+            {"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[{"type":"reasoning","summary":[]}]}
+            """);
+
+        var result = OpenAiProvider.ParseResponse(calls.RootElement, "model-x");
+        var cut = OpenAiProvider.ParseResponse(truncated.RootElement, "model-x");
+
+        Assert.Equal(("Смотрю продажи.", "model-x-2026", "tool_calls"), (result.Text, result.Model, result.StopReason));
+        Assert.Equal(new AiTokenUsage(120, 30), result.Usage);
+        var call = Assert.Single(result.ToolCalls);
+        Assert.Equal(("call_9", "get_sales", "2026-08"), (call.Id, call.Name, call.Arguments.GetProperty("month").GetString()));
+        Assert.Equal(((string?)null, "length", "model-x"), (cut.Text, cut.StopReason, cut.Model));
+    }
+
+    [Fact]
+    public async Task OpenAi_switches_to_responses_api_when_chat_completions_refuses_tools_and_remembers_it()
+    {
+        var factory = new StubHttp(
+            (HttpStatusCode.BadRequest, """{"error":{"message":"Function tools with reasoning_effort are not supported for model-x in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.","type":"invalid_request_error"}}"""),
+            (HttpStatusCode.OK, """{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Готово."}]}]}"""),
+            (HttpStatusCode.OK, """{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Ещё."}]}]}"""));
+        var provider = new OpenAiProvider(factory);
+        var credentials = new AiCredentials("key-123456789", "https://api.example.test/v1");
+
+        var first = await provider.CompleteAsync(credentials, Conversation());
+        var second = await provider.CompleteAsync(credentials, Conversation());
+
+        Assert.Equal(("Готово.", "Ещё."), (first.Text, second.Text));
+        Assert.Equal(
+            ["https://api.example.test/v1/chat/completions", "https://api.example.test/v1/responses", "https://api.example.test/v1/responses"],
+            factory.Requests.Select(r => r.RequestUri!.ToString()));
+    }
+
+    [Fact]
+    public async Task OpenAi_other_bad_requests_are_not_retried_on_responses_api()
+    {
+        var factory = new StubHttp(HttpStatusCode.BadRequest, """{"error":{"message":"Invalid schema for function 'get_sales'.","type":"invalid_request_error"}}""");
+
+        var error = await Assert.ThrowsAsync<AiProviderException>(() =>
+            new OpenAiProvider(factory).CompleteAsync(new AiCredentials("key-123456789", "https://api.example.test/v1"), Conversation()));
+
+        Assert.Equal(400, error.StatusCode);
+        Assert.Single(factory.Requests);
+    }
+
+    [Fact]
     public void Anthropic_request_puts_system_on_top_and_groups_tool_results()
     {
         var body = AnthropicProvider.BuildBody(Conversation(0.3));
