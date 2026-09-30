@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using OneBase.Domain.AI;
 
 namespace OneBase.Infrastructure.Persistence;
@@ -44,6 +44,23 @@ internal static class AiSchema
             e.Property(x => x.EmbeddingProvider).HasMaxLength(32);
             e.Property(x => x.EmbeddingModel).HasMaxLength(200);
         });
+
+        b.Entity<AiConversation>(e =>
+        {
+            e.ToTable("Conversations", Schema);
+            e.Property(x => x.Title).HasMaxLength(200);
+            e.HasIndex(x => new { x.UserId, x.LastMessageAt });
+        });
+
+        b.Entity<AiMessage>(e =>
+        {
+            e.ToTable("Messages", Schema);
+            e.Property(x => x.Role).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Details).HasColumnType("jsonb");
+            e.Property(x => x.Error).HasMaxLength(1000);
+            e.HasOne(x => x.Conversation).WithMany(x => x.Messages).HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.ConversationId, x.CreatedAt });
+        });
     }
 }
-

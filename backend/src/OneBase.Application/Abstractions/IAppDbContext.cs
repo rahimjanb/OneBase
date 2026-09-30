@@ -26,6 +26,8 @@ public interface IAppDbContext
     DbSet<AiProvider> AiProviders { get; }
     DbSet<AiModel> AiModels { get; }
     DbSet<AiSettings> AiSettings { get; }
+    DbSet<AiConversation> AiConversations { get; }
+    DbSet<AiMessage> AiMessages { get; }
 
     DbSet<LinkoUser> LinkoUsers { get; }
     DbSet<LinkoMarket> LinkoMarkets { get; }

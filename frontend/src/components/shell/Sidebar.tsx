@@ -23,7 +23,7 @@ const workspace: NavItem[] = [
   { href: "/tasks", label: "Задачи", icon: Check },
   { href: "/reports", label: "Отчёты", icon: Rows3 },
   { href: "/base", label: "Общая база", icon: CircleDot },
-  { href: "/ai", label: "AI Consultants", icon: Sparkle },
+  { href: "/consultant", label: "Консультант", icon: Sparkle, also: ["/ai"] },
 ];
 
 const settings: NavItem = { href: "/settings", label: "Настройки", icon: Settings };

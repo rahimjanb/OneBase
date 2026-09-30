@@ -35,6 +35,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<AiProvider> AiProviders => Set<AiProvider>();
     public DbSet<AiModel> AiModels => Set<AiModel>();
     public DbSet<AiSettings> AiSettings => Set<AiSettings>();
+    public DbSet<AiConversation> AiConversations => Set<AiConversation>();
+    public DbSet<AiMessage> AiMessages => Set<AiMessage>();
 
     // Linko (зеркало SFA)
     public DbSet<LinkoUser> LinkoUsers => Set<LinkoUser>();

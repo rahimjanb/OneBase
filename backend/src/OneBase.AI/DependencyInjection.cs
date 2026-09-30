@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using OneBase.AI.Agents;
 using OneBase.AI.Approvals;
+using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
@@ -39,6 +40,10 @@ public static class DependencyInjection
         services.AddSingleton<IAiGateway>(sp => sp.GetRequiredService<AiGateway>());
         services.AddSingleton<ILlmClient>(sp => sp.GetRequiredService<AiGateway>());
         services.AddScoped<AiModelCatalog>();
+
+        // Консультант: чаты и движок ответа.
+        services.AddScoped<IConsultantEngine, DirectConsultantEngine>();
+        services.AddScoped<ConsultantChatService>();
 
         services.AddScoped<ITool, DelegateToAgentTool>();
         services.AddScoped<IToolRegistry, ToolRegistry>();

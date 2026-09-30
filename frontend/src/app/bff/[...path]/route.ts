@@ -25,11 +25,12 @@ async function proxy(request: NextRequest, { params }: { params: Promise<{ path:
   });
 
   const responseHeaders = new Headers();
-  for (const name of ["content-type", "content-disposition"]) {
+  // cache-control и x-accel-buffering — чтобы поток ответа консультанта (text/event-stream) не буферизовался и не сжимался.
+  for (const name of ["content-type", "content-disposition", "cache-control", "x-accel-buffering"]) {
     const value = upstream.headers.get(name);
     if (value) responseHeaders.set(name, value);
   }
   return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
 }
 
-export { proxy as GET, proxy as POST, proxy as PUT, proxy as DELETE };
+export { proxy as GET, proxy as POST, proxy as PUT, proxy as PATCH, proxy as DELETE };
