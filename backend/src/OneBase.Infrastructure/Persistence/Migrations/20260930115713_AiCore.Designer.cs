@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OneBase.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using OneBase.Infrastructure.Persistence;
 namespace OneBase.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(OneBaseDbContext))]
-    partial class OneBaseDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930115713_AiCore")]
+    partial class AiCore
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -38,7 +41,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DataProtectionKeys", (string)null);
+                    b.ToTable("DataProtectionKeys");
                 });
 
             modelBuilder.Entity("OneBase.Domain.AI.AgentToolGrant", b =>
@@ -71,7 +74,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgentCode", "ToolName")
                         .IsUnique();
 
-                    b.ToTable("AgentToolGrants", (string)null);
+                    b.ToTable("AgentToolGrants");
                 });
 
             modelBuilder.Entity("OneBase.Domain.AI.AiModel", b =>
@@ -286,7 +289,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("ApprovalRequests", (string)null);
+                    b.ToTable("ApprovalRequests");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Audit.AuditLog", b =>
@@ -332,7 +335,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EntityType", "EntityId");
 
-                    b.ToTable("AuditLogs", (string)null);
+                    b.ToTable("AuditLogs");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Files.FileItem", b =>
@@ -367,7 +370,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("FolderId", "Name");
 
-                    b.ToTable("Files", (string)null);
+                    b.ToTable("Files");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Files.FileVersion", b =>
@@ -409,7 +412,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("FileItemId", "Number")
                         .IsUnique();
 
-                    b.ToTable("FileVersions", (string)null);
+                    b.ToTable("FileVersions");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Files.Folder", b =>
@@ -441,7 +444,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ParentId", "Name");
 
-                    b.ToTable("Folders", (string)null);
+                    b.ToTable("Folders");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Files.ResourcePermission", b =>
@@ -483,7 +486,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PrincipalType", "PrincipalId");
 
-                    b.ToTable("ResourcePermissions", null, t =>
+                    b.ToTable("ResourcePermissions", t =>
                         {
                             t.HasCheckConstraint("CK_ResourcePermissions_SingleTarget", "(\"FolderId\" IS NULL) <> (\"FileItemId\" IS NULL)");
                         });
@@ -516,7 +519,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("Departments", (string)null);
+                    b.ToTable("Departments");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Identity.Role", b =>
@@ -544,7 +547,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Roles", (string)null);
+                    b.ToTable("Roles");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Identity.RolePermission", b =>
@@ -558,7 +561,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasKey("RoleId", "Code");
 
-                    b.ToTable("RolePermission", (string)null);
+                    b.ToTable("RolePermission");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Identity.User", b =>
@@ -600,7 +603,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Identity.UserRole", b =>
@@ -615,7 +618,7 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("UserRole", (string)null);
+                    b.ToTable("UserRole");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Integrations.IntegrationConnection", b =>

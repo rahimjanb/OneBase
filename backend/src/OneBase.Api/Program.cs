@@ -11,7 +11,7 @@ DotEnv.Load();
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddAi();
+builder.Services.AddAi(builder.Configuration);
 builder.Services.AddJwtAuth(builder.Configuration);
 
 builder.Services.AddControllers()

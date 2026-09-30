@@ -31,15 +31,6 @@ public interface ILlmClient
         CancellationToken cancellationToken = default);
 }
 
-public sealed class LlmNotConfiguredException()
-    : InvalidOperationException("LLM-провайдер не настроен. Зарегистрируйте реализацию ILlmClient и задайте секцию Llm в конфигурации.");
-
-/// <summary>Заглушка до подключения реального провайдера.</summary>
-internal sealed class NotConfiguredLlmClient : ILlmClient
-{
-    public Task<LlmResponse> CompleteAsync(
-        IReadOnlyList<LlmMessage> messages,
-        IReadOnlyList<LlmToolDefinition> tools,
-        CancellationToken cancellationToken = default) =>
-        throw new LlmNotConfiguredException();
-}
+/// <summary>AI не настроен или выключен. Message безопасен для показа пользователю.</summary>
+public sealed class LlmNotConfiguredException(string? message = null)
+    : InvalidOperationException(message ?? "AI не настроен: администратор должен добавить ключ провайдера и выбрать модель в «Настройки → AI».");

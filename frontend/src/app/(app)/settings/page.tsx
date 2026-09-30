@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Bot, Building2, Plug, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, Bot, Building2, Plug, Sparkle, TrendingUp, Users } from "lucide-react";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 
 export const metadata = { title: "Настройки · OneBase" };
@@ -10,6 +10,12 @@ const sections = [
     icon: Plug,
     title: "Интеграции",
     text: "Подключения отделов к внешним системам: Linko для продаж и другие.",
+  },
+  {
+    href: "/settings/ai",
+    icon: Sparkle,
+    title: "AI",
+    text: "Провайдеры OpenAI и Anthropic, ключи API, модели и параметры консультанта.",
   },
   {
     href: "/sales/setup",

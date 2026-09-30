@@ -31,6 +31,11 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<AgentToolGrant> AgentToolGrants => Set<AgentToolGrant>();
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
 
+    // AI: провайдеры, модели, настройки
+    public DbSet<AiProvider> AiProviders => Set<AiProvider>();
+    public DbSet<AiModel> AiModels => Set<AiModel>();
+    public DbSet<AiSettings> AiSettings => Set<AiSettings>();
+
     // Linko (зеркало SFA)
     public DbSet<LinkoUser> LinkoUsers => Set<LinkoUser>();
     public DbSet<LinkoMarket> LinkoMarkets => Set<LinkoMarket>();
@@ -69,6 +74,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     {
         SalesModel.ConfigureLinko(b);
         SalesModel.ConfigureSales(b);
+        AiSchema.Configure(b);
 
         b.Entity<IntegrationConnection>(e =>
         {

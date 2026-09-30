@@ -1,6 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
+        <!-- Data Protection (шифрование ключей API) и IHttpClientFactory из общего фреймворка ASP.NET Core. -->
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="OneBase.AI.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\OneBase.Application\OneBase.Application.csproj" />
     </ItemGroup>
 

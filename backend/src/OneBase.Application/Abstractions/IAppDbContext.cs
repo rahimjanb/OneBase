@@ -23,6 +23,10 @@ public interface IAppDbContext
     DbSet<AgentToolGrant> AgentToolGrants { get; }
     DbSet<ApprovalRequest> ApprovalRequests { get; }
 
+    DbSet<AiProvider> AiProviders { get; }
+    DbSet<AiModel> AiModels { get; }
+    DbSet<AiSettings> AiSettings { get; }
+
     DbSet<LinkoUser> LinkoUsers { get; }
     DbSet<LinkoMarket> LinkoMarkets { get; }
     DbSet<LinkoProduct> LinkoProducts { get; }

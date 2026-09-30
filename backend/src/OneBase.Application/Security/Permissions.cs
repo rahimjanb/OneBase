@@ -13,9 +13,13 @@ public static class Permissions
     public const string SalesManage = "sales.manage";
     public const string IntegrationsManage = "integrations.manage";
 
+    /// <summary>«Настройки → AI»: провайдеры, ключи API, модели, агенты.</summary>
+    public const string AiSettingsManage = "ai.settings.manage";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
+        AiSettingsManage,
         UsersManage,
         FilesRead,
         FilesWrite,
