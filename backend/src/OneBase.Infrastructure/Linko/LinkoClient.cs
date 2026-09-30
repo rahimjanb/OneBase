@@ -257,6 +257,20 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
         return await SendAsync<List<LinkoStaffBalanceDto>>(connection, StaffPrefix, "staff_balance/", query, false, options.MaxAttempts, ct);
     }
 
+    /// <summary>Строки staff_balance как есть — только для диагностики набора полей (linko-fields staff_balance); значения не сохраняются.</summary>
+    public async Task<List<System.Text.Json.JsonElement>> StaffBalanceRawAsync(int year, int month, CancellationToken ct = default)
+    {
+        var connection = await ReadyPlansAsync(ct);
+        var query = new Dictionary<string, string?>
+        {
+            ["year"] = year.ToString(),
+            ["month"] = month.ToString(),
+            ["token"] = connection.PlanToken,
+            ["format"] = "json",
+        };
+        return await SendAsync<List<System.Text.Json.JsonElement>>(connection, StaffPrefix, "staff_balance/", query, false, options.MaxAttempts, ct);
+    }
+
     private async Task<LinkoConnectionSettings> ReadyPlansAsync(CancellationToken ct)
     {
         var connection = await settings.GetAsync(ct);

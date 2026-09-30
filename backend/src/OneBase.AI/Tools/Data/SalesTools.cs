@@ -26,7 +26,7 @@ public abstract class SalesTool(SalesDataLoader loader) : DataTool
             }
         }
 
-        return await loader.LoadAsync(year, month, PlanKind.Rop, ct);
+        return await loader.LoadAsync(year, month, ct);
     }
 
     /// <summary>Регион по id или названию; null — республика. Неизвестный регион — ошибка со списком регионов.</summary>
@@ -534,7 +534,7 @@ internal sealed class GetSalesTrendTool(SalesDataLoader loader) : SalesTool(load
         UnitRow? region = null;
         foreach (var m in months)
         {
-            var analytics = await Loader.LoadAsync(m.Year, m.Month, PlanKind.Rop, ct);
+            var analytics = await Loader.LoadAsync(m.Year, m.Month, ct);
             var republic = analytics.CachedRepublic(null, null);
             var kpi = republic.Kpi;
             if (regionArg is not null)

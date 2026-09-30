@@ -82,7 +82,7 @@ internal sealed class GetPrimaryShipmentsTool(PrimaryService primary) : DataTool
     public override string Source => KnowledgeSources.SalesPrimary;
 
     public override string Description =>
-        "Первичка — отгрузки завода дилерам: за месяц (кг, коробки, сумма по цене завода и по цене дилера), план и прогноз, по месяцам года, " +
+        "Первичка — отгрузки завода дилерам: за месяц (кг, коробки, сумма по цене завода и по цене дилера), прогноз (плана первички в Linko нет), по месяцам года, " +
         "с начала года, по дилерам и категориям, возвраты дилеров. Это спрос дилеров, а не выпуск производства.";
 
     public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg);

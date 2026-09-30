@@ -153,13 +153,8 @@ public sealed partial class PrimaryService(IAppDbContext db, SalesOptions option
         var regions = await db.SalesRegions.AsNoTracking().Select(r => new { r.Id, r.Name, r.DealerName }).ToListAsync(ct);
         var regionByName = regions.GroupBy(r => r.Name.Trim(), StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-        // План первички: регион × категория × месяц, кг.
-        var planRows = (await db.SalesRegionPlans.AsNoTracking()
-                .Where(p => p.Kind == PlanKind.Primary && p.Year == year)
-                .Select(p => new { p.RegionId, p.Month, p.CategoryId, p.PlanKg })
-                .ToListAsync(ct))
-            .Select(p => new PlanRow(p.RegionId, null, p.Month, p.CategoryId, p.PlanKg))
-            .ToList();
+        // Плана первички в Linko нет, а в «Продажах» — только данные Linko: первичка показывается без плана.
+        var planRows = new List<PlanRow>();
         var hasPlan = planRows.Count > 0;
         decimal? RegionPlan(Guid region, int m) => SalesMath.PlanTotal(planRows.Where(p => p.RegionId == region && p.Month == m));
         decimal? TotalPlan(int m) =>

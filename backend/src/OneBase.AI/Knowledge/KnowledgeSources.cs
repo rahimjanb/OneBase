@@ -27,7 +27,7 @@ public static class KnowledgeSources
             Permissions.SalesRead),
         new(SalesVisits, "Визиты и страйк", "Визиты торговых представителей, визиты с заказом и без, конверсия (страйк).",
             "linko.Visits", "Продажи: агенты, проблемные агенты", Permissions.SalesRead),
-        new(SalesPlans, "Планы продаж", "Планы ТП из Linko, планы РОП и «Завод», выполнение и прогноз.",
+        new(SalesPlans, "Планы продаж", "Планы ТП из API планов Linko (вес, АКБ, сумма), план региона — сумма планов его ТП, выполнение и прогноз.",
             "linko.KpiPlans, sales.StaffPlans, sales.RegionPlans", "Продажи: планы, регионы", Permissions.SalesRead),
         new(SalesTeam, "Команда продаж", "Торговые представители и их должности, регионы, вакансии оргструктуры продаж.",
             "linko.Users, sales.Regions, sales.AgentProfiles", "Продажи: регионы, команда", Permissions.SalesRead),

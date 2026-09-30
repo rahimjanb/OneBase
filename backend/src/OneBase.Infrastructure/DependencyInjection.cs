@@ -80,7 +80,6 @@ public static class DependencyInjection
         services.AddHttpClient<LinkoClient>(http => http.Timeout = TimeSpan.FromSeconds(linko.TimeoutSeconds));
         services.AddScoped<LinkoSyncService>();
         services.AddScoped<LinkoVerifier>();
-        services.AddScoped<ISalesPlanImporter, SalesPlanImporter>();
         services.AddScoped<ISalesHistoryReader, SalesHistoryReader>();
         services.AddMemoryCache();
         services.AddSingleton<SalesCacheSignal>();

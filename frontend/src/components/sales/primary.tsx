@@ -54,7 +54,7 @@ function MonthTiles({ data }: { data: PrimaryView }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[87.5rem]:grid-cols-5">
       <KpiTile label="План месяца" value={plan != null ? kg(plan) : "—"} unit={plan != null ? "кг" : undefined}>
-        {plan != null ? `отгрузка дилерам за ${monthName(data.month)}` : "план первички на месяц не загружен"}
+        {plan != null ? `отгрузка дилерам за ${monthName(data.month)}` : "в Linko плана первички нет"}
       </KpiTile>
       <KpiTile label="Отгружено" value={kg(fact)} unit="кг">
         {num(data.monthTotal.boxes)} коробок · {money(data.monthTotal.sumFactory)}
@@ -68,11 +68,11 @@ function MonthTiles({ data }: { data: PrimaryView }) {
             </div>
           </>
         ) : (
-          "нужен план месяца"
+          "плана в Linko нет"
         )}
       </KpiTile>
       <KpiTile label="Осталось" value={plan != null ? kg(Math.max(0, plan - fact)) : "—"} unit={plan != null ? "кг" : undefined}>
-        {plan == null ? "нужен план месяца" : fact >= plan ? `план выполнен, сверх него ${kg(fact - plan)} кг` : "до плана месяца"}
+        {plan == null ? "плана в Linko нет" : fact >= plan ? `план выполнен, сверх него ${kg(fact - plan)} кг` : "до плана месяца"}
       </KpiTile>
       <KpiTile label="Прогноз" value={kg(data.forecastKg ?? fact)} unit="кг">
         {data.forecastKg != null
@@ -450,7 +450,7 @@ function YtdTiles({ data }: { data: PrimaryView }) {
         {num(data.ytdReturnLines)} строк · {pct(y.kg ? data.ytdReturnsKg / y.kg : null, 1)} от отгруженного
       </KpiTile>
       <KpiTile label="Выполнение" value={pct(exec, 1)}>
-        {data.planYtdKg != null ? `план ${tons(data.planYtdKg)} т` : "план первички не загружен"}
+        {data.planYtdKg != null ? `план ${tons(data.planYtdKg)} т` : "в Linko плана первички нет"}
       </KpiTile>
     </div>
   );
@@ -588,8 +588,8 @@ export function PrimaryRepublic({ data }: { data: PrimaryView }) {
         Первичка — отгрузка завода дилеру, это не продажи в торговые точки. Источник — перемещения Linko со склада «{data.factoryStock ?? "Завод"}» на склады дилеров
         («отдано» или «принято»); склад «{data.exportStock ?? "Экспорт"}» — экспорт, сюда не входит. Сумма завода — цена перемещения (прайс «Дилерга кириш нарх»), сумма
         дилера — по прайсу «{data.dealerPriceList ?? "Дилердан чикиш нарх"}» (текущие цены). Коробки — только у товаров, где вес коробки из названия делится на вес
-        единицы ({kg(data.boxesUnknownKg)} кг с начала года без коробок). Возвраты — перемещения со складов дилеров на завод; из отгрузки не вычитаются. План первички
-        в Linko нет — он загружается в «Настройки → Продажи → Планы» с видом «Первичка»; план есть только в килограммах, на коробках и суммах его колонки скрыты.
+        единицы ({kg(data.boxesUnknownKg)} кг с начала года без коробок). Возвраты — перемещения со складов дилеров на завод; из отгрузки не вычитаются. Плана первички
+        в Linko нет, поэтому первичка показывается без плана.
       </Note>
     </>
   );

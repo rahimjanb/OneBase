@@ -11,12 +11,12 @@ export function PlanBadge({ share }: { share: number | null }) {
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{pct(share)} плана</span>;
 }
 
-/** Шесть плиток KPI — одинаковые на всех уровнях; на широком экране — в один ряд. plan — «Rop» или «Factory» из адреса. */
-export function KpiRow({ kpi, period, plan }: { kpi: KpiTiles; period: Period; plan?: string | null }) {
+/** Шесть плиток KPI — одинаковые на всех уровнях; на широком экране — в один ряд. План — сумма планов ТП из Linko. */
+export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
   return (
     // Порог в rem (87.5rem = 1400px): брейкпоинты Tailwind — в rem, и порог в px проигрывает lg по порядку правил.
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[87.5rem]:grid-cols-6">
-      <KpiTile label={plan === "Factory" ? "Выполнение плана «Завод»" : "Выполнение плана РОП"} value={pct(kpi.execution, 1)}>
+      <KpiTile label="Выполнение плана" value={pct(kpi.execution, 1)}>
         {kpi.planKg != null ? (
           <>
             {kg(kpi.planFactKg)} из {kg(kpi.planKg)} кг{kpi.planAgents > 0 && ` · ${num(kpi.planAgents)} ТП с планом`}
@@ -31,7 +31,7 @@ export function KpiRow({ kpi, period, plan }: { kpi: KpiTiles; period: Period; p
           </>
         ) : (
           <>
-            факт {kg(kpi.factKg)} кг · плана нет
+            факт {kg(kpi.factKg)} кг · плана в Linko нет
             <br />
             прогноз {kg(kpi.forecastKg)} кг по темпу {period.workedDays} из {period.daysInMonth} дн.
           </>

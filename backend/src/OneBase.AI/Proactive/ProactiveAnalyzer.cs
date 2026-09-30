@@ -113,7 +113,7 @@ public sealed class ProactiveAnalyzer(
 
     internal async Task<IReadOnlyList<AlertCandidate>> SalesAsync(HashSet<string> evaluated, CancellationToken ct)
     {
-        var analytics = await sales.LoadAsync(null, null, PlanKind.Rop, ct);
+        var analytics = await sales.LoadAsync(null, null, ct);
         var republic = analytics.CachedRepublic(null, null);
         var overview = analytics.CachedOverview();
         var p = republic.Period;

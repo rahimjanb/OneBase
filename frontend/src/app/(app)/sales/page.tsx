@@ -4,7 +4,7 @@ import { ExportCard, KpiRow, UnitCard } from "@/components/sales/blocks";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGet } from "@/lib/server-api";
 import { num } from "@/lib/sales/format";
-import { apiQuery, param, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
+import { apiQuery, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { OverviewView } from "@/lib/sales/types";
 
 export const metadata = { title: "Продажи · OneBase" };
@@ -17,7 +17,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
   return (
     <SalesFrame title="Вторичка" subtitle="Полевой контроль: план, факт и работа торговых представителей" sp={sp}>
-      <KpiRow kpi={data.kpi} period={data.period} plan={param(sp, "plan")} />
+      <KpiRow kpi={data.kpi} period={data.period} />
 
       <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-l-4 border-line border-l-warn bg-surface px-4 py-3 text-sm text-ink-2 shadow-sm">
         <span>

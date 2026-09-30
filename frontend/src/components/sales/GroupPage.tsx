@@ -58,7 +58,7 @@ export function GroupPage({
 
   return (
     <>
-      <KpiRow kpi={data.kpi} period={period} plan={param(sp, "plan")} />
+      <KpiRow kpi={data.kpi} period={period} />
       <UnassignedWarning kgValue={data.unassigned.kg} share={data.unassigned.share} />
 
       <Cards title="Региональные менеджеры" cards={directions} query={query} />

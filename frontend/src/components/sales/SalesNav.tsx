@@ -10,7 +10,7 @@ import type { SalesMonth, SyncStatus } from "@/lib/sales/types";
 const withoutPeriod: (SalesTab | null)[] = [null, "stock", "method"];
 
 /**
- * Полоса раздела «Продажи» под верхней панелью: период, план, свежесть данных и «Обновить».
+ * Полоса раздела «Продажи» под верхней панелью: период, свежесть данных и «Обновить».
  * Кнопки разделов — в верхней панели (SectionNav). Живёт в layout раздела — при переходах не перерисовывается.
  */
 export function SalesNav({ months, status }: { months: SalesMonth[]; status: SyncStatus }) {
@@ -28,8 +28,6 @@ export function SalesNav({ months, status }: { months: SalesMonth[]; status: Syn
           months={months}
           year={year}
           month={month}
-          plan={params.get("plan") ?? "Rop"}
-          showPlan={active === "analytics" || active === "problems"}
         />
       ) : (
         <span />

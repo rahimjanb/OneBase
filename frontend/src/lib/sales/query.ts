@@ -7,7 +7,7 @@ const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v
 /** Параметры периода, которые переносятся между уровнями: year, month, plan. */
 export function periodQuery(sp: SalesSearchParams): string {
   const q = new URLSearchParams();
-  for (const key of ["year", "month", "plan"]) {
+  for (const key of ["year", "month"]) {
     const value = first(sp[key]);
     if (value) q.set(key, value);
   }

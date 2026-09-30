@@ -46,7 +46,7 @@ export default async function RegionPage({
       back={(parent ?? republic).href}
       sp={sp}
     >
-      <KpiRow kpi={data.kpi} period={period} plan={param(sp, "plan")} />
+      <KpiRow kpi={data.kpi} period={period} />
       <UnassignedWarning kgValue={data.unassigned.kg} share={data.unassigned.share} />
 
       <PlanFactMonths months={data.months} current={period.month} />

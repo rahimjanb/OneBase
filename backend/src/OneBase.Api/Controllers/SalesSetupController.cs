@@ -8,24 +8,18 @@ using OneBase.Domain.Sales;
 
 namespace OneBase.Api.Controllers;
 
-/// <summary>Оргструктура продаж, цели и планы — то, чего нет в Linko.</summary>
+/// <summary>Оргструктура продаж и цели. Планы — только из Linko (ручного ввода и загрузки файлом нет).</summary>
 [ApiController]
 [Route("api/sales/setup")]
 [HasPermission(Permissions.SalesRead)]
 [InvalidateSalesCache]
-public sealed class SalesSetupController(IAppDbContext db, ISalesPlanImporter importer, SalesOptions salesOptions) : ControllerBase
+public sealed class SalesSetupController(IAppDbContext db) : ControllerBase
 {
     public sealed record DirectionInput(string Name, DirectionKind Kind, string? ManagerName, string? Description, int SortOrder);
 
     public sealed record RegionInput(string Name, Guid? DirectionId, string? SupervisorName, string? DealerName);
 
     public sealed record AgentInput(Guid? RegionId, bool IsVacancy, string? Note);
-
-    public sealed record RegionPlanInput(Guid RegionId, PlanKind Kind, int Year, int Month, long? CategoryId, decimal? PlanKg);
-
-    public sealed record AgentPlanInput(long LinkoUserId, PlanKind Kind, int Year, int Month, long? CategoryId, decimal? PlanKg);
-
-    public sealed record AutoPlan(long LinkoUserId, decimal PlanKg, int Indicators);
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct)
@@ -176,115 +170,6 @@ public sealed class SalesSetupController(IAppDbContext db, ISalesPlanImporter im
 
         await db.SaveChangesAsync(ct);
         return NoContent();
-    }
-
-    // ---------- Планы ----------
-
-    [HttpGet("plans")]
-    public async Task<IActionResult> GetPlans([FromQuery] int year, [FromQuery] int month, [FromQuery] PlanKind kind = PlanKind.Rop, CancellationToken ct = default)
-    {
-        return Ok(new
-        {
-            RegionPlans = await db.SalesRegionPlans.AsNoTracking()
-                .Where(p => p.Year == year && p.Month == month && p.Kind == kind)
-                .Select(p => new { p.Id, p.RegionId, p.CategoryId, p.PlanKg })
-                .ToListAsync(ct),
-            AgentPlans = await db.SalesAgentPlans.AsNoTracking()
-                .Where(p => p.Year == year && p.Month == month && p.Kind == kind)
-                .Select(p => new { p.Id, p.LinkoUserId, p.CategoryId, p.PlanKg })
-                .ToListAsync(ct),
-            // Планы агентов из Linko (staff_balance, кг) — действуют, если в OneBase не задан ручной.
-            AutoAgentPlans = kind != PlanKind.Rop ? [] : await AutoAgentPlansAsync(year, month, ct),
-        });
-    }
-
-    /// <summary>Автопланы ТП из Linko без супервайзеров (их план — план команды, см. Sales:StaffPlanExcludeJobs).</summary>
-    private async Task<List<AutoPlan>> AutoAgentPlansAsync(int year, int month, CancellationToken ct)
-    {
-        var plans = await db.SalesStaffPlans.AsNoTracking()
-            .Where(p => p.Year == year && p.Month == month && p.PlanType == StaffPlanTypes.SalesWeight)
-            .GroupBy(p => p.LinkoUserId)
-            .Select(g => new AutoPlan(g.Key, g.Sum(p => p.PlanAmount), g.Count()))
-            .ToListAsync(ct);
-
-        var ids = plans.Select(p => p.LinkoUserId).ToList();
-        var excluded = (await db.LinkoUsers.AsNoTracking().Where(u => ids.Contains(u.Id)).Select(u => new { u.Id, u.JobName }).ToListAsync(ct))
-            .Where(u => u.JobName is { } job && salesOptions.StaffPlanExcludeJobs.Any(x => job.Contains(x, StringComparison.OrdinalIgnoreCase)))
-            .Select(u => u.Id)
-            .ToHashSet();
-        return plans.Where(p => !excluded.Contains(p.LinkoUserId)).ToList();
-    }
-
-    [HttpPut("plans/region")]
-    [HasPermission(Permissions.SalesManage)]
-    public async Task<IActionResult> SetRegionPlan(RegionPlanInput input, CancellationToken ct)
-    {
-        var plan = await db.SalesRegionPlans.FirstOrDefaultAsync(p => p.RegionId == input.RegionId && p.Kind == input.Kind
-            && p.Year == input.Year && p.Month == input.Month && p.CategoryId == input.CategoryId, ct);
-
-        if (input.PlanKg is null)
-        {
-            if (plan is not null) db.SalesRegionPlans.Remove(plan);
-        }
-        else
-        {
-            if (plan is null)
-            {
-                plan = new SalesRegionPlan { RegionId = input.RegionId, Kind = input.Kind, Year = input.Year, Month = input.Month, CategoryId = input.CategoryId };
-                db.SalesRegionPlans.Add(plan);
-            }
-
-            plan.PlanKg = input.PlanKg.Value;
-            plan.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-
-        await db.SaveChangesAsync(ct);
-        return NoContent();
-    }
-
-    [HttpPut("plans/agent")]
-    [HasPermission(Permissions.SalesManage)]
-    public async Task<IActionResult> SetAgentPlan(AgentPlanInput input, CancellationToken ct)
-    {
-        var plan = await db.SalesAgentPlans.FirstOrDefaultAsync(p => p.LinkoUserId == input.LinkoUserId && p.Kind == input.Kind
-            && p.Year == input.Year && p.Month == input.Month && p.CategoryId == input.CategoryId, ct);
-
-        if (input.PlanKg is null)
-        {
-            if (plan is not null) db.SalesAgentPlans.Remove(plan);
-        }
-        else
-        {
-            if (plan is null)
-            {
-                plan = new SalesAgentPlan { LinkoUserId = input.LinkoUserId, Kind = input.Kind, Year = input.Year, Month = input.Month, CategoryId = input.CategoryId };
-                db.SalesAgentPlans.Add(plan);
-            }
-
-            plan.PlanKg = input.PlanKg.Value;
-            plan.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-
-        await db.SaveChangesAsync(ct);
-        return NoContent();
-    }
-
-    [HttpPost("plans/import")]
-    [HasPermission(Permissions.SalesManage)]
-    [RequestSizeLimit(20 * 1024 * 1024)]
-    public async Task<ActionResult<PlanImportResult>> Import(IFormFile file, [FromQuery] PlanImportTarget target, [FromQuery] PlanKind kind = PlanKind.Rop, CancellationToken ct = default)
-    {
-        await using var stream = file.OpenReadStream();
-        return await importer.ImportAsync(stream, file.FileName, target, kind, ct);
-    }
-
-    [HttpGet("plans/template")]
-    [HasPermission(Permissions.SalesManage)]
-    public async Task<IActionResult> Template([FromQuery] PlanImportTarget target, CancellationToken ct)
-    {
-        var bytes = await importer.BuildTemplateAsync(target, ct);
-        var name = target == PlanImportTarget.Region ? "plan-regions.xlsx" : "plan-agents.xlsx";
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name);
     }
 
     /// <summary>Планы из Linko (kpi_plans) — только для просмотра.</summary>

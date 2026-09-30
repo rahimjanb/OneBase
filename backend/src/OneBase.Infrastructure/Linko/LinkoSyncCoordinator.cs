@@ -58,7 +58,7 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
         try
         {
             using var scope = scopes.CreateScope();
-            var analytics = await scope.ServiceProvider.GetRequiredService<SalesDataLoader>().LoadAsync(null, null, PlanKind.Rop, ct);
+            var analytics = await scope.ServiceProvider.GetRequiredService<SalesDataLoader>().LoadAsync(null, null, ct);
             analytics.CachedOverview();
             analytics.CachedRepublic(null, null);
             analytics.CachedProblems(null, null, false);

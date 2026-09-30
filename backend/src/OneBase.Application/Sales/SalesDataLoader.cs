@@ -109,13 +109,13 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                 .ToList();
         });
 
-    public async Task<SalesAnalytics> LoadAsync(int? year, int? month, PlanKind kind, CancellationToken ct = default)
+    public async Task<SalesAnalytics> LoadAsync(int? year, int? month, CancellationToken ct = default)
     {
         var lastData = await Cached("sales:last-data", () => LastDataDateAsync(ct));
         var y = year ?? lastData?.Year ?? DateTime.Today.Year;
         var m = month is >= 1 and <= 12 ? month.Value : lastData?.Month ?? DateTime.Today.Month;
 
-        var key = $"sales:{y}-{m}:{kind}";
+        var key = $"sales:{y}-{m}";
         if (cache.TryGetValue(key, out SalesAnalytics? cached) && cached is not null)
         {
             return cached;
@@ -130,7 +130,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             }
 
             var token = signal.Token; // до загрузки: если данные обновятся во время расчёта, результат сразу устареет
-            var data = await BuildAsync(y, m, kind, lastData, ct);
+            var data = await BuildAsync(y, m, lastData, ct);
             var analytics = new SalesAnalytics(data);
             cache.Set(key, analytics, new MemoryCacheEntryOptions()
                 .SetAbsoluteExpiration(CacheTtl)
@@ -183,7 +183,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         return await db.LinkoOrders.CountAsync(o => sold.Contains(o.Status) && o.AcceptedDate > today, ct);
     }
 
-    private async Task<MonthData> BuildAsync(int year, int month, PlanKind kind, DateOnly? lastData, CancellationToken ct)
+    private async Task<MonthData> BuildAsync(int year, int month, DateOnly? lastData, CancellationToken ct)
     {
         var monthStart = new DateOnly(year, month, 1);
         var monthEnd = monthStart.AddMonths(1).AddDays(-1);
@@ -210,20 +210,9 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .Select(v => new { v.Day, v.UserId, v.MarketId, v.Status, v.IsInPlan })
             .ToListAsync(ct);
 
-        var regionPlans = await db.SalesRegionPlans.AsNoTracking()
-            .Where(p => p.Year == year && p.Kind == kind)
-            .Select(p => new PlanRow(p.RegionId, null, p.Month, p.CategoryId, p.PlanKg))
-            .ToListAsync(ct);
-        var manualAgentPlans = await db.SalesAgentPlans.AsNoTracking()
-            .Where(p => p.Year == year && p.Kind == kind)
-            .Select(p => new PlanRow(null, p.LinkoUserId, p.Month, p.CategoryId, p.PlanKg))
-            .ToListAsync(ct);
-
-        // Планы агентов из Linko (staff_balance) — это план РОП. Ручной план OneBase на тот же месяц важнее.
-        var staff = kind == PlanKind.Rop
-            ? await db.SalesStaffPlans.AsNoTracking().Where(p => p.Year == year).ToListAsync(ct)
-            : [];
-        var manualKeys = manualAgentPlans.Select(p => (p.AgentId, p.Month)).ToHashSet();
+        // Планы — только из Linko (API планов, staff_balance): план ТП — его план по весу, план региона и республики —
+        // сумма планов их ТП. Загруженных файлом и ручных планов в «Продажах» нет — только данные Linko.
+        var staff = await db.SalesStaffPlans.AsNoTracking().Where(p => p.Year == year).ToListAsync(ct);
         var staffIds = staff.Select(s => s.LinkoUserId).Distinct().ToList();
         var excludedStaff = (await db.LinkoUsers.AsNoTracking()
                 .Where(u => staffIds.Contains(u.Id))
@@ -232,12 +221,11 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .Where(u => u.JobName is { } job && options.StaffPlanExcludeJobs.Any(x => job.Contains(x, StringComparison.OrdinalIgnoreCase)))
             .Select(u => u.Id)
             .ToHashSet();
-        var autoAgentPlans = staff
+        var yearAgentPlans = staff
             .Where(s => s.PlanType == StaffPlanTypes.SalesWeight && !excludedStaff.Contains(s.LinkoUserId))
             .GroupBy(s => (AgentId: (long?)s.LinkoUserId, s.Month))
-            .Where(g => !manualKeys.Contains(g.Key))
-            .Select(g => new PlanRow(null, g.Key.AgentId, g.Key.Month, null, g.Sum(s => s.PlanAmount)));
-        var yearAgentPlans = manualAgentPlans.Concat(autoAgentPlans).ToList();
+            .Select(g => new PlanRow(null, g.Key.AgentId, g.Key.Month, null, g.Sum(s => s.PlanAmount)))
+            .ToList();
         var agentPlans = yearAgentPlans.Where(p => p.Month == month).ToList();
 
         var profiles = await db.SalesAgentProfiles.AsNoTracking().ToDictionaryAsync(p => p.LinkoUserId, ct);
@@ -286,8 +274,8 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             Quality = current.Quality,
             Visits = visits.Where(v => !nonSales.Contains(v.UserId!.Value)).Select(v => new VisitRecord(v.Day, v.UserId!.Value, v.MarketId!.Value, ParseStatus(v.Status), v.IsInPlan)).ToList(),
             History = await HistoryAsync(historyFrom, monthEnd, ct),
-            Plans = regionPlans.Where(p => p.Month == month).Concat(agentPlans).ToList(),
-            YearRegionPlans = regionPlans,
+            Plans = agentPlans,
+            YearRegionPlans = [],
             YearAgentPlans = yearAgentPlans,
             Indicators = staff
                 .Where(s => s.Month == month)

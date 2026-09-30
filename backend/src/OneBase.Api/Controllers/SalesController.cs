@@ -12,14 +12,14 @@ namespace OneBase.Api.Controllers;
 /// <summary>
 /// Аналитика продаж по уровням drill-down: старт → республика → РМ → регион → агент.
 /// Все данные — из нашей БД (синхронизированной с Linko).
-/// Общие параметры: year, month (по умолчанию — месяц последних данных), plan=Rop|Factory.
+/// Общие параметры: year, month (по умолчанию — месяц последних данных). Планы — только из Linko.
 /// </summary>
 [ApiController]
 [Route("api/sales")]
 [HasPermission(Permissions.SalesRead)]
 public sealed class SalesController(SalesDataLoader loader) : ControllerBase
 {
-    public sealed record PeriodQuery(int? Year, int? Month, PlanKind Plan = PlanKind.Rop);
+    public sealed record PeriodQuery(int? Year, int? Month);
 
     [HttpGet("months")]
     public Task<IReadOnlyList<SalesMonth>> Months(CancellationToken ct) => loader.MonthsAsync(ct);
@@ -66,7 +66,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// <summary>Все планы из Linko (staff_balance) за месяц: агенты по регионам и планы команд (супервайзеров).</summary>
     [HttpGet("plans")]
     public async Task<PlansView> Plans([FromQuery] PeriodQuery q, CancellationToken ct) =>
-        (await Load(q with { Plan = PlanKind.Rop }, ct)).CachedPlans();
+        (await Load(q, ct)).CachedPlans();
 
     [HttpGet("problems")]
     public async Task<ProblemsView> Problems(
@@ -143,7 +143,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     public Task<PrimaryView> PrimaryExport([FromServices] PrimaryService primary, [FromQuery] int? year, [FromQuery] int? month, CancellationToken ct) =>
         primary.GetExportAsync(year, month, ct);
 
-    private Task<SalesAnalytics> Load(PeriodQuery q, CancellationToken ct) => loader.LoadAsync(q.Year, q.Month, q.Plan, ct);
+    private Task<SalesAnalytics> Load(PeriodQuery q, CancellationToken ct) => loader.LoadAsync(q.Year, q.Month, ct);
 
     private static AssortmentScope Scope(string? direction, Guid? region, long? agent, bool export) =>
         new(string.IsNullOrEmpty(direction) ? null : direction, region, agent, export);

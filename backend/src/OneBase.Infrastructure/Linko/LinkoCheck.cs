@@ -50,6 +50,24 @@ public static class LinkoCheck
     public static async Task<int> FieldsAsync(IServiceProvider services, string entity)
     {
         var fields = new SortedDictionary<string, SortedDictionary<string, int>>(StringComparer.Ordinal);
+        if (entity == "staff_balance")
+        {
+            // API планов: поля за текущий месяц (печатаются только пути и типы, без значений).
+            var rows = await services.GetRequiredService<LinkoClient>().StaffBalanceRawAsync(DateTime.Today.Year, DateTime.Today.Month);
+            foreach (var row in rows)
+            {
+                Collect(row, "", fields);
+            }
+
+            Console.WriteLine($"{entity}: {rows.Count} записей");
+            foreach (var (path, kinds) in fields)
+            {
+                Console.WriteLine($"  {path,-40} {string.Join(", ", kinds.Select(k => $"{k.Key}={k.Value}"))}");
+            }
+
+            return 0;
+        }
+
         var total = await services.GetRequiredService<LinkoClient>().ReadAllAsync<JsonElement>(entity, null, page =>
         {
             foreach (var item in page)
