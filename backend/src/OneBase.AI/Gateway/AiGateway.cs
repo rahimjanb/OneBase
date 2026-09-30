@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using OneBase.AI.Llm;
@@ -82,6 +83,12 @@ internal sealed class AiGateway(
     ILogger<AiGateway> logger) : IAiGateway, ILlmClient
 {
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>
+    /// Модели, которые не принимают temperature (reasoning-модели OpenAI берут только значение по умолчанию):
+    /// узнаём по ответу провайдера и дальше не отправляем параметр.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, bool> _noTemperature = new(StringComparer.Ordinal);
 
     public async Task<AiReadiness> GetReadinessAsync(CancellationToken cancellationToken = default)
     {
@@ -170,21 +177,32 @@ internal sealed class AiGateway(
                 throw new AiProviderException(model.Provider, null, $"Провайдер {provider.Name} выключен в настройках AI.", false);
             }
 
-            var request = new AiCompletionRequest(model.Model, messages, tools, temperature, maxTokens, options.JsonOutput);
+            var key = model.ToString();
+            var request = new AiCompletionRequest(model.Model, messages, tools, _noTemperature.ContainsKey(key) ? null : temperature, maxTokens, options.JsonOutput);
             for (var attempt = 1; ; attempt++)
             {
                 var watch = Stopwatch.StartNew();
+                AiCompletion completion;
                 try
                 {
-                    var completion = await provider.CompleteAsync(state.Credentials, request, cancellationToken);
+                    completion = await provider.CompleteAsync(state.Credentials, request, cancellationToken);
                     watch.Stop();
                     await RecordAsync(new AiCallRecord(options.Context, model, completion.Usage, watch.ElapsedMilliseconds, true, null));
-                    return new AiCallResult(completion.Text, completion.ToolCalls, completion.Usage, model, usedFallback, watch.ElapsedMilliseconds, completion.StopReason);
                 }
                 catch (AiProviderException ex)
                 {
                     watch.Stop();
                     await RecordAsync(new AiCallRecord(options.Context, model, AiTokenUsage.None, watch.ElapsedMilliseconds, false, ex.Message));
+
+                    // Модель не принимает temperature — повторяем без неё (это не попытка из-за сбоя) и запоминаем.
+                    if (request.Temperature is not null && ex.StatusCode == 400 && ex.Message.Contains("temperature", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _noTemperature[key] = true;
+                        logger.LogInformation("AI: модель {Model} не принимает temperature — запросы отправляются без неё", key);
+                        request = request with { Temperature = null };
+                        attempt--;
+                        continue;
+                    }
 
                     // Один повтор при сбое сервера или сети; при лимите (429) повтор обычно бесполезен — сразу резерв.
                     if (attempt == 1 && ex.Transient && ex.StatusCode is not 429)
@@ -195,6 +213,16 @@ internal sealed class AiGateway(
 
                     throw;
                 }
+
+                // Весь лимит ушёл на рассуждения (reasoning-модели) — ответа нет; прямо говорим, что делать.
+                if (completion.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(completion.Text) && completion.StopReason is "length" or "max_tokens")
+                {
+                    throw new AiProviderException(model.Provider, null,
+                        $"Модель {model.Model} израсходовала лимит токенов ответа ({maxTokens}) и не дописала ответ — у reasoning-моделей часть лимита уходит " +
+                        "на рассуждения. Увеличьте «Максимум токенов ответа» в «Настройки → AI».", false);
+                }
+
+                return new AiCallResult(completion.Text, completion.ToolCalls, completion.Usage, model, usedFallback, watch.ElapsedMilliseconds, completion.StopReason);
             }
         }
     }

@@ -40,7 +40,7 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
         var result = await gateway.CompleteAsync(
             [new LlmMessage(LlmRole.System, Prompt(available)), new LlmMessage(LlmRole.User, Request(question, history, memory))],
             [],
-            new AiCallOptions { Model = s.Router, JsonOutput = true, Temperature = 0, MaxOutputTokens = 1024, Context = context with { Purpose = "consultant.route" } },
+            new AiCallOptions { Model = s.Router, JsonOutput = true, MaxOutputTokens = 2048, Context = context with { Purpose = "consultant.route" } },
             ct);
 
         var json = JsonText.ExtractObject(result.Text);

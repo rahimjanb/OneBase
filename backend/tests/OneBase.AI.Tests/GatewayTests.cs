@@ -119,6 +119,33 @@ public class GatewayTests
         Assert.Empty(openAi.Requests);
     }
 
+    [Fact]
+    public async Task Model_without_temperature_support_is_retried_without_it_and_remembered()
+    {
+        var (gateway, openAi, anthropic, _) = Build(new AiSettingsSnapshot(true, Primary, Reserve, null, null, 0.2, 2048, false));
+        openAi.Fail(new AiProviderException("openai", 400,
+            "Провайдер отклонил запрос (HTTP 400). Ответ провайдера: Unsupported value: 'temperature' does not support 0.2 with this model.", false), times: 1);
+
+        var first = await gateway.CompleteAsync(Question, [], new AiCallOptions());
+        var second = await gateway.CompleteAsync(Question, [], new AiCallOptions());
+
+        Assert.Equal(Primary, first.Model);
+        Assert.Equal(Primary, second.Model);
+        Assert.Empty(anthropic.Requests);
+        Assert.Equal([0.2, null, null], openAi.Requests.Select(r => r.Temperature));
+    }
+
+    [Fact]
+    public async Task Empty_answer_cut_by_token_limit_explains_what_to_do()
+    {
+        var (gateway, openAi, _, _) = Build(new AiSettingsSnapshot(true, Primary, null, null, null, null, 1024, false));
+        openAi.Replies.Enqueue(new AiCompletion(null, [], new AiTokenUsage(100, 1024), "main-model", "length"));
+
+        var error = await Assert.ThrowsAsync<AiProviderException>(() => gateway.CompleteAsync(Question, [], new AiCallOptions()));
+
+        Assert.Contains("Максимум токенов ответа", error.Message);
+    }
+
     private sealed class FakeSettings(AiSettingsSnapshot settings, Dictionary<string, AiProviderState> providers) : IAiSettingsSource
     {
         public Task<AiSettingsSnapshot> GetSettingsAsync(CancellationToken ct = default) => Task.FromResult(settings);
