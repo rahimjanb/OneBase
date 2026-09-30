@@ -145,7 +145,7 @@ public sealed class AgentRunner(AiAgentStore agents, IAiGateway gateway, ToolExe
 
     internal static AgentResult Parse(AgentConfig agent, string? text, IReadOnlyList<string> toolsUsed, IReadOnlyList<DataSource> toolSources)
     {
-        var json = ExtractJson(text);
+        var json = JsonText.ExtractObject(text);
         if (json is null)
         {
             return new AgentResult(agent.Code, agent.Name, "partial", text?.Trim() ?? string.Empty, [], [], [], [], toolSources, toolsUsed);
@@ -187,31 +187,6 @@ public sealed class AgentRunner(AiAgentStore agents, IAiGateway gateway, ToolExe
             Strings(root, "recommendations"),
             sources,
             toolsUsed);
-    }
-
-    private static JsonElement? ExtractJson(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        var start = text.IndexOf('{');
-        var end = text.LastIndexOf('}');
-        if (start < 0 || end <= start)
-        {
-            return null;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(text[start..(end + 1)]);
-            return doc.RootElement.ValueKind == JsonValueKind.Object ? doc.RootElement.Clone() : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     private static string? Str(JsonElement e, string name) =>

@@ -49,7 +49,10 @@ public static class DependencyInjection
         services.AddScoped<AgentRunner>();
 
         // Консультант: чаты и движок ответа.
-        services.AddScoped<IConsultantEngine, DirectConsultantEngine>();
+        // Консультант: маршрутизация → AI-сотрудники параллельно → единый ответ.
+        services.AddScoped<OneBase.AI.Orchestration.AiRouter>();
+        services.AddScoped<OneBase.AI.Orchestration.AgentOrchestrator>();
+        services.AddScoped<IConsultantEngine, OneBase.AI.Orchestration.OrchestratedConsultantEngine>();
         services.AddScoped<ConsultantChatService>();
 
         services.AddScoped<ITool, DelegateToAgentTool>();
