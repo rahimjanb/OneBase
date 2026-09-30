@@ -66,6 +66,12 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
     await AiSeeder.SeedAsync(app.Services);
 }
 
+// Аварийный доступ администратора (deploy/reset-admin.sh): пароль — из stdin, не из аргументов.
+if (Array.IndexOf(args, "reset-admin") is var resetAt and >= 0)
+{
+    return await AdminAccess.ResetAsync(app.Services, resetAt + 1 < args.Length ? args[resetAt + 1] : null, Console.In);
+}
+
 if (args.Contains("linko-check"))
 {
     return await LinkoCheck.RunAsync(app.Services, full: args.Contains("--full"));

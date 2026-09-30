@@ -74,6 +74,7 @@ cd ~/onebase && bash deploy/update.sh
 | Сайт не открывается | `docker compose logs --tail 50 cloudflared` — токен туннеля, Public hostname → `nginx:80` |
 | 502 / ошибка сервера | `docker compose logs --tail 100 api` и `docker compose logs --tail 100 web` |
 | «This page couldn't load», в логе web — `does not match origin` | В `.env` нет `PUBLIC_HOST=ваш-домен`; добавить и `docker compose up -d` |
+| «Неверный логин или пароль» у администратора | `bash deploy/reset-admin.sh ЛОГИН` — новый пароль (вводится скрыто), вход включается, роль «Администратор»; логина нет — создаётся. Покажет и число заказов Linko: 0 — дамп не восстановлен |
 | После входа снова страница входа | Сайт открыт по http — сессия ставится только по https. nginx перенаправляет сам, если задан `PUBLIC_HOST` |
 | Консультант обрывается | `docker compose logs api` — таймауты; nginx держит поток до 300 с, API шлёт «пульс» каждые 15 с |
 
