@@ -40,5 +40,7 @@ export async function login(_: LoginState, form: FormData): Promise<LoginState> 
     expires: new Date(expiresAt),
   });
 
-  redirect(next.startsWith("/") ? next : "/sales");
+  // Только путь этого сайта: «//host» и «/\host» браузер понял бы как другой сайт.
+  const safeNext = next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/sales";
+  redirect(safeNext);
 }
