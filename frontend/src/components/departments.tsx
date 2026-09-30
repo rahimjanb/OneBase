@@ -31,10 +31,15 @@ export function DepartmentIcon({ code }: { code: string }) {
   );
 }
 
-/** Карточка показателей отдела (Dashboard, «Отделы»). */
+/** Отделы со своим разделом в OneBase: карточка ведёт туда, а не в файлы отдела в «Общей базе». */
+const sections: Record<string, string> = {
+  sales: "/sales",
+};
+
+/** Карточка показателей отдела (Dashboard, «Отделы»): открывает раздел отдела, а если его нет — файлы в «Общей базе». */
 export function DepartmentStatusCard({ department: d }: { department: Department }) {
   return (
-    <Link href={`/base/${d.code}`} className="group block">
+    <Link href={sections[d.code] ?? `/base/${d.code}`} className="group block">
       <Card className="h-full p-5 transition-colors group-hover:border-accent/40">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-ink">{d.name}</span>

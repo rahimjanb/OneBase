@@ -11,16 +11,15 @@ import {
   Rows3,
   Settings,
   Sparkle,
-  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+/** also — разделы, которые открываются из этого пункта и подсвечивают его (продажи — из «Отделов»). */
+type NavItem = { href: string; label: string; icon: LucideIcon; also?: string[] };
 
 const workspace: NavItem[] = [
   { href: "/", label: "Dashboard", icon: Columns2 },
-  { href: "/departments", label: "Отделы", icon: Grid3x3 },
-  { href: "/sales", label: "Продажи", icon: TrendingUp },
+  { href: "/departments", label: "Отделы", icon: Grid3x3, also: ["/sales"] },
   { href: "/tasks", label: "Задачи", icon: Check },
   { href: "/reports", label: "Отчёты", icon: Rows3 },
   { href: "/base", label: "Общая база", icon: CircleDot },
@@ -29,8 +28,9 @@ const workspace: NavItem[] = [
 
 const settings: NavItem = { href: "/settings", label: "Настройки", icon: Settings };
 
-function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+function isActive(pathname: string, item: NavItem) {
+  const under = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  return item.href === "/" ? pathname === "/" : under(item.href) || (item.also ?? []).some(under);
 }
 
 export function Logo() {
@@ -78,12 +78,12 @@ export function Sidebar() {
         </div>
         <nav className="mt-3 space-y-1">
           {workspace.map((item) => (
-            <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
+            <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
           ))}
         </nav>
 
         <nav className="mt-6">
-          <NavLink item={settings} active={isActive(pathname, settings.href)} />
+          <NavLink item={settings} active={isActive(pathname, settings)} />
         </nav>
 
         <div className="mt-auto border-t border-white/10 px-3 pt-4">
@@ -103,7 +103,7 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={
-                isActive(pathname, item.href)
+                isActive(pathname, item)
                   ? "shrink-0 rounded-lg bg-sidebar-active px-3 py-1.5 text-sm font-semibold text-white"
                   : "shrink-0 rounded-lg px-3 py-1.5 text-sm text-sidebar-text"
               }
