@@ -46,15 +46,10 @@ public sealed record AiCallRecord(
     bool Success,
     string? Error);
 
-/// <summary>Учёт вызовов моделей. По умолчанию ничего не пишет.</summary>
+/// <summary>Учёт вызовов моделей (реализация — Monitoring.DbUsageRecorder).</summary>
 public interface IAiUsageRecorder
 {
     Task RecordAsync(AiCallRecord record, CancellationToken cancellationToken = default);
-}
-
-internal sealed class NoUsageRecorder : IAiUsageRecorder
-{
-    public Task RecordAsync(AiCallRecord record, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 /// <summary>Готов ли AI к работе и что не так, если нет. Message безопасен для показа пользователю.</summary>

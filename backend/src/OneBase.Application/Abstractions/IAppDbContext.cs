@@ -34,6 +34,8 @@ public interface IAppDbContext
     DbSet<AiKnowledgeChunk> AiKnowledgeChunks { get; }
     DbSet<AiMemory> AiMemories { get; }
     DbSet<AiAlert> AiAlerts { get; }
+    DbSet<AiUsage> AiUsage { get; }
+    DbSet<AiAuditLog> AiAuditLogs { get; }
 
     DbSet<LinkoUser> LinkoUsers { get; }
     DbSet<LinkoMarket> LinkoMarkets { get; }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OneBase.AI.Llm;
+using OneBase.AI.Monitoring;
 using OneBase.AI.Providers;
 using OneBase.Application.Abstractions;
 using OneBase.Domain.AI;
@@ -30,6 +31,7 @@ public sealed record ConversationView(Guid Id, string Title, DateTimeOffset Crea
 public sealed class ConsultantChatService(
     IAppDbContext db,
     IConsultantEngine engine,
+    AiAuditService audit,
     ILogger<ConsultantChatService> logger)
 {
     public const int MaxQuestionLength = 4000;
@@ -120,6 +122,8 @@ public sealed class ConsultantChatService(
         await emit(new ChatEvent("start", new { conversationId = conversation.Id, title = conversation.Title, userMessage = View(userMessage) }));
 
         var watch = Stopwatch.StartNew();
+        var startedAt = DateTimeOffset.UtcNow;
+        ConsultantDetails? details = null;
         var reply = new AiMessage { ConversationId = conversation.Id, Role = AiMessageRole.Assistant, Content = string.Empty };
         try
         {
@@ -129,6 +133,7 @@ public sealed class ConsultantChatService(
                 ct);
             reply.Content = answer.Content.Length > 0 ? answer.Content : "Модель вернула пустой ответ.";
             reply.Details = JsonSerializer.Serialize(answer.Details, Json);
+            details = answer.Details;
             reply.InputTokens = answer.Usage.InputTokens;
             reply.OutputTokens = answer.Usage.OutputTokens;
         }
@@ -154,6 +159,16 @@ public sealed class ConsultantChatService(
         db.AiMessages.Add(reply);
         conversation.LastMessageAt = reply.CreatedAt;
         await db.SaveChangesAsync(CancellationToken.None);
+
+        try
+        {
+            await audit.WriteAsync("consultant", userId, conversation.Id, reply.Id, question, startedAt, reply.DurationMs, details,
+                reply.Status == AiMessageStatus.Completed ? reply.Content : null, reply.Error, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Консультант: не удалось записать AI-журнал для чата {ConversationId}", conversation.Id);
+        }
 
         await emit(reply.Status == AiMessageStatus.Completed
             ? new ChatEvent("done", new { message = View(reply) })

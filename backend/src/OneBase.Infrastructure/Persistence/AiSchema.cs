@@ -134,5 +134,37 @@ internal static class AiSchema
             e.HasIndex(x => x.Key);
             e.HasIndex(x => new { x.ResolvedAt, x.Severity });
         });
+
+        b.Entity<AiUsage>(e =>
+        {
+            e.ToTable("Usage", Schema);
+            e.HasKey(x => x.Id).HasName("PK_AiUsage");
+            e.Property(x => x.AgentCode).HasMaxLength(64);
+            e.Property(x => x.Purpose).HasMaxLength(64);
+            e.Property(x => x.Provider).HasMaxLength(32);
+            e.Property(x => x.Model).HasMaxLength(200);
+            e.Property(x => x.CostUsd).HasPrecision(14, 6);
+            e.Property(x => x.Error).HasMaxLength(1000);
+            e.HasIndex(x => x.CreatedAt);
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
+        });
+
+        b.Entity<AiAuditLog>(e =>
+        {
+            e.ToTable("AuditLogs", Schema);
+            e.HasKey(x => x.Id).HasName("PK_AiAuditLogs");
+            e.Property(x => x.Kind).HasMaxLength(16);
+            e.Property(x => x.Question).HasMaxLength(4000);
+            e.Property(x => x.Agents).HasMaxLength(500);
+            e.Property(x => x.Model).HasMaxLength(250);
+            e.Property(x => x.Tools).HasMaxLength(1000);
+            e.Property(x => x.Sources).HasColumnType("jsonb");
+            e.Property(x => x.CostUsd).HasPrecision(14, 6);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.ResponsePreview).HasMaxLength(1000);
+            e.Property(x => x.Error).HasMaxLength(1000);
+            e.HasIndex(x => x.CreatedAt);
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
+        });
     }
 }

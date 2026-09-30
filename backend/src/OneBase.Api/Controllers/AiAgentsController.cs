@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using OneBase.AI.Agents;
 using OneBase.AI.Gateway;
 using OneBase.AI.Knowledge;
 using OneBase.AI.Llm;
+using OneBase.AI.Monitoring;
 using OneBase.AI.Providers;
 using OneBase.AI.Security;
 using OneBase.AI.Tools;
@@ -24,6 +26,7 @@ public sealed class AiAgentsController(
     AgentRunner runner,
     IToolRegistry tools,
     IUserPermissions permissions,
+    AiAuditService aiAudit,
     IAuditLogger audit) : ControllerBase
 {
     public sealed record ExecuteRequest(string Task);
@@ -73,6 +76,7 @@ public sealed class AiAgentsController(
 
     /// <summary>Задача одному AI-сотруднику без консультанта — для проверки и отладки.</summary>
     [HttpPost("{code}/execute")]
+    [EnableRateLimiting("ai")]
     [HasPermission(Permissions.AgentsRun)]
     public async Task<IActionResult> Execute(string code, ExecuteRequest request, CancellationToken ct)
     {
@@ -86,20 +90,23 @@ public sealed class AiAgentsController(
             return NotFound();
         }
 
+        var startedAt = DateTimeOffset.UtcNow;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             var run = await runner.RunAsync(new AgentTask(code, request.Task.Trim(), User.GetUserId()), null, ct);
             await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "ai.agent.executed", "ai_agent", code,
                 new { run.Result.Status, run.Result.ToolsUsed, run.Model, run.Usage.InputTokens, run.Usage.OutputTokens }, ct);
+            await aiAudit.WriteAsync("agent", User.GetUserId(), null, null, request.Task.Trim(), startedAt, watch.ElapsedMilliseconds,
+                new OneBase.AI.Consultant.ConsultantDetails([run.Result], run.Result.DataSources, run.Model, false),
+                run.Result.Summary, run.Result.Error, ct);
             return Ok(new { run.Result, run.Usage, run.Model });
         }
-        catch (LlmNotConfiguredException ex)
+        catch (Exception ex) when (ex is LlmNotConfiguredException or AiProviderException)
         {
-            return Problem(ex.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
-        catch (AiProviderException ex)
-        {
-            return Problem(ex.Message, statusCode: StatusCodes.Status502BadGateway);
+            await aiAudit.WriteAsync("agent", User.GetUserId(), null, null, request.Task.Trim(), startedAt, watch.ElapsedMilliseconds,
+                null, null, ex.Message, ct);
+            return Problem(ex.Message, statusCode: ex is LlmNotConfiguredException ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status502BadGateway);
         }
     }
 

@@ -37,7 +37,9 @@ public static class DependencyInjection
         services.AddSingleton<AiSettingsStore>();
         services.AddSingleton<IAiSettingsSource>(sp => sp.GetRequiredService<AiSettingsStore>());
 
-        services.TryAddSingleton<IAiUsageRecorder, NoUsageRecorder>();
+        // Учёт вызовов моделей (токены, стоимость) и AI-журнал запросов.
+        services.AddSingleton<IAiUsageRecorder, OneBase.AI.Monitoring.DbUsageRecorder>();
+        services.AddScoped<OneBase.AI.Monitoring.AiAuditService>();
         services.AddSingleton<AiGateway>();
         services.AddSingleton<IAiGateway>(sp => sp.GetRequiredService<AiGateway>());
         services.AddSingleton<ILlmClient>(sp => sp.GetRequiredService<AiGateway>());

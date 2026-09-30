@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.Api.Auth;
@@ -54,6 +55,7 @@ public sealed class ConsultantController(
     /// Если браузер закрыли, ответ всё равно дорабатывается и сохраняется в чат.
     /// </summary>
     [HttpPost("chat")]
+    [EnableRateLimiting("ai")]
     public async Task Chat(ChatRequest request)
     {
         var message = request.Message?.Trim() ?? string.Empty;

@@ -73,6 +73,8 @@ export const aiSettingsTabs = [
   { href: "/settings/ai/agents", label: "Агенты" },
   { href: "/settings/ai/tools", label: "Инструменты" },
   { href: "/settings/ai/knowledge", label: "База знаний" },
+  { href: "/settings/ai/usage", label: "Использование" },
+  { href: "/settings/ai/logs", label: "Журнал" },
 ] as const;
 
 export const modelLabel = (m: AiModelView) => m.displayName ?? m.model;
@@ -202,4 +204,48 @@ export const categoryNames: Record<string, string> = {
   hr: "HR",
   production: "Производство",
   supply: "Снабжение",
+};
+
+type UsageTotals = { calls: number; inputTokens: number; outputTokens: number; costUsd: number; costIncomplete: boolean };
+
+export type AiUsageView = {
+  from: string;
+  days: number;
+  today: { requests: number; usage: UsageTotals };
+  period: { requests: number; failedRequests: number; avgResponseMs: number; failedCalls: number; usage: UsageTotals };
+  byDay: { date: string; requests: number; inputTokens: number; outputTokens: number; costUsd: number }[];
+  byModel: { model: string; calls: number; failed: number; inputTokens: number; outputTokens: number; costUsd: number; priceMissing: boolean; avgMs: number }[];
+  byUser: { user: string; requests: number; calls: number; tokens: number; costUsd: number }[];
+  byAgent: { agent: string; calls: number; tokens: number; costUsd: number }[];
+  byPurpose: { purpose: string; calls: number; tokens: number; costUsd: number }[];
+};
+
+export type AiLogRow = {
+  id: string;
+  createdAt: string;
+  user: string;
+  kind: "consultant" | "agent";
+  conversationId: string | null;
+  question: string;
+  agents: string[];
+  model: string | null;
+  tools: string[];
+  sources: { title: string; period: string | null; href: string | null }[] | null;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number | null;
+  durationMs: number;
+  status: "completed" | "failed";
+  responsePreview: string | null;
+  error: string | null;
+};
+
+export const purposeNames: Record<string, string> = {
+  "consultant.route": "Маршрутизация",
+  "consultant.answer": "Ответ консультанта",
+  agent: "AI-сотрудники",
+  "knowledge.index": "Индексация базы знаний",
+  "knowledge.search": "Поиск по базе знаний",
+  "settings.test": "Проверка модели",
+  chat: "Прочее",
 };

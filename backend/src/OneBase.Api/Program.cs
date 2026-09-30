@@ -27,6 +27,11 @@ builder.Services.AddRateLimiter(o =>
     o.AddPolicy("login", http => RateLimitPartition.GetFixedWindowLimiter(
         http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+
+    // Вопросы консультанту и задачи AI-сотрудникам стоят денег у провайдера — не больше 20 в минуту на пользователя.
+    o.AddPolicy("ai", http => RateLimitPartition.GetFixedWindowLimiter(
+        http.User.FindFirst(OneBaseClaims.UserId)?.Value ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
 });
 
 var app = builder.Build();
@@ -37,8 +42,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseExceptionHandler();
-app.UseRateLimiter();
 app.UseAuthentication();
+app.UseRateLimiter(); // после аутентификации — лимит AI считается по пользователю
 app.UseAuthorization();
 
 app.MapControllers();

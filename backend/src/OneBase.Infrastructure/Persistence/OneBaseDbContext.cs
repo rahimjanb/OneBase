@@ -43,6 +43,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<AiKnowledgeChunk> AiKnowledgeChunks => Set<AiKnowledgeChunk>();
     public DbSet<AiMemory> AiMemories => Set<AiMemory>();
     public DbSet<AiAlert> AiAlerts => Set<AiAlert>();
+    public DbSet<AiUsage> AiUsage => Set<AiUsage>();
+    public DbSet<AiAuditLog> AiAuditLogs => Set<AiAuditLog>();
 
     // Linko (зеркало SFA)
     public DbSet<LinkoUser> LinkoUsers => Set<LinkoUser>();
