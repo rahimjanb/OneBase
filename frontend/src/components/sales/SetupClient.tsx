@@ -429,7 +429,7 @@ function PlansSection({ regions, agents, run }: { regions: Region[]; agents: Age
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
-  const [kind, setKind] = useState<"Rop" | "Factory">("Rop");
+  const [kind, setKind] = useState<"Rop" | "Factory" | "Primary">("Rop");
   const [plans, setPlans] = useState<Plans | null>(null);
   const [kpi, setKpi] = useState<KpiPlan[]>([]);
   const [importTarget, setImportTarget] = useState<"Region" | "Agent">("Region");
@@ -493,9 +493,10 @@ function PlansSection({ regions, agents, run }: { regions: Region[]; agents: Age
               <option key={`${y}-${m}`} value={`${y}-${m}`}>{monthLabel(y, m)}</option>
             )))}
           </select>
-          <select className={control} value={kind} onChange={(e) => setKind(e.target.value as "Rop" | "Factory")}>
+          <select className={control} value={kind} onChange={(e) => setKind(e.target.value as "Rop" | "Factory" | "Primary")}>
             <option value="Rop">План РОП</option>
             <option value="Factory">План завода</option>
+            <option value="Primary">План первички (отгрузка дилерам)</option>
           </select>
         </>
       }

@@ -3,7 +3,7 @@
 import { DataTable, NameCell, type Column } from "./DataTable";
 import { Note, Section } from "./bits";
 import { kg, money, monthShort, num, pct } from "@/lib/sales/format";
-import type { AgentAssortment, AssortmentView, ExportView, PrimaryView, ProductRow, StockItem, StockStatus, StockView, StoreView } from "@/lib/sales/types";
+import type { AgentAssortment, AssortmentView, ExportView, ProductRow, StockItem, StockStatus, StockView, StoreView } from "@/lib/sales/types";
 
 const withQuery = (path: string, query: string) => (query ? `${path}?${query}` : path);
 
@@ -273,97 +273,5 @@ export function OtherStocksTable({ rows }: { rows: StockView["otherStocks"] }) {
       empty="Все склады с остатком сопоставлены с регионами"
       note="Склады, название которых не совпадает ни с одним регионом (старые, интеграционные, «Основной», «Оптом»…). Их остаток не складывается в регионы автоматически — иначе он раздувал бы остаток дилеров."
     />
-  );
-}
-
-// ---------- Первичка ----------
-
-export function PrimaryDealersTable({ data }: { data: PrimaryView }) {
-  type Row = PrimaryView["dealerRows"][number];
-  const columns: Column<Row>[] = [
-    { key: "name", label: "Дилер (склад)", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.regionId ? null : "склад без региона"} /> },
-    { key: "kg", label: "Отгружено, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
-    { key: "sum", label: "Сумма", align: "right", value: (r) => r.sum, render: (r) => money(r.sum) },
-    { key: "share", label: "Доля", align: "right", value: (r) => r.share, render: (r) => pct(r.share, 1) },
-    { key: "count", label: "Отгрузок", align: "right", value: (r) => r.shipments, render: (r) => num(r.shipments) },
-  ];
-  return <DataTable title="По дилерам" hint="склады, куда отгружал завод" columns={columns} rows={data.dealerRows} rowKey={(r) => String(r.stockId)} />;
-}
-
-export function PrimaryCategoriesTable({ data }: { data: PrimaryView }) {
-  type Row = PrimaryView["categories"][number];
-  const columns: Column<Row>[] = [
-    { key: "name", label: "Категория", value: (r) => r.name, render: (r) => categoryCell(r.name, r.inReport) },
-    ...Array.from({ length: data.month }, (_, i) => ({
-      key: `m${i + 1}`,
-      label: monthShort(i + 1),
-      align: "right" as const,
-      value: (r: Row) => r.months[i],
-      render: (r: Row) => kg(r.months[i] || null),
-    })),
-    { key: "share", label: "Доля в месяце", align: "right", value: (r) => r.share, render: (r) => pct(r.share, 1) },
-  ];
-  return <DataTable title="По категориям" hint="кг по месяцам года" columns={columns} rows={data.categories} rowKey={(r) => r.name} />;
-}
-
-export function PrimaryItemsTable({ data }: { data: PrimaryView }) {
-  type Row = PrimaryView["items"][number];
-  const columns: Column<Row>[] = [
-    { key: "name", label: "Наименование", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
-    { key: "cat", label: "Категория", value: (r) => r.category },
-    { key: "pieces", label: "Штук", align: "right", value: (r) => r.pieces, render: (r) => num(r.pieces) },
-    { key: "kg", label: "Вес, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
-    { key: "sum", label: "Сумма", align: "right", value: (r) => r.sum, render: (r) => money(r.sum) },
-    { key: "perKg", label: "Цена за кг", align: "right", value: (r) => r.sumPerKg, render: (r) => money(r.sumPerKg) },
-  ];
-  return <DataTable title="Товары" hint="за месяц, по убыванию веса" columns={columns} rows={data.items} rowKey={(r) => String(r.productId)} />;
-}
-
-export function PrimaryCalendar({ data }: { data: PrimaryView }) {
-  const days = Array.from({ length: data.daysInMonth }, (_, i) => i + 1).filter((d) => data.dealerRows.some((r) => r.days[d - 1] != null));
-  if (days.length === 0) return null;
-  const total = (d: number) => data.dealerRows.reduce((s, r) => s + (r.days[d - 1] ?? 0), 0);
-  return (
-    <Section title="Календарь отгрузок" hint="кг по дням; показаны только дни с отгрузками">
-      <div className="-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
-        <table className="w-full min-w-max border-collapse text-xs">
-          <thead>
-            <tr className="border-b border-line">
-              <th className="sticky left-0 z-10 bg-surface px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">Дилер</th>
-              {days.map((d) => (
-                <th key={d} className="px-2 py-2 text-right text-[11px] font-semibold text-ink-3">
-                  {d}
-                </th>
-              ))}
-              <th className="px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-ink-3">Итого</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.dealerRows.map((r) => (
-              <tr key={r.stockId} className="border-b border-line">
-                <td className="sticky left-0 z-10 bg-surface px-2 py-1.5 text-ink">{r.name}</td>
-                {days.map((d) => (
-                  <td key={d} className="px-2 py-1.5 text-right tabular-nums text-ink-2">
-                    {r.days[d - 1] == null ? <span className="text-ink-3">·</span> : kg(r.days[d - 1])}
-                  </td>
-                ))}
-                <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-ink">{kg(r.kg)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-muted">
-              <td className="sticky left-0 z-10 bg-muted px-2 py-1.5 font-semibold text-ink">Итого</td>
-              {days.map((d) => (
-                <td key={d} className="px-2 py-1.5 text-right font-semibold tabular-nums text-ink">
-                  {kg(total(d))}
-                </td>
-              ))}
-              <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-ink">{kg(data.kg)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </Section>
   );
 }

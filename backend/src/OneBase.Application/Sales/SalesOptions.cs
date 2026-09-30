@@ -82,6 +82,12 @@ public sealed class SalesOptions
     /// <summary>Статусы перемещений, которые считаются отгрузкой: отдано (given) или уже принято (accepted).</summary>
     public string[] ShippedTransferStatuses { get; set; } = ["given", "accepted"];
 
+    /// <summary>
+    /// Прайс-лист Linko с ценой, по которой дилер продаёт дальше («Дилердан чикиш нарх»): по нему считается «сумма дилера»
+    /// в первичке. «Сумма завода» — цена самого перемещения (у отгрузок дилерам это прайс «Дилерга кириш нарх»).
+    /// </summary>
+    public string PrimaryDealerPriceList { get; set; } = "Дилердан чикиш нарх";
+
     /// <summary>За сколько дней считать скорость продаж для запаса на складах.</summary>
     public int StockVelocityDays { get; set; } = 90;
 

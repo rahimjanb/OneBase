@@ -569,37 +569,50 @@ export type StockView = {
   factoryTotals: StockTotals | null;
 };
 
+/** Отгрузка в четырёх единицах: кг, коробки (где фасовка известна), сумма завода, сумма дилера. */
+export type PrimaryAmounts = { kg: number; boxes: number; sumFactory: number; sumDealer: number };
+
+/** Строка разреза первички (категория или дилер): месяц, 12 месяцев года, план в кг (null — плана нет). */
+export type PrimaryRow = {
+  id: string;
+  name: string;
+  sub: string | null;
+  month: PrimaryAmounts;
+  months: PrimaryAmounts[];
+  planMonthKg: number | null;
+  planMonths: (number | null)[];
+};
+
+export type PrimaryCard = { kg: number; sumFactory: number; counterparties: number; transfers: number };
+
 export type PrimaryView = {
   year: number;
   month: number;
   dataThrough: string | null;
   daysInMonth: number;
+  workedDays: number;
   syncedAt: string | null;
   factoryStock: string | null;
-  kg: number;
-  sum: number;
-  shipments: number;
-  dealers: number;
-  shipmentDays: number;
-  forecastKg: number | null;
-  prevMonthKg: number;
-  toFactoryKg: number;
-  toFactoryTransfers: number;
-  toExportKg: number;
   exportStock: string | null;
-  monthsAvailable: number[];
-  months: { month: number; kg: number; sum: number; toFactoryKg: number; toExportKg: number }[];
-  dealerRows: {
-    stockId: number;
-    name: string;
-    regionId: string | null;
-    kg: number;
-    sum: number;
-    shipments: number;
-    share: number | null;
-    days: (number | null)[];
-    months: number[];
-  }[];
-  categories: { name: string; inReport: boolean; kg: number; sum: number; share: number | null; months: number[] }[];
-  items: { productId: number; name: string; code: string | null; category: string; pieces: number; kg: number; sum: number; sumPerKg: number | null }[];
+  dealerPriceList: string | null;
+  republic: PrimaryCard;
+  export: PrimaryCard;
+  monthTotal: PrimaryAmounts;
+  planMonthKg: number | null;
+  forecastKg: number | null;
+  monthTransfers: number;
+  monthsWithData: number[];
+  months: PrimaryAmounts[];
+  planMonths: (number | null)[];
+  ytd: PrimaryAmounts;
+  ytdArticles: number;
+  ytdReturnsKg: number;
+  ytdReturnLines: number;
+  planYtdKg: number | null;
+  boxesUnknownKg: number;
+  categories: PrimaryRow[];
+  dealers: PrimaryRow[];
+  items: { productId: number; name: string; code: string | null; category: string; ytd: PrimaryAmounts; boxesKnown: boolean }[];
+  monthLines: { day: number; dealerId: string; productId: number | null; kg: number; boxes: number; sumFactory: number; sumDealer: number }[];
+  productNames: Record<string, string>;
 };

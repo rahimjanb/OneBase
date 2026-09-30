@@ -57,6 +57,9 @@ public enum PlanKind
 
     /// <summary>План завода.</summary>
     Factory,
+
+    /// <summary>План первички — отгрузки завода дилеру (регион = склад дилера с тем же названием).</summary>
+    Primary,
 }
 
 /// <summary>План региона, кг за месяц. CategoryId = null — план без разбивки по категориям.</summary>
