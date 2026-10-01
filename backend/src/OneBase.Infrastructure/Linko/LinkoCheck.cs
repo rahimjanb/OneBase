@@ -91,6 +91,31 @@ public static class LinkoCheck
     /// Команда `linko-audit [ГГГГ-ММ]`: сверка допущений о Linko API с фактическими ответами. Только GET-запросы,
     /// печатаются агрегаты (счётчики, форматы, распределения), без имён, телефонов и других персональных данных.
     /// </summary>
+    /// <summary>
+    /// Команда `linko-page СУЩНОСТЬ [РАЗМЕР…]`: сколько Linko отвечает на одну страницу разного размера (только чтение,
+    /// одна попытка без повторов). Чтобы подобрать Linko:PageSizes, если синхронизация упирается в «нет ответа за 60 с».
+    /// </summary>
+    public static async Task<int> PageTimingAsync(IServiceProvider services, string entity, IReadOnlyList<int> sizes)
+    {
+        var client = services.GetRequiredService<LinkoClient>();
+        foreach (var size in sizes.Count > 0 ? sizes : [1000, 500, 200])
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                var page = await client.GetJsonAsync($"{entity}/", new Dictionary<string, string?> { ["limit"] = size.ToString(), ["offset"] = "0" }, maxAttempts: 1);
+                var rows = page.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array ? results.GetArrayLength() : 0;
+                Console.WriteLine($"{entity}, страница {size}: {watch.Elapsed.TotalSeconds:0.0} с, строк {rows}, ответ {page.GetRawText().Length / 1024:N0} КБ");
+            }
+            catch (LinkoApiException ex)
+            {
+                Console.WriteLine($"{entity}, страница {size}: {ex.Message} ({watch.Elapsed.TotalSeconds:0.0} с)");
+            }
+        }
+
+        return 0;
+    }
+
     public static async Task<int> AuditAsync(IServiceProvider services, string? monthArg)
     {
         var client = services.GetRequiredService<LinkoClient>();

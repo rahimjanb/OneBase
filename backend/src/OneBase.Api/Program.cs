@@ -82,6 +82,12 @@ if (Array.IndexOf(args, "linko-audit") is var auditAt and >= 0)
     return await LinkoCheck.AuditAsync(app.Services, auditAt + 1 < args.Length ? args[auditAt + 1] : null);
 }
 
+if (Array.IndexOf(args, "linko-page") is var pageAt and >= 0 && pageAt + 1 < args.Length)
+{
+    var sizes = args.Skip(pageAt + 2).Select(a => int.TryParse(a, out var n) ? n : 0).Where(n => n is > 0 and <= 1000).ToList();
+    return await LinkoCheck.PageTimingAsync(app.Services, args[pageAt + 1], sizes);
+}
+
 if (Array.IndexOf(args, "linko-fields") is var at and >= 0 && at + 1 < args.Length)
 {
     return await LinkoCheck.FieldsAsync(app.Services, args[at + 1]);

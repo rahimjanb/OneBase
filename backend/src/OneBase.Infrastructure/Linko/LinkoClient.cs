@@ -28,7 +28,7 @@ public sealed class LinkoOptions
     /// Свой предел страницы у отдельных ресурсов. Возвраты — 500: так отдаёт сервер (из опыта интеграции);
     /// если сервер на самом деле отдаёт меньше лимита, клиент это замечает и подстраивается сам.
     /// </summary>
-    public Dictionary<string, int> PageSizes { get; set; } = new() { ["order_returns"] = 500 };
+    public Dictionary<string, int> PageSizes { get; set; } = new() { ["order_returns"] = 500, ["stock_transfers"] = 200 };
 
     /// <summary>
     /// Сколько запросов к Linko одновременно — на весь процесс, не на одну выгрузку. Больше четырёх нельзя:
@@ -99,9 +99,9 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
     public async Task<List<T>> ListAsync<T>(string path, CancellationToken ct = default) =>
         await SendAsync<List<T>>(await ReadyAsync(ct), path, null, options.MaxAttempts, ct);
 
-    /// <summary>Один GET с произвольным ответом — для диагностики (команда linko-audit). Только чтение.</summary>
-    public async Task<JsonElement> GetJsonAsync(string path, IDictionary<string, string?>? query = null, CancellationToken ct = default) =>
-        await SendAsync<JsonElement>(await ReadyAsync(ct), path, query, options.MaxAttempts, ct);
+    /// <summary>Один GET с произвольным ответом — для диагностики (команды linko-audit, linko-page). Только чтение.</summary>
+    public async Task<JsonElement> GetJsonAsync(string path, IDictionary<string, string?>? query = null, CancellationToken ct = default, int? maxAttempts = null) =>
+        await SendAsync<JsonElement>(await ReadyAsync(ct), path, query, maxAttempts ?? options.MaxAttempts, ct);
 
     /// <summary>
     /// Выгружает все страницы списка (limit/offset). Каждая страница передаётся в onPage — большие выгрузки
