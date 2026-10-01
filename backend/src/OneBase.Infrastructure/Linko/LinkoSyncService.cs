@@ -64,6 +64,7 @@ public sealed class LinkoSyncService(
         // Первая загрузка (или после очистки) — всегда полная.
         var full = mode != LinkoSyncMode.Incremental
             || !await db.LinkoSyncStates.AnyAsync(s => s.Entity == "orders" && s.LastSuccessAt != null, ct);
+        progress.Plan(PlanOf(full, connection.HasPlanCredentials));
 
         // 1. Справочники.
         foreach (var entity in Dictionaries)
@@ -129,6 +130,36 @@ public sealed class LinkoSyncService(
 
         results.Add(await RunStepAsync("kpi_plans", "Планы Linko", accumulate: false, _ => SyncKpiPlansAsync(ct), ct));
         return new LinkoSyncReport(started, time.GetUtcNow(), results);
+    }
+
+    /// <summary>
+    /// План шагов для индикатора «сколько выполнено»: те же entity и phase, что у шагов ниже. Вес — примерная доля времени:
+    /// при полной загрузке основное время уходит на историю заказов и визитов, справочники — быстрые.
+    /// </summary>
+    private IReadOnlyList<LinkoSyncPlanStep> PlanOf(bool full, bool staffPlans)
+    {
+        var phase = full ? "Текущий и прошлый месяц" : "Обновление";
+        var steps = Dictionaries
+            .Select(d => new LinkoSyncPlanStep(d, "Справочники", d is "markets" or "market_users" or "price_list_items" ? 2 : 1))
+            .ToList();
+        steps.AddRange(
+        [
+            new("orders", phase, 6), new("order_returns", phase, 2), new("visits", phase, 6),
+            new("product_balances", phase, 2), new("stock_transfers", phase, 2), new("payments", phase, 2),
+        ]);
+        if (staffPlans)
+        {
+            steps.Add(new("staff_balance", "Планы агентов", 2));
+        }
+
+        if (full && BackfillWindow().From <= RecentWindow().From.AddDays(-1))
+        {
+            steps.AddRange([new("orders", "История", 30), new("order_returns", "История", 6), new("visits", "История", 30)]);
+        }
+
+        steps.Add(new("kpi_plans", "Планы Linko", 3));
+        steps.Add(new(null, "Пересчёт отчётов", 2)); // прогрев отчётов в LinkoSyncCoordinator
+        return steps;
     }
 
     /// <summary>Окно полной загрузки документов: с 1-го числа (BackfillMonths назад) по конец текущего месяца.</summary>

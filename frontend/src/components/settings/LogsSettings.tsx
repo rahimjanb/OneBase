@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { button } from "@/components/ai/form";
 import { CancelSyncButton } from "@/components/sales/CancelSyncButton";
+import { SyncProgressBar } from "@/components/sales/SyncProgressBar";
 import { Note, Section } from "@/components/sales/bits";
 import { bff } from "@/lib/bff";
-import { progressText } from "@/lib/integrations";
 import { sourceLabels, type LogEntry, type LogSource, type LogsView } from "@/lib/logs";
 import { dateTime } from "@/lib/sales/format";
 import type { SyncStatus } from "@/lib/sales/types";
@@ -105,9 +105,10 @@ export function LogsSettings({ initial, initialSync }: { initial: LogsView; init
       {sync && (
         <Section title="Синхронизация с Linko" hint={sync.dataAsOf ? `данные по ${dateTime(sync.dataAsOf)}` : "данных ещё нет"}>
           {sync.isRunning ? (
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <Loader2 className="size-4 animate-spin text-accent-strong" />
-              <span className="flex-1 text-ink">Идёт: {progressText(sync.progress)}</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <SyncProgressBar progress={sync.progress} />
+              </div>
               <CancelSyncButton cancelling={sync.isCancelling} onCancelled={() => setSync((s) => (s ? { ...s, isCancelling: true } : s))} />
             </div>
           ) : (

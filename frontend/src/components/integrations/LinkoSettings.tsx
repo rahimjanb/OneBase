@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Loader2, PlugZap, RefreshCw, XCircle } from "lucide-react";
 import { Note, Section } from "@/components/sales/bits";
 import { CancelSyncButton } from "@/components/sales/CancelSyncButton";
+import { SyncProgressBar } from "@/components/sales/SyncProgressBar";
 import { linkoEntityLabels, progressText, statusView, type LinkoDetails, type LinkoTestResult } from "@/lib/integrations";
 import { dateTime, num } from "@/lib/sales/format";
 
@@ -287,9 +288,10 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
         }
       >
         {data.sync.isRunning && (
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent-strong">
-            <Loader2 className="size-4 animate-spin" />
-            <span className="flex-1">Загрузка: {progressText(data.sync.progress)}</span>
+          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-3">
+            <div className="min-w-0 flex-1">
+              <SyncProgressBar progress={data.sync.progress} />
+            </div>
             <CancelSyncButton size="sm" cancelling={data.sync.isCancelling} onCancelled={() => void reload()} />
           </div>
         )}

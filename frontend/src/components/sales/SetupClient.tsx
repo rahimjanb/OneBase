@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Trash2 } from "lucide-react";
 import { CancelSyncButton } from "./CancelSyncButton";
+import { SyncProgressBar } from "./SyncProgressBar";
 import { Note, Section } from "./bits";
 import { dateTime, num } from "@/lib/sales/format";
 import { linkoEntityLabels } from "@/lib/integrations";
@@ -118,6 +119,11 @@ function SyncSection({ status, run }: { status: SyncStatus | null; run: Run }) {
         </>
       }
     >
+      {status?.isRunning && (
+        <div className="mb-4 rounded-lg border border-line p-3">
+          <SyncProgressBar progress={status.progress} />
+        </div>
+      )}
       <p className={`mb-2 text-sm ${status?.configured ? "text-ink-2" : "text-warn"}`}>
         {status?.configured ? "Адрес, токен и проверка подключения — в " : "Linko не настроен или выключен. Задайте адрес и токен в "}
         <a href="/settings/integrations/sales/linko" className="font-medium text-accent-strong hover:underline">

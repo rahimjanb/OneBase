@@ -345,7 +345,21 @@ export type ProblemAgent = {
 
 export type ProblemsView = { period: Period; vacancies: number; agents: ProblemAgent[] };
 
-export type SyncProgress = { mode: string; phase: string; entity: string | null; rows: number; startedAt: string };
+export type SyncProgress = {
+  mode: string;
+  phase: string;
+  entity: string | null;
+  rows: number;
+  startedAt: string;
+  /** Оценка выполненного, 0–100. */
+  percent?: number;
+  stepsDone?: number;
+  stepsTotal?: number;
+  /** Сколько строк ожидается в текущем шаге (счётчик Linko). */
+  expected?: number | null;
+  /** Сколько примерно осталось; null — пока рано оценивать. */
+  remainingSeconds?: number | null;
+};
 
 export type SyncStatus = {
   configured: boolean;

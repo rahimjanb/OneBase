@@ -78,7 +78,13 @@ public sealed record LinkoTestResult(
 /// Клиент Linko External API: пагинация limit/offset, повторы с backoff, разбор поля errors.
 /// Адрес и токен берутся из LinkoSettingsStore на каждый запрос — изменения в настройках действуют сразу.
 /// </summary>
-public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSettingsStore settings, LinkoThrottle throttle, ILogger<LinkoClient> logger)
+public sealed class LinkoClient(
+    HttpClient http,
+    LinkoOptions options,
+    LinkoSettingsStore settings,
+    LinkoThrottle throttle,
+    LinkoSyncProgress progress,
+    ILogger<LinkoClient> logger)
 {
     private const string Prefix = "api/v1/integration/external-api/";
 
@@ -89,9 +95,9 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
 
-    public async Task<long> CountAsync(string entity, IDictionary<string, string?>? filters = null, CancellationToken ct = default)
+    public async Task<long> CountAsync(string entity, IDictionary<string, string?>? filters = null, CancellationToken ct = default, int? maxAttempts = null)
     {
-        var result = await SendAsync<LinkoCount>(await ReadyAsync(ct), $"{entity}_count/", filters, options.MaxAttempts, ct);
+        var result = await SendAsync<LinkoCount>(await ReadyAsync(ct), $"{entity}_count/", filters, maxAttempts ?? options.MaxAttempts, ct);
         return result.Count;
     }
 
@@ -117,6 +123,21 @@ public sealed class LinkoClient(HttpClient http, LinkoOptions options, LinkoSett
         CancellationToken ct = default)
     {
         var connection = await ReadyAsync(ct);
+
+        // Для индикатора синхронизации: сколько строк ожидается (лёгкий *_count, одна попытка).
+        // Нет счётчика у сущности или он не ответил — процент шага просто считается без строк.
+        if (progress.IsActive)
+        {
+            using var countTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            countTimeout.CancelAfter(TimeSpan.FromSeconds(15)); // счётчик не должен задерживать загрузку
+            try
+            {
+                progress.Expect(await CountAsync(entity, filters, countTimeout.Token, maxAttempts: 1));
+            }
+            catch (Exception ex) when (ex is LinkoApiException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
+            {
+            }
+        }
 
         async Task<IReadOnlyList<T>> Page(int offset, int size)
         {

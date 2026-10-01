@@ -84,10 +84,27 @@ export const statusView: Record<IntegrationStatus, { label: string; className: s
   not_configured: { label: "Не настроено", className: "bg-muted text-ink-2" },
 };
 
-/** «Заказы · текущий и прошлый месяц · 12 000 строк». */
+/** «Заказы · История · 12 000 из 30 000 строк». */
 export function progressText(progress: SyncProgress | null): string {
   if (!progress) return "Обновляется…";
+  const n = (v: number) => new Intl.NumberFormat("ru-RU").format(v);
   const entity = progress.entity ? linkoEntityLabels[progress.entity] ?? progress.entity : null;
-  const rows = progress.rows > 0 ? ` · ${new Intl.NumberFormat("ru-RU").format(progress.rows)} строк` : "";
+  const rows =
+    progress.rows > 0 ? ` · ${n(progress.rows)}${progress.expected ? ` из ${n(progress.expected)}` : ""} строк` : progress.expected ? ` · ${n(progress.expected)} строк` : "";
   return [entity, progress.phase].filter(Boolean).join(" · ") + rows;
+}
+
+/** «осталось ~3 мин»; null — оценивать ещё рано. */
+export function remainingText(progress: SyncProgress | null): string | null {
+  const s = progress?.remainingSeconds;
+  if (s == null) return null;
+  if (s < 60) return "осталось меньше минуты";
+  const minutes = Math.round(s / 60);
+  return minutes < 60 ? `осталось ~${minutes} мин` : `осталось ~${Math.floor(minutes / 60)} ч ${minutes % 60} мин`;
+}
+
+/** Коротко: «42% · осталось ~3 мин». */
+export function progressShort(progress: SyncProgress | null): string {
+  if (!progress || progress.percent == null || !progress.stepsTotal) return "Обновляется…";
+  return [`${progress.percent}%`, remainingText(progress)].filter(Boolean).join(" · ");
 }

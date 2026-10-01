@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { progressText } from "@/lib/integrations";
+import { progressShort, progressText } from "@/lib/integrations";
 import { CancelSyncButton } from "./CancelSyncButton";
 import { dateTime } from "@/lib/sales/format";
 import type { SyncStatus } from "@/lib/sales/types";
@@ -70,7 +70,11 @@ export function SyncControls({ initial }: { initial: SyncStatus }) {
       <DataChip status={status} />
       {status.configured && (
         <>
-          {status.isRunning && <span className="max-w-64 truncate text-xs text-ink-2">{progressText(status.progress)}</span>}
+          {status.isRunning && (
+            <span className="max-w-64 truncate text-xs tabular-nums text-ink-2" title={progressText(status.progress)}>
+              {progressShort(status.progress)}
+            </span>
+          )}
           {error && <span className="text-xs text-bad">{error}</span>}
           <button
             type="button"
