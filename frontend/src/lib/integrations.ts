@@ -32,6 +32,7 @@ export type LinkoDetails = {
   lastTest: { at: string; ok: boolean | null; message: string | null } | null;
   sync: {
     isRunning: boolean;
+    isCancelling?: boolean;
     progress: SyncProgress | null;
     dataAsOf: string | null;
     entities: { entity: string; lastSuccessAt: string | null; lastRows: number; lastError: string | null }[];

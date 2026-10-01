@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Bot, Building2, Plug, Sparkle, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, Bot, Building2, Plug, ScrollText, Sparkle, TrendingUp, Users } from "lucide-react";
 import { redirect } from "next/navigation";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { apiGet } from "@/lib/server-api";
@@ -36,6 +36,13 @@ const sections = [
     title: "Продажи: справочник и цели",
     text: "Синхронизация с Linko, справочник ТП и вакансий из Linko, цели. Планы и оргструктура — только в Linko.",
     permission: "sales.manage",
+  },
+  {
+    href: "/settings/logs",
+    icon: ScrollText,
+    title: "Журнал ошибок",
+    text: "Ошибки интеграции Linko, синхронизации и сервера. Отмена идущей синхронизации.",
+    permission: "system.logs.read",
   },
   { href: null, icon: Building2, title: "Отделы", text: "Структура компании и руководители отделов.", permission: "ai.settings.manage" },
   { href: null, icon: Bot, title: "Доступ AI-агентов", text: "Какие инструменты разрешены каждому AI-сотруднику.", permission: "ai.settings.manage" },

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { progressText } from "@/lib/integrations";
+import { CancelSyncButton } from "./CancelSyncButton";
 import { dateTime } from "@/lib/sales/format";
 import type { SyncStatus } from "@/lib/sales/types";
 
@@ -81,6 +82,14 @@ export function SyncControls({ initial }: { initial: SyncStatus }) {
             <RefreshCw className={`size-3.5 ${status.isRunning ? "animate-spin" : ""}`} />
             {status.isRunning ? "Обновляется" : "Обновить"}
           </button>
+          {status.isRunning && (
+            <CancelSyncButton
+              size="sm"
+              mode={status.progress?.mode}
+              cancelling={status.isCancelling}
+              onCancelled={() => setStatus((s) => ({ ...s, isCancelling: true }))}
+            />
+          )}
         </>
       )}
     </span>

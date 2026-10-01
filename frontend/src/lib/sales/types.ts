@@ -350,6 +350,8 @@ export type SyncProgress = { mode: string; phase: string; entity: string | null;
 export type SyncStatus = {
   configured: boolean;
   isRunning: boolean;
+  /** Отмена запрошена — синхронизация сворачивается. */
+  isCancelling?: boolean;
   progress: SyncProgress | null;
   dataAsOf: string | null;
   hasErrors: boolean;

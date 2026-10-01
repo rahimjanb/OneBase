@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Minio;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Sales;
@@ -87,6 +88,11 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Sales.Stock.StockService>();
         services.AddScoped<OneBase.Application.Sales.Primary.PrimaryService>();
         services.AddSingleton<LinkoSyncCoordinator>();
+
+        // Журнал ошибок («Настройки → Журнал ошибок»): логгер кладёт в очередь, фоновая служба пишет в БД.
+        services.AddSingleton<Logging.SystemLogQueue>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<ILoggerProvider, Logging.SystemLoggerProvider>());
+        services.AddHostedService<Logging.SystemLogWriter>();
         services.AddHostedService<LinkoSyncWorker>();
 
         return services;

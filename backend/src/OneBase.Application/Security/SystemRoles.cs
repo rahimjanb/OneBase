@@ -36,7 +36,7 @@ public static class SystemRoles
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
     public static readonly IReadOnlyList<string> SettingsPermissions =
-        [Permissions.UsersManage, Permissions.IntegrationsManage, Permissions.AiSettingsManage, Permissions.SalesManage];
+        [Permissions.UsersManage, Permissions.IntegrationsManage, Permissions.AiSettingsManage, Permissions.SalesManage, Permissions.LogsRead];
 
     /// <summary>Порядок ролей в списках: администратор, директор, отделы.</summary>
     public static int OrderOf(string name)
@@ -58,6 +58,7 @@ public static class SystemRoles
         [Permissions.UsersManage] = "Пользователи и роли",
         [Permissions.IntegrationsManage] = "Интеграции",
         [Permissions.AiSettingsManage] = "Настройки AI",
+        [Permissions.LogsRead] = "Журнал ошибок",
         [Permissions.SalesRead] = "Продажи",
         [Permissions.SalesManage] = "Продажи: настройки и синхронизация",
         [Permissions.FinanceRead] = "Финансы",

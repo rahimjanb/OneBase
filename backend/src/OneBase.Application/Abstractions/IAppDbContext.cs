@@ -19,6 +19,7 @@ public interface IAppDbContext
     DbSet<ResourcePermission> ResourcePermissions { get; }
 
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<SystemLog> SystemLogs { get; }
 
     DbSet<AgentToolGrant> AgentToolGrants { get; }
     DbSet<ApprovalRequest> ApprovalRequests { get; }

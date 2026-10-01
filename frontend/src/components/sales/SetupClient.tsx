@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Trash2 } from "lucide-react";
+import { CancelSyncButton } from "./CancelSyncButton";
 import { Note, Section } from "./bits";
 import { dateTime, num } from "@/lib/sales/format";
 import { linkoEntityLabels } from "@/lib/integrations";
@@ -113,6 +114,7 @@ function SyncSection({ status, run }: { status: SyncStatus | null; run: Run }) {
           <button className={button} disabled={!status?.configured || status?.isRunning} onClick={() => run(() => bff("sync?full=true", { method: "POST" }), "Полная перезагрузка запущена")}>
             Полная перезагрузка
           </button>
+          {status?.isRunning && <CancelSyncButton mode={status.progress?.mode} cancelling={status.isCancelling} />}
         </>
       }
     >

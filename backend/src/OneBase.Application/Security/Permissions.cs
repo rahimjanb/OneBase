@@ -22,10 +22,14 @@ public static class Permissions
     /// <summary>«Настройки → AI»: провайдеры, ключи API, модели, агенты.</summary>
     public const string AiSettingsManage = "ai.settings.manage";
 
+    /// <summary>«Настройки → Журнал ошибок»: ошибки Linko, синхронизации и сервера. Только у администратора.</summary>
+    public const string LogsRead = "system.logs.read";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
         AiSettingsManage,
+        LogsRead,
         UsersManage,
         FilesRead,
         FilesWrite,

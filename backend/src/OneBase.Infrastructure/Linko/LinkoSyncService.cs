@@ -54,6 +54,7 @@ public sealed class LinkoSyncService(
         }
         else if (await SourceChangedAsync(connection.BaseUrl, ct) is { } message)
         {
+            logger.LogWarning("Linko: синхронизация не запущена — {Message}", message);
             await SetErrorAsync(SourceState, message, ct);
             return new LinkoSyncReport(started, time.GetUtcNow(), [new LinkoEntityResult(SourceState, 0, message)]);
         }

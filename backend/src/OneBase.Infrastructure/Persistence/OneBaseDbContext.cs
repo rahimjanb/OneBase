@@ -27,6 +27,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<ResourcePermission> ResourcePermissions => Set<ResourcePermission>();
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<SystemLog> SystemLogs => Set<SystemLog>();
 
     public DbSet<AgentToolGrant> AgentToolGrants => Set<AgentToolGrant>();
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
@@ -178,6 +179,18 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         });
 
         // Audit
+        b.Entity<SystemLog>(e =>
+        {
+            e.Property(x => x.Level).HasMaxLength(16);
+            e.Property(x => x.Source).HasMaxLength(16);
+            e.Property(x => x.Category).HasMaxLength(200);
+            e.Property(x => x.Message).HasMaxLength(4000);
+            e.Property(x => x.Exception).HasMaxLength(16000);
+            e.Property(x => x.TraceId).HasMaxLength(64);
+            e.HasIndex(x => x.Timestamp);
+            e.HasIndex(x => new { x.Source, x.Timestamp });
+        });
+
         b.Entity<AuditLog>(e =>
         {
             e.Property(x => x.ActorType).HasConversion<string>().HasMaxLength(32);

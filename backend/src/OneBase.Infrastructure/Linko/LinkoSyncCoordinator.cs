@@ -11,7 +11,13 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>Отмена текущего запуска (кнопка «Отменить»); null — синхронизация не идёт.</summary>
+    private CancellationTokenSource? _run;
+
     public bool IsRunning => _gate.CurrentCount == 0;
+
+    /// <summary>Отмена запрошена и синхронизация ещё сворачивается.</summary>
+    public bool IsCancelling => _run?.IsCancellationRequested == true;
 
     public LinkoSyncReport? LastReport { get; private set; }
 
@@ -23,12 +29,14 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
             return null;
         }
 
+        using var run = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _run = run;
         try
         {
             progress.Start(mode);
             using var scope = scopes.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<LinkoSyncService>();
-            LastReport = await service.SyncAsync(mode, ct);
+            LastReport = await service.SyncAsync(mode, run.Token);
             if (mode == LinkoSyncMode.Incremental)
             {
                 cacheSignal.Invalidate();
@@ -39,14 +47,38 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
             }
 
             progress.Step("Пересчёт отчётов", null);
-            await WarmUpAsync(ct);
+            await WarmUpAsync(run.Token);
             return LastReport;
+        }
+        catch (OperationCanceledException) when (run.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            // Отменили кнопкой: шаги, которые успели, сохранены; прерванный шаг повторится со следующей синхронизацией.
+            logger.LogWarning("Синхронизация Linko отменена (режим {Mode}): {Effect}", mode, mode == LinkoSyncMode.Reset
+                ? "данные загружены не полностью — догрузятся следующей синхронизацией"
+                : "незавершённый шаг повторится при следующей синхронизации");
+            cacheSignal.Invalidate();
+            return null;
         }
         finally
         {
+            _run = null;
             progress.Finish();
             _gate.Release();
         }
+    }
+
+    /// <summary>Кнопка «Отменить»: прерывает текущую синхронизацию. false — синхронизация не идёт.</summary>
+    public bool Cancel()
+    {
+        var run = _run;
+        if (run is null || run.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        progress.Step("Отмена…", null);
+        run.Cancel();
+        return true;
     }
 
     /// <summary>

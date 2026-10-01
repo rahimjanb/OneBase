@@ -19,7 +19,8 @@ public sealed class IntegrationsController(
     LinkoSyncCoordinator coordinator,
     LinkoSyncProgress progress,
     LinkoVerifier verifier,
-    IAuditLogger audit) : ControllerBase
+    IAuditLogger audit,
+    ILogger<IntegrationsController> logger) : ControllerBase
 {
     private sealed record CatalogItem(string Code, string Department, string Name, string Description);
 
@@ -91,6 +92,11 @@ public sealed class IntegrationsController(
         var planToken = string.IsNullOrWhiteSpace(input.PlanToken) ? current.PlanToken : input.PlanToken;
         var result = await client.TestAsync(baseUrl, token, planToken, ct);
         await linko.SaveTestResultAsync(result.Ok, result.Message, ct);
+        if (!result.Ok)
+        {
+            logger.LogWarning("Linko: проверка подключения не прошла — {Message}", result.Message);
+        }
+
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "integration.linko.tested", "integration", LinkoSettingsStore.Code,
             new { result.Ok, result.Message }, ct);
         return result;
@@ -133,6 +139,7 @@ public sealed class IntegrationsController(
         }
         catch (LinkoApiException ex)
         {
+            logger.LogWarning(ex, "Linko: сверка с Linko не удалась");
             return Problem(ex.Message, statusCode: StatusCodes.Status502BadGateway);
         }
     }
@@ -195,6 +202,7 @@ public sealed class IntegrationsController(
             Sync = new
             {
                 coordinator.IsRunning,
+                coordinator.IsCancelling,
                 Progress = progress.Current,
                 DataAsOf = dataAsOf,
                 Entities = states.Select(s => new { s.Entity, s.LastSuccessAt, s.LastRows, s.LastError }),

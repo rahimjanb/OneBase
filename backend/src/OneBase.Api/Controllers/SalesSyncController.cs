@@ -25,6 +25,7 @@ public sealed class SalesSyncController(IAppDbContext db, LinkoSyncCoordinator c
         {
             Configured = connection.IsReady,
             IsRunning = coordinator.IsRunning,
+            IsCancelling = coordinator.IsCancelling,
             Progress = progress.Current,
             DataAsOf = documents.Count == 3 && documents.All(s => s.LastSuccessAt != null)
                 ? documents.Min(s => s.LastSuccessAt)
@@ -50,6 +51,23 @@ public sealed class SalesSyncController(IAppDbContext db, LinkoSyncCoordinator c
         }
 
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "sales.sync.started", data: new { full }, cancellationToken: ct);
+        return Accepted();
+    }
+
+    /// <summary>
+    /// Кнопка «Отменить»: прерывает идущую синхронизацию (в том числе фоновую). Загруженное до отмены сохраняется,
+    /// прерванный шаг повторится со следующей синхронизацией.
+    /// </summary>
+    [HttpPost("sync/cancel")]
+    [HasPermission(Permissions.SalesManage)]
+    public async Task<IActionResult> Cancel(CancellationToken ct)
+    {
+        if (!coordinator.Cancel())
+        {
+            return Conflict(new { error = "Синхронизация не идёт." });
+        }
+
+        await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "sales.sync.cancelled", cancellationToken: ct);
         return Accepted();
     }
 }
