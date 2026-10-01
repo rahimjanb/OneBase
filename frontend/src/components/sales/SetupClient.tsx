@@ -114,7 +114,7 @@ function SyncSection({ status, run }: { status: SyncStatus | null; run: Run }) {
           <button className={button} disabled={!status?.configured || status?.isRunning} onClick={() => run(() => bff("sync?full=true", { method: "POST" }), "Полная перезагрузка запущена")}>
             Полная перезагрузка
           </button>
-          {status?.isRunning && <CancelSyncButton mode={status.progress?.mode} cancelling={status.isCancelling} />}
+          {status?.isRunning && <CancelSyncButton cancelling={status.isCancelling} />}
         </>
       }
     >

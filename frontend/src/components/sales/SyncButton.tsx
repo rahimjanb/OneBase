@@ -85,7 +85,6 @@ export function SyncControls({ initial }: { initial: SyncStatus }) {
           {status.isRunning && (
             <CancelSyncButton
               size="sm"
-              mode={status.progress?.mode}
               cancelling={status.isCancelling}
               onCancelled={() => setStatus((s) => ({ ...s, isCancelling: true }))}
             />

@@ -290,7 +290,7 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent-strong">
             <Loader2 className="size-4 animate-spin" />
             <span className="flex-1">Загрузка: {progressText(data.sync.progress)}</span>
-            <CancelSyncButton size="sm" mode={data.sync.progress?.mode} cancelling={data.sync.isCancelling} onCancelled={() => void reload()} />
+            <CancelSyncButton size="sm" cancelling={data.sync.isCancelling} onCancelled={() => void reload()} />
           </div>
         )}
         {data.sync.entities.find((e) => e.entity === "source" && e.lastError) && (

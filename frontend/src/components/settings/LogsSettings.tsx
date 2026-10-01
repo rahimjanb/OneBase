@@ -108,7 +108,7 @@ export function LogsSettings({ initial, initialSync }: { initial: LogsView; init
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <Loader2 className="size-4 animate-spin text-accent-strong" />
               <span className="flex-1 text-ink">Идёт: {progressText(sync.progress)}</span>
-              <CancelSyncButton mode={sync.progress?.mode} cancelling={sync.isCancelling} onCancelled={() => setSync((s) => (s ? { ...s, isCancelling: true } : s))} />
+              <CancelSyncButton cancelling={sync.isCancelling} onCancelled={() => setSync((s) => (s ? { ...s, isCancelling: true } : s))} />
             </div>
           ) : (
             <p className="text-sm text-ink-2">

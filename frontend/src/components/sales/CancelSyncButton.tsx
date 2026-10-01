@@ -3,18 +3,12 @@
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
 
-/**
- * «Отменить» для идущей синхронизации Linko. Загруженное до отмены сохраняется, прерванный шаг повторится
- * со следующей синхронизацией. Для перезагрузки с нуля — предупреждение: данные будут неполными, пока не догрузятся.
- */
+/** «Отменить» для идущей синхронизации Linko. Загруженное до отмены сохраняется, прерванный шаг повторится со следующей синхронизацией. */
 export function CancelSyncButton({
-  mode,
   cancelling,
   onCancelled,
   size = "md",
 }: {
-  /** progress.mode: Incremental | Full | Reset. */
-  mode?: string | null;
   /** Отмена уже запрошена — синхронизация сворачивается. */
   cancelling?: boolean;
   onCancelled?: () => void;
@@ -24,11 +18,7 @@ export function CancelSyncButton({
   const [error, setError] = useState<string | null>(null);
 
   const cancel = async () => {
-    const question =
-      mode === "Reset"
-        ? "Отменить перезагрузку данных с нуля? Старые данные уже удалены — до следующей синхронизации отчёты будут неполными."
-        : "Отменить синхронизацию с Linko? Уже загруженное сохранится, остальное догрузится при следующей синхронизации.";
-    if (!window.confirm(question)) return;
+    if (!window.confirm("Отменить синхронизацию с Linko? Уже загруженное сохранится, остальное догрузится при следующей синхронизации.")) return;
     setBusy(true);
     setError(null);
     try {
