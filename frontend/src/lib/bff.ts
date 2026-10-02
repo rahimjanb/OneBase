@@ -1,6 +1,12 @@
 /** Запрос из браузера к backend через прокси /bff (токен — в httpOnly-cookie). Ошибка — Error с текстом для человека. */
 export async function bff<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/bff/api/${path}`, { ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
+  let response: Response;
+  try {
+    response = await fetch(`/bff/api/${path}`, { ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
+  } catch {
+    // Ответа нет совсем: связь оборвалась по дороге. Сервер мог успеть выполнить действие — ответ потерялся на обратном пути.
+    throw new Error("Нет связи с сервером OneBase — ответ не пришёл. Обновите страницу и проверьте, не выполнилось ли действие, затем повторите.");
+  }
   if (!response.ok) {
     const text = await response.text();
     let message = text;
