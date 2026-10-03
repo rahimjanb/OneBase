@@ -55,7 +55,7 @@ public static class AgentDefaults
             Воронки сделок и потерянных сделок в OneBase нет — есть заказы, визиты и торговые точки из Linko.
             """,
             "sales", Permissions.SalesRead, 2,
-            [KnowledgeSources.SalesSecondary, KnowledgeSources.SalesVisits, KnowledgeSources.SalesPlans, KnowledgeSources.SalesTeam, KnowledgeSources.Documents]),
+            [KnowledgeSources.SalesSecondary, KnowledgeSources.SalesVisits, KnowledgeSources.SalesPlans, KnowledgeSources.SalesTeam, KnowledgeSources.SalesStock, KnowledgeSources.Documents]),
         new("marketing", "Marketing AI", "Директор по маркетингу",
             "Маркетинг: кампании, лиды, каналы, стоимость привлечения; продажи товаров и категорий как результат.",
             """

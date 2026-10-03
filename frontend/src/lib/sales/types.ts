@@ -608,6 +608,77 @@ export type StockView = {
   factoryTotals: StockTotals | null;
 };
 
+/** Пара «товар × регион» в аутстоке; days — флаги по дням периода: «1» — товар утром был, «0» — нет. */
+export type OutstockPair = {
+  regionId: string;
+  region: string;
+  productId: number;
+  product: string;
+  code: string | null;
+  category: string;
+  inReport: boolean;
+  periodKg: number;
+  perDayKg: number;
+  avgPrice: number | null;
+  zeroDays: number;
+  dealerDays: number;
+  factoryDays: number;
+  lostKg: number;
+  lostSum: number;
+  dealerLossSum: number;
+  factoryLossSum: number;
+  core: boolean;
+  chronic: boolean;
+  snapshotKg: number;
+  days: string;
+};
+
+export type OutstockGroup = {
+  id: string;
+  name: string;
+  pairs: number;
+  corePairs: number;
+  chronic: number;
+  lostKg: number;
+  lostSum: number;
+  dealerLossSum: number;
+  factoryLossSum: number;
+};
+
+export type OutstockTotals = {
+  lostKg: number;
+  lostSum: number;
+  pairs: number;
+  pairsWithLoss: number;
+  corePairs: number;
+  coreSum: number;
+  chronic: number;
+  dealerLossSum: number;
+  factoryLossSum: number;
+  cells: number;
+  negativeCells: number;
+  negativeSharePct: number | null;
+};
+
+export type OutstockView = {
+  year: number;
+  month: number;
+  from: string;
+  to: string;
+  /** Дней периода, по которым восстановлен остаток; 0 — снимок раньше начала месяца. */
+  days: number;
+  daysInMonth: number;
+  snapshotDate: string;
+  syncedAt: string | null;
+  regionId: string | null;
+  factoryKnown: boolean;
+  regions: { id: string; name: string }[];
+  totals: OutstockTotals;
+  pairs: OutstockPair[];
+  byRegion: OutstockGroup[];
+  byProduct: OutstockGroup[];
+};
+
 /** Отгрузка в четырёх единицах: кг, коробки (где фасовка известна), сумма завода, сумма дилера. */
 export type PrimaryAmounts = { kg: number; boxes: number; sumFactory: number; sumDealer: number };
 

@@ -131,6 +131,11 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     public Task<StockView> Stock([FromServices] StockService stock, [FromQuery] string? region, CancellationToken ct) =>
         stock.GetAsync(string.IsNullOrEmpty(region) ? null : region, ct);
 
+    /// <summary>Аутсток: дни без товара у дилеров за месяц и упущенные продажи — по восстановленному назад от снимка остатку.</summary>
+    [HttpGet("outstock")]
+    public Task<OutstockView> Outstock([FromServices] OutstockService outstock, [FromQuery] int? year, [FromQuery] int? month, [FromQuery] string? region, CancellationToken ct) =>
+        outstock.GetAsync(year, month, string.IsNullOrEmpty(region) ? null : region, ct);
+
     /// <summary>Первичка: отгрузки завода дилерам (перемещения со склада завода) за месяц и год.</summary>
     [HttpGet("primary")]
     public Task<PrimaryView> Primary([FromServices] PrimaryService primary, [FromQuery] int? year, [FromQuery] int? month, CancellationToken ct) =>
