@@ -323,8 +323,8 @@ internal sealed class GetProductsTool(SalesDataLoader loader) : SalesTool(loader
     public override string Source => KnowledgeSources.SalesSecondary;
 
     public override string Description =>
-        "Ассортимент за месяц по республике или региону: категории (кг, выручка, доля, АКБ, дистрибуция, изменение к прошлому месяцу, «молчащие» и пропавшие SKU), " +
-        "лучшие и худшие товары по выручке, пропавшие SKU.";
+        "Ассортимент за месяц по республике или региону: все категории (кг, выручка, доля, АКБ, дистрибуция, изменение к прошлому месяцу, «молчащие» и пропавшие SKU), " +
+        "лучшие и худшие товары по выручке, пропавшие SKU. Конкретный товар, категорию или бренд по названию — find_products.";
 
     public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg, RegionArg);
 

@@ -48,6 +48,7 @@ public static class DependencyInjection
         // AI-сотрудники: настройки, права пользователя, выполнение задач.
         services.AddScoped<IUserPermissions, UserPermissions>();
         services.AddScoped<AiAgentStore>();
+        services.AddScoped<SalesGlossary>();
         services.AddScoped<AgentRunner>();
 
         // Консультант: чаты и движок ответа.
@@ -75,6 +76,7 @@ public static class DependencyInjection
         services.AddScoped<ITool, GetSalesByEmployeeTool>();
         services.AddScoped<ITool, GetProblemAgentsTool>();
         services.AddScoped<ITool, GetProductsTool>();
+        services.AddScoped<ITool, FindProductsTool>();
         services.AddScoped<ITool, GetCustomersTool>();
         services.AddScoped<ITool, GetVisitsTool>();
         services.AddScoped<ITool, GetSalesKpiTool>();

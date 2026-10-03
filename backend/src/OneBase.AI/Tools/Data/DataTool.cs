@@ -33,6 +33,9 @@ public abstract class DataTool : ITool
     public bool IsCritical => false;
     public abstract JsonElement InputSchema { get; }
 
+    /// <summary>Подсказка сотруднику, когда и как вызывать инструмент; попадает в его системный промпт. null — без подсказки.</summary>
+    public virtual string? UsageHint => null;
+
     public async Task<ToolResult> ExecuteAsync(ToolContext context, JsonElement arguments, CancellationToken cancellationToken = default)
     {
         try

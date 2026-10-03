@@ -57,6 +57,23 @@ public class RouterTests
     }
 
     [Fact]
+    public void Glossary_word_routes_to_sales()
+    {
+        var decision = AiRouter.ByKeywords("Как идёт помадка в Хоразме?", Available, AiTokenUsage.None, ["помадка", "хоразм"]);
+
+        Assert.Equal(["sales"], decision.Agents);
+    }
+
+    [Fact]
+    public void Short_glossary_stem_does_not_match_inside_other_words()
+    {
+        // «соки» → основа «sok»: внутри «высокий» она есть, но слово вопроса с неё не начинается — продажи не привлекаются.
+        var decision = AiRouter.ByKeywords("Какой высокий остаток у поставщика?", Available, AiTokenUsage.None, ["соки"]);
+
+        Assert.Equal(["supply"], decision.Agents);
+    }
+
+    [Fact]
     public void Question_without_keywords_goes_to_everyone()
     {
         var decision = AiRouter.ByKeywords("Что нам улучшить?", Available, AiTokenUsage.None);

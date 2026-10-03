@@ -50,7 +50,11 @@
 
 ## Инструменты
 
-`get_sales`, `get_sales_by_branch`, `get_sales_by_employee`, `get_problem_agents`, `get_products`, `get_customers`, `get_visits`, `get_sales_kpi`, `get_sales_trend`, `get_inventory`, `get_primary_shipments`, `get_payments`, `get_suppliers`, `search_knowledge`.
+`get_sales`, `get_sales_by_branch`, `get_sales_by_employee`, `get_problem_agents`, `get_products`, `find_products`, `get_customers`, `get_visits`, `get_sales_kpi`, `get_sales_trend`, `get_inventory`, `get_primary_shipments`, `get_payments`, `get_suppliers`, `search_knowledge`.
+
+`find_products` ищет категорию, тип Linko или товар по части названия, бренду или артикулу — кириллицей или латиницей («помадка» находит и тип «Помадка», и товары «POMADKA») — и отдаёт продажи найденного: по категории — итоги и SKU, по товару — факт, точки и регионы.
+
+Маршрутизатор и сотрудники с данными продаж получают в промпт словарь названий компании (категории отчёта с типами Linko, регионы, число SKU), поэтому «помадка» или «Хоразм» в вопросе — знакомые слова, а не повод ответить «данных нет».
 
 Как работают инструменты:
 

@@ -4,6 +4,7 @@ using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
+using OneBase.AI.Tools.Data;
 using OneBase.Domain.AI;
 
 namespace OneBase.AI.Orchestration;
@@ -15,7 +16,7 @@ public sealed record RoutingDecision(IReadOnlyList<string> Agents, IReadOnlyDict
 /// AI Router: по вопросу (и истории чата) определяет нужных AI-сотрудников. Если модель не ответила разборчиво —
 /// запасной выбор по ключевым словам; если ни одно слово не подошло — все доступные сотрудники.
 /// </summary>
-public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
+public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, SalesGlossary? glossary = null)
 {
     /// <summary>Основы слов, по которым вопрос относится к отделу (запасной маршрут).</summary>
     internal static readonly IReadOnlyDictionary<string, string[]> Keywords = new Dictionary<string, string[]>
@@ -38,8 +39,11 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
         }
 
         var s = await settings.GetSettingsAsync(ct);
+        // Названия категорий, товаров и регионов знает только отдел продаж — словарь нужен, когда он доступен пользователю.
+        var hasSales = available.Any(a => a.Code == "sales");
+        var glossaryText = hasSales && glossary is not null ? await glossary.TextAsync(ct) : null;
         var result = await gateway.CompleteAsync(
-            [new LlmMessage(LlmRole.System, Prompt(available)), new LlmMessage(LlmRole.User, Request(question, history, memory))],
+            [new LlmMessage(LlmRole.System, Prompt(available, glossaryText)), new LlmMessage(LlmRole.User, Request(question, history, memory))],
             [],
             // Выбор сотрудников — простая задача: рассуждения всегда минимальные, чтобы не ждать десятки секунд.
             new AiCallOptions
@@ -51,7 +55,8 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
         var json = JsonText.ExtractObject(result.Text);
         if (json is null)
         {
-            return ByKeywords(question, available, result.Usage);
+            // Слова словаря нужны только запасному маршруту — заранее их не считаем.
+            return ByKeywords(question, available, result.Usage, hasSales && glossary is not null ? await glossary.KeywordsAsync(ct) : null);
         }
 
         var codes = available.Select(a => a.Code).ToHashSet();
@@ -78,11 +83,14 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
         return new RoutingDecision(agents, tasks, JsonText.Str(json.Value, "reason") ?? string.Empty, false, result.Usage);
     }
 
-    internal static RoutingDecision ByKeywords(string question, IReadOnlyList<AgentConfig> available, AiTokenUsage usage)
+    /// <summary>salesWords — названия категорий, типов и регионов из словаря компании: вопрос про «помадку» — к продажам.</summary>
+    internal static RoutingDecision ByKeywords(string question, IReadOnlyList<AgentConfig> available, AiTokenUsage usage, IReadOnlyList<string>? salesWords = null)
     {
         var q = question.ToLowerInvariant();
+        var tokens = NameMatch.Tokens(question);
         var agents = available
-            .Where(a => Keywords.TryGetValue(a.Code, out var words) && words.Any(q.Contains))
+            .Where(a => (Keywords.TryGetValue(a.Code, out var words) && words.Any(q.Contains))
+                || (a.Code == "sales" && salesWords is not null && salesWords.Any(w => NameMatch.MentionedIn(tokens, w))))
             .Select(a => a.Code)
             .ToList();
         if (agents.Count == 0)
@@ -93,7 +101,7 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
         return new RoutingDecision(agents, new Dictionary<string, string>(), "Выбор по ключевым словам вопроса (маршрутизатор не ответил разборчиво).", true, usage);
     }
 
-    private static string Prompt(IReadOnlyList<AgentConfig> available)
+    private static string Prompt(IReadOnlyList<AgentConfig> available, string? glossaryText)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Ты — маршрутизатор главного AI-консультанта компании в OneBase. Реши, каких AI-сотрудников привлечь к вопросу пользователя.");
@@ -102,6 +110,13 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings)
         foreach (var a in available)
         {
             sb.AppendLine($"- {a.Code} — {a.Name} ({a.Role}): {a.Description}");
+        }
+
+        if (glossaryText is not null)
+        {
+            sb.AppendLine();
+            sb.AppendLine(glossaryText);
+            sb.AppendLine("Вопрос о товаре, категории, бренде, артикуле или регионе из словаря — это вопрос о продажах (sales); в задаче сотруднику сохрани название как в вопросе.");
         }
 
         sb.AppendLine();

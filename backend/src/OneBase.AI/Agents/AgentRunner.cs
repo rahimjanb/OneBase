@@ -7,6 +7,7 @@ using OneBase.AI.Llm;
 using OneBase.AI.Providers;
 using OneBase.AI.Security;
 using OneBase.AI.Tools;
+using OneBase.AI.Tools.Data;
 
 namespace OneBase.AI.Agents;
 
@@ -25,6 +26,7 @@ public sealed class AgentRunner(
     ToolExecutor executor,
     IUserPermissions permissions,
     KnowledgeService knowledge,
+    SalesGlossary glossary,
     TimeProvider clock)
 {
     private const int MaxSteps = 8;
@@ -65,9 +67,11 @@ public sealed class AgentRunner(
         }
         var definitions = tools.Select(t => new LlmToolDefinition(t.Name, t.Description, t.InputSchema)).ToList();
 
+        // Словарь названий компании — только сотрудникам с данными продаж: иначе «помадка» в вопросе для модели просто незнакомое слово.
+        var glossaryText = tools.Any(t => t.Source?.StartsWith("sales.", StringComparison.Ordinal) == true) ? await glossary.TextAsync(ct) : null;
         var messages = new List<LlmMessage>
         {
-            new(LlmRole.System, SystemPrompt(agent, tools)),
+            new(LlmRole.System, SystemPrompt(agent, tools, glossaryText)),
             new(LlmRole.User, task.Context is null ? task.Task : $"{task.Task}\n\nКонтекст от главного консультанта:\n{task.Context}"),
         };
 
@@ -133,7 +137,7 @@ public sealed class AgentRunner(
             "Агент не завершил анализ за отведённое число шагов."), usage, model);
     }
 
-    private string SystemPrompt(AgentConfig agent, IReadOnlyList<ITool> tools)
+    private string SystemPrompt(AgentConfig agent, IReadOnlyList<ITool> tools, string? glossaryText)
     {
         var today = clock.GetUtcNow().ToOffset(CompanyOffset);
         var sb = new StringBuilder();
@@ -143,6 +147,17 @@ public sealed class AgentRunner(
         sb.AppendLine(tools.Count == 0
             ? "Инструментов с данными OneBase у тебя сейчас нет — значит, данных для ответа нет."
             : "Бери цифры только из результатов инструментов. Вызывай инструменты столько раз, сколько нужно, с точными фильтрами (период, регион).");
+        foreach (var hint in tools.OfType<DataTool>().Select(t => t.UsageHint).OfType<string>())
+        {
+            sb.AppendLine(hint);
+        }
+
+        if (glossaryText is not null)
+        {
+            sb.AppendLine();
+            sb.AppendLine(glossaryText);
+        }
+
         sb.AppendLine();
         sb.AppendLine(ConsultantPrompts.QualityRules);
         sb.AppendLine();
