@@ -1,0 +1,14 @@
+"use client";
+
+import { useEffect } from "react";
+
+/** Регистрирует service worker (/sw.js): офлайн-заглушка при обрыве сети. Сам файл не кэширует страницы и данные. */
+export function PwaRegister() {
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {
+      // Без service worker приложение работает как обычно — просто не будет страницы «Нет соединения».
+    });
+  }, []);
+  return null;
+}

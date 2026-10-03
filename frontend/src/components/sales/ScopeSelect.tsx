@@ -22,7 +22,7 @@ export function ScopeSelect({
   const groups = [...new Set(options.map((o) => o.group ?? ""))];
 
   return (
-    <label className="inline-flex items-center gap-2 text-sm text-ink-2">
+    <label className="inline-flex items-center gap-2 text-sm text-ink-2 max-lg:w-full">
       {label}
       <select
         value={current}
@@ -33,7 +33,7 @@ export function ScopeSelect({
           if (kind) next.set(kind, rest.join(":"));
           router.push(`${pathname}?${next}`);
         }}
-        className="h-9 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink"
+        className="h-9 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink max-lg:h-11 max-lg:min-w-0 max-lg:flex-1"
       >
         {groups.map((g) =>
           g ? (

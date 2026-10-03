@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { AkbChart } from "@/components/sales/AkbChart";
-import { CollapsedSections, FlagPills, KpiTile, Section } from "@/components/sales/bits";
-import { CategoryPlanBars, IndicatorBars, PlanBadge } from "@/components/sales/blocks";
+import { CollapsedSections, FlagPills, KpiTile, Section, planTone } from "@/components/sales/bits";
+import { CategoryPlanBars, IndicatorBars } from "@/components/sales/blocks";
 import { AgentStoresTable, LaggingTable, ProductsTable } from "@/components/sales/assortment-tables";
 import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
@@ -82,18 +82,13 @@ export default async function AgentPage({
         <FlagPills flags={data.flags.filter((f) => f.severity !== "Info")} empty={null} />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 min-[87.5rem]:grid-cols-5">
-        <KpiTile label="План ТП на месяц" value={kg(data.planKg)} unit={data.planKg != null ? "кг" : undefined}>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 min-[87.5rem]:grid-cols-5">
+        <KpiTile label="План ТП на месяц" value={kg(data.planKg)} unit={data.planKg != null ? "кг" : undefined} tone={data.planKg != null ? planTone(data.execution) : "muted"}>
           {data.planKg != null ? `выполнено ${pct(data.execution)}` : planNote(data, monthName(period.month))}
         </KpiTile>
-        <KpiTile
-          label="Выручка за месяц"
-          value={money(data.revenue)}
-          unit="сум"
-          badge={data.revenuePlan != null ? <PlanBadge share={data.revenueExecution} /> : undefined}
-        >
+        <KpiTile label="Выручка за месяц" value={money(data.revenue)} unit="сум" tone={data.revenuePlan != null ? planTone(data.revenueExecution) : "ink"}>
           {kg(data.factKg)} кг
-          {data.revenuePlan != null && <> · план {money(data.revenuePlan)}</>}
+          {data.revenuePlan != null && <> · {pct(data.revenueExecution)} плана ({money(data.revenuePlan)})</>}
         </KpiTile>
         <KpiTile label="Визиты" value={num(data.visits)}>
           {num(data.visitsWithOrder)} с заказом

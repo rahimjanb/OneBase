@@ -30,7 +30,7 @@ export function SalesToolbar({
   const options = months.some((m) => m.year === year && m.month === month) ? months : [{ year, month }, ...months];
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 max-lg:w-full">
       <select
         aria-label="Период"
         value={`${year}-${month}`}
@@ -38,7 +38,7 @@ export function SalesToolbar({
           const [y, m] = e.target.value.split("-");
           go({ year: y, month: m, from: null, to: null });
         }}
-        className="h-9 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink"
+        className="h-9 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink max-lg:h-11 max-lg:flex-1"
       >
         {options.map((m) => (
           <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`}>

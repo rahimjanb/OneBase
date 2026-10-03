@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FlagPills, Note } from "@/components/sales/bits";
+import { Alert, FlagPills, Note, Stat } from "@/components/sales/bits";
 import { ProblemsFilters } from "@/components/sales/ProblemsFilters";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGet } from "@/lib/server-api";
@@ -8,15 +8,6 @@ import { apiQuery, periodQuery, withQuery, type SalesSearchParams } from "@/lib/
 import type { GroupView, ProblemsView } from "@/lib/sales/types";
 
 export const metadata = { title: "Проблемные агенты · Продажи" };
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-[10px] font-medium uppercase tracking-[0.08em] text-ink-3">{label}</dt>
-      <dd className="mt-1 whitespace-nowrap text-sm font-semibold tabular-nums text-ink">{value}</dd>
-    </div>
-  );
-}
 
 export default async function ProblemsPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
   const sp = await searchParams;
@@ -34,10 +25,10 @@ export default async function ProblemsPage({ searchParams }: { searchParams: Pro
       <ProblemsFilters directions={directions} vacancies={data.vacancies} found={found} />
 
       {unassigned.kg > 0 && (
-        <p className="mt-4 rounded-lg border border-l-4 border-line border-l-warn bg-surface px-4 py-3 text-sm text-ink-2 shadow-sm">
-          <b className="text-ink">{kg(unassigned.kg)} кг</b> факта (<b className="text-ink">{pct(unassigned.share)}</b>) не привязаны к агентам — в заказах Linko нет
-          агента. Рейтинг считается по остальным <b className="text-ink">{kg(republic.kpi.factKg - unassigned.kg)} кг</b>.
-        </p>
+        <Alert>
+          <b>{kg(unassigned.kg)} кг</b> факта (<b>{pct(unassigned.share)}</b>) не привязаны к агентам — в заказах Linko нет агента. Рейтинг считается по
+          остальным <b>{kg(republic.kpi.factKg - unassigned.kg)} кг</b>.
+        </Alert>
       )}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 min-[87.5rem]:grid-cols-4">
@@ -45,11 +36,11 @@ export default async function ProblemsPage({ searchParams }: { searchParams: Pro
           <Link
             key={a.agentId}
             href={withQuery(`/sales/agents/${a.agentId}`, q)}
-            className="flex flex-col rounded-xl border border-line bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md"
+            className="flex flex-col rounded-xl border border-line bg-surface p-5 shadow-sm transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md max-lg:active:opacity-75"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 font-semibold leading-snug text-ink">
+                <div className="flex flex-wrap items-center gap-2 text-base font-semibold leading-snug text-ink">
                   {a.name}
                   {a.isVacancy && <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-2">вакансия</span>}
                 </div>
@@ -61,12 +52,12 @@ export default async function ProblemsPage({ searchParams }: { searchParams: Pro
                 </span>
               )}
             </div>
-            <dl className="mt-3 grid grid-cols-3 gap-3">
-              <Metric label="Конверсия" value={pct(a.conversion)} />
-              <Metric label="Визиты" value={num(a.visits)} />
-              <Metric label="Выручка" value={money(a.revenue)} />
+            <dl className="mt-4 grid grid-cols-3 gap-3">
+              <Stat label="Конверсия" value={pct(a.conversion)} />
+              <Stat label="Визиты" value={num(a.visits)} />
+              <Stat label="Выручка" value={money(a.revenue)} />
             </dl>
-            <div className="mt-auto pt-3">
+            <div className="mt-auto pt-4">
               <FlagPills flags={a.flags} empty={a.isVacancy ? null : "Замечаний нет"} />
             </div>
           </Link>

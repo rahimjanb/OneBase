@@ -1,79 +1,57 @@
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
-import { Alert, ExecutionBar, FlagCountPills, KpiTile, Note, Section, TargetBadge, execClass } from "./bits";
+import { Alert, ExecutionBar, FlagCountPills, KpiTile, Note, Section, Stat, SummaryCard, execClass, execTone, targetTone } from "./bits";
+import { plural } from "@/lib/format";
 import { delta, kg, money, monthLabel, monthShort, num, pct } from "@/lib/sales/format";
-import type { CategoryPlanFact, DataQuality, ExcludedSummary, KpiTiles, NextMonthPlan, Period, UnitRow } from "@/lib/sales/types";
+import type { CategoryPlanFact, DataQuality, KpiTiles, NextMonthPlan, Period, UnitRow } from "@/lib/sales/types";
 
-/** Плашка «X% плана»: ≥100% зелёная, 70–99% оранжевая, меньше — красная. */
-export function PlanBadge({ share }: { share: number | null }) {
-  if (share == null) return null;
-  const tone = share >= 1 ? "bg-ok-soft text-ok" : share >= 0.7 ? "bg-warn-soft text-warn" : "bg-bad-soft text-bad";
-  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{pct(share)} плана</span>;
-}
-
-/** Шесть плиток KPI — одинаковые на всех уровнях; на широком экране — в один ряд. План — сумма планов ТП из Linko. */
+/**
+ * Шесть плиток KPI — одинаковые на всех уровнях (вторичка, направление, регион); на широком экране — в один ряд.
+ * Значение окрашено по уровню цели, под ним одна строка пояснения; подробности (прогноз, ТП с планом) — во всплывающей подсказке.
+ * План — сумма планов ТП из Linko.
+ */
 export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
+  const hasPlan = kpi.planKg != null;
+  const pace = `по темпу ${period.workedDays} из ${period.daysInMonth} дн.`;
+  const planDetails = hasPlan
+    ? [
+        `${num(kpi.planAgents)} ТП с планом`,
+        `прогноз ${kg(kpi.planForecastKg)} кг (${pct(kpi.forecastExecution)}) ${pace}`,
+        kpi.planFactKg != null && kpi.planFactKg !== kpi.factKg ? `всего продано ${kg(kpi.factKg)} кг` : null,
+      ]
+    : [`прогноз ${kg(kpi.forecastKg)} кг ${pace}`];
+
   return (
     // Порог в rem (87.5rem = 1400px): брейкпоинты Tailwind — в rem, и порог в px проигрывает lg по порядку правил.
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[87.5rem]:grid-cols-6">
-      <KpiTile label="Выполнение плана" value={pct(kpi.execution, 1)}>
-        {kpi.planKg != null ? (
-          <>
-            {kg(kpi.planFactKg)} из {kg(kpi.planKg)} кг{kpi.planAgents > 0 && ` · ${num(kpi.planAgents)} ТП с планом`}
-            <br />
-            прогноз {kg(kpi.planForecastKg)} кг ({pct(kpi.forecastExecution)}) по темпу {period.workedDays} из {period.daysInMonth} дн.
-            {kpi.planFactKg != null && kpi.planFactKg !== kpi.factKg && (
-              <>
-                <br />
-                всего продано {kg(kpi.factKg)} кг
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            факт {kg(kpi.factKg)} кг · плана в Linko нет
-            <br />
-            прогноз {kg(kpi.forecastKg)} кг по темпу {period.workedDays} из {period.daysInMonth} дн.
-          </>
-        )}
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 min-[87.5rem]:grid-cols-6">
+      <KpiTile label="Выполнение плана" value={pct(kpi.execution, 1)} tone={hasPlan ? "accent" : "muted"} title={planDetails.filter(Boolean).join(" · ")}>
+        {hasPlan ? `${kg(kpi.planFactKg)} из ${kg(kpi.planKg)} кг` : `факт ${kg(kpi.factKg)} кг · плана в Linko нет`}
       </KpiTile>
       <KpiTile
         label="Выручка"
         value={money(kpi.revenue)}
-        unit="сум"
-        badge={kpi.revenuePlan && <PlanBadge share={kpi.revenuePlan.execution} />}
+        title={
+          kpi.revenuePlan
+            ? `План по выручке: ${money(kpi.revenuePlan.fact)} из ${money(kpi.revenuePlan.plan)} (${num(kpi.revenuePlan.agents)} ТП с планом) · АКБ ${num(kpi.akb)}`
+            : `АКБ ${num(kpi.akb)} · плана по выручке в Linko нет`
+        }
       >
-        АКБ {num(kpi.akb)}
-        {kpi.revenuePlan && (
-          <>
-            <br />
-            план по выручке: {money(kpi.revenuePlan.fact)} из {money(kpi.revenuePlan.plan)} ({num(kpi.revenuePlan.agents)} ТП с планом)
-            <br />
-            прогноз {money(kpi.revenuePlan.forecast)} ({pct(kpi.revenuePlan.forecastExecution)})
-          </>
-        )}
+        {kpi.revenuePlan ? `сум · ${pct(kpi.revenuePlan.execution)} плана` : `сум · АКБ ${num(kpi.akb)}`}
       </KpiTile>
-      <KpiTile
-        label="Конверсия визита"
-        value={pct(kpi.conversion.value, 1)}
-        badge={<TargetBadge target={kpi.conversion} />}
-        note={`цель ${pct(kpi.conversion.target)}`}
-      />
+      <KpiTile label="Конверсия визита" value={pct(kpi.conversion.value)} tone={targetTone(kpi.conversion)} title={`${pct(kpi.conversion.ratio)} от цели`}>
+        цель {pct(kpi.conversion.target)}
+      </KpiTile>
       <KpiTile
         label="Выручка на ТТ"
         value={money(kpi.revenuePerOutlet.value)}
-        unit="сум"
-        badge={<TargetBadge target={kpi.revenuePerOutlet} />}
-        note={`цель ${money(kpi.revenuePerOutlet.target)}`}
-      />
-      <KpiTile
-        label="АКБ на агента"
-        value={num(kpi.akbPerAgent.value, 1)}
-        badge={<TargetBadge target={kpi.akbPerAgent} />}
-        note={`цель ${num(kpi.akbPerAgent.target)}`}
-      />
-      <KpiTile label="Визиты без заказа" value={num(kpi.visitsWithoutOrder)}>
-        из {num(kpi.visitsDone)} визитов · {num(kpi.activeAgents)} ТП
+        tone={targetTone(kpi.revenuePerOutlet)}
+        title={`цель ${money(kpi.revenuePerOutlet.target)} сум`}
+      >
+        сум · {pct(kpi.revenuePerOutlet.ratio)} от цели
+      </KpiTile>
+      <KpiTile label="АКБ на агента" value={num(kpi.akbPerAgent.value, 1)} tone={targetTone(kpi.akbPerAgent)} title={`${pct(kpi.akbPerAgent.ratio)} от цели`}>
+        цель {num(kpi.akbPerAgent.target)}
+      </KpiTile>
+      <KpiTile label="Визиты без заказа" value={num(kpi.visitsWithoutOrder)} title={`${num(kpi.activeAgents)} ТП с визитами`}>
+        из {num(kpi.visitsDone)} визитов
       </KpiTile>
     </div>
   );
@@ -88,84 +66,49 @@ export function UnassignedWarning({ kgValue, share }: { kgValue: number; share: 
   );
 }
 
-/** Карточка РМ / направления / региона. */
-export function UnitCard({ unit, href }: { unit: UnitRow; href: string | null }) {
-  const body = (
-    <div className={`@container flex h-full flex-col rounded-xl border border-line bg-surface p-4 shadow-sm ${href ? "transition-colors group-hover:border-accent/40" : ""}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-semibold text-ink">{unit.name}</div>
-          <div className="mt-0.5 text-xs text-ink-3">
-            {unit.subtitle ? `${unit.subtitle} · ` : ""}
-            {unit.kind !== "region" && unit.regionCount > 0 ? `${num(unit.regionCount)} рег. · ` : ""}
-            {num(unit.agents)} ТП
-          </div>
-        </div>
-        {href && <ArrowUpRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />}
-      </div>
-      <div className="mt-3">
-        <ExecutionBar value={unit.execution} tone={unit.execution != null && unit.execution < 0.7 ? "bad" : unit.execution != null && unit.execution < 0.9 ? "warn" : "accent"} />
-      </div>
-      <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-3 text-xs @sm:grid-cols-4">
-        <Metric label="План, кг" value={kg(unit.planKg)} />
-        {unit.planKg != null ? (
-          <Metric label="Факт в плане, кг" value={kg(unit.planFactKg)} />
-        ) : (
-          <Metric label="Факт, кг" value={kg(unit.factKg)} />
-        )}
-        <Metric label="Вып." value={<span className={execClass(unit.execution)}>{pct(unit.execution)}</span>} />
-        {unit.planKg != null ? (
-          <Metric label="Прогноз вып." value={<span className={execClass(unit.forecastExecution)}>{pct(unit.forecastExecution)}</span>} />
-        ) : (
-          <Metric label="Прогноз, кг" value={kg(unit.forecastKg)} />
-        )}
-        <Metric label="Страйк" value={pct(unit.strike)} />
-        <Metric label="Выручка" value={money(unit.revenue)} />
-      </dl>
-      {unit.regionNames.length > 1 && <p className="mt-3 line-clamp-2 text-xs text-ink-3">{unit.regionNames.join(", ")}</p>}
-      <div className="mt-auto pt-3">
-        <FlagCountPills flags={unit.flags} />
-      </div>
-    </div>
-  );
+/**
+ * Карточка республики, РМ / направления или региона: шкала выполнения, шесть итогов, флаги ТП.
+ * showFlags=false — на «Вторичке», где флаги уже показаны полосой над карточками.
+ */
+export function UnitCard({ unit, href, showFlags = true }: { unit: UnitRow; href: string | null; showFlags?: boolean }) {
+  const hasPlan = unit.planKg != null;
+  const subtitle = [
+    unit.subtitle,
+    unit.kind !== "region" && unit.regionCount > 0 ? `${num(unit.regionCount)} ${plural(unit.regionCount, ["регион", "региона", "регионов"])}` : null,
+    `${num(unit.agents)} ТП`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
-  return href ? (
-    <Link href={href} className="group block">
-      {body}
-    </Link>
-  ) : (
-    body
-  );
-}
-
-/** Плитка «Экспорт и опт»: филиал «Завод» из Linko — отдельно от вторички, чтобы не завышать республику. */
-export function ExportCard({ data, href }: { data: ExcludedSummary; href: string }) {
   return (
-    <Link href={href} className="group block">
-      <div className="@container flex h-full flex-col rounded-xl border border-line bg-surface p-4 shadow-sm transition-colors group-hover:border-accent/40">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="font-semibold text-ink">Экспорт и опт</div>
-            <div className="mt-0.5 text-xs text-ink-3">филиал «Завод» в Linko · не входит во вторичку</div>
-          </div>
-          <ArrowUpRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />
-        </div>
-        <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-3 text-xs @sm:grid-cols-4">
-          <Metric label="Факт, кг" value={kg(data.factKg)} />
-          <Metric label="Выручка" value={money(data.revenue)} />
-          <Metric label="АКБ" value={num(data.akb)} />
-          <Metric label="Прогноз, кг" value={kg(data.forecastKg)} />
-          <Metric label="Заказов" value={num(data.orders)} />
-          <Metric label="К прошлому мес." value={<span className={deltaClass(data.vsPrevMonth)}>{delta(data.vsPrevMonth)}</span>} />
-        </dl>
+    <SummaryCard title={unit.name} subtitle={subtitle} href={href}>
+      <div
+        className="mt-4"
+        role="progressbar"
+        aria-label="Выполнение плана"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={unit.execution == null ? undefined : Math.round(Math.min(1, unit.execution) * 100)}
+      >
+        <ExecutionBar value={unit.execution} tone="accent" />
       </div>
-    </Link>
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3">
+        <Stat label="План, кг" value={kg(unit.planKg)} />
+        <Stat label={hasPlan ? "Прогноз" : "Прогноз, кг"} value={hasPlan ? pct(unit.forecastExecution) : kg(unit.forecastKg)} />
+        <Stat label={hasPlan ? "Факт в плане" : "Факт, кг"} value={kg(hasPlan ? unit.planFactKg : unit.factKg)} />
+        <Stat label="Страйк" value={pct(unit.strike)} />
+        <Stat label="Выполнение" value={pct(unit.execution)} tone={execTone(unit.execution)} />
+        <Stat label="Выручка" value={money(unit.revenue)} />
+      </dl>
+      {/* У направления — какие регионы в него входят; у республики список не нужен. */}
+      {unit.kind === "direction" && unit.regionNames.length > 0 && <p className="mt-3 line-clamp-2 text-xs text-ink-3">{unit.regionNames.join(", ")}</p>}
+      {showFlags && (
+        <div className="mt-auto pt-4">
+          <FlagCountPills flags={unit.flags} />
+        </div>
+      )}
+    </SummaryCard>
   );
-}
-
-function deltaClass(value: number | null): string {
-  if (value == null) return "text-ink-3";
-  return value >= 0 ? "text-ok" : value > -0.1 ? "text-warn" : "text-bad";
 }
 
 /**
@@ -231,16 +174,6 @@ export function DataQualityNotes({ quality }: { quality: DataQuality }) {
         </div>
       )}
     </Section>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    // Значения ряда — на одной линии, даже если подпись переносится на две строки.
-    <div className="flex min-w-0 flex-col justify-between">
-      <dt className="text-[10px] font-medium uppercase leading-tight tracking-[0.08em] text-ink-3">{label}</dt>
-      <dd className="mt-1 whitespace-nowrap text-sm font-semibold tabular-nums text-ink">{value}</dd>
-    </div>
   );
 }
 

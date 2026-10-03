@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Note, Section } from "./bits";
+import { Note, Section, Stat, deltaTone } from "./bits";
 import { DataTable, NameCell, type Column } from "./DataTable";
 import { delta, kg, money, num, pct } from "@/lib/sales/format";
 import { withQuery } from "@/lib/sales/query";
@@ -36,27 +36,11 @@ export function SkuStatusChip({ status, store = false }: { status: SkuStatus; st
   return <Chip tone={view.tone}>{store && status === "silent" ? "Не брал" : view.label}</Chip>;
 }
 
-/** Изменение к прошлому месяцу: рост — зелёный, падение до −10% — оранжевый, сильнее — красный. */
-function deltaClass(value: number | null): string {
-  if (value == null) return "text-ink-3";
-  return value >= 0 ? "text-ok" : value > -0.1 ? "text-warn" : "text-bad";
-}
-
-function Metric({ label, value, className = "text-ink" }: { label: string; value: React.ReactNode; className?: string }) {
-  return (
-    // Значения ряда — на одной линии, даже если подпись переносится на две строки.
-    <div className="flex min-w-0 flex-col justify-between">
-      <dt className="text-[10px] font-medium uppercase leading-tight tracking-[0.08em] text-ink-3">{label}</dt>
-      <dd className={`mt-1 whitespace-nowrap text-sm font-semibold tabular-nums ${className}`}>{value}</dd>
-    </div>
-  );
-}
-
 function Card({ card, href }: { card: CategoryCard; href: string }) {
   return (
     <Link
       href={href}
-      className="flex h-full flex-col rounded-xl border border-line bg-surface p-4 text-left shadow-sm transition-[border-color,box-shadow] hover:border-accent/40 hover:shadow-md"
+      className="flex h-full flex-col rounded-xl border border-line bg-surface p-4 text-left shadow-sm transition-[border-color,box-shadow] hover:border-accent/40 hover:shadow-md max-lg:active:opacity-75"
     >
       <div className="font-semibold text-ink">{card.name}</div>
       <div className="mt-0.5 text-xs text-ink-3">
@@ -68,17 +52,17 @@ function Card({ card, href }: { card: CategoryCard; href: string }) {
       </div>
 
       <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 text-xs">
-        <Metric label="Факт, кг" value={kg(card.factKg)} />
-        <Metric label="Доля по весу" value={pct(card.weightShare)} />
-        <Metric label="Выручка" value={money(card.revenue)} />
-        <Metric label="АКБ" value={num(card.akb)} />
-        <Metric label="Дистрибуция" value={pct(card.distribution)} />
+        <Stat label="Факт, кг" value={kg(card.factKg)} />
+        <Stat label="Доля по весу" value={pct(card.weightShare)} />
+        <Stat label="Выручка" value={money(card.revenue)} />
+        <Stat label="АКБ" value={num(card.akb)} />
+        <Stat label="Дистрибуция" value={pct(card.distribution)} />
       </dl>
 
       <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 border-t border-dashed border-line pt-3 text-xs">
-        <Metric label="Прогноз, кг" value={kg(card.forecastKg)} />
-        <Metric label="Прогноз выручки" value={money(card.forecastRevenue)} />
-        <Metric label="К прошлому мес." value={delta(card.vsPrevMonth)} className={deltaClass(card.vsPrevMonth)} />
+        <Stat label="Прогноз, кг" value={kg(card.forecastKg)} />
+        <Stat label="Прогноз выручки" value={money(card.forecastRevenue)} />
+        <Stat label="К прошлому мес." value={delta(card.vsPrevMonth)} tone={deltaTone(card.vsPrevMonth)} />
       </dl>
 
       <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
@@ -122,7 +106,7 @@ export function CategoryCards({ cards, scope, query }: { cards: CategoryCard[]; 
 /** Название с переносом: длинные наименования иначе растягивают таблицу. */
 function WrapName({ name, sub }: { name: string; sub?: string | null }) {
   return (
-    <span className="block max-w-[340px] whitespace-normal">
+    <span className="block max-w-[340px] whitespace-normal max-lg:max-w-[44vw]">
       <NameCell name={name} sub={sub} />
     </span>
   );

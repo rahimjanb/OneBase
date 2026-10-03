@@ -13,7 +13,7 @@ const criteria: { key: FlagKind; label: string }[] = [
   { key: "LowData", label: "Мало данных (< 20 визитов)" },
 ];
 
-const control = "h-9 rounded-lg border border-line bg-surface px-3 text-sm text-ink shadow-sm";
+const control = "h-9 rounded-lg border border-line bg-surface px-3 text-sm text-ink shadow-sm max-lg:h-11";
 
 /** Фильтры «Проблемных агентов»: РМ, критерий, вакансии — применяются сразу, без кнопки. */
 export function ProblemsFilters({ directions, vacancies, found }: { directions: { id: string; name: string }[]; vacancies: number; found: number }) {
@@ -61,7 +61,7 @@ export function ProblemsFilters({ directions, vacancies, found }: { directions: 
         />
         Показывать вакансии ({vacancies})
       </label>
-      <span className="rounded-full border border-line bg-surface px-3 py-1 text-xs tabular-nums text-ink-2">{found} ТП с замечаниями</span>
+      <span className="rounded-full border border-line bg-surface px-3 py-1 text-xs tabular-nums text-ink-2 max-lg:py-2">{found} ТП с замечаниями</span>
     </div>
   );
 }

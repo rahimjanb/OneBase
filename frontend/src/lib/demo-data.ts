@@ -61,10 +61,8 @@ export const departments: Department[] = [
   { code: "hr", name: "HR", score: 88, status: "ok", metric: { label: "Удержание команды", value: 78 }, filesCount: 64, foldersCount: 6, updated: "Сегодня" },
 ];
 
-export const attentionItems = [
-  { department: "Финансы", text: "расходы выше плана на 8%" },
-  { department: "Маркетинг", text: "лиды ниже целевого уровня" },
-];
+/** Баннер «Фокус дня» на главной, пока у пользователя нет доступа к находкам AI. */
+export const focusOfDay = "Финансы и маркетинг требуют внимания. Проверьте расходы и темп поступления лидов.";
 
 
 const folder = (

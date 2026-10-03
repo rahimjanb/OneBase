@@ -27,7 +27,7 @@ export default function SalesError({ error, reset }: { error: Error & { digest?:
           <p className="mt-2 text-sm text-ink-2">Последняя синхронизация с Linko завершилась с ошибкой — подробности в «Настройки → Интеграции → Продажи → Linko».</p>
         )}
         {error.digest && <p className="mt-2 text-xs text-ink-3">Код ошибки: {error.digest}</p>}
-        <button type="button" onClick={reset} className="mt-4 h-9 rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong">
+        <button type="button" onClick={reset} className="mt-4 h-9 rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong max-lg:h-11">
           Попробовать снова
         </button>
       </div>

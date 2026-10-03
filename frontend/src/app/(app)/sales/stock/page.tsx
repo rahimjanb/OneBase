@@ -26,9 +26,9 @@ const statuses: { key: StockStatus | "all"; label: string }[] = [
 
 function Chips<T extends string>({ items, current, href }: { items: readonly { key: T; label: string }[]; current: T; href: (key: T) => string }) {
   return (
-    <div className="flex overflow-hidden rounded-lg border border-line text-sm">
+    <div className="no-scrollbar flex max-w-full overflow-x-auto rounded-lg border border-line text-sm">
       {items.map((i) => (
-        <Link key={i.key} href={href(i.key)} className={`px-3 py-1.5 ${current === i.key ? "bg-accent text-white" : "bg-surface text-ink hover:bg-muted"}`}>
+        <Link key={i.key} href={href(i.key)} className={`shrink-0 whitespace-nowrap px-3 py-1.5 max-lg:py-2.5 ${current === i.key ? "bg-accent text-white" : "bg-surface text-ink hover:bg-muted"}`}>
           {i.label}
         </Link>
       ))}
@@ -74,11 +74,11 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
         <Chips items={units} current={unit} href={(k) => href({ unit: k })} />
         <Chips items={statuses} current={status} href={(k) => href({ status: k })} />
         <div className="flex flex-wrap gap-1 text-xs">
-          <Link href={href({ category: null })} className={`rounded-full px-2.5 py-1 ${!category ? "bg-accent-soft font-semibold text-ink" : "text-ink-2 hover:bg-muted"}`}>
+          <Link href={href({ category: null })} className={`rounded-full px-2.5 py-1 max-lg:py-2 ${!category ? "bg-accent-soft font-semibold text-ink" : "text-ink-2 hover:bg-muted"}`}>
             все категории
           </Link>
           {categories.map((c) => (
-            <Link key={c} href={href({ category: c })} className={`rounded-full px-2.5 py-1 ${category === c ? "bg-accent-soft font-semibold text-ink" : "text-ink-2 hover:bg-muted"}`}>
+            <Link key={c} href={href({ category: c })} className={`rounded-full px-2.5 py-1 max-lg:py-2 ${category === c ? "bg-accent-soft font-semibold text-ink" : "text-ink-2 hover:bg-muted"}`}>
               {c}
             </Link>
           ))}
@@ -89,7 +89,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
         <Alert>Остатки ещё не загружены из Linko — они появятся после ближайшей синхронизации (или нажмите «Обновить»).</Alert>
       )}
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiTile label="Остаток" value={kg(t.kg)} unit="кг">
           {t.boxes ? `${num(t.boxes)} коробок (где вес коробки подтверждён)` : "коробки — где вес коробки подтверждён"}
         </KpiTile>

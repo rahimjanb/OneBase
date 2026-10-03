@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ExecutionBar, SummaryCard } from "@/components/sales/bits";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGet } from "@/lib/server-api";
 import { money, num, pct } from "@/lib/sales/format";
@@ -9,35 +8,32 @@ import type { PrimaryCard, PrimaryView } from "@/lib/sales/types";
 export const metadata = { title: "Первичка · Продажи" };
 
 function Card({ title, sub, card, share, href }: { title: string; sub: string; card: PrimaryCard; share: number | null; href: string | null }) {
-  const body = (
-    <div className={`flex h-full flex-col rounded-xl border border-line bg-surface p-5 shadow-sm ${href ? "transition-colors group-hover:border-accent/40" : ""}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 font-semibold text-ink">
-            {title}
-            {href && <ArrowUpRight className="size-4 text-ink-3 group-hover:text-accent-strong" />}
-          </div>
-          <div className="mt-0.5 text-xs text-ink-3">{sub}</div>
-        </div>
-        <div className="text-right">
-          <div className="whitespace-nowrap text-[26px] font-semibold leading-none tabular-nums text-ink">
+  return (
+    <SummaryCard
+      title={title}
+      subtitle={sub}
+      href={href}
+      aside={
+        <div className="shrink-0 text-right">
+          <div className="whitespace-nowrap text-[24px] font-semibold leading-none tracking-tight tabular-nums text-ink">
             {num(card.kg / 1000, 1)} <span className="text-sm font-normal text-ink-3">т</span>
           </div>
           <div className="mt-1 text-xs tabular-nums text-ink-2">{money(card.sumFactory)}</div>
         </div>
+      }
+    >
+      <div
+        className="mt-4"
+        role="progressbar"
+        aria-label="Доля всей отгрузки завода"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={share == null ? undefined : Math.round(share * 100)}
+      >
+        <ExecutionBar value={share} tone="accent" />
       </div>
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (share ?? 0) * 100)}%` }} />
-      </div>
-      <div className="mt-2 text-xs text-ink-2">{pct(share, 1)} всей отгрузки завода</div>
-    </div>
-  );
-  return href ? (
-    <Link href={href} className="group block">
-      {body}
-    </Link>
-  ) : (
-    body
+      <p className="mt-2 text-xs text-ink-2">{pct(share, 1)} всей отгрузки завода</p>
+    </SummaryCard>
   );
 }
 

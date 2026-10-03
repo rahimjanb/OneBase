@@ -28,7 +28,7 @@ function DataChip({ status }: { status: SyncStatus }) {
       </span>
     );
   }
-  return <span className="rounded-full border border-line bg-surface px-3 py-1 text-xs tabular-nums text-ink-2">данные по {dateTime(status.dataAsOf)}</span>;
+  return <span className="rounded-full border border-line bg-surface px-3 py-1 text-xs tabular-nums text-ink-2 max-lg:py-1.5">данные по {dateTime(status.dataAsOf)}</span>;
 }
 
 /**
@@ -81,7 +81,7 @@ export function SyncControls({ initial }: { initial: SyncStatus }) {
             onClick={start}
             disabled={status.isRunning}
             title="Загрузить свежие данные из Linko"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-muted disabled:opacity-60"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-muted disabled:opacity-60 max-lg:h-10 max-lg:text-sm"
           >
             <RefreshCw className={`size-3.5 ${status.isRunning ? "animate-spin" : ""}`} />
             {status.isRunning ? "Обновляется" : "Обновить"}

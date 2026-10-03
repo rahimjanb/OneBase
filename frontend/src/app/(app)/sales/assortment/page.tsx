@@ -40,7 +40,7 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ScopeSelect options={options} />
       </div>
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <KpiTile label="Факт, кг" value={kg(s.factKg)} unit="кг">
           {s.prevMonthKg ? `прошлый месяц целиком: ${kg(s.prevMonthKg)} кг` : "в прошлом месяце продаж не было"}
         </KpiTile>

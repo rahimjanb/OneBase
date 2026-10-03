@@ -1,11 +1,15 @@
 import Link from "next/link";
-import { ArrowRight, ArrowUp, CircleAlert, Clock, Plus, Sparkle } from "lucide-react";
+import { ArrowRight, ArrowUp, CircleAlert, Clock, Sparkle } from "lucide-react";
 import { DepartmentStatusCard } from "@/components/departments";
-import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import { PageBody } from "@/components/shell/PageHeader";
 import { Card, SectionTitle, SelectField } from "@/components/ui";
 import { categoryNames, type AiAlertsView } from "@/lib/ai";
-import { attentionItems, departments, kpis } from "@/lib/demo-data";
-import { apiTry } from "@/lib/server-api";
+import { departments, focusOfDay, kpis } from "@/lib/demo-data";
+import { greeting, todayLabel } from "@/lib/format";
+import { apiSession, apiTry } from "@/lib/server-api";
+import type { Me } from "@/lib/users";
+
+export const metadata = { title: "Обзор · OneBase" };
 
 const trendStyles = {
   up: { icon: ArrowUp, className: "text-ok" },
@@ -14,114 +18,88 @@ const trendStyles = {
 } as const;
 
 export default async function DashboardPage() {
-  // Карточка AI — реальные находки проактивного анализа (если у пользователя есть доступ к консультанту).
-  const alerts = await apiTry<AiAlertsView>("/api/ai/alerts");
-  const top = alerts?.alerts.filter((a) => a.severity !== "Opportunity").slice(0, 2) ?? [];
+  // Приветствие по имени и «Фокус дня» — реальные находки проактивного анализа, если есть доступ к консультанту.
+  const [me, alerts] = await Promise.all([apiSession<Me>("/api/auth/me"), apiTry<AiAlertsView>("/api/ai/alerts")]);
+  const name = me?.firstName || me?.name || me?.login;
+  const problems = alerts?.alerts.filter((a) => a.severity !== "Opportunity").slice(0, 2) ?? [];
+
   return (
-    <>
-      <PageHeader title="Обзор компании" subtitle="Единый центр управления всеми подразделениями" />
-      <PageBody>
-        <div className="flex flex-wrap items-end gap-4">
-          <SelectField label="Период" options={["Последние 30 дней", "Последние 7 дней", "Квартал", "Год"]} />
-          <SelectField label="Отдел" options={["Все отделы", ...departments.map((d) => d.name)]} />
-          <SelectField label="Ответственный" options={["Все сотрудники", "Иван Иванов", "Анна Петрова", "Мария Орлова"]} />
-          <span className="flex items-center gap-2 pb-3 text-xs text-ink-2 sm:ml-auto">
-            <span className="size-2 rounded-full bg-ink-3" />
-            Обновлено 5 минут назад
-          </span>
-        </div>
+    <PageBody>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">{todayLabel()}</div>
+      <h1 className="mt-1.5 text-[26px] font-semibold leading-tight tracking-tight text-ink sm:text-[28px]">
+        {greeting()}
+        {name ? `, ${name}` : ""}!
+      </h1>
+      <p className="mt-1.5 text-sm text-ink-2">Вот что происходит в компании сегодня.</p>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {kpis.map((kpi) => {
-            const trend = trendStyles[kpi.tone];
-            return (
-              <Card key={kpi.label} className="p-5">
-                <div className="text-sm text-ink-2">{kpi.label}</div>
-                <div className="mt-3 text-[32px] font-semibold leading-none tracking-tight">{kpi.value}</div>
-                <div className={`mt-4 flex items-center gap-1.5 text-xs ${trend.className}`}>
-                  <trend.icon className="size-3.5" />
-                  {kpi.trend}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <SelectField options={["Последние 30 дней", "Последние 7 дней", "Квартал", "Год"]} className="max-lg:w-full" />
+        <SelectField options={["Все отделы", ...departments.map((d) => d.name)]} className="max-lg:w-full" />
+        <SelectField options={["Все сотрудники", "Иван Иванов", "Анна Петрова", "Мария Орлова"]} className="max-lg:w-full" />
+        <span className="flex items-center gap-2 text-xs text-ink-3">
+          <span className="size-1.5 rounded-full bg-ink-3" />
+          Обновлено 5 минут назад
+        </span>
+      </div>
 
-        <div className="mt-10">
-          <SectionTitle
-            title="Состояние отделов"
-            subtitle="Показатели и состояние рабочих пространств"
-            action={
-              <Link href="/departments" className="flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline">
-                Все отделы <ArrowRight className="size-3.5" />
-              </Link>
-            }
-          />
-        </div>
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        {kpis.map((kpi) => {
+          const trend = trendStyles[kpi.tone];
+          return (
+            <Card key={kpi.label} className="p-5 max-lg:p-4">
+              <div className="text-sm text-ink-2">{kpi.label}</div>
+              <div className="mt-3 text-[32px] font-semibold leading-none tracking-tight max-lg:text-2xl">{kpi.value}</div>
+              <div className={`mt-4 flex items-center gap-1.5 text-xs ${trend.className}`}>
+                <trend.icon className="size-3.5" />
+                {kpi.trend}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {departments.map((d) => (
-            <DepartmentStatusCard key={d.code} department={d} />
-          ))}
-        </div>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <button
-            type="button"
-            className="flex min-h-[64px] items-center justify-center gap-2 rounded-xl border border-line bg-surface/60 text-sm font-medium text-accent-strong transition-colors hover:border-accent/40 hover:bg-surface xl:self-start"
-          >
-            <Plus className="size-4" />
-            Добавить отдел
-          </button>
-
-          <Card className="p-5">
-            <h3 className="font-semibold">Требует внимания</h3>
-            <ul className="mt-3 space-y-2.5">
-              {attentionItems.map((item) => (
-                <li key={item.department} className="flex items-center gap-3 text-sm text-ink">
-                  <span className="size-2 shrink-0 rounded-full bg-warn" />
-                  <span>
-                    {item.department} · {item.text}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <div className="rounded-xl border border-accent/25 bg-accent-soft p-5 md:col-span-2 xl:col-span-1">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent-strong">
-              <Sparkle className="size-3.5" />
-              AI-консультант
-            </div>
-            {alerts === null ? (
-              <p className="mt-3 text-sm leading-relaxed text-ink">Задайте вопрос о компании — консультант привлечёт AI-сотрудников отделов.</p>
-            ) : top.length === 0 ? (
-              <p className="mt-3 text-sm leading-relaxed text-ink">Проактивный анализ не нашёл проблем в данных OneBase.</p>
-            ) : (
-              <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink">
-                {top.map((a) => (
-                  <li key={a.id}>
-                    <span className={a.severity === "Critical" ? "font-semibold text-bad" : "font-semibold text-warn"}>{categoryNames[a.category] ?? a.category}: </span>
-                    {a.title}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {alerts && alerts.summary.problems > 0 && (
-              <p className="mt-2 text-xs text-ink-2">
-                Проблем: {alerts.summary.problems}, критических: {alerts.summary.critical}, возможностей: {alerts.summary.opportunities}
-              </p>
-            )}
-            <Link href={alerts ? "/ai" : "/consultant"} className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-accent-strong hover:underline">
-              {alerts ? "Открыть AI Dashboard" : "Открыть консультанта"} <ArrowRight className="size-3.5" />
+      <div className="mt-8">
+        <SectionTitle
+          title="Состояние отделов"
+          subtitle="Показатели и динамика команд"
+          action={
+            <Link href="/departments" className="flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline">
+              Все отделы <ArrowRight className="size-3.5" />
             </Link>
-          </div>
-        </div>
+          }
+        />
+      </div>
 
-        <p className="mt-8 text-xs text-ink-3">
-          Единое рабочее пространство · Отделы можно добавлять по мере роста компании
-        </p>
-      </PageBody>
-    </>
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {departments.map((d) => (
+          <DepartmentStatusCard key={d.code} department={d} />
+        ))}
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-accent/20 bg-accent-soft px-5 py-4">
+        <Sparkle className="size-5 shrink-0 text-accent-strong" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-ink">Фокус дня</div>
+          <p className="mt-0.5 text-sm text-ink-2">
+            {alerts === null ? (
+              focusOfDay
+            ) : problems.length === 0 ? (
+              "Проактивный анализ не нашёл проблем в данных OneBase."
+            ) : (
+              problems.map((a, i) => (
+                <span key={a.id}>
+                  {i > 0 && " · "}
+                  <span className={a.severity === "Critical" ? "font-semibold text-bad" : "font-semibold text-warn"}>{categoryNames[a.category] ?? a.category}: </span>
+                  {a.title}
+                </span>
+              ))
+            )}
+          </p>
+        </div>
+        <Link href={alerts ? "/ai" : "/consultant"} className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent-strong hover:underline">
+          {alerts ? "Открыть обзор" : "Открыть консультанта"} <ArrowRight className="size-3.5" />
+        </Link>
+      </div>
+    </PageBody>
   );
 }

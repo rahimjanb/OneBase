@@ -39,7 +39,7 @@ export default async function ProductPage({
       <div className="mb-4 flex items-center gap-2 text-sm text-ink-2">
         Статус в охвате: <SkuStatusChip status={data.status} />
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiTile label="Факт, кг" value={kg(data.factKg)} unit="кг">
           {data.prevMonthKg ? `прошлый месяц целиком: ${kg(data.prevMonthKg)} кг` : "в прошлом месяце продаж не было"}
         </KpiTile>

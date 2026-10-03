@@ -87,3 +87,25 @@ body {
 .hatched {
   background-image: repeating-linear-gradient(-45deg, var(--color-line) 0 4px, transparent 4px 8px);
 }
+
+/* Телефон: без подсветки нажатий iOS/Android и без полосы у горизонтальной прокрутки (кнопки разделов). */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Телефон: поля ввода не меньше 16px — иначе iOS увеличивает страницу при фокусе. */
+@media (width < 64rem) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

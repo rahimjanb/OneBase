@@ -38,7 +38,7 @@ export default async function CategoryPage({
     >
       {card ? (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiTile label="Факт, кг" value={kg(card.factKg)} unit="кг">
               {card.prevMonthKg ? `прошлый месяц целиком: ${kg(card.prevMonthKg)} кг` : "в прошлом месяце продаж не было"}
             </KpiTile>

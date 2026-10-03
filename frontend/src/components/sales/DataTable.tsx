@@ -35,7 +35,7 @@ export function CopyButton({ onCopy }: { onCopy: () => string }) {
           setCopied(false);
         }
       }}
-      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-muted"
+      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-muted max-lg:hidden"
     >
       <Copy className="size-3.5" />
       {copied ? "Скопировано" : "Копировать"}
@@ -84,7 +84,7 @@ export function TableHead<T>({ columns, sort, onSort }: { columns: Column<T>[]; 
             <th
               key={i}
               colSpan={g.span}
-              className={`px-3 pb-1 pt-2 text-center text-[11px] font-semibold uppercase tracking-wide text-ink-3 ${g.label ? "border-b border-line" : ""}`}
+              className={`px-3 pb-1 pt-2 text-center text-[11px] font-semibold uppercase tracking-wide text-ink-3 first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5 ${g.label ? "border-b border-line" : ""}`}
             >
               {g.label}
             </th>
@@ -95,7 +95,7 @@ export function TableHead<T>({ columns, sort, onSort }: { columns: Column<T>[]; 
         {columns.map((c) => {
           const active = sort?.key === c.key;
           return (
-            <th key={c.key} className={`whitespace-nowrap px-3 py-2 font-semibold ${c.align === "right" ? "text-right" : "text-left"}`}>
+            <th key={c.key} className={`whitespace-nowrap px-3 py-2 font-semibold first:sticky first:left-0 first:z-[1] first:bg-surface first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5 ${c.align === "right" ? "text-right" : "text-left"}`}>
               <button
                 type="button"
                 onClick={() => onSort(c.key)}
@@ -169,7 +169,7 @@ export function DataTable<T>({
         </>
       }
     >
-      <div className="-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
+      <div className="-mx-4 overflow-x-auto sm:-mx-5">
         <table className="w-full min-w-max border-collapse text-sm">
           <TableHead columns={columns} sort={sort} onSort={(key) => setSort((s) => nextSort(s, key))} />
           <tbody>
@@ -184,12 +184,13 @@ export function DataTable<T>({
                     onClick={
                       href ? () => router.push(href) : expand ? () => setExpanded((e) => (e === key ? null : key)) : undefined
                     }
-                    className={`border-b border-line ${clickable ? "cursor-pointer hover:bg-muted" : ""}`}
+                    className={`group/row border-b border-line ${clickable ? "cursor-pointer hover:bg-muted active:bg-muted" : ""}`}
                   >
                     {columns.map((c) => (
                       <td
                         key={c.key}
-                        className={`px-3 py-2.5 align-middle ${c.align === "right" ? "text-right tabular-nums" : ""} ${c.className ?? ""}`}
+                        // Первая колонка не уезжает при горизонтальной прокрутке: название видно всегда, особенно на телефоне.
+                        className={`px-3 py-2.5 align-middle max-lg:py-3 first:sticky first:left-0 first:z-[1] first:bg-surface first:pl-4 max-lg:first:shadow-[inset_-1px_0_0_var(--color-line)] first:group-hover/row:bg-muted last:pr-4 sm:first:pl-5 sm:last:pr-5 ${c.align === "right" ? "text-right tabular-nums" : ""} ${c.className ?? ""}`}
                       >
                         {c.render ? c.render(row) : (c.value(row) ?? "—")}
                       </td>
@@ -197,7 +198,7 @@ export function DataTable<T>({
                   </tr>
                   {details && (
                     <tr className="border-b border-line bg-muted/50">
-                      <td colSpan={columns.length} className="px-3 py-3">
+                      <td colSpan={columns.length} className="px-4 py-3 sm:px-5">
                         {details}
                       </td>
                     </tr>
@@ -214,7 +215,7 @@ export function DataTable<T>({
         <button
           type="button"
           onClick={() => setShowAll((s) => !s)}
-          className="mt-3 text-sm font-medium text-accent hover:underline"
+          className="mt-3 text-sm font-medium text-accent hover:underline max-lg:flex max-lg:h-11 max-lg:w-full max-lg:items-center max-lg:justify-center max-lg:rounded-lg max-lg:border max-lg:border-line max-lg:bg-surface"
         >
           {showAll ? "Свернуть" : `Показать все (${sorted.length})`}
         </button>
@@ -227,9 +228,9 @@ export function DataTable<T>({
 /** Ячейка «название + серый подзаголовок». */
 export function NameCell({ name, sub }: { name: string; sub?: string | null }) {
   return (
-    <span className="block min-w-[160px]">
-      <span className="block font-medium text-ink">{name}</span>
-      {sub && <span className="block text-xs text-ink-3">{sub}</span>}
+    <span className="block min-w-[160px] max-lg:min-w-0 max-lg:max-w-[44vw]">
+      <span className="block font-medium text-ink max-lg:truncate">{name}</span>
+      {sub && <span className="block text-xs text-ink-3 max-lg:truncate">{sub}</span>}
     </span>
   );
 }

@@ -1,9 +1,8 @@
-import { KpiTile } from "@/components/sales/bits";
-import { PlanBadge } from "@/components/sales/blocks";
+import { KpiTile, planTone } from "@/components/sales/bits";
 import { PeoplePlansTable, RegionPlansTable } from "@/components/sales/plans";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGet } from "@/lib/server-api";
-import { kg, money, monthLabel, num } from "@/lib/sales/format";
+import { kg, money, monthLabel, num, pct } from "@/lib/sales/format";
 import { apiQuery, periodQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { PlansView } from "@/lib/sales/types";
 
@@ -21,9 +20,9 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       subtitle={`Все планы из Linko за ${monthLabel(period.year, period.month).toLowerCase()} — обновляются автоматически после каждого пересчёта`}
       sp={sp}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiTile label="План ТП, кг" value={kg(data.weightPlan)} badge={<PlanBadge share={data.weightExecution} />}>
-          факт по Linko {kg(data.weightFact)} кг
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiTile label="План ТП, кг" value={kg(data.weightPlan)} tone={data.weightPlan != null ? planTone(data.weightExecution) : "muted"}>
+          факт по Linko {kg(data.weightFact)} кг{data.weightExecution != null && ` · ${pct(data.weightExecution)} плана`}
         </KpiTile>
         <KpiTile label="План по выручке" value={money(data.revenuePlan)} unit={data.revenuePlan != null ? "сум" : undefined}>
           {data.revenuePlan != null ? `факт по Linko ${money(data.revenueFact)}` : "денежных планов нет"}

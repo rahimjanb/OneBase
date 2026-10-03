@@ -33,7 +33,7 @@ export default async function StorePage({ params, searchParams }: { params: Prom
       back={crumbs[crumbs.length - 2]?.href ?? withQuery("/sales", q)}
       sp={sp}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiTile label="Выручка за месяц" value={money(data.revenue)} unit="сум">
           {kg(data.factKg)} кг · {num(data.orders)} заказов
         </KpiTile>

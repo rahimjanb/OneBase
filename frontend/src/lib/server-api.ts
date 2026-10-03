@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -44,11 +45,12 @@ export async function apiGetOrNull<T>(path: string, returnTo?: string): Promise<
 }
 
 /**
- * Данные о текущей сессии для общего layout. Нет cookie — null (proxy уже отправил бы на вход).
+ * Данные о текущей сессии для общего layout и страниц. Нет cookie — null (proxy уже отправил бы на вход).
  * 401 — токен недействителен или пользователь отключён: выход с очисткой cookie и страница входа.
  * API недоступен — null, без выхода: сессия может быть в порядке.
+ * Обёрнуто в React cache: layout и страница в одном запросе получают один ответ, а не два похода к API.
  */
-export async function apiSession<T>(path: string): Promise<T | null> {
+export const apiSession = cache(async <T>(path: string): Promise<T | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   let response: Response;
@@ -59,7 +61,7 @@ export async function apiSession<T>(path: string): Promise<T | null> {
   }
   if (response.status === 401) redirect("/logout");
   return response.ok ? ((await response.json()) as T) : null;
-}
+});
 
 /** Запрос для необязательного блока страницы: нет сессии, прав или ответа — null, без перехода на вход или «нет доступа». */
 export async function apiTry<T>(path: string): Promise<T | null> {

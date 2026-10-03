@@ -7,6 +7,7 @@ import { activeSalesTab, salesTabs, type SalesTab } from "@/components/sales/tab
 
 /**
  * Кнопки разделов в верхней панели — только внутри «Продаж»; в других разделах панель без них.
+ * На телефоне — отдельной строкой под логотипом, прокручивается по горизонтали без полосы прокрутки.
  * Нажатая кнопка подсвечивается сразу, а не после загрузки страницы: иначе ещё секунду горит прежний раздел.
  */
 export function SectionNav() {
@@ -28,7 +29,7 @@ export function SectionNav() {
   const query = period.toString();
 
   return (
-    <nav className="flex min-w-0 gap-2 overflow-x-auto" aria-label="Разделы продаж">
+    <nav className="no-scrollbar order-last flex basis-full gap-2 overflow-x-auto pb-3 lg:order-none lg:min-w-0 lg:shrink lg:basis-auto lg:pb-0" aria-label="Разделы продаж">
       {salesTabs.map((t) => {
         const on = active === t.key;
         return (
@@ -39,7 +40,7 @@ export function SectionNav() {
             onClick={(e) => {
               if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) setPending({ tab: t.key, from: pathname });
             }}
-            className={`inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-sm font-medium shadow-sm transition-colors ${
+            className={`inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-sm font-medium shadow-sm transition-colors max-lg:h-10 max-lg:px-3 ${
               on ? "border-accent bg-accent text-white hover:bg-accent-strong" : "border-line bg-surface text-ink hover:border-accent/40 hover:bg-muted"
             }`}
           >

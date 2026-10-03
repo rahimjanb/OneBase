@@ -50,7 +50,7 @@ export function Section({
     <section className={`mt-6 rounded-xl border border-line bg-surface p-4 sm:p-5 ${className}`}>
       <div className={`flex flex-wrap items-center justify-between gap-3 ${open ? "mb-3" : ""}`}>
         <h2 className="min-w-0 flex-1 text-base font-semibold text-ink">
-          <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="group flex w-full items-center gap-2 text-left">
+          <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="group flex w-full items-center gap-2 text-left max-lg:min-h-11">
             <ChevronRight className={`size-4 shrink-0 text-ink-3 transition-transform ${open ? "rotate-90" : ""}`} />
             <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
               <span>{title}</span>

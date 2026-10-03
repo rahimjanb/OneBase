@@ -8,7 +8,7 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ variant = "outline", size = "md", className = "", ...props }: ButtonProps) {
   const base = "inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50";
-  const sizes = { sm: "h-8 px-3 text-xs", md: "h-9 px-4 text-sm" };
+  const sizes = { sm: "h-8 px-3 text-xs max-lg:h-10", md: "h-9 px-4 text-sm max-lg:h-11" };
   const variants = {
     primary: "bg-accent text-white hover:bg-accent-strong",
     outline: "border border-line bg-surface text-ink hover:bg-muted",
@@ -20,11 +20,13 @@ export function Card({ className = "", ...props }: React.HTMLAttributes<HTMLDivE
   return <div className={`rounded-xl border border-line bg-surface ${className}`} {...props} />;
 }
 
-export function ProgressBar({ value, tone = "accent" }: { value: number; tone?: "accent" | "warn" }) {
+const barTones = { accent: "bg-accent", ok: "bg-ok", warn: "bg-warn" } as const;
+
+export function ProgressBar({ value, tone = "accent" }: { value: number; tone?: keyof typeof barTones }) {
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
       <div
-        className={`h-full rounded-full ${tone === "warn" ? "bg-warn" : "bg-accent"}`}
+        className={`h-full rounded-full ${barTones[tone]}`}
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
       />
     </div>
@@ -56,19 +58,22 @@ export function SearchInput({
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
       <input
         type="search"
-        className="h-10 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="h-10 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm max-lg:h-11 text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         {...props}
       />
     </label>
   );
 }
 
-export function SelectField({ label, options }: { label: string; options: string[] }) {
+/** Выпадающий список; без label — компактный, для строки фильтров. */
+export function SelectField({ label, options, className = "" }: { label?: string; options: string[]; className?: string }) {
   return (
-    <label className="block">
-      <span className="mb-2 block text-sm text-ink-2">{label}</span>
+    <label className={`block ${className}`}>
+      {label && <span className="mb-2 block text-sm text-ink-2">{label}</span>}
       <span className="relative block">
-        <select className="h-11 w-full min-w-[160px] appearance-none rounded-lg border border-line bg-surface pl-3.5 pr-9 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20">
+        <select
+          className={`${label ? "h-11" : "h-10 max-lg:h-11"} w-full min-w-[160px] appearance-none rounded-lg border border-line bg-surface pl-3.5 pr-9 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20`}
+        >
           {options.map((o) => (
             <option key={o}>{o}</option>
           ))}

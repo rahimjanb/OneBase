@@ -39,20 +39,19 @@ const sections: Record<string, string> = {
 /** Карточка показателей отдела (Dashboard, «Отделы»): открывает раздел отдела, а если его нет — файлы в «Общей базе». */
 export function DepartmentStatusCard({ department: d }: { department: Department }) {
   return (
-    <Link href={sections[d.code] ?? `/base/${d.code}`} className="group block">
+    <Link href={sections[d.code] ?? `/base/${d.code}`} className="group block max-lg:active:opacity-75">
       <Card className="h-full p-5 transition-colors group-hover:border-accent/40">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-ink">{d.name}</span>
           <ArrowUpRight className="size-4 text-ink-3 group-hover:text-accent-strong" />
         </div>
-        <div className="mt-3 flex items-center gap-4">
+        <div className="mt-3 flex items-center gap-3">
           <span className="text-[28px] font-semibold leading-none tracking-tight">{percent(d.score)}</span>
           <StatusDot status={d.status} />
         </div>
         <div className="mt-4 text-xs text-ink-2">{d.metric.label}</div>
-        <div className="mt-2 flex items-center gap-4">
-          <ProgressBar value={d.metric.value} tone={d.status === "attention" ? "warn" : "accent"} />
-          <span className="w-10 shrink-0 text-right text-xs font-semibold text-ink">{percent(d.metric.value)}</span>
+        <div className="mt-2" title={`${d.metric.label}: ${percent(d.metric.value)}`}>
+          <ProgressBar value={d.metric.value} tone={d.status === "attention" ? "warn" : "ok"} />
         </div>
       </Card>
     </Link>
@@ -62,7 +61,7 @@ export function DepartmentStatusCard({ department: d }: { department: Department
 /** Карточка рабочего пространства отдела в «Общей базе». */
 export function DepartmentWorkspaceCard({ department: d }: { department: Department }) {
   return (
-    <Link href={`/base/${d.code}`} className="group block">
+    <Link href={`/base/${d.code}`} className="group block max-lg:active:opacity-75">
       <Card className="h-full p-5 transition-colors group-hover:border-accent/40">
         <div className="flex items-center gap-3">
           <DepartmentIcon code={d.code} />

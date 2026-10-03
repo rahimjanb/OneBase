@@ -202,7 +202,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
   );
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-10.5rem)] max-w-[1800px] lg:h-[calc(100dvh-4rem)]">
+    <div className="mx-auto flex h-[calc(100dvh-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] max-w-[1800px] lg:h-[calc(100dvh-4rem)]">
       <aside className="hidden w-72 shrink-0 border-r border-line bg-surface lg:block">{historyPanel}</aside>
 
       {historyOpen && (
@@ -218,13 +218,13 @@ export function Consultant({ status, conversations: initialList, conversation, c
             type="button"
             onClick={() => setHistoryOpen(true)}
             aria-label="История чатов"
-            className="grid size-9 place-items-center rounded-lg border border-line text-ink-2 hover:bg-muted lg:hidden"
+            className="grid size-10 place-items-center rounded-lg border border-line text-ink-2 hover:bg-muted lg:hidden"
           >
             <History className="size-4" />
           </button>
           <Sparkle className="hidden size-4 text-accent-strong sm:block" />
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-ink">{activeId ? title : "Консультант"}</h1>
-          <Link href="/ai" className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-2 hover:bg-muted hover:text-ink">
+          <Link href="/ai" className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-2 hover:bg-muted hover:text-ink max-lg:py-2.5">
             AI Dashboard
           </Link>
           {activeId && (
@@ -268,7 +268,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
                       type="button"
                       disabled={!status.ready}
                       onClick={() => send(q)}
-                      className="rounded-full border border-line bg-surface px-3.5 py-1.5 text-sm text-ink-2 hover:border-accent/40 hover:text-ink disabled:opacity-50"
+                      className="rounded-full border border-line bg-surface px-3.5 py-1.5 text-sm text-ink-2 hover:border-accent/40 hover:text-ink max-lg:py-2.5 disabled:opacity-50"
                     >
                       {q}
                     </button>
@@ -324,7 +324,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
                 type="submit"
                 aria-label="Отправить"
                 disabled={!status.ready || busy || input.trim() === ""}
-                className="grid size-10 shrink-0 place-items-center rounded-lg bg-accent text-white hover:bg-accent-strong disabled:opacity-40"
+                className="grid size-10 shrink-0 place-items-center rounded-lg bg-accent text-white hover:bg-accent-strong disabled:opacity-40 max-lg:size-11"
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
               </button>

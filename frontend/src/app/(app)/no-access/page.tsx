@@ -14,10 +14,10 @@ export default function NoAccessPage() {
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           {/* Обычная ссылка, не Link: Link заранее загружает адрес, а /logout при загрузке удаляет сессию. */}
-          <a href="/logout" className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong">
+          <a href="/logout" className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong max-lg:h-11">
             Войти под другим пользователем
           </a>
-          <Link href="/" className="inline-flex h-9 items-center rounded-lg border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-muted">
+          <Link href="/" className="inline-flex h-9 items-center rounded-lg border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-muted max-lg:h-11">
             На главную
           </Link>
         </div>

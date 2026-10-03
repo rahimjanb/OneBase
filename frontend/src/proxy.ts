@@ -21,6 +21,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Кроме статики, картинок и /bff (прокси к API сам отвечает 401 без сессии).
-  matcher: ["/((?!_next/static|_next/image|bff/|favicon.ico|robots.txt|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|txt|woff2?)$).*)"],
+  // Кроме статики, картинок, /bff (прокси к API сам отвечает 401 без сессии) и файлов веб-приложения:
+  // манифест, service worker, офлайн-страницу и иконки браузер запрашивает без входа — иначе установка не работает.
+  matcher: [
+    "/((?!_next/static|_next/image|bff/|favicon.ico|robots.txt|manifest.webmanifest|sw.js|offline.html|icons/|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|txt|woff2?)$).*)",
+  ],
 };

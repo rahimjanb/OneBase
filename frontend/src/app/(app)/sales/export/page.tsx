@@ -1,4 +1,4 @@
-import { CollapsedSections, KpiTile, Note } from "@/components/sales/bits";
+import { CollapsedSections, KpiTile, Note, deltaTone } from "@/components/sales/bits";
 import { CategoryCards } from "@/components/sales/categories";
 import { ExportAgentsTable, ExportMarketsTable, ProductsTable } from "@/components/sales/assortment-tables";
 import { SalesFrame } from "@/components/sales/SalesFrame";
@@ -27,7 +27,7 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
         <p className="rounded-xl border border-line bg-surface px-4 py-8 text-center text-sm text-ink-3">За месяц продаж филиала «Завод» в Linko нет.</p>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiTile label="Факт, кг" value={kg(s.factKg)}>
               прогноз {kg(s.forecastKg)} кг
             </KpiTile>
@@ -37,7 +37,7 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
             <KpiTile label="АКБ" value={num(s.akb)}>
               точек с отгрузкой
             </KpiTile>
-            <KpiTile label="К прошлому месяцу" value={delta(s.vsPrevMonth)}>
+            <KpiTile label="К прошлому месяцу" value={delta(s.vsPrevMonth)} tone={deltaTone(s.vsPrevMonth)}>
               прошлый месяц {kg(s.prevMonthKg)} кг
             </KpiTile>
           </div>

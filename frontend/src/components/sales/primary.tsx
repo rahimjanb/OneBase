@@ -52,14 +52,14 @@ function MonthTiles({ data }: { data: PrimaryView }) {
   const fact = data.monthTotal.kg;
   const exec = plan ? fact / plan : null;
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[87.5rem]:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 min-[87.5rem]:grid-cols-5">
       <KpiTile label="План месяца" value={plan != null ? kg(plan) : "—"} unit={plan != null ? "кг" : undefined}>
         {plan != null ? `отгрузка дилерам за ${monthName(data.month)}` : "в Linko плана первички нет"}
       </KpiTile>
       <KpiTile label="Отгружено" value={kg(fact)} unit="кг">
         {num(data.monthTotal.boxes)} коробок · {money(data.monthTotal.sumFactory)}
       </KpiTile>
-      <KpiTile label="Выполнение" value={pct(exec, 1)}>
+      <KpiTile label="Выполнение" value={pct(exec, 1)} tone={exec == null ? "muted" : barTone(exec)}>
         {plan != null ? (
           <>
             {kg(fact)} из {kg(plan)} кг
@@ -436,7 +436,7 @@ function YtdTiles({ data }: { data: PrimaryView }) {
   const margin = y.sumDealer - y.sumFactory;
   const exec = data.planYtdKg ? y.kg / data.planYtdKg : null;
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[87.5rem]:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 min-[87.5rem]:grid-cols-5">
       <KpiTile label="Отгружено" value={tons(y.kg)} unit="т">
         {num(data.ytdArticles)} артикулов
       </KpiTile>
@@ -449,7 +449,7 @@ function YtdTiles({ data }: { data: PrimaryView }) {
       <KpiTile label="Возвраты" value={tons(data.ytdReturnsKg)} unit="т">
         {num(data.ytdReturnLines)} строк · {pct(y.kg ? data.ytdReturnsKg / y.kg : null, 1)} от отгруженного
       </KpiTile>
-      <KpiTile label="Выполнение" value={pct(exec, 1)}>
+      <KpiTile label="Выполнение" value={pct(exec, 1)} tone={exec == null ? "muted" : barTone(exec)}>
         {data.planYtdKg != null ? `план ${tons(data.planYtdKg)} т` : "в Linko плана первички нет"}
       </KpiTile>
     </div>
@@ -606,7 +606,7 @@ export function PrimaryExport({ data }: { data: PrimaryView }) {
       <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
         <UnitSwitch unit={unit} onChange={setUnit} only={["kg", "sumFactory"]} />
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3">
         <KpiTile label="Отгружено" value={kg(fact.kg)} unit="кг">
           {money(fact.sumFactory)} · {num(data.monthTransfers)} заказов · {num(data.dealers.filter((d) => d.month.kg).length)} стран
         </KpiTile>
@@ -623,7 +623,7 @@ export function PrimaryExport({ data }: { data: PrimaryView }) {
           {monthsDone} мес. · по {date(data.dataThrough)}
         </span>
       </h2>
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiTile label="Отгружено" value={tons(data.ytd.kg)} unit="т">
           {num(data.ytdArticles)} артикулов
         </KpiTile>

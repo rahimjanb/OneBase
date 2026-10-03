@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#16213a" />
+    <title>Нет соединения · OneBase</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --page: #f6f8fb;
+        --surface: #ffffff;
+        --line: #e3e8ef;
+        --ink: #111b2e;
+        --ink-2: #56657d;
+        --accent: #3b76f6;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page: #0e1422;
+          --surface: #151d2e;
+          --line: #27324a;
+          --ink: #e7ebf3;
+          --ink-2: #a7b2c6;
+          --accent: #5b8cff;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--page);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+      .card {
+        width: 100%;
+        max-width: 360px;
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface);
+        text-align: center;
+      }
+      .logo {
+        width: 64px;
+        height: 64px;
+        border-radius: 14px;
+      }
+      h1 {
+        margin: 20px 0 8px;
+        font-size: 18px;
+      }
+      p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--ink-2);
+      }
+      button {
+        margin-top: 20px;
+        height: 44px;
+        width: 100%;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <!-- Иконка лежит в кэше service worker вместе с этой страницей. -->
+      <img class="logo" src="/icons/icon-192.png" alt="OneBase" width="64" height="64" />
+      <h1>Нет соединения</h1>
+      <p>Сервер OneBase сейчас недоступен или нет интернета. Данные в системе сохранены — попробуйте снова, когда появится сеть.</p>
+      <button type="button" onclick="location.reload()">Повторить</button>
+    </main>
+  </body>
+</html>
