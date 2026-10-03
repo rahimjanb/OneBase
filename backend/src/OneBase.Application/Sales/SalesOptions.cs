@@ -167,6 +167,12 @@ public sealed class SalesOptions
     /// <summary>За сколько дней считать скорость продаж для запаса на складах.</summary>
     public int StockVelocityDays { get; set; } = 90;
 
+    /// <summary>
+    /// Прайс Linko с входной ценой дилера («Дилерга кириш нарх») — по нему считается стоимость рекомендуемого остатка:
+    /// штуки × цена за единицу учёта, последняя по времени строка товара.
+    /// </summary>
+    public string StockPriceList { get; set; } = "Дилерга кириш нарх";
+
     public bool IsFactoryStock(string? stockName) =>
         stockName is { } name && FactoryStocks.Any(s => string.Equals(s.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
 

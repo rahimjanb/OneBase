@@ -7,7 +7,7 @@ export const salesTabs: { key: SalesTab; label: string; href: string; icon: type
   { key: "analytics", label: "Вторичка", href: "/sales", icon: ChartColumn },
   { key: "assortment", label: "Ассортимент", href: "/sales/assortment", icon: LayoutGrid },
   { key: "primary", label: "Первичка", href: "/sales/primary", icon: Factory },
-  { key: "stock", label: "Остатки", href: "/sales/stock", icon: Boxes },
+  { key: "stock", label: "Рек. остаток", href: "/sales/stock", icon: Boxes },
   { key: "plans", label: "Планы", href: "/sales/plans", icon: Target },
   { key: "problems", label: "Проблемные агенты", href: "/sales/problems", icon: TriangleAlert },
   // «Как считается» (/sales/method) без кнопки: страница открывается по адресу.

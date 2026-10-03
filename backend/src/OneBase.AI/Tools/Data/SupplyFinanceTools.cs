@@ -12,12 +12,13 @@ namespace OneBase.AI.Tools.Data;
 internal sealed class GetInventoryTool(StockService stock) : DataTool
 {
     public override string Name => "get_inventory";
-    public override string Title => "Остатки на складах";
+    public override string Title => "Рекомендуемый остаток на складах";
     public override string Source => KnowledgeSources.SalesStock;
 
     public override string Description =>
-        "Остатки товаров на складах регионов (кг, коробки) и скорость продаж: дни покрытия, дефицит (меньше 15 дней продаж), затоварка (больше 30 дней), " +
-        "«не продаётся» (остаток есть, продаж нет); отдельно — склад завода. Можно по одному региону.";
+        "Рекомендуемый остаток: запас на складах регионов (кг, коробки, стоимость по входной цене дилера) и скорость продаж за 90 дней: дни покрытия, " +
+        "запас на 15 и 30 дней, дефицит (меньше 15 дней продаж), затоварка (больше 30 дней), «не продаётся» (остаток есть, продаж нет); " +
+        "отдельно — склад завода (его запас меряется скоростью всей страны). Можно по одному региону.";
 
     public override JsonElement InputSchema { get; } = Schema(RegionArg);
 
@@ -44,6 +45,9 @@ internal sealed class GetInventoryTool(StockService stock) : DataTool
             KgPerDay = R(i.KgPerDay, 1),
             DaysOfCover = R(i.DaysOfCover, 1),
             NeedFor15DaysKg = R(i.Need15Kg),
+            NeedFor30DaysKg = R(i.Need30Kg),
+            PricePerUnit = R(i.Price),
+            ValueSum = R(i.ValueSum),
         };
 
         return Data(new
@@ -57,8 +61,11 @@ internal sealed class GetInventoryTool(StockService stock) : DataTool
             Overstock = known.Where(i => i.Status == StockStatuses.Overstock).OrderByDescending(i => i.DaysOfCover).Take(10).Select(Item),
             NotSelling = known.Where(i => i.Status == StockStatuses.Dead).OrderByDescending(i => i.Kg).Take(10).Select(Item),
             ItemsWithoutWeight = view.Totals.WithoutWeight,
-            Note = "Остатки Linko — в штуках; кг и коробки пересчитаны по весу штуки и коробки. Дни покрытия = кг ÷ продажи кг в день за период скорости.",
-        }, new DataSource(region is null ? "OneBase → Продажи → Остатки" : $"OneBase → Продажи → Остатки → {region.Name}",
+            ItemsWithoutPrice = view.Totals.WithoutPrice,
+            PriceList = view.PriceList,
+            Note = "Остатки Linko — в штуках; кг и коробки пересчитаны по весу штуки и коробки. Дни покрытия = кг ÷ продажи кг в день за период скорости. " +
+                "Стоимость = штуки × входная цена дилера за единицу учёта (без пересчёта через вес).",
+        }, new DataSource(region is null ? "OneBase → Продажи → Рек. остаток" : $"OneBase → Продажи → Рек. остаток → {region.Name}",
             view.SyncedAt is { } at ? $"на {at.ToOffset(TimeSpan.FromHours(5)):dd.MM.yyyy HH:mm}" : null,
             region is null ? "/sales/stock" : $"/sales/stock?region={region.Id}"));
     }
@@ -72,6 +79,8 @@ internal sealed class GetInventoryTool(StockService stock) : DataTool
         DeficitSku = t.Deficit,
         OverstockSku = t.Overstock,
         NotSellingSku = t.Dead,
+        ValueSum = R(t.ValueSum),
+        SkuWithoutPrice = t.WithoutPrice,
     };
 }
 

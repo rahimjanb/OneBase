@@ -25,6 +25,10 @@ public static class StockStatuses
     public const string Unknown = "unknown";
 }
 
+/// <summary>
+/// Товар в рекомендуемом остатке. Price — входная цена дилера за единицу учёта (прайс Sales:StockPriceList, последняя по времени),
+/// ValueSum — остаток × цена; Need15Kg и Need30Kg — скорость × горизонт.
+/// </summary>
 public sealed record StockItem(
     long ProductId,
     string Name,
@@ -41,6 +45,9 @@ public sealed record StockItem(
     decimal? KgPerDay,
     decimal? DaysOfCover,
     decimal? Need15Kg,
+    decimal? Need30Kg,
+    decimal? Price,
+    decimal? ValueSum,
     string Status,
     IReadOnlyDictionary<string, StockCell> Regions,
     StockCell? Factory);
@@ -48,13 +55,29 @@ public sealed record StockItem(
 /// <summary>Склад, не сопоставленный ни с регионом, ни с заводом: в остаток страны не входит, показывается отдельно.</summary>
 public sealed record OtherStock(long StockId, string Name, decimal Pieces, decimal? Kg, int Items);
 
-public sealed record StockTotals(decimal? Kg, decimal? Boxes, decimal? KgPerDay, decimal? DaysOfCover, int Deficit, int Overstock, int Dead, int WithoutWeight);
+/// <summary>
+/// Итоги: кг, коробки, скорость и дни запаса, SKU по статусам; ValueSum — стоимость запаса по входной цене (только SKU с ценой),
+/// WithoutPrice — SKU с остатком, у которых цены в прайсе нет; ApproxWeight — SKU, у которых вес единицы взят из названия.
+/// </summary>
+public sealed record StockTotals(
+    decimal? Kg,
+    decimal? Boxes,
+    decimal? KgPerDay,
+    decimal? DaysOfCover,
+    int Deficit,
+    int Overstock,
+    int Dead,
+    int WithoutWeight,
+    decimal ValueSum,
+    int WithoutPrice,
+    int ApproxWeight);
 
 public sealed record StockView(
     DateTimeOffset? SyncedAt,
     int VelocityDays,
     DateOnly VelocityFrom,
     DateOnly VelocityTo,
+    string? PriceList,
     IReadOnlyList<StockRegion> Regions,
     StockRegion? Factory,
     IReadOnlyList<StockItem> Items,
@@ -64,8 +87,9 @@ public sealed record StockView(
 
 /// <summary>
 /// Рекомендуемый остаток: остатки Linko (штуки) по складам регионов → кг по весу штуки → коробки по весу коробки,
-/// скорость продаж (кг в день) — из вторички за последние StockVelocityDays дней по региону склада.
-/// Склад региона — склад с тем же названием, что у региона; склад завода — в остаток страны не входит.
+/// скорость продаж (кг в день) — из вторички за последние StockVelocityDays дней по региону склада, стоимость — по входной
+/// цене дилера. Склад региона — склад с тем же названием, что у региона; склад завода в остаток страны не входит,
+/// а его запас меряется скоростью продаж всей страны — своих продаж у завода нет.
 /// </summary>
 public sealed class StockService(IAppDbContext db, SalesOptions options, Microsoft.Extensions.Caching.Memory.IMemoryCache cache, SalesCacheSignal signal)
 {
@@ -124,13 +148,28 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Microso
             .Where(v => v.BranchId is { } b && regionOfBranch.ContainsKey(b))
             .GroupBy(v => (Region: regionOfBranch[v.BranchId!.Value], v.ProductId))
             .ToDictionary(g => g.Key, g => g.Sum(x => x.Kg) / options.StockVelocityDays);
+        // Скорость всей страны по товару — для склада завода, у которого своих продаж нет.
+        var countryPerDay = perDay.GroupBy(kv => kv.Key.ProductId).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
+
+        // Входная цена дилера за единицу учёта: последняя по времени строка товара в прайсе Sales:StockPriceList.
+        var priceList = (await db.LinkoPriceLists.AsNoTracking().Select(p => new { p.Id, p.Name }).ToListAsync(ct))
+            .FirstOrDefault(p => string.Equals(p.Name.Trim(), options.StockPriceList.Trim(), StringComparison.OrdinalIgnoreCase));
+        var prices = priceList is null
+            ? new Dictionary<long, decimal>()
+            : (await db.LinkoPriceListItems.AsNoTracking()
+                    .Where(i => i.PriceListId == priceList.Id && i.ProductId != null)
+                    .Select(i => new { ProductId = i.ProductId!.Value, i.Price, i.Tm })
+                    .ToListAsync(ct))
+                .GroupBy(i => i.ProductId)
+                .Select(g => (g.Key, Price: StockMath.LatestPrice(g.Select(i => (i.Price, i.Tm)))))
+                .Where(x => x.Price is not null)
+                .ToDictionary(x => x.Key, x => x.Price!.Value);
 
         var products = await db.LinkoProducts.AsNoTracking().Select(p => new { p.Id, p.Name, p.Code, p.TypeId }).ToDictionaryAsync(p => p.Id, ct);
         var types = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
         var categories = SalesCategories.Build(options.Categories, types);
 
         var scopeRegions = regionId is null ? regionStocks : regionStocks.Where(r => r.Id == regionId).ToList();
-        var scopeStockIds = scopeRegions.Select(r => r.StockId).ToHashSet();
         var scopeRegionIds = scopeRegions.Select(r => r.Id).ToHashSet();
 
         var productIds = balances.Where(b => regionStockIds.Contains(b.StockId) || b.StockId == factory?.StockId).Select(b => b.ProductId)
@@ -138,11 +177,12 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Microso
             .Distinct();
 
         var items = new List<StockItem>();
+        var factoryRows = new List<TotalRow>();
         foreach (var productId in productIds)
         {
             var product = products.GetValueOrDefault(productId);
-            var unitKg = unitWeights.GetValueOrDefault(productId);
             var pack = StockMath.ParsePack(product?.Name);
+            var (unitKg, unitSource) = StockMath.UnitWeight(unitWeights.GetValueOrDefault(productId), pack);
             var (boxKg, boxNote) = pack?.BoxKg is not { } parsedBox
                 ? (null, "в названии нет веса коробки")
                 : unitKg is null
@@ -150,16 +190,23 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Microso
                     : StockMath.BoxConsistent(parsedBox, unitKg.Value)
                         ? ((decimal?)parsedBox, $"по названию: {parsedBox:0.###} кг = {Math.Round(parsedBox / unitKg.Value):0} × {unitKg:0.###} кг")
                         : (null, $"в названии {parsedBox:0.###} кг — не делится на вес штуки {unitKg:0.###} кг, коробки не считаются");
+            var price = prices.TryGetValue(productId, out var pr) ? pr : (decimal?)null;
 
-            StockCell Cell(long stockId, string? region)
+            StockCell Cell(long stockId, decimal? day)
             {
                 var pieces = balanceOf.GetValueOrDefault((productId, stockId));
                 var kg = StockMath.Kg(pieces, unitKg);
-                var day = region is null ? null : perDay.TryGetValue((region, productId), out var v) ? v : (decimal?)0;
                 return new StockCell(pieces, kg, day, kg is { } k && day is > 0 ? k / day.Value : null);
             }
 
-            var cells = regionStocks.ToDictionary(r => r.Id, r => Cell(r.StockId, r.Id));
+            var cells = regionStocks.ToDictionary(r => r.Id, r => Cell(r.StockId, perDay.TryGetValue((r.Id, productId), out var v) ? v : 0));
+            var factoryCell = factory is null ? null : Cell(factory.StockId, countryPerDay.GetValueOrDefault(productId));
+            if (factoryCell is { Pieces: not 0 })
+            {
+                factoryRows.Add(new TotalRow(factoryCell.Kg, StockMath.Boxes(factoryCell.Kg, boxKg), factoryCell.KgPerDay, null,
+                    StockMath.ValueSum(factoryCell.Pieces, price), true, price is not null, unitSource == WeightSources.Name));
+            }
+
             var scopeCells = scopeRegions.Select(r => cells[r.Id]).ToList();
             var pieces = scopeCells.Sum(c => c.Pieces);
             decimal? kgTotal = unitKg is null ? null : scopeCells.Sum(c => c.Kg ?? 0);
@@ -174,7 +221,7 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Microso
 
             if (pieces == 0 && kgPerDay == 0)
             {
-                continue; // в выбранной области ни остатка, ни продаж
+                continue; // в выбранной области ни остатка, ни продаж (остаток завода учтён в его итоге)
             }
 
             items.Add(new StockItem(
@@ -184,7 +231,7 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Microso
                 categories.NameOf(group),
                 SalesCategories.IsConfigured(group),
                 unitKg,
-                unitKg is null ? WeightSources.None : WeightSources.Orders,
+                unitSource,
                 boxKg,
                 boxNote,
                 pieces,
@@ -193,9 +240,12 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Microso
                 kgPerDay,
                 days,
                 kgPerDay * 15,
+                kgPerDay * 30,
+                price,
+                StockMath.ValueSum(pieces, price),
                 status,
                 cells,
-                factory is null ? null : Cell(factory.StockId, null)));
+                factoryCell));
         }
 
         var others = balances
@@ -217,17 +267,21 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Microso
             options.StockVelocityDays,
             velocityFrom,
             velocityTo,
+            priceList?.Name.Trim(),
             regionStocks,
             factory,
             items.OrderBy(i => i.InReport ? 0 : 1).ThenBy(i => i.Category).ThenByDescending(i => i.Kg ?? 0).ToList(),
             others,
-            Totals(items, i => (i.Kg, i.Boxes, i.KgPerDay, i.Status)),
-            factory is null ? null : Totals(items.Where(i => i.Factory is not null), i => (i.Factory!.Kg, StockMath.Boxes(i.Factory.Kg, i.BoxKg), null, null)));
+            Totals(items.Select(i => new TotalRow(i.Kg, i.Boxes, i.KgPerDay, i.Status, i.ValueSum, i.Pieces != 0, i.Price is not null, i.UnitKgSource == WeightSources.Name))),
+            factory is null ? null : Totals(factoryRows));
     }
 
-    private static StockTotals Totals(IEnumerable<StockItem> source, Func<StockItem, (decimal? Kg, decimal? Boxes, decimal? PerDay, string? Status)> pick)
+    /// <summary>Строка для итогов: у склада завода PerDay — скорость всей страны, Status не считается.</summary>
+    private sealed record TotalRow(decimal? Kg, decimal? Boxes, decimal? PerDay, string? Status, decimal? Value, bool HasStock, bool HasPrice, bool ApproxWeight);
+
+    private static StockTotals Totals(IEnumerable<TotalRow> source)
     {
-        var rows = source.Select(pick).ToList();
+        var rows = source.ToList();
         var kg = rows.Sum(r => r.Kg ?? 0);
         var perDay = rows.Sum(r => r.PerDay ?? 0);
         return new StockTotals(
@@ -238,6 +292,9 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Microso
             rows.Count(r => r.Status == StockStatuses.Deficit),
             rows.Count(r => r.Status == StockStatuses.Overstock),
             rows.Count(r => r.Status == StockStatuses.Dead),
-            rows.Count(r => r.Status == StockStatuses.Unknown));
+            rows.Count(r => r.Status == StockStatuses.Unknown),
+            rows.Sum(r => r.Value ?? 0),
+            rows.Count(r => r.HasStock && !r.HasPrice),
+            rows.Count(r => r.HasStock && r.ApproxWeight));
     }
 }

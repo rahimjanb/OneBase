@@ -12,6 +12,9 @@ public static class WeightSources
     /// <summary>Σ total_weight ÷ Σ amount по строкам заказов — единственное место, где Linko даёт штуки и кг одной строкой.</summary>
     public const string Orders = "orders";
 
+    /// <summary>Продаж за год не было — вес единицы взят из фасовки в названии («(8-шт по 0,5-кг)»); кг и коробки — оценка (≈).</summary>
+    public const string Name = "name";
+
     /// <summary>Не нашлось ни продаж, ни проверяемой фасовки — в кг и коробки не пересчитывается.</summary>
     public const string None = "none";
 }

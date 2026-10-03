@@ -557,7 +557,8 @@ export type StockItem = {
   category: string;
   inReport: boolean;
   unitKg: number | null;
-  unitKgSource: "orders" | "none";
+  /** orders — по строкам заказов; name — из фасовки в названии (кг и коробки — оценка, ≈); none — веса нет. */
+  unitKgSource: "orders" | "name" | "none";
   boxKg: number | null;
   boxNote: string;
   pieces: number;
@@ -566,6 +567,11 @@ export type StockItem = {
   kgPerDay: number | null;
   daysOfCover: number | null;
   need15Kg: number | null;
+  need30Kg: number | null;
+  /** Входная цена дилера за единицу учёта; null — товара нет в прайсе. */
+  price: number | null;
+  /** Остаток × входная цена. */
+  valueSum: number | null;
   status: StockStatus;
   regions: Record<string, StockCell>;
   factory: StockCell | null;
@@ -580,6 +586,11 @@ export type StockTotals = {
   overstock: number;
   dead: number;
   withoutWeight: number;
+  /** Стоимость запаса по входной цене — только SKU с ценой. */
+  valueSum: number;
+  withoutPrice: number;
+  /** SKU, у которых вес единицы взят из названия. */
+  approxWeight: number;
 };
 
 export type StockView = {
@@ -587,6 +598,8 @@ export type StockView = {
   velocityDays: number;
   velocityFrom: string;
   velocityTo: string;
+  /** Прайс входной цены дилера; null — не найден в Linko. */
+  priceList: string | null;
   regions: { id: string; name: string; stockId: number }[];
   factory: { id: string; name: string; stockId: number } | null;
   items: StockItem[];

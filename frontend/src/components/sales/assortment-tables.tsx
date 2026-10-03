@@ -221,6 +221,10 @@ const stockStatus: Record<StockStatus, { label: string; cls: string }> = {
 export function StockTable({ data, unit }: { data: StockView; unit: "kg" | "boxes" | "pieces" }) {
   const value = (r: StockItem) => (unit === "boxes" ? r.boxes : unit === "pieces" ? r.pieces : r.kg);
   const fmt = (v: number | null) => (unit === "kg" ? kg(v) : num(v, unit === "boxes" ? 1 : 0));
+  // Вес из названия — оценка: кг и коробки помечаются «≈» (штуки — как в Linko, без пометки).
+  const approx = (r: StockItem) => r.unitKgSource === "name";
+  const mark = (r: StockItem, text: string) => (approx(r) && unit !== "pieces" ? `≈ ${text}` : text);
+  const priceList = data.priceList ?? "вход дилеру";
   const columns: Column<StockItem>[] = [
     { key: "name", label: "Наименование", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
     { key: "cat", label: "Категория", value: (r) => r.category, render: (r) => categoryCell(r.category, r.inReport) },
@@ -229,12 +233,25 @@ export function StockTable({ data, unit }: { data: StockView; unit: "kg" | "boxe
       label: "Вес штуки",
       align: "right",
       value: (r) => r.unitKg,
-      render: (r) => <span title={r.boxNote}>{r.unitKg == null ? "—" : `${num(r.unitKg, 3)} кг`}</span>,
+      render: (r) => (
+        <span title={approx(r) ? `Продаж за год не было — вес из названия (оценка). ${r.boxNote}` : `По строкам заказов за год. ${r.boxNote}`}>
+          {r.unitKg == null ? "—" : `${approx(r) ? "≈ " : ""}${num(r.unitKg, 3)} кг`}
+        </span>
+      ),
     },
-    { key: "stock", label: unit === "boxes" ? "Коробок" : unit === "pieces" ? "Штук" : "Остаток, кг", align: "right", value, render: (r) => fmt(value(r)) },
+    { key: "stock", label: unit === "boxes" ? "Коробок" : unit === "pieces" ? "Штук" : "Остаток, кг", align: "right", value, render: (r) => mark(r, fmt(value(r))) },
     { key: "perDay", label: "Продажи в день, кг", align: "right", value: (r) => r.kgPerDay, render: (r) => kg(r.kgPerDay) },
-    { key: "days", label: "Хватит, дн.", align: "right", value: (r) => r.daysOfCover, render: (r) => num(r.daysOfCover) },
+    { key: "days", label: "Хватит, дн.", align: "right", value: (r) => r.daysOfCover, render: (r) => (r.daysOfCover == null ? "—" : `${approx(r) ? "≈ " : ""}${num(r.daysOfCover)}`) },
     { key: "need", label: "Запас на 15 дн., кг", align: "right", value: (r) => r.need15Kg, render: (r) => kg(r.need15Kg) },
+    { key: "need30", label: "Запас на 30 дн., кг", align: "right", value: (r) => r.need30Kg, render: (r) => kg(r.need30Kg) },
+    {
+      key: "price",
+      label: "Цена входа",
+      align: "right",
+      value: (r) => r.price,
+      render: (r) => <span title={r.price == null ? `Товара нет в прайсе «${priceList}»` : `За единицу учёта, прайс «${priceList}»`}>{r.price == null ? "—" : num(r.price)}</span>,
+    },
+    { key: "value", label: "Сумма запаса", align: "right", value: (r) => r.valueSum, render: (r) => money(r.valueSum) },
     {
       key: "status",
       label: "Статус",
@@ -250,7 +267,7 @@ export function StockTable({ data, unit }: { data: StockView; unit: "kg" | "boxe
       columns={columns}
       rows={data.items}
       rowKey={(r) => String(r.productId)}
-      note="Linko хранит остаток в штуках (единицах учёта). Кг = штуки × вес штуки; вес штуки — Σ веса ÷ Σ количества по строкам заказов за год. Коробки = кг ÷ вес коробки из названия, если в коробке целое число штук (наведите на вес штуки — видно, откуда вес коробки). Дефицит — меньше 15 дней продаж, затоварка — больше 30, «не продаётся» — остаток есть, продаж за базовый период нет. Остаток завода в итог страны не входит."
+      note={`Linko хранит остаток и цену за единицу учёта (штука, шоубокс или кг). Сумма запаса = штуки × входная цена дилера из прайса «${priceList}». Кг = штуки × вес штуки; вес штуки — Σ веса ÷ Σ количества по строкам заказов за год, без продаж — из названия (≈). Коробки = кг ÷ вес коробки из названия, если в коробке целое число штук (наведите на вес штуки). Дефицит — меньше 15 дней продаж, затоварка — больше 30, «не продаётся» — остаток есть, продаж нет. Остаток завода в итог страны не входит.`}
     />
   );
 }
