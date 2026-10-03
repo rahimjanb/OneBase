@@ -133,8 +133,15 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
 
     /// <summary>Аутсток: дни без товара у дилеров за месяц и упущенные продажи — по восстановленному назад от снимка остатку.</summary>
     [HttpGet("outstock")]
-    public Task<OutstockView> Outstock([FromServices] OutstockService outstock, [FromQuery] int? year, [FromQuery] int? month, [FromQuery] string? region, CancellationToken ct) =>
-        outstock.GetAsync(year, month, string.IsNullOrEmpty(region) ? null : region, ct);
+    public Task<OutstockView> Outstock(
+        [FromServices] OutstockService outstock,
+        [FromQuery] int? year,
+        [FromQuery] int? month,
+        [FromQuery] string? region,
+        [FromQuery] string? scope,
+        [FromQuery] string? cat,
+        CancellationToken ct) =>
+        outstock.GetAsync(year, month, string.IsNullOrEmpty(region) ? null : region, scope, OutstockService.ParseCategories(cat), ct);
 
     /// <summary>Первичка: отгрузки завода дилерам (перемещения со склада завода) за месяц и год.</summary>
     [HttpGet("primary")]

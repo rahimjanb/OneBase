@@ -608,7 +608,7 @@ export type StockView = {
   factoryTotals: StockTotals | null;
 };
 
-/** Пара «товар × регион» в аутстоке; days — флаги по дням периода: «1» — товар утром был, «0» — нет. */
+/** Пара «товар × регион» в аутстоке; days — флаги по дням периода: «1» — товар утром был, «0» — нет; received — «1» в дни прихода с завода. */
 export type OutstockPair = {
   regionId: string;
   region: string;
@@ -616,13 +616,15 @@ export type OutstockPair = {
   product: string;
   code: string | null;
   category: string;
-  inReport: boolean;
+  top: boolean;
   periodKg: number;
+  periodSum: number;
   perDayKg: number;
   avgPrice: number | null;
   zeroDays: number;
   dealerDays: number;
   factoryDays: number;
+  negativeDays: number;
   lostKg: number;
   lostSum: number;
   dealerLossSum: number;
@@ -631,25 +633,76 @@ export type OutstockPair = {
   chronic: boolean;
   snapshotKg: number;
   days: string;
+  received: string;
 };
 
-export type OutstockGroup = {
+/** Карточка категории: share — доля во всех потерях области, lossShare — упущенные кг к проданным («к факту»). */
+export type OutstockCategory = {
+  name: string;
+  lostKg: number;
+  lostSum: number;
+  soldKg: number;
+  share: number;
+  lossShare: number | null;
+  pairs: number;
+  zeroDays: number;
+  selected: boolean;
+};
+
+export type OutstockTopProduct = { productId: number; name: string; code: string | null; top: boolean; lostSum: number; share: number };
+
+export type OutstockRegion = {
   id: string;
   name: string;
+  dealer: string | null;
+  soldKg: number;
+  lostKg: number;
+  lostSum: number;
+  lossShare: number | null;
+  zeroDays: number;
   pairs: number;
   corePairs: number;
   chronic: number;
+  dealerLossSum: number;
+  factoryLossSum: number;
+  top: OutstockTopProduct[];
+};
+
+export type OutstockProduct = {
+  id: number;
+  name: string;
+  code: string | null;
+  category: string;
+  top: boolean;
+  soldKg: number;
+  zeroShare: number | null;
   lostKg: number;
   lostSum: number;
+  regions: number;
+  regionsSold: number;
+  corePairs: number;
+  chronic: number;
   dealerLossSum: number;
   factoryLossSum: number;
 };
 
+export type OutstockMatrixRow = { id: string; name: string; dealer: string | null; sum: number[]; kg: number[]; totalSum: number; totalKg: number };
+
+export type OutstockMatrix = { categories: string[]; rows: OutstockMatrixRow[]; totalSum: number[]; totalKg: number[] };
+
 export type OutstockTotals = {
   lostKg: number;
   lostSum: number;
+  soldKg: number;
+  soldSum: number;
+  lossShare: number | null;
   pairs: number;
   pairsWithLoss: number;
+  productsWithLoss: number;
+  regionsWithLoss: number;
+  zeroDays: number;
+  dealerDays: number;
+  factoryDays: number;
   corePairs: number;
   coreSum: number;
   chronic: number;
@@ -659,6 +712,8 @@ export type OutstockTotals = {
   negativeCells: number;
   negativeSharePct: number | null;
 };
+
+export type OutstockScope = "top" | "all" | "rest";
 
 export type OutstockView = {
   year: number;
@@ -671,12 +726,18 @@ export type OutstockView = {
   snapshotDate: string;
   syncedAt: string | null;
   regionId: string | null;
+  scope: OutstockScope;
+  selectedCategories: string[];
+  topConfigured: boolean;
+  topHint: string;
   factoryKnown: boolean;
-  regions: { id: string; name: string }[];
+  regions: { id: string; name: string; dealer: string | null }[];
   totals: OutstockTotals;
+  categories: OutstockCategory[];
   pairs: OutstockPair[];
-  byRegion: OutstockGroup[];
-  byProduct: OutstockGroup[];
+  byRegion: OutstockRegion[];
+  byProduct: OutstockProduct[];
+  matrix: OutstockMatrix;
 };
 
 /** Отгрузка в четырёх единицах: кг, коробки (где фасовка известна), сумма завода, сумма дилера. */
