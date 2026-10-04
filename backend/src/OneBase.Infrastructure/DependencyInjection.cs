@@ -96,6 +96,23 @@ public static class DependencyInjection
         services.AddHostedService<Logging.SystemLogWriter>();
         services.AddHostedService<LinkoSyncWorker>();
 
+        // Sales Base (sales.1base.uz): полевые продажи поверх зеркала Linko.
+        services.AddScoped<OneBase.Application.Field.ILinkoSalesProvider, OneBase.Application.Field.LinkoMirrorSalesProvider>();
+        services.AddScoped<OneBase.Application.Field.FieldDirectory>();
+        services.AddScoped<OneBase.Application.Field.FieldAccess>();
+        services.AddScoped<OneBase.Application.Field.FieldAssignments>();
+        services.AddScoped<OneBase.Application.Field.FieldNotifier>();
+        services.AddScoped<OneBase.Application.Field.FieldSettingsStore>();
+        services.AddScoped<OneBase.Application.Field.FieldMemberService>();
+        services.AddScoped<OneBase.Application.Field.FieldRouteService>();
+        services.AddScoped<OneBase.Application.Field.FieldCustomerService>();
+        services.AddScoped<OneBase.Application.Field.FieldTaskService>();
+        services.AddScoped<OneBase.Application.Field.FieldVisitService>();
+        services.AddScoped<OneBase.Application.Field.FieldRecommendationService>();
+        services.AddScoped<OneBase.Application.Field.FieldDashboardService>();
+        services.AddScoped<Field.FieldStatsRefresher>();
+        services.AddHostedService<Field.FieldWorker>();
+
         return services;
     }
 }

@@ -86,5 +86,15 @@
       <p>Сервер OneBase сейчас недоступен или нет интернета. Данные в системе сохранены — попробуйте снова, когда появится сеть.</p>
       <button type="button" onclick="location.reload()">Повторить</button>
     </main>
+    <script>
+      // Домен Sales Base — своя иконка и текст: открытые раньше страницы маршрута и точек доступны из кэша.
+      if (location.hostname.indexOf("sales.") === 0 || location.pathname.indexOf("/field") === 0) {
+        document.title = "Нет соединения · Sales Base";
+        var logo = document.querySelector(".logo");
+        if (logo) { logo.src = "/icons/field-192.png"; logo.alt = "Sales Base"; }
+        var p = document.querySelector("p");
+        if (p) p.textContent = "Нет интернета. Уже открытые страницы маршрута, задач и точек доступны из кэша — вернитесь назад. Визит начнётся, когда появится связь.";
+      }
+    </script>
   </body>
 </html>

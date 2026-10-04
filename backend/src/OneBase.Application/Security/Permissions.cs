@@ -25,6 +25,12 @@ public static class Permissions
     /// <summary>«Настройки → Журнал ошибок»: ошибки Linko, синхронизации и сервера. Только у администратора.</summary>
     public const string LogsRead = "system.logs.read";
 
+    /// <summary>Sales Base: работа агента, супервайзера, РМ. Что именно видно — решает участник Sales Base (FieldScope).</summary>
+    public const string FieldUse = "field.use";
+
+    /// <summary>Sales Base: управление — состав и команды, доступы, настройки, рекомендации AI всей организации.</summary>
+    public const string FieldManage = "field.manage";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
@@ -40,5 +46,7 @@ public static class Permissions
         SalesManage,
         FinanceRead,
         HrRead,
+        FieldUse,
+        FieldManage,
     ];
 }

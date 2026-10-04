@@ -13,6 +13,12 @@ public static class SystemRoles
 
     public const string Director = "Директор";
 
+    /// <summary>Роли Sales Base (sales.1base.uz).</summary>
+    public const string FieldRm = "РМ (Sales Base)";
+
+    public const string FieldSupervisor = "Супервайзер";
+    public const string FieldAgent = "Агент";
+
     public sealed record Definition(string Name, string Description, string? DepartmentCode, IReadOnlyList<string> Permissions);
 
     /// <summary>Общее для сотрудников отделов: консультант и файлы.</summary>
@@ -32,6 +38,10 @@ public static class SystemRoles
         new("Производство", "Сотрудник производства: остатки и продажи товаров (раздел «Продажи»), консультант, файлы.", "production", [Permissions.SalesRead, .. Employee]),
         new("Снабжение", "Сотрудник снабжения: остатки, поставщики и продажи товаров (раздел «Продажи»), консультант, файлы.", "supply", [Permissions.SalesRead, .. Employee]),
         new("Маркетинг", "Сотрудник маркетинга: продажи, ассортимент и клиенты (раздел «Продажи»), консультант, файлы.", "marketing", [Permissions.SalesRead, .. Employee]),
+        new(FieldRm, "Sales Base: вся структура полевых продаж — команды, точки, маршруты, задачи, KPI, решения по рекомендациям AI; аналитика продаж и консультант.", null,
+            [Permissions.FieldUse, Permissions.FieldManage, Permissions.SalesRead, Permissions.AgentsRun]),
+        new(FieldSupervisor, "Sales Base: своя команда — агенты, точки, маршруты, визиты, задачи и KPI команды.", null, [Permissions.FieldUse]),
+        new(FieldAgent, "Sales Base с телефона: свой маршрут, точки, визиты, задачи, продажи и KPI.", null, [Permissions.FieldUse]),
     ];
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
@@ -68,5 +78,7 @@ public static class SystemRoles
         [Permissions.AgentsRun] = "AI-консультант",
         [Permissions.ApprovalsDecide] = "Подтверждение действий AI",
         [Permissions.AuditRead] = "Журнал аудита",
+        [Permissions.FieldUse] = "Sales Base",
+        [Permissions.FieldManage] = "Sales Base: управление",
     };
 }

@@ -1,12 +1,29 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Inter } from "next/font/google";
 import { PwaRegister } from "@/components/shell/PwaRegister";
 import { themeInitScript } from "@/components/shell/ThemeToggle";
+import { isFieldHost, requestHost } from "@/lib/field/host";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-inter" });
 
-export const metadata: Metadata = {
+/** На домене Sales Base — своё имя приложения (вкладка, установленное приложение на iOS). */
+export async function generateMetadata(): Promise<Metadata> {
+  const field = isFieldHost(requestHost(await headers()));
+  return field
+    ? {
+        ...baseMetadata,
+        title: "Sales Base",
+        applicationName: "Sales Base",
+        description: "Sales Base — управление полевыми продажами",
+        icons: { icon: [{ url: "/icons/field-192.png", type: "image/png", sizes: "192x192" }], apple: "/icons/field-apple-touch-icon.png" },
+        appleWebApp: { capable: true, title: "Sales Base", statusBarStyle: "black-translucent" },
+      }
+    : baseMetadata;
+}
+
+const baseMetadata: Metadata = {
   title: "OneBase",
   applicationName: "OneBase",
   description: "Корпоративная платформа с AI-сотрудниками",

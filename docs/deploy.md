@@ -33,6 +33,8 @@ scp $HOME\onebase.dump root@IP_СЕРВЕРА:~/
 2. На шаге установки скопируйте **токен** — длинную строку после `--token` в показанной команде. Саму команду запускать
    не нужно: cloudflared запустится в Docker.
 3. **Public hostname**: домен (и поддомен, если нужен) → **Service**: тип `HTTP`, адрес `nginx:80` → **Save**.
+4. **Sales Base** (полевые продажи): ещё один **Public hostname** `sales.1base.uz` → **Service** `HTTP`, адрес `nginx:81` → **Save**.
+   Другой домен — задайте его в `.env` как `FIELD_HOST=...` (по умолчанию `sales.1base.uz`). Подробнее — [sales-base.md](sales-base.md).
 
 ## 3. На сервере
 
@@ -91,9 +93,13 @@ cd ~/onebase && bash deploy/update.sh
 ```
 
 Скрипт забирает новую версию из GitHub, пересобирает `api` и `web`, перезапускает и ждёт ответа `/health`.
-Миграции базы применяются при старте API. Данные (тома Docker) не затрагиваются.
+Миграции базы применяются при старте API. Данные (тома Docker) не затрагиваются. Если изменилась конфигурация nginx
+или `docker-compose.yml` (например, появился сайт Sales Base на порту 81), скрипт сам пересоздаёт контейнер nginx.
 
 ## Если что-то не так
+
+Sales Base на сервере без Cloudflare: `docker compose exec -T nginx wget -qO- http://127.0.0.1:81/health` — ответ `Healthy`.
+
 
 | Симптом | Что смотреть |
 |---|---|

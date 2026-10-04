@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-/** Регистрирует service worker (/sw.js): офлайн-заглушка при обрыве сети. Сам файл не кэширует страницы и данные. */
+/** Регистрирует service worker (/sw.js): офлайн-заглушка OneBase и офлайн-кэш страниц и данных Sales Base. */
 export function PwaRegister() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;

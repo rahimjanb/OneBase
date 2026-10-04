@@ -1,10 +1,39 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
+import { isFieldHost, requestHost } from "@/lib/field/host";
 
 /**
  * Манифест веб-приложения: по нему Chrome, Edge, Firefox на Android и Safari на iOS предлагают
- * установить OneBase на рабочий стол и открывают его без адресной строки. Отдаётся как /manifest.webmanifest.
+ * установить приложение на рабочий стол и открывают его без адресной строки. Отдаётся как /manifest.webmanifest.
+ * На домене Sales Base — своё приложение (имя, иконки, цвет); чтение заголовков делает манифест динамическим.
  */
-export default function manifest(): MetadataRoute.Manifest {
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  if (isFieldHost(requestHost(await headers()))) {
+    return {
+      id: "/",
+      name: "Sales Base — полевые продажи",
+      short_name: "Sales Base",
+      description: "Маршрут, точки, визиты, задачи и KPI для агентов и супервайзеров",
+      lang: "ru",
+      start_url: "/",
+      scope: "/",
+      display: "standalone",
+      orientation: "portrait",
+      background_color: "#f6f8fb",
+      theme_color: "#0d3b33",
+      categories: ["business", "productivity"],
+      icons: [
+        { src: "/icons/field-192.png", sizes: "192x192", type: "image/png" },
+        { src: "/icons/field-512.png", sizes: "512x512", type: "image/png" },
+        { src: "/icons/field-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      ],
+      shortcuts: [
+        { name: "Маршрут", url: "/routes", icons: [{ src: "/icons/field-192.png", sizes: "192x192" }] },
+        { name: "Задачи", url: "/tasks", icons: [{ src: "/icons/field-192.png", sizes: "192x192" }] },
+      ],
+    };
+  }
+
   return {
     id: "/",
     name: "OneBase",

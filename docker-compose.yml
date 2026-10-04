@@ -99,6 +99,10 @@ services:
     environment:
       API_INTERNAL_URL: http://api:8080
       TZ: Asia/Tashkent
+      # Домен Sales Base: на нём Next.js показывает полевые продажи (/field) и свой манифест PWA.
+      FIELD_HOST: ${FIELD_HOST:-sales.1base.uz}
+      # Основной домен — для ссылок из Sales Base в OneBase (консультант и т. п.).
+      PUBLIC_HOST: ${PUBLIC_HOST:-}
     depends_on:
       - api
 
@@ -110,10 +114,14 @@ services:
       - ./infra/nginx/nginx.conf:/etc/nginx/templates/default.conf.template:ro
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST:-}
+      # Sales Base слушает :81 — в Cloudflare Tunnel: sales.1base.uz → http://nginx:81.
+      FIELD_HOST: ${FIELD_HOST:-sales.1base.uz}
     # Снаружи сайт открывается через Cloudflare Tunnel (cloudflared → nginx по сети docker), порт наружу не нужен.
     # 127.0.0.1:8080 — для проверки на самом сервере: curl http://127.0.0.1:8080/health
     ports:
       - "${NGINX_BIND:-127.0.0.1:8080}:80"
+      # Sales Base (:81) наружу не публикуется — занятый порт на сервере не дал бы стартовать nginx и основному сайту.
+      # Проверка на сервере: docker compose exec -T nginx wget -qO- http://127.0.0.1:81/health
     depends_on:
       - api
       - web

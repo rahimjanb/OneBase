@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.48.0",
     "next": "^16",
     "react": "^19",
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",

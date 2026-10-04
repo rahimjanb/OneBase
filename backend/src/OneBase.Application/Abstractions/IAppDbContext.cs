@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OneBase.Domain.AI;
 using OneBase.Domain.Audit;
+using OneBase.Domain.Field;
 using OneBase.Domain.Files;
 using OneBase.Domain.Identity;
 using OneBase.Domain.Sales;
@@ -68,6 +69,20 @@ public interface IAppDbContext
     DbSet<SalesAgentPlan> SalesAgentPlans { get; }
     DbSet<SalesTarget> SalesTargets { get; }
     DbSet<SalesStaffPlan> SalesStaffPlans { get; }
+
+    DbSet<FieldMember> FieldMembers { get; }
+    DbSet<FieldTeam> FieldTeams { get; }
+    DbSet<FieldCustomer> FieldCustomers { get; }
+    DbSet<FieldCustomerStats> FieldCustomerStats { get; }
+    DbSet<FieldRoute> FieldRoutes { get; }
+    DbSet<FieldRoutePoint> FieldRoutePoints { get; }
+    DbSet<FieldVisit> FieldVisits { get; }
+    DbSet<FieldJointVisit> FieldJointVisits { get; }
+    DbSet<FieldJointVisitParticipant> FieldJointVisitParticipants { get; }
+    DbSet<FieldTask> FieldTasks { get; }
+    DbSet<FieldRecommendation> FieldRecommendations { get; }
+    DbSet<FieldNotification> FieldNotifications { get; }
+    DbSet<FieldSettings> FieldSettings { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -4,6 +4,7 @@ using OneBase.Domain.Integrations;
 using OneBase.Application.Abstractions;
 using OneBase.Domain.AI;
 using OneBase.Domain.Audit;
+using OneBase.Domain.Field;
 using OneBase.Domain.Files;
 using OneBase.Domain.Identity;
 using OneBase.Domain.Sales;
@@ -81,11 +82,27 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<SalesTarget> SalesTargets => Set<SalesTarget>();
     public DbSet<SalesStaffPlan> SalesStaffPlans => Set<SalesStaffPlan>();
 
+    // Sales Base (полевые продажи)
+    public DbSet<FieldMember> FieldMembers => Set<FieldMember>();
+    public DbSet<FieldTeam> FieldTeams => Set<FieldTeam>();
+    public DbSet<FieldCustomer> FieldCustomers => Set<FieldCustomer>();
+    public DbSet<FieldCustomerStats> FieldCustomerStats => Set<FieldCustomerStats>();
+    public DbSet<FieldRoute> FieldRoutes => Set<FieldRoute>();
+    public DbSet<FieldRoutePoint> FieldRoutePoints => Set<FieldRoutePoint>();
+    public DbSet<FieldVisit> FieldVisits => Set<FieldVisit>();
+    public DbSet<FieldJointVisit> FieldJointVisits => Set<FieldJointVisit>();
+    public DbSet<FieldJointVisitParticipant> FieldJointVisitParticipants => Set<FieldJointVisitParticipant>();
+    public DbSet<FieldTask> FieldTasks => Set<FieldTask>();
+    public DbSet<FieldRecommendation> FieldRecommendations => Set<FieldRecommendation>();
+    public DbSet<FieldNotification> FieldNotifications => Set<FieldNotification>();
+    public DbSet<FieldSettings> FieldSettings => Set<FieldSettings>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         SalesModel.ConfigureLinko(b);
         SalesModel.ConfigureSales(b);
         AiSchema.Configure(b);
+        FieldModel.Configure(b);
 
         b.Entity<IntegrationConnection>(e =>
         {

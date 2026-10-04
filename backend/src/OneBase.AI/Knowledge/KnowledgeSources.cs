@@ -14,6 +14,9 @@ public static class KnowledgeSources
     public const string SalesTeam = "sales.team";
     public const string SalesPrimary = "sales.primary";
     public const string SalesStock = "sales.stock";
+
+    /// <summary>Sales Base: полевая команда — маршруты, визиты, задачи, статусы агентов, рекомендации AI.</summary>
+    public const string FieldSales = "field.sales";
     public const string FinancePayments = "finance.payments";
     public const string SupplyProviders = "supply.providers";
     public const string Documents = "knowledge.documents";
@@ -35,6 +38,8 @@ public static class KnowledgeSources
             "linko.StockTransfers, StockTransferLines, PriceLists", "Продажи: первичка", Permissions.SalesRead),
         new(SalesStock, "Остатки на складах", "Остатки на складах регионов и завода, дни покрытия, дефицит и затоварка.",
             "linko.Stocks, ProductBalances", "Продажи: остатки", Permissions.SalesRead),
+        new(FieldSales, "Sales Base: полевая команда", "Работа агентов за день: заказы против плана, визиты, маршруты, задачи, статусы и проблемы агентов, рекомендации AI-планирования.",
+            "field.Members, Teams, Routes, RoutePoints, Visits, Tasks, Recommendations", "Sales Base: дашборд команды", Permissions.FieldUse),
         new(FinancePayments, "Оплаты",
             "Оплаты торговых точек из Linko: наличные и банк, принятые и нет. Расходов, прибыли и бюджетов в OneBase нет.",
             "linko.Payments", "—", Permissions.FinanceRead),

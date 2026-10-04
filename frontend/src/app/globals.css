@@ -109,3 +109,45 @@ html {
     font-size: 16px;
   }
 }
+
+/* Sales Base (sales.1base.uz): свой акцент и тёмно-зелёная панель поверх токенов OneBase — часть системы, но узнаваемый продукт. */
+[data-product="field"] {
+  --color-sidebar: #0d2e29;
+  --color-sidebar-active: #18463e;
+  --color-sidebar-text: #c6d6d1;
+  --color-sidebar-muted: #7fa199;
+  --color-accent: #0d9488;
+  --color-accent-strong: #0f766e;
+  --color-accent-soft: #e3f5f2;
+}
+
+:root[data-theme="dark"] [data-product="field"] {
+  --color-sidebar: #071a17;
+  --color-sidebar-active: #123630;
+  --color-accent: #2cc4b3;
+  --color-accent-strong: #5eead4;
+  --color-accent-soft: #10302c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) [data-product="field"] {
+    --color-sidebar: #071a17;
+    --color-sidebar-active: #123630;
+    --color-accent: #2cc4b3;
+    --color-accent-strong: #5eead4;
+    --color-accent-soft: #10302c;
+  }
+}
+
+/* Нижняя шторка Sales Base: появление снизу. */
+@keyframes field-sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.field-sheet { animation: field-sheet-in 180ms ease-out; }
+
+/* Карта Leaflet в тёмной теме: плитки чуть темнее, чтобы не слепили. */
+:root[data-theme="dark"] .field-map .leaflet-tile-pane { filter: brightness(0.75) contrast(1.1) saturate(0.8); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .field-map .leaflet-tile-pane { filter: brightness(0.75) contrast(1.1) saturate(0.8); }
+}
