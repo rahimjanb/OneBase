@@ -161,6 +161,13 @@ public sealed class SalesOptions
         return ExportCountries.FirstOrDefault(c => c.Value.Any(w => text.Contains(w.ToLowerInvariant()))).Key;
     }
 
+    /// <summary>
+    /// Статусы заказов для продаж в аутстоке — средние продажи в день и цена: доставлен (delivered) и отдан (given). У «отдан»
+    /// в Linko всегда есть время приёмки. Остаток назад восстанавливается только по <see cref="SoldStatuses"/> (доставленные):
+    /// так восстановление лучше всего сходится с остатками Linko. Вторичка считает только <see cref="SoldStatuses"/>, как супер-отчёт Linko.
+    /// </summary>
+    public string[] OutstockSoldStatuses { get; set; } = ["delivered", "given"];
+
     /// <summary>Статусы перемещений, которые считаются отгрузкой: отдано (given) или уже принято (accepted).</summary>
     public string[] ShippedTransferStatuses { get; set; } = ["given", "accepted"];
 

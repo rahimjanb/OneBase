@@ -57,7 +57,7 @@ public sealed record OutstockRegion(
     decimal FactoryLossSum,
     IReadOnlyList<OutstockTopProduct> Top);
 
-/// <summary>Товар по всем регионам: ZeroShare — доля дней в нуле среди дней всех регионов, где товар продавался.</summary>
+/// <summary>Товар по всем регионам: ZeroShare — доля дней в нуле среди дней регионов, где товар хотя бы день стоял в нуле.</summary>
 public sealed record OutstockProduct(
     long Id,
     string Name,
@@ -264,7 +264,7 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, Stoc
             .Select(g =>
             {
                 var first = g.First();
-                var days = g.Count() * b.Days;
+                var days = g.Count(p => p.ZeroDays > 0) * b.Days;
                 var zero = g.Sum(p => p.ZeroDays);
                 return new OutstockProduct(g.Key, first.Product, first.Code, first.Category, first.Top, g.Sum(p => p.PeriodKg), days > 0 ? (decimal)zero / days : null,
                     g.Sum(p => p.LostKg), g.Sum(p => p.LostSum), g.Count(p => p.ZeroDays > 0), g.Count(), g.Count(p => p.Core), g.Count(p => p.Chronic),
@@ -355,7 +355,12 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, Stoc
         var analyzed = to.DayNumber - monthStart.DayNumber + 1;
         int Index(DateOnly d) => d.DayNumber - monthStart.DayNumber;
 
-        var sold = options.SoldStatuses;
+        // Момент снимка по местному времени: Linko отдаёт даты заказов и перемещений без пояса, в местном времени.
+        // Движения позже этого момента в снимке ещё не отражены и назад не прибавляются.
+        var snapshotLocal = view.SyncedAt is { } synced ? synced.ToOffset(CompanyOffset).DateTime : DateTime.Now;
+        var walkStatuses = options.SoldStatuses;
+        var demandStatuses = options.OutstockSoldStatuses;
+        var statuses = walkStatuses.Concat(demandStatuses).Distinct().ToArray();
         var excluded = options.ExcludedBranches.Select(b => b.Trim().ToLowerInvariant()).ToArray();
         var regionOfBranch = kept.ToDictionary(r => r.BranchId, r => r.Id.ToString());
         foreach (var (branch, region) in aliases)
@@ -363,14 +368,24 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, Stoc
             regionOfBranch.TryAdd(branch, region.ToString());
         }
 
-        // Продажи по дням: заказы дилеров магазинам по дате приёмки, без филиалов «Завод» и «Экспорт».
+        // Продажи по дням: заказы дилеров магазинам по дате приёмки, без филиалов «Завод» и «Экспорт». Средние продажи
+        // и цена — по доставленным и отданным (у «отдан» в Linko есть приёмка), остаток назад — по доставленным, как в первичке.
         var sales = await (
                 from l in db.LinkoOrderLines
                 join o in db.LinkoOrders on l.OrderId equals o.Id
-                where sold.Contains(o.Status) && o.AcceptedDate >= monthStart && o.AcceptedDate <= snapshotDate && l.ProductId != null
+                where statuses.Contains(o.Status) && o.AcceptedDate >= monthStart && o.AcceptedDate <= snapshotDate && l.ProductId != null
                       && (o.BranchName == null || !excluded.Contains(o.BranchName.ToLower()))
-                group l by new { o.AcceptedDate, o.BranchId, l.ProductId } into g
-                select new { Date = g.Key.AcceptedDate!.Value, g.Key.BranchId, ProductId = g.Key.ProductId!.Value, Kg = g.Sum(x => x.TotalWeight), Sum = g.Sum(x => x.TotalPrice) })
+                group l by new { o.AcceptedDate, o.BranchId, l.ProductId, o.Status, Late = o.AcceptedAt > snapshotLocal } into g
+                select new
+                {
+                    Date = g.Key.AcceptedDate!.Value,
+                    g.Key.BranchId,
+                    ProductId = g.Key.ProductId!.Value,
+                    g.Key.Status,
+                    g.Key.Late,
+                    Kg = g.Sum(x => x.TotalWeight),
+                    Sum = g.Sum(x => x.TotalPrice),
+                })
             .ToListAsync(ct);
 
         var soldByDay = new Dictionary<(string Region, long Product), decimal[]>();
@@ -383,21 +398,26 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, Stoc
             }
 
             var key = (region, s.ProductId);
-            if (!soldByDay.TryGetValue(key, out var arr))
+            var i = Index(s.Date);
+            if (walkStatuses.Contains(s.Status) && !s.Late)
             {
-                soldByDay[key] = arr = new decimal[n];
+                if (!soldByDay.TryGetValue(key, out var arr))
+                {
+                    soldByDay[key] = arr = new decimal[n];
+                }
+
+                arr[i] += s.Kg;
             }
 
-            var i = Index(s.Date);
-            arr[i] += s.Kg;
-            if (i < analyzed)
+            if (i < analyzed && demandStatuses.Contains(s.Status))
             {
                 var r = revenue.GetValueOrDefault(key);
                 revenue[key] = (r.Kg + s.Kg, r.Sum + s.Sum);
             }
         }
 
-        // Приход дилеру и движения завода — перемещения в статусах отгрузки; дата — выдача, без неё приёмка, без неё создание.
+        // Приход дилеру и движения завода — перемещения в статусах отгрузки по дате выдачи (без неё — приёмки, без неё —
+        // создания), как отгрузки по дням в первичке. Возвраты дилера заводу вычитаются из прихода.
         var regionOfStock = view.Regions.ToDictionary(r => r.StockId, r => r.Id);
         var factoryStock = view.Factory?.StockId;
         var shipped = options.ShippedTransferStatuses;
@@ -424,8 +444,10 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, Stoc
 
         foreach (var t in transfers)
         {
+            var fromFactory = factoryStock is { } f && t.FromStockId == f;
+            var toFactory = factoryStock is { } f2 && t.ToStockId == f2;
             var when = t.GivenAt ?? t.AcceptedAt ?? t.CreatedAt;
-            if (when is null)
+            if ((!fromFactory && !toFactory) || when is null || when.Value > snapshotLocal)
             {
                 continue;
             }
@@ -437,8 +459,6 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, Stoc
             }
 
             var i = Index(date);
-            var fromFactory = factoryStock is { } f && t.FromStockId == f;
-            var toFactory = factoryStock is { } f2 && t.ToStockId == f2;
             if (fromFactory)
             {
                 Series(factoryOut, t.ProductId)[i] += t.TotalWeight;
@@ -477,14 +497,14 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, Stoc
 
         var regionName = regions.ToDictionary(r => r.Id, r => r.Name);
         var pairs = new List<OutstockPair>();
-        foreach (var (key, soldArr) in soldByDay)
+        foreach (var (key, (periodKg, periodSum)) in revenue)
         {
             if (!regionName.TryGetValue(key.Region, out var name))
             {
                 continue;
             }
 
-            var (periodKg, periodSum) = revenue.GetValueOrDefault(key);
+            var soldArr = soldByDay.GetValueOrDefault(key) ?? new decimal[n];
             if (periodKg <= 0)
             {
                 continue; // товар, который регион в периоде не продавал, аутстоком не считается
@@ -557,6 +577,9 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, Stoc
                 new string(flags),
                 new string(arrivals)));
         }
+
+        var withSales = pairs.Select(p => p.RegionId).ToHashSet();
+        regions = regions.Where(r => withSales.Contains(r.Id)).ToList();
 
         // Без списка кодов ТОП — категории отчёта; если в них попали все проданные товары, делить не на что: ТОП не настроен.
         if (topConfigured && options.TopProducts.Length == 0 && pairs.All(p => p.Top))
