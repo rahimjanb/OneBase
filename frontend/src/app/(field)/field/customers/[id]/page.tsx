@@ -5,6 +5,7 @@ import { NewTaskButton, TaskList } from "@/components/field/TaskBoard";
 import { Chip, FieldPage, Panel, Stat, buttonClass } from "@/components/field/ui";
 import { VisitPanel } from "@/components/field/VisitPanel";
 import { fieldGet, fieldMe } from "@/lib/field/api";
+import { yandexNavigateTo } from "@/lib/field/yandex";
 import { customerStatusLabel, priorityLabel, visitResultLabel } from "@/lib/field/labels";
 import { date, kg, money, monthShort, pct } from "@/lib/sales/format";
 import type { FieldCustomerCard } from "@/lib/field/types";
@@ -21,7 +22,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   const c = card.customer;
   const isMine = me.memberId !== null && c.agentId === me.memberId;
   const maxMonth = Math.max(...card.months.map((m) => m.sum), 1);
-  const yandex = c.lat && c.lon ? `https://yandex.ru/maps/?rtext=~${c.lat},${c.lon}&rtt=auto` : null;
+  const yandex = yandexNavigateTo(c);
 
   return (
     <FieldPage

@@ -1,7 +1,7 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type * as Leaflet from "leaflet";
 import { LocateFixed } from "lucide-react";
 import { mapStateStyle } from "@/lib/field/labels";
@@ -11,6 +11,17 @@ import { fieldApi } from "./hooks";
 const routeColors = ["#0d9488", "#3b76f6", "#e0922f", "#b5179e", "#1f9d6b", "#dc4c4c", "#6d28d9", "#0891b2"];
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const money = (v: number) => (v >= 1e6 ? `${(v / 1e6).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} млн` : v >= 1e3 ? `${Math.round(v / 1e3)} тыс` : String(Math.round(v)));
+
+/** Фильтр точек по статусу в маршруте дня. */
+type PointFilter = "all" | "planned" | "visited" | "skipped";
+const pointFilters: { key: PointFilter; label: string }[] = [
+  { key: "all", label: "Все точки" },
+  { key: "planned", label: "Запланированы" },
+  { key: "visited", label: "Посещены" },
+  { key: "skipped", label: "Пропущены" },
+];
+const isPointFilter = (v: string | null | undefined): v is PointFilter => pointFilters.some((f) => f.key === v);
+const FILTER_KEY = "sales-base-map-points";
 
 /**
  * Карта Sales Base (Leaflet + OpenStreetMap): точки по состоянию, маршруты с номерами, позиции агентов, «я здесь».
@@ -24,6 +35,27 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
   const [view, setView] = useState(initial);
   const [status, setStatus] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  // Статус точек маршрута: «посещена», «запланирована», «пропущена». Точки маршрутов приходят всегда, поэтому фильтр — в браузере.
+  // Выбор хранится в памяти вкладки (sessionStorage), а не в адресе: переживает «Назад» и перезагрузку и не мешает
+  // переходам по дате и агенту (запись в адрес во время такого перехода отменила бы его).
+  const [filter, setFilter] = useState<PointFilter>("all");
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(FILTER_KEY);
+      if (isPointFilter(saved)) setFilter(saved);
+    } catch {
+      // хранилище недоступно — фильтр «Все точки»
+    }
+  }, []);
+  const filterRef = useRef(filter);
+  useEffect(() => {
+    filterRef.current = filter; // объявлен раньше эффекта отрисовки — к перерисовке значение уже свежее
+  }, [filter]);
+  const counts = useMemo(() => {
+    const c: Record<PointFilter, number> = { all: view.points.length, planned: 0, visited: 0, skipped: 0 };
+    for (const p of view.points) if (p.state === "planned" || p.state === "visited" || p.state === "skipped") c[p.state]++;
+    return c;
+  }, [view]);
   // Фильтры меняются без пересоздания карты (страница не перемонтируется при смене query) — обработчик сдвига читает актуальные.
   const queryRef = useRef(query);
   useEffect(() => {
@@ -80,7 +112,17 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
   useEffect(() => {
     if (mapRef.current) draw(view);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
+  }, [view, filter]);
+
+  const choose = (key: PointFilter) => {
+    setFilter(key);
+    try {
+      if (key === "all") sessionStorage.removeItem(FILTER_KEY);
+      else sessionStorage.setItem(FILTER_KEY, key);
+    } catch {
+      // хранилище недоступно — выбор действует до ухода со страницы
+    }
+  };
 
   function draw(v: FieldMapView) {
     const L = LRef.current;
@@ -97,7 +139,9 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
       if (line.length > 1) L.polyline(line, { color, weight: 3, opacity: 0.7, dashArray: "6 6" }).addTo(layers.routes).bindTooltip(r.agentName);
     });
 
-    for (const p of v.points) {
+    // Линии маршрутов — по всем точкам (видно весь путь), метки — только выбранного статуса.
+    const shown = filterRef.current === "all" ? v.points : v.points.filter((p) => p.state === filterRef.current);
+    for (const p of shown) {
       const style = mapStateStyle[p.state] ?? mapStateStyle.normal;
       const popup = `<div style="min-width:180px"><b>${esc(p.name)}</b><br/><span style="color:${style.color}">${style.label}</span>${p.sales30 ? `<br/>Продажи 30 дн: ${money(p.sales30)} сум` : ""}<br/><a href="/field/customers/${p.marketId}">Открыть карточку →</a></div>`;
       if (p.sequence != null) {
@@ -163,8 +207,32 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
   };
 
   return (
+    <div className="space-y-2">
+      <div role="group" aria-label="Статус точек маршрута" className="flex flex-wrap gap-1.5">
+        {pointFilters.map((f) => {
+          const on = filter === f.key;
+          return (
+            <button
+              key={f.key}
+              type="button"
+              aria-pressed={on}
+              onClick={() => choose(f.key)}
+              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors ${on ? "border-accent bg-accent-soft font-semibold text-accent-strong" : "border-line bg-surface text-ink-2 hover:bg-muted"}`}
+            >
+              {f.key !== "all" && <span className="size-2.5 rounded-full" style={{ background: mapStateStyle[f.key].color }} />}
+              {f.label}
+              <span className={`text-xs tabular-nums ${on ? "text-accent-strong" : "text-ink-3"}`}>{counts[f.key]}</span>
+            </button>
+          );
+        })}
+      </div>
     <div className="field-map relative isolate overflow-hidden rounded-xl border border-line">
-      <div ref={box} className="h-[calc(100dvh-15rem)] min-h-[420px] w-full bg-muted lg:h-[calc(100dvh-13rem)]" />
+      <div ref={box} className="h-[calc(100dvh-23rem)] min-h-[360px] w-full bg-muted lg:h-[calc(100dvh-16rem)]" />
+      {filter !== "all" && counts[filter] === 0 && (
+        <div className="absolute inset-x-3 top-14 z-[500] mx-auto max-w-xs rounded-lg bg-surface/95 px-3 py-2 text-center text-xs text-ink-2 shadow">
+          В маршрутах этого дня нет точек со статусом «{pointFilters.find((x) => x.key === filter)?.label.toLowerCase()}».
+        </div>
+      )}
       <button type="button" onClick={locate} aria-label="Моё местоположение" className="absolute bottom-24 right-3 z-[500] grid size-11 place-items-center rounded-full bg-surface text-ink shadow-md lg:bottom-6">
         <LocateFixed className={`size-5 ${locating ? "animate-pulse text-accent" : ""}`} />
       </button>
@@ -177,6 +245,7 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
           </span>
         ))}
       </div>
+    </div>
     </div>
   );
 }

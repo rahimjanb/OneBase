@@ -7,6 +7,7 @@ import { DayBars, PlanFactBar } from "./charts";
 import { Chip, Empty, Panel, Stat, buttonClass } from "./ui";
 import { RecommendationList } from "./Recommendations";
 import { TaskList } from "./TaskBoard";
+import { YandexRouteButton } from "./YandexRouteButton";
 
 const shareTone = (share: number | null | undefined, expected = 1) => (share == null ? "muted" : share >= expected ? "ok" : share >= expected * 0.7 ? "accent" : "bad");
 
@@ -76,6 +77,7 @@ export function AgentTodayView({ data, me, own }: { data: FieldToday; me: FieldM
             <Link href={`/field/customers/${next.marketId}`} className={buttonClass.outline}>
               Карточка точки
             </Link>
+            <YandexRouteButton route={data.route!} fromHere={own} />
           </div>
         </Panel>
       ) : (

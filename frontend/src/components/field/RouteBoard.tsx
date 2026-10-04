@@ -7,8 +7,10 @@ import { pointStatusLabel, priorityLabel, routeSourceLabel } from "@/lib/field/l
 import type { FieldCustomerRow, FieldRoute, FieldRoutePoint, FieldVisitRow, Page } from "@/lib/field/types";
 import { Chip, Empty, buttonClass, inputClass } from "./ui";
 import { Sheet } from "./Sheet";
+import { yandexNavigateTo } from "@/lib/field/yandex";
 import { fieldApi, getPosition, useAction } from "./hooks";
 import { VisitPanel } from "./VisitPanel";
+import { YandexRouteButton } from "./YandexRouteButton";
 
 const statusDot: Record<string, string> = {
   Planned: "bg-surface text-ink ring-2 ring-line",
@@ -18,7 +20,7 @@ const statusDot: Record<string, string> = {
   Cancelled: "bg-muted text-ink-3",
 };
 
-const navUrl = (p: FieldRoutePoint) => (p.lat && p.lon ? `https://yandex.ru/maps/?rtext=~${p.lat},${p.lon}&rtt=auto` : null);
+const navUrl = (p: FieldRoutePoint) => yandexNavigateTo(p);
 
 /**
  * Маршрут дня. Агент: следующая точка, визит, пропуск, навигатор. Супервайзер/РМ: сформировать, оптимизировать,
@@ -128,6 +130,7 @@ export function RouteBoard({
           <Link href={`/field/map?agent=${agentId}&date=${date}`} className={buttonClass.outline}>
             <MapIcon className="size-4" /> На карте
           </Link>
+          <YandexRouteButton route={route} fromHere={isOwn} />
           {(canPlan || isOwn) && !edit && (
             <button
               type="button"
