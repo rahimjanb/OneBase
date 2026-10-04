@@ -10,7 +10,7 @@ public sealed class FieldScope
 {
     public required Guid UserId { get; init; }
 
-    /// <summary>Участник Sales Base; null — администратор/РМ с правом field.manage без карточки участника.</summary>
+    /// <summary>Участник Sales Base; null — администратор/РМ (field.manage) или руководитель (field.plan) без карточки участника.</summary>
     public Guid? MemberId { get; init; }
 
     public required FieldRole Role { get; init; }
@@ -81,7 +81,8 @@ public static class FieldScopeBuilder
 
     public sealed record TeamRow(Guid Id, Guid? SupervisorId, long? BranchId, bool IsActive);
 
-    public static FieldScope Build(Guid userId, bool canUse, bool canManage, IReadOnlyList<MemberRow> members, IReadOnlyList<TeamRow> teams)
+    /// <param name="canPlan">field.plan: руководитель планирует работу всей организации (задачи, маршруты) без управления составом.</param>
+    public static FieldScope Build(Guid userId, bool canUse, bool canManage, IReadOnlyList<MemberRow> members, IReadOnlyList<TeamRow> teams, bool canPlan = false)
     {
         var me = members.FirstOrDefault(m => m.UserId == userId);
         var active = members.Where(m => m.IsActive).ToList();
@@ -89,12 +90,13 @@ public static class FieldScopeBuilder
 
         if (me is null)
         {
-            if (!canManage)
+            if (!canManage && !canPlan)
             {
                 throw new FieldForbiddenException("Вас ещё не добавили в Sales Base. Обратитесь к РМ или администратору.");
             }
 
-            // Администратор без карточки участника — вся организация.
+            // Без карточки участника: администратор (field.manage) или руководитель (field.plan) — вся организация.
+            // Управление составом, доступами и настройками — только с field.manage.
             return Scope(userId, null, FieldRole.Rm, canManage, orgWide: true, [],
                 active.Where(m => m.Role == FieldRole.Agent).Select(m => m.Id), active.Select(m => m.Id), activeTeams.Select(t => t.Id), active);
         }
@@ -105,7 +107,7 @@ public static class FieldScopeBuilder
             throw new FieldForbiddenException("Ваш доступ к Sales Base отключён.");
         }
 
-        if (!canUse && !canManage)
+        if (!canUse && !canManage && !canPlan)
         {
             throw new FieldForbiddenException("У вашей роли нет доступа к Sales Base.");
         }

@@ -97,6 +97,17 @@ public static class DbSeeder
             }
         }
 
+        // Новые права существующих ролей (SystemRoles.Upgrades).
+        foreach (var (roleName, permission) in SystemRoles.Upgrades)
+        {
+            var role = db.Roles.Local.FirstOrDefault(r => r.Name == roleName)
+                       ?? await db.Roles.Include(r => r.Permissions).FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
+            if (role is not null && role.Permissions.All(p => p.Code != permission))
+            {
+                role.Permissions.Add(new RolePermission { Code = permission });
+            }
+        }
+
         foreach (var agent in AgentCodes)
         {
             if (!await db.AgentToolGrants.AnyAsync(g => g.AgentCode == agent && g.ToolName == "delegate_to_agent", cancellationToken))

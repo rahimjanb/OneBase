@@ -88,9 +88,42 @@ body {
   background-image: repeating-linear-gradient(-45deg, var(--color-line) 0 4px, transparent 4px 8px);
 }
 
-/* Телефон: без подсветки нажатий iOS/Android и без полосы у горизонтальной прокрутки (кнопки разделов). */
+/* Телефон: без подсветки нажатий iOS/Android и без полосы у горизонтальной прокрутки (кнопки разделов).
+   manipulation — без масштабирования двойным касанием: оно сдвигало закреплённые панели. */
 html {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Оболочка как у приложения (data-app-shell — OneBase и Sales Base): документ не прокручивается и не пружинит,
+   панели стоят на месте; прокручивается только область содержимого [data-app-scroll]. Страницы без оболочки
+   (вход, «нет доступа») прокручиваются как обычно. */
+html:has([data-app-shell]),
+html:has([data-app-shell]) body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior-y: none;
+}
+
+[data-app-scroll] {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media print {
+  html:has([data-app-shell]),
+  html:has([data-app-shell]) body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  [data-app-shell] {
+    position: static !important;
+  }
+  [data-app-scroll] {
+    overflow: visible !important;
+  }
 }
 
 .no-scrollbar {

@@ -96,7 +96,8 @@ public sealed class ToolExecutor(IToolRegistry registry, IAppDbContext db, IUser
         }
 
         // Данные пользователя читаются только от имени пользователя с нужным правом.
-        if (tool.RequiredPermission is { } permission && (userPermissions is null || !userPermissions.Contains(permission)))
+        if (tool.RequiredPermission is { } permission
+            && (userPermissions is null || (!userPermissions.Contains(permission) && !(tool.AlternativePermissions ?? []).Any(userPermissions.Contains))))
         {
             return "no_permission";
         }

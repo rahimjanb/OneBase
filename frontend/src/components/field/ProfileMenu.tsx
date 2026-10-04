@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ChevronUp, LogOut } from "lucide-react";
+import { ChevronUp, LogOut, Settings2 } from "lucide-react";
+import { LogoutLink } from "@/components/shell/AppBridge";
+import { PermissionsSheet } from "@/components/shell/PermissionsSheet";
 import { FIELD_LOGOUT_PATH } from "@/lib/field/host";
 import { roleLabel } from "@/lib/field/labels";
 import type { FieldMe } from "@/lib/field/types";
@@ -28,6 +30,7 @@ function Avatar({ name, className = "" }: { name: string; className?: string }) 
  */
 export function ProfileMenu({ me, variant }: { me: FieldMe; variant: "header" | "sidebar" }) {
   const [open, setOpen] = useState(false);
+  const [permissions, setPermissions] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -93,14 +96,27 @@ export function ProfileMenu({ me, variant }: { me: FieldMe; variant: "header" | 
               <div className="text-xs leading-snug text-ink-3">{details}</div>
             </div>
           </div>
-          <div className="border-t border-line p-1.5">
-            <a role="menuitem" href={FIELD_LOGOUT_PATH} className="flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-sm font-medium text-bad hover:bg-bad-soft">
+          <div className="space-y-0.5 border-t border-line p-1.5">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                setPermissions(true);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-sm text-ink hover:bg-muted"
+            >
+              <Settings2 className="size-4 text-ink-3" strokeWidth={1.75} />
+              Уведомления и геолокация
+            </button>
+            <LogoutLink role="menuitem" href={FIELD_LOGOUT_PATH} className="flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-sm font-medium text-bad hover:bg-bad-soft">
               <LogOut className="size-4" strokeWidth={1.75} />
               Выйти
-            </a>
+            </LogoutLink>
           </div>
         </div>
       )}
+      <PermissionsSheet open={permissions} onClose={() => setPermissions(false)} appName="Sales Base" />
     </div>
   );
 }

@@ -24,7 +24,7 @@ export type NavItem = { href: string; label: string; icon: LucideIcon; also?: st
 export const workspace: NavItem[] = [
   { href: "/", label: "Обзор", icon: LayoutGrid },
   { href: "/departments", label: "Отделы", icon: Grid3x3, also: ["/sales"] },
-  { href: "/tasks", label: "Задачи", icon: Check, soon: true },
+  { href: "/tasks", label: "Задачи", icon: Check },
   { href: "/reports", label: "Отчёты", icon: ChartNoAxesColumn, soon: true },
   { href: "/base", label: "Общая база", icon: Database, short: "База" },
   { href: "/consultant", label: "AI-консультант", icon: Sparkle, also: ["/ai"], short: "AI" },
@@ -79,7 +79,7 @@ export function Sidebar({ canOpenSettings }: { canOpenSettings: boolean }) {
   const pathname = usePathname();
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col bg-sidebar px-3 py-6 lg:flex">
+    <aside className="hidden h-full w-[232px] shrink-0 flex-col overflow-y-auto bg-sidebar px-3 py-6 lg:flex">
       <div className="px-3">
         <Logo />
       </div>

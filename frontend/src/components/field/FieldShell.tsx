@@ -26,6 +26,8 @@ import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { roleLabel } from "@/lib/field/labels";
 import type { FieldMe } from "@/lib/field/types";
 import { FIELD_LOGOUT_PATH } from "@/lib/field/host";
+import { PullToRefresh, ScrollManager, useKeyboardOpen } from "@/components/shell/AppScroll";
+import { AppBridge, LogoutLink } from "@/components/shell/AppBridge";
 import { ProfileMenu } from "./ProfileMenu";
 import { Sheet } from "./Sheet";
 
@@ -104,6 +106,7 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
   const bottomItems = bottom.map((href) => items.find((i) => i.href === href)!).filter(Boolean);
   const moreItems = items.filter((i) => !bottom.includes(i.href));
   const moreActive = moreItems.some((i) => isActive(pathname, i));
+  const keyboardOpen = useKeyboardOpen();
 
   useEffect(() => setMore(false), [pathname]);
 
@@ -116,9 +119,10 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
   const visit = me.activeVisit;
 
   return (
-    <div data-product="field" className="flex min-h-dvh bg-page">
+    // Оболочка как у приложения: закреплена на весь экран, панели не двигаются, прокручивается только <main data-app-scroll>.
+    <div data-product="field" data-app-shell className="fixed inset-0 flex overflow-hidden bg-page">
       {/* Панель слева — большой экран */}
-      <aside className="sticky top-0 hidden h-screen w-[244px] shrink-0 flex-col bg-sidebar px-3 py-5 lg:flex">
+      <aside className="hidden h-full w-[244px] shrink-0 flex-col bg-sidebar px-3 py-5 lg:flex">
         <div className="px-2">
           <Brand />
         </div>
@@ -146,7 +150,7 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Шапка: на телефоне — тёмная с логотипом; на большом экране — светлая полоса с данными и уведомлениями */}
-        <header className="sticky top-0 z-30 bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-text lg:bg-page/90 lg:pt-0 lg:text-ink-2 lg:backdrop-blur">
+        <header className="relative z-40 shrink-0 bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-text lg:border-b lg:border-line lg:bg-page lg:pt-0 lg:text-ink-2">
           <div className="flex h-14 items-center gap-2 px-4 sm:px-6 lg:h-14">
             <div className="lg:hidden">
               <Brand compact />
@@ -179,11 +183,15 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
           )}
         </header>
 
-        <main className="flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
-      </div>
+        <div className="relative min-h-0 flex-1">
+          <PullToRefresh />
+          <main data-app-scroll className="h-full">
+            {children}
+          </main>
+        </div>
 
-      {/* Нижняя навигация — телефон */}
-      <nav aria-label="Разделы Sales Base" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      {/* Нижняя навигация — телефон: в потоке под содержимым, не двигается; при открытой клавиатуре прячется */}
+      <nav aria-label="Разделы Sales Base" className={`relative z-30 shrink-0 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden ${keyboardOpen ? "hidden" : ""}`}>
         <ul className="flex">
           {bottomItems.map((item) => {
             const active = isActive(pathname, item);
@@ -204,7 +212,10 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
           </li>
         </ul>
       </nav>
+      </div>
 
+      <ScrollManager />
+      <AppBridge userId={me.userId} refreshOnFocus />
       <Sheet open={more} onClose={() => setMore(false)} title="Разделы">
         <div className="mb-3 rounded-xl bg-muted px-3 py-2.5 text-sm">
           <div className="font-medium text-ink">{me.name}</div>
@@ -225,10 +236,10 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
               <span className="px-1">{item.short ?? item.label}</span>
             </Link>
           ))}
-          <a href={FIELD_LOGOUT_PATH} className="flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border border-line text-xs font-medium text-bad active:bg-muted">
+          <LogoutLink href={FIELD_LOGOUT_PATH} className="flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border border-line text-xs font-medium text-bad active:bg-muted">
             <LogOut className="size-6" strokeWidth={1.75} />
             Выйти
-          </a>
+          </LogoutLink>
         </div>
       </Sheet>
     </div>

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { bff } from "@/lib/bff";
+import { locate } from "@/lib/geo";
 
 /** Действие с кнопки: занято/ошибка, после успеха — обновление серверных данных страницы. */
 export function useAction() {
@@ -45,32 +46,10 @@ export type Position = { latitude: number; longitude: number; accuracy: number }
  * Координаты из браузера. Не блокирует работу: нет разрешения, сигнала или ответа за 12 секунд — null
  * (визит начнётся с отметкой «нет GPS»). Точность браузер сообщает сам — её учитывает проверка геозоны на сервере.
  */
-export function getPosition(timeoutMs = 12000): Promise<Position | null> {
-  return new Promise((resolve) => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) return resolve(null);
-    let done = false;
-    const timer = setTimeout(() => {
-      if (!done) {
-        done = true;
-        resolve(null);
-      }
-    }, timeoutMs + 500);
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy });
-      },
-      () => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        resolve(null);
-      },
-      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 30000 },
-    );
-  });
+export async function getPosition(timeoutMs = 12000): Promise<Position | null> {
+  // Общий модуль: проверяет разрешение, переиспользует свежие координаты, не обрывает окно разрешения таймером.
+  const { position } = await locate({ timeoutMs });
+  return position ? { latitude: position.latitude, longitude: position.longitude, accuracy: position.accuracy } : null;
 }
 
 /** Сегодня по времени компании (UTC+5), yyyy-MM-dd. */

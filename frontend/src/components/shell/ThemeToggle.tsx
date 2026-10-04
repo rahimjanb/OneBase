@@ -5,8 +5,11 @@ import { useEffect, useState } from "react";
 
 const KEY = "onebase-theme";
 
-/** Скрипт в <head>: применяет сохранённую тему до отрисовки, без мигания. */
-export const themeInitScript = `try{var t=localStorage.getItem("${KEY}");if(t){document.documentElement.dataset.theme=t;document.addEventListener("DOMContentLoaded",function(){var c=t==="dark"?"#0b1220":"#16213a";document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute("content",c)})})}}catch(e){}`;
+/**
+ * Скрипт в <head>: применяет сохранённую тему до отрисовки, без мигания. Цвет строки состояния — от оболочки, а на
+ * страницах без неё (вход) — от продукта страницы (Sales Base — зелёный).
+ */
+export const themeInitScript = `try{var t=localStorage.getItem("${KEY}");if(t){document.documentElement.dataset.theme=t;document.addEventListener("DOMContentLoaded",function(){var s=document.querySelector("[data-app-shell]")||document.querySelector("[data-product]");var c=s&&getComputedStyle(s).getPropertyValue("--color-sidebar").trim()||(t==="dark"?"#0b1220":"#16213a");document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute("content",c)})})}}catch(e){}`;
 
 function currentTheme(): "light" | "dark" {
   const explicit = document.documentElement.dataset.theme;
@@ -28,8 +31,10 @@ export function ThemeToggle() {
     } catch {
       // хранилище недоступно — тема действует до перезагрузки
     }
-    // Цвет строки состояния установленного приложения — как у шапки выбранной темы.
-    for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.setAttribute("content", next === "dark" ? "#0b1220" : "#16213a");
+    // Цвет строки состояния установленного приложения — как у шапки выбранной темы (у Sales Base — свой, зелёный).
+    const shell = document.querySelector<HTMLElement>("[data-app-shell]");
+    const color = (shell && getComputedStyle(shell).getPropertyValue("--color-sidebar").trim()) || (next === "dark" ? "#0b1220" : "#16213a");
+    for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.setAttribute("content", color);
     setTheme(next);
   }
 

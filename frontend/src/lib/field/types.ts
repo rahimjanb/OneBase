@@ -10,7 +10,8 @@ export type FieldVisitStatus = "InProgress" | "Completed" | "Cancelled";
 export type FieldVisitResult = "Order" | "Sale" | "Refusal" | "Revisit" | "Closed" | "NoDecisionMaker" | "Other";
 export type FieldGeoStatus = "Ok" | "Far" | "NoGps" | "NoTarget";
 export type FieldTaskStatus = "New" | "Accepted" | "InProgress" | "Completed" | "Verified" | "Cancelled" | "Postponed";
-export type FieldActorType = "Rm" | "Supervisor" | "Agent" | "Ai" | "System";
+/** Office — сотрудник офиса из раздела «Задачи» OneBase (без карточки участника). */
+export type FieldActorType = "Rm" | "Supervisor" | "Agent" | "Ai" | "System" | "Office";
 export type FieldRecommendationKind = "SalesDecline" | "NotVisited" | "LostCustomer" | "AgentBehindPlan" | "SkippedPoint" | "HighPotential" | "Reassign";
 export type FieldRecommendationStatus = "Pending" | "Approved" | "Rejected" | "Expired";
 export type AgentDayStatus = "NotStarted" | "OnRoute" | "OnVisit" | "Finished" | "Problem";

@@ -25,8 +25,11 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
         // PostgreSQL — бизнес-данные и метаданные
-        services.AddDbContext<OneBaseDbContext>(o =>
-            o.UseNpgsql(config.GetConnectionString("Postgres")));
+        // Перехватчик сохранения ставит push-уведомления в очередь после успешного сохранения.
+        services.AddSingleton<Push.PushQueue>();
+        services.AddSingleton<Push.PushNotificationInterceptor>();
+        services.AddDbContext<OneBaseDbContext>((sp, o) =>
+            o.UseNpgsql(config.GetConnectionString("Postgres")).AddInterceptors(sp.GetRequiredService<Push.PushNotificationInterceptor>()));
         services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<OneBaseDbContext>());
 
         services.AddScoped<IAuditLogger, AuditLogger>();
@@ -112,6 +115,18 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Field.FieldDashboardService>();
         services.AddScoped<Field.FieldStatsRefresher>();
         services.AddHostedService<Field.FieldWorker>();
+
+        // Раздел «Задачи» OneBase: задачи отделов и уведомления пользователей.
+        services.AddScoped<OneBase.Application.Work.UserNotifier>();
+        services.AddScoped<OneBase.Application.Work.WorkTaskService>();
+
+        // Web Push (Lib.Net.Http.WebPush: aes128gcm + VAPID, как требует и Apple). Ключи VAPID — в базе, токены — в памяти
+        // (Apple просит не обновлять JWT чаще раза в час); повтор по 429 — не больше двух раз.
+        services.AddMemoryCache();
+        services.AddMemoryVapidTokenCache();
+        services.AddPushServiceClient(o => o.MaxRetriesAfter = 2);
+        services.AddSingleton<Push.PushKeyProvider>();
+        services.AddHostedService<Push.PushSender>();
 
         return services;
     }

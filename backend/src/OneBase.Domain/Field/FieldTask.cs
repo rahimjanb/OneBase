@@ -10,6 +10,9 @@ public enum FieldActorType
     Agent,
     Ai,
     System,
+
+    /// <summary>Сотрудник офиса из раздела «Задачи» OneBase — без карточки участника Sales Base.</summary>
+    Office,
 }
 
 public enum FieldTaskStatus
@@ -28,7 +31,12 @@ public class FieldTask : Entity
     public required string Title { get; set; }
     public string? Description { get; set; }
 
+    /// <summary>Участник Sales Base, поставивший задачу (null — AI, система или сотрудник офиса без карточки).</summary>
     public Guid? CreatedById { get; set; }
+
+    /// <summary>Пользователь OneBase, поставивший задачу: для подписи «от …» и уведомлений автору без карточки участника.</summary>
+    public Guid? CreatedByUserId { get; set; }
+
     public FieldActorType CreatedByType { get; set; }
 
     public Guid AssignedToId { get; set; }

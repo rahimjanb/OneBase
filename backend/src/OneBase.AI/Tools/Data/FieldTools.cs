@@ -19,6 +19,8 @@ internal sealed class GetFieldTeamTool(FieldAccess access, FieldDashboardService
     public override string Source => KnowledgeSources.FieldSales;
     public override string? RequiredPermission => Permissions.FieldUse;
 
+    public override IReadOnlyList<string>? AlternativePermissions => [Permissions.FieldManage, Permissions.FieldPlan];
+
     public override string Description =>
         "Полевые продажи (Sales Base) за день: заказы агентов против дневного плана, выполнение месячного плана, визиты, маршруты (посещено/пропущено), " +
         "задачи (открыто/просрочено), статус каждого агента (не начал/на маршруте/завершил/проблема) и блок «требует внимания», " +
@@ -38,7 +40,7 @@ internal sealed class GetFieldTeamTool(FieldAccess access, FieldDashboardService
         FieldScope scope;
         try
         {
-            scope = await access.ResolveAsync(userId, granted.Contains(Permissions.FieldUse), granted.Contains(Permissions.FieldManage), ct);
+            scope = await access.ResolveAsync(userId, granted.Contains(Permissions.FieldUse), granted.Contains(Permissions.FieldManage), ct, granted.Contains(Permissions.FieldPlan));
         }
         catch (FieldForbiddenException e)
         {

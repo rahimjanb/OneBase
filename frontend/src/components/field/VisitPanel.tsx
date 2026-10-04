@@ -6,7 +6,8 @@ import { Camera, MapPin, Play, Square, X } from "lucide-react";
 import { geoLabel, visitResultLabel } from "@/lib/field/labels";
 import type { FieldVisitResult, FieldVisitRow } from "@/lib/field/types";
 import { Chip, buttonClass, inputClass } from "./ui";
-import { fieldApi, getPosition, useAction } from "./hooks";
+import { locate } from "@/lib/geo";
+import { fieldApi, useAction } from "./hooks";
 
 const results: FieldVisitResult[] = ["Order", "Sale", "Refusal", "Revisit", "NoDecisionMaker", "Closed", "Other"];
 
@@ -68,6 +69,8 @@ export function VisitPanel({
   const [photo, setPhoto] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [locating, setLocating] = useState(false);
+  // Браузер запретил геолокацию: объясняем, почему визит без отметки места, и где включить.
+  const [geoNote, setGeoNote] = useState<"denied" | null>(null);
 
   if (active && active.marketId !== marketId) {
     return (
@@ -90,8 +93,9 @@ export function VisitPanel({
           disabled={busy !== null || locating}
           onClick={async () => {
             setLocating(true);
-            const pos = await getPosition();
+            const { position: pos, reason } = await locate();
             setLocating(false);
+            setGeoNote(reason === "denied" || reason === "dismissed" ? "denied" : null);
             await run("start", () =>
               fieldApi.post("visits/start", {
                 marketId,
@@ -118,6 +122,11 @@ export function VisitPanel({
   const [geoText, geoTone] = geoLabel[active.geoStatus];
   return (
     <div className="space-y-4 rounded-xl border-2 border-accent/50 bg-accent-soft/40 p-4">
+      {geoNote === "denied" && active.geoStatus === "NoGps" && (
+        <p className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-ink">
+          Геолокация не разрешена — визит идёт без отметки места. Разрешить её можно в профиле: «Уведомления и геолокация».
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <span className="relative flex size-2.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />

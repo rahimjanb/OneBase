@@ -31,6 +31,12 @@ public static class Permissions
     /// <summary>Sales Base: управление — состав и команды, доступы, настройки, рекомендации AI всей организации.</summary>
     public const string FieldManage = "field.manage";
 
+    /// <summary>
+    /// Sales Base из OneBase: задачи агентам и супервайзерам, маршруты, данные всей организации — без управления составом,
+    /// доступами и настройками (это field.manage). Для руководителей без карточки участника.
+    /// </summary>
+    public const string FieldPlan = "field.plan";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
@@ -48,5 +54,6 @@ public static class Permissions
         HrRead,
         FieldUse,
         FieldManage,
+        FieldPlan,
     ];
 }

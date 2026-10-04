@@ -58,6 +58,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
             { value: "Ai", label: "AI" },
             { value: "Supervisor", label: "Супервайзер" },
             { value: "Rm", label: "РМ" },
+            { value: "Office", label: "Офис (OneBase)" },
             { value: "System", label: "Система" },
             { value: "Agent", label: "Сам агент" },
           ]}

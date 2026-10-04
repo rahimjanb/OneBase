@@ -28,7 +28,8 @@ public abstract class FieldControllerBase(FieldAccess access) : ControllerBase
         }
 
         var permissions = User.FindAll(OneBaseClaims.Permission).Select(c => c.Value).ToHashSet();
-        _scope = await access.ResolveAsync(User.GetUserId(), permissions.Contains(Permissions.FieldUse), permissions.Contains(Permissions.FieldManage), ct);
+        _scope = await access.ResolveAsync(User.GetUserId(), permissions.Contains(Permissions.FieldUse), permissions.Contains(Permissions.FieldManage), ct,
+            permissions.Contains(Permissions.FieldPlan));
         return _scope;
     }
 

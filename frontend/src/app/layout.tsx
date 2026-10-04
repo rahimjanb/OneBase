@@ -40,17 +40,28 @@ const baseMetadata: Metadata = {
   formatDetection: { telephone: false },
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  // Контент заходит под вырез и строку состояния; отступы — через env(safe-area-inset-*) в шапке и нижней панели.
-  viewportFit: "cover",
-  // Цвет строки состояния — как у шапки на телефоне; при ручном переключении темы его обновляет ThemeToggle.
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#16213a" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b1220" },
-  ],
-};
+export async function generateViewport(): Promise<Viewport> {
+  const field = isFieldHost(requestHost(await headers()));
+  return {
+    width: "device-width",
+    initialScale: 1,
+    // Контент заходит под вырез и строку состояния; отступы — через env(safe-area-inset-*) в шапке и нижней панели.
+    viewportFit: "cover",
+    // Клавиатура уменьшает экран приложения (Android Chrome, Firefox): шапка остаётся на месте, поле ввода — над клавиатурой,
+    // нижняя панель на это время прячется (useKeyboardOpen). iOS параметр не читает.
+    interactiveWidget: "resizes-content",
+    // Цвет строки состояния — как у шапки на телефоне (у Sales Base — зелёная); при переключении темы его обновляет ThemeToggle.
+    themeColor: field
+      ? [
+          { media: "(prefers-color-scheme: light)", color: "#0d2e29" },
+          { media: "(prefers-color-scheme: dark)", color: "#071a17" },
+        ]
+      : [
+          { media: "(prefers-color-scheme: light)", color: "#16213a" },
+          { media: "(prefers-color-scheme: dark)", color: "#0b1220" },
+        ],
+  };
+}
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

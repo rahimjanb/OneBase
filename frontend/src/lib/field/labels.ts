@@ -87,7 +87,7 @@ export const taskActionLabel: Record<FieldTaskStatus, string> = {
   Postponed: "Перенести",
 };
 
-export const actorLabel: Record<FieldActorType, string> = { Rm: "РМ", Supervisor: "Супервайзер", Agent: "Агент", Ai: "AI", System: "Система" };
+export const actorLabel: Record<FieldActorType, string> = { Rm: "РМ", Supervisor: "Супервайзер", Agent: "Агент", Ai: "AI", System: "Система", Office: "Офис" };
 
 export const dayStatusLabel: Record<AgentDayStatus, [string, Tone]> = {
   NotStarted: ["Не начал", "muted"],

@@ -6,6 +6,7 @@ import type * as Leaflet from "leaflet";
 import { LocateFixed } from "lucide-react";
 import { mapStateStyle } from "@/lib/field/labels";
 import type { FieldMapView } from "@/lib/field/types";
+import { locate as locateMe } from "@/lib/geo";
 import { fieldApi } from "./hooks";
 
 const routeColors = ["#0d9488", "#3b76f6", "#e0922f", "#b5179e", "#1f9d6b", "#dc4c4c", "#6d28d9", "#0891b2"];
@@ -171,9 +172,34 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
     }
   }
 
-  // «Я здесь» — для агента следим за позицией.
+  // «Я здесь» — для агента следим за позицией, но только с уже выданным разрешением (или после нажатия «Моё местоположение»):
+  // запрос при каждом открытии карты Chrome после трёх закрытых окон превращает в блокировку геолокации всего сайта.
+  const [canWatch, setCanWatch] = useState(false);
   useEffect(() => {
-    if (!followMe || typeof navigator === "undefined" || !navigator.geolocation) return;
+    if (!followMe || typeof navigator === "undefined" || !navigator.permissions) return;
+    let alive = true;
+    let permission: PermissionStatus | null = null;
+    const sync = () => {
+      if (permission?.state === "granted") setCanWatch(true);
+      else if (permission?.state === "denied") setCanWatch(false);
+    };
+    navigator.permissions
+      .query({ name: "geolocation" })
+      .then((status) => {
+        if (!alive) return;
+        permission = status;
+        status.addEventListener("change", sync);
+        sync();
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+      permission?.removeEventListener("change", sync);
+    };
+  }, [followMe]);
+
+  useEffect(() => {
+    if (!followMe || !canWatch || typeof navigator === "undefined" || !navigator.geolocation) return;
     const id = navigator.geolocation.watchPosition(
       (pos) => {
         const L = LRef.current;
@@ -188,22 +214,21 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 },
     );
     return () => navigator.geolocation.clearWatch(id);
-  }, [followMe]);
+  }, [followMe, canWatch]);
 
-  const locate = () => {
-    if (!navigator.geolocation) return;
+  // По нажатию: здесь окно разрешения уместно. Удалось — дальше следим за позицией без запросов.
+  const locate = async () => {
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocating(false);
-        mapRef.current?.setView([pos.coords.latitude, pos.coords.longitude], 15);
-      },
-      () => {
-        setLocating(false);
-        setStatus("Не удалось определить местоположение — проверьте разрешение и GPS");
-      },
-      { enableHighAccuracy: true, timeout: 12000 },
-    );
+    const { position, reason } = await locateMe({ reuseMs: 5000 });
+    setLocating(false);
+    if (position) {
+      mapRef.current?.setView([position.latitude, position.longitude], 15);
+      if (followMe) setCanWatch(true);
+    } else {
+      setStatus(
+        reason === "denied" || reason === "dismissed" ? "Геолокация не разрешена — разрешить можно в профиле: «Уведомления и геолокация»" : "Не удалось определить местоположение — проверьте GPS",
+      );
+    }
   };
 
   return (

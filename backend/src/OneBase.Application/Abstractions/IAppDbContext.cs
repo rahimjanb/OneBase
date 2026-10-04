@@ -84,5 +84,10 @@ public interface IAppDbContext
     DbSet<FieldNotification> FieldNotifications { get; }
     DbSet<FieldSettings> FieldSettings { get; }
 
+    DbSet<OneBase.Domain.Work.WorkTask> WorkTasks { get; }
+    DbSet<OneBase.Domain.Work.UserNotification> UserNotifications { get; }
+    DbSet<OneBase.Domain.Work.PushSubscription> PushSubscriptions { get; }
+    DbSet<OneBase.Domain.Work.PushKeys> PushKeys { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

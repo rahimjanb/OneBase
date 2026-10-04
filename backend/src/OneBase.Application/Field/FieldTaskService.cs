@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
+using OneBase.Application.Work;
 using OneBase.Domain.Audit;
 using OneBase.Domain.Field;
+using OneBase.Domain.Work;
 
 namespace OneBase.Application.Field;
 
@@ -42,9 +44,13 @@ public sealed class FieldTaskService(
     FieldAssignments assignments,
     ILinkoSalesProvider linko,
     FieldNotifier notifier,
+    UserNotifier userNotifier,
     IAuditLogger audit)
 {
     private static readonly FieldTaskStatus[] AllStatuses = Enum.GetValues<FieldTaskStatus>();
+
+    /// <summary>Куда ведёт уведомление автору из OneBase: раздел «Задачи → Продажи».</summary>
+    private const string OfficeTasksLink = "/tasks/sales";
 
     private IQueryable<FieldTask> Visible(FieldScope scope)
     {
@@ -129,13 +135,23 @@ public sealed class FieldTaskService(
         var snapshot = await directory.GetAsync(ct);
         var markets = await linko.MarketsAsync(tasks.Where(t => t.MarketId is not null).Select(t => t.MarketId!.Value).ToList(), ct);
         var today = FieldClock.Today;
+        // Автор без карточки участника (сотрудник офиса из OneBase) — по имени пользователя.
+        var authorIds = tasks.Where(t => t.CreatedById is null && t.CreatedByUserId is not null).Select(t => t.CreatedByUserId!.Value).Distinct().ToArray();
+        var authors = authorIds.Length == 0
+            ? new Dictionary<Guid, string>()
+            : await db.Users.AsNoTracking().Where(u => authorIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        string? AuthorOf(FieldTask t) =>
+            t.CreatedByType == FieldActorType.Ai ? "AI"
+            : t.CreatedByType == FieldActorType.System ? "Система"
+            : t.CreatedById is { } member ? snapshot.NameOf(member)
+            : t.CreatedByUserId is { } user && authors.TryGetValue(user, out var name) ? name
+            : null;
         return tasks.Select(t =>
         {
             var isAssignee = scope.MemberId == t.AssignedToId;
             var canPlan = scope.CanPlan && scope.CanSeeMember(t.AssignedToId) && !isAssignee || scope.CanPlanFor(t.AssignedToId);
             return new FieldTaskRow(t.Id, t.Title, t.Description, t.Priority, t.Status, t.DueDate, FieldTaskRules.IsOpen(t.Status) && t.DueDate < today,
-                t.AssignedToId, snapshot.NameOf(t.AssignedToId), t.CreatedByType,
-                t.CreatedByType == FieldActorType.Ai ? "AI" : t.CreatedByType == FieldActorType.System ? "Система" : snapshot.NameOf(t.CreatedById),
+                t.AssignedToId, snapshot.NameOf(t.AssignedToId), t.CreatedByType, AuthorOf(t),
                 t.MarketId, t.MarketId is { } m ? markets.GetValueOrDefault(m)?.Name : null, t.CreatedAt, t.CompletedAt, t.Result, t.RecommendationId,
                 canPlan, AllStatuses.Where(s => FieldTaskRules.CanTransition(t.Status, s, isAssignee, canPlan)).ToList());
         }).ToList();
@@ -167,7 +183,12 @@ public sealed class FieldTaskService(
             Priority = input.Priority,
             DueDate = input.DueDate,
             CreatedById = scope.MemberId,
-            CreatedByType = self && scope.IsAgent ? FieldActorType.Agent : scope.IsRm ? FieldActorType.Rm : FieldActorType.Supervisor,
+            CreatedByUserId = scope.UserId,
+            // Без карточки участника — сотрудник офиса (раздел «Задачи» OneBase).
+            CreatedByType = scope.MemberId is null ? FieldActorType.Office
+                : self && scope.IsAgent ? FieldActorType.Agent
+                : scope.IsRm ? FieldActorType.Rm
+                : FieldActorType.Supervisor,
         };
         db.FieldTasks.Add(task);
         if (!self)
@@ -287,6 +308,7 @@ public sealed class FieldTaskService(
             case FieldTaskStatus.Completed:
                 task.CompletedAt = DateTimeOffset.UtcNow;
                 notifier.Notify(task.SupervisorId ?? task.CreatedById, FieldNotificationKind.TaskChanged, $"Выполнена задача: {task.Title}", task.Result, $"/field/tasks/{task.Id}");
+                await NotifyOfficeAuthorAsync(task, scope.UserId, UserNotificationKind.FieldTaskDone, $"Выполнена задача: {task.Title}", task.Result, ct);
                 break;
             case FieldTaskStatus.Verified:
                 task.VerifiedAt = DateTimeOffset.UtcNow;
@@ -310,6 +332,7 @@ public sealed class FieldTaskService(
                 else
                 {
                     notifier.Notify(task.SupervisorId, FieldNotificationKind.TaskChanged, $"Агент перенёс задачу: {task.Title}", DueText(task.DueDate), $"/field/tasks/{task.Id}");
+                    await NotifyOfficeAuthorAsync(task, scope.UserId, UserNotificationKind.FieldTaskPostponed, $"Перенесена задача: {task.Title}", DueText(task.DueDate), ct);
                 }
 
                 break;
@@ -325,6 +348,18 @@ public sealed class FieldTaskService(
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, scope.UserId.ToString(), "field.task.status", "field_task", task.Id.ToString(),
             new { from = from.ToString(), to = task.Status.ToString(), task.DueDate }, ct);
+    }
+
+    /// <summary>Автору из OneBase (без карточки участника) — в его колокольчик OneBase, с именем исполнителя.</summary>
+    private async Task NotifyOfficeAuthorAsync(FieldTask task, Guid currentUserId, UserNotificationKind kind, string title, string? detail, CancellationToken ct)
+    {
+        if (task.CreatedById is not null || task.CreatedByUserId is not { } author || author == currentUserId)
+        {
+            return;
+        }
+
+        var assignee = (await directory.GetAsync(ct)).NameOf(task.AssignedToId);
+        userNotifier.Notify(author, kind, title, string.IsNullOrWhiteSpace(detail) ? assignee : $"{assignee}: {detail}", OfficeTasksLink);
     }
 
     /// <summary>Раз в день: напомнить исполнителю и супервайзеру о просроченных задачах.</summary>

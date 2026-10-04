@@ -172,6 +172,10 @@ public sealed partial class UsersController(
 
         await db.SaveChangesAsync(ct);
         access.Invalidate(user.Id); // новая роль или отключение действуют сразу
+        if (wasActive && !user.IsActive)
+        {
+            await db.PushSubscriptions.Where(s => s.UserId == user.Id).ExecuteDeleteAsync(ct);
+        }
 
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "users.updated", "user", user.Id.ToString(),
             new

@@ -1,3 +1,5 @@
+import { AppBridge } from "@/components/shell/AppBridge";
+import { PullToRefresh, ScrollManager } from "@/components/shell/AppScroll";
 import { MobileNav } from "@/components/shell/MobileNav";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
@@ -9,15 +11,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Без сессии на вход ведёт proxy; недействительная сессия (401) — выход и вход заново.
   const me = await apiSession<Me>("/api/auth/me");
   const canOpenSettings = !!me?.canOpenSettings;
+  // Оболочка как у приложения: закреплена на весь экран, верхняя и нижняя панели не двигаются,
+  // прокручивается только <main data-app-scroll>.
   return (
-    <div className="min-h-dvh lg:flex">
+    <div data-app-shell className="fixed inset-0 flex overflow-hidden bg-page">
       <Sidebar canOpenSettings={canOpenSettings} />
-      {/* На телефоне снизу — панель навигации: оставляем под неё место, с учётом safe area. */}
-      <main className="min-w-0 flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col">
         <Topbar me={me} />
-        {children}
-      </main>
-      <MobileNav canOpenSettings={canOpenSettings} />
+        <div className="relative min-h-0 flex-1">
+          <PullToRefresh />
+          <main data-app-scroll className="h-full">
+            {children}
+          </main>
+        </div>
+        <MobileNav canOpenSettings={canOpenSettings} />
+      </div>
+      <ScrollManager />
+      <AppBridge userId={me?.id ?? null} />
     </div>
   );
 }

@@ -33,6 +33,9 @@ public interface ITool
     /// <summary>Право OneBase, которое нужно пользователю, чтобы AI получил эти данные. null — данных пользователя инструмент не читает.</summary>
     string? RequiredPermission => null;
 
+    /// <summary>Права, любое из которых заменяет RequiredPermission (например, field.plan вместо field.use).</summary>
+    IReadOnlyList<string>? AlternativePermissions => null;
+
     /// <summary>Источник знаний (KnowledgeSources), к которому относится инструмент. null — служебный инструмент.</summary>
     string? Source => null;
 

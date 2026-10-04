@@ -8,6 +8,7 @@ using OneBase.Domain.Field;
 using OneBase.Domain.Files;
 using OneBase.Domain.Identity;
 using OneBase.Domain.Sales;
+using OneBase.Domain.Work;
 
 namespace OneBase.Infrastructure.Persistence;
 
@@ -97,12 +98,18 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<FieldNotification> FieldNotifications => Set<FieldNotification>();
     public DbSet<FieldSettings> FieldSettings => Set<FieldSettings>();
 
+    public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
+    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    public DbSet<PushKeys> PushKeys => Set<PushKeys>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         SalesModel.ConfigureLinko(b);
         SalesModel.ConfigureSales(b);
         AiSchema.Configure(b);
         FieldModel.Configure(b);
+        WorkModel.Configure(b);
 
         b.Entity<IntegrationConnection>(e =>
         {

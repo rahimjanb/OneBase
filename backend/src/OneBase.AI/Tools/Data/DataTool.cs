@@ -30,6 +30,9 @@ public abstract class DataTool : ITool
     public abstract string Description { get; }
     public abstract string? Source { get; }
     public virtual string? RequiredPermission => Permissions.SalesRead;
+
+    /// <summary>Права, любое из которых заменяет RequiredPermission.</summary>
+    public virtual IReadOnlyList<string>? AlternativePermissions => null;
     public bool IsCritical => false;
     public abstract JsonElement InputSchema { get; }
 

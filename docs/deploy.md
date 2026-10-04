@@ -34,7 +34,8 @@ scp $HOME\onebase.dump root@IP_СЕРВЕРА:~/
    не нужно: cloudflared запустится в Docker.
 3. **Public hostname**: домен (и поддомен, если нужен) → **Service**: тип `HTTP`, адрес `nginx:80` → **Save**.
 4. **Sales Base** (полевые продажи): ещё один **Public hostname** `sales.1base.uz` → **Service** `HTTP`, адрес `nginx:81` → **Save**.
-   Другой домен — задайте его в `.env` как `FIELD_HOST=...` (по умолчанию `sales.1base.uz`). Подробнее — [sales-base.md](sales-base.md).
+   Другой домен — задайте его в `.env` как `FIELD_HOST=...` (по умолчанию `sales.1base.uz`), вида `sales.<основной домен>`:
+   по префиксу «sales.» его узнают service worker и ссылки в push-уведомлениях. Подробнее — [sales-base.md](sales-base.md).
 
 ## 3. На сервере
 

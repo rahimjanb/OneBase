@@ -1,5 +1,6 @@
 import { DateSwitch, ParamSelect } from "@/components/field/DateSwitch";
 import { FieldPage } from "@/components/field/ui";
+import { PushPrompt } from "@/components/shell/AppBridge";
 import { AgentTodayView, DashboardView } from "@/components/field/views";
 import { fieldGet, fieldMe, qs, sp, type FieldSearchParams } from "@/lib/field/api";
 import type { FieldDashboard, FieldMe, FieldStructure, FieldToday } from "@/lib/field/types";
@@ -16,7 +17,10 @@ export default async function FieldHome({ searchParams }: { searchParams: Promis
     const today = await fieldGet<FieldToday>(`today${qs({ date: sp(params, "date") })}`, "/field");
     return (
       <FieldPage title="Сегодня" subtitle={[me.name, me.teamName, me.supervisorName ? `супервайзер ${me.supervisorName}` : null].filter(Boolean).join(" · ")} actions={<DateSwitch value={date} today={me.today} />}>
-        <AgentTodayView data={today} me={me} own />
+        <div className="space-y-4">
+          <PushPrompt appName="Sales Base" text="Включите уведомления — новые задачи и изменения маршрута будут приходить сразу на телефон." />
+          <AgentTodayView data={today} me={me} own />
+        </div>
       </FieldPage>
     );
   }
@@ -45,7 +49,10 @@ export default async function FieldHome({ searchParams }: { searchParams: Promis
         </>
       }
     >
-      <DashboardView data={dashboard} me={me} query={query} />
+      <div className="space-y-4">
+        <PushPrompt appName="Sales Base" text="Включите уведомления — выполненные задачи и рекомендации AI по команде будут приходить сразу." />
+        <DashboardView data={dashboard} me={me} query={query} />
+      </div>
     </FieldPage>
   );
 }

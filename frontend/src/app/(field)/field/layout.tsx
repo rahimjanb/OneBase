@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { FieldShell } from "@/components/field/FieldShell";
+import { LogoutLink } from "@/components/shell/AppBridge";
 import { FieldAccessError, fieldGet, fieldMe } from "@/lib/field/api";
 import { FIELD_LOGOUT_PATH, oneBaseHref, requestHost } from "@/lib/field/host";
 import type { FieldMe } from "@/lib/field/types";
@@ -25,9 +26,9 @@ export default async function FieldLayout({ children }: { children: React.ReactN
           <h1 className="mt-4 text-lg font-semibold text-ink">Нет доступа к Sales Base</h1>
           <p className="mt-2 text-sm text-ink-2">{error.message}</p>
           <div className="mt-5 flex justify-center gap-2">
-            <a href={FIELD_LOGOUT_PATH} className="inline-flex h-11 items-center rounded-lg border border-line px-4 text-sm text-ink hover:bg-muted">
+            <LogoutLink href={FIELD_LOGOUT_PATH} className="inline-flex h-11 items-center rounded-lg border border-line px-4 text-sm text-ink hover:bg-muted">
               Войти другим пользователем
-            </a>
+            </LogoutLink>
             {oneBase && (
               <a href={oneBase} className="inline-flex h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-white">
                 OneBase

@@ -50,7 +50,7 @@ public sealed class FieldDirectory(IAppDbContext db, IMemoryCache cache)
 /// <summary>Область текущего пользователя (см. FieldScopeBuilder).</summary>
 public sealed class FieldAccess(FieldDirectory directory)
 {
-    public async Task<FieldScope> ResolveAsync(Guid userId, bool canUse, bool canManage, CancellationToken ct)
+    public async Task<FieldScope> ResolveAsync(Guid userId, bool canUse, bool canManage, CancellationToken ct, bool canPlan = false)
     {
         var snapshot = await directory.GetAsync(ct);
         return FieldScopeBuilder.Build(
@@ -58,7 +58,8 @@ public sealed class FieldAccess(FieldDirectory directory)
             canUse,
             canManage,
             snapshot.Members.Values.Select(m => new FieldScopeBuilder.MemberRow(m.Id, m.UserId, m.LinkoUserId, m.Role, m.TeamId, m.BranchIds, m.IsActive)).ToList(),
-            snapshot.Teams.Values.Select(t => new FieldScopeBuilder.TeamRow(t.Id, t.SupervisorId, t.BranchId, t.IsActive)).ToList());
+            snapshot.Teams.Values.Select(t => new FieldScopeBuilder.TeamRow(t.Id, t.SupervisorId, t.BranchId, t.IsActive)).ToList(),
+            canPlan);
     }
 }
 

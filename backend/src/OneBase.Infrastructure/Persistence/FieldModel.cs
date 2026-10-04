@@ -137,6 +137,10 @@ public static class FieldModel
             e.HasIndex(x => x.DueDate);
             e.HasIndex(x => x.MarketId);
             e.HasOne(x => x.AssignedTo).WithMany().HasForeignKey(x => x.AssignedToId).OnDelete(DeleteBehavior.Cascade);
+            // Автор из OneBase без карточки участника; пользователь удалён — подпись пропадает, задача остаётся.
+            e.HasIndex(x => x.CreatedByUserId);
+            e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_FieldTasks_Users_CreatedByUserId");
         });
 
         b.Entity<FieldRecommendation>(e =>

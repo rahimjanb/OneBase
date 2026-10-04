@@ -20,7 +20,7 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
       display: "standalone",
       orientation: "portrait",
       background_color: "#f6f8fb",
-      theme_color: "#0d3b33",
+      theme_color: "#0d2e29", // как шапка Sales Base
       categories: ["business", "productivity"],
       icons: [
         { src: "/icons/field-192.png", sizes: "192x192", type: "image/png" },

@@ -1443,6 +1443,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Description")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
@@ -1488,6 +1491,8 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("DueDate");
 
@@ -2983,6 +2988,205 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("Targets", "sales");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Work.PushKeys", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProtectedPrivateKey")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("PublicKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_PushKeys");
+
+                    b.ToTable("PushKeys", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.PushSubscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Auth")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("Failures")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Origin")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("P256dh")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_PushSubscriptions");
+
+                    b.HasIndex("Endpoint")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PushSubscriptions_Endpoint");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_PushSubscriptions_UserId");
+
+                    b.ToTable("PushSubscriptions", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.UserNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Link")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_UserNotifications");
+
+                    b.HasIndex("RecipientId", "CreatedAt")
+                        .HasDatabaseName("IX_UserNotifications_RecipientId_CreatedAt");
+
+                    b.HasIndex("RecipientId", "ReadAt")
+                        .HasDatabaseName("IX_UserNotifications_RecipientId_ReadAt");
+
+                    b.ToTable("Notifications", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssigneeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Result")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_WorkTasks");
+
+                    b.HasIndex("CreatedById")
+                        .HasDatabaseName("IX_WorkTasks_CreatedById");
+
+                    b.HasIndex("AssigneeId", "Status")
+                        .HasDatabaseName("IX_WorkTasks_AssigneeId_Status");
+
+                    b.HasIndex("DepartmentId", "Status")
+                        .HasDatabaseName("IX_WorkTasks_DepartmentId_Status");
+
+                    b.ToTable("Tasks", "work");
+                });
+
             modelBuilder.Entity("OneBase.Domain.AI.AiKnowledgeChunk", b =>
                 {
                     b.HasOne("OneBase.Domain.AI.AiKnowledgeDocument", null)
@@ -3083,6 +3287,12 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AssignedToId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("OneBase.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_FieldTasks_Users_CreatedByUserId");
 
                     b.Navigation("AssignedTo");
                 });
@@ -3265,6 +3475,58 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Region");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.PushSubscription", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_PushSubscriptions_Users_UserId");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.UserNotification", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "Recipient")
+                        .WithMany()
+                        .HasForeignKey("RecipientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_UserNotifications_Users_RecipientId");
+
+                    b.Navigation("Recipient");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTask", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "Assignee")
+                        .WithMany()
+                        .HasForeignKey("AssigneeId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_WorkTasks_Users_AssigneeId");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_WorkTasks_Users_CreatedById");
+
+                    b.HasOne("OneBase.Domain.Identity.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkTasks_Departments_DepartmentId");
+
+                    b.Navigation("Assignee");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Department");
                 });
 
             modelBuilder.Entity("OneBase.Domain.AI.AiConversation", b =>

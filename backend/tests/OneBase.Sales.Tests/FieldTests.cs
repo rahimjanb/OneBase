@@ -116,6 +116,31 @@ public class FieldScopeTests
     }
 
     [Fact]
+    public void Planner_without_member_card_plans_organization_but_does_not_manage()
+    {
+        // Директор с field.plan: задачи и маршруты всей организации, без управления составом и настройками.
+        var scope = FieldScopeBuilder.Build(Guid.NewGuid(), false, false, Members, Teams, canPlan: true);
+
+        Assert.True(scope.OrgWide);
+        Assert.True(scope.CanPlan);
+        Assert.False(scope.CanManage);
+        Assert.False(scope.CanManageOrg);
+        Assert.Null(scope.MemberId);
+        Assert.Equal(new HashSet<Guid> { A1, A2, A3 }, scope.AgentIds);
+        Assert.True(scope.CanSeeMember(Sv1)); // задачу можно поставить и супервайзеру
+        Assert.Throws<FieldForbiddenException>(() => FieldMemberService.RequireManage(scope));
+    }
+
+    [Fact]
+    public void Member_with_only_plan_permission_keeps_own_scope()
+    {
+        var scope = FieldScopeBuilder.Build(Sv1User, false, false, Members, Teams, canPlan: true);
+
+        Assert.Equal(FieldRole.Supervisor, scope.Role);
+        Assert.Equal(new HashSet<Guid> { A1, A2 }, scope.AgentIds);
+    }
+
+    [Fact]
     public void Deactivated_rm_with_manage_permission_loses_access()
     {
         // Иначе отключённый РМ с правом field.manage попал бы в ветку «администратор без карточки» и получил всю организацию.
@@ -441,5 +466,36 @@ public class FieldPlanningRulesTests
         var b = FieldPlanningRules.Decline(M(145, 4_000_000, 10_000_000, 30_000_000, Today), Settings, Today.AddDays(1))!;
 
         Assert.Equal(a.Key, b.Key);
+    }
+}
+
+public class WorkTaskRulesTests
+{
+    [Fact]
+    public void Assignee_moves_task_forward_only()
+    {
+        Assert.True(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.New, OneBase.Domain.Work.WorkTaskStatus.InProgress, isAssignee: true, canEdit: false));
+        Assert.True(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.InProgress, OneBase.Domain.Work.WorkTaskStatus.Done, isAssignee: true, canEdit: false));
+        Assert.False(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.New, OneBase.Domain.Work.WorkTaskStatus.Cancelled, isAssignee: true, canEdit: false));
+        Assert.False(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.Done, OneBase.Domain.Work.WorkTaskStatus.InProgress, isAssignee: true, canEdit: false));
+    }
+
+    [Fact]
+    public void Author_cancels_and_reopens()
+    {
+        Assert.True(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.InProgress, OneBase.Domain.Work.WorkTaskStatus.Cancelled, isAssignee: false, canEdit: true));
+        Assert.True(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.Done, OneBase.Domain.Work.WorkTaskStatus.InProgress, isAssignee: false, canEdit: true));
+        Assert.True(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.Cancelled, OneBase.Domain.Work.WorkTaskStatus.InProgress, isAssignee: false, canEdit: true));
+        Assert.False(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.Done, OneBase.Domain.Work.WorkTaskStatus.Cancelled, isAssignee: false, canEdit: true));
+    }
+
+    [Fact]
+    public void Outsider_changes_nothing()
+    {
+        foreach (var from in Enum.GetValues<OneBase.Domain.Work.WorkTaskStatus>())
+        foreach (var to in Enum.GetValues<OneBase.Domain.Work.WorkTaskStatus>())
+        {
+            Assert.False(OneBase.Application.Work.WorkTaskService.CanTransition(from, to, isAssignee: false, canEdit: false));
+        }
     }
 }

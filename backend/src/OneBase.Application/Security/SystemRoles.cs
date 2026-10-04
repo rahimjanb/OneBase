@@ -30,7 +30,7 @@ public static class SystemRoles
         new(Director, "Все данные отделов, консультант, журнал аудита, пользователи и роли. Интеграции и настройки AI — у администратора.", null,
         [
             Permissions.UsersManage, Permissions.SalesRead, Permissions.FinanceRead, Permissions.HrRead, Permissions.FilesRead, Permissions.FilesWrite,
-            Permissions.AgentsRun, Permissions.ApprovalsDecide, Permissions.AuditRead,
+            Permissions.AgentsRun, Permissions.ApprovalsDecide, Permissions.AuditRead, Permissions.FieldPlan,
         ]),
         new("Продажи", "Сотрудник отдела продаж: раздел «Продажи», консультант, файлы.", "sales", [Permissions.SalesRead, .. Employee]),
         new("Финансы", "Сотрудник финансового отдела: оплаты и продажи, консультант, файлы.", "finance", [Permissions.FinanceRead, Permissions.SalesRead, .. Employee]),
@@ -42,6 +42,15 @@ public static class SystemRoles
             [Permissions.FieldUse, Permissions.FieldManage, Permissions.SalesRead, Permissions.AgentsRun]),
         new(FieldSupervisor, "Sales Base: своя команда — агенты, точки, маршруты, визиты, задачи и KPI команды.", null, [Permissions.FieldUse]),
         new(FieldAgent, "Sales Base с телефона: свой маршрут, точки, визиты, задачи, продажи и KPI.", null, [Permissions.FieldUse]),
+    ];
+
+    /// <summary>
+    /// Права, которые добавляются уже созданным ролям при запуске (права ролей иначе задаются только при создании):
+    /// так новые возможности доходят до существующих баз. Только добавление — снятые вручную права вернутся.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Role, string Permission)> Upgrades =
+    [
+        (Director, Permissions.FieldPlan),
     ];
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
@@ -80,5 +89,6 @@ public static class SystemRoles
         [Permissions.AuditRead] = "Журнал аудита",
         [Permissions.FieldUse] = "Sales Base",
         [Permissions.FieldManage] = "Sales Base: управление",
+        [Permissions.FieldPlan] = "Sales Base: задачи и маршруты",
     };
 }

@@ -1,6 +1,8 @@
 import { Suspense } from "react";
-import { Bell, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { initials, type Me } from "@/lib/users";
+import { LogoutLink } from "./AppBridge";
+import { NotificationBell } from "./NotificationBell";
 import { SectionNav } from "./SectionNav";
 import { Logo } from "./Sidebar";
 import { ThemeToggle } from "./ThemeToggle";
@@ -9,11 +11,12 @@ import { ThemeToggle } from "./ThemeToggle";
  * Верхняя панель — одна на все страницы (живёт в layout, поэтому не перерисовывается и не пропадает при переходах).
  * На телефоне это тёмная шапка приложения: логотип, тема, уведомления, аватар; кнопки разделов продаж — второй строкой.
  * Отступ сверху — под вырез экрана и строку состояния в установленном приложении (safe area).
- * На больших экранах — светлая, прилипает к верху, без нижней линии: её даёт заголовок страницы.
+ * На больших экранах — светлая, без нижней линии: её даёт заголовок страницы. Панель стоит над областью прокрутки и не двигается.
+ * Слой выше нижней панели (z-40 против z-30): уведомления и меню аватара, открытые вниз, не прячутся под неё.
  */
 export function Topbar({ me }: { me: Me | null }) {
   return (
-    <div className="z-30 bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-text lg:sticky lg:top-0 lg:bg-page/90 lg:pt-0 lg:text-ink-2 lg:backdrop-blur">
+    <div className="relative z-40 shrink-0 bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-text lg:bg-page lg:pt-0 lg:text-ink-2">
       <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-1 px-4 sm:px-6">
         <div className="flex h-14 items-center lg:hidden">
           <Logo />
@@ -23,14 +26,7 @@ export function Topbar({ me }: { me: Me | null }) {
         </Suspense>
         <div className="ml-auto flex h-14 items-center gap-1 lg:h-16">
           <ThemeToggle />
-          <button
-            type="button"
-            aria-label="Уведомления"
-            className="relative grid size-10 place-items-center rounded-full text-current transition-colors hover:bg-white/10 hover:text-white lg:size-9 lg:hover:bg-muted lg:hover:text-ink"
-          >
-            <Bell className="size-4" strokeWidth={1.75} />
-            <span className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-accent ring-2 ring-sidebar lg:right-2 lg:top-2 lg:ring-page" />
-          </button>
+          {me && <NotificationBell />}
           {me && (
             <details className="relative ml-1">
               <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg p-1 text-left transition-colors hover:bg-white/10 lg:hover:bg-muted [&::-webkit-details-marker]:hidden">
@@ -47,9 +43,9 @@ export function Topbar({ me }: { me: Me | null }) {
                   <span className="block truncate">{me.position ?? me.roles[0] ?? me.login}</span>
                 </div>
                 {/* Обычная ссылка: /logout при загрузке удаляет сессию, заранее его загружать нельзя. */}
-                <a href="/logout" className="block rounded-md px-2.5 py-2 text-sm text-ink hover:bg-muted">
+                <LogoutLink href="/logout" className="block rounded-md px-2.5 py-2 text-sm text-ink hover:bg-muted">
                   Выйти
-                </a>
+                </LogoutLink>
               </div>
             </details>
           )}
