@@ -6,7 +6,7 @@ import { MonitorUp } from "lucide-react";
 import { EmptyState, SearchInput } from "@/components/ui";
 import { fileSize, filesLabel, foldersLabel } from "@/lib/format";
 import { accessLabel, filesApi, modifiedLabel, type DepartmentSummary, type SearchRow } from "@/lib/files";
-import { FileIcon } from "./file-meta";
+import { FileIcon, FolderIcon } from "./file-meta";
 import { PreviewDialog } from "./FileDialogs";
 
 const connectionBadge = {
@@ -59,31 +59,44 @@ export function BaseOverview({ departments }: { departments: DepartmentSummary[]
       ) : departments.length === 0 ? (
         <div className="mt-6"><EmptyState>Нет отделов, к файлам которых у вас есть доступ</EmptyState></div>
       ) : (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {departments.map((d) => {
-            const badge = connectionBadge[d.connection.status];
-            return (
-              <Link key={d.id} href={`/base/${d.code}`} className="group rounded-xl border border-line bg-surface p-5 transition-colors hover:border-accent">
-                <div className="flex items-start gap-3">
-                  <span className="flex-1 text-base font-semibold group-hover:text-accent">{d.name}</span>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-ink-2">{accessLabel[d.access]}</span>
-                </div>
-                <p className="mt-2 text-sm text-ink-2">
-                  {foldersLabel(d.folders)} · {filesLabel(d.files)}
-                  {d.files > 0 && ` · ${fileSize(d.sizeBytes)}`}
-                </p>
-                <div className="mt-4 flex items-center gap-2 text-xs text-ink-3">
-                  <span className="flex-1">{d.updatedAt ? `Изменено: ${modifiedLabel(d.updatedAt)}` : "Файлов пока нет"}</span>
-                  {badge && (
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${badge.cls}`}>
-                      <MonitorUp className="size-3" />
-                      {badge.label}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
+        // Отделы — папки верхнего уровня: та же таблица, что внутри отдела («Файлы» → «Производство» → «Отчёты»).
+        <div className="mt-5 overflow-x-auto">
+          <div className="min-w-[640px]">
+            <div className="grid grid-cols-[minmax(0,2fr)_130px_minmax(0,1.3fr)_90px_minmax(0,1.2fr)] gap-3 border-b border-line py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+              <span>Отдел</span>
+              <span>Доступ</span>
+              <span>Содержимое</span>
+              <span>Размер</span>
+              <span>Изменён</span>
+            </div>
+            {departments.map((d) => {
+              const badge = connectionBadge[d.connection.status];
+              return (
+                <Link
+                  key={d.id}
+                  href={`/base/${d.code}`}
+                  className="group grid grid-cols-[minmax(0,2fr)_130px_minmax(0,1.3fr)_90px_minmax(0,1.2fr)] items-center gap-3 border-b border-line py-3 text-sm hover:bg-muted/50"
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <FolderIcon />
+                    <span className="truncate font-medium group-hover:text-accent">{d.name}</span>
+                    {badge && (
+                      <span className={`hidden shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] sm:inline-flex ${badge.cls}`} title={badge.label}>
+                        <MonitorUp className="size-3" />
+                        Windows
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-xs text-ink-2">{accessLabel[d.access]}</span>
+                  <span className="text-xs text-ink-2">
+                    {foldersLabel(d.folders)} · {filesLabel(d.files)}
+                  </span>
+                  <span className="text-xs text-ink-2">{d.files > 0 ? fileSize(d.sizeBytes) : "—"}</span>
+                  <span className="text-xs text-ink-2">{d.updatedAt ? modifiedLabel(d.updatedAt) : "файлов пока нет"}</span>
+                </Link>
+              );
+            })}
+          </div>
         </div>
       )}
       {preview && <PreviewDialog file={preview.file} onClose={() => setPreview(null)} />}

@@ -75,6 +75,34 @@ public class FilesRulesTests
         Assert.Equal(AccessLevel.Manage, FileAccessRules.AccessTo(admin, Production));
     }
 
+    [Fact]
+    public void Read_all_sees_every_department_read_only_but_keeps_own_write()
+    {
+        // Директор: files.read.all — все отделы на чтение; свой отдел (если есть) — как по ролям.
+        var director = User(Production) with { CanReadAll = true };
+        var viewer = new FileActor(Guid.NewGuid(), null, "Наблюдатель", false, false, false, new HashSet<Guid>(), [], CanReadAll: true);
+
+        Assert.Equal(AccessLevel.Write, FileAccessRules.AccessTo(director, Production));
+        Assert.Equal(AccessLevel.Read, FileAccessRules.AccessTo(director, Finance));
+        Assert.False(FileAccessRules.CanWrite(director, Sales));
+        Assert.False(FileAccessRules.CanSeeConnection(director, Finance)); // логин чужого отдела даёт запись — не показывается
+        Assert.Equal(AccessLevel.Read, FileAccessRules.AccessTo(viewer, Sales));
+        Assert.Null(FileAccessRules.AccessTo(User(Finance), Sales)); // без files.read.all чужие отделы закрыты
+    }
+
+    [Fact]
+    public void Read_all_is_given_only_to_admin_and_director_roles()
+    {
+        var holders = OneBase.Application.Security.SystemRoles.All
+            .Where(r => r.Permissions.Contains(OneBase.Application.Security.Permissions.FilesReadAll))
+            .Select(r => r.Name)
+            .ToList();
+
+        Assert.Equal([OneBase.Application.Security.SystemRoles.Admin, OneBase.Application.Security.SystemRoles.Director], holders);
+        Assert.Contains((OneBase.Application.Security.SystemRoles.Director, OneBase.Application.Security.Permissions.FilesReadAll),
+            OneBase.Application.Security.SystemRoles.Upgrades); // у уже созданной роли директора право появится при запуске
+    }
+
     // ---------- Имена ----------
 
     [Theory]

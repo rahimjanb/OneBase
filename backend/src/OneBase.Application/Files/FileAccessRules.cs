@@ -19,7 +19,8 @@ public sealed record FileActor(
     IReadOnlySet<Guid> OwnDepartments,
     IReadOnlyList<DepartmentGrant> Grants,
     Guid? ConnectionDepartment = null,
-    AccessLevel ConnectionAccess = AccessLevel.Read)
+    AccessLevel ConnectionAccess = AccessLevel.Read,
+    bool CanReadAll = false)
 {
     public bool IsConnection => ConnectionId is not null;
 
@@ -29,9 +30,9 @@ public sealed record FileActor(
 
 /// <summary>
 /// Доступ к папке отдела — одно правило для сайта и для подключения Windows:
-/// подключение — только свой отдел и только с уровнем подключения; администратор (files.manage) — всё; сотрудник — свой отдел
-/// (чтение при files.read, запись при files.write) и отделы, к которым ему, его роли или отделу выдан доступ; запись по выдаче —
-/// только при files.write. Без files.read и files.write — ничего.
+/// подключение — только свой отдел и только с уровнем подключения; администратор (files.manage) — всё; files.read.all (администратор
+/// и директор) — любой отдел не меньше чем на чтение; сотрудник — свой отдел (чтение при files.read, запись при files.write) и отделы,
+/// к которым ему, его роли или отделу выдан доступ; запись по выдаче — только при files.write. Без прав на файлы — ничего.
 /// </summary>
 public static class FileAccessRules
 {
@@ -49,7 +50,7 @@ public static class FileAccessRules
 
         if (!actor.CanRead && !actor.CanWrite)
         {
-            return null;
+            return actor.CanReadAll ? AccessLevel.Read : null;
         }
 
         AccessLevel? best = actor.OwnDepartments.Contains(departmentId) ? actor.CanWrite ? AccessLevel.Write : AccessLevel.Read : null;
@@ -62,7 +63,7 @@ public static class FileAccessRules
             }
         }
 
-        return best;
+        return best ?? (actor.CanReadAll ? AccessLevel.Read : null);
     }
 
     public static bool CanRead(FileActor actor, Guid departmentId) => AccessTo(actor, departmentId) is not null;

@@ -30,6 +30,7 @@ public static class SystemRoles
         new(Director, "Все данные отделов, консультант, журнал аудита, пользователи и роли. Интеграции и настройки AI — у администратора.", null,
         [
             Permissions.UsersManage, Permissions.SalesRead, Permissions.FinanceRead, Permissions.HrRead, Permissions.FilesRead, Permissions.FilesWrite,
+            Permissions.FilesReadAll,
             Permissions.AgentsRun, Permissions.ApprovalsDecide, Permissions.AuditRead, Permissions.FieldPlan,
         ]),
         new("Продажи", "Сотрудник отдела продаж: раздел «Продажи», консультант, файлы.", "sales", [Permissions.SalesRead, .. Employee]),
@@ -51,6 +52,7 @@ public static class SystemRoles
     public static readonly IReadOnlyList<(string Role, string Permission)> Upgrades =
     [
         (Director, Permissions.FieldPlan),
+        (Director, Permissions.FilesReadAll),
     ];
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>

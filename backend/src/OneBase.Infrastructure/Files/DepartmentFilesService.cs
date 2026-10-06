@@ -130,7 +130,7 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
 
         return new FileActor(user.Id, null, user.FullName,
             permissions.Contains(Permissions.FilesRead), permissions.Contains(Permissions.FilesWrite), permissions.Contains(Permissions.FilesManage),
-            own, grants);
+            own, grants, CanReadAll: permissions.Contains(Permissions.FilesReadAll));
     }
 
     // ---------- Отделы ----------
