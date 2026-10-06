@@ -109,9 +109,12 @@ export const filesApi = {
     bff<void>(`files/departments/${code}/access`, { method: "PUT", ...json({ departmentId, access }) }),
 };
 
-/** Ссылка на скачивание (inline — открыть картинку или PDF в браузере). */
-export const downloadUrl = (id: string, inline = false, version?: number) =>
-  `/bff/api/files/${id}/download?inline=${inline}${version ? `&version=${version}` : ""}`;
+/**
+ * Ссылка на скачивание (inline — открыть картинку или PDF в браузере). Имя файла — в конце адреса: браузеры и менеджеры загрузок,
+ * которые не читают Content-Disposition, берут имя и расширение из адреса (иначе сохраняют «download.html»).
+ */
+export const downloadUrl = (file: { id: string; name: string }, inline = false, version?: number) =>
+  `/bff/api/files/${file.id}/download/${encodeURIComponent(file.name)}?inline=${inline}${version ? `&version=${version}` : ""}`;
 
 /**
  * Загрузка файлов в папку одним запросом (multipart). XMLHttpRequest — ради прогресса: fetch его не сообщает.

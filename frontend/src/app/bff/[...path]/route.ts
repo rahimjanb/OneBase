@@ -17,7 +17,9 @@ async function proxy(request: NextRequest, { params }: { params: Promise<{ path:
   if (contentType) headers.set("content-type", contentType);
 
   const hasBody = !["GET", "HEAD"].includes(request.method);
-  const upstream = await fetch(`${API_URL}/${path.join("/")}${request.nextUrl.search}`, {
+  // Сегменты приходят раскодированными: кодируем заново, иначе «#» или «%» в имени файла (…/download/Отчёт #1.txt) обрезали бы путь
+  // вместе с параметрами запроса.
+  const upstream = await fetch(`${API_URL}/${path.map(encodeURIComponent).join("/")}${request.nextUrl.search}`, {
     method: request.method,
     headers,
     body: hasBody ? await request.arrayBuffer() : undefined,
@@ -26,7 +28,7 @@ async function proxy(request: NextRequest, { params }: { params: Promise<{ path:
 
   const responseHeaders = new Headers();
   // cache-control и x-accel-buffering — чтобы поток ответа консультанта (text/event-stream) не буферизовался и не сжимался.
-  for (const name of ["content-type", "content-disposition", "cache-control", "x-accel-buffering"]) {
+  for (const name of ["content-type", "content-disposition", "cache-control", "x-accel-buffering", "x-content-type-options"]) {
     const value = upstream.headers.get(name);
     if (value) responseHeaders.set(name, value);
   }

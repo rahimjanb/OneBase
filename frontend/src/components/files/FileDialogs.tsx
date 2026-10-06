@@ -163,7 +163,7 @@ export function VersionsDialog({ file, onClose }: { file: FileRow; onClose: () =
               {modifiedLabel(v.createdAt)} · {v.by?.name ?? "—"} · {fileSize(v.sizeBytes)}
               {v.current && <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">текущая</span>}
             </span>
-            <a href={downloadUrl(file.id, false, v.number)} className="rounded-md p-1.5 text-ink-3 hover:bg-muted hover:text-ink" aria-label={`Скачать версию ${v.number}`}>
+            <a href={downloadUrl(file, false, v.number)} className="rounded-md p-1.5 text-ink-3 hover:bg-muted hover:text-ink" aria-label={`Скачать версию ${v.number}`}>
               <Download className="size-4" />
             </a>
           </div>
@@ -190,9 +190,9 @@ export function PreviewDialog({ file, onClose }: { file: FileRow; onClose: () =>
       <div className="space-y-3">
         {group === "images" && (
           // eslint-disable-next-line @next/next/no-img-element -- файл из хранилища OneBase через /bff, не статический ресурс
-          <img src={downloadUrl(file.id, true)} alt={file.name} className="mx-auto max-h-[70vh] rounded-lg object-contain" />
+          <img src={downloadUrl(file, true)} alt={file.name} className="mx-auto max-h-[70vh] rounded-lg object-contain" />
         )}
-        {group === "pdf" && <iframe src={downloadUrl(file.id, true)} title={file.name} className="h-[75vh] w-full rounded-lg border border-line" />}
+        {group === "pdf" && <iframe src={downloadUrl(file, true)} title={file.name} className="h-[75vh] w-full rounded-lg border border-line" />}
         {error && <p className="text-sm text-bad">{error}</p>}
         {group !== "images" && group !== "pdf" && !preview && !error && <Loader2 className="size-5 animate-spin text-ink-3" />}
         {preview?.kind === "table" && (
@@ -241,7 +241,7 @@ export function PreviewDialog({ file, onClose }: { file: FileRow; onClose: () =>
         )}
         {preview?.note && <p className="text-sm text-ink-2">{preview.note}</p>}
         <div className="flex justify-end">
-          <a href={downloadUrl(file.id)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line px-4 text-sm font-medium hover:bg-muted">
+          <a href={downloadUrl(file)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line px-4 text-sm font-medium hover:bg-muted">
             <Download className="size-4" />
             Скачать · {fileSize(file.sizeBytes)}
           </a>

@@ -104,14 +104,18 @@ public sealed class FilesController(DepartmentFilesService files, FileConnection
     /// <summary>
     /// Скачивание (version — номер версии, иначе текущая). inline=true — открыть в браузере: только картинки и PDF, остальное всегда
     /// вложением (HTML или SVG из файла не выполнятся на сайте). Ответ не кэшируется.
+    /// Имя файла можно добавить в конец адреса (…/download/отчёт.xlsx, сайт так и делает): браузеры и менеджеры загрузок, которые
+    /// не читают Content-Disposition, берут имя и расширение из адреса, а не сохраняют «download.html». Тип — настоящий (xlsx, pdf …):
+    /// по нему расширение угадывается, а показ в браузере всё равно запрещён вложением и nosniff.
     /// </summary>
     [HttpGet("{id:guid}/download")]
+    [HttpGet("{id:guid}/download/{*name}")]
     public async Task Download(Guid id, [FromQuery] int? version, [FromQuery] bool inline, CancellationToken ct)
     {
         var actor = await ActorAsync(ct);
         var (file, v) = await files.OpenAsync(actor, id, version, ct);
         var showInline = inline && FileNames.IsInlineSafe(file.Name);
-        Response.ContentType = showInline ? FileNames.ContentType(file.Name) : "application/octet-stream";
+        Response.ContentType = FileNames.ContentType(file.Name);
         Response.ContentLength = v.SizeBytes;
         Response.Headers.CacheControl = "no-store, private";
         Response.Headers.XContentTypeOptions = "nosniff";

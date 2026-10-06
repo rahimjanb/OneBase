@@ -281,7 +281,7 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
                   <RowMenu
                     items={[
                       { label: "Просмотр", icon: Eye, onClick: () => setDialog({ kind: "preview", file }) },
-                      { label: "Скачать", icon: Download, href: downloadUrl(file.id) },
+                      { label: "Скачать", icon: Download, href: downloadUrl(file) },
                       { label: "Версии", icon: History, onClick: () => setDialog({ kind: "versions", file }) },
                       ...(view.canWrite
                         ? [
