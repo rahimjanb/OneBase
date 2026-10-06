@@ -18,6 +18,7 @@ public interface IAppDbContext
     DbSet<FileItem> Files { get; }
     DbSet<FileVersion> FileVersions { get; }
     DbSet<ResourcePermission> ResourcePermissions { get; }
+    DbSet<FileConnection> FileConnections { get; }
 
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<SystemLog> SystemLogs { get; }

@@ -8,6 +8,7 @@
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/OneBase.AI.Tests/OneBase.AI.Tests.csproj" />
+        <Project Path="tests/OneBase.Files.Tests/OneBase.Files.Tests.csproj" />
         <Project Path="tests/OneBase.Sales.Tests/OneBase.Sales.Tests.csproj" />
     </Folder>
 </Solution>

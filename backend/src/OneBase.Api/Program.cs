@@ -53,6 +53,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
+// Подключение папок отделов к Windows (WebDAV): свой вход по логину отдела, без JWT сайта. Снаружи — nginx :82 (FILE_STORAGE_DOMAIN):
+// он передаёт адрес без изменений (https://files.1base.uz/production → /production) и ставит X-Dav-Root; nginx :80 и :81 этот заголовок
+// у клиента стирают. Напрямую к API (на сервере) — /dav/….
+app.MapWhen(http => http.Request.Headers.ContainsKey("X-Dav-Root"), dav => dav.Run(OneBase.Api.Files.WebDavHandler.HandleAsync));
+app.Map("/dav", dav => dav.Run(OneBase.Api.Files.WebDavHandler.HandleAsync));
 app.UseAuthentication();
 app.UseRateLimiter(); // после аутентификации — лимит AI считается по пользователю
 app.UseAuthorization();

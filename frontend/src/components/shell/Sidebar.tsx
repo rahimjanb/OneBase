@@ -26,7 +26,7 @@ export const workspace: NavItem[] = [
   { href: "/departments", label: "Отделы", icon: Grid3x3, also: ["/sales"] },
   { href: "/tasks", label: "Задачи", icon: Check },
   { href: "/reports", label: "Отчёты", icon: ChartNoAxesColumn, soon: true },
-  { href: "/base", label: "Общая база", icon: Database, short: "База" },
+  { href: "/base", label: "Файлы", icon: Database, also: ["/files"] },
   { href: "/consultant", label: "AI-консультант", icon: Sparkle, also: ["/ai"], short: "AI" },
 ];
 

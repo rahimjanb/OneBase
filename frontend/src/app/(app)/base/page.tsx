@@ -1,14 +1,16 @@
 import { BaseOverview } from "@/components/files/BaseOverview";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
-import { departments } from "@/lib/demo-data";
+import type { DepartmentSummary } from "@/lib/files";
+import { apiGet } from "@/lib/server-api";
 
-export default function BasePage() {
+export default async function FilesPage() {
+  const departments = await apiGet<DepartmentSummary[]>("/api/files/departments", "/base");
   return (
     <>
       <PageHeader
-        title="Общая база"
-        subtitle="Корпоративные документы и данные по отделам"
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: "Общая база" }]}
+        title="Файлы"
+        subtitle="Файлы отделов — на сайте и в подключённой папке Windows, это одно хранилище"
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: "Файлы" }]}
       />
       <PageBody>
         <BaseOverview departments={departments} />

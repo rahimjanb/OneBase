@@ -1,35 +1,33 @@
-import { notFound } from "next/navigation";
-import { FolderBrowser } from "@/components/files/FolderBrowser";
-import { PageBody, PageHeader, type Crumb } from "@/components/shell/PageHeader";
-import { childFolders, findDepartment, folderFiles, folderPath } from "@/lib/demo-data";
+import { notFound, redirect } from "next/navigation";
+import { FilesBrowser } from "@/components/files/FilesBrowser";
+import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import type { FolderView } from "@/lib/files";
+import { apiGetOrNull } from "@/lib/server-api";
+
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function FolderPage({ params }: { params: Promise<{ dept: string; folder: string }> }) {
-  const { dept, folder: folderId } = await params;
-  const department = findDepartment(dept);
-  const chain = folderPath(folderId);
-  const folder = chain.at(-1);
-  if (!department || !folder || folder.department !== department.code) notFound();
-
-  const deptHref = `/base/${department.code}`;
-  const path: Crumb[] = [
-    { label: "Общая база", href: "/base" },
-    { label: department.name, href: deptHref },
-    ...chain.map((f, i) => ({ label: f.name, href: i < chain.length - 1 ? `${deptHref}/${f.id}` : undefined })),
-  ];
-  const parentHref = folder.parentId ? `${deptHref}/${folder.parentId}` : deptHref;
+  const { dept, folder } = await params;
+  if (!GUID.test(folder)) notFound();
+  const view = await apiGetOrNull<FolderView>(`/api/files/folders/${folder}`, `/base/${dept}/${folder}`);
+  if (!view) notFound();
+  // Папка другого отдела по чужому адресу — на её настоящий адрес (доступ API уже проверил).
+  if (view.department.code !== dept) redirect(view.parentId ? `/base/${view.department.code}/${view.id}` : `/base/${view.department.code}`);
 
   return (
     <>
-      <PageHeader title={folder.name} breadcrumbs={[{ label: "OneBase", href: "/" }, ...path]} />
+      <PageHeader
+        title={view.name}
+        subtitle={`Папка отдела «${view.department.name}»`}
+        breadcrumbs={[
+          { label: "OneBase", href: "/" },
+          { label: "Файлы", href: "/base" },
+          { label: view.department.name, href: `/base/${view.department.code}` },
+          { label: view.name },
+        ]}
+      />
       <PageBody>
-        <FolderBrowser
-          department={department}
-          folder={folder}
-          path={path}
-          parentHref={parentHref}
-          subfolders={childFolders(department.code, folder.id)}
-          initialFiles={folderFiles(folder.id)}
-        />
+        <FilesBrowser initial={view} />
       </PageBody>
     </>
   );

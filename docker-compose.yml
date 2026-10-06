@@ -70,6 +70,9 @@ services:
       Minio__AccessKey: ${MINIO_ROOT_USER}
       Minio__SecretKey: ${MINIO_ROOT_PASSWORD}
       Minio__Bucket: ${MINIO_BUCKET}
+      # «Файлы отделов»: домен подключения папок к Windows (WebDAV). Пусто — подключение не настроено (сайт с файлами работает).
+      # В Cloudflare Tunnel: этот домен → http://nginx:82.
+      Files__PublicDomain: ${FILE_STORAGE_DOMAIN:-}
       Qdrant__Host: qdrant
       Qdrant__Port: 6334
       Seed__AdminEmail: ${SEED_ADMIN_EMAIL}

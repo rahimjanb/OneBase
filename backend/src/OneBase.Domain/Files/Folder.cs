@@ -14,6 +14,11 @@ public class Folder : Entity
     public Guid? DepartmentId { get; set; }
     public Department? Department { get; set; }
 
+    public Guid? CreatedById { get; set; }
+
+    /// <summary>В корзине с этого момента (вместе со всем содержимым).</summary>
+    public DateTimeOffset? DeletedAt { get; set; }
+
     public ICollection<FileItem> Files { get; set; } = [];
     public ICollection<ResourcePermission> Permissions { get; set; } = [];
 }

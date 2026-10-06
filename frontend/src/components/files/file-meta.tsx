@@ -1,25 +1,24 @@
-import { File, FileSpreadsheet, FileText } from "lucide-react";
-import type { FileKind } from "@/lib/demo-data";
+import { File, FileArchive, FileImage, FileSpreadsheet, FileText, Folder } from "lucide-react";
+import { typeGroup } from "@/lib/files";
 
-const kinds: Record<FileKind, { short: string; long: string; icon: typeof File; color: string }> = {
-  xlsx: { short: "Excel", long: "Лист Microsoft Excel", icon: FileSpreadsheet, color: "text-emerald-600" },
-  pdf: { short: "PDF", long: "PDF документ", icon: FileText, color: "text-red-500" },
-  docx: { short: "Word", long: "Документ Microsoft Word", icon: FileText, color: "text-blue-600" },
-  other: { short: "Файл", long: "Файл", icon: File, color: "text-ink-3" },
-};
+const groups = {
+  docs: { short: "Документ", icon: FileText, color: "text-blue-600" },
+  sheets: { short: "Таблица", icon: FileSpreadsheet, color: "text-emerald-600" },
+  pdf: { short: "PDF", icon: FileText, color: "text-red-500" },
+  images: { short: "Картинка", icon: FileImage, color: "text-violet-500" },
+  other: { short: "Файл", icon: File, color: "text-ink-3" },
+} as const;
 
-export const kindShort = (kind: FileKind) => kinds[kind].short;
-export const kindLong = (kind: FileKind) => kinds[kind].long;
+/** «XLSX», «PDF», «Файл» — тип для колонки «Тип». */
+export const typeShort = (extension: string) => (extension ? extension.toUpperCase() : groups[typeGroup(extension)].short);
 
-export function kindFromName(name: string): FileKind {
-  const ext = name.split(".").pop()?.toLowerCase();
-  if (ext === "xlsx" || ext === "xls" || ext === "csv") return "xlsx";
-  if (ext === "pdf") return "pdf";
-  if (ext === "docx" || ext === "doc") return "docx";
-  return "other";
+export function FileIcon({ extension }: { extension: string }) {
+  const { icon: Icon, color } = ["zip", "rar", "7z"].includes(extension)
+    ? { icon: FileArchive, color: "text-amber-600" }
+    : groups[typeGroup(extension)];
+  return <Icon className={`size-4 shrink-0 ${color}`} strokeWidth={1.75} />;
 }
 
-export function FileIcon({ kind }: { kind: FileKind }) {
-  const { icon: Icon, color } = kinds[kind];
-  return <Icon className={`size-4 shrink-0 ${color}`} strokeWidth={1.75} />;
+export function FolderIcon() {
+  return <Folder className="size-4 shrink-0 text-amber-500" strokeWidth={1.75} fill="currentColor" fillOpacity={0.15} />;
 }

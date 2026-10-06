@@ -53,6 +53,13 @@ public static class DependencyInjection
             .Build());
         services.AddSingleton<IFileStorage, MinioFileStorage>();
 
+        // «Файлы отделов»: сайт и подключение Windows (WebDAV) работают через одни и те же сервисы.
+        services.AddSingleton(config.GetSection(OneBase.Application.Files.FilesOptions.Section).Get<OneBase.Application.Files.FilesOptions>()
+                              ?? new OneBase.Application.Files.FilesOptions());
+        services.AddScoped<Files.DepartmentFilesService>();
+        services.AddScoped<Files.FileConnectionsService>();
+        services.AddScoped<Files.FilePreviewService>();
+
         // Qdrant — векторы для RAG и семантической памяти
         var qdrant = config.GetSection(QdrantOptions.Section).Get<QdrantOptions>() ?? new QdrantOptions();
         services.AddSingleton(_ => new QdrantClient(qdrant.Host, qdrant.Port, qdrant.UseHttps, qdrant.ApiKey));

@@ -27,6 +27,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<FileItem> Files => Set<FileItem>();
     public DbSet<FileVersion> FileVersions => Set<FileVersion>();
     public DbSet<ResourcePermission> ResourcePermissions => Set<ResourcePermission>();
+    public DbSet<FileConnection> FileConnections => Set<FileConnection>();
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemLog> SystemLogs => Set<SystemLog>();
@@ -172,6 +173,10 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.HasOne(x => x.Parent).WithMany(x => x.Children).HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Department).WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(x => new { x.ParentId, x.Name });
+            e.HasIndex(x => new { x.DepartmentId, x.ParentId });
+            // Корневая папка отдела — одна (создаётся при первом открытии; гонка двух запросов упрётся в индекс).
+            e.HasIndex(x => x.DepartmentId).IsUnique().HasFilter("\"ParentId\" IS NULL AND \"DepartmentId\" IS NOT NULL")
+                .HasDatabaseName("IX_Folders_DepartmentRoot");
         });
 
         b.Entity<FileItem>(e =>
@@ -180,6 +185,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.Property(x => x.ContentType).HasMaxLength(255);
             e.HasOne(x => x.Folder).WithMany(x => x.Files).HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.FolderId, x.Name });
+            e.HasIndex(x => new { x.DepartmentId, x.DeletedAt });
         });
 
         b.Entity<FileVersion>(e =>
@@ -200,6 +206,17 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.ToTable(t => t.HasCheckConstraint(
                 "CK_ResourcePermissions_SingleTarget",
                 "(\"FolderId\" IS NULL) <> (\"FileItemId\" IS NULL)"));
+        });
+
+        b.Entity<FileConnection>(e =>
+        {
+            e.Property(x => x.Username).HasMaxLength(64);
+            e.Property(x => x.PasswordHash).HasMaxLength(200);
+            e.Property(x => x.Access).HasConversion<string>().HasMaxLength(16);
+            e.HasIndex(x => x.Username).IsUnique();
+            // У отдела одно действующее подключение; отозванные остаются для журнала.
+            e.HasIndex(x => x.DepartmentId).IsUnique().HasFilter("\"RevokedAt\" IS NULL");
+            e.HasOne<Department>().WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // Audit

@@ -6,6 +6,8 @@ public static class Permissions
     public const string UsersManage = "users.manage";
     public const string FilesRead = "files.read";
     public const string FilesWrite = "files.write";
+    /// <summary>«Файлы отделов»: все отделы и подключения к Windows (создать, сменить пароль, отозвать). Только у администратора.</summary>
+    public const string FilesManage = "files.manage";
     public const string AgentsRun = "ai.agents.run";
     public const string ApprovalsDecide = "ai.approvals.decide";
     public const string AuditRead = "audit.read";
@@ -45,6 +47,7 @@ public static class Permissions
         UsersManage,
         FilesRead,
         FilesWrite,
+        FilesManage,
         AgentsRun,
         ApprovalsDecide,
         AuditRead,

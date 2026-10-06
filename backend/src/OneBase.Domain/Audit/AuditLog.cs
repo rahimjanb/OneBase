@@ -5,6 +5,9 @@ public enum ActorType
     User,
     Agent,
     System,
+
+    /// <summary>Подключение папки отдела к Windows (WebDAV): ActorId — id подключения, логин — в Data.</summary>
+    Connection,
 }
 
 /// <summary>Неизменяемая запись аудита: действия людей, AI-агентов и системы.</summary>
