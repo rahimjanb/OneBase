@@ -54,6 +54,7 @@ public abstract class SalesTool(SalesDataLoader loader) : DataTool
     {
         FactKg = R(k.FactKg),
         PlanKg = R(k.PlanKg),
+        k.PlanSource, // rop — план РОП регионов, linko — плана РОП на месяц нет, план = сумма планов ТП из Linko
         ExecutionPct = Pct(k.Execution),
         ForecastKg = R(k.ForecastKg),
         ForecastExecutionPct = Pct(k.ForecastExecution),
@@ -66,6 +67,7 @@ public abstract class SalesTool(SalesDataLoader loader) : DataTool
         RevenuePerOutletSum = R(k.RevenuePerOutlet.Value),
         k.VisitsDone,
         k.VisitsWithoutOrder,
+        k.VisitsOutsideTeam,
         SalesReps = k.ActiveAgents,
         RevenuePlan = k.RevenuePlan is { } rp
             ? new { PlanSum = R(rp.Plan), FactSum = R(rp.Fact), ExecutionPct = Pct(rp.Execution), ForecastSum = R(rp.Forecast), rp.Agents }
@@ -76,7 +78,7 @@ public abstract class SalesTool(SalesDataLoader loader) : DataTool
     {
         u.Id,
         u.Name,
-        Supervisor = u.Subtitle,
+        Direction = u.Subtitle, // у региона — его РМ или канал
         PlanKg = R(u.PlanKg),
         FactKg = R(u.FactKg),
         ExecutionPct = Pct(u.Execution),
@@ -440,7 +442,8 @@ internal sealed class GetVisitsTool(SalesDataLoader loader) : SalesTool(loader)
     public override string Source => KnowledgeSources.SalesVisits;
 
     public override string Description =>
-        "Визиты ТП за месяц по регионам: план визитов, выполненные (в плане и вне), заказы с визитов и их сумма, непосещённые точки, страйк (визиты с заказом ÷ визиты).";
+        "Визиты ТП за месяц по регионам: план визитов, выполненные (в плане и вне), заказы с визитов и их сумма, непосещённые точки, " +
+        "страйк (заказы ТП, принятые в месяце ÷ выполненные визиты ТП; бывает больше 100%), визиты без заказа (визиты − заказы), визиты не ТП отдельно.";
 
     public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg);
 
@@ -456,6 +459,7 @@ internal sealed class GetVisitsTool(SalesDataLoader loader) : SalesTool(loader)
             StrikeTargetPct = Pct(republic.Kpi.Conversion.Target),
             republic.Kpi.VisitsDone,
             republic.Kpi.VisitsWithoutOrder,
+            republic.Kpi.VisitsOutsideTeam,
             Regions = republic.VisitCalendar.Select(r => new
             {
                 r.Name,

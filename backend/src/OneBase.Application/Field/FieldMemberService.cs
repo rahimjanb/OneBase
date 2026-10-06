@@ -146,7 +146,7 @@ public sealed class FieldMemberService(
                 FieldRole? role = repJobs.Contains(u.JobName!) ? FieldRole.Agent
                     : SupervisorJobs.Any(j => u.JobName!.Contains(j, StringComparison.OrdinalIgnoreCase)) ? FieldRole.Supervisor
                     : null;
-                return role is null || salesOptions.IsVacancy(u.Id, name) ? null : new StaffRow(u.Id, name, u.JobName, u.PositionName, role.Value);
+                return role is null || salesOptions.IsFieldVacancy(u.Id, name) ? null : new StaffRow(u.Id, name, u.JobName, u.PositionName, role.Value);
             })
             .Where(u => u is not null)
             .Select(u => u!)

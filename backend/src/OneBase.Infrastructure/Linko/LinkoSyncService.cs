@@ -183,27 +183,31 @@ public sealed class LinkoSyncService(
     // ---------- Очистка и источник данных ----------
 
     /// <summary>
-    /// Удаляет всё загруженное из Linko и связанное с его идентификаторами в OneBase:
-    /// регионы (branch), профили агентов и планы. Направления, цели и настройки подключения сохраняются.
+    /// Что удаляет «Очистить данные и загрузить заново»: копию Linko (схема linko) и планы ТП из API планов Linko (sales."StaffPlans").
+    /// Данные OneBase остаются: направления, регионы с направлением, СВР и дилером, планы РОП и «Завод» (sales."RegionPlans"),
+    /// планы и профили агентов, цели. Регион — строка на филиал Linko: после загрузки филиал находит свой регион по LinkoBranchId
+    /// (EnsureRegionsAsync добавляет новые филиалы и обновляет название известных по последнему заказу). Удалять регионы нельзя ещё и потому,
+    /// что планы регионов ушли бы с ними каскадом. TRUNCATE без CASCADE: на эти таблицы не ссылается ничего, что остаётся.
     /// </summary>
+    public static readonly IReadOnlyList<string> PurgedTables =
+    [
+        "linko.\"OrderLines\"", "linko.\"Orders\"", "linko.\"OrderReturnLines\"", "linko.\"OrderReturns\"",
+        "linko.\"Visits\"", "linko.\"Markets\"", "linko.\"MarketUsers\"", "linko.\"Users\"", "linko.\"Products\"",
+        "linko.\"ProductTypes\"", "linko.\"Borders\"", "linko.\"KpiPlans\"", "linko.\"SyncState\"",
+        "linko.\"Stocks\"", "linko.\"ProductBalances\"", "linko.\"StockTransferLines\"", "linko.\"StockTransfers\"",
+        "linko.\"Payments\"", "linko.\"PriceLists\"", "linko.\"PriceListItems\"", "linko.\"Providers\"",
+        "linko.\"Currencies\"", "linko.\"Contracts\"",
+        "sales.\"StaffPlans\"",
+    ];
+
+    private static readonly string PurgeSql = "TRUNCATE " + string.Join(", ", PurgedTables);
+
+    /// <summary>Очистка перед загрузкой заново — только то, что пришло из Linko (<see cref="PurgedTables"/>).</summary>
     private async Task PurgeAsync(CancellationToken ct)
     {
-        await db.Database.ExecuteSqlRawAsync(
-            """
-            TRUNCATE linko."OrderLines", linko."Orders", linko."OrderReturnLines", linko."OrderReturns",
-                     linko."Visits", linko."Markets", linko."MarketUsers", linko."Users", linko."Products",
-                     linko."ProductTypes", linko."Borders", linko."KpiPlans", linko."SyncState",
-                     linko."Stocks", linko."ProductBalances", linko."StockTransferLines", linko."StockTransfers",
-                     linko."Payments", linko."PriceLists", linko."PriceListItems", linko."Providers",
-                     linko."Currencies", linko."Contracts"
-            """, ct);
-        await db.SalesStaffPlans.ExecuteDeleteAsync(ct);
-        await db.SalesAgentPlans.ExecuteDeleteAsync(ct);
-        await db.SalesRegionPlans.ExecuteDeleteAsync(ct);
-        await db.SalesAgentProfiles.ExecuteDeleteAsync(ct);
-        await db.SalesRegions.ExecuteDeleteAsync(ct);
+        await db.Database.ExecuteSqlRawAsync(PurgeSql, ct);
         cacheSignal.InvalidateHistory();
-        logger.LogWarning("Данные Linko очищены перед полной загрузкой");
+        logger.LogWarning("Данные Linko очищены перед полной загрузкой; оргструктура и планы OneBase сохранены");
     }
 
     private async Task<string?> SourceChangedAsync(string baseUrl, CancellationToken ct)
@@ -238,24 +242,60 @@ public sealed class LinkoSyncService(
 
     private static string Host(string url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : url;
 
-    /// <summary>Каждый филиал (branch) из заказов становится регионом OneBase — без направления, пока его не назначат.</summary>
+    /// <summary>
+    /// Каждый филиал (branch) из заказов — регион OneBase: новый добавляется без направления, пока его не назначат; у известного название
+    /// обновляется по последнему заказу филиала (регионы при перезагрузке не удаляются, а филиал в Linko могли переименовать).
+    /// </summary>
     private async Task EnsureRegionsAsync(CancellationToken ct)
     {
         db.ChangeTracker.Clear();
-        var known = await db.SalesRegions.Select(r => r.LinkoBranchId).ToListAsync(ct);
+        // Последний заказ филиала — номер заказа Linko растёт со временем.
         var branches = await db.LinkoOrders
-            .Where(o => o.BranchId != null && !known.Contains(o.BranchId!.Value))
+            .Where(o => o.BranchId != null)
             .GroupBy(o => o.BranchId!.Value)
-            .Select(g => new { Id = g.Key, Name = g.Max(o => o.BranchName) })
+            .Select(g => new { Id = g.Key, LastOrder = g.Max(o => o.Id), AnyName = g.Max(o => o.BranchName) })
             .ToListAsync(ct);
+        var lastOrders = branches.Select(b => b.LastOrder).ToList();
+        var latest = await db.LinkoOrders
+            .Where(o => lastOrders.Contains(o.Id))
+            .Select(o => new { Branch = o.BranchId!.Value, o.BranchName })
+            .ToDictionaryAsync(o => o.Branch, o => o.BranchName, ct);
 
-        foreach (var branch in branches)
-        {
-            db.SalesRegions.Add(new SalesRegion { LinkoBranchId = branch.Id, Name = branch.Name ?? $"Филиал {branch.Id}" });
-        }
-
+        var regions = await db.SalesRegions.ToListAsync(ct);
+        db.SalesRegions.AddRange(SyncRegions(regions, branches.Select(b => new LinkoBranch(b.Id, latest.GetValueOrDefault(b.Id), b.AnyName)), time.GetUtcNow()));
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
+    }
+
+    /// <summary>Филиал Linko из заказов: название в его последнем заказе и любое название из его заказов (если в последнем пусто).</summary>
+    public sealed record LinkoBranch(long Id, string? LatestName, string? AnyName);
+
+    /// <summary>
+    /// Регионы по филиалам заказов. У известного региона название меняется на название из последнего заказа филиала (UpdatedAt — когда),
+    /// направление, СВР и дилер — данные OneBase — остаются; пустое название в последнем заказе ничего не меняет. Возвращает регионы новых
+    /// филиалов: название — из последнего заказа, иначе любое из заказов, иначе «Филиал {id}».
+    /// </summary>
+    public static List<SalesRegion> SyncRegions(IEnumerable<SalesRegion> regions, IEnumerable<LinkoBranch> branches, DateTimeOffset now)
+    {
+        static string? Name(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+        var known = regions.ToDictionary(r => r.LinkoBranchId);
+        var added = new List<SalesRegion>();
+        foreach (var branch in branches)
+        {
+            var latest = Name(branch.LatestName);
+            if (!known.TryGetValue(branch.Id, out var region))
+            {
+                added.Add(new SalesRegion { LinkoBranchId = branch.Id, Name = latest ?? Name(branch.AnyName) ?? $"Филиал {branch.Id}" });
+            }
+            else if (latest is not null && region.Name != latest)
+            {
+                region.Name = latest;
+                region.UpdatedAt = now;
+            }
+        }
+
+        return added;
     }
 
     // ---------- Шаги ----------

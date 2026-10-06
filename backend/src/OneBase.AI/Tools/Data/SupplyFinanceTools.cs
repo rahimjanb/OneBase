@@ -91,8 +91,9 @@ internal sealed class GetPrimaryShipmentsTool(PrimaryService primary) : DataTool
     public override string Source => KnowledgeSources.SalesPrimary;
 
     public override string Description =>
-        "Первичка — отгрузки завода дилерам: за месяц (кг, коробки, сумма по цене завода и по цене дилера), прогноз (плана первички в Linko нет), по месяцам года, " +
-        "с начала года, по дилерам и категориям, возвраты дилеров. Это спрос дилеров, а не выпуск производства.";
+        "Первичка — отгрузки завода дилерам и точкам завода (базары, сети, фирменный магазин): за месяц (кг, коробки, сумма по цене дилера и по цене продажи дилера), " +
+        "прогноз по дате данных, план первички (если загружен в OneBase), по месяцам года, с начала года, по контрагентам и категориям, возвраты (уже вычтены). " +
+        "Это спрос дилеров, а не выпуск производства.";
 
     public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg);
 
@@ -112,7 +113,7 @@ internal sealed class GetPrimaryShipmentsTool(PrimaryService primary) : DataTool
             view.DaysInMonth,
             MonthTotal = Amounts(view.MonthTotal),
             PlanMonthKg = R(view.PlanMonthKg),
-            ExecutionPct = view.PlanMonthKg is > 0 ? Pct(view.MonthTotal.Kg / view.PlanMonthKg) : null,
+            ExecutionPct = Pct(view.MonthExecution),
             ForecastKg = R(view.ForecastKg),
             Transfers = view.MonthTransfers,
             ByMonth = view.MonthsWithData.Select(m => new { Month = MonthName(m), Kg = R(view.Months[m - 1].Kg), FactorySum = R(view.Months[m - 1].SumFactory), PlanKg = R(view.PlanMonths[m - 1]) }),
@@ -123,14 +124,17 @@ internal sealed class GetPrimaryShipmentsTool(PrimaryService primary) : DataTool
             Dealers = view.Dealers.OrderByDescending(r => r.Month.Kg).Select(r => new
             {
                 r.Name,
+                Detail = r.Sub, // регион дилера или тип точки и филиал прямого клиента
+                Group = r.Group == PrimaryGroups.Direct ? "прямой клиент завода" : "дилер",
                 Kg = R(r.Month.Kg),
                 FactorySum = R(r.Month.SumFactory),
                 PlanKg = R(r.PlanMonthKg),
-                ExecutionPct = r.PlanMonthKg is > 0 ? Pct(r.Month.Kg / r.PlanMonthKg) : null,
+                ExecutionPct = Pct(r.MonthExecution),
             }),
             Categories = view.Categories.OrderByDescending(r => r.Month.Kg).Select(r => new { r.Name, Kg = R(r.Month.Kg), FactorySum = R(r.Month.SumFactory) }),
             Export = new { Kg = R(view.Export.Kg), FactorySum = R(view.Export.SumFactory), view.Export.Counterparties, Note = "с начала года" },
-            Note = "Сумма завода — по цене перемещения; сумма дилера — по прайсу дилера. Возвраты из отгрузки не вычитаются.",
+            Note = "FactorySum — сумма по цене дилера (цена перемещения или заказа: по ней дилер берёт товар у завода); DealerSum — по прайсу продажи дилера. " +
+                "Цены завода в Linko нет. Возвраты вычтены: суммы — нетто.",
         }, new DataSource("OneBase → Продажи → Первичка", period, $"/sales/primary/republic?{Query(view.Year, view.Month)}"));
     }
 }

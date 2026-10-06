@@ -1,4 +1,4 @@
-import { KpiTile, planTone } from "@/components/sales/bits";
+import { KpiTile, levelTone } from "@/components/sales/bits";
 import { PeoplePlansTable, RegionPlansTable } from "@/components/sales/plans";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGet } from "@/lib/server-api";
@@ -21,7 +21,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       sp={sp}
     >
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiTile label="План ТП, кг" value={kg(data.weightPlan)} tone={data.weightPlan != null ? planTone(data.weightExecution) : "muted"}>
+        <KpiTile label="План ТП, кг" value={kg(data.weightPlan)} tone={levelTone(data.weightExecutionLevel)}>
           факт по Linko {kg(data.weightFact)} кг{data.weightExecution != null && ` · ${pct(data.weightExecution)} плана`}
         </KpiTile>
         <KpiTile label="План по выручке" value={money(data.revenuePlan)} unit={data.revenuePlan != null ? "сум" : undefined}>
@@ -35,16 +35,19 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
         </KpiTile>
       </div>
 
-      <RegionPlansTable rows={data.regions} query={q} />
+      {/* Ключ по месяцу: смена месяца сбрасывает сортировки и раскрытые строки (DOC-filters §12). */}
+      <RegionPlansTable key={`r${period.year}-${period.month}`} rows={data.regions} query={q} />
       <PeoplePlansTable
+        key={`a${period.year}-${period.month}`}
         rows={data.agents}
         query={q}
         title="Планы торговых представителей"
         hint="нажмите на строку — все показатели агента"
-        note="План ТП в кг — сумма весовых показателей Linko; план по выручке — показатели «сумма продаж»; АКБ — план активных клиентов. Факт и выполнение здесь — по расчёту Linko."
+        note="План ТП в кг — сумма весовых показателей Linko; план по выручке — показатели «сумма продаж»; АКБ — план активных клиентов. Факт и выполнение здесь — по расчёту Linko. Во «Вторичке» план региона и республики — план РОП или «Завод»; эти планы там — план ТП, а для месяца без планов регионов — и план подразделений."
       />
       {data.teamPlans.length > 0 && (
         <PeoplePlansTable
+          key={`t${period.year}-${period.month}`}
           rows={data.teamPlans}
           query={q}
           team

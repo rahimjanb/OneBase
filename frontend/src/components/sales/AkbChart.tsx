@@ -12,7 +12,8 @@ const PALETTE = ["#3b82f6", "#f97316", "#10b981", "#eab308", "#ec4899", "#8b5cf6
 const HEIGHT = 320;
 const TOTAL = "total";
 
-type Series = { id: string; name: string; values: (number | null)[]; color: string; total: boolean };
+/** average — «Сред/мес» с сервера (null — считать не по чему). */
+type Series = { id: string; name: string; values: (number | null)[]; average: number | null; color: string; total: boolean };
 
 /** Шкала «15 000 с шагом 2 500»: шаг 1 / 2 / 2,5 / 5 × 10ⁿ, около шести делений. */
 function niceScale(max: number): { top: number; step: number } {
@@ -60,17 +61,29 @@ function downloadCsv(name: string, rows: (string | number | null)[][]) {
   URL.revokeObjectURL(url);
 }
 
-/** Среднее за месяц по месяцам с данными; идущий месяц тоже в счёт, как в «Полевом контроле». */
-function average(values: (number | null)[]): number | null {
-  const known = values.filter((v): v is number => v != null);
-  return known.length === 0 ? null : known.reduce((a, b) => a + b, 0) / known.length;
-}
+type Format = (value: number | null | undefined) => string;
 
-/** Таблица под графиком: категория × месяц, среднее за месяц; внизу — «Всего точек». Клик по строке — подсветить линию. */
-function AkbTable({ data, series, active, onToggle }: { data: AkbByMonth; series: Series[]; active: string | null; onToggle: (id: string) => void }) {
+/** Таблица под графиком: категория × месяц, «Сред/мес» (с сервера); внизу — итог («Всего точек»). Клик по строке — подсветить линию. */
+function AkbTable({
+  data,
+  series,
+  active,
+  onToggle,
+  head,
+  totalLabel,
+  format,
+}: {
+  data: AkbByMonth;
+  series: Series[];
+  active: string | null;
+  onToggle: (id: string) => void;
+  head: string;
+  totalLabel: string;
+  format: Format;
+}) {
   const last = data.months.length - 1;
   const th = "px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-ink-3";
-  const cell = (v: number | null) => (v == null ? <span className="text-ink-3">—</span> : v === 0 ? <span className="text-ink-3">0</span> : num(v));
+  const cell = (v: number | null) => (v == null ? <span className="text-ink-3">—</span> : v === 0 ? <span className="text-ink-3">0</span> : format(v));
   const total = series.find((s) => s.total);
   const rows = series.filter((s) => !s.total);
 
@@ -79,7 +92,7 @@ function AkbTable({ data, series, active, onToggle }: { data: AkbByMonth; series
       <table className="w-full min-w-max border-collapse text-sm">
         <thead>
           <tr className="border-b border-line">
-            <th className={`${th} text-left`}>Категория — АКБ, точек</th>
+            <th className={`${th} text-left`}>{head}</th>
             {data.months.map((m, i) => (
               <th key={m} className={th}>
                 {monthShort(m)}
@@ -107,20 +120,20 @@ function AkbTable({ data, series, active, onToggle }: { data: AkbByMonth; series
                   {cell(v)}
                 </td>
               ))}
-              <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink">{num(average(s.values))}</td>
+              <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink">{format(s.average)}</td>
             </tr>
           ))}
         </tbody>
         {total && (
           <tfoot>
             <tr className="bg-muted font-semibold text-ink">
-              <td className="px-3 py-2">Всего точек</td>
+              <td className="px-3 py-2">{totalLabel}</td>
               {total.values.map((v, i) => (
                 <td key={i} className="px-3 py-2 text-right tabular-nums">
                   {cell(v)}
                 </td>
               ))}
-              <td className="px-3 py-2 text-right tabular-nums">{num(average(total.values))}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{format(total.average)}</td>
             </tr>
           </tfoot>
         )}
@@ -129,8 +142,32 @@ function AkbTable({ data, series, active, onToggle }: { data: AkbByMonth; series
   );
 }
 
-/** АКБ по месяцам: итог и линии категорий. Клик по линии или легенде — подсветить, ещё раз — снять. */
-export function AkbChart({ data }: { data: AkbByMonth }) {
+/**
+ * АКБ по месяцам: итог и линии категорий. Клик по линии или легенде — подсветить, ещё раз — снять.
+ * Подписи, формат чисел и кнопки — для другой меры в той же форме (первичка: клиенты / кг / сум); по умолчанию — АКБ точек вторички.
+ * «Сред/мес» считает сервер; averageNote — по каким месяцам (у вторички — по всем месяцам с данными, у первички — только по закрытым).
+ */
+export function AkbChart({
+  data,
+  title = "АКБ по месяцам",
+  hint = "уникальные точки, купившие за месяц",
+  head = "Категория — АКБ, точек",
+  totalLabel = "Всего точек",
+  format = num,
+  actions,
+  note,
+  averageNote = "«Сред/мес» — среднее за месяц по месяцам с данными (идущий месяц тоже), считает сервер.",
+}: {
+  data: AkbByMonth;
+  title?: string;
+  hint?: string;
+  head?: string;
+  totalLabel?: string;
+  format?: Format;
+  actions?: React.ReactNode;
+  note?: React.ReactNode;
+  averageNote?: string;
+}) {
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<string | null>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -145,8 +182,8 @@ export function AkbChart({ data }: { data: AkbByMonth }) {
   }, []);
 
   const series: Series[] = [
-    { id: TOTAL, name: "Итого", values: data.total, color: "var(--color-ink)", total: true },
-    ...data.categories.map((c, i) => ({ ...c, color: PALETTE[i % PALETTE.length], total: false })),
+    { id: TOTAL, name: "Итого", values: data.total, average: data.average ?? null, color: "var(--color-ink)", total: true },
+    ...data.categories.map((c, i) => ({ id: c.id, name: c.name, values: c.values, average: c.average ?? null, color: PALETTE[i % PALETTE.length], total: false })),
   ];
   const rows = tableRows(data, series);
   const toggle = (id: string) => setActive((a) => (a === id ? null : id));
@@ -168,14 +205,15 @@ export function AkbChart({ data }: { data: AkbByMonth }) {
 
   return (
     <Section
-      title="АКБ по месяцам"
-      hint="уникальные точки, купившие за месяц · клик по линии — подсветить, ещё раз — снять"
+      title={title}
+      hint={`${hint} · клик по линии — подсветить, ещё раз — снять`}
       actions={
         <>
+          {actions}
           <CopyButton onCopy={() => rows.map((r) => r.map(tsvValue).join("\t")).join("\n")} />
           <button
             type="button"
-            onClick={() => downloadCsv(`АКБ по месяцам ${data.year}`, rows)}
+            onClick={() => downloadCsv(`${title} ${data.year}`, rows)}
             title="Скачать таблицу для Excel (CSV)"
             className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-muted"
           >
@@ -192,7 +230,7 @@ export function AkbChart({ data }: { data: AkbByMonth }) {
             height={HEIGHT}
             className="block select-none"
             role="img"
-            aria-label="АКБ по месяцам"
+            aria-label={title}
             onMouseMove={(e) => {
               const left = e.currentTarget.getBoundingClientRect().left;
               const i = n <= 1 ? 0 : Math.round(((e.clientX - left - pad.left) / plotW) * (n - 1));
@@ -203,7 +241,7 @@ export function AkbChart({ data }: { data: AkbByMonth }) {
               <g key={t}>
                 <line x1={pad.left} x2={width - pad.right} y1={y(t)} y2={y(t)} stroke="var(--color-line)" />
                 <text x={pad.left - 8} y={y(t)} dy="0.32em" textAnchor="end" fontSize={11} fill="var(--color-ink-3)" className="tabular-nums">
-                  {num(t)}
+                  {format(t)}
                 </text>
               </g>
             ))}
@@ -261,7 +299,7 @@ export function AkbChart({ data }: { data: AkbByMonth }) {
                   className="tabular-nums"
                   style={{ paintOrder: "stroke", stroke: "var(--color-surface)", strokeWidth: 4 }}
                 >
-                  {num(s.values[i])}
+                  {format(s.values[i])}
                 </text>
               ));
             })}
@@ -283,7 +321,7 @@ export function AkbChart({ data }: { data: AkbByMonth }) {
                   <span className="size-2 rounded-full" style={{ background: s.color }} />
                   {s.name}
                 </span>
-                <span className="tabular-nums">{num(s.values[hover])}</span>
+                <span className="tabular-nums">{format(s.values[hover])}</span>
               </div>
             ))}
           </div>
@@ -307,11 +345,17 @@ export function AkbChart({ data }: { data: AkbByMonth }) {
         ))}
       </div>
 
-      <AkbTable data={data} series={series} active={active} onToggle={toggle} />
+      <AkbTable data={data} series={series} active={active} onToggle={toggle} head={head} totalLabel={totalLabel} format={format} />
 
       <Note>
-        АКБ — уникальные ТТ, у которых чистая покупка (продажи минус возвраты) за месяц больше нуля. Итог — не сумма категорий: одна ТТ
-        покупает несколько категорий. {data.lastPartial && "Пустая точка — месяц ещё идёт. "}Наведите на график — значения за месяц.
+        {note ?? (
+          <>
+            АКБ — уникальные ТТ, у которых чистая покупка (продажи минус возвраты) за месяц больше нуля. Итог — не сумма категорий: одна ТТ
+            покупает несколько категорий.{" "}
+          </>
+        )}
+        {data.lastPartial && "Пустая точка — месяц ещё идёт. "}
+        {averageNote} Наведите на график — значения за месяц.
       </Note>
     </Section>
   );

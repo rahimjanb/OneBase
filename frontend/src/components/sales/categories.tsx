@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { Note, Section, Stat, deltaTone } from "./bits";
 import { DataTable, NameCell, type Column } from "./DataTable";
-import { delta, kg, money, num, pct } from "@/lib/sales/format";
+import { TopChip } from "./outstock";
+import { delta, kg, money, num, outletsLabel, pct, plural } from "@/lib/sales/format";
 import { withQuery } from "@/lib/sales/query";
 import type { AssortmentRegionRow, CategoryCard, ProductBreakdownRow, ProductView, SkuRow, SkuStatus } from "@/lib/sales/types";
 
@@ -34,6 +35,11 @@ const statusRank: Record<SkuStatus, number> = { selling: 0, lost: 1, elsewhere: 
 export function SkuStatusChip({ status, store = false }: { status: SkuStatus; store?: boolean }) {
   const view = statusView[status];
   return <Chip tone={view.tone}>{store && status === "silent" ? "Не брал" : view.label}</Chip>;
+}
+
+/** «Нет данных»: в регионе за месяц ни одной покупки — дыра в выгрузке, а не «не возят». */
+export function NoDataChip() {
+  return <Chip tone="muted">нет данных</Chip>;
 }
 
 function Card({ card, href }: { card: CategoryCard; href: string }) {
@@ -94,40 +100,59 @@ export function CategoryCards({ cards, scope, query }: { cards: CategoryCard[]; 
         </div>
       )}
       <Note>
-        SKU в категории — товары, которые продавались за последние полгода (признака «товар активен» в Linko нет). «Молчат» — SKU без продаж в
-        этом месяце в {scope}, из них «пропало» — продавались в прошлом месяце. Доля по весу и дистрибуция (доля ТТ с покупкой, купивших категорию) —
-        от итога {scope}. Прогноз — по текущему темпу; «к прошлому мес.» — прогноз к факту всего прошлого месяца. Подтипы Linko («Помадка 0,5 кг» и
-        т.п.) объединены с основной категорией.
+        SKU в категории — товары, которые продавались во вторичке с 1 января по конец выбранного месяца (признака «товар активен» в Linko нет; весь
+        каталог Linko и товары, которые продавал только «Завод», сюда не входят). «Продаётся» — SKU, у которого в {scope} есть точка с положительной
+        строкой (кг или сумма больше нуля); «молчат» — остальные, из них «пропало» — продавались в прошлом месяце. Доля по весу и дистрибуция (доля ТТ с
+        покупкой, у которых чистый вес категории больше нуля) — от итога {scope}. Прогноз — по текущему темпу; «к прошлому мес.» — прогноз к факту всего
+        прошлого месяца; у закрытого месяца их нет. Подтипы Linko («Помадка 0,5 кг» и т.п.) объединены с основной категорией.
       </Note>
     </Section>
   );
 }
 
-/** Название с переносом: длинные наименования иначе растягивают таблицу. */
-function WrapName({ name, sub }: { name: string; sub?: string | null }) {
+/** Название с переносом: длинные наименования иначе растягивают таблицу. top — метка «ТОП» (товар из списка ТОП). */
+function WrapName({ name, sub, top = false }: { name: string; sub?: string | null; top?: boolean }) {
   return (
-    <span className="block max-w-[340px] whitespace-normal max-lg:max-w-[44vw]">
+    <span className="flex max-w-[340px] items-start gap-1.5 whitespace-normal max-lg:max-w-[44vw]">
+      {top && (
+        <span className="mt-0.5">
+          <TopChip />
+        </span>
+      )}
       <NameCell name={name} sub={sub} />
     </span>
   );
 }
 
-/** Артикулы категории: клик — где товар идёт, а где нет. query — период и охват. */
-export function SkuTable({ card, prevLabel, query }: { card: CategoryCard; prevLabel: string; query: string }) {
+/** Артикулы категории: клик — где товар идёт, а где нет. query — период и охват; mono — «Только он», точек в охвате всего. */
+export function SkuTable({ card, prevLabel, query, mono }: { card: CategoryCard; prevLabel: string; query: string; mono?: number }) {
   const columns: Column<SkuRow>[] = [
-    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `Артикул ${r.code}` : null} /> },
+    {
+      key: "name",
+      label: "Продукт",
+      value: (r) => r.name,
+      render: (r) => <WrapName name={r.name} sub={r.code ? `Артикул ${r.code}` : null} top={r.isTop} />,
+    },
     { key: "status", label: "Статус", value: (r) => statusRank[r.status], render: (r) => <SkuStatusChip status={r.status} /> },
     { key: "fact", label: "Факт, кг", align: "right", value: (r) => r.factKg, render: (r) => kg(r.factKg) },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
-    {
-      key: "share",
-      label: "Доля по весу",
-      align: "right",
-      value: (r) => (card.factKg && r.factKg ? r.factKg / card.factKg : null),
-      render: (r) => (card.factKg && r.factKg ? pct(r.factKg / card.factKg, 1) : "—"),
-    },
+    { key: "share", label: "Доля по весу", align: "right", value: (r) => r.weightShare, render: (r) => pct(r.weightShare, 1) },
     { key: "akb", label: "ТТ", align: "right", value: (r) => r.akb, render: (r) => num(r.akb) },
     { key: "dist", label: "Дистрибуция", align: "right", value: (r) => r.distribution, render: (r) => pct(r.distribution) },
+    {
+      key: "solo",
+      label: "Только он",
+      align: "right",
+      value: (r) => r.solo,
+      render: (r) =>
+        r.solo > 0 ? (
+          <span title={`${outletsLabel(r.solo)} ${plural(r.solo, ["купила", "купили", "купили"])} только этот SKU — ${pct(r.soloShare, 1)} его ТТ`}>
+            {num(r.solo)} <span className="text-ink-3">· {pct(r.soloShare)}</span>
+          </span>
+        ) : (
+          <span className="text-ink-3">—</span>
+        ),
+    },
     { key: "prev", label: `${prevLabel}, кг`, align: "right", value: (r) => r.prevMonthKg, render: (r) => kg(r.prevMonthKg) },
   ];
 
@@ -139,22 +164,39 @@ export function SkuTable({ card, prevLabel, query }: { card: CategoryCard; prevL
       rows={card.skus}
       rowKey={(r) => String(r.productId)}
       rowHref={(r) => withQuery(`/sales/assortment/product/${r.productId}`, query)}
-      note={`«Пропал» — в прошлом месяце здесь продавался, в этом пока ни одной продажи. «Не возят» — здесь ноль, а по республике товар идёт. «Нет продаж» — есть в ассортименте (продавался за последние полгода), но в этом месяце не продаётся нигде. Дистрибуция — доля ТТ с покупкой, купивших артикул. «${prevLabel}» — прошлый месяц целиком: текущий ещё не закончен, килограммы в лоб не сравнивать.`}
+      note={`«Продаётся» — есть точка с положительной строкой артикула (кг или сумма больше нуля). «Пропал» — в прошлом месяце здесь продавался, в этом пока ни одной продажи. «Не возят» — здесь ноль, а по республике товар идёт. «Нет продаж» — есть в ассортименте (продавался с начала года), но в этом месяце не продаётся нигде. ТТ — точки с положительной строкой артикула; дистрибуция — их доля от ТТ с покупкой. «Только он» — точки, которые из всех SKU купили только этот, и их доля от ТТ артикула${mono != null ? `; всего таких точек ${num(mono)}` : ""}. «ТОП» — товар из списка ТОП. «${prevLabel}» — прошлый месяц целиком: текущий ещё не закончен, килограммы в лоб не сравнивать.`}
     />
   );
 }
 
+/** Колонки «По регионам» (вкладка «Ассортимент» и страница категории): регион без покупок за месяц — «нет данных» вместо счётчиков. */
+export function regionColumns(): Column<AssortmentRegionRow>[] {
+  const count = (r: AssortmentRegionRow, value: number, tone?: string) =>
+    r.noData ? <span className="text-ink-3">—</span> : <span className={value && tone ? tone : ""}>{num(value)}</span>;
+  return [
+    {
+      key: "name",
+      label: "Регион",
+      value: (r) => r.name,
+      render: (r) => (
+        <span className="flex items-center gap-2">
+          <WrapName name={r.name} />
+          {r.noData && <NoDataChip />}
+        </span>
+      ),
+    },
+    { key: "kg", label: "Факт, кг", align: "right", value: (r) => (r.noData ? null : r.kg), render: (r) => (r.noData ? "—" : kg(r.kg)) },
+    { key: "revenue", label: "Выручка", align: "right", value: (r) => (r.noData ? null : r.revenue), render: (r) => (r.noData ? "—" : money(r.revenue)) },
+    { key: "sku", label: "SKU идёт", align: "right", value: (r) => (r.noData ? null : r.skuSelling), render: (r) => count(r, r.skuSelling) },
+    { key: "no", label: "Не возят", align: "right", value: (r) => (r.noData ? null : r.skuNotCarried), render: (r) => count(r, r.skuNotCarried, "text-warn") },
+    { key: "lost", label: "Пропало", align: "right", value: (r) => (r.noData ? null : r.skuLost), render: (r) => count(r, r.skuLost, "text-bad") },
+    { key: "akb", label: "ТТ", align: "right", value: (r) => (r.noData ? null : r.akb), render: (r) => count(r, r.akb) },
+  ];
+}
+
 /** «По регионам» страницы категории: клик — эта же категория в регионе. */
 export function CategoryRegionsTable({ rows, categoryId, query }: { rows: AssortmentRegionRow[]; categoryId: string; query: string }) {
-  const columns: Column<AssortmentRegionRow>[] = [
-    { key: "name", label: "Регион", value: (r) => r.name },
-    { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
-    { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
-    { key: "sku", label: "SKU идёт", align: "right", value: (r) => r.skuSelling, render: (r) => num(r.skuSelling) },
-    { key: "no", label: "Не возят", align: "right", value: (r) => r.skuNotCarried, render: (r) => <span className={r.skuNotCarried ? "text-warn" : ""}>{num(r.skuNotCarried)}</span> },
-    { key: "lost", label: "Пропало", align: "right", value: (r) => r.skuLost, render: (r) => <span className={r.skuLost ? "text-bad" : ""}>{num(r.skuLost)}</span> },
-    { key: "akb", label: "ТТ", align: "right", value: (r) => r.akb, render: (r) => num(r.akb) },
-  ];
+  const columns = regionColumns();
   const regionQuery = (id: string) => {
     const q = new URLSearchParams(query);
     q.delete("direction");
@@ -169,7 +211,7 @@ export function CategoryRegionsTable({ rows, categoryId, query }: { rows: Assort
       rows={rows}
       rowKey={(r) => r.id}
       rowHref={(r) => withQuery(`/sales/assortment/category/${encodeURIComponent(categoryId)}`, regionQuery(r.id))}
-      note="«SKU идёт» — сколько артикулов категории из тех, что продаются по республике в этом месяце, есть в регионе. «Не возят» — остальные. «Пропало» — продавались в регионе в прошлом месяце, в этом нет. ТТ — точки региона с покупкой."
+      note="«SKU идёт» — сколько артикулов категории из тех, что продаются по республике в этом месяце, есть в регионе (точка с положительной строкой). «Не возят» — остальные. «Пропало» — продавались в регионе в прошлом месяце, в этом нет. ТТ — точки региона с покупкой. «Нет данных» — в регионе за месяц ни одной покупки: это почти всегда дыра в выгрузке, а не регион, который ничего не возит."
     />
   );
 }
@@ -180,9 +222,14 @@ export function ProductBreakdownTable({ data, prevLabel, query }: { data: Produc
   const nameLabel = kind === "regions" ? "Регион" : kind === "agents" ? "ТП" : "Магазин";
   const columns: Column<ProductBreakdownRow>[] = [
     { key: "name", label: nameLabel, value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.sub} /> },
-    { key: "status", label: "Статус", value: (r) => statusRank[r.status], render: (r) => <SkuStatusChip status={r.status} store={kind === "stores"} /> },
-    { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
-    { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
+    {
+      key: "status",
+      label: "Статус",
+      value: (r) => (r.noData ? null : statusRank[r.status]),
+      render: (r) => (r.noData ? <NoDataChip /> : <SkuStatusChip status={r.status} store={kind === "stores"} />),
+    },
+    { key: "kg", label: "Факт, кг", align: "right", value: (r) => (r.noData ? null : r.kg), render: (r) => (r.noData ? "—" : kg(r.kg)) },
+    { key: "revenue", label: "Выручка", align: "right", value: (r) => (r.noData ? null : r.revenue), render: (r) => (r.noData ? "—" : money(r.revenue)) },
     ...(kind === "stores"
       ? []
       : ([
@@ -190,8 +237,8 @@ export function ProductBreakdownTable({ data, prevLabel, query }: { data: Produc
             key: "tt",
             label: "ТТ с товаром",
             align: "right",
-            value: (r) => r.tt,
-            render: (r) => (kind === "agents" ? `${num(r.tt)} / ${num(r.outlets)}` : num(r.tt)),
+            value: (r) => (r.noData ? null : r.tt),
+            render: (r) => (r.noData ? "—" : kind === "agents" ? `${num(r.tt)} / ${num(r.outlets)}` : num(r.tt)),
           },
           { key: "dist", label: kind === "agents" ? "Дистрибуция у ТП" : "Дистрибуция", align: "right", value: (r) => r.distribution, render: (r) => pct(r.distribution) },
         ] satisfies Column<ProductBreakdownRow>[])),
@@ -233,10 +280,10 @@ export function ProductBreakdownTable({ data, prevLabel, query }: { data: Produc
       empty="Продаж в охвате нет"
       note={
         kind === "regions"
-          ? "ТТ с товаром — точки региона, купившие артикул; дистрибуция — их доля от ТТ региона с покупкой. «Не возят» — в регионе ноль, а по республике идёт."
+          ? "ТТ с товаром — точки региона с положительной строкой артикула (кг или сумма больше нуля); дистрибуция — их доля от ТТ региона с покупкой. «Не возят» — в регионе ноль, а по республике идёт. «Нет данных» — в регионе за месяц ни одной покупки."
           : kind === "agents"
-            ? "ТП региона с продажами в этом месяце. ТТ с товаром — сколько его точек купили артикул из всех его точек с покупкой."
-            : "Магазины с заказом в этом месяце и те, кто брал артикул в прошлом. «Пропал» — брал в прошлом месяце, в этом нет; «Не брал» — ни в этом, ни в прошлом."
+            ? "ТП региона с продажами в этом месяце. ТТ с товаром — сколько его точек купили артикул (положительная строка) из всех его точек с покупкой."
+            : "Магазины с заказом в этом месяце и те, кто брал артикул в прошлом. «Продаётся» — строка артикула положительна; «Пропал» — брал в прошлом месяце, в этом нет; «Не брал» — ни в этом, ни в прошлом."
       }
     />
   );

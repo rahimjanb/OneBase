@@ -1,13 +1,14 @@
 import { notFound } from "next/navigation";
-import { AkbChart } from "@/components/sales/AkbChart";
-import { CollapsedSections, FlagPills, KpiTile, Section, planTone } from "@/components/sales/bits";
+import { AkbMonthsCard } from "@/components/sales/AkbMonthsCard";
+import { CollapsedSections, FlagPills, KpiTile, Section, levelTone } from "@/components/sales/bits";
 import { CategoryPlanBars, IndicatorBars } from "@/components/sales/blocks";
 import { AgentStoresTable, LaggingTable, ProductsTable } from "@/components/sales/assortment-tables";
 import { CategoryCards } from "@/components/sales/categories";
+import { ReportMonthExit } from "@/components/sales/MonthExit";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { NewMarketsTable, SameDaysTable, SilentMarketsTable } from "@/components/sales/tables";
 import { apiGetOrNull } from "@/lib/server-api";
-import { kg, money, monthGenitive, monthName, num, pct } from "@/lib/sales/format";
+import { kg, money, monthGenitive, monthName, num, ordersLabel, pct } from "@/lib/sales/format";
 import { apiQuery, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { AgentFlag, AgentView } from "@/lib/sales/types";
 
@@ -69,43 +70,47 @@ export default async function AgentPage({
   if (data.regionId) crumbs.push({ label: data.regionName ?? "Регион", href: withQuery(`/sales/regions/${data.regionId}`, q) });
 
   const subtitle = [data.directionName, data.regionName, `ID ${data.agentId}`, data.isVacancy ? "вакансия" : null].filter(Boolean).join(" · ");
+  const regionHref = data.regionId ? `/sales/regions/${data.regionId}` : "/sales/republic";
 
   return (
     <SalesFrame
       title={data.name}
       subtitle={subtitle}
       crumbs={[...crumbs, { label: data.name }]}
-      back={data.regionId ? withQuery(`/sales/regions/${data.regionId}`, q) : withQuery("/sales/republic", q)}
+      back={withQuery(regionHref, q)}
       sp={sp}
+      period={period}
     >
+      {/* Смена месяца уходит к региону ТП (DOC-filters §12). */}
+      <ReportMonthExit to={regionHref} />
       <div className="mb-4 flex justify-end">
         <FlagPills flags={data.flags.filter((f) => f.severity !== "Info")} empty={null} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 min-[87.5rem]:grid-cols-5">
-        <KpiTile label="План ТП на месяц" value={kg(data.planKg)} unit={data.planKg != null ? "кг" : undefined} tone={data.planKg != null ? planTone(data.execution) : "muted"}>
+        <KpiTile label="План ТП на месяц" value={kg(data.planKg)} unit={data.planKg != null ? "кг" : undefined} tone={levelTone(data.executionLevel)}>
           {data.planKg != null ? `выполнено ${pct(data.execution)}` : planNote(data, monthName(period.month))}
         </KpiTile>
-        <KpiTile label="Выручка за месяц" value={money(data.revenue)} unit="сум" tone={data.revenuePlan != null ? planTone(data.revenueExecution) : "ink"}>
+        <KpiTile label="Выручка за месяц" value={money(data.revenue)} unit="сум" tone={data.revenuePlan != null ? levelTone(data.revenueExecutionLevel) : "ink"}>
           {kg(data.factKg)} кг
           {data.revenuePlan != null && <> · {pct(data.revenueExecution)} плана ({money(data.revenuePlan)})</>}
         </KpiTile>
-        <KpiTile label="Визиты" value={num(data.visits)}>
-          {num(data.visitsWithOrder)} с заказом
+        <KpiTile label="Визиты" value={num(data.visits)} title={`${num(data.visitsWithOrder)} визитов, в день которых в этой точке введён заказ`}>
+          {ordersLabel(data.orders)} за месяц
         </KpiTile>
-        <KpiTile label="Конверсия" value={pct(data.conversion.value, 1)}>
+        <KpiTile label="Конверсия" value={pct(data.conversion.value, 1)} title="Заказы, принятые в месяце ÷ выполненные визиты; бывает больше 100%">
           медиана региона {pct(data.conversion.regionMedian)}
         </KpiTile>
         <KpiTile label="Сум с визита" value={money(data.sumPerVisit.value)}>
           медиана региона {money(data.sumPerVisit.regionMedian)}
         </KpiTile>
         <KpiTile label="АКБ — точек с отгрузкой" value={num(data.akb)}>
-          {data.akb ? `${money(data.revenue / data.akb)} сум с точки` : "покупок за месяц нет"}
+          {data.revenuePerOutlet != null ? `${money(data.revenuePerOutlet)} сум с точки` : "покупок за месяц нет"}
         </KpiTile>
         <KpiTile label="Средний чек" value={money(data.avgCheck.value)} unit="сум">
           медиана региона {money(data.avgCheck.regionMedian)}
         </KpiTile>
-        <KpiTile label="Вес на точку" value={kg(data.akb ? data.factKg / data.akb : null)} unit={data.akb ? "кг" : undefined} />
+        <KpiTile label="Вес на точку" value={kg(data.kgPerOutlet)} unit={data.kgPerOutlet != null ? "кг" : undefined} />
         <KpiTile label="Категорий" value={num(data.categories)} unit={data.planCategories ? `из ${data.planCategories} в плане` : undefined}>
           цель — {num(data.categoryTarget)} на активную точку
         </KpiTile>
@@ -119,14 +124,15 @@ export default async function AgentPage({
         <CategoryCards cards={data.assortment.categories} scope="продажах этого ТП" query={queryWith(q, { agent: data.agentId })} />
       )}
 
-      <CollapsedSections>
-        {data.akbMonths && <AkbChart data={data.akbMonths} />}
+      {/* Ключ по месяцу: смена месяца сбрасывает раскрытые секции, сортировки и раскрытые строки (DOC-filters §12). */}
+      <CollapsedSections key={`${period.year}-${period.month}`}>
+        {data.akbMonths && <AkbMonthsCard data={data.akbMonths} />}
         <IndicatorBars rows={data.indicators} />
         <CategoryPlanBars rows={data.categoryPlan} />
         {data.assortment && (
           <>
             <AgentStoresTable rows={data.assortment.stores} agentId={data.agentId} query={q} />
-            <ProductsTable rows={data.assortment.products} />
+            <ProductsTable rows={data.assortment.products} outsideReport={data.assortment.productsOutsideReport} />
             <LaggingTable rows={data.assortment.lagging} />
           </>
         )}

@@ -14,7 +14,11 @@ public class ExportCountryTests
     [InlineData("ARAZ AZERBAIJAN", "AZERBAIJAN", "Азербайджан")]
     [InlineData("Orgil Conditer Mongolia", null, "Монголия")]
     [InlineData("Казахстан - Актобе", null, "Казахстан")]
-    [InlineData("Dagestan", "Ставропольский край, г. Михайловск", "Россия")]
+    [InlineData("Казахстан - Монголия", "Астана", "Казахстан")] // в «Полевом контроле» — «Экспорт (уточнить)», у нас — Казахстан
+    [InlineData("Dagestan", "Ставропольский край, г. Михайловск", "Россия (Дагестан)")]
+    [InlineData("Дагестан ФАЙДА", "Россия, СКФО", "Россия (Дагестан)")]
+    [InlineData("ООО ВЛАДКОН", "Россия, Москва", "Россия (Уфа)")] // как у эталона: адрес в Linko — Москва
+    [InlineData("ООО Ромашка", "Россия, Казань", "Россия")]
     public void Country_is_found_in_market_name_or_address(string name, string? address, string country) =>
         Assert.Equal(country, Options.ExportCountryOf(name, address));
 
@@ -37,7 +41,12 @@ public class ExportCountryTests
     [Theory]
     [InlineData(0, "Иван", true)]
     [InlineData(15, "Вакант Самарканд", true)]
+    [InlineData(310, "310 Вакан (Термиз туман)", true)] // «вакан», как в «Полевом контроле»
     [InlineData(16, "Агент Ташкент", false)]
     public void Vacancy_is_marked_by_name_or_zero_id(long id, string name, bool vacancy) =>
         Assert.Equal(vacancy, Options.IsVacancy(id, name));
+
+    [Fact]
+    public void Sales_base_keeps_its_own_vacancy_word() =>
+        Assert.True(Options.IsFieldVacancy(15, "Вакант Самарканд") && !Options.IsFieldVacancy(310, "310 Вакан (Термиз туман)"));
 }

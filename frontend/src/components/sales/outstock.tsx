@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Section } from "./bits";
 import { DataTable, NameCell, type Column } from "./DataTable";
@@ -37,13 +38,22 @@ function DaysStrip({ days, from }: { days: string; from: string }) {
   );
 }
 
+/** Чья потеря по дням в нуле: недовоз (на заводе товар был), завод (на заводе тоже ноль), нет данных по складу завода. */
 function Whose({ p }: { p: OutstockPair }) {
   if (p.zeroDays === 0) return <span className="text-ink-3">—</span>;
+  const parts = [
+    p.dealerDays > 0 ? <span key="d" className="text-warn">недовоз {num(p.dealerDays)}</span> : null,
+    p.factoryDays > 0 ? <span key="f" className="text-bad">завод {num(p.factoryDays)}</span> : null,
+    p.unknownDays > 0 ? <span key="u" className="text-ink-3">нет данных {num(p.unknownDays)}</span> : null,
+  ].filter(Boolean);
   return (
     <span className="whitespace-nowrap text-xs">
-      {p.dealerDays > 0 && <span className="text-warn">недовоз {num(p.dealerDays)}</span>}
-      {p.dealerDays > 0 && p.factoryDays > 0 && <span className="text-ink-3"> · </span>}
-      {p.factoryDays > 0 && <span className="text-bad">завод {num(p.factoryDays)}</span>}
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 && <span className="text-ink-3"> · </span>}
+          {part}
+        </span>
+      ))}
     </span>
   );
 }
@@ -141,10 +151,22 @@ function TopList({ items }: { items: OutstockTopProduct[] }) {
   );
 }
 
-/** По регионам: клик по строке — календарь по дням этого региона. linkQuery — период и фильтры из адреса. */
-export function OutstockRegionsTable({ rows, linkQuery, limit }: { rows: OutstockRegion[]; linkQuery: string; limit?: number }) {
+/**
+ * По регионам: клик по строке открывает календарь по дням этого региона (параметр calendar — итоги и таблицы остаются по области);
+ * клик по открытому региону закрывает календарь. linkQuery — период и фильтры из адреса.
+ */
+export function OutstockRegionsTable({ rows, linkQuery, activeId, limit }: { rows: OutstockRegion[]; linkQuery: string; activeId?: string | null; limit?: number }) {
   const columns: Column<OutstockRegion>[] = [
-    { key: "name", label: "Регион", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.dealer} /> },
+    {
+      key: "name",
+      label: "Регион",
+      value: (r) => r.name,
+      render: (r) => (
+        <span className={r.id === activeId ? "text-accent-strong" : ""}>
+          <NameCell name={r.name} sub={r.dealer} />
+        </span>
+      ),
+    },
     { key: "sold", label: "Продажи, кг", align: "right", value: (r) => r.soldKg, render: (r) => kg(r.soldKg) },
     { key: "lostKg", label: "Упущено, кг", align: "right", value: (r) => r.lostKg, render: (r) => kg(r.lostKg) },
     { key: "lostSum", label: "Упущено, сум", align: "right", value: (r) => r.lostSum, render: (r) => <span className="font-semibold">{money(r.lostSum)}</span> },
@@ -165,10 +187,10 @@ export function OutstockRegionsTable({ rows, linkQuery, limit }: { rows: Outstoc
       columns={columns}
       rows={rows}
       rowKey={(r) => r.id}
-      rowHref={(r) => withQuery("/sales/outstock", queryWith(linkQuery, { region: r.id }))}
+      rowHref={(r) => withQuery("/sales/outstock", queryWith(linkQuery, { calendar: r.id === activeId ? null : r.id }))}
       limit={limit}
       empty="Потерь нет"
-      note="«К факту» — упущенные кг к проданным за период. «Позиций» — товаров региона, которые хотя бы день стояли в нуле. «Дней в нуле» — сумма по этим товарам."
+      note="«К факту» — упущенные кг к проданным за период. «Позиций» — товаров региона, которые хотя бы день стояли в нуле. «Дней в нуле» — сумма по этим товарам. Клик — календарь региона; итоги и таблицы при этом остаются по всей области."
     />
   );
 }
@@ -240,13 +262,23 @@ export function OutstockProductsTable({ rows, limit }: { rows: OutstockProduct[]
 }
 
 /** Календарь региона по дням: красная клетка — утром товара не было, зелёная — был, точка — в этот день привезли с завода. */
-export function OutstockCalendar({ pairs, from, days, region }: { pairs: OutstockPair[]; from: string; days: number; region: string }) {
+export function OutstockCalendar({ pairs, from, days, region, closeHref }: { pairs: OutstockPair[]; from: string; days: number; region: string; closeHref?: string }) {
   const [showAll, setShowAll] = useState(false);
   const limit = 40;
   const rows = showAll ? pairs : pairs.slice(0, limit);
   const labels = Array.from({ length: days }, (_, i) => dayLabel(from, i));
   return (
-    <Section title={`Календарь по дням · ${region}`} hint="что и когда стояло в нуле, когда довезли">
+    <Section
+      title={`Календарь по дням · ${region}`}
+      hint="что и когда стояло в нуле, когда довезли"
+      actions={
+        closeHref ? (
+          <Link href={closeHref} className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-muted max-lg:min-h-11 max-lg:px-3">
+            Закрыть
+          </Link>
+        ) : undefined
+      }
+    >
       <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-3.5 w-3 rounded-sm bg-bad" /> нет товара

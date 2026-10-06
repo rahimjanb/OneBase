@@ -14,7 +14,7 @@ export default async function DirectionPage({
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const path = `/sales/directions/${id}`;
-  const data = await apiGetOrNull<GroupView>(`/api/sales/directions/${id}${apiQuery(sp, ["from", "to"])}`, path);
+  const data = await apiGetOrNull<GroupView>(`/api/sales/directions/${id}${apiQuery(sp, ["from", "to", "metric", "category"])}`, path);
   if (!data) notFound();
   const q = periodQuery(sp);
 
@@ -25,6 +25,7 @@ export default async function DirectionPage({
       crumbs={[{ label: "Республика", href: withQuery("/sales/republic", q) }, { label: data.name }]}
       back={withQuery("/sales/republic", q)}
       sp={sp}
+      period={data.period}
     >
       <GroupPage
         data={data}

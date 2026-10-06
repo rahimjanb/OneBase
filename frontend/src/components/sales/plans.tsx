@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { DataTable, NameCell, type Column } from "./DataTable";
-import { ExecutionBar, execClass } from "./bits";
+import { ExecutionBar, levelBarTone, levelClass } from "./bits";
 import { kg, money, num, pct } from "@/lib/sales/format";
 import type { IndicatorPlan, PlanPersonRow, PlansView } from "@/lib/sales/types";
 
@@ -23,10 +23,10 @@ function Indicators({ rows, agentId, query, team }: { rows: IndicatorPlan[]; age
           <span className="truncate text-ink-2" title={r.name}>
             {r.name}
           </span>
-          <ExecutionBar value={r.execution} tone={r.execution != null && r.execution < 0.7 ? (r.execution < 0.4 ? "bad" : "warn") : "accent"} />
+          <ExecutionBar value={r.execution} tone={levelBarTone(r.executionLevel)} />
           <span className="text-right tabular-nums text-ink">
             {value(r.planType, r.fact)} из {value(r.planType, r.plan)} {unit(r.planType)}
-            <span className={`ml-2 font-semibold ${execClass(r.execution)}`}>{pct(r.execution)}</span>
+            <span className={`ml-2 font-semibold ${levelClass(r.executionLevel)}`}>{pct(r.execution)}</span>
           </span>
         </div>
       ))}
@@ -45,7 +45,7 @@ export function RegionPlansTable({ rows, query }: { rows: PlansView["regions"]; 
     { key: "agents", label: "ТП с планом", align: "right", value: (r) => r.agents, render: (r) => num(r.agents) },
     { key: "plan", label: "План, кг", align: "right", value: (r) => r.weightPlan, render: (r) => kg(r.weightPlan) },
     { key: "fact", label: "Факт Linko, кг", align: "right", value: (r) => r.weightFact, render: (r) => kg(r.weightFact) },
-    { key: "exec", label: "Вып.", align: "right", value: (r) => r.weightExecution, render: (r) => <span className={execClass(r.weightExecution)}>{pct(r.weightExecution)}</span> },
+    { key: "exec", label: "Вып.", align: "right", value: (r) => r.weightExecution, render: (r) => <span className={levelClass(r.weightExecutionLevel)}>{pct(r.weightExecution)}</span> },
     { key: "rplan", label: "План, сум", align: "right", value: (r) => r.revenuePlan, render: (r) => money(r.revenuePlan) },
     { key: "rfact", label: "Факт Linko, сум", align: "right", value: (r) => (r.revenuePlan == null ? null : r.revenueFact), render: (r) => (r.revenuePlan == null ? "—" : money(r.revenueFact)) },
   ];
@@ -87,7 +87,7 @@ export function PeoplePlansTable({
     ...(team ? [] : [{ key: "region", label: "Регион", value: (r: PlanPersonRow) => r.regionName ?? "Без региона" } as Column<PlanPersonRow>]),
     { key: "plan", label: "План, кг", align: "right", value: (r) => r.weightPlan, render: (r) => kg(r.weightPlan) },
     { key: "fact", label: "Факт, кг", align: "right", value: (r) => (r.weightPlan == null ? null : r.weightFact), render: (r) => (r.weightPlan == null ? "—" : kg(r.weightFact)) },
-    { key: "exec", label: "Вып.", align: "right", value: (r) => r.weightExecution, render: (r) => <span className={execClass(r.weightExecution)}>{pct(r.weightExecution)}</span> },
+    { key: "exec", label: "Вып.", align: "right", value: (r) => r.weightExecution, render: (r) => <span className={levelClass(r.weightExecutionLevel)}>{pct(r.weightExecution)}</span> },
     { key: "rplan", label: "План, сум", align: "right", value: (r) => r.revenuePlan, render: (r) => money(r.revenuePlan) },
     { key: "rfact", label: "Факт, сум", align: "right", value: (r) => (r.revenuePlan == null ? null : r.revenueFact), render: (r) => (r.revenuePlan == null ? "—" : money(r.revenueFact)) },
     { key: "akb", label: "АКБ план / факт", align: "right", value: (r) => r.akbPlan, render: (r) => (r.akbPlan == null ? "—" : `${num(r.akbFact)} / ${num(r.akbPlan)}`) },

@@ -1,8 +1,10 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Sales.Metrics;
+using OneBase.Application.Sales.SkuSales;
 using OneBase.Domain.Sales;
 
 namespace OneBase.Application.Sales;
@@ -40,6 +42,15 @@ public interface ISalesHistoryReader
 {
     /// <summary>АКБ по месяцам периода: по республике и по филиалам, итог и по категориям (с объединением подтипов).</summary>
     Task<IReadOnlyList<MonthlyAkb>> AkbByMonthAsync(DateOnly from, DateOnly to, IReadOnlyDictionary<long, long> categoryGroups, CancellationToken ct);
+
+    /// <summary>
+    /// «Продажи по SKU» за дни [from; to] (любые месяцы, в том числе через год) — по правилам вторички (SecondarySales): заказы проданных
+    /// статусов по дате реализации, возвраты по строкам (сумма — количество × цена) по дате создания, без исключённых и пропускаемых
+    /// филиалов; выручка заказа в другой валюте — 0, вес учитывается. branchRegions — филиал Linko → регион (старые филиалы — в текущем
+    /// регионе, как OldBranches.Merge); филиал вне словаря — регион null. Кг и выручка — по товару × региону × месяцу; АКБ SKU за весь
+    /// отрезок — различные ТТ с положительной месячной строкой товара (кг или выручка больше нуля) хотя бы в одном месяце.
+    /// </summary>
+    Task<SkuSalesAggregate> SkuSalesAsync(DateOnly from, DateOnly to, IReadOnlyDictionary<long, Guid> branchRegions, CancellationToken ct);
 }
 
 public sealed record SalesMonth(int Year, int Month);
@@ -57,10 +68,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
     /// <summary>Один пересчёт за раз: запрос пользователя и прогрев после синхронизации не считают одно и то же дважды.</summary>
     private static readonly SemaphoreSlim BuildGate = new(1, 1);
 
-    /// <summary>«Живой» ассортимент: SKU, проданные за столько месяцев до выбранного (плюс сам месяц).</summary>
-    private const int AssortmentMonths = 6;
-
-    /// <summary>Заказ с датой реализации по настройке (по умолчанию — дата приёмки).</summary>
+    /// <summary>Заказ с датой реализации по настройке (по умолчанию — дата приёмки). Вес и сумма — только из строк, шапка заказа не берётся.</summary>
     private sealed class DatedOrder
     {
         public long Id { get; init; }
@@ -69,37 +77,44 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         public string? BranchName { get; init; }
         public long? BranchId { get; init; }
         public long? AgentId { get; init; }
-        public decimal TotalWeight { get; init; }
+        public long? MarketId { get; init; }
     }
 
     private IQueryable<DatedOrder> Dated() => options.DateField switch
     {
         SaleDateField.Accepted => db.LinkoOrders.Select(o => new DatedOrder
         {
-            Id = o.Id, Date = o.AcceptedDate, Status = o.Status, BranchName = o.BranchName, BranchId = o.BranchId, AgentId = o.AgentId, TotalWeight = o.TotalWeight,
+            Id = o.Id, Date = o.AcceptedDate, Status = o.Status, BranchName = o.BranchName, BranchId = o.BranchId, AgentId = o.AgentId, MarketId = o.MarketId,
         }),
         SaleDateField.Delivery => db.LinkoOrders.Select(o => new DatedOrder
         {
-            Id = o.Id, Date = o.DeliveryDate ?? o.CreatedDate, Status = o.Status, BranchName = o.BranchName, BranchId = o.BranchId, AgentId = o.AgentId, TotalWeight = o.TotalWeight,
+            Id = o.Id, Date = o.DeliveryDate ?? o.CreatedDate, Status = o.Status, BranchName = o.BranchName, BranchId = o.BranchId, AgentId = o.AgentId, MarketId = o.MarketId,
         }),
         _ => db.LinkoOrders.Select(o => new DatedOrder
         {
-            Id = o.Id, Date = o.CreatedDate, Status = o.Status, BranchName = o.BranchName, BranchId = o.BranchId, AgentId = o.AgentId, TotalWeight = o.TotalWeight,
+            Id = o.Id, Date = o.CreatedDate, Status = o.Status, BranchName = o.BranchName, BranchId = o.BranchId, AgentId = o.AgentId, MarketId = o.MarketId,
         }),
     };
 
     /// <summary>Исключённые филиалы в нижнем регистре — для SQL (lower(branch) in …).</summary>
     private string[] ExcludedLower => options.ExcludedBranches.Select(b => b.Trim().ToLowerInvariant()).ToArray();
 
-    /// <summary>Месяцы, за которые есть продажи (по дате реализации) — от новых к старым.</summary>
+    /// <summary>Пропускаемые филиалы («К К Мерч») в нижнем регистре.</summary>
+    private string[] IgnoredLower => options.IgnoredBranches.Select(b => b.Trim().ToLowerInvariant()).ToArray();
+
+    /// <summary>Филиалы не вторички (исключённые и пропускаемые) в нижнем регистре.</summary>
+    private string[] NotSecondaryLower => options.NotSecondaryBranchesLower();
+
+    /// <summary>Месяцы, за которые есть продажи вторички (по дате реализации, до отчётного дня) — от новых к старым.</summary>
     public async Task<IReadOnlyList<SalesMonth>> MonthsAsync(CancellationToken ct = default) =>
         await Cached("sales:months", async () =>
         {
             var sold = options.SoldStatuses;
-            // Приёмка «в будущем» (бывает у части заказов) не должна давать в выборе периода месяц, которого ещё нет.
-            var today = DateOnly.FromDateTime(DateTime.Today);
+            var skipped = NotSecondaryLower;
+            // Приёмка сегодня или «в будущем» (бывает у части заказов) не должна давать в выборе периода месяц, которого в отчёте ещё нет.
+            var cutoff = ReportCutoff;
             var months = await Dated()
-                .Where(o => sold.Contains(o.Status) && o.Date != null && o.Date <= today)
+                .Where(o => sold.Contains(o.Status) && o.Date != null && o.Date <= cutoff && (o.BranchName == null || !skipped.Contains(o.BranchName.ToLower())))
                 .Select(o => new { o.Date!.Value.Year, o.Date!.Value.Month })
                 .Distinct()
                 .ToListAsync(ct);
@@ -109,13 +124,21 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                 .ToList();
         });
 
-    public async Task<SalesAnalytics> LoadAsync(int? year, int? month, CancellationToken ct = default)
+    /// <summary>Отчёт месяца по плану по умолчанию — РОП: AI-инструменты, проактивные проверки, прогрев после синхронизации.</summary>
+    public Task<SalesAnalytics> LoadAsync(int? year, int? month, CancellationToken ct = default) => LoadAsync(year, month, PlanKind.Rop, ct);
+
+    /// <summary>
+    /// Отчёт месяца; plan — план вторички: РОП или «Завод» (sales."RegionPlans"). На месяц без планов регионов этого вида
+    /// план подразделений — сумма планов ТП из Linko. Вид плана — часть ключа кэша.
+    /// </summary>
+    public async Task<SalesAnalytics> LoadAsync(int? year, int? month, PlanKind plan, CancellationToken ct = default)
     {
         var lastData = await Cached("sales:last-data", () => LastDataDateAsync(ct));
         var y = year ?? lastData?.Year ?? DateTime.Today.Year;
         var m = month is >= 1 and <= 12 ? month.Value : lastData?.Month ?? DateTime.Today.Month;
+        var kind = SalesPlans.Secondary(plan);
 
-        var key = $"sales:{y}-{m}";
+        var key = SalesPlans.CacheKey(y, m, kind);
         if (cache.TryGetValue(key, out SalesAnalytics? cached) && cached is not null)
         {
             return cached;
@@ -130,7 +153,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             }
 
             var token = signal.Token; // до загрузки: если данные обновятся во время расчёта, результат сразу устареет
-            var data = await BuildAsync(y, m, lastData, ct);
+            var data = await BuildAsync(y, m, kind, lastData, ct);
             var analytics = new SalesAnalytics(data);
             cache.Set(key, analytics, new MemoryCacheEntryOptions()
                 .SetAbsoluteExpiration(CacheTtl)
@@ -142,6 +165,9 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             BuildGate.Release();
         }
     }
+
+    /// <summary>Отчётный день (последний день с продажами вторички, не позже вчера) — для отчётов за несколько месяцев («Продажи по SKU»).</summary>
+    public Task<DateOnly?> LastDataAsync(CancellationToken ct = default) => Cached("sales:last-data", () => LastDataDateAsync(ct));
 
     /// <summary>Небольшие справочные запросы (месяцы, дата последних данных) — до следующей синхронизации.</summary>
     private async Task<T> Cached<T>(string key, Func<Task<T>> load)
@@ -158,40 +184,55 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
     }
 
     /// <summary>
-    /// Последний день, за который есть продажи (по дате реализации), но не позже сегодняшнего: у части заказов Linko
-    /// дата приёмки стоит в будущем (например, завтра) — отчётный день из-за них не должен уезжать вперёд.
+    /// Отчётный день: последний день с продажами вторички (по дате реализации, без «Завода» и пропускаемых филиалов), но не позже
+    /// последнего полного дня — вчера по местному времени. Сегодняшние приёмки войдут в отчёт завтра; у части заказов Linko
+    /// дата приёмки стоит в будущем — отчётный день из-за них не уезжает вперёд.
     /// </summary>
     private async Task<DateOnly?> LastDataDateAsync(CancellationToken ct)
     {
         var sold = options.SoldStatuses;
-        var today = Today;
-        return await Dated().Where(o => sold.Contains(o.Status) && o.Date <= today).MaxAsync(o => o.Date, ct);
+        var skipped = NotSecondaryLower;
+        var cutoff = ReportCutoff;
+        return await Dated()
+            .Where(o => sold.Contains(o.Status) && o.Date <= cutoff && (o.BranchName == null || !skipped.Contains(o.BranchName.ToLower())))
+            .MaxAsync(o => o.Date, ct);
     }
 
-    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Now);
+    /// <summary>Последний полный день по местному времени (вчера) — см. SecondarySales.ReportCutoff.</summary>
+    private static DateOnly ReportCutoff => SecondarySales.ReportCutoff(DateTimeOffset.UtcNow);
 
-    /// <summary>Проданные заказы с датой приёмки позже сегодняшнего дня: в факт попадут, когда этот день наступит.</summary>
-    private async Task<int> AcceptedInFutureAsync(CancellationToken ct)
+    /// <summary>
+    /// Заказ вторички по филиалу: без филиала или не «Завод» и не «К К Мерч» (skippedLower — их названия в нижнем регистре, NotSecondaryLower).
+    /// Для запросов к заказам напрямую; выборки по дате реализации (Dated) проверяют то же самое.
+    /// </summary>
+    public static Expression<Func<LinkoOrder, bool>> SecondaryBranch(string[] skippedLower) =>
+        o => o.BranchName == null || !skippedLower.Contains(o.BranchName.ToLower());
+
+    /// <summary>
+    /// Проданные заказы вторички этого месяца, принятые после отчётного дня — сегодня или с датой приёмки в будущем (окно —
+    /// SecondarySales.AcceptedAfterReport): в факт попадут на следующий день после приёмки. У закрытого месяца окна нет — 0.
+    /// </summary>
+    private async Task<int> AcceptedInFutureAsync(DateOnly monthStart, DateOnly dataThrough, CancellationToken ct)
     {
-        if (options.DateField != SaleDateField.Accepted)
+        if (options.DateField != SaleDateField.Accepted || SecondarySales.AcceptedAfterReport(monthStart, dataThrough) is not { } window)
         {
             return 0;
         }
 
         var sold = options.SoldStatuses;
-        var today = Today;
-        return await db.LinkoOrders.CountAsync(o => sold.Contains(o.Status) && o.AcceptedDate > today, ct);
+        var (from, to) = window;
+        return await db.LinkoOrders
+            .Where(SecondaryBranch(NotSecondaryLower))
+            .CountAsync(o => sold.Contains(o.Status) && o.AcceptedDate >= from && o.AcceptedDate <= to, ct);
     }
 
-    private async Task<MonthData> BuildAsync(int year, int month, DateOnly? lastData, CancellationToken ct)
+    private async Task<MonthData> BuildAsync(int year, int month, PlanKind kind, DateOnly? lastData, CancellationToken ct)
     {
         var monthStart = new DateOnly(year, month, 1);
         var monthEnd = monthStart.AddMonths(1).AddDays(-1);
         var previousStart = monthStart.AddMonths(-1);
 
-        var dataThrough = lastData is null || lastData < monthStart
-            ? monthStart.AddDays(-1)
-            : lastData > monthEnd ? monthEnd : lastData.Value;
+        var dataThrough = SecondarySales.DataThrough(monthStart, lastData);
         var salesEnd = dataThrough < monthStart ? monthEnd : dataThrough;
 
         // Сырые строки: заказы, реализованные с начала прошлого месяца, и заказы, созданные в месяце (для визитов);
@@ -201,7 +242,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         var missingAcceptance = await DeliveredWithoutAcceptanceAsync(monthStart.AddDays(-45), salesEnd, ct);
 
         var current = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, monthStart, dataThrough, options, missingAcceptance);
-        current = current with { Quality = current.Quality with { AcceptedInFuture = await AcceptedInFutureAsync(ct) } };
+        current = current with { Quality = current.Quality with { AcceptedInFuture = await AcceptedInFutureAsync(monthStart, dataThrough, ct) } };
         var previous = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, previousStart, monthStart.AddDays(-1), options);
         var historyFrom = new[] { new DateOnly(year, 1, 1), monthStart.AddMonths(-3) }.Min();
 
@@ -210,9 +251,9 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .Select(v => new { v.Day, v.UserId, v.MarketId, v.Status, v.IsInPlan })
             .ToListAsync(ct);
 
-        // Планы — только из Linko (API планов, staff_balance): план ТП — его план по весу, план региона и республики —
-        // сумма планов их ТП. Загруженных файлом и ручных планов в «Продажах» нет — только данные Linko.
-        // Год месяца и следующий месяц: для карточки «План на следующий месяц» (появляется, когда он есть в Linko).
+        // Планы ТП из Linko (API планов, staff_balance): план ТП — его план по весу; по ним карточка ТП и команда региона.
+        // Планом региона и республики они становятся, только если на месяц нет планов регионов выбранного вида (см. SalesPlans).
+        // Год месяца и следующий месяц: для карточки «План на следующий месяц».
         var next = new DateOnly(year, month, 1).AddMonths(1);
         var staff = await db.SalesStaffPlans.AsNoTracking()
             .Where(p => p.Year == year || (p.Year == next.Year && p.Month == next.Month))
@@ -238,7 +279,8 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .Select(g => new PlanRow(null, g.Key, next.Month, null, g.Sum(s => s.PlanAmount)))
             .ToList();
 
-        // Справочник ТП — пользователи Linko с должностью ТП (Sales:SalesRepJobs); вакансия — «вакант» в имени или ID 0.
+        // Справочник ТП — пользователи Linko с должностью ТП (Sales:SalesRepJobs); вакансия — «вакан» в имени («вакант», «Вакан …»;
+        // Sales:VacancyMarkers) или ID 0. У Sales Base своё слово — «вакант» (Sales:FieldVacancyMarkers).
         var users = await db.LinkoUsers.AsNoTracking().ToListAsync(ct);
 
         // Доставщики и т.п.: их «визиты» — доставки, в работу ТП они не входят.
@@ -266,17 +308,31 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             ? await AkbHistoryAsync(yearStart, akbHistoryTo, categoryMap.Mapping, ct)
             : [];
 
-        // Регионы — филиалы вторички: исключённые («Завод») в структуре не показываются, у них отдельный блок.
+        // Регионы — филиалы вторички: исключённые («Завод») в структуре не показываются, у них отдельный блок;
+        // пропускаемых («К К Мерч») во вторичке нет совсем — ни региона, ни визитов в их точках.
         // Старые филиалы («Жиззах (эски)») считаются в текущем регионе с тем же названием.
-        var excludedBranchIds = await ExcludedBranchIdsAsync(ct);
-        // Регионы — филиалы Linko; направлений, СВР и дилеров в Linko нет — оргструктура OneBase не используется.
-        var (regions, branchAliases) = OldBranches.Merge(
-            (await db.SalesRegions.AsNoTracking()
-                .Select(r => new RegionInfo(r.Id, r.LinkoBranchId, r.Name, null, null, null))
-                .ToListAsync(ct))
-            .Where(r => !excludedBranchIds.Contains(r.BranchId))
-            .ToList(),
-            options.OldBranchSuffix);
+        var excludedBranchIds = await BranchIdsAsync("sales:excluded-branches", ExcludedLower, ct);
+        var ignoredBranchIds = await BranchIdsAsync("sales:ignored-branches", IgnoredLower, ct);
+        // Оргструктура — данные OneBase («Настройки продаж»): направления (РМ, каналы), у региона — направление, СВР и дилер; в Linko их нет.
+        var structure = SalesStructure.Build(
+            await db.SalesDirections.AsNoTracking().ToListAsync(ct),
+            await db.SalesRegions.AsNoTracking().ToListAsync(ct),
+            excludedBranchIds.Concat(ignoredBranchIds).ToHashSet(),
+            options.OldBranchSuffix,
+            options.ChannelRegions); // регионы-каналы (базар, сети): их строки — только в закрытом месяце (SecondarySales.ChannelsOn)
+
+        // План вторички — РОП или «Завод» из sales."RegionPlans" (год месяца и следующий месяц); на месяц без них — планы ТП из Linko.
+        // Читаются оба вида: план — выбранного, а по обоим — какие планы на месяц вообще заведены (переключатель плана).
+        var regionPlans = await db.SalesRegionPlans.AsNoTracking()
+            .Where(p => (p.Kind == PlanKind.Rop || p.Kind == PlanKind.Factory) && (p.Year == year || (p.Year == next.Year && p.Month == next.Month)))
+            .Select(p => new RegionPlanRow(p.RegionId, p.Kind, p.Year, p.Month, p.CategoryId, p.PlanKg))
+            .ToListAsync(ct);
+        var plans = SalesPlans.Select(year, month, kind, regionPlans, structure.RegionOf, agentPlans);
+
+        var markets = await db.LinkoMarkets.AsNoTracking()
+            .Select(x => new MarketInfo(x.Id, x.Name, x.ResponsibleAgentId, x.BranchId))
+            .ToDictionaryAsync(x => x.Id, ct);
+        var ignoredMarkets = markets.Values.Where(m => m.BranchId is { } b && ignoredBranchIds.Contains(b)).Select(m => m.Id).ToHashSet();
 
         return new MonthData
         {
@@ -291,10 +347,16 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             OtherCurrency = current.OtherCurrency ?? [],
             ExcludedOtherCurrency = current.ExcludedOtherCurrency ?? [],
             Quality = current.Quality,
-            Visits = visits.Where(v => !nonSales.Contains(v.UserId!.Value)).Select(v => new VisitRecord(v.Day, v.UserId!.Value, v.MarketId!.Value, ParseStatus(v.Status), v.IsInPlan)).ToList(),
-            History = await HistoryAsync(historyFrom, monthEnd, ct),
-            Plans = agentPlans,
-            YearRegionPlans = [],
+            Visits = visits.Where(v => !nonSales.Contains(v.UserId!.Value) && !ignoredMarkets.Contains(v.MarketId!.Value))
+                .Select(v => new VisitRecord(v.Day, v.UserId!.Value, v.MarketId!.Value, ParseStatus(v.Status), v.IsInPlan)).ToList(),
+            // Текущий месяц в истории — по отчётный день, как плитка факта.
+            History = await HistoryAsync(historyFrom, dataThrough, ct),
+            Plans = plans.Plans,
+            YearRegionPlans = plans.YearRegionPlans,
+            NextRegionPlans = plans.NextRegionPlans,
+            SelectedPlan = SalesPlans.SourceOf(kind),
+            AvailablePlans = SalesPlans.Available(year, month, regionPlans, structure.RegionOf),
+            PlanSource = plans.Source,
             YearAgentPlans = yearAgentPlans,
             CategoryPlans = categoryPlans,
             NextMonth = (next.Year, next.Month),
@@ -317,19 +379,18 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                 options.IsVacancy(u.Id, $"{u.DisplayName} {u.Username}"),
                 u.JobName is { } job && options.SalesRepJobs.Any(j => string.Equals(j.Trim(), job.Trim(), StringComparison.OrdinalIgnoreCase)),
                 u.JobName)),
-            Regions = regions,
-            BranchAliases = branchAliases,
-            Directions = [],
-            Markets = await db.LinkoMarkets.AsNoTracking()
-                .Select(x => new MarketInfo(x.Id, x.Name, x.ResponsibleAgentId, x.BranchId))
-                .ToDictionaryAsync(x => x.Id, ct),
+            Regions = structure.Regions,
+            BranchAliases = structure.BranchAliases,
+            Directions = structure.Directions,
+            Markets = markets,
             Categories = linkoTypes,
             CategoryMap = categoryMap,
             AkbHistory = akbHistory,
             Products = await db.LinkoProducts.AsNoTracking()
                 .Select(p => new ProductInfo(p.Id, p.Name, p.Code, p.TypeId))
                 .ToDictionaryAsync(p => p.Id, ct),
-            ActiveSkus = await ActiveSkusAsync(monthStart.AddMonths(-AssortmentMonths), salesEnd, ct),
+            ActiveSkus = await ActiveSkusAsync(AssortmentWindow(monthStart, salesEnd), ct),
+            Top = TopProductSet.Of(options),
             MarketAssignments = (await db.LinkoMarketUsers.AsNoTracking().Where(x => !x.IsDelete)
                     .Select(x => new { x.UserId, x.MarketId }).ToListAsync(ct))
                 .Select(x => (x.UserId, x.MarketId)).ToList(),
@@ -340,6 +401,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                 Target(SalesTargetKeys.CategoriesPerOutlet)),
             Thresholds = options.Flags,
             SalesRepJobs = options.SalesRepJobs,
+            AkbChartHiddenCategories = options.AkbChartHiddenCategories,
         };
     }
 
@@ -395,8 +457,8 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
     }
 
     /// <summary>
-    /// Проданные заказы без даты приёмки, созданные в окне: признак неполной загрузки (копия старше поля accepted_time).
-    /// При дате реализации не по приёмке не считается.
+    /// Проданные заказы вторички без даты приёмки, созданные в окне: признак неполной загрузки (копия старше поля accepted_time).
+    /// Без «Завода» и «К К Мерч», как остальные выборки вторички. При дате реализации не по приёмке не считается.
     /// </summary>
     private async Task<int> DeliveredWithoutAcceptanceAsync(DateOnly from, DateOnly to, CancellationToken ct)
     {
@@ -406,16 +468,17 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         }
 
         var sold = options.SoldStatuses;
-        return await db.LinkoOrders.CountAsync(o => sold.Contains(o.Status) && o.AcceptedDate == null && o.CreatedDate >= from && o.CreatedDate <= to, ct);
+        return await db.LinkoOrders
+            .Where(SecondaryBranch(NotSecondaryLower))
+            .CountAsync(o => sold.Contains(o.Status) && o.AcceptedDate == null && o.CreatedDate >= from && o.CreatedDate <= to, ct);
     }
 
-    /// <summary>Филиалы, исключённые из вторички (по названию филиала в заказах).</summary>
-    private async Task<HashSet<long>> ExcludedBranchIdsAsync(CancellationToken ct) =>
-        await Cached("sales:excluded-branches", async () =>
+    /// <summary>Филиалы с этими названиями (в нижнем регистре) — по названию филиала в заказах.</summary>
+    private async Task<HashSet<long>> BranchIdsAsync(string key, string[] names, CancellationToken ct) =>
+        await Cached(key, async () =>
         {
-            var excluded = ExcludedLower;
             var ids = await db.LinkoOrders
-                .Where(o => o.BranchId != null && o.BranchName != null && excluded.Contains(o.BranchName.ToLower()))
+                .Where(o => o.BranchId != null && o.BranchName != null && names.Contains(o.BranchName.ToLower()))
                 .Select(o => o.BranchId!.Value)
                 .Distinct()
                 .ToListAsync(ct);
@@ -429,7 +492,8 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
     private async Task<IReadOnlyList<MonthlyAkb>> AkbHistoryAsync(DateOnly from, DateOnly to, IReadOnlyDictionary<long, long> groups, CancellationToken ct)
     {
         var merged = groups.Where(g => g.Key != g.Value).OrderBy(g => g.Key).ToDictionary();
-        var key = $"sales:akb:v2:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}:{options.DateField}:{string.Join(",", ExcludedLower)}:{string.Join(",", merged.Select(g => $"{g.Key}>{g.Value}"))}";
+        var key = $"sales:akb:v4:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}:{options.DateField}:{string.Join(",", options.SoldStatuses)}:" +
+                  $"{string.Join(",", NotSecondaryLower)}:{string.Join(",", merged.Select(g => $"{g.Key}>{g.Value}"))}";
         if (cache.TryGetValue(key, out IReadOnlyList<MonthlyAkb>? cached) && cached is not null)
         {
             return cached;
@@ -442,16 +506,26 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         return rows;
     }
 
-    /// <summary>«Живой» ассортимент: SKU, проданные во вторичке (без исключённых филиалов) за период.</summary>
-    private async Task<HashSet<long>> ActiveSkusAsync(DateOnly start, DateOnly end, CancellationToken ct)
+    /// <summary>
+    /// Окно ассортимента («из M SKU»): с 1 января года выбранного месяца по его конец — salesEnd (у идущего месяца — отчётный день).
+    /// Не полгода назад и не будущие месяцы: SKU, впервые проданный после выбранного месяца, в его знаменатель не входит.
+    /// </summary>
+    public static (DateOnly From, DateOnly To) AssortmentWindow(DateOnly monthStart, DateOnly salesEnd) => (new DateOnly(monthStart.Year, 1, 1), salesEnd);
+
+    /// <summary>
+    /// Ассортимент — знаменатель «продаётся N из M SKU»: SKU с продажами во вторичке за окно (проданные статусы, по дате реализации,
+    /// без «Завода» и пропускаемых филиалов). Каталог Linko целиком сюда не входит; SKU, которые продавал только «Завод», — тоже.
+    /// </summary>
+    private async Task<HashSet<long>> ActiveSkusAsync((DateOnly From, DateOnly To) window, CancellationToken ct)
     {
+        var (start, end) = window;
         var sold = options.SoldStatuses;
-        var excluded = ExcludedLower;
+        var skipped = NotSecondaryLower;
         var ids = await (
                 from l in db.LinkoOrderLines
                 join o in Dated() on l.OrderId equals o.Id
                 where sold.Contains(o.Status) && o.Date >= start && o.Date <= end && l.ProductId != null
-                      && (o.BranchName == null || !excluded.Contains(o.BranchName.ToLower()))
+                      && (o.BranchName == null || !skipped.Contains(o.BranchName.ToLower()))
                 select l.ProductId!.Value)
             .Distinct()
             .ToListAsync(ct);
@@ -459,31 +533,77 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
     }
 
     /// <summary>
-    /// Факт кг по месяцам в разрезе агента и филиала: заказы по дате реализации минус возвраты по строкам
-    /// (по дате возврата), без исключённых филиалов.
+    /// Факт кг по месяцам в разрезе агента и филиала — по правилам факта месяца: строки проданных заказов по дате реализации
+    /// (вес строк, а не шапки заказа) минус возвраты по строкам (по дате возврата), без исключённых и пропускаемых филиалов.
     /// </summary>
     private async Task<List<MonthlyFact>> HistoryAsync(DateOnly start, DateOnly end, CancellationToken ct)
     {
         var sold = options.SoldStatuses;
         var returned = options.ReturnStatuses;
-        var excluded = ExcludedLower;
+        var skipped = NotSecondaryLower;
 
-        var sales = await Dated()
-            .Where(o => sold.Contains(o.Status) && o.Date >= start && o.Date <= end && (o.BranchName == null || !excluded.Contains(o.BranchName.ToLower())))
-            .GroupBy(o => new { o.Date!.Value.Year, o.Date!.Value.Month, o.AgentId, o.BranchId })
-            .Select(g => new MonthlyFact(g.Key.Year, g.Key.Month, g.Key.AgentId, g.Key.BranchId, g.Sum(o => o.TotalWeight)))
+        var sales = await (
+                from l in db.LinkoOrderLines
+                join o in Dated() on l.OrderId equals o.Id
+                where sold.Contains(o.Status) && o.Date >= start && o.Date <= end && (o.BranchName == null || !skipped.Contains(o.BranchName.ToLower()))
+                group l by new { o.Date!.Value.Year, o.Date!.Value.Month, o.AgentId, o.BranchId } into g
+                select new MonthlyFact(g.Key.Year, g.Key.Month, g.Key.AgentId, g.Key.BranchId, g.Sum(x => x.TotalWeight)))
             .ToListAsync(ct);
 
         var returns = await (
                 from l in db.LinkoOrderReturnLines
                 join r in db.LinkoOrderReturns on l.ReturnId equals r.Id
                 where returned.Contains(r.Status) && r.CreatedDate >= start && r.CreatedDate <= end
-                      && (r.BranchName == null || !excluded.Contains(r.BranchName.ToLower()))
+                      && (r.BranchName == null || !skipped.Contains(r.BranchName.ToLower()))
                 group l by new { r.CreatedDate.Year, r.CreatedDate.Month, r.AgentId, r.BranchId } into g
                 select new MonthlyFact(g.Key.Year, g.Key.Month, g.Key.AgentId, g.Key.BranchId, -g.Sum(x => x.TotalWeight)))
             .ToListAsync(ct);
 
-        return sales.Concat(returns).ToList();
+        return sales.Concat(returns).Concat(await ChannelHistoryAsync(start, end, ct)).ToList();
+    }
+
+    /// <summary>
+    /// Помесячный факт точек-каналов (Sales:ChannelRegions) из филиалов первички — только за закрытые месяцы (как SecondarySales.Build)
+    /// не раньше первого месяца канала (Since), в виртуальном филиале своего региона-канала.
+    /// </summary>
+    private async Task<List<MonthlyFact>> ChannelHistoryAsync(DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        var afterCutoff = ReportCutoff.AddDays(1);
+        var closedThrough = new DateOnly(afterCutoff.Year, afterCutoff.Month, 1).AddDays(-1);
+        var to = end < closedThrough ? end : closedThrough;
+        var markets = options.ChannelRegions.SelectMany(c => c.Markets).Distinct().ToArray();
+        if (markets.Length == 0 || to < start)
+        {
+            return [];
+        }
+
+        var sold = options.SoldStatuses;
+        var returned = options.ReturnStatuses;
+        var branches = options.PrimaryOrderBranches.Select(b => b.Trim().ToLowerInvariant()).ToArray();
+
+        var sales = await (
+                from l in db.LinkoOrderLines
+                join o in Dated() on l.OrderId equals o.Id
+                where sold.Contains(o.Status) && o.Date >= start && o.Date <= to && o.MarketId != null && markets.Contains(o.MarketId.Value)
+                      && o.BranchName != null && branches.Contains(o.BranchName.ToLower())
+                group l by new { o.Date!.Value.Year, o.Date!.Value.Month, o.AgentId, o.MarketId } into g
+                select new { g.Key.Year, g.Key.Month, g.Key.AgentId, g.Key.MarketId, Kg = g.Sum(x => x.TotalWeight) })
+            .ToListAsync(ct);
+
+        var returns = await (
+                from l in db.LinkoOrderReturnLines
+                join r in db.LinkoOrderReturns on l.ReturnId equals r.Id
+                where returned.Contains(r.Status) && r.CreatedDate >= start && r.CreatedDate <= to && r.MarketId != null
+                      && markets.Contains(r.MarketId.Value) && r.BranchName != null && branches.Contains(r.BranchName.ToLower())
+                group l by new { r.CreatedDate.Year, r.CreatedDate.Month, r.AgentId, r.MarketId } into g
+                select new { g.Key.Year, g.Key.Month, g.Key.AgentId, g.Key.MarketId, Kg = -g.Sum(x => x.TotalWeight) })
+            .ToListAsync(ct);
+
+        return sales.Concat(returns)
+            .Select(x => (Row: x, Channel: options.ChannelOf(x.MarketId)!.Value))
+            .Where(x => x.Channel.Since is not { } since || new DateOnly(x.Row.Year, x.Row.Month, 1) >= since) // канал с первого своего месяца
+            .Select(x => new MonthlyFact(x.Row.Year, x.Row.Month, x.Row.AgentId, x.Channel.BranchId, x.Row.Kg))
+            .ToList();
     }
 
     private static readonly System.Text.RegularExpressions.Regex MonthPrefix = new(

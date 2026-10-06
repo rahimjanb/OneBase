@@ -22,30 +22,34 @@ public enum FlagSeverity
 
 public sealed record AgentFlag(FlagKind Kind, FlagSeverity Severity, string Label, string Title, string Explanation);
 
-/// <summary>Визиты агента за период и их связь с заказами.</summary>
+/// <summary>
+/// Визиты агента за месяц и его заказы. Orders — заказы агента, принятые в месяце: те же, что дали факт (статусы вторички,
+/// приёмка не позже отчётного дня, без «Завода» и пропускаемых филиалов). WithOrder — для справки: выполненные визиты, в день
+/// которых агент ввёл заказ в этой ТТ (по дню ввода, created_date).
+/// </summary>
 public sealed record VisitSummary(int Done, int WithOrder, int Orders)
 {
-    public int WithoutOrder => Done - WithOrder;
+    /// <summary>Визиты без заказа = выполненные визиты − заказы (как в «Полевом контроле»); у агента бывает и меньше нуля.</summary>
+    public int WithoutOrder => Done - Orders;
 
-    /// <summary>Конверсия визита («Страйк») = визиты с заказом / визиты done.</summary>
-    public decimal? Conversion => SalesMath.Ratio(WithOrder, Done);
+    /// <summary>Конверсия визита («Страйк») = заказы, принятые в месяце ÷ выполненные визиты; может быть больше 100%.</summary>
+    public decimal? Conversion => SalesMath.Ratio(Orders, Done);
 
-    /// <summary>Заказов больше, чем визитов — данные не сходятся.</summary>
+    /// <summary>Заказов больше, чем визитов (конверсия больше 100%) — данные не сходятся.</summary>
     public bool DataMismatch => Orders > Done;
 
-    public static VisitSummary Of(IEnumerable<VisitRecord> visits, IEnumerable<SaleLine> lines)
+    /// <summary>visitLines — заказы по дню ввода (сшивка визит ↔ заказ); orders — строки факта месяца агента (заказы по приёмке).</summary>
+    public static VisitSummary Of(IEnumerable<VisitRecord> visits, IEnumerable<SaleLine> visitLines, IEnumerable<SaleLine> orders)
     {
-        var lineList = lines as IReadOnlyCollection<SaleLine> ?? lines.ToList();
-
         // Визит «с заказом» — есть заказ того же агента в той же ТТ в тот же день.
-        var orderKeys = lineList
+        var orderKeys = visitLines
             .Where(l => l.OrderId != null && l.AgentId != null && l.MarketId != null)
             .Select(l => (l.AgentId!.Value, l.MarketId!.Value, l.Date))
             .ToHashSet();
 
         var done = visits.Where(v => v.Status == VisitStatus.Done).ToList();
         var withOrder = done.Count(v => orderKeys.Contains((v.AgentId, v.MarketId, v.Date)));
-        return new VisitSummary(done.Count, withOrder, SalesMath.OrderCount(lineList));
+        return new VisitSummary(done.Count, withOrder, SalesMath.OrderCount(orders));
     }
 }
 
@@ -58,24 +62,26 @@ public sealed record AgentStats(
     int Categories,
     VisitSummary Visits,
     decimal? Tempo,
-    bool IsVacancy,
-    int? SalesOrders = null)
+    bool IsVacancy)
 {
-    /// <summary>Заказы, созданные в месяце (сшиваются с визитами).</summary>
+    /// <summary>Заказы агента, принятые в месяце: дали факт и выручку.</summary>
     public int Orders => Visits.Orders;
     public decimal? Conversion => Visits.Conversion;
     public decimal? SumPerVisit => SalesMath.Ratio(Revenue, Visits.Done);
 
-    /// <summary>Средний чек — выручка на заказ; заказы — те же, что дали выручку (принятые в месяце).</summary>
-    public decimal? AvgCheck => SalesMath.Ratio(Revenue, SalesOrders ?? Orders);
+    /// <summary>Средний чек — выручка на заказ (не на визит); заказы — те же, что дали выручку.</summary>
+    public decimal? AvgCheck => SalesMath.Ratio(Revenue, Orders);
 }
 
-/// <summary>Медианы региона — без вакансий и без агентов с флагом «данные не сходятся».</summary>
+/// <summary>
+/// Медианы региона — по агентам, с которыми честно сравнивать: не вакансии, не меньше MinVisits визитов и без флага
+/// «данные не сходятся» (заказов больше, чем визитов).
+/// </summary>
 public sealed record RegionMedians(decimal? Conversion, decimal? SumPerVisit, decimal? AvgCheck)
 {
-    public static RegionMedians Of(IEnumerable<AgentStats> agents)
+    public static RegionMedians Of(IEnumerable<AgentStats> agents, int minVisits)
     {
-        var eligible = agents.Where(a => !a.IsVacancy && !a.Visits.DataMismatch).ToList();
+        var eligible = agents.Where(a => !a.IsVacancy && a.Visits.Done >= minVisits && !a.Visits.DataMismatch).ToList();
         return new RegionMedians(
             SalesMath.Median(eligible.Where(a => a.Conversion != null).Select(a => a.Conversion!.Value)),
             SalesMath.Median(eligible.Where(a => a.SumPerVisit != null).Select(a => a.SumPerVisit!.Value)),
@@ -108,13 +114,13 @@ public static class AgentFlags
 
         var flags = new List<AgentFlag>();
 
+        // Заказов больше, чем визитов (конверсия больше 100%) — вопрос к данным, а не к работе агента: риск, без оценки конверсии.
         if (v.DataMismatch)
         {
-            flags.Add(new AgentFlag(FlagKind.DataMismatch, FlagSeverity.Critical, "Данные", "Данные не сходятся",
-                $"Заказов ({v.Orders}) больше, чем визитов ({v.Done}). Агент исключён из медиан региона."));
+            flags.Add(new AgentFlag(FlagKind.DataMismatch, FlagSeverity.Risk, "Данные", "Данные не сходятся",
+                $"Заказов ({v.Orders}) больше, чем визитов ({v.Done}) — конверсия больше 100%. Конверсия не оценивается, агент исключён из медиан региона."));
         }
-
-        if (a.Conversion is { } conv)
+        else if (a.Conversion is { } conv)
         {
             var severity =
                 conv < t.ConversionCritical || Below(conv, m.Conversion, t.ConversionCriticalOfMedian) ? FlagSeverity.Critical
@@ -123,7 +129,8 @@ public static class AgentFlags
             if (severity is { } s)
             {
                 flags.Add(new AgentFlag(FlagKind.LowConversion, s, "Конверсия", "Низкая конверсия",
-                    $"Конверсия {SalesFormat.Pct(conv)}{VersusMedian(m.Conversion, SalesFormat.Pct)}: из {v.Done} визитов с заказом {v.WithOrder}."));
+                    $"Конверсия {SalesFormat.Pct(conv)}{VersusMedian(m.Conversion, SalesFormat.Pct)}: " +
+                    $"{v.Orders} {SalesFormat.Plural(v.Orders, "заказ", "заказа", "заказов")} на {v.Done} {SalesFormat.Plural(v.Done, "визит", "визита", "визитов")}."));
             }
         }
 

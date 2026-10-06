@@ -7,7 +7,7 @@ namespace OneBase.Application.Field;
 
 /// <summary>
 /// Как считать продажи: Taken — заказы, принятые агентом в этот день (по дате создания, без отменённых и недоставленных) —
-/// работа агента за день; Delivered — доставленные по дате приёмки, как во вторичке OneBase.
+/// работа агента за день; Delivered — доставленные (Sales:FieldSoldStatuses) по дате приёмки.
 /// </summary>
 public enum SalesBasis
 {
@@ -69,7 +69,7 @@ public sealed class LinkoMirrorSalesProvider(IAppDbContext db, SalesOptions opti
     private IQueryable<LinkoOrder> Orders(SalesBasis basis)
     {
         var excluded = Excluded;
-        var sold = options.SoldStatuses;
+        var sold = options.FieldSoldStatuses; // свои статусы Sales Base (доставленные), не статусы вторички
         var q = db.LinkoOrders.AsNoTracking().Where(o => o.BranchName == null || !excluded.Contains(o.BranchName.ToLower()));
         return basis == SalesBasis.Taken ? q.Where(o => !NotTaken.Contains(o.Status)) : q.Where(o => sold.Contains(o.Status) && o.AcceptedDate != null);
     }

@@ -8,7 +8,7 @@ export const metadata = { title: "Республика · Продажи" };
 
 export default async function RepublicPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
   const sp = await searchParams;
-  const data = await apiGet<GroupView>(`/api/sales/republic${apiQuery(sp, ["from", "to"])}`, "/sales/republic");
+  const data = await apiGet<GroupView>(`/api/sales/republic${apiQuery(sp, ["from", "to", "metric", "category"])}`, "/sales/republic");
   const q = periodQuery(sp);
 
   return (
@@ -18,6 +18,7 @@ export default async function RepublicPage({ searchParams }: { searchParams: Pro
       crumbs={[{ label: "Республика" }]}
       back={withQuery("/sales", q)}
       sp={sp}
+      period={data.period}
     >
       <GroupPage data={data} sp={sp} query={q} categoryQuery={q} regionsTitle="Все регионы" scopeName="республике" />
     </SalesFrame>

@@ -19,10 +19,10 @@ Sales Base — модуль OneBase для РМ, супервайзеров и �
 
 - **Префикс `field`, а не `sales`.** `/sales` и `/api/sales` уже заняты аналитикой продаж (вторичка, аутсток…);
   проверки `startsWith("/sales")` во фронтенде зацепили бы новый модуль.
-- **Схема `field`.** Сброс Linko (`PurgeAsync`) и `deploy/restore-linko.sh` очищают схемы `linko` и `sales`; данные Sales Base
-  (маршруты, визиты, задачи) не должны пропадать при перезагрузке Linko.
+- **Схема `field`.** Сброс Linko (`PurgeAsync`) очищает схему `linko` и планы ТП `sales."StaffPlans"`, `deploy/restore-linko.sh` заменяет
+  схемы `linko` и `sales` дампом; данные Sales Base (маршруты, визиты, задачи) не должны пропадать при перезагрузке Linko.
 - **Без внешних ключей в `linko.*`.** Точки, агенты и филиалы связаны с Linko по его `long`-идентификаторам (MarketId,
-  LinkoUserId, BranchId): TRUNCATE зеркала без CASCADE не должен ломаться, а `sales.Regions` при сбросе получают новые Guid.
+  LinkoUserId, BranchId): TRUNCATE зеркала без CASCADE не должен ломаться; `sales.Regions` при сбросе Linko не удаляются (направления, СВР, дилеры и планы регионов — данные OneBase).
 - **Точки не дублируются.** Торговая точка — это `linko.Markets` (49 981 точка, у всех координаты и ответственный агент);
   `field.Customers` — только то, чего нет в Linko: назначенный в Sales Base агент, приоритет, статус, план, контакт.
 - **Linko только читается.** Смена агента, маршруты и визиты Sales Base в Linko не записываются (интеграция read-only).

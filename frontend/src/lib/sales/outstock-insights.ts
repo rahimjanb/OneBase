@@ -16,11 +16,13 @@ export function plural(n: number, one: string, few: string, many: string): strin
 const short = (name: string, max = 60) => (name.length > max ? `${name.slice(0, max - 1).trimEnd()}…` : name);
 
 /**
- * «Выводы» аутстока — текст из цифр страницы: меняется вместе с фильтрами (ТОП, категории, регион).
- * Ничего не придумывает: каждая фраза — пересказ одного числа из данных.
+ * «Выводы» аутстока — текст из цифр сервера (OutstockView.insights и totals): меняется вместе с фильтрами (ТОП, категории, регион).
+ * Здесь только шаблоны фраз: какой регион худший по доле, «каждый N-й килограмм», доля дней «потеря дилера», товары ядра — считает
+ * OutstockService (DOC §9.5). Ничего не придумывает: каждая фраза — пересказ одного числа из данных.
  */
-export function buildOutstockInsights(d: OutstockView): Insight[] {
+export function outstockInsights(d: OutstockView): Insight[] {
   const t = d.totals;
+  const i = d.insights;
   if (d.days === 0 || t.pairsWithLoss === 0) return [];
 
   const out: Insight[] = [];
@@ -38,39 +40,30 @@ export function buildOutstockInsights(d: OutstockView): Insight[] {
       `${num(t.productsWithLoss)} ${plural(t.productsWithLoss, "товар", "товара", "товаров")} в ${num(t.regionsWithLoss)} ${plural(t.regionsWithLoss, "регионе", "регионах", "регионах")}.`,
   });
 
-  const regions = d.byRegion.filter((r) => r.lostSum > 0);
-  if (!region && regions.length > 1) {
-    const top = regions[0];
-    const byShare = regions.filter((r) => r.lossShare != null && r.soldKg > 0).sort((a, b) => (b.lossShare ?? 0) - (a.lossShare ?? 0))[0];
+  if (!region && t.regionsWithLoss > 1 && i.topRegion) {
+    const top = i.topRegion;
     let text = `Больше всего денег потерял ${top.name}${top.dealer ? ` (${top.dealer})` : ""}: ${money(top.lostSum)}, это ${pct(top.lossShare)} от его продаж.`;
-    const worst = byShare && byShare.id !== top.id ? byShare : null;
-    const share = worst?.lossShare ?? top.lossShare ?? 0;
-    const nth = share > 0 ? Math.round(1 / share) : 0;
-    if (worst) {
-      text += ` Хуже всего по доле — ${worst.name}: там не хватило ${pct(worst.lossShare)} товара${nth >= 2 ? `, то есть примерно каждый ${num(nth)}-й килограмм мы могли продать, но не продали` : ""}.`;
-    } else if (nth >= 2) {
-      text += ` Примерно каждый ${num(nth)}-й килограмм там могли продать, но не продали.`;
+    if (i.worstRegion) {
+      const worst = i.worstRegion;
+      text += ` Хуже всего по доле — ${worst.name}: там не хватило ${pct(worst.lossShare)} товара${
+        worst.everyNthKg ? `, то есть примерно каждый ${num(worst.everyNthKg)}-й килограмм мы могли продать, но не продали` : ""
+      }.`;
+    } else if (top.everyNthKg) {
+      text += ` Примерно каждый ${num(top.everyNthKg)}-й килограмм там могли продать, но не продали.`;
     }
     out.push({ title: "Где теряем больше всего", text });
   }
 
-  const cats = d.selectedCategories.length ? d.categories.filter((c) => c.selected) : d.categories;
-  const cat = cats[0];
-  const prod = d.byProduct[0];
-  if (prod) {
-    let text = cat && cats.length > 1 ? `Больше всего теряем на категории «${cat.name}» — это ${pct(cat.share)} всех потерь. ` : "";
+  if (i.topProduct) {
+    const prod = i.topProduct;
+    let text = i.topCategory ? `Больше всего теряем на категории «${i.topCategory}» — это ${pct(i.topCategoryShare)} всех потерь. ` : "";
     text += `Самый «дорогой» пропавший товар — ${short(prod.name)}: из-за его отсутствия ушло ${money(prod.lostSum)}`;
     text += prod.regions > 1 ? `, и не хватало его сразу в ${num(prod.regions)} ${plural(prod.regions, "регионе", "регионах", "регионах")}.` : ".";
     out.push({ title: "Каких товаров не хватает", text });
   }
 
   if (t.corePairs > 0 && t.pairsWithLoss > t.corePairs) {
-    const counts = new Map<string, number>();
-    for (const p of d.pairs) if (p.core) counts.set(p.product, (counts.get(p.product) ?? 0) + 1);
-    const frequent = [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([name]) => short(name, 48));
+    const frequent = i.coreFrequent.map((name) => short(name, 48));
     out.push({
       title: "Главное — не распыляться",
       text:
@@ -83,12 +76,14 @@ export function buildOutstockInsights(d: OutstockView): Insight[] {
 
   if (t.zeroDays > 0) {
     if (d.factoryKnown) {
-      const share = t.dealerDays / t.zeroDays;
       let text =
-        `В ${pct(share)} дней, когда у дилера товара не было, на складе завода он был. То есть товар есть, но его вовремя не заказали или не довезли. ` +
+        `В ${pct(i.dealerDaysShare)} дней, когда у дилера товара не было, на складе завода он был. То есть товар есть, но его вовремя не заказали или не довезли. ` +
         `Только на этом мы потеряли ${money(t.dealerLossSum)}. Это не нехватка производства — это вопрос заказа и доставки.`;
       if (t.factoryLossSum > 0) {
         text += ` А ${money(t.factoryLossSum)} потеряли в дни, когда на заводе тоже было пусто: тут дилер не виноват, отгружать было нечего — это вопрос к производству.`;
+      }
+      if (t.unknownLossSum > 0) {
+        text += ` Ещё ${money(t.unknownLossSum)} — дни без данных по складу завода (${num(t.unknownDays)} ${plural(t.unknownDays, "день", "дня", "дней")}): чья это потеря, сказать нельзя.`;
       }
       text += " Выпуска цехов в Linko нет, поэтому остаток завода в прошлые дни восстановлен только по перемещениям, и доля завода — оценка снизу.";
       out.push({ title: "Почему так происходит", text });
@@ -98,6 +93,15 @@ export function buildOutstockInsights(d: OutstockView): Insight[] {
         text: "Склад завода в Linko не найден, поэтому все потери отнесены к дилерам: товар вовремя не заказали или не довезли.",
       });
     }
+  }
+
+  if (t.chronic > 0) {
+    out.push({
+      title: "Хронические дыры",
+      text:
+        `${num(t.chronic)} ${plural(t.chronic, "пара", "пары", "пар")} «товар × регион» стояли в нуле половину месяца и дольше — ${money(t.chronicSum)}. ` +
+        "Это не разовый сбой доставки, а товар, которого в регионе системно нет: его стоит поставить в постоянный заказ.",
+    });
   }
 
   return out;

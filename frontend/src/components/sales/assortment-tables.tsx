@@ -2,15 +2,22 @@
 
 import { DataTable, NameCell, type Column } from "./DataTable";
 import { Note, Section } from "./bits";
-import { kg, money, monthShort, num, pct } from "@/lib/sales/format";
-import type { AgentAssortment, AssortmentView, ExportView, ProductRow, StockItem, StockStatus, StockView, StoreView } from "@/lib/sales/types";
+import { regionColumns } from "./categories";
+import { TopChip } from "./outstock";
+import { kg, money, monthShort, num, pct, plural, productsLabel } from "@/lib/sales/format";
+import type { AgentAssortment, AssortmentView, ExportView, ProductRow, StoreView } from "@/lib/sales/types";
 
 const withQuery = (path: string, query: string) => (query ? `${path}?${query}` : path);
 
-/** Название с переносом: длинные наименования товаров иначе растягивают таблицу и уводят цифры за край. */
-function WrapName({ name, sub }: { name: string; sub?: string | null }) {
+/** Название с переносом: длинные наименования товаров иначе растягивают таблицу и уводят цифры за край. top — метка «ТОП». */
+function WrapName({ name, sub, top = false }: { name: string; sub?: string | null; top?: boolean }) {
   return (
-    <span className="block max-w-[320px] whitespace-normal">
+    <span className="flex max-w-[320px] items-start gap-1.5 whitespace-normal">
+      {top && (
+        <span className="mt-0.5">
+          <TopChip />
+        </span>
+      )}
       <NameCell name={name} sub={sub} />
     </span>
   );
@@ -25,9 +32,29 @@ const categoryCell = (name: string, inReport = true) => (
 
 // ---------- Товары (агент, экспорт, ассортимент) ----------
 
-export function ProductsTable({ rows, title = "Товары", hint = "по выручке за месяц" }: { rows: ProductRow[]; title?: string; hint?: string }) {
+/**
+ * Товары категорий отчёта; outsideReport — сколько товаров других типов Linko (бонус, подарки) в таблицу не вошло; quality — на странице
+ * есть блок «Качество данных» с их весом и суммой (иначе примечание просто говорит, что они исключены).
+ */
+export function ProductsTable({
+  rows,
+  title = "Товары",
+  hint = "по выручке за месяц",
+  outsideReport,
+  quality = false,
+}: {
+  rows: ProductRow[];
+  title?: string;
+  hint?: string;
+  outsideReport?: number;
+  quality?: boolean;
+}) {
+  const outside = (n: number) =>
+    `Ещё ${productsLabel(n)} других типов Linko (бонус, подарки) в таблицу не ${plural(n, ["входит", "входят", "входят"])}${
+      quality ? " — их вес и сумма в «Качестве данных»" : ""
+    }.`;
   const columns: Column<ProductRow>[] = [
-    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
+    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} top={r.isTop} /> },
     { key: "cat", label: "Категория", value: (r) => r.category, render: (r) => categoryCell(r.category, r.inReport) },
     { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
@@ -43,7 +70,9 @@ export function ProductsTable({ rows, title = "Товары", hint = "по вы�
       rows={rows}
       rowKey={(r) => String(r.productId)}
       limit={30}
-      note="Доля — от выручки набора. ТТ — точек, купивших товар; дистрибуция — их доля от всех ТТ с покупкой. * — тип товара вне восьми категорий отчёта."
+      note={`Только восемь категорий отчёта. Доля — от выручки этих товаров. ТТ — точки с положительной строкой товара (кг или сумма больше нуля); дистрибуция — их доля от всех ТТ с покупкой. «ТОП» — товар из списка ТОП.${
+        outsideReport ? ` ${outside(outsideReport)}` : ""
+      }`}
     />
   );
 }
@@ -103,12 +132,21 @@ export function LaggingTable({ rows }: { rows: AgentAssortment["lagging"] }) {
 export function StoreProductsTable({ rows }: { rows: StoreView["products"] }) {
   type Row = StoreView["products"][number];
   const columns: Column<Row>[] = [
-    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
+    { key: "name", label: "Продукт", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} top={r.isTop} /> },
     { key: "cat", label: "Категория", value: (r) => r.category },
     { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
   ];
-  return <DataTable title="Что продано в эту точку" hint="за месяц, возвраты вычтены" columns={columns} rows={rows} rowKey={(r) => String(r.productId)} />;
+  return (
+    <DataTable
+      title="Что продано в эту точку"
+      hint="за месяц, возвраты вычтены"
+      columns={columns}
+      rows={rows}
+      rowKey={(r) => String(r.productId)}
+      note="«ТОП» — товар из списка ТОП."
+    />
+  );
 }
 
 // ---------- Экспорт ----------
@@ -138,32 +176,24 @@ export function ExportAgentsTable({ rows }: { rows: ExportView["agents"] }) {
 
 // ---------- Ассортимент ----------
 
+/** «По регионам» вкладки «Ассортимент» — у охвата из двух и больше регионов (сервер отдаёт пустой список, если регион один). */
 export function AssortmentRegionsTable({ rows, query }: { rows: AssortmentView["regions"]; query: string }) {
-  type Row = AssortmentView["regions"][number];
-  const columns: Column<Row>[] = [
-    { key: "name", label: "Регион", value: (r) => r.name, render: (r) => <WrapName name={r.name} /> },
-    { key: "kg", label: "Факт, кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
-    { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
-    { key: "sku", label: "SKU идёт", align: "right", value: (r) => r.skuSelling, render: (r) => num(r.skuSelling) },
-    { key: "no", label: "Не возят", align: "right", value: (r) => r.skuNotCarried, render: (r) => <span className={r.skuNotCarried ? "text-warn" : ""}>{num(r.skuNotCarried)}</span> },
-    { key: "lost", label: "Пропало", align: "right", value: (r) => r.skuLost, render: (r) => <span className={r.skuLost ? "text-bad" : ""}>{num(r.skuLost)}</span> },
-    { key: "akb", label: "ТТ", align: "right", value: (r) => r.akb, render: (r) => num(r.akb) },
-  ];
   return (
     <DataTable
       title="По регионам"
       hint="клик — открыть регион"
-      columns={columns}
+      columns={regionColumns()}
       rows={rows}
       rowKey={(r) => r.id}
       rowHref={(r) => withQuery(`/sales/regions/${r.id}`, query)}
-      note="«SKU идёт» — сколько артикулов категорий отчёта из тех, что продаются по республике в этом месяце, есть в регионе. «Не возят» — остальные. «Пропало» — продавались в регионе в прошлом месяце, в этом нет. ТТ — точки региона с покупкой."
+      note="«SKU идёт» — сколько артикулов категорий отчёта из тех, что продаются по республике в этом месяце, есть в регионе (точка с положительной строкой). «Не возят» — остальные. «Пропало» — продавались в регионе в прошлом месяце, в этом нет. ТТ — точки региона с покупкой. «Нет данных» — в регионе за месяц ни одной покупки: это почти всегда дыра в выгрузке, а не регион, который ничего не возит."
     />
   );
 }
 
 const levelClass = { none: "bg-bad-soft text-bad", low: "bg-warn-soft text-warn", ok: "text-ink" } as const;
 
+/** Матрица «товар × регион»: цвет клетки (нет / меньше 40% средней / норма) считает сервер. */
 export function AssortmentMatrix({ data }: { data: AssortmentView }) {
   if (data.matrix.length === 0) return null;
   return (
@@ -184,12 +214,15 @@ export function AssortmentMatrix({ data }: { data: AssortmentView }) {
           <tbody>
             {data.matrix.map((row) => (
               <tr key={row.productId} className="border-b border-line">
-                <td className="sticky left-0 z-10 max-w-[280px] truncate bg-surface px-2 py-1.5 text-ink" title={`${row.name} · ${row.category}`}>
-                  {row.name}
+                <td className="sticky left-0 z-10 max-w-[280px] bg-surface px-2 py-1.5 text-ink" title={`${row.name} · ${row.category}`}>
+                  <span className="flex items-center gap-1.5">
+                    {row.isTop && <TopChip />}
+                    <span className="truncate">{row.name}</span>
+                  </span>
                 </td>
                 <td className="px-2 py-1.5 text-right tabular-nums text-ink-2">{pct(row.averageDistribution)}</td>
                 {row.cells.map((c) => (
-                  <td key={c.regionId} className="px-1 py-1">
+                  <td key={c.regionId} className="px-1 py-1" title={`${num(c.tt)} ТТ с товаром`}>
                     <span className={`block rounded px-1.5 py-0.5 text-right tabular-nums ${levelClass[c.level]}`}>
                       {c.level === "none" ? "нет" : pct(c.distribution)}
                     </span>
@@ -201,94 +234,12 @@ export function AssortmentMatrix({ data }: { data: AssortmentView }) {
         </table>
       </div>
       <Note>
-        Красным — товара в регионе нет вовсе, оранжевым — стоит меньше чем в 40% от своей средней дистрибуции по регионам. «Всего» — средняя по регионам,
-        где товар есть. Показаны 25 товаров категорий отчёта с наибольшей выручкой.
+        Клетка — дистрибуция: доля ТТ региона с покупкой, у которых строка товара положительна. «Всего» — дистрибуция по всему охвату: все ТТ с товаром ÷ все ТТ
+        с покупкой в регионах матрицы. Красным — товара в регионе нет вовсе, оранжевым — стоит меньше чем в 40% от «Всего». Показаны 20 товаров категорий
+        отчёта с наибольшей выручкой; матрица строится, если продажи есть хотя бы в двух регионах.
       </Note>
     </Section>
   );
 }
 
-// ---------- Остатки ----------
-
-const stockStatus: Record<StockStatus, { label: string; cls: string }> = {
-  deficit: { label: "дефицит", cls: "bg-bad-soft text-bad" },
-  overstock: { label: "затоварка", cls: "bg-warn-soft text-warn" },
-  dead: { label: "не продаётся", cls: "bg-muted text-ink-2" },
-  ok: { label: "норма", cls: "bg-ok-soft text-ok" },
-  unknown: { label: "нет веса", cls: "bg-muted text-ink-3" },
-};
-
-export function StockTable({ data, unit }: { data: StockView; unit: "kg" | "boxes" | "pieces" }) {
-  const value = (r: StockItem) => (unit === "boxes" ? r.boxes : unit === "pieces" ? r.pieces : r.kg);
-  const fmt = (v: number | null) => (unit === "kg" ? kg(v) : num(v, unit === "boxes" ? 1 : 0));
-  // Вес из названия — оценка: кг и коробки помечаются «≈» (штуки — как в Linko, без пометки).
-  const approx = (r: StockItem) => r.unitKgSource === "name";
-  const mark = (r: StockItem, text: string) => (approx(r) && unit !== "pieces" ? `≈ ${text}` : text);
-  const priceList = data.priceList ?? "вход дилеру";
-  const columns: Column<StockItem>[] = [
-    { key: "name", label: "Наименование", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={r.code ? `код ${r.code}` : null} /> },
-    { key: "cat", label: "Категория", value: (r) => r.category, render: (r) => categoryCell(r.category, r.inReport) },
-    {
-      key: "unit",
-      label: "Вес штуки",
-      align: "right",
-      value: (r) => r.unitKg,
-      render: (r) => (
-        <span title={approx(r) ? `Продаж за год не было — вес из названия (оценка). ${r.boxNote}` : `По строкам заказов за год. ${r.boxNote}`}>
-          {r.unitKg == null ? "—" : `${approx(r) ? "≈ " : ""}${num(r.unitKg, 3)} кг`}
-        </span>
-      ),
-    },
-    { key: "stock", label: unit === "boxes" ? "Коробок" : unit === "pieces" ? "Штук" : "Остаток, кг", align: "right", value, render: (r) => mark(r, fmt(value(r))) },
-    { key: "perDay", label: "Продажи в день, кг", align: "right", value: (r) => r.kgPerDay, render: (r) => kg(r.kgPerDay) },
-    { key: "days", label: "Хватит, дн.", align: "right", value: (r) => r.daysOfCover, render: (r) => (r.daysOfCover == null ? "—" : `${approx(r) ? "≈ " : ""}${num(r.daysOfCover)}`) },
-    { key: "need", label: "Запас на 15 дн., кг", align: "right", value: (r) => r.need15Kg, render: (r) => kg(r.need15Kg) },
-    { key: "need30", label: "Запас на 30 дн., кг", align: "right", value: (r) => r.need30Kg, render: (r) => kg(r.need30Kg) },
-    {
-      key: "price",
-      label: "Цена входа",
-      align: "right",
-      value: (r) => r.price,
-      render: (r) => <span title={r.price == null ? `Товара нет в прайсе «${priceList}»` : `За единицу учёта, прайс «${priceList}»`}>{r.price == null ? "—" : num(r.price)}</span>,
-    },
-    { key: "value", label: "Сумма запаса", align: "right", value: (r) => r.valueSum, render: (r) => money(r.valueSum) },
-    {
-      key: "status",
-      label: "Статус",
-      value: (r) => r.status,
-      render: (r) => <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${stockStatus[r.status].cls}`}>{stockStatus[r.status].label}</span>,
-    },
-    { key: "factory", label: "Завод", align: "right", value: (r) => r.factory?.kg ?? null, render: (r) => kg(r.factory?.kg ?? null) },
-  ];
-  return (
-    <DataTable
-      title="Остатки по товарам"
-      hint={unit === "boxes" ? "коробки — только там, где вес коробки подтверждён" : undefined}
-      columns={columns}
-      rows={data.items}
-      rowKey={(r) => String(r.productId)}
-      note={`Linko хранит остаток и цену за единицу учёта (штука, шоубокс или кг). Сумма запаса = штуки × входная цена дилера из прайса «${priceList}». Кг = штуки × вес штуки; вес штуки — Σ веса ÷ Σ количества по строкам заказов за год, без продаж — из названия (≈). Коробки = кг ÷ вес коробки из названия, если в коробке целое число штук (наведите на вес штуки). Дефицит — меньше 15 дней продаж, затоварка — больше 30, «не продаётся» — остаток есть, продаж нет. Остаток завода в итог страны не входит.`}
-    />
-  );
-}
-
-export function OtherStocksTable({ rows }: { rows: StockView["otherStocks"] }) {
-  type Row = StockView["otherStocks"][number];
-  const columns: Column<Row>[] = [
-    { key: "name", label: "Склад", value: (r) => r.name, render: (r) => <WrapName name={r.name} sub={`ID ${r.stockId}`} /> },
-    { key: "items", label: "Товаров", align: "right", value: (r) => r.items, render: (r) => num(r.items) },
-    { key: "pieces", label: "Штук", align: "right", value: (r) => r.pieces, render: (r) => num(r.pieces) },
-    { key: "kg", label: "Кг", align: "right", value: (r) => r.kg, render: (r) => kg(r.kg) },
-  ];
-  return (
-    <DataTable
-      title="Склады вне регионов"
-      hint="в остаток регионов не входят"
-      columns={columns}
-      rows={rows}
-      rowKey={(r) => String(r.stockId)}
-      empty="Все склады с остатком сопоставлены с регионами"
-      note="Склады, название которых не совпадает ни с одним регионом (старые, интеграционные, «Основной», «Оптом»…). Их остаток не складывается в регионы автоматически — иначе он раздувал бы остаток дилеров."
-    />
-  );
-}
+// Таблицы «Рек. остатка» — в app/(app)/sales/stock/tables.tsx.

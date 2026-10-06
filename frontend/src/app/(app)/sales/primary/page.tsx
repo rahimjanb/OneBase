@@ -1,13 +1,14 @@
 import { ExecutionBar, SummaryCard } from "@/components/sales/bits";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGet } from "@/lib/server-api";
-import { money, num, pct } from "@/lib/sales/format";
+import { money, num, ordersLabel, pct } from "@/lib/sales/format";
 import { apiQuery, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { PrimaryCard, PrimaryView } from "@/lib/sales/types";
 
 export const metadata = { title: "Первичка · Продажи" };
 
-function Card({ title, sub, card, share, href }: { title: string; sub: string; card: PrimaryCard; share: number | null; href: string | null }) {
+function Card({ title, sub, card, href }: { title: string; sub: string; card: PrimaryCard; href: string | null }) {
+  const share = card.share;
   return (
     <SummaryCard
       title={title}
@@ -42,29 +43,26 @@ export default async function PrimaryPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   const data = await apiGet<PrimaryView>(`/api/sales/primary${apiQuery(sp)}`, "/sales/primary");
   const q = periodQuery(sp);
-  const total = data.republic.kg + data.export.kg;
 
   return (
-    <SalesFrame title="Первичка" subtitle={`Завод — дилерам · ${data.year} год с начала года · выберите, что смотреть`} crumbs={[{ label: "Первичка" }]} sp={sp}>
+    <SalesFrame title="Первичка" subtitle={`Завод — дилерам и прямым клиентам · ${data.year} год с начала года · выберите, что смотреть`} crumbs={[{ label: "Первичка" }]} sp={sp}>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card
           title="Республика"
-          sub={`завод → дилеры · ${num(data.republic.counterparties)} контрагентов`}
+          sub={`завод → дилеры и прямые клиенты · ${num(data.republic.counterparties)} контрагентов`}
           card={data.republic}
-          share={total ? data.republic.kg / total : null}
           href={withQuery("/sales/primary/republic", q)}
         />
         <Card
           title="Экспорт"
-          sub={`завод → экспорт · ${num(data.export.counterparties)} стран · ${num(data.export.transfers)} заказов`}
+          sub={`завод → экспорт · ${num(data.export.counterparties)} стран · ${ordersLabel(data.export.transfers)}`}
           card={data.export}
-          share={total ? data.export.kg / total : null}
           href={withQuery("/sales/primary/export", q)}
         />
       </div>
       <p className="mt-4 text-xs text-ink-3">
-        Республика — перемещения Linko со склада завода на склады дилеров. Экспорт — заказы филиала «Завод» торговым точкам с типом EXPORT; страна — по
-        названию или адресу точки в Linko.
+        Республика — перемещения Linko со склада завода на склады дилеров и заказы прямых клиентов завода (базары, сети, фирменный магазин), нетто
+        возвратов. Экспорт — заказы филиала «Завод» торговым точкам с типом EXPORT; страна — по названию или адресу точки в Linko.
       </p>
     </SalesFrame>
   );

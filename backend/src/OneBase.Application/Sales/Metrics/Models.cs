@@ -4,7 +4,8 @@ namespace OneBase.Application.Sales.Metrics;
 
 /// <summary>
 /// Строка продажи: одна позиция заказа (+) или возврата (−) — кг и выручка со знаком.
-/// OrderId = null у возвратов: они не считаются заказами.
+/// OrderId = null у возвратов: они не считаются заказами. CreatedDate — день ввода заказа (created_date): по нему заказ сшивается
+/// с визитом в календаре визитов (агент стоял в магазине в день ввода, приёмка — позже); null — у возвратов и в старых данных.
 /// </summary>
 public sealed record SaleLine(
     DateOnly Date,
@@ -15,7 +16,8 @@ public sealed record SaleLine(
     long? ProductId,
     decimal Kg,
     decimal Revenue,
-    long? OrderId);
+    long? OrderId,
+    DateOnly? CreatedDate = null);
 
 public enum VisitStatus
 {
@@ -41,9 +43,10 @@ public sealed record MonthlyFact(int Year, int Month, long? AgentId, long? Branc
 
 /// <summary>
 /// АКБ давнего месяца из БД: по республике (ByBranch = false, AgentId = null), по филиалу или по агенту (AgentId);
-/// итог (IsTotal) или по категории-группе.
+/// итог (IsTotal) или по категории-группе. Kg и Revenue — чистые кг и выручка того же разреза за месяц (ряды «кг» и «сум» в «АКБ по месяцам»).
 /// </summary>
-public sealed record MonthlyAkb(int Year, int Month, bool ByBranch, long? BranchId, bool IsTotal, long? CategoryId, int Akb, long? AgentId = null);
+public sealed record MonthlyAkb(int Year, int Month, bool ByBranch, long? BranchId, bool IsTotal, long? CategoryId, int Akb, long? AgentId = null,
+    decimal Kg = 0, decimal Revenue = 0);
 
 public sealed record PlanRow(Guid? RegionId, long? AgentId, int Month, long? CategoryId, decimal PlanKg);
 
@@ -79,13 +82,31 @@ public sealed class MonthData
     /// <summary>Факт по месяцам: 12 месяцев до текущего включительно.</summary>
     public required IReadOnlyList<MonthlyFact> History { get; init; }
 
-    /// <summary>Планы на выбранный месяц (регионов и агентов).</summary>
+    /// <summary>
+    /// Планы на выбранный месяц: планы регионов выбранного вида (РОП или «Завод», регион × категория) и планы ТП из Linko —
+    /// по ним карточка ТП, команда региона и состав месяца. Без планов регионов план подразделения — сумма планов его ТП (PlanSource).
+    /// </summary>
     public required IReadOnlyList<PlanRow> Plans { get; init; }
 
-    /// <summary>Планы регионов на весь год выбранного месяца (для графика по месяцам).</summary>
+    /// <summary>Планы регионов выбранного вида на весь год выбранного месяца (для графика по месяцам).</summary>
     public required IReadOnlyList<PlanRow> YearRegionPlans { get; init; }
 
-    /// <summary>Итоговые планы агентов на весь год (ручные или из Linko) — план региона без ручного = сумма планов его агентов.</summary>
+    /// <summary>Планы регионов выбранного вида на следующий месяц; пусто — карточка следующего месяца по планам ТП из Linko.</summary>
+    public IReadOnlyList<PlanRow> NextRegionPlans { get; init; } = [];
+
+    /// <summary>Выбранный вид плана: PlanSources.Rop или PlanSources.Factory.</summary>
+    public string SelectedPlan { get; init; } = PlanSources.Rop;
+
+    /// <summary>Какие планы регионов заведены на месяц (rop, factory) — для переключателя плана; пусто — ни одного, план из Linko.</summary>
+    public IReadOnlyList<string> AvailablePlans { get; init; } = [];
+
+    /// <summary>
+    /// Откуда план подразделений месяца (PlanSources): rop / factory — планы регионов выбранного вида; linko — их на месяц нет,
+    /// план — сумма планов ТП из Linko. Планы регионов и ТП в одном месяце не смешиваются.
+    /// </summary>
+    public string PlanSource { get; init; } = PlanSources.Linko;
+
+    /// <summary>Планы ТП из Linko на весь год — план региона в месяце без планов регионов = сумма планов его ТП.</summary>
     public IReadOnlyList<PlanRow> YearAgentPlans { get; init; } = [];
 
     /// <summary>Планы ТП по категориям (текущий и следующий месяц) — из показателей Linko.</summary>
@@ -119,10 +140,13 @@ public sealed class MonthData
     public IReadOnlyDictionary<long, ProductInfo> Products { get; init; } = new Dictionary<long, ProductInfo>();
 
     /// <summary>
-    /// «Живой» ассортимент — SKU, которые продавались за последние полгода (по всей компании).
-    /// Признака «товар активен» в Linko нет, поэтому ассортимент определяется по продажам.
+    /// Ассортимент — SKU, которые продавались во вторичке с 1 января года месяца по конец месяца (по всей компании, без «Завода»
+    /// и «К К Мерч»): знаменатель «продаётся N из M SKU». Признака «товар активен» в Linko нет, поэтому ассортимент определяется по продажам.
     /// </summary>
     public IReadOnlySet<long> ActiveSkus { get; init; } = new HashSet<long>();
+
+    /// <summary>ТОП-товары (Sales:TopProducts) — метка «ТОП» в ассортименте.</summary>
+    public TopProductSet Top { get; init; } = TopProductSet.Empty;
 
     /// <summary>
     /// АКБ по месяцам года до прошлого месяца (не включая его): текущий и прошлый месяц считаются из строк продаж.
@@ -131,8 +155,8 @@ public sealed class MonthData
     public IReadOnlyList<MonthlyAkb> AkbHistory { get; init; } = [];
 
     /// <summary>
-    /// Заказы для сшивки с визитами: созданные в месяце (дата строки — created_date), а не принятые в нём.
-    /// null — сшивать по строкам факта (так в тестах и в старых данных).
+    /// Заказы для сшивки с визитами (календарь визитов, «визиты с заказом» для справки): созданные в месяце (дата строки — created_date),
+    /// а не принятые в нём. Конверсия считается по заказам факта (Current). null — сшивать по строкам факта (так в тестах и в старых данных).
     /// </summary>
     public IReadOnlyList<SaleLine>? VisitOrders { get; init; }
 
@@ -162,7 +186,13 @@ public sealed class MonthData
     /// <summary>Должности Linko, которые считаются ТП (Sales:SalesRepJobs). Пусто — ТП все, у кого есть продажи или визиты.</summary>
     public IReadOnlyList<string> SalesRepJobs { get; init; } = [];
 
+    /// <summary>Категории отчёта, которых нет в «АКБ по месяцам» (Sales:AkbChartHiddenCategories; «Песочный»). Без учёта регистра.</summary>
+    public IReadOnlyList<string> AkbChartHiddenCategories { get; init; } = [];
+
     public DateOnly MonthStart => new(Year, Month, 1);
     public int DaysInMonth => DateTime.DaysInMonth(Year, Month);
     public int WorkedDays => SalesMath.WorkedDays(MonthStart, DataThrough);
+
+    /// <summary>Месяц закрыт: данные есть за все его дни — прогноза на конец месяца нет.</summary>
+    public bool Closed => WorkedDays >= DaysInMonth;
 }

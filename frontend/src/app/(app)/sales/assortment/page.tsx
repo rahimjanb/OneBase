@@ -36,6 +36,7 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
       subtitle={`Что и где продаётся: категории, артикулы, дистрибуция · ${data.scopeName}`}
       crumbs={[{ label: "Ассортимент" }]}
       sp={sp}
+      period={data.period}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ScopeSelect options={options} />
@@ -45,20 +46,25 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
           {s.prevMonthKg ? `прошлый месяц целиком: ${kg(s.prevMonthKg)} кг` : "в прошлом месяце продаж не было"}
         </KpiTile>
         <KpiTile label="Выручка" value={money(s.revenue)} unit="сум" />
-        <KpiTile label="Продаётся SKU" value={num(s.skuSold)} unit={`/ ${num(s.skuTotal)}`}>
+        <KpiTile
+          label="Продаётся SKU"
+          value={num(s.skuSold)}
+          unit={`/ ${num(s.skuTotal)}`}
+          title="Из SKU, которые продавались во вторичке с 1 января по конец месяца; «продаётся» — есть точка с положительной строкой"
+        >
           {s.skuLost > 0 ? <span className="font-semibold text-bad">пропало {num(s.skuLost)}</span> : "ничего не пропало"}
         </KpiTile>
-        <KpiTile label="ТТ" value={num(s.outlets)}>
-          точек с покупкой за месяц
+        <KpiTile label="ТТ" value={num(s.outlets)} title="«Только он» — точки, которые из всех SKU купили ровно один">
+          точек с покупкой за месяц · только один SKU — {num(s.mono)}
         </KpiTile>
       </div>
       <CategoryCards cards={data.categories} scope={scopeLabel} query={queryWith(q, { direction: param(sp, "direction"), region: param(sp, "region") })} />
       <CollapsedSections>
         <AkbChart data={data.akbMonths} />
-        <AssortmentRegionsTable rows={data.regions} query={q} />
+        {data.regions.length > 0 && <AssortmentRegionsTable rows={data.regions} query={q} />}
         <AssortmentMatrix data={data} />
-        <ProductsTable rows={data.products} hint={`по выручке за месяц · ${data.scopeName}`} />
-        <DataQualityNotes quality={data.quality} />
+        <ProductsTable rows={data.products} hint={`по выручке за месяц · ${data.scopeName}`} outsideReport={data.productsOutsideReport} quality />
+        <DataQualityNotes quality={data.quality} period={data.period} />
       </CollapsedSections>
       <p className="mt-4 text-xs text-ink-3">
         Регион подробнее — на его странице во «Вторичке»:{" "}

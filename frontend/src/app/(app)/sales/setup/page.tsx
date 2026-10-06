@@ -9,7 +9,7 @@ export default async function SalesSetupPage({ searchParams }: { searchParams: P
   return (
     <SalesFrame
       title="Настройки продаж"
-      subtitle="Синхронизация, справочник ТП и цели. Планы и оргструктура продаж — только из Linko"
+      subtitle="Синхронизация, оргструктура (РМ, каналы, СВР и дилеры регионов), справочник ТП и цели"
       back="/settings"
       sp={sp}
     >

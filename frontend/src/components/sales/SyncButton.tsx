@@ -12,7 +12,10 @@ import type { SyncStatus } from "@/lib/sales/types";
 const IDLE_POLL_MS = 60_000;
 const RUNNING_POLL_MS = 3_000;
 
-/** Чип «данные по …» — время последней успешной синхронизации с Linko. */
+/**
+ * Свежесть копии Linko — время последней успешной синхронизации. Отчётный день вторички («данные по ДД.ММ») — отдельный чип
+ * в шапке страницы (SalesFrame): это последний полный день, а не момент загрузки.
+ */
 function DataChip({ status }: { status: SyncStatus }) {
   if (!status.configured) {
     return (
@@ -24,11 +27,15 @@ function DataChip({ status }: { status: SyncStatus }) {
   if (status.hasErrors) {
     return (
       <span className="rounded-full bg-warn-soft px-3 py-1 text-xs font-medium text-warn" title="Последняя синхронизация с Linko завершилась с ошибкой — подробности в «Настройках»">
-        Синхронизация с ошибкой · данные по {dateTime(status.dataAsOf)}
+        Синхронизация с ошибкой · загружено {dateTime(status.dataAsOf)}
       </span>
     );
   }
-  return <span className="rounded-full border border-line bg-surface px-3 py-1 text-xs tabular-nums text-ink-2 max-lg:py-1.5">данные по {dateTime(status.dataAsOf)}</span>;
+  return (
+    <span className="text-xs tabular-nums text-ink-3" title="Последняя успешная загрузка данных из Linko">
+      загружено из Linko {dateTime(status.dataAsOf)}
+    </span>
+  );
 }
 
 /**

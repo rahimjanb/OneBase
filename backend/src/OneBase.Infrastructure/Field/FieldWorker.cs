@@ -60,7 +60,7 @@ public sealed class FieldStatsRefresher(OneBaseDbContext db, SalesOptions option
             """;
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        var rows = await db.Database.ExecuteSqlRawAsync(sql, [new NpgsqlParameter("today", today), new NpgsqlParameter("sold", options.SoldStatuses)], ct);
+        var rows = await db.Database.ExecuteSqlRawAsync(sql, [new NpgsqlParameter("today", today), new NpgsqlParameter("sold", options.FieldSoldStatuses)], ct);
         await tx.CommitAsync(ct);
         logger.LogInformation("Sales Base: витрина точек пересчитана ({Rows} строк)", rows);
         return rows;

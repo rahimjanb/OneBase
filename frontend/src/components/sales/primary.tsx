@@ -1,46 +1,55 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { AkbChart } from "./AkbChart";
 import { ExecutionBar, KpiTile, Note, Section, execClass } from "./bits";
 import { CopyButton, DataTable, NameCell, type Column } from "./DataTable";
-import { date, kg, money, monthGenitive, monthName, monthShort, num, pct, tsvValue } from "@/lib/sales/format";
-import type { PrimaryAmounts, PrimaryRow, PrimaryView } from "@/lib/sales/types";
+import { date, kg, money, monthGenitive, monthName, monthShort, num, ordersLabel, pct, plural, rowsLabel, tsvValue } from "@/lib/sales/format";
+import type { PrimaryAmounts, PrimaryGroup, PrimaryRow, PrimaryView } from "@/lib/sales/types";
 
-// «Первичка → Республика» как в «Полевом контроле»: плитки месяца, столбики по месяцам, план и факт по категориям и
-// дилерам, календарь отгрузок, «С начала года» и товары. Переключатель единиц меняет графики и таблицы сразу.
+// «Первичка → Республика» как в «Полевом контроле»: плитки месяца, столбики по месяцам, план и факт по категориям, дилерам и прямым
+// клиентам завода, календарь отгрузок, «С начала года», клиенты по месяцам и товары. Все суммы, доли, выполнение и итоги — с сервера:
+// компоненты только форматируют. Переключатель единиц меняет графики и таблицы сразу; план и факт по категориям, дилерам и прямым
+// клиентам — всегда в кг (DOC-filters §3).
 
 type Unit = keyof PrimaryAmounts;
 
-const units: { key: Unit; label: string }[] = [
+type Option<T extends string> = { key: T; label: string; title?: string };
+
+const units: Option<Unit>[] = [
   { key: "kg", label: "кг" },
   { key: "boxes", label: "коробки" },
-  { key: "sumFactory", label: "сум завода" },
-  { key: "sumDealer", label: "сум дилера" },
+  { key: "sumFactory", label: "сум (цена дилера)", title: "Сумма (цена дилера): сумма перемещения или заказа — по этой цене дилер берёт товар у завода" },
+  { key: "sumDealer", label: "сум (продажа дилера)", title: "Сумма (цена продажи дилера): количество × цена прайса «Дилердан чикиш нарх»" },
 ];
+
+const exportUnits: Option<Unit>[] = [
+  { key: "kg", label: "кг" },
+  { key: "sumFactory", label: "сум", title: "Сумма заказа в сумах" },
+];
+
+/** Параметры календаря отгрузок в адресе: период «с … по …», день и контрагент разбора. */
+const calendarKeys = ["from", "to", "day", "dealer"] as const;
+type CalendarParams = Partial<Record<(typeof calendarKeys)[number], string | number | null>>;
 
 const fmt = (value: number | null | undefined, unit: Unit) => (unit === "kg" ? kg(value) : unit === "boxes" ? num(value) : money(value));
 const tons = (value: number | null | undefined) => (value == null ? "—" : num(value / 1000, 1));
 const barTone = (v: number | null) => (v == null ? "accent" : v < 0.5 ? "bad" : v < 0.9 ? "warn" : "accent");
 
-/** Идёт ли месяц сейчас (последний столбик — штриховкой, в подписи «идёт»). */
-function isRunning(year: number, month: number) {
-  const now = new Date();
-  return now.getFullYear() === year && now.getMonth() + 1 === month;
-}
-
-function UnitSwitch({ unit, onChange, only }: { unit: Unit; onChange: (u: Unit) => void; only?: Unit[] }) {
+function Switch<T extends string>({ value, onChange, options, label }: { value: T; onChange: (v: T) => void; options: Option<T>[]; label: string }) {
   return (
-    <div className="inline-flex overflow-hidden rounded-full border border-line bg-surface text-xs shadow-sm" role="group" aria-label="Единицы">
-      {units.filter((u) => !only || only.includes(u.key)).map((u) => (
+    <div className="inline-flex overflow-hidden rounded-full border border-line bg-surface text-xs shadow-sm" role="group" aria-label={label}>
+      {options.map((o) => (
         <button
-          key={u.key}
+          key={o.key}
           type="button"
-          onClick={() => onChange(u.key)}
-          aria-pressed={unit === u.key}
-          className={`px-3 py-1.5 font-medium ${unit === u.key ? "bg-accent text-white" : "text-ink-2 hover:bg-muted"}`}
+          onClick={() => onChange(o.key)}
+          aria-pressed={value === o.key}
+          title={o.title}
+          className={`px-3 py-1.5 font-medium ${value === o.key ? "bg-accent text-white" : "text-ink-2 hover:bg-muted"}`}
         >
-          {u.label}
+          {o.label}
         </button>
       ))}
     </div>
@@ -50,11 +59,12 @@ function UnitSwitch({ unit, onChange, only }: { unit: Unit; onChange: (u: Unit) 
 function MonthTiles({ data }: { data: PrimaryView }) {
   const plan = data.planMonthKg;
   const fact = data.monthTotal.kg;
-  const exec = plan ? fact / plan : null;
+  const exec = data.monthExecution;
+  const noPlan = data.hasPlan ? "плана первички на этот месяц нет" : "план первички не загружен";
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 min-[87.5rem]:grid-cols-5">
       <KpiTile label="План месяца" value={plan != null ? kg(plan) : "—"} unit={plan != null ? "кг" : undefined}>
-        {plan != null ? `отгрузка дилерам за ${monthName(data.month)}` : "в Linko плана первички нет"}
+        {plan != null ? `отгрузка за ${monthName(data.month)}` : noPlan}
       </KpiTile>
       <KpiTile label="Отгружено" value={kg(fact)} unit="кг">
         {num(data.monthTotal.boxes)} коробок · {money(data.monthTotal.sumFactory)}
@@ -68,15 +78,21 @@ function MonthTiles({ data }: { data: PrimaryView }) {
             </div>
           </>
         ) : (
-          "плана в Linko нет"
+          noPlan
         )}
       </KpiTile>
-      <KpiTile label="Осталось" value={plan != null ? kg(Math.max(0, plan - fact)) : "—"} unit={plan != null ? "кг" : undefined}>
-        {plan == null ? "плана в Linko нет" : fact >= plan ? `план выполнен, сверх него ${kg(fact - plan)} кг` : "до плана месяца"}
+      <KpiTile label="Осталось" value={plan != null ? kg(data.monthRemainingKg) : "—"} unit={plan != null ? "кг" : undefined}>
+        {plan == null
+          ? noPlan
+          : data.monthOverPlanKg
+            ? `план выполнен, сверх него ${kg(data.monthOverPlanKg)} кг`
+            : data.monthRemainingKg === 0
+              ? "план выполнен"
+              : "до плана месяца"}
       </KpiTile>
       <KpiTile label="Прогноз" value={kg(data.forecastKg ?? fact)} unit="кг">
         {data.forecastKg != null
-          ? `${plan ? `${pct(data.forecastKg / plan)} плана · ` : ""}темп по ${data.workedDays}-е число`
+          ? `${data.forecastExecution != null ? `${pct(data.forecastExecution)} плана · ` : ""}темп по ${data.workedDays}-е число`
           : data.dataThrough
             ? "месяц закрыт — это факт"
             : "отгрузок в месяце нет"}
@@ -93,7 +109,7 @@ function MonthsChart({ data, unit }: { data: PrimaryView; unit: Unit }) {
   const last = Math.max(data.month, ...data.monthsWithData, 1);
   const months = Array.from({ length: last }, (_, i) => i + 1);
   const planOn = unit === "kg" && data.planMonths.some((p) => p != null);
-  const values = months.map((m) => data.months[m - 1][unit]);
+  const values = months.map((m) => data.months[m - 1][unit] ?? 0);
   const plans = months.map((m) => (planOn ? data.planMonths[m - 1] : null));
   const max = Math.max(1, ...values, ...plans.map((p) => p ?? 0));
 
@@ -101,17 +117,19 @@ function MonthsChart({ data, unit }: { data: PrimaryView; unit: Unit }) {
     const next = new URLSearchParams(params);
     next.set("year", String(data.year));
     next.set("month", String(m));
+    // Другой месяц — календарь отгрузок с начала: период и разбор дня сбрасываются.
+    for (const key of calendarKeys) next.delete(key);
     router.push(`${pathname}?${next}`);
   };
 
   return (
-    <Section title="По месяцам" hint={`${data.year} · клик — открыть месяц${isRunning(data.year, last) ? " · последний месяц ещё идёт" : ""}`}>
+    <Section title="По месяцам" hint={`${data.year} · клик — открыть месяц${data.runningMonth === last ? " · последний месяц ещё идёт" : ""}`}>
       <div className="flex h-[260px] items-end gap-2 sm:gap-4">
         {months.map((m, i) => {
           const v = values[i];
           const plan = plans[i];
-          const exec = plan ? data.months[m - 1].kg / plan : null;
-          const running = isRunning(data.year, m);
+          const exec = planOn ? data.monthExecutions[m - 1] : null;
+          const running = data.runningMonth === m;
           const selected = m === data.month;
           return (
             <button key={m} type="button" onClick={() => open(m)} className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end" title={`${monthName(m)}: ${fmt(v, unit)}${plan ? ` из ${kg(plan)} кг плана` : ""}`}>
@@ -169,52 +187,52 @@ function TotalsFooter({ cells }: { cells: { value: React.ReactNode; right?: bool
   );
 }
 
-/** План и факт за выбранный месяц: категории или дилеры. План — только в кг; в других единицах — факт и доля. */
-function PlanFactTable({ title, nameLabel, rows, data, unit }: { title: string; nameLabel: string; rows: PrimaryRow[]; data: PrimaryView; unit: Unit }) {
-  const planOn = unit === "kg" && rows.some((r) => r.planMonthKg != null);
+/**
+ * План и факт за выбранный месяц: категории, дилеры или прямые клиенты — всегда в килограммах, переключатель единиц сюда не действует
+ * (DOC-filters §3): факт кг, план, выполнение, «осталось»; без плана — факт и доля в весе месяца. Строка с планом остаётся и без факта.
+ * total — итог таблицы с сервера.
+ */
+function PlanFactTable({ title, hint, nameLabel, rows, total, data }: { title: string; hint?: string; nameLabel: string; rows: PrimaryRow[]; total: PrimaryRow; data: PrimaryView }) {
+  const unit: Unit = "kg";
+  const planOn = total.planMonthKg != null;
   const shown = rows.filter((r) => r.month[unit] !== 0 || (planOn && r.planMonthKg != null));
-  const total = data.monthTotal[unit];
-  const planTotal = shown.reduce((s, r) => s + (r.planMonthKg ?? 0), 0);
 
   const columns: Column<PrimaryRow>[] = [
     { key: "name", label: nameLabel, value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.sub} /> },
-    ...(planOn ? [{ key: "plan", label: "План", align: "right" as const, value: (r: PrimaryRow) => r.planMonthKg, render: (r: PrimaryRow) => kg(r.planMonthKg) }] : []),
-    { key: "fact", label: "Факт", align: "right", value: (r) => r.month[unit], render: (r) => <span className="font-semibold">{fmt(r.month[unit], unit)}</span> },
+    ...(planOn ? [{ key: "plan", label: "План, кг", align: "right" as const, value: (r: PrimaryRow) => r.planMonthKg, render: (r: PrimaryRow) => kg(r.planMonthKg) }] : []),
+    { key: "fact", label: "Факт, кг", align: "right", value: (r) => r.month[unit], render: (r) => <span className="font-semibold">{fmt(r.month[unit], unit)}</span> },
     ...(planOn
       ? [
           {
             key: "exec",
             label: "Выполнение",
             align: "right" as const,
-            value: (r: PrimaryRow) => (r.planMonthKg ? r.month.kg / r.planMonthKg : null),
-            render: (r: PrimaryRow) => {
-              const exec = r.planMonthKg ? r.month.kg / r.planMonthKg : null;
-              return (
-                <span className="inline-flex items-center justify-end gap-3">
-                  <span className={`w-12 tabular-nums ${execClass(exec)}`}>{pct(exec)}</span>
-                  <span className="w-28">
-                    <ExecutionBar value={exec} tone={barTone(exec)} />
-                  </span>
+            value: (r: PrimaryRow) => r.monthExecution,
+            render: (r: PrimaryRow) => (
+              <span className="inline-flex items-center justify-end gap-3">
+                <span className={`w-12 tabular-nums ${execClass(r.monthExecution)}`}>{pct(r.monthExecution)}</span>
+                <span className="w-28">
+                  <ExecutionBar value={r.monthExecution} tone={barTone(r.monthExecution)} />
                 </span>
-              );
-            },
+              </span>
+            ),
           },
           {
             key: "left",
             label: "Осталось",
             align: "right" as const,
-            value: (r: PrimaryRow) => (r.planMonthKg != null ? r.planMonthKg - r.month.kg : null),
+            value: (r: PrimaryRow) => r.monthRemainingKg,
             render: (r: PrimaryRow) =>
-              r.planMonthKg == null ? "—" : r.month.kg >= r.planMonthKg ? <span className="text-ok">выполнен</span> : <span className="text-bad">{kg(r.planMonthKg - r.month.kg)}</span>,
+              r.monthRemainingKg == null ? "—" : r.monthRemainingKg === 0 ? <span className="text-ok">выполнен</span> : <span className="text-bad">{kg(r.monthRemainingKg)}</span>,
           },
         ]
-      : [{ key: "share", label: "Доля", align: "right" as const, value: (r: PrimaryRow) => (total ? r.month[unit] / total : null), render: (r: PrimaryRow) => pct(total ? r.month[unit] / total : null, 1) }]),
+      : [{ key: "share", label: "Доля", align: "right" as const, value: (r: PrimaryRow) => r.monthShare[unit], render: (r: PrimaryRow) => pct(r.monthShare[unit], 1) }]),
   ];
 
   return (
     <DataTable
       title={title}
-      hint={`за ${monthName(data.month)}${planOn ? ", в килограммах" : ""}`}
+      hint={hint ?? `за ${monthName(data.month)}, в килограммах`}
       columns={columns}
       rows={shown}
       rowKey={(r) => r.id}
@@ -224,14 +242,14 @@ function PlanFactTable({ title, nameLabel, rows, data, unit }: { title: string; 
           <TotalsFooter
             cells={[
               { value: "Итого" },
-              ...(planOn ? [{ value: kg(planTotal), right: true }] : []),
-              { value: fmt(total, unit), right: true },
+              ...(planOn ? [{ value: kg(total.planMonthKg), right: true }] : []),
+              { value: fmt(total.month[unit], unit), right: true },
               ...(planOn
                 ? [
-                    { value: <span className={execClass(planTotal ? data.monthTotal.kg / planTotal : null)}>{pct(planTotal ? data.monthTotal.kg / planTotal : null)}</span>, right: true },
-                    { value: kg(Math.max(0, planTotal - data.monthTotal.kg)), right: true },
+                    { value: <span className={execClass(total.monthExecution)}>{pct(total.monthExecution)}</span>, right: true },
+                    { value: kg(total.monthRemainingKg), right: true },
                   ]
-                : [{ value: "100%", right: true }]),
+                : [{ value: pct(total.monthShare[unit], 1), right: true }]),
             ]}
           />
         )
@@ -240,72 +258,75 @@ function PlanFactTable({ title, nameLabel, rows, data, unit }: { title: string; 
   );
 }
 
-/** Календарь отгрузок: дилер × день. Клик по клетке — что отгрузили; по дилеру — весь его месяц; по дню — все дилеры. */
-/** Диапазоны дней для фильтра календаря: все дни с отгрузкой или декада. */
-const dayRanges = [
-  { key: "all", label: "все дни", from: 1, to: 31 },
-  { key: "d1", label: "1–10", from: 1, to: 10 },
-  { key: "d2", label: "11–20", from: 11, to: 20 },
-  { key: "d3", label: "21–31", from: 21, to: 31 },
-] as const;
-
+/**
+ * Календарь отгрузок: контрагент × день за период «с … по …» (дни с отгрузкой), итоги строк и дней, «Дней» — с сервера. Клик по клетке —
+ * что отгрузили в этот день; по дню — всем; по контрагенту — за период. Период и разбор — параметры адреса (from, to, day, dealer).
+ */
 function ShipmentCalendar({
   data,
   unit,
-  nameLabel = "Дилер",
-  allLabel = "все дилеры",
+  nameLabel = "Контрагент",
+  allLabel = "все контрагенты",
   dealerSum = true,
+  boxes = true,
 }: {
   data: PrimaryView;
   unit: Unit;
   nameLabel?: string;
   allLabel?: string;
-  /** Колонка «Сумма дилера» в разборе дня (у экспорта её нет). */
+  /** Колонка «По цене продажи дилера» в разборе (у экспорта её нет). */
   dealerSum?: boolean;
+  /** Колонка «Коробок» в разборе (у экспорта коробок нет). */
+  boxes?: boolean;
 }) {
-  const [pick, setPick] = useState<{ dealer: string | null; day: number | null } | null>(null);
-  const [range, setRange] = useState<(typeof dayRanges)[number]["key"]>("all");
-  const span = dayRanges.find((r) => r.key === range)!;
-  const days = useMemo(
-    () => [...new Set(data.monthLines.map((l) => l.day))].filter((d) => d >= span.from && d <= span.to).sort((a, b) => a - b),
-    [data.monthLines, span],
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const cal = data.calendar;
+  if (!cal || cal.monthDays.length === 0) return null;
+
+  const go = (changes: CalendarParams) => {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value == null || value === "") next.delete(key);
+      else next.set(key, String(value));
+    }
+    router.push(`${pathname}?${next}`, { scroll: false });
+  };
+  const pick = (dealer: string | null, day: number | null) => (cal.dealer === dealer && cal.day === day ? go({ dealer: null, day: null }) : go({ dealer, day }));
+
+  const mon = monthShort(data.month).toLowerCase();
+  const isRange = cal.days.length !== cal.monthDays.length;
+  // В списках — дни с отгрузкой; день из адреса без отгрузок тоже остаётся видимым.
+  const withDay = (days: number[], day: number | null) => (day == null || days.includes(day) ? days : [...days, day].sort((a, b) => a - b));
+  const partyName = (id: string | null) => (id ? (cal.rows.find((r) => r.id === id)?.name ?? data.dealers.find((d) => d.id === id)?.name ?? id) : allLabel);
+  const select = "h-8 rounded-lg border border-line bg-surface px-2 text-xs text-ink";
+  const bound = (label: string, key: "from" | "to", value: number | null) => (
+    <label className="flex items-center gap-1.5 text-xs text-ink-3">
+      {label}
+      <select
+        value={value ?? ""}
+        onChange={(e) => go(key === "from" ? { from: e.target.value } : { to: e.target.value })}
+        aria-label={key === "from" ? "Период с какого дня" : "Период по какой день"}
+        className={select}
+      >
+        {withDay(cal.monthDays, value).map((d) => (
+          <option key={d} value={d}>
+            {d} {mon}
+          </option>
+        ))}
+      </select>
+    </label>
   );
-  const dealers = data.dealers.filter((d) => d.month.kg !== 0 || d.month.sumFactory !== 0);
-  const cell = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const l of data.monthLines) {
-      const key = `${l.dealerId}|${l.day}`;
-      map.set(key, (map.get(key) ?? 0) + l[unit]);
-    }
-    return map;
-  }, [data.monthLines, unit]);
-  // Итог и число дней отгрузки строки — по выбранным дням.
-  const rowTotal = (id: string) => days.reduce((sum, d) => sum + (cell.get(`${id}|${d}`) ?? 0), 0);
-  const rowDays = (id: string) => days.filter((d) => cell.get(`${id}|${d}`)).length;
-  const dayTotal = (d: number) => dealers.reduce((sum, r) => sum + (cell.get(`${r.id}|${d}`) ?? 0), 0);
-
-  const detail = useMemo(() => {
-    if (!pick) return [];
-    const byProduct = new Map<string, PrimaryAmounts>();
-    for (const l of data.monthLines) {
-      if ((pick.dealer && l.dealerId !== pick.dealer) || (pick.day && l.day !== pick.day)) continue;
-      const key = String(l.productId ?? "—");
-      const a = byProduct.get(key) ?? { kg: 0, boxes: 0, sumFactory: 0, sumDealer: 0 };
-      byProduct.set(key, { kg: a.kg + l.kg, boxes: a.boxes + l.boxes, sumFactory: a.sumFactory + l.sumFactory, sumDealer: a.sumDealer + l.sumDealer });
-    }
-    return [...byProduct.entries()].map(([id, a]) => ({ id, name: data.productNames[id] ?? "Без товара", ...a })).sort((x, y) => y.kg - x.kg);
-  }, [pick, data.monthLines, data.productNames]);
-
-  if (data.monthLines.length === 0) return null;
-  const dealerName = (id: string | null) => (id ? (data.dealers.find((d) => d.id === id)?.name ?? id) : allLabel);
   const copy = () =>
     [
-      [nameLabel, ...days.map(String), "Итого", "Дней"].join("\t"),
-      ...dealers.map((r) => [r.name, ...days.map((d) => tsvValue(cell.get(`${r.id}|${d}`) ?? "")), tsvValue(rowTotal(r.id)), String(rowDays(r.id))].join("\t")),
-      ["Итого", ...days.map((d) => tsvValue(dayTotal(d))), tsvValue(days.reduce((sum, d) => sum + dayTotal(d), 0)), String(days.length)].join("\t"),
+      [nameLabel, ...cal.days.map(String), "Итого", "Дней"].join("\t"),
+      ...cal.rows.map((r) => [r.name, ...r.cells.map((c) => tsvValue(c?.[unit] ?? "")), tsvValue(r.total[unit]), String(r.days)].join("\t")),
+      ["Итого", ...cal.dayTotals.map((t) => tsvValue(t[unit])), tsvValue(cal.total[unit]), String(cal.days.length)].join("\t"),
     ].join("\n");
   const th = "px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-ink-3";
   const pickCls = (on: boolean) => (on ? "bg-accent-soft font-semibold text-ink" : "");
+  const period = cal.day ? `${cal.day} ${monthGenitive(data.month)}` : isRange ? `${cal.from}–${cal.to} ${monthGenitive(data.month)}` : `весь ${monthName(data.month)}`;
 
   return (
     <Section
@@ -313,15 +334,18 @@ function ShipmentCalendar({
       hint="клик по клетке — что отгрузили в этот день"
       actions={
         <>
-          <select
-            value={range}
-            onChange={(e) => setRange(e.target.value as typeof range)}
-            aria-label="Дни"
-            className="h-8 rounded-lg border border-line bg-surface px-2 text-xs text-ink"
-          >
-            {dayRanges.map((r) => (
-              <option key={r.key} value={r.key}>
-                {r.label}
+          {bound("с", "from", cal.from)}
+          {bound("по", "to", cal.to)}
+          {isRange && (
+            <button type="button" onClick={() => go({ from: null, to: null })} className="h-8 rounded-lg border border-line bg-surface px-2.5 text-xs font-medium text-ink hover:bg-muted">
+              все дни
+            </button>
+          )}
+          <select value={cal.day ?? ""} onChange={(e) => go({ day: e.target.value || null, dealer: null })} aria-label="День разбора" className={select}>
+            <option value="">все дни</option>
+            {withDay(cal.days, cal.day).map((d) => (
+              <option key={d} value={d}>
+                {d} {mon}
               </option>
             ))}
           </select>
@@ -334,32 +358,39 @@ function ShipmentCalendar({
           <thead>
             <tr className="border-b border-line">
               <th className="sticky left-0 z-10 bg-surface px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">{nameLabel}</th>
-              {days.map((d) => (
+              {cal.days.map((d) => (
                 <th key={d} className={th}>
-                  <button type="button" onClick={() => setPick({ dealer: null, day: d })} className="hover:text-accent-strong">
+                  <button type="button" onClick={() => pick(null, d)} className={`hover:text-accent-strong ${cal.day === d && cal.dealer == null ? "text-accent-strong" : ""}`}>
                     {d}
                   </button>
                 </th>
               ))}
-              <th className={th}>Итого</th>
+              <th className={th}>
+                Итого
+                {isRange && (
+                  <div className="font-normal normal-case tracking-normal">
+                    {cal.from}–{cal.to} {mon}
+                  </div>
+                )}
+              </th>
               <th className={th}>Дней</th>
             </tr>
           </thead>
           <tbody>
-            {dealers.map((r) => (
+            {cal.rows.map((r) => (
               <tr key={r.id} className="border-b border-line">
-                <td className={`sticky left-0 z-10 bg-surface px-2 py-1.5 ${pickCls(pick?.dealer === r.id && pick.day == null)}`}>
-                  <button type="button" onClick={() => setPick({ dealer: r.id, day: null })} className="text-left font-medium text-ink hover:text-accent-strong" title={r.sub ?? undefined}>
+                <td className={`sticky left-0 z-10 bg-surface px-2 py-1.5 ${pickCls(cal.dealer === r.id && cal.day == null)}`}>
+                  <button type="button" onClick={() => pick(r.id, null)} className="text-left font-medium text-ink hover:text-accent-strong" title={r.sub ?? undefined}>
                     {r.name}
                   </button>
                 </td>
-                {days.map((d) => {
-                  const v = cell.get(`${r.id}|${d}`);
+                {r.cells.map((c, i) => {
+                  const d = cal.days[i];
                   return (
-                    <td key={d} className={`px-1 py-1 text-right tabular-nums ${pickCls(pick?.dealer === r.id && pick.day === d)}`}>
-                      {v ? (
-                        <button type="button" onClick={() => setPick({ dealer: r.id, day: d })} className="w-full rounded px-1 py-0.5 text-right text-ink hover:bg-muted">
-                          {fmt(v, unit)}
+                    <td key={d} className={`px-1 py-1 text-right tabular-nums ${pickCls(cal.day === d && (cal.dealer == null || cal.dealer === r.id))}`}>
+                      {c ? (
+                        <button type="button" onClick={() => pick(r.id, d)} className="w-full rounded px-1 py-0.5 text-right text-ink hover:bg-muted">
+                          {fmt(c[unit], unit)}
                         </button>
                       ) : (
                         <span className="px-1 text-ink-3">·</span>
@@ -367,63 +398,90 @@ function ShipmentCalendar({
                     </td>
                   );
                 })}
-                <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-ink">{fmt(range === "all" ? r.month[unit] : rowTotal(r.id), unit)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-ink-2">{rowDays(r.id)}</td>
+                <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-ink">{fmt(r.total[unit], unit)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-ink-2">{num(r.days)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="bg-muted/60 font-semibold">
               <td className="sticky left-0 z-10 bg-muted px-2 py-1.5 text-ink">Итого</td>
-              {days.map((d) => (
-                <td key={d} className="px-2 py-1.5 text-right tabular-nums text-ink">
-                  {fmt(dayTotal(d), unit)}
+              {cal.dayTotals.map((t, i) => (
+                <td key={cal.days[i]} className="px-2 py-1.5 text-right tabular-nums text-ink">
+                  {fmt(t[unit], unit)}
                 </td>
               ))}
-              <td className="px-2 py-1.5 text-right tabular-nums text-ink">{fmt(days.reduce((sum, d) => sum + dayTotal(d), 0), unit)}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums text-ink">{days.length}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums text-ink">{fmt(cal.total[unit], unit)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums text-ink">{num(cal.days.length)}</td>
             </tr>
           </tfoot>
         </table>
-        {days.length === 0 && <p className="py-3 text-center text-sm text-ink-3">В эти дни отгрузок не было</p>}
+        {cal.days.length === 0 && <p className="py-3 text-center text-sm text-ink-3">В эти дни отгрузок не было</p>}
       </div>
 
-      {pick && (
+      {cal.detail && (
         <div className="mt-4 rounded-lg border border-line bg-muted/40 p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
             <span className="font-semibold text-ink">
-              {dealerName(pick.dealer)} · {pick.day ? `${pick.day} ${monthGenitive(data.month)}` : `весь ${monthName(data.month)}`}
-              <span className="ml-2 font-normal text-ink-3">{detail.length} товаров</span>
+              {partyName(cal.dealer)} · {period}
+              <span className="ml-2 font-normal text-ink-3">{rowsLabel(cal.detail.length)}</span>
             </span>
-            <button type="button" onClick={() => setPick(null)} className="rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink hover:bg-muted">
+            <button type="button" onClick={() => go({ day: null, dealer: null })} className="rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink hover:bg-muted">
               Сбросить
             </button>
           </div>
-          {detail.length === 0 ? (
-            <p className="text-sm text-ink-3">В этот день отгрузок нет.</p>
+          {cal.detail.length === 0 ? (
+            <p className="text-sm text-ink-3">Отгрузок нет.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line text-[11px] uppercase tracking-wide text-ink-3">
-                  <th className="py-1.5 text-left font-semibold">Товар</th>
-                  <th className="py-1.5 text-right font-semibold">Коробок</th>
-                  <th className="py-1.5 text-right font-semibold">Кг</th>
-                  <th className="py-1.5 text-right font-semibold">{dealerSum ? "Сумма завода" : "Сумма"}</th>
-                  {dealerSum && <th className="py-1.5 text-right font-semibold">Сумма дилера</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {detail.map((d) => (
-                  <tr key={d.id} className="border-b border-line last:border-0">
-                    <td className="max-w-[420px] py-1.5 pr-3 text-ink">{d.name}</td>
-                    <td className="py-1.5 text-right tabular-nums text-ink-2">{d.boxes ? num(d.boxes) : "—"}</td>
-                    <td className="py-1.5 text-right tabular-nums text-ink">{kg(d.kg)}</td>
-                    <td className="py-1.5 text-right tabular-nums text-ink-2">{money(d.sumFactory)}</td>
-                    {dealerSum && <td className="py-1.5 text-right tabular-nums text-ink-2">{money(d.sumDealer)}</td>}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line text-[11px] uppercase tracking-wide text-ink-3">
+                    {cal.dealer == null && <th className="py-1.5 pr-3 text-left font-semibold">{nameLabel}</th>}
+                    <th className="py-1.5 text-left font-semibold">Товар</th>
+                    <th className="py-1.5 pl-3 text-left font-semibold">Категория</th>
+                    {boxes && <th className="py-1.5 text-right font-semibold">Коробок</th>}
+                    <th className="py-1.5 text-right font-semibold">Кг</th>
+                    <th className="py-1.5 text-right font-semibold">{dealerSum ? "Сумма (цена дилера)" : "Сумма"}</th>
+                    {dealerSum && <th className="py-1.5 text-right font-semibold">Сумма (цена продажи дилера)</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {cal.detail.map((d) => (
+                    <tr key={`${d.dealerId}|${d.productId}|${d.isReturn}`} className="border-b border-line last:border-0">
+                      {cal.dealer == null && <td className="py-1.5 pr-3 font-medium text-ink">{d.dealerName}</td>}
+                      <td className="max-w-[420px] py-1.5 pr-3 text-ink">
+                        {d.name}
+                        {(d.code || d.isReturn) && (
+                          <div className="text-[11.5px] text-ink-3">
+                            {d.code && `Артикул ${d.code}`}
+                            {d.isReturn && <span className="text-bad">{d.code ? " · " : ""}возврат</span>}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-1.5 pl-3 text-ink-2">{d.category}</td>
+                      {boxes && <td className="py-1.5 text-right tabular-nums text-ink-2">{d.amounts.boxes ? num(d.amounts.boxes) : "—"}</td>}
+                      <td className="py-1.5 text-right tabular-nums text-ink">{kg(d.amounts.kg)}</td>
+                      <td className="py-1.5 text-right tabular-nums text-ink-2">{money(d.amounts.sumFactory)}</td>
+                      {dealerSum && <td className="py-1.5 text-right tabular-nums text-ink-2">{money(d.amounts.sumDealer)}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+                {cal.detailTotal && (
+                  <tfoot>
+                    <tr className="font-semibold text-ink">
+                      <td className="pt-2" colSpan={cal.dealer == null ? 3 : 2}>
+                        Итого
+                      </td>
+                      {boxes && <td className="pt-2 text-right tabular-nums">{num(cal.detailTotal.boxes)}</td>}
+                      <td className="pt-2 text-right tabular-nums">{kg(cal.detailTotal.kg)}</td>
+                      <td className="pt-2 text-right tabular-nums">{money(cal.detailTotal.sumFactory)}</td>
+                      {dealerSum && <td className="pt-2 text-right tabular-nums">{money(cal.detailTotal.sumDealer)}</td>}
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -433,63 +491,54 @@ function ShipmentCalendar({
 
 function YtdTiles({ data }: { data: PrimaryView }) {
   const y = data.ytd;
-  const margin = y.sumDealer - y.sumFactory;
-  const exec = data.planYtdKg ? y.kg / data.planYtdKg : null;
+  const exec = data.ytdExecution;
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 min-[87.5rem]:grid-cols-5">
       <KpiTile label="Отгружено" value={tons(y.kg)} unit="т">
-        {num(data.ytdArticles)} артикулов
+        {num(data.ytdArticles)} артикулов · нетто
       </KpiTile>
-      <KpiTile label="Сумма завода" value={money(y.sumFactory)}>
-        {y.kg ? `${money(y.sumFactory / y.kg)} за кг по цене завода` : "—"}
+      <KpiTile label="Сумма (цена дилера)" value={money(y.sumFactory)}>
+        {data.ytdPricePerKg != null ? `${money(data.ytdPricePerKg)} за кг` : "—"}
       </KpiTile>
-      <KpiTile label="Сумма дилера" value={money(y.sumDealer)}>
-        {y.sumFactory ? `наценка дилеру ${money(margin)} · ${pct(margin / y.sumFactory, 1)}` : "—"}
+      <KpiTile label="По цене продажи дилера" value={money(y.sumDealer)}>
+        {data.ytdMarkup != null ? `наценка дилера ${money(data.ytdMarkupSum)} · ${pct(data.ytdMarkup, 1)}` : "—"}
       </KpiTile>
       <KpiTile label="Возвраты" value={tons(data.ytdReturnsKg)} unit="т">
-        {num(data.ytdReturnLines)} строк · {pct(y.kg ? data.ytdReturnsKg / y.kg : null, 1)} от отгруженного
+        {rowsLabel(data.ytdReturnLines)} · {pct(data.ytdReturnsShare, 1)} от отгруженного
       </KpiTile>
       <KpiTile label="Выполнение" value={pct(exec, 1)} tone={exec == null ? "muted" : barTone(exec)}>
-        {data.planYtdKg != null ? `план ${tons(data.planYtdKg)} т` : "в Linko плана первички нет"}
+        {data.planYtdKg != null ? `план ${tons(data.planYtdKg)} т` : data.hasPlan ? "плана на эти месяцы нет" : "план первички не загружен"}
       </KpiTile>
     </div>
   );
 }
 
-/** С начала года по месяцам: категории или дилеры; доля — от итога за год; план и выполнение — только в кг. */
-function YearMatrix({ title, hint, nameLabel, rows, data, unit }: { title: string; hint: string; nameLabel: string; rows: PrimaryRow[]; data: PrimaryView; unit: Unit }) {
+/** С начала года по месяцам (по выбранный): доля — от итога с начала года; план и выполнение — только в кг. total — итог таблицы с сервера. */
+function YearMatrix({ title, hint, nameLabel, rows, total, data, unit }: { title: string; hint: string; nameLabel: string; rows: PrimaryRow[]; total: PrimaryRow; data: PrimaryView; unit: Unit }) {
   const months = Array.from({ length: data.month }, (_, i) => i + 1);
-  const ytd = (r: PrimaryRow) => months.reduce((s, m) => s + r.months[m - 1][unit], 0);
-  const planYtd = (r: PrimaryRow) => (r.planMonths.slice(0, data.month).some((p) => p != null) ? r.planMonths.slice(0, data.month).reduce<number>((s, p) => s + (p ?? 0), 0) : null);
-  const planOn = unit === "kg" && rows.some((r) => planYtd(r) != null);
-  const shown = rows.filter((r) => ytd(r) !== 0 || (planOn && planYtd(r) != null));
-  const total = shown.reduce((s, r) => s + ytd(r), 0);
-  const planTotal = shown.reduce((s, r) => s + (planYtd(r) ?? 0), 0);
+  const planOn = unit === "kg" && total.planYtdKg != null;
+  const shown = rows.filter((r) => r.ytd[unit] !== 0 || (planOn && r.planYtdKg != null));
 
   const columns: Column<PrimaryRow>[] = [
     { key: "name", label: nameLabel, value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.sub} /> },
     ...months.map((m) => ({
       key: `m${m}`,
-      label: `${monthShort(m)}${isRunning(data.year, m) ? " (идёт)" : ""}`,
+      label: `${monthShort(m)}${data.runningMonth === m ? " (идёт)" : ""}`,
       align: "right" as const,
       value: (r: PrimaryRow) => r.months[m - 1][unit],
       render: (r: PrimaryRow) => <span className={r.months[m - 1][unit] ? "text-ink" : "text-ink-3"}>{fmt(r.months[m - 1][unit], unit)}</span>,
     })),
-    { key: "total", label: "Итого", align: "right", value: (r) => ytd(r), render: (r) => <span className="font-semibold">{fmt(ytd(r), unit)}</span> },
-    { key: "share", label: "Доля", align: "right", value: (r) => (total ? ytd(r) / total : null), render: (r) => pct(total ? ytd(r) / total : null, 1) },
+    { key: "total", label: "Итого", align: "right", value: (r) => r.ytd[unit], render: (r) => <span className="font-semibold">{fmt(r.ytd[unit], unit)}</span> },
+    { key: "share", label: "Доля", align: "right", value: (r) => r.ytdShare[unit], render: (r) => pct(r.ytdShare[unit], 1) },
     ...(planOn
       ? [
-          { key: "plan", label: "План", align: "right" as const, value: (r: PrimaryRow) => planYtd(r), render: (r: PrimaryRow) => kg(planYtd(r)) },
+          { key: "plan", label: "План", align: "right" as const, value: (r: PrimaryRow) => r.planYtdKg, render: (r: PrimaryRow) => kg(r.planYtdKg) },
           {
             key: "exec",
             label: "Выполнение",
             align: "right" as const,
-            value: (r: PrimaryRow) => (planYtd(r) ? r.months.slice(0, data.month).reduce((s, a) => s + a.kg, 0) / planYtd(r)! : null),
-            render: (r: PrimaryRow) => {
-              const p = planYtd(r);
-              const v = p ? r.months.slice(0, data.month).reduce((s, a) => s + a.kg, 0) / p : null;
-              return <span className={execClass(v)}>{pct(v)}</span>;
-            },
+            value: (r: PrimaryRow) => r.ytdExecution,
+            render: (r: PrimaryRow) => <span className={execClass(r.ytdExecution)}>{pct(r.ytdExecution)}</span>,
           },
         ]
       : []),
@@ -507,13 +556,13 @@ function YearMatrix({ title, hint, nameLabel, rows, data, unit }: { title: strin
           <TotalsFooter
             cells={[
               { value: "Итого" },
-              ...months.map((m) => ({ value: fmt(shown.reduce((s, r) => s + r.months[m - 1][unit], 0), unit), right: true })),
-              { value: fmt(total, unit), right: true },
-              { value: "100%", right: true },
+              ...months.map((m) => ({ value: fmt(total.months[m - 1][unit], unit), right: true })),
+              { value: fmt(total.ytd[unit], unit), right: true },
+              { value: pct(total.ytdShare[unit], 1), right: true },
               ...(planOn
                 ? [
-                    { value: kg(planTotal), right: true },
-                    { value: <span className={execClass(planTotal ? data.ytd.kg / planTotal : null)}>{pct(planTotal ? data.ytd.kg / planTotal : null)}</span>, right: true },
+                    { value: kg(total.planYtdKg), right: true },
+                    { value: <span className={execClass(total.ytdExecution)}>{pct(total.ytdExecution)}</span>, right: true },
                   ]
                 : []),
             ]}
@@ -524,7 +573,7 @@ function YearMatrix({ title, hint, nameLabel, rows, data, unit }: { title: strin
   );
 }
 
-function ItemsTable({ data, dealer = true }: { data: PrimaryView; dealer?: boolean }) {
+function ItemsTable({ data, dealer = true, boxes = true }: { data: PrimaryView; dealer?: boolean; boxes?: boolean }) {
   type Row = PrimaryView["items"][number];
   const columns: Column<Row>[] = [
     {
@@ -538,89 +587,178 @@ function ItemsTable({ data, dealer = true }: { data: PrimaryView; dealer?: boole
       ),
     },
     { key: "cat", label: "Категория", value: (r) => r.category },
-    { key: "boxes", label: "Коробок", align: "right", value: (r) => r.ytd.boxes, render: (r) => (r.ytd.boxes ? <span title={r.boxesKnown ? undefined : "часть строк без известной фасовки"}>{num(r.ytd.boxes)}{r.boxesKnown ? "" : " ≈"}</span> : "—") },
+    ...(boxes
+      ? [
+          {
+            key: "boxes",
+            label: "Коробок",
+            align: "right" as const,
+            value: (r: Row) => r.ytd.boxes,
+            render: (r: Row) => (r.ytd.boxes ? <span title={r.boxesKnown ? undefined : "часть строк без известной фасовки"}>{num(r.ytd.boxes)}{r.boxesKnown ? "" : " ≈"}</span> : "—"),
+          },
+        ]
+      : []),
     { key: "kg", label: "Вес, кг", align: "right", value: (r) => r.ytd.kg, render: (r) => <span className="font-semibold">{kg(r.ytd.kg)}</span> },
-    { key: "sf", label: dealer ? "Сумма завода" : "Сумма", align: "right", value: (r) => r.ytd.sumFactory, render: (r) => money(r.ytd.sumFactory) },
-    ...(dealer ? [{ key: "sd", label: "Сумма дилера", align: "right" as const, value: (r: Row) => r.ytd.sumDealer, render: (r: Row) => money(r.ytd.sumDealer) }] : []),
-    { key: "perKg", label: dealer ? "Цена завода за кг" : "Цена за кг", align: "right", value: (r) => (r.ytd.kg ? r.ytd.sumFactory / r.ytd.kg : null), render: (r) => money(r.ytd.kg ? r.ytd.sumFactory / r.ytd.kg : null) },
+    { key: "sf", label: dealer ? "Сумма (цена дилера)" : "Сумма", align: "right", value: (r) => r.ytd.sumFactory, render: (r) => money(r.ytd.sumFactory) },
+    ...(dealer ? [{ key: "sd", label: "По цене продажи дилера", align: "right" as const, value: (r: Row) => r.ytd.sumDealer, render: (r: Row) => money(r.ytd.sumDealer) }] : []),
+    { key: "perKg", label: dealer ? "Цена дилера за кг" : "Цена за кг", align: "right", value: (r) => r.pricePerKg, render: (r) => money(r.pricePerKg) },
+    ...(dealer ? [{ key: "margin", label: "Наценка дилера", align: "right" as const, value: (r: Row) => r.markup, render: (r: Row) => pct(r.markup, 1) }] : []),
   ];
-  if (dealer)
-    columns.push({
-      key: "margin",
-      label: "Наценка",
-      align: "right",
-      value: (r) => (r.ytd.sumFactory && r.ytd.sumDealer ? r.ytd.sumDealer / r.ytd.sumFactory - 1 : null),
-      render: (r) => pct(r.ytd.sumFactory && r.ytd.sumDealer ? r.ytd.sumDealer / r.ytd.sumFactory - 1 : null, 1),
-    });
-  return <DataTable title="Товары" hint={`${num(data.items.length)} артикулов с начала года, по убыванию веса`} columns={columns} rows={data.items} rowKey={(r) => String(r.productId)} limit={50} />;
+  return (
+    <DataTable
+      title="Товары"
+      hint={`${num(data.items.length)} артикулов с начала года (по ${monthName(data.month)}), по убыванию веса`}
+      columns={columns}
+      rows={data.items}
+      rowKey={(r) => String(r.productId)}
+      limit={50}
+    />
+  );
+}
+
+type ClientsMode = "akb" | "kg" | "sum";
+
+const clientModes: Option<ClientsMode>[] = [
+  { key: "akb", label: "АКБ" },
+  { key: "kg", label: "кг" },
+  { key: "sum", label: "сум" },
+];
+
+const clientView = {
+  akb: { title: "Клиенты по месяцам", hint: "клиенты, получившие отгрузку за месяц", head: "Категория — клиентов", total: "Всего клиентов", format: num },
+  kg: { title: "Отгрузка по месяцам, кг", hint: "вес нетто за месяц", head: "Категория — кг", total: "Итого, кг", format: kg },
+  sum: { title: "Отгрузка по месяцам, сум", hint: "сумма нетто по цене дилера", head: "Категория — сум", total: "Итого, сум", format: money },
+} satisfies Record<ClientsMode, { title: string; hint: string; head: string; total: string; format: (v: number | null | undefined) => string }>;
+
+/** Клиенты по месяцам (DOC §9.3): АКБ / кг / сум — та же карточка, что «АКБ по месяцам»; числа считает сервер. */
+function ClientsChart({ clients }: { clients: NonNullable<PrimaryView["clients"]> }) {
+  const [mode, setMode] = useState<ClientsMode>("akb");
+  const view = clientView[mode];
+  return (
+    <AkbChart
+      data={clients[mode]}
+      title={view.title}
+      hint={view.hint}
+      head={view.head}
+      totalLabel={view.total}
+      format={view.format}
+      actions={<Switch value={mode} onChange={setMode} options={clientModes} label="Мера" />}
+      note={
+        <>
+          Клиент — контрагент первички (дилер или прямой клиент завода); за месяц он считается один раз, если нетто его отгрузок (отгрузка минус
+          возвраты) больше нуля; в строке категории — если нетто по категории больше нуля. Итог — не сумма категорий. Кг — нетто, сум — по цене
+          дилера.{" "}
+        </>
+      }
+      averageNote="«Сред/мес» — среднее за закрытые месяцы с отгрузками, считает сервер: идущий месяц не в счёт, неполный месяц занижал бы его."
+    />
+  );
+}
+
+/** Строки контрагентов группы и её итог (дилеры или прямые клиенты завода). */
+function groupOf(data: PrimaryView, group: PrimaryGroup) {
+  const total = data.dealerGroups.find((g) => g.group === group);
+  return total ? { rows: data.dealers.filter((r) => r.group === group), total } : null;
 }
 
 /** Страница «Первичка → Республика». */
 export function PrimaryRepublic({ data }: { data: PrimaryView }) {
   const [unit, setUnit] = useState<Unit>("kg");
-  const monthsDone = data.monthsWithData.filter((m) => m <= data.month).length;
+  const dealers = groupOf(data, "dealer");
+  const direct = groupOf(data, "direct");
+  const directHint = "базары, сети, фирменный магазин — заказы «Завода» и «К К Мерч»";
 
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
-        <UnitSwitch unit={unit} onChange={setUnit} />
+        <Switch value={unit} onChange={setUnit} options={units} label="Единицы" />
       </div>
       <MonthTiles data={data} />
       <MonthsChart data={data} unit={unit} />
-      <PlanFactTable title="План и факт по категориям" nameLabel="Категория" rows={data.categories} data={data} unit={unit} />
-      <PlanFactTable title="План и факт по дилерам" nameLabel="Дилер" rows={data.dealers} data={data} unit={unit} />
-      <ShipmentCalendar data={data} unit={unit} />
+      <PlanFactTable title="План и факт по категориям" nameLabel="Категория" rows={data.categories} total={data.categoryTotal} data={data} />
+      {dealers && <PlanFactTable title="План и факт по дилерам" nameLabel="Дилер" rows={dealers.rows} total={dealers.total} data={data} />}
+      {direct && (
+        <PlanFactTable
+          title="Прямые клиенты завода"
+          hint={`за ${monthName(data.month)}, в килограммах · ${directHint}`}
+          nameLabel="Клиент"
+          rows={direct.rows}
+          total={direct.total}
+          data={data}
+        />
+      )}
+      <ShipmentCalendar key={`${data.year}-${data.month}`} data={data} unit={unit} />
 
       <h2 className="mt-8 flex flex-wrap items-baseline gap-x-3 text-lg font-semibold text-ink">
         С начала года
         <span className="text-xs font-normal uppercase tracking-[0.08em] text-ink-3">
-          {monthsDone} мес. · по {date(data.dataThrough)}
+          {data.ytdMonths} мес. · по {date(data.dataThrough)}
         </span>
       </h2>
       <div className="mt-3">
         <YtdTiles data={data} />
       </div>
-      <YearMatrix title="По категориям" hint="доля — от итога за год" nameLabel="Категория" rows={data.categories} data={data} unit={unit} />
-      <YearMatrix title="По дилерам" hint="сортировка по объёму" nameLabel="Дилер" rows={data.dealers} data={data} unit={unit} />
+      {data.clients && <ClientsChart clients={data.clients} />}
+      <YearMatrix title="По категориям" hint="доля — от итога с начала года" nameLabel="Категория" rows={data.categories} total={data.categoryTotal} data={data} unit={unit} />
+      {dealers && <YearMatrix title="По дилерам" hint="доля — от всей отгрузки с начала года" nameLabel="Дилер" rows={dealers.rows} total={dealers.total} data={data} unit={unit} />}
+      {direct && <YearMatrix title="Прямые клиенты завода" hint={`доля — от всей отгрузки · ${directHint}`} nameLabel="Клиент" rows={direct.rows} total={direct.total} data={data} unit={unit} />}
       <ItemsTable data={data} />
 
+      {data.notes?.map((n) => (
+        <Note key={n}>{n}</Note>
+      ))}
+      {data.otherStocks && data.otherStocks.length > 0 && (
+        <Note>
+          Склады вне справочника регионов — не дилеры, в первичку и в число клиентов не входят:{" "}
+          {data.otherStocks.map((s, i) => (
+            <span key={s.name}>
+              {i > 0 && ", "}«{s.name}» — {num(s.transfers)} {plural(s.transfers, ["перемещение", "перемещения", "перемещений"])}, {kg(s.kg)} кг
+            </span>
+          ))}{" "}
+          за {data.year} год.
+        </Note>
+      )}
       <Note>
-        Первичка — отгрузка завода дилеру, это не продажи в торговые точки. Источник — перемещения Linko со склада «{data.factoryStock ?? "Завод"}» на склады дилеров
-        («отдано» или «принято»); склад «{data.exportStock ?? "Экспорт"}» — экспорт, сюда не входит. Сумма завода — цена перемещения (прайс «Дилерга кириш нарх»), сумма
-        дилера — по прайсу «{data.dealerPriceList ?? "Дилердан чикиш нарх"}» (текущие цены). Коробки — только у товаров, где вес коробки из названия делится на вес
-        единицы ({kg(data.boxesUnknownKg)} кг с начала года без коробок). Возвраты — перемещения со складов дилеров на завод; из отгрузки не вычитаются. Плана первички
-        в Linko нет, поэтому первичка показывается без плана.
+        Первичка — отгрузка завода контрагентам, это не продажи в торговые точки. Источники в Linko: перемещения со склада «{data.factoryStock ?? "Завод"}» на склады
+        дилеров («отдано» или «принято», дата — доставка) и заказы прямых клиентов завода — базаров, сетей, фирменного магазина (филиалы «Завод» и «К К Мерч»,
+        точки не экспортного типа, «доставлен» и «отдан», дата — создание заказа; без «Дегустатсия + Акция»). Склад «{data.exportStock ?? "Экспорт"}» — экспорт,
+        сюда не входит. Возвраты — перемещения со складов дилеров на завод и возвраты по заказам — вычтены: все цифры нетто. Склады сводятся к регионам
+        («Коканд бозор» — Коканд), дилер — склад с регионом из справочника, подпись строки — дилер региона из «Настроек продаж». Сумма (цена дилера) — сумма
+        перемещения или заказа, по этой цене дилер берёт товар у завода; сумма (цена продажи дилера) — количество × цена прайса «{data.dealerPriceList ?? "Дилердан чикиш нарх"}».
+        Цены завода в Linko нет, поэтому «суммы завода», как в таблице первички, здесь нет. План и факт по категориям, дилерам и прямым клиентам — всегда в кг.
+        Коробки — только у товаров, где вес коробки из названия делится на вес единицы ({kg(data.boxesUnknownKg)} кг с начала года без коробок).
+        План — загруженный в OneBase план вида «Первичка»{data.hasPlan ? "" : " (сейчас не загружен — первичка без плана)"}; строки позже отчётного дня (вчера,
+        не позже синхронизации) в отчёт не входят; прогноз — по дате данных{data.asOf ? ` (${date(data.asOf)})` : ""}, а не по сегодняшнему дню.
       </Note>
     </>
   );
 }
 
-/** Страница «Первичка → Экспорт»: заказы филиала «Завод» экспортным точкам — по месяцам, странам и дням. */
+/** Страница «Первичка → Экспорт»: заказы филиала «Завод» экспортным точкам — по месяцам, странам и дням. Коробок у экспорта нет. */
 export function PrimaryExport({ data }: { data: PrimaryView }) {
   const [unit, setUnit] = useState<Unit>("kg");
   const fact = data.monthTotal;
-  const monthsDone = data.monthsWithData.filter((m) => m <= data.month).length;
 
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
-        <UnitSwitch unit={unit} onChange={setUnit} only={["kg", "sumFactory"]} />
+        <Switch value={unit} onChange={setUnit} options={exportUnits} label="Единицы" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <KpiTile label="Отгружено" value={kg(fact.kg)} unit="кг">
-          {money(fact.sumFactory)} · {num(data.monthTransfers)} заказов · {num(data.dealers.filter((d) => d.month.kg).length)} стран
+          {money(fact.sumFactory)} · {ordersLabel(data.monthTransfers)} · {num(data.monthCounterparties)} стран
         </KpiTile>
         <KpiTile label="Прогноз" value={kg(data.forecastKg ?? fact.kg)} unit="кг">
           {data.forecastKg != null ? `темп по ${data.workedDays}-е число` : data.dataThrough ? "месяц закрыт — это факт" : "отгрузок в месяце нет"}
         </KpiTile>
       </div>
       <MonthsChart data={data} unit={unit} />
-      <ShipmentCalendar data={data} unit={unit} nameLabel="Страна" allLabel="все страны" dealerSum={false} />
+      <ShipmentCalendar key={`${data.year}-${data.month}`} data={data} unit={unit} nameLabel="Страна" allLabel="все страны" dealerSum={false} boxes={false} />
 
       <h2 className="mt-8 flex flex-wrap items-baseline gap-x-3 text-lg font-semibold text-ink">
         С начала года
         <span className="text-xs font-normal uppercase tracking-[0.08em] text-ink-3">
-          {monthsDone} мес. · по {date(data.dataThrough)}
+          {data.ytdMonths} мес. · по {date(data.dataThrough)}
         </span>
       </h2>
       <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -628,26 +766,27 @@ export function PrimaryExport({ data }: { data: PrimaryView }) {
           {num(data.ytdArticles)} артикулов
         </KpiTile>
         <KpiTile label="Сумма" value={money(data.ytd.sumFactory)}>
-          {data.ytd.kg ? `${money(data.ytd.sumFactory / data.ytd.kg)} за кг` : "—"}
+          {data.ytdPricePerKg != null ? `${money(data.ytdPricePerKg)} за кг` : "—"}
         </KpiTile>
         <KpiTile label="Стран" value={num(data.export.counterparties)}>
-          {num(data.export.transfers)} заказов за {data.year} год
+          {ordersLabel(data.export.transfers)} за {data.year} год
         </KpiTile>
         <KpiTile label="Возвраты" value={tons(data.ytdReturnsKg)} unit="т">
-          {data.ytdReturnLines ? `${num(data.ytdReturnLines)} строк` : "возвратов не было"}
+          {data.ytdReturnLines ? rowsLabel(data.ytdReturnLines) : "возвратов не было"}
         </KpiTile>
       </div>
-      <YearMatrix title="По странам" hint="доля — от итога за год" nameLabel="Страна" rows={data.dealers} data={data} unit={unit} />
-      <YearMatrix title="По категориям" hint="доля — от итога за год" nameLabel="Категория" rows={data.categories} data={data} unit={unit} />
-      <ItemsTable data={data} dealer={false} />
+      <YearMatrix title="По странам" hint="доля — от итога с начала года" nameLabel="Страна" rows={data.dealers} total={data.dealerTotal} data={data} unit={unit} />
+      <YearMatrix title="По категориям" hint="доля — от итога с начала года" nameLabel="Категория" rows={data.categories} total={data.categoryTotal} data={data} unit={unit} />
+      <ItemsTable data={data} dealer={false} boxes={false} />
 
       {data.notes?.map((n) => (
         <Note key={n}>{n}</Note>
       ))}
       <Note>
         Экспорт — заказы Linko филиала «Завод» торговым точкам с типом EXPORT (статус «доставлен», дата — приёмка), минус возвраты по строкам. Страна
-        определяется по названию или адресу точки в Linko (например «Daler Tojikiston», «Adamium Armenia»); точка без страны в названии показывается своим
-        названием. Сумма — сумма заказа в сумах. Перемещения на склад «Экспорт» сюда не входят: это внутреннее движение склада, а не продажа.
+        определяется по названию или адресу точки в Linko (например «Daler Tojikiston», «Adamium Armenia»); Россия — по точкам: «Россия (Дагестан)» и
+        «Россия (Уфа)» («ООО ВЛАДКОН»), как в «Полевом контроле»; точка без страны в названии показывается своим названием. Сумма — сумма заказа в сумах.
+        Коробок у экспорта нет: в строках заказа Linko только штуки и кг. Перемещения на склад «Экспорт» сюда не входят: это внутреннее движение склада, а не продажа.
       </Note>
     </>
   );

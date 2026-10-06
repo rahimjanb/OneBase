@@ -35,6 +35,7 @@ export default async function CategoryPage({
       crumbs={[{ label: "Все категории", href: all }, { label: data.name }]}
       back={all}
       sp={sp}
+      period={data.period}
     >
       {card ? (
         <>
@@ -50,7 +51,7 @@ export default async function CategoryPage({
               дистрибуция {pct(card.distribution)}
             </KpiTile>
           </div>
-          <SkuTable card={card} prevLabel={prevLabel} query={query} />
+          <SkuTable card={card} prevLabel={prevLabel} query={query} mono={data.mono} />
         </>
       ) : (
         <p className="rounded-xl border border-line bg-surface px-4 py-6 text-center text-sm text-ink-3">

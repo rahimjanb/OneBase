@@ -1,23 +1,32 @@
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Sales.Metrics;
-using OneBase.Application.Sales.Stock;
 
 namespace OneBase.Application.Sales.Primary;
 
 /// <summary>
 /// «Первичка → Экспорт»: заказы филиала «Завод» (SalesOptions.ExcludedBranches) торговым точкам с типом EXPORT
-/// (SalesOptions.ExportMarketTypes) минус возвраты по строкам. Дата — приёмка заказа (как во вторичке), у возврата — дата возврата.
+/// (SalesOptions.ExportMarketTypes) минус возвраты по строкам. Статусы — SalesOptions.ExportSoldStatuses (доставленные), а не статусы
+/// вторички. Дата — приёмка заказа (как во вторичке), у возврата — дата возврата.
 /// Строки — страны: страна берётся из названия или адреса точки (SalesOptions.ExportCountries), иначе — название точки.
-/// Сумма — сумма заказа в основной валюте; заказы в другой валюте дают вес без суммы.
+/// Сумма — сумма заказа в основной валюте; заказы в другой валюте дают вес без суммы. Коробок нет (в строках заказа — штуки и кг): null.
+/// Приёмки позже отчётного дня (вчера, не позже синхронизации) в отчёт не входят.
 /// </summary>
 public sealed partial class PrimaryService
 {
-    public Task<PrimaryView> GetExportAsync(int? year, int? month, CancellationToken ct = default) =>
-        SalesViewCache.GetAsync(cache, signal, $"sales:primary-export:{year}:{month}", () => BuildExportAsync(year, month, ct));
+    public Task<PrimaryView> GetExportAsync(int? year, int? month, CancellationToken ct = default) => GetExportAsync(year, month, new PrimaryCalendarQuery(), ct);
+
+    /// <summary>Экспорт месяца; calendar — период и разбор календаря отгрузок по странам.</summary>
+    public async Task<PrimaryView> GetExportAsync(int? year, int? month, PrimaryCalendarQuery calendar, CancellationToken ct = default) =>
+        WithCalendar(await SalesViewCache.GetAsync(cache, signal, $"sales:primary-export:{year}:{month}", () => BuildExportAsync(year, month, ct)), calendar);
 
     private sealed record ExportSale(long? OrderId, long MarketId, DateOnly Date, long? ProductId, decimal Amount, decimal Kg, decimal Sum);
 
-    private sealed record ExportData(IReadOnlyList<ExportSale> Sales, IReadOnlyDictionary<long, string> Countries, IReadOnlyDictionary<long, string> MarketNames, int OtherCurrencyOrders);
+    /// <summary>Экспорт: строки, страна и название точки, заказы в другой валюте — id → дата приёмки.</summary>
+    private sealed record ExportData(
+        IReadOnlyList<ExportSale> Sales,
+        IReadOnlyDictionary<long, string> Countries,
+        IReadOnlyDictionary<long, string> MarketNames,
+        IReadOnlyDictionary<long, DateOnly> OtherCurrencyOrders);
 
     private async Task<ExportData> LoadExportAsync(CancellationToken ct)
     {
@@ -29,7 +38,7 @@ public sealed partial class PrimaryService
             .ToList();
         var ids = markets.Select(m => m.Id).ToList();
         var branches = options.ExcludedBranches.Select(b => b.Trim()).ToList();
-        var sold = options.SoldStatuses;
+        var sold = options.ExportSoldStatuses; // только доставленные — экспорт сверен с «Полевым контролем» до килограмма
         var returned = options.ReturnStatuses;
 
         var orders = await (
@@ -58,13 +67,13 @@ public sealed partial class PrimaryService
             sales,
             markets.ToDictionary(m => m.Id, m => options.ExportCountryOf(m.Name, m.Address) ?? m.Name.Trim()),
             markets.ToDictionary(m => m.Id, m => m.Name.Trim()),
-            orders.Where(o => !options.IsBaseCurrency(o.Currency)).Select(o => o.Id).Distinct().Count());
+            orders.Where(o => !options.IsBaseCurrency(o.Currency)).GroupBy(o => o.Id).ToDictionary(g => g.Key, g => g.First().Date));
     }
 
-    /// <summary>Итог экспорта с начала года — для плитки «Экспорт» на входе в «Первичку».</summary>
-    private static PrimaryCard ExportCard(ExportData export, int year)
+    /// <summary>Итог экспорта с начала года (строки не позже отчётного дня cutoff) — для плитки «Экспорт» на входе в «Первичку».</summary>
+    private static PrimaryCard ExportCard(ExportData export, int year, DateOnly cutoff)
     {
-        var rows = export.Sales.Where(s => s.Date.Year == year).ToList();
+        var rows = export.Sales.Where(s => s.Date.Year == year && s.Date <= cutoff).ToList();
         return new PrimaryCard(
             rows.Sum(s => s.Kg),
             rows.Sum(s => s.Sum),
@@ -72,142 +81,149 @@ public sealed partial class PrimaryService
             rows.Where(s => s.OrderId != null).Select(s => s.OrderId).Distinct().Count());
     }
 
-    public async Task<PrimaryView> BuildExportAsync(int? yearArg, int? monthArg, CancellationToken ct = default)
+    private async Task<PrimaryMonth> BuildExportAsync(int? yearArg, int? monthArg, CancellationToken ct)
     {
         var export = await LoadExportAsync(ct);
         var branches = options.ExcludedBranches.Select(b => b.Trim()).ToList();
-        var sold = options.SoldStatuses;
+        var sold = options.ExportSoldStatuses;
 
-        // Месяц по умолчанию и «данные по» — по последнему заказу филиала «Завод» (любого типа точки), а не только экспорта.
-        var factoryLast = await db.LinkoOrders.AsNoTracking()
-            .Where(o => sold.Contains(o.Status) && o.AcceptedDate != null && o.BranchName != null && branches.Contains(o.BranchName))
-            .MaxAsync(o => o.AcceptedDate, ct);
-        var last = factoryLast ?? (export.Sales.Count == 0 ? (DateOnly?)null : export.Sales.Max(s => s.Date));
-        var year = yearArg ?? last?.Year ?? DateTime.Today.Year;
-        var month = monthArg is >= 1 and <= 12 ? monthArg.Value : last?.Month ?? DateTime.Today.Month;
+        // Месяц по умолчанию, дата данных и «данные по» — по заказам филиала «Завод» (любого типа точки), а не только экспорта.
+        // Приёмки позже отчётного дня (сегодня и в будущем) в отчёт не входят — как во вторичке.
+        var syncedAt = (await db.LinkoSyncStates.AsNoTracking().FirstOrDefaultAsync(s => s.Entity == "orders", ct))?.LastSuccessAt;
+        var cutoff = PrimaryMath.DataLimit(SecondarySales.ReportCutoff(DateTimeOffset.UtcNow), SyncedOn([syncedAt]));
+        var factoryDays = (await db.LinkoOrders.AsNoTracking()
+                .Where(o => sold.Contains(o.Status) && o.AcceptedDate != null && o.BranchName != null && branches.Contains(o.BranchName))
+                .Select(o => o.AcceptedDate!.Value)
+                .Distinct()
+                .ToListAsync(ct))
+            .Where(d => d <= cutoff)
+            .ToList();
+        var asOf = PrimaryMath.AsOf(factoryDays, cutoff, null);
+        var year = yearArg ?? asOf?.Year ?? DateTime.Today.Year;
+        var month = monthArg is >= 1 and <= 12 ? monthArg.Value : asOf?.Month ?? DateTime.Today.Month;
         var days = DateTime.DaysInMonth(year, month);
-        var from = new DateOnly(year, month, 1);
-        var to = from.AddMonths(1);
-        var monthFactoryLast = await db.LinkoOrders.AsNoTracking()
-            .Where(o => sold.Contains(o.Status) && o.AcceptedDate >= from && o.AcceptedDate < to && o.BranchName != null && branches.Contains(o.BranchName))
-            .MaxAsync(o => o.AcceptedDate, ct);
+        var monthFactoryDays = factoryDays.Where(d => d.Year == year && d.Month == month).ToList();
 
         var products = await db.LinkoProducts.AsNoTracking().Select(p => new { p.Id, p.Name, p.Code, p.TypeId }).ToDictionaryAsync(p => p.Id, ct);
-        var packs = products.ToDictionary(p => p.Key, p => StockMath.ParsePack(p.Value.Name));
         var types = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
         var categories = SalesCategories.Build(options.Categories, types);
         long? GroupOf(long? product) => categories.GroupOf(product is { } p && products.TryGetValue(p, out var info) ? info.TypeId : null);
 
-        var shipments = export.Sales
-            .Select(s =>
-            {
-                var (amounts, boxesKnown) = AmountsOf(s.ProductId is { } p ? packs.GetValueOrDefault(p) : null, s.Amount, s.Kg, s.Sum, 0);
-                return (Sale: s, Country: export.Countries[s.MarketId], Amounts: amounts, BoxesKnown: boxesKnown);
-            })
-            .ToList();
-        var yearRows = shipments.Where(s => s.Sale.Date.Year == year).ToList();
-        var inMonth = yearRows.Where(s => s.Sale.Date.Month == month).ToList();
+        var pricing = PrimaryPricing.WeightOnly;
+        var zero = pricing.Zero;
+        var (all, afterCutoff) = PrimaryMath.ReportRows(export.Sales
+            .Select(s => new PrimaryShipment(s.OrderId is { } id ? $"o:{id}" : "return", export.Countries[s.MarketId], s.Date, s.ProductId,
+                pricing.Value(s.ProductId, s.Amount, s.Kg, s.Sum).Amounts, false, s.OrderId is null)), cutoff);
+        var yearSales = export.Sales.Where(s => s.Date.Year == year && s.Date <= cutoff).ToList();
+        var yearRows = all.Where(s => s.Date.Year == year).ToList();
+        var inMonth = yearRows.Where(s => s.Date.Month == month).ToList();
+        var ytdRows = yearRows.Where(s => s.Date.Month <= month).ToList();
+        var running = PrimaryMath.IsRunning(year, month, asOf);
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var running = year == today.Year && month == today.Month;
-        var dataThrough = monthFactoryLast ?? (inMonth.Count == 0 ? (DateOnly?)null : inMonth.Max(s => s.Sale.Date));
-        var workedDays = dataThrough is null ? 0 : running ? today.Day : days;
+        // Строки — страны; подпись — точки Linko этой страны.
+        var parties = yearSales
+            .GroupBy(s => export.Countries[s.MarketId])
+            .ToDictionary(g => g.Key, g => new PrimaryParty(g.Key, g.Key, string.Join(", ", g.Select(s => export.MarketNames[s.MarketId]).Distinct().Order()), null, PrimaryMath.NoPlan));
 
-        static PrimaryAmounts Sum(IEnumerable<PrimaryAmounts> source) => source.Aggregate(PrimaryAmounts.Zero, (a, s) => a.Add(s));
-        IReadOnlyList<PrimaryAmounts> ByMonth<T>(IEnumerable<T> source, Func<T, DateOnly> dateOf, Func<T, PrimaryAmounts> amountsOf)
-        {
-            var list = source.ToLookup(s => dateOf(s).Month);
-            return Enumerable.Range(1, 12).Select(m => Sum(list[m].Select(amountsOf))).ToList();
-        }
-
-        IReadOnlyList<decimal?> noPlan = Enumerable.Repeat<decimal?>(null, 12).ToList();
-        var countryRows = yearRows
-            .GroupBy(s => s.Country)
-            .Select(g => new PrimaryRow(
-                g.Key,
-                g.Key,
-                string.Join(", ", g.Select(s => export.MarketNames[s.Sale.MarketId]).Distinct().Order()),
-                Sum(g.Where(s => s.Sale.Date.Month == month).Select(s => s.Amounts)),
-                ByMonth(g, s => s.Sale.Date, s => s.Amounts),
-                null,
-                noPlan))
+        var months = PrimaryMath.ByMonth(yearRows, zero);
+        var monthTotal = months[month - 1];
+        var ytd = PrimaryMath.SumOf(ytdRows.Select(s => s.Amounts), zero);
+        var countryRows = PrimaryMath.PartyRows(yearRows, parties, month, zero, monthTotal, ytd)
             .OrderByDescending(r => r.Month.Kg).ThenByDescending(r => r.Months.Sum(m => m.Kg))
             .ToList();
 
         var categoryRows = yearRows
-            .GroupBy(s => CategoryKey(GroupOf(s.Sale.ProductId)))
+            .GroupBy(s => CategoryKey(GroupOf(s.ProductId)))
             .Select(g =>
             {
-                var group = GroupOf(g.First().Sale.ProductId);
-                return new PrimaryRow(g.Key, categories.NameOf(group), SalesCategories.IsConfigured(group) ? null : "вне категорий отчёта",
-                    Sum(g.Where(s => s.Sale.Date.Month == month).Select(s => s.Amounts)), ByMonth(g, s => s.Sale.Date, s => s.Amounts), null, noPlan);
+                var group = GroupOf(g.First().ProductId);
+                return PrimaryMath.Row(g.Key, categories.NameOf(group), SalesCategories.IsConfigured(group) ? null : "вне категорий отчёта", null,
+                    PrimaryMath.ByMonth(g, zero), PrimaryMath.NoPlan, month, zero, monthTotal, ytd);
             })
             .OrderByDescending(c => c.Months.Sum(m => m.Kg))
             .ToList();
 
-        var ytdRows = yearRows.Where(s => s.Sale.Date.Month <= month).ToList();
-        var items = yearRows
-            .Where(s => s.Sale.ProductId != null)
-            .GroupBy(s => s.Sale.ProductId!.Value)
+        var items = ytdRows
+            .Where(s => s.ProductId != null)
+            .GroupBy(s => s.ProductId!.Value)
             .Select(g =>
             {
                 var product = products.GetValueOrDefault(g.Key);
-                return new PrimaryItemRow(g.Key, product?.Name ?? $"Товар {g.Key}", product?.Code, categories.NameOf(GroupOf(g.Key)),
-                    Sum(g.Select(s => s.Amounts)), g.All(s => s.BoxesKnown));
+                var sum = PrimaryMath.SumOf(g.Select(s => s.Amounts), zero);
+                return new PrimaryItemRow(g.Key, product?.Name ?? $"Товар {g.Key}", product?.Code, categories.NameOf(GroupOf(g.Key)), sum, false,
+                    PrimaryMath.PricePerKg(sum), null);
             })
+            .Where(i => i.Ytd.Kg != 0 || i.Ytd.SumFactory != 0)
             .OrderByDescending(i => i.Ytd.Kg)
             .ToList();
 
-        var monthKg = inMonth.Sum(s => s.Amounts.Kg);
         var notes = new List<string>();
-        if (export.OtherCurrencyOrders > 0)
+        var otherCurrency = export.OtherCurrencyOrders.Values.Count(d => d.Year == year && d <= cutoff);
+        if (otherCurrency > 0)
         {
-            notes.Add($"Заказов в другой валюте: {export.OtherCurrencyOrders} — их вес учтён, сумма нет (курса в Linko нет).");
+            notes.Add($"Заказов в другой валюте за {year} год: {otherCurrency} — их вес учтён, сумма нет (курса в Linko нет).");
         }
 
-        var syncedAt = (await db.LinkoSyncStates.AsNoTracking().FirstOrDefaultAsync(s => s.Entity == "orders", ct))?.LastSuccessAt;
-        return new PrimaryView(
-            year,
-            month,
-            dataThrough,
-            days,
-            workedDays,
-            syncedAt,
-            null,
-            null,
-            null,
-            new PrimaryCard(0, 0, 0, 0),
-            ExportCard(export, year),
-            Sum(inMonth.Select(s => s.Amounts)),
-            null,
-            running && workedDays > 0 ? SalesMath.Forecast(monthKg, workedDays, days) : null,
-            inMonth.Where(s => s.Sale.OrderId != null).Select(s => s.Sale.OrderId).Distinct().Count(),
-            yearRows.Select(s => s.Sale.Date.Month).Distinct().Order().ToList(),
-            ByMonth(yearRows, s => s.Sale.Date, s => s.Amounts),
-            noPlan,
-            Sum(ytdRows.Select(s => s.Amounts)),
-            ytdRows.Where(s => s.Sale.ProductId != null).Select(s => s.Sale.ProductId).Distinct().Count(),
-            -ytdRows.Where(s => s.Sale.OrderId == null).Sum(s => s.Amounts.Kg),
-            ytdRows.Count(s => s.Sale.OrderId == null),
-            null,
-            ytdRows.Where(s => !s.BoxesKnown).Sum(s => s.Amounts.Kg),
-            categoryRows,
-            countryRows,
-            items,
-            inMonth.Select(s => new PrimaryLine(s.Sale.Date.Day, s.Country, s.Sale.ProductId, s.Amounts.Kg, s.Amounts.Boxes, s.Amounts.SumFactory, 0)).ToList(),
-            inMonth.Where(s => s.Sale.ProductId != null).Select(s => s.Sale.ProductId!.Value).Distinct()
-                .ToDictionary(id => id, id => products.TryGetValue(id, out var p) ? p.Name : $"Товар {id}"),
-            notes);
-    }
+        if (afterCutoff > 0)
+        {
+            notes.Add($"Строк экспорта после отчётного дня ({cutoff:dd.MM.yyyy}): {afterCutoff} — в отчёт войдут, когда их день станет отчётным.");
+        }
 
-    /// <summary>
-    /// Коробки — по весу коробки из названия: у весового товара (единица учёта — 1 кг) любой, у штучного — если в коробке
-    /// целое число штук этой строки. Иначе название не совпадает с тем, как товар учитывается, и коробки не считаются.
-    /// </summary>
-    private static (PrimaryAmounts Amounts, bool BoxesKnown) AmountsOf(PackInfo? pack, decimal amount, decimal kg, decimal sumFactory, decimal sumDealer)
-    {
-        var unitKg = StockMath.UnitKg(kg, amount);
-        var boxKg = pack?.BoxKg is { } b && unitKg is { } u && (Math.Abs(u - 1) < 0.001m || StockMath.BoxConsistent(b, u)) ? b : (decimal?)null;
-        return (new PrimaryAmounts(kg, boxKg is { } bk ? kg / bk : 0, sumFactory, sumDealer), boxKg is not null);
+        var ytdReturns = ytdRows.Where(s => s.IsReturn).ToList();
+        var ytdReturnsKg = -ytdReturns.Sum(s => s.Amounts.Kg);
+        var monthsWithData = yearRows.Select(s => s.Date.Month).Distinct().Order().ToList();
+        var forecast = PrimaryMath.Forecast(monthTotal.Kg, year, month, asOf);
+        var view = new PrimaryView(
+            Year: year,
+            Month: month,
+            DataThrough: running ? asOf : monthFactoryDays.Count > 0 ? monthFactoryDays.Max() : inMonth.Count == 0 ? null : inMonth.Max(s => s.Date),
+            AsOf: asOf,
+            Running: running,
+            RunningMonth: PrimaryMath.RunningMonth(year, asOf),
+            DaysInMonth: days,
+            WorkedDays: PrimaryMath.WorkedDays(year, month, asOf, inMonth.Count > 0 || monthFactoryDays.Count > 0),
+            SyncedAt: syncedAt,
+            FactoryStock: null,
+            ExportStock: null,
+            DealerPriceList: null,
+            Republic: new PrimaryCard(0, 0, 0, 0),
+            Export: ExportCard(export, year, cutoff),
+            MonthTotal: monthTotal,
+            PlanMonthKg: null,
+            MonthExecution: null,
+            MonthRemainingKg: null,
+            MonthOverPlanKg: null,
+            ForecastKg: forecast,
+            ForecastExecution: null,
+            MonthTransfers: inMonth.Where(s => !s.IsReturn).Select(s => s.Doc).Distinct().Count(),
+            MonthCounterparties: countryRows.Count(r => r.Month.Kg > 0),
+            HasPlan: false,
+            MonthsWithData: monthsWithData,
+            Months: months,
+            PlanMonths: PrimaryMath.NoPlan,
+            MonthExecutions: PrimaryMath.NoPlan,
+            Ytd: ytd,
+            YtdMonths: monthsWithData.Count(m => m <= month),
+            YtdArticles: ytdRows.Where(s => s.ProductId != null).Select(s => s.ProductId).Distinct().Count(),
+            YtdReturnsKg: ytdReturnsKg,
+            YtdReturnLines: ytdReturns.Count,
+            YtdReturnsShare: SalesMath.Ratio(ytdReturnsKg, ytdRows.Where(s => !s.IsReturn).Sum(s => s.Amounts.Kg)),
+            PlanYtdKg: null,
+            YtdExecution: null,
+            YtdPricePerKg: PrimaryMath.PricePerKg(ytd),
+            YtdMarkupSum: null,
+            YtdMarkup: null,
+            BoxesUnknownKg: 0, // коробок у экспорта нет вовсе
+            Categories: categoryRows,
+            CategoryTotal: PrimaryMath.Total("total", "Итого", null, categoryRows, month, zero, monthTotal, ytd),
+            Dealers: countryRows,
+            DealerGroups: [],
+            DealerTotal: PrimaryMath.Total("total", "Итого", null, countryRows, month, zero, monthTotal, ytd),
+            Items: items,
+            Clients: null,
+            Calendar: null,
+            Notes: notes);
+
+        return new PrimaryMonth(view, inMonth, parties, ProductsOf(inMonth, products.ToDictionary(p => p.Key, p => (p.Value.Name, p.Value.Code)), product => categories.NameOf(GroupOf(product))), zero);
     }
 }

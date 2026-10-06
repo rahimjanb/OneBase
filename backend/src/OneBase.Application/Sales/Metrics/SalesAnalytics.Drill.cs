@@ -4,9 +4,10 @@ namespace OneBase.Application.Sales.Metrics;
 
 public sealed record StoreCategoryRow(string Name, decimal Kg, decimal Revenue, decimal? Share);
 
-public sealed record StoreProductRow(long ProductId, string Name, string? Code, string Category, decimal Kg, decimal Revenue);
+/// <summary>Товар в магазине за месяц; IsTop — товар из списка ТОП.</summary>
+public sealed record StoreProductRow(long ProductId, string Name, string? Code, string Category, decimal Kg, decimal Revenue, bool IsTop = false);
 
-/// <summary>Магазин (торговая точка) за месяц: что и на сколько ему продали.</summary>
+/// <summary>Магазин (торговая точка) за месяц: что и на сколько ему продали. ShareOfAgent — «доля в объёме ТП»: кг магазина ÷ кг ТП.</summary>
 public sealed record StoreView(
     PeriodInfo Period,
     long MarketId,
@@ -29,25 +30,30 @@ public sealed record StoreView(
 
 public sealed record AgentStoreRow(long MarketId, string Name, decimal Kg, decimal Revenue, int Categories, int Positions, decimal? Share);
 
-/// <summary>Товар в наборе: вес, выручка, доля выручки, АКБ и дистрибуция (доля ТТ набора, купивших товар).</summary>
+/// <summary>
+/// Товар категорий отчёта в наборе: вес, выручка, доля выручки (от выручки товаров категорий отчёта в наборе), Akb — ТТ артикула
+/// (положительная строка, SalesMath.SkuTt) и дистрибуция — их доля от АКБ набора. IsTop — товар из списка ТОП.
+/// </summary>
 public sealed record ProductRow(long ProductId, string Name, string? Code, string Category, bool InReport, decimal Kg, decimal Revenue,
-    decimal? Share, int Akb, decimal? Distribution);
+    decimal? Share, int Akb, decimal? Distribution, bool IsTop = false);
 
 /// <summary>Товар, который регион ставит шире, чем этот ТП.</summary>
 public sealed record LaggingProductRow(long ProductId, string Name, string Category, int AgentAkb, decimal? AgentDistribution,
     decimal? RegionDistribution, decimal RegionRevenue);
 
+/// <summary>Ассортимент ТП; ProductsOutsideReport — товаров вне категорий отчёта (бонус, подарки), в «Товары» они не входят.</summary>
 public sealed record AgentAssortment(
     IReadOnlyList<CategoryCard> Categories,
     IReadOnlyList<AgentStoreRow> Stores,
     IReadOnlyList<ProductRow> Products,
-    IReadOnlyList<LaggingProductRow> Lagging);
+    IReadOnlyList<LaggingProductRow> Lagging,
+    int ProductsOutsideReport = 0);
 
 public sealed record ExportMarketRow(long MarketId, string Name, decimal Kg, decimal Revenue, int Orders, decimal PrevMonthKg);
 
 public sealed record ExportAgentRow(long? AgentId, string Name, decimal Kg, decimal Revenue, int Markets);
 
-/// <summary>Экспорт и опт — филиал «Завод» в Linko: отдельно от вторички.</summary>
+/// <summary>Экспорт и опт — филиал «Завод» в Linko: отдельно от вторички. ProductsOutsideReport — товаров вне категорий отчёта.</summary>
 public sealed record ExportView(
     PeriodInfo Period,
     ExcludedSummary? Summary,
@@ -55,11 +61,14 @@ public sealed record ExportView(
     IReadOnlyList<ExportMarketRow> Markets,
     IReadOnlyList<ExportAgentRow> Agents,
     IReadOnlyList<ProductRow> Products,
-    IReadOnlyList<CurrencyTotal> OtherCurrency);
+    IReadOnlyList<CurrencyTotal> OtherCurrency,
+    int ProductsOutsideReport = 0);
 
 public sealed record UnitRef(string Id, string Name);
 
-public sealed record AssortmentRegionRow(string Id, string Name, decimal Kg, decimal Revenue, int SkuSelling, int SkuNotCarried, int SkuLost, int Akb);
+/// <summary>Регион в «По регионам»; NoData — в регионе за месяц нет ни одной покупки («нет данных», счётчики SKU — нули).</summary>
+public sealed record AssortmentRegionRow(string Id, string Name, decimal Kg, decimal Revenue, int SkuSelling, int SkuNotCarried, int SkuLost, int Akb,
+    bool NoData = false);
 
 public static class MatrixLevels
 {
@@ -72,17 +81,23 @@ public static class MatrixLevels
     public const string Ok = "ok";
 }
 
-public sealed record MatrixCell(string RegionId, decimal? Distribution, string Level);
+/// <summary>Клетка матрицы: дистрибуция товара в регионе (Tt — ТТ с положительной строкой товара ÷ АКБ региона) и её цвет (MatrixLevels).</summary>
+public sealed record MatrixCell(string RegionId, decimal? Distribution, string Level, int Tt = 0);
 
-public sealed record MatrixRow(long ProductId, string Name, string Category, decimal Revenue, decimal? AverageDistribution, IReadOnlyList<MatrixCell> Cells);
+/// <summary>Строка матрицы; AverageDistribution — дистрибуция по всему охвату: Σ ТТ с товаром ÷ Σ АКБ регионов матрицы.</summary>
+public sealed record MatrixRow(long ProductId, string Name, string Category, decimal Revenue, decimal? AverageDistribution, IReadOnlyList<MatrixCell> Cells,
+    bool IsTop = false);
 
 /// <summary>
 /// Плитки над категориями: факт и выручка охвата, факт всего прошлого месяца, SKU в продаже / в ассортименте
-/// и пропавшие (суммы по категориям отчёта), ТТ с покупкой.
+/// и пропавшие (суммы по категориям отчёта), ТТ с покупкой; Mono — «Только он»: ТТ с положительной строкой ровно по одному SKU.
 /// </summary>
-public sealed record AssortmentSummary(decimal FactKg, decimal Revenue, decimal PrevMonthKg, int SkuSold, int SkuTotal, int SkuLost, int Outlets);
+public sealed record AssortmentSummary(decimal FactKg, decimal Revenue, decimal PrevMonthKg, int SkuSold, int SkuTotal, int SkuLost, int Outlets, int Mono = 0);
 
-/// <summary>Вкладка «Ассортимент»: плитки, категории, АКБ по месяцам, регионы, товары и матрица «товар × регион».</summary>
+/// <summary>
+/// Вкладка «Ассортимент»: плитки, категории, АКБ по месяцам, регионы (у охвата из двух и больше регионов), товары категорий отчёта
+/// (ProductsOutsideReport — сколько товаров других типов Linko в таблицу не вошло) и матрица «товар × регион».
+/// </summary>
 public sealed record AssortmentView(
     PeriodInfo Period,
     string ScopeName,
@@ -93,12 +108,16 @@ public sealed record AssortmentView(
     IReadOnlyList<UnitRef> MatrixRegions,
     IReadOnlyList<MatrixRow> Matrix,
     DataQualityView Quality,
-    AssortmentSummary Summary);
+    AssortmentSummary Summary,
+    int ProductsOutsideReport = 0);
 
 public sealed partial class SalesAnalytics
 {
     /// <summary>Порог «матрицы»: оранжевым — товар стоит меньше чем в этой доле от своей средней дистрибуции.</summary>
     private const decimal MatrixLowShare = 0.4m;
+
+    /// <summary>Строк в матрице «товар × регион»: товары с наибольшей выручкой в охвате.</summary>
+    private const int MatrixRows = 20;
 
     public StoreView CachedStore(long marketId, long? agentId) => View($"store:{marketId}:{agentId}", () => Store(marketId, agentId));
 
@@ -114,8 +133,10 @@ public sealed partial class SalesAnalytics
         var lines = _d.Current.Where(l => l.MarketId == marketId && (agentId is null || l.AgentId == agentId)).ToList();
         var previous = _d.Previous.Where(l => l.MarketId == marketId && (agentId is null || l.AgentId == agentId)).ToList();
         var regionId = _marketRegion.TryGetValue(marketId, out var r) ? r : lines.Select(RegionOf).FirstOrDefault(NoRegionId);
+        var kg = lines.Sum(l => l.Kg);
         var revenue = lines.Sum(l => l.Revenue);
-        var agentRevenue = agentId is { } a ? _currentByAgent[a].Sum(l => l.Revenue) : (decimal?)null;
+        // «Доля в объёме ТП» — по весу (DOC): кг магазина ÷ кг ТП за месяц.
+        var agentKg = agentId is { } a ? _currentByAgent[a].Sum(l => l.Kg) : (decimal?)null;
 
         var categories = lines.GroupBy(l => GroupOf(l.CategoryId))
             .Select(g => new StoreCategoryRow(_cats.NameOf(g.Key), g.Sum(l => l.Kg), g.Sum(l => l.Revenue), SalesMath.Ratio(g.Sum(l => l.Revenue), revenue)))
@@ -126,7 +147,7 @@ public sealed partial class SalesAnalytics
             {
                 var product = _d.Products.GetValueOrDefault(g.Key);
                 return new StoreProductRow(g.Key, product?.Name ?? $"Товар {g.Key}", product?.Code, _cats.NameOf(GroupOf(product?.CategoryId)),
-                    g.Sum(l => l.Kg), g.Sum(l => l.Revenue));
+                    g.Sum(l => l.Kg), g.Sum(l => l.Revenue), _d.Top.Contains(product?.Code));
             })
             .OrderByDescending(p => p.Revenue)
             .ToList();
@@ -139,12 +160,12 @@ public sealed partial class SalesAnalytics
             _regions.TryGetValue(regionId, out var region) ? region.Name : null,
             agentId,
             agentId is { } id ? AgentName(id) : null,
-            lines.Sum(l => l.Kg),
+            kg,
             revenue,
             SalesMath.OrderCount(lines),
             SalesMath.CategoryCount(lines, GroupOf),
             lines.Where(l => l.OrderId != null && l.ProductId != null).Select(l => l.ProductId).Distinct().Count(),
-            agentRevenue is { } ar ? SalesMath.Ratio(revenue, ar) : null,
+            agentKg is { } ak ? SalesMath.Ratio(kg, ak) : null,
             previous.Sum(l => l.Kg),
             previous.Sum(l => l.Revenue),
             categories,
@@ -152,7 +173,10 @@ public sealed partial class SalesAnalytics
             lines.Where(l => l.AgentId != null).Select(l => AgentName(l.AgentId!.Value)).Distinct().Order().ToList());
     }
 
-    /// <summary>Ассортимент агента: категории, магазины, товары и товары, которые регион ставит шире.</summary>
+    /// <summary>
+    /// Ассортимент агента: категории, магазины, товары и товары, которые регион ставит шире. Дистрибуция товара у ТП и в регионе —
+    /// ТТ с положительной строкой товара ÷ АКБ ТП или региона.
+    /// </summary>
     private AgentAssortment AgentAssortmentOf(long agent, Guid regionId)
     {
         var lines = _currentByAgent[agent].ToList();
@@ -173,8 +197,8 @@ public sealed partial class SalesAnalytics
         var lagging = regionByProduct
             .Select(g =>
             {
-                var regionDist = SalesMath.Ratio(SalesMath.Akb(g), regionAkb);
-                var own = SalesMath.Akb(agentByProduct[g.Key]);
+                var regionDist = SalesMath.Ratio(SalesMath.SkuTt(g), regionAkb);
+                var own = SalesMath.SkuTt(agentByProduct[g.Key]);
                 return (Product: g.Key, RegionDist: regionDist, Own: own, OwnDist: SalesMath.Ratio(own, agentAkb), RegionRevenue: g.Sum(l => l.Revenue));
             })
             .Where(x => x.RegionDist >= 0.15m && agentAkb > 0 && (x.OwnDist ?? 0) < x.RegionDist!.Value / 2)
@@ -188,7 +212,9 @@ public sealed partial class SalesAnalytics
             })
             .ToList();
 
-        return new AgentAssortment(CategoryCardsFor(lines, _previousByAgent[agent].ToList(), republic: false), stores, ProductsOf(lines), lagging);
+        var products = ProductsOf(lines);
+        return new AgentAssortment(CategoryCardsFor(lines, _previousByAgent[agent].ToList(), republic: false), stores, products.Rows, lagging,
+            products.OutsideReport);
     }
 
     public ExportView Export()
@@ -207,7 +233,9 @@ public sealed partial class SalesAnalytics
             .OrderByDescending(a => a.Kg)
             .ToList();
 
-        return new ExportView(Period, Excluded(), CategoryCardsFor(now, before, republic: false), markets, agents, ProductsOf(now), _d.ExcludedOtherCurrency);
+        var products = ProductsOf(now);
+        return new ExportView(Period, Excluded(), CategoryCardsFor(now, before, republic: false), markets, agents, products.Rows, _d.ExcludedOtherCurrency,
+            products.OutsideReport);
     }
 
     public AssortmentView Assortment(string? direction, Guid? region)
@@ -223,52 +251,79 @@ public sealed partial class SalesAnalytics
 
         var lines = Lines(scope).ToList();
         var previous = scope is null ? _d.Previous : scope.SelectMany(x => _previousByRegion[x]).ToList();
-        var categories = CategoryCardsFor(lines, previous, republic: scope is null);
+        // Категории — по каталогу: знаменатель «из M SKU» не зависит от охвата, категория без продаж в охвате — «0 из M».
+        var categories = CatalogCardsFor(lines, previous, republic: scope is null);
         var products = ProductsOf(lines);
         var regionRows = RegionRowsOf(scope, category: null);
         var summary = new AssortmentSummary(lines.Sum(l => l.Kg), lines.Sum(l => l.Revenue), previous.Sum(l => l.Kg),
-            categories.Sum(c => c.SkuSold), categories.Sum(c => c.SkuTotal), categories.Sum(c => c.Lost), SalesMath.Akb(lines));
+            categories.Sum(c => c.SkuSold), categories.Sum(c => c.SkuTotal), categories.Sum(c => c.Lost), SalesMath.Akb(lines), SoloOf(lines).Values.Sum());
 
-        // Матрица: топ товаров категорий отчёта по выручке × регионы с продажами.
-        var matrixRegions = regionRows.Where(x => x.Akb > 0).Select(x => new UnitRef(x.Id, x.Name)).ToList();
-        var regionAkb = matrixRegions.ToDictionary(x => x.Id, x => SalesMath.Akb(_currentByRegion[Guid.Parse(x.Id)]));
-        var matrix = products.Where(p => p.InReport).OrderByDescending(p => p.Revenue).Take(25)
-            .Select(p =>
-            {
-                var dist = matrixRegions.ToDictionary(x => x.Id, x =>
-                    SalesMath.Ratio(SalesMath.Akb(_currentByRegion[Guid.Parse(x.Id)].Where(l => l.ProductId == p.ProductId)), regionAkb[x.Id]));
-                var present = dist.Values.Where(v => v is > 0).Select(v => v!.Value).ToList();
-                decimal? avg = present.Count == 0 ? null : present.Average();
-                var cells = matrixRegions.Select(x =>
-                {
-                    var v = dist[x.Id];
-                    var level = v is null or 0 ? MatrixLevels.None : avg is { } a && v < a * MatrixLowShare ? MatrixLevels.Low : MatrixLevels.Ok;
-                    return new MatrixCell(x.Id, v, level);
-                }).ToList();
-                return new MatrixRow(p.ProductId, p.Name, p.Category, p.Revenue, avg, cells);
-            })
-            .ToList();
+        var matrixRegions = regionRows.Where(x => !x.NoData).Select(x => new UnitRef(x.Id, x.Name)).ToList();
+        var matrix = matrixRegions.Count >= 2 ? MatrixOf(products.Rows, matrixRegions) : [];
 
-        return new AssortmentView(Period, scopeName, categories, AkbMonthsOf(scope, categories), regionRows, products, matrixRegions, matrix, QualityOf(scope),
-            summary);
+        return new AssortmentView(Period, scopeName, categories, AkbMonthsOf(scope, categories), regionRows, products.Rows,
+            matrix.Count > 0 ? matrixRegions : [], matrix, QualityOf(scope), summary, products.OutsideReport);
     }
 
-    /// <summary>Товары набора с долей выручки, АКБ и дистрибуцией (доля ТТ набора, купивших товар).</summary>
-    private List<ProductRow> ProductsOf(IReadOnlyList<SaleLine> lines)
+    /// <summary>
+    /// Матрица «товар × регион» (DOC §9.2): 20 товаров категорий отчёта с наибольшей выручкой в охвате × регионы с продажами.
+    /// Клетка — дистрибуция: ТТ региона с положительной строкой товара ÷ АКБ региона. Средняя — дистрибуция товара по всему охвату:
+    /// Σ ТТ с товаром ÷ Σ АКБ регионов. Красный — товара в регионе нет, оранжевый — клетка меньше 40% средней (SalesMath.MatrixLevelOf).
+    /// </summary>
+    private List<MatrixRow> MatrixOf(IReadOnlyList<ProductRow> products, IReadOnlyList<UnitRef> regions)
     {
-        var revenue = lines.Sum(l => l.Revenue);
+        var regionLines = regions.ToDictionary(x => x.Id, x => _currentByRegion[Guid.Parse(x.Id)].ToList());
+        var regionAkb = regionLines.ToDictionary(x => x.Key, x => SalesMath.Akb(x.Value));
+        var totalAkb = regionAkb.Values.Sum();
+        var byProduct = regionLines.ToDictionary(x => x.Key, x => x.Value.Where(l => l.ProductId != null).ToLookup(l => l.ProductId!.Value));
+
+        return products.OrderByDescending(p => p.Revenue).Take(MatrixRows)
+            .Select(p =>
+            {
+                var tt = regions.ToDictionary(x => x.Id, x => SalesMath.SkuTt(byProduct[x.Id][p.ProductId]));
+                var average = SalesMath.Ratio(tt.Values.Sum(), totalAkb);
+                var cells = regions.Select(x =>
+                {
+                    var distribution = SalesMath.Ratio(tt[x.Id], regionAkb[x.Id]);
+                    return new MatrixCell(x.Id, distribution, SalesMath.MatrixLevelOf(tt[x.Id], distribution, average, MatrixLowShare), tt[x.Id]);
+                }).ToList();
+                return new MatrixRow(p.ProductId, p.Name, p.Category, p.Revenue, average, cells, p.IsTop);
+            })
+            .ToList();
+    }
+
+    private sealed record ProductList(List<ProductRow> Rows, int OutsideReport);
+
+    /// <summary>
+    /// «Товары» набора — только категории отчёта: вес, выручка, доля выручки (от выручки товаров категорий отчёта в наборе), ТТ артикула
+    /// (положительная строка) и дистрибуция — их доля от АКБ набора. Товары других типов Linko (бонус, подарки, оборудование)
+    /// в таблицу не входят: их число — OutsideReport, вес и сумма — в «Качестве данных» (QualityOf).
+    /// </summary>
+    private ProductList ProductsOf(IReadOnlyList<SaleLine> lines)
+    {
         var akb = SalesMath.Akb(lines);
-        return lines.Where(l => l.ProductId != null).GroupBy(l => l.ProductId!.Value)
+        var all = lines.Where(l => l.ProductId != null).GroupBy(l => l.ProductId!.Value)
             .Select(g =>
             {
                 var product = _d.Products.GetValueOrDefault(g.Key);
-                var group = GroupOf(product?.CategoryId);
-                var productAkb = SalesMath.Akb(g);
-                return new ProductRow(g.Key, product?.Name ?? $"Товар {g.Key}", product?.Code, _cats.NameOf(group), InReport(group),
-                    g.Sum(l => l.Kg), g.Sum(l => l.Revenue), SalesMath.Ratio(g.Sum(l => l.Revenue), revenue), productAkb, SalesMath.Ratio(productAkb, akb));
+                var items = g.ToList();
+                return (Id: g.Key, Product: product, Group: GroupOf(product?.CategoryId ?? items[0].CategoryId), Lines: items,
+                    Kg: items.Sum(l => l.Kg), Revenue: items.Sum(l => l.Revenue));
             })
-            .Where(p => p.Kg != 0 || p.Revenue != 0)
+            .Where(x => x.Kg != 0 || x.Revenue != 0)
+            .ToList();
+        var report = all.Where(x => InReport(x.Group)).ToList();
+        var revenue = report.Sum(x => x.Revenue);
+
+        var rows = report
+            .Select(x =>
+            {
+                var tt = SalesMath.SkuTt(x.Lines);
+                return new ProductRow(x.Id, x.Product?.Name ?? $"Товар {x.Id}", x.Product?.Code, _cats.NameOf(x.Group), true,
+                    x.Kg, x.Revenue, SalesMath.Ratio(x.Revenue, revenue), tt, SalesMath.Ratio(tt, akb), _d.Top.Contains(x.Product?.Code));
+            })
             .OrderByDescending(p => p.Revenue)
             .ToList();
+        return new ProductList(rows, all.Count - report.Count);
     }
 }

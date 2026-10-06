@@ -62,8 +62,8 @@ public static class DependencyInjection
         services.AddSingleton<IDocumentTextExtractor, Knowledge.DocumentTextExtractor>();
         services.AddScoped<IKnowledgeFullTextSearch, Knowledge.KnowledgeFullTextSearch>();
 
-        // Продажи: настройки и синхронизация с Linko SFA
-        var sales = config.GetSection(SalesOptions.Section).Get<SalesOptions>() ?? new SalesOptions();
+        // Продажи: настройки и синхронизация с Linko SFA. Списки из настроек заменяют значения по умолчанию, а не дописываются к ним.
+        var sales = SalesOptionsBinding.Load(config);
         services.AddSingleton(sales);
         services.TryAddSingleton(TimeProvider.System);
 
@@ -91,6 +91,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Sales.Stock.StockService>();
         services.AddScoped<OneBase.Application.Sales.Stock.OutstockService>();
         services.AddScoped<OneBase.Application.Sales.Primary.PrimaryService>();
+        services.AddScoped<OneBase.Application.Sales.SkuSales.SkuSalesService>();
         services.AddSingleton<LinkoSyncCoordinator>();
 
         // Журнал ошибок («Настройки → Журнал ошибок»): логгер кладёт в очередь, фоновая служба пишет в БД.

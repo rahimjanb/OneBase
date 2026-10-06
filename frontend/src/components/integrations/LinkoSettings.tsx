@@ -94,8 +94,8 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
   const reset = async () => {
     const ok = confirm(
       `Удалить все данные, загруженные из Linko, и загрузить их заново с ${data.baseUrl}?\n\n` +
-        "Будут удалены: заказы, возвраты, визиты, торговые точки, агенты, товары, а также регионы, профили агентов и планы в OneBase " +
-        "(они привязаны к данным Linko).\nСохранятся: направления, цели и настройки подключения.",
+        "Будут удалены: заказы, возвраты, визиты, торговые точки, агенты, товары, остатки и планы ТП из Linko.\n" +
+        "Сохранятся данные OneBase: регионы с направлением, СВР и дилером, направления, планы РОП и «Завод», цели и настройки подключения.",
     );
     if (!ok) return;
     setBusy("reset");
@@ -144,7 +144,7 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
       <div className="flex flex-wrap items-center gap-3">
         <span className={`rounded-full px-3 py-1 text-sm font-medium ${status.className}`}>{status.label}</span>
         <span className="text-sm text-ink-3">
-          {data.sync.dataAsOf ? `данные по ${dateTime(data.sync.dataAsOf)}` : "данные ещё не загружались"}
+          {data.sync.dataAsOf ? `загружено ${dateTime(data.sync.dataAsOf)}` : "данные ещё не загружались"}
           {data.updatedAt ? ` · настройки изменены ${dateTime(data.updatedAt)}` : ""}
         </span>
       </div>

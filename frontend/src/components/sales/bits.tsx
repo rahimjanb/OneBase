@@ -15,25 +15,30 @@ export const toneClass: Record<Tone, string> = {
   muted: "text-ink-3",
 };
 
-/** Цвет выполнения в таблицах: ≥100% зелёный, 90–99% обычный, 70–89% оранжевый, ниже — красный. */
-export function execClass(value: number | null): string {
-  if (value == null) return "text-ink-3";
-  if (value >= 1) return "text-ok font-semibold";
-  if (value >= 0.9) return "text-ink";
-  if (value >= 0.7) return "text-warn";
-  return "text-bad";
-}
+const tones: Record<TargetLevel, Tone> = { Good: "ok", Warning: "warn", Bad: "bad" };
 
-const levelTone: Record<TargetLevel, Tone> = { Good: "ok", Warning: "warn", Bad: "bad" };
+/** Тон по уровню, посчитанному сервером (выполнение плана, % плана визитов, прогноз к плану); без уровня — серый. */
+export const levelTone = (level: TargetLevel | null | undefined): Tone => (level ? tones[level] : "muted");
+
+/** Класс текста по уровню с сервера; без уровня — серый. Пороги — на сервере (SalesMath.ExecutionLevelOf, ForecastLevelOf, TargetLevelOf). */
+export const levelClass = (level: TargetLevel | null | undefined): string => toneClass[levelTone(level)];
 
 /** Тон по уровню цели (конверсия, выручка на ТТ, АКБ на агента); без цели — обычный. */
-export const targetTone = (t: TargetValue): Tone => (t.level ? levelTone[t.level] : "ink");
+export const targetTone = (t: TargetValue): Tone => (t.level ? tones[t.level] : "ink");
 
-/** Тон доли плана: ≥100% зелёный, 70–99% оранжевый, меньше — красный; без плана — серый. */
-export const planTone = (share: number | null | undefined): Tone => (share == null ? "muted" : share >= 1 ? "ok" : share >= 0.7 ? "warn" : "bad");
+/** Цвет шкалы выполнения по уровню с сервера: норма — акцент, предупреждение — оранжевый, плохо — красный. */
+export const levelBarTone = (level: TargetLevel | null | undefined): "accent" | "warn" | "bad" => (level === "Warning" ? "warn" : level === "Bad" ? "bad" : "accent");
 
-/** Тон выполнения плана, как execClass в таблицах: ≥100% зелёный, 90–99% обычный, 70–89% оранжевый, ниже — красный. */
-export const execTone = (value: number | null | undefined): Tone => (value == null ? "muted" : value >= 1 ? "ok" : value >= 0.9 ? "ink" : value >= 0.7 ? "warn" : "bad");
+/**
+ * Переходное, только для «Первички», пока её уровни не отдаёт сервер: цвет выполнения по значению с теми же порогами, что у сервера
+ * (от 90% — зелёный, от 60% — оранжевый, ниже — красный). Вторичка берёт уровень с сервера — levelClass.
+ */
+export function execClass(value: number | null): string {
+  if (value == null) return "text-ink-3";
+  if (value >= 0.9) return "text-ok";
+  if (value >= 0.6) return "text-warn";
+  return "text-bad";
+}
 
 /** Тон изменения к прошлому периоду: рост зелёный, падение до −10% оранжевый, сильнее — красный. */
 export const deltaTone = (value: number | null | undefined): Tone => (value == null ? "muted" : value >= 0 ? "ok" : value > -0.1 ? "warn" : "bad");

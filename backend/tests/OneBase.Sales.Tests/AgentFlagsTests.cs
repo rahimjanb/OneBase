@@ -73,9 +73,12 @@ public class AgentFlagsTests
     [Fact]
     public void Small_check_requires_normal_conversion_and_enough_orders()
     {
-        // Чек 1 млн против медианы 2 млн (50% < 60%).
-        var medians = new RegionMedians(null, null, 2_000_000m);
+        // Чек 1 млн против медианы 2,5 млн (40% < 50%).
+        var medians = new RegionMedians(null, null, 2_500_000m);
         Assert.Equal(FlagSeverity.Risk, SeverityOf(Flags(Agent(), medians), FlagKind.SmallCheck));
+
+        // Ровно половина медианы — ещё не мелкий чек (порог — ½ медианы, как в «Полевом контроле»).
+        Assert.Null(SeverityOf(Flags(Agent(), new RegionMedians(null, null, 2_000_000m)), FlagKind.SmallCheck));
 
         // Мало заказов — не оцениваем.
         Assert.Null(SeverityOf(Flags(Agent(withOrder: 19, orders: 19, revenue: 19_000_000), medians), FlagKind.SmallCheck));
@@ -100,11 +103,31 @@ public class AgentFlagsTests
         Assert.Equal(expected, SeverityOf(Flags(Agent(tempo: (decimal)tempo)), FlagKind.TempoDrop));
 
     [Fact]
-    public void More_orders_than_visits_is_critical_mismatch() =>
-        Assert.Equal(FlagSeverity.Critical, SeverityOf(Flags(Agent(visits: 50, withOrder: 50, orders: 60)), FlagKind.DataMismatch));
+    public void More_orders_than_visits_is_a_data_quality_risk_and_conversion_is_not_judged()
+    {
+        // 60 заказов на 50 визитов — конверсия 120%: это вопрос к данным, а не к агенту; низкую конверсию не оцениваем,
+        // даже если медиана региона выше.
+        var flags = Flags(Agent(visits: 50, withOrder: 50, orders: 60), new RegionMedians(3m, null, null));
+
+        Assert.Equal(FlagSeverity.Risk, SeverityOf(flags, FlagKind.DataMismatch));
+        Assert.Null(SeverityOf(flags, FlagKind.LowConversion));
+        Assert.Equal(FlagSeverity.Risk, AgentFlags.Worst(flags));
+    }
 
     [Fact]
-    public void Region_median_excludes_vacancies_and_mismatched_agents()
+    public void Conversion_is_orders_over_done_visits_and_visits_without_order_may_be_negative()
+    {
+        var summary = new VisitSummary(Done: 100, WithOrder: 30, Orders: 45);
+        Assert.Equal(0.45m, summary.Conversion); // заказы ÷ визиты, а не визиты с заказом
+        Assert.Equal(55, summary.WithoutOrder);
+
+        var busy = new VisitSummary(Done: 10, WithOrder: 9, Orders: 12);
+        Assert.Equal(-2, busy.WithoutOrder); // заказов больше, чем визитов — не обрезаем
+        Assert.True(busy.DataMismatch);
+    }
+
+    [Fact]
+    public void Region_median_peers_are_evaluated_agents_without_vacancies_and_mismatches()
     {
         var agents = new[]
         {
@@ -112,8 +135,9 @@ public class AgentFlagsTests
             Agent(withOrder: 50, orders: 50, id: 2), // 50%
             Agent(withOrder: 90, orders: 90, vacancy: true, id: 3), // вакансия
             Agent(visits: 50, withOrder: 50, orders: 70, id: 4), // данные не сходятся
+            Agent(visits: 19, withOrder: 19, orders: 19, id: 5), // меньше 20 визитов — не оценивается
         };
 
-        Assert.Equal(0.35m, RegionMedians.Of(agents).Conversion);
+        Assert.Equal(0.35m, RegionMedians.Of(agents, T.MinVisits).Conversion);
     }
 }

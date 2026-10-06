@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-import { AkbChart } from "@/components/sales/AkbChart";
+import { AkbMonthsCard } from "@/components/sales/AkbMonthsCard";
 import { CollapsedSections } from "@/components/sales/bits";
-import { CategoryPlanTable, DataQualityNotes, KpiRow, NextMonthCard, PlanFactMonths, UnassignedWarning } from "@/components/sales/blocks";
+import { CategoryPlanTable, DataQualityNotes, KpiRow, NextMonthCard, PlanFactMonths, UnassignedWarning, VolumeMix } from "@/components/sales/blocks";
 import { MonthCalendarTable, VisitCalendarTable } from "@/components/sales/calendars";
 import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
@@ -36,34 +36,52 @@ export default async function RegionPage({
     ? { label: data.directionName ?? "Направление", href: withQuery(`/sales/directions/${data.directionId}`, q) }
     : null;
 
+  // СВР и дилер — оргструктура OneBase («Настройки продаж»): в Linko их нет.
+  const people = [data.supervisor && `СВР: ${data.supervisor}`, data.dealer && `дилер: ${data.dealer}`].filter(Boolean).join(", ");
+
   return (
     <SalesFrame
       title={data.name}
+      subtitle={people || (data.isChannel ? undefined : "СВР и дилер не указаны — их можно задать в настройках продаж")}
       crumbs={[republic, ...(parent ? [parent] : []), { label: data.name }]}
       back={(parent ?? republic).href}
       sp={sp}
+      period={period}
     >
       <KpiRow kpi={data.kpi} period={period} />
       <UnassignedWarning kgValue={data.unassigned.kg} share={data.unassigned.share} />
 
       <PlanFactMonths months={data.months} current={period.month} />
+      <VolumeMix categories={data.categories} />
       {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle="Категория" />}
       <CategoryCards cards={data.categoryCards} scope="регионе" query={queryWith(q, { region: id })} />
 
-      <CollapsedSections>
-        <CategoryPlanTable rows={data.categoryPlans ?? []} />
-        <AkbChart data={data.akbMonths} />
+      {/* Ключ по месяцу: смена месяца сбрасывает раскрытые секции, сортировки и раскрытые строки (DOC-filters §12). */}
+      <CollapsedSections key={`${period.year}-${period.month}`}>
+        <CategoryPlanTable rows={data.categoryPlans} total={data.categoryPlanTotal} source={data.kpi.planSource} plan={period.plan} />
+        <AkbMonthsCard data={data.akbMonths} />
         <MonthCalendarTable
           calendar={data.calendar}
           year={period.year}
           month={period.month}
           categories={data.categories.filter((c) => c.categoryId != null).map((c) => ({ id: c.categoryId!, name: c.name }))}
         />
-        <VisitCalendarTable rows={data.visitCalendar} flatten totalName={data.name} from={from} to={to} maxDay={period.daysInMonth} />
+        <VisitCalendarTable
+          rows={data.visitCalendar}
+          flatten
+          totalName={data.name}
+          from={from}
+          to={to}
+          maxDay={period.daysInMonth}
+          factDays={period.workedDays}
+          year={period.year}
+          month={period.month}
+        />
         <TeamTable rows={data.team} query={q} />
         <SameDaysTable rows={data.sameDays} nameLabel="ТП" hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`} link="agent" query={q} />
         <NotBoughtTable
           rows={data.notBought}
+          total={data.notBoughtTotal}
           nameLabel="ТП"
           hint={`база — ${monthName(prevMonth)}, кто пока молчит`}
           workedDays={period.workedDays}
@@ -71,7 +89,7 @@ export default async function RegionPage({
           expandable
         />
         {data.notInDirectory.length > 0 && <NotInDirectoryTable rows={data.notInDirectory} query={q} />}
-        <DataQualityNotes quality={data.quality} />
+        <DataQualityNotes quality={data.quality} period={period} />
       </CollapsedSections>
     </SalesFrame>
   );

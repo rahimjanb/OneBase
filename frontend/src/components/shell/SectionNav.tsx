@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { activeSalesTab, salesTabs, type SalesTab } from "@/components/sales/tabs";
+import { periodQuery } from "@/lib/sales/query";
 
 /**
  * Кнопки разделов в верхней панели — только внутри «Продаж»; в других разделах панель без них.
@@ -20,13 +21,8 @@ export function SectionNav() {
   if (!pathname.startsWith("/sales")) return null;
   const active = pending && pending.from === pathname ? pending.tab : current;
 
-  // Период и план переносятся между разделами.
-  const period = new URLSearchParams();
-  for (const key of ["year", "month", "plan"]) {
-    const value = params.get(key);
-    if (value) period.set(key, value);
-  }
-  const query = period.toString();
+  // Период и план переносятся между разделами — тем же правилом, что ссылки внутри страниц (plan — только factory).
+  const query = periodQuery(Object.fromEntries(params));
 
   return (
     <nav className="no-scrollbar order-last flex basis-full gap-2 overflow-x-auto pb-3 lg:order-none lg:min-w-0 lg:shrink lg:basis-auto lg:pb-0" aria-label="Разделы продаж">

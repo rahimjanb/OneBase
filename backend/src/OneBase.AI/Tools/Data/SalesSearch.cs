@@ -125,6 +125,9 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
     /// <summary>Сколько лучших совпадений считать подробно: карточка товара с разбивкой по регионам — недешёвая.</summary>
     private const int Candidates = 16;
 
+    /// <summary>Регион без единой покупки за месяц (дыра в выгрузке): не «нет продаж» и не «не возят».</summary>
+    private const string NoDataStatus = "нет данных";
+
     public override string Name => "find_products";
     public override string Title => "Поиск товара или категории";
     public override string Source => KnowledgeSources.SalesSecondary;
@@ -235,12 +238,13 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
                 ByRegion = view?.Regions.Take(MaxRegions).Select(r => new
                 {
                     r.Name,
-                    Kg = R(r.Kg),
-                    RevenueSum = R(r.Revenue),
-                    SkuSelling = r.SkuSelling,
-                    SkuNotCarried = r.SkuNotCarried,
-                    SkuLost = r.SkuLost,
-                    OutletsWithPurchase = r.Akb,
+                    Status = RegionStatusName(r),
+                    Kg = r.NoData ? null : (decimal?)R(r.Kg),
+                    RevenueSum = r.NoData ? null : (decimal?)R(r.Revenue),
+                    SkuSelling = r.NoData ? null : (int?)r.SkuSelling,
+                    SkuNotCarried = r.NoData ? null : (int?)r.SkuNotCarried,
+                    SkuLost = r.NoData ? null : (int?)r.SkuLost,
+                    OutletsWithPurchase = r.NoData ? null : (int?)r.Akb,
                 }),
             });
         }
@@ -272,15 +276,16 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
             DistributionPct = Pct(v.Distribution),
             PricePerKg = R(v.PricePerKg),
             PrevMonthKg = R(v.PrevMonthKg),
+            // Регион без покупок за месяц (NoData) — «нет данных», а не «нет продаж»: счётчиков у него нет.
             ByRegion = i < ProductsWithRegions
-                ? v.Rows.Where(r => r.Kg != 0 || r.PrevMonthKg != 0).Take(MaxRegions).Select(r => new
+                ? v.Rows.Where(ShowRegion).Take(MaxRegions).Select(r => new
                 {
                     r.Name,
-                    Status = StatusName(r.Status),
-                    Kg = R(r.Kg),
-                    RevenueSum = R(r.Revenue),
-                    OutletsWithProduct = r.Tt,
-                    DistributionPct = Pct(r.Distribution),
+                    Status = RegionStatusName(r),
+                    Kg = r.NoData ? null : (decimal?)R(r.Kg),
+                    RevenueSum = r.NoData ? null : (decimal?)R(r.Revenue),
+                    OutletsWithProduct = r.NoData ? null : (int?)r.Tt,
+                    DistributionPct = r.NoData ? null : Pct(r.Distribution),
                     PrevMonthKg = R(r.PrevMonthKg),
                 })
                 : null,
@@ -296,6 +301,7 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
             ProductsFound = products.Count,
             Products = productItems,
             Note = "Статусы: «продаётся»; «пропал» — продавался в прошлом месяце, в этом нет; «не возят» — по республике идёт, здесь нет; «нет продаж». " +
+                "«нет данных» у региона — в нём за месяц нет ни одной покупки (дыра в выгрузке), это не «нет продаж» и не «не возят». " +
                 "Товары отсортированы по продажам в охвате. Если месяц ещё не закончен (Complete = false), для оценки спроса сравнивай с прошлым полным месяцем — вызови инструмент с month прошлого месяца.",
         }, sources.Count == 0 ? [RepublicSource(p, "OneBase → Продажи → Ассортимент")] : sources.ToArray());
     }
@@ -306,13 +312,22 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
             ? words.Where(w => !NameMatch.Key(row.Name).Contains(NameMatch.Key(w), StringComparison.Ordinal))
             : [];
 
-    private static string StatusName(string status) => status switch
+    internal static string StatusName(string status) => status switch
     {
         SkuStatuses.Selling => "продаётся",
         SkuStatuses.Lost => "пропал",
         SkuStatuses.Elsewhere => "не возят",
         _ => "нет продаж",
     };
+
+    /// <summary>Статус региона в разбивке товара: у региона без покупок за месяц (NoData) — «нет данных», иначе статус артикула в нём.</summary>
+    internal static string RegionStatusName(ProductBreakdownRow row) => row.NoData ? NoDataStatus : StatusName(row.Status);
+
+    /// <summary>Статус региона в разбивке категории: «нет данных» у региона без покупок за месяц, иначе «есть покупки».</summary>
+    internal static string RegionStatusName(AssortmentRegionRow row) => row.NoData ? NoDataStatus : "есть покупки";
+
+    /// <summary>Регион показывается в разбивке товара, если у него есть продажи в этом или прошлом месяце — или нет данных вовсе (это тоже ответ).</summary>
+    internal static bool ShowRegion(ProductBreakdownRow row) => row.NoData || row.Kg != 0 || row.PrevMonthKg != 0;
 }
 
 /// <summary>

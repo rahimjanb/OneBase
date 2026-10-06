@@ -14,7 +14,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const q = periodQuery(sp);
 
   return (
-    <SalesFrame title="Вторичка" subtitle="План, факт и работа торговых представителей" sp={sp}>
+    <SalesFrame title="Вторичка" subtitle="План, факт и работа торговых представителей" sp={sp} period={data.period}>
       <KpiRow kpi={data.kpi} period={data.period} />
       <FlagsStrip activeAgents={data.activeAgents} flags={data.flags} vacancies={data.vacancies} href={withQuery("/sales/problems", q)} />
       <div className="mt-5 grid gap-4 md:grid-cols-2">

@@ -137,12 +137,14 @@ public sealed class ProactiveAnalyzer(
                     $"/sales/regions/{row.Id}?{query}", Permissions.SalesRead));
             }
 
-            // Месяц закрыт — пишем «не выполнен»; идёт — «под угрозой» с прогнозом на конец месяца.
+            // Месяц закрыт — пишем «не выполнен» (прогноза у закрытого месяца нет — берётся выполнение); идёт — «под угрозой»
+            // с прогнозом на конец месяца.
             var closed = p.DataThrough.Day >= p.DaysInMonth;
-            var behind = republic.Regions.Where(r => r.PlanKg is > 0 && r.ForecastExecution is < 0.9m).OrderBy(r => r.ForecastExecution).ToList();
-            foreach (var r in behind.Where(r => r.ForecastExecution < 0.75m))
+            static decimal? Expected(UnitRow r) => r.ForecastExecution ?? r.Execution;
+            var behind = republic.Regions.Where(r => r.PlanKg is > 0 && Expected(r) is < 0.9m).OrderBy(Expected).ToList();
+            foreach (var r in behind.Where(r => Expected(r) < 0.75m))
             {
-                var forecast = r.ForecastExecution!.Value;
+                var forecast = Expected(r)!.Value;
                 list.Add(new AlertCandidate("sales", "sales.region.plan", $"sales.region.plan:{r.Id}:{month}", AiAlertSeverity.Critical,
                     closed ? $"{r.Name}: план месяца не выполнен — {Pct(forecast)}" : $"{r.Name}: план месяца под угрозой — прогноз {Pct(forecast)}",
                     closed
@@ -154,34 +156,35 @@ public sealed class ProactiveAnalyzer(
                     $"/sales/regions/{r.Id}?{query}", Permissions.SalesRead));
             }
 
-            var lagging = behind.Where(r => r.ForecastExecution >= 0.75m).ToList();
+            var lagging = behind.Where(r => Expected(r) >= 0.75m).ToList();
             if (lagging.Count > 0)
             {
                 list.Add(new AlertCandidate("sales", "sales.region.plan", $"sales.region.plan.group:{month}", AiAlertSeverity.Warning,
                     closed ? $"Ещё {lagging.Count} регионов не дотянули до 90% плана" : $"Ещё {lagging.Count} регионов идут ниже 90% плана",
-                    string.Join("; ", lagging.Select(r => $"{r.Name} — {Pct(r.ForecastExecution)} ({Kg(r.FactKg)} из {Kg(r.PlanKg!.Value)})")) + ".",
+                    string.Join("; ", lagging.Select(r => $"{r.Name} — {Pct(Expected(r))} ({Kg(r.FactKg)} из {Kg(r.PlanKg!.Value)})")) + ".",
                     "Сравнить с регионами, выполняющими план: страйк, АКБ на агента, ширина ассортимента.",
                     $"/sales/republic?{query}", Permissions.SalesRead));
             }
 
-            foreach (var r in republic.Regions.Where(r => r.PlanKg is > 0 && r.ForecastExecution is >= 1.1m))
+            foreach (var r in republic.Regions.Where(r => r.PlanKg is > 0 && Expected(r) is >= 1.1m))
             {
                 list.Add(new AlertCandidate("sales", "sales.region.opportunity", $"sales.region.opportunity:{r.Id}:{month}", AiAlertSeverity.Opportunity,
-                    $"{r.Name} перевыполняет план — прогноз {Pct(r.ForecastExecution)}",
+                    $"{r.Name} перевыполняет план — прогноз {Pct(Expected(r))}",
                     $"План {Kg(r.PlanKg!.Value)}, прогноз {Kg(r.ForecastKg ?? r.FactKg)}; АКБ {r.Akb}, страйк {Pct(r.Strike)}.",
                     "Разобрать практики региона для других регионов; проверить, не занижен ли план.",
                     $"/sales/regions/{r.Id}?{query}", Permissions.SalesRead));
             }
 
             var k = republic.Kpi;
-            if (k.PlanKg is > 0 && k.ForecastExecution is < 0.95m)
+            var expected = k.ForecastExecution ?? k.Execution;
+            if (k.PlanKg is > 0 && expected is < 0.95m)
             {
                 list.Add(new AlertCandidate("sales", "sales.republic.plan", $"sales.republic.plan:{month}",
-                    k.ForecastExecution < 0.85m ? AiAlertSeverity.Critical : AiAlertSeverity.Warning,
-                    p.DataThrough.Day >= p.DaysInMonth ? $"План продаж компании не выполнен — {Pct(k.ForecastExecution)}" : $"План продаж компании под угрозой — прогноз {Pct(k.ForecastExecution)}",
+                    expected < 0.85m ? AiAlertSeverity.Critical : AiAlertSeverity.Warning,
+                    p.DataThrough.Day >= p.DaysInMonth ? $"План продаж компании не выполнен — {Pct(expected)}" : $"План продаж компании под угрозой — прогноз {Pct(expected)}",
                     $"План {Kg(k.PlanKg.Value)}, факт {Kg(k.FactKg)} ({Pct(k.Execution)}) {period}" +
                     (p.DataThrough.Day >= p.DaysInMonth ? ". " : $", прогноз {Kg(k.ForecastKg ?? k.FactKg)}. ") +
-                    $"Регионов с прогнозом ниже 90%: {republic.Regions.Count(r => r.PlanKg is > 0 && r.ForecastExecution is < 0.9m)}.",
+                    $"Регионов с прогнозом ниже 90%: {republic.Regions.Count(r => r.PlanKg is > 0 && Expected(r) is < 0.9m)}.",
                     "Сосредоточиться на регионах с наибольшим отставанием в кг; проверить дефицит на складах этих регионов.",
                     $"/sales/republic?{query}", Permissions.SalesRead));
             }

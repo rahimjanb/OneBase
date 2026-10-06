@@ -1,5 +1,10 @@
 // Числа в разделе «Продажи»: разделитель тысяч — пробел, крупные суммы сокращаются, пусто — «—».
 
+import { plural } from "@/lib/format";
+import type { PlanKind } from "./types";
+
+export { plural };
+
 const ru = (digits: number) =>
   new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: digits });
 
@@ -29,6 +34,24 @@ export function pct(share: number | null | undefined, digits = 0): string {
   return share == null || Number.isNaN(share) ? DASH : `${ru(digits).format(share * 100)}%`;
 }
 
+/** «1 заказ», «3 заказа», «12 заказов». */
+export const ordersLabel = (n: number) => `${num(n)} ${plural(n, ["заказ", "заказа", "заказов"])}`;
+
+/** «1 товар», «3 товара», «12 товаров». */
+export const productsLabel = (n: number) => `${num(n)} ${plural(n, ["товар", "товара", "товаров"])}`;
+
+/** «1 регион», «3 региона», «12 регионов». */
+export const regionsLabel = (n: number) => `${num(n)} ${plural(n, ["регион", "региона", "регионов"])}`;
+
+/** «1 точка», «3 точки», «12 точек». */
+export const outletsLabel = (n: number) => `${num(n)} ${plural(n, ["точка", "точки", "точек"])}`;
+
+/** «1 строка», «3 строки», «12 строк». */
+export const rowsLabel = (n: number) => `${num(n)} ${plural(n, ["строка", "строки", "строк"])}`;
+
+/** «плана РОП на этот месяц нет» / «плана «Завод» на этот месяц нет» — когда выбранного плана регионов на месяц нет. */
+export const planMissingText = (plan: PlanKind) => `плана ${plan === "factory" ? "«Завод»" : "РОП"} на этот месяц нет`;
+
 /** Изменение в долях → «+ 8%» / «− 12%». */
 export function delta(share: number | null | undefined): string {
   if (share == null) return DASH;
@@ -45,6 +68,13 @@ export function date(iso: string | null | undefined): string {
   if (!iso) return DASH;
   const [y, m, d] = iso.slice(0, 10).split("-");
   return `${d}.${m}.${y}`;
+}
+
+/** «2026-10-05» → «05.10». */
+export function dayMonth(iso: string | null | undefined): string {
+  if (!iso) return DASH;
+  const [, m, d] = iso.slice(0, 10).split("-");
+  return `${d}.${m}`;
 }
 
 const MONTHS = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];

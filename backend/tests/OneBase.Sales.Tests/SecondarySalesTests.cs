@@ -1,5 +1,6 @@
 using OneBase.Application.Sales;
 using OneBase.Application.Sales.Metrics;
+using OneBase.Domain.Sales;
 using OneBase.Infrastructure.Linko;
 
 namespace OneBase.Sales.Tests;
@@ -7,7 +8,7 @@ namespace OneBase.Sales.Tests;
 /// <summary>Правила вторички из «Как считается вторичка из Linko API» — на маленьких наборах с известным ответом.</summary>
 public class SecondarySalesTests
 {
-    private static readonly SalesOptions Options = new(); // delivered, дата приёмки, без филиала «Завод»
+    private static readonly SalesOptions Options = new(); // delivered и given, дата приёмки, без «Завода» и «К К Мерч»
     private static readonly DateOnly Sep1 = new(2026, 9, 1);
     private static readonly DateOnly Sep28 = new(2026, 9, 28);
 
@@ -45,10 +46,84 @@ public class SecondarySalesTests
     [Theory]
     [InlineData("cancelled")]
     [InlineData("not_delivered")]
-    [InlineData("given")]
+    [InlineData("requested")]
     [InlineData("new")]
-    public void Only_delivered_orders_are_sales(string status) =>
+    public void Only_delivered_and_given_orders_are_sales(string status) =>
         Assert.Empty(Build([Order(1, status: status)]).Lines);
+
+    [Fact]
+    public void Given_order_with_acceptance_is_a_sale()
+    {
+        // «Отдан» — магазин товар принял, а статус в Linko не переставили: продажа по дате приёмки, как и «доставлен».
+        var result = Build([Order(1, status: "given", accepted: "2026-09-29", kg: 7), Order(2, kg: 3)], to: D("2026-09-30"));
+
+        Assert.Equal(10m, result.Lines.Sum(l => l.Kg));
+        Assert.Equal(D("2026-09-29"), result.Lines.Single(l => l.OrderId == 1).Date);
+        Assert.Single(SecondarySales.VisitOrders([Order(1, status: "given")], Sep1, Sep28, Options));
+    }
+
+    [Fact]
+    public void Export_and_sales_base_keep_delivered_only()
+    {
+        Assert.Equal(["delivered"], Options.ExportSoldStatuses);
+        Assert.Equal(["delivered"], Options.FieldSoldStatuses);
+        Assert.Contains("given", Options.SoldStatuses);
+    }
+
+    [Theory]
+    [InlineData("К К Мерч")]
+    [InlineData(" к к мерч ")]
+    public void Ignored_branch_is_dropped_from_the_secondary_completely(string branch)
+    {
+        var headers = new[] { new RawReturnHeader(9, "delivered", D("2026-09-12"), branch, HeaderKg: 4, Lines: 0, LinesKg: 0) };
+
+        var result = Build([Order(1, status: "given", branch: branch, kg: 261), Order(2, kg: 10)], [Return(9, 3, branch: branch)], headers);
+
+        Assert.Equal(10m, result.Lines.Sum(l => l.Kg)); // не вторичка…
+        Assert.Empty(result.Excluded); // …и не «Экспорт и опт», как «Завод»
+        Assert.Equal(0, result.Quality.ReturnsWithoutLines);
+        Assert.Empty(SecondarySales.VisitOrders([Order(3, branch: branch)], Sep1, Sep28, Options));
+    }
+
+    [Theory]
+    [InlineData("2026-10-05T18:59:00Z", "2026-10-04")] // 23:59 по Ташкенту 5 октября — полный день ещё 4-е
+    [InlineData("2026-10-05T19:00:00Z", "2026-10-05")] // 00:00 по Ташкенту 6 октября — 5-е уже полный день
+    [InlineData("2026-11-01T03:00:00Z", "2026-10-31")]
+    public void Report_day_is_the_last_full_day_in_Tashkent(string utcNow, string expected) =>
+        Assert.Equal(D(expected), SecondarySales.ReportCutoff(DateTimeOffset.Parse(utcNow)));
+
+    [Theory]
+    [InlineData("2026-10-05", "2026-10-01", "2026-10-05")] // идущий месяц — по отчётный день
+    [InlineData("2026-10-05", "2026-09-01", "2026-09-30")] // закрытый месяц — целиком
+    [InlineData("2026-10-05", "2026-11-01", "2026-10-31")] // данных за месяц ещё нет
+    [InlineData(null, "2026-10-01", "2026-09-30")]
+    public void Data_through_is_the_report_day_cut_to_the_month(string? lastData, string monthStart, string expected) =>
+        Assert.Equal(D(expected), SecondarySales.DataThrough(D(monthStart), lastData is null ? null : D(lastData)));
+
+    [Theory]
+    [InlineData("2026-10-01", "2026-10-05", "2026-10-06", "2026-10-31")] // идущий месяц — после отчётного дня и до конца месяца
+    [InlineData("2026-11-01", "2026-10-31", "2026-11-01", "2026-11-30")] // данных за месяц ещё нет — весь месяц
+    public void Acceptance_after_the_report_day_is_counted_inside_the_month_only(string monthStart, string dataThrough, string from, string to) =>
+        Assert.Equal((D(from), D(to)), SecondarySales.AcceptedAfterReport(D(monthStart), D(dataThrough)));
+
+    [Fact]
+    public void Closed_month_has_no_acceptance_after_the_report_day() =>
+        Assert.Null(SecondarySales.AcceptedAfterReport(Sep1, D("2026-09-30"))); // «приняты сегодня / в будущем» на закрытом месяце не показываются
+
+    [Theory]
+    [InlineData("Завод", false)]
+    [InlineData("ЗАВОД", false)]
+    [InlineData("К К Мерч", false)]
+    [InlineData("к к мерч", false)]
+    [InlineData("Самарканд", true)]
+    [InlineData(null, true)]
+    public void Secondary_queries_skip_factory_and_ignored_branches(string? branch, bool secondary)
+    {
+        // Тот же отбор по филиалу, что у заказов без даты приёмки и «приняты сегодня / в будущем» в SQL.
+        var inSecondary = SalesDataLoader.SecondaryBranch(Options.NotSecondaryBranchesLower()).Compile();
+
+        Assert.Equal(secondary, inSecondary(new LinkoOrder { Status = "delivered", BranchName = branch }));
+    }
 
     [Fact]
     public void Order_without_acceptance_time_is_not_a_sale_and_is_reported()

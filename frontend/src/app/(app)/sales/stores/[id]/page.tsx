@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { KpiTile, Section } from "@/components/sales/bits";
 import { StoreProductsTable } from "@/components/sales/assortment-tables";
+import { ReportMonthExit } from "@/components/sales/MonthExit";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGetOrNull } from "@/lib/server-api";
-import { kg, money, num, pct } from "@/lib/sales/format";
+import { kg, money, num, ordersLabel, pct } from "@/lib/sales/format";
 import { apiQuery, param, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { StoreView } from "@/lib/sales/types";
 
@@ -31,11 +32,14 @@ export default async function StorePage({ params, searchParams }: { params: Prom
         .join(" · ")}
       crumbs={crumbs}
       back={crumbs[crumbs.length - 2]?.href ?? withQuery("/sales", q)}
+      period={data.period}
       sp={sp}
     >
+      {/* Смена месяца уходит к региону магазина (DOC-filters §12). */}
+      <ReportMonthExit to={data.regionId ? `/sales/regions/${data.regionId}` : "/sales/republic"} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiTile label="Выручка за месяц" value={money(data.revenue)} unit="сум">
-          {kg(data.factKg)} кг · {num(data.orders)} заказов
+          {kg(data.factKg)} кг · {ordersLabel(data.orders)}
         </KpiTile>
         <KpiTile label="Категорий" value={num(data.categories)} />
         <KpiTile label="Позиций" value={num(data.positions)}>

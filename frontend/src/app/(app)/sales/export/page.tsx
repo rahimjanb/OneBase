@@ -3,7 +3,7 @@ import { CategoryCards } from "@/components/sales/categories";
 import { ExportAgentsTable, ExportMarketsTable, ProductsTable } from "@/components/sales/assortment-tables";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { apiGet } from "@/lib/server-api";
-import { delta, kg, money, num } from "@/lib/sales/format";
+import { delta, kg, money, num, ordersLabel } from "@/lib/sales/format";
 import { apiQuery, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { ExportView } from "@/lib/sales/types";
 
@@ -22,6 +22,7 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
       crumbs={[{ label: "Экспорт и опт" }]}
       back={withQuery("/sales", q)}
       sp={sp}
+      period={data.period}
     >
       {!s ? (
         <p className="rounded-xl border border-line bg-surface px-4 py-8 text-center text-sm text-ink-3">За месяц продаж филиала «Завод» в Linko нет.</p>
@@ -29,15 +30,20 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiTile label="Факт, кг" value={kg(s.factKg)}>
-              прогноз {kg(s.forecastKg)} кг
+              {data.period.closed ? "месяц закрыт" : `прогноз ${kg(s.forecastKg)} кг`}
             </KpiTile>
             <KpiTile label="Выручка" value={money(s.revenue)} unit="сум">
-              {num(s.orders)} заказов
+              {ordersLabel(s.orders)}
             </KpiTile>
             <KpiTile label="АКБ" value={num(s.akb)}>
               точек с отгрузкой
             </KpiTile>
-            <KpiTile label="К прошлому месяцу" value={delta(s.vsPrevMonth)} tone={deltaTone(s.vsPrevMonth)}>
+            <KpiTile
+              label="К прошлому месяцу"
+              value={delta(s.vsPrevMonth)}
+              tone={deltaTone(s.vsPrevMonth)}
+              title={data.period.closed ? "Прогноз месяца к прошлому месяцу — только у идущего месяца, как у карточек категорий" : "Прогноз месяца к факту прошлого месяца"}
+            >
               прошлый месяц {kg(s.prevMonthKg)} кг
             </KpiTile>
           </div>
@@ -50,7 +56,7 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
                   <b className="text-ink">
                     {num(c.amount)} {c.currency}
                   </b>{" "}
-                  ({num(c.orders)} заказов)
+                  ({ordersLabel(c.orders)})
                 </span>
               ))}
               . Курса в данных нет — эти суммы в выручку не сложены, вес заказов учтён.
@@ -60,7 +66,7 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
           <CollapsedSections>
             <ExportMarketsTable rows={data.markets} />
             <ExportAgentsTable rows={data.agents} />
-            <ProductsTable rows={data.products} />
+            <ProductsTable rows={data.products} outsideReport={data.productsOutsideReport} />
           </CollapsedSections>
           <Note>
             Разбивки по странам в Linko External API нет: в артефакте «Полевого контроля» она шла из отдельных файлов по странам. Здесь — то, что

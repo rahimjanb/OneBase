@@ -5,7 +5,7 @@ import { SalesFrame } from "@/components/sales/SalesFrame";
 import { ScopeSelect } from "@/components/sales/ScopeSelect";
 import { apiGet } from "@/lib/server-api";
 import { date, dateTime, kg, money, monthLabel, num, pct } from "@/lib/sales/format";
-import { buildOutstockInsights, plural } from "@/lib/sales/outstock-insights";
+import { outstockInsights, plural } from "@/lib/sales/outstock-insights";
 import { apiQuery, param, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { OutstockScope, OutstockView } from "@/lib/sales/types";
 
@@ -39,36 +39,41 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * «Аутсток»: дни, когда у дилера не было товара, который он обычно продаёт, и сколько продаж на этом потеряно.
- * Остаток по дням восстановлен назад от снимка Linko; период — месяц, как во вторичке. Область: ТОП / все / кроме ТОПа,
- * карточки категорий — фильтр (можно несколько), регион — календарь по дням.
+ * «Аутсток» (DOC-rules §9.5, DOC-filters §5): дни, когда у дилера не было товара, который он обычно продаёт, и сколько продаж на этом потеряно.
+ * Всегда последний закрытый месяц (месяц перед месяцем снимка остатков) — переключателя периода нет; остаток по дням восстановлен назад от снимка Linko.
+ * Область: ТОП / все / кроме ТОПа, карточки категорий — фильтр (можно несколько), «Сбросить»; регион — область (region) или календарь по дням
+ * (calendar — итоги и таблицы при этом остаются по области). Все числа, включая «Выводы», считает сервер.
  */
 export default async function OutstockPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
   const sp = await searchParams;
   const region = param(sp, "region");
-  const data = await apiGet<OutstockView>(`/api/sales/outstock${apiQuery(sp, ["region", "scope", "cat"])}`, "/sales/outstock");
+  const data = await apiGet<OutstockView>(`/api/sales/outstock${apiQuery(sp, ["region", "scope", "cat", "calendar"])}`, "/sales/outstock");
   const t = data.totals;
   const selected = data.selectedCategories;
   const regionInfo = data.regions.find((r) => r.id === region);
+  const calendarRegion = data.regions.find((r) => r.id === data.calendarRegionId);
+  const month = monthLabel(data.year, data.month);
 
-  const href = (changes: { scope?: OutstockScope; cat?: string[]; region?: string | null }) => {
+  // Явный закрытый месяц в адресе (year, month) переносится между ссылками; без него сервер берёт последний закрытый.
+  const href = (changes: { scope?: OutstockScope; cat?: string[]; region?: string | null; calendar?: string | null }) => {
     const scope = changes.scope ?? data.scope;
     const query = queryWith(periodQuery(sp), {
       region: changes.region === undefined ? region : changes.region,
       scope: scope === "top" ? null : scope,
       cat: (changes.cat ?? selected).join(",") || null,
+      calendar: changes.calendar === undefined ? data.calendarRegionId : changes.calendar,
     });
     return withQuery("/sales/outstock", query);
   };
   const toggleCategory = (name: string) => href({ cat: selected.includes(name) ? selected.filter((c) => c !== name) : [...selected, name] });
-  const linkQuery = queryWith(periodQuery(sp), { scope: data.scope === "top" ? null : data.scope, cat: selected.join(",") || null });
+  const linkQuery = queryWith(periodQuery(sp), { region, scope: data.scope === "top" ? null : data.scope, cat: selected.join(",") || null });
   const scopeLabel = data.scope === "top" ? "ТОП-товары" : data.scope === "rest" ? "товары вне ТОПа" : "все SKU";
-  const insights = buildOutstockInsights(data);
+  const insights = outstockInsights(data);
 
   return (
     <SalesFrame
-      title="Аутсток"
-      subtitle={`Дни без товара у дилеров и упущенные продажи за ${monthLabel(data.year, data.month).toLowerCase()}${regionInfo ? ` · ${regionInfo.name}` : ""}`}
+      title={`Аутсток · ${month}`}
+      subtitle={`Дни без товара у дилеров и упущенные продажи за последний закрытый месяц${regionInfo ? ` · ${regionInfo.name}` : ""}`}
       crumbs={[{ label: "Аутсток" }]}
       sp={sp}
     >
@@ -86,12 +91,17 @@ export default async function OutstockPage({ searchParams }: { searchParams: Pro
           </span>
         )}
         {data.categories.length > 0 && <span className="text-[11px] uppercase tracking-wide text-ink-3">клик по карточке категории — фильтр (можно несколько)</span>}
+        {data.canReset && (
+          <Link href={href({ scope: "top", cat: [] })} className="ml-auto rounded-lg border border-line px-3 py-1.5 text-sm text-ink hover:bg-muted">
+            Сбросить
+          </Link>
+        )}
       </div>
 
       {data.days === 0 ? (
         <Alert tone="info">
-          Снимок остатков Linko сделан {date(data.snapshotDate)} — раньше начала {monthLabel(data.year, data.month).toLowerCase()}. Восстановить остаток на эти дни не из чего:
-          выберите месяц, который уже начался к дате снимка, или нажмите «Обновить».
+          Снимок остатков Linko сделан {date(data.snapshotDate)} — раньше начала {month.toLowerCase()}. Восстановить остаток на эти дни не из чего: нажмите «Обновить», когда появится
+          новый снимок.
         </Alert>
       ) : (
         <>
@@ -125,20 +135,21 @@ export default async function OutstockPage({ searchParams }: { searchParams: Pro
               {pct(t.lossShare, 1)} к факту продаж
             </KpiTile>
             <KpiTile label="Упущено, сум" value={money(t.lostSum)} tone={t.lostSum > 0 ? "ink" : "ok"} title="Упущенные кг × средняя цена товара у дилера за период">
-              {monthLabel(data.year, data.month)} · {scopeLabel}
+              {month} · {scopeLabel}
               {selected.length ? ` · ${selected.join(", ")}` : ""}
             </KpiTile>
             <KpiTile label="Позиций с потерями" value={num(t.pairsWithLoss)} title="Пары «товар × регион», которые хотя бы один день стояли в нуле">
               {num(t.productsWithLoss)} {plural(t.productsWithLoss, "товар", "товара", "товаров")} в {num(t.regionsWithLoss)} {plural(t.regionsWithLoss, "регионе", "регионах", "регионах")}
             </KpiTile>
-            <KpiTile label="Дней в нуле" value={num(t.zeroDays)} title="Сумма дней без товара по всем парам «товар × регион»">
-              сумма по парам «SKU × регион»
+            <KpiTile label="Дней в нуле" value={num(t.zeroDays)} title="Сумма дней без товара по всем парам «товар × регион»; чья потеря — по складу завода в тот же день">
+              недовоз {num(t.dealerDays)} · завод {num(t.factoryDays)}
+              {t.unknownDays > 0 ? ` · нет данных ${num(t.unknownDays)}` : ""}
             </KpiTile>
           </div>
           <p className="mt-3 text-xs text-ink-3">
             Период {date(data.from)} – {date(data.to)} ({num(data.days)} дн.), снимок остатков Linko на {dateTime(data.syncedAt)}. Пар «товар × регион» с продажами: {num(t.pairs)}.{" "}
             {data.topConfigured ? `${data.topHint}. ` : ""}
-            {t.negativeSharePct != null ? `Клеток, ушедших в минус при расчёте назад (считаются нулём): ${num(t.negativeSharePct, 1)}%. ` : ""}
+            {t.negativeSharePct != null ? `Клеток, ушедших в минус при расчёте назад (показаны нулём): ${num(t.negativeSharePct, 1)}%. ` : ""}
             Это оценка, а не учёт — реальные потери, скорее, немного больше.
           </p>
 
@@ -155,9 +166,9 @@ export default async function OutstockPage({ searchParams }: { searchParams: Pro
             </Section>
           )}
 
-          {regionInfo && <OutstockCalendar pairs={data.pairs} from={data.from} days={data.days} region={regionInfo.name} />}
+          {calendarRegion && <OutstockCalendar pairs={data.calendar} from={data.from} days={data.days} region={calendarRegion.name} closeHref={href({ calendar: null })} />}
 
-          <OutstockRegionsTable rows={data.byRegion} linkQuery={linkQuery} />
+          <OutstockRegionsTable rows={data.byRegion} linkQuery={linkQuery} activeId={data.calendarRegionId} />
           <OutstockMatrixTable matrix={data.matrix} />
           <OutstockProductsTable rows={data.byProduct} limit={30} />
           <CollapsedSections>

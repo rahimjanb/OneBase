@@ -103,8 +103,9 @@ public sealed class IntegrationsController(
     }
 
     /// <summary>
-    /// Удалить все данные, загруженные из Linko (и связанные с ними регионы, агентов и планы OneBase),
-    /// и загрузить заново с текущего сервера. Направления, цели и настройки подключения сохраняются.
+    /// Удалить все данные, загруженные из Linko (копия Linko и планы ТП из API планов), и загрузить заново с текущего сервера.
+    /// Данные OneBase сохраняются: направления, регионы с СВР и дилером, планы РОП и «Завод», цели и настройки подключения
+    /// (см. LinkoSyncService.PurgedTables).
     /// </summary>
     [HttpPost("linko/reset")]
     public async Task<IActionResult> ResetLinko(CancellationToken ct)

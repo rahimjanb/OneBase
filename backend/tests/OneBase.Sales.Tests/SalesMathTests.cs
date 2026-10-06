@@ -53,7 +53,7 @@ public class SalesMathTests
     }
 
     [Fact]
-    public void Conversion_is_visits_with_order_on_same_day_and_outlet_over_done_visits()
+    public void Conversion_is_orders_accepted_in_the_month_over_done_visits()
     {
         var visits = new[]
         {
@@ -62,18 +62,28 @@ public class SalesMathTests
             new VisitRecord(new DateOnly(2026, 9, 2), 1, 12, VisitStatus.Done, false),
             new VisitRecord(new DateOnly(2026, 9, 3), 1, 13, VisitStatus.Pending, true), // не выполнен — не считается
         };
-        var lines = new[]
+        // Заказы по дню ввода — только для справки «визитов с заказом».
+        var created = new[]
         {
             Sale(agent: 1, market: 10, revenue: 100, day: 1, order: 1),
             Sale(agent: 1, market: 12, revenue: 100, day: 2, order: 2),
             Sale(agent: 1, market: 11, revenue: 100, day: 5, order: 3), // заказ в другой день — визит 1.09 без заказа
         };
+        // Заказы месяца по дате приёмки (факт): два заказа и возврат — возврат заказом не считается.
+        var accepted = new[]
+        {
+            Sale(agent: 1, market: 10, revenue: 100, day: 2, order: 1),
+            Sale(agent: 1, market: 10, revenue: 50, day: 2, order: 1),
+            Sale(agent: 1, market: 12, revenue: 100, day: 3, order: 2),
+            Sale(agent: 1, market: 12, revenue: -20, kg: -1, day: 4, order: null),
+        };
 
-        var summary = VisitSummary.Of(visits, lines);
+        var summary = VisitSummary.Of(visits, created, accepted);
 
         Assert.Equal(3, summary.Done);
         Assert.Equal(2, summary.WithOrder);
-        Assert.Equal(1, summary.WithoutOrder);
+        Assert.Equal(2, summary.Orders);
+        Assert.Equal(1, summary.WithoutOrder); // визиты − заказы
         Assert.Equal(2m / 3m, summary.Conversion);
         Assert.False(summary.DataMismatch);
     }
@@ -84,7 +94,9 @@ public class SalesMathTests
         var visits = new[] { new VisitRecord(new DateOnly(2026, 9, 1), 1, 10, VisitStatus.Done, true) };
         var lines = new[] { Sale(1, 10, 100, order: 1), Sale(1, 11, 100, order: 2) };
 
-        Assert.True(VisitSummary.Of(visits, lines).DataMismatch);
+        var summary = VisitSummary.Of(visits, lines, lines);
+        Assert.True(summary.DataMismatch);
+        Assert.Equal(2m, summary.Conversion); // 2 заказа на 1 визит — 200%, не обрезается
     }
 
     [Fact]
@@ -116,10 +128,40 @@ public class SalesMathTests
 
     [Theory]
     [InlineData(1.0, TargetLevel.Good)]
-    [InlineData(0.7, TargetLevel.Warning)]
-    [InlineData(0.69, TargetLevel.Bad)]
+    [InlineData(0.95, TargetLevel.Good)] // как в «Полевом контроле»: от 95% цели — зелёный
+    [InlineData(0.94, TargetLevel.Warning)]
+    [InlineData(0.75, TargetLevel.Warning)]
+    [InlineData(0.74, TargetLevel.Bad)]
     public void Target_level_thresholds(double share, TargetLevel expected) =>
         Assert.Equal(expected, SalesMath.TargetLevelOf((decimal)share * 100, 100));
+
+    [Theory]
+    [InlineData(1.0, TargetLevel.Good)]
+    [InlineData(0.9, TargetLevel.Good)] // execLevel «Полевого контроля»: от 90% — зелёный
+    [InlineData(0.89, TargetLevel.Warning)]
+    [InlineData(0.6, TargetLevel.Warning)]
+    [InlineData(0.59, TargetLevel.Bad)]
+    public void Execution_level_thresholds(double execution, TargetLevel expected) =>
+        Assert.Equal(expected, SalesMath.ExecutionLevelOf((decimal)execution));
+
+    [Fact]
+    public void Execution_level_is_absent_without_a_value() => Assert.Null(SalesMath.ExecutionLevelOf(null));
+
+    [Fact]
+    public void Problem_score_weighs_critical_risk_and_strike_of_evaluated_agents()
+    {
+        Assert.Equal(10.4m, SalesMath.ProblemScore(critical: 0, risk: 2, conversion: 0.2m, visits: 20, minVisits: 20)); // 8 + 0,8 × 3
+        Assert.Equal(20m, SalesMath.ProblemScore(2, 0, 1.5m, 20, 20)); // страйк больше 100% — слагаемое 0
+        Assert.Equal(14m, SalesMath.ProblemScore(1, 1, 0m, 19, 20)); // меньше 20 визитов — без слагаемого страйка
+        Assert.Equal(4m, SalesMath.ProblemScore(0, 1, null, 20, 20));
+    }
+
+    [Fact]
+    public void Average_takes_months_with_data()
+    {
+        Assert.Equal(20m, SalesMath.Average([10m, null, 30m]));
+        Assert.Null(SalesMath.Average([null, null]));
+    }
 
     [Fact]
     public void Median_handles_even_and_empty_sets()

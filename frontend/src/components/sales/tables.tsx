@@ -1,6 +1,6 @@
 "use client";
 
-import { DeltaPill, FlagCountPills, FlagPills, execClass } from "./bits";
+import { DeltaPill, FlagCountPills, FlagPills, levelClass } from "./bits";
 import { DataTable, NameCell, type Column } from "./DataTable";
 import { kg, money, num, pct } from "@/lib/sales/format";
 import type { NewMarket, NotBoughtRow, SameDaysRow, SilentMarket, TeamRow, UnitRow } from "@/lib/sales/types";
@@ -16,7 +16,7 @@ export function RegionsTable({ rows, query, title, hint }: { rows: UnitRow[]; qu
     { key: "name", label: "Регион", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.subtitle} /> },
     { key: "plan", label: "План, кг", align: "right", value: (r) => r.planKg, render: (r) => kg(r.planKg) },
     { key: "planFact", label: "Факт в плане, кг", align: "right", value: (r) => r.planFactKg, render: (r) => kg(r.planFactKg) },
-    { key: "exec", label: "Вып.", align: "right", value: (r) => r.execution, render: (r) => <span className={execClass(r.execution)}>{pct(r.execution)}</span> },
+    { key: "exec", label: "Вып.", align: "right", value: (r) => r.execution, render: (r) => <span className={levelClass(r.executionLevel)}>{pct(r.execution)}</span> },
     { key: "fact", label: "Факт всего, кг", align: "right", value: (r) => r.factKg, render: (r) => kg(r.factKg) },
     { key: "forecast", label: "Прогноз, кг", align: "right", value: (r) => r.forecastKg, render: (r) => kg(r.forecastKg) },
     {
@@ -24,7 +24,7 @@ export function RegionsTable({ rows, query, title, hint }: { rows: UnitRow[]; qu
       label: "Прогноз вып.",
       align: "right",
       value: (r) => r.forecastExecution,
-      render: (r) => <span className={execClass(r.forecastExecution)}>{pct(r.forecastExecution)}</span>,
+      render: (r) => <span className={levelClass(r.forecastExecutionLevel)}>{pct(r.forecastExecution)}</span>,
     },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
     { key: "akb", label: "АКБ", align: "right", value: (r) => r.akb, render: (r) => num(r.akb) },
@@ -46,7 +46,7 @@ export function RegionsTable({ rows, query, title, hint }: { rows: UnitRow[]; qu
       rows={rows}
       rowKey={(r) => r.id}
       rowHref={(r) => (r.id === NO_REGION ? null : withQuery(`/sales/regions/${r.id}`, query))}
-      note="«Факт в плане» — продажи тех ТП, у кого есть план (если у региона свой ручной план — все продажи региона); выполнение считается по нему. «Факт всего» — все продажи региона. Прогноз — факт всего, растянутый на месяц по текущему темпу. Страйк — доля визитов, после которых в тот же день был заказ в этой ТТ."
+      note="План — РОП или «Завод» (переключатель «План» вверху), «факт в плане» — все продажи региона; если планов регионов на месяц нет — план и факт ТП с планом в Linko. Выполнение считается по «факту в плане». «Факт всего» — все продажи региона. Прогноз — факт всего, растянутый на месяц по текущему темпу; у закрытого месяца прогноза нет. Страйк — заказы ТП региона, принятые в месяце ÷ их выполненные визиты (бывает больше 100%); «без заказа» — визиты минус заказы."
     />
   );
 }
@@ -129,6 +129,7 @@ export function SilentList({ markets }: { markets: SilentMarket[] }) {
 
 export function NotBoughtTable({
   rows,
+  total,
   nameLabel,
   hint,
   workedDays,
@@ -136,14 +137,27 @@ export function NotBoughtTable({
   expandable = false,
 }: {
   rows: NotBoughtRow[];
+  /** Итог таблицы — считает сервер; noData у итога — нет данных хотя бы у одной строки. */
+  total: NotBoughtRow;
   nameLabel: string;
   hint: string;
   workedDays: number;
   daysInMonth: number;
   expandable?: boolean;
 }) {
+  const noData = total.noData;
   const columns: Column<NotBoughtRow>[] = [
-    { key: "name", label: nameLabel, value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.subtitle} /> },
+    {
+      key: "name",
+      label: nameLabel,
+      value: (r) => r.name,
+      render: (r) => (
+        <span className="flex items-center gap-2">
+          <NameCell name={r.name} sub={r.subtitle} />
+          {r.noData && <span className="whitespace-nowrap rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-2">нет данных</span>}
+        </span>
+      ),
+    },
     { key: "base", label: "База ТТ", align: "right", value: (r) => r.base, render: (r) => num(r.base) },
     {
       key: "silent",
@@ -161,23 +175,26 @@ export function NotBoughtTable({
     { key: "new", label: "Новых", align: "right", value: (r) => r.new, render: (r) => num(r.new) },
   ];
 
-  const base = rows.reduce((s, r) => s + r.base, 0);
-  const silent = rows.reduce((s, r) => s + r.silent, 0);
-
   return (
     <DataTable
       title="Ещё не купили в этом месяце"
       hint={hint}
       actions={
         <span className="rounded-full bg-muted px-2.5 py-1 text-xs tabular-nums text-ink-2">
-          {num(silent)} из {num(base)} ТТ
+          {num(total.silent)} из {num(total.base)} ТТ
         </span>
       }
       columns={columns}
       rows={rows}
       rowKey={(r) => r.id}
       expand={expandable ? (r) => (r.silent > 0 ? <SilentList markets={r.silentMarkets} /> : null) : undefined}
-      note={`Это рабочий список, а не отток: точки из прошлого месяца, которые ещё не покупали в этом. По ходу месяца список тает сам. Пройдено ${workedDays} из ${daysInMonth} дней.${expandable ? " Нажмите на строку, чтобы увидеть магазины." : ""}`}
+      note={
+        `Это рабочий список, а не отток: точки из прошлого месяца, которые ещё не покупали в этом. По ходу месяца список тает сам. Пройдено ${workedDays} из ${daysInMonth} дней.` +
+        (noData
+          ? " «Нет данных» — в регионе за месяц нет ни одной покупки: это почти всегда дыра в данных, а не замолчавшая база, поэтому доли нет; в итог такие точки входят."
+          : "") +
+        (expandable ? " Нажмите на строку, чтобы увидеть магазины." : "")
+      }
     />
   );
 }
@@ -205,14 +222,14 @@ export function TeamTable({ rows, query }: { rows: TeamRow[]; query: string }) {
     },
     { key: "plan", label: "План ТП, кг", align: "right", value: (r) => r.planKg, render: (r) => kg(r.planKg) },
     { key: "fact", label: "Факт, кг", align: "right", value: (r) => r.factKg, render: (r) => kg(r.factKg) },
-    { key: "exec", label: "Вып.", align: "right", value: (r) => r.execution, render: (r) => <span className={execClass(r.execution)}>{pct(r.execution)}</span> },
+    { key: "exec", label: "Вып.", align: "right", value: (r) => r.execution, render: (r) => <span className={levelClass(r.executionLevel)}>{pct(r.execution)}</span> },
     { key: "forecast", label: "Прогноз, кг", align: "right", value: (r) => r.forecastKg, render: (r) => kg(r.forecastKg) },
     {
       key: "forecastExec",
       label: "Прогноз вып.",
       align: "right",
       value: (r) => r.forecastExecution,
-      render: (r) => <span className={execClass(r.forecastExecution)}>{pct(r.forecastExecution)}</span>,
+      render: (r) => <span className={levelClass(r.forecastExecutionLevel)}>{pct(r.forecastExecution)}</span>,
     },
     { key: "revenue", label: "Выручка", align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue) },
     { key: "visits", label: "Визиты", align: "right", value: (r) => r.visits, render: (r) => num(r.visits) },
@@ -236,7 +253,7 @@ export function TeamTable({ rows, query }: { rows: TeamRow[]; query: string }) {
       rows={rows}
       rowKey={(r) => String(r.agentId)}
       rowHref={(r) => withQuery(`/sales/agents/${r.agentId}`, query)}
-      note="Факт ТП — продажи агента в этом регионе. Флаги считаются, только если у агента за месяц не меньше 20 визитов; сравнение — с медианой региона без вакансий."
+      note="Факт ТП — продажи агента в этом регионе. Заказы — принятые в месяце, страйк — заказы ÷ выполненные визиты (бывает больше 100%). Флаги считаются, только если у агента за месяц не меньше 20 визитов; сравнение — с медианой региона по ТП без вакансий, с 20+ визитами и без «данные не сходятся». Прогноз — только у идущего месяца."
     />
   );
 }

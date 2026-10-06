@@ -1,7 +1,7 @@
-import { AkbChart } from "./AkbChart";
+import { AkbMonthsCard } from "./AkbMonthsCard";
 import { CollapsedSections } from "./bits";
 import { CategoryPlanTable, DataQualityNotes, KpiRow, NextMonthCard, UnassignedWarning, UnitCard } from "./blocks";
-import { VisitCalendarTable } from "./calendars";
+import { MonthCalendarTable, VisitCalendarTable } from "./calendars";
 import { CategoryCards } from "./categories";
 import { NotBoughtTable, RegionsTable, SameDaysTable } from "./tables";
 import { monthGenitive, monthName } from "@/lib/sales/format";
@@ -67,16 +67,36 @@ export function GroupPage({
       {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle="Регион" />}
       <CategoryCards cards={data.categoryCards} scope={scopeName} query={categoryQuery} />
 
-      <CollapsedSections>
-        <CategoryPlanTable rows={data.categoryPlans ?? []} />
-        <AkbChart data={data.akbMonths} />
+      {/* Ключ по месяцу: смена месяца сбрасывает раскрытые секции, сортировки и раскрытые строки (DOC-filters §12). */}
+      <CollapsedSections key={`${period.year}-${period.month}`}>
+        <CategoryPlanTable rows={data.categoryPlans} total={data.categoryPlanTotal} source={data.kpi.planSource} plan={period.plan} />
+        <AkbMonthsCard data={data.akbMonths} />
         <RegionsTable
           rows={data.regions}
           query={query}
           title={regionsTitle}
           hint={`текущий темп × ${period.daysInMonth} дн. (отработано ${period.workedDays})`}
         />
-        <VisitCalendarTable rows={data.visitCalendar} totalName="Итого" from={from} to={to} maxDay={period.daysInMonth} />
+        <MonthCalendarTable
+          calendar={data.calendar}
+          year={period.year}
+          month={period.month}
+          categories={data.categoryCards.filter((c) => c.id !== "none").map((c) => ({ id: Number(c.id), name: c.name }))}
+          title="Календарь месяца по регионам"
+          rowLabel="Регион"
+          rowKind="region"
+        />
+        <VisitCalendarTable
+          rows={data.visitCalendar}
+          totalRow={data.visitCalendarTotal}
+          totalName="Итого"
+          from={from}
+          to={to}
+          maxDay={period.daysInMonth}
+          factDays={period.workedDays}
+          year={period.year}
+          month={period.month}
+        />
         <SameDaysTable
           rows={data.sameDays}
           nameLabel="Регион"
@@ -86,12 +106,13 @@ export function GroupPage({
         />
         <NotBoughtTable
           rows={data.notBought}
+          total={data.notBoughtTotal}
           nameLabel="Регион"
           hint={`база — ${monthName(prevMonth)}, кто пока молчит`}
           workedDays={period.workedDays}
           daysInMonth={period.daysInMonth}
         />
-        <DataQualityNotes quality={data.quality} />
+        <DataQualityNotes quality={data.quality} period={period} />
       </CollapsedSections>
     </>
   );
