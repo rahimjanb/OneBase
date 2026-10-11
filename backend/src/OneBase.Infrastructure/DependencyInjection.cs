@@ -101,6 +101,21 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Sales.SkuSales.SkuSalesService>();
         services.AddSingleton<LinkoSyncCoordinator>();
 
+        // AI Data Manager: отчёты администратора → планы изменений данных OneBase (копия Linko не меняется).
+        var dataManager = config.GetSection(OneBase.Application.DataManager.DataManagerOptions.Section)
+                              .Get<OneBase.Application.DataManager.DataManagerOptions>()
+                          ?? new OneBase.Application.DataManager.DataManagerOptions();
+        if (config["DATA_MANAGER_MODEL"] is { Length: > 0 } dataManagerModel)
+        {
+            dataManager.Model = dataManagerModel;
+        }
+
+        services.AddSingleton(dataManager);
+        services.AddSingleton<IReportReader, DataManager.ReportReader>();
+        services.AddScoped<OneBase.Application.DataManager.DataFileService>();
+        services.AddScoped<OneBase.Application.DataManager.DataChangeService>();
+        services.AddScoped<OneBase.Application.DataManager.IDataChangeApplier, DataManager.DataChangeApplier>();
+
         // Журнал ошибок («Настройки → Журнал ошибок»): логгер кладёт в очередь, фоновая служба пишет в БД.
         services.AddSingleton<Logging.SystemLogQueue>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<ILoggerProvider, Logging.SystemLoggerProvider>());

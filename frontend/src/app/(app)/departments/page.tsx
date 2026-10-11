@@ -1,8 +1,14 @@
+import { redirect } from "next/navigation";
 import { DepartmentStatusCard } from "@/components/departments";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { departments } from "@/lib/demo-data";
+import { canOpen, homeFor } from "@/lib/navigation";
+import { apiSession } from "@/lib/server-api";
+import type { Me } from "@/lib/users";
 
-export default function DepartmentsPage() {
+export default async function DepartmentsPage() {
+  const me = await apiSession<Me>("/api/auth/me");
+  if (me && !canOpen("/departments", me.permissions)) redirect(homeFor(me.permissions));
   return (
     <>
       <PageHeader title="Отделы" subtitle="Показатели, планы и состояние подразделений" />

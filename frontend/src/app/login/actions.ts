@@ -3,6 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { fieldHomePath, isFieldHost, requestHost } from "@/lib/field/host";
+import { homeFor } from "@/lib/navigation";
 import { API_URL, SESSION_COOKIE } from "@/lib/server-api";
 
 export type LoginState = { error?: string };
@@ -44,7 +45,16 @@ export async function login(_: LoginState, form: FormData): Promise<LoginState> 
     expires: new Date(expiresAt),
   });
 
-  redirect(safePath(next, fallback));
+  // По умолчанию — «Продажи»; кому они недоступны (HR, «Админ 2»), — первый доступный раздел вместо «нет доступа».
+  let target = safePath(next, fallback);
+  if (target === "/sales") {
+    const me = await fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<{ permissions: string[] }>) : null))
+      .catch(() => null);
+    if (me && !me.permissions.includes("sales.read")) target = homeFor(me.permissions);
+  }
+
+  redirect(target);
 }
 
 /**

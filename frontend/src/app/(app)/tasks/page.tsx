@@ -3,8 +3,11 @@ import { ArrowRight, Lock, Route as RouteIcon } from "lucide-react";
 import { DepartmentIcon } from "@/components/departments";
 import { PushPrompt } from "@/components/shell/AppBridge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
-import { apiGet, apiTry } from "@/lib/server-api";
+import { redirect } from "next/navigation";
+import { canOpen, homeFor } from "@/lib/navigation";
+import { apiGet, apiSession, apiTry } from "@/lib/server-api";
 import type { DepartmentTasks, PageResult } from "@/lib/tasks";
+import type { Me } from "@/lib/users";
 import type { FieldTask } from "@/lib/field/types";
 
 export const metadata = { title: "Задачи · OneBase" };
@@ -17,6 +20,8 @@ const plural = (n: number, one: string, few: string, many: string) => {
 
 /** «Задачи»: кнопки всех отделов. В отделе — его задачи; в «Продажах» ещё задачи и маршруты полевой команды (Sales Base). */
 export default async function TasksPage() {
+  const me = await apiSession<Me>("/api/auth/me");
+  if (me && !canOpen("/tasks", me.permissions)) redirect(homeFor(me.permissions));
   const departments = await apiGet<DepartmentTasks[]>("/api/work/departments", "/tasks");
   // Открытые задачи полевой команды — для карточки «Продажи», если есть доступ к Sales Base.
   const fieldOpen = departments.some((d) => d.hasField) ? await apiTry<PageResult<FieldTask>>("/api/field/tasks?status=open&pageSize=10") : null;

@@ -68,6 +68,12 @@ public static class DependencyInjection
         services.AddScoped<IConsultantEngine, OneBase.AI.Orchestration.OrchestratedConsultantEngine>();
         services.AddScoped<ConsultantChatService>();
 
+        // AI Data Manager: Claude (официальный SDK) + инструменты чтения и подготовки планов изменений.
+        // Применение — только по подтверждению администратора (DataManagerChatService.ApplyAsync), у модели такого инструмента нет.
+        services.AddSingleton<OneBase.AI.DataManager.IDataManagerModel, OneBase.AI.DataManager.ClaudeDataManagerModel>();
+        services.AddScoped<OneBase.AI.DataManager.DataManagerTools>();
+        services.AddScoped<OneBase.AI.DataManager.DataManagerChatService>();
+
         services.AddScoped<ITool, DelegateToAgentTool>();
 
         // Инструменты данных OneBase — только чтение, с правами пользователя.

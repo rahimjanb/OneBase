@@ -3,16 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useKeyboardOpen } from "./AppScroll";
-import { isActive, settings, workspace } from "./Sidebar";
+import { isActive, settings, visibleWorkspace } from "./Sidebar";
 
 /**
  * Нижняя панель навигации на телефоне — главные разделы, как в нативном приложении.
  * Разделы «скоро» не показываем; «Настройки» — только при правах. Отступ снизу — под жест «домой» (safe area).
  * Панель в потоке под областью прокрутки — не двигается при прокрутке; при открытой клавиатуре прячется.
  */
-export function MobileNav({ canOpenSettings }: { canOpenSettings: boolean }) {
+export function MobileNav({ canOpenSettings, permissions }: { canOpenSettings: boolean; permissions: readonly string[] | null }) {
   const pathname = usePathname();
-  const items = [...workspace.filter((item) => !item.soon), ...(canOpenSettings ? [settings] : [])];
+  const items = [...visibleWorkspace(permissions).filter((item) => !item.soon), ...(canOpenSettings ? [settings] : [])];
   const keyboardOpen = useKeyboardOpen();
 
   return (

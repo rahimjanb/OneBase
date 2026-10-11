@@ -40,6 +40,13 @@ public interface IAppDbContext
     DbSet<AiUsage> AiUsage { get; }
     DbSet<AiAuditLog> AiAuditLogs { get; }
 
+    // AI Data Manager: чаты, отчёты, планы изменений
+    DbSet<DataConversation> DataConversations { get; }
+    DbSet<DataMessage> DataMessages { get; }
+    DbSet<DataFile> DataFiles { get; }
+    DbSet<DataChangeSet> DataChangeSets { get; }
+    DbSet<DataChangeItem> DataChangeItems { get; }
+
     DbSet<LinkoUser> LinkoUsers { get; }
     DbSet<LinkoMarket> LinkoMarkets { get; }
     DbSet<LinkoProduct> LinkoProducts { get; }

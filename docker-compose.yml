@@ -83,6 +83,8 @@ services:
       Llm__EmbeddingModel: ${EMBEDDING_MODEL}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # AI Data Manager: модель Claude (пусто — claude-opus-5-5 из appsettings).
+      DATA_MANAGER_MODEL: ${DATA_MANAGER_MODEL:-}
       LINKO_BASE_URL: ${LINKO_BASE_URL}
       LINKO_TOKEN: ${LINKO_TOKEN}
       LINKO_PLAN_TOKEN: ${LINKO_PLAN_TOKEN}

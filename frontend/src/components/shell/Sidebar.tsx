@@ -7,12 +7,14 @@ import {
   Check,
   CircleQuestionMark,
   Database,
+  DatabaseZap,
   Grid3x3,
   LayoutGrid,
   SlidersHorizontal,
   Sparkle,
   type LucideIcon,
 } from "lucide-react";
+import { canOpen } from "@/lib/navigation";
 
 /**
  * also — разделы, которые открываются из этого пункта и подсвечивают его (продажи — из «Отделов»).
@@ -28,9 +30,14 @@ export const workspace: NavItem[] = [
   { href: "/reports", label: "Отчёты", icon: ChartNoAxesColumn, soon: true },
   { href: "/base", label: "Файлы", icon: Database, also: ["/files"] },
   { href: "/consultant", label: "AI-консультант", icon: Sparkle, also: ["/ai"], short: "AI" },
+  { href: "/data-manager", label: "AI Data Manager", icon: DatabaseZap, short: "Данные" },
 ];
 
 export const settings: NavItem = { href: "/settings", label: "Настройки", icon: SlidersHorizontal };
+
+/** Пункты меню, доступные пользователю (права — из /api/auth/me; без прав раздел скрыт, как и «Настройки»). */
+export const visibleWorkspace = (permissions: readonly string[] | null) =>
+  permissions === null ? workspace : workspace.filter((item) => canOpen(item.href, permissions));
 
 export function isActive(pathname: string, item: NavItem) {
   const under = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -74,8 +81,9 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 /**
  * Боковая навигация на больших экранах. На телефоне вместо неё — шапка (Topbar) и нижняя панель (MobileNav).
  * canOpenSettings — есть права раздела «Настройки»; обычным сотрудникам пункт не показывается.
+ * permissions — права пользователя: пункты, к которым нет доступа, скрыты (роль «Админ 2» видит только «Файлы» и «AI Data Manager»).
  */
-export function Sidebar({ canOpenSettings }: { canOpenSettings: boolean }) {
+export function Sidebar({ canOpenSettings, permissions }: { canOpenSettings: boolean; permissions: readonly string[] | null }) {
   const pathname = usePathname();
 
   return (
@@ -88,7 +96,7 @@ export function Sidebar({ canOpenSettings }: { canOpenSettings: boolean }) {
         Рабочее пространство
       </div>
       <nav className="mt-3 space-y-1">
-        {workspace.map((item) => (
+        {visibleWorkspace(permissions).map((item) => (
           <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
         ))}
       </nav>

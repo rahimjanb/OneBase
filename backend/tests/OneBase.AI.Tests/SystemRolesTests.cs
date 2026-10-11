@@ -32,9 +32,20 @@ public class SystemRolesTests
     [InlineData("marketing")]
     public void Every_department_has_a_role_without_settings(string department)
     {
-        var role = Assert.Single(SystemRoles.All, r => r.DepartmentCode == department);
+        var role = Assert.Single(SystemRoles.All, r => r.DepartmentCode == department && r.Name != SystemRoles.DataAdmin);
 
         Assert.DoesNotContain(role.Permissions, SystemRoles.SettingsPermissions.Contains);
         Assert.Contains(Permissions.AgentsRun, role.Permissions);
+    }
+
+    [Fact]
+    public void DataAdmin_has_sales_files_and_only_data_manager_in_settings()
+    {
+        var role = Role(SystemRoles.DataAdmin);
+
+        Assert.Equal("sales", role.DepartmentCode); // «Файлы» — только папка отдела продаж
+        Assert.Equal([Permissions.DataManage, Permissions.FilesRead, Permissions.FilesWrite], role.Permissions.Order());
+        Assert.Equal([Permissions.DataManage], SystemRoles.SettingsPermissions.Where(role.Permissions.Contains));
+        Assert.DoesNotContain(Permissions.FilesReadAll, role.Permissions);
     }
 }

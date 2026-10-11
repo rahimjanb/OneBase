@@ -13,6 +13,12 @@ public static class SystemRoles
 
     public const string Director = "Директор";
 
+    /// <summary>
+    /// Администратор данных продаж: файлы отдела продаж и AI Data Manager (отчёты → планы, цели, дилеры — с подтверждением).
+    /// Без пользователей, интеграций, настроек AI и разделов аналитики.
+    /// </summary>
+    public const string DataAdmin = "Админ 2";
+
     /// <summary>Роли Sales Base (sales.1base.uz).</summary>
     public const string FieldRm = "РМ (Sales Base)";
 
@@ -33,6 +39,9 @@ public static class SystemRoles
             Permissions.FilesReadAll,
             Permissions.AgentsRun, Permissions.ApprovalsDecide, Permissions.AuditRead, Permissions.FieldPlan,
         ]),
+        new(DataAdmin, "Файлы отдела продаж и AI Data Manager: загрузка отчётов, изменение планов, целей и дилеров регионов с подтверждением. "
+                       + "В «Настройках» — только AI Data Manager.", "sales",
+            [Permissions.FilesRead, Permissions.FilesWrite, Permissions.DataManage]),
         new("Продажи", "Сотрудник отдела продаж: раздел «Продажи», консультант, файлы.", "sales", [Permissions.SalesRead, .. Employee]),
         new("Финансы", "Сотрудник финансового отдела: оплаты и продажи, консультант, файлы.", "finance", [Permissions.FinanceRead, Permissions.SalesRead, .. Employee]),
         new("HR", "Сотрудник HR: кадровые данные, консультант, файлы.", "hr", [Permissions.HrRead, .. Employee]),
@@ -57,7 +66,7 @@ public static class SystemRoles
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
     public static readonly IReadOnlyList<string> SettingsPermissions =
-        [Permissions.UsersManage, Permissions.IntegrationsManage, Permissions.AiSettingsManage, Permissions.SalesManage, Permissions.LogsRead];
+        [Permissions.UsersManage, Permissions.IntegrationsManage, Permissions.AiSettingsManage, Permissions.DataManage, Permissions.SalesManage, Permissions.LogsRead];
 
     /// <summary>Порядок ролей в списках: администратор, директор, отделы.</summary>
     public static int OrderOf(string name)
@@ -79,6 +88,7 @@ public static class SystemRoles
         [Permissions.UsersManage] = "Пользователи и роли",
         [Permissions.IntegrationsManage] = "Интеграции",
         [Permissions.AiSettingsManage] = "Настройки AI",
+        [Permissions.DataManage] = "AI Data Manager: изменение данных по отчётам",
         [Permissions.LogsRead] = "Журнал ошибок",
         [Permissions.SalesRead] = "Продажи",
         [Permissions.SalesManage] = "Продажи: настройки и синхронизация",

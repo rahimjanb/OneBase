@@ -26,6 +26,12 @@ public static class Permissions
     /// <summary>«Настройки → AI»: провайдеры, ключи API, модели, агенты.</summary>
     public const string AiSettingsManage = "ai.settings.manage";
 
+    /// <summary>
+    /// AI Data Manager: загрузка отчётов, анализ через Claude, чтение данных продаж внутри раздела и подтверждение изменений данных OneBase
+    /// (планы регионов, цели, дилеры и СВР регионов). Других прав на продажи не требует — роль «Админ 2» работает только им.
+    /// </summary>
+    public const string DataManage = "ai.data.manage";
+
     /// <summary>«Настройки → Журнал ошибок»: ошибки Linko, синхронизации и сервера. Только у администратора.</summary>
     public const string LogsRead = "system.logs.read";
 
@@ -45,6 +51,7 @@ public static class Permissions
     [
         IntegrationsManage,
         AiSettingsManage,
+        DataManage,
         LogsRead,
         UsersManage,
         FilesRead,

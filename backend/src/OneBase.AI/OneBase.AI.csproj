@@ -13,4 +13,9 @@
         <ProjectReference Include="..\OneBase.Application\OneBase.Application.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- Официальный SDK Claude API — для AI Data Manager (tool use с рассуждениями, кэш подсказки, резервная модель). -->
+        <PackageReference Include="Anthropic" Version="12.55.0" />
+    </ItemGroup>
+
 </Project>

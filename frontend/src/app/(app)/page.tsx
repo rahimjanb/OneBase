@@ -6,6 +6,8 @@ import { Card, SectionTitle, SelectField } from "@/components/ui";
 import { categoryNames, type AiAlertsView } from "@/lib/ai";
 import { departments, focusOfDay, kpis } from "@/lib/demo-data";
 import { greeting, todayLabel } from "@/lib/format";
+import { redirect } from "next/navigation";
+import { canOpen, homeFor } from "@/lib/navigation";
 import { apiSession, apiTry } from "@/lib/server-api";
 import type { Me } from "@/lib/users";
 
@@ -20,6 +22,8 @@ const trendStyles = {
 export default async function DashboardPage() {
   // Приветствие по имени и «Фокус дня» — реальные находки проактивного анализа, если есть доступ к консультанту.
   const [me, alerts] = await Promise.all([apiSession<Me>("/api/auth/me"), apiTry<AiAlertsView>("/api/ai/alerts")]);
+  // Роль без общих разделов (например, «Админ 2») начинает со своего первого раздела.
+  if (me && !canOpen("/", me.permissions)) redirect(homeFor(me.permissions));
   const name = me?.firstName || me?.name || me?.login;
   const problems = alerts?.alerts.filter((a) => a.severity !== "Opportunity").slice(0, 2) ?? [];
 

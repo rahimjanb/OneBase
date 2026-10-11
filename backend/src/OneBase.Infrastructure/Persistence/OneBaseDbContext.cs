@@ -50,6 +50,12 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<AiUsage> AiUsage => Set<AiUsage>();
     public DbSet<AiAuditLog> AiAuditLogs => Set<AiAuditLog>();
 
+    public DbSet<DataConversation> DataConversations => Set<DataConversation>();
+    public DbSet<DataMessage> DataMessages => Set<DataMessage>();
+    public DbSet<DataFile> DataFiles => Set<DataFile>();
+    public DbSet<DataChangeSet> DataChangeSets => Set<DataChangeSet>();
+    public DbSet<DataChangeItem> DataChangeItems => Set<DataChangeItem>();
+
     // Linko (зеркало SFA)
     public DbSet<LinkoUser> LinkoUsers => Set<LinkoUser>();
     public DbSet<LinkoMarket> LinkoMarkets => Set<LinkoMarket>();
@@ -109,6 +115,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         SalesModel.ConfigureLinko(b);
         SalesModel.ConfigureSales(b);
         AiSchema.Configure(b);
+        DataManagerSchema.Configure(b);
         FieldModel.Configure(b);
         WorkModel.Configure(b);
 
