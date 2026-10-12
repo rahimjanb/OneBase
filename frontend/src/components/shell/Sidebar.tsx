@@ -11,7 +11,7 @@ import {
   Grid3x3,
   LayoutGrid,
   SlidersHorizontal,
-  Sparkle,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { canOpen } from "@/lib/navigation";
@@ -29,7 +29,7 @@ export const workspace: NavItem[] = [
   { href: "/tasks", label: "Задачи", icon: Check },
   { href: "/reports", label: "Отчёты", icon: ChartNoAxesColumn, soon: true },
   { href: "/base", label: "Файлы", icon: Database, also: ["/files"] },
-  { href: "/consultant", label: "AI-консультант", icon: Sparkle, also: ["/ai"], short: "AI" },
+  { href: "/consultant", label: "AI-консультант", icon: Sparkles, also: ["/ai"], short: "AI" },
   { href: "/data-manager", label: "AI Data Manager", icon: DatabaseZap, short: "Данные" },
 ];
 
@@ -53,13 +53,17 @@ export function Logo() {
   );
 }
 
-const linkClass = "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-text transition-colors hover:bg-white/5 hover:text-white";
+const linkClass = "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-sidebar-text transition-colors hover:bg-white/5 hover:text-white";
+
+/** Активный пункт — «стеклянная» плашка: белый 10 %, обводка белый 15 %, размытие фона. */
+const activeClass =
+  "flex items-center gap-3 rounded-xl bg-sidebar-active px-3 py-2.5 text-[13px] font-semibold text-white ring-1 ring-inset ring-white/15 backdrop-blur-md";
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
   if (item.soon) {
     return (
-      <span aria-disabled="true" title="Раздел в разработке" className="flex cursor-default items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-muted">
+      <span aria-disabled="true" title="Раздел в разработке" className="flex cursor-default items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-sidebar-muted">
         <Icon className="size-4 shrink-0" strokeWidth={1.75} />
         {item.label}
         <span className="ml-auto rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] text-sidebar-muted">скоро</span>
@@ -70,7 +74,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      className={active ? "flex items-center gap-3 rounded-lg bg-sidebar-active px-3 py-2.5 text-sm font-semibold text-white" : linkClass}
+      className={active ? activeClass : linkClass}
     >
       <Icon className="size-4 shrink-0" strokeWidth={1.75} />
       {item.label}
@@ -87,12 +91,13 @@ export function Sidebar({ canOpenSettings, permissions }: { canOpenSettings: boo
   const pathname = usePathname();
 
   return (
-    <aside className="hidden h-full w-[232px] shrink-0 flex-col overflow-y-auto bg-sidebar px-3 py-6 lg:flex">
-      <div className="px-3">
+    <aside className="hidden h-full w-[232px] shrink-0 flex-col overflow-y-auto border-r border-white/[0.07] bg-sidebar px-3 pb-6 lg:flex">
+      {/* Высота — как у верхней панели (72px): логотип и панель — одна строка. */}
+      <div className="flex h-[72px] shrink-0 items-center px-3">
         <Logo />
       </div>
 
-      <div className="mt-9 px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-sidebar-muted">
+      <div className="mt-5 px-3 text-[10px] font-semibold uppercase tracking-[1px] text-sidebar-muted">
         Рабочее пространство
       </div>
       <nav className="mt-3 space-y-1">

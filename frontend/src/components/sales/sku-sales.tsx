@@ -283,9 +283,9 @@ export function SkuRegionMatrix({ data }: { data: SkuSalesView }) {
       ) : (
         <div className="-mx-4 max-h-[640px] overflow-auto px-4 sm:-mx-5 sm:px-5">
           <table className="w-full min-w-max border-collapse text-xs">
-            <thead className="sticky top-0 z-20 bg-surface">
+            <thead className="sticky top-0 z-20 bg-surface-solid">
               <tr className="border-b border-line">
-                <th className="sticky left-0 z-10 bg-surface px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">Продукт</th>
+                <th className="sticky left-0 z-10 bg-surface-solid px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">Продукт</th>
                 {data.regions.map((r) => (
                   <th key={r.id} className={`${th} ${r.id === data.regionId ? "text-accent-strong" : ""}`}>
                     {r.name}
@@ -297,7 +297,7 @@ export function SkuRegionMatrix({ data }: { data: SkuSalesView }) {
             <tbody>
               {m.rows.map((r) => (
                 <tr key={r.productId} className="border-b border-line">
-                  <td className="sticky left-0 z-10 max-w-[300px] bg-surface px-2 py-1.5 text-ink" title={`${r.name} · ${r.category} · ${r.abc}`}>
+                  <td className="sticky left-0 z-10 max-w-[300px] bg-surface-solid px-2 py-1.5 text-ink" title={`${r.name} · ${r.category} · ${r.abc}`}>
                     <span className="flex items-center gap-1.5">
                       {r.isTop && <TopChip />}
                       <span className="truncate">{r.name}</span>
@@ -317,7 +317,7 @@ export function SkuRegionMatrix({ data }: { data: SkuSalesView }) {
             {unit !== "share" && (
               <tfoot>
                 <tr className="bg-muted font-semibold text-ink">
-                  <td className="sticky left-0 z-10 bg-muted px-2 py-2">Итого</td>
+                  <td className="sticky left-0 z-10 bg-muted-solid px-2 py-2">Итого</td>
                   {data.regions.map((reg, i) => (
                     <td key={reg.id} className="px-2 py-2 text-right tabular-nums">
                       {unit === "sum" ? money(m.totalRevenue[i]) : kg(m.totalKg[i])}
@@ -386,7 +386,7 @@ export function SkuCategoryMatrix({ data }: { data: SkuSalesView }) {
   const head = (last: string) => (
     <thead>
       <tr className="border-b border-line">
-        <th className="sticky left-0 z-10 bg-surface px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">Категория</th>
+        <th className="sticky left-0 z-10 bg-surface-solid px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">Категория</th>
         {data.regions.map((r) => (
           <th key={r.id} className={th}>
             {r.name}
@@ -397,7 +397,7 @@ export function SkuCategoryMatrix({ data }: { data: SkuSalesView }) {
       </tr>
     </thead>
   );
-  const name = (n: string) => <td className="sticky left-0 z-10 bg-surface px-2 py-1.5 text-ink">{n}</td>;
+  const name = (n: string) => <td className="sticky left-0 z-10 bg-surface-solid px-2 py-1.5 text-ink">{n}</td>;
 
   return (
     <Section title="Категории × регионы" hint="вес категорий по регионам и доля категории в весе региона">
@@ -424,7 +424,7 @@ export function SkuCategoryMatrix({ data }: { data: SkuSalesView }) {
               </tbody>
               <tfoot>
                 <tr className="bg-muted font-semibold text-ink">
-                  <td className="sticky left-0 z-10 bg-muted px-2 py-2">Итого</td>
+                  <td className="sticky left-0 z-10 bg-muted-solid px-2 py-2">Итого</td>
                   {c.totalKg.map((v, i) => (
                     <td key={i} className="px-2 py-2 text-right tabular-nums">
                       {kg(v)}

@@ -121,7 +121,7 @@ export default async function AgentPage({
 
       <Findings flags={data.flags} />
       {data.assortment && (
-        <CategoryCards cards={data.assortment.categories} scope="продажах этого ТП" query={queryWith(q, { agent: data.agentId })} />
+        <CategoryCards cards={data.assortment.categories} scope="продажах этого ТП" query={queryWith(q, { agent: data.agentId })} plans={data.categoryPlan} />
       )}
 
       {/* Ключ по месяцу: смена месяца сбрасывает раскрытые секции, сортировки и раскрытые строки (DOC-filters §12). */}

@@ -394,7 +394,7 @@ function RowMenu({ items }: { items: MenuItem[] }) {
           ref={menu}
           role="menu"
           style={{ top: position?.top ?? 0, right: position?.right ?? 0, visibility: position ? "visible" : "hidden" }}
-          className="fixed z-50 w-48 rounded-lg border border-line bg-surface py-1 shadow-lg"
+          className="fixed z-50 w-48 rounded-lg border border-line bg-surface-solid py-1 shadow-lg"
         >
           {items.map((item) => {
             const content = (

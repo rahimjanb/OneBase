@@ -10,6 +10,7 @@ using OneBase.AI.DataManager;
 using OneBase.AI.Gateway;
 using OneBase.Application.Abstractions;
 using OneBase.Application.DataManager;
+using OneBase.Application.Sales.Pnl;
 using OneBase.Application.Security;
 using OneBase.Domain.AI;
 using OneBase.Domain.Identity;
@@ -208,6 +209,7 @@ public sealed class DataManagerDb : IAsyncLifetime
         await db.DataFiles.ExecuteDeleteAsync();
         await db.DataConversations.ExecuteDeleteAsync();
         await db.SalesRegionPlans.ExecuteDeleteAsync();
+        await db.SalesPnlValues.ExecuteDeleteAsync();
         Model.Script.Clear();
         Model.Calls.Clear();
         scope.ServiceProvider.GetRequiredService<OneBase.Application.Sales.SalesCacheSignal>().InvalidateHistory();
@@ -423,6 +425,64 @@ public class DataManagerDatabaseTests(DataManagerDb fixture) : IClassFixture<Dat
         Assert.Equal(DataChangeSetStatus.Cancelled, cancelled.Status);
         await Assert.ThrowsAsync<DataManagerException>(() => sp.GetRequiredService<IDataChangeApplier>().ApplyAsync(set.Id, fixture.AdminId));
         Assert.Empty(await PlansAsync(sp));
+    }
+
+    /// <summary>P&L: реестр «Прочие расходы» → план → подтверждение → P&L раздела пересчитан и сверен → повтор без дублей → откат.</summary>
+    [PostgresFact]
+    public async Task Pnl_RegistryToConfirmedVerifiedPnl_RollbackRestoresEmpty()
+    {
+        await fixture.ResetAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var chat = sp.GetRequiredService<DataManagerChatService>();
+        var pnl = sp.GetRequiredService<PnlService>();
+        const string registry = "Год;Месяц;Сумма;Диллер;Статья\n2026;9;1 000;Азизбек Хоразм;601-Дилер бонуслари\n2026;9;500;азизбек  хоразм;609-Акция\n"
+                                + "2026;9;300;Азизбек Хоразм;606-Логистика\n2026;9;200;Каримов;339-Утилизация\n";
+        var mapping = new
+        {
+            headerRow = 1, dealerColumn = "Диллер", lineColumn = "Статья", valueColumn = "Сумма", yearColumn = "Год", monthColumn = "Месяц", sumRows = true,
+        };
+
+        async Task<DataChangeSetView> PrepareAsync()
+        {
+            var fileId = await UploadAsync(sp, registry, "prochie.csv");
+            fixture.Model.Script.Enqueue(_ => FakeDataModel.Tool("prepare_pnl_update", new { mode = "upsert", fileId, mapping }));
+            fixture.Model.Script.Enqueue(_ => FakeDataModel.Text("Подготовил загрузку P&L."));
+            var events = new List<ChatEvent>();
+            await chat.SendAsync(fixture.AdminId, null, "Загрузи прочие расходы за сентябрь в P&L", [fileId], Collect(events), CancellationToken.None);
+            return Assert.IsType<DataChangeSetView>(events.Last(e => e.Type == "changeset").Data);
+        }
+
+        var set = await PrepareAsync();
+        Assert.Equal(DataTargets.Pnl, set.Target);
+        Assert.Equal(3, set.Items.Count(i => i.Action == DataChangeAction.Create));
+        Assert.Empty((await pnl.GetAsync(null, null)).Months); // до подтверждения P&L пуст — демо-данных нет
+
+        ScriptVerify();
+        var outcome = await chat.ApplyAsync(fixture.AdminId, set.Id, Collect([]), CancellationToken.None);
+        Assert.Equal(DataChangeSetStatus.Applied, outcome.Status);
+
+        var view = await pnl.GetAsync(null, null);
+        Assert.Equal((2026, 9), (view.Year!.Value, view.Month!.Value));
+        var azizbek = Assert.Single(view.Groups.SelectMany(g => g.Dealers), d => d.Name == "Азизбек Хоразм");
+        Assert.Equal("Хоразм", azizbek.Region); // дилер региона из справочника OneBase
+        Assert.Equal(1500m, azizbek.Values[PnlMath.Sm]);
+        Assert.Equal(300m, azizbek.Values[PnlMath.Ship]);
+        Assert.Equal(-2000m, view.Total[PnlMath.Ebit]);
+        Assert.Equal(set.Id, view.LastLoad!.ChangeSetId);
+
+        var verification = (await sp.GetRequiredService<DataChangeService>().GetAsync(set.Id))!.Verification!.Value;
+        Assert.Equal(0, verification.GetProperty("mismatches").GetInt32());
+        Assert.Equal(-2000m, verification.GetProperty("pnl")[0].GetProperty("after").GetProperty("ebit").GetDecimal());
+
+        // Тот же реестр ещё раз: изменений нет, применять нечего.
+        var again = await PrepareAsync();
+        Assert.False(again.CanApply);
+        Assert.All(again.Items, i => Assert.Equal(DataChangeAction.Unchanged, i.Action));
+
+        var rollback = await chat.RollbackAsync(fixture.AdminId, set.Id, Collect([]), CancellationToken.None);
+        Assert.Equal(DataChangeSetStatus.RolledBack, rollback.Status);
+        Assert.Empty((await pnl.GetAsync(null, null)).Months);
     }
 
     [PostgresFact]

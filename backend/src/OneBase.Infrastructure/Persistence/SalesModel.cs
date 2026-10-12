@@ -236,5 +236,16 @@ internal static class SalesModel
             e.HasKey(x => x.Key);
             e.Property(x => x.Key).HasMaxLength(64);
         });
+
+        // P&L дилеров: исходные строки по месяцам; итоги считает OneBase. Данные — только через AI Data Manager.
+        b.Entity<SalesPnlValue>(e =>
+        {
+            e.ToTable("PnlValues", "sales");
+            e.Property(x => x.Dealer).HasMaxLength(200);
+            e.Property(x => x.DealerKey).HasMaxLength(200);
+            e.Property(x => x.Line).HasMaxLength(32);
+            e.Property(x => x.Amount).HasPrecision(20, 2);
+            e.HasIndex(x => new { x.Year, x.Month, x.DealerKey, x.Line }).IsUnique();
+        });
     }
 }

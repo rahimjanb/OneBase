@@ -99,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Sales.Stock.OutstockService>();
         services.AddScoped<OneBase.Application.Sales.Primary.PrimaryService>();
         services.AddScoped<OneBase.Application.Sales.SkuSales.SkuSalesService>();
+        services.AddScoped<OneBase.Application.Sales.Pnl.PnlService>();
         services.AddSingleton<LinkoSyncCoordinator>();
 
         // AI Data Manager: отчёты администратора → планы изменений данных OneBase (копия Linko не меняется).

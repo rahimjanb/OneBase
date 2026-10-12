@@ -116,7 +116,7 @@ export function NotificationBell() {
         <div
           role="menu"
           style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}
-          className="fixed z-50 flex flex-col overflow-hidden rounded-xl border border-line bg-surface text-ink shadow-xl"
+          className="fixed z-50 flex flex-col overflow-hidden rounded-xl border border-line bg-surface-solid text-ink shadow-xl"
         >
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-2.5">
             <span className="text-sm font-semibold">Уведомления</span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import { Download } from "lucide-react";
 import { Note, Section } from "./bits";
 import { CopyButton } from "./DataTable";
@@ -171,6 +171,9 @@ export function AkbChart({
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<string | null>(null);
   const [hover, setHover] = useState<number | null>(null);
+  // Столбцы — итог или выбранная категория по месяцам (по умолчанию); линии — итог и все категории сразу.
+  const [mode, setMode] = useState<"bars" | "lines">("bars");
+  const gradient = useId();
 
   // Ширину меряем, когда поле графика появляется в DOM: в свёрнутой секции его нет,
   // и замер «один раз при загрузке страницы» оставил бы график пустым после раскрытия.
@@ -193,23 +196,47 @@ export function AkbChart({
   const plotW = Math.max(1, width - pad.left - pad.right);
   const plotH = HEIGHT - pad.top - pad.bottom;
   const n = data.months.length;
-  const { top, step } = niceScale(Math.max(0, ...series.flatMap((s) => s.values.map((v) => v ?? 0))));
-  const x = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i * plotW) / (n - 1));
+  const bars = mode === "bars";
+  // В столбцах — одна мера: итог или выбранная категория; шкала — по ней.
+  const shown = series.find((s) => s.id === (active ?? TOTAL)) ?? series[0];
+  const { top, step } = niceScale(Math.max(0, ...(bars ? [shown] : series).flatMap((s) => s.values.map((v) => v ?? 0))));
+  const band = plotW / Math.max(1, n);
+  const barWidth = Math.min(44, band * 0.56);
+  const x = bars ? (i: number) => pad.left + band * (i + 0.5) : (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i * plotW) / (n - 1));
   const y = (v: number) => pad.top + plotH * (1 - v / top);
+  const base = pad.top + plotH;
   const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step);
   const lastIndex = n - 1;
 
-  // Подписи первой и последней точки — у итога и у подсвеченной категории.
-  const labelled = series.filter((s) => s.total || s.id === active);
+  // Подписи первой и последней точки — у итога и у подсвеченной категории (в линиях).
+  const labelled = bars ? [] : series.filter((s) => s.total || s.id === active);
   const hovered = hover == null ? [] : [...series].filter((s) => s.values[hover] != null).sort((a, b) => (b.total ? 1 : 0) - (a.total ? 1 : 0) || (b.values[hover] ?? 0) - (a.values[hover] ?? 0));
 
   return (
     <Section
       title={title}
-      hint={`${hint} · клик по линии — подсветить, ещё раз — снять`}
+      hint={bars ? `${hint} · ${shown.total ? "итог" : shown.name}; клик по категории — её столбцы` : `${hint} · клик по линии — подсветить, ещё раз — снять`}
       actions={
         <>
           {actions}
+          <div className="flex overflow-hidden rounded-lg border border-line text-xs" role="group" aria-label="Вид графика">
+            {(
+              [
+                ["bars", "Столбцы"],
+                ["lines", "Линии"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={mode === key}
+                onClick={() => setMode(key)}
+                className={`px-2.5 py-1.5 ${mode === key ? "bg-accent text-white" : "bg-surface text-ink hover:bg-muted"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <CopyButton onCopy={() => rows.map((r) => r.map(tsvValue).join("\t")).join("\n")} />
           <button
             type="button"
@@ -233,10 +260,17 @@ export function AkbChart({
             aria-label={title}
             onMouseMove={(e) => {
               const left = e.currentTarget.getBoundingClientRect().left;
-              const i = n <= 1 ? 0 : Math.round(((e.clientX - left - pad.left) / plotW) * (n - 1));
+              const offset = e.clientX - left - pad.left;
+              const i = bars ? Math.floor(offset / band) : n <= 1 ? 0 : Math.round((offset / plotW) * (n - 1));
               setHover(Math.min(lastIndex, Math.max(0, i)));
             }}
           >
+            <defs>
+              <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" style={{ stopColor: shown.total ? "var(--color-accent-strong)" : shown.color, stopOpacity: 0.95 }} />
+                <stop offset="1" style={{ stopColor: shown.total ? "var(--color-accent)" : shown.color, stopOpacity: shown.total ? 1 : 0.6 }} />
+              </linearGradient>
+            </defs>
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={pad.left} x2={width - pad.right} y1={y(t)} y2={y(t)} stroke="var(--color-line)" />
@@ -250,10 +284,47 @@ export function AkbChart({
                 {monthShort(m)}
               </text>
             ))}
-            {hover != null && <line x1={x(hover)} x2={x(hover)} y1={pad.top} y2={pad.top + plotH} stroke="var(--color-ink-3)" strokeDasharray="3 3" />}
+            {hover != null && !bars && <line x1={x(hover)} x2={x(hover)} y1={pad.top} y2={pad.top + plotH} stroke="var(--color-ink-3)" strokeDasharray="3 3" />}
 
-            {/* Категории под итогом; подсвеченная — поверх остальных. */}
-            {[...series.filter((s) => !s.total && s.id !== active), ...series.filter((s) => !s.total && s.id === active), ...series.filter((s) => s.total)].map((s) => {
+            {/* Столбцы: выбранная мера по месяцам; идущий месяц — бледнее, с пунктиром; над столбцом — значение. */}
+            {bars &&
+              shown.values.map((v, i) => {
+                if (v == null) return null;
+                const partial = i === lastIndex && data.lastPartial;
+                const yTop = y(v);
+                const h = Math.max(0, base - yTop);
+                const r = Math.min(6, h / 2, barWidth / 2);
+                const left = x(i) - barWidth / 2;
+                return (
+                  <g key={i} opacity={hover != null && hover !== i ? 0.55 : 1} className="transition-opacity">
+                    {h > 0 && (
+                      <path
+                        d={`M${left},${base} V${yTop + r} Q${left},${yTop} ${left + r},${yTop} H${left + barWidth - r} Q${left + barWidth},${yTop} ${left + barWidth},${yTop + r} V${base} Z`}
+                        fill={`url(#${gradient})`}
+                        fillOpacity={partial ? 0.45 : 1}
+                        stroke={partial ? (shown.total ? "var(--color-accent-strong)" : shown.color) : "none"}
+                        strokeDasharray={partial ? "4 3" : undefined}
+                      />
+                    )}
+                    {band >= 34 && (
+                      <text
+                        x={x(i)}
+                        y={yTop - 7}
+                        textAnchor="middle"
+                        fontSize={11}
+                        fontWeight={hover === i ? 700 : 600}
+                        fill={hover === i ? "var(--color-ink)" : "var(--color-ink-2)"}
+                        className="tabular-nums"
+                      >
+                        {format(v)}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+
+            {/* Линии: категории под итогом; подсвеченная — поверх остальных. */}
+            {(bars ? [] : [...series.filter((s) => !s.total && s.id !== active), ...series.filter((s) => !s.total && s.id === active), ...series.filter((s) => s.total)]).map((s) => {
               const dim = active != null && active !== s.id;
               const path = linePath(s.values, x, y);
               const strong = s.total || s.id === active;
@@ -308,7 +379,7 @@ export function AkbChart({
 
         {hover != null && hovered.length > 0 && (
           <div
-            className="pointer-events-none absolute top-2 z-10 min-w-[180px] rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-lg"
+            className="pointer-events-none absolute top-2 z-10 min-w-[180px] rounded-lg border border-line bg-surface-solid px-3 py-2 text-xs shadow-lg"
             style={x(hover) > width / 2 ? { left: x(hover) - 12, transform: "translateX(-100%)" } : { left: x(hover) + 12 }}
           >
             <div className="mb-1 font-semibold text-ink">
@@ -329,20 +400,24 @@ export function AkbChart({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {series.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => toggle(s.id)}
-            aria-pressed={active === s.id}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-              active === s.id ? "border-accent bg-accent-soft font-semibold text-ink" : "border-line bg-surface text-ink-2 hover:bg-muted"
-            } ${active != null && active !== s.id ? "opacity-50" : ""}`}
-          >
-            <span className={`rounded-full ${s.total ? "h-0.5 w-3.5" : "size-2"}`} style={{ background: s.color }} />
-            {s.name}
-          </button>
-        ))}
+        {series.map((s) => {
+          // В столбцах выбрана одна мера (итог по умолчанию), в линиях — подсвеченная.
+          const pressed = bars ? shown.id === s.id : active === s.id;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => toggle(s.id)}
+              aria-pressed={pressed}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                pressed ? "border-accent bg-accent-soft font-semibold text-ink" : "border-line bg-surface text-ink-2 hover:bg-muted"
+              } ${!bars && active != null && active !== s.id ? "opacity-50" : ""}`}
+            >
+              <span className={`rounded-full ${s.total ? "h-0.5 w-3.5" : "size-2"}`} style={{ background: s.total && bars ? "var(--color-accent)" : s.color }} />
+              {s.name}
+            </button>
+          );
+        })}
       </div>
 
       <AkbTable data={data} series={series} active={active} onToggle={toggle} head={head} totalLabel={totalLabel} format={format} />
@@ -354,7 +429,7 @@ export function AkbChart({
             покупает несколько категорий.{" "}
           </>
         )}
-        {data.lastPartial && "Пустая точка — месяц ещё идёт. "}
+        {data.lastPartial && (bars ? "Бледный столбец с пунктиром — месяц ещё идёт. " : "Пустая точка — месяц ещё идёт. ")}
         {averageNote} Наведите на график — значения за месяц.
       </Note>
     </Section>

@@ -73,7 +73,7 @@ public static class ReportExtraction
 
     public static string Cell(IReadOnlyList<string> row, int column) => column < row.Count ? row[column].Trim() : string.Empty;
 
-    private static bool IsSummary(string region)
+    internal static bool IsSummary(string region)
     {
         var name = DataValues.Normalize(region);
         return SummaryRows.Any(s => name == s || name.StartsWith(s + " ", StringComparison.Ordinal) || name.StartsWith(s + ":", StringComparison.Ordinal));

@@ -320,7 +320,7 @@ export function MonthCalendarTable({
         <table className="w-full min-w-max border-collapse text-xs">
           <thead>
             <tr className="border-b border-line text-[11px] uppercase tracking-wide text-ink-3">
-              <th className="sticky left-0 z-10 bg-surface px-2 py-2 text-left font-semibold">
+              <th className="sticky left-0 z-10 bg-surface-solid px-2 py-2 text-left font-semibold">
                 <button type="button" onClick={() => setSortByTotal(false)} className="uppercase hover:text-ink">
                   {rowLabel}
                 </button>
@@ -340,7 +340,7 @@ export function MonthCalendarTable({
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-line">
-                <td className="sticky left-0 z-10 bg-surface px-2 py-1.5">
+                <td className="sticky left-0 z-10 bg-surface-solid px-2 py-1.5">
                   <span className="block whitespace-nowrap text-[13px] font-medium text-ink">{r.name}</span>
                   {rowKind === "agent" && <span className="block text-[11px] text-ink-3">ID {r.id}</span>}
                 </td>
@@ -355,7 +355,7 @@ export function MonthCalendarTable({
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-line bg-muted/60 font-semibold">
-              <td className="sticky left-0 z-10 bg-muted px-2 py-1.5">Итого</td>
+              <td className="sticky left-0 z-10 bg-muted-solid px-2 py-1.5">Итого</td>
               {calendar.totalDays.map((v, i) => (
                 <td key={i} className="px-1.5 py-1.5 text-right tabular-nums">
                   {format(v)}

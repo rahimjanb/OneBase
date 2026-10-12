@@ -95,7 +95,7 @@ export function TableHead<T>({ columns, sort, onSort }: { columns: Column<T>[]; 
         {columns.map((c) => {
           const active = sort?.key === c.key;
           return (
-            <th key={c.key} className={`whitespace-nowrap px-3 py-2 font-semibold first:sticky first:left-0 first:z-[1] first:bg-surface first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5 ${c.align === "right" ? "text-right" : "text-left"}`}>
+            <th key={c.key} className={`whitespace-nowrap px-3 py-2 font-semibold first:sticky first:left-0 first:z-[1] first:bg-surface-solid first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5 ${c.align === "right" ? "text-right" : "text-left"}`}>
               <button
                 type="button"
                 onClick={() => onSort(c.key)}
@@ -190,7 +190,7 @@ export function DataTable<T>({
                       <td
                         key={c.key}
                         // Первая колонка не уезжает при горизонтальной прокрутке: название видно всегда, особенно на телефоне.
-                        className={`px-3 py-2.5 align-middle max-lg:py-3 first:sticky first:left-0 first:z-[1] first:bg-surface first:pl-4 max-lg:first:shadow-[inset_-1px_0_0_var(--color-line)] first:group-hover/row:bg-muted last:pr-4 sm:first:pl-5 sm:last:pr-5 ${c.align === "right" ? "text-right tabular-nums" : ""} ${c.className ?? ""}`}
+                        className={`px-3 py-2.5 align-middle max-lg:py-3 first:sticky first:left-0 first:z-[1] first:bg-surface-solid first:pl-4 max-lg:first:shadow-[inset_-1px_0_0_var(--color-line)] first:group-hover/row:bg-muted-solid last:pr-4 sm:first:pl-5 sm:last:pr-5 ${c.align === "right" ? "text-right tabular-nums" : ""} ${c.className ?? ""}`}
                       >
                         {c.render ? c.render(row) : (c.value(row) ?? "—")}
                       </td>

@@ -297,7 +297,7 @@ export function OutstockCalendar({ pairs, from, days, region, closeHref }: { pai
           <table className="border-separate border-spacing-0 text-xs">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 bg-surface py-1 pr-3 text-left font-medium text-ink-3">Товар</th>
+                <th className="sticky left-0 z-10 bg-surface-solid py-1 pr-3 text-left font-medium text-ink-3">Товар</th>
                 {labels.map((l, i) => (
                   <th key={i} className="px-px py-1 text-center font-medium tabular-nums text-ink-3" title={l}>
                     {i + 1}
@@ -310,7 +310,7 @@ export function OutstockCalendar({ pairs, from, days, region, closeHref }: { pai
             <tbody>
               {rows.map((p) => (
                 <tr key={p.productId}>
-                  <td className="sticky left-0 z-10 border-t border-line bg-surface py-1 pr-3">
+                  <td className="sticky left-0 z-10 border-t border-line bg-surface-solid py-1 pr-3">
                     <span className="flex items-center gap-1.5">
                       {p.top && <TopChip />}
                       <span className="block max-w-[260px] truncate font-medium text-ink max-lg:max-w-[36vw]" title={p.product}>

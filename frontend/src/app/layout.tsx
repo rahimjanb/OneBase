@@ -1,12 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { Inter } from "next/font/google";
+import { Inter, Manrope } from "next/font/google";
 import { PwaRegister } from "@/components/shell/PwaRegister";
 import { themeInitScript } from "@/components/shell/ThemeToggle";
 import { isFieldHost, requestHost } from "@/lib/field/host";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-inter" });
+// Заголовки — Manrope (кириллица есть).
+const manrope = Manrope({ subsets: ["latin", "cyrillic"], variable: "--font-manrope" });
 
 /** На домене Sales Base — своё имя приложения (вкладка, установленное приложение на iOS). */
 export async function generateMetadata(): Promise<Metadata> {
@@ -57,15 +59,21 @@ export async function generateViewport(): Promise<Viewport> {
           { media: "(prefers-color-scheme: dark)", color: "#071a17" },
         ]
       : [
-          { media: "(prefers-color-scheme: light)", color: "#16213a" },
-          { media: "(prefers-color-scheme: dark)", color: "#0b1220" },
+          // OneBase по умолчанию в тёмной стеклянной теме — шапка тёмная при любой системной теме.
+          { media: "(prefers-color-scheme: light)", color: "#050c1c" },
+          { media: "(prefers-color-scheme: dark)", color: "#050c1c" },
         ],
   };
 }
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+/**
+ * data-brand="onebase" — стеклянная тёмная тема OneBase (globals.css): по умолчанию, пока пользователь не выбрал светлую. На домене
+ * Sales Base её нет — там своя тема по системной.
+ */
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const field = isFieldHost(requestHost(await headers()));
   return (
-    <html lang="ru" className={inter.variable} suppressHydrationWarning>
+    <html lang="ru" className={`${inter.variable} ${manrope.variable}`} data-brand={field ? undefined : "onebase"} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>

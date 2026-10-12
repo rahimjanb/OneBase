@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Sales;
 using OneBase.Application.Sales.Metrics;
+using OneBase.Application.Sales.Pnl;
 using OneBase.Application.Sales.Primary;
 using OneBase.Domain.AI;
 using OneBase.Domain.Sales;
@@ -22,6 +23,7 @@ public sealed class DataChangeService(
     SalesDataLoader loader,
     PrimaryService primary,
     SalesCacheSignal cacheSignal,
+    PnlService pnl,
     DataManagerOptions options)
 {
     /// <summary>Регионы вторички, в которые можно записать план: без «Завода», «К К Мерч» и старых филиалов.</summary>
@@ -129,7 +131,7 @@ public sealed class DataChangeService(
         var requestHash = Hash(DataTargets.RegionPlans, request.Kind.ToString(), request.Replace ? "replace" : "upsert",
             file?.Sha256 ?? "", JsonSerializer.Serialize(request.Mapping, DataTargets.Json),
             request.FileId is null ? JsonSerializer.Serialize(values, DataTargets.Json) : "");
-        var previous = await PreviousVersionAsync(request.Kind, period, file, result.Items, ct);
+        var previous = await PreviousVersionAsync(DataTargets.RegionPlans, request.Kind.ToString(), period, file, result.Items, ct);
         var title = $"{DataTargets.Label(DataTargets.RegionPlans)}: {DataEntityTypes.PlanKindLabel(request.Kind)} · "
                     + (periods.Count == 1 ? DataEntityTypes.MonthLabel(periods[0].Year, periods[0].Month) : period ?? "без периода")
                     + (file is null ? " · из сообщения" : $" · {file.FileName}");
@@ -174,6 +176,89 @@ public sealed class DataChangeService(
             file, hash, items, [], [], [], null, file is null ? "message" : "file", null, 0, note is { Length: > 0 } ? [note] : [], ct);
     }
 
+    /// <summary>
+    /// План изменений P&L дилеров: исходные строки (продажи, себестоимость, расходы) из отчёта или сообщения против sales.PnlValues.
+    /// Расчётные строки отчёта (валовая, EBIT…) не пишутся — сверяются с расчётом OneBase.
+    /// </summary>
+    public async Task<DataChangeSetView> PreparePnlAsync(DataActor actor, PnlRequest request, CancellationToken ct = default)
+    {
+        DataFile? file = null;
+        IReadOnlyList<PnlRawValue> values;
+        if (request.FileId is { } fileId)
+        {
+            var mapping = request.Mapping ?? throw new DataManagerException("Для файла нужно сопоставление столбцов (mapping).");
+            var loaded = await files.LoadAsync(fileId, actor.UserId, ct);
+            file = loaded.File;
+            values = PnlExtraction.Values(loaded.Document, mapping);
+        }
+        else
+        {
+            values = request.Values ?? [];
+        }
+
+        if (values.Count == 0)
+        {
+            throw new DataManagerException("Значений P&L не найдено: проверьте лист, строку заголовка и столбцы.");
+        }
+
+        var periods = values.Where(v => v.Month is >= 1 and <= 12 && v.Year is >= 2020 and <= 2100)
+            .Select(v => (v.Year, v.Month)).Distinct().Order().ToList();
+        if (periods.Count > 24)
+        {
+            throw new DataManagerException("В одном плане — не больше 24 месяцев.");
+        }
+
+        var years = periods.Select(p => p.Year).Distinct().ToList();
+        var existing = (await db.SalesPnlValues.AsNoTracking()
+                .Where(v => years.Contains(v.Year))
+                .Select(v => new ExistingPnlRow(v.Year, v.Month, v.Dealer, v.DealerKey, v.Line, v.Amount))
+                .ToListAsync(ct))
+            .Where(v => periods.Contains((v.Year, v.Month)))
+            .ToList();
+        var known = (await db.SalesPnlValues.AsNoTracking()
+                .GroupBy(v => v.DealerKey)
+                .Select(g => new { g.Key, Dealer = g.Max(v => v.Dealer) })
+                .ToListAsync(ct))
+            .ToDictionary(d => d.Key, d => d.Dealer!);
+
+        var result = PnlPlanner.Plan(request.Replace, request.Mapping?.SumRows ?? false, values, request.LineMap, request.DealerMap, existing, known);
+        var items = result.Items.Where(i => i.Action != DataChangeAction.Unchanged || result.Items.Count <= options.MaxChangeItems).ToList();
+        if (items.Count > options.MaxChangeItems)
+        {
+            throw new DataManagerException($"Слишком много строк ({items.Count}); за раз — не больше {options.MaxChangeItems}. Разбейте отчёт по месяцам.");
+        }
+
+        var period = periods.Count switch
+        {
+            0 => null,
+            1 => $"{periods[0].Year:D4}-{periods[0].Month:D2}",
+            _ => $"{periods[0].Year:D4}-{periods[0].Month:D2}…{periods[^1].Year:D4}-{periods[^1].Month:D2}",
+        };
+        var notes = new List<string>();
+        if (request.Note is { Length: > 0 } note)
+        {
+            notes.Add(note.Length > 500 ? note[..500] : note);
+        }
+
+        if (items.Count < result.Items.Count)
+        {
+            notes.Add($"Строк без изменений: {result.Items.Count - items.Count} — в плане не показаны.");
+        }
+
+        var hash = Hash(DataTargets.Pnl, request.Replace ? "replace" : "upsert", file?.Sha256 ?? "",
+            JsonSerializer.Serialize(request.Mapping, DataTargets.Json), JsonSerializer.Serialize(request.LineMap, DataTargets.Json),
+            JsonSerializer.Serialize(request.DealerMap, DataTargets.Json),
+            request.FileId is null ? JsonSerializer.Serialize(values, DataTargets.Json) : "");
+        // та же строка P&L того же дилера уже применялась из другого файла — это новая версия отчёта
+        var previous = await PreviousVersionAsync(DataTargets.Pnl, null, period, file, items, ct) is { CorrectedRows: > 0 } p ? p : null;
+        var title = $"{DataTargets.Label(DataTargets.Pnl)} · "
+                    + (periods.Count == 1 ? DataEntityTypes.MonthLabel(periods[0].Year, periods[0].Month) : period ?? "без периода")
+                    + (file is null ? " · из сообщения" : $" · {file.FileName}");
+        return await SaveAsync(actor, DataTargets.Pnl, title, period, null, request.Replace ? "replace" : "upsert",
+            file, hash, items, result.Warnings, [], [], previous, file is null ? "message" : "file", request.Mapping?.Sheet, result.SkippedEmpty,
+            notes, ct, result.Summary);
+    }
+
     private async Task<DataChangeSetView> SaveAsync(
         DataActor actor,
         string target,
@@ -192,7 +277,8 @@ public sealed class DataChangeService(
         string? sheet,
         int skippedEmpty,
         List<string> notes,
-        CancellationToken ct)
+        CancellationToken ct,
+        PnlSummary? pnlSummary = null)
     {
         var counts = Count(items);
 
@@ -226,7 +312,7 @@ public sealed class DataChangeService(
             draft.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
-        var summary = new ChangeSetSummary(counts, warnings, totals, impact, previous, source, file?.FileName, sheet, skippedEmpty, notes);
+        var summary = new ChangeSetSummary(counts, warnings, totals, impact, previous, source, file?.FileName, sheet, skippedEmpty, notes, pnlSummary);
         var set = new DataChangeSet
         {
             UserId = actor.UserId,
@@ -368,6 +454,7 @@ public sealed class DataChangeService(
         cacheSignal.Invalidate();
         var kpi = new List<ChangeImpact>();
         var notes = new List<string>();
+        List<PnlMonthTotal>? pnlMonths = null;
         var summary = JsonSerializer.Deserialize<ChangeSetSummary>(set.Summary, DataTargets.Json);
         if (set.Target == DataTargets.RegionPlans && Enum.TryParse<PlanKind>(set.PlanKind, out var kind) && summary is not null)
         {
@@ -387,13 +474,41 @@ public sealed class DataChangeService(
         {
             notes.Add("Цели читаются отчётами при следующем расчёте месяца; кэш отчётов сброшен.");
         }
+        else if (set.Target == DataTargets.Pnl && summary?.Pnl is { } plan)
+        {
+            // P&L месяца пересчитан тем же кодом, что и раздел «P&L дилеров»: итоги должны совпасть с планом изменений.
+            pnlMonths = [];
+            foreach (var month in plan.Months.Take(12))
+            {
+                var expected = rolledBack ? month.Before : month.After;
+                var (_, total) = await pnl.MonthAsync(month.Year, month.Month, ct);
+                pnlMonths.Add(new PnlMonthTotal(month.Year, month.Month, expected, total));
+                if (set.Status == DataChangeSetStatus.PartiallyRolledBack)
+                {
+                    continue; // при частичном откате итог месяца смешанный — сверяются только строки
+                }
+
+                foreach (var line in PnlCheckedLines)
+                {
+                    var e = expected.GetValueOrDefault(line);
+                    var a = total.GetValueOrDefault(line);
+                    if (Math.Abs((e ?? 0) - (a ?? 0)) > 1m)
+                    {
+                        problems.Add(new StoredCheck($"P&L · {DataEntityTypes.MonthLabel(month.Year, month.Month)} · {PnlMath.Line(line)!.Label}: расчёт OneBase",
+                            e is { } ev ? DataValues.Format(Math.Round(ev, 2)) : null, a is { } av ? DataValues.Format(Math.Round(av, 2)) : null, false));
+                    }
+                }
+            }
+
+            notes.Add("P&L пересчитан OneBase по загруженным исходным строкам (раздел «Продажи → P&L дилеров»).");
+        }
 
         if (problems.Count > 0)
         {
             notes.Add("Есть расхождения: смотрите problems — значение в базе или в расчёте OneBase отличается от плана изменений.");
         }
 
-        var result = new VerificationResult(DateTimeOffset.UtcNow, checkedCount, problems.Count, problems, kpi, notes);
+        var result = new VerificationResult(DateTimeOffset.UtcNow, checkedCount, problems.Count, problems, kpi, notes, pnlMonths);
         set.Verification = JsonSerializer.Serialize(result, DataTargets.Json);
         set.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
@@ -426,6 +541,17 @@ public sealed class DataChangeService(
             var region = await db.SalesRegions.AsNoTracking().Where(r => r.Id == regionId)
                 .Select(r => new { r.DealerName, r.SupervisorName }).FirstOrDefaultAsync(ct);
             return field == RegionProfilePlanner.Dealer ? region?.DealerName : region?.SupervisorName;
+        }
+
+        if (entityKey.StartsWith(DataEntityTypes.PnlValue + ":", StringComparison.Ordinal))
+        {
+            var k = PnlPlanner.ParseKey(entityKey);
+            var dealerKey = PnlMath.DealerKey(k.Dealer);
+            var value = await db.SalesPnlValues.AsNoTracking()
+                .Where(v => v.Year == k.Year && v.Month == k.Month && v.Line == k.Line && v.DealerKey == dealerKey)
+                .Select(v => (decimal?)v.Amount)
+                .FirstOrDefaultAsync(ct);
+            return value is { } v ? DataValues.Format(v) : null;
         }
 
         return null;
@@ -535,7 +661,7 @@ public sealed class DataChangeService(
         return (new ChangeImpact(period, kpi.PlanSource, republicRow, regionsImpact, note), problems);
     }
 
-    private async Task<PreviousVersionInfo?> PreviousVersionAsync(PlanKind kind, string? period, DataFile? file, IReadOnlyList<PlannedItem> items,
+    private async Task<PreviousVersionInfo?> PreviousVersionAsync(string target, string? planKind, string? period, DataFile? file, IReadOnlyList<PlannedItem> items,
         CancellationToken ct)
     {
         if (period is null)
@@ -545,7 +671,7 @@ public sealed class DataChangeService(
 
         var previous = await db.DataChangeSets.AsNoTracking()
             .Include(s => s.Items)
-            .Where(s => s.Target == DataTargets.RegionPlans && s.PlanKind == kind.ToString() && s.Period == period
+            .Where(s => s.Target == target && s.PlanKind == planKind && s.Period == period
                         && s.Status == DataChangeSetStatus.Applied && (file == null || s.FileSha256 != file.Sha256))
             .OrderByDescending(s => s.AppliedAt)
             .FirstOrDefaultAsync(ct);
@@ -561,6 +687,9 @@ public sealed class DataChangeService(
             : null;
         return new PreviousVersionInfo(previous.Id, fileName, previous.AppliedAt, corrected);
     }
+
+    /// <summary>Строки P&L, итоги которых сверяются после применения.</summary>
+    private static readonly string[] PnlCheckedLines = [PnlMath.Sales, PnlMath.Cost, PnlMath.Gross, PnlMath.Sm, PnlMath.Ship, PnlMath.Admin, PnlMath.Other, PnlMath.Ebit];
 
     public static ChangeCounts Count(IReadOnlyCollection<PlannedItem> items) => new(
         items.Count(i => i.Action == DataChangeAction.Create),

@@ -11,7 +11,7 @@ import { periodQuery } from "@/lib/sales/query";
  * На телефоне — отдельной строкой под логотипом, прокручивается по горизонтали без полосы прокрутки.
  * Нажатая кнопка подсвечивается сразу, а не после загрузки страницы: иначе ещё секунду горит прежний раздел.
  */
-export function SectionNav() {
+export function SectionNav({ permissions }: { permissions: string[] | null }) {
   const pathname = usePathname();
   const params = useSearchParams();
   // Нажатая кнопка — пока адрес не сменился; после перехода подсветку определяет адрес.
@@ -25,8 +25,8 @@ export function SectionNav() {
   const query = periodQuery(Object.fromEntries(params));
 
   return (
-    <nav className="no-scrollbar order-last flex basis-full gap-2 overflow-x-auto pb-3 lg:order-none lg:min-w-0 lg:shrink lg:basis-auto lg:pb-0" aria-label="Разделы продаж">
-      {salesTabs.map((t) => {
+    <nav className="no-scrollbar order-last flex basis-full gap-2 -mx-1 overflow-x-auto px-1 py-1 pb-3 lg:order-none lg:min-w-0 lg:shrink lg:basis-auto lg:pb-1" aria-label="Разделы продаж">
+      {salesTabs.filter((t) => !t.permission || permissions?.includes(t.permission)).map((t) => {
         const on = active === t.key;
         return (
           <Link
@@ -36,11 +36,11 @@ export function SectionNav() {
             onClick={(e) => {
               if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) setPending({ tab: t.key, from: pathname });
             }}
-            className={`inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-sm font-medium shadow-sm transition-colors max-lg:h-10 max-lg:px-3 ${
-              on ? "border-accent bg-accent text-white hover:bg-accent-strong" : "border-line bg-surface text-ink hover:border-accent/40 hover:bg-muted"
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] border px-3 text-[12.5px] backdrop-blur-md transition-colors max-lg:h-10 max-lg:text-sm ${
+              on ? "border-accent bg-accent font-medium text-white hover:bg-accent-strong" : "border-line bg-surface text-ink-2 hover:border-accent/50 hover:bg-muted hover:text-ink"
             }`}
           >
-            <t.icon className="hidden size-4 2xl:block" />
+            <t.icon className="size-3.5 shrink-0" strokeWidth={1.75} />
             {t.label}
           </Link>
         );

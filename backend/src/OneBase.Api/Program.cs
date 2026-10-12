@@ -42,6 +42,11 @@ builder.Services.AddRateLimiter(o =>
     o.AddPolicy("ai", http => RateLimitPartition.GetFixedWindowLimiter(
         http.User.FindFirst(OneBaseClaims.UserId)?.Value ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
+
+    // Голос консультанта: распознавание вопроса и озвучка ответа частями (длинный ответ — несколько запросов).
+    o.AddPolicy("voice", http => RateLimitPartition.GetFixedWindowLimiter(
+        http.User.FindFirst(OneBaseClaims.UserId)?.Value ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1) }));
 });
 
 var app = builder.Build();

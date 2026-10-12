@@ -5,6 +5,7 @@ using Npgsql;
 using OneBase.Application.Abstractions;
 using OneBase.Application.DataManager;
 using OneBase.Application.Sales;
+using OneBase.Application.Sales.Pnl;
 using OneBase.Application.Security;
 using OneBase.Domain.AI;
 using OneBase.Domain.Audit;
@@ -21,7 +22,7 @@ namespace OneBase.Infrastructure.DataManager;
 /// план помечается Stale и готовится заново;</item>
 /// <item>откат возвращает «до» только там, где сейчас всё ещё «после» — чужие более новые изменения не затираются.</item>
 /// </list>
-/// Пишутся только данные OneBase (sales.RegionPlans, sales.Targets, профиль региона) — копия Linko не трогается.
+/// Пишутся только данные OneBase (sales.RegionPlans, sales.Targets, профиль региона, sales.PnlValues) — копия Linko не трогается.
 /// </summary>
 internal sealed class DataChangeApplier(
     OneBaseDbContext db,
@@ -255,6 +256,12 @@ internal sealed class DataChangeApplier(
             return field == RegionProfilePlanner.Dealer ? region?.DealerName : region?.SupervisorName;
         }
 
+        if (key.StartsWith(DataEntityTypes.PnlValue + ":", StringComparison.Ordinal))
+        {
+            var row = await PnlRowAsync(key, ct);
+            return row is null ? null : DataValues.Format(row.Amount);
+        }
+
         throw new DataManagerException($"Неизвестный вид записи: {key}");
     }
 
@@ -344,6 +351,37 @@ internal sealed class DataChangeApplier(
                 return;
             }
 
+            case DataEntityTypes.PnlValue:
+            {
+                var row = await PnlRowAsync(key, ct);
+                if (value is null)
+                {
+                    if (row is not null)
+                    {
+                        db.SalesPnlValues.Remove(row);
+                    }
+
+                    return;
+                }
+
+                var amount = DataValues.ParseStored(value)!.Value;
+                if (row is null)
+                {
+                    var k = PnlPlanner.ParseKey(key);
+                    db.SalesPnlValues.Add(new SalesPnlValue
+                    {
+                        Year = k.Year, Month = k.Month, Line = k.Line, Dealer = PnlMath.DealerName(k.Dealer), DealerKey = PnlMath.DealerKey(k.Dealer), Amount = amount,
+                    });
+                }
+                else
+                {
+                    row.Amount = amount;
+                    row.UpdatedAt = now;
+                }
+
+                return;
+            }
+
             default:
                 throw new DataManagerException($"Неизвестный вид записи: {entityType}");
         }
@@ -357,6 +395,16 @@ internal sealed class DataChangeApplier(
             && db.Entry(p).State != EntityState.Deleted);
         return local ?? await db.SalesRegionPlans.FirstOrDefaultAsync(p =>
             p.RegionId == k.RegionId && p.Kind == k.Kind && p.Year == k.Year && p.Month == k.Month && p.CategoryId == k.CategoryId, ct);
+    }
+
+    private async Task<SalesPnlValue?> PnlRowAsync(string key, CancellationToken ct)
+    {
+        var k = PnlPlanner.ParseKey(key);
+        var dealerKey = PnlMath.DealerKey(k.Dealer);
+        var local = db.SalesPnlValues.Local.FirstOrDefault(v =>
+            v.Year == k.Year && v.Month == k.Month && v.Line == k.Line && v.DealerKey == dealerKey && db.Entry(v).State != EntityState.Deleted);
+        return local ?? await db.SalesPnlValues.FirstOrDefaultAsync(v =>
+            v.Year == k.Year && v.Month == k.Month && v.Line == k.Line && v.DealerKey == dealerKey, ct);
     }
 
     private static string TargetKey(string key) => key[(DataEntityTypes.SalesTarget.Length + 1)..];

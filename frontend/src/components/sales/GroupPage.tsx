@@ -1,6 +1,7 @@
 import { AkbMonthsCard } from "./AkbMonthsCard";
 import { CollapsedSections } from "./bits";
-import { CategoryPlanTable, DataQualityNotes, KpiRow, NextMonthCard, UnassignedWarning, UnitCard } from "./blocks";
+import { DataQualityNotes, KpiRow, NextMonthCard, UnassignedWarning, UnitCard } from "./blocks";
+import { CategoryPlanCard } from "./category-plan";
 import { MonthCalendarTable, VisitCalendarTable } from "./calendars";
 import { CategoryCards } from "./categories";
 import { NotBoughtTable, RegionsTable, SameDaysTable } from "./tables";
@@ -65,12 +66,16 @@ export function GroupPage({
       <Cards title={directions.length > 0 ? "Регионы без РМ" : "Регионы"} cards={regions} query={query} />
 
       {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle="Регион" />}
-      <CategoryCards cards={data.categoryCards} scope={scopeName} query={categoryQuery} />
+      <CategoryCards cards={data.categoryCards} scope={scopeName} query={categoryQuery} plans={data.categoryPlans} />
+
+      {/* План и факт по категориям и АКБ по месяцам — сразу под карточками, на широком экране рядом. */}
+      <div key={`charts-${period.year}-${period.month}`} className={`grid items-start gap-x-6 ${data.categoryPlans.length > 0 ? "2xl:grid-cols-2" : ""}`}>
+        <CategoryPlanCard rows={data.categoryPlans} total={data.categoryPlanTotal} source={data.kpi.planSource} plan={period.plan} />
+        <AkbMonthsCard data={data.akbMonths} />
+      </div>
 
       {/* Ключ по месяцу: смена месяца сбрасывает раскрытые секции, сортировки и раскрытые строки (DOC-filters §12). */}
       <CollapsedSections key={`${period.year}-${period.month}`}>
-        <CategoryPlanTable rows={data.categoryPlans} total={data.categoryPlanTotal} source={data.kpi.planSource} plan={period.plan} />
-        <AkbMonthsCard data={data.akbMonths} />
         <RegionsTable
           rows={data.regions}
           query={query}

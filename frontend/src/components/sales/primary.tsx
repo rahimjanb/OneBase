@@ -357,7 +357,7 @@ function ShipmentCalendar({
         <table className="w-full min-w-max border-collapse text-xs">
           <thead>
             <tr className="border-b border-line">
-              <th className="sticky left-0 z-10 bg-surface px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">{nameLabel}</th>
+              <th className="sticky left-0 z-10 bg-surface-solid px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">{nameLabel}</th>
               {cal.days.map((d) => (
                 <th key={d} className={th}>
                   <button type="button" onClick={() => pick(null, d)} className={`hover:text-accent-strong ${cal.day === d && cal.dealer == null ? "text-accent-strong" : ""}`}>
@@ -379,7 +379,7 @@ function ShipmentCalendar({
           <tbody>
             {cal.rows.map((r) => (
               <tr key={r.id} className="border-b border-line">
-                <td className={`sticky left-0 z-10 bg-surface px-2 py-1.5 ${pickCls(cal.dealer === r.id && cal.day == null)}`}>
+                <td className={`sticky left-0 z-10 bg-surface-solid px-2 py-1.5 ${pickCls(cal.dealer === r.id && cal.day == null)}`}>
                   <button type="button" onClick={() => pick(r.id, null)} className="text-left font-medium text-ink hover:text-accent-strong" title={r.sub ?? undefined}>
                     {r.name}
                   </button>
@@ -405,7 +405,7 @@ function ShipmentCalendar({
           </tbody>
           <tfoot>
             <tr className="bg-muted/60 font-semibold">
-              <td className="sticky left-0 z-10 bg-muted px-2 py-1.5 text-ink">Итого</td>
+              <td className="sticky left-0 z-10 bg-muted-solid px-2 py-1.5 text-ink">Итого</td>
               {cal.dayTotals.map((t, i) => (
                 <td key={cal.days[i]} className="px-2 py-1.5 text-right tabular-nums text-ink">
                   {fmt(t[unit], unit)}

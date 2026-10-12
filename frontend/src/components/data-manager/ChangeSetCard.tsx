@@ -13,6 +13,8 @@ import {
   type ChangeAction,
   type ChangeSet,
   type Impact,
+  type PnlCheck,
+  type PnlMonthTotal,
 } from "@/lib/data-manager";
 
 type Props = {
@@ -99,6 +101,16 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
         ))}
         {set.error && <Banner tone="bad">{set.error}</Banner>}
 
+        {set.summary.pnl && set.summary.pnl.months.length > 0 && !set.verification && (
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-3">Как изменится P&L (расчёт OneBase, все дилеры)</h4>
+            {set.summary.pnl.months.map((m) => (
+              <PnlTotalsTable key={`${m.year}-${m.month}`} total={m} />
+            ))}
+          </div>
+        )}
+        {set.summary.pnl && set.summary.pnl.checks.length > 0 && <PnlChecksTable checks={set.summary.pnl.checks} total={set.summary.pnl.checkedValues} />}
+
         {set.summary.impact.length > 0 && !set.verification && (
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-3">Как изменятся показатели</h4>
@@ -125,6 +137,9 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
             )}
             {set.verification.kpi.map((i) => (
               <ImpactTable key={i.period} impact={i} after />
+            ))}
+            {set.verification.pnl?.map((m) => (
+              <PnlTotalsTable key={`${m.year}-${m.month}`} total={m} verified />
             ))}
             {set.verification.notes.map((n) => (
               <p key={n} className="mt-1 text-xs text-ink-2">
@@ -258,6 +273,99 @@ function Banner({ tone, children }: { tone: "info" | "warn" | "bad"; children: R
     <div className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm text-ink-2 ${style}`}>
       <Icon className={`mt-0.5 size-4 shrink-0 ${iconTone}`} />
       <span>{children}</span>
+    </div>
+  );
+}
+
+const pnlRows: [string, string, boolean?][] = [
+  ["sales", "Продажи"],
+  ["cost", "Себестоимость"],
+  ["gross", "Валовая прибыль"],
+  ["margin", "Маржа", true],
+  ["sm", "Отдел продаж и маркетинга"],
+  ["ship", "Доставка и склад"],
+  ["admin", "Административные"],
+  ["other", "Прочие расходы"],
+  ["ebit", "EBIT"],
+];
+
+const sum = (v: number | null | undefined) => (v == null ? "—" : `${Math.round(v).toLocaleString("ru-RU")} сум`);
+
+/** P&L месяца по всем дилерам: было → станет (план изменений) или ожидалось / в расчёте (проверка после применения). */
+function PnlTotalsTable({ total, verified = false }: { total: PnlMonthTotal; verified?: boolean }) {
+  const rows = pnlRows.filter(([key]) => total.before[key] != null || total.after[key] != null);
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
+            <th className="py-1.5 pr-3 font-semibold">
+              {String(total.month).padStart(2, "0")}.{total.year}
+            </th>
+            <th className="py-1.5 pr-3 text-right font-semibold">{verified ? "Ожидалось" : "Было"}</th>
+            <th className="py-1.5 pr-3 text-right font-semibold">{verified ? "В расчёте OneBase" : "Станет"}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([key, label, isPct]) => {
+            const before = total.before[key];
+            const after = total.after[key];
+            const changed = (before ?? 0) !== (after ?? 0);
+            return (
+              <tr key={key} className={`border-b border-line/60 last:border-0 ${key === "ebit" ? "font-medium" : ""}`}>
+                <td className="py-1.5 pr-3 text-ink">{label}</td>
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums text-ink-2">{isPct ? pct(before) : sum(before)}</td>
+                <td className={`whitespace-nowrap py-1.5 pr-3 text-right tabular-nums ${changed ? (verified ? "text-bad" : "text-ink") : "text-ink-2"} ${changed && !verified ? "font-medium" : ""}`}>
+                  {isPct ? pct(after) : sum(after)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Расчётные строки из отчёта (валовая, EBIT…), которые разошлись с расчётом OneBase по исходным строкам. */
+function PnlChecksTable({ checks, total }: { checks: PnlCheck[]; total: number }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? checks : checks.slice(0, 10);
+  const value = (c: PnlCheck, v: number | null) => (v == null ? "—" : c.line === "margin" || c.line === "ros" ? pct(v) : sum(v));
+  return (
+    <div>
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-3">
+        Сверка расчётных строк отчёта: расхождений {checks.length} из {total}
+      </h4>
+      <div className="mt-1 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
+              <th className="py-1.5 pr-3 font-semibold">Дилер · строка</th>
+              <th className="py-1.5 pr-3 text-right font-semibold">В отчёте</th>
+              <th className="py-1.5 pr-3 text-right font-semibold">Расчёт OneBase</th>
+              <th className="py-1.5 pr-3 font-semibold">Ячейка</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((c, i) => (
+              <tr key={`${c.dealer}-${c.line}-${c.month}-${i}`} className="border-b border-line/60 last:border-0">
+                <td className="py-1.5 pr-3 text-ink">
+                  {c.dealer} · {c.label} · {String(c.month).padStart(2, "0")}.{c.year}
+                </td>
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums">{value(c, c.report)}</td>
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums text-warn">{value(c, c.oneBase)}</td>
+                <td className="py-1.5 pr-3 text-xs text-ink-3">{c.sourceRef}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {checks.length > 10 && (
+        <button type="button" onClick={() => setAll(!all)} className="mt-1 text-sm font-medium text-accent-strong hover:underline">
+          {all ? "Свернуть" : `Показать все ${checks.length}`}
+        </button>
+      )}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import type { VoiceStatus } from "./voice";
+
 export type DataSource = { title: string; period: string | null; href: string | null };
 export type Metric = { name: string; value: string; unit: string | null };
 
@@ -37,7 +39,8 @@ export type ChatMessage = {
 
 export type ConversationSummary = { id: string; title: string; createdAt: string; lastMessageAt: string };
 export type ConversationView = { id: string; title: string; createdAt: string; messages: ChatMessage[] };
-export type AiStatus = { ready: boolean; message: string | null };
+/** voice — голос консультанта на сервере (OpenAI); без него — голос браузера, если он есть. */
+export type AiStatus = { ready: boolean; message: string | null; voice?: VoiceStatus };
 
 export type ProgressStatus = "Pending" | "Running" | "Done" | "Failed" | "Skipped";
 export type ConsultantProgress = { stage: string; agent: string | null; agentName: string | null; status: ProgressStatus; note: string | null };
@@ -97,6 +100,21 @@ export const exampleQuestions = [
   "Где заканчиваются остатки?",
   "Что нужно сделать, чтобы увеличить продажи?",
 ];
+
+/** Раздел истории консультанта: Сегодня, Вчера, Ранее. */
+export function historySection(iso: string, now = new Date()): "Сегодня" | "Вчера" | "Ранее" {
+  const group = historyGroup(iso, now);
+  return group === "Сегодня" || group === "Вчера" ? group : "Ранее";
+}
+
+/** Время чата в истории: сегодня и вчера — «14:05», раньше — «12 окт», в другом году — «12.10.2025». */
+export function historyTime(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  if (historySection(iso, now) !== "Ранее") return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return d.getFullYear() === now.getFullYear()
+    ? d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }).replace(".", "")
+    : d.toLocaleDateString("ru-RU");
+}
 
 /** Группа истории: Сегодня, Вчера, дата. */
 export function historyGroup(iso: string, now = new Date()): string {

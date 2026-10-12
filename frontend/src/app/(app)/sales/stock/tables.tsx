@@ -353,7 +353,7 @@ export function StockMatrix({ data, unit }: { data: StockView; unit: StockUnit }
       {arrow(key)}
     </button>
   );
-  const sticky = "sticky left-0 z-[1] bg-surface";
+  const sticky = "sticky left-0 z-[1] bg-surface-solid";
 
   return (
     <Section title="Рекомендуемый остаток" hint="на каждый склад: остаток, продажи в день, на сколько хватит, запас на 15 дней и рекомендуемый заказ">
@@ -405,7 +405,7 @@ export function StockMatrix({ data, unit }: { data: StockView; unit: StockUnit }
           </tbody>
           <tfoot>
             <tr className="bg-muted/50 font-semibold">
-              <td colSpan={3} className={`${sticky} bg-muted/50 py-1.5 pl-4 pr-2 sm:pl-5`}>
+              <td colSpan={3} className={`sticky left-0 z-[1] bg-muted-solid py-1.5 pl-4 pr-2 sm:pl-5`}>
                 Итого · {num(data.items.length)} SKU
               </td>
               {groups.map((g) =>

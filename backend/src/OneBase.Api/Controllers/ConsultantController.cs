@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
+using OneBase.AI.Voice;
 using OneBase.Api.Auth;
 using OneBase.Application.Security;
 
@@ -14,6 +15,7 @@ namespace OneBase.Api.Controllers;
 [HasPermission(Permissions.AgentsRun)]
 public sealed class ConsultantController(
     ConsultantChatService chats,
+    VoiceService voice,
     IAiGateway gateway,
     IHostApplicationLifetime lifetime,
     ILogger<ConsultantController> logger) : ControllerBase
@@ -28,12 +30,65 @@ public sealed class ConsultantController(
 
     public sealed record RenameRequest(string Title);
 
-    /// <summary>Готов ли AI отвечать — для экрана чата.</summary>
+    /// <summary>Готов ли AI отвечать — для экрана чата; voice — голос консультанта (OpenAI) или только голос браузера.</summary>
     [HttpGet("status")]
     public async Task<IActionResult> Status(CancellationToken ct)
     {
         var readiness = await gateway.GetReadinessAsync(ct);
-        return Ok(new { readiness.Ready, readiness.Message });
+        return Ok(new { readiness.Ready, readiness.Message, Voice = await voice.GetStatusAsync(ct) });
+    }
+
+    /// <summary>Вопрос голосом: запись из браузера (webm, mp4, ogg, wav, mp3) → текст. Запись не сохраняется.</summary>
+    [HttpPost("voice/transcribe")]
+    [EnableRateLimiting("voice")]
+    [RequestSizeLimit(12 * 1024 * 1024)]
+    public async Task<IActionResult> Transcribe(IFormFile? audio, CancellationToken ct)
+    {
+        if (audio is null || audio.Length == 0)
+        {
+            return BadRequest(new { error = "Запись пустая — проверьте микрофон." });
+        }
+
+        try
+        {
+            using var buffer = new MemoryStream();
+            await audio.CopyToAsync(buffer, ct);
+            var text = await voice.TranscribeAsync(new AiCallContext(User.GetUserId(), "consultant", null, "voice"), buffer.ToArray(), audio.ContentType, ct);
+            return Ok(new { text });
+        }
+        catch (VoiceException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Ответ консультанта для чтения вслух — частями (первая короткая). Нужен и голосу браузера, когда ключа OpenAI нет.</summary>
+    [HttpGet("messages/{id:guid}/speech-text")]
+    public async Task<IActionResult> SpeechParts(Guid id, CancellationToken ct) =>
+        await chats.AnswerTextAsync(User.GetUserId(), id, ct) is { } content
+            ? Ok(new { parts = voice.Parts(content) })
+            : NotFound(new { error = "Ответ не найден." });
+
+    /// <summary>Озвучка части ответа (mp3). Готовый звук кэшируется на сервере — повтор не стоит денег.</summary>
+    [HttpGet("messages/{id:guid}/speech")]
+    [EnableRateLimiting("voice")]
+    public async Task<IActionResult> Speech(Guid id, [FromQuery] int part, CancellationToken ct)
+    {
+        if (await chats.AnswerTextAsync(User.GetUserId(), id, ct) is not { } content)
+        {
+            return NotFound(new { error = "Ответ не найден." });
+        }
+
+        try
+        {
+            var speech = await voice.SpeechAsync(new AiCallContext(User.GetUserId(), "consultant", null, "voice"), id.ToString("N"), content, part, ct);
+            Response.Headers.CacheControl = "private, max-age=3600";
+            return File(speech.Audio, "audio/mpeg");
+        }
+        catch (VoiceException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpGet("conversations")]

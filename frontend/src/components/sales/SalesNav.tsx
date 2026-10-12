@@ -9,9 +9,9 @@ import type { SalesMonth, SyncStatus } from "@/lib/sales/types";
 
 /**
  * На остатках и в описании период не нужен: остаток — снимок на момент загрузки; аутсток — всегда последний закрытый месяц (DOC-filters §0, §5).
- * У «Продаж по SKU» свой период — с … по … месяцам.
+ * У «Продаж по SKU» свой период — с … по … месяцам, у «P&L дилеров» — свой выбор месяца (месяцы загруженного P&L).
  */
-const withoutPeriod: (SalesTab | null)[] = [null, "stock", "outstock", "method", "skuSales"];
+const withoutPeriod: (SalesTab | null)[] = [null, "stock", "outstock", "method", "skuSales", "pnl"];
 
 /**
  * Полоса раздела «Продажи» под верхней панелью: период, план (на страницах с планом подразделений), свежесть данных и «Обновить».

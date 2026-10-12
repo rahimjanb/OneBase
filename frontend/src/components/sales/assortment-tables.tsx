@@ -202,7 +202,7 @@ export function AssortmentMatrix({ data }: { data: AssortmentView }) {
         <table className="w-full min-w-max border-collapse text-xs">
           <thead>
             <tr className="border-b border-line">
-              <th className="sticky left-0 z-10 bg-surface px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">Продукт</th>
+              <th className="sticky left-0 z-10 bg-surface-solid px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">Продукт</th>
               <th className="px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-ink-3">Всего</th>
               {data.matrixRegions.map((r) => (
                 <th key={r.id} className="px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-ink-3">
@@ -214,7 +214,7 @@ export function AssortmentMatrix({ data }: { data: AssortmentView }) {
           <tbody>
             {data.matrix.map((row) => (
               <tr key={row.productId} className="border-b border-line">
-                <td className="sticky left-0 z-10 max-w-[280px] bg-surface px-2 py-1.5 text-ink" title={`${row.name} · ${row.category}`}>
+                <td className="sticky left-0 z-10 max-w-[280px] bg-surface-solid px-2 py-1.5 text-ink" title={`${row.name} · ${row.category}`}>
                   <span className="flex items-center gap-1.5">
                     {row.isTop && <TopChip />}
                     <span className="truncate">{row.name}</span>

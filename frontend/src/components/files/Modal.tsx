@@ -31,7 +31,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`w-full ${wide ? "max-w-5xl" : "max-w-lg"} rounded-xl border border-line bg-surface shadow-xl outline-none`}
+        className={`w-full ${wide ? "max-w-5xl" : "max-w-lg"} rounded-xl border border-line bg-surface-solid shadow-xl outline-none`}
       >
         <div className="flex items-center gap-3 border-b border-line px-5 py-4">
           <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>

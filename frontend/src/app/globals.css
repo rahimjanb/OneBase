@@ -2,6 +2,7 @@
 
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-manrope), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
   --color-sidebar: #16213a;
   --color-sidebar-active: #25324f;
@@ -11,6 +12,9 @@
   --color-page: #f6f8fb;
   --color-surface: #ffffff;
   --color-muted: #f1f4f8;
+  /* Непрозрачные варианты — для липких ячеек, меню и окон: под ними прокручивается содержимое (в стеклянной теме surface прозрачный). */
+  --color-surface-solid: #ffffff;
+  --color-muted-solid: #f1f4f8;
   --color-line: #e3e8ef;
   --color-ink: #111b2e;
   --color-ink-2: #56657d;
@@ -36,6 +40,8 @@
   --color-page: #0e1422;
   --color-surface: #151d2e;
   --color-muted: #1c2538;
+  --color-surface-solid: #151d2e;
+  --color-muted-solid: #1c2538;
   --color-line: #27324a;
   --color-ink: #e7ebf3;
   --color-ink-2: #a7b2c6;
@@ -59,6 +65,8 @@
     --color-page: #0e1422;
     --color-surface: #151d2e;
     --color-muted: #1c2538;
+    --color-surface-solid: #151d2e;
+    --color-muted-solid: #1c2538;
     --color-line: #27324a;
     --color-ink: #e7ebf3;
     --color-ink-2: #a7b2c6;
@@ -81,6 +89,142 @@
 
 body {
   @apply bg-page text-ink antialiased;
+}
+
+/*
+ * OneBase: тёмная стеклянная тема — по умолчанию (светлая — только явным выбором кнопкой темы). data-brand="onebase" ставит корневой
+ * layout вне домена Sales Base. Один непрерывный фон на весь экран: база #050C1C, синее свечение из левого нижнего угла и приглушённое —
+ * из правого верхнего. Панели и карточки — полупрозрачный белый 4–8 %, фон просвечивает сквозь все зоны. Липкие ячейки, меню и окна —
+ * непрозрачные (surface-solid): под ними прокручивается содержимое.
+ * Подписи и цвета статусов светлее, чем в макете (#7E93B8 и др.): контраст не ниже 4,5 проверен на самой яркой зоне свечения
+ * (левый нижний угол).
+ */
+:root[data-brand="onebase"]:not([data-theme="light"]) {
+  color-scheme: dark;
+  --color-status-bar: #050c1c;
+  --color-sidebar: transparent;
+  --color-sidebar-active: rgb(255 255 255 / 0.1);
+  --color-sidebar-text: #d3dff3;
+  --color-sidebar-muted: #a3b5d6;
+  --color-page: transparent;
+  --color-surface: rgb(255 255 255 / 0.055);
+  --color-muted: rgb(255 255 255 / 0.07);
+  --color-surface-solid: #0e1a36;
+  --color-muted-solid: #16264a;
+  --color-line: rgb(255 255 255 / 0.1);
+  --color-ink: #f5f9ff;
+  --color-ink-2: #cfdbf1;
+  --color-ink-3: #a3b5d6;
+  --color-accent: #3056d3;
+  --color-accent-strong: #a3c0ff;
+  --color-accent-soft: rgb(91 140 255 / 0.18);
+  --color-ok: #4fd88f;
+  --color-ok-soft: rgb(52 199 121 / 0.16);
+  --color-warn: #f6bd6a;
+  --color-warn-soft: rgb(244 181 94 / 0.16);
+  /* Алерты — яркий красный дизайн-системы: заливка 12 %, обводка 20 % (border-bad/20), точка и текст #FF2222. */
+  --color-bad: #ff2222;
+  --color-bad-soft: rgb(255 34 34 / 0.12);
+}
+
+:root[data-brand="onebase"]:not([data-theme="light"]) body {
+  background-color: #050c1c;
+  background-image:
+    radial-gradient(85% 90% at 0% 100%, rgb(29 99 242 / 0.85) 0%, rgb(29 99 242 / 0.42) 22%, rgb(29 99 242 / 0.14) 50%, rgb(29 99 242 / 0) 72%),
+    radial-gradient(70% 70% at 100% 0%, rgb(17 48 110 / 0.9) 0%, rgb(17 48 110 / 0) 70%);
+  background-attachment: fixed;
+}
+
+/* Основные кнопки и сообщения пользователя — градиент со свечением, как в макете; при наведении — светлее, а не голубой фон под белым текстом. */
+:root[data-brand="onebase"]:not([data-theme="light"]) .bg-accent.text-white:not([data-product="field"] *) {
+  /* Вокруг акцента #3056D3; белый текст в середине кнопки — контраст не ниже 4,5. */
+  background-image: linear-gradient(135deg, #4a7bf0, #2a4fc9);
+  border-color: transparent;
+}
+:root[data-brand="onebase"]:not([data-theme="light"]) .bg-accent.text-white:is(a, button):not(:disabled, [data-product="field"] *) {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12) inset, 0 6px 20px -6px rgb(48 86 211 / 0.75);
+}
+:root[data-brand="onebase"]:not([data-theme="light"]) .bg-accent.text-white:is(a, button):not(:disabled, [data-product="field"] *):hover {
+  background-color: #2a4fc9;
+  filter: brightness(1.1);
+}
+
+/* Окна и меню поверх содержимого — стекло с размытием. */
+:root[data-brand="onebase"]:not([data-theme="light"]) :is(.bg-surface-solid, .bg-muted-solid):is([role="dialog"], [role="menu"], .shadow-lg, .shadow-xl) {
+  background-color: rgb(14 26 54 / 0.92);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+
+/* Sales Base внутри OneBase (/field на домене OneBase) — своя тёмная тема без стекла. */
+:root[data-brand="onebase"]:not([data-theme="light"]) [data-product="field"] {
+  --color-page: #0e1422;
+  --color-status-bar: #071a17;
+  --color-sidebar: #071a17;
+  --color-sidebar-active: #123630;
+  --color-sidebar-text: #c6d6d1;
+  --color-sidebar-muted: #7fa199;
+  --color-accent: #2cc4b3;
+  --color-accent-strong: #5eead4;
+  --color-accent-soft: #10302c;
+  --color-surface: #151d2e;
+  --color-muted: #1c2538;
+  --color-surface-solid: #151d2e;
+  --color-muted-solid: #1c2538;
+  --color-line: #27324a;
+  --color-ink: #e7ebf3;
+  --color-ink-2: #a7b2c6;
+  --color-ink-3: #7a869d;
+  --color-ok: #3cc28a;
+  --color-ok-soft: #13301f;
+  --color-warn: #f0a94a;
+  --color-warn-soft: #3a2a12;
+  --color-bad: #f07070;
+  --color-bad-soft: #3a1818;
+  background-color: var(--color-page);
+}
+
+/* OneBase, светлая тема (явный выбор кнопкой темы): палитра дизайн-системы — тёплый фон, акцент #3056D3, алерты #E60F0F. */
+:root[data-brand="onebase"][data-theme="light"] {
+  --color-page: #f4f3ef;
+  --color-surface: #ffffff;
+  --color-muted: #efede7;
+  --color-surface-solid: #ffffff;
+  --color-muted-solid: #efede7;
+  --color-line: #e6e3db;
+  --color-ink: #15181e;
+  --color-ink-2: #5b6472;
+  --color-ink-3: #8d95a3;
+  --color-accent: #3056d3;
+  --color-accent-strong: #2445b0;
+  --color-accent-soft: #dce3f8;
+  --color-ok: #17804d;
+  --color-ok-soft: #e3f3ea;
+  --color-bad: #e60f0f;
+  --color-bad-soft: #fde2e2;
+}
+
+/* Sales Base внутри OneBase в светлой теме — прежняя светлая палитра Sales Base. */
+:root[data-brand="onebase"][data-theme="light"] [data-product="field"] {
+  --color-page: #f6f8fb;
+  --color-muted: #f1f4f8;
+  --color-muted-solid: #f1f4f8;
+  --color-line: #e3e8ef;
+  --color-ink: #111b2e;
+  --color-ink-2: #56657d;
+  --color-ink-3: #8793a7;
+  --color-ok: #1f9d6b;
+  --color-ok-soft: #e6f6ef;
+  --color-bad: #dc4c4c;
+  --color-bad-soft: #fdecec;
+}
+
+/* Заголовки — Manrope, текст — Inter (оба с кириллицей). */
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+  }
 }
 
 /* Штриховка для шкал без плана. */
@@ -184,3 +328,4 @@ html:has([data-app-shell]) body {
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .field-map .leaflet-tile-pane { filter: brightness(0.75) contrast(1.1) saturate(0.8); }
 }
+:root[data-brand="onebase"]:not([data-theme="light"]) .field-map .leaflet-tile-pane { filter: brightness(0.75) contrast(1.1) saturate(0.8); }

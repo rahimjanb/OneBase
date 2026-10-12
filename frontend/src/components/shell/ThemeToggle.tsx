@@ -6,14 +6,16 @@ import { useEffect, useState } from "react";
 const KEY = "onebase-theme";
 
 /**
- * Скрипт в <head>: применяет сохранённую тему до отрисовки, без мигания. Цвет строки состояния — от оболочки, а на
- * страницах без неё (вход) — от продукта страницы (Sales Base — зелёный).
+ * Скрипт в <head>: применяет сохранённую тему до отрисовки, без мигания. Цвет строки состояния — от оболочки (--color-status-bar,
+ * у стеклянной темы OneBase шапка прозрачная; иначе --color-sidebar), а на страницах без неё (вход) — от продукта страницы.
  */
-export const themeInitScript = `try{var t=localStorage.getItem("${KEY}");if(t){document.documentElement.dataset.theme=t;document.addEventListener("DOMContentLoaded",function(){var s=document.querySelector("[data-app-shell]")||document.querySelector("[data-product]");var c=s&&getComputedStyle(s).getPropertyValue("--color-sidebar").trim()||(t==="dark"?"#0b1220":"#16213a");document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute("content",c)})})}}catch(e){}`;
+export const themeInitScript = `try{var t=localStorage.getItem("${KEY}");if(t){document.documentElement.dataset.theme=t;document.addEventListener("DOMContentLoaded",function(){var s=document.querySelector("[data-app-shell]")||document.querySelector("[data-product]");var st=s&&getComputedStyle(s);var c=st&&(st.getPropertyValue("--color-status-bar").trim()||st.getPropertyValue("--color-sidebar").trim())||(t==="dark"?"#050c1c":"#16213a");document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute("content",c)})})}}catch(e){}`;
 
+/** Тема сейчас: выбранная, иначе у OneBase — тёмная стеклянная (по умолчанию), у Sales Base — как в системе. */
 function currentTheme(): "light" | "dark" {
   const explicit = document.documentElement.dataset.theme;
   if (explicit === "light" || explicit === "dark") return explicit;
+  if (document.documentElement.dataset.brand === "onebase") return "dark";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
@@ -33,7 +35,9 @@ export function ThemeToggle() {
     }
     // Цвет строки состояния установленного приложения — как у шапки выбранной темы (у Sales Base — свой, зелёный).
     const shell = document.querySelector<HTMLElement>("[data-app-shell]");
-    const color = (shell && getComputedStyle(shell).getPropertyValue("--color-sidebar").trim()) || (next === "dark" ? "#0b1220" : "#16213a");
+    const style = shell && getComputedStyle(shell);
+    const color =
+      (style && (style.getPropertyValue("--color-status-bar").trim() || style.getPropertyValue("--color-sidebar").trim())) || (next === "dark" ? "#050c1c" : "#16213a");
     for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.setAttribute("content", color);
     setTheme(next);
   }

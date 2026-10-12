@@ -68,6 +68,11 @@ public static class DependencyInjection
         services.AddScoped<IConsultantEngine, OneBase.AI.Orchestration.OrchestratedConsultantEngine>();
         services.AddScoped<ConsultantChatService>();
 
+        // Голос консультанта: вопрос голосом и озвучка ответа (OpenAI audio; ключ — из «Настройки → AI»).
+        services.AddSingleton(config.GetSection(OneBase.AI.Voice.VoiceOptions.Section).Get<OneBase.AI.Voice.VoiceOptions>()
+                              ?? new OneBase.AI.Voice.VoiceOptions());
+        services.AddScoped<OneBase.AI.Voice.VoiceService>();
+
         // AI Data Manager: Claude (официальный SDK) + инструменты чтения и подготовки планов изменений.
         // Применение — только по подтверждению администратора (DataManagerChatService.ApplyAsync), у модели такого инструмента нет.
         services.AddSingleton<OneBase.AI.DataManager.IDataManagerModel, OneBase.AI.DataManager.ClaudeDataManagerModel>();

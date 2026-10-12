@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { Markdown } from "@/components/ai/Markdown";
 import { bff } from "@/lib/bff";
-import { historyGroup } from "@/lib/consultant";
+import { historySection } from "@/lib/consultant";
 import {
   exampleTasks,
   streamDataManager,
@@ -76,6 +76,8 @@ export function DataManager({ status, conversations: initialList, conversation, 
   const picker = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // Пустой чат не прокручивается: на телефоне подсказки выше экрана, и прокрутка вниз срезала бы заголовок.
+    if (messages.length === 0 && pending === null && Object.keys(sets).length === 0) return;
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, pending, steps.length, Object.keys(sets).length]);
 
@@ -248,12 +250,13 @@ export function DataManager({ status, conversations: initialList, conversation, 
     }
   };
 
+  // История: разделы Сегодня / Вчера / Ранее (список уже отсортирован по последнему сообщению).
   const groups = useMemo(() => {
     const out: { label: string; items: DataConversationSummary[] }[] = [];
     for (const c of list) {
-      const label = historyGroup(c.lastMessageAt);
-      const last = out[out.length - 1];
-      if (last?.label === label) last.items.push(c);
+      const label = historySection(c.lastMessageAt);
+      const group = out.find((g) => g.label === label);
+      if (group) group.items.push(c);
       else out.push({ label, items: [c] });
     }
     return out;
@@ -280,41 +283,52 @@ export function DataManager({ status, conversations: initialList, conversation, 
 
   const historyPanel = (
     <div className="flex h-full flex-col">
-      <div className="p-3">
+      <div className="p-4">
         <Link
           href={base}
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent text-sm font-semibold text-white hover:bg-accent-strong"
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-accent text-sm font-semibold text-white hover:bg-accent-strong"
           onClick={() => setHistoryOpen(false)}
         >
           <Plus className="size-4" />
           Новый чат
         </Link>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
         {list.length === 0 && <p className="px-3 py-6 text-center text-sm text-ink-3">Чатов пока нет</p>}
         {groups.map((g) => (
-          <div key={g.label} className="mt-3">
-            <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-3">{g.label}</div>
-            {g.items.map((c) => (
-              <div key={c.id} className={`group flex items-center rounded-lg ${c.id === activeId ? "bg-accent-soft" : "hover:bg-muted"}`}>
-                <Link
-                  href={`${base}/${c.id}`}
-                  onClick={() => setHistoryOpen(false)}
-                  className={`min-w-0 flex-1 truncate px-3 py-2 text-sm ${c.id === activeId ? "font-medium text-accent-strong" : "text-ink"}`}
-                  title={c.title}
-                >
-                  {c.title}
-                </Link>
-                <button
-                  type="button"
-                  aria-label="Убрать чат из истории"
-                  onClick={() => archive(c.id)}
-                  className="mr-1 hidden size-7 shrink-0 place-items-center rounded-md text-ink-3 hover:text-bad group-hover:grid"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </div>
-            ))}
+          <div key={g.label} className="mt-2 first:mt-0">
+            <div className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[1px] text-ink-3">{g.label}</div>
+            <div className="space-y-0.5">
+              {g.items.map((c) => {
+                const active = c.id === activeId;
+                return (
+                  <div
+                    key={c.id}
+                    className={`group relative flex items-center rounded-xl border ${
+                      active ? "border-line bg-muted shadow-sm backdrop-blur-md" : "border-transparent hover:bg-muted/60"
+                    }`}
+                  >
+                    <Link
+                      href={`${base}/${c.id}`}
+                      onClick={() => setHistoryOpen(false)}
+                      aria-current={active ? "page" : undefined}
+                      className={`min-w-0 flex-1 truncate px-3 py-2.5 text-[13px] group-hover:pr-10 ${active ? "font-medium text-ink" : "text-ink-2 group-hover:text-ink"}`}
+                      title={c.title}
+                    >
+                      {c.title}
+                    </Link>
+                    <button
+                      type="button"
+                      aria-label="Убрать чат из истории"
+                      onClick={() => archive(c.id)}
+                      className="absolute right-2 hidden size-7 place-items-center rounded-lg text-ink-3 hover:bg-bad-soft hover:text-bad focus:grid group-hover:grid"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ))}
       </div>
@@ -328,45 +342,52 @@ export function DataManager({ status, conversations: initialList, conversation, 
       {historyOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <button type="button" aria-label="Закрыть историю" className="absolute inset-0 bg-black/30" onClick={() => setHistoryOpen(false)} />
-          <div className="absolute inset-y-0 left-0 w-80 max-w-[85vw] bg-surface shadow-xl">{historyPanel}</div>
+          <div className="absolute inset-y-0 left-0 w-80 max-w-[85vw] bg-surface-solid shadow-xl">{historyPanel}</div>
         </div>
       )}
 
       <section className="flex min-w-0 flex-1 flex-col">
-        <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3 sm:px-6">
+        {/*
+          Шапка: на компьютере — значок и название слева, переключатель «Чат / Журнал операций» справа;
+          на телефоне — кнопка истории и одна стеклянная полоса: название (обрезается) и переключатель.
+        */}
+        <header className="flex items-center gap-2 border-b border-line px-3 py-3 sm:px-6 lg:gap-3">
           <button
             type="button"
             onClick={() => setHistoryOpen(true)}
             aria-label="История чатов"
-            className="grid size-10 place-items-center rounded-lg border border-line text-ink-2 hover:bg-muted lg:hidden"
+            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-muted text-ink-2 backdrop-blur-md hover:text-ink lg:hidden"
           >
             <History className="size-4" />
           </button>
-          <DatabaseZap className="hidden size-4 text-accent-strong sm:block" />
-          <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-ink">{activeId ? title : "AI Data Manager"}</h1>
-          <div role="tablist" className="flex rounded-lg border border-line p-0.5 text-sm">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "chat"}
-              onClick={() => setTab("chat")}
-              className={`rounded-md px-3 py-1 ${tab === "chat" ? "bg-accent-soft font-medium text-accent-strong" : "text-ink-2 hover:text-ink"}`}
-            >
-              Чат
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "journal"}
-              onClick={() => setTab("journal")}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 ${tab === "journal" ? "bg-accent-soft font-medium text-accent-strong" : "text-ink-2 hover:text-ink"}`}
-            >
-              <ListChecks className="size-3.5" />
-              Журнал операций
-            </button>
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-line bg-muted p-1 backdrop-blur-md lg:gap-3 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+            <DatabaseZap className="hidden size-5 shrink-0 text-accent-strong lg:block" strokeWidth={1.75} />
+            <h1 className="min-w-0 flex-1 truncate pl-2 text-[13px] font-semibold text-ink lg:pl-0 lg:text-base">{activeId ? title : "AI Data Manager"}</h1>
+            <div role="tablist" aria-label="Раздел" className="flex shrink-0 gap-0.5 rounded-full lg:border lg:border-line lg:bg-muted lg:p-1 lg:backdrop-blur-md">
+              {(
+                [
+                  ["chat", "Чат", null],
+                  ["journal", "Журнал операций", ListChecks],
+                ] as const
+              ).map(([key, label, Icon]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === key}
+                  onClick={() => setTab(key)}
+                  className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-xs transition-colors lg:px-4 lg:text-[13px] ${
+                    tab === key ? "bg-accent font-medium text-white hover:bg-accent-strong" : "text-ink-2 hover:bg-white/5 hover:text-ink"
+                  }`}
+                >
+                  {Icon && <Icon className="hidden size-3.5 lg:block" strokeWidth={1.75} />}
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           {activeId && tab === "chat" && (
-            <button type="button" onClick={rename} aria-label="Переименовать чат" className="grid size-8 place-items-center rounded-md text-ink-3 hover:bg-muted hover:text-ink">
+            <button type="button" onClick={rename} aria-label="Переименовать чат" className="grid size-9 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-muted hover:text-ink">
               <Pencil className="size-3.5" />
             </button>
           )}
@@ -387,7 +408,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
         ) : (
           <>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+              <div className="mx-auto flex min-h-full max-w-5xl flex-col px-4 py-6 sm:px-6">
                 {!status.ready && (
                   <div className="mb-6 flex items-start gap-3 rounded-lg bg-warn-soft px-4 py-3 text-sm">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" />
@@ -412,23 +433,25 @@ export function DataManager({ status, conversations: initialList, conversation, 
                 )}
 
                 {messages.length === 0 && !running && (
-                  <div className="py-8 text-center">
-                    <div className="mx-auto grid size-12 place-items-center rounded-full bg-accent-soft text-accent-strong">
-                      <DatabaseZap className="size-5" />
+                  <div className="my-auto py-8 text-center">
+                    {/* Светящийся стеклянный круг со значком. */}
+                    <div className="mx-auto grid size-16 place-items-center rounded-full bg-muted text-accent-strong shadow-[0_0_48px_-6px_rgb(46_107_255/0.55)] ring-1 ring-inset ring-white/15 backdrop-blur-md">
+                      <DatabaseZap className="size-7" strokeWidth={1.5} />
                     </div>
-                    <h2 className="mt-4 text-xl font-semibold text-ink">Обновление данных по отчёту</h2>
-                    <p className="mx-auto mt-2 max-w-2xl text-sm text-ink-2">
+                    <h2 className="mt-5 text-2xl font-bold tracking-tight text-ink">Обновление данных по отчёту</h2>
+                    <p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-ink-2">
                       Приложите отчёт Excel или CSV и напишите, что сделать. Claude ({status.model}) разберёт файл, сверит его с данными OneBase и подготовит план
                       изменений «было → стало». Данные меняются только после вашего подтверждения; факт продаж из Linko только сверяется — он не правится.
                     </p>
-                    <div className="mx-auto mt-6 flex max-w-2xl flex-wrap justify-center gap-2">
+                    {/* Подсказки — столбиком по центру; на телефоне — на всю ширину, текст переносится. */}
+                    <div className="mx-auto mt-7 flex max-w-xl flex-col items-center gap-2.5">
                       {exampleTasks.map((q) => (
                         <button
                           key={q}
                           type="button"
                           disabled={!status.ready}
                           onClick={() => setInput(q)}
-                          className="rounded-full border border-line bg-surface px-3.5 py-1.5 text-sm text-ink-2 hover:border-accent/40 hover:text-ink max-lg:py-2.5 disabled:opacity-50"
+                          className="rounded-full border border-line bg-muted px-5 py-2.5 text-center text-[13px] leading-snug text-ink-2 backdrop-blur-md transition-colors hover:border-accent/50 hover:text-ink active:bg-accent-soft disabled:opacity-50 max-lg:w-full max-lg:rounded-2xl max-lg:py-3"
                         >
                           {q}
                         </button>
@@ -458,7 +481,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
               </div>
             </div>
 
-            <div className="border-t border-line bg-page px-4 py-3 sm:px-6">
+            <div className="px-4 pb-4 pt-2 sm:px-6">
               <div className="mx-auto max-w-5xl">
                 {error && (
                   <div className="mb-2 flex items-start gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">
@@ -487,7 +510,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
                   </div>
                 )}
                 <form
-                  className="flex items-end gap-2 rounded-xl border border-line bg-surface p-2 shadow-sm focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20"
+                  className="flex items-end gap-2 rounded-[20px] border border-line bg-muted p-2 shadow-[0_16px_48px_-24px_rgb(0_0_0/0.6)] backdrop-blur-xl focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/20 lg:rounded-[28px]"
                   onSubmit={(e) => {
                     e.preventDefault();
                     void send(input);
@@ -507,9 +530,9 @@ export function DataManager({ status, conversations: initialList, conversation, 
                     title={`Приложить отчёт (${status.extensions.join(", ")}, до ${fileSize(status.maxFileBytes)})`}
                     disabled={!status.ready || running}
                     onClick={() => picker.current?.click()}
-                    className="grid size-10 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-muted hover:text-ink disabled:opacity-40 max-lg:size-11"
+                    className="grid size-10 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-white/5 hover:text-ink disabled:opacity-40 max-lg:size-11 lg:rounded-full"
                   >
-                    <Paperclip className="size-4" />
+                    <Paperclip className="size-[18px]" strokeWidth={1.75} />
                   </button>
                   <textarea
                     ref={textarea}
@@ -526,18 +549,18 @@ export function DataManager({ status, conversations: initialList, conversation, 
                     placeholder={status.ready ? "Что сделать с отчётом? Например: «Обнови план РОП на октябрь»" : "Claude API не подключён"}
                     disabled={!status.ready}
                     aria-label="Сообщение AI Data Manager"
-                    className="max-h-[200px] min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-60"
+                    className="max-h-[200px] min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-60"
                   />
                   <button
                     type="submit"
                     aria-label="Отправить"
                     disabled={!status.ready || running || uploading || input.trim() === ""}
-                    className="grid size-10 shrink-0 place-items-center rounded-lg bg-accent text-white hover:bg-accent-strong disabled:opacity-40 max-lg:size-11"
+                    className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent text-white hover:bg-accent-strong disabled:opacity-40 max-lg:size-11 lg:rounded-full"
                   >
                     {running ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
                   </button>
                 </form>
-                <p className="mt-1.5 text-center text-[11px] text-ink-3">
+                <p className="mt-2 text-center text-[11px] leading-relaxed text-ink-3">
                   Enter — отправить, Shift+Enter — новая строка. Изменения применяются только кнопкой «Подтвердить»; каждое действие пишется в журнал.
                 </p>
               </div>

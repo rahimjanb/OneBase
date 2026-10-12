@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
 using OneBase.Application.DataManager;
 using OneBase.Application.Sales;
+using OneBase.Application.Sales.Pnl;
 using OneBase.Application.Security;
 using OneBase.Domain.AI;
 using OneBase.Domain.Audit;
@@ -30,6 +31,7 @@ public sealed class DataManagerTools(
     DataFileService files,
     DataChangeService changes,
     SalesDataLoader loader,
+    PnlService pnl,
     IAuditLogger audit)
 {
     public const int MaxResultChars = 30_000;
@@ -96,8 +98,8 @@ public sealed class DataManagerTools(
     private List<ToolDef> Build() =>
     [
         new("list_data_targets", "Что можно менять",
-            "Какие данные OneBase можно обновить по отчёту, какие только читаются (копия Linko) и чего в OneBase нет (P&L и др.). "
-            + "Вызывайте в начале, если задача не про планы, цели или дилеров.",
+            "Какие данные OneBase можно обновить по отчёту (планы, цели, дилеры, P&L), какие только читаются (копия Linko) и чего в OneBase нет. "
+            + "Вызывайте в начале, если задача не про планы, цели, дилеров или P&L.",
             Schema([]), Permissions.DataManage, ListTargetsAsync),
 
         new("list_regions", "Регионы",
@@ -258,6 +260,106 @@ public sealed class DataManagerTools(
                 ("note", Prop("string", "пояснение"), false),
             ]), Permissions.DataManage, PrepareProfilesAsync),
 
+        new("get_pnl", "P&L дилеров",
+            "P&L дилеров из базы OneBase за месяц: исходные строки (продажи, себестоимость, расходы) и расчёт OneBase (валовая, маржа, "
+            + "прибыль после продаж, ROS, доставка, EBIT…) по дилерам и итог. Без year/month — список месяцев с данными. Формулы не придумывайте — берите отсюда.",
+            Schema([
+                ("year", Prop("integer", "год"), false),
+                ("month", Prop("integer", "месяц 1–12"), false),
+                ("dealer", Prop("string", "контрагент (часть имени, необязательно)"), false),
+            ]), Permissions.DataManage, GetPnlAsync),
+
+        new("compare_pnl_primary", "Сверка P&L с первичкой",
+            "Сверить строку «Продажи» P&L за месяц с первичкой OneBase (отгрузка завода по цене дилера из Linko) по контрагентам. "
+            + "Только сравнение: ни P&L, ни первичка не меняются.",
+            Schema([("year", Prop("integer", "год"), true), ("month", Prop("integer", "месяц"), true)]),
+            Permissions.DataManage, ComparePnlPrimaryAsync),
+
+        new("prepare_pnl_update", "План изменений: P&L дилеров",
+            "Подготовить загрузку P&L дилеров (sales.PnlValues): исходные строки — sales (продажи), cost (себестоимость), sm (отдел продаж и маркетинга), "
+            + "retro (ретробонусы), ship_plant / ship_dealer (доставка: завод / дилер оплатил, журнал логистики), ship_606 (компенсация по ст. 606), "
+            + "admin, other, amort, bank, tax, div — сум за месяц на контрагента. Расчётные строки отчёта (валовая, маржа, EBIT…) не загружаются, "
+            + "а сверяются с расчётом OneBase. Статьи реестра «Прочие расходы» распознаются по коду: 601–604, 607–610 → sm; 606 → ship_606; "
+            + "611, 331, 334, 339 → admin; прочие коды → other. Значения из файла OneBase берёт сам по mapping; rows — только для значений из сообщения. "
+            + "Ничего не меняет до подтверждения. mode = replace — только после явного «да» на вопрос, полный ли отчёт за месяц (completePeriod = true): "
+            + "тогда удаляются значения тех же месяцев и строк P&L, которых нет в отчёте.",
+            Schema([
+                ("mode", Enum("upsert — только значения отчёта; replace — отчёт полный за месяц по своим строкам P&L", "upsert", "replace"), true),
+                ("completePeriod", Prop("boolean", "администратор подтвердил, что отчёт полный за месяц"), false),
+                ("fileId", Prop("string", "id файла; для значений из сообщения — пусто"), false),
+                ("mapping", new
+                {
+                    type = "object",
+                    description = "как читать лист. Строки — контрагенты: dealerColumn + valueColumns (столбец → строка P&L) или lineColumn + valueColumn "
+                                  + "(длинная таблица: статья/строка P&L и сумма). Строки — статьи P&L, столбцы — контрагенты: lineColumn + firstDealerColumn "
+                                  + "(+ lastDealerColumn), имена контрагентов в строке заголовка, year и month обязательны.",
+                    properties = new Dictionary<string, object>
+                    {
+                        ["sheet"] = Prop("string", "лист"),
+                        ["headerRow"] = Prop("integer", "строка заголовка, с 1"),
+                        ["dealerColumn"] = Prop("string", "столбец контрагента (дилера): буква или заголовок"),
+                        ["valueColumns"] = new
+                        {
+                            type = "array",
+                            description = "столбцы значений и строки P&L, например {column: \"S\", line: \"sales\"}, {column: \"R\", line: \"cost\"}",
+                            items = new
+                            {
+                                type = "object",
+                                properties = new { column = Prop("string", "буква или заголовок"), line = Prop("string", "строка P&L: sales, cost, sm…") },
+                                required = new[] { "column", "line" },
+                            },
+                        },
+                        ["lineColumn"] = Prop("string", "столбец статьи или строки P&L"),
+                        ["valueColumn"] = Prop("string", "столбец суммы (длинная таблица)"),
+                        ["firstDealerColumn"] = Prop("string", "первый столбец контрагентов (статьи в строках)"),
+                        ["lastDealerColumn"] = Prop("string", "последний столбец контрагентов (без «Итого»)"),
+                        ["yearColumn"] = Prop("string", "столбец года"),
+                        ["monthColumn"] = Prop("string", "столбец месяца"),
+                        ["year"] = Prop("integer", "год, если он один на весь лист"),
+                        ["month"] = Prop("integer", "месяц, если он один на весь лист"),
+                        ["returnColumn"] = Prop("string", "столбец признака возврата (тип операции)"),
+                        ["returnValues"] = new { type = "array", items = new { type = "string" }, description = "значения returnColumn, означающие возврат: сумма берётся со знаком минус" },
+                        ["sumRows"] = Prop("boolean", "складывать строки отчёта с одним контрагентом, месяцем и строкой P&L (реестр расходов, база продаж, журнал рейсов); "
+                                                     + "false — повтор с другим значением будет конфликтом"),
+                        ["unit"] = Enum("единицы сумм", "sum", "thousand", "million"),
+                        ["firstRow"] = Prop("integer", "первая строка данных"),
+                        ["lastRow"] = Prop("integer", "последняя строка данных"),
+                    },
+                    required = new[] { "headerRow" },
+                }, false),
+                ("lineMap", new
+                {
+                    type = "object",
+                    description = "уточнение строк P&L: текст или код статьи из отчёта → строка P&L (например {\"605\": \"sm\"}); по умолчанию — правило статей выше",
+                    additionalProperties = new { type = "string" },
+                }, false),
+                ("dealerMap", new
+                {
+                    type = "object",
+                    description = "имя контрагента в отчёте → имя, под которым он уже есть в P&L (когда один дилер записан по-разному)",
+                    additionalProperties = new { type = "string" },
+                }, false),
+                ("rows", new
+                {
+                    type = "array",
+                    description = "значения из сообщения администратора",
+                    items = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            dealer = Prop("string", "контрагент"),
+                            line = Prop("string", "строка P&L"),
+                            year = Prop("integer", "год"),
+                            month = Prop("integer", "месяц"),
+                            amount = Prop("number", "сумма, сум"),
+                        },
+                        required = new[] { "dealer", "line", "year", "month", "amount" },
+                    },
+                }, false),
+                ("note", Prop("string", "пояснение для администратора: что и почему"), false),
+            ]), Permissions.DataManage, PreparePnlAsync),
+
         new("get_change_set", "План изменений",
             "План изменений по id: статус (Draft — ждёт подтверждения, Applied, Stale — данные изменились, Cancelled, RolledBack…), строки, проверка.",
             Schema([("id", Prop("string", "id плана"), true), ("items", Prop("boolean", "вернуть строки (по умолчанию — первые 100)"), false)]),
@@ -294,6 +396,14 @@ public sealed class DataManagerTools(
                 },
                 new { target = DataTargets.SalesTargets, tool = "prepare_targets_update", what = "Цели KPI (sales.Targets)" },
                 new { target = DataTargets.RegionProfiles, tool = "prepare_region_profile_update", what = "Дилер и СВР региона (sales.Regions)" },
+                new
+                {
+                    target = DataTargets.Pnl, tool = "prepare_pnl_update",
+                    what = "P&L дилеров (sales.PnlValues): контрагент × месяц × исходная строка P&L, сум. Раздел «Продажи → P&L дилеров» показывает "
+                           + "только загруженное здесь; демонстрационных данных нет",
+                    rule = "итоги (валовая, маржа, прибыль после продаж, ROS, доставка, EBIT, EAT) считает OneBase по исходным строкам — get_pnl; "
+                           + "продажи P&L можно сверить с первичкой OneBase — compare_pnl_primary",
+                },
             },
             readOnly = new
             {
@@ -305,7 +415,7 @@ public sealed class DataManagerTools(
             },
             notInOneBase = new[]
             {
-                "P&L, себестоимость, прибыль, расходы, бюджеты — такого модуля в OneBase нет; пересчитывать нечего",
+                "бюджеты и P&L компании в целом (в OneBase только P&L по дилерам — prepare_pnl_update)",
                 "премии и KPI-бонусы сотрудников",
                 "первичка из таблицы ГП: OneBase считает первичку по перемещениям и заказам Linko",
             },
@@ -573,6 +683,101 @@ public sealed class DataManagerTools(
         var view = await changes.PrepareRegionProfilesAsync(new DataActor(context.UserId, context.ConversationId), values, fileId, Str(input, "note"), ct);
         return await PreparedAsync(context, view, ct);
     }
+
+    private async Task<object> GetPnlAsync(DataToolContext context, JsonElement input, CancellationToken ct)
+    {
+        var months = await pnl.MonthsAsync(ct);
+        if (Int(input, "year") is not { } year || Int(input, "month") is not { } month)
+        {
+            return new
+            {
+                months = months.Select(m => new { period = $"{m.Year:D4}-{m.Month:D2}", m.HasSales, m.HasExpenses }),
+                lines = PnlService.LineViews.Select(l => new { l.Key, l.Label, l.Format, input = l.Input }),
+                note = months.Count == 0 ? "P&L в OneBase пока пуст: данные загружаются только через prepare_pnl_update." : null,
+            };
+        }
+
+        var (dealers, total) = await pnl.MonthAsync(year, month, ct);
+        var filter = Str(input, "dealer");
+        static object Compact(IReadOnlyDictionary<string, decimal?> values) =>
+            values.Where(v => v.Value is not null).ToDictionary(v => v.Key, v => Math.Round(v.Value!.Value, v.Key is PnlMath.Margin or PnlMath.Ros ? 4 : 2));
+        return new
+        {
+            period = $"{year:D4}-{month:D2}",
+            hasData = dealers.Count > 0,
+            total = Compact(total),
+            dealers = dealers
+                .Where(d => filter is null || d.Key.Contains(PnlMath.DealerKey(filter), StringComparison.Ordinal))
+                .OrderByDescending(d => d.Values.GetValueOrDefault(PnlMath.Sales) ?? 0)
+                .Take(200)
+                .Select(d => new { dealer = d.Name, values = Compact(d.Values) }),
+            note = "margin и ros — доли (0,057 = 5,7 %). Пустых строк в ответе нет: значит, они не загружены.",
+        };
+    }
+
+    private async Task<object> ComparePnlPrimaryAsync(DataToolContext context, JsonElement input, CancellationToken ct) =>
+        await pnl.ComparePrimaryAsync(Int(input, "year") ?? throw new ToolInputException("year обязателен"),
+            Int(input, "month") ?? throw new ToolInputException("month обязателен"), ct);
+
+    private async Task<object> PreparePnlAsync(DataToolContext context, JsonElement input, CancellationToken ct)
+    {
+        var replace = Str(input, "mode") == "replace";
+        if (replace && Bool(input, "completePeriod") != true)
+        {
+            throw new DataManagerException("Режим replace удаляет значения месяца, которых нет в отчёте. Сначала спросите администратора, "
+                                           + "полный ли отчёт за период, и передайте completePeriod = true только после явного «да».");
+        }
+
+        Guid? fileId = Str(input, "fileId") is { Length: > 0 } ? Guid(input, "fileId") : null;
+        PnlSheetMapping? mapping = null;
+        IReadOnlyList<PnlRawValue>? values = null;
+        if (fileId is not null)
+        {
+            if (!input.TryGetProperty("mapping", out var m) || m.ValueKind != JsonValueKind.Object)
+            {
+                throw new ToolInputException("для файла нужен mapping");
+            }
+
+            var columns = m.TryGetProperty("valueColumns", out var vc) && vc.ValueKind == JsonValueKind.Array
+                ? vc.EnumerateArray().Select(c => new PnlColumn(Str(c, "column") ?? throw new ToolInputException("valueColumns[].column"),
+                    Str(c, "line") ?? throw new ToolInputException("valueColumns[].line"))).ToList()
+                : null;
+            var returns = m.TryGetProperty("returnValues", out var rv) && rv.ValueKind == JsonValueKind.Array
+                ? rv.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToList()
+                : null;
+            mapping = new PnlSheetMapping(
+                Str(m, "sheet"),
+                Int(m, "headerRow") ?? throw new ToolInputException("mapping.headerRow обязателен"),
+                Str(m, "dealerColumn"), columns, Str(m, "lineColumn"), Str(m, "valueColumn"), Str(m, "yearColumn"), Str(m, "monthColumn"),
+                Int(m, "year"), Int(m, "month"),
+                Str(m, "unit") switch { "thousand" => 1000m, "million" => 1_000_000m, _ => 1m },
+                Int(m, "firstRow"), Int(m, "lastRow"), Str(m, "firstDealerColumn"), Str(m, "lastDealerColumn"), Str(m, "returnColumn"), returns,
+                Bool(m, "sumRows") ?? false);
+        }
+        else if (input.TryGetProperty("rows", out var rows) && rows.ValueKind == JsonValueKind.Array)
+        {
+            values = rows.EnumerateArray().Select((r, i) =>
+            {
+                var number = r.TryGetProperty("amount", out var a) && a.ValueKind == JsonValueKind.Number ? a.GetDecimal() : (decimal?)null;
+                return new PnlRawValue(Str(r, "dealer") ?? "", Str(r, "line") ?? "", Int(r, "year") ?? 0, Int(r, "month") ?? 0, number,
+                    $"из сообщения, строка {i + 1}", number is null ? "пусто" : null);
+            }).ToList();
+        }
+        else
+        {
+            throw new ToolInputException("нужен fileId с mapping или rows");
+        }
+
+        var view = await changes.PreparePnlAsync(new DataActor(context.UserId, context.ConversationId),
+            new PnlRequest(replace, fileId, mapping, values, Map(input, "lineMap"), Map(input, "dealerMap"), Str(input, "note")), ct);
+        return await PreparedAsync(context, view, ct);
+    }
+
+    private static IReadOnlyDictionary<string, string>? Map(JsonElement input, string name) =>
+        input.TryGetProperty(name, out var m) && m.ValueKind == JsonValueKind.Object
+            ? m.EnumerateObject().Where(p => p.Value.ValueKind == JsonValueKind.String && p.Value.GetString() is { Length: > 0 })
+                .ToDictionary(p => p.Name, p => p.Value.GetString()!)
+            : null;
 
     private async Task<object> PreparedAsync(DataToolContext context, DataChangeSetView view, CancellationToken ct)
     {

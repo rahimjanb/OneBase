@@ -73,7 +73,8 @@ public sealed record ChangeSetSummary(
     string? FileName,
     string? Sheet,
     int SkippedEmpty,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    PnlSummary? Pnl = null);
 
 public sealed record DataChangeItemView(
     Guid Id,
@@ -151,7 +152,8 @@ public sealed record VerificationResult(
     int Mismatches,
     IReadOnlyList<StoredCheck> Problems,
     IReadOnlyList<ChangeImpact> Kpi,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<PnlMonthTotal>? Pnl = null);
 
 /// <summary>
 /// Применение и откат плана изменений — одной транзакцией, с проверкой, что данные не изменились после подготовки
@@ -169,12 +171,14 @@ public static class DataTargets
     public const string RegionPlans = "region_plans";
     public const string SalesTargets = "sales_targets";
     public const string RegionProfiles = "region_profiles";
+    public const string Pnl = "pnl";
 
     public static string Label(string target) => target switch
     {
         RegionPlans => "Планы регионов",
         SalesTargets => "Цели KPI",
         RegionProfiles => "Дилеры и СВР регионов",
+        Pnl => "P&L дилеров",
         _ => target,
     };
 

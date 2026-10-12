@@ -1,21 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { Note, Section, Stat, deltaTone } from "./bits";
+import { ArrowUpRight, TrendingDown, TrendingUp } from "lucide-react";
+import { Note, Section, Stat } from "./bits";
 import { DataTable, NameCell, type Column } from "./DataTable";
 import { TopChip } from "./outstock";
 import { delta, kg, money, num, outletsLabel, pct, plural } from "@/lib/sales/format";
 import { withQuery } from "@/lib/sales/query";
-import type { AssortmentRegionRow, CategoryCard, ProductBreakdownRow, ProductView, SkuRow, SkuStatus } from "@/lib/sales/types";
+import type { AssortmentRegionRow, CategoryCard, CategoryPlanFact, ProductBreakdownRow, ProductView, SkuRow, SkuStatus, TargetLevel } from "@/lib/sales/types";
 
 const chip = "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium";
 
 type Tone = "ok" | "bad" | "warn" | "muted";
 
+/** Бейдж с точкой; алерт (bad) — заливка 12 %, обводка 20 %, точка и текст красные. */
 function Chip({ tone, children }: { tone: Tone; children: React.ReactNode }) {
-  const styles = { ok: "bg-ok-soft text-ok", bad: "bg-bad-soft text-bad", warn: "bg-warn-soft text-warn", muted: "bg-muted text-ink-2" };
+  const styles = {
+    ok: "border-transparent bg-ok-soft text-ok",
+    bad: "border-bad/20 bg-bad-soft text-bad",
+    warn: "border-transparent bg-warn-soft text-warn",
+    muted: "border-transparent bg-muted text-ink-2",
+  };
   return (
-    <span className={`${chip} ${styles[tone]}`}>
+    <span className={`${chip} border ${styles[tone]}`}>
       <span className="size-1.5 rounded-full bg-current" />
       {children}
     </span>
@@ -42,40 +49,85 @@ export function NoDataChip() {
   return <Chip tone="muted">нет данных</Chip>;
 }
 
-function Card({ card, href }: { card: CategoryCard; href: string }) {
+const levelChip: Record<TargetLevel, string> = { Good: "bg-ok-soft text-ok", Warning: "bg-warn-soft text-warn", Bad: "border-bad/20 bg-bad-soft text-bad" };
+
+/** Динамика к прошлому месяцу: рост — зелёным со стрелкой вверх, падение — красным со стрелкой вниз. */
+function Trend({ value }: { value: number | null }) {
+  if (value == null) return <span className="text-ink-3">—</span>;
+  const Icon = value >= 0 ? TrendingUp : TrendingDown;
+  return (
+    <span className={`inline-flex items-center gap-1 ${value >= 0 ? "text-ok" : "text-bad"}`}>
+      <Icon className="size-3.5" strokeWidth={2} />
+      {delta(value)}
+    </span>
+  );
+}
+
+/**
+ * Карточка категории: факт крупно, план и выполнение (план «регион × категория» или планы ТП — из «План и факт по категориям»),
+ * доля по весу, выручка, АКБ, дистрибуция, прогноз, динамика к прошлому месяцу и алерты «молчат / пропало».
+ */
+function Card({ card, plan, href }: { card: CategoryCard; plan: CategoryPlanFact | undefined; href: string }) {
+  const planned = plan?.planKg != null;
+  const bar = planned ? plan!.execution : card.weightShare;
   return (
     <Link
       href={href}
-      className="flex h-full flex-col rounded-xl border border-line bg-surface p-4 text-left shadow-sm transition-[border-color,box-shadow] hover:border-accent/40 hover:shadow-md max-lg:active:opacity-75"
+      className="group flex h-full flex-col rounded-2xl border border-line bg-surface p-5 text-left shadow-sm backdrop-blur-md transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-md max-lg:active:opacity-75"
     >
-      <div className="font-semibold text-ink">{card.name}</div>
-      <div className="mt-0.5 text-xs text-ink-3">
-        продаётся {num(card.skuSold)} из {num(card.skuTotal)} SKU
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-base font-semibold text-ink">{card.name}</h3>
+          <div className="mt-0.5 text-xs text-ink-3">
+            продаётся {num(card.skuSold)} из {num(card.skuTotal)} SKU
+          </div>
+        </div>
+        <ArrowUpRight className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent-strong" strokeWidth={1.75} />
       </div>
 
-      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted" title={`Доля по весу ${pct(card.weightShare)}`}>
-        <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, Math.max(0, (card.weightShare ?? 0) * 100))}%` }} />
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-display text-[26px] font-bold leading-none tracking-tight text-ink tabular-nums">
+            {kg(card.factKg)} <span className="text-sm font-semibold text-ink-3">кг</span>
+          </div>
+          <div className="mt-1.5 text-xs text-ink-3">
+            {planned ? <>план {kg(plan!.planKg)} кг</> : "плана нет"} · {pct(card.weightShare)} веса
+          </div>
+        </div>
+        {planned && plan!.execution != null && (
+          <span
+            className={`shrink-0 rounded-full border border-transparent px-2.5 py-1 text-xs font-semibold tabular-nums ${plan!.executionLevel ? levelChip[plan!.executionLevel] : "bg-muted text-ink-2"}`}
+            title="Выполнение плана категории"
+          >
+            {pct(plan!.execution)}
+          </span>
+        )}
       </div>
 
-      <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 text-xs">
-        <Stat label="Факт, кг" value={kg(card.factKg)} />
-        <Stat label="Доля по весу" value={pct(card.weightShare)} />
+      <div
+        className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+        title={planned ? `Выполнение плана ${pct(plan!.execution)}` : `Доля по весу ${pct(card.weightShare)}`}
+      >
+        <div
+          className={`h-full rounded-full ${planned && plan!.executionLevel === "Bad" ? "bg-bad" : planned && plan!.executionLevel === "Warning" ? "bg-warn" : "bg-accent"}`}
+          style={{ width: `${Math.min(100, Math.max(0, (bar ?? 0) * 100))}%` }}
+        />
+      </div>
+
+      <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-3 border-t border-line pt-4 text-xs">
         <Stat label="Выручка" value={money(card.revenue)} />
         <Stat label="АКБ" value={num(card.akb)} />
         <Stat label="Дистрибуция" value={pct(card.distribution)} />
-      </dl>
-
-      <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 border-t border-dashed border-line pt-3 text-xs">
         <Stat label="Прогноз, кг" value={kg(card.forecastKg)} />
         <Stat label="Прогноз выручки" value={money(card.forecastRevenue)} />
-        <Stat label="К прошлому мес." value={delta(card.vsPrevMonth)} tone={deltaTone(card.vsPrevMonth)} />
+        <Stat label="К прошлому мес." value={<Trend value={card.vsPrevMonth} />} />
       </dl>
 
-      <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
+      <div className="mt-auto flex flex-wrap gap-1.5 pt-4">
         {card.silent === 0 ? (
           <Chip tone="ok">все продаются</Chip>
         ) : (
-          <Chip tone={card.lost > 0 ? "bad" : "muted"}>молчат {num(card.silent)}</Chip>
+          <Chip tone="bad">молчат {num(card.silent)}</Chip>
         )}
         {card.lost > 0 && <Chip tone="bad">пропало {num(card.lost)}</Chip>}
       </div>
@@ -86,8 +138,10 @@ function Card({ card, href }: { card: CategoryCard; href: string }) {
 /**
  * Карточки категорий; клик открывает страницу категории с её плитками и артикулами.
  * query — период и охват («region=…», «agent=…»): категория открывается в том же охвате, что и карточка.
+ * plans — «План и факт по категориям» того же охвата: план и выполнение в карточке (без строки плана — «плана нет»).
  */
-export function CategoryCards({ cards, scope, query }: { cards: CategoryCard[]; scope: string; query: string }) {
+export function CategoryCards({ cards, scope, query, plans }: { cards: CategoryCard[]; scope: string; query: string; plans?: CategoryPlanFact[] }) {
+  const byCategory = new Map((plans ?? []).filter((p) => p.categoryId != null).map((p) => [String(p.categoryId), p]));
   return (
     <Section title="Категории" hint="клик — артикулы категории">
       {cards.length === 0 ? (
@@ -95,7 +149,7 @@ export function CategoryCards({ cards, scope, query }: { cards: CategoryCard[]; 
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {cards.map((c) => (
-            <Card key={c.id} card={c} href={withQuery(`/sales/assortment/category/${encodeURIComponent(c.id)}`, query)} />
+            <Card key={c.id} card={c} plan={byCategory.get(c.id)} href={withQuery(`/sales/assortment/category/${encodeURIComponent(c.id)}`, query)} />
           ))}
         </div>
       )}

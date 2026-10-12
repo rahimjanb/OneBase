@@ -41,6 +41,10 @@ export type Counts = { create: number; update: number; delete: number; unchanged
 export type ImpactRow = { name: string; planBefore: number | null; planAfter: number | null; factKg: number | null; executionBefore: number | null; executionAfter: number | null };
 export type Impact = { period: string; planSourceBefore: string | null; republic: ImpactRow | null; regions: ImpactRow[]; note: string };
 
+export type PnlMonthTotal = { year: number; month: number; before: Record<string, number | null>; after: Record<string, number | null> };
+export type PnlCheck = { dealer: string; year: number; month: number; line: string; label: string; report: number; oneBase: number | null; diff: number | null; sourceRef: string };
+export type PnlSummary = { months: PnlMonthTotal[]; checks: PnlCheck[]; checkedValues: number; newDealers: string[] };
+
 export type ChangeSummary = {
   counts: Counts;
   warnings: string[];
@@ -51,6 +55,7 @@ export type ChangeSummary = {
   sheet: string | null;
   skippedEmpty: number;
   notes: string[];
+  pnl?: PnlSummary | null;
 };
 
 export type Verification = {
@@ -60,6 +65,7 @@ export type Verification = {
   problems: { label: string; expected: string | null; actual: string | null; ok: boolean }[];
   kpi: Impact[];
   notes: string[];
+  pnl?: PnlMonthTotal[] | null;
 };
 
 export type ChangeSet = {

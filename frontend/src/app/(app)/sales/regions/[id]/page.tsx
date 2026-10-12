@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { AkbMonthsCard } from "@/components/sales/AkbMonthsCard";
 import { CollapsedSections } from "@/components/sales/bits";
-import { CategoryPlanTable, DataQualityNotes, KpiRow, NextMonthCard, PlanFactMonths, UnassignedWarning, VolumeMix } from "@/components/sales/blocks";
+import { DataQualityNotes, KpiRow, NextMonthCard, PlanFactMonths, UnassignedWarning, VolumeMix } from "@/components/sales/blocks";
+import { CategoryPlanCard } from "@/components/sales/category-plan";
 import { MonthCalendarTable, VisitCalendarTable } from "@/components/sales/calendars";
 import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
@@ -54,12 +55,16 @@ export default async function RegionPage({
       <PlanFactMonths months={data.months} current={period.month} />
       <VolumeMix categories={data.categories} />
       {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle="Категория" />}
-      <CategoryCards cards={data.categoryCards} scope="регионе" query={queryWith(q, { region: id })} />
+      <CategoryCards cards={data.categoryCards} scope="регионе" query={queryWith(q, { region: id })} plans={data.categoryPlans} />
+
+      {/* План и факт по категориям и АКБ по месяцам — сразу под карточками, на широком экране рядом. */}
+      <div key={`charts-${period.year}-${period.month}`} className={`grid items-start gap-x-6 ${data.categoryPlans.length > 0 ? "2xl:grid-cols-2" : ""}`}>
+        <CategoryPlanCard rows={data.categoryPlans} total={data.categoryPlanTotal} source={data.kpi.planSource} plan={period.plan} />
+        <AkbMonthsCard data={data.akbMonths} />
+      </div>
 
       {/* Ключ по месяцу: смена месяца сбрасывает раскрытые секции, сортировки и раскрытые строки (DOC-filters §12). */}
       <CollapsedSections key={`${period.year}-${period.month}`}>
-        <CategoryPlanTable rows={data.categoryPlans} total={data.categoryPlanTotal} source={data.kpi.planSource} plan={period.plan} />
-        <AkbMonthsCard data={data.akbMonths} />
         <MonthCalendarTable
           calendar={data.calendar}
           year={period.year}

@@ -360,13 +360,33 @@ export function CategoryPlanTable({
   plan: PlanKind;
 }) {
   if (rows.length === 0) return null;
+  return (
+    <Section title="План и факт по категориям" hint={categoryPlanHint(source)}>
+      <CategoryPlanRows rows={rows} total={total} source={source} plan={plan} />
+    </Section>
+  );
+}
+
+/** Подпись к «План и факт по категориям»: откуда план. */
+export const categoryPlanHint = (source: PlanSource) =>
+  source === "linko" ? "план — сумма планов ТП по показателям Linko, в кг" : `${planSourceText[source]} — сумма планов «регион × категория», в кг`;
+
+/** Таблица «План и факт по категориям» с пояснением — без секции (её ставит CategoryPlanTable или CategoryPlanCard с графиком). */
+export function CategoryPlanRows({
+  rows,
+  total,
+  source,
+  plan,
+}: {
+  rows: CategoryPlanFact[];
+  total: CategoryPlanFact | null;
+  source: PlanSource;
+  plan: PlanKind;
+}) {
   const fromLinko = source === "linko";
   const th = "py-2 pr-3 text-right text-[11px] font-semibold uppercase tracking-wide text-ink-3";
   return (
-    <Section
-      title="План и факт по категориям"
-      hint={fromLinko ? "план — сумма планов ТП по показателям Linko, в кг" : `${planSourceText[source]} — сумма планов «регион × категория», в кг`}
-    >
+    <>
       <div className="-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
         <table className="w-full min-w-max text-sm">
           <thead>
@@ -425,7 +445,7 @@ export function CategoryPlanTable({
           : "План категории — сумма плана «регион × категория» по регионам подразделения (фасовки помадки — одна категория); факт — все продажи категории, а не только ТП с планом. У ТП плана по категориям из планов регионов нет — в карточке ТП его план из Linko. "}
         Серые строки — категории с продажами, на которые плана нет; в итог они не входят.
       </Note>
-    </Section>
+    </>
   );
 }
 

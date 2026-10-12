@@ -22,9 +22,9 @@ export function Topbar({ me }: { me: Me | null }) {
           <Logo />
         </div>
         <Suspense fallback={null}>
-          <SectionNav />
+          <SectionNav permissions={me?.permissions ?? null} />
         </Suspense>
-        <div className="ml-auto flex h-14 items-center gap-1 lg:h-16">
+        <div className="ml-auto flex h-14 items-center gap-1 lg:h-[72px]">
           <ThemeToggle />
           {me && <NotificationBell />}
           {me && (
@@ -37,7 +37,7 @@ export function Topbar({ me }: { me: Me | null }) {
                 </span>
                 <ChevronDown className="mr-1 hidden size-4 text-ink-3 lg:block" />
               </summary>
-              <div className="absolute right-0 z-40 mt-2 w-56 rounded-lg border border-line bg-surface p-1.5 text-ink shadow-lg">
+              <div className="absolute right-0 z-40 mt-2 w-56 rounded-lg border border-line bg-surface-solid p-1.5 text-ink shadow-lg">
                 <div className="px-2.5 py-2 text-xs text-ink-3">
                   <span className="block truncate text-ink-2">{me.name || me.login}</span>
                   <span className="block truncate">{me.position ?? me.roles[0] ?? me.login}</span>

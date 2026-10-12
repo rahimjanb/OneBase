@@ -40,6 +40,7 @@ public static class DataEntityTypes
     public const string RegionPlan = "region_plan";
     public const string SalesTarget = "sales_target";
     public const string RegionProfile = "region_profile";
+    public const string PnlValue = "pnl_value";
 
     public static string PlanKindLabel(PlanKind kind) => kind switch
     {

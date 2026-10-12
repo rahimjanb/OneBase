@@ -112,7 +112,7 @@ export function PackFilter({ packs, selected }: { packs: number[]; selected: num
       <summary className={`${control} inline-flex cursor-pointer select-none list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden`}>
         Фасовка: <span className="font-medium">{selected.length ? selected.map(label).join(", ") : "все веса"}</span>
       </summary>
-      <div className="absolute left-0 top-full z-20 mt-1 max-h-72 min-w-[190px] overflow-y-auto rounded-lg border border-line bg-surface p-2 shadow-lg">
+      <div className="absolute left-0 top-full z-20 mt-1 max-h-72 min-w-[190px] overflow-y-auto rounded-lg border border-line bg-surface-solid p-2 shadow-lg">
         {selected.length > 0 && (
           <button type="button" onClick={() => set({ pack: null })} className="mb-1 block w-full rounded px-2 py-1 text-left text-xs font-medium text-accent hover:bg-muted">
             Все веса

@@ -65,6 +65,14 @@ public sealed class ConsultantChatService(
         return new ConversationView(conversation.Id, conversation.Title, conversation.CreatedAt, messages.Select(View).ToList());
     }
 
+    /// <summary>Текст ответа консультанта для озвучки — только из своего чата и только готовый ответ.</summary>
+    public async Task<string?> AnswerTextAsync(Guid userId, Guid messageId, CancellationToken ct) =>
+        await db.AiMessages.AsNoTracking()
+            .Where(m => m.Id == messageId && m.Role == AiMessageRole.Assistant && m.Status == AiMessageStatus.Completed
+                        && m.Conversation!.UserId == userId)
+            .Select(m => m.Content)
+            .FirstOrDefaultAsync(ct);
+
     public async Task<bool> RenameAsync(Guid userId, Guid id, string title, CancellationToken ct)
     {
         var conversation = await db.AiConversations.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId && c.ArchivedAt == null, ct);
