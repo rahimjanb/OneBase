@@ -256,10 +256,11 @@ export class SpeechPlayer {
     });
   }
 
+  /** Голос браузера (когда ключа OpenAI нет) — как и на сервере, мужской и естественный. */
   private async speakBrowser(parts: string[], alive: () => boolean, onState: (state: SpeechState) => void) {
     if (!canSpeakInBrowser()) throw new Error("Этот браузер не умеет читать вслух.");
     const synth = window.speechSynthesis;
-    const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith("ru"));
+    const voice = russianMaleVoice(synth.getVoices());
     for (const text of parts) {
       if (!alive()) return;
       await new Promise<void>((resolve) => {
@@ -274,4 +275,15 @@ export class SpeechPlayer {
       });
     }
   }
+}
+
+/**
+ * Русский голос браузера: сначала мужские «нейронные» (Edge — «Dmitry Online (Natural)»), потом любые мужские (Windows — «Pavel»),
+ * иначе — любой русский.
+ */
+export function russianMaleVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
+  const russian = voices.filter((v) => v.lang.toLowerCase().startsWith("ru"));
+  const male = (v: SpeechSynthesisVoice) => /dmitr|pavel|maxim|yuri|artem|\bmale\b|мужск/i.test(v.name);
+  const natural = (v: SpeechSynthesisVoice) => /natural|online|neural/i.test(v.name);
+  return russian.find((v) => male(v) && natural(v)) ?? russian.find(male) ?? russian.find(natural) ?? russian[0];
 }

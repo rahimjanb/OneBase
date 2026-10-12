@@ -41,6 +41,48 @@ public class VoiceTests
     }
 
     [Fact]
+    public void Sources_are_not_read_aloud()
+    {
+        const string answer = """
+            В Ташкенте **333 активных магазина** за 1–11 октября (источник: OneBase → Продажи).
+
+            *Источник: прогноз Sales AI по данным `get_sales` за 1–11 октября.*
+
+            Прогноз — 46,7 т. Источник: OneBase → Продажи → Ташкент.
+
+            **Источники:**
+            - OneBase → Продажи → Республика
+            - get_sales_by_branch — регионы
+
+            | Регион | Факт, кг | Источник |
+            |---|---:|---|
+            | Хоразм | 9 911 | get_sales |
+
+            Итог: план под угрозой.
+            """;
+
+        Assert.Equal(
+            "В Ташкенте 333 активных магазина за 1–11 октября. Прогноз — 46,7 т. Хоразм, Факт, кг: 9 911. Итог: план под угрозой.",
+            SpeechText.From(answer));
+    }
+
+    [Fact]
+    public async Task Rejected_voice_falls_back_to_male_backup_and_is_remembered()
+    {
+        var (service, http, _) = Create(body: "MP3");
+        http.Script.Enqueue((HttpStatusCode.BadRequest, "{\"error\":{\"message\":\"Invalid value for 'voice': 'cedar'.\"}}"));
+
+        var audio = await service.SpeechAsync(Context, "m1", "Первый ответ.", 0);
+
+        Assert.Equal("MP3"u8.ToArray(), audio.Audio);
+        Assert.Equal(new[] { "cedar", "ash" }, http.Bodies.Select(b => JsonDocument.Parse(b).RootElement.GetProperty("voice").GetString()!).ToArray());
+
+        await service.SpeechAsync(Context, "m2", "Второй ответ.", 0);
+        Assert.Equal("ash", JsonDocument.Parse(http.Bodies[^1]).RootElement.GetProperty("voice").GetString()); // сразу запасной, без лишнего запроса
+        Assert.Equal(3, http.Requests.Count);
+    }
+
+    [Fact]
     public void First_part_is_short_others_fit_the_model_and_nothing_is_lost()
     {
         var sentence = "Регион Хоразм выполнил план по кексу на сто двадцать процентов, а по бамбуку отстаёт. ";
@@ -126,6 +168,7 @@ public class VoiceTests
         Assert.Single(http.Requests); // повтор — из кэша, без нового запроса
         using var json = JsonDocument.Parse(http.Bodies[^1]);
         Assert.Equal("gpt-4o-mini-tts", json.RootElement.GetProperty("model").GetString());
+        Assert.Equal("cedar", json.RootElement.GetProperty("voice").GetString()); // мужской, самый естественный голос OpenAI
         Assert.Equal("mp3", json.RootElement.GetProperty("response_format").GetString());
         Assert.StartsWith("Продажи за октябрь.", json.RootElement.GetProperty("input").GetString());
         Assert.True(json.RootElement.TryGetProperty("instructions", out _));
@@ -167,6 +210,8 @@ public class VoiceTests
     {
         public HttpStatusCode Status { get; } = status;
         public string Body { get; } = body;
+        /// <summary>Ответы по очереди; когда закончатся — Status и Body.</summary>
+        public Queue<(HttpStatusCode Status, string Body)> Script { get; } = new();
         public List<HttpRequestMessage> Requests { get; } = [];
         public List<string> Bodies { get; } = [];
         public HttpRequestMessage? LastRequest => Requests.LastOrDefault();
@@ -179,7 +224,8 @@ public class VoiceTests
             {
                 owner.Requests.Add(request);
                 owner.Bodies.Add(request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken));
-                return new HttpResponseMessage(owner.Status) { Content = new StringContent(owner.Body) };
+                var (status, body) = owner.Script.Count > 0 ? owner.Script.Dequeue() : (owner.Status, owner.Body);
+                return new HttpResponseMessage(status) { Content = new StringContent(body) };
             }
         }
     }

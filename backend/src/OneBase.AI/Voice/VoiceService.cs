@@ -17,11 +17,20 @@ public sealed class VoiceOptions
 
     public string SpeechModel { get; set; } = "gpt-4o-mini-tts";
 
-    public string Voice { get; set; } = "coral";
+    /// <summary>Мужской голос OpenAI с самым естественным звучанием (cedar); если OpenAI его не примет — <see cref="FallbackVoice"/>.</summary>
+    public string Voice { get; set; } = "cedar";
 
-    /// <summary>Как читать (только у моделей gpt-4o-*-tts).</summary>
+    /// <summary>Запасной мужской голос — если основной у этой модели недоступен (ответ 400 про voice).</summary>
+    public string FallbackVoice { get; set; } = "ash";
+
+    /// <summary>Как читать (только у моделей gpt-4o-*-tts): живой человек, а не диктор.</summary>
     public string Instructions { get; set; } =
-        "Говори по-русски, спокойно и чётко, деловым тоном, в среднем темпе. Числа и единицы читай полностью.";
+        "Голос: мужчина лет сорока, опытный руководитель продаж, рассказывает коллеге итоги — живо и по-человечески. "
+        + "Говори по-русски естественно, как в обычном разговоре, а не как диктор или автоответчик: спокойный уверенный тон, тёплый тембр, "
+        + "разговорный темп, естественные паузы между мыслями, лёгкое смысловое ударение на главных цифрах. "
+        + "Без пафоса и театральности, без растягивания слов и ровной «роботной» интонации. "
+        + "Числа произноси так, как их говорят вслух, единицы — полностью: «кг» — килограммов, «т» — тонн, «%» — процентов. "
+        + "Сокращения АКБ, СВР, ТП, РМ читай по буквам, РОП — одним словом.";
 
     /// <summary>
     /// Подсказка распознаванию: термины продаж, которых нет в обычной речи. Только список — на тишине модель иногда «повторяет» подсказку,
@@ -144,18 +153,41 @@ public sealed class VoiceService(
             throw new VoiceException($"Части {part + 1} нет: всего {parts.Count}.");
         }
 
-        var cacheKey = $"voice:{key}:{options.SpeechModel}:{options.Voice}:{part}";
+        // Основной голос OpenAI не принял раньше — сразу запасной, без лишнего запроса.
+        var voice = cache.TryGetValue(RejectedKey(options.Voice), out bool _) ? options.FallbackVoice : options.Voice;
+        // Ключ — по тексту части, голосу и инструкциям: правка подготовки текста или смена голоса не отдаёт старый звук.
+        var cacheKey = $"voice:{options.SpeechModel}:{voice}:{Hash(options.Instructions + "\u001f" + parts[part])}";
         if (cache.TryGetValue(cacheKey, out byte[]? cached) && cached is not null)
         {
             return new SpeechPart(cached, part, parts.Count);
         }
 
         var credentials = await CredentialsAsync(ct);
+        byte[] audio;
+        try
+        {
+            audio = await SynthesizeAsync(context, credentials, voice, parts[part], ct);
+        }
+        catch (VoiceException ex) when (ex.Status == 400 && ex.Detail.Contains("voice", StringComparison.OrdinalIgnoreCase)
+                                        && voice != options.FallbackVoice && !string.IsNullOrWhiteSpace(options.FallbackVoice))
+        {
+            cache.Set(RejectedKey(options.Voice), true, TimeSpan.FromHours(12));
+            voice = options.FallbackVoice;
+            cacheKey = $"voice:{options.SpeechModel}:{voice}:{Hash(options.Instructions + "\u001f" + parts[part])}";
+            audio = await SynthesizeAsync(context, credentials, voice, parts[part], ct);
+        }
+
+        cache.Set(cacheKey, audio, CacheTime);
+        return new SpeechPart(audio, part, parts.Count);
+    }
+
+    private async Task<byte[]> SynthesizeAsync(AiCallContext context, AiCredentials credentials, string voice, string input, CancellationToken ct)
+    {
         var request = new Dictionary<string, object>
         {
             ["model"] = options.SpeechModel,
-            ["voice"] = options.Voice,
-            ["input"] = parts[part],
+            ["voice"] = voice,
+            ["input"] = input,
             ["response_format"] = "mp3",
         };
         if (options.SpeechModel.Contains("-tts", StringComparison.OrdinalIgnoreCase) && !options.SpeechModel.StartsWith("tts-", StringComparison.OrdinalIgnoreCase))
@@ -164,10 +196,12 @@ public sealed class VoiceService(
         }
 
         using var content = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json");
-        var audio = await SendBytesAsync(context, options.SpeechModel, credentials, "/audio/speech", content, ct);
-        cache.Set(cacheKey, audio, CacheTime);
-        return new SpeechPart(audio, part, parts.Count);
+        return await SendBytesAsync(context, options.SpeechModel, credentials, "/audio/speech", content, ct);
     }
+
+    private string RejectedKey(string voice) => $"voice:rejected:{options.SpeechModel}:{voice}";
+
+    private static string Hash(string text) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..32];
 
     /// <summary>Текст для чтения вслух, частями (для голоса браузера, когда ключа OpenAI нет).</summary>
     public IReadOnlyList<string> Parts(string markdown)
@@ -209,9 +243,10 @@ public sealed class VoiceService(
             var bytes = await response.Content.ReadAsByteArrayAsync(timeout.Token);
             if (!response.IsSuccessStatusCode)
             {
-                var failure = ProviderErrors.FromStatus(Provider, (int)response.StatusCode, Encoding.UTF8.GetString(bytes), credentials.ApiKey);
+                var body = Encoding.UTF8.GetString(bytes);
+                var failure = ProviderErrors.FromStatus(Provider, (int)response.StatusCode, body, credentials.ApiKey);
                 error = failure.Message;
-                throw new VoiceException(failure.Message);
+                throw new VoiceException(failure.Message, (int)response.StatusCode, ProviderErrors.Scrub(body, credentials.ApiKey));
             }
 
             return bytes;
@@ -234,5 +269,10 @@ public sealed class VoiceService(
     }
 }
 
-/// <summary>Ошибка голоса: текст безопасен для показа пользователю.</summary>
-public sealed class VoiceException(string message) : Exception(message);
+/// <summary>Ошибка голоса: текст безопасен для показа пользователю. Status и Detail — ответ OpenAI (без ключа), если он был.</summary>
+public sealed class VoiceException(string message, int? status = null, string? detail = null) : Exception(message)
+{
+    public int? Status { get; } = status;
+
+    public string Detail { get; } = detail ?? string.Empty;
+}

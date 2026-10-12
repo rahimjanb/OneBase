@@ -15,12 +15,17 @@ public static partial class SpeechText
     /// <summary>Остальные части — с запасом под лимит модели озвучки.</summary>
     public const int PartChars = 1500;
 
+    /// <summary>
+    /// Источники вслух не читаются: строки и предложения «Источник: …», список после заголовка «Источники», столбец «Источник» в таблице,
+    /// «(источник: …)» и имена инструментов вроде get_sales — это для экрана, на слух они только мешают.
+    /// </summary>
     public static string From(string markdown)
     {
         var lines = (markdown ?? string.Empty).Replace("\r", "").Split('\n');
         var output = new List<string>();
         string[]? header = null;
         var inCode = false;
+        var inSources = false;
         foreach (var raw in lines)
         {
             var line = raw.Trim();
@@ -51,17 +56,38 @@ public static partial class SpeechText
                 }
 
                 var parts = cells.Select((c, i) => (Name: i < header.Length ? header[i] : "", Value: c))
-                    .Where(p => p.Value.Length > 0 && p.Value != "—")
+                    .Where(p => p.Value.Length > 0 && p.Value != "—" && !SourceHeader().IsMatch(p.Name))
                     .Select((p, i) => i == 0 || p.Name.Length == 0 ? p.Value : $"{p.Name}: {p.Value}");
-                output.Add(Sentence(string.Join(", ", parts)));
+                var row = Clean(string.Join(", ", parts));
+                if (row.Length > 0)
+                {
+                    output.Add(Sentence(row));
+                }
+
                 continue;
             }
 
             header = null;
+            var bullet = Bullet().IsMatch(line);
             line = Heading().Replace(line, "");
             line = Bullet().Replace(line, "");
             line = Quote().Replace(line, "");
             var text = Inline(line);
+
+            // «Источники:» — заголовок списка: его пункты пропускаются до первой строки не из списка.
+            if (SourceHeader().IsMatch(text))
+            {
+                inSources = true;
+                continue;
+            }
+
+            if (inSources && bullet)
+            {
+                continue;
+            }
+
+            inSources = false;
+            text = Clean(string.Join(" ", Sentences().Split(text).Where(s => !SourceSentence().IsMatch(s))));
             if (text.Length > 0)
             {
                 output.Add(Sentence(text));
@@ -128,6 +154,30 @@ public static partial class SpeechText
     }
 
     private static string Sentence(string text) => text.Length > 0 && ".!?:;…".Contains(text[^1]) ? text : text + ".";
+
+    /// <summary>Без «(источник: …)» и имён инструментов (get_sales); лишние пробелы и пробел перед знаком препинания убираются.</summary>
+    private static string Clean(string text)
+    {
+        text = SourceParenthesis().Replace(text, "");
+        text = ToolName().Replace(text, "");
+        text = Spaces().Replace(text, " ");
+        return SpaceBeforePunctuation().Replace(text, "$1").Trim();
+    }
+
+    [GeneratedRegex(@"^(источник|источники|source|sources)(\s+данных)?\s*[:.]?$", RegexOptions.IgnoreCase)]
+    private static partial Regex SourceHeader();
+
+    [GeneratedRegex(@"^\s*(источник|источники|source|sources)(\s+данных)?\s*[:—–-]", RegexOptions.IgnoreCase)]
+    private static partial Regex SourceSentence();
+
+    [GeneratedRegex(@"\s*\((источник|источники|source|sources)\b[^)]*\)", RegexOptions.IgnoreCase)]
+    private static partial Regex SourceParenthesis();
+
+    [GeneratedRegex(@"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b")]
+    private static partial Regex ToolName();
+
+    [GeneratedRegex(@"\s+([,.;:!?…])")]
+    private static partial Regex SpaceBeforePunctuation();
 
     [GeneratedRegex(@"\[([^\]]+)\]\([^)]+\)")]
     private static partial Regex Link();
