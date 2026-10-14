@@ -165,10 +165,12 @@ public sealed record PrimaryView(
 /// Первичка — отгрузка завода контрагентам (DOC-rules §3, §9.3): перемещения Linko со склада завода на склады дилеров (кроме склада экспорта)
 /// в статусах «отдано» или «принято» и заказы филиалов SalesOptions.PrimaryOrderBranches («Завод», «К К Мерч») точкам не экспортного типа —
 /// базарам, сетям, фирменному магазину (статусы PrimaryOrderStatuses, без PrimaryExcludedMarkets). Возвраты — перемещения со склада дилера
-/// на завод и возвраты по таким заказам — строки со знаком минус: месяцы, строки, календарь и с начала года — нетто.
+/// на завод и возвраты по таким заказам — строки со знаком минус: месяцы, строки, календарь и с начала года — нетто. Перемещение между
+/// складами дилеров разных регионов — возврат у одного и отгрузка другому (как в таблице первички ГП).
 /// Дата перемещения — доставка (DeliveryDate), без неё — выдача, приёмка, создание; дата заказа — создание, возврата — его создание.
 /// Строки позже отчётного дня (вчера, не позже синхронизации) в отчёт не входят — как salesEnd во вторичке.
-/// Склады сводятся к регионам (SalesOptions.StockRegionAliases), дилер — склад с регионом из справочника, подпись строки — дилер региона.
+/// Склады сводятся к регионам (SalesOptions.PrimaryStockRegion: StockRegionAliases, склады прежних дилеров — их старые филиалы), дилер — склад
+/// с регионом из справочника, подпись строки — дилер региона. Прямые клиенты — под названиями таблицы первички (PrimaryClientNames).
 /// План — sales."RegionPlans" вида «Первичка».
 /// </summary>
 public sealed partial class PrimaryService(IAppDbContext db, SalesOptions options, Microsoft.Extensions.Caching.Memory.IMemoryCache cache, SalesCacheSignal signal)
@@ -218,14 +220,17 @@ public sealed partial class PrimaryService(IAppDbContext db, SalesOptions option
                 .ToDictionaryAsync(x => x.Key, x => x.Price, ct);
 
         var products = await db.LinkoProducts.AsNoTracking().Select(p => new { p.Id, p.Name, p.Code, p.TypeId }).ToDictionaryAsync(p => p.Id, ct);
-        var pricing = new PrimaryPricing(dealerPrices, products.ToDictionary(p => p.Key, p => StockMath.ParsePack(p.Value.Name)));
+        // Вес коробки из справочника (SalesOptions.PrimaryBoxKg) — по коду товара; у остальных — из названия.
+        var boxKg = products.Values
+            .Where(p => p.Code is { } c && options.PrimaryBoxKg.ContainsKey(c.Trim()))
+            .ToDictionary(p => p.Id, p => options.PrimaryBoxKg[p.Code!.Trim()]);
+        var pricing = new PrimaryPricing(dealerPrices, products.ToDictionary(p => p.Key, p => StockMath.ParsePack(p.Value.Name)), boxKgByProduct: boxKg);
         var zero = pricing.Zero;
 
         var transferLines = await (
                 from l in db.LinkoStockTransferLines
                 join t in db.LinkoStockTransfers on l.TransferId equals t.Id
-                where shipped.Contains(t.Status)
-                      && ((t.FromStockId != null && factoryIds.Contains(t.FromStockId.Value)) || (t.ToStockId != null && factoryIds.Contains(t.ToStockId.Value)))
+                where shipped.Contains(t.Status) && t.FromStockId != null && t.ToStockId != null // и между складами дилеров — их разбирает PrimaryMath.Transfers
                 select new PrimaryTransferLine(t.Id, t.FromStockId, t.ToStockId, t.DeliveryDate, t.GivenAt, t.AcceptedAt, t.CreatedAt, l.ProductId, l.Amount, l.TotalWeight, l.TotalPrice))
             .AsNoTracking()
             .ToListAsync(ct);
@@ -251,7 +256,8 @@ public sealed partial class PrimaryService(IAppDbContext db, SalesOptions option
             .AsNoTracking()
             .ToListAsync(ct);
 
-        // Строка дилера — регион склада (StockRegionAliases: «Коканд бозор» — Коканд): ключ — склад с названием региона, без него — регион OneBase.
+        // Строка дилера — регион склада (PrimaryStockRegion: «Коканд бозор» — Коканд, «Андижон эски 2» — «Андижон (эски) 2»): ключ — склад с названием
+        // региона, без него — регион OneBase.
         // Дилер — склад, чей регион есть в справочнике регионов (без «Завода» и «К К Мерч»); «Основной», «Нукус (интеграция учун)» — не дилеры.
         var regions = await db.SalesRegions.AsNoTracking().Select(r => new { r.Id, r.Name, r.DealerName }).ToListAsync(ct);
         var regionByName = regions.GroupBy(r => r.Name.Trim(), StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
@@ -297,7 +303,7 @@ public sealed partial class PrimaryService(IAppDbContext db, SalesOptions option
             .Where(p => p.Kind == PlanKind.Primary && p.Year == year)
             .Select(p => new RegionPlanRow(p.RegionId, p.Kind, p.Year, p.Month, p.CategoryId, p.PlanKg))
             .ToListAsync(ct), year);
-        var regionDealer = regions.ToDictionary(r => r.Id, r => DealerId(options.StockRegionName(r.Name)));
+        var regionDealer = regions.ToDictionary(r => r.Id, r => DealerId(options.PrimaryStockRegion(r.Name)));
         var dealerPlans = PrimaryMath.DealerPlans(planRows, id => regionDealer.GetValueOrDefault(id));
 
         // План по категории отчёта: строки с категорией; регион, у которого на месяц только итог, — в «Без разбивки».

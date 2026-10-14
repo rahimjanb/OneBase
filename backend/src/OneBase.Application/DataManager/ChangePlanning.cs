@@ -69,10 +69,20 @@ public sealed partial class DataMatcher
     private static readonly HashSet<string> TotalWords =
         ["", "итого", "итог", "всего", "total", "план", "план кг", "план, кг", "итого кг", "без разбивки", "все", "жами"];
 
-    /// <summary>Регион по названию, дилеру или id филиала Linko. Ошибка — текст для администратора.</summary>
+    /// <summary>
+    /// Регион по названию, дилеру или id филиала Linko. Ошибка — текст для администратора. Точное название или дилер — первыми: старый филиал
+    /// в списке (дилер первички — «Андижон (эски) 2») берётся по своему названию; иначе «(эски)» отбрасывается — регион текущий.
+    /// </summary>
     public (DataRegionRef? Region, string? Error) Region(string text)
     {
-        var name = OldBranch().Replace(DataValues.Normalize(text), "").Trim();
+        var full = DataValues.Normalize(text);
+        var whole = _regions.Where(r => DataValues.Normalize(r.Name) == full || (r.Dealer is { } d && DataValues.Normalize(d) == full)).ToList();
+        if (whole.Count == 1)
+        {
+            return (whole[0], null);
+        }
+
+        var name = OldBranch().Replace(full, "").Trim();
         if (name.Length == 0)
         {
             return (null, "регион не указан");

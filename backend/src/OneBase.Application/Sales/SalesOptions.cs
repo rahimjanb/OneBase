@@ -212,8 +212,11 @@ public sealed class SalesOptions
     /// </summary>
     public string[] PrimaryOrderBranches { get; set; } = ["Завод", "К К Мерч"];
 
-    /// <summary>Статусы заказов первички (<see cref="PrimaryOrderBranches"/>): доставлен и отдан — у этих точек «отдан» и есть отгрузка.</summary>
-    public string[] PrimaryOrderStatuses { get; set; } = ["delivered", "given"];
+    /// <summary>
+    /// Статусы заказов первички (<see cref="PrimaryOrderBranches"/>): доставлен и отдан — у этих точек «отдан» и есть отгрузка; «не доставлен» —
+    /// заказ в пути (таблица первички записывает его в день создания: «Хавас» и «Ассорти» 13.10.2026, магазины Makro в июне). Отменённые не входят.
+    /// </summary>
+    public string[] PrimaryOrderStatuses { get; set; } = ["delivered", "given", "not_delivered"];
 
     /// <summary>
     /// Точки, заказы которых в первичку не входят, — название (без учёта регистра) или id точки Linko: «Дегустатсия + Акция» (id 27896,
@@ -283,11 +286,89 @@ public sealed class SalesOptions
     }
 
     /// <summary>
+    /// Первичка: склад прежнего дилера → его старый филиал (регион справочника), главнее <see cref="StockRegionAliases"/>. Как в таблице
+    /// первички (ГП): у каждого дилера своя строка и свой план — «Андижон эски склад» (Юнусхон, до 01.2026) — «Андижон (эски) 1»,
+    /// «Андижон эски 2» (Икбол, 02–07.2026) — «Андижон (эски) 2», «Жиззах (эски)» (Билолиддин, до 07.2026) — «Жиззах (эски)». Вторичка,
+    /// остаток и аутсток по-прежнему сводят старые филиалы к текущему региону. Без учёта регистра.
+    /// </summary>
+    public Dictionary<string, string> PrimaryStockRegions { get; set; } = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Андижон эски склад"] = "Андижон (эски) 1",
+        ["Андижон эски 2"] = "Андижон (эски) 2",
+        ["Жиззах (эски)"] = "Жиззах (эски)",
+    };
+
+    /// <summary>Регион склада в первичке: <see cref="PrimaryStockRegions"/>, иначе <see cref="StockRegionName"/>.</summary>
+    public string PrimaryStockRegion(string stockName)
+    {
+        var name = stockName.Trim();
+        var region = PrimaryStockRegions.TryGetValue(name, out var exact)
+            ? exact
+            : PrimaryStockRegions.FirstOrDefault(a => string.Equals(a.Key.Trim(), name, StringComparison.OrdinalIgnoreCase)).Value;
+        return string.IsNullOrWhiteSpace(region) ? StockRegionName(name) : region.Trim();
+    }
+
+    /// <summary>
+    /// Названия прямых клиентов первички — как в таблице первички (ГП): регулярное выражение по названию точки Linko (без учёта регистра) →
+    /// название строки. Точки с одним названием — одна строка: «Макро» — «Макро РЦ» и магазины Makro филиала «К К Мерч» (M015, М135 …).
+    /// Первое подходящее правило; точка без правила — под своим названием Linko.
+    /// </summary>
+    public Dictionary<string, string> PrimaryClientNames { get; set; } = new()
+    {
+        ["^Murod D/63$"] = "Мурод бозор/Д63",
+        ["^Низомидин Урикзор$"] = "Низомиддин",
+        [@"\(Havas\)"] = "Хавас",
+        ["^ASSORTI DISCOUNT MARKET$"] = "Assorti Diskount Market",
+        [@"\(Барака\)"] = "Барака маркет",
+        [@"\(Eng yaqin\)"] = "Энг якин маркет",
+        ["^Bolajon citymall$"] = "Болажон Сити молл",
+        [@"^Макро РЦ$|^[MМ]\s?\d{3}\b"] = "Макро",
+    };
+
+    /// <summary>Название строки прямого клиента по <see cref="PrimaryClientNames"/> или null — правила нет (неверное выражение пропускается).</summary>
+    public string? PrimaryClientName(string marketName)
+    {
+        var rules = _clientNames ??= PrimaryClientNames
+            .Where(r => !string.IsNullOrWhiteSpace(r.Key) && !string.IsNullOrWhiteSpace(r.Value))
+            .Select(r =>
+            {
+                try
+                {
+                    return (Regex: new System.Text.RegularExpressions.Regex(r.Key.Trim(),
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+                        TimeSpan.FromMilliseconds(100)), Name: r.Value.Trim());
+                }
+                catch (ArgumentException)
+                {
+                    return (Regex: null, Name: r.Value.Trim());
+                }
+            })
+            .Where(r => r.Regex is not null)
+            .ToList();
+        var name = marketName.Trim();
+        return rules.FirstOrDefault(r => r.Regex!.IsMatch(name)).Name;
+    }
+
+    private List<(System.Text.RegularExpressions.Regex? Regex, string Name)>? _clientNames;
+
+    /// <summary>
     /// Прайс-лист Linko с ценой, по которой дилер продаёт дальше («Дилердан чикиш нарх»): по нему считается «сумма по цене продажи дилера»
     /// в первичке (количество × максимальная цена прайса). «Сумма (цена дилера)» — цена самого перемещения или заказа (у отгрузок дилерам
     /// это прайс «Дилерга кириш нарх»). Цены завода в Linko нет — «суммы завода» в первичке нет.
     /// </summary>
     public string PrimaryDealerPriceList { get; set; } = "Дилердан чикиш нарх";
+
+    /// <summary>
+    /// Вес коробки, кг, по коду товара Linko — для коробок первички там, где название его не даёт («304 KEKO декор»), даёт только вес штуки
+    /// («230-гр») или вес пачки вместо коробки («493 … 0.18-кг», в коробке 10 пачек). Значения — как в таблице первички (ГП): кг ÷ коробки
+    /// у этих артикулов одинаковы во всех строках 2026 года. Главнее веса из названия; остальные товары — по названию, как раньше.
+    /// </summary>
+    public Dictionary<string, decimal> PrimaryBoxKg { get; set; } = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["304"] = 1m, ["118"] = 2.3m, ["130"] = 2.3m, ["324"] = 3m, ["492"] = 3m, ["493"] = 1.8m, ["256"] = 3m, ["254"] = 3m,
+        ["131"] = 4m, ["132"] = 4m, ["133"] = 4m, ["054"] = 2m, ["056"] = 3m, ["076"] = 3m, ["088"] = 2.5m, ["338"] = 1.5m,
+        ["A008"] = 0.48m, ["A009"] = 0.492m, ["A010"] = 0.51m,
+    };
 
     /// <summary>
     /// База скорости продаж для запаса на складах: столько дней до последнего полного дня данных (вчера или последняя приёмка не позже

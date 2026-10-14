@@ -59,7 +59,11 @@ public class DataManagerPlanningTests
     [Theory]
     [InlineData("9", null, 9)]
     [InlineData("2026-09", 2026, 9)]
+    [InlineData("2026-10", 2026, 10)] // раньше читался как январь
+    [InlineData("2026-12-01", 2026, 12)]
+    [InlineData("2026-1", 2026, 1)]
     [InlineData("09.2026", 2026, 9)]
+    [InlineData("10.2026", 2026, 10)]
     [InlineData("Сентябрь 2026", 2026, 9)]
     public void ParsesMonths(string text, int? year, int month)
     {
@@ -208,6 +212,26 @@ public class DataManagerPlanningTests
         Assert.Equal(8, matcher.Category("МОГУЛЬ").Category?.TypeId);
         Assert.True(matcher.Category("Итого").Total);
         Assert.NotNull(matcher.Category("Импорт").Error);
+    }
+
+    /// <summary>
+    /// Старый филиал в списке (дилер первички, Sales:PrimaryStockRegions) берётся по своему названию или дилеру, остальное «(эски)» — текущий
+    /// регион, как раньше; без него в списке (вторичка) «Андижон (эски) 2» — тоже текущий.
+    /// </summary>
+    [Fact]
+    public void OldBranchOfAPrimaryDealerIsMatchedByItsOwnName()
+    {
+        var andijan = new DataRegionRef(Guid.NewGuid(), "Андижон", "Исомиддин Андижон", 26);
+        var old2 = new DataRegionRef(Guid.NewGuid(), "Андижон (эски) 2", "Икбол Андижон", 23);
+        var primary = new DataMatcher([andijan, old2], Categories);
+        var secondary = new DataMatcher([andijan], Categories);
+
+        Assert.Equal(old2.Id, primary.Region("Андижон (ЭСКИ) 2").Region?.Id);
+        Assert.Equal(old2.Id, primary.Region("икбол андижон").Region?.Id);
+        Assert.Equal(andijan.Id, primary.Region("Исомиддин Андижон").Region?.Id);
+        Assert.Equal(andijan.Id, primary.Region("Андижон").Region?.Id);
+        Assert.Equal(andijan.Id, primary.Region("Андижон (эски) 1").Region?.Id); // старого филиала нет в списке — текущий регион
+        Assert.Equal(andijan.Id, secondary.Region("Андижон (эски) 2").Region?.Id);
     }
 
     [Fact]

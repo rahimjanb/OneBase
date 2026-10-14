@@ -27,7 +27,13 @@ public sealed class DataChangeService(
     DataManagerOptions options)
 {
     /// <summary>Регионы вторички, в которые можно записать план: без «Завода», «К К Мерч» и старых филиалов.</summary>
-    public async Task<IReadOnlyList<DataRegionRef>> RegionsAsync(CancellationToken ct = default)
+    public Task<IReadOnlyList<DataRegionRef>> RegionsAsync(CancellationToken ct = default) => RegionsAsync(false, ct);
+
+    /// <summary>
+    /// Регионы вторички; withPrimaryDealers — ещё старые филиалы, которые в первичке отдельные дилеры (Sales:PrimaryStockRegions:
+    /// «Андижон (эски) 2» — склад Икбола): для плана первички и дилера региона. Во вторичке они по-прежнему в текущем регионе.
+    /// </summary>
+    public async Task<IReadOnlyList<DataRegionRef>> RegionsAsync(bool withPrimaryDealers, CancellationToken ct = default)
     {
         var rows = await db.SalesRegions.AsNoTracking()
             .Select(r => new { r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName })
@@ -37,11 +43,18 @@ public sealed class DataChangeService(
             .Select(r => new RegionInfo(r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName))
             .ToList();
         var (current, _) = OldBranches.Merge(infos, salesOptions.OldBranchSuffix);
-        return current
+        var primaryOld = withPrimaryDealers
+            ? infos.Where(r => current.All(c => c.Id != r.Id) && IsPrimaryDealerBranch(r.Name)).ToList()
+            : [];
+        return current.Concat(primaryOld)
             .OrderBy(r => r.Name)
             .Select(r => new DataRegionRef(r.Id, r.Name, r.Dealer, r.BranchId, r.Supervisor))
             .ToList();
     }
+
+    /// <summary>Старый филиал, который в первичке — отдельный дилер (значение Sales:PrimaryStockRegions).</summary>
+    public bool IsPrimaryDealerBranch(string regionName) =>
+        salesOptions.PrimaryStockRegions.Values.Any(v => string.Equals(v.Trim(), regionName.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Категории отчёта (Sales:Categories): план хранится под первым типом товара категории.</summary>
     public async Task<IReadOnlyList<DataCategoryRef>> CategoriesAsync(CancellationToken ct = default)
@@ -103,7 +116,7 @@ public sealed class DataChangeService(
             throw new DataManagerException("В одном плане — не больше 24 месяцев.");
         }
 
-        var regions = await RegionsAsync(ct);
+        var regions = await RegionsAsync(request.Kind == PlanKind.Primary, ct);
         var categories = await CategoriesAsync(ct);
         var years = periods.Select(p => p.Year).Distinct().ToList();
         var existing = (await db.SalesRegionPlans.AsNoTracking()
@@ -169,7 +182,7 @@ public sealed class DataChangeService(
             file = (await files.LoadAsync(id, actor.UserId, ct)).File;
         }
 
-        var items = RegionProfilePlanner.Plan(values, await RegionsAsync(ct));
+        var items = RegionProfilePlanner.Plan(values, await RegionsAsync(true, ct));
         var hash = Hash(DataTargets.RegionProfiles, file?.Sha256 ?? "", JsonSerializer.Serialize(values, DataTargets.Json));
         return await SaveAsync(actor, DataTargets.RegionProfiles, DataTargets.Label(DataTargets.RegionProfiles)
                                                                  + (file is null ? "" : $" · {file.FileName}"), null, null, "upsert",

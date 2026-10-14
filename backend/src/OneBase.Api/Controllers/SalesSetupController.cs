@@ -29,7 +29,7 @@ public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOpt
     /// <summary>
     /// Направления, регионы (филиалы Linko) с направлением, СВР и дилером, справочник ТП из Linko (ТП — по должности, вакансия — «вакан»
     /// в имени или ID 0), категории и цели. У региона вне вторички («Завод», «К К Мерч») и старого филиала — пояснение: их направление,
-    /// СВР и дилер в отчётах не используются.
+    /// СВР и дилер в отчётах не используются; у старого филиала из Sales:PrimaryStockRegions дилер и план — строка первички.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct)
@@ -43,7 +43,10 @@ public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOpt
         string? NoteOf(SalesRegion r) =>
             salesOptions.IsExcludedBranch(r.Name) ? "экспорт и опт — не регион вторички"
             : salesOptions.IsIgnoredBranch(r.Name) ? "во вторичку не входит"
-            : aliases.TryGetValue(r.LinkoBranchId, out var target) ? $"старый филиал — считается в регионе «{regions.First(x => x.Id == target).Name}»"
+            : aliases.TryGetValue(r.LinkoBranchId, out var target)
+                ? $"старый филиал — считается в регионе «{regions.First(x => x.Id == target).Name}»"
+                  + (salesOptions.PrimaryStockRegions.Values.Any(v => string.Equals(v.Trim(), r.Name.Trim(), StringComparison.OrdinalIgnoreCase))
+                      ? "; в первичке — отдельный дилер со своим планом" : "")
             : null;
 
         return Ok(new

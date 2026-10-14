@@ -76,7 +76,6 @@ public class PrimaryTests
             Transfer(3, KokandBazaar, Factory, 10), // возврат дилера заводу
             Transfer(4, Factory, Export, 999), // склад экспорта — не дилер
             Transfer(5, Export, Factory, 777),
-            Transfer(6, Kokand, Bukhara, 40), // между дилерами — не первичка
             Transfer(7, Factory, Main, 7), // «Основной» — склад без региона: не дилер и не клиент
             Transfer(8, Factory, Main, 3, delivery: new DateOnly(2025, 12, 30)),
         ];
@@ -95,6 +94,32 @@ public class PrimaryTests
 
         Assert.Equal(["Основной", "Основной"], transfers.OtherStocks.Select(s => s.Counterparty)); // прочие склады — отдельно, по названию склада
         Assert.Equal([("Основной", 1, 7m)], PrimaryMath.OtherStocksOf(transfers.OtherStocks, 2026).Select(s => (s.Name, s.Transfers, s.Kg))); // за год
+    }
+
+    /// <summary>
+    /// Как в таблице первички ГП: «Андижон эски склад» → Коканд (28.02, 1 170,3 кг) — возврат у Андижона и отгрузка Коканду;
+    /// Фаргона → Наманган (11.06, 800 кг) — так же. Внутри региона (Коканд ↔ «Коканд бозор») и со склада без региона — не первичка.
+    /// </summary>
+    [Fact]
+    public void Transfer_between_dealers_of_different_regions_is_a_return_and_a_shipment()
+    {
+        PrimaryTransferLine[] lines =
+        [
+            Transfer(1, Kokand, Bukhara, 40),
+            Transfer(2, Kokand, KokandBazaar, 25), // один регион
+            Transfer(3, Main, Bukhara, 9), // «Основной» — не дилер
+        ];
+
+        var rows = PrimaryMath.Transfers(lines, new HashSet<long> { Factory }, new HashSet<long> { Export }, id => Stocks[id], Options, IsDealerRegion,
+            region => $"dealer:{region}", Pricing).Rows;
+
+        Assert.Equal(2, rows.Count);
+        var back = Assert.Single(rows, r => r.IsReturn);
+        Assert.Equal(("dealer:Коканд", -40m, -40_000m), (back.Counterparty, back.Amounts.Kg, back.Amounts.SumFactory));
+        var shipped = Assert.Single(rows, r => !r.IsReturn);
+        Assert.Equal(("dealer:Бухоро", 40m, 40_000m), (shipped.Counterparty, shipped.Amounts.Kg, shipped.Amounts.SumFactory));
+        Assert.Equal(0m, rows.Sum(r => r.Amounts.Kg)); // республика не меняется
+        Assert.All(rows, r => Assert.Equal("t:1", r.Doc)); // один документ
     }
 
     [Fact]
@@ -144,22 +169,62 @@ public class PrimaryTests
         var direct = PrimaryMath.DirectOrders(orders, returns, options, Pricing);
 
         Assert.Equal(["o:1", "o:2", "o:8", "o:9", "r:50"], direct.Rows.Select(r => r.Doc));
-        Assert.Equal(PrimaryMath.DirectId(26576), direct.Rows[0].Counterparty);
+        Assert.Equal(PrimaryMath.ClientId("Мурод бозор/Д63"), direct.Rows[0].Counterparty); // название таблицы первички (PrimaryClientNames)
         Assert.Equal(KeyValuePair.Create(9L, Aug10), Assert.Single(direct.OtherCurrencyOrders)); // заказ в другой валюте — с датой: заметка за выбранный год
         Assert.Equal(0m, direct.Rows.Single(r => r.Doc == "o:9").Amounts.SumFactory); // вес USD-заказа учтён, суммы в сумах нет
         Assert.Equal(4m, direct.Rows.Single(r => r.Doc == "o:9").Amounts.Kg);
         var back = direct.Rows.Single(r => r.IsReturn);
         Assert.Equal((-3m, -93_000m, new DateOnly(2026, 9, 2)), (back.Amounts.Kg, back.Amounts.SumFactory, back.Date)); // количество × цена, дата возврата
-        var murod = direct.Parties[PrimaryMath.DirectId(26576)];
-        Assert.Equal(("Murod D/63", "Оптовая торговля · Завод", PrimaryGroups.Direct), (murod.Name, murod.Sub, murod.Group));
-        Assert.Equal(3, direct.Parties.Count); // Murod, Bolajon, Havas
+        var murod = direct.Parties[PrimaryMath.ClientId("Мурод бозор/Д63")];
+        Assert.Equal(("Мурод бозор/Д63", "Murod D/63 · Оптовая торговля · Завод", PrimaryGroups.Direct), (murod.Name, murod.Sub, murod.Group));
+        Assert.Equal(("Havas", "Retail · Завод"), (direct.Parties[PrimaryMath.DirectId(26614)].Name, direct.Parties[PrimaryMath.DirectId(26614)].Sub)); // без правила — название Linko
+        Assert.Equal(3, direct.Parties.Count); // Мурод, Болажон, Havas
+    }
+
+    /// <summary>
+    /// Коробки — как в таблице первички: «304 KEKO декор» без веса в названии — коробка 1 кг из справочника; «493 … 0.18-кг» — в названии вес
+    /// пачки, справочник даёт коробку 1,8 кг (10 пачек); товар без записи — по названию, как раньше.
+    /// </summary>
+    [Fact]
+    public void Box_weight_from_the_directory_wins_over_the_name()
+    {
+        const long keko = 63, misNat = 271, bamboo = 78;
+        var packs = new Dictionary<long, PackInfo?>
+        {
+            [keko] = StockMath.ParsePack("304 KEKO декор"),
+            [misNat] = StockMath.ParsePack("493 Вафельные трубочки шоколадной глазурью сверху жаренный арахис, MIS NAT, 0.18-кг"),
+            [bamboo] = StockMath.ParsePack("002 Кукурузные палочки с молочной начинкой, ROHAT BAMBUK, 3-кг"),
+        };
+        var directory = new Dictionary<long, decimal> { [keko] = Options.PrimaryBoxKg["304"], [misNat] = Options.PrimaryBoxKg["493"] };
+        var pricing = new PrimaryPricing(new Dictionary<long, decimal>(), packs, boxKgByProduct: directory);
+
+        Assert.Equal((100m, true), (pricing.Value(keko, 100, 100, 0).Amounts.Boxes, pricing.Value(keko, 100, 100, 0).BoxesKnown));
+        Assert.Equal(10m, pricing.Value(misNat, 100, 18, 0).Amounts.Boxes); // 100 пачек по 0,18 кг = 18 кг = 10 коробок
+        Assert.Equal(100m, pricing.Value(bamboo, 300, 300, 0).Amounts.Boxes); // из названия: блок 3 кг
+        Assert.Equal((0m, false), (new PrimaryPricing(new Dictionary<long, decimal>(), packs).Value(keko, 1, 1, 0).Amounts.Boxes!.Value,
+            new PrimaryPricing(new Dictionary<long, decimal>(), packs).Value(keko, 1, 1, 0).BoxesKnown)); // без справочника — неизвестно
+    }
+
+    /// <summary>Заказ в пути («не доставлен») — первичка: таблица ГП записывает его в день создания; отменённый — нет.</summary>
+    [Fact]
+    public void Order_in_transit_counts_cancelled_does_not()
+    {
+        PrimaryOrderLine[] orders =
+        [
+            new(1, 26614, "OOO \"Havas Food\" (Havas)", "Retail", "Завод", "not_delivered", new DateOnly(2026, 10, 13), "SUM", 7, 340.4m, 340.4m, 1m),
+            new(2, 26614, "OOO \"Havas Food\" (Havas)", "Retail", "Завод", "cancelled", new DateOnly(2026, 10, 13), "SUM", 7, 50, 50, 1m),
+        ];
+
+        var rows = PrimaryMath.DirectOrders(orders, [], Options, Pricing).Rows;
+
+        Assert.Equal(340.4m, Assert.Single(rows).Amounts.Kg);
     }
 
     [Fact]
     public void Primary_order_options_have_the_documented_defaults_and_are_replaced_from_settings()
     {
         Assert.Equal(["Завод", "К К Мерч"], Options.PrimaryOrderBranches);
-        Assert.Equal(["delivered", "given"], Options.PrimaryOrderStatuses);
+        Assert.Equal(["delivered", "given", "not_delivered"], Options.PrimaryOrderStatuses);
         Assert.True(Options.IsPrimaryExcludedMarket(27896, "дегустатсия + акция"));
         Assert.False(Options.IsPrimaryExcludedMarket(26576, "Murod D/63"));
 
@@ -189,6 +254,76 @@ public class PrimaryTests
 
         var plain = PrimaryMath.DealerParty("1", "Основной", " ", PrimaryMath.NoPlan);
         Assert.Equal(("Основной", (string?)null), (plain.Name, plain.Sub));
+    }
+
+    /// <summary>
+    /// Как в таблице первички (ГП): склад прежнего дилера — его строка (старый филиал): «Андижон эски 2» (Икбол) — «Андижон (эски) 2»,
+    /// «Жиззах (эски)» (Билолиддин) — «Жиззах (эски)»; перемещение со старого склада на новый (07.2026, 252 кг) — возврат у прежнего дилера
+    /// и отгрузка новому. «Коканд бозор» по-прежнему в Коканде; вторичка и остаток сводят старые склады к текущему региону.
+    /// </summary>
+    [Fact]
+    public void Stocks_of_former_dealers_are_their_own_dealer_rows()
+    {
+        const long andijan = 34, andijanOld2 = 27, jizzakhOld = 24;
+        var stocks = new Dictionary<long, string>(Stocks)
+        {
+            [andijan] = "Андижон",
+            [andijanOld2] = "Андижон эски 2",
+            [jizzakhOld] = "Жиззах (эски)",
+        };
+        static bool IsDealer(string region) => region is "Андижон" or "Андижон (эски) 2" or "Жиззах (эски)" or "Коканд";
+        PrimaryTransferLine[] lines =
+        [
+            Transfer(1, Factory, andijanOld2, 100),
+            Transfer(2, andijanOld2, andijan, 252),
+            Transfer(3, Factory, jizzakhOld, 30),
+            Transfer(4, Factory, KokandBazaar, 5),
+        ];
+
+        var rows = PrimaryMath.Transfers(lines, new HashSet<long> { Factory }, new HashSet<long> { Export }, id => stocks[id], Options, IsDealer,
+            region => $"dealer:{region}", Pricing).Rows;
+
+        Assert.Equal("Андижон (эски) 2", Options.PrimaryStockRegion("андижон ЭСКИ 2"));
+        Assert.Equal("Андижон (эски) 1", Options.PrimaryStockRegion("Андижон эски склад"));
+        Assert.Equal("Коканд", Options.PrimaryStockRegion("Коканд бозор")); // без записи — StockRegionAliases
+        Assert.Equal("Андижон", Options.StockRegionName("Андижон эски 2")); // вне первички — текущий регион
+        Assert.Equal(-152m, rows.Where(r => r.Counterparty == "dealer:Андижон (эски) 2").Sum(r => r.Amounts.Kg)); // 100 − 252
+        Assert.Equal(252m, Assert.Single(rows, r => r.Counterparty == "dealer:Андижон").Amounts.Kg);
+        Assert.Equal(30m, Assert.Single(rows, r => r.Counterparty == "dealer:Жиззах (эски)").Amounts.Kg);
+        Assert.Equal(5m, Assert.Single(rows, r => r.Counterparty == "dealer:Коканд").Amounts.Kg);
+    }
+
+    /// <summary>
+    /// Прямые клиенты — под названиями таблицы первички: «Макро РЦ» и магазины Makro «К К Мерч» (M015, М135 кириллицей, «м 104 …», «M140-…»)
+    /// — одна строка «Макро» с числом точек второй строкой; «Bolajon citymall» — «Болажон Сити молл»; точка без правила — под своим названием.
+    /// </summary>
+    [Fact]
+    public void Direct_clients_get_the_names_of_the_primary_table_and_makro_stores_are_one_row()
+    {
+        PrimaryOrderLine Order(long id, long market, string name, string branch, decimal kg) =>
+            new(id, market, name, "Retail", branch, "delivered", Aug10, "SUM", 7, kg, kg, kg * 30_000);
+        PrimaryOrderLine[] orders =
+        [
+            Order(1, 32553, "Макро РЦ", "Завод", 44),
+            Order(2, 46693, "M015 КАТАРТАЛ", "К К Мерч", 15),
+            Order(3, 46738, "М135 ЮНУСАБАД 18КВ", "К К Мерч", 8),
+            Order(4, 53904, "м 104 МВД макро", "К К Мерч", 1),
+            Order(5, 59822, "M140-ТАШ..ВУЗГОРОДОК 2", "К К Мерч", 4),
+            Order(6, 69891, "Bolajon citymall", "К К Мерч", 263),
+            Order(7, 26614, "OOO \"Havas Food\" (Havas)", "Завод", 711),
+            Order(8, 26500, "Ятт Илгоров", "Завод", 108),
+        ];
+
+        var direct = PrimaryMath.DirectOrders(orders, [], Options, Pricing);
+        var byName = direct.Rows.GroupBy(r => direct.Parties[r.Counterparty].Name).ToDictionary(g => g.Key, g => g.Sum(r => r.Amounts.Kg));
+
+        Assert.Equal(72m, byName["Макро"]); // 44 + 15 + 8 + 1 + 4
+        Assert.Equal("5 точек Linko", direct.Parties[PrimaryMath.ClientId("Макро")].Sub);
+        Assert.Equal(263m, byName["Болажон Сити молл"]);
+        Assert.Equal(711m, byName["Хавас"]);
+        Assert.Equal(108m, byName["Ятт Илгоров"]);
+        Assert.Equal(4, direct.Parties.Count);
+        Assert.Null(Options.PrimaryClientName("Makro M001 склад")); // латиница без номера магазина — не Makro-магазин
     }
 
     [Fact]

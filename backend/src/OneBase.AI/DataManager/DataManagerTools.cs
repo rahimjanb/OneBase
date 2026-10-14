@@ -428,7 +428,7 @@ public sealed class DataManagerTools(
 
     private async Task<object> ListRegionsAsync(DataToolContext context, JsonElement input, CancellationToken ct)
     {
-        var regions = await changes.RegionsAsync(ct);
+        var regions = await changes.RegionsAsync(true, ct);
         var directions = await db.SalesRegions.AsNoTracking()
             .Where(r => r.Direction != null)
             .Select(r => new { r.Id, Direction = r.Direction!.Name })
@@ -436,8 +436,10 @@ public sealed class DataManagerTools(
         return new
         {
             regions = regions.Select(r => new { id = r.Id, name = r.Name, linkoBranchId = r.BranchId, dealer = r.Dealer, supervisor = r.Supervisor,
-                direction = directions.GetValueOrDefault(r.Id) }),
-            note = "«Урикзор» и «Сети» — регионы-каналы без филиала Linko: план для них не хранится. «Завод», «К К Мерч» и старые «(эски)» филиалы — не регионы вторички.",
+                direction = directions.GetValueOrDefault(r.Id), primaryOnly = changes.IsPrimaryDealerBranch(r.Name) ? true : (bool?)null }),
+            note = "«Урикзор» и «Сети» — регионы-каналы без филиала Linko: план для них не хранится. «Завод», «К К Мерч» и старые «(эски)» филиалы — не регионы "
+                   + "вторички. primaryOnly — старый филиал, который в первичке отдельный дилер (склад прежнего дилера): ему пишутся только план первички "
+                   + "и дилер; во вторичке он считается в текущем регионе.",
         };
     }
 
@@ -464,7 +466,7 @@ public sealed class DataManagerTools(
         var year = Int(input, "year") ?? throw new ToolInputException("year обязателен");
         var month = Int(input, "month") ?? throw new ToolInputException("month обязателен");
         var regionFilter = Str(input, "region");
-        var regions = await changes.RegionsAsync(ct);
+        var regions = await changes.RegionsAsync(kind == PlanKind.Primary, ct);
         var categories = (await changes.CategoriesAsync(ct)).ToDictionary(c => c.TypeId, c => c.Name);
         var rows = await db.SalesRegionPlans.AsNoTracking()
             .Where(p => p.Kind == kind && p.Year == year && p.Month == month)
@@ -821,7 +823,7 @@ public sealed class DataManagerTools(
         view.Period,
         view.PlanKind,
         view.FileName,
-        summary = view.Summary,
+        summary = CompactSummary(view.Summary),
         itemCount = view.ItemCount,
         items = view.Items
             .OrderBy(i => i.Action == DataChangeAction.Conflict ? 0 : i.Action == DataChangeAction.Unchanged ? 2 : 1)
@@ -831,6 +833,28 @@ public sealed class DataManagerTools(
         view.Error,
         instruction,
     };
+
+    /// <summary>
+    /// Сводка плана для модели: счётчики, предупреждения, заметки и предыдущая версия — целиком; итоги «регион × месяц» и влияние по регионам —
+    /// первые строки (у большого плана их сотни, и ответ обрезался бы, а предупреждения оказывались бы за обрезом). Полностью — в карточке плана.
+    /// </summary>
+    private static object CompactSummary(JsonElement summary)
+    {
+        const int MaxRows = 30;
+        if (JsonSerializer.Deserialize<ChangeSetSummary>(summary.GetRawText(), DataTargets.Json) is not { } s)
+        {
+            return summary;
+        }
+
+        return new
+        {
+            s.Counts, s.Warnings, s.Notes, s.Previous, s.Source, s.FileName, s.Sheet, s.SkippedEmpty,
+            totals = s.Totals.Take(MaxRows),
+            totalsShown = $"{Math.Min(MaxRows, s.Totals.Count)} из {s.Totals.Count}",
+            impact = s.Impact.Select(i => new { i.Period, i.PlanSourceBefore, i.Republic, regions = i.Regions.Take(10), regionCount = i.Regions.Count, i.Note }),
+            pnl = s.Pnl is null ? null : new { months = s.Pnl.Months, checks = s.Pnl.Checks.Take(MaxRows), s.Pnl.CheckedValues, s.Pnl.NewDealers },
+        };
+    }
 
     private static PlanKind Kind(JsonElement input) => Str(input, "kind") switch
     {

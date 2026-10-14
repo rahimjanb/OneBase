@@ -167,7 +167,8 @@ public static partial class DataValues
     [GeneratedRegex(@"\s*(кг|kg|т|тонн[а-я]*|сум|sum|uzs|шт)\.?$", RegexOptions.IgnoreCase)]
     private static partial Regex UnitSuffix();
 
-    [GeneratedRegex(@"^(20\d{2})[-./](0?[1-9]|1[0-2])")]
+    /// <summary>«2026-10», «2026.12.01»: двузначный месяц проверяется первым, за ним не цифра — иначе «2026-10» читался как январь.</summary>
+    [GeneratedRegex(@"^(20\d{2})[-./](1[0-2]|0?[1-9])(?!\d)")]
     private static partial Regex IsoMonth();
 
     [GeneratedRegex(@"^(0?[1-9]|1[0-2])[./](20\d{2})$")]

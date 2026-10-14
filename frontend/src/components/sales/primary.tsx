@@ -6,7 +6,7 @@ import { AkbChart } from "./AkbChart";
 import { ExecutionBar, KpiTile, Note, Section, execClass } from "./bits";
 import { CopyButton, DataTable, NameCell, type Column } from "./DataTable";
 import { date, kg, money, monthGenitive, monthName, monthShort, num, ordersLabel, pct, plural, rowsLabel, tsvValue } from "@/lib/sales/format";
-import type { PrimaryAmounts, PrimaryGroup, PrimaryRow, PrimaryView } from "@/lib/sales/types";
+import type { PrimaryAmounts, PrimaryRow, PrimaryView } from "@/lib/sales/types";
 
 // «Первичка → Республика» как в «Полевом контроле»: плитки месяца, столбики по месяцам, план и факт по категориям, дилерам и прямым
 // клиентам завода, календарь отгрузок, «С начала года», клиенты по месяцам и товары. Все суммы, доли, выполнение и итоги — с сервера:
@@ -192,13 +192,21 @@ function TotalsFooter({ cells }: { cells: { value: React.ReactNode; right?: bool
  * (DOC-filters §3): факт кг, план, выполнение, «осталось»; без плана — факт и доля в весе месяца. Строка с планом остаётся и без факта.
  * total — итог таблицы с сервера.
  */
+/** Вторая строка контрагента: регион дилера не повторяется, если он уже в имени («Бобур Самарканд»), — как в таблице первички. */
+function partySub(r: PrimaryRow) {
+  return r.sub && r.name.toLowerCase().includes(r.sub.toLowerCase()) ? null : r.sub;
+}
+
 function PlanFactTable({ title, hint, nameLabel, rows, total, data }: { title: string; hint?: string; nameLabel: string; rows: PrimaryRow[]; total: PrimaryRow; data: PrimaryView }) {
   const unit: Unit = "kg";
   const planOn = total.planMonthKg != null;
-  const shown = rows.filter((r) => r.month[unit] !== 0 || (planOn && r.planMonthKg != null));
+  // Как в таблице первички: строки с планом или фактом месяца, по убыванию плана, затем факта.
+  const shown = rows
+    .filter((r) => r.month[unit] !== 0 || (planOn && r.planMonthKg != null))
+    .sort((a, b) => (b.planMonthKg ?? 0) - (a.planMonthKg ?? 0) || b.month[unit] - a.month[unit]);
 
   const columns: Column<PrimaryRow>[] = [
-    { key: "name", label: nameLabel, value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.sub} /> },
+    { key: "name", label: nameLabel, value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={partySub(r)} /> },
     ...(planOn ? [{ key: "plan", label: "План, кг", align: "right" as const, value: (r: PrimaryRow) => r.planMonthKg, render: (r: PrimaryRow) => kg(r.planMonthKg) }] : []),
     { key: "fact", label: "Факт, кг", align: "right", value: (r) => r.month[unit], render: (r) => <span className="font-semibold">{fmt(r.month[unit], unit)}</span> },
     ...(planOn
@@ -517,10 +525,11 @@ function YtdTiles({ data }: { data: PrimaryView }) {
 function YearMatrix({ title, hint, nameLabel, rows, total, data, unit }: { title: string; hint: string; nameLabel: string; rows: PrimaryRow[]; total: PrimaryRow; data: PrimaryView; unit: Unit }) {
   const months = Array.from({ length: data.month }, (_, i) => i + 1);
   const planOn = unit === "kg" && total.planYtdKg != null;
-  const shown = rows.filter((r) => r.ytd[unit] !== 0 || (planOn && r.planYtdKg != null));
+  // Как в таблице первички: по убыванию итога с начала года.
+  const shown = rows.filter((r) => r.ytd[unit] !== 0 || (planOn && r.planYtdKg != null)).sort((a, b) => (b.ytd[unit] ?? 0) - (a.ytd[unit] ?? 0));
 
   const columns: Column<PrimaryRow>[] = [
-    { key: "name", label: nameLabel, value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.sub} /> },
+    { key: "name", label: nameLabel, value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={partySub(r)} /> },
     ...months.map((m) => ({
       key: `m${m}`,
       label: `${monthShort(m)}${data.runningMonth === m ? " (идёт)" : ""}`,
@@ -655,18 +664,11 @@ function ClientsChart({ clients }: { clients: NonNullable<PrimaryView["clients"]
   );
 }
 
-/** Строки контрагентов группы и её итог (дилеры или прямые клиенты завода). */
-function groupOf(data: PrimaryView, group: PrimaryGroup) {
-  const total = data.dealerGroups.find((g) => g.group === group);
-  return total ? { rows: data.dealers.filter((r) => r.group === group), total } : null;
-}
-
 /** Страница «Первичка → Республика». */
 export function PrimaryRepublic({ data }: { data: PrimaryView }) {
   const [unit, setUnit] = useState<Unit>("kg");
-  const dealers = groupOf(data, "dealer");
-  const direct = groupOf(data, "direct");
-  const directHint = "базары, сети, фирменный магазин — заказы «Завода» и «К К Мерч»";
+  // Дилеры и прямые клиенты завода — одна таблица, как в таблице первички: итог — вся отгрузка республики.
+  const parties = data.dealers.length > 0 ? { rows: data.dealers, total: data.dealerTotal } : null;
 
   return (
     <>
@@ -676,17 +678,7 @@ export function PrimaryRepublic({ data }: { data: PrimaryView }) {
       <MonthTiles data={data} />
       <MonthsChart data={data} unit={unit} />
       <PlanFactTable title="План и факт по категориям" nameLabel="Категория" rows={data.categories} total={data.categoryTotal} data={data} />
-      {dealers && <PlanFactTable title="План и факт по дилерам" nameLabel="Дилер" rows={dealers.rows} total={dealers.total} data={data} />}
-      {direct && (
-        <PlanFactTable
-          title="Прямые клиенты завода"
-          hint={`за ${monthName(data.month)}, в килограммах · ${directHint}`}
-          nameLabel="Клиент"
-          rows={direct.rows}
-          total={direct.total}
-          data={data}
-        />
-      )}
+      {parties && <PlanFactTable title="План и факт по дилерам" nameLabel="Дилер" rows={parties.rows} total={parties.total} data={data} />}
       <ShipmentCalendar key={`${data.year}-${data.month}`} data={data} unit={unit} />
 
       <h2 className="mt-8 flex flex-wrap items-baseline gap-x-3 text-lg font-semibold text-ink">
@@ -700,8 +692,7 @@ export function PrimaryRepublic({ data }: { data: PrimaryView }) {
       </div>
       {data.clients && <ClientsChart clients={data.clients} />}
       <YearMatrix title="По категориям" hint="доля — от итога с начала года" nameLabel="Категория" rows={data.categories} total={data.categoryTotal} data={data} unit={unit} />
-      {dealers && <YearMatrix title="По дилерам" hint="доля — от всей отгрузки с начала года" nameLabel="Дилер" rows={dealers.rows} total={dealers.total} data={data} unit={unit} />}
-      {direct && <YearMatrix title="Прямые клиенты завода" hint={`доля — от всей отгрузки · ${directHint}`} nameLabel="Клиент" rows={direct.rows} total={direct.total} data={data} unit={unit} />}
+      {parties && <YearMatrix title="По дилерам" hint="доля — от всей отгрузки с начала года" nameLabel="Дилер" rows={parties.rows} total={parties.total} data={data} unit={unit} />}
       <ItemsTable data={data} />
 
       {data.notes?.map((n) => (
@@ -721,12 +712,14 @@ export function PrimaryRepublic({ data }: { data: PrimaryView }) {
       <Note>
         Первичка — отгрузка завода контрагентам, это не продажи в торговые точки. Источники в Linko: перемещения со склада «{data.factoryStock ?? "Завод"}» на склады
         дилеров («отдано» или «принято», дата — доставка) и заказы прямых клиентов завода — базаров, сетей, фирменного магазина (филиалы «Завод» и «К К Мерч»,
-        точки не экспортного типа, «доставлен» и «отдан», дата — создание заказа; без «Дегустатсия + Акция»). Склад «{data.exportStock ?? "Экспорт"}» — экспорт,
+        точки не экспортного типа, «доставлен», «отдан» и «не доставлен» — в пути, дата — создание заказа; без «Дегустатсия + Акция»). Склад «{data.exportStock ?? "Экспорт"}» — экспорт,
         сюда не входит. Возвраты — перемещения со складов дилеров на завод и возвраты по заказам — вычтены: все цифры нетто. Склады сводятся к регионам
-        («Коканд бозор» — Коканд), дилер — склад с регионом из справочника, подпись строки — дилер региона из «Настроек продаж». Сумма (цена дилера) — сумма
+        («Коканд бозор» — Коканд), склад прежнего дилера — отдельная строка («Андижон эски 2» — «Андижон (эски) 2»), подпись строки — дилер региона
+        из «Настроек продаж»; прямые клиенты — под названиями таблицы первички («Макро» — «Макро РЦ» и магазины Makro). Сумма (цена дилера) — сумма
         перемещения или заказа, по этой цене дилер берёт товар у завода; сумма (цена продажи дилера) — количество × цена прайса «{data.dealerPriceList ?? "Дилердан чикиш нарх"}».
         Цены завода в Linko нет, поэтому «суммы завода», как в таблице первички, здесь нет. План и факт по категориям, дилерам и прямым клиентам — всегда в кг.
-        Коробки — только у товаров, где вес коробки из названия делится на вес единицы ({kg(data.boxesUnknownKg)} кг с начала года без коробок).
+        Коробки — по весу коробки из справочника (как в таблице первички), у остальных товаров — из названия, если он делится на вес единицы
+        ({kg(data.boxesUnknownKg)} кг с начала года без коробок).
         План — загруженный в OneBase план вида «Первичка»{data.hasPlan ? "" : " (сейчас не загружен — первичка без плана)"}; строки позже отчётного дня (вчера,
         не позже синхронизации) в отчёт не входят; прогноз — по дате данных{data.asOf ? ` (${date(data.asOf)})` : ""}, а не по сегодняшнему дню.
       </Note>

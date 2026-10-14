@@ -88,7 +88,12 @@ public sealed record PrimaryCalendarQuery(int? From = null, int? To = null, int?
 public sealed record PrimaryProduct(string Name, string? Code, string Category);
 
 /// <summary>Оценка строки: сумма по цене продажи дилера (прайс SalesOptions.PrimaryDealerPriceList) и коробки по фасовке из названия.</summary>
-public sealed class PrimaryPricing(IReadOnlyDictionary<long, decimal> dealerPrices, IReadOnlyDictionary<long, PackInfo?> packs, bool boxes = true)
+/// <param name="boxKgByProduct">Вес коробки по товару из справочника (SalesOptions.PrimaryBoxKg) — главнее веса из названия.</param>
+public sealed class PrimaryPricing(
+    IReadOnlyDictionary<long, decimal> dealerPrices,
+    IReadOnlyDictionary<long, PackInfo?> packs,
+    bool boxes = true,
+    IReadOnlyDictionary<long, decimal>? boxKgByProduct = null)
 {
     /// <summary>Только кг и сумма: у экспорта нет ни коробок (в строках заказа — штуки и кг), ни второй цены.</summary>
     public static PrimaryPricing WeightOnly { get; } = new(new Dictionary<long, decimal>(), new Dictionary<long, PackInfo?>(), boxes: false);
@@ -97,8 +102,9 @@ public sealed class PrimaryPricing(IReadOnlyDictionary<long, decimal> dealerPric
     public PrimaryAmounts Zero => boxes ? PrimaryAmounts.Zero : PrimaryAmounts.NoBoxes;
 
     /// <summary>
-    /// Суммы строки. Коробки — по весу коробки из названия: у весового товара (единица учёта — 1 кг) любой, у штучного — если в коробке целое
-    /// число штук этой строки; иначе название не совпадает с тем, как товар учитывается, и коробки не считаются (BoxesKnown = false).
+    /// Суммы строки. Коробки — по весу коробки из справочника (как в таблице первички), иначе из названия: у весового товара (единица учёта —
+    /// 1 кг) любой, у штучного — если в коробке целое число штук этой строки; иначе название не совпадает с тем, как товар учитывается,
+    /// и коробки не считаются (BoxesKnown = false).
     /// </summary>
     public (PrimaryAmounts Amounts, bool BoxesKnown) Value(long? productId, decimal amount, decimal kg, decimal sum)
     {
@@ -110,7 +116,9 @@ public sealed class PrimaryPricing(IReadOnlyDictionary<long, decimal> dealerPric
 
         var pack = productId is { } p ? packs.GetValueOrDefault(p) : null;
         var unitKg = StockMath.UnitKg(kg, amount);
-        var boxKg = pack?.BoxKg is { } b && unitKg is { } u && (Math.Abs(u - 1) < 0.001m || StockMath.BoxConsistent(b, u)) ? b : (decimal?)null;
+        var boxKg = productId is { } bp && boxKgByProduct?.GetValueOrDefault(bp) is { } fixedKg and > 0 ? fixedKg
+            : pack?.BoxKg is { } b && unitKg is { } u && (Math.Abs(u - 1) < 0.001m || StockMath.BoxConsistent(b, u)) ? b
+            : (decimal?)null;
         return (new PrimaryAmounts(kg, boxKg is { } bk ? kg / bk : 0, sum, dealerSum), boxKg is not null);
     }
 }
@@ -133,9 +141,13 @@ public static class PrimaryMath
     /// <summary>
     /// Перемещения → строки первички. Отгрузка — со склада завода на склад дилера (не завод и не экспорт), контрагент — склад получателя;
     /// возврат — со склада дилера на завод, контрагент — склад отправителя, суммы со знаком минус. Склад сводится к региону
-    /// (SalesOptions.StockRegionName: «Коканд бозор» — Коканд); дилер — только склад, чей регион есть в справочнике регионов
-    /// (isDealerRegion), dealerId — ключ строки дилера по региону. Склады вне справочника («Основной», «Нукус (интеграция учун)») — не дилеры:
-    /// их перемещения — в OtherStocks, в первичку не входят. Перемещения завод ↔ экспорт и между складами дилеров не берутся.
+    /// (SalesOptions.PrimaryStockRegion: «Коканд бозор» — Коканд, склады прежних дилеров — их старые филиалы: «Андижон эски 2» — «Андижон (эски) 2»);
+    /// дилер — только склад, чей регион есть в справочнике регионов (isDealerRegion), dealerId — ключ строки дилера по региону. Склады вне
+    /// справочника («Основной», «Нукус (интеграция учун)») — не дилеры: их перемещения — в OtherStocks, в первичку не входят. Перемещения
+    /// завод ↔ экспорт не берутся.
+    /// Перемещение между складами дилеров разных регионов («Андижон эски 2» → «Андижон», «Андижон эски склад» → Коканд) — как в таблице
+    /// первички (ГП): завод забирает товар у одного дилера и отдаёт другому — возврат у отправителя и отгрузка получателю; республика не
+    /// меняется. Внутри одного региона (Коканд ↔ «Коканд бозор») — не первичка.
     /// </summary>
     public static PrimaryTransfers Transfers(
         IEnumerable<PrimaryTransferLine> lines,
@@ -156,14 +168,30 @@ public static class PrimaryMath
         {
             var outbound = IsFactory(l.FromStockId) && IsStock(l.ToStockId);
             var back = IsStock(l.FromStockId) && IsFactory(l.ToStockId);
-            if ((!outbound && !back) || TransferDate(l.DeliveryDate, l.GivenAt, l.AcceptedAt, l.CreatedAt) is not { } date)
+            var between = IsStock(l.FromStockId) && IsStock(l.ToStockId);
+            if ((!outbound && !back && !between) || TransferDate(l.DeliveryDate, l.GivenAt, l.AcceptedAt, l.CreatedAt) is not { } date)
             {
                 continue;
             }
 
             var (amounts, boxesKnown) = pricing.Value(l.ProductId, l.Amount, l.Kg, l.TotalPrice);
+            if (between)
+            {
+                // Между дилерами разных регионов: возврат у отправителя, отгрузка получателю. Остальные перемещения между складами не берутся.
+                var fromRegion = options.PrimaryStockRegion(stockName(l.FromStockId!.Value));
+                var toRegion = options.PrimaryStockRegion(stockName(l.ToStockId!.Value));
+                if (isDealerRegion(fromRegion) && isDealerRegion(toRegion)
+                    && !string.Equals(fromRegion, toRegion, StringComparison.OrdinalIgnoreCase))
+                {
+                    rows.Add(new PrimaryShipment($"t:{l.TransferId}", dealerId(fromRegion), date, l.ProductId, amounts.Negate(), boxesKnown, true));
+                    rows.Add(new PrimaryShipment($"t:{l.TransferId}", dealerId(toRegion), date, l.ProductId, amounts, boxesKnown));
+                }
+
+                continue;
+            }
+
             var stock = stockName(outbound ? l.ToStockId!.Value : l.FromStockId!.Value);
-            var region = options.StockRegionName(stock);
+            var region = options.PrimaryStockRegion(stock);
             var dealer = isDealerRegion(region);
             (dealer ? rows : other).Add(new PrimaryShipment($"t:{l.TransferId}", dealer ? dealerId(region) : stock.Trim(), date, l.ProductId,
                 back ? amounts.Negate() : amounts, boxesKnown, back));
@@ -184,19 +212,23 @@ public static class PrimaryMath
     /// <summary>Ключ строки точки с заказами завода.</summary>
     public static string DirectId(long marketId) => $"market:{marketId}";
 
+    /// <summary>Ключ строки прямого клиента с названием из SalesOptions.PrimaryClientNames (одна строка на название, сколько бы точек ни было).</summary>
+    public static string ClientId(string reportName) => $"client:{reportName.Trim().ToLowerInvariant()}";
+
     /// <summary>
     /// Заказы филиалов первички (SalesOptions.PrimaryOrderBranches: «Завод», «К К Мерч») точкам не экспортного типа → строки первички:
     /// статусы PrimaryOrderStatuses (доставлен, отдан), дата — создание заказа (с ней сходится день таблицы первички), кг — вес строки, сумма —
     /// сумма строки в основной валюте (заказ в другой валюте даёт вес без суммы и считается отдельно), минус возвраты по строкам (статус
     /// ReturnStatuses, дата создания возврата, деньги = количество × цена). Точки PrimaryExcludedMarkets («Дегустатсия + Акция») не входят.
-    /// Каждая точка — свой контрагент группы direct.
+    /// Контрагент группы direct — точка под своим названием или, по SalesOptions.PrimaryClientNames, строка с названием таблицы первички
+    /// («Murod D/63» — «Мурод бозор/Д63», «Макро РЦ» и магазины Makro — «Макро»); второй строкой — точка Linko или их число.
     /// </summary>
     public static PrimaryDirect DirectOrders(IEnumerable<PrimaryOrderLine> orders, IEnumerable<PrimaryReturnLine> returns, SalesOptions options, PrimaryPricing pricing)
     {
         var sold = options.PrimaryOrderStatuses.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var returned = options.ReturnStatuses.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var rows = new List<PrimaryShipment>();
-        var parties = new Dictionary<string, PrimaryParty>();
+        var clients = new Dictionary<string, (string Name, string? Sub, bool Renamed, SortedSet<string> Markets)>();
         var otherCurrency = new Dictionary<long, DateOnly>();
 
         bool Counts(long market, string name, string? type, string? branch) =>
@@ -204,9 +236,15 @@ public static class PrimaryMath
 
         string Party(long market, string name, string? type, string? branch)
         {
-            var id = DirectId(market);
-            var sub = string.Join(" · ", new[] { type, branch }.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!.Trim()));
-            parties.TryAdd(id, new PrimaryParty(id, name.Trim(), sub.Length == 0 ? null : sub, PrimaryGroups.Direct, NoPlan));
+            var report = options.PrimaryClientName(name);
+            var id = report is null ? DirectId(market) : ClientId(report);
+            if (!clients.TryGetValue(id, out var client))
+            {
+                var sub = string.Join(" · ", new[] { type, branch }.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!.Trim()));
+                clients[id] = client = (report ?? name.Trim(), sub.Length == 0 ? null : sub, report is not null, new SortedSet<string>(StringComparer.OrdinalIgnoreCase));
+            }
+
+            client.Markets.Add(name.Trim());
             return id;
         }
 
@@ -239,8 +277,16 @@ public static class PrimaryMath
                 amounts.Negate(), boxesKnown, IsReturn: true));
         }
 
+        var parties = clients.ToDictionary(c => c.Key, c => new PrimaryParty(c.Key, c.Value.Name, ClientSub(c.Value.Sub, c.Value.Renamed, c.Value.Markets),
+            PrimaryGroups.Direct, NoPlan));
         return new PrimaryDirect(rows, parties, otherCurrency);
     }
+
+    /// <summary>Вторая строка прямого клиента: тип и филиал точки; у строки с названием таблицы первички — ещё точка Linko или число точек.</summary>
+    private static string? ClientSub(string? sub, bool renamed, IReadOnlyCollection<string> markets) =>
+        !renamed ? sub
+        : markets.Count == 1 ? string.Join(" · ", new[] { markets.First(), sub }.Where(s => !string.IsNullOrEmpty(s)))
+        : $"{markets.Count} {SalesFormat.Plural(markets.Count, "точка", "точки", "точек")} Linko";
 
     /// <summary>Строка дилера: подпись — дилер региона (sales."Regions".DealerName), если записан, иначе регион или склад; регион тогда — второй строкой.</summary>
     public static PrimaryParty DealerParty(string id, string region, string? dealerName, IReadOnlyList<decimal?> plans) =>
