@@ -10,6 +10,8 @@ import { isActive, settings, visibleWorkspace } from "./Sidebar";
  * Разделы «скоро» не показываем; «Настройки» — только при правах. Отступ снизу — под жест «домой» (safe area).
  * Панель в потоке под областью прокрутки — не двигается при прокрутке; при открытой клавиатуре прячется.
  * Вид — плавающая скруглённая плашка (отступ 10px от краёв, радиус 24px), полупрозрачная, с размытием; активный раздел — светлый.
+ * Ширина пунктов — по подписи, свободное место поровну: «Настройки» помещается целиком и на 320px (равные колонки её обрезали),
+ * у «AI» колонка уже, но не уже 2,5rem — 35px на телефоне, чтобы попасть пальцем. Снизу — над полоской «домой» iPhone, без лишнего зазора (safe area − 8px, не меньше 10px).
  */
 export function MobileNav({ canOpenSettings, permissions }: { canOpenSettings: boolean; permissions: readonly string[] | null }) {
   const pathname = usePathname();
@@ -19,13 +21,13 @@ export function MobileNav({ canOpenSettings, permissions }: { canOpenSettings: b
   return (
     <nav
       aria-label="Основные разделы"
-      className={`relative z-30 shrink-0 px-2.5 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-1.5 lg:hidden ${keyboardOpen ? "hidden" : ""}`}
+      className={`relative z-30 shrink-0 px-2.5 pb-[max(calc(env(safe-area-inset-bottom)-8px),10px)] pt-1.5 lg:hidden ${keyboardOpen ? "hidden" : ""}`}
     >
       <ul className="flex rounded-3xl border border-line bg-surface-solid/75 px-1 shadow-[0_12px_40px_-12px_rgb(0_0_0/0.55)] backdrop-blur-xl">
         {items.map((item) => {
           const active = isActive(pathname, item);
           return (
-            <li key={item.href} className="min-w-0 flex-1">
+            <li key={item.href} className="min-w-10 flex-auto">
               <Link
                 href={item.href}
                 aria-current={active ? "page" : undefined}
@@ -34,7 +36,7 @@ export function MobileNav({ canOpenSettings, permissions }: { canOpenSettings: b
                 }`}
               >
                 <item.icon className="size-5" strokeWidth={active ? 2.25 : 1.75} />
-                <span className="max-w-full truncate px-0.5">{item.short ?? item.label}</span>
+                <span className="max-w-full truncate whitespace-nowrap">{item.short ?? item.label}</span>
               </Link>
             </li>
           );

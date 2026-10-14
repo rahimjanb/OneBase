@@ -489,7 +489,7 @@ export function NextMonthCard({ plan, rowsTitle }: { plan: NextMonthPlan; rowsTi
       hint={plan.source === "linko" ? `из Linko · ${num(plan.agents)} ТП с планом` : planSourceText[plan.source]}
     >
       <div className="flex flex-wrap items-baseline gap-3">
-        <span className="text-[28px] font-semibold tabular-nums text-ink">{kg(plan.planKg)}</span>
+        <span className="text-[1.75rem] font-semibold tabular-nums text-ink">{kg(plan.planKg)}</span>
         <span className="text-sm text-ink-3">кг</span>
         {diff != null && (
           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${diff >= 0 ? "bg-ok-soft text-ok" : "bg-bad-soft text-bad"}`}>

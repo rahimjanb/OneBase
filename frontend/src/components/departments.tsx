@@ -46,7 +46,7 @@ export function DepartmentStatusCard({ department: d }: { department: Department
           <ArrowUpRight className="size-4 text-ink-3 group-hover:text-accent-strong" />
         </div>
         <div className="mt-3 flex items-center gap-3">
-          <span className="text-[28px] font-semibold leading-none tracking-tight">{percent(d.score)}</span>
+          <span className="text-[1.75rem] font-semibold leading-none tracking-tight">{percent(d.score)}</span>
           <StatusDot status={d.status} />
         </div>
         <div className="mt-4 text-xs text-ink-2">{d.metric.label}</div>

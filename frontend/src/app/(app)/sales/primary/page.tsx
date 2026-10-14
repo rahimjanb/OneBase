@@ -16,7 +16,7 @@ function Card({ title, sub, card, href }: { title: string; sub: string; card: Pr
       href={href}
       aside={
         <div className="shrink-0 text-right">
-          <div className="whitespace-nowrap text-[24px] font-semibold leading-none tracking-tight tabular-nums text-ink">
+          <div className="whitespace-nowrap text-[1.5rem] font-semibold leading-none tracking-tight tabular-nums text-ink">
             {num(card.kg / 1000, 1)} <span className="text-sm font-normal text-ink-3">т</span>
           </div>
           <div className="mt-1 text-xs tabular-nums text-ink-2">{money(card.sumFactory)}</div>

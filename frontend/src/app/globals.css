@@ -278,11 +278,29 @@ html:has([data-app-shell]) body {
   display: none;
 }
 
-/* Телефон: поля ввода не меньше 16px — иначе iOS увеличивает страницу при фокусе. */
-@media (width < 64rem) {
+/*
+ * Телефон (OneBase): всё в rem — текст, отступы, высоты, значки — на 12,5 % мельче: корень 14px вместо 16px. Подписи text-xs — не мельче
+ * 11px. Брейкпоинты в rem считаются от 16px браузера, корень на них не влияет. Sales Base (data-product="field") — полевое приложение
+ * под палец, остаётся как есть.
+ */
+@media (width < 40rem) {
+  html:not(:has([data-product="field"])) {
+    font-size: 87.5%;
+    --text-xs: 0.785714rem;
+  }
+}
+
+/* Поля ввода не меньше 16px — иначе iOS увеличивает страницу при фокусе: планшет и Sales Base. На телефоне OneBase iPhone этого
+   не делает (viewport с maximum-scale=1 — generateViewport), поэтому поля мельче вместе со всем текстом. */
+@media (40rem <= width < 64rem) {
   input,
   select,
   textarea {
+    font-size: 16px;
+  }
+}
+@media (width < 40rem) {
+  [data-product="field"] :is(input, select, textarea) {
     font-size: 16px;
   }
 }

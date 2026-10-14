@@ -54,7 +54,7 @@ export function PageHeader({
               )}
             </div>
           )}
-          <h1 className="text-[22px] font-semibold leading-tight tracking-tight text-ink sm:text-[26px] lg:text-[28px]">{title}</h1>
+          <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ink sm:text-[1.625rem] lg:text-[1.75rem]">{title}</h1>
           {subtitle && <p className="mt-1.5 text-sm text-ink-2">{subtitle}</p>}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}

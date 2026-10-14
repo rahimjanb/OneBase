@@ -43,10 +43,15 @@ const baseMetadata: Metadata = {
 };
 
 export async function generateViewport(): Promise<Viewport> {
-  const field = isFieldHost(requestHost(await headers()));
+  const requestHeaders = await headers();
+  const field = isFieldHost(requestHost(requestHeaders));
+  // iPhone увеличивает страницу при фокусе на поле мельче 16px; maximum-scale=1 это отключает, а масштаб жестом iOS всё равно разрешает.
+  // На телефоне OneBase весь текст мельче (globals.css), поля тоже — поэтому только для iPhone; Android при фокусе не увеличивает.
+  const iPhone = /iPhone|iPod/.test(requestHeaders.get("user-agent") ?? "");
   return {
     width: "device-width",
     initialScale: 1,
+    ...(iPhone ? { maximumScale: 1 } : {}),
     // Контент заходит под вырез и строку состояния; отступы — через env(safe-area-inset-*) в шапке и нижней панели.
     viewportFit: "cover",
     // Клавиатура уменьшает экран приложения (Android Chrome, Firefox): шапка остаётся на месте, поле ввода — над клавиатурой,

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Markdown } from "@/components/ai/Markdown";
 import { bff } from "@/lib/bff";
+import { phoneQuery, useMedia } from "@/lib/media";
 import { historySection } from "@/lib/consultant";
 import {
   exampleTasks,
@@ -63,6 +64,8 @@ export function DataManager({ status, conversations: initialList, conversation, 
   const [sets, setSets] = useState<Record<string, ChangeSet>>(() => Object.fromEntries((conversation?.changeSets ?? []).map((s) => [s.id, s])));
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [input, setInput] = useState("");
+  // Телефон: короткая подсказка в поле — пример растягивал поле на три строки (он есть в подсказках над полем).
+  const phone = useMedia(phoneQuery);
   const [pending, setPending] = useState<string | null>(null);
   const [steps, setSteps] = useState<DataStep[]>([]);
   const [running, setRunning] = useState(false);
@@ -86,7 +89,8 @@ export function DataManager({ status, conversations: initialList, conversation, 
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [input]);
+    // и при смене подсказки: на телефоне она короче — поле в одну строку
+  }, [input, phone]);
 
   const upsertSet = (set: ChangeSet) => setSets((prev) => ({ ...prev, [set.id]: set }));
   const addMessage = (m: DataMessage) => setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
@@ -438,7 +442,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
                     <div className="mx-auto grid size-16 place-items-center rounded-full bg-muted text-accent-strong shadow-[0_0_48px_-6px_rgb(46_107_255/0.55)] ring-1 ring-inset ring-white/15 backdrop-blur-md">
                       <DatabaseZap className="size-7" strokeWidth={1.5} />
                     </div>
-                    <h2 className="mt-5 text-2xl font-bold tracking-tight text-ink">Обновление данных по отчёту</h2>
+                    <h2 className="mt-5 text-xl font-bold tracking-tight text-ink sm:text-2xl">Обновление данных по отчёту</h2>
                     <p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-ink-2">
                       Приложите отчёт Excel или CSV и напишите, что сделать. Claude ({status.model}) разберёт файл, сверит его с данными OneBase и подготовит план
                       изменений «было → стало». Данные меняются только после вашего подтверждения; факт продаж из Linko только сверяется — он не правится.
@@ -451,7 +455,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
                           type="button"
                           disabled={!status.ready}
                           onClick={() => setInput(q)}
-                          className="rounded-full border border-line bg-muted px-5 py-2.5 text-center text-[13px] leading-snug text-ink-2 backdrop-blur-md transition-colors hover:border-accent/50 hover:text-ink active:bg-accent-soft disabled:opacity-50 max-lg:w-full max-lg:rounded-2xl max-lg:py-3"
+                          className="rounded-full border border-line bg-muted px-5 py-2.5 text-center text-[0.8125rem] leading-snug text-ink-2 backdrop-blur-md transition-colors hover:border-accent/50 hover:text-ink active:bg-accent-soft disabled:opacity-50 max-lg:w-full max-lg:rounded-2xl max-lg:py-3"
                         >
                           {q}
                         </button>
@@ -546,10 +550,10 @@ export function DataManager({ status, conversations: initialList, conversation, 
                     }}
                     rows={1}
                     maxLength={8000}
-                    placeholder={status.ready ? "Что сделать с отчётом? Например: «Обнови план РОП на октябрь»" : "Claude API не подключён"}
+                    placeholder={!status.ready ? "Claude API не подключён" : phone ? "Что сделать с отчётом?" : "Что сделать с отчётом? Например: «Обнови план РОП на октябрь»"}
                     disabled={!status.ready}
                     aria-label="Сообщение AI Data Manager"
-                    className="max-h-[200px] min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-60"
+                    className="max-h-[200px] min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2.5 text-base text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-60 sm:text-sm"
                   />
                   <button
                     type="submit"
@@ -560,8 +564,10 @@ export function DataManager({ status, conversations: initialList, conversation, 
                     {running ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
                   </button>
                 </form>
+                {/* Подсказка про клавиши — только при мыши и клавиатуре: на сенсорном экране Shift + Enter нет. */}
                 <p className="mt-2 text-center text-[11px] leading-relaxed text-ink-3">
-                  Enter — отправить, Shift+Enter — новая строка. Изменения применяются только кнопкой «Подтвердить»; каждое действие пишется в журнал.
+                  <span className="pointer-coarse:hidden">Enter — отправить, Shift+Enter — новая строка. </span>
+                  Изменения применяются только кнопкой «Подтвердить»; каждое действие пишется в журнал.
                 </p>
               </div>
             </div>

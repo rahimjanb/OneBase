@@ -19,7 +19,7 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: "ba
   return (
     <div className="rounded-xl border border-line bg-surface p-5">
       <div className="text-sm text-ink-2">{label}</div>
-      <div className={`mt-2 text-[32px] font-semibold leading-none tracking-tight ${tone === "bad" ? "text-bad" : tone === "ok" ? "text-ok" : "text-ink"}`}>
+      <div className={`mt-2 text-[2rem] font-semibold leading-none tracking-tight ${tone === "bad" ? "text-bad" : tone === "ok" ? "text-ok" : "text-ink"}`}>
         {value}
       </div>
     </div>

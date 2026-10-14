@@ -9,7 +9,7 @@ function Tile({ label, value, note }: { label: string; value: string; note?: str
   return (
     <div className="rounded-xl border border-line bg-surface p-5">
       <div className="text-sm text-ink-2">{label}</div>
-      <div className="mt-2 text-[28px] font-semibold leading-none tracking-tight text-ink">{value}</div>
+      <div className="mt-2 text-[1.75rem] font-semibold leading-none tracking-tight text-ink">{value}</div>
       {note && <div className="mt-2 text-xs text-ink-3">{note}</div>}
     </div>
   );

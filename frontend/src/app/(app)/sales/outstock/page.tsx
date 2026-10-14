@@ -118,7 +118,7 @@ export default async function OutstockPage({ searchParams }: { searchParams: Pro
                 >
                   <div className="truncate text-sm font-semibold text-ink">{c.name}</div>
                   <div className="text-xs text-ink-3">{pct(c.share, 1)} всех потерь</div>
-                  <div className="mt-2 text-[22px] font-semibold leading-none tracking-tight text-bad tabular-nums max-lg:text-xl">{money(c.lostSum)}</div>
+                  <div className="mt-2 text-[1.375rem] font-semibold leading-none tracking-tight text-bad tabular-nums max-lg:text-xl">{money(c.lostSum)}</div>
                   <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
                     <Fact label="Упущено, кг" value={kg(c.lostKg)} />
                     <Fact label="К факту" value={pct(c.lossShare, 1)} />

@@ -209,7 +209,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
             >
               <div className="truncate text-sm font-semibold text-ink">{tile.name}</div>
               <div className="text-xs text-ink-3">{num(tile.skus)} SKU</div>
-              <div className="mt-2 text-[22px] font-semibold leading-none tracking-tight text-ink tabular-nums max-lg:text-xl">
+              <div className="mt-2 text-[1.375rem] font-semibold leading-none tracking-tight text-ink tabular-nums max-lg:text-xl">
                 {kg(tile.kg)} <span className="text-xs font-normal text-ink-3">кг</span>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">

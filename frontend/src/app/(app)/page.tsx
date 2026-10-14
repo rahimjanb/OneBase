@@ -30,7 +30,7 @@ export default async function DashboardPage() {
   return (
     <PageBody>
       <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">{todayLabel()}</div>
-      <h1 className="mt-1.5 text-[26px] font-semibold leading-tight tracking-tight text-ink sm:text-[28px]">
+      <h1 className="mt-1.5 text-[1.625rem] font-semibold leading-tight tracking-tight text-ink sm:text-[1.75rem]">
         {greeting()}
         {name ? `, ${name}` : ""}!
       </h1>
@@ -52,7 +52,7 @@ export default async function DashboardPage() {
           return (
             <Card key={kpi.label} className="p-5 max-lg:p-4">
               <div className="text-sm text-ink-2">{kpi.label}</div>
-              <div className="mt-3 text-[32px] font-semibold leading-none tracking-tight max-lg:text-2xl">{kpi.value}</div>
+              <div className="mt-3 text-[2rem] font-semibold leading-none tracking-tight max-lg:text-2xl">{kpi.value}</div>
               <div className={`mt-4 flex items-center gap-1.5 text-xs ${trend.className}`}>
                 <trend.icon className="size-3.5" />
                 {kpi.trend}

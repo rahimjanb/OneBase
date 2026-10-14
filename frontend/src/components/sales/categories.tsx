@@ -87,7 +87,7 @@ function Card({ card, plan, href }: { card: CategoryCard; plan: CategoryPlanFact
 
       <div className="mt-4 flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-display text-[26px] font-bold leading-none tracking-tight text-ink tabular-nums">
+          <div className="font-display text-[1.625rem] font-bold leading-none tracking-tight text-ink tabular-nums">
             {kg(card.factKg)} <span className="text-sm font-semibold text-ink-3">кг</span>
           </div>
           <div className="mt-1.5 text-xs text-ink-3">

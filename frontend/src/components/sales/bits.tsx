@@ -64,7 +64,7 @@ export function KpiTile({
     <div className="flex min-w-0 flex-col rounded-xl border border-line bg-surface px-4 py-3.5 shadow-sm max-lg:px-3.5 max-lg:py-3" title={title}>
       <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3">{label}</div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5">
-        <span className={`text-[24px] font-semibold leading-none tracking-tight tabular-nums max-lg:text-xl ${toneClass[tone]}`}>{value}</span>
+        <span className={`text-[1.5rem] font-semibold leading-none tracking-tight tabular-nums max-lg:text-xl ${toneClass[tone]}`}>{value}</span>
         {unit && <span className="text-sm text-ink-3">{unit}</span>}
       </div>
       {children && <div className="mt-1.5 text-xs leading-relaxed text-ink-2">{children}</div>}

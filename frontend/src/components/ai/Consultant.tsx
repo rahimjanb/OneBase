@@ -34,6 +34,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { bff } from "@/lib/bff";
+import { phoneQuery, useMedia } from "@/lib/media";
 import {
   exampleQuestions,
   historySection,
@@ -89,6 +90,8 @@ export function Consultant({ status, conversations: initialList, conversation, c
   const [title, setTitle] = useState(conversation?.title ?? "Новый чат");
   const [messages, setMessages] = useState<ChatMessage[]>(conversation?.messages ?? []);
   const [input, setInput] = useState(initialQuestion ?? "");
+  // Телефон: короткая подсказка в поле — длинная переносилась и растягивала поле на две строки.
+  const phone = useMedia(phoneQuery);
   const [pending, setPending] = useState<string | null>(null);
   const [progress, setProgress] = useState<ConsultantProgress[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -273,7 +276,8 @@ export function Consultant({ status, conversations: initialList, conversation, c
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [input]);
+    // и при смене подсказки: на телефоне она короче — поле в одну строку
+  }, [input, phone]);
 
   const send = async (text: string) => {
     const question = text.trim();
@@ -512,7 +516,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
                 <div className="mx-auto grid size-16 place-items-center rounded-full bg-muted text-accent-strong shadow-[0_0_48px_-6px_rgb(46_107_255/0.55)] ring-1 ring-inset ring-white/15 backdrop-blur-md">
                   <Sparkles className="size-7" strokeWidth={1.5} />
                 </div>
-                <h2 className="mt-5 text-2xl font-bold tracking-tight text-ink">Чем помочь вашему бизнесу?</h2>
+                <h2 className="mt-5 text-xl font-bold tracking-tight text-ink sm:text-2xl">Чем помочь вашему бизнесу?</h2>
                 <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-ink-2">
                   Спросите обычным языком: консультант привлечёт нужных AI-сотрудников, возьмёт цифры из данных OneBase, к которым у вас есть доступ,
                   и отделит факты от рекомендаций.
@@ -621,10 +625,10 @@ export function Consultant({ status, conversations: initialList, conversation, c
                 }}
                 rows={1}
                 maxLength={4000}
-                placeholder={!status.ready ? "Консультант не настроен" : "Спросите о продажах, складе или клиентах…"}
+                placeholder={!status.ready ? "Консультант не настроен" : phone ? "Спросите о продажах…" : "Спросите о продажах, складе или клиентах…"}
                 disabled={!status.ready}
                 aria-label="Вопрос консультанту"
-                className="max-h-[200px] min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-60"
+                className="max-h-[200px] min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2.5 text-base text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-60 sm:text-sm"
               />
               <button
                 type="submit"
@@ -635,7 +639,8 @@ export function Consultant({ status, conversations: initialList, conversation, c
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
               </button>
             </form>
-            <p className="mt-2 text-center text-[11px] text-ink-3">Enter — отправить · Shift + Enter — новая строка</p>
+            {/* Подсказка про клавиши — только при мыши и клавиатуре: на сенсорном экране Shift + Enter нет. */}
+            <p className="mt-2 text-center text-[11px] text-ink-3 pointer-coarse:hidden">Enter — отправить · Shift + Enter — новая строка</p>
           </div>
         </div>
       </section>
