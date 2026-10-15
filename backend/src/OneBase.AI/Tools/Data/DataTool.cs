@@ -43,7 +43,7 @@ public abstract class DataTool : ITool
     {
         try
         {
-            return await RunAsync(context, new ToolArgs(arguments), cancellationToken);
+            return await RunAsync(context, new ToolArgs(arguments) { Report = context.Report }, cancellationToken);
         }
         catch (ToolArgumentException ex)
         {
@@ -102,6 +102,12 @@ public abstract class DataTool : ITool
 /// <summary>Аргументы вызова инструмента с проверкой.</summary>
 public sealed class ToolArgs(JsonElement root)
 {
+    /// <summary>Вызов для отчёта Excel (ToolContext.Report): списки — целиком.</summary>
+    public bool Report { get; init; }
+
+    /// <summary>Сколько строк списка отдать: модели — n (компактно), в отчёт — все.</summary>
+    public int Cap(int n) => Report ? int.MaxValue : n;
+
     public int? Int(string name, int min, int max)
     {
         if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty(name, out var v) || v.ValueKind == JsonValueKind.Null)

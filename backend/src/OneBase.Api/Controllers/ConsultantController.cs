@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
+using OneBase.AI.Reports;
 using OneBase.AI.Voice;
 using OneBase.Api.Auth;
 using OneBase.Application.Security;
@@ -15,6 +16,7 @@ namespace OneBase.Api.Controllers;
 [HasPermission(Permissions.AgentsRun)]
 public sealed class ConsultantController(
     ConsultantChatService chats,
+    ReportService reports,
     VoiceService voice,
     IAiGateway gateway,
     IHostApplicationLifetime lifetime,
@@ -97,6 +99,21 @@ public sealed class ConsultantController(
     [HttpGet("conversations/{id:guid}")]
     public async Task<IActionResult> Conversation(Guid id, CancellationToken ct) =>
         await chats.GetAsync(User.GetUserId(), id, ct) is { } view ? Ok(view) : NotFound();
+
+    /// <summary>Отчёт консультанта для предпросмотра в чате: листы с таблицами. Только свой.</summary>
+    [HttpGet("reports/{id:guid}")]
+    public async Task<IActionResult> Report(Guid id, CancellationToken ct) =>
+        await reports.GetAsync(User.GetUserId(), id, ct) is { } view ? Ok(view) : NotFound();
+
+    /// <summary>
+    /// Отчёт консультанта файлом Excel. Имя файла в пути (/xlsx/Название.xlsx) — так его берут iOS и браузеры без Content-Disposition;
+    /// само имя на сервере — из названия отчёта.
+    /// </summary>
+    [HttpGet("reports/{id:guid}/xlsx/{*fileName}")]
+    public async Task<IActionResult> ReportXlsx(Guid id, CancellationToken ct) =>
+        await reports.WorkbookAsync(User.GetUserId(), id, ct) is { } file
+            ? File(file.Content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.FileName)
+            : NotFound();
 
     [HttpPatch("conversations/{id:guid}")]
     public async Task<IActionResult> Rename(Guid id, RenameRequest request, CancellationToken ct) =>

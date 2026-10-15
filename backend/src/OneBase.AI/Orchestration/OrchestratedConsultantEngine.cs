@@ -7,6 +7,7 @@ using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
 using OneBase.AI.Memory;
 using OneBase.AI.Providers;
+using OneBase.AI.Reports;
 using OneBase.AI.Security;
 
 namespace OneBase.AI.Orchestration;
@@ -22,6 +23,7 @@ public sealed class OrchestratedConsultantEngine(
     AgentOrchestrator orchestrator,
     IAiGateway gateway,
     AiMemoryStore memory,
+    ReportService reports,
     TimeProvider clock,
     ILogger<OrchestratedConsultantEngine> logger) : IConsultantEngine
 {
@@ -32,6 +34,9 @@ public sealed class OrchestratedConsultantEngine(
 
     public async Task<ConsultantAnswer> AnswerAsync(ConsultantTurn turn, Func<ConsultantProgress, Task> progress, CancellationToken ct)
     {
+        var startedAt = clock.GetUtcNow();
+        // Отчёт Excel — только когда пользователь сам его просит: иначе инструмента отчёта у сотрудников нет.
+        var wantsReport = ReportIntent.Requested(turn.Question);
         var all = await agents.ListAsync(ct);
         var consultant = all.FirstOrDefault(a => a.IsConsultant);
         if (consultant is { Enabled: false })
@@ -71,13 +76,14 @@ public sealed class OrchestratedConsultantEngine(
 
         var (runs, agentUsage) = chosen.Count == 0
             ? ([], AiTokenUsage.None)
-            : await orchestrator.RunAsync(chosen, routing.Tasks, turn.Question, contexts, turn.UserId, turn.ConversationId, progress, ct);
+            : await orchestrator.RunAsync(chosen, routing.Tasks, turn.Question, contexts, turn.UserId, turn.ConversationId, progress, ct, wantsReport);
+        var created = wantsReport ? await reports.CreatedAsync(turn.UserId, turn.ConversationId, startedAt, ct) : [];
 
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Running));
         var results = runs.Select(r => r.Result).ToList();
         List<LlmMessage> messages =
         [
-            new(LlmRole.System, ComposePrompt(consultant, results, forbidden, rememberedText)),
+            new(LlmRole.System, ComposePrompt(consultant, results, forbidden, rememberedText, wantsReport ? created : null)),
             .. turn.History,
             new(LlmRole.User, turn.Question),
         ];
@@ -111,7 +117,8 @@ public sealed class OrchestratedConsultantEngine(
 
         return new ConsultantAnswer(
             answer.Text?.Trim() ?? string.Empty,
-            new ConsultantDetails(results, sources, answer.Model.ToString(), answer.UsedFallback, routing.Reason.Length > 0 ? routing.Reason : null, memoryUsed),
+            new ConsultantDetails(results, sources, answer.Model.ToString(), answer.UsedFallback, routing.Reason.Length > 0 ? routing.Reason : null, memoryUsed,
+                created.Count > 0 ? created : null),
             routing.Usage.Add(agentUsage).Add(answer.Usage));
     }
 
@@ -147,7 +154,8 @@ public sealed class OrchestratedConsultantEngine(
         return sb.Length == 0 ? null : sb.ToString();
     }
 
-    private string ComposePrompt(AgentConfig? consultant, IReadOnlyList<AgentResult> results, IReadOnlyList<AgentConfig> forbidden, string? remembered)
+    private string ComposePrompt(AgentConfig? consultant, IReadOnlyList<AgentResult> results, IReadOnlyList<AgentConfig> forbidden, string? remembered,
+        IReadOnlyList<ReportRef>? reportsCreated)
     {
         var today = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(5));
         var sb = new StringBuilder();
@@ -195,6 +203,16 @@ public sealed class OrchestratedConsultantEngine(
             sb.AppendLine();
             sb.AppendLine("Что AI-сотрудники выяснили раньше в этом чате (для сравнения и уточняющих вопросов):");
             sb.AppendLine(remembered);
+        }
+
+        if (reportsCreated is not null)
+        {
+            sb.AppendLine();
+            sb.AppendLine(reportsCreated.Count > 0
+                ? $"Пользователь просил отчёт. Сформированы отчёты Excel: {string.Join("; ", reportsCreated.Select(r => $"«{r.Title}» (листов {r.SheetCount}, строк {r.RowCount})"))}. " +
+                  "Они показаны под ответом: предпросмотр и кнопка «Скачать Excel». Коротко скажи, что в отчёте, и назови главные цифры; таблицы целиком не повторяй."
+                : "Пользователь просил отчёт Excel, но он не сформирован. Прямо скажи об этом и почему (нет данных, нет доступа или ошибка — по результатам сотрудников), " +
+                  "и предложи уточнить запрос: какие показатели, период, регион.");
         }
 
         if (forbidden.Count > 0)

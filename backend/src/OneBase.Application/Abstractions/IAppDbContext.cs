@@ -31,6 +31,7 @@ public interface IAppDbContext
     DbSet<AiSettings> AiSettings { get; }
     DbSet<AiConversation> AiConversations { get; }
     DbSet<AiMessage> AiMessages { get; }
+    DbSet<AiReport> AiReports { get; }
     DbSet<AiAgent> AiAgents { get; }
     DbSet<AiAgentKnowledgeSource> AiAgentKnowledgeSources { get; }
     DbSet<AiKnowledgeDocument> AiKnowledgeDocuments { get; }

@@ -24,7 +24,22 @@ export type ConsultantDetails = {
   usedFallback: boolean;
   routingReason: string | null;
   memoryUsed?: number;
+  /** Отчёты Excel, сформированные по просьбе пользователя. */
+  reports?: ReportRef[] | null;
 };
+
+/** Отчёт консультанта в ответе: ссылка без данных — листы загружаются для предпросмотра отдельно. */
+export type ReportRef = { id: string; title: string; sheetCount: number; rowCount: number };
+
+/** Формат колонки: как показывать число (как в Excel). percent — значение в процентах (27.8 = 27,8 %). */
+export type ReportFormat = "text" | "integer" | "number" | "kg" | "money" | "percent" | "date";
+export type ReportCell = number | string | boolean | null;
+export type ReportSheet = { name: string; columns: { header: string; format: ReportFormat }[]; rows: ReportCell[][]; total: boolean; note: string | null };
+export type ReportView = { id: string; title: string; createdAt: string; sheets: ReportSheet[]; sources: string[] };
+
+/** Ссылка на файл Excel: имя файла — в пути, чтобы его взяли iOS и браузеры. */
+export const reportDownloadUrl = (report: { id: string; title: string }) =>
+  `/bff/api/ai/reports/${report.id}/xlsx/${encodeURIComponent(report.title.replace(/[\\/:*?"<>|«»]/g, " ").replace(/\s+/g, " ").trim() || "Отчёт")}.xlsx`;
 
 export type ChatMessage = {
   id: string;

@@ -59,6 +59,7 @@ import {
   type SpeechState,
 } from "@/lib/voice";
 import { Markdown } from "./Markdown";
+import { ReportCard } from "./ReportCard";
 
 const voiceModeKey = "onebase-voice-mode";
 
@@ -718,6 +719,8 @@ function AssistantMessage({ message, speech, onSpeak }: { message: ChatMessage; 
             <div className="rounded-2xl rounded-tl-md border border-line bg-surface px-4 py-3">
               <Markdown text={message.content} />
             </div>
+            {/* Отчёты Excel — только если пользователь их просил: предпросмотр и скачивание. */}
+            {message.details?.reports?.map((r) => <ReportCard key={r.id} report={r} />)}
             {speech && (
               <button
                 type="button"

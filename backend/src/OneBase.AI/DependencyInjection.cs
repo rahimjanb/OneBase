@@ -67,6 +67,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.AI.Orchestration.AgentOrchestrator>();
         services.AddScoped<IConsultantEngine, OneBase.AI.Orchestration.OrchestratedConsultantEngine>();
         services.AddScoped<ConsultantChatService>();
+        services.AddScoped<OneBase.AI.Reports.ReportService>();
 
         // Голос консультанта: вопрос голосом и озвучка ответа (OpenAI audio; ключ — из «Настройки → AI»).
         services.AddSingleton(config.GetSection(OneBase.AI.Voice.VoiceOptions.Section).Get<OneBase.AI.Voice.VoiceOptions>()

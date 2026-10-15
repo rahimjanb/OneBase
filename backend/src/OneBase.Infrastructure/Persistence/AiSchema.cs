@@ -64,6 +64,17 @@ internal static class AiSchema
             e.HasIndex(x => new { x.ConversationId, x.CreatedAt });
         });
 
+        // Отчёты консультанта: виден только автору; листы с таблицами — jsonb, файл Excel собирается из них при скачивании.
+        b.Entity<AiReport>(e =>
+        {
+            e.ToTable("Reports", Schema);
+            e.Property(x => x.AgentCode).HasMaxLength(64);
+            e.Property(x => x.Title).HasMaxLength(200);
+            e.Property(x => x.Content).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
+            e.HasIndex(x => new { x.ConversationId, x.CreatedAt });
+        });
+
         b.Entity<AiAgent>(e =>
         {
             e.ToTable("Agents", Schema);

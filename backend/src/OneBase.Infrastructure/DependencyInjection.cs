@@ -113,6 +113,8 @@ public static class DependencyInjection
 
         services.AddSingleton(dataManager);
         services.AddSingleton<IReportReader, DataManager.ReportReader>();
+        // Отчёты AI-консультанта: файл Excel из листов отчёта.
+        services.AddSingleton<OneBase.Application.Reports.IReportWorkbookWriter, Reports.ReportWorkbookWriter>();
         services.AddScoped<OneBase.Application.DataManager.DataFileService>();
         services.AddScoped<OneBase.Application.DataManager.DataChangeService>();
         services.AddScoped<OneBase.Application.DataManager.IDataChangeApplier, DataManager.DataChangeApplier>();

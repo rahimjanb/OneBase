@@ -3,8 +3,11 @@ using OneBase.AI.Consultant;
 
 namespace OneBase.AI.Tools;
 
-/// <summary>Контекст вызова инструмента: какой агент, по чьей инициативе, глубина делегирования.</summary>
-public sealed record ToolContext(string AgentCode, Guid? UserId, int Depth);
+/// <summary>
+/// Контекст вызова инструмента: какой агент, по чьей инициативе, глубина делегирования, чат консультанта. Report — данные для отчёта
+/// Excel: инструменты отдают списки целиком, без топ-N для модели (ToolArgs.Cap).
+/// </summary>
+public sealed record ToolContext(string AgentCode, Guid? UserId, int Depth, Guid? ConversationId = null, bool Report = false);
 
 /// <summary>Результат инструмента. Sources — откуда данные (показываются пользователю как источники ответа).</summary>
 public sealed record ToolResult(bool Success, string Content, Guid? ApprovalRequestId = null, IReadOnlyList<DataSource>? Sources = null)

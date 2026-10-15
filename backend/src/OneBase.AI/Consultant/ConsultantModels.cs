@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
+using OneBase.AI.Reports;
 
 namespace OneBase.AI.Consultant;
 
@@ -40,14 +41,15 @@ public sealed record AgentResult(
     IReadOnlyList<string> ToolsUsed,
     string? Error = null);
 
-/// <summary>Разбор ответа, который сохраняется рядом с текстом и показывается в чате.</summary>
+/// <summary>Разбор ответа, который сохраняется рядом с текстом и показывается в чате. Reports — отчёты Excel, сформированные по просьбе пользователя.</summary>
 public sealed record ConsultantDetails(
     IReadOnlyList<AgentResult> Agents,
     IReadOnlyList<DataSource> Sources,
     string? Model,
     bool UsedFallback,
     string? RoutingReason = null,
-    int MemoryUsed = 0);
+    int MemoryUsed = 0,
+    IReadOnlyList<ReportRef>? Reports = null);
 
 public sealed record ConsultantAnswer(string Content, ConsultantDetails Details, AiTokenUsage Usage);
 

@@ -5,14 +5,18 @@ using OneBase.AI.Gateway;
 using OneBase.AI.Knowledge;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
+using OneBase.AI.Reports;
 using OneBase.AI.Security;
 using OneBase.AI.Tools;
 using OneBase.AI.Tools.Data;
 
 namespace OneBase.AI.Agents;
 
-/// <summary>Задача AI-сотруднику: что выяснить и (от оркестратора) что уже известно от других сотрудников.</summary>
-public sealed record AgentTask(string AgentCode, string Task, Guid UserId, Guid? ConversationId = null, string? Context = null);
+/// <summary>
+/// Задача AI-сотруднику: что выяснить и (от оркестратора) что уже известно от других сотрудников. Report — пользователь сам попросил
+/// отчёт Excel (ReportIntent): только тогда сотруднику даётся инструмент create_report.
+/// </summary>
+public sealed record AgentTask(string AgentCode, string Task, Guid UserId, Guid? ConversationId = null, string? Context = null, bool Report = false);
 
 public sealed record AgentRun(AgentResult Result, AiTokenUsage Usage, string? Model);
 
@@ -27,6 +31,7 @@ public sealed class AgentRunner(
     IUserPermissions permissions,
     KnowledgeService knowledge,
     SalesGlossary glossary,
+    ReportService reports,
     TimeProvider clock)
 {
     private const int MaxSteps = 8;
@@ -67,15 +72,22 @@ public sealed class AgentRunner(
         }
         var definitions = tools.Select(t => new LlmToolDefinition(t.Name, t.Description, t.InputSchema)).ToList();
 
+        // Отчёт Excel — только по просьбе пользователя и только при инструментах данных: один отчёт за задачу.
+        var reportTool = task.Report && tools.Count > 0 ? new LlmToolDefinition(ReportSpec.ToolName, ReportSpec.Description, ReportSpec.InputSchema) : null;
+        if (reportTool is not null)
+        {
+            definitions.Add(reportTool);
+        }
+
         // Словарь названий компании — только сотрудникам с данными продаж: иначе «помадка» в вопросе для модели просто незнакомое слово.
         var glossaryText = tools.Any(t => t.Source?.StartsWith("sales.", StringComparison.Ordinal) == true) ? await glossary.TextAsync(ct) : null;
         var messages = new List<LlmMessage>
         {
-            new(LlmRole.System, SystemPrompt(agent, tools, glossaryText)),
+            new(LlmRole.System, SystemPrompt(agent, tools, glossaryText, reportTool is not null)),
             new(LlmRole.User, task.Context is null ? task.Task : $"{task.Task}\n\nКонтекст от главного консультанта:\n{task.Context}"),
         };
 
-        var context = new ToolContext(agent.Code, task.UserId, 0);
+        var context = new ToolContext(agent.Code, task.UserId, 0, task.ConversationId);
         var usage = AiTokenUsage.None;
         var toolsUsed = new List<string>();
         var sources = new List<DataSource>();
@@ -106,13 +118,33 @@ public sealed class AgentRunner(
             messages.Add(new LlmMessage(LlmRole.Assistant, response.Text ?? string.Empty, ToolCalls: response.ToolCalls));
             foreach (var call in response.ToolCalls)
             {
-                var title = tools.FirstOrDefault(t => t.Name == call.Name)?.Title ?? call.Name;
+                var isReport = call.Name == ReportSpec.ToolName;
+                var title = isReport ? ReportSpec.ToolTitle : tools.FirstOrDefault(t => t.Name == call.Name)?.Title ?? call.Name;
                 if (progress is not null)
                 {
                     await progress(new ConsultantProgress("agent", agent.Code, agent.Name, ProgressStatus.Running, title));
                 }
 
-                var result = await executor.ExecuteAsync(context, call.Name, call.Arguments, ct);
+                ToolResult result;
+                if (!isReport)
+                {
+                    result = await executor.ExecuteAsync(context, call.Name, call.Arguments, ct);
+                }
+                else if (reportTool is null || !definitions.Contains(reportTool))
+                {
+                    result = ToolResult.Error(reportTool is null
+                        ? "Отчёт Excel формируется только по просьбе пользователя — ответь текстом."
+                        : "Отчёт уже сформирован — второй не нужен. Подведи итог.");
+                }
+                else
+                {
+                    (result, _) = await reports.CreateAsync(context, call.Arguments, ct);
+                    if (result.Success)
+                    {
+                        definitions.Remove(reportTool);
+                    }
+                }
+
                 if (!toolsUsed.Contains(call.Name))
                 {
                     toolsUsed.Add(call.Name);
@@ -137,7 +169,7 @@ public sealed class AgentRunner(
             "Агент не завершил анализ за отведённое число шагов."), usage, model);
     }
 
-    private string SystemPrompt(AgentConfig agent, IReadOnlyList<ITool> tools, string? glossaryText)
+    private string SystemPrompt(AgentConfig agent, IReadOnlyList<ITool> tools, string? glossaryText, bool report = false)
     {
         var today = clock.GetUtcNow().ToOffset(CompanyOffset);
         var sb = new StringBuilder();
@@ -156,6 +188,18 @@ public sealed class AgentRunner(
         {
             sb.AppendLine();
             sb.AppendLine(glossaryText);
+        }
+
+        if (report)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"""
+                Пользователь попросил отчёт Excel. Порядок: 1) получи нужные данные инструментами (период и фильтры — как в вопросе);
+                2) ОДИН раз вызови {ReportSpec.ToolName}: листы с source — тот же инструмент и аргументы, path к массиву в его результате,
+                колонки с понятными русскими заголовками и форматами (kg, money, percent для полей …Pct, integer, text); итоговая строка (total) —
+                где суммы имеют смысл. Цифры backend возьмёт из данных сам, списки при этом полные. 3) Верни итоговый JSON; в summary скажи, что
+                отчёт сформирован и что в нём. Если данных для отчёта нет — не создавай его и верни status no_data.
+                """);
         }
 
         sb.AppendLine();

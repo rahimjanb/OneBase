@@ -105,6 +105,28 @@
 
 Повторная находка обновляется, а находка с исчезнувшим условием закрывается.
 
+## Отчёты Excel (консультант)
+
+Консультант формирует отчёт-файл **только когда пользователь сам просит**: в вопросе есть «отчёт», Excel / «эксель», xlsx,
+«выгрузи», «скачать» или «hisobot» (`ReportIntent`). Это проверяет код до вызова модели: без такой просьбы инструмента
+`create_report` у AI-сотрудников просто нет, а случайный вызов отклоняется. «Экспорт» — раздел продаж, отчёт по нему не включается.
+
+- **Откуда цифры.** Сотрудник сначала получает данные инструментами, затем один раз вызывает `create_report`. Лист описывается
+  ссылкой на данные: инструмент, его аргументы, `path` к массиву в JSON-результате и колонки (`field` → заголовок, формат).
+  Backend сам вызывает этот инструмент через `ToolExecutor` с правами пользователя и раскладывает строки — модель цифры не
+  перепечатывает. Для отчёта инструменты отдают списки целиком (`ToolContext.Report` → `ToolArgs.Cap`: без топ-10/25 для модели).
+  Лист с `rows` вместо ссылки — только небольшая таблица, которую сотрудник посчитал сам (до 200 строк).
+- **Ошибки описания** (нет такого `path` или поля, неизвестный формат) уходят модели со списком того, что есть, — она исправляет вызов.
+- **Форматы:** text, integer, number, kg, money (сумы), percent (значение в процентах: 27.8 = 27,8 %), date. Без формата —
+  по значениям и имени поля (`…Pct` — проценты, `…Kg` — кг, `revenue`/`sum` — сумы).
+- **Лимиты:** до 10 листов, 40 колонок, 10 000 строк на лист, 300 000 ячеек, один отчёт на сотрудника за вопрос.
+- **Хранение:** `ai.Reports` (миграция AiReports): автор, чат, сотрудник, название, листы в jsonb. Отчёт виден только автору.
+  В ответе консультанта — `details.reports` (id, название, листов, строк).
+- **В чате:** под ответом — карточка: «Скачать Excel», вкладки листов, предпросмотр первых 100 строк с итогом, пояснение и источники.
+- **Файл:** собирается при скачивании (ClosedXML, `ReportWorkbookWriter`): название и дата формирования (Ташкент), источники,
+  закреплённая шапка с автофильтром, форматы чисел, итоговая строка формулами СУММ (кроме процентов), проценты — числами с форматом %.
+- **Журнал:** создание отчёта — `ai.report.created` в аудите; вызовы данных — как обычные вызовы инструментов.
+
 ## Голос (только консультант)
 
 Работает только в чате консультанта:
@@ -152,6 +174,7 @@
 | GET, PATCH, DELETE | `/api/ai/conversations`, `/api/ai/conversations/{id}` | ai.agents.run |
 | GET | `/api/ai/status`, `/api/ai/agents`, `/api/ai/alerts` | ai.agents.run |
 | POST | `/api/ai/voice/transcribe` (multipart `audio`: webm, mp4, ogg, wav, mp3) → `{ text }` | ai.agents.run |
+| GET | `/api/ai/reports/{id}` → листы для предпросмотра; `/api/ai/reports/{id}/xlsx/{имя}.xlsx` → файл Excel | ai.agents.run, свой отчёт |
 | GET | `/api/ai/messages/{id}/speech-text` → `{ parts }`; `/api/ai/messages/{id}/speech?part=N` → mp3 | ai.agents.run, свой ответ |
 | POST | `/api/ai/agents/{code}/execute` | ai.agents.run |
 | GET, PUT, POST | `/api/ai/providers…`, `/api/ai/models…`, `/api/ai/settings…` | ai.settings.manage |
@@ -164,7 +187,7 @@
 
 ## Таблицы (схема `ai`)
 
-Providers, Models, Settings, Agents, AgentKnowledgeSources, Conversations, Messages, KnowledgeDocuments, KnowledgeChunks, Memory, Alerts, Usage, AuditLogs; в `public."AgentToolGrants"` добавлен флаг `Enabled`. Миграции: AiCore, AiChat, AiAgents, AiKnowledge, AiMemory, AiAlerts, AiUsage.
+Providers, Models, Settings, Agents, AgentKnowledgeSources, Conversations, Messages, Reports, KnowledgeDocuments, KnowledgeChunks, Memory, Alerts, Usage, AuditLogs; в `public."AgentToolGrants"` добавлен флаг `Enabled`. Миграции: AiCore, AiChat, AiAgents, AiKnowledge, AiMemory, AiAlerts, AiUsage, AiReports.
 
 ## Чего пока нет
 
