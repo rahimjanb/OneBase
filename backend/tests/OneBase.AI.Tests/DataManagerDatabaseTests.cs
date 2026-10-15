@@ -87,6 +87,27 @@ public sealed class MemoryStorage : IFileStorage
     }
 }
 
+/// <summary>Подставная таблица Google: лист(ы), которые «вернул» Google, и счётчик чтений.</summary>
+public sealed class FakeSheets : OneBase.Application.DataSources.IGoogleSheetsClient
+{
+    public ReportDocument Document { get; set; } = new([]);
+    public int Reads { get; private set; }
+
+    public Task<ReportDocument> ReadAsync(OneBase.Application.DataSources.SheetSource source, CancellationToken ct = default)
+    {
+        Reads++;
+        return Task.FromResult(Document);
+    }
+}
+
+/// <summary>Часы теста: Now задан — «сейчас» это он (смена месяца в синхронизации), иначе — настоящее время.</summary>
+public sealed class TestClock : TimeProvider
+{
+    public DateTimeOffset? Now { get; set; }
+
+    public override DateTimeOffset GetUtcNow() => Now ?? base.GetUtcNow();
+}
+
 public sealed class DataManagerDb : IAsyncLifetime
 {
     public const string Variable = "ONEBASE_TEST_POSTGRES";
@@ -96,6 +117,8 @@ public sealed class DataManagerDb : IAsyncLifetime
 
     public ServiceProvider Services { get; private set; } = null!;
     public FakeDataModel Model { get; } = new();
+    public FakeSheets Sheets { get; } = new();
+    public TestClock Clock { get; } = new();
     public Guid AdminId { get; private set; }
     public Guid ViewerId { get; private set; }
     public Guid DataAdminId { get; private set; }
@@ -126,10 +149,12 @@ public sealed class DataManagerDb : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IConfiguration>(config);
+        services.AddSingleton<TimeProvider>(Clock);
         services.AddInfrastructure(config);
         services.AddAi(config);
         services.AddSingleton<IDataManagerModel>(Model);
         services.AddSingleton<IFileStorage, MemoryStorage>();
+        services.AddSingleton<OneBase.Application.DataSources.IGoogleSheetsClient>(Sheets);
         Services = services.BuildServiceProvider();
 
         using var scope = Services.CreateScope();
@@ -210,6 +235,12 @@ public sealed class DataManagerDb : IAsyncLifetime
         await db.DataConversations.ExecuteDeleteAsync();
         await db.SalesRegionPlans.ExecuteDeleteAsync();
         await db.SalesPnlValues.ExecuteDeleteAsync();
+        await db.DataSourceSyncRuns.ExecuteDeleteAsync();
+        await db.DataSourceBindings.ExecuteDeleteAsync();
+        await db.DataSourceConnections.ExecuteDeleteAsync();
+        await db.SalesRegions.Where(r => r.Name == "Бухоро").ExecuteUpdateAsync(u => u.SetProperty(r => r.DealerName, (string?)null));
+        Clock.Now = null;
+        await db.UserNotifications.ExecuteDeleteAsync();
         Model.Script.Clear();
         Model.Calls.Clear();
         scope.ServiceProvider.GetRequiredService<OneBase.Application.Sales.SalesCacheSignal>().InvalidateHistory();

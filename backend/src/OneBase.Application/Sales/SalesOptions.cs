@@ -330,26 +330,29 @@ public sealed class SalesOptions
     {
         var rules = _clientNames ??= PrimaryClientNames
             .Where(r => !string.IsNullOrWhiteSpace(r.Key) && !string.IsNullOrWhiteSpace(r.Value))
-            .Select(r =>
-            {
-                try
-                {
-                    return (Regex: new System.Text.RegularExpressions.Regex(r.Key.Trim(),
-                        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
-                        TimeSpan.FromMilliseconds(100)), Name: r.Value.Trim());
-                }
-                catch (ArgumentException)
-                {
-                    return (Regex: null, Name: r.Value.Trim());
-                }
-            })
+            .Select(r => (Regex: ClientRule(r.Key), Name: r.Value.Trim()))
             .Where(r => r.Regex is not null)
+            .Select(r => (Regex: r.Regex!, r.Name))
             .ToList();
         var name = marketName.Trim();
-        return rules.FirstOrDefault(r => r.Regex!.IsMatch(name)).Name;
+        return rules.FirstOrDefault(r => r.Regex.IsMatch(name)).Name;
     }
 
-    private List<(System.Text.RegularExpressions.Regex? Regex, string Name)>? _clientNames;
+    private static System.Text.RegularExpressions.Regex? ClientRule(string pattern)
+    {
+        try
+        {
+            return new System.Text.RegularExpressions.Regex(pattern.Trim(),
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+                TimeSpan.FromMilliseconds(100));
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private List<(System.Text.RegularExpressions.Regex Regex, string Name)>? _clientNames;
 
     /// <summary>
     /// Прайс-лист Linko с ценой, по которой дилер продаёт дальше («Дилердан чикиш нарх»): по нему считается «сумма по цене продажи дилера»

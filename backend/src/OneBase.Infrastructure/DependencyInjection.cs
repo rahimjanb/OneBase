@@ -113,6 +113,12 @@ public static class DependencyInjection
 
         services.AddSingleton(dataManager);
         services.AddSingleton<IReportReader, DataManager.ReportReader>();
+        // Источники данных: таблицы Google Sheets → поля разделов продаж (через план изменений AI Data Manager), синхронизация по расписанию.
+        services.AddHttpClient<OneBase.Application.DataSources.IGoogleSheetsClient, DataSources.GoogleSheetsClient>(http => http.Timeout = TimeSpan.FromSeconds(60));
+        services.AddSingleton<DataSources.DataSourceRunLocks>();
+        services.AddScoped<DataSources.DataSourceService>();
+        services.AddHostedService<DataSources.DataSourceSyncWorker>();
+
         // Отчёты AI-консультанта: файл Excel из листов отчёта.
         services.AddSingleton<OneBase.Application.Reports.IReportWorkbookWriter, Reports.ReportWorkbookWriter>();
         services.AddScoped<OneBase.Application.DataManager.DataFileService>();

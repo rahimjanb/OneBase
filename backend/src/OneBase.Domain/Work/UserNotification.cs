@@ -19,6 +19,9 @@ public enum UserNotificationKind
 
     /// <summary>Исполнитель отложил полевую задачу, поставленную из OneBase, — автору.</summary>
     FieldTaskPostponed,
+
+    /// <summary>Начался месяц, а плана на него (РОП, «Завод», первички) нет, хотя в прошлом месяце был, — тем, кто загружает планы.</summary>
+    MonthPlanMissing,
 }
 
 /// <summary>

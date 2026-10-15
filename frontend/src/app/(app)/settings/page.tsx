@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Bot, Building2, DatabaseZap, Plug, ScrollText, Sparkle, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, Bot, Building2, DatabaseZap, FileSpreadsheet, Plug, ScrollText, Sparkle, TrendingUp, Users } from "lucide-react";
 import { redirect } from "next/navigation";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { apiGet } from "@/lib/server-api";
@@ -21,6 +21,13 @@ const sections = [
     icon: Plug,
     title: "Интеграции",
     text: "Подключения отделов к внешним системам: Linko для продаж и другие.",
+    permission: "integrations.manage",
+  },
+  {
+    href: "/settings/data-sources",
+    icon: FileSpreadsheet,
+    title: "Источники данных",
+    text: "Linko и Google Sheets: какие поля разделов продаж (планы, дилеры, P&L) брать из таблиц и как часто их обновлять.",
     permission: "integrations.manage",
   },
   {

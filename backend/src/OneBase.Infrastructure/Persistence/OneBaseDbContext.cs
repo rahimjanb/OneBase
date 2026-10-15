@@ -17,6 +17,9 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
 {
     // Интеграции и ключи шифрования их секретов
     public DbSet<IntegrationConnection> Integrations => Set<IntegrationConnection>();
+    public DbSet<DataSourceConnection> DataSourceConnections => Set<DataSourceConnection>();
+    public DbSet<DataSourceBinding> DataSourceBindings => Set<DataSourceBinding>();
+    public DbSet<DataSourceSyncRun> DataSourceSyncRuns => Set<DataSourceSyncRun>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<User> Users => Set<User>();
@@ -120,6 +123,45 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         DataManagerSchema.Configure(b);
         FieldModel.Configure(b);
         WorkModel.Configure(b);
+
+        // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.
+        b.Entity<DataSourceConnection>(e =>
+        {
+            e.ToTable("DataSourceConnections");
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.SpreadsheetId).HasMaxLength(200);
+            e.Property(x => x.Url).HasMaxLength(500);
+            e.Property(x => x.Access).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.ServiceAccountEmail).HasMaxLength(320);
+            e.Property(x => x.LastCheckMessage).HasMaxLength(1000);
+            e.Property(x => x.Sheets).HasColumnType("jsonb");
+        });
+
+        b.Entity<DataSourceBinding>(e =>
+        {
+            e.ToTable("DataSourceBindings");
+            e.Property(x => x.Section).HasMaxLength(32);
+            e.Property(x => x.Sheets).HasColumnType("jsonb");
+            e.Property(x => x.Fields).HasColumnType("jsonb");
+            e.Property(x => x.Schedule).HasMaxLength(16);
+            e.Property(x => x.DailyAt).HasMaxLength(5);
+            e.Property(x => x.LastStatus).HasMaxLength(16);
+            e.Property(x => x.LastMessage).HasMaxLength(1100);
+            e.HasOne(x => x.Connection).WithMany().HasForeignKey(x => x.ConnectionId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => x.Section);
+            e.HasIndex(x => new { x.Enabled, x.NextRunAt });
+        });
+
+        b.Entity<DataSourceSyncRun>(e =>
+        {
+            e.ToTable("DataSourceSyncRuns");
+            e.Property(x => x.Trigger).HasMaxLength(16);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.Message).HasMaxLength(1100);
+            e.Property(x => x.Details).HasColumnType("jsonb");
+            e.HasOne(x => x.Binding).WithMany(x => x.Runs).HasForeignKey(x => x.BindingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.BindingId, x.CreatedAt });
+        });
 
         b.Entity<IntegrationConnection>(e =>
         {

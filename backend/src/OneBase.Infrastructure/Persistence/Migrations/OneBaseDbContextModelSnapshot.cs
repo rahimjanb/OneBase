@@ -2406,6 +2406,188 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("UserRole");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceBinding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DailyAt")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Fields")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("HeaderRow")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IntervalMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastMessage")
+                        .HasMaxLength(1100)
+                        .HasColumnType("character varying(1100)");
+
+                    b.Property<DateTimeOffset?>("LastRunAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("NextRunAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Schedule")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Section")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Sheets")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectionId");
+
+                    b.HasIndex("Section");
+
+                    b.HasIndex("Enabled", "NextRunAt");
+
+                    b.ToTable("DataSourceBindings", (string)null);
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Access")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastCheckMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool?>("LastCheckOk")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ProtectedKey")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ServiceAccountEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("Sheets")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SpreadsheetId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataSourceConnections", (string)null);
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceSyncRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BindingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(1100)
+                        .HasColumnType("character varying(1100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BindingId", "CreatedAt");
+
+                    b.ToTable("DataSourceSyncRuns", (string)null);
+                });
+
             modelBuilder.Entity("OneBase.Domain.Integrations.IntegrationConnection", b =>
                 {
                     b.Property<string>("Code")
@@ -3959,6 +4141,28 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceBinding", b =>
+                {
+                    b.HasOne("OneBase.Domain.Integrations.DataSourceConnection", "Connection")
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Connection");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceSyncRun", b =>
+                {
+                    b.HasOne("OneBase.Domain.Integrations.DataSourceBinding", "Binding")
+                        .WithMany("Runs")
+                        .HasForeignKey("BindingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Binding");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Sales.LinkoOrderLine", b =>
                 {
                     b.HasOne("OneBase.Domain.Sales.LinkoOrder", null)
@@ -4130,6 +4334,11 @@ namespace OneBase.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("OneBase.Domain.Identity.User", b =>
                 {
                     b.Navigation("Roles");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceBinding", b =>
+                {
+                    b.Navigation("Runs");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Sales.LinkoOrder", b =>

@@ -96,7 +96,7 @@ public sealed class DataChangeService(
         else
         {
             values = request.Values ?? [];
-            source = "message";
+            source = actor.ValuesSource;
         }
 
         if (values.Count == 0)
@@ -147,7 +147,7 @@ public sealed class DataChangeService(
         var previous = await PreviousVersionAsync(DataTargets.RegionPlans, request.Kind.ToString(), period, file, result.Items, ct);
         var title = $"{DataTargets.Label(DataTargets.RegionPlans)}: {DataEntityTypes.PlanKindLabel(request.Kind)} · "
                     + (periods.Count == 1 ? DataEntityTypes.MonthLabel(periods[0].Year, periods[0].Month) : period ?? "без периода")
-                    + (file is null ? " · из сообщения" : $" · {file.FileName}");
+                    + (file is null ? actor.ValuesLabel : $" · {file.FileName}");
 
         return await SaveAsync(actor, DataTargets.RegionPlans, title, period, request.Kind.ToString(), request.Replace ? "replace" : "upsert",
             file, requestHash, result.Items, result.Warnings, result.Totals, impact, previous, source, request.Mapping?.Sheet, result.SkippedEmpty,
@@ -165,7 +165,7 @@ public sealed class DataChangeService(
         var items = TargetPlanner.Plan(values, current, "из сообщения");
         var hash = Hash(DataTargets.SalesTargets, JsonSerializer.Serialize(values.OrderBy(v => v.Key), DataTargets.Json));
         return await SaveAsync(actor, DataTargets.SalesTargets, DataTargets.Label(DataTargets.SalesTargets), null, null, "upsert", null, hash,
-            items, [], [], [], null, "message", null, 0, note is { Length: > 0 } ? [note] : [], ct);
+            items, [], [], [], null, actor.ValuesSource, null, 0, note is { Length: > 0 } ? [note] : [], ct);
     }
 
     public async Task<DataChangeSetView> PrepareRegionProfilesAsync(DataActor actor, IReadOnlyList<RegionProfileValue> values, Guid? fileId, string? note,
@@ -185,8 +185,8 @@ public sealed class DataChangeService(
         var items = RegionProfilePlanner.Plan(values, await RegionsAsync(true, ct));
         var hash = Hash(DataTargets.RegionProfiles, file?.Sha256 ?? "", JsonSerializer.Serialize(values, DataTargets.Json));
         return await SaveAsync(actor, DataTargets.RegionProfiles, DataTargets.Label(DataTargets.RegionProfiles)
-                                                                 + (file is null ? "" : $" · {file.FileName}"), null, null, "upsert",
-            file, hash, items, [], [], [], null, file is null ? "message" : "file", null, 0, note is { Length: > 0 } ? [note] : [], ct);
+                                                                 + (file is null ? actor.Source is { } src ? $" · {src}" : "" : $" · {file.FileName}"), null, null, "upsert",
+            file, hash, items, [], [], [], null, file is null ? actor.ValuesSource : "file", null, 0, note is { Length: > 0 } ? [note] : [], ct);
     }
 
     /// <summary>
@@ -266,9 +266,9 @@ public sealed class DataChangeService(
         var previous = await PreviousVersionAsync(DataTargets.Pnl, null, period, file, items, ct) is { CorrectedRows: > 0 } p ? p : null;
         var title = $"{DataTargets.Label(DataTargets.Pnl)} · "
                     + (periods.Count == 1 ? DataEntityTypes.MonthLabel(periods[0].Year, periods[0].Month) : period ?? "без периода")
-                    + (file is null ? " · из сообщения" : $" · {file.FileName}");
+                    + (file is null ? actor.ValuesLabel : $" · {file.FileName}");
         return await SaveAsync(actor, DataTargets.Pnl, title, period, null, request.Replace ? "replace" : "upsert",
-            file, hash, items, result.Warnings, [], [], previous, file is null ? "message" : "file", request.Mapping?.Sheet, result.SkippedEmpty,
+            file, hash, items, result.Warnings, [], [], previous, file is null ? actor.ValuesSource : "file", request.Mapping?.Sheet, result.SkippedEmpty,
             notes, ct, result.Summary);
     }
 

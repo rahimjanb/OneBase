@@ -130,8 +130,18 @@ public sealed record DataChangeSetSummaryView(
     string? AppliedBy,
     DateTimeOffset? RolledBackAt);
 
-/// <summary>Кто готовит план: пользователь (из сессии, а не из ответа модели) и чат.</summary>
-public sealed record DataActor(Guid UserId, Guid? ConversationId);
+/// <summary>
+/// Кто готовит план: пользователь (из сессии, а не из ответа модели) и чат. Source — синхронизация из внешнего источника
+/// («Google Sheets «План 2026» / План»): попадает в название операции вместо «из сообщения», источник плана — google_sheets.
+/// </summary>
+public sealed record DataActor(Guid UserId, Guid? ConversationId, string? Source = null)
+{
+    /// <summary>Источник значений без файла: сообщение пользователя или внешняя таблица.</summary>
+    public string ValuesSource => Source is null ? "message" : "google_sheets";
+
+    /// <summary>Хвост названия операции без файла.</summary>
+    public string ValuesLabel => Source is null ? " · из сообщения" : $" · {Source}";
+}
 
 public sealed record RegionPlanRequest(
     PlanKind Kind,
