@@ -93,10 +93,18 @@ public sealed class FakeSheets : OneBase.Application.DataSources.IGoogleSheetsCl
     public ReportDocument Document { get; set; } = new([]);
     public int Reads { get; private set; }
 
-    public Task<ReportDocument> ReadAsync(OneBase.Application.DataSources.SheetSource source, CancellationToken ct = default)
+    public Task<IReadOnlyList<OneBase.Application.DataSources.SheetInfo>> SheetsAsync(OneBase.Application.DataSources.SheetSource source, CancellationToken ct = default)
     {
         Reads++;
-        return Task.FromResult(Document);
+        return Task.FromResult<IReadOnlyList<OneBase.Application.DataSources.SheetInfo>>(
+            Document.Sheets.Select(s => new OneBase.Application.DataSources.SheetInfo(s.Name, s.TotalRows, s.TotalColumns)).ToList());
+    }
+
+    public Task<ReportDocument> ReadAsync(OneBase.Application.DataSources.SheetSource source, IReadOnlyCollection<string> sheets, CancellationToken ct = default)
+    {
+        Reads++;
+        var names = OneBase.Application.DataSources.DataSourceRules.ResolveSheets(Document.Sheets.Select(s => s.Name).ToList(), sheets);
+        return Task.FromResult(new ReportDocument(names.Select(n => Document.Sheets.First(s => s.Name == n)).ToList()));
     }
 }
 

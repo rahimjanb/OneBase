@@ -107,6 +107,166 @@ public sealed class DataSourceRulesTests
 }
 
 /// <summary>
+/// Клиент Google Sheets на подставном HTTP: сервисным аккаунтом читаются только выбранные листы (Sheets API), значения — в записи разбора xlsx,
+/// отказ Google объясняется его ответом, а не «нет доступа» на всё; книга больше 10 МБ — выгрузкой docs.google.com с токеном.
+/// </summary>
+public sealed class GoogleSheetsClientTests
+{
+    private const string Id = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms";
+
+    private static JsonElement Range(string json) => JsonDocument.Parse(json).RootElement;
+
+    [Fact]
+    public void Values_match_the_xlsx_reading_dates_numbers_and_errors()
+    {
+        // 46266 — 1 сентября 2026; 0.5 — время 12:00; 1.5 — длительность 36:00:00.
+        var serial = Range("""{"values":[["Регион","Месяц","План",""],["Хоразм",46266,1234.5,true],["Бухоро",0.5,"#N/A",1.5]]}""");
+        var shown = Range("""{"values":[["Регион","Месяц","План",""],["Хоразм","01.09.2026",1234.5,true],["Бухоро","12:00:00","#N/A","36:00:00"]]}""");
+        var sheet = GoogleSheetsClient.Sheet("План", serial, shown, 1000, 26, 100, 10);
+
+        Assert.Equal(new[] { "Хоразм", "2026-09-01", "1234.5", "да" }, sheet.Rows[1]);
+        Assert.Equal(new[] { "Бухоро", "12:00:00", "#ОШИБКА", "36:00:00" }, sheet.Rows[2]);
+        Assert.Equal((3, 4, false), (sheet.TotalRows, sheet.TotalColumns, sheet.Truncated));
+    }
+
+    [Fact]
+    public void Rows_and_columns_over_the_limit_are_cut_and_marked()
+    {
+        var rows = string.Join(",", Enumerable.Range(1, 4).Select(i => $"[{i},2,3]"));
+        var range = Range($$"""{"values":[{{rows}}]}""");
+        var sheet = GoogleSheetsClient.Sheet("Лист", range, range, 5000, 40, 3, 2);
+
+        Assert.Equal(3, sheet.Rows.Count);
+        Assert.All(sheet.Rows, r => Assert.Equal(2, r.Count));
+        Assert.Equal((5000, 40, true), (sheet.TotalRows, sheet.TotalColumns, sheet.Truncated));
+        Assert.Empty(GoogleSheetsClient.Sheet("Пусто", Range("{}"), Range("{}"), 1000, 26, 3, 2).Rows);
+    }
+
+    [Fact]
+    public void Unpacked_size_counts_only_the_sheets_of_the_book()
+    {
+        using var buffer = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(buffer, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (name, size) in new[] { ("xl/worksheets/sheet1.xml", 3000), ("xl/sharedStrings.xml", 500), ("xl/styles.xml", 9999) })
+            {
+                using var entry = zip.CreateEntry(name).Open();
+                entry.Write(new byte[size]);
+            }
+        }
+
+        Assert.Equal(3500, GoogleSheetsClient.UnpackedSize(buffer.ToArray()));
+        Assert.Equal(0, GoogleSheetsClient.UnpackedSize("не zip"u8.ToArray()));
+    }
+
+    [Fact]
+    public async Task Service_account_reads_only_the_chosen_sheets_through_the_sheets_api()
+    {
+        var google = new FakeGoogle();
+        google.On("sheets.googleapis.com/v4/spreadsheets/" + Id + "?", 200, """{"sheets":[{"properties":{"title":"DSO","sheetType":"GRID","gridProperties":{"rowCount":11000,"columnCount":115}}},{"properties":{"title":"План","sheetType":"GRID","gridProperties":{"rowCount":1000,"columnCount":26}}},{"properties":{"title":"Диаграмма","sheetType":"OBJECT"}}]}""");
+        google.On("values:batchGet", 200, """{"valueRanges":[{"range":"'План'!A1:Z1000","values":[["Регион","План"],["Хоразм",1000]]}]}""");
+        var (client, source) = Client(google);
+
+        var sheets = await client.SheetsAsync(source);
+        Assert.Equal(new[] { "DSO", "План" }, sheets.Select(s => s.Name));
+
+        var document = await client.ReadAsync(source, ["план"]);
+        var sheet = Assert.Single(document.Sheets);
+        Assert.Equal("План", sheet.Name);
+        Assert.Equal(new[] { "Хоразм", "1000" }, sheet.Rows[1]);
+        var reads = google.Requests.Where(r => r.Contains("values:batchGet")).ToList();
+        Assert.Equal(2, reads.Count); // даты числом и даты строкой
+        Assert.All(reads, r => Assert.Contains("ranges='План'!A1:BI20001", r));
+        Assert.DoesNotContain(google.Requests, r => r.Contains("DSO"));
+
+        var missing = await Assert.ThrowsAsync<DataSourceException>(() => client.ReadAsync(source, ["Нет такого"]));
+        Assert.Contains("Листы: DSO, План", missing.Message);
+    }
+
+    [Fact]
+    public async Task Refusal_quotes_google_instead_of_blaming_access_for_everything()
+    {
+        var google = new FakeGoogle();
+        google.On("sheets.googleapis.com/v4/spreadsheets/", 403, """{"error":{"code":403,"message":"The caller does not have permission","status":"PERMISSION_DENIED"}}""");
+        var (client, source) = Client(google);
+
+        var error = await Assert.ThrowsAsync<DataSourceException>(() => client.SheetsAsync(source));
+        Assert.Contains("поделитесь ею с onebase@project.iam.gserviceaccount.com", error.Message);
+        Assert.Contains("The caller does not have permission", error.Message);
+    }
+
+    [Fact]
+    public async Task Book_over_the_drive_export_limit_is_read_through_the_docs_export_with_the_token()
+    {
+        // Sheets API выключен в проекте → файл через Drive; files.export отвечает «больше 10 МБ» → выгрузка docs.google.com.
+        var google = new FakeGoogle();
+        google.On("sheets.googleapis.com", 403, """{"error":{"code":403,"message":"Google Sheets API has not been used in project","status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"SERVICE_DISABLED"}]}}""");
+        google.On("/export?mimeType=", 403, """{"error":{"code":403,"message":"This file is too large to be exported.","errors":[{"message":"This file is too large to be exported.","domain":"global","reason":"exportSizeLimitExceeded"}]}}""");
+        google.On("docs.google.com/spreadsheets/d/" + Id + "/export?format=xlsx", 200, "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        var (client, source) = Client(google);
+
+        var document = await client.ReadAsync(source, ["План"]);
+        Assert.Equal("План", Assert.Single(document.Sheets).Name);
+        var docs = google.Requests.Single(r => r.Contains("docs.google.com"));
+        Assert.Contains(docs, google.Authorized);
+    }
+
+    private static (GoogleSheetsClient Client, SheetSource Source) Client(FakeGoogle google)
+    {
+        using var rsa = RSA.Create(2048);
+        var key = JsonSerializer.Serialize(new
+        {
+            type = "service_account",
+            // Своя почта на тест: токены кэшируются по почте сервисного аккаунта.
+            client_email = "onebase@project.iam.gserviceaccount.com",
+            private_key = rsa.ExportPkcs8PrivateKeyPem(),
+            token_uri = $"https://oauth2.googleapis.com/token/{Guid.NewGuid():N}",
+        });
+        google.On("oauth2.googleapis.com/token", 200, """{"access_token":"test-token","expires_in":3600}""");
+        var reader = new FixedReader(new ReportDocument([
+            new ReportSheet("DSO", [["Дата"]], 1, 1, false),
+            new ReportSheet("План", [["Регион", "План"]], 1, 2, false),
+        ]));
+        var client = new GoogleSheetsClient(new HttpClient(google), reader, new DataManagerOptions());
+        return (client, new SheetSource(Id, OneBase.Domain.Integrations.SheetAccess.ServiceAccount, key));
+    }
+
+    private sealed class FixedReader(ReportDocument document) : IReportReader
+    {
+        public IReadOnlyCollection<string> Extensions { get; } = [".xlsx"];
+
+        public ReportDocument Read(Stream content, string fileName) => document;
+    }
+
+    /// <summary>Подставной Google: ответ по первой подходящей части адреса; запоминает запросы (адрес без %-кодирования) и какие шли с токеном.</summary>
+    private sealed class FakeGoogle : HttpMessageHandler
+    {
+        private readonly List<(string Part, int Status, string Body, string Type)> _routes = [];
+        public List<string> Requests { get; } = [];
+        public List<string> Authorized { get; } = [];
+
+        public void On(string part, int status, string body, string type = "application/json") => _routes.Add((part, status, body, type));
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var url = Uri.UnescapeDataString(request.RequestUri!.AbsoluteUri);
+            Requests.Add(url);
+            if (request.Headers.Authorization?.Parameter == "test-token")
+            {
+                Authorized.Add(url);
+            }
+
+            var route = _routes.FirstOrDefault(r => url.Contains(r.Part, StringComparison.Ordinal));
+            var response = new HttpResponseMessage((System.Net.HttpStatusCode)(route.Part is null ? 404 : route.Status))
+            {
+                Content = new StringContent(route.Body ?? "{}", Encoding.UTF8, route.Type ?? "application/json"),
+            };
+            return Task.FromResult(response);
+        }
+    }
+}
+
+/// <summary>
 /// Синхронизация Google Sheets на настоящем PostgreSQL: обновляются только выбранные поля, повтор без изменений ничего не пишет,
 /// строки с ошибкой не записываются, одно поле — одна привязка, расписание запускает только подошедшие привязки.
 /// </summary>

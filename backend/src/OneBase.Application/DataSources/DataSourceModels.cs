@@ -104,11 +104,22 @@ public sealed record DataSourceFieldResult(
 /// <summary>Откуда читать таблицу: ID, доступ и (для сервисного аккаунта) ключ JSON.</summary>
 public sealed record SheetSource(string SpreadsheetId, SheetAccess Access, string? ServiceAccountJson);
 
-/// <summary>Чтение таблицы Google целиком (все листы, значения ячеек). Реализация — Infrastructure.</summary>
+/// <summary>Лист таблицы Google: название и размер (строк и столбцов).</summary>
+public sealed record SheetInfo(string Name, int Rows, int Columns);
+
+/// <summary>
+/// Чтение таблицы Google: список листов и значения ячеек только нужных листов — большая книга не читается целиком.
+/// Реализация — Infrastructure.
+/// </summary>
 public interface IGoogleSheetsClient
 {
+    /// <summary>Листы таблицы с размерами — без значений.</summary>
     /// <exception cref="DataSourceException">Нет доступа, таблица не найдена, сеть — текст для администратора.</exception>
-    Task<ReportDocument> ReadAsync(SheetSource source, CancellationToken ct = default);
+    Task<IReadOnlyList<SheetInfo>> SheetsAsync(SheetSource source, CancellationToken ct = default);
+
+    /// <summary>Значения листов sheets («*» — всех) в порядке sheets, с названиями как в таблице.</summary>
+    /// <exception cref="DataSourceException">Листов нет в таблице (с перечнем), нет доступа, сеть.</exception>
+    Task<ReportDocument> ReadAsync(SheetSource source, IReadOnlyCollection<string> sheets, CancellationToken ct = default);
 }
 
 public static partial class DataSourceRules
@@ -283,19 +294,22 @@ public static partial class DataSourceRules
             : (list, null);
     }
 
-    /// <summary>Листы документа для синхронизации: «все» — все листы; иначе выбранные, а пропавших нет — ошибка с перечнем.</summary>
-    public static IReadOnlyList<string> ResolveSheets(ReportDocument document, IReadOnlyList<string> sheets)
+    /// <summary>
+    /// Какие листы таблицы читать: «все» — все листы; иначе выбранные (названия — как в таблице), а пропавших нет — ошибка с перечнем.
+    /// names — листы таблицы.
+    /// </summary>
+    public static IReadOnlyList<string> ResolveSheets(IReadOnlyList<string> names, IReadOnlyCollection<string> sheets)
     {
         if (sheets.Contains(AllSheets))
         {
-            return document.Sheets.Count == 0 ? throw new DataSourceException("В таблице нет листов.") : document.Sheets.Select(s => s.Name).ToList();
+            return names.Count == 0 ? throw new DataSourceException("В таблице нет листов.") : names;
         }
 
-        var names = document.Sheets.Select(s => s.Name).ToList();
-        var missing = sheets.Where(s => !names.Any(n => DataValues.Normalize(n) == DataValues.Normalize(s))).ToList();
+        var found = sheets.Select(s => (Wanted: s, Name: names.FirstOrDefault(n => DataValues.Normalize(n) == DataValues.Normalize(s)))).ToList();
+        var missing = found.Where(f => f.Name is null).Select(f => f.Wanted).ToList();
         return missing.Count > 0
             ? throw new DataSourceException($"В таблице нет листов {string.Join(", ", missing.Select(m => $"«{m}»"))}. Листы: {string.Join(", ", names)}.")
-            : sheets;
+            : found.Select(f => f.Name!).ToList();
     }
 
     /// <summary>Месяц из названия листа («Сентябрь 2026», «09.2026», «2026-09»); год — из названия или fallbackYear.</summary>

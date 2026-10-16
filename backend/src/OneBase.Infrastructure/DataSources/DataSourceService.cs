@@ -16,8 +16,6 @@ using OneBase.Infrastructure.Persistence;
 
 namespace OneBase.Infrastructure.DataSources;
 
-public sealed record SheetInfo(string Name, int Rows, int Columns);
-
 public sealed record ConnectionView(
     Guid Id, string Name, string Url, string SpreadsheetId, string Access, string? ServiceAccountEmail,
     DateTimeOffset? LastCheckedAt, bool? LastCheckOk, string? LastCheckMessage, IReadOnlyList<SheetInfo> Sheets, int Bindings);
@@ -235,15 +233,15 @@ public sealed class DataSourceService(
         return ConnectionView(connection, await db.DataSourceBindings.CountAsync(b => b.ConnectionId == id, ct));
     }
 
-    /// <summary>Первые строки листа — чтобы выбрать столбцы в привязке. Таблица кэшируется на 3 минуты.</summary>
+    /// <summary>Первые строки листа — чтобы выбрать столбцы в привязке. Лист кэшируется на 3 минуты.</summary>
     public async Task<SheetPreview> PreviewAsync(Guid connectionId, string sheet, CancellationToken ct)
     {
         var connection = await db.DataSourceConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == connectionId, ct) ?? throw new KeyNotFoundException();
         // Ключ — с моментом последней проверки: после «Проверить» предпросмотр читает таблицу заново, а не из кэша.
-        var document = await cache.GetOrCreateAsync($"datasource:{connection.Id}:{connection.UpdatedAt?.Ticks}:{connection.LastCheckedAt?.Ticks}", async entry =>
+        var document = await cache.GetOrCreateAsync($"datasource:{connection.Id}:{connection.UpdatedAt?.Ticks}:{connection.LastCheckedAt?.Ticks}:{sheet}", async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(3);
-            return await sheets.ReadAsync(Source(connection), ct);
+            return await sheets.ReadAsync(Source(connection), [sheet], ct);
         }) ?? throw new DataSourceException("Таблица не прочитана.");
         ReportSheet found;
         try
@@ -305,8 +303,7 @@ public sealed class DataSourceService(
         connection.LastCheckedAt = clock.GetUtcNow();
         try
         {
-            var document = await sheets.ReadAsync(Source(connection), ct);
-            var list = document.Sheets.Select(s => new SheetInfo(s.Name, s.TotalRows, s.TotalColumns)).ToList();
+            var list = await sheets.SheetsAsync(Source(connection), ct);
             connection.Sheets = JsonSerializer.Serialize(list, DataSourceRules.Json);
             connection.LastCheckOk = true;
             connection.LastCheckMessage = $"Таблица читается: листов {list.Count}.";
@@ -502,8 +499,9 @@ public sealed class DataSourceService(
         try
         {
             var connection = binding.Connection ?? throw new DataSourceException("Таблица привязки удалена.");
-            var document = await sheets.ReadAsync(Source(connection), ct);
-            var sheetNames = DataSourceRules.ResolveSheets(document, DataSourceRules.ReadSheets(binding.Sheets));
+            // Только листы привязки: из большой книги не читаются остальные листы.
+            var document = await sheets.ReadAsync(Source(connection), DataSourceRules.ReadSheets(binding.Sheets), ct);
+            var sheetNames = document.Sheets.Select(s => s.Name).ToList();
 
             // Изменения пишутся от имени того, кто настроил привязку (по кнопке — того, кто нажал): журнал AI Data Manager.
             var label = sheetNames.Count == 1 ? sheetNames[0] : $"листов {sheetNames.Count}";
