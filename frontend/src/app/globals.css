@@ -155,11 +155,184 @@ body {
   backdrop-filter: blur(20px) saturate(140%);
 }
 
-/* Пункты выпадающих списков (select): фон у поля полупрозрачный, а список браузер рисует на белом — светлый текст пунктов на нём
-   не виден. Пунктам — непрозрачный фон темы. */
-:root[data-brand="onebase"]:not([data-theme="light"]) :is(option, optgroup) {
-  background-color: var(--color-surface-solid);
-  color: var(--color-ink);
+/* Пункты выпадающих списков (select) там, где браузер не умеет оформлять список (см. ниже): фон у поля полупрозрачный, а список
+   браузер рисует на белом — светлый текст пунктов на нём не виден. Пунктам — непрозрачный фон темы. */
+@supports not (appearance: base-select) {
+  :root[data-brand="onebase"]:not([data-theme="light"]) :is(option, optgroup) {
+    background-color: var(--color-surface-solid);
+    color: var(--color-ink);
+  }
+}
+
+/*
+ * Выпадающие списки — оформленные (appearance: base-select, Chrome/Edge/Яндекс 135+): список — карточка темы со скруглением, тенью и
+ * стеклом в тёмной теме, пункты с подсветкой при наведении, выбранный — акцентом и галочкой, стрелка поворачивается при открытии.
+ * Сам select остаётся нативным: значение, клавиатура, формы и доступность — как были; вид поля задают классы компонента (они в слое
+ * utilities и сильнее этих правил). Браузеры без поддержки показывают обычный список. Отказаться в отдельном поле — класс appearance-auto.
+ */
+@layer base {
+  @supports (appearance: base-select) {
+    select:not([multiple], [size]) {
+      appearance: base-select;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+    }
+  }
+}
+
+@supports (appearance: base-select) {
+  select:not([multiple], [size]):disabled {
+    cursor: not-allowed;
+  }
+
+  select:not([multiple], [size])::picker-icon {
+    content: "";
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    margin-inline-start: auto;
+    background-color: var(--color-ink-3);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+      center / 1rem no-repeat;
+    transition: rotate 0.2s ease;
+  }
+
+  select:not([multiple], [size]):open::picker-icon {
+    rotate: 180deg;
+    background-color: var(--color-accent-strong);
+  }
+
+  select:not([multiple], [size]):open {
+    border-color: var(--color-accent);
+  }
+
+  /* Сам список: под полем (или над ним, если внизу нет места), не уже поля, с прокруткой. */
+  select:not([multiple], [size])::picker(select) {
+    appearance: base-select;
+    max-inline-size: min(28rem, calc(100vw - 2rem));
+    max-block-size: min(24rem, 70vh);
+    margin-block: 0.375rem;
+    padding: 0.375rem;
+    overflow-y: auto;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background-color: var(--color-surface-solid);
+    color: var(--color-ink);
+    font-size: max(1em, 0.8125rem);
+    box-shadow:
+      0 18px 40px -14px rgb(15 23 42 / 0.35),
+      0 2px 8px -2px rgb(15 23 42 / 0.12);
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line) transparent;
+    opacity: 0;
+    translate: 0 -0.25rem;
+    transition:
+      opacity 0.14s ease,
+      translate 0.14s ease,
+      display 0.14s allow-discrete,
+      overlay 0.14s allow-discrete;
+  }
+
+  select:not([multiple], [size]):open::picker(select) {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  @starting-style {
+    select:not([multiple], [size]):open::picker(select) {
+      opacity: 0;
+      translate: 0 -0.25rem;
+    }
+  }
+
+  /* Тёмная тема OneBase — стекло, как у меню и окон. */
+  :root[data-brand="onebase"]:not([data-theme="light"]) select:not([multiple], [size])::picker(select) {
+    background-color: rgb(14 26 54 / 0.94);
+    backdrop-filter: blur(20px) saturate(140%);
+    border-color: rgb(255 255 255 / 0.12);
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.04) inset,
+      0 24px 48px -16px rgb(0 0 0 / 0.7);
+  }
+
+  select:not([multiple], [size]) option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-block-size: 2.25rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 0.5rem;
+    color: var(--color-ink);
+    background-color: transparent;
+    font-weight: 400;
+    line-height: 1.3;
+    white-space: normal;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+  }
+
+  select:not([multiple], [size]) option:is(:hover, :focus-visible) {
+    background-color: var(--color-muted);
+    outline: none;
+  }
+
+  select:not([multiple], [size]) option:checked {
+    background-color: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+    font-weight: 600;
+  }
+
+  select:not([multiple], [size]) option:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background-color: transparent;
+  }
+
+  /* Галочка выбранного — справа, цветом акцента. */
+  select:not([multiple], [size]) option::checkmark {
+    order: 1;
+    content: "";
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    margin-inline-start: auto;
+    background-color: currentColor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+      center / 1rem no-repeat;
+  }
+
+  /* Группы пунктов: подпись капителью, пункты — обычным текстом. */
+  select:not([multiple], [size]) optgroup {
+    padding-block-start: 0.375rem;
+    color: var(--color-ink-3);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  select:not([multiple], [size]) optgroup + optgroup {
+    margin-block-start: 0.25rem;
+    border-block-start: 1px solid var(--color-line);
+  }
+
+  select:not([multiple], [size]) optgroup option {
+    font-size: max(1rem * 0.875, 0.8125rem);
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+
+  select:not([multiple], [size]) optgroup option:checked {
+    font-weight: 600;
+  }
+
+  /* Компактный список-значок (без рамки и фона, например «→» на доске назначений) — без своей стрелки. */
+  select[data-select="bare"]::picker-icon {
+    display: none;
+  }
 }
 
 /* Sales Base внутри OneBase (/field на домене OneBase) — своя тёмная тема без стекла. */

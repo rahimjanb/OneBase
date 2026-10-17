@@ -104,5 +104,19 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Integrations.DataSourceBinding> DataSourceBindings { get; }
     DbSet<OneBase.Domain.Integrations.DataSourceConflict> DataSourceConflicts { get; }
 
+    // Telegram: аккаунты, агент, разрешения, чаты, материалы, журнал агента, рассылки.
+    DbSet<OneBase.Domain.Telegram.TelegramAccount> TelegramAccounts { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramAgentSettings> TelegramAgentSettings { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramUserPermission> TelegramUserPermissions { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramLinkCode> TelegramLinkCodes { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramChat> TelegramChats { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramMaterial> TelegramMaterials { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramMaterialChunk> TelegramMaterialChunks { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramIncomingMessage> TelegramIncomingMessages { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramAgentExecution> TelegramAgentExecutions { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramCampaign> TelegramCampaigns { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramCampaignRecipient> TelegramCampaignRecipients { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramCampaignAttachment> TelegramCampaignAttachments { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

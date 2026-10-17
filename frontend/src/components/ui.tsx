@@ -1,4 +1,4 @@
-import { ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import type { DepartmentStatus } from "@/lib/demo-data";
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -70,16 +70,14 @@ export function SelectField({ label, options, className = "" }: { label?: string
   return (
     <label className={`block ${className}`}>
       {label && <span className="mb-2 block text-sm text-ink-2">{label}</span>}
-      <span className="relative block">
-        <select
-          className={`${label ? "h-11" : "h-10 max-lg:h-11"} w-full min-w-[160px] appearance-none rounded-lg border border-line bg-surface pl-3.5 pr-9 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20`}
-        >
-          {options.map((o) => (
-            <option key={o}>{o}</option>
-          ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ink-2" />
-      </span>
+      {/* Стрелку и оформленный список рисует общий стиль select (globals.css). */}
+      <select
+        className={`${label ? "h-11" : "h-10 max-lg:h-11"} w-full min-w-[160px] rounded-lg border border-line bg-surface px-3.5 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20`}
+      >
+        {options.map((o) => (
+          <option key={o}>{o}</option>
+        ))}
+      </select>
     </label>
   );
 }

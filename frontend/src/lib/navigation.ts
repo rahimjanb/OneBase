@@ -14,10 +14,11 @@ export const navPermissions: Record<string, string[]> = {
   "/base": ["files.read"],
   "/consultant": ["ai.agents.run"],
   "/data-manager": ["ai.data.manage"],
+  "/campaigns": ["telegram.campaigns"],
 };
 
 /** Порядок разделов в меню — по нему выбирается стартовая страница, если «Обзор» недоступен. */
-const order = ["/", "/departments", "/tasks", "/base", "/consultant", "/data-manager"];
+const order = ["/", "/departments", "/tasks", "/base", "/consultant", "/data-manager", "/campaigns"];
 
 export function canOpen(href: string, permissions: readonly string[]): boolean {
   const need = navPermissions[href];

@@ -47,6 +47,12 @@ public static class Permissions
     /// </summary>
     public const string FieldPlan = "field.plan";
 
+    /// <summary>Telegram: аккаунты, AI-агент, доступ пользователей Telegram, журнал агента.</summary>
+    public const string TelegramManage = "telegram.manage";
+
+    /// <summary>Рассылки в Telegram: создание, запуск, пауза, отмена.</summary>
+    public const string TelegramCampaigns = "telegram.campaigns";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
@@ -68,5 +74,7 @@ public static class Permissions
         FieldUse,
         FieldManage,
         FieldPlan,
+        TelegramManage,
+        TelegramCampaigns,
     ];
 }

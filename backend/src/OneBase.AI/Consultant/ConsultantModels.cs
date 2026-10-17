@@ -1,12 +1,19 @@
 using System.Text.Json.Serialization;
+using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
 using OneBase.AI.Reports;
 
 namespace OneBase.AI.Consultant;
 
-/// <summary>Вопрос пользователя в контексте чата.</summary>
-public sealed record ConsultantTurn(Guid UserId, Guid ConversationId, string Question, IReadOnlyList<LlmMessage> History);
+/// <summary>Вопрос пользователя в контексте чата. Channel — откуда вопрос (null — чат OneBase).</summary>
+public sealed record ConsultantTurn(Guid UserId, Guid ConversationId, string Question, IReadOnlyList<LlmMessage> History, ConsultantChannel? Channel = null);
+
+/// <summary>
+/// Канал вопроса вне чата OneBase (Telegram): свои инструкции (стиль, язык, ограничения администратора), модель и длина ответа, можно ли
+/// формировать отчёты. Права на данные — по-прежнему права пользователя: канал их не расширяет.
+/// </summary>
+public sealed record ConsultantChannel(string Name, string? Instructions, AiModelRef? Model, int? MaxOutputTokens, bool AllowReports);
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ProgressStatus

@@ -35,8 +35,9 @@ public sealed class OrchestratedConsultantEngine(
     public async Task<ConsultantAnswer> AnswerAsync(ConsultantTurn turn, Func<ConsultantProgress, Task> progress, CancellationToken ct)
     {
         var startedAt = clock.GetUtcNow();
-        // Отчёт Excel — только когда пользователь сам его просит: иначе инструмента отчёта у сотрудников нет.
-        var wantsReport = ReportIntent.Requested(turn.Question);
+        // Отчёт Excel — только когда пользователь сам его просит: иначе инструмента отчёта у сотрудников нет. Канал может отчёты запретить.
+        var asksReport = ReportIntent.Requested(turn.Question);
+        var wantsReport = asksReport && (turn.Channel?.AllowReports ?? true);
         var all = await agents.ListAsync(ct);
         var consultant = all.FirstOrDefault(a => a.IsConsultant);
         if (consultant is { Enabled: false })
@@ -48,7 +49,7 @@ public sealed class OrchestratedConsultantEngine(
         var departments = all.Where(a => !a.IsConsultant && a.Enabled).ToList();
         var available = departments.Where(a => a.RequiredPermission is null || own.Contains(a.RequiredPermission)).ToList();
         var forbidden = departments.Except(available).ToList();
-        var context = new AiCallContext(turn.UserId, AgentDefaults.Consultant, turn.ConversationId, "consultant");
+        var context = new AiCallContext(turn.UserId, AgentDefaults.Consultant, turn.ConversationId, turn.Channel?.Name ?? "consultant");
 
         // Аналитическая память чата: что сотрудники уже выяснили (только доступные пользователю сейчас).
         var names = all.ToDictionary(a => a.Code, a => a.Name);
@@ -83,15 +84,15 @@ public sealed class OrchestratedConsultantEngine(
         var results = runs.Select(r => r.Result).ToList();
         List<LlmMessage> messages =
         [
-            new(LlmRole.System, ComposePrompt(consultant, results, forbidden, rememberedText, wantsReport ? created : null)),
+            new(LlmRole.System, ComposePrompt(consultant, results, forbidden, rememberedText, wantsReport ? created : null, turn.Channel, asksReport && !wantsReport)),
             .. turn.History,
             new(LlmRole.User, turn.Question),
         ];
         var answer = await gateway.CompleteAsync(messages, [], new AiCallOptions
         {
-            Model = consultant?.Model,
+            Model = turn.Channel?.Model ?? consultant?.Model,
             Temperature = consultant?.Temperature,
-            MaxOutputTokens = consultant?.MaxOutputTokens,
+            MaxOutputTokens = turn.Channel?.MaxOutputTokens ?? consultant?.MaxOutputTokens,
             Context = context with { Purpose = "consultant.answer" },
         }, ct);
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Done));
@@ -155,7 +156,7 @@ public sealed class OrchestratedConsultantEngine(
     }
 
     private string ComposePrompt(AgentConfig? consultant, IReadOnlyList<AgentResult> results, IReadOnlyList<AgentConfig> forbidden, string? remembered,
-        IReadOnlyList<ReportRef>? reportsCreated)
+        IReadOnlyList<ReportRef>? reportsCreated, ConsultantChannel? channel = null, bool reportsForbidden = false)
     {
         var today = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(5));
         var sb = new StringBuilder();
@@ -165,6 +166,17 @@ public sealed class OrchestratedConsultantEngine(
         sb.AppendLine();
         sb.AppendLine(ConsultantPrompts.QualityRules);
         sb.AppendLine();
+        if (channel?.Instructions is { Length: > 0 } instructions)
+        {
+            sb.AppendLine(instructions);
+            sb.AppendLine();
+        }
+
+        if (reportsForbidden)
+        {
+            sb.AppendLine("Пользователь просит отчёт Excel, но в этом канале отчёты ему не разрешены. Скажи об этом коротко и ответь текстом.");
+            sb.AppendLine();
+        }
 
         if (results.Count == 0)
         {
@@ -210,7 +222,10 @@ public sealed class OrchestratedConsultantEngine(
             sb.AppendLine();
             sb.AppendLine(reportsCreated.Count > 0
                 ? $"Пользователь просил отчёт. Сформированы отчёты Excel: {string.Join("; ", reportsCreated.Select(r => $"«{r.Title}» (листов {r.SheetCount}, строк {r.RowCount})"))}. " +
-                  "Они показаны под ответом: предпросмотр и кнопка «Скачать Excel». Коротко скажи, что в отчёте, и назови главные цифры; таблицы целиком не повторяй."
+                  (channel is null
+                      ? "Они показаны под ответом: предпросмотр и кнопка «Скачать Excel». "
+                      : "Файлы Excel будут отправлены следом за ответом. ") +
+                  "Коротко скажи, что в отчёте, и назови главные цифры; таблицы целиком не повторяй."
                 : "Пользователь просил отчёт Excel, но он не сформирован. Прямо скажи об этом и почему (нет данных, нет доступа или ошибка — по результатам сотрудников), " +
                   "и предложи уточнить запрос: какие показатели, период, регион.");
         }

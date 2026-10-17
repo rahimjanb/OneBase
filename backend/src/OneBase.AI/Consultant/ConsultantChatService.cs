@@ -27,6 +27,9 @@ public sealed record ConversationSummary(Guid Id, string Title, DateTimeOffset C
 
 public sealed record ConversationView(Guid Id, string Title, DateTimeOffset CreatedAt, IReadOnlyList<ChatMessageView> Messages);
 
+/// <summary>Ответ консультанта целиком (для каналов без потоковой отдачи): Ok=false — Error с текстом для пользователя.</summary>
+public sealed record ConsultantReply(Guid ConversationId, bool Ok, string Content, string? Error, ConsultantDetails? Details, AiTokenUsage Usage, long DurationMs);
+
 /// <summary>Чаты консультанта: история, сохранение вопросов и ответов. Пользователь видит только свои чаты.</summary>
 public sealed class ConsultantChatService(
     IAppDbContext db,
@@ -105,7 +108,18 @@ public sealed class ConsultantChatService(
     /// Вопрос в чат: сохраняет вопрос, получает ответ консультанта и сохраняет его (или ошибку).
     /// События: start → progress… → done | error. KeyNotFoundException — чата нет или он чужой.
     /// </summary>
-    public async Task SendAsync(Guid userId, Guid? conversationId, string question, Func<ChatEvent, Task> emit, CancellationToken ct)
+    public Task SendAsync(Guid userId, Guid? conversationId, string question, Func<ChatEvent, Task> emit, CancellationToken ct) =>
+        RunAsync(userId, conversationId, question, null, emit, ct);
+
+    /// <summary>
+    /// Вопрос из другого канала (Telegram) от имени пользователя OneBase — с его правами, в его чате консультанта (виден и в OneBase).
+    /// Ответ — целиком, без потоковых событий. KeyNotFoundException — чата нет, он чужой или в архиве.
+    /// </summary>
+    public async Task<ConsultantReply> AskAsync(Guid userId, Guid? conversationId, string question, ConsultantChannel channel, CancellationToken ct) =>
+        await RunAsync(userId, conversationId, question, channel, _ => Task.CompletedTask, ct);
+
+    private async Task<ConsultantReply> RunAsync(Guid userId, Guid? conversationId, string question, ConsultantChannel? channel, Func<ChatEvent, Task> emit,
+        CancellationToken ct)
     {
         question = question.Trim();
         AiConversation conversation;
@@ -116,7 +130,7 @@ public sealed class ConsultantChatService(
         }
         else
         {
-            conversation = new AiConversation { UserId = userId, Title = TitleOf(question) };
+            conversation = new AiConversation { UserId = userId, Title = channel is null ? TitleOf(question) : TitleOf($"Telegram · {question}") };
             db.AiConversations.Add(conversation);
         }
 
@@ -136,7 +150,7 @@ public sealed class ConsultantChatService(
         try
         {
             var answer = await engine.AnswerAsync(
-                new ConsultantTurn(userId, conversation.Id, question, history),
+                new ConsultantTurn(userId, conversation.Id, question, history, channel),
                 p => emit(new ChatEvent("progress", p)),
                 ct);
             reply.Content = answer.Content.Length > 0 ? answer.Content : "Модель вернула пустой ответ.";
@@ -170,7 +184,7 @@ public sealed class ConsultantChatService(
 
         try
         {
-            await audit.WriteAsync("consultant", userId, conversation.Id, reply.Id, question, startedAt, reply.DurationMs, details,
+            await audit.WriteAsync(channel?.Name ?? "consultant", userId, conversation.Id, reply.Id, question, startedAt, reply.DurationMs, details,
                 reply.Status == AiMessageStatus.Completed ? reply.Content : null, reply.Error, CancellationToken.None);
         }
         catch (Exception ex)
@@ -181,6 +195,8 @@ public sealed class ConsultantChatService(
         await emit(reply.Status == AiMessageStatus.Completed
             ? new ChatEvent("done", new { message = View(reply) })
             : new ChatEvent("error", new { message = View(reply), error = reply.Error }));
+        return new ConsultantReply(conversation.Id, reply.Status == AiMessageStatus.Completed, reply.Content, reply.Error, details,
+            new AiTokenUsage(reply.InputTokens, reply.OutputTokens), reply.DurationMs);
     }
 
     private async Task<IReadOnlyList<LlmMessage>> HistoryAsync(Guid conversationId, CancellationToken ct)

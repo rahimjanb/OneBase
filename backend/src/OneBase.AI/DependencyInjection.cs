@@ -71,6 +71,13 @@ public static class DependencyInjection
         services.AddScoped<IConsultantEngine, OneBase.AI.Orchestration.OrchestratedConsultantEngine>();
         services.AddScoped<ConsultantChatService>();
         services.AddScoped<OneBase.AI.Reports.ReportService>();
+        // Telegram: AI-агент аккаунтов — входящие из очереди TelegramInbox (её наполняет клиент Telegram из Infrastructure).
+        services.AddScoped<OneBase.AI.Telegram.TelegramAgentService>();
+        services.AddHostedService<OneBase.AI.Telegram.TelegramAgentWorker>();
+        // Рассылки: мастер и управление (сервис), очередь в PostgreSQL (runner) и фоновая отправка.
+        services.AddScoped<OneBase.AI.Telegram.TelegramCampaignService>();
+        services.AddSingleton<OneBase.AI.Telegram.TelegramCampaignRunner>();
+        services.AddHostedService<OneBase.AI.Telegram.TelegramCampaignWorker>();
 
         // Голос консультанта: вопрос голосом и озвучка ответа (OpenAI audio; ключ — из «Настройки → AI»).
         services.AddSingleton(config.GetSection(OneBase.AI.Voice.VoiceOptions.Section).Get<OneBase.AI.Voice.VoiceOptions>()

@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { ChevronDown } from "lucide-react";
+import { LinkTelegramButton } from "@/components/telegram/LinkTelegramButton";
 import { initials, type Me } from "@/lib/users";
 import { LogoutLink } from "./AppBridge";
 import { NotificationBell } from "./NotificationBell";
@@ -42,6 +43,7 @@ export function Topbar({ me }: { me: Me | null }) {
                   <span className="block truncate text-ink-2">{me.name || me.login}</span>
                   <span className="block truncate">{me.position ?? me.roles[0] ?? me.login}</span>
                 </div>
+                <LinkTelegramButton />
                 {/* Обычная ссылка: /logout при загрузке удаляет сессию, заранее его загружать нельзя. */}
                 <LogoutLink href="/logout" className="block rounded-md px-2.5 py-2 text-sm text-ink hover:bg-muted">
                   Выйти

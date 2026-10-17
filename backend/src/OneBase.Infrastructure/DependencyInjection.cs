@@ -159,6 +159,15 @@ public static class DependencyInjection
         services.AddScoped<Field.FieldStatsRefresher>();
         services.AddHostedService<Field.FieldWorker>();
 
+        // Telegram: пользовательские аккаунты (MTProto, WTelegramClient) — один клиент на аккаунт на весь процесс; входящие → очередь агента.
+        services.AddSingleton<OneBase.Application.Telegram.TelegramInbox>();
+        services.AddSingleton<Telegram.TelegramCredentialsStore>();
+        services.TryAddSingleton<OneBase.Application.Telegram.ITelegramGateway, Telegram.WTelegramGateway>();
+        services.AddScoped<Telegram.TelegramAccountService>();
+        services.AddScoped<OneBase.Application.Telegram.TelegramLinkService>();
+        services.AddScoped<OneBase.Application.Telegram.TelegramMaterialService>();
+        services.AddHostedService<Telegram.TelegramConnectionWorker>();
+
         // Раздел «Задачи» OneBase: задачи отделов и уведомления пользователей.
         services.AddScoped<OneBase.Application.Work.UserNotifier>();
         services.AddScoped<OneBase.Application.Work.WorkTaskService>();

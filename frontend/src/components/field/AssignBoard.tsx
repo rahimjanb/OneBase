@@ -70,6 +70,7 @@ export function AssignBoard({ columns }: { columns: Column[] }) {
                   {p.status === "Planned" && (
                     <select
                       aria-label="Передать агенту"
+                      data-select="bare"
                       value=""
                       onChange={(e) => e.target.value && reassign(p.marketId, p.name, c.agentId, e.target.value)}
                       className="w-7 shrink-0 cursor-pointer rounded border-0 bg-transparent text-xs text-ink-3 lg:hidden"

@@ -21,6 +21,19 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<DataSourceBinding> DataSourceBindings => Set<DataSourceBinding>();
     public DbSet<DataSourceSyncRun> DataSourceSyncRuns => Set<DataSourceSyncRun>();
     public DbSet<DataSourceConflict> DataSourceConflicts => Set<DataSourceConflict>();
+
+    public DbSet<OneBase.Domain.Telegram.TelegramAccount> TelegramAccounts => Set<OneBase.Domain.Telegram.TelegramAccount>();
+    public DbSet<OneBase.Domain.Telegram.TelegramAgentSettings> TelegramAgentSettings => Set<OneBase.Domain.Telegram.TelegramAgentSettings>();
+    public DbSet<OneBase.Domain.Telegram.TelegramUserPermission> TelegramUserPermissions => Set<OneBase.Domain.Telegram.TelegramUserPermission>();
+    public DbSet<OneBase.Domain.Telegram.TelegramLinkCode> TelegramLinkCodes => Set<OneBase.Domain.Telegram.TelegramLinkCode>();
+    public DbSet<OneBase.Domain.Telegram.TelegramChat> TelegramChats => Set<OneBase.Domain.Telegram.TelegramChat>();
+    public DbSet<OneBase.Domain.Telegram.TelegramMaterial> TelegramMaterials => Set<OneBase.Domain.Telegram.TelegramMaterial>();
+    public DbSet<OneBase.Domain.Telegram.TelegramMaterialChunk> TelegramMaterialChunks => Set<OneBase.Domain.Telegram.TelegramMaterialChunk>();
+    public DbSet<OneBase.Domain.Telegram.TelegramIncomingMessage> TelegramIncomingMessages => Set<OneBase.Domain.Telegram.TelegramIncomingMessage>();
+    public DbSet<OneBase.Domain.Telegram.TelegramAgentExecution> TelegramAgentExecutions => Set<OneBase.Domain.Telegram.TelegramAgentExecution>();
+    public DbSet<OneBase.Domain.Telegram.TelegramCampaign> TelegramCampaigns => Set<OneBase.Domain.Telegram.TelegramCampaign>();
+    public DbSet<OneBase.Domain.Telegram.TelegramCampaignRecipient> TelegramCampaignRecipients => Set<OneBase.Domain.Telegram.TelegramCampaignRecipient>();
+    public DbSet<OneBase.Domain.Telegram.TelegramCampaignAttachment> TelegramCampaignAttachments => Set<OneBase.Domain.Telegram.TelegramCampaignAttachment>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<User> Users => Set<User>();
@@ -124,6 +137,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         DataManagerSchema.Configure(b);
         FieldModel.Configure(b);
         WorkModel.Configure(b);
+        TelegramModel.Configure(b);
 
         // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.
         b.Entity<DataSourceConnection>(e =>

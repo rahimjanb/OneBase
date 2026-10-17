@@ -10,6 +10,7 @@ import {
   DatabaseZap,
   Grid3x3,
   LayoutGrid,
+  Send,
   SlidersHorizontal,
   Sparkles,
   type LucideIcon,
@@ -31,6 +32,7 @@ export const workspace: NavItem[] = [
   { href: "/base", label: "Файлы", icon: Database, also: ["/files"] },
   { href: "/consultant", label: "AI-консультант", icon: Sparkles, also: ["/ai"], short: "AI" },
   { href: "/data-manager", label: "AI Data Manager", icon: DatabaseZap, short: "Данные" },
+  { href: "/campaigns", label: "Рассылки", icon: Send },
 ];
 
 export const settings: NavItem = { href: "/settings", label: "Настройки", icon: SlidersHorizontal };

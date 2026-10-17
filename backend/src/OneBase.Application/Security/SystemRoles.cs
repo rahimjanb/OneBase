@@ -66,7 +66,8 @@ public static class SystemRoles
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
     public static readonly IReadOnlyList<string> SettingsPermissions =
-        [Permissions.UsersManage, Permissions.IntegrationsManage, Permissions.AiSettingsManage, Permissions.DataManage, Permissions.SalesManage, Permissions.LogsRead];
+        [Permissions.UsersManage, Permissions.IntegrationsManage, Permissions.AiSettingsManage, Permissions.DataManage, Permissions.SalesManage, Permissions.LogsRead,
+            Permissions.TelegramManage];
 
     /// <summary>Порядок ролей в списках: администратор, директор, отделы.</summary>
     public static int OrderOf(string name)
@@ -102,5 +103,7 @@ public static class SystemRoles
         [Permissions.FieldUse] = "Sales Base",
         [Permissions.FieldManage] = "Sales Base: управление",
         [Permissions.FieldPlan] = "Sales Base: задачи и маршруты",
+        [Permissions.TelegramManage] = "Telegram: аккаунты и AI-агент",
+        [Permissions.TelegramCampaigns] = "Рассылки в Telegram",
     };
 }

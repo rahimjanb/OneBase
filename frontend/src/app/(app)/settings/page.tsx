@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Bot, Building2, DatabaseZap, FileSpreadsheet, Plug, ScrollText, Sparkle, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, Bot, Building2, DatabaseZap, FileSpreadsheet, Plug, ScrollText, Send, Sparkle, TrendingUp, Users } from "lucide-react";
 import { redirect } from "next/navigation";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { apiGet } from "@/lib/server-api";
@@ -36,6 +36,13 @@ const sections = [
     title: "AI",
     text: "Провайдеры OpenAI и Anthropic, ключи API, модели и параметры консультанта.",
     permission: "ai.settings.manage",
+  },
+  {
+    href: "/settings/telegram",
+    icon: Send,
+    title: "Telegram",
+    text: "Аккаунты Telegram, AI-агент для ответов в чатах: кому он отвечает, с какими правами, журнал ответов.",
+    permission: "telegram.manage",
   },
   {
     href: "/data-manager",

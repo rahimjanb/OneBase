@@ -226,6 +226,8 @@ public sealed class DataManagerDb : IAsyncLifetime
     public FakeSheets Sheets { get; } = new();
     public FakeLinko Linko { get; } = new();
     public FakeGateway Gateway { get; } = new();
+    public FakeTelegram Telegram { get; } = new();
+    public FakeConsultant Consultant { get; } = new();
     public TestClock Clock { get; } = new();
     public Guid AdminId { get; private set; }
     public Guid ViewerId { get; private set; }
@@ -269,6 +271,9 @@ public sealed class DataManagerDb : IAsyncLifetime
         services.AddSingleton<IFileStorage, MemoryStorage>();
         services.AddSingleton<OneBase.Application.DataSources.IGoogleSheetsClient>(Sheets);
         services.AddSingleton<OneBase.AI.Gateway.IAiGateway>(Gateway);
+        // Telegram и консультант — подставные: без сети и настоящих отправок.
+        services.AddSingleton<OneBase.Application.Telegram.ITelegramGateway>(Telegram);
+        services.AddScoped<OneBase.AI.Consultant.IConsultantEngine>(_ => Consultant);
         services.AddHttpClient<OneBase.Infrastructure.Linko.LinkoClient>().ConfigurePrimaryHttpMessageHandler(() => Linko);
         Services = services.BuildServiceProvider();
 
@@ -366,6 +371,13 @@ public sealed class DataManagerDb : IAsyncLifetime
         Sheets.Failure = null;
         Clock.Now = null;
         await db.UserNotifications.ExecuteDeleteAsync();
+        await db.TelegramCampaigns.ExecuteDeleteAsync();
+        await db.TelegramAccounts.ExecuteDeleteAsync();
+        await db.TelegramLinkCodes.ExecuteDeleteAsync();
+        await db.AiReports.ExecuteDeleteAsync();
+        Telegram.Reset();
+        Consultant.Turns.Clear();
+        Consultant.Answer = null;
         Model.Script.Clear();
         Model.Calls.Clear();
         scope.ServiceProvider.GetRequiredService<OneBase.Application.Sales.SalesCacheSignal>().InvalidateHistory();
