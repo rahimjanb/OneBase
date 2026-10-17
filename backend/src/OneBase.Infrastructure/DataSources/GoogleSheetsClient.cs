@@ -16,7 +16,7 @@ namespace OneBase.Infrastructure.DataSources;
 
 /// <summary>
 /// Таблица Google → листы и значения ячеек в той же записи, что разбор отчётов AI Data Manager (числа — инвариантно, даты — ГГГГ-ММ-ДД).
-/// Только чтение.
+/// Строки листа — все (предел строк загрузок AI Data Manager здесь не действует), столбцы — до лимита AI Data Manager. Только чтение.
 /// Сервисным аккаунтом — Google Sheets API (токен OAuth по JWT из ключа, scope drive.readonly): список листов и значения только нужных
 /// листов — большая книга целиком не скачивается. Файл Excel, загруженный в Drive (не таблица Google), или Sheets API, выключенный
 /// в проекте, — файлом xlsx через Drive API: files.export (до 10 МБ; больше — выгрузка docs.google.com с тем же токеном), файл Excel —
@@ -38,7 +38,7 @@ public sealed partial class GoogleSheetsClient(HttpClient http, IReportReader re
     private const long MaxUnpackedBytes = 50 * 1024 * 1024;
 
     /// <summary>Ячеек за одно чтение через Sheets API — не больше: «все листы» большой книги заняли бы память сервера.</summary>
-    private const long MaxCells = 3_000_000;
+    private const long MaxCells = 5_000_000;
 
     /// <summary>Листов и ячеек (по размеру сетки) в одном запросе values:batchGet.</summary>
     private const int BatchSheets = 10;
@@ -144,9 +144,15 @@ public sealed partial class GoogleSheetsClient(HttpClient http, IReportReader re
         return (sheets, string.Empty);
     }
 
-    /// <summary>Значения листов через values:batchGet — по нескольку листов за запрос, не больше лимитов строк и столбцов AI Data Manager.</summary>
+    /// <summary>Значения листов через values:batchGet — по нескольку листов за запрос; все строки, столбцы — до лимита AI Data Manager.</summary>
     private async Task<ReportDocument> ValuesAsync(string id, ServiceAccountKey key, string token, IReadOnlyList<GridSheet> sheets, CancellationToken ct)
     {
+        // Лист, который уже по размеру сетки больше предела, не скачиваем вовсе.
+        if (sheets.FirstOrDefault(s => Cells(s) > MaxCells) is { } huge)
+        {
+            throw new DataSourceException($"Лист «{huge.Title}» слишком большой: {huge.Rows:N0} строк — больше {MaxCells / 1_000_000} млн ячеек за одно чтение.");
+        }
+
         var result = new List<ReportSheet>(sheets.Count);
         long cells = 0;
         foreach (var batch in Batches(sheets))
@@ -164,7 +170,7 @@ public sealed partial class GoogleSheetsClient(HttpClient http, IReportReader re
 
             for (var i = 0; i < batch.Count; i++)
             {
-                var sheet = Sheet(batch[i].Title, serialRanges[i], shownRanges[i], batch[i].Rows, batch[i].Columns, options.MaxRowsPerSheet, options.MaxColumns);
+                var sheet = Sheet(batch[i].Title, serialRanges[i], shownRanges[i], batch[i].Rows, batch[i].Columns, int.MaxValue, options.MaxColumns);
                 cells += sheet.Rows.Sum(r => (long)r.Count);
                 if (cells > MaxCells)
                 {
@@ -184,7 +190,7 @@ public sealed partial class GoogleSheetsClient(HttpClient http, IReportReader re
         long size = 0;
         foreach (var sheet in sheets)
         {
-            var estimate = (long)Math.Min(sheet.Rows, options.MaxRowsPerSheet + 1) * Math.Min(sheet.Columns, options.MaxColumns + 1);
+            var estimate = Cells(sheet);
             if (batch.Count > 0 && (batch.Count == BatchSheets || size + estimate > BatchCells))
             {
                 yield return batch;
@@ -202,10 +208,13 @@ public sealed partial class GoogleSheetsClient(HttpClient http, IReportReader re
         }
     }
 
+    /// <summary>Ячеек листа по размеру сетки (столбцы — сколько читаем).</summary>
+    private long Cells(GridSheet sheet) => (long)sheet.Rows * Math.Min(sheet.Columns, options.MaxColumns + 1);
+
     private async Task<JsonDocument> BatchGetAsync(string id, ServiceAccountKey key, string token, IReadOnlyList<GridSheet> sheets, string dates, CancellationToken ct)
     {
-        // На строку и столбец больше лимита — чтобы знать, что лист обрезан; диапазон больше листа Google сам сужает до сетки.
-        var last = $"{DataValues.ColumnLetter(options.MaxColumns)}{options.MaxRowsPerSheet + 1}";
+        // Все строки (диапазон без номера последней строки) и на столбец больше лимита — чтобы знать, что столбцы обрезаны.
+        var last = DataValues.ColumnLetter(options.MaxColumns);
         var ranges = string.Join("&", sheets.Select(s => "ranges=" + Uri.EscapeDataString($"'{s.Title.Replace("'", "''")}'!A1:{last}")));
         var url = $"https://sheets.googleapis.com/v4/spreadsheets/{Uri.EscapeDataString(id)}/values:batchGet?{ranges}" +
                   $"&majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption={dates}";

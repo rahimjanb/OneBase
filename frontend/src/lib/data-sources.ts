@@ -51,7 +51,14 @@ export type PnlMapping = {
 /**
  * Месяц: monthFromSheet — из названия листа («Сентябрь 2026», «09.2026»): лист на месяц; currentMonth — текущий месяц по Ташкенту на
  * момент синхронизации: с 1-го числа значения идут в новый месяц (те же цифры, что за прошлый, по расписанию не копируются).
+ * headers — снимок заголовков при сопоставлении (столбец → заголовок): переименовали или переставили столбцы — синхронизация не пишет.
  */
+/** Какие месяцы листа брать: all — все (не больше 24), current — текущий месяц, year — текущий год, last — последние months, range — from…to («2026-01»). */
+export type PeriodFilter = { mode: "all" | "current" | "year" | "last" | "range"; months?: number | null; from?: string | null; to?: string | null };
+
+export const periodText = (p: PeriodFilter | null | undefined) =>
+  !p || p.mode === "all" ? "все месяцы" : p.mode === "current" ? "текущий месяц" : p.mode === "year" ? "текущий год" : p.mode === "last" ? `последние ${p.months} мес.` : `${p.from} — ${p.to}`;
+
 export type FieldBinding = {
   field: string;
   plan?: PlanMapping | null;
@@ -60,6 +67,60 @@ export type FieldBinding = {
   replace: boolean;
   monthFromSheet?: boolean;
   currentMonth?: boolean;
+  headers?: Record<string, string> | null;
+  period?: PeriodFilter | null;
+};
+
+/** Статус предложения ИИ: accepted — выбрано сразу, review — проверьте, unmatched — не сопоставлено, rejected — поле или столбец не существуют, blocked — поле ведёт другая привязка. */
+export type MappingStatus = "accepted" | "review" | "unmatched" | "rejected" | "blocked";
+
+export type MappingSuggestion = {
+  sourceColumn: string;
+  header: string;
+  targetField: string | null;
+  fieldLabel: string | null;
+  roleLabel: string | null;
+  category: string | null;
+  confidence: number;
+  reason: string;
+  transformType: string;
+  requiresConfirmation: boolean;
+  status: MappingStatus;
+  warnings: string[];
+};
+
+export type MappingFieldSetting = { field: string; monthSource: "column" | "sheet" | "current" | "fixed"; year: number | null; month: number | null; period?: PeriodFilter | null };
+
+export type MappingTargetView = { key: string; field: string; label: string; role: string; blocked: string | null };
+
+/** Предложение ИИ после проверки бэкендом. fields — привязка из принятых сразу соответствий; stale — устаревшие сохранённые сопоставления. */
+export type SheetMappingProposal = {
+  sheet: string;
+  suggestions: MappingSuggestion[];
+  fieldSettings: MappingFieldSetting[];
+  fields: FieldBinding[];
+  fieldErrors: string[];
+  targets: MappingTargetView[];
+  categories: string[];
+  notes: string[];
+  stale: string[];
+  model: string;
+  acceptConfidence: number;
+  reviewConfidence: number;
+};
+
+export type MappingDecision = { sourceColumn: string; targetField: string; category: string | null; transformType: string | null };
+
+export type AutoMapInput = { section: string; connectionId: string; sheets: string[]; sheet: string | null; headerRow: number; bindingId: string | null };
+
+export type AutoMapConfirmInput = AutoMapInput & {
+  decisions: MappingDecision[];
+  settings: MappingFieldSetting[];
+  schedule: Schedule;
+  intervalMinutes: number | null;
+  dailyAt: string | null;
+  enabled: boolean;
+  dryRun: boolean;
 };
 
 /** «Все листы таблицы» в списке листов привязки — и те, что появятся позже. */
@@ -108,6 +169,48 @@ export type DataSourcesOverview = {
   canApply: boolean;
   /** Планы на текущий месяц: сколько регионов с планом сейчас и было в прошлом месяце. */
   monthPlans: { field: string; label: string; period: string; regions: number; previousRegions: number }[];
+  /** Кто ведёт какие данные. */
+  ownership: OwnershipRow[];
+  /** Конфликтов, которые ждут исправления таблицы. */
+  openConflicts: number;
+};
+
+/**
+ * Строка карты владения: linko — факт из Linko, google_sheets — поле ведёт привязка Google Sheets (меняет только она), onebase — правится
+ * в OneBase (AI Data Manager, настройки продаж), calculated — считается при показе и не хранится.
+ */
+export type OwnershipRow = {
+  key: string;
+  label: string;
+  group: string;
+  owner: "linko" | "google_sheets" | "onebase" | "calculated";
+  source: string;
+  detail: string | null;
+  updatedAt: string | null;
+  updatedNote: string | null;
+};
+
+/** Конфликт источников: строка таблицы, которую не записали (row), или попытка изменить чужое поле (owner). */
+export type ConflictView = {
+  id: string;
+  source: string;
+  sourceLabel: string;
+  field: string;
+  fieldLabel: string;
+  entity: string | null;
+  period: string | null;
+  kind: "row" | "owner";
+  kindLabel: string;
+  message: string;
+  sourceRef: string | null;
+  rule: string | null;
+  decision: string;
+  needsAction: boolean;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  occurrences: number;
+  resolvedAt: string | null;
+  binding: string | null;
 };
 
 export type SheetPreview = { sheet: string; rows: number; columns: number; letters: string[]; cells: string[][] };
@@ -127,7 +230,7 @@ export type FieldResult = {
 
 export type RunView = {
   id: string;
-  trigger: "manual" | "schedule";
+  trigger: "manual" | "schedule" | "chat";
   startedAt: string;
   finishedAt: string | null;
   status: SyncStatus;
@@ -164,6 +267,18 @@ export const dataSourcesApi = {
   deleteBinding: (id: string) => bff<void>(`${base}/bindings/${id}`, { method: "DELETE" }),
   sync: (id: string) => bff<RunView>(`${base}/bindings/${id}/sync`, { method: "POST" }),
   runs: (id: string) => bff<RunView[]>(`${base}/bindings/${id}/runs`),
+  conflicts: () => bff<ConflictView[]>(`${base}/conflicts`),
+  autoMap: (input: AutoMapInput) => bff<SheetMappingProposal>(`${base}/auto-map`, { method: "POST", body: JSON.stringify(input) }),
+  confirmAutoMap: (input: AutoMapConfirmInput) =>
+    bff<{ fields: FieldBinding[]; binding: BindingView | null }>(`${base}/auto-map/confirm`, { method: "POST", body: JSON.stringify(input) }),
+  closeConflict: (id: string) => bff<void>(`${base}/conflicts/${id}/close`, { method: "POST" }),
+};
+
+export const ownerLabel: Record<OwnershipRow["owner"], { label: string; className: string }> = {
+  linko: { label: "Linko", className: "bg-accent-soft text-accent-strong" },
+  google_sheets: { label: "Google Sheets", className: "bg-ok-soft text-ok" },
+  onebase: { label: "OneBase", className: "bg-muted text-ink-2" },
+  calculated: { label: "Расчёт", className: "bg-warn-soft text-warn" },
 };
 
 export const statusLabel: Record<SyncStatus, { label: string; className: string }> = {

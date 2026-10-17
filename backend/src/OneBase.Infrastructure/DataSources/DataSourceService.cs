@@ -36,8 +36,9 @@ public sealed record LinkoSourceView(bool Configured, bool Enabled, string? Host
 /// <summary>План вида на текущий месяц: сколько регионов с планом сейчас и сколько было в прошлом месяце (0 и 0 — план не ведётся).</summary>
 public sealed record MonthPlanView(string Field, string Label, string Period, int Regions, int PreviousRegions);
 
+/// <summary>Ownership — кто ведёт какие данные (карта владения), OpenConflicts — конфликтов, которые ждут исправления таблицы.</summary>
 public sealed record DataSourcesOverview(LinkoSourceView Linko, IReadOnlyList<ConnectionView> Connections, IReadOnlyList<SectionView> Sections,
-    IReadOnlyList<DataSourceField> Fields, bool CanApply, IReadOnlyList<MonthPlanView> MonthPlans);
+    IReadOnlyList<DataSourceField> Fields, bool CanApply, IReadOnlyList<MonthPlanView> MonthPlans, IReadOnlyList<OwnershipRow> Ownership, int OpenConflicts);
 
 public sealed record SheetPreview(string Sheet, int Rows, int Columns, IReadOnlyList<string> Letters, IReadOnlyList<IReadOnlyList<string>> Cells);
 
@@ -67,7 +68,8 @@ public sealed class DataSourceRunLocks
 /// читаются тем же разбором, что отчёты AI Data Manager, и записываются его планом изменений (подготовка → применение одной
 /// транзакцией → проверка) от имени того, кто настроил привязку: каждая синхронизация видна в журнале операций и откатывается
 /// там же. Обновляются только выбранные в привязке поля; строки с ошибкой (регион не найден, не число) — синхронизация поля
-/// не записывает ничего, пока таблицу не исправят.
+/// не записывает ничего, пока таблицу не исправят, а строки видны в журнале конфликтов. Поле, которое ведёт включённая привязка,
+/// меняет только она (FieldOwnership): ни чат AI Data Manager, ни «Настройки продаж» его не перезаписывают.
 /// </summary>
 public sealed class DataSourceService(
     OneBaseDbContext db,
@@ -78,6 +80,7 @@ public sealed class DataSourceService(
     IDataProtectionProvider protection,
     IMemoryCache cache,
     DataSourceRunLocks locks,
+    DataSourceOwnershipService ownershipMap,
     IAuditLogger audit,
     TimeProvider clock,
     ILogger<DataSourceService> logger)
@@ -112,7 +115,9 @@ public sealed class DataSourceService(
             sections,
             DataSourceCatalog.Fields,
             await CanApplyAsync(userId, ct),
-            await MonthPlansAsync(ct));
+            await MonthPlansAsync(ct),
+            await ownershipMap.MapAsync(ct),
+            await ownershipMap.OpenCountAsync(ct));
     }
 
     /// <summary>Планы на текущий месяц по видам: есть ли, и были ли в прошлом месяце.</summary>
@@ -233,16 +238,20 @@ public sealed class DataSourceService(
         return ConnectionView(connection, await db.DataSourceBindings.CountAsync(b => b.ConnectionId == id, ct));
     }
 
-    /// <summary>Первые строки листа — чтобы выбрать столбцы в привязке. Лист кэшируется на 3 минуты.</summary>
+    /// <summary>Первые строки листа и его размер — чтобы выбрать столбцы в привязке. Предпросмотр кэшируется на 3 минуты (сам лист — нет).</summary>
     public async Task<SheetPreview> PreviewAsync(Guid connectionId, string sheet, CancellationToken ct)
     {
         var connection = await db.DataSourceConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == connectionId, ct) ?? throw new KeyNotFoundException();
         // Ключ — с моментом последней проверки: после «Проверить» предпросмотр читает таблицу заново, а не из кэша.
-        var document = await cache.GetOrCreateAsync($"datasource:{connection.Id}:{connection.UpdatedAt?.Ticks}:{connection.LastCheckedAt?.Ticks}:{sheet}", async entry =>
+        return await cache.GetOrCreateAsync($"datasource:{connection.Id}:{connection.UpdatedAt?.Ticks}:{connection.LastCheckedAt?.Ticks}:{sheet}", async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(3);
-            return await sheets.ReadAsync(Source(connection), [sheet], ct);
+            return Preview(await sheets.ReadAsync(Source(connection), [sheet], ct), sheet);
         }) ?? throw new DataSourceException("Таблица не прочитана.");
+    }
+
+    private static SheetPreview Preview(ReportDocument document, string sheet)
+    {
         ReportSheet found;
         try
         {
@@ -315,6 +324,49 @@ public sealed class DataSourceService(
         }
     }
 
+    /// <summary>Лист для ИИ-сопоставления: название таблицы, её листы и значения листа (sheet null — первый лист таблицы).</summary>
+    public async Task<(string Connection, IReadOnlyList<string> Sheets, ReportSheet Sheet)> SheetAsync(Guid connectionId, string? sheet, CancellationToken ct)
+    {
+        var connection = await db.DataSourceConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == connectionId, ct)
+                         ?? throw new DataSourceException("Таблица не найдена — добавьте её в «Подключения».");
+        var names = string.IsNullOrWhiteSpace(connection.Sheets)
+            ? []
+            : (JsonSerializer.Deserialize<List<SheetInfo>>(connection.Sheets, DataSourceRules.Json) ?? []).Select(s => s.Name).ToList();
+        var name = !string.IsNullOrWhiteSpace(sheet) && sheet != DataSourceRules.AllSheets ? sheet
+            : names.FirstOrDefault() ?? throw new DataSourceException("Листы таблицы неизвестны — нажмите «Проверить» у подключения.");
+        var document = await sheets.ReadAsync(Source(connection), [name], ct);
+        return (connection.Name, names, document.Sheets.Single());
+    }
+
+    /// <summary>Право «AI Data Manager» — нужно, чтобы настраивать привязки (в том числе ИИ-сопоставлением).</summary>
+    public Task EnsureCanApplyAsync(Guid userId, CancellationToken ct) => RequireApplyAsync(userId, ct);
+
+    /// <summary>Поля, которые уже ведут другие привязки (кроме bindingId): поле → правило. Их нельзя ни предложить, ни сохранить.</summary>
+    public async Task<IReadOnlyDictionary<string, string>> TakenFieldsAsync(Guid? bindingId, CancellationToken ct)
+    {
+        var others = await db.DataSourceBindings.AsNoTracking()
+            .Where(b => bindingId == null || b.Id != bindingId)
+            .OrderBy(b => b.CreatedAt)
+            .Select(b => new { b.Fields, b.Sheets, b.Section, b.Enabled, Connection = b.Connection!.Name })
+            .ToListAsync(ct);
+        var taken = new Dictionary<string, string>();
+        foreach (var o in others)
+        {
+            foreach (var f in DataSourceRules.ReadFields(o.Fields))
+            {
+                taken.TryAdd(f.Field, $"поле уже ведёт привязка «{o.Connection}» ({DataSourceRules.SheetsLabel(DataSourceRules.ReadSheets(o.Sheets))}) " +
+                                      $"в разделе «{DataSourceCatalog.Section(o.Section)?.Name ?? o.Section}»{(o.Enabled ? "" : ", выключена")} — одно поле, один источник");
+            }
+        }
+
+        return taken;
+    }
+
+    /// <summary>Поля привязки (для ИИ-сопоставления существующей привязки).</summary>
+    public async Task<IReadOnlyList<DataSourceFieldBinding>> BindingFieldsAsync(Guid bindingId, CancellationToken ct) =>
+        DataSourceRules.ReadFields(await db.DataSourceBindings.AsNoTracking().Where(b => b.Id == bindingId).Select(b => b.Fields).FirstOrDefaultAsync(ct)
+                                   ?? throw new KeyNotFoundException());
+
     private SheetSource Source(DataSourceConnection c) =>
         new(c.SpreadsheetId, c.Access, c.Access == SheetAccess.ServiceAccount && c.ProtectedKey is { } key ? Unprotect(key) : null);
 
@@ -347,8 +399,9 @@ public sealed class DataSourceService(
             throw new DataSourceException(fieldsError);
         }
 
-        var schedule = string.IsNullOrWhiteSpace(input.Schedule) ? DataSourceRules.Manual : input.Schedule.Trim();
-        if (DataSourceRules.ScheduleError(schedule, input.IntervalMinutes, input.DailyAt) is { } scheduleError)
+        var schedule = string.IsNullOrWhiteSpace(input.Schedule) ? DataSourceRules.Interval : input.Schedule.Trim();
+        var interval = input.IntervalMinutes ?? DataSourceRules.DefaultIntervalMinutes;
+        if (DataSourceRules.ScheduleError(schedule, interval, input.DailyAt) is { } scheduleError)
         {
             throw new DataSourceException(scheduleError);
         }
@@ -380,9 +433,11 @@ public sealed class DataSourceService(
         }
 
         DataSourceBinding binding;
+        IReadOnlyList<string> removed = [];
         if (id is { } existing)
         {
             binding = await db.DataSourceBindings.FirstOrDefaultAsync(b => b.Id == existing, ct) ?? throw new KeyNotFoundException();
+            removed = DataSourceRules.ReadFields(binding.Fields).Select(f => f.Field).Except(fields.Select(f => f.Field)).ToList();
             binding.UpdatedById = userId;
             binding.UpdatedAt = clock.GetUtcNow();
         }
@@ -398,11 +453,16 @@ public sealed class DataSourceService(
         binding.HeaderRow = input.HeaderRow;
         binding.Fields = JsonSerializer.Serialize(fields, DataSourceRules.Json);
         binding.Schedule = schedule;
-        binding.IntervalMinutes = schedule == DataSourceRules.Interval ? input.IntervalMinutes : null;
+        binding.IntervalMinutes = schedule == DataSourceRules.Interval ? interval : null;
         binding.DailyAt = schedule == DataSourceRules.Daily ? input.DailyAt : null;
         binding.Enabled = input.Enabled;
         binding.NextRunAt = input.Enabled ? DataSourceRules.NextRun(schedule, binding.IntervalMinutes, binding.DailyAt, clock.GetUtcNow()) : null;
         await db.SaveChangesAsync(ct);
+        if (removed.Count > 0)
+        {
+            await ownershipMap.CloseForBindingAsync(binding.Id, removed, "поле убрано из привязки", ct);
+        }
+
         await audit.LogAsync(ActorType.User, userId.ToString(), id is null ? "datasource.binding.created" : "datasource.binding.updated",
             nameof(DataSourceBinding), binding.Id.ToString(), new { binding.Section, Sheets = sheetList, Fields = fields.Select(f => f.Field), binding.Schedule }, ct);
         return View(binding, connection.Name);
@@ -411,6 +471,8 @@ public sealed class DataSourceService(
     public async Task DeleteBindingAsync(Guid id, Guid userId, CancellationToken ct)
     {
         var binding = await db.DataSourceBindings.FirstOrDefaultAsync(b => b.Id == id, ct) ?? throw new KeyNotFoundException();
+        // Данные, записанные привязкой, остаются; её открытые конфликты закрываются (история журнала остаётся).
+        await ownershipMap.CloseForBindingAsync(id, null, "привязка удалена", ct);
         db.DataSourceBindings.Remove(binding);
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, userId.ToString(), "datasource.binding.deleted", nameof(DataSourceBinding), id.ToString(),
@@ -494,6 +556,8 @@ public sealed class DataSourceService(
 
         var run = new DataSourceSyncRun { BindingId = binding.Id, Trigger = trigger, Status = "running", UserId = userId ?? binding.CreatedById };
         var results = new List<DataSourceFieldResult>();
+        var drafts = new List<ConflictDraft>();
+        var rule = "привязка выключена — запуск вручную";
         string status;
         string message;
         try
@@ -505,10 +569,15 @@ public sealed class DataSourceService(
 
             // Изменения пишутся от имени того, кто настроил привязку (по кнопке — того, кто нажал): журнал AI Data Manager.
             var label = sheetNames.Count == 1 ? sheetNames[0] : $"листов {sheetNames.Count}";
-            var actor = new DataActor(run.UserId!.Value, null, $"Google Sheets «{connection.Name}» / {label}");
+            var actor = new DataActor(run.UserId!.Value, null, $"Google Sheets «{connection.Name}» / {label}", binding.Id);
+            if (binding.Enabled)
+            {
+                rule = $"поле ведёт Google Sheets «{connection.Name}» ({DataSourceRules.SheetsLabel(DataSourceRules.ReadSheets(binding.Sheets))})";
+            }
+
             foreach (var field in DataSourceRules.ReadFields(binding.Fields))
             {
-                results.Add(await SyncFieldAsync(binding, field, document, sheetNames, actor, trigger == "schedule", ct));
+                results.Add(await SyncFieldAsync(binding, field, document, sheetNames, actor, trigger == "schedule", drafts, ct));
             }
 
             status = DataSourceRules.Overall(results.Select(r => r.Status).ToList());
@@ -527,19 +596,38 @@ public sealed class DataSourceService(
         }
 
         var now = clock.GetUtcNow();
+        db.ChangeTracker.Clear();
+        var tracked = await db.DataSourceBindings.FirstOrDefaultAsync(b => b.Id == bindingId, CancellationToken.None);
+        var next = tracked is { Enabled: true } ? DataSourceRules.NextRun(tracked.Schedule, tracked.IntervalMinutes, tracked.DailyAt, now) : null;
+
+        // Ошибка по расписанию (Google недоступен, сеть, лист пропал) — один повтор через 5 минут; вторая подряд — уже по расписанию.
+        // Записанные раньше данные остаются: ошибка ничего не удаляет.
+        if (status == DataSourceRules.Error && trigger == "schedule" && binding.LastStatus != DataSourceRules.Error && tracked is { Enabled: true })
+        {
+            var retry = now.AddMinutes(DataSourceRules.RetryMinutes);
+            if (next is null || retry < next)
+            {
+                next = retry;
+                message += $" Повтор через {DataSourceRules.RetryMinutes} минут.";
+            }
+        }
+
         run.Status = status;
         run.Message = Clip(message);
         run.FinishedAt = now;
         run.Details = JsonSerializer.Serialize(results, DataSourceRules.Json);
-        db.ChangeTracker.Clear();
         db.DataSourceSyncRuns.Add(run);
-        var tracked = await db.DataSourceBindings.FirstOrDefaultAsync(b => b.Id == bindingId, CancellationToken.None);
         if (tracked is not null)
         {
             tracked.LastRunAt = now;
             tracked.LastStatus = status;
             tracked.LastMessage = run.Message;
-            tracked.NextRunAt = tracked.Enabled ? DataSourceRules.NextRun(tracked.Schedule, tracked.IntervalMinutes, tracked.DailyAt, now) : null;
+            tracked.NextRunAt = next;
+
+            // Строки с ошибками — в журнал конфликтов; исправленные — закрываются. Только поля, прочитанные до конца.
+            var checkedFields = results.Where(r => r.Status is DataSourceRules.Ok or DataSourceRules.Unchanged or DataSourceRules.Conflicts)
+                .Select(r => r.Field).ToList();
+            await ownershipMap.ReconcileAsync(bindingId, rule, checkedFields, drafts, run.UserId, CancellationToken.None);
         }
 
         await db.SaveChangesAsync(CancellationToken.None);
@@ -548,16 +636,37 @@ public sealed class DataSourceService(
         return new RunView(run.Id, run.Trigger, run.CreatedAt, run.FinishedAt, run.Status, run.Message, results, name);
     }
 
-    /// <summary>Значения поля из листов: как подготовить план изменений, и — у «текущего месяца» — месяц и отпечаток значений.</summary>
-    private sealed record Extracted(Func<Task<DataChangeSetView>> Prepare, string? Period = null, string? Fingerprint = null);
+    /// <summary>
+    /// Значения поля из листов: как подготовить план изменений, и — у «текущего месяца» — месяц и отпечаток значений. Problems — строки,
+    /// которые нельзя записать ещё до плана (у одного региона в таблице разные значения).
+    /// </summary>
+    private sealed record Extracted(Func<Task<DataChangeSetView>> Prepare, string? Period = null, string? Fingerprint = null,
+        IReadOnlyList<ConflictDraft>? Problems = null);
 
     private async Task<DataSourceFieldResult> SyncFieldAsync(DataSourceBinding binding, DataSourceFieldBinding f, ReportDocument document,
-        IReadOnlyList<string> sheetNames, DataActor actor, bool scheduled, CancellationToken ct)
+        IReadOnlyList<string> sheetNames, DataActor actor, bool scheduled, List<ConflictDraft> drafts, CancellationToken ct)
     {
         var field = DataSourceCatalog.Field(f.Field);
         if (field is null)
         {
             return new DataSourceFieldResult(f.Field, f.Field, DataSourceRules.Error, "поле больше не поддерживается");
+        }
+
+        // Период поля: строки других месяцев не пишутся и не удаляются; листы «месяц в названии» вне периода не читаются вовсе.
+        var range = field.Kind == "profile" || f.CurrentMonth ? null : DataSourceRules.PeriodRange(f.Period, clock.GetUtcNow());
+        var fieldSheets = f.MonthFromSheet && range is not null
+            ? sheetNames.Where(s => SheetInPeriod(s, f.Plan?.Year ?? f.Pnl?.Year, range)).ToList()
+            : sheetNames;
+        if (fieldSheets.Count == 0)
+        {
+            return new DataSourceFieldResult(field.Key, field.Label, DataSourceRules.Waiting,
+                $"листа за период «{DataSourceRules.PeriodLabel(f.Period)}» в таблице ещё нет — жду, когда его добавят");
+        }
+
+        // Сопоставление сделано под другую разметку листа (переименовали или переставили столбцы) — не читаем не тот столбец.
+        if (DataSourceRules.StructureError(document, fieldSheets, binding.HeaderRow, f) is { } changed)
+        {
+            return new DataSourceFieldResult(field.Key, field.Label, DataSourceRules.Error, changed);
         }
 
         DataChangeSetView view;
@@ -566,10 +675,18 @@ public sealed class DataSourceService(
         {
             extracted = field.Kind switch
             {
-                "plan" => PlanValues(binding, f, field, document, sheetNames, actor, ct),
+                "plan" => PlanValues(binding, f, field, document, fieldSheets, range, actor, ct),
                 "profile" => ProfileValues(binding, f, field, document, sheetNames, actor, ct),
-                _ => PnlValues(binding, f, document, sheetNames, actor, ct),
+                _ => PnlValues(binding, f, document, fieldSheets, range, actor, ct),
             };
+
+            if (extracted.Problems is { Count: > 0 } problems)
+            {
+                drafts.AddRange(problems);
+                return new DataSourceFieldResult(field.Key, field.Label, DataSourceRules.Conflicts,
+                    $"не записано: строк с ошибками {problems.Count} — исправьте таблицу", Conflicts: problems.Count,
+                    Problems: problems.Take(5).Select(p => $"{p.Entity}: {p.Message}").ToList());
+            }
 
             // Новый месяц, а в листе «текущий месяц» те же цифры, что записаны за прошлый: по расписанию не пишем — ждём обновления таблицы.
             // Кнопкой «Синхронизировать сейчас» — пишем: человек сам решил, что план нового месяца такой же.
@@ -593,7 +710,7 @@ public sealed class DataSourceService(
 
         try
         {
-            var result = await WriteAsync(field, view, actor, ct);
+            var result = await WriteAsync(field, view, actor, drafts, ct);
             return result.Status is DataSourceRules.Ok or DataSourceRules.Unchanged
                 ? result with { Period = extracted.Period, Fingerprint = extracted.Fingerprint }
                 : result;
@@ -606,12 +723,14 @@ public sealed class DataSourceService(
     }
 
     /// <summary>План изменений поля: с ошибками строк или без изменений — отменяется; иначе применяется и проверяется.</summary>
-    private async Task<DataSourceFieldResult> WriteAsync(DataSourceField field, DataChangeSetView view, DataActor actor, CancellationToken ct)
+    private async Task<DataSourceFieldResult> WriteAsync(DataSourceField field, DataChangeSetView view, DataActor actor, List<ConflictDraft> drafts,
+        CancellationToken ct)
     {
         var conflicts = view.Items.Where(i => i.Action == DataChangeAction.Conflict).ToList();
         var counts = Counts(view);
         if (conflicts.Count > 0)
         {
+            drafts.AddRange(conflicts.Select(c => new ConflictDraft(field.Key, c.Label, view.Period, c.Message ?? "строку нельзя записать", c.SourceRef)));
             await changes.CancelAsync(view.Id, actor.UserId, ct);
             return new DataSourceFieldResult(field.Key, field.Label, "conflicts",
                 $"не записано: строк с ошибками {conflicts.Count} — исправьте таблицу", view.Id, Conflicts: conflicts.Count,
@@ -643,7 +762,7 @@ public sealed class DataSourceService(
     /// (тогда — с отпечатком значений для защиты от копирования прошлого плана в новый месяц).
     /// </summary>
     private Extracted PlanValues(DataSourceBinding binding, DataSourceFieldBinding f, DataSourceField field, ReportDocument document,
-        IReadOnlyList<string> sheetNames, DataActor actor, CancellationToken ct)
+        IReadOnlyList<string> sheetNames, (DateOnly From, DateOnly To)? range, DataActor actor, CancellationToken ct)
     {
         var m = f.Plan!;
         var (currentYear, currentMonth) = DataSourceRules.CurrentPeriod(clock.GetUtcNow());
@@ -672,15 +791,16 @@ public sealed class DataSourceService(
             throw new DataManagerException("в листах нет строк со значениями плана");
         }
 
+        values = InPeriod(values, f, range, v => (v.Year, v.Month));
         return new Extracted(
-            () => changes.PrepareRegionPlansAsync(actor, new RegionPlanRequest(field.PlanKind!.Value, f.Replace, null, null, values, Note(sheetNames)), ct),
+            () => changes.PrepareRegionPlansAsync(actor, new RegionPlanRequest(field.PlanKind!.Value, f.Replace, null, null, values, Note(sheetNames, f)), ct),
             f.CurrentMonth ? DataSourceRules.PeriodKey(currentYear, currentMonth) : null,
             f.CurrentMonth ? DataSourceRules.Fingerprint(values.Select(v => $"{v.Region}|{v.Category}|{v.Value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? v.InvalidRaw}")) : null);
     }
 
     /// <summary>
     /// Дилер или СВР со всех листов. Один регион в нескольких строках (на одном листе или на разных) с одним значением — одна строка;
-    /// с разными — ошибка поля: какое из значений верное, решает таблица, а не порядок строк.
+    /// с разными — конфликт строки: какое из значений верное, решает таблица, а не порядок строк (поле не записывается).
     /// </summary>
     private Extracted ProfileValues(DataSourceBinding binding, DataSourceFieldBinding f, DataSourceField field, ReportDocument document,
         IReadOnlyList<string> sheetNames, DataActor actor, CancellationToken ct)
@@ -692,23 +812,25 @@ public sealed class DataSourceService(
         }
 
         var values = new List<RegionProfileValue>();
+        var problems = new List<ConflictDraft>();
         foreach (var group in all.GroupBy(v => DataValues.Normalize(v.Region)))
         {
             var distinct = group.Select(v => v.Value).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (distinct.Count > 1)
             {
-                throw new DataManagerException($"у региона «{group.First().Region}» в таблице разные значения: {string.Join(" / ", distinct)} " +
-                                               $"({string.Join(", ", group.Select(v => v.SourceRef))})");
+                problems.Add(new ConflictDraft(field.Key, group.First().Region, null,
+                    $"в таблице разные значения: {string.Join(" / ", distinct)}", string.Join(", ", group.Select(v => v.SourceRef))));
+                continue;
             }
 
             values.Add(group.First());
         }
 
-        return new Extracted(() => changes.PrepareRegionProfilesAsync(actor, values, null, Note(sheetNames), ct));
+        return new Extracted(() => changes.PrepareRegionProfilesAsync(actor, values, null, Note(sheetNames), ct), Problems: problems);
     }
 
     private Extracted PnlValues(DataSourceBinding binding, DataSourceFieldBinding f, ReportDocument document, IReadOnlyList<string> sheetNames,
-        DataActor actor, CancellationToken ct)
+        (DateOnly From, DateOnly To)? range, DataActor actor, CancellationToken ct)
     {
         var (currentYear, currentMonth) = DataSourceRules.CurrentPeriod(clock.GetUtcNow());
         var values = new List<PnlRawValue>();
@@ -728,8 +850,9 @@ public sealed class DataSourceService(
             values.AddRange(PnlExtraction.Values(document, map));
         }
 
+        values = InPeriod(values, f, range, v => (v.Year, v.Month));
         return new Extracted(
-            () => changes.PreparePnlAsync(actor, new PnlRequest(f.Replace, null, null, values, null, null, Note(sheetNames)), ct),
+            () => changes.PreparePnlAsync(actor, new PnlRequest(f.Replace, null, null, values, null, null, Note(sheetNames, f)), ct),
             f.CurrentMonth ? DataSourceRules.PeriodKey(currentYear, currentMonth) : null,
             f.CurrentMonth ? DataSourceRules.Fingerprint(values.Select(v => $"{v.Dealer}|{v.Line}|{v.Value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? v.InvalidRaw}")) : null);
     }
@@ -756,7 +879,46 @@ public sealed class DataSourceService(
         return (null, null);
     }
 
-    private static string Note(IReadOnlyList<string> sheetNames) => $"Синхронизация из Google Sheets: {DataSourceRules.SheetsLabel(sheetNames)}.";
+    private static string Note(IReadOnlyList<string> sheetNames, DataSourceFieldBinding? f = null) =>
+        $"Синхронизация из Google Sheets: {DataSourceRules.SheetsLabel(sheetNames)}" +
+        (f?.Period is { Mode: not DataSourceRules.PeriodAll } p && !f.CurrentMonth ? $", период: {DataSourceRules.PeriodLabel(p)}." : ".");
+
+    /// <summary>
+    /// Строки периода поля. Без периода больше 24 месяцев — понятная ошибка с подсказкой выбрать период (за раз AI Data Manager пишет не
+    /// больше 24 месяцев); в периоде строк нет — тоже ошибка поля, а не «без изменений».
+    /// </summary>
+    private static List<T> InPeriod<T>(List<T> values, DataSourceFieldBinding f, (DateOnly From, DateOnly To)? range, Func<T, (int Year, int Month)> month)
+    {
+        var kept = values.Where(v => DataSourceRules.InPeriod(range, month(v).Year, month(v).Month)).ToList();
+        var label = DataSourceRules.PeriodLabel(f.Period);
+        if (kept.Count == 0 && values.Count > 0)
+        {
+            throw new DataManagerException($"в листах нет строк за период «{label}»");
+        }
+
+        var months = kept.Select(month).Where(m => m.Month is >= 1 and <= 12 && m.Year > 0).Distinct().Count();
+        if (months > DataSourceRules.MaxPeriodMonths)
+        {
+            throw new DataManagerException($"в листе {months} месяцев ({label}) — за раз можно не больше {DataSourceRules.MaxPeriodMonths}: выберите в привязке " +
+                                           "нужный период поля (например, «текущий год» или «последние 3 месяца»)");
+        }
+
+        return kept;
+    }
+
+    /// <summary>Лист «месяц в названии» входит в период; название без месяца — оставляем (ошибка поля скажет, что не так).</summary>
+    private static bool SheetInPeriod(string sheet, int? fallbackYear, (DateOnly From, DateOnly To)? range)
+    {
+        try
+        {
+            var (year, month) = DataSourceRules.SheetMonth(sheet, fallbackYear);
+            return DataSourceRules.InPeriod(range, year, month);
+        }
+        catch (DataManagerException)
+        {
+            return true;
+        }
+    }
 
     private static ChangeCounts Counts(DataChangeSetView view) =>
         view.Summary.TryGetProperty("counts", out var c) ? c.Deserialize<ChangeCounts>(DataTargets.Json) ?? new ChangeCounts(0, 0, 0, 0, 0) : new ChangeCounts(0, 0, 0, 0, 0);

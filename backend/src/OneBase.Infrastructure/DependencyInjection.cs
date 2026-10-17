@@ -114,14 +114,25 @@ public static class DependencyInjection
         services.AddSingleton(dataManager);
         services.AddSingleton<IReportReader, DataManager.ReportReader>();
         // Источники данных: таблицы Google Sheets → поля разделов продаж (через план изменений AI Data Manager), синхронизация по расписанию.
-        services.AddHttpClient<OneBase.Application.DataSources.IGoogleSheetsClient, DataSources.GoogleSheetsClient>(http => http.Timeout = TimeSpan.FromSeconds(60));
+        // Строки таблиц Google — все: свой разбор xlsx без предела строк загрузок AI Data Manager (память бережёт предел размера книги в клиенте).
+        var sheetReader = new DataManager.ReportReader(new OneBase.Application.DataManager.DataManagerOptions { MaxRowsPerSheet = int.MaxValue, MaxColumns = dataManager.MaxColumns });
+        services.AddHttpClient(nameof(DataSources.GoogleSheetsClient), http => http.Timeout = TimeSpan.FromSeconds(60))
+            .AddTypedClient<OneBase.Application.DataSources.IGoogleSheetsClient>((http, _) => new DataSources.GoogleSheetsClient(http, sheetReader, dataManager));
         services.AddSingleton<DataSources.DataSourceRunLocks>();
+        services.AddScoped<DataSources.DataSourceOwnershipService>();
+        // ИИ-сопоставление столбцов: пороги уверенности — DataSources:AutoMap (модель ИИ — ISheetMappingAdvisor из AddAi).
+        services.AddSingleton(config.GetSection(OneBase.Application.DataSources.SheetMappingOptions.Section).Get<OneBase.Application.DataSources.SheetMappingOptions>()
+                              ?? new OneBase.Application.DataSources.SheetMappingOptions());
+        services.AddScoped<DataSources.DataSourceAutoMapService>();
+        // AI Data Manager: подключённые таблицы Google Sheets — список, свежий лист, синхронизация привязки.
+        services.AddScoped<OneBase.Application.DataSources.IDataSourceGateway, DataSources.DataSourceGateway>();
         services.AddScoped<DataSources.DataSourceService>();
         services.AddHostedService<DataSources.DataSourceSyncWorker>();
 
         // Отчёты AI-консультанта: файл Excel из листов отчёта.
         services.AddSingleton<OneBase.Application.Reports.IReportWorkbookWriter, Reports.ReportWorkbookWriter>();
         services.AddScoped<OneBase.Application.DataManager.DataFileService>();
+        services.AddScoped<OneBase.Application.DataSources.FieldOwnership>();
         services.AddScoped<OneBase.Application.DataManager.DataChangeService>();
         services.AddScoped<OneBase.Application.DataManager.IDataChangeApplier, DataManager.DataChangeApplier>();
 

@@ -21,9 +21,10 @@ type Region = {
   note: string | null;
 };
 type Agent = { linkoUserId: number; name: string; isActive: boolean; job: string | null; hasSales: boolean; isSalesRep: boolean; isVacancy: boolean };
-type Setup = { directions: Direction[]; regions: Region[]; agents: Agent[]; categories: { id: number; name: string }[]; targets: Record<string, number> };
+/** owners — дилер и СВР, которые ведёт привязка Google Sheets (поле → правило): здесь они только для просмотра. */
+type Setup = { directions: Direction[]; regions: Region[]; agents: Agent[]; categories: { id: number; name: string }[]; targets: Record<string, number>; owners?: Record<string, string> };
 
-const control = "h-8 rounded-md border border-line bg-surface px-2 text-sm text-ink focus:border-accent focus:outline-none";
+const control = "h-8 rounded-md border border-line bg-surface px-2 text-sm text-ink focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-60";
 const input = `${control} w-full`;
 const button = "inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-muted disabled:opacity-50";
 const primary = "inline-flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-xs font-semibold text-white hover:bg-accent-strong disabled:opacity-50";
@@ -104,7 +105,7 @@ export function SetupClient() {
       )}
       <SyncSection status={status} run={run} />
       <DirectionsSection directions={setup.directions} run={run} />
-      <RegionsSection regions={setup.regions} directions={setup.directions} run={run} />
+      <RegionsSection regions={setup.regions} directions={setup.directions} owners={setup.owners ?? {}} run={run} />
       <AgentsSection agents={setup.agents} />
       <TargetsSection targets={setup.targets} run={run} />
     </>
@@ -244,7 +245,8 @@ function DirectionRow({ direction, run }: { direction: Direction; run: Run }) {
  * Регионы — филиалы Linko (создаются сами при синхронизации): направление, СВР и дилер. Название — из Linko (последний заказ филиала),
  * здесь не меняется.
  */
-function RegionsSection({ regions, directions, run }: { regions: Region[]; directions: Direction[]; run: Run }) {
+function RegionsSection({ regions, directions, owners, run }: { regions: Region[]; directions: Direction[]; owners: Record<string, string>; run: Run }) {
+  const fromSheets = <span className="ml-1 font-normal normal-case tracking-normal text-accent-strong">· Google Sheets</span>;
   return (
     <Section title="Регионы" hint="филиалы Linko · направление, СВР и дилер — данные OneBase">
       <div className="overflow-x-auto">
@@ -253,14 +255,18 @@ function RegionsSection({ regions, directions, run }: { regions: Region[]; direc
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
               <th className="py-2 pr-2 font-semibold">Регион</th>
               <th className="py-2 pr-2 font-semibold">Направление</th>
-              <th className="py-2 pr-2 font-semibold">СВР</th>
-              <th className="py-2 pr-2 font-semibold">Дилер</th>
+              <th className="py-2 pr-2 font-semibold" title={owners.supervisor}>
+                СВР{owners.supervisor && fromSheets}
+              </th>
+              <th className="py-2 pr-2 font-semibold" title={owners.dealer}>
+                Дилер{owners.dealer && fromSheets}
+              </th>
               <th />
             </tr>
           </thead>
           <tbody>
             {regions.map((r) => (
-              <RegionRow key={JSON.stringify(r)} region={r} directions={directions} run={run} />
+              <RegionRow key={JSON.stringify(r)} region={r} directions={directions} owners={owners} run={run} />
             ))}
           </tbody>
         </table>
@@ -270,11 +276,17 @@ function RegionsSection({ regions, directions, run }: { regions: Region[]; direc
         остаются. Название — как в последнем заказе филиала: переименуют филиал в Linko — после синхронизации переименуется и регион. Дилер региона
         виден в «Первичке» и «Аутстоке». «Завод», «К К Мерч» и старые филиалы («эски») регионами вторички не являются.
       </Note>
+      {(owners.dealer || owners.supervisor) && (
+        <Note>
+          {[owners.supervisor && `СВР: ${owners.supervisor}`, owners.dealer && `дилер: ${owners.dealer}`].filter(Boolean).join("; ")} — здесь только просмотр,
+          меняйте в таблице (или отключите привязку в «Настройки → Источники данных»).
+        </Note>
+      )}
     </Section>
   );
 }
 
-function RegionRow({ region, directions, run }: { region: Region; directions: Direction[]; run: Run }) {
+function RegionRow({ region, directions, owners, run }: { region: Region; directions: Direction[]; owners: Record<string, string>; run: Run }) {
   const [r, setR] = useState(region);
   const dirty = r.directionId !== region.directionId || (r.supervisorName ?? "") !== (region.supervisorName ?? "") || (r.dealerName ?? "") !== (region.dealerName ?? "");
   const inactive = region.note != null;
@@ -298,10 +310,24 @@ function RegionRow({ region, directions, run }: { region: Region; directions: Di
         </select>
       </td>
       <td className="py-1.5 pr-2">
-        <input className={input} aria-label="СВР" disabled={inactive} value={r.supervisorName ?? ""} onChange={(e) => setR({ ...r, supervisorName: e.target.value })} />
+        <input
+          className={input}
+          aria-label="СВР"
+          disabled={inactive || !!owners.supervisor}
+          title={owners.supervisor}
+          value={r.supervisorName ?? ""}
+          onChange={(e) => setR({ ...r, supervisorName: e.target.value })}
+        />
       </td>
       <td className="py-1.5 pr-2">
-        <input className={input} aria-label="Дилер" disabled={inactive} value={r.dealerName ?? ""} onChange={(e) => setR({ ...r, dealerName: e.target.value })} />
+        <input
+          className={input}
+          aria-label="Дилер"
+          disabled={inactive || !!owners.dealer}
+          title={owners.dealer}
+          value={r.dealerName ?? ""}
+          onChange={(e) => setR({ ...r, dealerName: e.target.value })}
+        />
       </td>
       <td className="py-1.5 text-right">
         {!inactive && (

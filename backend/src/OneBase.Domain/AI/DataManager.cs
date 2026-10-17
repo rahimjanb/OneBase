@@ -134,6 +134,12 @@ public class DataChangeSet : Entity
     /// <summary>Вид плана (Rop, Factory, Primary) — у планов регионов.</summary>
     public string? PlanKind { get; set; }
 
+    /// <summary>
+    /// Привязка Google Sheets, синхронизация которой подготовила план (null — чат или файл администратора). По ней при применении
+    /// проверяется владелец поля: поле, которое ведёт привязка, меняет только она.
+    /// </summary>
+    public Guid? SourceBindingId { get; set; }
+
     /// <summary>upsert — только строки отчёта; replace — отчёт полный за период, строк вне отчёта быть не должно.</summary>
     public required string Mode { get; set; }
 

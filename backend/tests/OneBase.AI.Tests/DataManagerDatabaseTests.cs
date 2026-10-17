@@ -87,15 +87,17 @@ public sealed class MemoryStorage : IFileStorage
     }
 }
 
-/// <summary>Подставная таблица Google: лист(ы), которые «вернул» Google, и счётчик чтений.</summary>
+/// <summary>Подставная таблица Google: лист(ы), которые «вернул» Google, счётчик чтений; Failure — Google недоступен (текст ошибки).</summary>
 public sealed class FakeSheets : OneBase.Application.DataSources.IGoogleSheetsClient
 {
     public ReportDocument Document { get; set; } = new([]);
     public int Reads { get; private set; }
+    public string? Failure { get; set; }
 
     public Task<IReadOnlyList<OneBase.Application.DataSources.SheetInfo>> SheetsAsync(OneBase.Application.DataSources.SheetSource source, CancellationToken ct = default)
     {
         Reads++;
+        Fail();
         return Task.FromResult<IReadOnlyList<OneBase.Application.DataSources.SheetInfo>>(
             Document.Sheets.Select(s => new OneBase.Application.DataSources.SheetInfo(s.Name, s.TotalRows, s.TotalColumns)).ToList());
     }
@@ -103,9 +105,102 @@ public sealed class FakeSheets : OneBase.Application.DataSources.IGoogleSheetsCl
     public Task<ReportDocument> ReadAsync(OneBase.Application.DataSources.SheetSource source, IReadOnlyCollection<string> sheets, CancellationToken ct = default)
     {
         Reads++;
+        Fail();
         var names = OneBase.Application.DataSources.DataSourceRules.ResolveSheets(Document.Sheets.Select(s => s.Name).ToList(), sheets);
         return Task.FromResult(new ReportDocument(names.Select(n => Document.Sheets.First(s => s.Name == n)).ToList()));
     }
+
+    private void Fail()
+    {
+        if (Failure is { } message)
+        {
+            throw new OneBase.Application.DataSources.DataSourceException(message);
+        }
+    }
+}
+
+/// <summary>
+/// Подставной Linko External API: заказы из Orders (на первой странице любого окна дат), остальные списки пустые; Down — сервер
+/// недоступен (503). Повторы клиента в тестах выключены (Linko:MaxAttempts = 1).
+/// </summary>
+public sealed class FakeLinko : HttpMessageHandler
+{
+    public List<object> Orders { get; } = [];
+    public bool Down { get; set; }
+
+    /// <summary>Заказ Linko: филиал (регион), дата, вес — одна строка товара «Кекс 1 кг» (ID 100).</summary>
+    public static object Order(long id, long branchId, string branch, DateTime date, decimal kg) => new
+    {
+        id,
+        created_date = date,
+        accepted_time = date,
+        status = "delivered",
+        market = new { id = 5000 + id % 1000, name = "Магазин" },
+        branch = new { id = branchId, name = branch },
+        agent = new { id = 60, name = "Агент" },
+        total_price = kg * 30_000,
+        total_weight = kg,
+        products = new[] { new { id, product = new { id = 100, name = "Кекс 1 кг" }, amount = kg, price = 30_000, total_price = kg * 30_000, total_weight = kg } },
+        tm = 1,
+    };
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (Down)
+        {
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable) { Content = new StringContent("down") });
+        }
+
+        var path = request.RequestUri!.AbsolutePath;
+        var first = !System.Text.RegularExpressions.Regex.IsMatch(request.RequestUri.Query, @"[?&]offset=[1-9]");
+        string body;
+        if (path.EndsWith("_count/", StringComparison.Ordinal))
+        {
+            body = """{"count":0}""";
+        }
+        else if (path.EndsWith("/currencies/", StringComparison.Ordinal))
+        {
+            body = "[]";
+        }
+        else if (path.EndsWith("/orders/", StringComparison.Ordinal) && first)
+        {
+            body = System.Text.Json.JsonSerializer.Serialize(new { results = Orders, errors = Array.Empty<object>() });
+        }
+        else
+        {
+            body = """{"results":[],"errors":[]}""";
+        }
+
+        return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") });
+    }
+}
+
+/// <summary>
+/// Подставной AI Gateway: ответы — из Script (по сообщениям запроса), все запросы — в Calls. Без ответа в Script — как ИИ без ключа
+/// (LlmNotConfiguredException), так что остальные тесты ведут себя как с ненастроенным ИИ.
+/// </summary>
+public sealed class FakeGateway : OneBase.AI.Gateway.IAiGateway
+{
+    public Queue<Func<IReadOnlyList<OneBase.AI.Llm.LlmMessage>, string>> Script { get; } = new();
+    public List<(IReadOnlyList<OneBase.AI.Llm.LlmMessage> Messages, OneBase.AI.Gateway.AiCallOptions Options)> Calls { get; } = [];
+
+    public Task<AiReadiness> GetReadinessAsync(CancellationToken cancellationToken = default) => Task.FromResult(new AiReadiness(true, null));
+
+    public Task<OneBase.AI.Gateway.AiCallResult> CompleteAsync(IReadOnlyList<OneBase.AI.Llm.LlmMessage> messages, IReadOnlyList<OneBase.AI.Llm.LlmToolDefinition> tools,
+        OneBase.AI.Gateway.AiCallOptions options, CancellationToken cancellationToken = default)
+    {
+        Calls.Add((messages, options));
+        if (Script.Count == 0)
+        {
+            throw new OneBase.AI.Llm.LlmNotConfiguredException("AI не настроен: нет ключа провайдера (тест).");
+        }
+
+        return Task.FromResult(new OneBase.AI.Gateway.AiCallResult(Script.Dequeue()(messages), [], new OneBase.AI.Providers.AiTokenUsage(100, 50),
+            new OneBase.AI.Gateway.AiModelRef("fake", "mapper"), false, 1, "stop"));
+    }
+
+    public Task<(IReadOnlyList<float[]> Vectors, OneBase.AI.Gateway.AiModelRef Model)> EmbedAsync(IReadOnlyList<string> inputs, OneBase.AI.Gateway.AiCallContext context,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
 }
 
 /// <summary>Часы теста: Now задан — «сейчас» это он (смена месяца в синхронизации), иначе — настоящее время.</summary>
@@ -120,12 +215,17 @@ public sealed class DataManagerDb : IAsyncLifetime
 {
     public const string Variable = "ONEBASE_TEST_POSTGRES";
 
+    /// <summary>ID заказов подставного Linko — с этого числа (не пересекаются с заказами из SeedAsync).</summary>
+    public const long FakeLinkoIds = 900_000_000;
+
     private string? _admin;
     private string? _database;
 
     public ServiceProvider Services { get; private set; } = null!;
     public FakeDataModel Model { get; } = new();
     public FakeSheets Sheets { get; } = new();
+    public FakeLinko Linko { get; } = new();
+    public FakeGateway Gateway { get; } = new();
     public TestClock Clock { get; } = new();
     public Guid AdminId { get; private set; }
     public Guid ViewerId { get; private set; }
@@ -153,6 +253,11 @@ public sealed class DataManagerDb : IAsyncLifetime
         {
             ["ConnectionStrings:Postgres"] = builder.ConnectionString,
             ["DataManager:RetryDelaySeconds"] = "0",
+            // Linko — подставной сервер (FakeLinko): без повторов, история — месяц.
+            ["LINKO_BASE_URL"] = "https://linko.test",
+            ["LINKO_TOKEN"] = "test-token",
+            ["Linko:MaxAttempts"] = "1",
+            ["Sales:Sync:BackfillMonths"] = "1",
         }).Build();
         var services = new ServiceCollection();
         services.AddLogging();
@@ -163,6 +268,8 @@ public sealed class DataManagerDb : IAsyncLifetime
         services.AddSingleton<IDataManagerModel>(Model);
         services.AddSingleton<IFileStorage, MemoryStorage>();
         services.AddSingleton<OneBase.Application.DataSources.IGoogleSheetsClient>(Sheets);
+        services.AddSingleton<OneBase.AI.Gateway.IAiGateway>(Gateway);
+        services.AddHttpClient<OneBase.Infrastructure.Linko.LinkoClient>().ConfigurePrimaryHttpMessageHandler(() => Linko);
         Services = services.BuildServiceProvider();
 
         using var scope = Services.CreateScope();
@@ -244,9 +351,19 @@ public sealed class DataManagerDb : IAsyncLifetime
         await db.SalesRegionPlans.ExecuteDeleteAsync();
         await db.SalesPnlValues.ExecuteDeleteAsync();
         await db.DataSourceSyncRuns.ExecuteDeleteAsync();
+        await db.DataSourceConflicts.ExecuteDeleteAsync();
         await db.DataSourceBindings.ExecuteDeleteAsync();
         await db.DataSourceConnections.ExecuteDeleteAsync();
         await db.SalesRegions.Where(r => r.Name == "Бухоро").ExecuteUpdateAsync(u => u.SetProperty(r => r.DealerName, (string?)null));
+        // Заказы и филиалы, которые «прислал» подставной Linko.
+        await db.LinkoOrderLines.Where(l => l.OrderId >= FakeLinkoIds).ExecuteDeleteAsync();
+        await db.LinkoOrders.Where(o => o.Id >= FakeLinkoIds).ExecuteDeleteAsync();
+        await db.SalesRegions.Where(r => r.LinkoBranchId >= 900).ExecuteDeleteAsync();
+        Linko.Orders.Clear();
+        Linko.Down = false;
+        Gateway.Script.Clear();
+        Gateway.Calls.Clear();
+        Sheets.Failure = null;
         Clock.Now = null;
         await db.UserNotifications.ExecuteDeleteAsync();
         Model.Script.Clear();

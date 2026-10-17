@@ -155,6 +155,13 @@ body {
   backdrop-filter: blur(20px) saturate(140%);
 }
 
+/* Пункты выпадающих списков (select): фон у поля полупрозрачный, а список браузер рисует на белом — светлый текст пунктов на нём
+   не виден. Пунктам — непрозрачный фон темы. */
+:root[data-brand="onebase"]:not([data-theme="light"]) :is(option, optgroup) {
+  background-color: var(--color-surface-solid);
+  color: var(--color-ink);
+}
+
 /* Sales Base внутри OneBase (/field на домене OneBase) — своя тёмная тема без стекла. */
 :root[data-brand="onebase"]:not([data-theme="light"]) [data-product="field"] {
   --color-page: #0e1422;

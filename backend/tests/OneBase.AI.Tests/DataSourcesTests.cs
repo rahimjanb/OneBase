@@ -176,7 +176,7 @@ public sealed class GoogleSheetsClientTests
         Assert.Equal(new[] { "Хоразм", "1000" }, sheet.Rows[1]);
         var reads = google.Requests.Where(r => r.Contains("values:batchGet")).ToList();
         Assert.Equal(2, reads.Count); // даты числом и даты строкой
-        Assert.All(reads, r => Assert.Contains("ranges='План'!A1:BI20001", r));
+        Assert.All(reads, r => Assert.Contains("ranges='План'!A1:BI&", r)); // все строки, столбцы — до лимита
         Assert.DoesNotContain(google.Requests, r => r.Contains("DSO"));
 
         var missing = await Assert.ThrowsAsync<DataSourceException>(() => client.ReadAsync(source, ["Нет такого"]));
@@ -390,9 +390,10 @@ public class DataSourceSyncTests(DataManagerDb fixture) : IClassFixture<DataMana
         ]);
         await sources.SaveBindingAsync(binding.Id, new BindingInput("primary", connection.Id, ["Сентябрь 2026", "Октябрь 2026"], 1, [DealerField],
             "manual", null, null, true), fixture.AdminId, CancellationToken.None);
+        // Разные дилеры одного региона — конфликт строки (в журнале), поле не записывается.
         var dealers = await sources.RunAsync(binding.Id, "manual", fixture.AdminId, CancellationToken.None);
-        Assert.Equal("error", dealers.Status);
-        Assert.Contains("разные значения", dealers.Fields.Single().Message);
+        Assert.Equal("conflicts", dealers.Status);
+        Assert.Contains("разные значения", Assert.Single(dealers.Fields.Single().Problems!));
         Assert.Equal("Мехриддин Бухоро", await db.SalesRegions.AsNoTracking().Where(r => r.Name == "Бухоро").Select(r => r.DealerName).FirstAsync());
 
         await sources.SaveBindingAsync(binding.Id, new BindingInput("primary", connection.Id, ["Ноябрь 2026"], 1, [DealerField], "manual", null, null, true),

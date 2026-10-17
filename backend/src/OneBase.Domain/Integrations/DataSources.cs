@@ -106,3 +106,56 @@ public class DataSourceSyncRun : Entity
 
     public Guid? UserId { get; set; }
 }
+
+/// <summary>
+/// Конфликт источников данных: строка таблицы, которую нельзя записать (регион не найден, не число, разные значения), или попытка
+/// изменить поле, которым источник не владеет (ручная правка поля, которое ведёт Google Sheets). Подтверждённое значение остаётся,
+/// конфликт виден в «Источниках данных». Строка таблицы — открыт, пока её не исправят (закрывается следующей синхронизацией);
+/// отказ в записи чужого поля — событие, закрыт сразу.
+/// </summary>
+public class DataSourceConflict : Entity
+{
+    /// <summary>Кто пытался записать: google_sheets, data_manager (чат и файлы AI Data Manager), manual (настройки продаж).</summary>
+    public required string Source { get; set; }
+
+    /// <summary>Привязка Google Sheets (у строк таблицы); при удалении привязки — null, конфликт закрывается.</summary>
+    public Guid? BindingId { get; set; }
+
+    /// <summary>Поле OneBase (DataSourceCatalog): plan_rop, dealer, pnl…</summary>
+    public required string Field { get; set; }
+
+    /// <summary>Что затронуто: «Хоразм · Кекс · сентябрь 2026», регион, дилер.</summary>
+    public string? Entity { get; set; }
+
+    /// <summary>Период: «2026-10» или диапазон.</summary>
+    public string? Period { get; set; }
+
+    /// <summary>row — строка таблицы не записана; owner — запись в поле, которым источник не владеет.</summary>
+    public required string Kind { get; set; }
+
+    public required string Message { get; set; }
+
+    /// <summary>Ячейка таблицы («План!B5»), если есть.</summary>
+    public string? SourceRef { get; set; }
+
+    /// <summary>Правило владения на момент конфликта: «поле ведёт Google Sheets «План»».</summary>
+    public string? Rule { get; set; }
+
+    /// <summary>Что решено: «не записано», «отклонено», «исправлено в таблице»…</summary>
+    public required string Decision { get; set; }
+
+    /// <summary>Нужно ли вмешательство: исправить таблицу или сопоставление.</summary>
+    public bool NeedsAction { get; set; }
+
+    /// <summary>Отпечаток (привязка, поле, вид, сущность, текст): повтор того же конфликта не плодит записи.</summary>
+    public required string Fingerprint { get; set; }
+
+    public DateTimeOffset LastSeenAt { get; set; }
+    public int Occurrences { get; set; } = 1;
+
+    public DateTimeOffset? ResolvedAt { get; set; }
+    public Guid? ResolvedById { get; set; }
+
+    /// <summary>Кто пытался записать (ручная правка, чат) или от чьего имени шла синхронизация.</summary>
+    public Guid? UserId { get; set; }
+}

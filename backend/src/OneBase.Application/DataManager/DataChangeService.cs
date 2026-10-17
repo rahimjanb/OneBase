@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
+using OneBase.Application.DataSources;
 using OneBase.Application.Sales;
 using OneBase.Application.Sales.Metrics;
 using OneBase.Application.Sales.Pnl;
@@ -14,7 +15,8 @@ namespace OneBase.Application.DataManager;
 
 /// <summary>
 /// Планы изменений AI Data Manager: подготовка (ничего не меняет в данных), просмотр, отмена и проверка после применения.
-/// Применение и откат — <see cref="IDataChangeApplier"/>, только по кнопке администратора.
+/// Применение и откат — <see cref="IDataChangeApplier"/>, только по кнопке администратора. Поле, которое ведёт привязка Google Sheets,
+/// меняет только её синхронизация (<see cref="FieldOwnership"/>): план из чата или файла для такого поля не готовится.
 /// </summary>
 public sealed class DataChangeService(
     IAppDbContext db,
@@ -24,7 +26,8 @@ public sealed class DataChangeService(
     PrimaryService primary,
     SalesCacheSignal cacheSignal,
     PnlService pnl,
-    DataManagerOptions options)
+    DataManagerOptions options,
+    FieldOwnership ownership)
 {
     /// <summary>Регионы вторички, в которые можно записать план: без «Завода», «К К Мерч» и старых филиалов.</summary>
     public Task<IReadOnlyList<DataRegionRef>> RegionsAsync(CancellationToken ct = default) => RegionsAsync(false, ct);
@@ -99,6 +102,7 @@ public sealed class DataChangeService(
             source = actor.ValuesSource;
         }
 
+        values = InPeriod(values, request.FromMonth, request.ToMonth, v => (v.Year, v.Month));
         if (values.Count == 0)
         {
             throw new DataManagerException("Значений плана не найдено: проверьте лист, строку заголовка и столбцы.");
@@ -115,6 +119,9 @@ public sealed class DataChangeService(
         {
             throw new DataManagerException("В одном плане — не больше 24 месяцев.");
         }
+
+        await ownership.EnsureAsync(FieldOwnership.Fields(DataTargets.RegionPlans, request.Kind.ToString(), []), actor.BindingId, actor.ConflictSource, actor.UserId,
+            Regions(values.Select(v => v.Region)), PeriodText(periods), ct);
 
         var regions = await RegionsAsync(request.Kind == PlanKind.Primary, ct);
         var categories = await CategoriesAsync(ct);
@@ -176,6 +183,9 @@ public sealed class DataChangeService(
             throw new DataManagerException("Не указано ни одного изменения.");
         }
 
+        await ownership.EnsureAsync(FieldOwnership.Fields(DataTargets.RegionProfiles, null, values.Select(v => v.Field)), actor.BindingId, actor.ConflictSource,
+            actor.UserId, Regions(values.Select(v => v.Region)), null, ct);
+
         DataFile? file = null;
         if (fileId is { } id)
         {
@@ -209,6 +219,7 @@ public sealed class DataChangeService(
             values = request.Values ?? [];
         }
 
+        values = InPeriod(values, request.FromMonth, request.ToMonth, v => (v.Year, v.Month));
         if (values.Count == 0)
         {
             throw new DataManagerException("Значений P&L не найдено: проверьте лист, строку заголовка и столбцы.");
@@ -220,6 +231,9 @@ public sealed class DataChangeService(
         {
             throw new DataManagerException("В одном плане — не больше 24 месяцев.");
         }
+
+        await ownership.EnsureAsync([DataSourceCatalog.Pnl], actor.BindingId, actor.ConflictSource, actor.UserId,
+            Regions(values.Select(v => v.Dealer)), PeriodText(periods), ct);
 
         var years = periods.Select(p => p.Year).Distinct().ToList();
         var existing = (await db.SalesPnlValues.AsNoTracking()
@@ -336,6 +350,7 @@ public sealed class DataChangeService(
             Title = title.Length > 300 ? title[..300] : title,
             Period = period,
             PlanKind = planKind,
+            SourceBindingId = actor.BindingId,
             Mode = mode,
             RequestHash = requestHash,
             Summary = JsonSerializer.Serialize(summary, DataTargets.Json),
@@ -364,6 +379,44 @@ public sealed class DataChangeService(
         await db.SaveChangesAsync(ct);
         return (await GetAsync(set.Id, ct))!;
     }
+
+    /// <summary>
+    /// Только месяцы периода FromMonth…ToMonth («2026-01»; без ToMonth — один месяц). Без периода — все строки. Нераспознанный месяц остаётся:
+    /// строка станет конфликтом, а не пропадёт.
+    /// </summary>
+    private static IReadOnlyList<T> InPeriod<T>(IReadOnlyList<T> values, string? from, string? to, Func<T, (int Year, int Month)> month)
+    {
+        if (string.IsNullOrWhiteSpace(from) && string.IsNullOrWhiteSpace(to))
+        {
+            return values;
+        }
+
+        var period = new PeriodFilter(DataSourceRules.PeriodRangeMode, From: from ?? to, To: to ?? from);
+        if (DataSourceRules.PeriodError(period) is { } error)
+        {
+            throw new DataManagerException($"Период fromMonth…toMonth: {error}.");
+        }
+
+        var range = DataSourceRules.PeriodRange(period, DateTimeOffset.UtcNow);
+        var kept = values.Where(v => DataSourceRules.InPeriod(range, month(v).Year, month(v).Month)).ToList();
+        return kept.Count == 0 && values.Count > 0
+            ? throw new DataManagerException($"В отчёте нет строк за период {period.From} — {period.To}.")
+            : kept;
+    }
+
+    /// <summary>Что затронуто — для журнала конфликтов: до пяти регионов (дилеров) и сколько ещё.</summary>
+    private static string Regions(IEnumerable<string?> names)
+    {
+        var list = names.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return list.Count <= 5 ? string.Join(", ", list) : $"{string.Join(", ", list.Take(5))} и ещё {list.Count - 5}";
+    }
+
+    private static string? PeriodText(IReadOnlyList<(int Year, int Month)> periods) => periods.Count switch
+    {
+        0 => null,
+        1 => $"{periods[0].Year:D4}-{periods[0].Month:D2}",
+        _ => $"{periods.Min().Year:D4}-{periods.Min().Month:D2}…{periods.Max().Year:D4}-{periods.Max().Month:D2}",
+    };
 
     public async Task<DataChangeSetView?> GetAsync(Guid id, CancellationToken ct = default)
     {

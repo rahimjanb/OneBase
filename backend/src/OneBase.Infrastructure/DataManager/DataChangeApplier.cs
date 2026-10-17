@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using OneBase.Application.Abstractions;
 using OneBase.Application.DataManager;
+using OneBase.Application.DataSources;
 using OneBase.Application.Sales;
 using OneBase.Application.Sales.Pnl;
 using OneBase.Application.Security;
@@ -23,17 +24,20 @@ namespace OneBase.Infrastructure.DataManager;
 /// <item>откат возвращает «до» только там, где сейчас всё ещё «после» — чужие более новые изменения не затираются.</item>
 /// </list>
 /// Пишутся только данные OneBase (sales.RegionPlans, sales.Targets, профиль региона, sales.PnlValues) — копия Linko не трогается.
+/// Поле, которое ведёт привязка Google Sheets, меняет только план её синхронизации (FieldOwnership) — проверяется и при применении.
 /// </summary>
 internal sealed class DataChangeApplier(
     OneBaseDbContext db,
     SalesCacheSignal cacheSignal,
     IAuditLogger audit,
+    FieldOwnership ownership,
     ILogger<DataChangeApplier> logger) : IDataChangeApplier
 {
     public async Task<ApplyOutcome> ApplyAsync(Guid changeSetId, Guid userId, CancellationToken ct = default)
     {
         await RequireAsync(userId, ct);
         db.ChangeTracker.Clear(); // свежие значения из базы: статус и версия плана меняются условным UPDATE в обход трекера
+        await EnsureOwnerAsync(changeSetId, userId, ct);
         try
         {
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
@@ -177,6 +181,36 @@ internal sealed class DataChangeApplier(
     }
 
     /// <summary>Применить и откатить план может только активный пользователь с ai.data.manage — проверяется по базе, а не по токену.</summary>
+    /// <summary>
+    /// Владелец полей на момент применения: план из чата или файла не меняет поле, которое с тех пор стала вести привязка Google Sheets,
+    /// а план синхронизации — поле чужой привязки. Отказ — в журнал конфликтов; план остаётся черновиком, данные не меняются.
+    /// </summary>
+    private async Task EnsureOwnerAsync(Guid changeSetId, Guid userId, CancellationToken ct)
+    {
+        var set = await db.DataChangeSets.AsNoTracking()
+            .Where(s => s.Id == changeSetId)
+            .Select(s => new { s.Target, s.PlanKind, s.Period, s.Title, s.SourceBindingId, s.Status })
+            .FirstOrDefaultAsync(ct);
+        if (set is not { Status: DataChangeSetStatus.Draft })
+        {
+            return; // не найден или уже обработан — это скажет захват плана
+        }
+
+        var profileFields = set.Target == DataTargets.RegionProfiles
+            ? (await db.DataChangeItems.AsNoTracking()
+                .Where(i => i.ChangeSetId == changeSetId && i.EntityKey.StartsWith(DataEntityTypes.RegionProfile + ":"))
+                .Select(i => i.EntityKey)
+                .ToListAsync(ct)).Select(k => k[(k.LastIndexOf(':') + 1)..]).ToList()
+            : [];
+        var foreign = await ownership.ForeignAsync(FieldOwnership.Fields(set.Target, set.PlanKind, profileFields), set.SourceBindingId, ct);
+        if (foreign.Count > 0)
+        {
+            await ownership.RecordRefusalAsync(foreign, set.SourceBindingId is null ? ConflictSources.DataManager : ConflictSources.GoogleSheets, userId,
+                set.Title, set.Period, ct);
+            throw new DataManagerException(FieldOwnership.Refusal(foreign));
+        }
+    }
+
     private async Task RequireAsync(Guid userId, CancellationToken ct)
     {
         var allowed = await db.Users.AsNoTracking()

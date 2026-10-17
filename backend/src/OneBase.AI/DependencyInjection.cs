@@ -43,6 +43,9 @@ public static class DependencyInjection
         services.AddSingleton<AiGateway>();
         services.AddSingleton<IAiGateway>(sp => sp.GetRequiredService<AiGateway>());
         services.AddSingleton<ILlmClient>(sp => sp.GetRequiredService<AiGateway>());
+
+        // «Источники данных»: ИИ предлагает сопоставление столбцов Google Sheets с полями OneBase (только предложение — сохраняет человек).
+        services.AddSingleton<OneBase.Application.DataSources.ISheetMappingAdvisor, DataSources.SheetMappingAdvisor>();
         services.AddScoped<AiModelCatalog>();
 
         // AI-сотрудники: настройки, права пользователя, выполнение задач.

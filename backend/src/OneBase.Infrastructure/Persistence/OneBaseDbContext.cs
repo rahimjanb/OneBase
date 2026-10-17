@@ -20,6 +20,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<DataSourceConnection> DataSourceConnections => Set<DataSourceConnection>();
     public DbSet<DataSourceBinding> DataSourceBindings => Set<DataSourceBinding>();
     public DbSet<DataSourceSyncRun> DataSourceSyncRuns => Set<DataSourceSyncRun>();
+    public DbSet<DataSourceConflict> DataSourceConflicts => Set<DataSourceConflict>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<User> Users => Set<User>();
@@ -161,6 +162,25 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.Property(x => x.Details).HasColumnType("jsonb");
             e.HasOne(x => x.Binding).WithMany(x => x.Runs).HasForeignKey(x => x.BindingId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.BindingId, x.CreatedAt });
+        });
+
+        // Журнал конфликтов источников: удаление привязки конфликты не удаляет (они закрываются, история остаётся).
+        b.Entity<DataSourceConflict>(e =>
+        {
+            e.ToTable("DataSourceConflicts");
+            e.Property(x => x.Source).HasMaxLength(16);
+            e.Property(x => x.Field).HasMaxLength(32);
+            e.Property(x => x.Entity).HasMaxLength(300);
+            e.Property(x => x.Period).HasMaxLength(32);
+            e.Property(x => x.Kind).HasMaxLength(16);
+            e.Property(x => x.Message).HasMaxLength(1000);
+            e.Property(x => x.SourceRef).HasMaxLength(300);
+            e.Property(x => x.Rule).HasMaxLength(300);
+            e.Property(x => x.Decision).HasMaxLength(300);
+            e.Property(x => x.Fingerprint).HasMaxLength(64);
+            e.HasOne<DataSourceBinding>().WithMany().HasForeignKey(x => x.BindingId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => new { x.ResolvedAt, x.LastSeenAt });
+            e.HasIndex(x => new { x.BindingId, x.Fingerprint });
         });
 
         b.Entity<IntegrationConnection>(e =>

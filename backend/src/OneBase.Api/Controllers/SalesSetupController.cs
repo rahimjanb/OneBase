@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OneBase.Api.Auth;
 using OneBase.Application.Abstractions;
+using OneBase.Application.DataManager;
+using OneBase.Application.DataSources;
 using OneBase.Application.Sales;
 using OneBase.Application.Sales.Metrics;
 using OneBase.Application.Security;
@@ -18,7 +20,7 @@ namespace OneBase.Api.Controllers;
 [Route("api/sales/setup")]
 [HasPermission(Permissions.SalesRead)]
 [InvalidateSalesCache]
-public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOptions, IAuditLogger audit) : ControllerBase
+public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOptions, IAuditLogger audit, FieldOwnership ownership) : ControllerBase
 {
     private const int NameLength = 200; // как в схеме sales: Name, ManagerName, SupervisorName, DealerName — varchar(200)
 
@@ -82,6 +84,10 @@ public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOpt
                 .Select(t => new { t.Id, t.Name, t.ParentId })
                 .ToListAsync(ct),
             Targets = await db.SalesTargets.AsNoTracking().ToDictionaryAsync(t => t.Key, t => t.Value, ct),
+            // Дилер и СВР, которые ведёт привязка Google Sheets: здесь они только для просмотра.
+            Owners = (await ownership.OwnersAsync(ct))
+                .Where(o => o.Key is DataSourceCatalog.Dealer or DataSourceCatalog.Supervisor)
+                .ToDictionary(o => o.Key, o => o.Value.Rule),
         });
     }
 
@@ -181,6 +187,17 @@ public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOpt
 
         if (input.SupervisorName?.Trim().Length > NameLength) return BadRequest(new { error = $"Имя СВР — не длиннее {NameLength} символов." });
         if (input.DealerName?.Trim().Length > NameLength) return BadRequest(new { error = $"Название дилера — не длиннее {NameLength} символов." });
+
+        // Дилер и СВР, которые ведёт привязка Google Sheets, здесь не меняются: следующая синхронизация перезаписала бы правку.
+        var changed = new List<string>();
+        if (Clean(input.DealerName) != region.DealerName) changed.Add(RegionProfilePlanner.Dealer);
+        if (Clean(input.SupervisorName) != region.SupervisorName) changed.Add(RegionProfilePlanner.Supervisor);
+        var foreign = await ownership.ForeignAsync(changed, null, ct);
+        if (foreign.Count > 0)
+        {
+            await ownership.RecordRefusalAsync(foreign, ConflictSources.Manual, User.GetUserId(), region.Name, null, ct);
+            return BadRequest(new { error = FieldOwnership.Refusal(foreign) });
+        }
 
         region.DirectionId = input.DirectionId;
         region.SupervisorName = Clean(input.SupervisorName);

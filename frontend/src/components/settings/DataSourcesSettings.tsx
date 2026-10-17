@@ -2,17 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Database, FileSpreadsheet, History, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, Database, FileSpreadsheet, History, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { Modal } from "@/components/files/Modal";
 import { BindingEditor } from "@/components/settings/BindingEditor";
 import {
   dataSourcesApi,
+  ownerLabel,
+  periodText,
   scheduleText,
   sheetsText,
   statusLabel,
   type BindingView,
+  type ConflictView,
   type ConnectionView,
   type DataSourcesOverview,
+  type OwnershipRow,
   type RunView,
   type SectionView,
 } from "@/lib/data-sources";
@@ -155,6 +159,8 @@ export function DataSourcesSettings({ initial }: { initial: DataSourcesOverview 
         </div>
       </section>
 
+      <OwnershipSection rows={data.ownership} />
+
       <section>
         {data.monthPlans.some((p) => p.regions > 0 || p.previousRegions > 0) && (
           <div className="mb-4 rounded-xl border border-line bg-surface p-4">
@@ -241,6 +247,8 @@ export function DataSourcesSettings({ initial }: { initial: DataSourcesOverview 
         </div>
       </section>
 
+      <ConflictsSection version={data} openCount={data.openConflicts} />
+
       {connectionDialog && (
         <ConnectionDialog
           connection={connectionDialog === "new" ? null : connectionDialog}
@@ -268,6 +276,164 @@ export function DataSourcesSettings({ initial }: { initial: DataSourcesOverview 
       )}
       {runsOf && <RunsDialog binding={runsOf} onClose={() => setRunsOf(null)} />}
     </div>
+  );
+}
+
+/**
+ * Кто ведёт данные: факт — Linko, поля OneBase — привязка Google Sheets (меняет только она) или сам OneBase, показатели — расчёт.
+ * Время — последнее успешное обновление или подтверждение источником: устаревшие данные не выдаются за свежие.
+ */
+function OwnershipSection({ rows }: { rows: OwnershipRow[] }) {
+  const groups = [...new Set(rows.map((r) => r.group))];
+  return (
+    <section>
+      <h2 className="text-base font-semibold text-ink">Кто ведёт данные</h2>
+      <p className="mb-3 text-sm text-ink-3">
+        У каждого показателя один владелец. Linko не трогает данные OneBase, Google Sheets — факт Linko; поле, которое ведёт таблица, в OneBase вручную не
+        меняется (ни в чате AI Data Manager, ни в настройках продаж) — попытка попадает в журнал конфликтов.
+      </p>
+      <div className="rounded-xl border border-line bg-surface">
+        {groups.map((group) => (
+          <div key={group} className="border-b border-line last:border-b-0">
+            <div className="px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-ink-3">{group}</div>
+            {rows
+              .filter((r) => r.group === group)
+              .map((r) => (
+                <div key={r.key} className="grid gap-x-4 gap-y-0.5 px-4 py-2 text-sm sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)_auto]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-ink">{r.label}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${ownerLabel[r.owner].className}`}>{ownerLabel[r.owner].label}</span>
+                  </div>
+                  <div className="min-w-0 text-ink-2">
+                    {r.source !== ownerLabel[r.owner].label && <span className="text-ink">{r.source}</span>}
+                    {r.source !== ownerLabel[r.owner].label && r.detail && " · "}
+                    {r.detail && <span className="text-ink-3">{r.detail}</span>}
+                  </div>
+                  <div className="text-xs text-ink-3 sm:text-right">
+                    {r.updatedAt ? (
+                      <span title={r.updatedNote ?? undefined}>обновлено {dateTime(r.updatedAt)}</span>
+                    ) : (
+                      r.updatedNote && <span>{r.updatedNote}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Журнал конфликтов: строки таблиц, которые не записаны (открыты, пока таблицу не исправят — закрывает синхронизация), и попытки
+ * изменить чужое поле (отклонены, значение источника-владельца осталось). Закрытые — за 30 дней.
+ */
+function ConflictsSection({ version, openCount }: { version: unknown; openCount: number }) {
+  const [items, setItems] = useState<ConflictView[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
+  const [closing, setClosing] = useState<string | null>(null);
+
+  const load = () =>
+    dataSourcesApi
+      .conflicts()
+      .then((list) => (setItems(list), setError(null)))
+      .catch((e: Error) => setError(e.message));
+
+  // Перечитать после синхронизации и правок на странице (обзор перезагружен — version новый).
+  useEffect(() => {
+    load();
+  }, [version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const close = async (id: string) => {
+    setClosing(id);
+    try {
+      await dataSourcesApi.closeConflict(id);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setClosing(null);
+    }
+  };
+
+  const open = items?.filter((c) => !c.resolvedAt) ?? [];
+  const shown = all ? (items ?? []) : open;
+  return (
+    <section>
+      <div className="mb-3 flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+            Конфликты источников
+            {openCount > 0 && <span className="rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn">ждут исправления: {openCount}</span>}
+          </h2>
+          <p className="text-sm text-ink-3">
+            Подтверждённые значения не перезаписываются: строка с ошибкой не записывается, пока таблицу не исправят, а запись в чужое поле отклоняется.
+          </p>
+        </div>
+        <div className="flex rounded-lg border border-line p-0.5 text-xs">
+          {[
+            [false, `Открытые (${open.length})`],
+            [true, "Все за 30 дней"],
+          ].map(([value, text]) => (
+            <button
+              key={String(value)}
+              type="button"
+              onClick={() => setAll(value as boolean)}
+              className={`rounded-md px-2.5 py-1 font-medium ${all === value ? "bg-accent-soft text-accent-strong" : "text-ink-2 hover:text-ink"}`}
+            >
+              {text as string}
+            </button>
+          ))}
+        </div>
+      </div>
+      {error && <div className="mb-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</div>}
+      {items === null && !error ? (
+        <div className="flex items-center gap-2 text-sm text-ink-3">
+          <Loader2 className="size-4 animate-spin" /> Загружаю журнал…
+        </div>
+      ) : shown.length === 0 ? (
+        <div className="flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-ink-2">
+          <CheckCircle2 className="size-4 text-ok" />
+          {all ? "За 30 дней конфликтов не было." : "Открытых конфликтов нет: источники не спорят, строки таблиц записываются."}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {shown.map((c) => (
+            <div key={c.id} className={`rounded-lg border border-line bg-surface p-3 ${c.resolvedAt ? "opacity-70" : ""}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                {!c.resolvedAt && c.needsAction ? <AlertTriangle className="size-4 shrink-0 text-warn" /> : <CheckCircle2 className="size-4 shrink-0 text-ink-3" />}
+                <span className="text-sm font-medium text-ink">{c.fieldLabel}</span>
+                {c.entity && <span className="text-sm text-ink-2">· {c.entity}</span>}
+                {c.period && <span className="text-xs text-ink-3">· {c.period}</span>}
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-ink-2">{c.kindLabel}</span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-ink-2">{c.sourceLabel}</span>
+                {!c.resolvedAt && (
+                  <button type="button" onClick={() => close(c.id)} disabled={closing === c.id} className={`${secondary} ml-auto`} title="Закрыть: если строка всё ещё с ошибкой, синхронизация откроет конфликт снова">
+                    {closing === c.id ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
+                    Закрыть
+                  </button>
+                )}
+              </div>
+              <div className="mt-1 text-sm text-ink">
+                {c.message}
+                {c.sourceRef && <span className="text-ink-3"> ({c.sourceRef})</span>}
+              </div>
+              <div className="mt-1 text-xs text-ink-3">
+                {c.decision}
+                {c.rule && ` · правило: ${c.rule}`}
+                {c.binding && ` · привязка ${c.binding}`}
+              </div>
+              <div className="mt-1 text-xs text-ink-3">
+                {c.occurrences > 1 ? `впервые ${dateTime(c.firstSeenAt)}, последний раз ${dateTime(c.lastSeenAt)} (раз: ${c.occurrences})` : dateTime(c.firstSeenAt)}
+                {c.resolvedAt && ` · закрыт ${dateTime(c.resolvedAt)}`}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -306,6 +472,7 @@ function BindingRow({
         {b.fields.map((f) => (
           <span key={f.field} className="rounded-md bg-accent-soft px-2 py-0.5 text-xs text-accent-strong">
             {section.fields.find((x) => x.key === f.field)?.label ?? f.field}
+            {f.period && f.period.mode !== "all" && !f.currentMonth && <span className="text-ink-3"> · {periodText(f.period)}</span>}
           </span>
         ))}
       </div>
@@ -453,7 +620,7 @@ function RunsDialog({ binding, onClose }: { binding: BindingView; onClose: () =>
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${statusLabel[r.status].className}`}>{statusLabel[r.status].label}</span>
                 <span className="text-ink">{dateTime(r.startedAt)}</span>
-                <span className="text-xs text-ink-3">{r.trigger === "schedule" ? "по расписанию" : "вручную"}{r.userName ? ` · ${r.userName}` : ""}</span>
+                <span className="text-xs text-ink-3">{r.trigger === "schedule" ? "по расписанию" : r.trigger === "chat" ? "из чата AI Data Manager" : "вручную"}{r.userName ? ` · ${r.userName}` : ""}</span>
               </div>
               {r.fields.length === 0 && r.message && <div className="mt-1.5 text-sm text-bad">{r.message}</div>}
               {r.fields.map((f) => (

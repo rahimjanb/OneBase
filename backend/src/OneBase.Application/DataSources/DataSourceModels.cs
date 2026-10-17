@@ -80,8 +80,20 @@ public sealed record ProfileFieldMapping(string RegionColumn, string ValueColumn
 /// из названия листа («Сентябрь 2026», «09.2026»): лист на месяц; CurrentMonth — текущий месяц по Ташкенту на момент синхронизации:
 /// лист «План» всегда про текущий месяц, с 1-го числа значения идут в новый месяц.
 /// </summary>
+/// <summary>
+/// Какие месяцы листа брать (планы и P&L): all — все (за раз не больше 24); current — текущий месяц; year — текущий год; last — последние
+/// Months месяцев, включая текущий; range — с From по To («2026-01»). «Текущий» — по Ташкенту на момент синхронизации: период сдвигается
+/// сам. Строки вне периода не пишутся и не удаляются.
+/// </summary>
+public sealed record PeriodFilter(string Mode, int? Months = null, string? From = null, string? To = null);
+
+/// <remarks>
+/// Period — какие месяцы листа брать (null — все). Headers — снимок заголовков на момент сопоставления (столбец сопоставления → текст заголовка): синхронизация сверяет с ним лист и при
+/// переименовании или перестановке столбцов ничего не пишет (StructureError), а не читает не тот столбец. null — старая привязка, без сверки.
+/// </remarks>
 public sealed record DataSourceFieldBinding(string Field, PlanFieldMapping? Plan = null, ProfileFieldMapping? Profile = null, PnlSheetMapping? Pnl = null,
-    bool Replace = true, bool MonthFromSheet = false, bool CurrentMonth = false);
+    bool Replace = true, bool MonthFromSheet = false, bool CurrentMonth = false, IReadOnlyDictionary<string, string>? Headers = null,
+    PeriodFilter? Period = null);
 
 /// <summary>
 /// Итог синхронизации поля: операция AI Data Manager, строки, ошибки. Period и Fingerprint — у поля «текущий месяц»: за какой месяц
@@ -130,6 +142,87 @@ public static partial class DataSourceRules
 
     /// <summary>Чаще 5 минут не синхронизируем: Google ограничивает выгрузку таблиц, а план так часто не меняется.</summary>
     public const int MinIntervalMinutes = 5;
+
+    public const string PeriodAll = "all";
+    public const string PeriodCurrent = "current";
+    public const string PeriodYear = "year";
+    public const string PeriodLast = "last";
+    public const string PeriodRangeMode = "range";
+
+    /// <summary>Месяцев за одну запись плана или P&L (как у AI Data Manager).</summary>
+    public const int MaxPeriodMonths = 24;
+
+    /// <summary>Месяцы периода включительно (первые числа) на момент now; null — все месяцы листа.</summary>
+    public static (DateOnly From, DateOnly To)? PeriodRange(PeriodFilter? period, DateTimeOffset now)
+    {
+        var (year, month) = CurrentPeriod(now);
+        var current = new DateOnly(year, month, 1);
+        switch (period?.Mode)
+        {
+            case PeriodCurrent:
+                return (current, current);
+            case PeriodYear:
+                return (new DateOnly(year, 1, 1), new DateOnly(year, 12, 1));
+            case PeriodLast:
+                return (current.AddMonths(-(Math.Clamp(period.Months ?? 1, 1, MaxPeriodMonths) - 1)), current);
+            case PeriodRangeMode when MonthOf(period.From) is { } from && MonthOf(period.To) is { } to:
+                return (from, to);
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>Строка в периоде. Нераспознанный месяц (0) — оставляем: строка станет ошибкой в журнале, а не пропадёт молча.</summary>
+    public static bool InPeriod((DateOnly From, DateOnly To)? range, int year, int month)
+    {
+        if (range is not { } r || year is < 1 or > 9999 || month is < 1 or > 12)
+        {
+            return true;
+        }
+
+        var date = new DateOnly(year, month, 1);
+        return date >= r.From && date <= r.To;
+    }
+
+    public static string PeriodLabel(PeriodFilter? period) => period?.Mode switch
+    {
+        PeriodCurrent => "текущий месяц",
+        PeriodYear => "текущий год",
+        PeriodLast => $"последние {period.Months} мес.",
+        PeriodRangeMode => $"{period.From} — {period.To}",
+        _ => "все месяцы",
+    };
+
+    /// <summary>Ошибка периода поля; null — всё верно.</summary>
+    public static string? PeriodError(PeriodFilter? period)
+    {
+        switch (period?.Mode)
+        {
+            case null or PeriodAll or PeriodCurrent or PeriodYear:
+                return null;
+            case PeriodLast:
+                return period.Months is null or < 1 or > MaxPeriodMonths ? $"последних месяцев — от 1 до {MaxPeriodMonths}" : null;
+            case PeriodRangeMode:
+                if (MonthOf(period.From) is not { } from || MonthOf(period.To) is not { } to)
+                {
+                    return "период — месяцы в формате ГГГГ-ММ";
+                }
+
+                var months = (to.Year - from.Year) * 12 + to.Month - from.Month + 1;
+                return months < 1 ? "начало периода позже конца" : months > MaxPeriodMonths ? $"период — не больше {MaxPeriodMonths} месяцев" : null;
+            default:
+                return "период: все месяцы, текущий месяц, текущий год, последние N месяцев или диапазон";
+        }
+    }
+
+    private static DateOnly? MonthOf(string? text) =>
+        DateOnly.TryParseExact($"{text?.Trim()}-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
+
+    /// <summary>Расписание новой привязки по умолчанию — каждые 30 минут.</summary>
+    public const int DefaultIntervalMinutes = 30;
+
+    /// <summary>Ошибка синхронизации по расписанию (Google недоступен, сеть) — один повтор через столько минут, дальше — по расписанию.</summary>
+    public const int RetryMinutes = 5;
 
     /// <summary>«Все листы таблицы» в списке листов привязки — и те, что появятся позже.</summary>
     public const string AllSheets = "*";
@@ -256,6 +349,11 @@ public static partial class DataSourceRules
                 "profile" => f.Profile is null || string.IsNullOrWhiteSpace(f.Profile.RegionColumn) || string.IsNullOrWhiteSpace(f.Profile.ValueColumn),
                 _ => f.Pnl is null,
             };
+            if (field.Kind != "profile" && PeriodError(f.Period) is { } periodError)
+            {
+                return $"«{field.Label}»: {periodError}.";
+            }
+
             if (missing)
             {
                 return field.Kind switch
@@ -269,6 +367,50 @@ public static partial class DataSourceRules
 
         var twice = fields.GroupBy(f => f.Field).FirstOrDefault(g => g.Count() > 1);
         return twice is null ? null : $"Поле «{DataSourceCatalog.Field(twice.Key)!.Label}» выбрано дважды.";
+    }
+
+    /// <summary>
+    /// Структура листа против снимка заголовков поля: столбец по заголовку — заголовок должен быть на месте (порядок столбцов не важен);
+    /// столбец по букве (заголовок повторялся или пуст) — в этой букве тот же заголовок. Иначе — текст ошибки: поле не пишется, пока
+    /// столбцы не сопоставят заново. null — всё на месте или снимка нет.
+    /// </summary>
+    public static string? StructureError(ReportDocument document, IReadOnlyList<string> sheets, int headerRow, DataSourceFieldBinding field)
+    {
+        if (field.Headers is not { Count: > 0 } headers)
+        {
+            return null;
+        }
+
+        var problems = new List<string>();
+        foreach (var sheet in document.Sheets.Where(s => sheets.Contains(s.Name)))
+        {
+            var header = headerRow >= 1 && headerRow <= sheet.Rows.Count ? sheet.Rows[headerRow - 1] : [];
+            var names = header.Select(h => DataValues.Normalize(h)).ToList();
+            foreach (var (column, saved) in headers)
+            {
+                if (names.Contains(DataValues.Normalize(column)))
+                {
+                    continue;
+                }
+
+                if (DataValues.ColumnIndex(column) is not { } index)
+                {
+                    problems.Add($"«{sheet.Name}»: столбца «{column}» больше нет");
+                    continue;
+                }
+
+                var now = index < header.Count ? header[index].Trim() : string.Empty;
+                if (DataValues.Normalize(now) != DataValues.Normalize(saved))
+                {
+                    problems.Add($"«{sheet.Name}»: в столбце {column} теперь «{now}», а при сопоставлении был «{saved}»");
+                }
+            }
+        }
+
+        return problems.Count == 0
+            ? null
+            : $"структура листа изменилась — {string.Join("; ", problems.Distinct().Take(5))}. Ничего не записано: откройте привязку и сопоставьте " +
+              "столбцы заново (можно «Сопоставить с помощью ИИ»)";
     }
 
     /// <summary>Листы привязки из JSON (jsonb).</summary>

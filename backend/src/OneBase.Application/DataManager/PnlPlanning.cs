@@ -62,7 +62,9 @@ public sealed record PnlRequest(
     IReadOnlyList<PnlRawValue>? Values,
     IReadOnlyDictionary<string, string>? LineMap,
     IReadOnlyDictionary<string, string>? DealerMap,
-    string? Note);
+    string? Note,
+    string? FromMonth = null,
+    string? ToMonth = null);
 
 public static class PnlExtraction
 {

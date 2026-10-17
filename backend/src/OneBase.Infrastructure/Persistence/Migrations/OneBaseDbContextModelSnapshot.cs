@@ -1005,6 +1005,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("RolledBackById")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("SourceBindingId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(24)
@@ -2481,6 +2484,94 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("Enabled", "NextRunAt");
 
                     b.ToTable("DataSourceBindings", (string)null);
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceConflict", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BindingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Entity")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("NeedsAction")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Occurrences")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Period")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ResolvedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Rule")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("SourceRef")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BindingId", "Fingerprint");
+
+                    b.HasIndex("ResolvedAt", "LastSeenAt");
+
+                    b.ToTable("DataSourceConflicts", (string)null);
                 });
 
             modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceConnection", b =>
@@ -4150,6 +4241,14 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Connection");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceConflict", b =>
+                {
+                    b.HasOne("OneBase.Domain.Integrations.DataSourceBinding", null)
+                        .WithMany()
+                        .HasForeignKey("BindingId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceSyncRun", b =>

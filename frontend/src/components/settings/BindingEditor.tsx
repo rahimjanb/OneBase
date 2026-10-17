@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { Modal } from "@/components/files/Modal";
+import { AutoMapPanel } from "@/components/settings/AutoMapPanel";
+import { PeriodSelect } from "@/components/settings/PeriodSelect";
 import {
   AllSheets,
   dataSourcesApi,
@@ -10,10 +12,13 @@ import {
   type ConnectionView,
   type DataSourceField,
   type FieldBinding,
+  type MappingDecision,
+  type MappingFieldSetting,
   type PlanMapping,
   type PnlMapping,
   type Schedule,
   type SectionView,
+  type SheetMappingProposal,
   type SheetPreview,
 } from "@/lib/data-sources";
 
@@ -21,7 +26,7 @@ const input = "h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm 
 const label = "mb-1 block text-xs font-medium text-ink-2";
 const intervals = [15, 30, 60, 180, 360, 720, 1440];
 
-type Column = { value: string; label: string };
+type Column = { value: string; label: string; header: string };
 
 /** Столбцы листа: значение — заголовок (если он есть и не повторяется), иначе буква; подпись — «B · Регион». */
 function columnsOf(preview: SheetPreview | null, headerRow: number): Column[] {
@@ -31,7 +36,28 @@ function columnsOf(preview: SheetPreview | null, headerRow: number): Column[] {
   return preview.letters.map((letter, i) => {
     const name = names[i] ?? "";
     const unique = name.length > 0 && names.filter((n) => n.toLowerCase() === name.toLowerCase()).length === 1;
-    return { value: unique ? name : letter, label: `${letter} · ${name || "—"}` };
+    return { value: unique ? name : letter, label: `${letter} · ${name || "—"}`, header: name };
+  });
+}
+
+/**
+ * Снимок заголовков для сохранения: столбец сопоставления → заголовок в листе предпросмотра. Синхронизация сверяет с ним лист: переименовали
+ * или переставили столбцы — поле не пишется, а не читает не тот столбец. Столбец не из этого листа — прежний снимок остаётся.
+ */
+function withHeaders(fields: FieldBinding[], columns: Column[]): FieldBinding[] {
+  if (columns.length === 0) return fields;
+  return fields.map((f) => {
+    const refs = [
+      f.plan?.regionColumn, f.plan?.categoryColumn, f.plan?.valueColumn, f.plan?.monthColumn, f.plan?.yearColumn, ...(f.plan?.valueColumns?.map((c) => c.column) ?? []),
+      f.profile?.regionColumn, f.profile?.valueColumn, f.pnl?.dealerColumn, f.pnl?.lineColumn, f.pnl?.valueColumn, f.pnl?.monthColumn, f.pnl?.yearColumn,
+    ].filter((r): r is string => !!r);
+    const headers: Record<string, string> = {};
+    for (const ref of refs) {
+      const column = columns.find((c) => c.value === ref);
+      if (!column) return f;
+      headers[ref] = column.header;
+    }
+    return { ...f, headers };
   });
 }
 
@@ -52,13 +78,13 @@ function defaultField(field: DataSourceField, columns: Column[]): FieldBinding {
       lineColumn: guess(columns, /стать|строк|line|показател/i), valueColumn: guess(columns, /сумм|amount|значен/i),
       yearColumn: guess(columns, /^.{0,4}год|year/i), monthColumn: month, year: month ? null : new Date().getFullYear(), month: null, multiplier: 1,
     };
-    return { field: field.key, pnl, replace: true };
+    return { field: field.key, pnl, replace: true, period: { mode: "year" } };
   }
   const plan: PlanMapping = {
     regionColumn: region, categoryColumn: guess(columns, /категор|category/i), valueColumn: guess(columns, /план|plan|кг|kg/i), valueColumns: null,
     monthColumn: month, yearColumn: guess(columns, /^.{0,4}год|year/i), year: new Date().getFullYear(), month: month ? null : new Date().getMonth() + 1, multiplier: 1,
   };
-  return { field: field.key, plan, replace: true };
+  return { field: field.key, plan, replace: true, period: { mode: "year" } };
 }
 
 function ColumnSelect({ value, columns, onChange, empty }: { value: string | null; columns: Column[]; onChange: (v: string | null) => void; empty?: string }) {
@@ -105,8 +131,9 @@ export function BindingEditor({
   const sheet = previewable.includes(previewPick) ? previewPick : (previewable[0] ?? "");
   const [headerRow, setHeaderRow] = useState(binding?.headerRow ?? 1);
   const [fields, setFields] = useState<FieldBinding[]>(binding?.fields ?? []);
-  const [schedule, setSchedule] = useState<Schedule>(binding?.schedule ?? "daily");
-  const [intervalMinutes, setIntervalMinutes] = useState(binding?.intervalMinutes ?? 60);
+  // Новая привязка — каждые 30 минут: свежие планы без ручного запуска.
+  const [schedule, setSchedule] = useState<Schedule>(binding?.schedule ?? "interval");
+  const [intervalMinutes, setIntervalMinutes] = useState(binding?.intervalMinutes ?? 30);
   const [dailyAt, setDailyAt] = useState(binding?.dailyAt ?? "07:00");
   const [enabled, setEnabled] = useState(binding?.enabled ?? true);
   const [preview, setPreview] = useState<SheetPreview | null>(null);
@@ -114,6 +141,11 @@ export function BindingEditor({
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // ИИ-сопоставление: предложение бэкенда (реальный вызов модели), ошибка, идёт ли анализ или подтверждение.
+  const [proposal, setProposal] = useState<SheetMappingProposal | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState<"confirm" | "manual" | null>(null);
 
   useEffect(() => {
     if (!connectionId || !sheet) return;
@@ -135,6 +167,48 @@ export function BindingEditor({
     setFields((prev) => (on ? [...prev, defaultField(field, columns)] : prev.filter((f) => f.field !== field.key)));
   const update = (key: string, change: (f: FieldBinding) => FieldBinding) => setFields((prev) => prev.map((f) => (f.field === key ? change(f) : f)));
 
+  const target = { section: section.key, connectionId, sheets, sheet: sheet || null, headerRow, bindingId: binding?.id ?? null };
+
+  const autoMap = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    setProposal(null);
+    try {
+      setProposal(await dataSourcesApi.autoMap(target));
+    } catch (e) {
+      setAiError((e as Error).message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const confirmAutoMap = async (decisions: MappingDecision[], settings: MappingFieldSetting[], dryRun: boolean) => {
+    setAiBusy(dryRun ? "manual" : "confirm");
+    setAiError(null);
+    try {
+      const result = await dataSourcesApi.confirmAutoMap({
+        ...target,
+        decisions,
+        settings,
+        schedule,
+        intervalMinutes: schedule === "interval" ? intervalMinutes : null,
+        dailyAt: schedule === "daily" ? dailyAt : null,
+        enabled,
+        dryRun,
+      });
+      if (dryRun) {
+        setFields(result.fields);
+        setProposal(null);
+      } else {
+        onSaved();
+      }
+    } catch (e) {
+      setAiError((e as Error).message);
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     setError(null);
@@ -144,7 +218,7 @@ export function BindingEditor({
         connectionId,
         sheets,
         headerRow,
-        fields,
+        fields: withHeaders(fields, columns),
         schedule,
         intervalMinutes: schedule === "interval" ? intervalMinutes : null,
         dailyAt: schedule === "daily" ? dailyAt : null,
@@ -269,8 +343,33 @@ export function BindingEditor({
         </div>
 
         <div>
-          <div className="mb-2 text-sm font-semibold text-ink">Какие поля обновлять из этого листа</div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-ink">Какие поля обновлять из этого листа</span>
+            <button
+              type="button"
+              onClick={autoMap}
+              disabled={aiLoading || !preview || !connectionId || sheets.length === 0}
+              title={!preview ? "Сначала дождитесь предпросмотра листа" : "ИИ посмотрит заголовки и значения листа и предложит, какие столбцы в какие поля OneBase"}
+              className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-accent/60 bg-accent-soft px-3 text-xs font-medium text-accent-strong hover:bg-accent-soft/70 disabled:opacity-50"
+            >
+              {aiLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+              {aiLoading ? "ИИ анализирует лист…" : "Сопоставить с помощью ИИ"}
+            </button>
+          </div>
           <p className="mb-3 text-xs text-ink-3">Обновляются только отмеченные поля. Строки с ошибкой (регион не найден, не число) не записываются — поле ждёт исправления таблицы.</p>
+          {aiError && !proposal && <div className="mb-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{aiError}</div>}
+          {proposal && (
+            <div className="mb-3">
+              <AutoMapPanel
+                proposal={proposal}
+                busy={aiBusy}
+                error={aiError}
+                onConfirm={(d, s) => confirmAutoMap(d, s, false)}
+                onToManual={(d, s) => confirmAutoMap(d, s, true)}
+                onClose={() => (setProposal(null), setAiError(null))}
+              />
+            </div>
+          )}
           <div className="space-y-3">
             {section.fields.map((f) => {
               const selected = fields.find((x) => x.field === f.key);
@@ -325,6 +424,14 @@ export function BindingEditor({
                           onChange={(pnl, replace, monthFromSheet, currentMonth) => update(f.key, (x) => ({ ...x, pnl, replace, monthFromSheet, currentMonth }))}
                         />
                       )}
+                      {/* Период — когда в листе много месяцев (месяц столбцом или в названиях листов). */}
+                      {f.kind !== "profile" &&
+                        !selected.currentMonth &&
+                        (selected.monthFromSheet || (f.kind === "plan" ? selected.plan?.monthColumn : selected.pnl?.monthColumn)) && (
+                          <div className="mt-3 border-t border-line pt-3">
+                            <PeriodSelect value={selected.period} onChange={(period) => update(f.key, (x) => ({ ...x, period }))} />
+                          </div>
+                        )}
                     </div>
                   )}
                 </div>

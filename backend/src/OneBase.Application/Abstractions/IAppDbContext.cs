@@ -99,5 +99,10 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Work.PushSubscription> PushSubscriptions { get; }
     DbSet<OneBase.Domain.Work.PushKeys> PushKeys { get; }
 
+    // Источники данных: привязки Google Sheets определяют владельца полей OneBase; конфликты — журнал отказов и строк с ошибками.
+    DbSet<OneBase.Domain.Integrations.DataSourceConnection> DataSourceConnections { get; }
+    DbSet<OneBase.Domain.Integrations.DataSourceBinding> DataSourceBindings { get; }
+    DbSet<OneBase.Domain.Integrations.DataSourceConflict> DataSourceConflicts { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

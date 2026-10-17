@@ -133,9 +133,13 @@ public sealed record DataChangeSetSummaryView(
 /// <summary>
 /// Кто готовит план: пользователь (из сессии, а не из ответа модели) и чат. Source — синхронизация из внешнего источника
 /// («Google Sheets «План 2026» / План»): попадает в название операции вместо «из сообщения», источник плана — google_sheets.
+/// BindingId — привязка Google Sheets этой синхронизации: поле, которое она ведёт, меняет только она (FieldOwnership).
 /// </summary>
-public sealed record DataActor(Guid UserId, Guid? ConversationId, string? Source = null)
+public sealed record DataActor(Guid UserId, Guid? ConversationId, string? Source = null, Guid? BindingId = null)
 {
+    /// <summary>Кто пишет — для журнала конфликтов: синхронизация Google Sheets или AI Data Manager (чат, файл).</summary>
+    public string ConflictSource => BindingId is null ? OneBase.Application.DataSources.ConflictSources.DataManager : OneBase.Application.DataSources.ConflictSources.GoogleSheets;
+
     /// <summary>Источник значений без файла: сообщение пользователя или внешняя таблица.</summary>
     public string ValuesSource => Source is null ? "message" : "google_sheets";
 
@@ -143,13 +147,16 @@ public sealed record DataActor(Guid UserId, Guid? ConversationId, string? Source
     public string ValuesLabel => Source is null ? " · из сообщения" : $" · {Source}";
 }
 
+/// <remarks>FromMonth…ToMonth («2026-01») — брать только месяцы периода: лист с историей за годы не упирается в 24 месяца.</remarks>
 public sealed record RegionPlanRequest(
     PlanKind Kind,
     bool Replace,
     Guid? FileId,
     PlanSheetMapping? Mapping,
     IReadOnlyList<PlanValue>? Values,
-    string? Note);
+    string? Note,
+    string? FromMonth = null,
+    string? ToMonth = null);
 
 /// <summary>Итог применения или отката.</summary>
 public sealed record ApplyOutcome(DataChangeSetStatus Status, int Applied, int Skipped, string Message, IReadOnlyList<string> Problems);
