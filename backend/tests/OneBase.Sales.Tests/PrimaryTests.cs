@@ -321,9 +321,36 @@ public class PrimaryTests
         Assert.Equal("5 точек Linko", direct.Parties[PrimaryMath.ClientId("Макро")].Sub);
         Assert.Equal(263m, byName["Болажон Сити молл"]);
         Assert.Equal(711m, byName["Хавас"]);
-        Assert.Equal(108m, byName["Ятт Илгоров"]);
+        Assert.Equal(108m, byName["Накт пул бозор"]); // «Ятт Илгоров», заказ «доставлен»
         Assert.Equal(4, direct.Parties.Count);
         Assert.Null(Options.PrimaryClientName("Makro M001 склад")); // латиница без номера магазина — не Makro-магазин
+    }
+
+    /// <summary>
+    /// «Ятт Илгоров» — как в таблице первички две строки: заказы «отдан» — «Фирменный магазин» (сверка 2026: вес совпадает до 0,1 кг
+    /// в 9 месяцах из 10), остальные заказы и возвраты — «Накт пул бозор». Деление задаётся в настройках и заменяет запись из кода.
+    /// </summary>
+    [Fact]
+    public void Shop_of_the_factory_is_split_by_order_status_like_the_primary_table()
+    {
+        PrimaryOrderLine Order(long id, string status, decimal kg) =>
+            new(id, 26500, "Ятт Илгоров", "Retail", "Завод", status, Aug10, "SUM", 7, kg, kg, kg * 30_000);
+        PrimaryOrderLine[] orders = [Order(1, "given", 144.3m), Order(2, "delivered", 4.5m), Order(3, "not_delivered", 2), Order(4, "cancelled", 9)];
+        PrimaryReturnLine[] returns = [new(50, 26500, "Ятт Илгоров", "Retail", "Завод", "delivered", Aug10, 7, 1, 30_000, 1)];
+
+        var direct = PrimaryMath.DirectOrders(orders, returns, Options, Pricing);
+        var byName = direct.Rows.GroupBy(r => direct.Parties[r.Counterparty].Name).ToDictionary(g => g.Key, g => g.Sum(r => r.Amounts.Kg));
+
+        Assert.Equal(144.3m, byName["Фирменный магазин"]);
+        Assert.Equal(5.5m, byName["Накт пул бозор"]); // 4,5 + 2 − 1 (возврат)
+        Assert.Equal("Ятт Илгоров · Retail · Завод", direct.Parties[PrimaryMath.ClientId("Фирменный магазин")].Sub);
+        Assert.Equal("Накт пул бозор", Options.PrimaryClientName(" ятт илгоров ", "DELIVERED"));
+        Assert.Equal("Мурод бозор/Д63", Options.PrimaryClientName("Murod D/63", "given")); // остальные точки — как раньше
+
+        var options = SalesOptionsBinding.Load(new ConfigurationBuilder().AddJsonStream(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("""
+            { "Sales": { "PrimaryClientStatusNames": { "^Ятт Илгоров$": { "*": "Ятт Илгоров" } } } }
+            """))).Build());
+        Assert.Equal("Ятт Илгоров", options.PrimaryClientName("Ятт Илгоров", "delivered"));
     }
 
     [Fact]

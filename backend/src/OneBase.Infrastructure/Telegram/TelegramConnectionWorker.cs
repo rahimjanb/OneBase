@@ -30,7 +30,15 @@ internal sealed class TelegramConnectionWorker(IServiceScopeFactory scopes, ILog
         using var timer = new PeriodicTimer(Interval);
         do
         {
-            await RunOnceAsync(stoppingToken);
+            try
+            {
+                await RunOnceAsync(stoppingToken);
+            }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            {
+                // Фоновая служба не должна останавливать весь сервер: ошибка — в журнал, следующий круг через Interval.
+                logger.LogWarning(ex, "Telegram: проверка подключений не завершилась");
+            }
         }
         while (await WaitAsync(timer, stoppingToken));
     }
@@ -58,7 +66,7 @@ internal sealed class TelegramConnectionWorker(IServiceScopeFactory scopes, ILog
                 .Where(a => a.Status == TelegramAccountStatus.Connected)
                 .Select(a => a.Id).ToListAsync(ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             logger.LogWarning(ex, "Telegram: список аккаунтов не прочитан");
             return;
@@ -84,8 +92,9 @@ internal sealed class TelegramConnectionWorker(IServiceScopeFactory scopes, ILog
             {
                 logger.LogWarning("Telegram {Account}: не подключён — {Error}", id, ex.Message);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
+                // В т.ч. отмена изнутри библиотеки при обрыве сети — это не остановка сервера.
                 logger.LogWarning(ex, "Telegram {Account}: ошибка подключения", id);
             }
         }

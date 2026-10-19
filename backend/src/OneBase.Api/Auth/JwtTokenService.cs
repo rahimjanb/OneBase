@@ -14,10 +14,10 @@ public sealed class JwtOptions
     public string Audience { get; set; } = "onebase";
     public string SigningKey { get; set; } = string.Empty;
     /// <summary>
-    /// Срок сессии — рабочий день. Права и активность пользователя всё равно проверяются по БД на каждом запросе
-    /// (UserAccessCache), поэтому отключённый пользователь теряет доступ сразу, а не через 12 часов.
+    /// Срок токена входа: сеанс длится, пока пользователь сам не выйдет, поэтому срок долгий (10 лет). Отзыв — на сервере:
+    /// токен несёт сеанс (UserSession), его проверяют на каждом запросе вместе с правами и активностью пользователя (UserAccessCache).
     /// </summary>
-    public int AccessTokenMinutes { get; set; } = 720;
+    public int SessionDays { get; set; } = 3650;
 
     public SymmetricSecurityKey GetSigningKey() => new(Encoding.UTF8.GetBytes(SigningKey));
 }
@@ -31,6 +31,8 @@ public static class OneBaseClaims
     public const string Role = "role";
     public const string Permission = "perm";
     public const string Department = "dept";
+    /// <summary>Сеанс входа (UserSession.Id).</summary>
+    public const string Session = "sid";
 
     public static Guid GetUserId(this ClaimsPrincipal principal) =>
         Guid.Parse(principal.FindFirstValue(UserId) ?? throw new InvalidOperationException("В токене нет sub."));
@@ -40,13 +42,14 @@ public sealed class JwtTokenService(JwtOptions options)
 {
     private readonly JsonWebTokenHandler _handler = new();
 
-    public (string Token, DateTimeOffset ExpiresAt) Create(User user, IEnumerable<string> roles, IEnumerable<string> permissions)
+    public (string Token, DateTimeOffset ExpiresAt) Create(User user, Guid sessionId, IEnumerable<string> roles, IEnumerable<string> permissions)
     {
-        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(options.AccessTokenMinutes);
+        var expiresAt = DateTimeOffset.UtcNow.AddDays(options.SessionDays);
 
         var claims = new List<Claim>
         {
             new(OneBaseClaims.UserId, user.Id.ToString()),
+            new(OneBaseClaims.Session, sessionId.ToString()),
             new(OneBaseClaims.Login, user.Login),
             new(OneBaseClaims.Name, user.FullName),
         };

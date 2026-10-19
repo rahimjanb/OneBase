@@ -37,6 +37,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<User> Users => Set<User>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Department> Departments => Set<Department>();
 
@@ -228,6 +229,14 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.HasIndex(x => x.Login).IsUnique();
             e.HasIndex(x => x.Email).IsUnique();
             e.HasOne(x => x.Department).WithMany(x => x.Users).HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<UserSession>(e =>
+        {
+            e.Property(x => x.UserAgent).HasMaxLength(300);
+            e.Property(x => x.Ip).HasMaxLength(64);
+            e.HasIndex(x => x.UserId);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Role>(e =>

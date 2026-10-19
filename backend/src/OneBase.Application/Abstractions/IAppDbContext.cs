@@ -11,6 +11,7 @@ namespace OneBase.Application.Abstractions;
 public interface IAppDbContext
 {
     DbSet<User> Users { get; }
+    DbSet<UserSession> UserSessions { get; }
     DbSet<Role> Roles { get; }
     DbSet<Department> Departments { get; }
 

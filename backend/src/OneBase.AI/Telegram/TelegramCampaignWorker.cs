@@ -17,10 +17,17 @@ internal sealed class TelegramCampaignWorker(TelegramCampaignRunner runner, ILog
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
-            var failed = await runner.RecoverAsync(stoppingToken);
-            if (failed > 0)
+            try
             {
-                logger.LogWarning("Рассылки: {Count} отправок прервано перезапуском — помечены ошибкой без автоповтора", failed);
+                var failed = await runner.RecoverAsync(stoppingToken);
+                if (failed > 0)
+                {
+                    logger.LogWarning("Рассылки: {Count} отправок прервано перезапуском — помечены ошибкой без автоповтора", failed);
+                }
+            }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            {
+                logger.LogWarning(ex, "Рассылки: прерванные отправки не проверены");
             }
 
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
@@ -38,8 +45,9 @@ internal sealed class TelegramCampaignWorker(TelegramCampaignRunner runner, ILog
                         _running[account] = Task.Run(() => RunAsync(account, stoppingToken), CancellationToken.None);
                     }
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
                 {
+                    // Обрыв сети или базы — не остановка сервера: в журнал, следующий круг через 5 с.
                     logger.LogWarning(ex, "Рассылки: круг очереди не выполнен");
                 }
             }

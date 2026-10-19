@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Paperclip, Plus, Users, X } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Note } from "@/components/sales/bits";
@@ -22,6 +22,16 @@ export function CampaignsList({ initial, accounts }: { initial: CampaignListItem
   const [rows, setRows] = useState(initial);
   const [filter, setFilter] = useState("all");
   const [creating, setCreating] = useState(false);
+  const router = useRouter();
+  const params = useSearchParams();
+
+  // «Новая рассылка» из меню на телефоне (/campaigns?new=1): то же окно, что у кнопки; адрес возвращается к списку.
+  const askedNew = params.get("new") === "1";
+  useEffect(() => {
+    if (!askedNew) return;
+    if (accounts.length > 0) setCreating(true);
+    router.replace("/campaigns", { scroll: false });
+  }, [askedNew, accounts.length, router]);
 
   // Идущие рассылки обновляются сами.
   useEffect(() => {

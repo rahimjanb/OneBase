@@ -32,7 +32,9 @@ const baseMetadata: Metadata = {
   // Манифест (/manifest.webmanifest) Next.js подключает сам по файлу app/manifest.ts.
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "32x32" },
+      // ?v= — новый адрес для кэша: Cloudflare держал /favicon.ico прежнего сайта на домене (2022 г., срок 60 дней), и на вкладке
+      // в проде был чужой значок. При смене значка — увеличить номер.
+      { url: "/favicon.ico?v=2", sizes: "32x32" },
       { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
     ],
     apple: "/icons/apple-touch-icon.png",

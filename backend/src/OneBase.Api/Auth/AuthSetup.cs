@@ -35,6 +35,7 @@ public static class AuthSetup
             });
 
         services.AddSingleton<UserAccessCache>();
+        services.AddSingleton<UserSessionCache>();
         services.AddAuthorization();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 
@@ -43,7 +44,8 @@ public static class AuthSetup
 
     /// <summary>
     /// Роли и права берутся из БД, а не из токена: иначе новые права (или отзыв доступа)
-    /// действовали бы только после повторного входа. Удалённый или отключённый пользователь получает 401.
+    /// действовали бы только после повторного входа. Удалённый или отключённый пользователь получает 401, закрытый сеанс (выход,
+    /// смена пароля) — тоже. Токен без сеанса выдан до сеансов: действует до своего срока (12 часов).
     /// </summary>
     private static async Task RefreshAccessAsync(TokenValidatedContext context)
     {
@@ -51,6 +53,15 @@ public static class AuthSetup
             || !Guid.TryParse(identity.FindFirst(OneBaseClaims.UserId)?.Value, out var userId))
         {
             context.Fail("В токене нет идентификатора пользователя.");
+            return;
+        }
+
+        if (identity.FindFirst(OneBaseClaims.Session)?.Value is { } sid
+            && (!Guid.TryParse(sid, out var sessionId)
+                || !await context.HttpContext.RequestServices.GetRequiredService<UserSessionCache>()
+                    .IsActiveAsync(sessionId, userId, context.HttpContext.RequestAborted)))
+        {
+            context.Fail("Сеанс закрыт: пользователь вышел или пароль сменили.");
             return;
         }
 

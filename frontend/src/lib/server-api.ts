@@ -4,6 +4,11 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 export const SESSION_COOKIE = "onebase_token";
+/**
+ * Срок cookie сессии — 400 дней: дольше браузеры не хранят. Сеанс длится до выхода: proxy продлевает cookie при каждом заходе,
+ * а токен внутри живёт 10 лет и закрывается на сервере выходом (как SESSION_MAX_AGE в proxy.ts).
+ */
+export const SESSION_MAX_AGE = 400 * 24 * 60 * 60;
 export const API_URL = process.env.API_INTERNAL_URL ?? "http://localhost:5080";
 
 export class ApiRequestError extends Error {

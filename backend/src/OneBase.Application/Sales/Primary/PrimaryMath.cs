@@ -221,7 +221,9 @@ public static class PrimaryMath
     /// сумма строки в основной валюте (заказ в другой валюте даёт вес без суммы и считается отдельно), минус возвраты по строкам (статус
     /// ReturnStatuses, дата создания возврата, деньги = количество × цена). Точки PrimaryExcludedMarkets («Дегустатсия + Акция») не входят.
     /// Контрагент группы direct — точка под своим названием или, по SalesOptions.PrimaryClientNames, строка с названием таблицы первички
-    /// («Murod D/63» — «Мурод бозор/Д63», «Макро РЦ» и магазины Makro — «Макро»); второй строкой — точка Linko или их число.
+    /// («Murod D/63» — «Мурод бозор/Д63», «Макро РЦ» и магазины Makro — «Макро»); второй строкой — точка Linko или их число. Точку, которую
+    /// таблица делит по статусу заказа (SalesOptions.PrimaryClientStatusNames: «Ятт Илгоров» — «Фирменный магазин» и «Накт пул бозор»),
+    /// — на две строки; её возвраты — во вторую.
     /// </summary>
     public static PrimaryDirect DirectOrders(IEnumerable<PrimaryOrderLine> orders, IEnumerable<PrimaryReturnLine> returns, SalesOptions options, PrimaryPricing pricing)
     {
@@ -234,9 +236,9 @@ public static class PrimaryMath
         bool Counts(long market, string name, string? type, string? branch) =>
             options.IsPrimaryOrderBranch(branch) && !options.IsExportMarketType(type) && !options.IsPrimaryExcludedMarket(market, name);
 
-        string Party(long market, string name, string? type, string? branch)
+        string Party(long market, string name, string? type, string? branch, string? status)
         {
-            var report = options.PrimaryClientName(name);
+            var report = options.PrimaryClientName(name, status);
             var id = report is null ? DirectId(market) : ClientId(report);
             if (!clients.TryGetValue(id, out var client))
             {
@@ -262,7 +264,7 @@ public static class PrimaryMath
             }
 
             var (amounts, boxesKnown) = pricing.Value(o.ProductId, o.Amount, o.Kg, inBase ? o.TotalPrice : 0);
-            rows.Add(new PrimaryShipment($"o:{o.OrderId}", Party(o.MarketId, o.MarketName, o.MarketType, o.Branch), o.CreatedDate, o.ProductId, amounts, boxesKnown));
+            rows.Add(new PrimaryShipment($"o:{o.OrderId}", Party(o.MarketId, o.MarketName, o.MarketType, o.Branch, o.Status), o.CreatedDate, o.ProductId, amounts, boxesKnown));
         }
 
         foreach (var r in returns)
@@ -273,7 +275,7 @@ public static class PrimaryMath
             }
 
             var (amounts, boxesKnown) = pricing.Value(r.ProductId, r.Amount, r.Kg, r.Amount * r.Price);
-            rows.Add(new PrimaryShipment($"r:{r.ReturnId}", Party(r.MarketId, r.MarketName, r.MarketType, r.Branch), r.CreatedDate, r.ProductId,
+            rows.Add(new PrimaryShipment($"r:{r.ReturnId}", Party(r.MarketId, r.MarketName, r.MarketType, r.Branch, null), r.CreatedDate, r.ProductId,
                 amounts.Negate(), boxesKnown, IsReturn: true));
         }
 

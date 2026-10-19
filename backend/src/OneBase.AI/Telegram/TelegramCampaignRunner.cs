@@ -180,7 +180,7 @@ public sealed class TelegramCampaignRunner(IServiceScopeFactory scopes, TimeProv
                 recipient.NextAttemptAt = null;
                 await db.SaveChangesAsync(CancellationToken.None);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Рассылка {Campaign}: ошибка отправки в чат {Peer}", campaign.Id, recipient.PeerId);
                 recipient.Status = recipient.Attempts < TelegramRules.MaxAttempts ? TelegramRecipientStatus.Pending : TelegramRecipientStatus.Failed;

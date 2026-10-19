@@ -275,7 +275,7 @@ public sealed class TelegramAgentService(
             execution.Status = "error";
             execution.Error = Short(ex.Message, 1000);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             logger.LogError(ex, "Telegram-агент: ошибка ответа (аккаунт {Account})", m.AccountId);
             execution.Status = "error";

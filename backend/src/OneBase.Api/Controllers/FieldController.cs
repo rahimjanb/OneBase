@@ -143,6 +143,7 @@ public sealed partial class FieldController(
             existing.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
             userAccess.Invalidate(existing.Id);
+            await db.RevokeAllAsync(existing.Id, keep: null, ct); // новый пароль закрывает старые входы сотрудника
             await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "field.member.password_reset", "field_member", member.Id.ToString(), null, ct);
             return Ok(new { login = existing.Login, password });
         }

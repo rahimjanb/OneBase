@@ -328,17 +328,62 @@ public sealed class SalesOptions
         [@"^Макро РЦ$|^[MМ]\s?\d{3}\b"] = "Макро",
     };
 
-    /// <summary>Название строки прямого клиента по <see cref="PrimaryClientNames"/> или null — правила нет (неверное выражение пропускается).</summary>
-    public string? PrimaryClientName(string marketName)
+    /// <summary>
+    /// Точки, которые таблица первички (ГП) делит на две строки по статусу заказа: регулярное выражение по названию точки Linko → статус заказа →
+    /// название строки; «*» — остальные статусы и возвраты. «Ятт Илгоров»: заказы «отдан» — «Фирменный магазин», остальные (мелкие заказы
+    /// базара за наличные) — «Накт пул бозор». Проверяются раньше <see cref="PrimaryClientNames"/>.
+    /// </summary>
+    public Dictionary<string, Dictionary<string, string>> PrimaryClientStatusNames { get; set; } = new()
     {
+        ["^Ятт Илгоров$"] = new(StringComparer.OrdinalIgnoreCase) { ["given"] = "Фирменный магазин", ["*"] = "Накт пул бозор" },
+    };
+
+    /// <summary>
+    /// Название строки прямого клиента: по <see cref="PrimaryClientStatusNames"/> (статус заказа; у возврата — null, он идёт в «*»),
+    /// иначе по <see cref="PrimaryClientNames"/>; null — правила нет (неверное выражение пропускается).
+    /// </summary>
+    public string? PrimaryClientName(string marketName, string? status = null)
+    {
+        var name = marketName.Trim();
+        var splits = _clientSplits ??= PrimaryClientStatusNames
+            .Select(r => (Regex: string.IsNullOrWhiteSpace(r.Key) ? null : ClientRule(r.Key), Names: StatusNames(r.Value)))
+            .Where(r => r.Regex is not null && r.Names.Count > 0)
+            .Select(r => (Regex: r.Regex!, r.Names))
+            .ToList();
+        foreach (var (regex, names) in splits.Where(s => s.Regex.IsMatch(name)))
+        {
+            if (status is not null && names.TryGetValue(status.Trim(), out var byStatus))
+            {
+                return byStatus;
+            }
+
+            if (names.TryGetValue("*", out var other))
+            {
+                return other;
+            }
+        }
+
         var rules = _clientNames ??= PrimaryClientNames
             .Where(r => !string.IsNullOrWhiteSpace(r.Key) && !string.IsNullOrWhiteSpace(r.Value))
             .Select(r => (Regex: ClientRule(r.Key), Name: r.Value.Trim()))
             .Where(r => r.Regex is not null)
             .Select(r => (Regex: r.Regex!, r.Name))
             .ToList();
-        var name = marketName.Trim();
         return rules.FirstOrDefault(r => r.Regex.IsMatch(name)).Name;
+    }
+
+    private static Dictionary<string, string> StatusNames(Dictionary<string, string>? names)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (status, title) in names ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(status) && !string.IsNullOrWhiteSpace(title))
+            {
+                result[status.Trim()] = title.Trim();
+            }
+        }
+
+        return result;
     }
 
     private static System.Text.RegularExpressions.Regex? ClientRule(string pattern)
@@ -356,6 +401,7 @@ public sealed class SalesOptions
     }
 
     private List<(System.Text.RegularExpressions.Regex Regex, string Name)>? _clientNames;
+    private List<(System.Text.RegularExpressions.Regex Regex, Dictionary<string, string> Names)>? _clientSplits;
 
     /// <summary>
     /// Прайс-лист Linko с ценой, по которой дилер продаёт дальше («Дилердан чикиш нарх»): по нему считается «сумма по цене продажи дилера»

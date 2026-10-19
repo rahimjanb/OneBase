@@ -75,6 +75,7 @@ docker compose --profile tunnel up -d           # + Cloudflare Tunnel (нуже�
 | Метод | Путь | Разрешение |
 |---|---|---|
 | POST | `/api/auth/login` | — |
+| POST | `/api/auth/logout` | авторизован |
 | GET | `/api/auth/me` | авторизован |
 | GET | `/api/agents` | авторизован |
 | POST | `/api/agents/director/tasks` | `ai.agents.run` |
@@ -82,6 +83,12 @@ docker compose --profile tunnel up -d           # + Cloudflare Tunnel (нуже�
 | POST | `/api/approvals/{id}/approve` · `/reject` | `ai.approvals.decide` |
 | GET | `/api/audit` | `audit.read` |
 | GET | `/health` | — |
+
+**Сеанс входа длится, пока пользователь сам не выйдет.** Вход создаёт сеанс (`UserSessions`), токен несёт его номер (claim `sid`)
+и живёт `Jwt:SessionDays` (10 лет); сервер проверяет сеанс на каждом запросе (кэш на минуту). Cookie `onebase_token` хранится 400 дней
+(дольше браузеры не держат) и продлевается при каждом заходе на страницу. Выход (`/logout` → `POST /api/auth/logout`) закрывает
+только этот сеанс — другие устройства остаются; смена пароля администратором закрывает все сеансы пользователя (свой текущий вход
+администратор сохраняет), отключение пользователя — доступ сразу. Токены, выданные до сеансов (без `sid`), действуют до своего срока — 12 часов.
 
 ## Миграции
 

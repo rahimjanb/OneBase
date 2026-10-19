@@ -20,8 +20,8 @@ type Option<T extends string> = { key: T; label: string; title?: string };
 const units: Option<Unit>[] = [
   { key: "kg", label: "кг" },
   { key: "boxes", label: "коробки" },
-  { key: "sumFactory", label: "сум (цена дилера)", title: "Сумма (цена дилера): сумма перемещения или заказа — по этой цене дилер берёт товар у завода" },
-  { key: "sumDealer", label: "сум (продажа дилера)", title: "Сумма (цена продажи дилера): количество × цена прайса «Дилердан чикиш нарх»" },
+  { key: "sumFactory", label: "сум дилера", title: "Сумма дилера: по этой цене дилер берёт товар у завода (сумма перемещения или заказа) — как «сум дилера» в «Полевом контроле»" },
+  { key: "sumDealer", label: "сум (продажа магазинам)", title: "Продажа магазинам: количество × цена прайса «Дилердан чикиш нарх» — по ней дилер продаёт дальше; в «Полевом контроле» этой суммы нет" },
 ];
 
 const exportUnits: Option<Unit>[] = [
@@ -282,7 +282,7 @@ function ShipmentCalendar({
   unit: Unit;
   nameLabel?: string;
   allLabel?: string;
-  /** Колонка «По цене продажи дилера» в разборе (у экспорта её нет). */
+  /** Колонка «Продажа магазинам» в разборе (у экспорта её нет). */
   dealerSum?: boolean;
   /** Колонка «Коробок» в разборе (у экспорта коробок нет). */
   boxes?: boolean;
@@ -450,8 +450,8 @@ function ShipmentCalendar({
                     <th className="py-1.5 pl-3 text-left font-semibold">Категория</th>
                     {boxes && <th className="py-1.5 text-right font-semibold">Коробок</th>}
                     <th className="py-1.5 text-right font-semibold">Кг</th>
-                    <th className="py-1.5 text-right font-semibold">{dealerSum ? "Сумма (цена дилера)" : "Сумма"}</th>
-                    {dealerSum && <th className="py-1.5 text-right font-semibold">Сумма (цена продажи дилера)</th>}
+                    <th className="py-1.5 text-right font-semibold">{dealerSum ? "Сумма дилера" : "Сумма"}</th>
+                    {dealerSum && <th className="py-1.5 text-right font-semibold">Продажа магазинам</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -505,10 +505,10 @@ function YtdTiles({ data }: { data: PrimaryView }) {
       <KpiTile label="Отгружено" value={tons(y.kg)} unit="т">
         {num(data.ytdArticles)} артикулов · нетто
       </KpiTile>
-      <KpiTile label="Сумма (цена дилера)" value={money(y.sumFactory)}>
+      <KpiTile label="Сумма дилера" value={money(y.sumFactory)}>
         {data.ytdPricePerKg != null ? `${money(data.ytdPricePerKg)} за кг` : "—"}
       </KpiTile>
-      <KpiTile label="По цене продажи дилера" value={money(y.sumDealer)}>
+      <KpiTile label="Продажа магазинам" value={money(y.sumDealer)}>
         {data.ytdMarkup != null ? `наценка дилера ${money(data.ytdMarkupSum)} · ${pct(data.ytdMarkup, 1)}` : "—"}
       </KpiTile>
       <KpiTile label="Возвраты" value={tons(data.ytdReturnsKg)} unit="т">
@@ -608,8 +608,8 @@ function ItemsTable({ data, dealer = true, boxes = true }: { data: PrimaryView; 
         ]
       : []),
     { key: "kg", label: "Вес, кг", align: "right", value: (r) => r.ytd.kg, render: (r) => <span className="font-semibold">{kg(r.ytd.kg)}</span> },
-    { key: "sf", label: dealer ? "Сумма (цена дилера)" : "Сумма", align: "right", value: (r) => r.ytd.sumFactory, render: (r) => money(r.ytd.sumFactory) },
-    ...(dealer ? [{ key: "sd", label: "По цене продажи дилера", align: "right" as const, value: (r: Row) => r.ytd.sumDealer, render: (r: Row) => money(r.ytd.sumDealer) }] : []),
+    { key: "sf", label: dealer ? "Сумма дилера" : "Сумма", align: "right", value: (r) => r.ytd.sumFactory, render: (r) => money(r.ytd.sumFactory) },
+    ...(dealer ? [{ key: "sd", label: "Продажа магазинам", align: "right" as const, value: (r: Row) => r.ytd.sumDealer, render: (r: Row) => money(r.ytd.sumDealer) }] : []),
     { key: "perKg", label: dealer ? "Цена дилера за кг" : "Цена за кг", align: "right", value: (r) => r.pricePerKg, render: (r) => money(r.pricePerKg) },
     ...(dealer ? [{ key: "margin", label: "Наценка дилера", align: "right" as const, value: (r: Row) => r.markup, render: (r: Row) => pct(r.markup, 1) }] : []),
   ];
@@ -715,8 +715,13 @@ export function PrimaryRepublic({ data }: { data: PrimaryView }) {
         точки не экспортного типа, «доставлен», «отдан» и «не доставлен» — в пути, дата — создание заказа; без «Дегустатсия + Акция»). Склад «{data.exportStock ?? "Экспорт"}» — экспорт,
         сюда не входит. Возвраты — перемещения со складов дилеров на завод и возвраты по заказам — вычтены: все цифры нетто. Склады сводятся к регионам
         («Коканд бозор» — Коканд), склад прежнего дилера — отдельная строка («Андижон эски 2» — «Андижон (эски) 2»), подпись строки — дилер региона
-        из «Настроек продаж»; прямые клиенты — под названиями таблицы первички («Макро» — «Макро РЦ» и магазины Makro). Сумма (цена дилера) — сумма
-        перемещения или заказа, по этой цене дилер берёт товар у завода; сумма (цена продажи дилера) — количество × цена прайса «{data.dealerPriceList ?? "Дилердан чикиш нарх"}».
+        из «Настроек продаж»; прямые клиенты — под названиями таблицы первички («Макро» — «Макро РЦ» и магазины Makro; «Ятт Илгоров» — две строки: заказы «отдан» —
+        «Фирменный магазин», остальные — «Накт пул бозор»). Сумма дилера — сумма
+        перемещения или заказа: по этой цене дилер берёт товар у завода, это «сум дилера» «Полевого контроля»; продажа магазинам — количество × цена прайса
+        «{data.dealerPriceList ?? "Дилердан чикиш нарх"}», по которой дилер продаёт дальше (в «Полевом контроле» такой суммы нет).
+        С «Полевым контролем» вес сходится, а сумма дилера может расходиться: здесь цена — из документа Linko, который принял дилер, а таблица
+        первички может переходить на новые цены прайса позже, чем Linko. Таблица записывает отгрузку при погрузке, здесь она появляется, когда перемещение
+        «отдано», — свежие отгрузки могут на день-два отставать.
         Цены завода в Linko нет, поэтому «суммы завода», как в таблице первички, здесь нет. План и факт по категориям, дилерам и прямым клиентам — всегда в кг.
         Коробки — по весу коробки из справочника (как в таблице первички), у остальных товаров — из названия, если он делится на вес единицы
         ({kg(data.boxesUnknownKg)} кг с начала года без коробок).

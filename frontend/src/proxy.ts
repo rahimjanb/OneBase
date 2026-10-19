@@ -3,6 +3,8 @@ import { FIELD_LOGIN_PATH, fieldLoginPath, isFieldHost, requestHost } from "@/li
 
 /** Имя cookie сессии — как SESSION_COOKIE в lib/server-api.ts (proxy не должен тянуть серверные модули). */
 const SESSION_COOKIE = "onebase_token";
+/** Срок cookie сессии — как SESSION_MAX_AGE в lib/server-api.ts: 400 дней, дольше браузеры не хранят. */
+const SESSION_MAX_AGE = 400 * 24 * 60 * 60;
 
 /** Страницы, открытые без входа. */
 const PUBLIC_PATHS = ["/login", "/logout", FIELD_LOGIN_PATH];
@@ -11,10 +13,16 @@ const PUBLIC_PATHS = ["/login", "/logout", FIELD_LOGIN_PATH];
  * Без сессии — сразу на вход, с возвратом на запрошенную страницу. Иначе страницы, которые не запрашивают данные
  * (например, главная), открывались бы без входа. Недействительную сессию (401 от API) обрабатывает layout приложения.
  *
+ * Сеанс длится до выхода: при каждом заходе cookie сессии продлевается ещё на 400 дней (токен внутри живёт 10 лет, закрывается выходом).
+ *
  * Домен Sales Base (sales.1base.uz): адреса вне /field переписываются в /field — «/» это главная Sales Base,
  * «/tasks» — /field/tasks. У Sales Base своя страница входа (/field/login; на его домене — «/login»), выход общий.
  */
 export function proxy(request: NextRequest) {
+  return extendSession(request, route(request));
+}
+
+function route(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const fieldHost = isFieldHost(requestHost(request.headers));
@@ -43,6 +51,23 @@ export function proxy(request: NextRequest) {
   }
 
   return NextResponse.next();
+}
+
+/** Продлевает cookie сессии на страницах приложения (не на входе и выходе: выход её удаляет). */
+function extendSession(request: NextRequest, response: NextResponse) {
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  const { pathname } = request.nextUrl;
+  if (token && !PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    response.cookies.set(SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: SESSION_MAX_AGE,
+    });
+  }
+
+  return response;
 }
 
 export const config = {

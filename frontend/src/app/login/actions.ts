@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { fieldHomePath, isFieldHost, requestHost } from "@/lib/field/host";
 import { homeFor } from "@/lib/navigation";
-import { API_URL, SESSION_COOKIE } from "@/lib/server-api";
+import { API_URL, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/server-api";
 
 export type LoginState = { error?: string };
 
@@ -36,13 +36,14 @@ export async function login(_: LoginState, form: FormData): Promise<LoginState> 
   if (response.status === 429) return { error: "Слишком много попыток. Подождите минуту." };
   if (!response.ok) return { error: `Ошибка входа (${response.status}).` };
 
-  const { accessToken, expiresAt } = (await response.json()) as { accessToken: string; expiresAt: string };
+  // Сеанс — до выхода: cookie на 400 дней (дольше браузеры не хранят), proxy продлевает её при каждом заходе.
+  const { accessToken } = (await response.json()) as { accessToken: string };
   (await cookies()).set(SESSION_COOKIE, accessToken, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    expires: new Date(expiresAt),
+    maxAge: SESSION_MAX_AGE,
   });
 
   // По умолчанию — «Продажи»; кому они недоступны (HR, «Админ 2»), — первый доступный раздел вместо «нет доступа».

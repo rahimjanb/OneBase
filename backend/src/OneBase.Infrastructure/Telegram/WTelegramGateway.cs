@@ -77,7 +77,11 @@ internal sealed class WTelegramGateway(
     /// <summary>Отправка с файлами может идти дольше (загрузка до 50 МБ).</summary>
     private static readonly TimeSpan SendTimeout = TimeSpan.FromMinutes(3);
 
-    /// <summary>Ждать ответа Telegram не дольше limit: зависший запрос не держит интерфейс и очередь (сам запрос библиотека доведёт или бросит).</summary>
+    /// <summary>
+    /// Ждать ответа Telegram не дольше limit: зависший запрос не держит интерфейс и очередь (сам запрос библиотека доведёт или бросит).
+    /// Обрыв связи (библиотека отменяет висящие запросы — TaskCanceledException, или IOException) — временная ошибка «нет связи», а не
+    /// исключение отмены: иначе фоновая служба приняла бы его за остановку сервера и уронила весь API.
+    /// </summary>
     private static async Task<T> Limited<T>(Task<T> call, TimeSpan limit)
     {
         try
@@ -88,6 +92,10 @@ internal sealed class WTelegramGateway(
         {
             throw new TelegramException($"Telegram не ответил за {limit.TotalSeconds:0} с — попробуйте ещё раз; если повторяется, нажмите «Проверить».",
                 TelegramErrorKind.Transient);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+        {
+            throw Disconnected(ex);
         }
     }
 
@@ -630,7 +638,17 @@ internal sealed class WTelegramGateway(
             throw new TelegramException($"Telegram не подтвердил отправку за {CallTimeout.TotalSeconds:0} с — неизвестно, дошло ли сообщение; проверьте чат.",
                 TelegramErrorKind.Permanent);
         }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+        {
+            // Связь оборвалась посреди отправки: сообщение могло уйти — без автоповтора, чтобы не было дубля.
+            throw new TelegramException($"Связь с Telegram оборвалась во время отправки ({ex.GetType().Name}) — неизвестно, дошло ли сообщение; проверьте чат.",
+                TelegramErrorKind.Permanent);
+        }
     }
+
+    /// <summary>Связь с Telegram оборвалась (сеть, сон компьютера, перезапуск соединения) — временная ошибка: следующая попытка переподключится.</summary>
+    private static TelegramException Disconnected(Exception ex) =>
+        new($"Нет связи с Telegram ({ex.GetType().Name}) — соединение восстановится само; повторите через минуту.", TelegramErrorKind.Transient);
 
     /// <summary>
     /// Сохранить состояние приёма через несколько секунд, вне обработчика: UpdateManager вызывает обработчик, держа свой замок, а

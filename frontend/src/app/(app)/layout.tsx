@@ -26,7 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {children}
           </main>
         </div>
-        <MobileNav canOpenSettings={canOpenSettings} permissions={permissions} />
+        <MobileNav me={me} canOpenSettings={canOpenSettings} permissions={permissions} />
       </div>
       <ScrollManager />
       <AppBridge userId={me?.id ?? null} />

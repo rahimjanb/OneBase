@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Net.Mail;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
@@ -172,6 +173,12 @@ public sealed partial class UsersController(
 
         await db.SaveChangesAsync(ct);
         access.Invalidate(user.Id); // новая роль или отключение действуют сразу
+        if (passwordChanged)
+        {
+            // Новый пароль закрывает старые входы на всех устройствах; свой текущий вход администратор сохраняет.
+            Guid? keep = Guid.TryParse(User.FindFirstValue(OneBaseClaims.Session), out var sid) && user.Id == User.GetUserId() ? sid : null;
+            await db.RevokeAllAsync(user.Id, keep, ct);
+        }
         if (wasActive && !user.IsActive)
         {
             await db.PushSubscriptions.Where(s => s.UserId == user.Id).ExecuteDeleteAsync(ct);
