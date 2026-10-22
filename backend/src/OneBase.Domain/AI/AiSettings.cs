@@ -42,7 +42,7 @@ public class AiSettings
     public int MaxOutputTokens { get; set; } = 4096;
 
     /// <summary>
-    /// Глубина рассуждений reasoning-моделей OpenAI: low | medium | high; пусто — по умолчанию модели.
+    /// Глубина рассуждений: low | medium | high (у Claude — effort, у reasoning-моделей OpenAI — reasoning_effort); пусто — по умолчанию модели.
     /// Чем глубже, тем дольше и дороже ответ.
     /// </summary>
     public string? ReasoningEffort { get; set; } = AiReasoning.Low;

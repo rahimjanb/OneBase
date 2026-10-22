@@ -29,6 +29,9 @@ public sealed record AiCallOptions
     /// <summary>Ответ — JSON-объект (у OpenAI включается response_format, у Anthropic — только инструкцией).</summary>
     public bool JsonOutput { get; init; }
 
+    /// <summary>false — инструменты остаются в запросе (они есть в истории), но вызывать их нельзя: модель отвечает текстом.</summary>
+    public bool AllowToolCalls { get; init; } = true;
+
     public AiCallContext Context { get; init; } = new();
 }
 
@@ -39,7 +42,12 @@ public sealed record AiCallResult(
     AiModelRef Model,
     bool UsedFallback,
     long ElapsedMs,
-    string? StopReason);
+    string? StopReason,
+    LlmProviderContent? Raw = null)
+{
+    /// <summary>Ответ как сообщение ассистента — для продолжения диалога (у Claude — вместе с блоками рассуждений).</summary>
+    public LlmMessage Reply => new LlmResponse(Text, ToolCalls, Raw).Reply;
+}
 
 /// <summary>Одна попытка вызова провайдера — для учёта использования и стоимости.</summary>
 public sealed record AiCallRecord(
@@ -186,7 +194,7 @@ internal sealed class AiGateway(
 
             var key = model.ToString();
             var request = new AiCompletionRequest(model.Model, messages, tools, _noTemperature.ContainsKey(key) ? null : temperature, maxTokens, options.JsonOutput,
-                _noReasoning.ContainsKey(key) ? null : reasoning);
+                _noReasoning.ContainsKey(key) ? null : reasoning, options.AllowToolCalls);
             for (var attempt = 1; ; attempt++)
             {
                 var watch = Stopwatch.StartNew();
@@ -212,8 +220,9 @@ internal sealed class AiGateway(
                         continue;
                     }
 
-                    // Модель не принимает глубину рассуждений — тоже повторяем без неё и запоминаем.
-                    if (request.ReasoningEffort is not null && ex.StatusCode == 400 && ex.Message.Contains("reasoning", StringComparison.OrdinalIgnoreCase))
+                    // Модель не принимает глубину рассуждений (reasoning у OpenAI, effort у Claude) — тоже повторяем без неё и запоминаем.
+                    if (request.ReasoningEffort is not null && ex.StatusCode == 400
+                        && (ex.Message.Contains("reasoning", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("effort", StringComparison.OrdinalIgnoreCase)))
                     {
                         _noReasoning[key] = true;
                         logger.LogInformation("AI: модель {Model} не принимает глубину рассуждений — запросы отправляются без неё", key);
@@ -232,6 +241,13 @@ internal sealed class AiGateway(
                     throw;
                 }
 
+                // Отказ по правилам безопасности провайдера (Claude: stop_reason "refusal") — это не ответ; если есть резервная модель, спросим её.
+                if (completion.StopReason == "refusal")
+                {
+                    throw new AiProviderException(model.Provider, null,
+                        $"Модель {model.Model} отказалась отвечать на этот запрос — сработали ограничения безопасности провайдера. Переформулируйте вопрос.", false);
+                }
+
                 // Весь лимит ушёл на рассуждения (reasoning-модели) — ответа нет; прямо говорим, что делать.
                 if (completion.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(completion.Text) && completion.StopReason is "length" or "max_tokens")
                 {
@@ -240,7 +256,8 @@ internal sealed class AiGateway(
                         "на рассуждения. Увеличьте «Максимум токенов ответа» в «Настройки → AI».", false);
                 }
 
-                return new AiCallResult(completion.Text, completion.ToolCalls, completion.Usage, model, usedFallback, watch.ElapsedMilliseconds, completion.StopReason);
+                return new AiCallResult(completion.Text, completion.ToolCalls, completion.Usage, model, usedFallback, watch.ElapsedMilliseconds, completion.StopReason,
+                    completion.Raw is { } raw ? new LlmProviderContent(model.Provider, raw) : null);
             }
         }
     }
@@ -277,7 +294,7 @@ internal sealed class AiGateway(
         IReadOnlyList<LlmMessage> messages, IReadOnlyList<LlmToolDefinition> tools, CancellationToken cancellationToken)
     {
         var result = await CompleteAsync(messages, tools, new AiCallOptions(), cancellationToken);
-        return new LlmResponse(result.Text, result.ToolCalls);
+        return new LlmResponse(result.Text, result.ToolCalls, result.Raw);
     }
 
     private async Task RecordAsync(AiCallRecord record)

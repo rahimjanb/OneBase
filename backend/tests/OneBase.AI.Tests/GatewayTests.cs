@@ -172,6 +172,36 @@ public class GatewayTests
         Assert.Contains("Максимум токенов ответа", error.Message);
     }
 
+    [Fact]
+    public async Task Claude_refusal_is_not_an_answer_the_reserve_answers()
+    {
+        var claude = new AiModelRef("anthropic", "claude-opus-5-5");
+        var (gateway, openAi, anthropic, _) = Build(new AiSettingsSnapshot(true, claude, Primary, null, null, null, 2048, false));
+        anthropic.Replies.Enqueue(new AiCompletion(null, [], new AiTokenUsage(100, 0), "claude-opus-5-5", "refusal"));
+
+        var result = await gateway.CompleteAsync(Question, [], new AiCallOptions());
+
+        Assert.Single(anthropic.Requests);
+        Assert.Single(openAi.Requests);
+        Assert.True(result.UsedFallback);
+        Assert.Equal("ответ openai", result.Text);
+    }
+
+    [Fact]
+    public async Task Reply_carries_the_provider_content_and_tool_calls_can_be_forbidden()
+    {
+        var claude = new AiModelRef("anthropic", "claude-opus-5-5");
+        var (gateway, _, anthropic, _) = Build(new AiSettingsSnapshot(true, claude, null, null, null, null, 16000, false));
+        var raw = System.Text.Json.JsonSerializer.SerializeToElement(new object[] { new { type = "thinking", thinking = "", signature = "sig" }, new { type = "text", text = "Готово." } });
+        anthropic.Replies.Enqueue(new AiCompletion("Готово.", [], new AiTokenUsage(10, 5), "claude-opus-5-5", "end_turn", raw));
+
+        var result = await gateway.CompleteAsync(Question, [], new AiCallOptions { AllowToolCalls = false });
+
+        Assert.False(anthropic.Requests.Single().AllowToolCalls);
+        Assert.Equal(LlmRole.Assistant, result.Reply.Role);
+        Assert.Equal(new LlmProviderContent("anthropic", raw), result.Reply.Raw);
+    }
+
     private sealed class FakeSettings(AiSettingsSnapshot settings, Dictionary<string, AiProviderState> providers) : IAiSettingsSource
     {
         public Task<AiSettingsSnapshot> GetSettingsAsync(CancellationToken ct = default) => Task.FromResult(settings);

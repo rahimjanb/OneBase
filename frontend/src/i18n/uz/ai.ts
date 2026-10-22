@@ -287,19 +287,20 @@ const dict: Dict = {
   "{ms} мс, токенов {tokens}.": "{ms} ms, tokenlar {tokens}.",
   "Параметры ответа": "Javob parametrlari",
   "по умолчанию провайдера": "provayder standarti",
-  "0 — точные, повторяемые ответы; 1 — разнообразнее. Для аналитики подходит 0–0,3. Пусто — не передаётся.":
-    "0 — aniq, takrorlanuvchi javoblar; 1 — xilma-xilroq. Tahlil uchun 0–0,3 mos. Bo'sh — yuborilmaydi.",
-  "Ограничивает длину и стоимость одного ответа модели (256–64 000).": "Model bitta javobining uzunligi va xarajatini cheklaydi (256–64 000).",
+  "0 — точные, повторяемые ответы; 1 — разнообразнее. Для аналитики подходит 0–0,3. Пусто — не передаётся. Модели Claude 5 температуру не принимают — им она не отправляется.":
+    "0 — aniq, takrorlanuvchi javoblar; 1 — xilma-xilroq. Tahlil uchun 0–0,3 mos. Bo'sh — yuborilmaydi. Claude 5 modellari haroratni qabul qilmaydi — ularga u yuborilmaydi.",
+  "Ограничивает длину и стоимость одного ответа модели (256–64 000). У Claude сюда входят и рассуждения — для него нужно не меньше 16 000.":
+    "Model bitta javobining uzunligi va xarajatini cheklaydi (256–64 000). Claude'da bunga mulohazalar ham kiradi — u uchun kamida 16 000 kerak.",
   "Глубина рассуждений": "Mulohaza chuqurligi",
   "Низкая — быстрее и дешевле (рекомендуется)": "Past — tezroq va arzonroq (tavsiya etiladi)",
   "Средняя": "O'rtacha",
   "Высокая — дольше и дороже": "Yuqori — uzoqroq va qimmatroq",
   "По умолчанию модели": "Model standarti",
-  "Для reasoning-моделей OpenAI: сколько модель «думает» перед ответом. Выбор AI-сотрудников всегда идёт с низкой. Модели, которые параметр не принимают, и Anthropic работают как раньше.":
-    "OpenAI reasoning modellari uchun: model javobdan oldin qancha «o'ylaydi». AI xodimlarni tanlash har doim past darajada. Parametrni qabul qilmaydigan modellar va Anthropic avvalgidek ishlaydi.",
+  "Сколько модель «думает» перед ответом: у Claude — effort, у reasoning-моделей OpenAI — reasoning_effort. Выбор AI-сотрудников всегда идёт с низкой. Моделям, которые параметр не принимают, он не отправляется.":
+    "Model javobdan oldin qancha «o'ylaydi»: Claude'da — effort, OpenAI reasoning modellarida — reasoning_effort. AI xodimlarni tanlash har doim past darajada. Parametrni qabul qilmaydigan modellarga u yuborilmaydi.",
   "AI включён для пользователей": "AI foydalanuvchilar uchun yoqilgan",
-  "«Проверить модель» отправляет модели короткий запрос — провайдер берёт оплату за несколько десятков токенов. Резервная модель включается автоматически при ошибке основной: сбой сервера или сети (после одного повтора), лимит запросов, недоступный ключ.":
-    "«Modelni tekshirish» modelga qisqa so'rov yuboradi — provayder bir necha o'nlab token uchun haq oladi. Zaxira model asosiy model xato berganda avtomatik yoqiladi: server yoki tarmoq nosozligi (bir marta qayta urinishdan keyin), so'rovlar limiti, kalit ishlamasligi.",
+  "«Проверить модель» отправляет модели короткий запрос — провайдер берёт оплату за несколько десятков токенов. Резервная модель включается автоматически при ошибке основной: сбой сервера или сети (после одного повтора), лимит запросов, недоступный ключ, отказ модели отвечать по правилам безопасности.":
+    "«Modelni tekshirish» modelga qisqa so'rov yuboradi — provayder bir necha o'nlab token uchun haq oladi. Zaxira model asosiy model xato berganda avtomatik yoqiladi: server yoki tarmoq nosozligi (bir marta qayta urinishdan keyin), so'rovlar limiti, kalit ishlamasligi, model xavfsizlik qoidalariga ko'ra javob berishdan bosh tortishi.",
 
   // Настройки → AI → Провайдеры
   "Подключён": "Ulangan",

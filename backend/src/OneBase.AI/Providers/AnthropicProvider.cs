@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using OneBase.AI.Llm;
 
 namespace OneBase.AI.Providers;
@@ -10,10 +11,13 @@ namespace OneBase.AI.Providers;
 /// Anthropic Messages API (POST {base}/v1/messages) с tool use, список моделей — GET {base}/v1/models.
 /// Эмбеддингов у Anthropic нет.
 /// </summary>
-public sealed class AnthropicProvider(IHttpClientFactory httpFactory) : HttpAiProvider(httpFactory)
+public sealed partial class AnthropicProvider(IHttpClientFactory httpFactory) : HttpAiProvider(httpFactory)
 {
     public const string ProviderCode = "anthropic";
     public const string ApiVersion = "2023-06-01";
+
+    /// <summary>Основная модель OneBase по умолчанию.</summary>
+    public const string DefaultModel = "claude-opus-5-5";
 
     public override string Code => ProviderCode;
     public override string Name => "Anthropic";
@@ -112,6 +116,14 @@ public sealed class AnthropicProvider(IHttpClientFactory httpFactory) : HttpAiPr
 
                 default:
                     FlushResults();
+
+                    // Ответ Claude — как пришёл, вместе с блоками рассуждений: их нельзя убирать или пересобирать между вызовами инструментов.
+                    if (m.Raw is { Provider: ProviderCode, Content: { ValueKind: JsonValueKind.Array } raw } && raw.GetArrayLength() > 0)
+                    {
+                        messages.Add(new JsonObject { ["role"] = "assistant", ["content"] = JsonNode.Parse(raw.GetRawText()) });
+                        break;
+                    }
+
                     var content = new JsonArray();
                     if (!string.IsNullOrWhiteSpace(m.Content))
                     {
@@ -152,9 +164,15 @@ public sealed class AnthropicProvider(IHttpClientFactory httpFactory) : HttpAiPr
             body["system"] = system.ToString();
         }
 
-        if (request.Temperature is { } temperature)
+        if (request.Temperature is { } temperature && AcceptsTemperature(request.Model))
         {
             body["temperature"] = temperature;
+        }
+
+        // Глубина рассуждений. Рассуждения (adaptive thinking) у Claude 5 включены всегда — effort задаёт, сколько модель думает.
+        if (request.ReasoningEffort is { } effort && SupportsEffort(request.Model))
+        {
+            body["output_config"] = new JsonObject { ["effort"] = effort };
         }
 
         if (request.Tools.Count > 0)
@@ -165,10 +183,54 @@ public sealed class AnthropicProvider(IHttpClientFactory httpFactory) : HttpAiPr
                 ["description"] = t.Description,
                 ["input_schema"] = JsonNode.Parse(t.InputSchema.GetRawText()),
             }).ToArray());
+
+            if (!request.AllowToolCalls)
+            {
+                body["tool_choice"] = new JsonObject { ["type"] = "none" };
+            }
         }
 
         return body;
     }
+
+    /// <summary>
+    /// Принимает ли модель temperature. Claude 5 (Opus, Sonnet, Haiku, Fable) и Opus 4.7–4.8 отвечают на неё ошибкой 400 —
+    /// параметр им не отправляется. Неизвестные идентификаторы — как старые модели (если что, AI Gateway повторит запрос без неё).
+    /// </summary>
+    internal static bool AcceptsTemperature(string model) => Version(model) switch
+    {
+        null => true,
+        ("fable" or "mythos", _, _) => false,
+        (_, var major, _) when major >= 5 => false,
+        ("opus", 4, var minor) => minor < 7,
+        _ => true,
+    };
+
+    /// <summary>Принимает ли модель глубину рассуждений (output_config.effort): Claude 5, Opus 4.5–4.8, Sonnet 4.6.</summary>
+    internal static bool SupportsEffort(string model) => Version(model) switch
+    {
+        null => false,
+        ("fable" or "mythos", _, _) => true,
+        (_, var major, _) when major >= 5 => true,
+        ("opus", 4, var minor) => minor >= 5,
+        ("sonnet", 4, var minor) => minor >= 6,
+        _ => false,
+    };
+
+    /// <summary>Семейство и версия из идентификатора: claude-opus-5-5 → (opus, 5, 5), claude-haiku-4-5-20251001 → (haiku, 4, 5), claude-opus-5 → (opus, 5, 0).</summary>
+    private static (string Family, int Major, int Minor)? Version(string model)
+    {
+        var match = ClaudeModelId().Match(model.Trim().ToLowerInvariant());
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        return (match.Groups[1].Value, int.Parse(match.Groups[2].Value), match.Groups[3].Success ? int.Parse(match.Groups[3].Value) : 0);
+    }
+
+    [GeneratedRegex(@"^claude-(opus|sonnet|haiku|fable|mythos)-(\d{1,2})(?:-(\d{1,2}))?(?=-|$)")]
+    private static partial Regex ClaudeModelId();
 
     internal static AiCompletion ParseCompletion(JsonElement root, string requestedModel)
     {
@@ -194,6 +256,7 @@ public sealed class AnthropicProvider(IHttpClientFactory httpFactory) : HttpAiPr
         }
 
         var usage = root.TryGetProperty("usage", out var u) ? new AiTokenUsage(Int(u, "input_tokens"), Int(u, "output_tokens")) : AiTokenUsage.None;
-        return new AiCompletion(text.Length > 0 ? text.ToString() : null, calls, usage, Str(root, "model") ?? requestedModel, Str(root, "stop_reason"));
+        return new AiCompletion(text.Length > 0 ? text.ToString() : null, calls, usage, Str(root, "model") ?? requestedModel, Str(root, "stop_reason"),
+            content.ValueKind == JsonValueKind.Array ? content.Clone() : null);
     }
 }

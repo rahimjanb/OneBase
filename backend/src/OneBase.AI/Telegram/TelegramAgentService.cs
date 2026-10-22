@@ -931,7 +931,7 @@ public sealed class TelegramAgentService(
         settings is { ModelProvider: { Length: > 0 } provider, Model: { Length: > 0 } model } ? new AiModelRef(provider, model) : null;
 
     /// <summary>
-    /// Модель ответа. Обычный вопрос — модель ответов агента (OpenAI). Просьба сформировать отчёт, документ, письмо, таблицу (GenerationIntent) —
+    /// Модель ответа. Обычный вопрос — модель ответов агента (пусто — основная модель из «Настройки → AI»). Просьба сформировать отчёт, документ, письмо, таблицу (GenerationIntent) —
     /// модель генерации: выбранная в настройках агента, иначе Claude из AI Data Manager, если ключ Anthropic подключён; без Claude — модель ответов.
     /// </summary>
     internal async Task<(AiModelRef? Model, bool Generation)> PickModelAsync(TelegramAgentSettings settings, bool generate, CancellationToken ct)

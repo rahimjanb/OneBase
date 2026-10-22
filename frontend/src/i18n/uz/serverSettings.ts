@@ -590,7 +590,7 @@ const dict: Dict = {
   "Код — цифры из сообщения Telegram.": "Kod — Telegram xabaridagi raqamlar.",
   "Введите пароль двухэтапной защиты Telegram.": "Telegram ikki bosqichli himoya parolini kiriting.",
   "Этот аккаунт Telegram уже подключён как «{name}».": "Bu Telegram akkaunti allaqachon «{name}» sifatida ulangan.",
-  "Модель — в виде «провайдер/модель», например openai/gpt-5; пусто — основная модель.": "Model — «provayder/model» ko'rinishida, masalan openai/gpt-5; bo'sh — asosiy model.",
+  "Модель — в виде «провайдер/модель», например anthropic/claude-opus-5-5; пусто — основная модель.": "Model — «provayder/model» ko'rinishida, masalan anthropic/claude-opus-5-5; bo'sh — asosiy model.",
   "Укажите username Telegram, например @ivan_petrov.": "Telegram username'ini kiriting, masalan @ivan_petrov.",
   "Telegram ID — положительное число.": "Telegram ID — musbat son.",
   "Пользователь OneBase не найден или отключён.": "OneBase foydalanuvchisi topilmadi yoki o'chirilgan.",

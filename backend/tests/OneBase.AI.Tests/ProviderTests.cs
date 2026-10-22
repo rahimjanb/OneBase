@@ -216,6 +216,67 @@ public class ProviderTests
         Assert.Equal("2026-09", call.Arguments.GetProperty("month").GetString());
     }
 
+    [Theory]
+    [InlineData("claude-opus-5-5", false, true)]
+    [InlineData("claude-sonnet-5-5", false, true)]
+    [InlineData("claude-haiku-5-5", false, true)]
+    [InlineData("claude-fable-5-1", false, true)]
+    [InlineData("claude-opus-4-8", false, true)]
+    [InlineData("claude-opus-4-6", true, true)]
+    [InlineData("claude-sonnet-4-6", true, true)]
+    [InlineData("claude-haiku-4-5-20251001", true, false)]
+    [InlineData("claude-3-5-sonnet-20241022", true, false)]
+    public void Claude_gets_only_the_parameters_the_model_accepts(string model, bool temperature, bool effort)
+    {
+        var body = AnthropicProvider.BuildBody(Conversation(0.2) with { Model = model, ReasoningEffort = "low" });
+
+        Assert.Equal(temperature, body.ContainsKey("temperature"));
+        Assert.Equal(effort ? "low" : null, (string?)body["output_config"]?["effort"]);
+        Assert.False(body.ContainsKey("thinking")); // у Claude 5 рассуждения идут по умолчанию (adaptive)
+    }
+
+    [Fact]
+    public void Claude_answer_goes_back_unchanged_with_its_thinking_blocks()
+    {
+        using var doc = JsonDocument.Parse("""
+            {"model":"claude-opus-5-5","stop_reason":"tool_use","content":[
+              {"type":"thinking","thinking":"","signature":"sig-1"},
+              {"type":"text","text":"Смотрю продажи."},
+              {"type":"tool_use","id":"tu_1","name":"get_sales","input":{"month":"2026-09"}}],
+             "usage":{"input_tokens":50,"output_tokens":12}}
+            """);
+        var completion = AnthropicProvider.ParseCompletion(doc.RootElement, "claude-opus-5-5");
+        var reply = new LlmResponse(completion.Text, completion.ToolCalls, new LlmProviderContent(AnthropicProvider.ProviderCode, completion.Raw!.Value)).Reply;
+        var request = Conversation() with
+        {
+            Model = "claude-opus-5-5",
+            Messages = [new(LlmRole.System, "Ты консультант."), new(LlmRole.User, "Как продажи?"), reply, new(LlmRole.Tool, "{\"kg\":100}", ToolCallId: "tu_1")],
+        };
+
+        var assistant = AnthropicProvider.BuildBody(request)["messages"]![1]!["content"]!.AsArray();
+
+        Assert.Equal(["thinking", "text", "tool_use"], assistant.Select(b => (string?)b!["type"]));
+        Assert.Equal("sig-1", (string?)assistant[0]!["signature"]);
+
+        // OpenAI блоков Claude не понимает — для него ответ собирается из текста и вызовов, как раньше.
+        var openAi = OpenAiProvider.BuildBody(request)["messages"]![2]!;
+        Assert.Equal("Смотрю продажи.", (string?)openAi["content"]);
+        Assert.Equal("tu_1", (string?)openAi["tool_calls"]![0]!["id"]);
+    }
+
+    [Fact]
+    public void Last_step_keeps_the_tools_but_forbids_calling_them()
+    {
+        var request = Conversation() with { AllowToolCalls = false };
+
+        var claude = AnthropicProvider.BuildBody(request);
+        Assert.Single(claude["tools"]!.AsArray()); // инструменты есть в истории — их описание остаётся
+        Assert.Equal("none", (string?)claude["tool_choice"]!["type"]);
+        Assert.Equal("none", (string?)OpenAiProvider.BuildBody(request)["tool_choice"]);
+        Assert.Equal("none", (string?)OpenAiProvider.BuildResponsesBody(request)["tool_choice"]);
+        Assert.False(AnthropicProvider.BuildBody(Conversation()).ContainsKey("tool_choice"));
+    }
+
     [Fact]
     public async Task Provider_error_never_contains_the_key()
     {

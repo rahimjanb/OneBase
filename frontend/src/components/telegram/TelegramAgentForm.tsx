@@ -59,7 +59,7 @@ export function TelegramAgentForm({ account, onSaved }: { account: TelegramAccou
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <Field label={t("Модель ответов")} hint={t("«провайдер/модель», например openai/gpt-5; пусто — основная модель консультанта («Настройки → AI»)")}>
+        <Field label={t("Модель ответов")} hint={t("«провайдер/модель», например anthropic/claude-opus-5-5; пусто — основная модель консультанта («Настройки → AI»)")}>
           <input
             className={field}
             value={s.modelProvider && s.model ? `${s.modelProvider}/${s.model}` : (s.model ?? "")}

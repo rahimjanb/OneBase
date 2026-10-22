@@ -18,11 +18,19 @@ public static class DependencyInjection
     public static IServiceCollection AddAi(this IServiceCollection services, IConfiguration config)
     {
         // Ключи провайдеров задаются в «Настройки → AI»; переменные окружения — запасной вариант.
+        // Ни провайдер, ни модель в окружении не заданы — основная модель по умолчанию Claude.
+        var provider = Value(config, "Llm:Provider", "LLM_PROVIDER");
+        var model = Value(config, "Llm:Model", "LLM_MODEL");
+        if (provider is null && model is null)
+        {
+            (provider, model) = (AnthropicProvider.ProviderCode, AnthropicProvider.DefaultModel);
+        }
+
         services.AddSingleton(new AiEnvironment
         {
-            Provider = config["Llm:Provider"] ?? config["LLM_PROVIDER"],
+            Provider = provider,
             ApiKey = config["Llm:ApiKey"] ?? config["LLM_API_KEY"],
-            Model = config["Llm:Model"] ?? config["LLM_MODEL"],
+            Model = model,
             EmbeddingModel = config["Llm:EmbeddingModel"] ?? config["EMBEDDING_MODEL"],
             OpenAiApiKey = config["OPENAI_API_KEY"],
             AnthropicApiKey = config["ANTHROPIC_API_KEY"],
@@ -127,4 +135,10 @@ public static class DependencyInjection
 
         return services;
     }
+
+    /// <summary>Значение настройки или переменной окружения; пустая строка (docker-compose передаёт незаданные как "") — как не задано.</summary>
+    private static string? Value(IConfiguration config, string key, string variable) =>
+        !string.IsNullOrWhiteSpace(config[key]) ? config[key]
+        : !string.IsNullOrWhiteSpace(config[variable]) ? config[variable]
+        : null;
 }

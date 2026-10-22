@@ -144,6 +144,11 @@ public sealed class OpenAiProvider(IHttpClientFactory httpFactory) : HttpAiProvi
                     ["parameters"] = JsonNode.Parse(t.InputSchema.GetRawText()),
                 },
             }).ToArray());
+
+            if (!request.AllowToolCalls)
+            {
+                body["tool_choice"] = "none";
+            }
         }
 
         if (request.JsonOutput)
@@ -217,6 +222,11 @@ public sealed class OpenAiProvider(IHttpClientFactory httpFactory) : HttpAiProvi
                 ["parameters"] = JsonNode.Parse(t.InputSchema.GetRawText()),
                 ["strict"] = false,
             }).ToArray());
+
+            if (!request.AllowToolCalls)
+            {
+                body["tool_choice"] = "none";
+            }
         }
 
         if (request.JsonOutput)

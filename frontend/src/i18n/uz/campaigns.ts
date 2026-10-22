@@ -115,7 +115,7 @@ const dict: Dict = {
   "На «кто ты?» агент отвечает от лица компании. На прямой вопрос «ты человек или бот?» он не выдаёт себя за человека — отвечает, что он виртуальный сотрудник.": "«Sen kimsan?» savoliga agent kompaniya nomidan javob beradi. «Sen odammisan yoki botmisan?» degan to'g'ridan-to'g'ri savolga u o'zini odam qilib ko'rsatmaydi — virtual xodim ekanini aytadi.",
   "Модель": "Model",
   "Модель ответов": "Javoblar modeli",
-  "«провайдер/модель», например openai/gpt-5; пусто — основная модель консультанта («Настройки → AI»)": "«provayder/model», masalan openai/gpt-5; bo'sh — maslahatchining asosiy modeli («Sozlamalar → AI»)",
+  "«провайдер/модель», например anthropic/claude-opus-5-5; пусто — основная модель консультанта («Настройки → AI»)": "«provayder/model», masalan anthropic/claude-opus-5-5; bo'sh — maslahatchining asosiy modeli («Sozlamalar → AI»)",
   "Модель генерации": "Generatsiya modeli",
   "Для просьб собрать отчёт, таблицу, документ, письмо. Пусто — Claude из AI Data Manager, если подключён ключ Anthropic.":
     "Hisobot, jadval, hujjat, xat tuzish so'rovlari uchun. Bo'sh — AI Data Manager'dagi Claude (Anthropic kaliti ulangan bo'lsa).",

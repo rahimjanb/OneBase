@@ -106,6 +106,7 @@ public sealed class AgentRunner(
         var sources = new List<DataSource>();
         var evidence = new EvidenceSet();
         var revised = false;
+        var reported = false;
         string? model = null;
         var options = new AiCallOptions
         {
@@ -118,9 +119,10 @@ public sealed class AgentRunner(
 
         for (var step = 0; step < MaxSteps; step++)
         {
-            // На последнем шаге инструменты не даём — агент должен подвести итог по тому, что уже получил.
+            // На последнем шаге инструменты вызывать нельзя — агент должен подвести итог по тому, что уже получил. Сам список инструментов
+            // не меняется: они есть в истории диалога, а у Claude смена набора инструментов посреди диалога сбрасывает его рассуждения.
             var last = step == MaxSteps - 1;
-            var response = await gateway.CompleteAsync(messages, last ? [] : definitions, options, ct);
+            var response = await gateway.CompleteAsync(messages, definitions, last ? options with { AllowToolCalls = false } : options, ct);
             usage = usage.Add(response.Usage);
             model = response.Model.ToString();
 
@@ -132,7 +134,7 @@ public sealed class AgentRunner(
                 {
                     // Evidence Check сотрудника: числа, которых нет в результатах инструментов, — пересчитать (calculate), получить или убрать.
                     revised = true;
-                    messages.Add(new LlmMessage(LlmRole.Assistant, response.Text ?? string.Empty));
+                    messages.Add(response.Reply);
                     messages.Add(new LlmMessage(LlmRole.User, $"""
                         Проверка итога по данным: эти числа не найдены в результатах инструментов: {string.Join("; ", check.Unsupported)}.
                         Производное число (сумма, разница, доля, рост, среднее) посчитай инструментом {Calculator.ToolName}; недостающее — получи
@@ -144,7 +146,7 @@ public sealed class AgentRunner(
                 return new AgentRun(check.Grounded ? result : result with { Unverified = check.Unsupported }, usage, model, evidence);
             }
 
-            messages.Add(new LlmMessage(LlmRole.Assistant, response.Text ?? string.Empty, ToolCalls: response.ToolCalls));
+            messages.Add(response.Reply);
             foreach (var call in response.ToolCalls)
             {
                 var isReport = call.Name == ReportSpec.ToolName;
@@ -182,7 +184,7 @@ public sealed class AgentRunner(
                         evidence.AddContent(result.Content);
                     }
                 }
-                else if (reportTool is null || !definitions.Contains(reportTool))
+                else if (reportTool is null || reported)
                 {
                     result = ToolResult.Error(reportTool is null
                         ? "Отчёт Excel формируется только по просьбе пользователя — ответь текстом."
@@ -191,10 +193,7 @@ public sealed class AgentRunner(
                 else
                 {
                     (result, _) = await reports.CreateAsync(context, call.Arguments, ct);
-                    if (result.Success)
-                    {
-                        definitions.Remove(reportTool);
-                    }
+                    reported = result.Success;
                 }
 
                 if (!toolsUsed.Contains(call.Name))

@@ -419,8 +419,8 @@ public sealed class TelegramAccountService(
         settings.Enabled = input.Enabled;
         settings.AutoReply = input.AutoReply;
         settings.ReplyToUnknown = input.ReplyToUnknown;
-        // Модель — «провайдер/модель» (openai/gpt-5) или отдельно провайдер и модель; пусто — основная модель консультанта.
-        var (provider, model) = ModelRef(input.Model, input.ModelProvider, "Модель — в виде «провайдер/модель», например openai/gpt-5; пусто — основная модель.");
+        // Модель — «провайдер/модель» (anthropic/claude-opus-5-5) или отдельно провайдер и модель; пусто — основная модель консультанта.
+        var (provider, model) = ModelRef(input.Model, input.ModelProvider, "Модель — в виде «провайдер/модель», например anthropic/claude-opus-5-5; пусто — основная модель.");
         settings.ModelProvider = provider;
         settings.Model = model;
         // Модель генерации (отчёты, документы, письма) — так же «провайдер/модель», например anthropic/claude-opus-5-5; пусто — Claude из AI Data Manager.

@@ -14,7 +14,10 @@ public sealed record AiTokenUsage(int InputTokens, int OutputTokens)
     public AiTokenUsage Add(AiTokenUsage other) => new(InputTokens + other.InputTokens, OutputTokens + other.OutputTokens);
 }
 
-/// <summary>Запрос генерации в провайдер-независимом виде.</summary>
+/// <summary>
+/// Запрос генерации в провайдер-независимом виде. AllowToolCalls = false — инструменты описаны (они есть в истории диалога),
+/// но вызывать их нельзя: модель должна ответить текстом.
+/// </summary>
 public sealed record AiCompletionRequest(
     string Model,
     IReadOnlyList<LlmMessage> Messages,
@@ -22,14 +25,17 @@ public sealed record AiCompletionRequest(
     double? Temperature,
     int MaxOutputTokens,
     bool JsonOutput = false,
-    string? ReasoningEffort = null);
+    string? ReasoningEffort = null,
+    bool AllowToolCalls = true);
 
+/// <summary>Raw — ответ в формате провайдера (Anthropic: блоки content) для повторной отправки без изменений.</summary>
 public sealed record AiCompletion(
     string? Text,
     IReadOnlyList<LlmToolCall> ToolCalls,
     AiTokenUsage Usage,
     string Model,
-    string? StopReason);
+    string? StopReason,
+    JsonElement? Raw = null);
 
 /// <summary>Модель из списка провайдера.</summary>
 public sealed record AiProviderModel(string Id, string? DisplayName, DateTimeOffset? CreatedAt);

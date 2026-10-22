@@ -34,7 +34,7 @@ OneBase работает от имени **пользовательских ак
 
 **Две модели** (`TelegramAgentService.PickModelAsync`):
 
-- **Модель ответов** (`AgentSettings.ModelProvider/Model`, например `openai/gpt-5`; пусто — основная консультанта) — обычные вопросы:
+- **Модель ответов** (`AgentSettings.ModelProvider/Model`, например `anthropic/claude-opus-5-5`; пусто — основная консультанта) — обычные вопросы:
   «как продажи в Хорезме?», «сколько на складе?».
 - **Модель генерации** (`AgentSettings.GenerationModelProvider/GenerationModel`) — когда просят что-то **сформировать**: отчёт, таблицу,
   документ, письмо, пост, план, презентацию, разбор (`GenerationIntent` по тексту сообщения: пара «действие + что» — «сделай отчёт»,

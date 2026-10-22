@@ -45,10 +45,11 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, Sal
         var result = await gateway.CompleteAsync(
             [new LlmMessage(LlmRole.System, Prompt(available, glossaryText)), new LlmMessage(LlmRole.User, Request(question, history, memory))],
             [],
-            // Выбор сотрудников — простая задача: рассуждения всегда минимальные, чтобы не ждать десятки секунд.
+            // Выбор сотрудников — простая задача: рассуждения всегда минимальные, чтобы не ждать десятки секунд. Лимит — с запасом на рассуждения:
+            // у Claude 5 они идут всегда и входят в max_tokens.
             new AiCallOptions
             {
-                Model = s.Router, JsonOutput = true, MaxOutputTokens = 2048, ReasoningEffort = AiReasoning.Low, Context = context with { Purpose = "consultant.route" },
+                Model = s.Router, JsonOutput = true, MaxOutputTokens = 4096, ReasoningEffort = AiReasoning.Low, Context = context with { Purpose = "consultant.route" },
             },
             ct);
 

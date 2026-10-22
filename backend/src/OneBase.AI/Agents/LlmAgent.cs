@@ -37,7 +37,7 @@ internal sealed class LlmAgent(AgentProfile profile, ILlmClient llm, ToolExecuto
                 return new AgentReply(profile.Code, response.Text ?? string.Empty);
             }
 
-            messages.Add(new LlmMessage(LlmRole.Assistant, response.Text ?? string.Empty, ToolCalls: response.ToolCalls));
+            messages.Add(response.Reply);
 
             foreach (var call in response.ToolCalls)
             {

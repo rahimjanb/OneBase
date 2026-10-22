@@ -186,12 +186,12 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-ink">{t("Температура")}</span>
             <input className={field} value={temperature} onChange={(e) => setTemperature(e.target.value)} placeholder={t("по умолчанию провайдера")} inputMode="decimal" />
-            <span className="mt-1 block text-xs text-ink-3">{t("0 — точные, повторяемые ответы; 1 — разнообразнее. Для аналитики подходит 0–0,3. Пусто — не передаётся.")}</span>
+            <span className="mt-1 block text-xs text-ink-3">{t("0 — точные, повторяемые ответы; 1 — разнообразнее. Для аналитики подходит 0–0,3. Пусто — не передаётся. Модели Claude 5 температуру не принимают — им она не отправляется.")}</span>
           </label>
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-ink">{t("Максимум токенов ответа")}</span>
             <input className={field} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} inputMode="numeric" />
-            <span className="mt-1 block text-xs text-ink-3">{t("Ограничивает длину и стоимость одного ответа модели (256–64 000).")}</span>
+            <span className="mt-1 block text-xs text-ink-3">{t("Ограничивает длину и стоимость одного ответа модели (256–64 000). У Claude сюда входят и рассуждения — для него нужно не меньше 16 000.")}</span>
           </label>
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-ink">{t("Глубина рассуждений")}</span>
@@ -203,7 +203,7 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
             </select>
             <span className="mt-1 block text-xs text-ink-3">
               {t(
-                "Для reasoning-моделей OpenAI: сколько модель «думает» перед ответом. Выбор AI-сотрудников всегда идёт с низкой. Модели, которые параметр не принимают, и Anthropic работают как раньше.",
+                "Сколько модель «думает» перед ответом: у Claude — effort, у reasoning-моделей OpenAI — reasoning_effort. Выбор AI-сотрудников всегда идёт с низкой. Моделям, которые параметр не принимают, он не отправляется.",
               )}
             </span>
           </label>
@@ -222,7 +222,7 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
 
       <Note>
         {t(
-          "«Проверить модель» отправляет модели короткий запрос — провайдер берёт оплату за несколько десятков токенов. Резервная модель включается автоматически при ошибке основной: сбой сервера или сети (после одного повтора), лимит запросов, недоступный ключ.",
+          "«Проверить модель» отправляет модели короткий запрос — провайдер берёт оплату за несколько десятков токенов. Резервная модель включается автоматически при ошибке основной: сбой сервера или сети (после одного повтора), лимит запросов, недоступный ключ, отказ модели отвечать по правилам безопасности.",
         )}
       </Note>
     </>
