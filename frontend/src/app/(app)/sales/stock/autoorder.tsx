@@ -285,6 +285,9 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
           <thead className="sticky top-0 z-[2] bg-surface-solid shadow-[inset_0_-1px_0_var(--color-line)]">
             <tr>
               <th className={`${th} sticky left-0 z-[1] bg-surface-solid pl-4 text-left sm:pl-5`}>{t("Товар")}</th>
+              <th className={`${th} text-right max-lg:hidden`} title={t("Остаток склада региона; бронь — заказы магазинов, которые ещё не отгружены; рекомендация считается от доступного")}>
+                {t("На складе, кг")}
+              </th>
               <th className={`${th} text-right max-lg:hidden`}>{t("Рекомендация")}</th>
               <th className={`${th} text-center`}>{t("Коробки")}</th>
               <th className={`${th} text-right`}>{t("Количество")}</th>
@@ -296,7 +299,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-ink-3">
+                <td colSpan={8} className="px-4 py-8 text-center text-sm text-ink-3">
                   {needle
                     ? t("Ничего не найдено")
                     : show === "edited"
@@ -321,7 +324,13 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
                           .filter(Boolean)
                           .join(" · ")}
                       </span>
+                      <span className="block text-xs text-ink-3 lg:hidden">
+                        <Stock it={it} inline />
+                      </span>
                     </span>
+                  </td>
+                  <td className={`${td} text-right tabular-nums max-lg:hidden`}>
+                    <Stock it={it} />
                   </td>
                   <td className={`${td} text-right tabular-nums max-lg:hidden`}>
                     <Recommendation it={it} changed={changed} onReset={() => resetRow(it)} />
@@ -360,7 +369,17 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
                       <span className="text-ink-3">—</span>
                     )}
                   </td>
-                  <td className={`${td} text-right tabular-nums`}>{boxes ? kg(kgOf(it, boxes)) : <span className="text-ink-3">—</span>}</td>
+                  <td className={`${td} text-right tabular-nums`}>
+                    {boxes ? kg(kgOf(it, boxes)) : <span className="text-ink-3">—</span>}
+                    {boxes > 0 && it.factoryFreeKg != null && kgOf(it, boxes) > it.factoryFreeKg + 0.001 && (
+                      <span
+                        className="block whitespace-nowrap text-[11px] font-medium text-warn"
+                        title={t("Остаток завода {stock} кг, из них в брони {reserved} кг", { stock: kg(it.factoryKg), reserved: kg((it.factoryKg ?? 0) - it.factoryFreeKg) })}
+                      >
+                        {t("на заводе доступно {n} кг", { n: kg(it.factoryFreeKg) })}
+                      </span>
+                    )}
+                  </td>
                   <td className={`${td} text-right tabular-nums text-ink-2`}>
                     {it.price ? num(it.price) : <span title={t("Товара нет в прайсе «{priceList}»", { priceList: view.priceList ?? "" })}>—</span>}
                   </td>
@@ -374,7 +393,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
 
       <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3.5 sm:px-5">
         <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-3 max-lg:basis-full">
-          {t("Рекомендация — заказ, который доводит остаток склада до запаса на {days} дн. продаж, в целых коробках. Цена — прайс «{priceList}».", {
+          {t("Рекомендация — заказ, который доводит доступный остаток склада (остаток − бронь: заказы магазинов, которые ещё не отгружены) до запаса на {days} дн. продаж, в целых коробках. Цена — прайс «{priceList}».", {
             days: view.coverDays,
             priceList: view.priceList ?? "Дилерга кириш нарх",
           })}
@@ -394,6 +413,31 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
         </div>
       </div>
     </>
+  );
+}
+
+/** Остаток склада региона и бронь: доступно = остаток − бронь (от него — рекомендация). inline — строкой под названием на телефоне. */
+function Stock({ it, inline = false }: { it: AutoOrderItem; inline?: boolean }) {
+  const t = useT();
+  const reserved = it.reservedKg > 0;
+  if (inline) {
+    return (
+      <>
+        {t("на складе {n} кг", { n: kg(it.stockKg) })}
+        {reserved && ` · ${t("бронь {r} кг · доступно {f} кг", { r: kg(it.reservedKg), f: kg(it.freeKg) })}`}
+      </>
+    );
+  }
+
+  return (
+    <span className="inline-flex flex-col items-end leading-tight">
+      <span className={it.stockKg > 0 ? "text-ink" : "text-ink-3"}>{it.stockKg > 0 ? kg(it.stockKg) : "0"}</span>
+      {reserved && (
+        <span className="whitespace-nowrap text-[11px] text-ink-3" title={t("Заказы магазинов, которые ещё не отгружены: рекомендация считается от доступного")}>
+          {t("бронь {r} · доступно {f}", { r: kg(it.reservedKg), f: kg(it.freeKg) })}
+        </span>
+      )}
+    </span>
   );
 }
 

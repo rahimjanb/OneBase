@@ -1,13 +1,18 @@
 using System.Text.Json.Serialization;
 using OneBase.AI.Gateway;
+using OneBase.AI.Grounding;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
 using OneBase.AI.Reports;
 
 namespace OneBase.AI.Consultant;
 
-/// <summary>Вопрос пользователя в контексте чата. Channel — откуда вопрос (null — чат OneBase).</summary>
-public sealed record ConsultantTurn(Guid UserId, Guid ConversationId, string Question, IReadOnlyList<LlmMessage> History, ConsultantChannel? Channel = null);
+/// <summary>
+/// Вопрос пользователя в контексте чата. Channel — откуда вопрос (null — чат OneBase). LastAnswerId — последний ответ консультанта в чате
+/// (если вопрос его оспаривает — на него ссылается проверка в журнале).
+/// </summary>
+public sealed record ConsultantTurn(Guid UserId, Guid ConversationId, string Question, IReadOnlyList<LlmMessage> History, ConsultantChannel? Channel = null,
+    Guid? LastAnswerId = null);
 
 /// <summary>
 /// Канал вопроса вне чата OneBase (Telegram): свои инструкции (стиль, язык, ограничения администратора), модель и длина ответа, можно ли
@@ -35,7 +40,10 @@ public sealed record DataSource(string Title, string? Period = null, string? Hre
 /// <summary>Показатель из данных: название, значение и единица.</summary>
 public sealed record Metric(string Name, string Value, string? Unit = null);
 
-/// <summary>Структурированный результат AI-сотрудника (agent/status/findings/metrics/problems/recommendations/data_sources).</summary>
+/// <summary>
+/// Структурированный результат AI-сотрудника (agent/status/findings/metrics/problems/recommendations/data_sources). Unverified — числа итога,
+/// которых нет в результатах инструментов и точных расчётов (после попытки исправить): консультант не выдаёт их за факт.
+/// </summary>
 public sealed record AgentResult(
     string Agent,
     string AgentName,
@@ -47,9 +55,13 @@ public sealed record AgentResult(
     IReadOnlyList<string> Recommendations,
     IReadOnlyList<DataSource> DataSources,
     IReadOnlyList<string> ToolsUsed,
-    string? Error = null);
+    string? Error = null,
+    IReadOnlyList<string>? Unverified = null);
 
-/// <summary>Разбор ответа, который сохраняется рядом с текстом и показывается в чате. Reports — отчёты Excel, сформированные по просьбе пользователя.</summary>
+/// <summary>
+/// Разбор ответа, который сохраняется рядом с текстом и показывается в чате. Reports — отчёты Excel, сформированные по просьбе пользователя.
+/// Grounding — проверка чисел ответа по данным; Correction — перепроверка, если вопрос оспаривал прошлый ответ.
+/// </summary>
 public sealed record ConsultantDetails(
     IReadOnlyList<AgentResult> Agents,
     IReadOnlyList<DataSource> Sources,
@@ -57,7 +69,9 @@ public sealed record ConsultantDetails(
     bool UsedFallback,
     string? RoutingReason = null,
     int MemoryUsed = 0,
-    IReadOnlyList<ReportRef>? Reports = null);
+    IReadOnlyList<ReportRef>? Reports = null,
+    GroundingSummary? Grounding = null,
+    CorrectionReview? Correction = null);
 
 public sealed record ConsultantAnswer(string Content, ConsultantDetails Details, AiTokenUsage Usage);
 

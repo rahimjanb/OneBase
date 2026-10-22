@@ -469,6 +469,33 @@ const dict: Dict = {
   "Токены — по ответам провайдеров. Стоимость — оценка по ценам, указанным в «Модели» (за 1 млн токенов); счёт провайдера может отличаться.":
     "Tokenlar — provayderlar javoblari bo'yicha. Xarajat — «Modellar» bo'limida ko'rsatilgan narxlar bo'yicha taxmin (1 mln token uchun); provayder hisobi farq qilishi mumkin.",
   "Для части моделей цена не задана — их стоимость не учтена.": "Ba'zi modellar uchun narx kiritilmagan — ularning xarajati hisobga olinmagan.",
+
+  // Консультант: проверка ответа по данным
+  "Перепроверка: {verdict}": "Qayta tekshiruv: {verdict}",
+  "прошлый ответ подтверждён данными": "oldingi javob ma'lumotlar bilan tasdiqlandi",
+  "прошлый ответ исправлен по данным": "oldingi javob ma'lumotlar bo'yicha tuzatildi",
+  "данных для проверки недостаточно": "tekshirish uchun ma'lumot yetarli emas",
+  "Первый вариант ответа содержал числа, которых нет в данных, — ответ исправлен":
+    "Javobning birinchi variantida ma'lumotlarda yo'q sonlar bor edi — javob tuzatildi",
+  "не подтверждено данными: {list}": "ma'lumotlar bilan tasdiqlanmagan: {list}",
+  "Прошлый ответ — подтверждено данными": "Oldingi javob — ma'lumotlar bilan tasdiqlangan",
+  "Прошлый ответ — не подтверждено": "Oldingi javob — tasdiqlanmagan",
+  "Ваши значения — подтверждено данными": "Sizning qiymatlaringiz — ma'lumotlar bilan tasdiqlangan",
+  "Ваши значения — не подтверждено": "Sizning qiymatlaringiz — tasdiqlanmagan",
+  "Перепроверка по данным": "Ma'lumotlar bo'yicha qayta tekshiruv",
+  "возражение подряд: {n}": "ketma-ket e'tiroz: {n}",
+  "Возражение не меняет ответ само по себе: AI-сотрудники заново получили данные, итог посчитан по ним.":
+    "E'tirozning o'zi javobni o'zgartirmaydi: AI-xodimlar ma'lumotlarni qaytadan oldi, natija ular bo'yicha hisoblandi.",
+  "Не подтверждено результатами инструментов: {list}": "Vositalar natijalari bilan tasdiqlanmagan: {list}",
+
+  // Журнал AI: проверка ответа по данным
+  "Проверка по данным:": "Ma'lumotlar bo'yicha tekshiruv:",
+  "подтверждено чисел: {n} из {m}": "tasdiqlangan sonlar: {m} tadan {n}",
+  "ответ исправлялся": "javob tuzatilgan",
+  "не подтверждено: {list}": "tasdiqlanmagan: {list}",
+  "Возражение пользователя:": "Foydalanuvchi e'tirozi:",
+  "подряд: {n}": "ketma-ket: {n}",
+  "значения пользователя не подтверждены: {list}": "foydalanuvchi qiymatlari tasdiqlanmagan: {list}",
 };
 
 export default dict;

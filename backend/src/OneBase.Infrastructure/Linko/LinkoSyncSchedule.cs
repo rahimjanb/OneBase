@@ -3,14 +3,14 @@ using OneBase.Domain.Sales;
 namespace OneBase.Infrastructure.Linko;
 
 /// <summary>
-/// Правила автоматического обмена с Linko без людей: когда делать ночную сверку, когда изменение задевает давние месяцы (их кэш живёт
+/// Правила автоматического обмена с Linko без людей: когда делать ежедневную сверку, когда изменение задевает давние месяцы (их кэш живёт
 /// дольше) и когда обмен считать сломанным — данные устарели. Время — ташкентское (UTC+5), сервер может жить в UTC.
 /// </summary>
 public static class LinkoSyncSchedule
 {
     public static readonly TimeSpan CompanyOffset = TimeSpan.FromHours(5);
 
-    /// <summary>Строка состояния ночной сверки (LastSuccessAt — когда была последняя).</summary>
+    /// <summary>Строка состояния ежедневной сверки (LastSuccessAt — когда была последняя).</summary>
     public const string ReconcileState = "reconcile";
 
     /// <summary>Строка состояния контроля обмена: LastError — текст открытой проблемы, по которой уже ушло уведомление.</summary>
@@ -24,9 +24,77 @@ public static class LinkoSyncSchedule
         ["visits"] = "визиты",
         ["product_balances"] = "остатки",
         ["stock_transfers"] = "перемещения",
+        ["reservations"] = "бронь",
     };
 
-    /// <summary>Ночная сверка: раз в сутки, после <paramref name="hour"/> часов по Ташкенту, если сегодня её ещё не было.</summary>
+    /// <summary>Время запусков из Sales:Sync:Times («11:00», «17:00») — по Ташкенту, по порядку, без повторов; неразборчивое отбрасывается.</summary>
+    public static IReadOnlyList<TimeOnly> ParseTimes(IEnumerable<string>? times) =>
+        (times ?? [])
+            .Select(t => TimeOnly.TryParseExact(t?.Trim(), ["H:mm", "HH:mm"], System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var v) ? v : (TimeOnly?)null)
+            .OfType<TimeOnly>()
+            .Distinct()
+            .Order()
+            .ToList();
+
+    /// <summary>Ближайший запуск по расписанию строго после <paramref name="nowUtc"/>.</summary>
+    public static DateTimeOffset NextRun(DateTimeOffset nowUtc, IReadOnlyList<TimeOnly> times)
+    {
+        var today = DateOnly.FromDateTime(nowUtc.ToOffset(CompanyOffset).DateTime);
+        foreach (var day in new[] { today, today.AddDays(1) })
+        {
+            foreach (var t in times)
+            {
+                var at = new DateTimeOffset(day.ToDateTime(t), CompanyOffset);
+                if (at > nowUtc)
+                {
+                    return at;
+                }
+            }
+        }
+
+        throw new InvalidOperationException("Расписание синхронизации пустое.");
+    }
+
+    /// <summary>Последний наступивший запуск по расписанию (не позже <paramref name="nowUtc"/>).</summary>
+    public static DateTimeOffset LastSlot(DateTimeOffset nowUtc, IReadOnlyList<TimeOnly> times)
+    {
+        var today = DateOnly.FromDateTime(nowUtc.ToOffset(CompanyOffset).DateTime);
+        foreach (var day in new[] { today, today.AddDays(-1) })
+        {
+            foreach (var t in times.Reverse())
+            {
+                var at = new DateTimeOffset(day.ToDateTime(t), CompanyOffset);
+                if (at <= nowUtc)
+                {
+                    return at;
+                }
+            }
+        }
+
+        throw new InvalidOperationException("Расписание синхронизации пустое.");
+    }
+
+    /// <summary>
+    /// Запуск по расписанию пропущен: после последнего наступившего времени данные не обновлялись (сервер был выключен или запуск не прошёл) —
+    /// синхронизацию нужно догнать сразу, а не ждать следующего времени.
+    /// </summary>
+    public static bool Missed(DateTimeOffset nowUtc, DateTimeOffset? lastSuccess, IReadOnlyList<TimeOnly> times) =>
+        times.Count > 0 && (lastSuccess is null || lastSuccess < LastSlot(nowUtc, times));
+
+    /// <summary>Самый долгий промежуток между запусками (с переходом через полночь): дольше него без обновления данные устарели.</summary>
+    public static TimeSpan LongestGap(IReadOnlyList<TimeOnly> times)
+    {
+        if (times.Count == 0)
+        {
+            return TimeSpan.FromDays(1);
+        }
+
+        var gaps = times.Zip(times.Skip(1), (a, b) => b - a).Append(TimeSpan.FromDays(1) - (times[^1] - times[0]));
+        return gaps.Max();
+    }
+
+    /// <summary>Ежедневная сверка: раз в сутки, после <paramref name="hour"/> часов по Ташкенту, если сегодня её ещё не было.</summary>
     public static bool ReconcileDue(DateTimeOffset nowUtc, DateTimeOffset? lastReconcile, int hour)
     {
         var local = nowUtc.ToOffset(CompanyOffset);

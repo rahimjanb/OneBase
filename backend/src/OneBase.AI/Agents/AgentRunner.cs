@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
+using OneBase.AI.Grounding;
 using OneBase.AI.Knowledge;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
@@ -9,6 +10,7 @@ using OneBase.AI.Reports;
 using OneBase.AI.Security;
 using OneBase.AI.Tools;
 using OneBase.AI.Tools.Data;
+using OneBase.Application.DataSources;
 
 namespace OneBase.AI.Agents;
 
@@ -19,11 +21,13 @@ namespace OneBase.AI.Agents;
 /// <summary>Model — модель для этого запуска вместо модели сотрудника (канал попросил другую, например Claude для генерации отчёта).</summary>
 public sealed record AgentTask(string AgentCode, string Task, Guid UserId, Guid? ConversationId = null, string? Context = null, bool Report = false, AiModelRef? Model = null);
 
-public sealed record AgentRun(AgentResult Result, AiTokenUsage Usage, string? Model);
+/// <summary>Evidence — числа из результатов инструментов и точных расчётов сотрудника: доказательства для проверки ответа консультанта.</summary>
+public sealed record AgentRun(AgentResult Result, AiTokenUsage Usage, string? Model, EvidenceSet? Evidence = null);
 
 /// <summary>
 /// Выполняет задачу одного AI-сотрудника: цикл вызова инструментов (данные OneBase) и структурированный итог
-/// agent/status/findings/metrics/problems/recommendations/data_sources.
+/// agent/status/findings/metrics/problems/recommendations/data_sources. Числа итога сверяются с результатами инструментов: неподтверждённые —
+/// одна попытка пересчитать (calculate) или убрать, оставшиеся — в Unverified результата.
 /// </summary>
 public sealed class AgentRunner(
     AiAgentStore agents,
@@ -33,6 +37,7 @@ public sealed class AgentRunner(
     KnowledgeService knowledge,
     SalesGlossary glossary,
     ReportService reports,
+    SourceOfTruthService truth,
     TimeProvider clock)
 {
     private const int MaxSteps = 8;
@@ -80,6 +85,13 @@ public sealed class AgentRunner(
             definitions.Add(reportTool);
         }
 
+        // Точный расчёт и источник истины — у каждого сотрудника с данными: производные числа считает код, расхождения источников решает правило.
+        if (tools.Count > 0)
+        {
+            definitions.Add(Calculator.Definition);
+            definitions.Add(SourceOfTruthTool.Definition);
+        }
+
         // Словарь названий компании — только сотрудникам с данными продаж: иначе «помадка» в вопросе для модели просто незнакомое слово.
         var glossaryText = tools.Any(t => t.Source?.StartsWith("sales.", StringComparison.Ordinal) == true) ? await glossary.TextAsync(ct) : null;
         var messages = new List<LlmMessage>
@@ -92,6 +104,8 @@ public sealed class AgentRunner(
         var usage = AiTokenUsage.None;
         var toolsUsed = new List<string>();
         var sources = new List<DataSource>();
+        var evidence = new EvidenceSet();
+        var revised = false;
         string? model = null;
         var options = new AiCallOptions
         {
@@ -113,23 +127,60 @@ public sealed class AgentRunner(
             if (response.ToolCalls.Count == 0)
             {
                 var result = Parse(agent, response.Text, toolsUsed, sources);
-                return new AgentRun(result, usage, model);
+                var check = EvidenceCheck.Run(ResultText(result), evidence, task.Task);
+                if (!check.Grounded && !revised && !last && tools.Count > 0)
+                {
+                    // Evidence Check сотрудника: числа, которых нет в результатах инструментов, — пересчитать (calculate), получить или убрать.
+                    revised = true;
+                    messages.Add(new LlmMessage(LlmRole.Assistant, response.Text ?? string.Empty));
+                    messages.Add(new LlmMessage(LlmRole.User, $"""
+                        Проверка итога по данным: эти числа не найдены в результатах инструментов: {string.Join("; ", check.Unsupported)}.
+                        Производное число (сумма, разница, доля, рост, среднее) посчитай инструментом {Calculator.ToolName}; недостающее — получи
+                        инструментом данных; чего нет в данных — убери или напиши, что данных нет. Затем верни исправленный итоговый JSON.
+                        """));
+                    continue;
+                }
+
+                return new AgentRun(check.Grounded ? result : result with { Unverified = check.Unsupported }, usage, model, evidence);
             }
 
             messages.Add(new LlmMessage(LlmRole.Assistant, response.Text ?? string.Empty, ToolCalls: response.ToolCalls));
             foreach (var call in response.ToolCalls)
             {
                 var isReport = call.Name == ReportSpec.ToolName;
-                var title = isReport ? ReportSpec.ToolTitle : tools.FirstOrDefault(t => t.Name == call.Name)?.Title ?? call.Name;
+                var title = isReport ? ReportSpec.ToolTitle
+                    : call.Name == Calculator.ToolName ? "Точный расчёт"
+                    : call.Name == SourceOfTruthTool.ToolName ? "Источник истины"
+                    : tools.FirstOrDefault(t => t.Name == call.Name)?.Title ?? call.Name;
                 if (progress is not null)
                 {
                     await progress(new ConsultantProgress("agent", agent.Code, agent.Name, ProgressStatus.Running, title));
                 }
 
                 ToolResult result;
-                if (!isReport)
+                if (call.Name == Calculator.ToolName && tools.Count > 0)
+                {
+                    var (calculated, value) = Calculator.Run(call.Arguments);
+                    if (value is { } v)
+                    {
+                        evidence.Add(v);
+                    }
+
+                    result = value is null ? ToolResult.Error(calculated) : ToolResult.Ok(calculated);
+                }
+                else if (call.Name == SourceOfTruthTool.ToolName && tools.Count > 0)
+                {
+                    var map = await SourceOfTruthTool.RunAsync(call.Arguments, truth, ct);
+                    evidence.AddContent(map);
+                    result = ToolResult.Ok(map);
+                }
+                else if (!isReport)
                 {
                     result = await executor.ExecuteAsync(context, call.Name, call.Arguments, ct);
+                    if (result.Success)
+                    {
+                        evidence.AddContent(result.Content);
+                    }
                 }
                 else if (reportTool is null || !definitions.Contains(reportTool))
                 {
@@ -167,8 +218,15 @@ public sealed class AgentRunner(
         }
 
         return new AgentRun(new AgentResult(agent.Code, agent.Name, "failed", "Превышен лимит шагов агента.", [], [], [], [], sources, toolsUsed,
-            "Агент не завершил анализ за отведённое число шагов."), usage, model);
+            "Агент не завершил анализ за отведённое число шагов."), usage, model, evidence);
     }
+
+    /// <summary>Утверждения итога сотрудника для проверки по данным: вывод, факты, показатели и проблемы (рекомендации — предложения, не факты).</summary>
+    internal static string ResultText(AgentResult r) =>
+        string.Join("\n", new[] { r.Summary }
+            .Concat(r.Findings)
+            .Concat(r.Metrics.Select(m => $"{m.Name}: {m.Value} {m.Unit}".Trim()))
+            .Concat(r.Problems));
 
     private string SystemPrompt(AgentConfig agent, IReadOnlyList<ITool> tools, string? glossaryText, bool report = false)
     {
@@ -179,7 +237,10 @@ public sealed class AgentRunner(
         sb.AppendLine($"Сегодня {today:dd.MM.yyyy}, {today:HH:mm} по Ташкенту. Компания работает в Узбекистане, суммы — в сумах (UZS), вес — в кг.");
         sb.AppendLine(tools.Count == 0
             ? "Инструментов с данными OneBase у тебя сейчас нет — значит, данных для ответа нет."
-            : "Бери цифры только из результатов инструментов. Вызывай инструменты столько раз, сколько нужно, с точными фильтрами (период, регион).");
+            : $"Бери цифры только из результатов инструментов. Вызывай инструменты столько раз, сколько нужно, с точными фильтрами (период, регион). " +
+              $"Любое число, которого нет в результатах (сумма, разница, доля, рост, среднее), считай инструментом {Calculator.ToolName} — каждое число итога " +
+              $"сверяется с данными. Если значения из разных источников расходятся или пользователь ссылается на другой источник — вызови " +
+              $"{SourceOfTruthTool.ToolName}: верно значение источника-владельца, о расхождении скажи.");
         foreach (var hint in tools.OfType<DataTool>().Select(t => t.UsageHint).OfType<string>())
         {
             sb.AppendLine(hint);

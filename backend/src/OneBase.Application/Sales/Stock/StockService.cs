@@ -8,7 +8,10 @@ namespace OneBase.Application.Sales.Stock;
 /// Остаток SKU на одном складе: штуки как в Linko, кг, коробки и стоимость; скорость без поправки (RawKgPerDay) и с поправкой на аутсток
 /// (KgPerDay; ZeroDays — зачтённые дни в нуле закрытого месяца), та же скорость в коробках и деньгах (BoxesPerDay, SumPerDay — для матрицы
 /// в выбранной единице); запас на 15 дней в кг, коробках и деньгах; рекомендуемый заказ (OrderKg — вверх до целой коробки; у завода —
-/// заказ у завода). Все переводы в коробки, штуки и деньги сделаны здесь — страница ничего не пересчитывает.
+/// заказ у завода). Бронь (Reserved…) — товар неотгруженных заказов и перемещений склада («Забронировано» в Linko), FreeKg — доступно
+/// (остаток − бронь): «хватит, дн.», статус и заказ дилера считаются от доступного; заказ у завода — от всего остатка (бронь завода — это
+/// отгрузки по тем же заказам дилеров, иначе её заказали бы дважды). Все переводы в коробки, штуки и деньги сделаны здесь — страница ничего
+/// не пересчитывает.
 /// </summary>
 public sealed record StockCell(
     decimal Pieces,
@@ -28,7 +31,11 @@ public sealed record StockCell(
     decimal? OrderBoxes,
     decimal? OrderPieces,
     decimal? OrderSum,
-    string Status);
+    string Status,
+    decimal ReservedKg = 0,
+    decimal? ReservedBoxes = null,
+    decimal? ReservedSum = null,
+    decimal? FreeKg = null);
 
 public static class StockStatuses
 {
@@ -82,7 +89,8 @@ public static class StockScopes
 /// <summary>
 /// Товар в рекомендуемом остатке по выбранному охвату. Price — входная цена дилера за единицу учёта на начало месяца; ValueSum — остаток × цена;
 /// KgPerDay — скорость с поправкой на аутсток, RawKgPerDay — без; Need15Kg и Need30Kg — скорость × горизонт; OrderKg — рекомендуемый заказ
-/// дилера (у охвата «Завод» — заказ у завода); PackKg — фасовка из названия (фильтр); Top — товар из списка ТОП.
+/// дилера (у охвата «Завод» — заказ у завода); PackKg — фасовка из названия (фильтр); Top — товар из списка ТОП; Reserved… и FreeKg — бронь и
+/// доступный остаток (DaysOfCover и статус — от доступного).
 /// </summary>
 public sealed record StockItem(
     long ProductId,
@@ -116,7 +124,11 @@ public sealed record StockItem(
     decimal? OrderSum,
     string Status,
     IReadOnlyDictionary<string, StockCell> Regions,
-    StockCell? Factory);
+    StockCell? Factory,
+    decimal ReservedKg = 0,
+    decimal? ReservedBoxes = null,
+    decimal? ReservedSum = null,
+    decimal? FreeKg = null);
 
 /// <summary>Товар, которого в таблице нет: вне категорий отчёта (бонус, подарочные наборы, импорт) или без веса единицы.</summary>
 public sealed record StockExcluded(long ProductId, string Name, string? Code, string Category, string Reason, decimal Pieces, decimal? Kg, decimal FactoryPieces);
@@ -134,7 +146,8 @@ public sealed record StockCategoryTile(string Name, int Skus, decimal Kg, decima
 /// Итоги по отфильтрованным строкам: кг, коробки, скорость (с поправкой и без; в коробках и деньгах — суммой по строкам, где они есть)
 /// и дни запаса, запас на 15 дней в трёх единицах, SKU по статусам; ValueSum — стоимость запаса по входной цене (только SKU с ценой),
 /// WithoutPrice — SKU с остатком без цены; ApproxWeight — SKU с весом единицы из названия; WithoutWeight — товары без веса единицы
-/// (в таблицу не входят); OrderKg/OrderSum/OrderSkus — рекомендуемый заказ.
+/// (в таблицу не входят); OrderKg/OrderSum/OrderSkus — рекомендуемый заказ; ReservedKg/ReservedBoxes/ReservedSum — бронь, FreeKg — доступно
+/// (дни запаса — от доступного).
 /// </summary>
 public sealed record StockTotals(
     decimal Pieces,
@@ -159,7 +172,11 @@ public sealed record StockTotals(
     decimal OrderKg,
     decimal OrderBoxes,
     decimal OrderSum,
-    int OrderSkus);
+    int OrderSkus,
+    decimal ReservedKg = 0,
+    decimal ReservedBoxes = 0,
+    decimal ReservedSum = 0,
+    decimal FreeKg = 0);
 
 /// <summary>Поправка скорости на аутсток по стране: скорость до и после, пары с зачтёнными днями в нуле, изменение в долях.</summary>
 public sealed record StockCorrection(int Year, int Month, decimal RawKgPerDay, decimal KgPerDay, int Pairs, decimal? Change);
@@ -208,7 +225,8 @@ public sealed record StockView(
     StockTotals Totals,
     StockTotals? FactoryTotals,
     IReadOnlyDictionary<string, StockTotals> RegionTotals,
-    StockCorrection Correction);
+    StockCorrection Correction,
+    DateTimeOffset? ReservedAt = null);
 
 /// <summary>Товар с клетками всех складов дилеров, завода и экспорта — до выбора охвата и фильтров.</summary>
 public sealed record StockBaseItem(
@@ -267,7 +285,8 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
 
     /// <summary>
     /// Автозаказ региона — без фильтров страницы: все товары, у которых известна коробка (единица Linko и сколько единиц в коробке),
-    /// рекомендация — рекомендуемый заказ склада региона в коробках. Регион не задан или не найден — первый по алфавиту.
+    /// рекомендация — рекомендуемый заказ склада региона в коробках (от доступного остатка: бронь уже продана магазинам). Регион не задан или
+    /// не найден — первый по алфавиту.
     /// </summary>
     public static AutoOrderView ComposeAutoOrder(StockBase b, string? regionId)
     {
@@ -289,11 +308,12 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
 
             var cell = i.Regions.GetValueOrDefault(region.Id);
             var rec = cell is null ? 0 : (int)Math.Round(cell.OrderKg / p.BoxKg.Value);
-            items.Add(new AutoOrderItem(p.Id, p.Code, p.Name, i.Category, i.Top, unit, perBox, p.BoxKg, p.Price, rec, cell?.Kg ?? 0, cell?.KgPerDay));
+            items.Add(new AutoOrderItem(p.Id, p.Code, p.Name, i.Category, i.Top, unit, perBox, p.BoxKg, p.Price, rec, cell?.Kg ?? 0, cell?.KgPerDay,
+                cell?.ReservedKg ?? 0, cell?.FreeKg, i.Factory?.Kg, i.Factory?.FreeKg));
         }
 
         return new AutoOrderView(region.Id, region.Name, regions, s.SnapshotDate, s.PriceList, StockMath.OrderCoverDays,
-            items.OrderByDescending(x => x.RecBoxes > 0).ThenBy(x => x.Category, Russian).ThenBy(x => x.Name, Russian).ToList(), withoutBox);
+            items.OrderByDescending(x => x.RecBoxes > 0).ThenBy(x => x.Category, Russian).ThenBy(x => x.Name, Russian).ToList(), withoutBox, s.ReservedAt);
     }
 
     /// <summary>
@@ -384,8 +404,9 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
             .Select(g =>
             {
                 var kg = g.Sum(r => r.Kg ?? 0);
+                var free = g.Sum(r => r.FreeKg ?? r.Kg ?? 0);
                 var perDay = g.Sum(r => r.KgPerDay ?? 0);
-                return new StockCategoryTile(g.Key, g.Count(), kg, g.Sum(r => r.ValueSum ?? 0), perDay, perDay > 0 ? kg / perDay : null,
+                return new StockCategoryTile(g.Key, g.Count(), kg, g.Sum(r => r.ValueSum ?? 0), perDay, perDay > 0 ? free / perDay : null,
                     g.Count(r => r.Status == StockStatuses.Deficit), g.Sum(r => r.OrderKg), chosen.Contains(g.Key));
             })
             .OrderByDescending(t => t.Kg)
@@ -430,16 +451,19 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
             b.Excluded.Count(e => e.Reason == StockExcludedReasons.OutsideReport),
             withoutWeight,
             Totals(filtered.Select(r => new TotalRow(r.Pieces, r.Kg, r.Boxes, r.KgPerDay, r.RawKgPerDay, r.BoxesPerDay, r.SumPerDay, r.Need15Kg, r.Need15Boxes, r.Need15Sum,
-                r.Status, r.ValueSum, r.Price is not null, r.UnitKgSource == WeightSources.Name, r.OrderKg, r.OrderBoxes, r.OrderSum)), withoutWeight),
+                r.Status, r.ValueSum, r.Price is not null, r.UnitKgSource == WeightSources.Name, r.OrderKg, r.OrderBoxes, r.OrderSum, r.ReservedKg, r.ReservedBoxes,
+                r.ReservedSum, r.FreeKg)), withoutWeight),
             factoryTotals,
             regionTotals,
-            b.Correction);
+            b.Correction,
+            s.ReservedAt);
     }
 
     /// <summary>Строка итогов по одной клетке склада (завод, склад региона в матрице): статус — по её остатку и скорости.</summary>
     private static TotalRow CellRow(StockItem r, StockCell c) =>
         new(c.Pieces, c.Kg, c.Boxes, c.KgPerDay, c.RawKgPerDay, c.BoxesPerDay, c.SumPerDay, c.Need15Kg, c.Need15Boxes, c.Need15Sum,
-            c.Status, c.ValueSum, r.Price is not null, r.UnitKgSource == WeightSources.Name, c.OrderKg, c.OrderBoxes, c.OrderSum);
+            c.Status, c.ValueSum, r.Price is not null, r.UnitKgSource == WeightSources.Name, c.OrderKg, c.OrderBoxes, c.OrderSum, c.ReservedKg, c.ReservedBoxes,
+            c.ReservedSum, c.FreeKg);
 
     /// <summary>Охват из строки запроса: «rm:id», «region:id», «plant», «export»; пусто или неизвестно — страна.</summary>
     public static (string Scope, string? Id) ParseScope(string? scope)
@@ -489,6 +513,8 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
             var cells = i.Regions.Where(kv => scopeIds.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
             regions = cells;
             var kg = cells.Values.Sum(c => c.Kg ?? 0);
+            var reserved = cells.Values.Sum(c => c.ReservedKg);
+            var free = cells.Values.Sum(c => c.FreeKg ?? c.Kg ?? 0);
             var perDay = cells.Values.Sum(c => c.KgPerDay ?? 0);
             var need15 = perDay * StockMath.OrderCoverDays;
             var order = cells.Values.Sum(c => c.OrderKg);
@@ -502,7 +528,7 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
                 StockMath.Boxes(perDay, p.BoxKg),
                 StockMath.SumOfKg(perDay, p.UnitKg, p.Price),
                 cells.Values.Sum(c => c.ZeroDays),
-                perDay > 0 ? kg / perDay : null,
+                perDay > 0 ? free / perDay : null,
                 need15,
                 StockMath.Boxes(need15, p.BoxKg),
                 StockMath.SumOfKg(need15, p.UnitKg, p.Price),
@@ -510,7 +536,11 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
                 StockMath.Boxes(order, p.BoxKg),
                 p.UnitKg is { } u && u > 0 ? order / u : null,
                 StockMath.SumOfKg(order, p.UnitKg, p.Price),
-                StockStatuses.Of(kg, perDay));
+                StockStatuses.Of(free, perDay),
+                reserved,
+                StockMath.Boxes(reserved, p.BoxKg),
+                StockMath.SumOfKg(reserved, p.UnitKg, p.Price),
+                free);
         }
 
         if (total.Kg is not > 0 && total.KgPerDay is not > 0)
@@ -518,7 +548,7 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
             return null; // в охвате ни остатка, ни продаж
         }
 
-        var status = scope == StockScopes.Export ? StockStatuses.None : StockStatuses.Of(total.Kg, total.KgPerDay);
+        var status = scope == StockScopes.Export ? StockStatuses.None : StockStatuses.Of(total.FreeKg ?? total.Kg, total.KgPerDay);
         return new StockItem(
             p.Id,
             p.Name,
@@ -551,7 +581,11 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
             total.OrderSum,
             status,
             regions,
-            i.Factory);
+            i.Factory,
+            total.ReservedKg,
+            total.ReservedBoxes,
+            total.ReservedSum,
+            total.FreeKg);
     }
 
     public async Task<StockBase> BuildBaseAsync(CancellationToken ct = default)
@@ -671,15 +705,18 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
     }
 
     /// <summary>
-    /// Клетка склада: у дилера заказ — до запаса на 15 дней по скорости с поправкой (orderSpeed), у завода — заказы дилеров минус его остаток
-    /// (dealerOrdersKg), у экспорта ни скорости, ни заказа.
+    /// Клетка склада: у дилера заказ — до запаса на 15 дней по скорости с поправкой (orderSpeed) от доступного остатка (остаток − бронь: бронь
+    /// дилера уже продана магазинам), у завода — заказы дилеров минус весь его остаток (dealerOrdersKg; бронь завода — отгрузки по тем же заказам
+    /// дилеров), у экспорта ни скорости, ни заказа. Дни запаса и статус — от доступного.
     /// </summary>
-    private static StockCell Cell(StockSnapshot s, StockProduct p, long stockId, decimal? kgPerDay, decimal? rawKgPerDay, int zeroDays, decimal? orderSpeed, decimal? dealerOrdersKg,
+    public static StockCell Cell(StockSnapshot s, StockProduct p, long stockId, decimal? kgPerDay, decimal? rawKgPerDay, int zeroDays, decimal? orderSpeed, decimal? dealerOrdersKg,
         bool top = false)
     {
         var pieces = s.PiecesOf(p.Id, stockId);
         var kg = StockMath.Kg(pieces, p.UnitKg) ?? 0;
-        var order = orderSpeed is { } speed ? (top ? StockMath.TopStartKg(speed, kg, p.BoxKg) : null) ?? StockMath.OrderKg(speed, kg, p.BoxKg)
+        var reserved = StockMath.Kg(s.ReservedOf(p.Id, stockId), p.UnitKg) ?? 0;
+        var free = StockMath.FreeKg(kg, reserved);
+        var order = orderSpeed is { } speed ? (top ? StockMath.TopStartKg(speed, kg, p.BoxKg) : null) ?? StockMath.OrderKg(speed, free, p.BoxKg)
             : dealerOrdersKg is { } demand ? StockMath.FactoryOrderKg(demand, kg)
             : 0;
         var orderPieces = p.UnitKg is { } u && u > 0 ? order / u : (decimal?)null;
@@ -694,7 +731,7 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
             StockMath.Boxes(kgPerDay, p.BoxKg),
             StockMath.SumOfKg(kgPerDay, p.UnitKg, p.Price),
             zeroDays,
-            kgPerDay is > 0 ? kg / kgPerDay.Value : null,
+            kgPerDay is > 0 ? free / kgPerDay.Value : null,
             need15,
             StockMath.Boxes(need15, p.BoxKg),
             StockMath.SumOfKg(need15, p.UnitKg, p.Price),
@@ -702,7 +739,11 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
             StockMath.Boxes(order, p.BoxKg),
             orderPieces,
             StockMath.SumOfKg(order, p.UnitKg, p.Price),
-            kgPerDay is null && rawKgPerDay is null ? StockStatuses.None : StockStatuses.Of(kg, kgPerDay)); // у экспорта скорости нет — статуса нет
+            kgPerDay is null && rawKgPerDay is null ? StockStatuses.None : StockStatuses.Of(free, kgPerDay), // у экспорта скорости нет — статуса нет
+            reserved,
+            StockMath.Boxes(reserved, p.BoxKg),
+            StockMath.SumOfKg(reserved, p.UnitKg, p.Price),
+            free);
     }
 
     /// <summary>Строка для итогов: у склада завода PerDay — скорость всей страны.</summary>
@@ -723,7 +764,11 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
         bool ApproxWeight,
         decimal OrderKg,
         decimal? OrderBoxes,
-        decimal? OrderSum)
+        decimal? OrderSum,
+        decimal ReservedKg = 0,
+        decimal? ReservedBoxes = null,
+        decimal? ReservedSum = null,
+        decimal? FreeKg = null)
     {
         public bool HasStock => Pieces != 0;
     }
@@ -732,6 +777,7 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
     {
         var rows = source.ToList();
         var kg = rows.Sum(r => r.Kg ?? 0);
+        var free = rows.Sum(r => r.FreeKg ?? r.Kg ?? 0);
         var perDay = rows.Sum(r => r.PerDay ?? 0);
         var raw = rows.Sum(r => r.RawPerDay ?? 0);
         return new StockTotals(
@@ -742,7 +788,7 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
             raw == 0 ? null : raw,
             rows.Sum(r => r.BoxesPerDay ?? 0),
             rows.Sum(r => r.SumPerDay ?? 0),
-            perDay > 0 ? kg / perDay : null,
+            perDay > 0 ? free / perDay : null,
             rows.Sum(r => r.Need15Kg ?? 0),
             rows.Sum(r => r.Need15Boxes ?? 0),
             rows.Sum(r => r.Need15Sum ?? 0),
@@ -757,6 +803,10 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
             rows.Sum(r => r.OrderKg),
             rows.Sum(r => r.OrderBoxes ?? 0),
             rows.Sum(r => r.OrderSum ?? 0),
-            rows.Count(r => r.OrderKg > 0));
+            rows.Count(r => r.OrderKg > 0),
+            rows.Sum(r => r.ReservedKg),
+            rows.Sum(r => r.ReservedBoxes ?? 0),
+            rows.Sum(r => r.ReservedSum ?? 0),
+            free);
     }
 }

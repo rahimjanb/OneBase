@@ -67,4 +67,13 @@ public class AiAuditLog
     public string? ResponsePreview { get; set; }
 
     public string? Error { get; set; }
+
+    /// <summary>Проверка ответа по данным (jsonb): числа — подтверждены или нет, исправлялся ли ответ; перепроверка после возражения.</summary>
+    public string? Grounding { get; set; }
+
+    /// <summary>Итог перепроверки, если вопрос оспаривал прошлый ответ: confirmed, corrected, insufficient.</summary>
+    public string? CorrectionVerdict { get; set; }
+
+    /// <summary>Оспоренный ответ (сообщение чата) — исходный ответ для сравнения.</summary>
+    public Guid? CorrectionOfMessageId { get; set; }
 }

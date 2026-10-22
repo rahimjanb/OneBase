@@ -321,6 +321,9 @@ public static partial class StockMath
         return boxKg is > 0 ? Math.Ceiling(need / boxKg.Value - 0.000000001m) * boxKg.Value : need;
     }
 
+    /// <summary>Доступно на складе: остаток минус бронь (неотгруженные заказы и перемещения), не меньше нуля.</summary>
+    public static decimal FreeKg(decimal kg, decimal reservedKg) => Math.Max(0, kg - reservedKg);
+
     /// <summary>Заказ у завода: заказы всех дилеров, которые его остаток не покрывает. Своего запаса «на 15 дней» у завода нет.</summary>
     public static decimal FactoryOrderKg(decimal dealerOrdersKg, decimal factoryKg) => Math.Max(0, dealerOrdersKg - factoryKg);
 

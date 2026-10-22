@@ -612,6 +612,15 @@ const dict: Dict = {
   // Широкие шаблоны — последними, чтобы не перехватить уточнённые выше.
   // Период источника данных: «октябрь 2026, данные по 19.10.2026».
   "{month} {year}, данные по {date}": "{month} {year}, {date} holatiga ma'lumot",
+
+  // Консультант: проверка ответа по данным (тексты сервера)
+  "чисел сверено с данными: {n}": "ma'lumotlar bilan solishtirilgan sonlar: {n}",
+  "Пользователь оспаривает прошлый ответ — AI-сотрудники перепроверяют данные.":
+    "Foydalanuvchi oldingi javobga e'tiroz bildirmoqda — AI-xodimlar ma'lumotlarni qayta tekshiradi.",
+  "Вопрос о данных компании — ответ только по данным OneBase.":
+    "Savol kompaniya ma'lumotlari haqida — javob faqat OneBase ma'lumotlari bo'yicha.",
+  "Точный расчёт": "Aniq hisob",
+  "Источник истины": "Haqiqat manbai",
 };
 
 export default dict;

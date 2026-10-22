@@ -84,6 +84,15 @@ public class SalesOptionsBindingTests
     }
 
     [Fact]
+    public void Sync_times_from_settings_replace_the_default_schedule()
+    {
+        Assert.Equal(["11:00", "17:00"], LoadJson("""{ "Sales": { "Sync": { "Times": [ "11:00", "17:00" ] } } }""").Sync.Times);
+        Assert.Equal(["09:00"], Load(new() { ["Sales:Sync:Times:0"] = "09:00" }).Sync.Times); // стандартная привязка дала бы 11:00, 17:00, 09:00
+        Assert.Empty(LoadJson("""{ "Sales": { "Sync": { "Times": [] } } }""").Sync.Times); // только кнопкой «Обновить»
+        Assert.Equal(new SalesOptions().Sync.Times, Load(new() { ["Sales:Sync:BackfillMonths"] = "6" }).Sync.Times);
+    }
+
+    [Fact]
     public void Lists_inside_dictionaries_are_replaced_by_key()
     {
         var options = Load(new()

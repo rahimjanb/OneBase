@@ -138,6 +138,7 @@ public static class DependencyInjection
         services.AddSingleton<OneBase.Application.Sales.Stock.ITransferActWriter, Reports.TransferActWriter>();
         services.AddScoped<OneBase.Application.DataManager.DataFileService>();
         services.AddScoped<OneBase.Application.DataSources.FieldOwnership>();
+        services.AddScoped<OneBase.Application.DataSources.SourceOfTruthService>();
         services.AddScoped<OneBase.Application.DataManager.DataChangeService>();
         services.AddScoped<OneBase.Application.DataManager.IDataChangeApplier, DataManager.DataChangeApplier>();
 

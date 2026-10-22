@@ -53,6 +53,13 @@ public sealed class AiAuditService(IAppDbContext db)
             Status = error is null ? "completed" : "failed",
             ResponsePreview = Trim(response, 1000),
             Error = Trim(error, 1000),
+            // Audit Log проверки: числа ответа против данных (сколько, какие не подтверждены, исправлялся ли ответ) и итог перепроверки, если
+            // вопрос оспаривал прошлый ответ: аргумент пользователя — Question, исходный ответ — сообщение CorrectionOfMessageId.
+            Grounding = details?.Grounding is null && details?.Correction is null
+                ? null
+                : JsonSerializer.Serialize(new { check = details?.Grounding, correction = details?.Correction }, Json),
+            CorrectionVerdict = details?.Correction?.Verdict,
+            CorrectionOfMessageId = details?.Correction?.PreviousMessageId,
         });
         await db.SaveChangesAsync(ct);
     }

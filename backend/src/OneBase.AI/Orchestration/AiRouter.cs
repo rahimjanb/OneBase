@@ -86,19 +86,25 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, Sal
     /// <summary>salesWords — названия категорий, типов и регионов из словаря компании: вопрос про «помадку» — к продажам.</summary>
     internal static RoutingDecision ByKeywords(string question, IReadOnlyList<AgentConfig> available, AiTokenUsage usage, IReadOnlyList<string>? salesWords = null)
     {
-        var q = question.ToLowerInvariant();
-        var tokens = NameMatch.Tokens(question);
-        var agents = available
-            .Where(a => (Keywords.TryGetValue(a.Code, out var words) && words.Any(q.Contains))
-                || (a.Code == "sales" && salesWords is not null && salesWords.Any(w => NameMatch.MentionedIn(tokens, w))))
-            .Select(a => a.Code)
-            .ToList();
+        var agents = KeywordAgents(question, available, salesWords).ToList();
         if (agents.Count == 0)
         {
             agents = available.Select(a => a.Code).ToList();
         }
 
         return new RoutingDecision(agents, new Dictionary<string, string>(), "Выбор по ключевым словам вопроса (маршрутизатор не ответил разборчиво).", true, usage);
+    }
+
+    /// <summary>AI-сотрудники, к области которых относятся слова текста; ни одно не подошло — пусто (без «все доступные»).</summary>
+    internal static IReadOnlyList<string> KeywordAgents(string text, IReadOnlyList<AgentConfig> available, IReadOnlyList<string>? salesWords = null)
+    {
+        var q = text.ToLowerInvariant();
+        var tokens = NameMatch.Tokens(text);
+        return available
+            .Where(a => (Keywords.TryGetValue(a.Code, out var words) && words.Any(q.Contains))
+                || (a.Code == "sales" && salesWords is not null && salesWords.Any(w => NameMatch.MentionedIn(tokens, w))))
+            .Select(a => a.Code)
+            .ToList();
     }
 
     private static string Prompt(IReadOnlyList<AgentConfig> available, string? glossaryText)

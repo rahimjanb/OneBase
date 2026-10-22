@@ -120,6 +120,12 @@ internal static class SalesModel
             e.HasIndex(x => x.StockId);
         });
 
+        b.Entity<LinkoReservation>(e =>
+        {
+            e.ToTable("Reservations", "linko");
+            e.HasKey(x => new { x.StockId, x.ProductId });
+        });
+
         b.Entity<LinkoStockTransfer>(e =>
         {
             e.ToTable("StockTransfers", "linko");

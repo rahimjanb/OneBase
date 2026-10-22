@@ -245,6 +245,13 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ConversationId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("CorrectionOfMessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CorrectionVerdict")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<decimal?>("CostUsd")
                         .HasPrecision(14, 6)
                         .HasColumnType("numeric(14,6)");
@@ -258,6 +265,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<string>("Error")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Grounding")
+                        .HasColumnType("jsonb");
 
                     b.Property<int>("InputTokens")
                         .HasColumnType("integer");
@@ -3376,6 +3386,28 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Providers", "linko");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Sales.LinkoReservation", b =>
+                {
+                    b.Property<long>("StockId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ProductId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("Documents")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Weight")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("StockId", "ProductId");
+
+                    b.ToTable("Reservations", "linko");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Sales.LinkoStock", b =>

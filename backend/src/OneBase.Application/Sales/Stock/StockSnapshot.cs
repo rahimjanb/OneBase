@@ -32,6 +32,8 @@ public sealed record StockProduct(
 /// <summary>
 /// Снимок остатков Linko (product_balances, штуки) на момент последней загрузки: склады дилеров (по одному на регион), завод, экспорт,
 /// прочие склады; у товаров — вес единицы, коробка и цена. Один снимок кормит и рекомендуемый остаток, и аутсток, поэтому их кг совпадают.
+/// Reserved — бронь склада в штуках («Забронировано» в Linko: неотгруженные заказы и одобренные перемещения), ReservedAt — когда загружена
+/// (null — бронь не загружалась: страница её не показывает).
 /// </summary>
 public sealed record StockSnapshot(
     DateTimeOffset? SyncedAt,
@@ -49,9 +51,14 @@ public sealed record StockSnapshot(
     IReadOnlyDictionary<long, StockProduct> Products,
     IReadOnlyDictionary<(long ProductId, long StockId), decimal> Pieces,
     IReadOnlyList<RegionInfo> KeptRegions,
-    IReadOnlyDictionary<long, Guid> BranchAliases)
+    IReadOnlyDictionary<long, Guid> BranchAliases,
+    IReadOnlyDictionary<(long ProductId, long StockId), decimal>? Reserved = null,
+    DateTimeOffset? ReservedAt = null)
 {
     public decimal PiecesOf(long productId, long stockId) => Pieces.GetValueOrDefault((productId, stockId));
+
+    /// <summary>Бронь товара на складе, штуки.</summary>
+    public decimal ReservedOf(long productId, long stockId) => Reserved?.GetValueOrDefault((productId, stockId)) ?? 0;
 
     /// <summary>Остаток в кг: штуки × вес единицы; null — веса нет.</summary>
     public decimal? KgOf(long productId, long stockId) => StockMath.Kg(PiecesOf(productId, stockId), Products.GetValueOrDefault(productId)?.UnitKg);
@@ -85,6 +92,9 @@ public static class StockSnapshotBuilder
 
     public const string CacheKey = "sales:stock:snapshot";
 
+    /// <summary>Состояние синхронизации брони складов (LinkoSyncService.ReservationsState).</summary>
+    public const string ReservationsState = "reservations";
+
     public static Task<StockSnapshot> GetAsync(IMemoryCache cache, SalesCacheSignal signal, IAppDbContext db, SalesOptions options, CancellationToken ct) =>
         SalesViewCache.GetAsync(cache, signal, CacheKey, () => BuildAsync(db, options, ct));
 
@@ -109,6 +119,9 @@ public static class StockSnapshotBuilder
 
         var balances = await db.LinkoProductBalances.AsNoTracking().Where(b => b.Balance != 0).ToListAsync(ct);
         var pieces = balances.GroupBy(b => (b.ProductId, b.StockId)).ToDictionary(g => g.Key, g => g.Sum(b => b.Balance));
+        var reservedAt = (await db.LinkoSyncStates.AsNoTracking().FirstOrDefaultAsync(s => s.Entity == ReservationsState, ct))?.LastSuccessAt;
+        var reserved = (await db.LinkoReservations.AsNoTracking().Where(r => r.Amount > 0).ToListAsync(ct))
+            .ToDictionary(r => (r.ProductId, r.StockId), r => r.Amount);
 
         var sold = options.SoldStatuses;
         var yearFrom = snapshotDate.AddDays(-UnitWeightYearDays);
@@ -183,7 +196,7 @@ public static class StockSnapshotBuilder
             .ToList();
 
         return new StockSnapshot(syncedAt, snapshotDate, snapshotLocal, closedYear, closedMonth, unitFrom, priceAsOf, priceList?.Name.Trim(),
-            regions, factory, export, others, products, pieces, kept, aliases);
+            regions, factory, export, others, products, pieces, kept, aliases, reserved, reservedAt);
     }
 
     /// <summary>

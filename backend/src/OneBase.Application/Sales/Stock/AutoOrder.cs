@@ -3,7 +3,9 @@ namespace OneBase.Application.Sales.Stock;
 /// <summary>
 /// Товар автозаказа региона: единица Linko («кг» или «шт»), сколько единиц в коробке, вес коробки, цена за единицу (прайс
 /// Sales:StockPriceList — «Дилерга кириш нарх», по нему Linko печатает передачи) и рекомендация в коробках — рекомендуемый заказ
-/// «Рек. остатка» (до запаса на 15 дней, вверх до коробки; ТОП-товару без остатка и продаж — 10 коробок).
+/// «Рек. остатка» (до запаса на 15 дней от доступного остатка, вверх до коробки; ТОП-товару без остатка и продаж — 10 коробок). StockKg —
+/// остаток склада региона, ReservedKg — его бронь (неотгруженные заказы магазинов и перемещения), FreeKg — доступно; FactoryKg и FactoryFreeKg —
+/// остаток завода и доступное на нём (без брони): больше заказывать нечего.
 /// </summary>
 public sealed record AutoOrderItem(
     long ProductId,
@@ -17,9 +19,16 @@ public sealed record AutoOrderItem(
     decimal? Price,
     int RecBoxes,
     decimal StockKg,
-    decimal? KgPerDay);
+    decimal? KgPerDay,
+    decimal ReservedKg = 0,
+    decimal? FreeKg = null,
+    decimal? FactoryKg = null,
+    decimal? FactoryFreeKg = null);
 
-/// <summary>Автозаказ региона: склады дилеров для выбора, товары с известной коробкой; WithoutBox — сколько товаров без коробки (в автозаказ не попали).</summary>
+/// <summary>
+/// Автозаказ региона: склады дилеров для выбора, товары с известной коробкой; WithoutBox — сколько товаров без коробки (в автозаказ не попали);
+/// ReservedAt — когда загружена бронь (null — не загружалась).
+/// </summary>
 public sealed record AutoOrderView(
     string RegionId,
     string RegionName,
@@ -28,7 +37,8 @@ public sealed record AutoOrderView(
     string? PriceList,
     int CoverDays,
     IReadOnlyList<AutoOrderItem> Items,
-    int WithoutBox);
+    int WithoutBox,
+    DateTimeOffset? ReservedAt = null);
 
 public sealed record AutoOrderActLine(long ProductId, int Boxes);
 

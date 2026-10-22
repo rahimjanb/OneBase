@@ -175,6 +175,8 @@ internal static class AiSchema
             e.Property(x => x.Status).HasMaxLength(16);
             e.Property(x => x.ResponsePreview).HasMaxLength(1000);
             e.Property(x => x.Error).HasMaxLength(1000);
+            e.Property(x => x.Grounding).HasColumnType("jsonb");
+            e.Property(x => x.CorrectionVerdict).HasMaxLength(16);
             e.HasIndex(x => x.CreatedAt);
             e.HasIndex(x => new { x.UserId, x.CreatedAt });
         });

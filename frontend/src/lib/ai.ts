@@ -1,4 +1,5 @@
 import type { T } from "@/i18n/core";
+import type { CorrectionReview, GroundingSummary } from "./consultant";
 
 export type AiProviderStatus = "connected" | "error" | "disabled" | "not_configured";
 
@@ -242,6 +243,10 @@ export type AiLogRow = {
   status: "completed" | "failed";
   responsePreview: string | null;
   error: string | null;
+  /** Проверка ответа по данным: числа (check) и перепроверка после возражения (correction). */
+  grounding?: { check: GroundingSummary | null; correction: CorrectionReview | null } | null;
+  correctionVerdict?: CorrectionReview["verdict"] | null;
+  correctionOfMessageId?: string | null;
 };
 
 /**

@@ -93,6 +93,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<LinkoPromotionProduct> LinkoPromotionProducts => Set<LinkoPromotionProduct>();
     public DbSet<LinkoStock> LinkoStocks => Set<LinkoStock>();
     public DbSet<LinkoProductBalance> LinkoProductBalances => Set<LinkoProductBalance>();
+    public DbSet<LinkoReservation> LinkoReservations => Set<LinkoReservation>();
     public DbSet<LinkoStockTransfer> LinkoStockTransfers => Set<LinkoStockTransfer>();
     public DbSet<LinkoStockTransferLine> LinkoStockTransferLines => Set<LinkoStockTransferLine>();
     public DbSet<LinkoPayment> LinkoPayments => Set<LinkoPayment>();

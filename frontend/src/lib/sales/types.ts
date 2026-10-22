@@ -800,8 +800,13 @@ export type StockCell = {
   orderBoxes: number | null;
   orderPieces: number | null;
   orderSum: number | null;
-  /** Статус клетки по её остатку и скорости; у экспорта — none. */
+  /** Статус клетки по доступному остатку и скорости; у экспорта — none. */
   status: StockStatus;
+  /** Бронь склада — неотгруженные заказы и перемещения («Забронировано» в Linko); доступно = остаток − бронь. */
+  reservedKg: number;
+  reservedBoxes: number | null;
+  reservedSum: number | null;
+  freeKg: number | null;
 };
 
 export type StockItem = {
@@ -843,6 +848,11 @@ export type StockItem = {
   status: StockStatus;
   regions: Record<string, StockCell>;
   factory: StockCell | null;
+  /** Бронь склада — неотгруженные заказы и перемещения («Забронировано» в Linko); доступно = остаток − бронь. */
+  reservedKg: number;
+  reservedBoxes: number | null;
+  reservedSum: number | null;
+  freeKg: number | null;
 };
 
 /** Товар, которого в таблице нет: вне категорий отчёта (бонус, подарки, импорт) или без веса единицы. */
@@ -896,6 +906,10 @@ export type StockTotals = {
   orderBoxes: number;
   orderSum: number;
   orderSkus: number;
+  reservedKg: number;
+  reservedBoxes: number;
+  reservedSum: number;
+  freeKg: number;
 };
 
 /** Поправка скорости на аутсток по стране: скорость до и после, пары с зачтёнными днями в нуле, изменение в долях. */
@@ -938,6 +952,8 @@ export type StockView = {
   excludedWithoutWeight: number;
   totals: StockTotals;
   factoryTotals: StockTotals | null;
+  /** Когда загружена бронь складов; null — не загружалась (бронь не показывается). */
+  reservedAt?: string | null;
   /** Итоги по складам охвата — подвал матрицы, по отфильтрованным строкам. */
   regionTotals: Record<string, StockTotals>;
   correction: StockCorrection;
@@ -1272,6 +1288,11 @@ export type AutoOrderItem = {
   recBoxes: number;
   stockKg: number;
   kgPerDay: number | null;
+  /** Бронь склада региона и доступное (рекомендация — от доступного); на заводе — остаток и доступное без брони. */
+  reservedKg: number;
+  freeKg: number | null;
+  factoryKg: number | null;
+  factoryFreeKg: number | null;
 };
 
 export type AutoOrderView = {
@@ -1283,6 +1304,7 @@ export type AutoOrderView = {
   coverDays: number;
   items: AutoOrderItem[];
   withoutBox: number;
+  reservedAt?: string | null;
 };
 
 /** «KPI»: деньги (оклад, бонусы, премии, фонд оплаты) — только с правом «Финансы», иначе null (money = false). */

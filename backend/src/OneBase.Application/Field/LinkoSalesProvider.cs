@@ -38,7 +38,7 @@ public sealed record AgentTotals(long LinkoUserId, int Orders, decimal Sum, deci
 public sealed record AgentVisitStats(long LinkoUserId, int Planned, int Done, int DoneInPlan, int Markets);
 
 /// <summary>
-/// Источник фактических данных Sales Base. Сейчас — зеркало Linko в БД OneBase (синхронизация каждые 20 минут);
+/// Источник фактических данных Sales Base. Сейчас — зеркало Linko в БД OneBase (синхронизация в 11:00 и 17:00 по Ташкенту и кнопкой «Обновить»);
 /// при прямом API Linko или другой SFA заменяется реализация, интерфейс и UI остаются.
 /// </summary>
 public interface ILinkoSalesProvider

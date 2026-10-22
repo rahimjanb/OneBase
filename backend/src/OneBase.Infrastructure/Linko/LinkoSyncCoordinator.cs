@@ -51,7 +51,7 @@ public sealed class LinkoSyncCoordinator(
             }
             else
             {
-                cacheSignal.InvalidateHistory(); // полная загрузка, ночная сверка или изменение давних месяцев
+                cacheSignal.InvalidateHistory(); // полная загрузка, ежедневная сверка или изменение давних месяцев
             }
 
             progress.Step("Пересчёт отчётов", null);
@@ -135,10 +135,12 @@ public sealed class LinkoSyncCoordinator(
 }
 
 /// <summary>
-/// Обмен с Linko без людей: обновление изменений каждые Sales:Sync:IntervalMinutes, раз в сутки после Sales:Sync:ReconcileHour (Ташкент) —
-/// ночная сверка (полная загрузка свежего окна и остатков); после каждого запуска — контроль обмена (LinkoSyncHealth): данные устарели —
-/// уведомление администраторам интеграций, восстановилось — тоже. После синхронизации координатор сбрасывает кэши всех отчётов на данных
-/// Linko и пересчитывает частые страницы; витрина Sales Base пересчитывается своей службой, увидев новую синхронизацию.
+/// Обмен с Linko без людей — только по расписанию Sales:Sync:Times (по умолчанию 11:00 и 17:00 по Ташкенту): обновление изменений;
+/// первый запуск дня после Sales:Sync:ReconcileHour — сверка (полная загрузка свежего окна и остатков). Между запусками данные свежее
+/// делает только кнопка «Обновить». Сервер был выключен во время запуска (или запуск не прошёл) — после старта синхронизация догоняется
+/// сразу. После каждого запуска — контроль обмена (LinkoSyncHealth): запуск не обновил данные — уведомление администраторам интеграций,
+/// восстановилось — тоже. После синхронизации координатор сбрасывает кэши всех отчётов на данных Linko и пересчитывает частые страницы;
+/// витрина Sales Base пересчитывается своей службой, увидев новую синхронизацию.
 /// </summary>
 internal sealed class LinkoSyncWorker(
     LinkoSyncCoordinator coordinator,
@@ -150,37 +152,83 @@ internal sealed class LinkoSyncWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!sales.Sync.Enabled)
+        var times = LinkoSyncSchedule.ParseTimes(sales.Sync.Times);
+        if (!sales.Sync.Enabled || times.Count == 0)
         {
-            logger.LogInformation("Фоновая синхронизация Linko выключена (Sales:Sync:Enabled=false)");
+            logger.LogInformation("Фоновая синхронизация Linko выключена (Sales:Sync:Enabled или пустое Sales:Sync:Times) — данные обновляет только кнопка «Обновить»");
             return;
         }
 
-        await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(Math.Max(1, sales.Sync.IntervalMinutes)));
-        do
+        await Task.Delay(TimeSpan.FromSeconds(15), time, stoppingToken);
+        if (await MissedAsync(times, stoppingToken))
         {
-            try
-            {
-                // Настройки читаются на каждом цикле: подключение можно включить или поменять без перезапуска.
-                if ((await settings.GetAsync(stoppingToken)).IsReady)
-                {
-                    var mode = await ReconcileDueAsync(stoppingToken) ? LinkoSyncMode.Reconcile : LinkoSyncMode.Incremental;
-                    if (mode == LinkoSyncMode.Reconcile)
-                    {
-                        logger.LogInformation("Linko: ночная сверка");
-                    }
-
-                    await coordinator.RunAsync(mode, stoppingToken);
-                    await CheckHealthAsync(stoppingToken);
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogError(ex, "Синхронизация Linko упала");
-            }
+            logger.LogInformation("Linko: запуск по расписанию пропущен (сервер был выключен или запуск не прошёл) — синхронизация сейчас");
+            await RunOnceAsync(stoppingToken);
         }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
+
+        // Отсчёт от прошедшего запуска, а не только от часов: таймер может проснуться на миг раньше — без этого тот же запуск прошёл бы дважды.
+        var previous = time.GetUtcNow();
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var now = time.GetUtcNow();
+            var next = LinkoSyncSchedule.NextRun(now > previous ? now : previous, times);
+            logger.LogInformation("Linko: следующая синхронизация — {Next:dd.MM.yyyy HH:mm} (Ташкент)", next.ToOffset(LinkoSyncSchedule.CompanyOffset));
+            var wait = next - now;
+            if (wait > TimeSpan.Zero)
+            {
+                await Task.Delay(wait, time, stoppingToken);
+            }
+
+            previous = next;
+            await RunOnceAsync(stoppingToken);
+        }
+    }
+
+    private async Task RunOnceAsync(CancellationToken ct)
+    {
+        try
+        {
+            // Настройки читаются перед каждым запуском: подключение можно включить или поменять без перезапуска.
+            if (!(await settings.GetAsync(ct)).IsReady)
+            {
+                return;
+            }
+
+            var mode = await ReconcileDueAsync(ct) ? LinkoSyncMode.Reconcile : LinkoSyncMode.Incremental;
+            if (mode == LinkoSyncMode.Reconcile)
+            {
+                logger.LogInformation("Linko: сверка (первый запуск дня)");
+            }
+
+            if (await coordinator.RunAsync(mode, ct) is not { } report)
+            {
+                logger.LogInformation("Linko: запуск по расписанию пропущен — уже идёт синхронизация кнопкой «Обновить»");
+                return;
+            }
+
+            await CheckHealthAsync(report.StartedAt, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Синхронизация Linko упала");
+        }
+    }
+
+    /// <summary>После последнего наступившего времени расписания заказы не обновлялись — ни по расписанию, ни кнопкой.</summary>
+    private async Task<bool> MissedAsync(IReadOnlyList<TimeOnly> times, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<OneBase.Infrastructure.Persistence.OneBaseDbContext>();
+            var last = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "orders").Select(s => s.LastSuccessAt).FirstOrDefaultAsync(ct);
+            return LinkoSyncSchedule.Missed(time.GetUtcNow(), last, times);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Linko: не удалось проверить пропущенный запуск");
+            return false;
+        }
     }
 
     private async Task<bool> ReconcileDueAsync(CancellationToken ct)
@@ -197,12 +245,12 @@ internal sealed class LinkoSyncWorker(
     }
 
     /// <summary>Контроль обмена не должен ломать синхронизацию: ошибка — в журнал.</summary>
-    private async Task CheckHealthAsync(CancellationToken ct)
+    private async Task CheckHealthAsync(DateTimeOffset since, CancellationToken ct)
     {
         try
         {
             using var scope = scopes.CreateScope();
-            await scope.ServiceProvider.GetRequiredService<LinkoSyncHealth>().CheckAsync(ct);
+            await scope.ServiceProvider.GetRequiredService<LinkoSyncHealth>().CheckAsync(since, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

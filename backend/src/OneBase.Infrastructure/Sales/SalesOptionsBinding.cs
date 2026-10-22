@@ -39,6 +39,12 @@ public static class SalesOptionsBinding
             }
         }
 
+        // Расписание синхронизации (Sync:Times) — тоже замена: ["09:00"] в настройках — один запуск в 9, а не 11, 17 и 9.
+        if (Child(section, nameof(SalesOptions.Sync)) is { } sync && Child(sync, nameof(SalesSyncOptions.Times)) is { } times)
+        {
+            options.Sync.Times = List(times, nameof(SalesSyncOptions.Times));
+        }
+
         return options;
     }
 

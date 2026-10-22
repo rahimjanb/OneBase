@@ -135,6 +135,12 @@ public sealed class ConsultantChatService(
         }
 
         var history = await HistoryAsync(conversation.Id, ct);
+        // Последний ответ консультанта: если вопрос его оспаривает, проверка в журнале ссылается на него.
+        var lastAnswerId = await db.AiMessages.AsNoTracking()
+            .Where(m => m.ConversationId == conversation.Id && m.Role == AiMessageRole.Assistant && m.Status == AiMessageStatus.Completed)
+            .OrderByDescending(m => m.CreatedAt)
+            .Select(m => (Guid?)m.Id)
+            .FirstOrDefaultAsync(ct);
 
         var userMessage = new AiMessage { ConversationId = conversation.Id, Role = AiMessageRole.User, Content = question };
         db.AiMessages.Add(userMessage);
@@ -150,7 +156,7 @@ public sealed class ConsultantChatService(
         try
         {
             var answer = await engine.AnswerAsync(
-                new ConsultantTurn(userId, conversation.Id, question, history, channel),
+                new ConsultantTurn(userId, conversation.Id, question, history, channel, lastAnswerId),
                 p => emit(new ChatEvent("progress", p)),
                 ct);
             reply.Content = answer.Content.Length > 0 ? answer.Content : "Модель вернула пустой ответ.";

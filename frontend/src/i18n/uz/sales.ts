@@ -647,8 +647,8 @@ const dict: Dict = {
     "Oxirgi yuklashda nechta yozuv kelgani: oddiy yangilashda — faqat o'zgarishlar",
   "Строк за раз": "Bir martada qatorlar",
   "Ошибка": "Xato",
-  "Автоматически данные обновляются каждые 20 минут. «Обновить» подтягивает изменения, «Полная перезагрузка» — заново всё окно истории.":
-    "Ma'lumotlar har 20 daqiqada avtomatik yangilanadi. «Yangilash» o'zgarishlarni oladi, «To'liq qayta yuklash» — butun tarix oynasini qaytadan.",
+  "Автоматически данные обновляются в 11:00 и 17:00 (Ташкент). «Обновить» подтягивает изменения сразу, «Полная перезагрузка» — заново всё окно истории.":
+    "Ma'lumotlar soat 11:00 va 17:00 da (Toshkent) avtomatik yangilanadi. «Yangilash» o'zgarishlarni darhol oladi, «To'liq qayta yuklash» — butun tarix oynasini qaytadan.",
   "Направления": "Yo'nalishlar",
   "региональные менеджеры (РМ 1–4) и отдельные каналы (Базар, ключевые клиенты)": "hududiy menejerlar (RM 1–4) va alohida kanallar (Bozor, asosiy mijozlar)",
   "Название (РМ 1, Базар…)": "Nomi (RM 1, Bozor…)",

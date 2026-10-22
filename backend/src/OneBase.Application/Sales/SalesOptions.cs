@@ -209,6 +209,15 @@ public sealed class SalesOptions
     public string[] ShippedTransferStatuses { get; set; } = ["given", "accepted"];
 
     /// <summary>
+    /// Бронь склада («Забронировано» в Linko): заказы, которые ещё не отгружены (not_delivered — «не доставлен»: заказ есть, товар со склада не
+    /// ушёл; given — уже отдан), по складу заказа. Висящие заказы прошлых месяцев тоже держат бронь — Linko считает их так же.
+    /// </summary>
+    public string[] ReservedOrderStatuses { get; set; } = ["not_delivered"];
+
+    /// <summary>Бронь склада-отправителя: перемещения одобрены (approved), но ещё не отданы.</summary>
+    public string[] ReservedTransferStatuses { get; set; } = ["approved"];
+
+    /// <summary>
     /// Филиалы, заказы которых — тоже первичка: контрагенты завода помимо складов дилеров. «Завод» — базары, сети, фирменный магазин (точки
     /// не экспортного типа, <see cref="ExportMarketTypes"/>; экспорт — «Первичка → Экспорт»), «К К Мерч» — сетевые магазины. Без учёта регистра.
     /// Во вторичку эти заказы по-прежнему не входят (<see cref="ExcludedBranches"/>, <see cref="IgnoredBranches"/>).
@@ -515,19 +524,21 @@ public sealed class SalesChannelRegion
 public sealed class SalesSyncOptions
 {
     public bool Enabled { get; set; } = true;
-    public int IntervalMinutes { get; set; } = 20;
+
+    /// <summary>
+    /// Когда синхронизация идёт сама — время по Ташкенту, каждый день. Между запусками данные Linko в OneBase не меняются: свежие подтягивает
+    /// кнопка «Обновить» в «Продажах». Пусто — автоматической синхронизации нет.
+    /// </summary>
+    public string[] Times { get; set; } = ["11:00", "17:00"];
 
     /// <summary>Сколько месяцев истории загружать при первой синхронизации.</summary>
     public int BackfillMonths { get; set; } = 12;
 
     /// <summary>
-    /// Ночная сверка с Linko — после этого часа по Ташкенту, раз в сутки: справочники и остатки целиком (пропавшие в Linko строки
-    /// остатков удаляются), документы текущего и прошлого месяца заново. -1 — выключена.
+    /// Сверка с Linko — первый запуск по расписанию после этого часа по Ташкенту, раз в сутки (при 11:00 и 17:00 — запуск в 11:00): справочники
+    /// и остатки целиком (пропавшие в Linko строки остатков удаляются), документы текущего и прошлого месяца заново. -1 — выключена.
     /// </summary>
     public int ReconcileHour { get; set; } = 3;
-
-    /// <summary>Через сколько минут без обновления ключевых данных Linko уведомлять администраторов интеграций (не меньше трёх интервалов).</summary>
-    public int StaleAlertMinutes { get; set; } = 120;
 }
 
 /// <summary>Пороги флагов «Проблемных агентов». Доли — от 0 до 1.</summary>

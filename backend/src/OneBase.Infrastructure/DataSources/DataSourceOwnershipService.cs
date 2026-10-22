@@ -34,22 +34,11 @@ public sealed class DataSourceOwnershipService(OneBaseDbContext db, FieldOwnersh
     private const int ClosedLimit = 100;
     private static readonly TimeSpan ClosedWindow = TimeSpan.FromDays(30);
 
-    /// <summary>Группы данных Linko и сущности синхронизации Linko, по которым видно, когда они обновлены.</summary>
-    private static readonly (string Key, string Label, string Detail, string[] Entities)[] LinkoData =
-    [
-        ("linko_sales", "Факт продаж и возвратов", "заказы и возвраты: вторичка, ассортимент, SKU, прямые клиенты первички", ["orders", "order_returns"]),
-        ("linko_visits", "Визиты", "визиты агентов, конверсия визита, проблемные агенты", ["visits"]),
-        ("linko_outlets", "Точки, агенты, товары", "справочники Linko: торговые точки, пользователи, товары и категории", ["markets", "users", "products"]),
-        ("linko_stock", "Остатки и перемещения", "остатки складов, аутсток, перемещения завод → дилеры (первичка)", ["product_balances", "stock_transfers"]),
-        ("linko_payments", "Оплаты", "платежи клиентов", ["payments"]),
-        ("linko_kpi", "Планы ТП", "планы агентов из API планов Linko", ["kpi_plans"]),
-    ];
-
     public async Task<IReadOnlyList<OwnershipRow>> MapAsync(CancellationToken ct)
     {
         var rows = new List<OwnershipRow>();
         var states = await db.LinkoSyncStates.AsNoTracking().ToDictionaryAsync(s => s.Entity, s => s.LastSuccessAt, ct);
-        foreach (var (key, label, detail, entities) in LinkoData)
+        foreach (var (key, label, detail, entities) in SourceOfTruth.LinkoGroups)
         {
             // Обновлено — по самой давней из сущностей группы: группа свежая не раньше, чем её самая старая часть.
             var times = entities.Select(e => states.GetValueOrDefault(e)).ToList();
@@ -89,10 +78,7 @@ public sealed class DataSourceOwnershipService(OneBaseDbContext db, FieldOwnersh
 
         rows.Add(new OwnershipRow("targets", "Цели", "Данные OneBase", "onebase", "OneBase", "«Настройки продаж → Цели»: конверсия визита, выручка на ТТ…",
             null, null));
-        rows.Add(new OwnershipRow("kpi", "Выполнение плана, отклонение, прогноз", "Расчёт", "calculated", "Расчёт OneBase",
-            "считается при показе из плана (OneBase или Google Sheets) и факта Linko — не хранится, источники его не пишут", null, null));
-        rows.Add(new OwnershipRow("pnl_calc", "P&L: валовая прибыль, EBIT, рентабельность", "Расчёт", "calculated", "Расчёт OneBase",
-            "считается из строк P&L дилеров", null, null));
+        rows.AddRange(SourceOfTruth.Calculated.Select(m => new OwnershipRow(m.Key, m.Label, "Расчёт", m.Owner, m.Source, m.Detail, null, null)));
         return rows;
     }
 

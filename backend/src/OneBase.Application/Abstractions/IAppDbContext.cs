@@ -65,6 +65,7 @@ public interface IAppDbContext
     DbSet<LinkoPromotionProduct> LinkoPromotionProducts { get; }
     DbSet<LinkoStock> LinkoStocks { get; }
     DbSet<LinkoProductBalance> LinkoProductBalances { get; }
+    DbSet<LinkoReservation> LinkoReservations { get; }
     DbSet<LinkoStockTransfer> LinkoStockTransfers { get; }
     DbSet<LinkoStockTransferLine> LinkoStockTransferLines { get; }
     DbSet<LinkoPayment> LinkoPayments { get; }

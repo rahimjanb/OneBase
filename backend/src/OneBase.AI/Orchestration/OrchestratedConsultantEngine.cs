@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using OneBase.AI.Agents;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
+using OneBase.AI.Grounding;
 using OneBase.AI.Llm;
 using OneBase.AI.Memory;
 using OneBase.AI.Providers;
@@ -16,7 +17,7 @@ namespace OneBase.AI.Orchestration;
 /// Главный AI-консультант: вопрос → маршрутизация → AI-сотрудники параллельно → единый управленческий ответ.
 /// AI-сотрудники без доступа у пользователя не привлекаются; консультант прямо говорит, каких данных не видит.
 /// </summary>
-public sealed class OrchestratedConsultantEngine(
+public sealed partial class OrchestratedConsultantEngine(
     AiAgentStore agents,
     IUserPermissions permissions,
     AiRouter router,
@@ -60,10 +61,21 @@ public sealed class OrchestratedConsultantEngine(
             await progress(new ConsultantProgress("memory", null, null, ProgressStatus.Done, $"прошлых анализов в чате: {remembered.Count}"));
         }
 
+        // Correction Guard: вопрос оспаривает прошлый ответ — это не доказательство, а повод перепроверить данные заново.
+        var correction = CorrectionGuard.Detect(turn.Question, turn.History);
+
         await progress(new ConsultantProgress("routing", null, null, ProgressStatus.Running));
-        var routing = await router.RouteAsync(turn.Question, turn.History, available, context, ct, rememberedText);
+        var routing = Enforce(await router.RouteAsync(turn.Question, turn.History, available, context, ct, rememberedText), turn, correction, available);
         await progress(new ConsultantProgress("routing", null, null, ProgressStatus.Done,
             routing.Agents.Count == 0 ? "без AI-сотрудников" : string.Join(", ", routing.Agents.Select(c => available.First(a => a.Code == c).Name))));
+        if (correction is not null)
+        {
+            var recheck = CorrectionGuard.AgentTask(correction);
+            routing = routing with
+            {
+                Tasks = routing.Agents.ToDictionary(code => code, code => $"{routing.Tasks.GetValueOrDefault(code) ?? turn.Question}\n\n{recheck}"),
+            };
+        }
 
         var chosen = available.Where(a => routing.Agents.Contains(a.Code)).ToList();
         var contexts = new Dictionary<string, string?>();
@@ -82,20 +94,25 @@ public sealed class OrchestratedConsultantEngine(
 
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Running));
         var results = runs.Select(r => r.Result).ToList();
+        var evidence = Evidence(runs, turn, correction, rememberedText);
+        var review = correction is null ? null : CorrectionGuard.Review(correction, evidence, turn.LastAnswerId);
         List<LlmMessage> messages =
         [
-            new(LlmRole.System, ComposePrompt(consultant, results, forbidden, rememberedText, wantsReport ? created : null, turn.Channel, asksReport && !wantsReport)),
+            new(LlmRole.System, ComposePrompt(consultant, results, forbidden, rememberedText, wantsReport ? created : null, turn.Channel, asksReport && !wantsReport,
+                review)),
             .. turn.History,
             new(LlmRole.User, turn.Question),
         ];
-        var answer = await gateway.CompleteAsync(messages, [], new AiCallOptions
+        // Ответ сверяется с данными: неподтверждённые числа — одна попытка исправить, затем пометка в тексте.
+        var answer = await new GroundedComposer(gateway).ComposeAsync(messages, new AiCallOptions
         {
             Model = turn.Channel?.Model ?? consultant?.Model,
             Temperature = consultant?.Temperature,
             MaxOutputTokens = turn.Channel?.MaxOutputTokens ?? consultant?.MaxOutputTokens,
             Context = context with { Purpose = "consultant.answer" },
-        }, ct);
-        await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Done));
+        }, evidence, turn.Question, ct, correction?.PreviousAnswer);
+        await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Done,
+            answer.Grounding.Checked == 0 ? null : $"чисел сверено с данными: {answer.Grounding.Checked}"));
 
         // Память — вспомогательная: её сбой не должен отнимать у пользователя готовый ответ.
         try
@@ -117,11 +134,83 @@ public sealed class OrchestratedConsultantEngine(
         }
 
         return new ConsultantAnswer(
-            answer.Text?.Trim() ?? string.Empty,
+            answer.Text,
             new ConsultantDetails(results, sources, answer.Model.ToString(), answer.UsedFallback, routing.Reason.Length > 0 ? routing.Reason : null, memoryUsed,
-                created.Count > 0 ? created : null),
+                created.Count > 0 ? created : null, answer.Grounding, review),
             routing.Usage.Add(agentUsage).Add(answer.Usage));
     }
+
+    /// <summary>
+    /// Data Retrieval: ответ о фактах — только по данным. Маршрутизатор не привлёк сотрудников, а вопрос — о данных компании (вопрос со словами
+    /// отделов) — сотрудники по ключевым словам. Возражение к ответу — перепроверяют сотрудники той же области (по прошлому вопросу и ответу),
+    /// а если область не определить, но в ответе были числа, — все доступные.
+    /// </summary>
+    internal static RoutingDecision Enforce(RoutingDecision routing, ConsultantTurn turn, CorrectionRequest? correction, IReadOnlyList<AgentConfig> available)
+    {
+        if (routing.Agents.Count > 0 || available.Count == 0)
+        {
+            return routing;
+        }
+
+        if (correction is not null)
+        {
+            var previousQuestion = turn.History.LastOrDefault(m => m.Role == LlmRole.User)?.Content ?? string.Empty;
+            var agents = AiRouter.KeywordAgents($"{previousQuestion}\n{correction.PreviousAnswer}\n{turn.Question}", available).ToList();
+            if (agents.Count == 0 && NumberClaims.Checkable(correction.PreviousAnswer).Count > 0)
+            {
+                agents = available.Select(a => a.Code).ToList();
+            }
+
+            return agents.Count == 0 ? routing : routing with { Agents = agents, Reason = "Пользователь оспаривает прошлый ответ — AI-сотрудники перепроверяют данные." };
+        }
+
+        if (AsksForData().IsMatch(turn.Question) && AiRouter.KeywordAgents(turn.Question, available) is { Count: > 0 } byWords)
+        {
+            return routing with { Agents = byWords, Reason = "Вопрос о данных компании — ответ только по данным OneBase." };
+        }
+
+        return routing;
+    }
+
+    /// <summary>
+    /// Доказательства ответа: числа из результатов инструментов и расчётов всех сотрудников, производные от их подтверждённых показателей,
+    /// выводы прошлых анализов (память) и — если сотрудники не привлекались — прошлые ответы чата. При возражении — только свежие данные:
+    /// прошлый ответ и есть то, что проверяется.
+    /// </summary>
+    private static EvidenceSet Evidence(IReadOnlyList<AgentRun> runs, ConsultantTurn turn, CorrectionRequest? correction, string? remembered)
+    {
+        var evidence = new EvidenceSet();
+        foreach (var run in runs)
+        {
+            if (run.Evidence is { } e)
+            {
+                evidence.AddAll(e);
+            }
+        }
+
+        var keys = runs.SelectMany(r => NumberClaims.Find(AgentRunner.ResultText(r.Result)))
+            .Where(evidence.Supports)
+            .Select(c => c.Value)
+            .ToList();
+        evidence.AddDerived(keys);
+        if (correction is null)
+        {
+            evidence.AddText(remembered);
+            if (runs.Count == 0)
+            {
+                foreach (var m in turn.History.Where(m => m.Role == LlmRole.Assistant))
+                {
+                    evidence.AddText(m.Content);
+                }
+            }
+        }
+
+        return evidence;
+    }
+
+    /// <summary>Вопрос, а не реплика: вопросительный знак или слово запроса данных.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"\?|сколько|какой|какая|какие|каков|почему|где|кто|когда|покажи|дай|сравни|посчитай|выведи|назови|nechta|qancha|qaysi|nima|qanday|ko['ʻ’‘]?rsat", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex AsksForData();
 
     /// <summary>
     /// Контекст сотрудника: о чём шла речь в чате, что он уже выяснил в этом чате и его недавние выводы в других чатах
@@ -156,7 +245,7 @@ public sealed class OrchestratedConsultantEngine(
     }
 
     private string ComposePrompt(AgentConfig? consultant, IReadOnlyList<AgentResult> results, IReadOnlyList<AgentConfig> forbidden, string? remembered,
-        IReadOnlyList<ReportRef>? reportsCreated, ConsultantChannel? channel = null, bool reportsForbidden = false)
+        IReadOnlyList<ReportRef>? reportsCreated, ConsultantChannel? channel = null, bool reportsForbidden = false, CorrectionReview? review = null)
     {
         var today = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(5));
         var sb = new StringBuilder();
@@ -166,6 +255,15 @@ public sealed class OrchestratedConsultantEngine(
         sb.AppendLine();
         sb.AppendLine(ConsultantPrompts.QualityRules);
         sb.AppendLine();
+        sb.AppendLine("Каждое число ответа сверяется кодом с данными AI-сотрудников: число, которого нет в их результатах, будет помечено как не подтверждённое.");
+        sb.AppendLine("Числа, которые сотрудник отметил как unverified, — не факт: не приводи их или скажи, что они не подтверждены данными.");
+        sb.AppendLine();
+        if (review is not null)
+        {
+            sb.AppendLine(CorrectionGuard.ComposeBlock(review));
+            sb.AppendLine();
+        }
+
         if (channel?.Instructions is { Length: > 0 } instructions)
         {
             sb.AppendLine(instructions);
@@ -198,6 +296,7 @@ public sealed class OrchestratedConsultantEngine(
                 r.Recommendations,
                 DataSources = r.DataSources.Select(s => s.Period is null ? s.Title : $"{s.Title} ({s.Period})"),
                 r.Error,
+                r.Unverified,
             }), Json));
             sb.AppendLine();
             sb.AppendLine("""

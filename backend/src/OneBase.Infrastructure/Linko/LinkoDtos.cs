@@ -91,7 +91,8 @@ public sealed record LinkoOrderDto(
     LinkoRef? Currency,
     List<LinkoOrderLineDto>? Products,
     decimal? Tm,
-    DateTime? AcceptedTime = null);
+    DateTime? AcceptedTime = null,
+    LinkoRef? Stock = null);
 
 public sealed record LinkoReturnLineDto(
     long Id,

@@ -158,6 +158,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       <div className={`mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 ${plant ? "min-[87.5rem]:grid-cols-5" : "min-[87.5rem]:grid-cols-6"}`}>
         <KpiTile label={tr("Остаток")} value={kg(t.kg)} unit={tr("кг")} title={tr("Штуки Linko × вес единицы; коробки — где вес коробки известен")}>
           {tr("{boxes} коробок · {skus} SKU", { boxes: num(t.boxes), skus: num(t.skus) })}
+          {t.reservedKg > 0 ? tr(" · бронь {kg} кг", { kg: kg(t.reservedKg) }) : ""}
         </KpiTile>
         <KpiTile
           label={tr("Стоимость запаса")}
@@ -173,7 +174,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
           value={num(t.daysOfCover, 1)}
           unit={tr("дн.")}
           tone={exportScope || t.daysOfCover == null ? "muted" : t.daysOfCover < 15 ? "bad" : t.daysOfCover > 30 ? "warn" : "ok"}
-          title={plant ? tr("Скорость завода — продажи всей страны") : tr("Остаток ÷ продажи в день с поправкой на аутсток")}
+          title={plant ? tr("Скорость завода — продажи всей страны") : tr("Доступный остаток (остаток − бронь) ÷ продажи в день с поправкой на аутсток")}
         >
           {exportScope
             ? tr("у экспорта своей скорости продаж нет")
@@ -190,7 +191,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
           title={
             plant
               ? tr("Сумма рекомендуемых заказов всех дилеров минус остаток на заводе")
-              : tr("Скорость с поправкой на аутсток × 15 дней − остаток, вверх до целой коробки; 0 — хватает")
+              : tr("Скорость с поправкой на аутсток × 15 дней − доступный остаток (остаток − бронь), вверх до целой коробки; 0 — хватает")
           }
         >
           {exportScope
@@ -205,12 +206,13 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
             title={f?.valueSum ? tr("{sum} сум по входной цене", { sum: money(f.valueSum, tr) }) : undefined}
           >
             {data.factory && f
-              ? `${tr("не хватает {kg} кг ({skus} SKU)", { kg: kg(f.orderKg), skus: num(f.orderSkus) })}${f.daysOfCover != null ? tr(" · хватит на {days} дн. по скорости всей страны", { days: num(f.daysOfCover, 1) }) : ""}${tr(" · в итог страны не входит")}`
+              ? `${tr("не хватает {kg} кг ({skus} SKU)", { kg: kg(f.orderKg), skus: num(f.orderSkus) })}${f.reservedKg > 0 ? tr(" · бронь {kg} кг", { kg: kg(f.reservedKg) }) : ""}${f.daysOfCover != null ? tr(" · хватит на {days} дн. по скорости всей страны", { days: num(f.daysOfCover, 1) }) : ""}${tr(" · в итог страны не входит")}`
               : tr("склад завода не найден")}
           </KpiTile>
         )}
       </div>
       <p className="mt-3 text-xs text-ink-3">
+        {data.reservedAt && `${tr("Бронь (неотгруженные заказы и перемещения) — на {time}.", { time: dateTime(data.reservedAt) })} `}
         {tr(
           "Остатки на {syncedAt} (снимок Linko {snapshot}). Скорость — вторичка нетто возвратов за {days} дн. ({from} – {to}) с поправкой на дни в нуле за {month}: по стране {raw} → {corrected} кг в день ({change}, пар с поправкой — {pairs}). Вес единицы — по строкам заказов с {unitFrom}; цена — прайс «{priceList}» на {priceAsOf}.",
           {

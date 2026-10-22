@@ -47,6 +47,8 @@ public static class StockExport
         new("stockKg", "Остаток, кг", "Qoldiq, kg", ReportFormats.Kg, i => i.Kg, (_, c) => c.Kg),
         new("stockBoxes", "Остаток, коробки", "Qoldiq, quti", ReportFormats.Number, i => R1(i.Boxes), (_, c) => R1(c.Boxes)),
         new("stockPieces", "Остаток, штуки", "Qoldiq, dona", ReportFormats.Number, i => R3(i.Pieces), (_, c) => R3(c.Pieces)),
+        new("reservedKg", "Бронь, кг", "Bron, kg", ReportFormats.Kg, i => i.ReservedKg, (_, c) => c.ReservedKg),
+        new("freeKg", "Доступно, кг", "Mavjud, kg", ReportFormats.Kg, i => i.FreeKg, (_, c) => c.FreeKg),
         new("perDay", "Продажи в день, кг", "Kunlik savdo, kg", ReportFormats.Number, i => R1(i.KgPerDay), (_, c) => R1(c.KgPerDay)),
         new("rawPerDay", "Продажи в день без поправки на аутсток, кг", "Autstoksiz kunlik savdo, kg", ReportFormats.Number, i => R1(i.RawKgPerDay), (_, c) => R1(c.RawKgPerDay)),
         new("zeroDays", "Дней без товара в прошлом месяце", "O'tgan oyda tovarsiz kunlar", ReportFormats.Integer, _ => null, (_, c) => c.ZeroDays, Sum: false),
@@ -65,7 +67,7 @@ public static class StockExport
 
     /// <summary>Колонки по умолчанию — как в таблице страницы (в кг).</summary>
     public static readonly IReadOnlyList<string> DefaultKeys =
-        ["name", "code", "cat", "pack", "unitKg", "stockKg", "perDay", "days", "need15", "need30", "price", "value", "orderKg", "status", "factoryKg"];
+        ["name", "code", "cat", "pack", "unitKg", "stockKg", "reservedKg", "perDay", "days", "need15", "need30", "price", "value", "orderKg", "status", "factoryKg"];
 
     /// <summary>Ключи из адреса «name,code,stockKg» — в порядке каталога, неизвестные отброшены; пусто — колонки по умолчанию.</summary>
     public static IReadOnlyList<StockExportColumn> Parse(string? keys)

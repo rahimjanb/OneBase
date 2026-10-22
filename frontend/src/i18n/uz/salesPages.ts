@@ -284,15 +284,17 @@ const dict: Dict = {
   "по входу дилера на {date}": "{date} holatiga diler kirim narxida",
   " · без цены {n} SKU": " · narxsiz {n} SKU",
   "Скорость завода — продажи всей страны": "Zavod tezligi — butun mamlakat savdosi",
-  "Остаток ÷ продажи в день с поправкой на аутсток": "Qoldiq ÷ autstokka tuzatilgan kunlik savdo",
+  " · бронь {kg} кг": " · bron {kg} kg",
+  "Бронь (неотгруженные заказы и перемещения) — на {time}.": "Bron (jo'natilmagan buyurtmalar va ko'chirishlar) — {time} holatiga.",
+  "Доступный остаток (остаток − бронь) ÷ продажи в день с поправкой на аутсток": "Mavjud qoldiq (qoldiq − bron) ÷ autstokka tuzatilgan kunlik savdo",
   "у экспорта своей скорости продаж нет": "eksportning o'z savdo tezligi yo'q",
   "{kg} кг в день": "kuniga {kg} kg",
   " (без поправки на аутсток {kg})": " (autstok tuzatishisiz {kg})",
   "Хватит меньше чем на 15 дней продаж": "15 kunlik savdodan kamga yetadi",
   "затоварка — {overstock}, не продаётся — {dead}": "ortiqcha — {overstock}, sotilmaydi — {dead}",
   "Сумма рекомендуемых заказов всех дилеров минус остаток на заводе": "Barcha dilerlar tavsiya buyurtmalari yig'indisi minus zavoddagi qoldiq",
-  "Скорость с поправкой на аутсток × 15 дней − остаток, вверх до целой коробки; 0 — хватает":
-    "Autstokka tuzatilgan tezlik × 15 kun − qoldiq, butun qutigacha yuqoriga yaxlitlangan; 0 — yetadi",
+  "Скорость с поправкой на аутсток × 15 дней − доступный остаток (остаток − бронь), вверх до целой коробки; 0 — хватает":
+    "Autstokka tuzatilgan tezlik × 15 kun − mavjud qoldiq (qoldiq − bron), butun qutigacha yuqoriga yaxlitlangan; 0 — yetadi",
   "у экспорта заказа нет": "eksportda buyurtma yo'q",
   "{sum} сум · {skus} SKU": "{sum} so'm · {skus} SKU",
   " · до запаса на 15 дней": " · 15 kunlik zaxiragacha",
@@ -372,8 +374,17 @@ const dict: Dict = {
   "Меньше на коробку": "Bir quti kamroq",
   "Больше на коробку": "Bir quti ko'proq",
   "Коробок: {name}": "Qutilar: {name}",
-  "Рекомендация — заказ, который доводит остаток склада до запаса на {days} дн. продаж, в целых коробках. Цена — прайс «{priceList}».": "Tavsiya — ombor qoldig'ini {days} kunlik savdo zaxirasigacha butun qutilarda yetkazadigan buyurtma. Narx — «{priceList}» prays-varag'i.",
+  "Рекомендация — заказ, который доводит доступный остаток склада (остаток − бронь: заказы магазинов, которые ещё не отгружены) до запаса на {days} дн. продаж, в целых коробках. Цена — прайс «{priceList}».":
+    "Tavsiya — omborning mavjud qoldig'ini (qoldiq − bron: hali jo'natilmagan do'kon buyurtmalari) {days} kunlik savdo zaxirasigacha butun qutilarda yetkazadigan buyurtma. Narx — «{priceList}» prays-varag'i.",
   "Без веса коробки и потому без автозаказа: {n} {products}.": "Quti vazni yo'qligi sababli avtobuyurtmasiz: {n} {products}.",
+  "На складе, кг": "Omborda, kg",
+  "Остаток склада региона; бронь — заказы магазинов, которые ещё не отгружены; рекомендация считается от доступного":
+    "Mintaqa ombori qoldig'i; bron — hali jo'natilmagan do'kon buyurtmalari; tavsiya mavjud qoldiqdan hisoblanadi",
+  "на складе {n} кг": "omborda {n} kg",
+  "бронь {r} · доступно {f}": "bron {r} · mavjud {f}",
+  "Заказы магазинов, которые ещё не отгружены: рекомендация считается от доступного": "Hali jo'natilmagan do'kon buyurtmalari: tavsiya mavjud qoldiqdan hisoblanadi",
+  "на заводе доступно {n} кг": "zavodda mavjud {n} kg",
+  "Остаток завода {stock} кг, из них в брони {reserved} кг": "Zavod qoldig'i {stock} kg, shundan bronda {reserved} kg",
   "Копировать для Excel": "Excel uchun nusxalash",
   "Таблица скопирована — вставьте в Excel": "Jadval nusxalandi — Excel'ga qo'ying",
   "Не удалось скопировать": "Nusxalab bo'lmadi",
@@ -399,6 +410,8 @@ const dict: Dict = {
   "Остаток, кг": "Qoldiq, kg",
   "Остаток, коробки": "Qoldiq, quti",
   "Остаток, штуки": "Qoldiq, dona",
+  "Бронь, кг": "Bron, kg",
+  "Доступно, кг": "Mavjud, kg",
   "Продажи и запас": "Savdo va zaxira",
   "Продажи в день без поправки на аутсток, кг": "Autstoksiz kunlik savdo, kg",
   "Дней без товара в прошлом месяце (лист «По складам»)": "O'tgan oyda tovarsiz kunlar («Omborlar bo'yicha» varag'i)",
@@ -442,18 +455,20 @@ const dict: Dict = {
   "склад завода: скорость — продажи всей страны, заказ — чего не хватает, чтобы отгрузить всем дилерам":
     "zavod ombori: tezlik — butun mamlakat savdosi, buyurtma — barcha dilerlarga jo'natish uchun nima yetishmaydi",
   "склад экспорта: своей скорости продаж нет": "eksport ombori: o'z savdo tezligi yo'q",
-  "Кг = штуки × вес штуки (Σ веса ÷ Σ количества по строкам заказов с 1-го числа закрытого месяца, иначе за год, иначе из названия — ≈). Коробки = кг ÷ вес коробки: из названия (у весового товара любой, у штучного — если в коробке целое число штук), иначе по отгрузкам завода. Сумма запаса = штуки × входная цена дилера из прайса «{priceList}» на начало месяца. «В день» — вторичка нетто возвратов за {days} дн. ÷ ({days} − дни в нуле за закрытый месяц, не больше 30) — звёздочка там, где поправка сработала. Рек. заказ = скорость × 15 − остаток, вверх до целой коробки; у завода — заказы всех дилеров минус его остаток. Дефицит — меньше 15 дней, норма 15–30, затоварка — больше 30, «не продаётся» — остаток есть, продаж за базу нет.":
-    "Kg = dona × dona vazni (Σ vazn ÷ Σ miqdor, yopilgan oyning 1-sanasidan buyurtma qatorlari bo'yicha, aks holda bir yillik, aks holda nomidan — ≈). Qutilar = kg ÷ quti vazni: nomidan (vaznli tovarda istalgan, donali tovarda — qutida butun son dona bo'lsa), aks holda zavod jo'natmalari bo'yicha. Zaxira summasi = dona × «{priceList}» praysidagi dilerning oy boshidagi kirim narxi. «Kuniga» — {days} kunlik ikkilamchi (qaytarishlar ayirilgan) ÷ ({days} − yopilgan oyda nolda turgan kunlar, 30 dan ko'p emas) — tuzatish ishlagan joyda yulduzcha. Tavsiya buyurtma = tezlik × 15 − qoldiq, butun qutigacha yuqoriga; zavodda — barcha dilerlar buyurtmalari minus uning qoldig'i. Taqchil — 15 kundan kam, me'yor 15–30, ortiqcha — 30 dan ko'p, «sotilmaydi» — qoldiq bor, baza davrida savdo yo'q.",
+  "Кг = штуки × вес штуки (Σ веса ÷ Σ количества по строкам заказов с 1-го числа закрытого месяца, иначе за год, иначе из названия — ≈). Коробки = кг ÷ вес коробки: из названия (у весового товара любой, у штучного — если в коробке целое число штук), иначе по отгрузкам завода. Сумма запаса = штуки × входная цена дилера из прайса «{priceList}» на начало месяца. «В день» — вторичка нетто возвратов за {days} дн. ÷ ({days} − дни в нуле за закрытый месяц, не больше 30) — звёздочка там, где поправка сработала. Бронь (под остатком) — заказы и перемещения, которые в Linko оформлены, но ещё не отгружены; «хватит, дн.», статус и рек. заказ считаются от доступного: остаток − бронь. Рек. заказ = скорость × 15 − доступный остаток, вверх до целой коробки; у завода — заказы всех дилеров минус весь его остаток (бронь завода — отгрузки по тем же заказам). Дефицит — меньше 15 дней, норма 15–30, затоварка — больше 30, «не продаётся» — остаток есть, продаж за базу нет.":
+    "Kg = dona × dona vazni (Σ vazn ÷ Σ miqdor, yopilgan oyning 1-sanasidan buyurtma qatorlari bo'yicha, aks holda bir yillik, aks holda nomidan — ≈). Qutilar = kg ÷ quti vazni: nomidan (vaznli tovarda istalgan, donali tovarda — qutida butun son dona bo'lsa), aks holda zavod jo'natmalari bo'yicha. Zaxira summasi = dona × «{priceList}» praysidagi dilerning oy boshidagi kirim narxi. «Kuniga» — {days} kunlik ikkilamchi (qaytarishlar ayirilgan) ÷ ({days} − yopilgan oyda nolda turgan kunlar, 30 dan ko'p emas) — tuzatish ishlagan joyda yulduzcha. Bron (qoldiq ostida) — Linko'da rasmiylashtirilgan, lekin hali jo'natilmagan buyurtmalar va ko'chirishlar; «yetadi, kun», holat va tavsiya buyurtma mavjud qoldiqdan hisoblanadi: qoldiq − bron. Tavsiya buyurtma = tezlik × 15 − mavjud qoldiq, butun qutigacha yuqoriga; zavodda — barcha dilerlar buyurtmalari minus uning butun qoldig'i (zavod broni — o'sha buyurtmalar bo'yicha jo'natmalar). Taqchil — 15 kundan kam, me'yor 15–30, ortiqcha — 30 dan ko'p, «sotilmaydi» — qoldiq bor, baza davrida savdo yo'q.",
   "в день, {unit}": "kuniga, {unit}",
   "заказ, {unit}": "buyurtma, {unit}",
-  "Рекомендуемый заказ: до запаса на 15 дней, вверх до целой коробки; у завода — заказы дилеров минус его остаток":
-    "Tavsiya buyurtma: 15 kunlik zaxiragacha, butun qutigacha yuqoriga; zavodda — dilerlar buyurtmalari minus uning qoldig'i",
+  "Рекомендуемый заказ: до запаса на 15 дней от доступного остатка (остаток − бронь), вверх до целой коробки; у завода — заказы дилеров минус весь его остаток":
+    "Tavsiya buyurtma: mavjud qoldiqdan (qoldiq − bron) 15 kunlik zaxiragacha, butun qutigacha yuqoriga; zavodda — dilerlar buyurtmalari minus uning butun qoldig'i",
   "Заказ у завода: заказы всех дилеров минус остаток на заводе": "Zavoddagi buyurtma: barcha dilerlar buyurtmalari minus zavoddagi qoldiq",
   "на каждый склад: остаток, продажи в день, на сколько хватит, запас на 15 дней и рекомендуемый заказ":
     "har bir ombor bo'yicha: qoldiq, kunlik savdo, necha kunga yetadi, 15 kunlik zaxira va tavsiya buyurtma",
   "Итого · {n} SKU": "Jami · {n} SKU",
-  "Клетка — склад: остаток в выбранной единице, продажи в день (звёздочка — с поправкой на аутсток), на сколько дней хватит, запас на 15 дней и рекомендуемый заказ (пусто — докупать не нужно). Завод в «Всего» не входит: это тот же товар до отгрузки; его заказ — заказы всех дилеров минус остаток на заводе. Итоги считает сервер по отфильтрованным строкам. «—» в сортировке всегда внизу.":
-    "Katak — ombor: tanlangan birlikdagi qoldiq, kunlik savdo (yulduzcha — autstokka tuzatilgan), necha kunga yetadi, 15 kunlik zaxira va tavsiya buyurtma (bo'sh — qo'shimcha xarid kerak emas). Zavod «Jami»ga kirmaydi: bu jo'natilgunga qadar o'sha tovar; uning buyurtmasi — barcha dilerlar buyurtmalari minus zavoddagi qoldiq. Jamilarni server filtrlangan qatorlar bo'yicha hisoblaydi. Saralashda «—» doim pastda.",
+  "бронь {n}": "bron {n}",
+  "бронь {r} кг · доступно {f} кг": "bron {r} kg · mavjud {f} kg",
+  "Клетка — склад: остаток в выбранной единице (под ним — бронь: заказы и перемещения, которые ещё не отгружены), продажи в день (звёздочка — с поправкой на аутсток), на сколько дней хватит доступного (остаток − бронь), запас на 15 дней и рекомендуемый заказ от доступного (пусто — докупать не нужно). Завод в «Всего» не входит: это тот же товар до отгрузки; его заказ — заказы всех дилеров минус весь остаток на заводе. Итоги считает сервер по отфильтрованным строкам. «—» в сортировке всегда внизу.":
+    "Katak — ombor: tanlangan birlikdagi qoldiq (ostida — bron: hali jo'natilmagan buyurtmalar va ko'chirishlar), kunlik savdo (yulduzcha — autstokka tuzatilgan), mavjud qoldiq (qoldiq − bron) necha kunga yetadi, 15 kunlik zaxira va mavjud qoldiqdan tavsiya buyurtma (bo'sh — qo'shimcha xarid kerak emas). Zavod «Jami»ga kirmaydi: bu jo'natilgunga qadar o'sha tovar; uning buyurtmasi — barcha dilerlar buyurtmalari minus zavoddagi butun qoldiq. Jamilarni server filtrlangan qatorlar bo'yicha hisoblaydi. Saralashda «—» doim pastda.",
   "вне категорий отчёта": "hisobot toifalaridan tashqari",
   "нет веса единицы": "birlik vazni yo'q",
   "Тип Linko": "Linko turi",
@@ -497,6 +512,8 @@ const dict: Dict = {
   "категории отчёта": "hisobot toifalari",
   "вкладка «Рек. остаток»": "«Tavsiya zaxira» bo'limi",
   "вкладка «Первичка»: отгрузки дилерам и возвраты": "«Birlamchi» bo'limi: dilerlarga jo'natmalar va qaytarishlar",
+  "Бронь складов": "Omborlar broni",
+  "«Рек. остаток» и автозаказ: бронь и доступный остаток (остаток − бронь)": "«Tavsiya zaxira» va avtobuyurtma: bron va mavjud qoldiq (qoldiq − bron)",
   "загружаются для сверки, в отчётах пока не используются": "solishtirish uchun yuklanadi, hisobotlarda hozircha ishlatilmaydi",
   "вкладка «Планы», план ТП; план подразделений, если планов регионов на месяц нет":
     "«Rejalar» bo'limi, TP rejasi; oyga mintaqa rejalari bo'lmasa — bo'linmalar rejasi",

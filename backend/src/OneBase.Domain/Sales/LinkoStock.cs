@@ -21,6 +21,20 @@ public class LinkoProductBalance
     public decimal Tm { get; set; }
 }
 
+/// <summary>
+/// Бронь на складе («Склад → Остаток → Забронировано» в Linko): товар заказов, которые ещё не отгружены, и одобренных, но не отданных
+/// перемещений со склада. Amount — в единицах учёта (как остаток), Weight — вес по строкам Linko, Documents — сколько документов. Снимок
+/// целиком на момент синхронизации.
+/// </summary>
+public class LinkoReservation
+{
+    public long StockId { get; set; }
+    public long ProductId { get; set; }
+    public decimal Amount { get; set; }
+    public decimal Weight { get; set; }
+    public int Documents { get; set; }
+}
+
 /// <summary>Перемещение между складами. Завод → склад региона — это отгрузка дилеру (первичка).</summary>
 public class LinkoStockTransfer
 {

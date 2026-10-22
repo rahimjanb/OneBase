@@ -9,21 +9,26 @@ using OneBase.Infrastructure.Persistence;
 namespace OneBase.Infrastructure.Linko;
 
 /// <summary>
-/// Контроль обмена с Linko после каждой фоновой синхронизации: если заказы, возвраты, визиты, остатки или перемещения не обновлялись
-/// дольше Sales:Sync:StaleAlertMinutes (не меньше трёх интервалов синхронизации) — уведомление (колокольчик и push) тем, кто управляет
-/// интеграциями; когда обмен восстановился — второе уведомление. По одному на проблему: открытая проблема хранится в строке «alert».
-/// Синхронизация сама повторяется каждые Sales:Sync:IntervalMinutes — уведомление нужно, только если она не справляется.
+/// Контроль обмена с Linko после каждой синхронизации по расписанию (Sales:Sync:Times): если этот запуск не обновил заказы, возвраты,
+/// визиты, остатки, перемещения или бронь — уведомление (колокольчик и push) тем, кто управляет интеграциями; когда обмен восстановился —
+/// второе уведомление. По одному на проблему: открытая проблема хранится в строке «alert». Запусков два в день — ждать следующего,
+/// чтобы сообщить, поздно: до него отчёты живут со старыми данными.
 /// </summary>
 public sealed class LinkoSyncHealth(OneBaseDbContext db, SalesOptions options, TimeProvider time, ILogger<LinkoSyncHealth> logger)
 {
-    public TimeSpan StaleAfter => TimeSpan.FromMinutes(Math.Max(options.Sync.StaleAlertMinutes, 3 * Math.Max(1, options.Sync.IntervalMinutes)));
+    /// <summary>Без привязки к запуску данные устарели, если не обновлялись дольше самого долгого промежутка между запусками и часа запаса.</summary>
+    public TimeSpan StaleAfter => LinkoSyncSchedule.LongestGap(LinkoSyncSchedule.ParseTimes(options.Sync.Times)) + TimeSpan.FromHours(1);
 
-    /// <summary>Проверяет обмен; true — отправлено уведомление (о проблеме или о восстановлении).</summary>
-    public async Task<bool> CheckAsync(CancellationToken ct)
+    /// <summary>
+    /// Проверяет обмен; true — отправлено уведомление (о проблеме или о восстановлении). <paramref name="since"/> — начало только что
+    /// прошедшей синхронизации: всё, что она не обновила, — проблема; null — проверка по <see cref="StaleAfter"/>.
+    /// </summary>
+    public async Task<bool> CheckAsync(DateTimeOffset? since = null, CancellationToken ct = default)
     {
         var now = time.GetUtcNow();
         var states = await db.LinkoSyncStates.ToListAsync(ct);
-        var problem = LinkoSyncSchedule.Problem(states, now, StaleAfter);
+        var staleAfter = since is { } s && s <= now ? now - s : StaleAfter;
+        var problem = LinkoSyncSchedule.Problem(states, now, staleAfter);
         var alert = states.FirstOrDefault(s => s.Entity == LinkoSyncSchedule.AlertState);
         var open = alert?.LastError;
         if ((problem is null && open is null) || (problem is not null && open is not null))
@@ -43,7 +48,7 @@ public sealed class LinkoSyncHealth(OneBaseDbContext db, SalesOptions options, T
             .ToListAsync(ct);
         var (title, body) = problem is not null
             ? ("Обмен с Linko не работает — данные в отчётах устарели",
-                $"{problem} OneBase повторяет синхронизацию каждые {options.Sync.IntervalMinutes} мин. Проверьте токен и доступность Linko в «Настройки → Интеграции».")
+                $"{problem} {NextRunText(now)}Проверьте токен и доступность Linko в «Настройки → Интеграции» и обновите данные кнопкой «Обновить».")
             : ("Обмен с Linko восстановлен", "Данные снова обновляются автоматически, отчёты пересчитаны.");
         foreach (var recipient in recipients)
         {
@@ -75,5 +80,13 @@ public sealed class LinkoSyncHealth(OneBaseDbContext db, SalesOptions options, T
         }
 
         return true;
+    }
+
+    private string NextRunText(DateTimeOffset now)
+    {
+        var times = LinkoSyncSchedule.ParseTimes(options.Sync.Times);
+        return times.Count == 0
+            ? ""
+            : $"Следующая синхронизация по расписанию — {LinkoSyncSchedule.NextRun(now, times).ToOffset(LinkoSyncSchedule.CompanyOffset):dd.MM HH:mm} (Ташкент). ";
     }
 }

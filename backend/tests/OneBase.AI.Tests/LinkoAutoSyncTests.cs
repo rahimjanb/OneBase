@@ -72,38 +72,94 @@ public class LinkoAutoSyncTests(DataManagerDb fixture) : IClassFixture<DataManag
         await db.SaveChangesAsync();
         Task<List<UserNotification>> Notes() => db.UserNotifications.AsNoTracking().Where(n => n.RecipientId == admin.Id).OrderBy(n => n.CreatedAt).ToListAsync();
 
-        // Данные не обновлялись 5 часов — одно уведомление с причиной и ссылкой на настройки; повторная проверка не дублирует.
-        Assert.True(await health.CheckAsync(default));
+        // Без запуска пять часов — ещё не повод (между запусками по расписанию до 18 часов).
+        Assert.False(await health.CheckAsync());
+        Assert.Empty(await Notes());
+
+        // Запуск по расписанию 10 минут назад данные не обновил — одно уведомление с причиной, следующим запуском и ссылкой на настройки;
+        // повторная проверка не дублирует.
+        var run = DateTimeOffset.UtcNow.AddMinutes(-10);
+        Assert.True(await health.CheckAsync(run));
         var problem = Assert.Single(await Notes());
         Assert.Equal(UserNotificationKind.DataSyncProblem, problem.Kind);
         Assert.Contains("не работает", problem.Title);
         Assert.Contains("заказы", problem.Body);
         Assert.Contains("401", problem.Body);
+        Assert.Contains("Следующая синхронизация по расписанию", problem.Body);
         Assert.Equal("/settings/integrations/sales/linko", problem.Link);
-        Assert.False(await health.CheckAsync(default));
+        Assert.False(await health.CheckAsync(run));
         Assert.Single(await Notes());
 
         // Обмен восстановился — второе уведомление, дальше тишина.
         await db.LinkoSyncStates.Where(s => LinkoSyncSchedule.KeyEntities.Keys.Contains(s.Entity))
             .ExecuteUpdateAsync(u => u.SetProperty(s => s.LastSuccessAt, DateTimeOffset.UtcNow).SetProperty(s => s.LastError, (string?)null));
         db.ChangeTracker.Clear();
-        Assert.True(await health.CheckAsync(default));
+        Assert.True(await health.CheckAsync(run));
         var notes = await Notes();
         Assert.Equal(2, notes.Count);
         Assert.Contains("восстановлен", notes[^1].Title);
-        Assert.False(await health.CheckAsync(default));
+        Assert.False(await health.CheckAsync(run));
         await db.LinkoSyncStates.Where(s => s.Entity == LinkoSyncSchedule.AlertState).ExecuteDeleteAsync();
     }
 }
 
-/// <summary>Расписание обмена с Linko без базы: ночная сверка, давние месяцы, текст проблемы.</summary>
+/// <summary>Расписание обмена с Linko без базы: запуски в 11:00 и 17:00, пропущенный запуск, сверка, давние месяцы, текст проблемы.</summary>
 public class LinkoSyncScheduleTests
 {
-    private static DateTimeOffset Tashkent(int year, int month, int day, int hour) => new(year, month, day, hour, 0, 0, TimeSpan.FromHours(5));
+    private static DateTimeOffset Tashkent(int year, int month, int day, int hour, int minute = 0) => new(year, month, day, hour, minute, 0, TimeSpan.FromHours(5));
+
+    private static readonly IReadOnlyList<TimeOnly> Times = LinkoSyncSchedule.ParseTimes(["17:00", "11:00", " 11:00 ", "9:5", "", "не время"]);
 
     [Fact]
-    public void Nightly_reconcile_runs_once_a_day_after_the_hour_in_Tashkent()
+    public void Times_are_parsed_ordered_and_deduplicated()
     {
+        Assert.Equal([new TimeOnly(11, 0), new TimeOnly(17, 0)], Times);
+        Assert.Equal([new TimeOnly(9, 30)], LinkoSyncSchedule.ParseTimes(["9:30"]));
+        Assert.Empty(LinkoSyncSchedule.ParseTimes(null));
+    }
+
+    [Fact]
+    public void Next_run_is_the_next_scheduled_time_in_Tashkent()
+    {
+        Assert.Equal(Tashkent(2026, 10, 22, 11), LinkoSyncSchedule.NextRun(Tashkent(2026, 10, 22, 10), Times));
+        Assert.Equal(Tashkent(2026, 10, 22, 17), LinkoSyncSchedule.NextRun(Tashkent(2026, 10, 22, 11), Times)); // ровно в 11 — уже следующий
+        Assert.Equal(Tashkent(2026, 10, 22, 17), LinkoSyncSchedule.NextRun(Tashkent(2026, 10, 22, 12, 30), Times));
+        Assert.Equal(Tashkent(2026, 10, 23, 11), LinkoSyncSchedule.NextRun(Tashkent(2026, 10, 22, 18), Times));
+        // Сервер в UTC: 20:00 UTC 22.10 — это 01:00 23.10 в Ташкенте, следующий запуск — 23.10 в 11:00 (06:00 UTC).
+        var next = LinkoSyncSchedule.NextRun(new DateTimeOffset(2026, 10, 22, 20, 0, 0, TimeSpan.Zero), Times);
+        Assert.Equal(new DateTimeOffset(2026, 10, 23, 6, 0, 0, TimeSpan.Zero), next);
+        Assert.Throws<InvalidOperationException>(() => LinkoSyncSchedule.NextRun(Tashkent(2026, 10, 22, 10), []));
+    }
+
+    [Fact]
+    public void Missed_run_is_caught_up_after_a_restart()
+    {
+        Assert.Equal(Tashkent(2026, 10, 21, 17), LinkoSyncSchedule.LastSlot(Tashkent(2026, 10, 22, 9), Times));
+        Assert.Equal(Tashkent(2026, 10, 22, 11), LinkoSyncSchedule.LastSlot(Tashkent(2026, 10, 22, 11), Times));
+
+        // Сервер не работал в 11:00, данные — со вчерашних 17:00: догнать сразу.
+        Assert.True(LinkoSyncSchedule.Missed(Tashkent(2026, 10, 22, 12), Tashkent(2026, 10, 21, 17, 5), Times));
+        // В 11:00 прошло, или кнопкой «Обновить» после 11:00 — ждать 17:00.
+        Assert.False(LinkoSyncSchedule.Missed(Tashkent(2026, 10, 22, 12), Tashkent(2026, 10, 22, 11, 3), Times));
+        // Ночью после вечернего запуска — ждать утра.
+        Assert.False(LinkoSyncSchedule.Missed(Tashkent(2026, 10, 23, 2), Tashkent(2026, 10, 22, 17, 4), Times));
+        Assert.True(LinkoSyncSchedule.Missed(Tashkent(2026, 10, 22, 12), null, Times)); // ни разу не загружалось
+        Assert.False(LinkoSyncSchedule.Missed(Tashkent(2026, 10, 22, 12), null, [])); // расписания нет — только кнопкой
+    }
+
+    [Fact]
+    public void Longest_gap_wraps_around_midnight()
+    {
+        Assert.Equal(TimeSpan.FromHours(18), LinkoSyncSchedule.LongestGap(Times)); // 17:00 → 11:00
+        Assert.Equal(TimeSpan.FromHours(24), LinkoSyncSchedule.LongestGap([new TimeOnly(11, 0)]));
+    }
+
+    [Fact]
+    public void Reconcile_runs_once_a_day_after_the_hour_in_Tashkent()
+    {
+        // При запусках в 11:00 и 17:00 и часе 3 сверка — утренний запуск, вечерний — обычное обновление.
+        Assert.True(LinkoSyncSchedule.ReconcileDue(Tashkent(2026, 10, 22, 11), Tashkent(2026, 10, 21, 11), 3));
+        Assert.False(LinkoSyncSchedule.ReconcileDue(Tashkent(2026, 10, 22, 17), Tashkent(2026, 10, 22, 11), 3));
         Assert.False(LinkoSyncSchedule.ReconcileDue(Tashkent(2026, 10, 21, 2), null, 3));          // до трёх ночи — нет
         Assert.True(LinkoSyncSchedule.ReconcileDue(Tashkent(2026, 10, 21, 3), null, 3));           // ни разу не было — сразу
         Assert.True(LinkoSyncSchedule.ReconcileDue(Tashkent(2026, 10, 21, 4), Tashkent(2026, 10, 20, 3), 3));

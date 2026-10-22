@@ -148,6 +148,9 @@ public sealed class AiUsageController(IAppDbContext db) : ControllerBase
             a.Status,
             a.ResponsePreview,
             a.Error,
+            Grounding = a.Grounding is null ? null : JsonDocument.Parse(a.Grounding).RootElement.Clone() as JsonElement?,
+            a.CorrectionVerdict,
+            a.CorrectionOfMessageId,
         }));
     }
 }

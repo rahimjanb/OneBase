@@ -70,6 +70,25 @@ function Row({ row, agentName }: { row: AiLogRow; agentName: (code: string) => s
             {t("{input} вход · {output} выход", { input: num(row.inputTokens), output: num(row.outputTokens) })}
           </div>
           {row.error && <div className="text-bad">{t("Ошибка: {error}", { error: t(row.error) })}</div>}
+          {row.grounding?.check && row.grounding.check.checked > 0 && (
+            <div>
+              <span className="text-ink-3">{t("Проверка по данным:")} </span>
+              {t("подтверждено чисел: {n} из {m}", { n: row.grounding.check.supported, m: row.grounding.check.checked })}
+              {row.grounding.check.revised && ` · ${t("ответ исправлялся")}`}
+              {row.grounding.check.unsupported.length > 0 && (
+                <span className="text-warn"> · {t("не подтверждено: {list}", { list: row.grounding.check.unsupported.join(", ") })}</span>
+              )}
+            </div>
+          )}
+          {row.grounding?.correction && (
+            <div>
+              <span className="text-ink-3">{t("Возражение пользователя:")} </span>
+              {t(verdictLabel[row.grounding.correction.verdict] ?? row.grounding.correction.verdict)}
+              {row.grounding.correction.attempt > 1 && ` · ${t("подряд: {n}", { n: row.grounding.correction.attempt })}`}
+              {row.grounding.correction.userNotConfirmed.length > 0 &&
+                ` · ${t("значения пользователя не подтверждены: {list}", { list: row.grounding.correction.userNotConfirmed.join(", ") })}`}
+            </div>
+          )}
           {row.responsePreview && (
             <div>
               <span className="text-ink-3">{t("Ответ (начало):")} </span>
@@ -84,6 +103,13 @@ function Row({ row, agentName }: { row: AiLogRow; agentName: (code: string) => s
     </div>
   );
 }
+
+/** Итог перепроверки после возражения пользователя. */
+const verdictLabel: Record<string, string> = {
+  confirmed: "прошлый ответ подтверждён данными",
+  corrected: "прошлый ответ исправлен по данным",
+  insufficient: "данных для проверки недостаточно",
+};
 
 export function LogsView({ initial, agentNames }: { initial: AiLogRow[]; agentNames: Record<string, string> }) {
   const t = useT();

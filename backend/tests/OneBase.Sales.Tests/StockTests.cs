@@ -218,6 +218,61 @@ public class StockTests
         Assert.Equal("all", StockService.Compose(b, new StockQuery(Status: "weird")).Status);
     }
 
+    /// <summary>Снимок с бронью: Бухоро 100 кг (бронь 40), Денов 30 кг (бронь 30 — всё), завод 100 кг (бронь 100).</summary>
+    private static StockSnapshot WithReservations() =>
+        new(DateTimeOffset.Parse("2026-10-22T12:00:00Z"), new DateOnly(2026, 10, 22), new DateTime(2026, 10, 22, 17, 0, 0), 2026, 9, new DateOnly(2026, 9, 1),
+            new DateOnly(2026, 10, 1), "Дилерга кириш нарх", [Bukhara, Denov], Factory, Export, [], new Dictionary<long, StockProduct> { [1] = Bambuk },
+            new Dictionary<(long, long), decimal> { [(1, 15)] = 100, [(1, 14)] = 30, [(1, 5)] = 100 }, new List<RegionInfo>(), new Dictionary<long, Guid>(),
+            new Dictionary<(long, long), decimal> { [(1, 15)] = 40, [(1, 14)] = 30, [(1, 5)] = 100 }, DateTimeOffset.Parse("2026-10-22T12:05:00Z"));
+
+    /// <summary>
+    /// Бронь (как в «Полевом контроле»): у дилера она уже продана магазинам — «хватит, дн.», статус и заказ считаются от доступного (остаток − бронь);
+    /// у завода бронь — отгрузки по тем же заказам дилеров, поэтому заказ у завода считается от всего остатка, иначе бронь заказали бы дважды.
+    /// </summary>
+    [Fact]
+    public void Reservation_lowers_cover_and_dealer_order_but_not_the_factory_order()
+    {
+        var s = WithReservations();
+
+        // Бухоро: доступно 60 кг при 10 кг/день — хватит на 6 дн.; заказ до 15 дней — 150 − 60 = 90 кг = 30 коробок (без брони было бы 17).
+        var dealer = StockService.Cell(s, Bambuk, Bukhara.StockId, 10, 10, 0, 10, null);
+        Assert.Equal((100m, 40m, 60m, 6m, 90m), (dealer.Kg!.Value, dealer.ReservedKg, dealer.FreeKg!.Value, dealer.DaysOfCover!.Value, dealer.OrderKg));
+        Assert.Equal(StockStatuses.Deficit, dealer.Status);
+        Assert.Equal(40m / 3, dealer.ReservedBoxes);
+        Assert.Equal(40m * 22800, dealer.ReservedSum);
+
+        // Завод: всё в брони, заказы дилеров 120 кг — не хватает 120 − 100 = 20 кг (от всего остатка), доступно 0.
+        var factory = StockService.Cell(s, Bambuk, Factory.StockId, 20, 20, 0, null, 120);
+        Assert.Equal((0m, 0m, 20m), (factory.FreeKg!.Value, factory.DaysOfCover!.Value, factory.OrderKg));
+    }
+
+    /// <summary>Бронь и доступное складываются в строке охвата и итогах (дни запаса — от доступного) и приходят в автозаказ — со складом завода.</summary>
+    [Fact]
+    public void Reservation_reaches_rows_totals_and_auto_order()
+    {
+        var s = WithReservations();
+        var item = new StockBaseItem(Bambuk, "Бамбук", true, false,
+            new Dictionary<string, StockCell>
+            {
+                ["r1"] = StockService.Cell(s, Bambuk, Bukhara.StockId, 10, 10, 0, 10, null),
+                ["r2"] = StockService.Cell(s, Bambuk, Denov.StockId, 10, 10, 0, 10, null),
+            },
+            StockService.Cell(s, Bambuk, Factory.StockId, 20, 20, 0, null, 240), null);
+        var b = new StockBase(s, 87, new DateOnly(2026, 7, 27), new DateOnly(2026, 10, 21), false, [], [item], [], new StockCorrection(2026, 9, 20, 20, 0, 0));
+
+        var view = StockService.Compose(b, new StockQuery());
+        var row = Assert.Single(view.Items);
+        Assert.Equal((130m, 70m, 60m, 3m), (row.Kg!.Value, row.ReservedKg, row.FreeKg!.Value, row.DaysOfCover!.Value));
+        Assert.Equal((70m, 60m, 3m), (view.Totals.ReservedKg, view.Totals.FreeKg, view.Totals.DaysOfCover!.Value));
+        Assert.Equal(s.ReservedAt, view.ReservedAt);
+        Assert.Equal(140m, view.FactoryTotals!.OrderKg); // 240 − 100: бронь завода второй раз не заказывается
+
+        var order = StockService.ComposeAutoOrder(b, "r2");
+        var line = Assert.Single(order.Items);
+        Assert.Equal((30m, 30m, 0m, 50, 100m, 0m), (line.StockKg, line.ReservedKg, line.FreeKg!.Value, line.RecBoxes, line.FactoryKg!.Value, line.FactoryFreeKg!.Value));
+        Assert.Equal(s.ReservedAt, order.ReservedAt);
+    }
+
     [Fact]
     public void Packs_from_the_address_are_parsed_with_either_separator()
     {

@@ -26,6 +26,8 @@ const columns: ExcelColumn[] = [
   { key: "stockKg", label: "Остаток, кг", group: "Остаток" },
   { key: "stockBoxes", label: "Остаток, коробки", group: "Остаток" },
   { key: "stockPieces", label: "Остаток, штуки", group: "Остаток" },
+  { key: "reservedKg", label: "Бронь, кг", group: "Остаток" },
+  { key: "freeKg", label: "Доступно, кг", group: "Остаток" },
   { key: "perDay", label: "Продажи в день, кг", group: "Продажи и запас" },
   { key: "rawPerDay", label: "Продажи в день без поправки на аутсток, кг", group: "Продажи и запас" },
   { key: "zeroDays", label: "Дней без товара в прошлом месяце (лист «По складам»)", group: "Продажи и запас", dealersOnly: true },
@@ -43,7 +45,7 @@ const columns: ExcelColumn[] = [
 ];
 
 /** Как в таблице страницы. */
-const defaults = ["name", "code", "cat", "pack", "unitKg", "stockKg", "perDay", "days", "need15", "need30", "price", "value", "orderKg", "status", "factoryKg"];
+const defaults = ["name", "code", "cat", "pack", "unitKg", "stockKg", "reservedKg", "perDay", "days", "need15", "need30", "price", "value", "orderKg", "status", "factoryKg"];
 
 const storageKey = "onebase.stock-excel";
 

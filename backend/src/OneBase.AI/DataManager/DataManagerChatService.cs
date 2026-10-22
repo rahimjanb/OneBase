@@ -540,7 +540,7 @@ public sealed class DataManagerChatService(
             try
             {
                 // Язык ответа по умолчанию — язык интерфейса пользователя (кнопка RU/UZ).
-                var prompt = $"{SystemPrompt}\nОтвечай на языке вопроса; по умолчанию — {UiLanguage.DefaultAnswerLanguage}.";
+                var prompt = $"{SystemPrompt}\n{ConsultantPrompts.GroundingPolicy}\nОтвечай на языке вопроса; по умолчанию — {UiLanguage.DefaultAnswerLanguage}.";
                 return await model.NextAsync(prompt, Transcript(conversation), tools.Specs, callContext, ct);
             }
             catch (DataManagerModelException ex) when (ex.Transient && attempt < 2)

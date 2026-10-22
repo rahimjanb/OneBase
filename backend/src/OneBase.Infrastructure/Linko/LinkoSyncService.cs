@@ -21,7 +21,7 @@ public sealed record LinkoSyncReport(DateTimeOffset StartedAt, DateTimeOffset Fi
 /// Полная загрузка идёт в два этапа — сначала текущий и прошлый месяц (дашборды работают сразу), потом история.
 /// Обычное обновление — изменения по last_tm; визиты (без tm) — за последние дни, раз в 6 часов — за весь месяц.
 /// Данные разных серверов Linko не смешиваются: при смене сервера нужно очистить данные.
-/// Ночная сверка (Reconcile) — полная загрузка без истории. EarliestChanged — самая ранняя дата среди изменённых заказов и возвратов:
+/// Ежедневная сверка (Reconcile) — полная загрузка без истории. EarliestChanged — самая ранняя дата среди изменённых заказов и возвратов:
 /// по ней координатор решает, сбрасывать ли кэш давних месяцев.
 /// </summary>
 public sealed class LinkoSyncService(
@@ -35,6 +35,9 @@ public sealed class LinkoSyncService(
     ILogger<LinkoSyncService> logger)
 {
     public const string SourceState = "source";
+
+    /// <summary>Шаг и состояние синхронизации брони складов (снимок «Забронировано»).</summary>
+    public const string ReservationsState = OneBase.Application.Sales.Stock.StockSnapshotBuilder.ReservationsState;
     private const string VisitsMonthState = "visits_month";
     private static readonly TimeSpan VisitsMonthInterval = TimeSpan.FromHours(6);
 
@@ -84,7 +87,7 @@ public sealed class LinkoSyncService(
         // Первая загрузка (или после очистки) — всегда полная.
         var full = mode != LinkoSyncMode.Incremental
             || !await db.LinkoSyncStates.AnyAsync(s => s.Entity == "orders" && s.LastSuccessAt != null, ct);
-        // Ночная сверка — полная загрузка свежего окна, но без истории (её хватает раз при подключении и по кнопке).
+        // Ежедневная сверка — полная загрузка свежего окна, но без истории (её хватает раз при подключении и по кнопке).
         var history = full && mode != LinkoSyncMode.Reconcile;
         var backfillDiscounts = (await db.LinkoSyncStates.AsNoTracking().FirstOrDefaultAsync(s => s.Entity == OrderDiscountsState, ct))?.LastSuccessAt is null;
         progress.Plan(PlanOf(full, connection.HasPlanCredentials, history, backfillDiscounts && !history));
@@ -126,6 +129,8 @@ public sealed class LinkoSyncService(
             SyncProductBalancesAsync(full || state.LastTm is null, state.LastTm, ct), ct));
         results.Add(await RunStepAsync("stock_transfers", phase, accumulate: false, state =>
             SyncStockTransfersAsync(full || state.LastTm is null, state.LastTm, ct), ct));
+        // Бронь — снимок целиком при каждой загрузке, рядом с остатками: неотгруженные заказы и одобренные перемещения («Забронировано»).
+        results.Add(await RunStepAsync(ReservationsState, phase, accumulate: false, _ => SyncReservationsAsync(ct), ct));
         results.Add(await RunStepAsync("payments", phase, accumulate: false, state =>
             SyncPaymentsAsync(full || state.LastTm is null ? Window(recentFrom, recentTo) : Since(state.LastTm), ct), ct));
 
@@ -200,7 +205,7 @@ public sealed class LinkoSyncService(
         steps.AddRange(
         [
             new("orders", phase, 6), new("order_returns", phase, 2), new("visits", phase, 6),
-            new("product_balances", phase, 2), new("stock_transfers", phase, 2), new("payments", phase, 2),
+            new("product_balances", phase, 2), new("stock_transfers", phase, 2), new(ReservationsState, phase, 1), new("payments", phase, 2),
         ]);
         if (staffPlans)
         {
@@ -253,7 +258,7 @@ public sealed class LinkoSyncService(
         "linko.\"OrderLines\"", "linko.\"Orders\"", "linko.\"OrderReturnLines\"", "linko.\"OrderReturns\"",
         "linko.\"Visits\"", "linko.\"Markets\"", "linko.\"MarketUsers\"", "linko.\"Users\"", "linko.\"Products\"",
         "linko.\"ProductTypes\"", "linko.\"Borders\"", "linko.\"KpiPlans\"", "linko.\"SyncState\"",
-        "linko.\"Stocks\"", "linko.\"ProductBalances\"", "linko.\"StockTransferLines\"", "linko.\"StockTransfers\"",
+        "linko.\"Stocks\"", "linko.\"ProductBalances\"", "linko.\"Reservations\"", "linko.\"StockTransferLines\"", "linko.\"StockTransfers\"",
         "linko.\"Payments\"", "linko.\"PriceLists\"", "linko.\"PriceListItems\"", "linko.\"Providers\"",
         "linko.\"Currencies\"", "linko.\"Contracts\"", "linko.\"Promotions\"", "linko.\"PromotionProducts\"",
         "sales.\"StaffPlans\"", "sales.\"StaffIndicators\"",
@@ -737,6 +742,83 @@ public sealed class LinkoSyncService(
             db.ChangeTracker.Clear();
         }, ct);
         return (rows, maxTm);
+    }
+
+    /// <summary>
+    /// Бронь складов («Склад → Остаток → Забронировано» в Linko) — снимок целиком: строки заказов в Sales:ReservedOrderStatuses (по складу заказа)
+    /// и перемещений в Sales:ReservedTransferStatuses (по складу-отправителю), сумма по складу и товару. Висящие заказы прошлых месяцев тоже в
+    /// снимке — Linko держит под них бронь так же. Сервер вернул документ другого статуса — фильтр не применён: шаг падает (читать все заказы
+    /// нельзя), прежний снимок остаётся.
+    /// </summary>
+    private async Task<(int, decimal?)> SyncReservationsAsync(CancellationToken ct)
+    {
+        var sums = new Dictionary<(long Stock, long Product), LinkoReservation>();
+        void Add(long? stock, IEnumerable<(long? Product, decimal? Amount, decimal? Weight)> lines)
+        {
+            if (stock is not { } s)
+            {
+                return;
+            }
+
+            foreach (var g in lines.Where(l => l.Product is not null).GroupBy(l => l.Product!.Value))
+            {
+                if (!sums.TryGetValue((s, g.Key), out var r))
+                {
+                    sums[(s, g.Key)] = r = new LinkoReservation { StockId = s, ProductId = g.Key };
+                }
+
+                r.Amount += g.Sum(l => l.Amount ?? 0);
+                r.Weight += g.Sum(l => l.Weight ?? 0);
+                r.Documents++;
+            }
+        }
+
+        static void Filtered(string entity, string status, string? actual)
+        {
+            if (!string.Equals(actual, status, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"Linko {entity}: фильтр status={status} не применён (пришёл документ «{actual}») — бронь не обновлена.");
+            }
+        }
+
+        var documents = 0;
+        foreach (var status in options.ReservedOrderStatuses)
+        {
+            documents += await client.ReadAllAsync<LinkoOrderDto>("orders", new Dictionary<string, string?> { ["status"] = status }, page =>
+            {
+                foreach (var o in page)
+                {
+                    Filtered("orders", status, o.Status);
+                    Add(o.Stock?.Id, (o.Products ?? []).Select(l => (l.Product?.Id, l.Amount, l.TotalWeight)));
+                }
+
+                progress.AddRows(page.Count);
+                return Task.CompletedTask;
+            }, ct);
+        }
+
+        foreach (var status in options.ReservedTransferStatuses)
+        {
+            documents += await client.ReadAllAsync<LinkoStockTransferDto>("stock_transfers", new Dictionary<string, string?> { ["status"] = status }, page =>
+            {
+                foreach (var t in page)
+                {
+                    Filtered("stock_transfers", status, t.Status);
+                    Add(t.FromStock?.Id, (t.Products ?? []).Select(l => (l.Product?.Id, l.Amount, l.TotalWeight)));
+                }
+
+                progress.AddRows(page.Count);
+                return Task.CompletedTask;
+            }, ct);
+        }
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.LinkoReservations.ExecuteDeleteAsync(ct);
+        db.LinkoReservations.AddRange(sums.Values);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        db.ChangeTracker.Clear();
+        return (documents, null);
     }
 
     /// <summary>Платежи: при полной загрузке — свежее окно (по дате создания), при обновлении — изменённые по last_tm.</summary>

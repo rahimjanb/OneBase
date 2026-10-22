@@ -20,6 +20,22 @@ export type AgentResult = {
   dataSources: DataSource[];
   toolsUsed: string[];
   error: string | null;
+  /** Числа итога, которых нет в результатах инструментов (после попытки исправить). */
+  unverified?: string[] | null;
+};
+
+/** Проверка ответа по данным: сколько чисел сверено, какие не подтверждены, исправлялся ли ответ и помечен ли текст. */
+export type GroundingSummary = { checked: number; supported: number; unsupported: string[]; quoted: string[]; revised: boolean; warned: boolean };
+
+/** Перепроверка после возражения пользователя: итог считает код по свежим данным. */
+export type CorrectionReview = {
+  verdict: "confirmed" | "corrected" | "insufficient";
+  previousConfirmed: string[];
+  previousNotConfirmed: string[];
+  userConfirmed: string[];
+  userNotConfirmed: string[];
+  attempt: number;
+  previousMessageId: string | null;
 };
 
 export type ConsultantDetails = {
@@ -31,6 +47,8 @@ export type ConsultantDetails = {
   memoryUsed?: number;
   /** Отчёты Excel, сформированные по просьбе пользователя. */
   reports?: ReportRef[] | null;
+  grounding?: GroundingSummary | null;
+  correction?: CorrectionReview | null;
 };
 
 /** Период источника на языке интерфейса: по словарю или шаблону («октябрь 2026, данные по 19.10.2026»), «октябрь 2026» — месяц словом. */

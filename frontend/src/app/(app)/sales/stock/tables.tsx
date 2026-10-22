@@ -54,6 +54,10 @@ type Amounts = Pick<
   | "orderPieces"
   | "orderSum"
   | "status"
+  | "reservedKg"
+  | "reservedBoxes"
+  | "reservedSum"
+  | "freeKg"
 > & { zeroDays?: number };
 
 /** Значение в выбранной единице — все четыре посчитаны сервером; штук в день и штук на 15 дней сервер не даёт, в «штуках» это кг. */
@@ -67,6 +71,9 @@ const totalStockOf = (t: StockTotals, unit: StockUnit) => pick(unit, t.kg, t.box
 const totalPerDayOf = (t: StockTotals, unit: StockUnit) => pick(unit, t.kgPerDay, t.boxesPerDay, t.sumPerDay, t.kgPerDay);
 const totalNeed15Of = (t: StockTotals, unit: StockUnit) => pick(unit, t.need15Kg, t.need15Boxes, t.need15Sum, t.need15Kg);
 const totalOrderOf = (t: StockTotals, unit: StockUnit) => pick(unit, t.orderKg, t.orderBoxes, t.orderSum, null);
+/** Бронь в выбранной единице; в штуках — кг ÷ вес штуки (вес знает строка товара). */
+const reservedOf = (c: Amounts, unit: StockUnit, unitKg?: number | null) =>
+  pick(unit, c.reservedKg, c.reservedBoxes, c.reservedSum, unitKg ? c.reservedKg / unitKg : null);
 
 /** Формат в единице: деньги сокращённо, коробки до десяти — с десятыми (иначе «0» читается как «не нужно»), штуки целые, кг — как везде. */
 const fmt = (unit: StockUnit, v: number | null, t: T = (x) => x) =>
@@ -90,6 +97,25 @@ function PerDay({ c, unit }: { c: Amounts; unit: StockUnit }) {
     <span title={title}>
       {fmtDay(unit, perDayOf(c, unit), t)}
       {corrected ? "*" : ""}
+    </span>
+  );
+}
+
+/**
+ * Остаток и под ним бронь — как «Забронировано» в Linko: заказ или перемещение оформлены, товар со склада ещё не ушёл. Подсказка — бронь и
+ * доступно в кг (остаток − бронь: от него считаются «хватит, дн.» и заказ дилера).
+ */
+function StockAmount({ c, unit, unitKg, approx = false }: { c: Amounts; unit: StockUnit; unitKg?: number | null; approx?: boolean }) {
+  const t = useT();
+  const value = fmt(unit, stockOf(c, unit), t);
+  const reserved = c.reservedKg > 0 ? reservedOf(c, unit, unitKg) : null;
+  return (
+    <span
+      className="inline-flex flex-col items-end leading-tight"
+      title={c.reservedKg > 0 ? t("бронь {r} кг · доступно {f} кг", { r: kg(c.reservedKg), f: kg(c.freeKg) }) : undefined}
+    >
+      <span>{approx ? `≈ ${value}` : value}</span>
+      {c.reservedKg > 0 && <span className="text-[11px] font-normal text-ink-3">{t("бронь {n}", { n: fmt(unit, reserved, t) })}</span>}
     </span>
   );
 }
@@ -168,7 +194,9 @@ function RegionPanel({ item, regions, factory, unit }: { item: StockItem; region
                 {r.name}
                 {r.plant && <span className="ml-1 text-ink-3">{t("(завод)")}</span>}
               </td>
-              <td className={td}>{fmt(unit, stockOf(r.c, unit), t)}</td>
+              <td className={td}>
+                <StockAmount c={r.c} unit={unit} unitKg={item.unitKg} />
+              </td>
               <td className={td}>
                 <PerDay c={r.c} unit={unit} />
               </td>
@@ -234,7 +262,13 @@ export function StockTable({ data, unit }: { data: StockView; unit: StockUnit })
       value: (r) => r.unitKg,
       render: (r) => <span title={weightTitle(r, t)}>{r.unitKg == null ? "—" : `${approx(r) ? "≈ " : ""}${num(r.unitKg, 3)} ${t("кг")}`}</span>,
     },
-    { key: "stock", label: t("Остаток, {unit}", { unit: u }), align: "right", value: (r) => stockOf(r, unit), render: (r) => mark(r, fmt(unit, stockOf(r, unit), t)) },
+    {
+      key: "stock",
+      label: t("Остаток, {unit}", { unit: u }),
+      align: "right",
+      value: (r) => stockOf(r, unit),
+      render: (r) => <StockAmount c={r} unit={unit} unitKg={r.unitKg} approx={approx(r) && unit !== "pieces"} />,
+    },
     { key: "perDay", label: t("В день, {unit}", { unit: t(perDayLabel(unit)) }), align: "right", value: (r) => perDayOf(r, unit), render: (r) => <PerDay c={r} unit={unit} /> },
     {
       key: "days",
@@ -283,7 +317,7 @@ export function StockTable({ data, unit }: { data: StockView; unit: StockUnit })
       rowKey={(r) => String(r.productId)}
       expand={dealers ? (r) => <RegionPanel item={r} regions={data.scopeRegions} factory={data.factory} unit={unit} /> : undefined}
       note={t(
-        "Кг = штуки × вес штуки (Σ веса ÷ Σ количества по строкам заказов с 1-го числа закрытого месяца, иначе за год, иначе из названия — ≈). Коробки = кг ÷ вес коробки: из названия (у весового товара любой, у штучного — если в коробке целое число штук), иначе по отгрузкам завода. Сумма запаса = штуки × входная цена дилера из прайса «{priceList}» на начало месяца. «В день» — вторичка нетто возвратов за {days} дн. ÷ ({days} − дни в нуле за закрытый месяц, не больше 30) — звёздочка там, где поправка сработала. Рек. заказ = скорость × 15 − остаток, вверх до целой коробки; у завода — заказы всех дилеров минус его остаток. Дефицит — меньше 15 дней, норма 15–30, затоварка — больше 30, «не продаётся» — остаток есть, продаж за базу нет.",
+        "Кг = штуки × вес штуки (Σ веса ÷ Σ количества по строкам заказов с 1-го числа закрытого месяца, иначе за год, иначе из названия — ≈). Коробки = кг ÷ вес коробки: из названия (у весового товара любой, у штучного — если в коробке целое число штук), иначе по отгрузкам завода. Сумма запаса = штуки × входная цена дилера из прайса «{priceList}» на начало месяца. «В день» — вторичка нетто возвратов за {days} дн. ÷ ({days} − дни в нуле за закрытый месяц, не больше 30) — звёздочка там, где поправка сработала. Бронь (под остатком) — заказы и перемещения, которые в Linko оформлены, но ещё не отгружены; «хватит, дн.», статус и рек. заказ считаются от доступного: остаток − бронь. Рек. заказ = скорость × 15 − доступный остаток, вверх до целой коробки; у завода — заказы всех дилеров минус весь его остаток (бронь завода — отгрузки по тем же заказам). Дефицит — меньше 15 дней, норма 15–30, затоварка — больше 30, «не продаётся» — остаток есть, продаж за базу нет.",
         { priceList, days: num(data.velocityDays) },
       )}
     />
@@ -297,7 +331,7 @@ const metrics: { key: Metric; label: (unit: StockUnit, t: T) => string; title?: 
   { key: "day", label: (u, t) => t("в день, {unit}", { unit: t(perDayLabel(u)) }) },
   { key: "left", label: (_u, t) => t("дн.") },
   { key: "rec", label: (u, t) => t("15 дн., {unit}", { unit: t(perDayLabel(u)) }) },
-  { key: "ord", label: (u, t) => t("заказ, {unit}", { unit: t(unitLabels[u]) }), title: "Рекомендуемый заказ: до запаса на 15 дней, вверх до целой коробки; у завода — заказы дилеров минус его остаток" },
+  { key: "ord", label: (u, t) => t("заказ, {unit}", { unit: t(unitLabels[u]) }), title: "Рекомендуемый заказ: до запаса на 15 дней от доступного остатка (остаток − бронь), вверх до целой коробки; у завода — заказы дилеров минус весь его остаток" },
 ];
 
 const metricOf = (c: Amounts, unit: StockUnit, m: Metric) =>
@@ -310,7 +344,7 @@ type Group = { key: string; name: string; plant: boolean; cellOf: (r: StockItem)
 const empty = (c: Amounts | null): c is null => !c || ((c.kg ?? 0) === 0 && (c.kgPerDay ?? 0) === 0);
 
 /** Пять клеток одного склада: остаток, в день, дн., 15 дн., заказ — в выбранной единице. */
-function Trio({ c, unit, plant }: { c: Amounts | null; unit: StockUnit; plant: boolean }) {
+function Trio({ c, unit, plant, unitKg }: { c: Amounts | null; unit: StockUnit; plant: boolean; unitKg?: number | null }) {
   const t = useT();
   const cls = "border-b border-line px-2 py-1.5 text-right tabular-nums";
   if (empty(c)) {
@@ -326,7 +360,9 @@ function Trio({ c, unit, plant }: { c: Amounts | null; unit: StockUnit; plant: b
   }
   return (
     <>
-      <td className={`${cls} border-l border-line`}>{fmt(unit, stockOf(c, unit), t)}</td>
+      <td className={`${cls} border-l border-line`}>
+        <StockAmount c={c} unit={unit} unitKg={unitKg} />
+      </td>
       <td className={`${cls} text-ink-2`}>
         <PerDay c={c} unit={unit} />
       </td>
@@ -435,7 +471,7 @@ export function StockMatrix({ data, unit }: { data: StockView; unit: StockUnit }
                 <td className="whitespace-nowrap border-b border-line px-2 py-1.5 text-ink-2">{t(r.category)}</td>
                 <td className="whitespace-nowrap border-b border-line px-2 py-1.5 text-right tabular-nums text-ink-2">{r.packKg == null ? "—" : packLabel(r.packKg, t)}</td>
                 {groups.map((g) => (
-                  <Trio key={g.key} c={g.cellOf(r)} unit={unit} plant={g.plant} />
+                  <Trio key={g.key} c={g.cellOf(r)} unit={unit} plant={g.plant} unitKg={r.unitKg} />
                 ))}
               </tr>
             ))}
@@ -449,6 +485,11 @@ export function StockMatrix({ data, unit }: { data: StockView; unit: StockUnit }
                 metrics.map((m, i) => (
                   <td key={`${g.key}:${m.key}`} className={`px-2 py-1.5 text-right tabular-nums ${i === 0 ? "border-l border-line" : ""}`}>
                     {g.totals == null ? "—" : m === metrics[1] ? fmtDay(unit, totalOf(g.totals, unit, m.key), t) : m.key === "left" ? num(g.totals.daysOfCover, 1) : fmt(unit, totalOf(g.totals, unit, m.key), t)}
+                    {g.totals && m.key === "v" && g.totals.reservedKg > 0 && unit !== "pieces" && (
+                      <span className="block text-[11px] font-normal text-ink-3">
+                        {t("бронь {n}", { n: fmt(unit, pick(unit, g.totals.reservedKg, g.totals.reservedBoxes, g.totals.reservedSum, null), t) })}
+                      </span>
+                    )}
                   </td>
                 )),
               )}
@@ -458,7 +499,7 @@ export function StockMatrix({ data, unit }: { data: StockView; unit: StockUnit }
       </div>
       <Note>
         {t(
-          "Клетка — склад: остаток в выбранной единице, продажи в день (звёздочка — с поправкой на аутсток), на сколько дней хватит, запас на 15 дней и рекомендуемый заказ (пусто — докупать не нужно). Завод в «Всего» не входит: это тот же товар до отгрузки; его заказ — заказы всех дилеров минус остаток на заводе. Итоги считает сервер по отфильтрованным строкам. «—» в сортировке всегда внизу.",
+          "Клетка — склад: остаток в выбранной единице (под ним — бронь: заказы и перемещения, которые ещё не отгружены), продажи в день (звёздочка — с поправкой на аутсток), на сколько дней хватит доступного (остаток − бронь), запас на 15 дней и рекомендуемый заказ от доступного (пусто — докупать не нужно). Завод в «Всего» не входит: это тот же товар до отгрузки; его заказ — заказы всех дилеров минус весь остаток на заводе. Итоги считает сервер по отфильтрованным строкам. «—» в сортировке всегда внизу.",
         )}
       </Note>
     </Section>

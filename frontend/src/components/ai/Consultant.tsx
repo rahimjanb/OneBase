@@ -22,6 +22,8 @@ import {
   Pencil,
   Plus,
   Search,
+  ShieldAlert,
+  ShieldCheck,
   Sparkle,
   Sparkles,
   Square,
@@ -815,6 +817,7 @@ function Details({ details, durationMs }: { details: ConsultantDetails; duration
         )}
         <span>{t("{s} с", { s: (durationMs / 1000).toFixed(1) })}</span>
         {(details.memoryUsed ?? 0) > 0 && <span>{t("учтены прошлые анализы: {n}", { n: details.memoryUsed ?? 0 })}</span>}
+        <Grounding details={details} />
         {hasMore && details.agents.length > 0 && (
           <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 font-medium text-accent-strong hover:underline">
             {t("Как получен ответ")}
@@ -825,11 +828,74 @@ function Details({ details, durationMs }: { details: ConsultantDetails; duration
       {open && (
         <div className="mt-3 space-y-3">
           {details.routingReason && <p className="text-xs text-ink-2">{t("Почему эти AI-сотрудники: {reason}", { reason: t(details.routingReason) })}</p>}
+          {details.correction && <CorrectionCard review={details.correction} />}
           {details.agents.map((a) => (
             <AgentCard key={a.agent} result={a} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const verdicts: Record<string, { label: string; className: string }> = {
+  confirmed: { label: "прошлый ответ подтверждён данными", className: "bg-ok-soft text-ok" },
+  corrected: { label: "прошлый ответ исправлен по данным", className: "bg-warn-soft text-warn" },
+  insufficient: { label: "данных для проверки недостаточно", className: "bg-muted text-ink-2" },
+};
+
+/**
+ * Проверка ответа по данным в строке разбора: числа ответа сверены с результатами инструментов (сколько) или какие не подтверждены;
+ * если вопрос оспаривал прошлый ответ — итог перепроверки.
+ */
+function Grounding({ details }: { details: ConsultantDetails }) {
+  const t = useT();
+  const g = details.grounding;
+  const verdict = details.correction ? verdicts[details.correction.verdict] : null;
+  return (
+    <>
+      {verdict && <span className={`rounded-full px-2 py-0.5 font-medium ${verdict.className}`}>{t("Перепроверка: {verdict}", { verdict: t(verdict.label) })}</span>}
+      {g && g.checked > 0 && (
+        <span
+          className={`inline-flex items-center gap-1 ${g.warned ? "text-warn" : "text-ok"}`}
+          title={g.revised ? t("Первый вариант ответа содержал числа, которых нет в данных, — ответ исправлен") : undefined}
+        >
+          {g.warned ? <ShieldAlert className="size-3.5" aria-hidden /> : <ShieldCheck className="size-3.5" aria-hidden />}
+          {g.warned
+            ? t("не подтверждено данными: {list}", { list: g.unsupported.join(", ") })
+            : t("чисел сверено с данными: {n}", { n: g.supported })}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** Перепроверка после возражения: какие числа прошлого ответа и пользователя подтвердили свежие данные. */
+function CorrectionCard({ review }: { review: NonNullable<ConsultantDetails["correction"]> }) {
+  const t = useT();
+  const rows: [string, string[], string][] = [
+    ["Прошлый ответ — подтверждено данными", review.previousConfirmed, "text-ok"],
+    ["Прошлый ответ — не подтверждено", review.previousNotConfirmed, "text-warn"],
+    ["Ваши значения — подтверждено данными", review.userConfirmed, "text-ok"],
+    ["Ваши значения — не подтверждено", review.userNotConfirmed, "text-warn"],
+  ];
+  return (
+    <div className="rounded-xl border border-line bg-surface px-4 py-3 text-xs">
+      <div className="text-sm font-semibold text-ink">
+        {t("Перепроверка по данным")}
+        {review.attempt > 1 && <span className="ml-2 font-normal text-ink-3">{t("возражение подряд: {n}", { n: review.attempt })}</span>}
+      </div>
+      <p className="mt-1 text-ink-2">{t("Возражение не меняет ответ само по себе: AI-сотрудники заново получили данные, итог посчитан по ним.")}</p>
+      <dl className="mt-2 grid gap-1 sm:grid-cols-2">
+        {rows
+          .filter(([, items]) => items.length > 0)
+          .map(([label, items, tone]) => (
+            <div key={label}>
+              <dt className="text-ink-3">{t(label)}</dt>
+              <dd className={`font-medium ${tone}`}>{items.join(", ")}</dd>
+            </div>
+          ))}
+      </dl>
     </div>
   );
 }
@@ -883,6 +949,12 @@ export function AgentCard({ result }: { result: ConsultantDetails["agents"][numb
       {section(t("Факты"), result.findings)}
       {section(t("Проблемы"), result.problems)}
       {section(t("Рекомендации"), result.recommendations)}
+      {(result.unverified?.length ?? 0) > 0 && (
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-warn">
+          <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden />
+          {t("Не подтверждено результатами инструментов: {list}", { list: result.unverified!.join(", ") })}
+        </p>
+      )}
       {result.toolsUsed.length > 0 && <p className="mt-2 text-[11px] text-ink-3">{t("Инструменты: {list}", { list: result.toolsUsed.join(", ") })}</p>}
     </div>
   );

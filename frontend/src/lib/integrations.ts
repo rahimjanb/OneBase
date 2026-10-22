@@ -73,13 +73,14 @@ export const linkoEntityLabels: Record<string, string> = {
   stocks: "Склады",
   product_balances: "Остатки (штуки)",
   stock_transfers: "Перемещения между складами",
+  reservations: "Бронь складов (неотгруженные заказы и перемещения)",
   payments: "Платежи",
   price_lists: "Прайс-листы",
   price_list_items: "Цены прайс-листов",
   providers: "Поставщики",
   currencies: "Валюты",
   contracts: "Договоры",
-  reconcile: "Ночная сверка (остатки и месяц целиком)",
+  reconcile: "Ежедневная сверка (остатки и месяц целиком)",
   alert: "Контроль обмена",
 };
 
