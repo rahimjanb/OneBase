@@ -174,6 +174,14 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Telegram.TelegramMaterialService>();
         services.AddHostedService<Telegram.TelegramConnectionWorker>();
 
+        // Автоотчёты в Telegram: картинки PNG на сервере (SkiaSharp), расписания утро/обед/вечер, очередь в PostgreSQL.
+        services.AddSingleton<OneBase.Application.Telegram.Reports.IDailyReportRenderer, Telegram.Reports.SkiaDailyReportRenderer>();
+        services.AddScoped<OneBase.Application.Telegram.Reports.DailyReportBuilder>();
+        services.AddScoped<Telegram.Reports.TelegramReportSender>();
+        services.AddScoped<Telegram.Reports.TelegramReportService>();
+        services.AddSingleton<Telegram.Reports.TelegramReportRunner>();
+        services.AddHostedService<Telegram.Reports.TelegramReportWorker>();
+
         // Раздел «Задачи» OneBase: задачи отделов и уведомления пользователей.
         services.AddScoped<OneBase.Application.Work.UserNotifier>();
         services.AddScoped<OneBase.Application.Work.WorkTaskService>();

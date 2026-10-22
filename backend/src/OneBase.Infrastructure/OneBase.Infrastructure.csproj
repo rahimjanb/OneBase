@@ -16,8 +16,16 @@
       <PackageReference Include="Minio" Version="7.0.0" />
       <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
       <PackageReference Include="Qdrant.Client" Version="1.19.0" />
+      <!-- Картинки автоотчётов Telegram (PNG на сервере). NoDependencies: в контейнере не нужен fontconfig, шрифты — свои. -->
+      <PackageReference Include="SkiaSharp" Version="3.119.4" />
+      <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
       <PackageReference Include="StackExchange.Redis" Version="3.3.1" />
       <PackageReference Include="WTelegramClient" Version="4.4.9" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <!-- Inter (SIL OFL 1.1, Inter-OFL.txt): кириллица и узбекская латиница на картинках отчётов. -->
+      <EmbeddedResource Include="Telegram\Reports\Fonts\*.ttf" LogicalName="OneBase.Fonts.%(Filename)%(Extension)" />
     </ItemGroup>
 
 </Project>

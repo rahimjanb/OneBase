@@ -3,7 +3,7 @@ using OneBase.Domain.Telegram;
 
 namespace OneBase.Infrastructure.Persistence;
 
-/// <summary>Схема telegram: аккаунты, агент, разрешения, чаты, материалы, входящие, журнал агента, рассылки.</summary>
+/// <summary>Схема telegram: аккаунты, агент, разрешения, чаты, материалы, входящие, журнал агента, рассылки, автоотчёты.</summary>
 internal static class TelegramModel
 {
     public const string Schema = "telegram";
@@ -152,6 +152,61 @@ internal static class TelegramModel
             e.Property(x => x.ObjectKey).HasMaxLength(500);
             e.Property(x => x.Sha256).HasMaxLength(64);
             e.HasOne(x => x.Campaign).WithMany(x => x.Attachments).HasForeignKey(x => x.CampaignId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Автоотчёты: настройки (одна строка), расписания трёх видов, получатели, журнал отправок.
+        b.Entity<TelegramReportSettings>(e =>
+        {
+            e.ToTable("ReportSettings", Schema);
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Language).HasMaxLength(8);
+            e.HasOne<TelegramAccount>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<TelegramReportSchedule>(e =>
+        {
+            e.ToTable("ReportSchedules", Schema);
+            e.HasKey(x => x.Kind);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.TimeZone).HasMaxLength(64);
+            e.Property(x => x.Metric).HasMaxLength(8);
+        });
+
+        b.Entity<TelegramReportSubscription>(e =>
+        {
+            e.ToTable("ReportSubscriptions", Schema);
+            e.Property(x => x.SupervisorName).HasMaxLength(200);
+            // Регион — без внешнего ключа: схема sales своя (как у остальных ссылок Telegram на данные продаж).
+            e.HasIndex(x => x.RegionId);
+            e.HasMany(x => x.Chats).WithOne().HasForeignKey(x => x.SubscriptionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TelegramReportSubscriptionChat>(e =>
+        {
+            e.ToTable("ReportSubscriptionChats", Schema);
+            e.HasKey(x => new { x.SubscriptionId, x.ChatId });
+            // Чат пропал из диалогов аккаунта — уходит и из автоотправок.
+            e.HasOne<TelegramChat>().WithMany().HasForeignKey(x => x.ChatId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TelegramReportDelivery>(e =>
+        {
+            e.ToTable("ReportDeliveries", Schema);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Trigger).HasMaxLength(16);
+            e.Property(x => x.DataMode).HasMaxLength(8);
+            e.Property(x => x.RecipientTitle).HasMaxLength(255);
+            e.Property(x => x.ScopeTitle).HasMaxLength(255);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.Error).HasMaxLength(1000);
+            e.Property(x => x.MessageIds).HasMaxLength(500);
+            e.Property(x => x.Summary).HasMaxLength(500);
+            // По расписанию: один отчёт автоотправки за один день в один чат — один раз, даже при двух экземплярах службы.
+            e.HasIndex(x => new { x.SubscriptionId, x.ChatId, x.Kind, x.Period }).IsUnique()
+                .HasFilter("\"Trigger\" = 'schedule' AND \"SubscriptionId\" IS NOT NULL AND \"ChatId\" IS NOT NULL");
+            e.HasIndex(x => new { x.Status, x.NextAttemptAt });
+            e.HasIndex(x => x.CreatedAt);
         });
     }
 }

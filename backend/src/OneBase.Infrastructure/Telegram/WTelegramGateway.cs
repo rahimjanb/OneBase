@@ -343,6 +343,37 @@ internal sealed class WTelegramGateway(
 
             var reply = message.ReplyToMessageId ?? 0;
             var files = message.Files;
+
+            // Страницы автоотчёта: несколько картинок — альбомом (до 10 в одном), подпись — у первой страницы.
+            if (files.Count > 1 && files.All(f => f.Photo))
+            {
+                var caption = text.Length is > 0 and <= TelegramRules.MaxCaptionLength ? text : null;
+                if (text.Length > 0 && caption is null)
+                {
+                    var sentText = await SendLimited(client.SendMessageAsync(input, text, reply_to_msg_id: reply, entities: entities));
+                    ids.Add(sentText.id);
+                    reply = 0;
+                }
+
+                foreach (var chunk in files.Chunk(10))
+                {
+                    var medias = new List<InputMedia>();
+                    foreach (var file in chunk)
+                    {
+                        var uploaded = await Limited(client.UploadFileAsync(new MemoryStream(file.Content), file.FileName), SendTimeout);
+                        medias.Add(new InputMediaUploadedPhoto { file = uploaded });
+                    }
+
+                    var album = await SendLimited(client.SendAlbumAsync(input, medias, caption, reply, caption is null ? null : entities));
+                    ids.AddRange(album.Select(m => m.id));
+                    caption = null;
+                    reply = 0;
+                }
+
+                await TouchAsync(session);
+                return new TelegramSent(ids);
+            }
+
             // Один файл с короткой подписью — одним сообщением; иначе текст отдельно, файлы — следом.
             var captionWithFile = files.Count == 1 && text.Length is > 0 and <= TelegramRules.MaxCaptionLength;
             if (text.Length > 0 && !captionWithFile)
@@ -355,9 +386,11 @@ internal sealed class WTelegramGateway(
             foreach (var file in files)
             {
                 var uploaded = await Limited(client.UploadFileAsync(new MemoryStream(file.Content), file.FileName), SendTimeout);
+                // "photo" — картинкой в ленте; MIME-тип — документом.
+                var mime = file.Photo ? "photo" : file.ContentType;
                 var sent = captionWithFile
-                    ? await SendLimited(client.SendMediaAsync(input, text, uploaded, file.ContentType, reply, entities))
-                    : await SendLimited(client.SendMediaAsync(input, null, uploaded, file.ContentType, reply));
+                    ? await SendLimited(client.SendMediaAsync(input, text, uploaded, mime, reply, entities))
+                    : await SendLimited(client.SendMediaAsync(input, null, uploaded, mime, reply));
                 ids.Add(sent.id);
                 reply = 0;
             }

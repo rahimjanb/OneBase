@@ -164,7 +164,10 @@ public sealed class FakeLinko : HttpMessageHandler
         }
         else if (path.EndsWith("/orders/", StringComparison.Ordinal) && first)
         {
-            body = System.Text.Json.JsonSerializer.Serialize(new { results = Orders, errors = Array.Empty<object>() });
+            // Фильтр статуса — как у Linko (бронь читает только неотгруженные заказы и проверяет, что фильтр применён).
+            var status = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query)["status"];
+            var orders = Orders.Where(o => status is null || o.GetType().GetProperty("status")?.GetValue(o) as string == status).ToList();
+            body = System.Text.Json.JsonSerializer.Serialize(new { results = orders, errors = Array.Empty<object>() });
         }
         else
         {

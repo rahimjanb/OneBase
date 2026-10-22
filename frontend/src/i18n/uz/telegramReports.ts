@@ -1,0 +1,177 @@
+import type { Dict } from "../core";
+
+/** «Настройки → Telegram → Автоматические отчёты»: интерфейс и тексты сервера (ошибки, причины, кто получатель). */
+const telegramReports: Dict = {
+  // Страница и разделы
+  "Автоматические отчёты": "Avtomatik hisobotlar",
+  "Автоматические отчёты · Telegram · OneBase": "Avtomatik hisobotlar · Telegram · OneBase",
+  "План на день, план / факт и итоги дня картинками 16:9 в чаты и группы Telegram — по регионам и супервайзерам":
+    "Kunlik reja, reja / fakt va kun yakuni 16:9 rasmlarda Telegram chat va guruhlariga — hududlar va supervayzerlar bo'yicha",
+  "План на день, план / факт и итоги дня картинками в чаты и группы — регион, супервайзер и его агенты, по расписанию, с журналом отправок.":
+    "Kunlik reja, reja / fakt va kun yakuni rasmlarda chat va guruhlarga — hudud, supervayzer va uning agentlari, jadval bo'yicha, yuborishlar jurnali bilan.",
+  "Расписание": "Jadval",
+  "Предпросмотр и тест": "Oldindan ko'rish va test",
+  "Журнал отправок": "Yuborishlar jurnali",
+  "Telegram выключен в этой среде (Telegram:Enabled=false): аккаунт работает на сервере OneBase. Здесь можно настроить отчёты и посмотреть картинки, по расписанию отсюда ничего не уходит.":
+    "Bu muhitda Telegram o'chirilgan (Telegram:Enabled=false): akkaunt OneBase serverida ishlaydi. Bu yerda hisobotlarni sozlash va rasmlarni ko'rish mumkin, jadval bo'yicha bu yerdan hech narsa yuborilmaydi.",
+
+  // Отправка: аккаунт и язык
+  "Отправка": "Yuborish",
+  "Аккаунт Telegram": "Telegram akkaunti",
+  "Не выбран": "Tanlanmagan",
+  "Язык картинок": "Rasmlar tili",
+  "Русский": "Rus tili",
+  "Узбекский (латиница)": "O'zbek tili (lotin)",
+  "Аккаунт не подключён — отчёты не уйдут, пока его не подключить на странице Telegram.":
+    "Akkaunt ulanmagan — Telegram sahifasida ulamaguningizcha hisobotlar yuborilmaydi.",
+  "Сохранено.": "Saqlandi.",
+  "Отчёты уходят с уже подключённого аккаунта OneBase (не бот и не второй аккаунт). Картинки PNG 16:9 (1920×1080) рисует сервер: регион, супервайзер, РМ, агенты с планом и фактом, итог; длинный отчёт — несколько пронумерованных картинок одним альбомом.":
+    "Hisobotlar OneBase'ning ulangan akkauntidan yuboriladi (bot ham, ikkinchi akkaunt ham emas). PNG 16:9 (1920×1080) rasmlarni server chizadi: hudud, supervayzer, RM, reja va faktli agentlar, jami; uzun hisobot — bitta albomda raqamlangan bir nechta rasm.",
+
+  // Расписание
+  "План на день": "Kunlik reja",
+  "План / факт": "Reja / fakt",
+  "Итоги дня": "Kun yakuni",
+  "Утро: цели дня — план продаж и визитов каждого агента, без факта": "Ertalab: kun maqsadlari — har bir agentning savdo va tashrif rejasi, faktsiz",
+  "Обед: продажи и визиты на момент отчёта, отставание и кто требует внимания":
+    "Tushlik: hisobot paytidagi savdo va tashriflar, orqada qolish va kimga e'tibor kerak",
+  "Вечер: итоговый факт, выполнение, отклонение, лучшие и невыполненные планы":
+    "Kechqurun: yakuniy fakt, bajarilish, farq, eng yaxshilar va bajarilmagan rejalar",
+  "Включить автоматическую отправку": "Avtomatik yuborishni yoqish",
+  "Показатель": "Ko'rsatkich",
+  "Сумы": "So'm",
+  "Килограммы": "Kilogramm",
+  "Часовой пояс": "Vaqt mintaqasi",
+  "Дни отправки": "Yuborish kunlari",
+  "Пн": "Du",
+  "Вт": "Se",
+  "Ср": "Ch",
+  "Чт": "Pa",
+  "Пт": "Ju",
+  "Сб": "Sh",
+  "Вс": "Ya",
+  "Дни не выбраны — отчёт не уходит.": "Kunlar tanlanmagan — hisobot yuborilmaydi.",
+  "Выключен — сохранение ничего не отправляет.": "O'chirilgan — saqlash hech narsa yubormaydi.",
+  "После сохранения отчёт уйдёт в ближайшее время по расписанию, а не сразу.":
+    "Saqlangandan keyin hisobot darhol emas, jadval bo'yicha eng yaqin vaqtda yuboriladi.",
+
+  // Получатели
+  "Сначала выберите аккаунт Telegram выше.": "Avval yuqorida Telegram akkauntini tanlang.",
+  "Получатель": "Qabul qiluvchi",
+  "РМ получает отчёт по своему региону, супервайзер — только по своей команде, агентам отчёты не отправляются. Личный чат РМ или супервайзера — по его привязке Telegram: в OneBase меню профиля → «Привязать Telegram» и отправить код аккаунту отчётов. Группа получает отчёт по выбранному региону или команде — его увидят все её участники. По расписанию один и тот же отчёт за день одному получателю уходит один раз; вручную повторно — только с подтверждением.":
+    "RM o'z hududi bo'yicha hisobot oladi, supervayzer — faqat o'z jamoasi bo'yicha, agentlarga hisobot yuborilmaydi. RM yoki supervayzerning shaxsiy chati — uning Telegram bog'lanishi orqali: OneBase'da profil menyusi → «Telegram'ni bog'lash» va kodni hisobotlar akkauntiga yuborish. Guruh tanlangan hudud yoki jamoa bo'yicha hisobot oladi — uni guruhning barcha a'zolari ko'radi. Jadval bo'yicha bir xil hisobot bir kunda bitta qabul qiluvchiga bir marta yuboriladi; qo'lda qayta — faqat tasdiqlash bilan.",
+  "Какой отчёт": "Qaysi hisobot",
+  "Выберите регион": "Hududni tanlang",
+
+  // Предпросмотр и тест
+  "Отправить реальные показатели в «{chat}»?": "Haqiqiy ko'rsatkichlar «{chat}» ga yuborilsinmi?",
+  "Отчёт": "Hisobot",
+  "Демонстрационные": "Namunaviy",
+  "Вымышленные имена и цифры, на картинке «ТЕСТОВЫЕ ДАННЫЕ»": "To'qima ismlar va raqamlar, rasmda «TEST MA'LUMOTLARI»",
+  "Проверка на реальных данных": "Haqiqiy ma'lumotlarda tekshiruv",
+  "Ташкентский регион": "Toshkent hududi",
+  "Супервайзеров": "Supervayzerlar",
+  "Предпросмотр": "Oldindan ko'rish",
+  "Тестовая отправка": "Test yuborish",
+  "Выберите чат или группу": "Chat yoki guruhni tanlang",
+  "Сначала выберите аккаунт Telegram": "Avval Telegram akkauntini tanlang",
+  "Отправить тестовый отчёт": "Test hisobotini yuborish",
+  "В этой среде Telegram выключен — тестовая отправка вернёт ошибку.": "Bu muhitda Telegram o'chirilgan — test yuborish xato qaytaradi.",
+  "Отправлено в «{chat}»: {pages} стр.": "«{chat}» ga yuborildi: {pages} sahifa.",
+  "Предпросмотр ничего не отправляет. Тест уходит одним сообщением в выбранный чат и записывается в журнал с режимом данных; на демонстрационных картинках всегда стоит «ТЕСТОВЫЕ ДАННЫЕ».":
+    "Oldindan ko'rish hech narsa yubormaydi. Test tanlangan chatga bitta xabar bo'lib ketadi va jurnalga ma'lumotlar rejimi bilan yoziladi; namunaviy rasmlarda doim «TEST MA'LUMOTLARI» turadi.",
+  "Картинок: {n} · {kb} КБ": "Rasmlar: {n} · {kb} KB",
+  "Страница {n}": "{n}-sahifa",
+  "Нажмите «Предпросмотр» — картинки появятся здесь.": "«Oldindan ko'rish» ni bosing — rasmlar shu yerda paydo bo'ladi.",
+
+  // Журнал
+  "Все отчёты": "Barcha hisobotlar",
+  "Все статусы": "Barcha holatlar",
+  "Все данные": "Barcha ma'lumotlar",
+  "Реальные": "Haqiqiy",
+  "Тестовые": "Test",
+  "Отправок пока нет.": "Hozircha yuborishlar yo'q.",
+  "Регион и команда": "Hudud va jamoa",
+  "Попыток: {n}": "Urinishlar: {n}",
+  "картинок: {n}, {kb} КБ": "rasmlar: {n}, {kb} KB",
+  "данные Linko на {time}": "Linko ma'lumotlari {time} holatiga",
+  "повтор в {time}": "{time} da takror",
+  "отправил {name}": "yubordi: {name}",
+  "Ожидает": "Kutmoqda",
+  "Отправляется": "Yuborilmoqda",
+  "Отправлен": "Yuborildi",
+  "По расписанию": "Jadval bo'yicha",
+  "Вручную": "Qo'lda",
+  "Тест": "Test",
+  "Уже отправлен сегодня.": "Bugun allaqachon yuborilgan.",
+
+  // Тексты сервера: кто получатель, почему отправить нельзя, ошибки
+  "Личный чат": "Shaxsiy chat",
+  "В этот чат писать нельзя.": "Bu chatga yozib bo'lmaydi.",
+  "Отчёт не отправлен: итоги не сходятся с суммой строк. {details}": "Hisobot yuborilmadi: yakunlar qatorlar yig'indisiga mos kelmaydi. {details}",
+  "Неизвестно, дошёл ли отчёт: сервер прервал отправку. Автоповтора нет, чтобы не отправить дважды — проверьте чат и при необходимости отправьте вручную.":
+    "Hisobot yetib bordimi — noma'lum: server yuborishni to'xtatdi. Ikki marta yubormaslik uchun avtomatik takror yo'q — chatni tekshiring va kerak bo'lsa qo'lda yuboring.",
+  "Аккаунт Telegram автоотчётов не подключён — «Настройки → Telegram → Подключение».":
+    "Avtomatik hisobotlar Telegram akkaunti ulanmagan — «Sozlamalar → Telegram → Ulanish».",
+  "Язык подписей — ru или uz.": "Yozuvlar tili — ru yoki uz.",
+  "Аккаунт Telegram не найден.": "Telegram akkaunti topilmadi.",
+  "Время — в формате ЧЧ:ММ, например 08:00.": "Vaqt — SS:DD formatida, masalan 08:00.",
+  "Часовой пояс «{zone}» не найден — укажите IANA, например Asia/Tashkent.": "«{zone}» vaqt mintaqasi topilmadi — IANA ni ko'rsating, masalan Asia/Tashkent.",
+  "Выберите хотя бы один день отправки.": "Kamida bitta yuborish kunini tanlang.",
+  "Показатель — sum (сумы) или kg (килограммы).": "Ko'rsatkich — sum (so'm) yoki kg (kilogramm).",
+  "Отметьте хотя бы один отчёт: утро, обед или вечер.": "Kamida bitta hisobotni belgilang: ertalab, tushlik yoki kechqurun.",
+  "Выберите команду.": "Jamoani tanlang.",
+  "Выберите регион.": "Hududni tanlang.",
+  "Сначала выберите аккаунт Telegram для автоотчётов.": "Avval avtomatik hisobotlar uchun Telegram akkauntini tanlang.",
+  "Чат не найден у аккаунта автоотчётов — обновите чаты.": "Avtomatik hisobotlar akkauntida chat topilmadi — chatlarni yangilang.",
+  "Вид отчёта — Morning, Midday или Evening.": "Hisobot turi — Morning, Midday yoki Evening.",
+  "Нет связи с Telegram: {kind}": "Telegram bilan aloqa yo'q: {kind}",
+
+  // Автоотправки: регион → супервайзер → чаты
+  "Автоотправки": "Avtoyuborishlar",
+  "Нет права на данные продаж (sales.read): регионы и реальные цифры недоступны, предпросмотр и тест — на демонстрационных данных.": "Savdo ma'lumotlariga huquq yo'q (sales.read): hududlar va haqiqiy raqamlar mavjud emas, oldindan ko'rish va test — namunaviy ma'lumotlarda.",
+  "Чаты другого аккаунта уберутся из автоотправок. Сменить аккаунт?": "Boshqa akkaunt chatlari avtoyuborishlardan olib tashlanadi. Akkauntni almashtirasizmi?",
+  "Следующая отправка: {time} · чатов: {n}": "Keyingi yuborish: {time} · chatlar: {n}",
+  "Удалить автоотправку «{name}»?": "«{name}» avtoyuborishi o'chirilsinmi?",
+  "{chat}: временная ошибка Telegram — повторим в {time}": "{chat}: Telegram'ning vaqtinchalik xatosi — {time} da takrorlaymiz",
+  "«{report}»: отправлено в {sent} из {total} чатов.": "«{report}»: {total} ta chatdan {sent} tasiga yuborildi.",
+  "Регион, супервайзер и чаты, куда уходят отчёты. Агенты на картинке — команда региона в «Продажах», подставляются сами.": "Hudud, supervayzer va hisobotlar yuboriladigan chatlar. Rasmdagi agentlar — «Savdo»dagi hudud jamoasi, o'zi qo'yiladi.",
+  "Добавить автоотправку": "Avtoyuborish qo'shish",
+  "Автоотправок пока нет.": "Hozircha avtoyuborishlar yo'q.",
+  "Агентов на картинке: {n}": "Rasmdagi agentlar: {n}",
+  "Куда": "Qayerga",
+  "Включена": "Yoqilgan",
+  "Ещё не отправлялась.": "Hali yuborilmagan.",
+  "Одна автоотправка — один регион и один супервайзер; отчёт уходит во все её чаты и группы. Таких строк можно добавить сколько угодно. Регионы, супервайзеры и агенты — реальные данные раздела «Продажи»: агенты — те, кто работает в регионе (продажи, визиты, план, профиль). По расписанию один и тот же отчёт за день в один чат уходит один раз; вручную повторно — только с подтверждением.": "Bitta avtoyuborish — bitta hudud va bitta supervayzer; hisobot uning barcha chat va guruhlariga ketadi. Bunday qatorlarni xohlagancha qo'shish mumkin. Hududlar, supervayzerlar va agentlar — «Savdo» bo'limining haqiqiy ma'lumotlari: agentlar — hududda ishlaydiganlar (savdo, tashriflar, reja, profil). Jadval bo'yicha bir xil hisobot bir kunda bitta chatga bir marta yuboriladi; qo'lda qayta — faqat tasdiqlash bilan.",
+  "Отправить сейчас во все чаты (реальные данные)": "Hozir barcha chatlarga yuborish (haqiqiy ma'lumotlar)",
+  "Автоотправка": "Avtoyuborish",
+  "Новая автоотправка": "Yangi avtoyuborish",
+  "1. Регион": "1. Hudud",
+  "2. Супервайзер": "2. Supervayzer",
+  "3. Чаты и группы": "3. Chatlar va guruhlar",
+  "4. Какие отчёты": "4. Qaysi hisobotlar",
+  "СВР из оргструктуры: {name}": "Tashkiliy tuzilmadagi SVR: {name}",
+  "Без супервайзера": "Supervayzersiz",
+  "Агенты на картинке": "Rasmdagi agentlar",
+  "В регионе нет агентов за этот месяц.": "Bu oyda hududda agentlar yo'q.",
+  "Подставляются сами — команда региона в «Продажах» на день отчёта.": "O'zi qo'yiladi — hisobot kunidagi «Savdo»dagi hudud jamoasi.",
+  "выбрано: {n}": "tanlangan: {n}",
+  "Чатов нет — обновите их на странице Telegram, вкладка «Чаты».": "Chatlar yo'q — Telegram sahifasidagi «Chatlar» bo'limida yangilang.",
+  "Регион и супервайзер из «Продаж»; на картинке «ПРОВЕРКА НА РЕАЛЬНЫХ ДАННЫХ»": "«Savdo»dagi hudud va supervayzer; rasmda «HAQIQIY MA'LUMOTLARDA TEKSHIRUV»",
+  "Агентов": "Agentlar",
+  "Чат «{chat}»: {reason}": "«{chat}» chati: {reason}",
+  "Нет права на данные продаж (sales.read) — доступны только демонстрационные данные.": "Savdo ma'lumotlariga huquq yo'q (sales.read) — faqat namunaviy ma'lumotlar mavjud.",
+  "Регион не найден в данных продаж за этот месяц.": "Hudud bu oydagi savdo ma'lumotlarida topilmadi.",
+  "Супервайзер больше не числится в этом регионе — выберите другого.": "Supervayzer endi bu hududda emas — boshqasini tanlang.",
+  "Нет чатов: чаты удалены из диалогов аккаунта — добавьте другие.": "Chatlar yo'q: chatlar akkaunt dialoglaridan o'chirilgan — boshqalarini qo'shing.",
+  "Не уйдёт в: {chats} — {reason}": "Yuborilmaydi: {chats} — {reason}",
+  "Выберите хотя бы один чат или группу.": "Kamida bitta chat yoki guruhni tanlang.",
+  "Этот супервайзер не числится в выбранном регионе.": "Bu supervayzer tanlangan hududda emas.",
+  "Чат принадлежит другому аккаунту Telegram.": "Chat boshqa Telegram akkauntiga tegishli.",
+  "Автоотправка удалена.": "Avtoyuborish o'chirilgan.",
+  "В автоотправке нет чатов.": "Avtoyuborishda chatlar yo'q.",
+  "Этот отчёт по автоотправке уже отправляется — дождитесь результата в журнале.": "Bu avtoyuborish hisoboti allaqachon yuborilmoqda — natijani jurnalda kuting.",
+  "«{report}» по этой автоотправке сегодня уже отправлен ({time}). Отправить ещё раз?": "«{report}» bu avtoyuborish bo'yicha bugun allaqachon yuborilgan ({time}). Yana yuborilsinmi?",
+};
+
+export default telegramReports;

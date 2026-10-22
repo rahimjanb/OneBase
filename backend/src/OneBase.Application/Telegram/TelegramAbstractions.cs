@@ -53,7 +53,8 @@ public sealed record TelegramResolvedUser(long UserId, string Username, string D
 /// <summary>Состояние клиента аккаунта в памяти: подключён ли и когда Telegram в последний раз присылал события (приём сообщений жив).</summary>
 public sealed record TelegramLiveStatus(bool Online, long Events, DateTimeOffset? LastEventAt, long Messages, DateTimeOffset? LastMessageAt);
 
-public sealed record TelegramFile(string FileName, string ContentType, byte[] Content);
+/// <summary>Файл сообщения. Photo — картинкой в ленте (страницы автоотчёта; несколько — альбомом), а не документом.</summary>
+public sealed record TelegramFile(string FileName, string ContentType, byte[] Content, bool Photo = false);
 
 /// <summary>Исходящее сообщение: текст (Html — разметка Telegram HTML), файлы, ответ на сообщение.</summary>
 public sealed record TelegramOutgoing(string? Text, bool Html, IReadOnlyList<TelegramFile> Files, int? ReplyToMessageId = null);

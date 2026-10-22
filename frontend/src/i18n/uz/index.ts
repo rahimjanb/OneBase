@@ -16,6 +16,7 @@ import serverSales from "./serverSales";
 import serverSettings from "./serverSettings";
 import settings from "./settings";
 import tasks from "./tasks";
+import telegramReports from "./telegramReports";
 
 /**
  * Узбекский (латиница): ключ — русский текст интерфейса. Словари по разделам, чтобы их можно было вести независимо;
@@ -36,6 +37,7 @@ export const uz: Dict = {
   ...ai,
   ...dataManager,
   ...campaigns,
+  ...telegramReports,
   ...settings,
   ...sales,
   ...salesPages,

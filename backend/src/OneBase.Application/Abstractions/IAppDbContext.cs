@@ -125,5 +125,12 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Telegram.TelegramCampaignRecipient> TelegramCampaignRecipients { get; }
     DbSet<OneBase.Domain.Telegram.TelegramCampaignAttachment> TelegramCampaignAttachments { get; }
 
+    // Автоотчёты в Telegram: настройки, расписания, получатели, журнал отправок.
+    DbSet<OneBase.Domain.Telegram.TelegramReportSettings> TelegramReportSettings { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramReportSchedule> TelegramReportSchedules { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramReportSubscription> TelegramReportSubscriptions { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramReportSubscriptionChat> TelegramReportSubscriptionChats { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramReportDelivery> TelegramReportDeliveries { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, FlaskConical, KeyRound, Loader2, MessageSquare, Plus, ScrollText, Smartphone, Users } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Bot, CalendarClock, FlaskConical, KeyRound, Loader2, MessageSquare, Plus, ScrollText, Smartphone, Users } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Note, Section } from "@/components/sales/bits";
 import { useT } from "@/i18n/client";
@@ -71,6 +72,22 @@ export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
 
   return (
     <>
+      <Link
+        href="/settings/telegram/reports"
+        className="group mt-6 flex items-center gap-4 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-accent/40 sm:p-5"
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
+          <CalendarClock className="size-[18px]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold text-ink">{t("Автоматические отчёты")}</span>
+          <span className="block text-sm text-ink-2">
+            {t("План на день, план / факт и итоги дня картинками в чаты и группы — регион, супервайзер и его агенты, по расписанию, с журналом отправок.")}
+          </span>
+        </span>
+        <ArrowRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />
+      </Link>
+
       <Credentials data={data} onSaved={setData} />
 
       <Section
@@ -153,6 +170,7 @@ export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
             {tab === "users" && <TelegramUsers key={account.id} account={account} onCount={(n) => setCount("permissions", n)} />}
             {tab === "chats" && <TelegramChats key={account.id} account={account} onCount={(n) => setCount("chats", n)} />}
             {tab === "test" && <TelegramAgentTest key={account.id} account={account} />}
+            {tab === "journal" && <TelegramJournal key={account.id} account={account} />}
           </div>
         </section>
       )}
