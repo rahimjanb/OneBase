@@ -19,15 +19,16 @@ import { ThemeToggle } from "./ThemeToggle";
  */
 export function Topbar({ me }: { me: Me | null }) {
   return (
-    <div className="relative z-40 shrink-0 bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-text lg:bg-page lg:pt-0 lg:text-ink-2">
-      <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-1 px-4 sm:px-6">
+    <div data-topbar className="relative z-40 shrink-0 bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-text lg:bg-page lg:pt-0 lg:text-ink-2">
+      {/* На компьютере — одна строка: не помещающиеся кнопки разделов прокручиваются, а не уезжают отдельной строкой над меню. */}
+      <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-1 px-4 sm:px-6 lg:flex-nowrap lg:gap-3">
         <div className="flex h-14 items-center lg:hidden">
           <Logo />
         </div>
         <Suspense fallback={null}>
           <SectionNav permissions={me?.permissions ?? null} />
         </Suspense>
-        <div className="ml-auto flex h-14 items-center gap-1 lg:h-[72px]">
+        <div className="ml-auto flex h-14 shrink-0 items-center gap-1 lg:h-[72px]">
           <ThemeToggle />
           <LanguageToggle />
           {me && <NotificationBell />}
@@ -35,7 +36,8 @@ export function Topbar({ me }: { me: Me | null }) {
             <details className="relative ml-1">
               <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg p-1 text-left transition-colors hover:bg-white/10 lg:hover:bg-muted [&::-webkit-details-marker]:hidden">
                 <span className="grid size-9 place-items-center rounded-full bg-white/10 text-xs font-semibold text-white lg:bg-muted lg:text-ink-2">{initials(me)}</span>
-                <span className="hidden lg:block">
+                {/* Тесно (кнопки разделов продаж не помещаются вместе с именем, data-crowded ставит SectionNav) — только аватар. */}
+                <span data-user-name className="hidden lg:block [[data-crowded]_&]:hidden">
                   <span className="block max-w-[220px] truncate text-sm font-semibold text-ink">{me.name || me.login}</span>
                   <span className="block max-w-[220px] truncate text-xs text-ink-3">{me.roles[0] ?? me.position ?? me.login}</span>
                 </span>
