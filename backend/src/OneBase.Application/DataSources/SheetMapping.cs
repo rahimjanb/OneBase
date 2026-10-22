@@ -21,11 +21,17 @@ public static class MappingRoles
     public const string Dealer = "dealer";
     public const string Line = "line";
     public const string Amount = "amount";
+    public const string Date = "date";
+    public const string Kind = "kind";
+    public const string CategoryName = "category_name";
+    public const string Comment = "comment";
+    public const string Norm = "norm";
+    public const string Opening = "opening";
 
     public static IReadOnlyList<MappingTarget> For(DataSourceField field)
     {
         MappingTarget T(string role, string label, string description, bool required = false) =>
-            new($"{field.Key}.{role}", field.Key, field.Label, role, label, description, required, field.Kind == "pnl");
+            new($"{field.Key}.{role}", field.Key, field.Label, role, label, description, required, field.Kind is "pnl" or "ledger" or "terms");
         return field.Kind switch
         {
             "plan" =>
@@ -42,6 +48,27 @@ public static class MappingRoles
                 T(Region, "Регион", "регион OneBase, к которому относится значение", true),
                 T(Value, field.Key == DataSourceCatalog.Dealer ? "Дилер" : "СВР",
                     field.Key == DataSourceCatalog.Dealer ? "дилер региона (подпись строк первички и P&L)" : "супервайзер (СВР) региона", true),
+            ],
+            "ledger" =>
+            [
+                T(Date, "Дата", "дата операции (день)", true),
+                T(Dealer, "Контрагент", "дилер или клиент завода, к которому относится операция", true),
+                T(Amount, "Сумма", "сумма операции в сумах (приход минус расход; валюта — по курсу)", true),
+                T(Kind, field.Key == DataSourceCatalog.DealerPayments ? "Касса / банк" : "Статья",
+                    field.Key == DataSourceCatalog.DealerPayments ? "кошелёк: наличные («Нақд») или банк" : "статья расхода: «601-Дилер бонуслари», «606-…»"),
+                T(CategoryName, "Категория", "категория строки — по ней отбираются нужные (например, «101-…» — поступления от дилеров)"),
+                T(Comment, "Комментарий", "пояснение к операции"),
+            ],
+            "balance" =>
+            [
+                T(Dealer, "Контрагент", "дилер или клиент завода", true),
+                T(Amount, "Остаток", "долг контрагента на начало месяца (остаток на начало)", true),
+            ],
+            "terms" =>
+            [
+                T(Dealer, "Контрагент", "дилер или клиент завода", true),
+                T(Norm, "Срок оплаты, дней", "норма оплаты по договору; пусто — без срока"),
+                T(Opening, "Остаток долга", "долг контрагента на дату начала реестра"),
             ],
             _ =>
             [
@@ -398,7 +425,7 @@ public static partial class SheetMapping
             var setting = settings.FirstOrDefault(s => s.Field == field.Key);
             var month = Ref(MappingRoles.Month);
             var monthSource = month is not null ? "column" : setting?.MonthSource;
-            if (field.Kind != "profile" && monthSource is null)
+            if (field.Kind is "plan" or "pnl" && monthSource is null)
             {
                 errors.Add($"«{field.Label}»: не понятно, за какой месяц значения — сопоставьте столбец месяца или выберите месяц поля вручную.");
                 continue;
@@ -460,6 +487,50 @@ public static partial class SheetMapping
                     fields.Add(new DataSourceFieldBinding(field.Key, Profile: new ProfileFieldMapping(region, value), Replace: false, Headers: headers));
                     break;
                 }
+                case "ledger":
+                {
+                    var date = Ref(MappingRoles.Date);
+                    var dealer = Ref(MappingRoles.Dealer);
+                    var amount = Ref(MappingRoles.Amount);
+                    if (date is null || dealer is null || amount is null)
+                    {
+                        errors.Add($"«{field.Label}»: нужны столбцы даты, контрагента и суммы.");
+                        continue;
+                    }
+
+                    fields.Add(new DataSourceFieldBinding(field.Key, Replace: true, Headers: headers,
+                        Ledger: new LedgerFieldMapping(date, dealer, amount, Ref(MappingRoles.Kind), Ref(MappingRoles.CategoryName), null, Ref(MappingRoles.Comment))));
+                    break;
+                }
+                case "balance":
+                {
+                    var dealer = Ref(MappingRoles.Dealer);
+                    var amount = Ref(MappingRoles.Amount);
+                    if (dealer is null || amount is null)
+                    {
+                        errors.Add($"«{field.Label}»: нужны столбцы контрагента и остатка.");
+                        continue;
+                    }
+
+                    fields.Add(new DataSourceFieldBinding(field.Key, Replace: true, Headers: headers,
+                        Balance: new BalanceFieldMapping(dealer, amount, null, new DateOnly(request.Today.Year, request.Today.Month, 1))));
+                    break;
+                }
+                case "terms":
+                {
+                    var dealer = Ref(MappingRoles.Dealer);
+                    var norm = Ref(MappingRoles.Norm);
+                    var opening = Ref(MappingRoles.Opening);
+                    if (dealer is null || (norm is null && opening is null))
+                    {
+                        errors.Add($"«{field.Label}»: нужны столбцы контрагента и срока оплаты или остатка.");
+                        continue;
+                    }
+
+                    fields.Add(new DataSourceFieldBinding(field.Key, Replace: true, Headers: headers,
+                        Terms: new TermsFieldMapping(dealer, norm, opening, opening is null ? null : new DateOnly(request.Today.Year, 1, 1))));
+                    break;
+                }
                 default:
                 {
                     var dealer = Ref(MappingRoles.Dealer);
@@ -494,6 +565,11 @@ public static partial class SheetMapping
                 : !roles.Contains(MappingRoles.Value) && !roles.Contains(MappingRoles.CategoryValue) ? "столбца плана"
                 : !month ? "месяца" : null,
             "profile" => !roles.Contains(MappingRoles.Region) ? "столбца региона" : !roles.Contains(MappingRoles.Value) ? "столбца значения" : null,
+            "ledger" => !roles.Contains(MappingRoles.Date) || !roles.Contains(MappingRoles.Dealer) || !roles.Contains(MappingRoles.Amount)
+                ? "столбцов даты, контрагента и суммы" : null,
+            "balance" => !roles.Contains(MappingRoles.Dealer) || !roles.Contains(MappingRoles.Amount) ? "столбцов контрагента и остатка" : null,
+            "terms" => !roles.Contains(MappingRoles.Dealer) ? "столбца контрагента"
+                : !roles.Contains(MappingRoles.Norm) && !roles.Contains(MappingRoles.Opening) ? "столбца срока оплаты или остатка" : null,
             _ => !roles.Contains(MappingRoles.Dealer) || !roles.Contains(MappingRoles.Line) || !roles.Contains(MappingRoles.Amount) ? "столбцов контрагента, статьи и суммы"
                 : !month ? "месяца" : null,
         };
@@ -522,6 +598,8 @@ public static partial class SheetMapping
             {
                 f.Plan?.RegionColumn, f.Plan?.CategoryColumn, f.Plan?.ValueColumn, f.Plan?.MonthColumn, f.Plan?.YearColumn, f.Profile?.RegionColumn,
                 f.Profile?.ValueColumn, f.Pnl?.DealerColumn, f.Pnl?.LineColumn, f.Pnl?.ValueColumn, f.Pnl?.MonthColumn, f.Pnl?.YearColumn,
+                f.Ledger?.DateColumn, f.Ledger?.DealerColumn, f.Ledger?.AmountColumn, f.Ledger?.KindColumn, f.Ledger?.CategoryColumn,
+                f.Ledger?.CommentColumn, f.Terms?.DealerColumn, f.Terms?.NormColumn, f.Terms?.OpeningColumn, f.Balance?.DealerColumn, f.Balance?.AmountColumn,
             }
             .Concat(f.Plan?.ValueColumns?.Select(c => c.Column) ?? [])
             .Where(r => !string.IsNullOrWhiteSpace(r) && DataValues.ColumnIndex(r) is null)

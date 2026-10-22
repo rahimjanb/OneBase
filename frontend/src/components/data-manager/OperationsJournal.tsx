@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, Loader2, RefreshCw } from "lucide-react";
+import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { statusView, when, type ChangeSet, type ChangeSetRow, type SetStatus } from "@/lib/data-manager";
 import { ChangeSetCard } from "./ChangeSetCard";
@@ -26,6 +27,7 @@ const filters: { key: "all" | SetStatus; label: string }[] = [
 
 /** Журнал операций всех администраторов: кто, когда, что подготовил и применил; раскрытие — полный план с действиями. */
 export function OperationsJournal({ canChange, version, acting, onApply, onCancel, onRollback }: Props) {
+  const t = useT();
   const [rows, setRows] = useState<ChangeSetRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | SetStatus>("all");
@@ -57,14 +59,14 @@ export function OperationsJournal({ canChange, version, acting, onApply, onCance
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="flex-1 text-lg font-semibold text-ink">Журнал операций</h2>
+        <h2 className="flex-1 text-lg font-semibold text-ink">{t("Журнал операций")}</h2>
         <button type="button" onClick={() => void load()} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm text-ink-2 hover:bg-muted">
           <RefreshCw className="size-4" />
-          Обновить
+          {t("Обновить")}
         </button>
       </div>
       <p className="mt-1 text-sm text-ink-2">
-        Планы изменений всех администраторов: подготовленные AI, подтверждённые, отменённые и откаченные. Значения «было → стало» хранятся для каждой строки.
+        {t("Планы изменений всех администраторов: подготовленные AI, подтверждённые, отменённые и откаченные. Значения «было → стало» хранятся для каждой строки.")}
       </p>
       <div className="mt-4 flex flex-wrap gap-1.5">
         {filters.map((f) => (
@@ -74,7 +76,7 @@ export function OperationsJournal({ canChange, version, acting, onApply, onCance
             onClick={() => setFilter(f.key)}
             className={`rounded-full px-3 py-1 text-sm ${filter === f.key ? "bg-accent-soft font-medium text-accent-strong" : "text-ink-2 hover:bg-muted"}`}
           >
-            {f.label}
+            {t(f.label)}
           </button>
         ))}
       </div>
@@ -85,7 +87,7 @@ export function OperationsJournal({ canChange, version, acting, onApply, onCance
           <Loader2 className="size-5 animate-spin" />
         </div>
       )}
-      {rows !== null && visible.length === 0 && <p className="mt-8 text-center text-sm text-ink-3">Операций пока нет</p>}
+      {rows !== null && visible.length === 0 && <p className="mt-8 text-center text-sm text-ink-3">{t("Операций пока нет")}</p>}
 
       <div className="mt-4 space-y-2">
         {visible.map((r) => {
@@ -97,14 +99,14 @@ export function OperationsJournal({ canChange, version, acting, onApply, onCance
                 <ChevronDown className={`mt-0.5 size-4 shrink-0 text-ink-3 transition-transform ${isOpen ? "" : "-rotate-90"}`} />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-ink">{r.title}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.tone}`}>{status.label}</span>
+                    <span className="font-medium text-ink">{t(r.title)}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.tone}`}>{t(status.label)}</span>
                   </div>
                   <div className="mt-0.5 text-xs text-ink-3">
                     {when(r.createdAt)}
-                    {r.userName ? ` · подготовил ${r.userName}` : ""}
-                    {r.appliedAt ? ` · применил ${r.appliedBy ?? "—"} ${when(r.appliedAt)}` : ""}
-                    {r.rolledBackAt ? ` · откачен ${when(r.rolledBackAt)}` : ""}
+                    {r.userName ? ` · ${t("подготовил {name}", { name: r.userName })}` : ""}
+                    {r.appliedAt ? ` · ${t("применил {name} {date}", { name: r.appliedBy ?? "—", date: when(r.appliedAt) })}` : ""}
+                    {r.rolledBackAt ? ` · ${t("откачен {date}", { date: when(r.rolledBackAt) })}` : ""}
                   </div>
                 </div>
                 {r.counts && (

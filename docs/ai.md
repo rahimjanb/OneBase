@@ -50,7 +50,22 @@
 
 ## Инструменты
 
-`get_sales`, `get_sales_by_branch`, `get_sales_by_employee`, `get_problem_agents`, `get_products`, `find_products`, `get_customers`, `get_visits`, `get_sales_kpi`, `get_sales_trend`, `get_inventory`, `get_primary_shipments`, `get_payments`, `get_suppliers`, `search_knowledge`.
+`get_sales`, `get_sales_by_branch`, `get_sales_by_employee`, `get_problem_agents`, `get_products`, `find_products`, `get_customers`, `get_visits`, `get_sales_kpi`, `get_sales_trend`, `get_sku_sales`, `get_export_sales`, `get_dealer_pnl`, `get_inventory`, `get_outstock`, `get_primary_shipments`, `get_payments`, `get_suppliers`, `get_field_team`, `get_field_tasks`, `get_field_routes`, `get_field_recommendations`, `get_department_tasks`, `search_knowledge`.
+
+| Инструмент | Источник | Право | Что отдаёт |
+|---|---|---|---|
+| `get_sku_sales` | `sales.sku` | `sales.read` | Продажи по SKU за любой период: итоги, ABC и концентрация, месяцы, категории, регионы, топ SKU с динамикой, новые и падающие (−10% и больше). |
+| `get_export_sales` | `sales.export` | `sales.read` | Экспорт по странам (кг, сумма, точки, к прошлому месяцу, с начала года, прогноз) и филиал «Завод» (экспорт и опт) по покупателям, агентам, товарам. Плана экспорта нет. |
+| `get_dealer_pnl` | `finance.pnl` | `finance.read` + `sales.read` | P&L дилеров (прибыль завода на дилере): продажи, себестоимость, валовая прибыль, маржа, расходы, EBIT, ROS, EAT по РМ и дилерам; месяц не загружен — `Loaded=false` и доступные месяцы. |
+| `get_field_tasks` | `field.sales` | `field.use` | Задачи полевой команды: сводка, по исполнителям, причины постановки (у задач AI — причина рекомендации), итоги и переносы. |
+| `get_field_routes` | `field.sales` | `field.use` | Маршруты: по агенту — точки по порядку, посещена/пропущена с причиной, визиты вне маршрута, заказы Linko; по команде — охват, пропуски, частые причины. |
+| `get_field_recommendations` | `field.sales` | `field.use` | Рекомендации AI-планирования: по статусам, видам и агентам; кто и когда решил. Агенту — отказ, как на странице. |
+| `get_department_tasks` | `work.tasks` | — (видимость отделов решает `WorkTaskService`) | Задачи отделов: открыто, просрочено, выполнено за период; список с исполнителем, сроком, итогом или причиной отмены. Чужой отдел — отказ. |
+
+Инструменты Sales Base видят только область пользователя: агент — себя, супервайзер — свою команду, РМ — всё или свои филиалы.
+Источники выдаются сотрудникам в `AgentDefaults` (при запуске `AiSeeder` дописывает недостающие): `sales.sku` — sales, marketing,
+production, supply; `sales.export` — sales, finance, marketing; `finance.pnl` — finance, sales; `field.sales` — sales, hr;
+`work.tasks` — все отделы.
 
 `find_products` ищет категорию, тип Linko или товар по части названия, бренду или артикулу — кириллицей или латиницей («помадка» находит и тип «Помадка», и товары «POMADKA») — и отдаёт продажи найденного: по категории — итоги и SKU, по товару — факт, точки и регионы.
 

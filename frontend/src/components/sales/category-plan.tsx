@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/i18n/client";
+import type { T } from "@/i18n/core";
 import { Section } from "./bits";
 import { CategoryPlanRows, categoryPlanHint } from "./blocks";
 import { kg, pct } from "@/lib/sales/format";
@@ -20,13 +22,15 @@ function scale(max: number): number[] {
 }
 
 /** Сокращённые килограммы для оси: «12 т», «850 кг». */
-const axis = (v: number) => (v >= 1000 ? `${(v / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} т` : `${v.toLocaleString("ru-RU")} кг`);
+const axis = (v: number, t: T) =>
+  v >= 1000 ? `${(v / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} ${t("т")}` : `${v.toLocaleString("ru-RU")} ${t("кг")}`;
 
 /**
  * Столбцы «план / факт» по категориям: план — светлый столбец, факт — акцентный; над парой — выполнение (цвет — уровень с сервера).
  * Категории без плана — только факт, приглушённо. Значения и уровни считает сервер, здесь только рисунок.
  */
 function PlanFactBars({ rows }: { rows: CategoryPlanFact[] }) {
+  const t = useT();
   const [hover, setHover] = useState<number | null>(null);
   const ticks = scale(Math.max(0, ...rows.flatMap((r) => [r.planKg ?? 0, r.factKg])));
   const top = ticks[ticks.length - 1] || 1;
@@ -37,19 +41,19 @@ function PlanFactBars({ rows }: { rows: CategoryPlanFact[] }) {
       <div className="mb-3 flex flex-wrap items-center gap-4 text-xs text-ink-2">
         <span className="inline-flex items-center gap-1.5">
           <span className="size-2.5 rounded-sm border border-line bg-muted" />
-          План
+          {t("План")}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="size-2.5 rounded-sm bg-accent" />
-          Факт
+          {t("Факт")}
         </span>
       </div>
       {/* Поле графика: сверху 1,5rem под подписи выполнения, снизу 2,5rem под названия; столбцы и сетка — в одной высоте. */}
       <div className="relative h-72" onMouseLeave={() => setHover(null)}>
         <div className="pointer-events-none absolute inset-x-0 bottom-10 top-6">
-          {ticks.map((t) => (
-            <div key={t} className="absolute inset-x-0 border-t border-line" style={{ bottom: `${(t / top) * 100}%` }}>
-              <span className="absolute -top-2 left-0 w-10 text-right text-[10px] tabular-nums text-ink-3">{axis(t)}</span>
+          {ticks.map((tick) => (
+            <div key={tick} className="absolute inset-x-0 border-t border-line" style={{ bottom: `${(tick / top) * 100}%` }}>
+              <span className="absolute -top-2 left-0 w-10 text-right text-[10px] tabular-nums text-ink-3">{axis(tick, t)}</span>
             </div>
           ))}
         </div>
@@ -62,7 +66,12 @@ function PlanFactBars({ rows }: { rows: CategoryPlanFact[] }) {
                 key={`${r.categoryId ?? r.name}`}
                 className={`flex min-w-0 flex-1 flex-col ${planned ? "" : "opacity-55"}`}
                 onMouseEnter={() => setHover(i)}
-                title={`${r.name}: план ${planned ? `${kg(r.planKg)} кг` : "нет"} · факт ${kg(r.factKg)} кг${planned ? ` · выполнение ${pct(r.execution)}` : ""}`}
+                title={t("{name}: план {plan} · факт {fact} кг{exec}", {
+                  name: t(r.name),
+                  plan: planned ? t("{kg} кг", { kg: kg(r.planKg) }) : t("нет"),
+                  fact: kg(r.factKg),
+                  exec: planned ? t(" · выполнение {pct}", { pct: pct(r.execution) }) : "",
+                })}
               >
                 <div className={`relative mt-6 flex flex-1 items-end justify-center gap-1 rounded-lg ${hover === i ? "bg-muted/60" : ""}`}>
                   {planned && (
@@ -79,7 +88,7 @@ function PlanFactBars({ rows }: { rows: CategoryPlanFact[] }) {
                     style={{ height: h(r.factKg), backgroundImage: "linear-gradient(to top, transparent, rgb(255 255 255 / 0.18))" }}
                   />
                 </div>
-                <div className={`mt-1.5 line-clamp-2 h-8.5 w-full text-center text-[11px] leading-tight ${hover === i ? "text-ink" : "text-ink-2"}`}>{r.name}</div>
+                <div className={`mt-1.5 line-clamp-2 h-8.5 w-full text-center text-[11px] leading-tight ${hover === i ? "text-ink" : "text-ink-2"}`}>{t(r.name)}</div>
               </div>
             );
           })}
@@ -101,18 +110,19 @@ export function CategoryPlanCard({
   source: PlanSource;
   plan: PlanKind;
 }) {
+  const t = useT();
   const [view, setView] = useState<View>("chart");
   if (rows.length === 0) return null;
   return (
     <Section
-      title="План и факт по категориям"
-      hint={categoryPlanHint(source)}
+      title={t("План и факт по категориям")}
+      hint={categoryPlanHint(source, t)}
       actions={
-        <div className="flex overflow-hidden rounded-lg border border-line text-xs" role="group" aria-label="Вид">
+        <div className="flex overflow-hidden rounded-lg border border-line text-xs" role="group" aria-label={t("Вид")}>
           {(
             [
-              ["chart", "График"],
-              ["table", "Таблица"],
+              ["chart", t("График")],
+              ["table", t("Таблица")],
             ] as [View, string][]
           ).map(([key, label]) => (
             <button
@@ -133,10 +143,10 @@ export function CategoryPlanCard({
           <PlanFactBars rows={rows} />
           {total && (
             <p className="mt-3 text-xs text-ink-2">
-              Итого: план <b className="font-semibold text-ink">{kg(total.planKg)} кг</b>, факт <b className="font-semibold text-ink">{kg(total.factKg)} кг</b>,
-              выполнение{" "}
+              {t("Итого: план")} <b className="font-semibold text-ink">{t("{kg} кг", { kg: kg(total.planKg) })}</b>, {t("факт")}{" "}
+              <b className="font-semibold text-ink">{t("{kg} кг", { kg: kg(total.factKg) })}</b>, {t("выполнение")}{" "}
               <b className={`font-semibold ${total.executionLevel ? levelText[total.executionLevel] : "text-ink"}`}>{pct(total.execution)}</b>
-              {total.forecastExecution != null && <>, прогноз к плану {pct(total.forecastExecution)}</>}. Подробности — в «Таблице».
+              {total.forecastExecution != null && <>, {t("прогноз к плану {pct}", { pct: pct(total.forecastExecution) })}</>}. {t("Подробности — в «Таблице».")}
             </p>
           )}
         </>

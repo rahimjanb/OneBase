@@ -5,6 +5,7 @@ import { DateSwitch, ParamSelect, SearchBox } from "@/components/field/DateSwitc
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { FieldTeamTasks, type TeamMember } from "@/components/tasks/FieldTeamTasks";
 import { WorkTaskBoard } from "@/components/tasks/WorkTaskBoard";
+import { getT } from "@/i18n/server";
 import { apiGet, apiTry } from "@/lib/server-api";
 import type { FieldRouteSummary, FieldTask } from "@/lib/field/types";
 import { routeSourceLabel } from "@/lib/field/labels";
@@ -31,7 +32,8 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
   const { code } = await params;
   const departments = await apiTry<DepartmentTasks[]>("/api/work/departments");
   const name = departments?.find((d) => d.code === code)?.name;
-  return { title: name ? `${name} · Задачи · OneBase` : "Задачи · OneBase" };
+  const t = await getT();
+  return { title: name ? t("{name} · Задачи · OneBase", { name }) : t("Задачи · OneBase") };
 }
 
 /** Отдел в разделе «Задачи»: задачи отдела, а в «Продажах» — ещё задачи и маршруты полевой команды (Sales Base). */
@@ -43,15 +45,16 @@ export default async function DepartmentTasksPage({ params, searchParams }: { pa
   const department = departments.find((d) => d.code === code);
   if (!department) notFound();
   if (!department.canOpen) redirect(`/no-access?from=${encodeURIComponent(returnTo)}`);
+  const t = await getT();
 
   const tabs = [
     ...(department.hasField
       ? [
-          { key: "team", label: "Агенты и супервайзеры" },
-          { key: "routes", label: "Маршруты" },
+          { key: "team", label: t("Агенты и супервайзеры") },
+          { key: "routes", label: t("Маршруты") },
         ]
       : []),
-    ...(department.hasTasks ? [{ key: "office", label: department.hasField ? "Задачи отдела" : "Задачи" }] : []),
+    ...(department.hasTasks ? [{ key: "office", label: department.hasField ? t("Задачи отдела") : t("Задачи") }] : []),
   ];
   const requested = one(sp, "tab");
   const tab = tabs.find((t) => t.key === requested)?.key ?? tabs[0]?.key;
@@ -62,14 +65,14 @@ export default async function DepartmentTasksPage({ params, searchParams }: { pa
     <>
       <PageHeader
         title={department.name}
-        subtitle={department.hasField ? "Задачи и маршруты полевой команды, задачи отдела" : "Задачи отдела"}
+        subtitle={department.hasField ? t("Задачи и маршруты полевой команды, задачи отдела") : t("Задачи отдела")}
         back="/tasks"
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: "Задачи", href: "/tasks" }, { label: department.name }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Задачи"), href: "/tasks" }, { label: department.name }]}
       />
       <PageBody>
         <div className="space-y-4">
           {tabs.length > 1 && (
-            <nav aria-label="Разделы отдела" className="flex gap-1 overflow-x-auto border-b border-line">
+            <nav aria-label={t("Разделы отдела")} className="flex gap-1 overflow-x-auto border-b border-line">
               {tabs.map((t) => (
                 <Link
                   key={t.key}
@@ -108,24 +111,25 @@ function StatusTabs({ current, items }: { current: string; items: { key: string;
   );
 }
 
-function Pager({ page, pageSize, total, href }: { page: number; pageSize: number; total: number; href: (p: number) => string }) {
+async function Pager({ page, pageSize, total, href }: { page: number; pageSize: number; total: number; href: (p: number) => string }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (pages <= 1) return null;
+  const t = await getT();
   return (
     <div className="flex items-center justify-center gap-3 pt-2 text-sm text-ink-2">
       {page > 1 ? (
         <Link href={href(page - 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-line bg-surface px-3 hover:bg-muted">
-          <ChevronLeft className="size-4" /> Назад
+          <ChevronLeft className="size-4" /> {t("Назад")}
         </Link>
       ) : (
         <span className="w-[84px]" />
       )}
       <span>
-        {page} из {pages}
+        {t("{page} из {pages}", { page, pages })}
       </span>
       {page < pages ? (
         <Link href={href(page + 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-line bg-surface px-3 hover:bg-muted">
-          Дальше <ChevronRight className="size-4" />
+          {t("Дальше")} <ChevronRight className="size-4" />
         </Link>
       ) : (
         <span className="w-[84px]" />
@@ -144,10 +148,11 @@ async function TeamTab({ sp, page, today, returnTo }: { sp: SearchParams; page: 
     apiTry<PageResult<FieldTask>>(`/api/field/tasks${qs({ ...filter, assignedToId: assignee, search, page, pageSize: 30 })}`),
     apiTry<TeamMember[]>("/api/field/agents"),
   ]);
+  const t = await getT();
   if (!tasks) {
     return (
       <div className="rounded-xl border border-line bg-surface p-5 text-sm text-ink-2">
-        Нет доступа к задачам Sales Base. Их видят администратор, директор, РМ и супервайзеры.
+        {t("Нет доступа к задачам Sales Base. Их видят администратор, директор, РМ и супервайзеры.")}
       </div>
     );
   }
@@ -158,24 +163,24 @@ async function TeamTab({ sp, page, today, returnTo }: { sp: SearchParams; page: 
       <StatusTabs
         current={view}
         items={[
-          { key: "open", label: "Открытые", href: link({ view: "open", page: undefined }) },
-          { key: "overdue", label: "Просроченные", href: link({ view: "overdue", page: undefined }) },
-          { key: "closed", label: "Закрытые", href: link({ view: "closed", page: undefined }) },
-          { key: "all", label: "Все", href: link({ view: "all", page: undefined }) },
+          { key: "open", label: t("Открытые"), href: link({ view: "open", page: undefined }) },
+          { key: "overdue", label: t("Просроченные"), href: link({ view: "overdue", page: undefined }) },
+          { key: "closed", label: t("Закрытые"), href: link({ view: "closed", page: undefined }) },
+          { key: "all", label: t("Все"), href: link({ view: "all", page: undefined }) },
         ]}
       />
       <div className="flex flex-wrap gap-2">
-        <SearchBox value={search ?? ""} placeholder="Поиск по задачам" />
+        <SearchBox value={search ?? ""} placeholder={t("Поиск по задачам")} />
         {(members?.length ?? 0) > 0 && (
           <ParamSelect
             param="assignee"
             value={assignee ?? ""}
-            label="Исполнитель"
-            options={[{ value: "", label: "Все исполнители" }, ...(members ?? []).map((m) => ({ value: m.id, label: `${m.name}${m.role === "Supervisor" ? " · супервайзер" : m.teamName ? ` · ${m.teamName}` : ""}` }))]}
+            label={t("Исполнитель")}
+            options={[{ value: "", label: t("Все исполнители") }, ...(members ?? []).map((m) => ({ value: m.id, label: `${m.name}${m.role === "Supervisor" ? ` · ${t("супервайзер")}` : m.teamName ? ` · ${m.teamName}` : ""}` }))]}
           />
         )}
       </div>
-      <p className="text-xs text-ink-3">Найдено: {tasks.total}</p>
+      <p className="text-xs text-ink-3">{t("Найдено: {n}", { n: tasks.total })}</p>
       <FieldTeamTasks items={tasks.items} members={members ?? []} today={today} canCreate={(members?.length ?? 0) > 0} />
       <Pager page={tasks.page} pageSize={tasks.pageSize} total={tasks.total} href={(p) => link({ page: p })} />
     </div>
@@ -186,26 +191,27 @@ async function TeamTab({ sp, page, today, returnTo }: { sp: SearchParams; page: 
 async function RoutesTab({ sp, today }: { sp: SearchParams; today: string }) {
   const date = one(sp, "date") ?? today;
   const routes = await apiTry<FieldRouteSummary[]>(`/api/field/routes${qs({ date })}`);
+  const t = await getT();
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <DateSwitch value={date} today={today} />
       </div>
       {!routes ? (
-        <div className="rounded-xl border border-line bg-surface p-5 text-sm text-ink-2">Нет доступа к маршрутам Sales Base.</div>
+        <div className="rounded-xl border border-line bg-surface p-5 text-sm text-ink-2">{t("Нет доступа к маршрутам Sales Base.")}</div>
       ) : routes.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line bg-surface/60 px-6 py-10 text-center text-sm text-ink-3">На этот день маршрутов нет</div>
+        <div className="rounded-xl border border-dashed border-line bg-surface/60 px-6 py-10 text-center text-sm text-ink-3">{t("На этот день маршрутов нет")}</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs text-ink-3">
-                <th className="px-4 py-2.5 font-medium">Агент</th>
-                <th className="px-2 py-2.5 font-medium">Команда</th>
-                <th className="px-2 py-2.5 text-right font-medium">Посещено</th>
-                <th className="px-2 py-2.5 text-right font-medium">Пропущено</th>
-                <th className="px-2 py-2.5 text-right font-medium">Км</th>
-                <th className="px-2 py-2.5 font-medium">Источник</th>
+                <th className="px-4 py-2.5 font-medium">{t("Агент")}</th>
+                <th className="px-2 py-2.5 font-medium">{t("Команда")}</th>
+                <th className="px-2 py-2.5 text-right font-medium">{t("Посещено")}</th>
+                <th className="px-2 py-2.5 text-right font-medium">{t("Пропущено")}</th>
+                <th className="px-2 py-2.5 text-right font-medium">{t("Км")}</th>
+                <th className="px-2 py-2.5 font-medium">{t("Источник")}</th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
@@ -224,10 +230,10 @@ async function RoutesTab({ sp, today }: { sp: SearchParams; today: string }) {
                     </td>
                     <td className={`px-2 py-2.5 text-right tabular-nums ${r.skipped > 0 ? "text-bad" : "text-ink-3"}`}>{r.skipped}</td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-ink-2">{r.distanceKm.toLocaleString("ru-RU")}</td>
-                    <td className="px-2 py-2.5 text-ink-2">{routeSourceLabel[r.source]}</td>
+                    <td className="px-2 py-2.5 text-ink-2">{t(routeSourceLabel[r.source])}</td>
                     <td className="px-4 py-2.5 text-right">
                       <Link href={`/field/routes/${r.id}`} className="inline-flex items-center gap-1 text-accent-strong hover:underline">
-                        Открыть <ExternalLink className="size-3.5" />
+                        {t("Открыть")} <ExternalLink className="size-3.5" />
                       </Link>
                     </td>
                   </tr>
@@ -252,19 +258,20 @@ async function OfficeTab({ code, sp, page, today, returnTo }: { code: string; sp
     apiGet<WorkAssignee[]>(`/api/work/assignees${qs({ department: code })}`, returnTo),
   ]);
   const link = (p: Record<string, string | number | undefined>) => `${returnTo}${qs({ tab: "office", view, search, ...p })}`;
+  const t = await getT();
   return (
     <div className="space-y-3">
       <StatusTabs
         current={view}
         items={[
-          { key: "open", label: "Открытые", href: link({ view: "open", page: undefined }) },
-          { key: "mine", label: "Мне", href: link({ view: "mine", page: undefined }) },
-          { key: "created", label: "Поставил я", href: link({ view: "created", page: undefined }) },
-          { key: "overdue", label: "Просроченные", href: link({ view: "overdue", page: undefined }) },
-          { key: "closed", label: "Закрытые", href: link({ view: "closed", page: undefined }) },
+          { key: "open", label: t("Открытые"), href: link({ view: "open", page: undefined }) },
+          { key: "mine", label: t("Мне"), href: link({ view: "mine", page: undefined }) },
+          { key: "created", label: t("Поставил я"), href: link({ view: "created", page: undefined }) },
+          { key: "overdue", label: t("Просроченные"), href: link({ view: "overdue", page: undefined }) },
+          { key: "closed", label: t("Закрытые"), href: link({ view: "closed", page: undefined }) },
         ]}
       />
-      <SearchBox value={search ?? ""} placeholder="Поиск по задачам" />
+      <SearchBox value={search ?? ""} placeholder={t("Поиск по задачам")} />
       <WorkTaskBoard department={code} items={tasks.items} assignees={assignees} today={today} />
       <Pager page={tasks.page} pageSize={tasks.pageSize} total={tasks.total} href={(p) => link({ page: p })} />
     </div>

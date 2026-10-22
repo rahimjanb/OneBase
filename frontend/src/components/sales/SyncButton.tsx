@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { useT } from "@/i18n/client";
 import { progressShort, progressText } from "@/lib/integrations";
 import { CancelSyncButton } from "./CancelSyncButton";
 import { dateTime } from "@/lib/sales/format";
@@ -17,23 +18,24 @@ const RUNNING_POLL_MS = 3_000;
  * в шапке страницы (SalesFrame): это последний полный день, а не момент загрузки.
  */
 function DataChip({ status }: { status: SyncStatus }) {
+  const t = useT();
   if (!status.configured) {
     return (
       <Link href="/settings/integrations/sales/linko" className="rounded-full bg-warn-soft px-3 py-1 text-xs font-medium text-warn hover:underline">
-        Linko не настроен — подключить
+        {t("Linko не настроен — подключить")}
       </Link>
     );
   }
   if (status.hasErrors) {
     return (
-      <span className="rounded-full bg-warn-soft px-3 py-1 text-xs font-medium text-warn" title="Последняя синхронизация с Linko завершилась с ошибкой — подробности в «Настройках»">
-        Синхронизация с ошибкой · загружено {dateTime(status.dataAsOf)}
+      <span className="rounded-full bg-warn-soft px-3 py-1 text-xs font-medium text-warn" title={t("Последняя синхронизация с Linko завершилась с ошибкой — подробности в «Настройках»")}>
+        {t("Синхронизация с ошибкой · загружено {date}", { date: dateTime(status.dataAsOf) })}
       </span>
     );
   }
   return (
-    <span className="text-xs tabular-nums text-ink-3" title="Последняя успешная загрузка данных из Linko">
-      загружено из Linko {dateTime(status.dataAsOf)}
+    <span className="text-xs tabular-nums text-ink-3" title={t("Последняя успешная загрузка данных из Linko")}>
+      {t("загружено из Linko {date}", { date: dateTime(status.dataAsOf) })}
     </span>
   );
 }
@@ -43,6 +45,7 @@ function DataChip({ status }: { status: SyncStatus }) {
  * когда фоновая синхронизация принесла новые данные, страница перечитывается сама, без перезагрузки.
  */
 export function SyncControls({ initial }: { initial: SyncStatus }) {
+  const t = useT();
   const router = useRouter();
   const [status, setStatus] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -67,10 +70,13 @@ export function SyncControls({ initial }: { initial: SyncStatus }) {
   const start = async () => {
     setError(null);
     const response = await fetch("/bff/api/sales/sync", { method: "POST" });
-    if (response.status === 403) return setError("Нет прав на обновление");
-    if (!response.ok && response.status !== 409) return setError("Не удалось запустить обновление");
+    if (response.status === 403) return setError(t("Нет прав на обновление"));
+    if (!response.ok && response.status !== 409) return setError(t("Не удалось запустить обновление"));
     setStatus((s) => ({ ...s, isRunning: true }));
   };
+
+  // Шаг синхронизации («Справочники», «История») приходит с сервера по-русски — переводится по словарю.
+  const progress = status.progress && { ...status.progress, phase: t(status.progress.phase) };
 
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
@@ -78,8 +84,8 @@ export function SyncControls({ initial }: { initial: SyncStatus }) {
       {status.configured && (
         <>
           {status.isRunning && (
-            <span className="max-w-64 truncate text-xs tabular-nums text-ink-2" title={progressText(status.progress)}>
-              {progressShort(status.progress)}
+            <span className="max-w-64 truncate text-xs tabular-nums text-ink-2" title={progressText(progress, t)}>
+              {progressShort(status.progress, t)}
             </span>
           )}
           {error && <span className="text-xs text-bad">{error}</span>}
@@ -87,11 +93,11 @@ export function SyncControls({ initial }: { initial: SyncStatus }) {
             type="button"
             onClick={start}
             disabled={status.isRunning}
-            title="Загрузить свежие данные из Linko"
+            title={t("Загрузить свежие данные из Linko")}
             className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-muted disabled:opacity-60 max-lg:h-10 max-lg:text-sm"
           >
             <RefreshCw className={`size-3.5 ${status.isRunning ? "animate-spin" : ""}`} />
-            {status.isRunning ? "Обновляется" : "Обновить"}
+            {status.isRunning ? t("Обновляется") : t("Обновить")}
           </button>
           {status.isRunning && (
             <CancelSyncButton

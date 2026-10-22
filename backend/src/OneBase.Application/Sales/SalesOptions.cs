@@ -434,6 +434,9 @@ public sealed class SalesOptions
     /// </summary>
     public string StockPriceList { get; set; } = "Дилерга кириш нарх";
 
+    /// <summary>Кто передаёт товар в акте приёма-передачи автозаказа (как в бланке Linko: «Начальник отдела продажи передает …»).</summary>
+    public string TransferActSender { get; set; } = "Ritm Admin";
+
     public bool IsFactoryStock(string? stockName) =>
         stockName is { } name && FactoryStocks.Any(s => string.Equals(s.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
 
@@ -516,6 +519,15 @@ public sealed class SalesSyncOptions
 
     /// <summary>Сколько месяцев истории загружать при первой синхронизации.</summary>
     public int BackfillMonths { get; set; } = 12;
+
+    /// <summary>
+    /// Ночная сверка с Linko — после этого часа по Ташкенту, раз в сутки: справочники и остатки целиком (пропавшие в Linko строки
+    /// остатков удаляются), документы текущего и прошлого месяца заново. -1 — выключена.
+    /// </summary>
+    public int ReconcileHour { get; set; } = 3;
+
+    /// <summary>Через сколько минут без обновления ключевых данных Linko уведомлять администраторов интеграций (не меньше трёх интервалов).</summary>
+    public int StaleAlertMinutes { get; set; } = 120;
 }
 
 /// <summary>Пороги флагов «Проблемных агентов». Доли — от 0 до 1.</summary>

@@ -1,8 +1,10 @@
 import { Suspense } from "react";
 import { ChevronDown } from "lucide-react";
 import { LinkTelegramButton } from "@/components/telegram/LinkTelegramButton";
+import { Tr } from "@/i18n/client";
 import { initials, type Me } from "@/lib/users";
 import { LogoutLink } from "./AppBridge";
+import { LanguageToggle } from "./LanguageToggle";
 import { NotificationBell } from "./NotificationBell";
 import { SectionNav } from "./SectionNav";
 import { Logo } from "./Sidebar";
@@ -27,6 +29,7 @@ export function Topbar({ me }: { me: Me | null }) {
         </Suspense>
         <div className="ml-auto flex h-14 items-center gap-1 lg:h-[72px]">
           <ThemeToggle />
+          <LanguageToggle />
           {me && <NotificationBell />}
           {me && (
             <details className="relative ml-1">
@@ -46,7 +49,7 @@ export function Topbar({ me }: { me: Me | null }) {
                 <LinkTelegramButton />
                 {/* Обычная ссылка: /logout при загрузке удаляет сессию, заранее его загружать нельзя. */}
                 <LogoutLink href="/logout" className="block rounded-md px-2.5 py-2 text-sm text-ink hover:bg-muted">
-                  Выйти
+                  <Tr>Выйти</Tr>
                 </LogoutLink>
               </div>
             </details>

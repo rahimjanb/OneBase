@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useT } from "@/i18n/client";
 import { Section } from "./bits";
 import { DataTable, NameCell, type Column } from "./DataTable";
 import { kg, money, num, pct } from "@/lib/sales/format";
@@ -10,9 +11,10 @@ import type { OutstockMatrix, OutstockMatrixRow, OutstockPair, OutstockProduct, 
 
 /** Зелёная метка ТОП-товара. */
 export function TopChip({ title = "ТОП-товар" }: { title?: string }) {
+  const t = useT();
   return (
-    <span title={title} className="inline-block shrink-0 rounded border border-ok/40 bg-ok-soft px-1 py-px text-[10px] font-semibold uppercase leading-4 text-ok">
-      ТОП
+    <span title={t(title)} className="inline-block shrink-0 rounded border border-ok/40 bg-ok-soft px-1 py-px text-[10px] font-semibold uppercase leading-4 text-ok">
+      {t("ТОП")}
     </span>
   );
 }
@@ -29,10 +31,11 @@ const dayLabel = (from: string, i: number) => {
 
 /** Полоса дней: зелёная клетка — товар утром был, красная — нет. */
 function DaysStrip({ days, from }: { days: string; from: string }) {
+  const t = useT();
   return (
-    <span className="inline-flex gap-px" aria-label={`${days.split("0").length - 1} дней в нуле из ${days.length}`}>
+    <span className="inline-flex gap-px" aria-label={t("{zero} дней в нуле из {days}", { zero: days.split("0").length - 1, days: days.length })}>
       {Array.from(days).map((d, i) => (
-        <span key={i} title={`${dayLabel(from, i)}: ${d === "1" ? "товар был" : "нет товара"}`} className={`h-3.5 w-1.5 rounded-sm ${d === "1" ? "bg-ok/60" : "bg-bad"}`} />
+        <span key={i} title={`${dayLabel(from, i)}: ${d === "1" ? t("товар был") : t("нет товара")}`} className={`h-3.5 w-1.5 rounded-sm ${d === "1" ? "bg-ok/60" : "bg-bad"}`} />
       ))}
     </span>
   );
@@ -40,11 +43,12 @@ function DaysStrip({ days, from }: { days: string; from: string }) {
 
 /** Чья потеря по дням в нуле: недовоз (на заводе товар был), завод (на заводе тоже ноль), нет данных по складу завода. */
 function Whose({ p }: { p: OutstockPair }) {
+  const t = useT();
   if (p.zeroDays === 0) return <span className="text-ink-3">—</span>;
   const parts = [
-    p.dealerDays > 0 ? <span key="d" className="text-warn">недовоз {num(p.dealerDays)}</span> : null,
-    p.factoryDays > 0 ? <span key="f" className="text-bad">завод {num(p.factoryDays)}</span> : null,
-    p.unknownDays > 0 ? <span key="u" className="text-ink-3">нет данных {num(p.unknownDays)}</span> : null,
+    p.dealerDays > 0 ? <span key="d" className="text-warn">{t("недовоз {n}", { n: num(p.dealerDays) })}</span> : null,
+    p.factoryDays > 0 ? <span key="f" className="text-bad">{t("завод {n}", { n: num(p.factoryDays) })}</span> : null,
+    p.unknownDays > 0 ? <span key="u" className="text-ink-3">{t("нет данных {n}", { n: num(p.unknownDays) })}</span> : null,
   ].filter(Boolean);
   return (
     <span className="whitespace-nowrap text-xs">
@@ -90,50 +94,52 @@ export function OutstockPairsTable({
   limit?: number;
   showRegion?: boolean;
 }) {
+  const t = useT();
   const columns: Column<OutstockPair>[] = [
     {
       key: "product",
-      label: "Товар",
+      label: t("Товар"),
       value: (r) => r.product,
-      render: (r) => <ProductName name={r.product} top={r.top} sub={[showRegion ? r.region : null, r.code ? `код ${r.code}` : null].filter(Boolean).join(" · ")} />,
+      render: (r) => <ProductName name={r.product} top={r.top} sub={[showRegion ? r.region : null, r.code ? t("код {code}", { code: r.code }) : null].filter(Boolean).join(" · ")} />,
     },
-    { key: "cat", label: "Категория", value: (r) => r.category },
-    { key: "zero", label: "Дней в нуле", align: "right", value: (r) => r.zeroDays, render: (r) => <span className={r.zeroDays > 0 ? "font-semibold text-bad" : "text-ink-3"}>{num(r.zeroDays)}</span> },
-    { key: "days", label: "По дням", value: (r) => r.days, render: (r) => <DaysStrip days={r.days} from={from} /> },
-    { key: "period", label: "Продано, кг", align: "right", value: (r) => r.periodKg, render: (r) => kg(r.periodKg) },
-    { key: "perDay", label: "В день, кг", align: "right", value: (r) => r.perDayKg, render: (r) => kg(r.perDayKg) },
-    { key: "lostKg", label: "Упущено, кг", align: "right", value: (r) => r.lostKg, render: (r) => kg(r.lostKg) },
-    { key: "price", label: "Цена, сум/кг", align: "right", value: (r) => r.avgPrice, render: (r) => num(r.avgPrice) },
-    { key: "lostSum", label: "Упущено, сум", align: "right", value: (r) => r.lostSum, render: (r) => <span className={r.lostSum > 0 ? "font-semibold text-ink" : "text-ink-3"}>{money(r.lostSum)}</span> },
-    { key: "whose", label: "Чья потеря, дн.", value: (r) => r.dealerDays, render: (r) => <Whose p={r} /> },
+    { key: "cat", label: t("Категория"), value: (r) => r.category, render: (r) => t(r.category) },
+    { key: "zero", label: t("Дней в нуле"), align: "right", value: (r) => r.zeroDays, render: (r) => <span className={r.zeroDays > 0 ? "font-semibold text-bad" : "text-ink-3"}>{num(r.zeroDays)}</span> },
+    { key: "days", label: t("По дням"), value: (r) => r.days, render: (r) => <DaysStrip days={r.days} from={from} /> },
+    { key: "period", label: t("Продано, кг"), align: "right", value: (r) => r.periodKg, render: (r) => kg(r.periodKg) },
+    { key: "perDay", label: t("В день, кг"), align: "right", value: (r) => r.perDayKg, render: (r) => kg(r.perDayKg) },
+    { key: "lostKg", label: t("Упущено, кг"), align: "right", value: (r) => r.lostKg, render: (r) => kg(r.lostKg) },
+    { key: "price", label: t("Цена, сум/кг"), align: "right", value: (r) => r.avgPrice, render: (r) => num(r.avgPrice) },
+    { key: "lostSum", label: t("Упущено, сум"), align: "right", value: (r) => r.lostSum, render: (r) => <span className={r.lostSum > 0 ? "font-semibold text-ink" : "text-ink-3"}>{money(r.lostSum, t)}</span> },
+    { key: "whose", label: t("Чья потеря, дн."), value: (r) => r.dealerDays, render: (r) => <Whose p={r} /> },
     {
       key: "flags",
-      label: "Признаки",
+      label: t("Признаки"),
       value: (r) => (r.chronic ? 1 : 0) + (r.core ? 2 : 0),
       render: (r) => (
         <span className="inline-flex gap-1">
-          {r.core && chip("bg-accent-soft text-accent-strong", "ядро")}
-          {r.chronic && chip("bg-bad-soft text-bad", "хронический")}
+          {r.core && chip("bg-accent-soft text-accent-strong", t("ядро"))}
+          {r.chronic && chip("bg-bad-soft text-bad", t("хронический"))}
         </span>
       ),
     },
-    { key: "snapshot", label: "Остаток сейчас, кг", align: "right", value: (r) => r.snapshotKg, render: (r) => kg(r.snapshotKg) },
+    { key: "snapshot", label: t("Остаток сейчас, кг"), align: "right", value: (r) => r.snapshotKg, render: (r) => kg(r.snapshotKg) },
   ];
   return (
     <DataTable
-      title={title}
-      hint={hint}
+      title={t(title)}
+      hint={hint && t(hint)}
       columns={columns}
       rows={rows}
       rowKey={(r) => `${r.regionId}:${r.productId}`}
       limit={limit}
-      empty="Дней без товара не найдено"
-      note="Дни в нуле — утром на складе дилера было не больше 0,5 кг товара, который регион в этом периоде продавал. Упущено, кг = дней в нуле × средние продажи в день; сумы — по средней цене товара у дилера за период. «Ядро» — пары, которые вместе дают 80% потерь; «хронический» — в нуле половину периода и дольше; «недовоз» — на складе завода в тот день товар был."
+      empty={t("Дней без товара не найдено")}
+      note={t("Дни в нуле — утром на складе дилера было не больше 0,5 кг товара, который регион в этом периоде продавал. Упущено, кг = дней в нуле × средние продажи в день; сумы — по средней цене товара у дилера за период. «Ядро» — пары, которые вместе дают 80% потерь; «хронический» — в нуле половину периода и дольше; «недовоз» — на складе завода в тот день товар был.")}
     />
   );
 }
 
 function TopList({ items }: { items: OutstockTopProduct[] }) {
+  const t = useT();
   if (!items.length) return <span className="text-ink-3">—</span>;
   return (
     <span className="flex flex-col gap-0.5 text-xs">
@@ -143,7 +149,7 @@ function TopList({ items }: { items: OutstockTopProduct[] }) {
           <span className="max-w-[260px] truncate font-medium text-ink max-lg:max-w-[40vw]" title={p.name}>
             {p.name}
           </span>
-          <span className="text-ink-2">— {money(p.lostSum)}</span>
+          <span className="text-ink-2">— {money(p.lostSum, t)}</span>
           <span className="text-ink-3">({pct(p.share)})</span>
         </span>
       ))}
@@ -156,10 +162,11 @@ function TopList({ items }: { items: OutstockTopProduct[] }) {
  * клик по открытому региону закрывает календарь. linkQuery — период и фильтры из адреса.
  */
 export function OutstockRegionsTable({ rows, linkQuery, activeId, limit }: { rows: OutstockRegion[]; linkQuery: string; activeId?: string | null; limit?: number }) {
+  const t = useT();
   const columns: Column<OutstockRegion>[] = [
     {
       key: "name",
-      label: "Регион",
+      label: t("Регион"),
       value: (r) => r.name,
       render: (r) => (
         <span className={r.id === activeId ? "text-accent-strong" : ""}>
@@ -167,42 +174,43 @@ export function OutstockRegionsTable({ rows, linkQuery, activeId, limit }: { row
         </span>
       ),
     },
-    { key: "sold", label: "Продажи, кг", align: "right", value: (r) => r.soldKg, render: (r) => kg(r.soldKg) },
-    { key: "lostKg", label: "Упущено, кг", align: "right", value: (r) => r.lostKg, render: (r) => kg(r.lostKg) },
-    { key: "lostSum", label: "Упущено, сум", align: "right", value: (r) => r.lostSum, render: (r) => <span className="font-semibold">{money(r.lostSum)}</span> },
-    { key: "share", label: "К факту", align: "right", value: (r) => r.lossShare, render: (r) => <span className={shareClass(r.lossShare)}>{pct(r.lossShare, 1)}</span> },
-    { key: "zero", label: "Дней в нуле", align: "right", value: (r) => r.zeroDays, render: (r) => num(r.zeroDays) },
-    { key: "pairs", label: "Позиций", align: "right", value: (r) => r.pairs, render: (r) => num(r.pairs) },
+    { key: "sold", label: t("Продажи, кг"), align: "right", value: (r) => r.soldKg, render: (r) => kg(r.soldKg) },
+    { key: "lostKg", label: t("Упущено, кг"), align: "right", value: (r) => r.lostKg, render: (r) => kg(r.lostKg) },
+    { key: "lostSum", label: t("Упущено, сум"), align: "right", value: (r) => r.lostSum, render: (r) => <span className="font-semibold">{money(r.lostSum, t)}</span> },
+    { key: "share", label: t("К факту"), align: "right", value: (r) => r.lossShare, render: (r) => <span className={shareClass(r.lossShare)}>{pct(r.lossShare, 1)}</span> },
+    { key: "zero", label: t("Дней в нуле"), align: "right", value: (r) => r.zeroDays, render: (r) => num(r.zeroDays) },
+    { key: "pairs", label: t("Позиций"), align: "right", value: (r) => r.pairs, render: (r) => num(r.pairs) },
     {
       key: "top",
-      label: "Что теряем больше всего",
-      value: (r) => r.top.map((p) => `${p.name} — ${money(p.lostSum)} (${pct(p.share)})`).join("; "),
+      label: t("Что теряем больше всего"),
+      value: (r) => r.top.map((p) => `${p.name} — ${money(p.lostSum, t)} (${pct(p.share)})`).join("; "),
       render: (r) => <TopList items={r.top} />,
     },
   ];
   return (
     <DataTable
-      title="По регионам"
-      hint="клик — календарь по дням: что, когда стояло в нуле и когда довезли"
+      title={t("По регионам")}
+      hint={t("клик — календарь по дням: что, когда стояло в нуле и когда довезли")}
       columns={columns}
       rows={rows}
       rowKey={(r) => r.id}
       rowHref={(r) => withQuery("/sales/outstock", queryWith(linkQuery, { calendar: r.id === activeId ? null : r.id }))}
       limit={limit}
-      empty="Потерь нет"
-      note="«К факту» — упущенные кг к проданным за период. «Позиций» — товаров региона, которые хотя бы день стояли в нуле. «Дней в нуле» — сумма по этим товарам. Клик — календарь региона; итоги и таблицы при этом остаются по всей области."
+      empty={t("Потерь нет")}
+      note={t("«К факту» — упущенные кг к проданным за период. «Позиций» — товаров региона, которые хотя бы день стояли в нуле. «Дней в нуле» — сумма по этим товарам. Клик — календарь региона; итоги и таблицы при этом остаются по всей области.")}
     />
   );
 }
 
 /** Дилеры × категории: упущено по каждой категории у каждого региона; переключатель сум/кг. */
 export function OutstockMatrixTable({ matrix }: { matrix: OutstockMatrix }) {
+  const t = useT();
   const [unit, setUnit] = useState<"sum" | "kg">("sum");
-  const fmt = unit === "sum" ? money : kg;
+  const fmt = unit === "sum" ? (v: number | null | undefined) => money(v, t) : kg;
   const pick = (r: OutstockMatrixRow, i: number) => (unit === "sum" ? r.sum[i] : r.kg[i]);
   const cell = (v: number) => (v > 0 ? fmt(v) : <span className="text-ink-3">·</span>);
   const columns: Column<OutstockMatrixRow>[] = [
-    { key: "name", label: "Регион · дилер", value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.dealer} /> },
+    { key: "name", label: t("Регион · дилер"), value: (r) => r.name, render: (r) => <NameCell name={r.name} sub={r.dealer} /> },
     ...matrix.categories.map((c, i) => ({
       key: `c${i}`,
       label: c,
@@ -212,7 +220,7 @@ export function OutstockMatrixTable({ matrix }: { matrix: OutstockMatrix }) {
     })),
     {
       key: "total",
-      label: "Итого",
+      label: t("Итого"),
       align: "right",
       value: (r) => (unit === "sum" ? r.totalSum : r.totalKg),
       render: (r) => <span className="font-semibold">{fmt(unit === "sum" ? r.totalSum : r.totalKg)}</span>,
@@ -222,89 +230,93 @@ export function OutstockMatrixTable({ matrix }: { matrix: OutstockMatrix }) {
     <div className="flex rounded-lg border border-line text-xs">
       {(["sum", "kg"] as const).map((u) => (
         <button key={u} type="button" onClick={() => setUnit(u)} className={`px-2.5 py-1 max-lg:py-2 ${unit === u ? "bg-accent text-white" : "text-ink hover:bg-muted"}`}>
-          {u === "sum" ? "сум" : "кг"}
+          {u === "sum" ? t("сум") : t("кг")}
         </button>
       ))}
     </div>
   );
   const totals = unit === "sum" ? matrix.totalSum : matrix.totalKg;
-  const hint = matrix.categories.length ? `упущено по каждой категории у каждого дилера · итого: ${matrix.categories.map((c, i) => `${c} ${fmt(totals[i])}`).join(", ")}` : "упущено по каждой категории у каждого дилера";
-  return <DataTable title="Дилеры × категории" hint={hint} actions={toggle} columns={columns} rows={matrix.rows} rowKey={(r) => r.id} empty="Потерь нет" />;
+  const hint = matrix.categories.length
+    ? t("упущено по каждой категории у каждого дилера · итого: {list}", { list: matrix.categories.map((c, i) => `${c} ${fmt(totals[i])}`).join(", ") })
+    : t("упущено по каждой категории у каждого дилера");
+  return <DataTable title={t("Дилеры × категории")} hint={hint} actions={toggle} columns={columns} rows={matrix.rows} rowKey={(r) => r.id} empty={t("Потерь нет")} />;
 }
 
 /** По товарам: где дыры на полке стоят дороже всего. */
 export function OutstockProductsTable({ rows, limit }: { rows: OutstockProduct[]; limit?: number }) {
+  const t = useT();
   const columns: Column<OutstockProduct>[] = [
     {
       key: "name",
-      label: "Продукт",
+      label: t("Продукт"),
       value: (r) => r.name,
-      render: (r) => <ProductName name={r.name} top={r.top} sub={[r.category, r.code ? `код ${r.code}` : null].filter(Boolean).join(" · ")} max="max-w-[460px]" />,
+      render: (r) => <ProductName name={r.name} top={r.top} sub={[t(r.category), r.code ? t("код {code}", { code: r.code }) : null].filter(Boolean).join(" · ")} max="max-w-[460px]" />,
     },
-    { key: "sold", label: "Продажи, кг", align: "right", value: (r) => r.soldKg, render: (r) => kg(r.soldKg) },
-    { key: "zeroShare", label: "Доля дней в нуле", align: "right", value: (r) => r.zeroShare, render: (r) => <span className={shareClass(r.zeroShare, 0.3, 0.15)}>{pct(r.zeroShare, 1)}</span> },
-    { key: "lostKg", label: "Упущено, кг", align: "right", value: (r) => r.lostKg, render: (r) => kg(r.lostKg) },
-    { key: "lostSum", label: "Упущено, сум", align: "right", value: (r) => r.lostSum, render: (r) => <span className="font-semibold">{money(r.lostSum)}</span> },
-    { key: "regions", label: "Регионов", align: "right", value: (r) => r.regions, render: (r) => <span className={r.regions >= 4 ? "font-semibold text-bad" : ""}>{num(r.regions)}</span> },
+    { key: "sold", label: t("Продажи, кг"), align: "right", value: (r) => r.soldKg, render: (r) => kg(r.soldKg) },
+    { key: "zeroShare", label: t("Доля дней в нуле"), align: "right", value: (r) => r.zeroShare, render: (r) => <span className={shareClass(r.zeroShare, 0.3, 0.15)}>{pct(r.zeroShare, 1)}</span> },
+    { key: "lostKg", label: t("Упущено, кг"), align: "right", value: (r) => r.lostKg, render: (r) => kg(r.lostKg) },
+    { key: "lostSum", label: t("Упущено, сум"), align: "right", value: (r) => r.lostSum, render: (r) => <span className="font-semibold">{money(r.lostSum, t)}</span> },
+    { key: "regions", label: t("Регионов"), align: "right", value: (r) => r.regions, render: (r) => <span className={r.regions >= 4 ? "font-semibold text-bad" : ""}>{num(r.regions)}</span> },
   ];
   return (
     <DataTable
-      title="По товарам"
-      hint="где дыры на полке стоят дороже всего"
+      title={t("По товарам")}
+      hint={t("где дыры на полке стоят дороже всего")}
       columns={columns}
       rows={rows}
       rowKey={(r) => String(r.id)}
       limit={limit}
-      empty="Потерь нет"
-      note="Доля дней в нуле — среди дней тех регионов, где товар хотя бы день стоял в нуле (регионов × дней периода). «Регионов» — сколько таких регионов."
+      empty={t("Потерь нет")}
+      note={t("Доля дней в нуле — среди дней тех регионов, где товар хотя бы день стоял в нуле (регионов × дней периода). «Регионов» — сколько таких регионов.")}
     />
   );
 }
 
 /** Календарь региона по дням: красная клетка — утром товара не было, зелёная — был, точка — в этот день привезли с завода. */
 export function OutstockCalendar({ pairs, from, days, region, closeHref }: { pairs: OutstockPair[]; from: string; days: number; region: string; closeHref?: string }) {
+  const t = useT();
   const [showAll, setShowAll] = useState(false);
   const limit = 40;
   const rows = showAll ? pairs : pairs.slice(0, limit);
   const labels = Array.from({ length: days }, (_, i) => dayLabel(from, i));
   return (
     <Section
-      title={`Календарь по дням · ${region}`}
-      hint="что и когда стояло в нуле, когда довезли"
+      title={t("Календарь по дням · {region}", { region })}
+      hint={t("что и когда стояло в нуле, когда довезли")}
       actions={
         closeHref ? (
           <Link href={closeHref} className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-muted max-lg:min-h-11 max-lg:px-3">
-            Закрыть
+            {t("Закрыть")}
           </Link>
         ) : undefined
       }
     >
       <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3.5 w-3 rounded-sm bg-bad" /> нет товара
+          <span className="inline-block h-3.5 w-3 rounded-sm bg-bad" /> {t("нет товара")}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3.5 w-3 rounded-sm bg-ok/50" /> товар был
+          <span className="inline-block h-3.5 w-3 rounded-sm bg-ok/50" /> {t("товар был")}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block size-2 rounded-full bg-accent" /> привезли с завода
+          <span className="inline-block size-2 rounded-full bg-accent" /> {t("привезли с завода")}
         </span>
       </div>
       {pairs.length === 0 ? (
-        <p className="text-sm text-ink-3">Дней без товара не найдено</p>
+        <p className="text-sm text-ink-3">{t("Дней без товара не найдено")}</p>
       ) : (
         <div className="-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
           <table className="border-separate border-spacing-0 text-xs">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 bg-surface-solid py-1 pr-3 text-left font-medium text-ink-3">Товар</th>
+                <th className="sticky left-0 z-10 bg-surface-solid py-1 pr-3 text-left font-medium text-ink-3">{t("Товар")}</th>
                 {labels.map((l, i) => (
                   <th key={i} className="px-px py-1 text-center font-medium tabular-nums text-ink-3" title={l}>
                     {i + 1}
                   </th>
                 ))}
-                <th className="py-1 pl-3 text-right font-medium text-ink-3">В нуле</th>
-                <th className="py-1 pl-3 text-right font-medium text-ink-3">Упущено, сум</th>
+                <th className="py-1 pl-3 text-right font-medium text-ink-3">{t("В нуле")}</th>
+                <th className="py-1 pl-3 text-right font-medium text-ink-3">{t("Упущено, сум")}</th>
               </tr>
             </thead>
             <tbody>
@@ -323,7 +335,7 @@ export function OutstockCalendar({ pairs, from, days, region, closeHref }: { pai
                     return (
                       <td key={i} className="border-t border-line px-px py-1">
                         <span
-                          title={`${labels[i]}: ${d === "1" ? "товар был" : "нет товара"}${arrived ? " · привезли с завода" : ""}`}
+                          title={`${labels[i]}: ${d === "1" ? t("товар был") : t("нет товара")}${arrived ? ` · ${t("привезли с завода")}` : ""}`}
                           className={`relative mx-auto block h-4 w-3.5 rounded-sm ${d === "1" ? "bg-ok/50" : "bg-bad"}`}
                         >
                           {arrived && <span className="absolute left-1/2 top-0 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent ring-1 ring-surface" />}
@@ -332,7 +344,7 @@ export function OutstockCalendar({ pairs, from, days, region, closeHref }: { pai
                     );
                   })}
                   <td className="border-t border-line py-1 pl-3 text-right font-semibold tabular-nums text-bad">{num(p.zeroDays)}</td>
-                  <td className="border-t border-line py-1 pl-3 text-right tabular-nums">{money(p.lostSum)}</td>
+                  <td className="border-t border-line py-1 pl-3 text-right tabular-nums">{money(p.lostSum, t)}</td>
                 </tr>
               ))}
             </tbody>
@@ -341,7 +353,7 @@ export function OutstockCalendar({ pairs, from, days, region, closeHref }: { pai
       )}
       {pairs.length > limit && (
         <button type="button" onClick={() => setShowAll((v) => !v)} className="mt-3 text-xs font-medium text-accent hover:underline max-lg:min-h-11">
-          {showAll ? "Свернуть" : `Показать все ${num(pairs.length)}`}
+          {showAll ? t("Свернуть") : t("Показать все {n}", { n: num(pairs.length) })}
         </button>
       )}
     </Section>

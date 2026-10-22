@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, Settings2 } from "lucide-react";
+import { useT } from "@/i18n/client";
+import { tParts } from "@/lib/field/labels";
 import { PermissionsSheet } from "./PermissionsSheet";
 
 type Row = { id: string; kind: string; title: string; body: string | null; link: string | null; createdAt: string; read: boolean };
@@ -14,6 +16,7 @@ const timeOf = (iso: string) => new Date(iso).toLocaleString("ru-RU", { day: "2-
  * обновляется при открытии, возвращении в приложение и после push; «Уведомления и геолокация» — настройки устройства.
  */
 export function NotificationBell() {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -102,7 +105,7 @@ export function NotificationBell() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={unread > 0 ? `Уведомления: ${unread} новых` : "Уведомления"}
+        aria-label={unread > 0 ? t("Уведомления: {n} новых", { n: unread }) : t("Уведомления")}
         className="relative grid size-10 place-items-center rounded-full text-current transition-colors hover:bg-white/10 hover:text-white lg:size-9 lg:hover:bg-muted lg:hover:text-ink"
       >
         <Bell className="size-4" strokeWidth={1.75} />
@@ -119,15 +122,15 @@ export function NotificationBell() {
           className="fixed z-50 flex flex-col overflow-hidden rounded-xl border border-line bg-surface-solid text-ink shadow-xl"
         >
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-2.5">
-            <span className="text-sm font-semibold">Уведомления</span>
+            <span className="text-sm font-semibold">{t("Уведомления")}</span>
             {unread > 0 && (
               <button type="button" onClick={readAll} className="text-xs text-accent-strong hover:underline">
-                Прочитать все
+                {t("Прочитать все")}
               </button>
             )}
           </div>
           {items.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-ink-3">Уведомлений пока нет</p>
+            <p className="px-4 py-6 text-center text-sm text-ink-3">{t("Уведомлений пока нет")}</p>
           ) : (
             <ul className="max-h-[60vh] min-h-0 divide-y divide-line overflow-y-auto overscroll-contain">
               {items.map((n) => (
@@ -136,8 +139,9 @@ export function NotificationBell() {
                     <span className="flex items-start gap-2">
                       {!n.read && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-accent" aria-hidden />}
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium text-ink">{n.title}</span>
-                        {n.body && <span className="mt-0.5 block line-clamp-2 text-xs text-ink-2">{n.body}</span>}
+                        <span className="block text-sm font-medium text-ink">{t(n.title)}</span>
+                        {/* Текст сервера: несколько названий через «; » (AI-рекомендации) — переводится по частям. */}
+                        {n.body && <span className="mt-0.5 block line-clamp-2 text-xs text-ink-2">{tParts(t, n.body, "; ")}</span>}
                         <span className="mt-0.5 block text-[11px] text-ink-3">{timeOf(n.createdAt)}</span>
                       </span>
                     </span>
@@ -154,7 +158,7 @@ export function NotificationBell() {
             }}
             className="flex w-full shrink-0 items-center gap-2 border-t border-line px-4 py-2.5 text-left text-sm text-ink-2 hover:bg-muted"
           >
-            <Settings2 className="size-4" /> Уведомления и геолокация на этом устройстве
+            <Settings2 className="size-4" /> {t("Уведомления и геолокация на этом устройстве")}
           </button>
         </div>
       )}

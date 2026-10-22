@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Card, ProgressBar, StatusDot } from "@/components/ui";
+import { getT } from "@/i18n/server";
 import type { Department } from "@/lib/demo-data";
 import { filesLabel, foldersLabel, percent } from "@/lib/format";
 
@@ -36,21 +37,22 @@ const sections: Record<string, string> = {
   sales: "/sales",
 };
 
-/** Карточка показателей отдела (Dashboard, «Отделы»): открывает раздел отдела, а если его нет — файлы в «Общей базе». */
-export function DepartmentStatusCard({ department: d }: { department: Department }) {
+/** Карточка показателей отдела (Dashboard, «Отделы»): открывает раздел отдела, а если его нет — файлы в «Общей базе». Только с сервера. */
+export async function DepartmentStatusCard({ department: d }: { department: Department }) {
+  const t = await getT();
   return (
     <Link href={sections[d.code] ?? `/base/${d.code}`} className="group block max-lg:active:opacity-75">
       <Card className="h-full p-5 transition-colors group-hover:border-accent/40">
         <div className="flex items-center justify-between">
-          <span className="font-semibold text-ink">{d.name}</span>
+          <span className="font-semibold text-ink">{t(d.name)}</span>
           <ArrowUpRight className="size-4 text-ink-3 group-hover:text-accent-strong" />
         </div>
         <div className="mt-3 flex items-center gap-3">
           <span className="text-[1.75rem] font-semibold leading-none tracking-tight">{percent(d.score)}</span>
           <StatusDot status={d.status} />
         </div>
-        <div className="mt-4 text-xs text-ink-2">{d.metric.label}</div>
-        <div className="mt-2" title={`${d.metric.label}: ${percent(d.metric.value)}`}>
+        <div className="mt-4 text-xs text-ink-2">{t(d.metric.label)}</div>
+        <div className="mt-2" title={`${t(d.metric.label)}: ${percent(d.metric.value)}`}>
           <ProgressBar value={d.metric.value} tone={d.status === "attention" ? "warn" : "ok"} />
         </div>
       </Card>
@@ -58,20 +60,21 @@ export function DepartmentStatusCard({ department: d }: { department: Department
   );
 }
 
-/** Карточка рабочего пространства отдела в «Общей базе». */
-export function DepartmentWorkspaceCard({ department: d }: { department: Department }) {
+/** Карточка рабочего пространства отдела в «Общей базе». Только с сервера. */
+export async function DepartmentWorkspaceCard({ department: d }: { department: Department }) {
+  const t = await getT();
   return (
     <Link href={`/base/${d.code}`} className="group block max-lg:active:opacity-75">
       <Card className="h-full p-5 transition-colors group-hover:border-accent/40">
         <div className="flex items-center gap-3">
           <DepartmentIcon code={d.code} />
-          <span className="flex-1 font-semibold text-ink">{d.name}</span>
+          <span className="flex-1 font-semibold text-ink">{t(d.name)}</span>
           <ArrowRight className="size-4 text-ink-3 transition-transform group-hover:translate-x-0.5 group-hover:text-accent-strong" />
         </div>
         <div className="mt-5 text-sm text-ink-2">
-          {filesLabel(d.filesCount)} <span className="mx-1.5 text-ink-3">·</span> {foldersLabel(d.foldersCount)}
+          {filesLabel(d.filesCount, t)} <span className="mx-1.5 text-ink-3">·</span> {foldersLabel(d.foldersCount, t)}
         </div>
-        <div className="mt-4 border-t border-line pt-4 text-xs text-ink-3">Последнее обновление: {d.updated}</div>
+        <div className="mt-4 border-t border-line pt-4 text-xs text-ink-3">{t("Последнее обновление: {date}", { date: t(d.updated) })}</div>
       </Card>
     </Link>
   );

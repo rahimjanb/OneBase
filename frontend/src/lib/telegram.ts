@@ -1,4 +1,8 @@
+import { makeT, type T } from "@/i18n/core";
 import { bff } from "./bff";
+
+/** Без перевода (русский) — если вызывающий не передал t. */
+const plain: T = makeT(null);
 
 export type TelegramAccountStatus = "New" | "CodeRequired" | "PasswordRequired" | "Connected" | "Disconnected" | "Error";
 
@@ -35,6 +39,9 @@ export type TelegramAgentSettings = {
   replyToUnknown: boolean;
   modelProvider: string | null;
   model: string | null;
+  /** Модель генерации отчётов и документов; пусто — Claude из AI Data Manager. */
+  generationModelProvider: string | null;
+  generationModel: string | null;
   systemPrompt: string | null;
   restrictions: string | null;
   responseStyle: "short" | "normal" | "detailed";
@@ -158,6 +165,8 @@ export type AgentTestResult = {
   conversationId: string | null;
   materials: number;
   error: string | null;
+  /** Документ Word, который ушёл бы файлом, — HTML для предпросмотра. */
+  document: string | null;
 };
 
 const base = "settings/telegram";
@@ -221,12 +230,12 @@ export const permissionState: Record<PermissionState, { label: string; className
 };
 
 /** «Последнее событие 2 мин назад». */
-export function ago(iso: string | null): string {
+export function ago(iso: string | null, t: T = plain): string {
   if (!iso) return "—";
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  if (s < 60) return "только что";
-  if (s < 3600) return `${Math.round(s / 60)} мин назад`;
-  if (s < 86400) return `${Math.round(s / 3600)} ч назад`;
+  if (s < 60) return t("только что");
+  if (s < 3600) return t("{n} мин назад", { n: Math.round(s / 60) });
+  if (s < 86400) return t("{n} ч назад", { n: Math.round(s / 3600) });
   return new Date(iso).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
 }
 

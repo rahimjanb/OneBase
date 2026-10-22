@@ -57,6 +57,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseForwardedHeaders();
+// Язык интерфейса (RU/UZ) — на весь запрос: ответы AI и сообщения сервера на нём.
+app.Use(async (context, next) =>
+{
+    OneBase.Application.Abstractions.UiLanguage.Set(context.Request.Headers.AcceptLanguage.ToString());
+    await next(context);
+});
 app.UseExceptionHandler();
 // Подключение папок отделов к Windows (WebDAV): свой вход по логину отдела, без JWT сайта. Снаружи — nginx :82 (FILE_STORAGE_DOMAIN):
 // он передаёт адрес без изменений (https://files.1base.uz/production → /production) и ставит X-Dav-Root; nginx :80 и :81 этот заголовок

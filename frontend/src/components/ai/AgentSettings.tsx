@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, Play, RotateCcw } from "lucide-react";
 import { Note, Section } from "@/components/sales/bits";
+import { useT } from "@/i18n/client";
 import { modelLabel, type AiAgentSettings, type AiModelView, type AiProviderView } from "@/lib/ai";
 import { bff } from "@/lib/bff";
 import type { AgentResult } from "@/lib/consultant";
@@ -13,6 +14,7 @@ import { button, field, primary } from "./form";
 type ToolState = { enabled: boolean; requiresApproval: boolean };
 
 export function AgentSettings({ initial, models, providers }: { initial: AiAgentSettings; models: AiModelView[]; providers: AiProviderView[] }) {
+  const t = useT();
   const [data, setData] = useState(initial);
   const [name, setName] = useState(initial.name);
   const [role, setRole] = useState(initial.role ?? "");
@@ -34,7 +36,7 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
   const enabledModels = models.filter((m) => m.enabled);
 
   const save = async () => {
-    const t = temperature.trim().replace(",", ".");
+    const temp = temperature.trim().replace(",", ".");
     const [provider, ...rest] = model.split("|");
     setBusy("save");
     setMessage(null);
@@ -47,7 +49,7 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
           description: description || null,
           systemPrompt: prompt,
           model: model ? { provider, model: rest.join("|") } : null,
-          temperature: t === "" ? null : Number(t),
+          temperature: temp === "" ? null : Number(temp),
           maxOutputTokens: maxTokens.trim() === "" ? null : Number(maxTokens),
           enabled,
           requiredPermission: permission || null,
@@ -57,7 +59,7 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
       });
       setData(saved);
       setPrompt(saved.systemPrompt);
-      setMessage({ tone: "ok", text: "Настройки AI-сотрудника сохранены." });
+      setMessage({ tone: "ok", text: t("Настройки AI-сотрудника сохранены.") });
     } catch (e) {
       setMessage({ tone: "bad", text: (e as Error).message });
     } finally {
@@ -80,8 +82,9 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
   };
 
   const toggleSource = (code: string, on: boolean) => setSources((prev) => (on ? [...prev, code] : prev.filter((s) => s !== code)));
-  const sourceName = (code: string) => data.sources.find((s) => s.code === code)?.name ?? code;
-  const permissionLabel = (code: string | null) => (code ? data.permissions.find((p) => p.code === code)?.label ?? code : null);
+  // Названия источников и подписи прав присылает сервер по-русски — показываются на языке интерфейса.
+  const sourceName = (code: string) => t(data.sources.find((s) => s.code === code)?.name ?? code);
+  const permissionLabel = (code: string | null) => (code ? t(data.permissions.find((p) => p.code === code)?.label ?? code) : null);
 
   return (
     <>
@@ -89,47 +92,47 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
         <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm ${message.tone === "ok" ? "bg-ok-soft text-ok" : "bg-bad-soft text-bad"}`}>{message.text}</div>
       )}
 
-      <Section title="Основное" hint={data.updatedAt ? `изменено ${dateTime(data.updatedAt)}` : undefined}>
+      <Section title={t("Основное")} hint={data.updatedAt ? t("изменено {date}", { date: dateTime(data.updatedAt) }) : undefined}>
         <div className="grid gap-5 lg:grid-cols-2">
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-ink">Название</span>
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Название")}</span>
             <input className={field} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-ink">Роль</span>
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Роль")}</span>
             <input className={field} value={role} onChange={(e) => setRole(e.target.value)} maxLength={200} />
           </label>
           <label className="block lg:col-span-2">
-            <span className="mb-1.5 block text-sm font-medium text-ink">Описание</span>
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Описание")}</span>
             <input className={field} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={1000} />
           </label>
           {!data.isConsultant && (
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-ink">Кому доступен</span>
+              <span className="mb-1.5 block text-sm font-medium text-ink">{t("Кому доступен")}</span>
               <select className={field} value={permission} onChange={(e) => setPermission(e.target.value)}>
-                <option value="">Всем, кто пользуется консультантом</option>
+                <option value="">{t("Всем, кто пользуется консультантом")}</option>
                 {data.permissions.map((p) => (
                   <option key={p.code} value={p.code}>
-                    Только с правом «{p.label}»
+                    {t("Только с правом «{label}»", { label: t(p.label) })}
                   </option>
                 ))}
               </select>
-              <span className="mt-1 block text-xs text-ink-3">Без этого права консультант не привлекает сотрудника к вопросу пользователя.</span>
+              <span className="mt-1 block text-xs text-ink-3">{t("Без этого права консультант не привлекает сотрудника к вопросу пользователя.")}</span>
             </label>
           )}
         </div>
         <label className="mt-5 flex items-center gap-2.5 text-sm text-ink">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
-          {data.isConsultant ? "Консультант включён" : "AI-сотрудник включён"}
+          {data.isConsultant ? t("Консультант включён") : t("AI-сотрудник включён")}
         </label>
       </Section>
 
-      <Section title="Модель">
+      <Section title={t("Модель")}>
         <div className="grid gap-5 lg:grid-cols-3">
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-ink">Модель</span>
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Модель")}</span>
             <select className={field} value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="">Основная из общих настроек</option>
+              <option value="">{t("Основная из общих настроек")}</option>
               {providers.map((p) => {
                 const list = enabledModels.filter((m) => m.provider === p.code);
                 return list.length === 0 ? null : (
@@ -143,29 +146,29 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
                 );
               })}
               {data.model && !enabledModels.some((m) => m.provider === data.model!.provider && m.model === data.model!.model) && (
-                <option value={`${data.model.provider}|${data.model.model}`}>{`${providerName(data.model.provider)} · ${data.model.model} (не разрешена)`}</option>
+                <option value={`${data.model.provider}|${data.model.model}`}>{`${providerName(data.model.provider)} · ${data.model.model} ${t("(не разрешена)")}`}</option>
               )}
             </select>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-ink">Температура</span>
-            <input className={field} value={temperature} onChange={(e) => setTemperature(e.target.value)} placeholder="из общих настроек" inputMode="decimal" />
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Температура")}</span>
+            <input className={field} value={temperature} onChange={(e) => setTemperature(e.target.value)} placeholder={t("из общих настроек")} inputMode="decimal" />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-ink">Максимум токенов ответа</span>
-            <input className={field} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} placeholder="из общих настроек" inputMode="numeric" />
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Максимум токенов ответа")}</span>
+            <input className={field} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} placeholder={t("из общих настроек")} inputMode="numeric" />
           </label>
         </div>
       </Section>
 
       <Section
-        title="Инструкция (System Prompt)"
-        hint={data.promptIsDefault ? "по умолчанию" : "изменена"}
+        title={t("Инструкция (System Prompt)")}
+        hint={data.promptIsDefault ? t("по умолчанию") : t("изменена")}
         actions={
           data.defaultPrompt && prompt.trim() !== data.defaultPrompt ? (
             <button className={button} onClick={() => setPrompt(data.defaultPrompt!)}>
               <RotateCcw className="size-4" />
-              Вернуть по умолчанию
+              {t("Вернуть по умолчанию")}
             </button>
           ) : undefined
         }
@@ -177,12 +180,13 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
           spellCheck={false}
         />
         <p className="mt-2 text-xs text-ink-3">
-          К инструкции всегда добавляются правила качества (не придумывать данные, разделять факты и рекомендации, указывать источники), дата и формат итога —
-          их изменить нельзя. Пользователи инструкцию не видят.
+          {t(
+            "К инструкции всегда добавляются правила качества (не придумывать данные, разделять факты и рекомендации, указывать источники), дата и формат итога — их изменить нельзя. Пользователи инструкцию не видят.",
+          )}
         </p>
       </Section>
 
-      <Section title="Источники знаний" hint="какие данные OneBase открыты сотруднику">
+      <Section title={t("Источники знаний")} hint={t("какие данные OneBase открыты сотруднику")}>
         <div className="space-y-2">
           {data.sources.map((s) => (
             <label key={s.code} className="flex items-start gap-3 rounded-lg border border-line px-3 py-2.5 hover:bg-muted/50">
@@ -193,11 +197,11 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
                 className="mt-0.5 size-4 accent-[var(--color-accent)]"
               />
               <span className="min-w-0">
-                <span className="block text-sm font-medium text-ink">{s.name}</span>
-                <span className="block text-sm text-ink-2">{s.description}</span>
+                <span className="block text-sm font-medium text-ink">{t(s.name)}</span>
+                <span className="block text-sm text-ink-2">{t(s.description)}</span>
                 <span className="mt-0.5 block text-xs text-ink-3">
-                  Таблицы: {s.tables} · Отчёты: {s.reports}
-                  {s.requiredPermission ? ` · право пользователя: «${permissionLabel(s.requiredPermission)}»` : ""}
+                  {t("Таблицы: {tables} · Отчёты: {reports}", { tables: s.tables, reports: t(s.reports) })}
+                  {s.requiredPermission ? ` · ${t("право пользователя: «{label}»", { label: permissionLabel(s.requiredPermission) ?? "" })}` : ""}
                 </span>
               </span>
             </label>
@@ -206,49 +210,51 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
       </Section>
 
       {!data.isConsultant && (
-        <Section title="Инструменты" hint="через них сотрудник получает данные">
+        <Section title={t("Инструменты")} hint={t("через них сотрудник получает данные")}>
           {data.tools.length === 0 ? (
-            <p className="text-sm text-ink-2">Инструментов с данными пока нет.</p>
+            <p className="text-sm text-ink-2">{t("Инструментов с данными пока нет.")}</p>
           ) : (
             <div className="-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
               <table className="w-full min-w-max text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
-                    <th className="py-2 pr-3 font-semibold">Разрешён</th>
-                    <th className="py-2 pr-3 font-semibold">Инструмент</th>
-                    <th className="py-2 pr-3 font-semibold">Источник</th>
-                    <th className="py-2 font-semibold" title="Каждый вызов ждёт одобрения человека">Подтверждение</th>
+                    <th className="py-2 pr-3 font-semibold">{t("Разрешён")}</th>
+                    <th className="py-2 pr-3 font-semibold">{t("Инструмент")}</th>
+                    <th className="py-2 pr-3 font-semibold">{t("Источник")}</th>
+                    <th className="py-2 font-semibold" title={t("Каждый вызов ждёт одобрения человека")}>
+                      {t("Подтверждение")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.tools.map((t) => {
-                    const state = tools[t.name];
-                    const open = sources.includes(t.source);
+                  {data.tools.map((tool) => {
+                    const state = tools[tool.name];
+                    const open = sources.includes(tool.source);
                     return (
-                      <tr key={t.name} className="border-b border-line last:border-0">
+                      <tr key={tool.name} className="border-b border-line last:border-0">
                         <td className="py-2 pr-3">
                           <input
                             type="checkbox"
                             checked={state.enabled}
-                            onChange={(e) => setTools((prev) => ({ ...prev, [t.name]: { ...prev[t.name], enabled: e.target.checked } }))}
-                            aria-label={`Разрешить ${t.title}`}
+                            onChange={(e) => setTools((prev) => ({ ...prev, [tool.name]: { ...prev[tool.name], enabled: e.target.checked } }))}
+                            aria-label={t("Разрешить {title}", { title: t(tool.title) })}
                             className="size-4 accent-[var(--color-accent)]"
                           />
                         </td>
                         <td className="py-2 pr-3">
-                          <div className="font-medium text-ink">{t.title}</div>
-                          <div className="max-w-xl text-xs text-ink-3">{t.description}</div>
+                          <div className="font-medium text-ink">{t(tool.title)}</div>
+                          <div className="max-w-xl text-xs text-ink-3">{t(tool.description)}</div>
                         </td>
                         <td className={`py-2 pr-3 text-xs ${open ? "text-ink-2" : "text-warn"}`}>
-                          {sourceName(t.source)}
-                          {!open && " — источник закрыт"}
+                          {sourceName(tool.source)}
+                          {!open && ` — ${t("источник закрыт")}`}
                         </td>
                         <td className="py-2">
                           <input
                             type="checkbox"
                             checked={state.requiresApproval}
-                            onChange={(e) => setTools((prev) => ({ ...prev, [t.name]: { ...prev[t.name], requiresApproval: e.target.checked } }))}
-                            aria-label={`Подтверждение для ${t.title}`}
+                            onChange={(e) => setTools((prev) => ({ ...prev, [tool.name]: { ...prev[tool.name], requiresApproval: e.target.checked } }))}
+                            aria-label={t("Подтверждение для {title}", { title: t(tool.title) })}
                             className="size-4 accent-[var(--color-accent)]"
                           />
                         </td>
@@ -260,7 +266,7 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
             </div>
           )}
           <p className="mt-3 text-xs text-ink-3">
-            Инструмент работает, только если он разрешён, его источник открыт и у пользователя есть право на эти данные. Все инструменты только читают данные.
+            {t("Инструмент работает, только если он разрешён, его источник открыт и у пользователя есть право на эти данные. Все инструменты только читают данные.")}
           </p>
         </Section>
       )}
@@ -268,31 +274,35 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
       <div className="mb-6 flex items-center gap-3">
         <button className={primary} onClick={save} disabled={busy !== null || name.trim() === ""}>
           {busy === "save" && <Loader2 className="size-4 animate-spin" />}
-          Сохранить
+          {t("Сохранить")}
         </button>
       </div>
 
       {!data.isConsultant && (
-        <Section title="Проверить сотрудника" hint="задача одному сотруднику, без консультанта">
+        <Section title={t("Проверить сотрудника")} hint={t("задача одному сотруднику, без консультанта")}>
           <textarea
             className={`${field} h-auto min-h-[80px] py-2`}
             value={task}
             onChange={(e) => setTask(e.target.value)}
-            placeholder="Например: какие регионы отстают от плана в этом месяце?"
+            placeholder={t("Например: какие регионы отстают от плана в этом месяце?")}
             maxLength={4000}
           />
           <div className="mt-3 flex items-center gap-3">
             <button className={button} onClick={execute} disabled={busy !== null || !task.trim()}>
               {busy === "run" ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-              Запустить
+              {t("Запустить")}
             </button>
-            <span className="text-xs text-ink-3">Работает с сохранёнными настройками и вашими правами.</span>
+            <span className="text-xs text-ink-3">{t("Работает с сохранёнными настройками и вашими правами.")}</span>
           </div>
           {run && (
             <div className="mt-4">
               <AgentCard result={run.result} />
               <p className="mt-1.5 text-xs text-ink-3">
-                Модель {run.model ?? "—"} · токенов {num(run.usage.inputTokens)} + {num(run.usage.outputTokens)}
+                {t("Модель {model} · токенов {input} + {output}", {
+                  model: run.model ?? "—",
+                  input: num(run.usage.inputTokens),
+                  output: num(run.usage.outputTokens),
+                })}
               </p>
             </div>
           )}
@@ -300,8 +310,9 @@ export function AgentSettings({ initial, models, providers }: { initial: AiAgent
       )}
 
       <Note>
-        Пустые поля модели, температуры и токенов — берутся из общих настроек AI. Выключенный сотрудник не привлекается к вопросам, консультант сообщает об
-        этом в ответе.
+        {t(
+          "Пустые поля модели, температуры и токенов — берутся из общих настроек AI. Выключенный сотрудник не привлекается к вопросам, консультант сообщает об этом в ответе.",
+        )}
       </Note>
     </>
   );

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,12 @@ using OneBase.Domain.Sales;
 namespace OneBase.Infrastructure.Linko;
 
 /// <summary>Не даёт запускать синхронизацию параллельно (фон + кнопка «Обновить»).</summary>
-public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCacheSignal cacheSignal, LinkoSyncProgress progress, ILogger<LinkoSyncCoordinator> logger)
+public sealed class LinkoSyncCoordinator(
+    IServiceScopeFactory scopes,
+    SalesCacheSignal cacheSignal,
+    LinkoSyncProgress progress,
+    TimeProvider time,
+    ILogger<LinkoSyncCoordinator> logger)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -37,13 +43,15 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
             using var scope = scopes.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<LinkoSyncService>();
             LastReport = await service.SyncAsync(mode, run.Token);
-            if (mode == LinkoSyncMode.Incremental)
+            // Обычное обновление сбрасывает кэш свежих расчётов; если пришло изменение давнего месяца (заказ или возврат старше прошлого
+            // месяца — поздняя приёмка, отмена) — и кэш давних месяцев: иначе АКБ с начала года жила бы со старыми цифрами часами.
+            if (mode == LinkoSyncMode.Incremental && !LinkoSyncSchedule.TouchesHistory(service.EarliestChanged, time.GetUtcNow()))
             {
                 cacheSignal.Invalidate();
             }
             else
             {
-                cacheSignal.InvalidateHistory(); // полная загрузка могла поменять и давние месяцы
+                cacheSignal.InvalidateHistory(); // полная загрузка, ночная сверка или изменение давних месяцев
             }
 
             progress.Step("Пересчёт отчётов", null);
@@ -126,11 +134,18 @@ public sealed class LinkoSyncCoordinator(IServiceScopeFactory scopes, SalesCache
     }
 }
 
-/// <summary>Периодическая синхронизация Linko (Sales:Sync:IntervalMinutes).</summary>
+/// <summary>
+/// Обмен с Linko без людей: обновление изменений каждые Sales:Sync:IntervalMinutes, раз в сутки после Sales:Sync:ReconcileHour (Ташкент) —
+/// ночная сверка (полная загрузка свежего окна и остатков); после каждого запуска — контроль обмена (LinkoSyncHealth): данные устарели —
+/// уведомление администраторам интеграций, восстановилось — тоже. После синхронизации координатор сбрасывает кэши всех отчётов на данных
+/// Linko и пересчитывает частые страницы; витрина Sales Base пересчитывается своей службой, увидев новую синхронизацию.
+/// </summary>
 internal sealed class LinkoSyncWorker(
     LinkoSyncCoordinator coordinator,
     LinkoSettingsStore settings,
     SalesOptions sales,
+    IServiceScopeFactory scopes,
+    TimeProvider time,
     ILogger<LinkoSyncWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -150,7 +165,14 @@ internal sealed class LinkoSyncWorker(
                 // Настройки читаются на каждом цикле: подключение можно включить или поменять без перезапуска.
                 if ((await settings.GetAsync(stoppingToken)).IsReady)
                 {
-                    await coordinator.RunAsync(LinkoSyncMode.Incremental, stoppingToken);
+                    var mode = await ReconcileDueAsync(stoppingToken) ? LinkoSyncMode.Reconcile : LinkoSyncMode.Incremental;
+                    if (mode == LinkoSyncMode.Reconcile)
+                    {
+                        logger.LogInformation("Linko: ночная сверка");
+                    }
+
+                    await coordinator.RunAsync(mode, stoppingToken);
+                    await CheckHealthAsync(stoppingToken);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -159,5 +181,32 @@ internal sealed class LinkoSyncWorker(
             }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
+    }
+
+    private async Task<bool> ReconcileDueAsync(CancellationToken ct)
+    {
+        if (sales.Sync.ReconcileHour < 0)
+        {
+            return false;
+        }
+
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<OneBase.Infrastructure.Persistence.OneBaseDbContext>();
+        var last = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == LinkoSyncSchedule.ReconcileState).Select(s => s.LastSuccessAt).FirstOrDefaultAsync(ct);
+        return LinkoSyncSchedule.ReconcileDue(time.GetUtcNow(), last, sales.Sync.ReconcileHour);
+    }
+
+    /// <summary>Контроль обмена не должен ломать синхронизацию: ошибка — в журнал.</summary>
+    private async Task CheckHealthAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<LinkoSyncHealth>().CheckAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Linko: контроль обмена не выполнен");
+        }
     }
 }

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { useT } from "@/i18n/client";
 
 /** true — секции внутри свёрнуты, пока их не раскроют. */
 const CollapsedContext = createContext(false);
@@ -14,10 +15,13 @@ export function CollapsedSections({ children }: { children: React.ReactNode }) {
   return <CollapsedContext.Provider value={true}>{children}</CollapsedContext.Provider>;
 }
 
-/** Секция-карточка с заголовком, пояснением и действиями справа. */
+/**
+ * Секция-карточка с заголовком, пояснением и действиями справа. Заголовок и строковое пояснение переводятся здесь
+ * (ключ — русский текст; уже переведённый текст не меняется).
+ */
 export function Section({
-  title,
-  hint,
+  title: titleText,
+  hint: hintText,
   actions,
   children,
   className = "",
@@ -28,6 +32,9 @@ export function Section({
   children: React.ReactNode;
   className?: string;
 }) {
+  const t = useT();
+  const title = t(titleText);
+  const hint = typeof hintText === "string" ? t(hintText) : hintText;
   const collapsible = useContext(CollapsedContext);
   const [open, setOpen] = useState(!collapsible);
 
@@ -56,7 +63,7 @@ export function Section({
               <span>{title}</span>
               {hint && <span className="text-xs font-normal text-ink-3">{hint}</span>}
             </span>
-            <span className="ml-auto shrink-0 pl-3 text-xs font-medium text-accent group-hover:underline">{open ? "Свернуть" : "Развернуть"}</span>
+            <span className="ml-auto shrink-0 pl-3 text-xs font-medium text-accent group-hover:underline">{open ? t("Свернуть") : t("Развернуть")}</span>
           </button>
         </h2>
         {open && actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

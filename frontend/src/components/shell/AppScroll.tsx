@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
+import { useT } from "@/i18n/client";
 
 /**
  * Оболочка как у приложения: верхняя и нижняя панели стоят на месте, прокручивается только содержимое — элемент
@@ -152,6 +153,7 @@ export function ScrollManager() {
  * жест браузера пропадает, когда документ не прокручивается. Только на сенсорных экранах.
  */
 export function PullToRefresh() {
+  const t = useT();
   const router = useRouter();
   const [pull, setPull] = useState(0);
   const [pending, startTransition] = useTransition();
@@ -216,7 +218,7 @@ export function PullToRefresh() {
         style={{ transform: pending ? undefined : `translateY(${Math.max(0, pull - 30)}px)`, opacity: pending ? 1 : Math.min(1, pull / 50) }}
       >
         <RefreshCw className={`size-4 ${pending ? "animate-spin" : ""}`} style={pending ? undefined : { transform: `rotate(${pull * 4}deg)` }} />
-        <span className="sr-only">{pending ? "Обновляем" : ready ? "Отпустите, чтобы обновить" : "Потяните, чтобы обновить"}</span>
+        <span className="sr-only">{pending ? t("Обновляем") : ready ? t("Отпустите, чтобы обновить") : t("Потяните, чтобы обновить")}</span>
       </span>
     </div>
   );

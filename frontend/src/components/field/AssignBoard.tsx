@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { GripVertical } from "lucide-react";
+import { useT } from "@/i18n/client";
 import type { FieldRoute } from "@/lib/field/types";
 import { fieldApi, useAction } from "./hooks";
 
@@ -14,6 +15,7 @@ type Column = { agentId: string; agentName: string; route: FieldRoute | null };
  * На телефоне — меню «к агенту» у каждой точки.
  */
 export function AssignBoard({ columns }: { columns: Column[] }) {
+  const t = useT();
   const { busy, error, run } = useAction();
   const [drag, setDrag] = useState<{ marketId: number; name: string; from: string } | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -22,9 +24,9 @@ export function AssignBoard({ columns }: { columns: Column[] }) {
   const reassign = (marketId: number, name: string, from: string, to: string) => {
     if (from === to) return;
     const target = columns.find((c) => c.agentId === to);
-    if (!confirm(`Передать «${name}» агенту ${target?.agentName}? Точка закрепится за ним.`)) return;
+    if (!confirm(t("Передать «{name}» агенту {agent}? Точка закрепится за ним.", { name, agent: target?.agentName ?? "" }))) return;
     run(`${marketId}`, () => fieldApi.post<{ toAgent: string; addedToRoute: boolean }>(`customers/${marketId}/agent`, { agentId: to }), {
-      onDone: (r) => setMessage(`«${name}» → ${r.toAgent}${r.addedToRoute ? ", добавлена в маршрут" : ""}`),
+      onDone: (r) => setMessage(`«${name}» → ${r.toAgent}${r.addedToRoute ? t(", добавлена в маршрут") : ""}`),
     });
   };
 
@@ -52,7 +54,7 @@ export function AssignBoard({ columns }: { columns: Column[] }) {
               <Link href={`/field/agents/${c.agentId}`} prefetch={false} className="block truncate text-sm font-semibold text-ink hover:underline">
                 {c.agentName}
               </Link>
-              <div className="text-xs text-ink-3">{c.route ? `${c.route.visited}/${c.route.planned} точек · ${c.route.distanceKm} км` : "маршрута нет"}</div>
+              <div className="text-xs text-ink-3">{c.route ? t("{visited}/{planned} точек · {km} км", { visited: c.route.visited, planned: c.route.planned, km: c.route.distanceKm }) : t("маршрута нет")}</div>
             </div>
             <ul className="max-h-[60vh] space-y-1 overflow-y-auto p-2">
               {(c.route?.points ?? []).map((p) => (
@@ -69,7 +71,7 @@ export function AssignBoard({ columns }: { columns: Column[] }) {
                   </span>
                   {p.status === "Planned" && (
                     <select
-                      aria-label="Передать агенту"
+                      aria-label={t("Передать агенту")}
                       data-select="bare"
                       value=""
                       onChange={(e) => e.target.value && reassign(p.marketId, p.name, c.agentId, e.target.value)}
@@ -85,7 +87,7 @@ export function AssignBoard({ columns }: { columns: Column[] }) {
                   )}
                 </li>
               ))}
-              {!c.route && <li className="px-2 py-4 text-center text-xs text-ink-3">Перетащите точку сюда — она закрепится за агентом</li>}
+              {!c.route && <li className="px-2 py-4 text-center text-xs text-ink-3">{t("Перетащите точку сюда — она закрепится за агентом")}</li>}
             </ul>
           </section>
         ))}

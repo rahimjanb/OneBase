@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
+import { useT } from "@/i18n/client";
 
 /** «Отменить» для идущей синхронизации Linko. Загруженное до отмены сохраняется, прерванный шаг повторится со следующей синхронизацией. */
 export function CancelSyncButton({
@@ -14,20 +15,21 @@ export function CancelSyncButton({
   onCancelled?: () => void;
   size?: "sm" | "md";
 }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const cancel = async () => {
-    if (!window.confirm("Отменить синхронизацию с Linko? Уже загруженное сохранится, остальное догрузится при следующей синхронизации.")) return;
+    if (!window.confirm(t("Отменить синхронизацию с Linko? Уже загруженное сохранится, остальное догрузится при следующей синхронизации."))) return;
     setBusy(true);
     setError(null);
     try {
       const response = await fetch("/bff/api/sales/sync/cancel", { method: "POST" });
-      if (response.status === 403) setError("Нет прав на отмену");
-      else if (!response.ok && response.status !== 409) setError("Не удалось отменить");
+      if (response.status === 403) setError(t("Нет прав на отмену"));
+      else if (!response.ok && response.status !== 409) setError(t("Не удалось отменить"));
       else onCancelled?.();
     } catch {
-      setError("Не удалось отменить");
+      setError(t("Не удалось отменить"));
     } finally {
       setBusy(false);
     }
@@ -41,9 +43,9 @@ export function CancelSyncButton({
 
   return (
     <>
-      <button type="button" className={cls} onClick={cancel} disabled={waiting} title="Прервать синхронизацию с Linko">
+      <button type="button" className={cls} onClick={cancel} disabled={waiting} title={t("Прервать синхронизацию с Linko")}>
         {waiting ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
-        {cancelling ? "Отменяется…" : "Отменить"}
+        {cancelling ? t("Отменяется…") : t("Отменить")}
       </button>
       {error && <span className="text-xs text-bad">{error}</span>}
     </>

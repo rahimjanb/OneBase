@@ -1,3 +1,4 @@
+import { getT } from "@/i18n/server";
 import { AkbMonthsCard } from "./AkbMonthsCard";
 import { CollapsedSections } from "./bits";
 import { DataQualityNotes, KpiRow, NextMonthCard, UnassignedWarning, UnitCard } from "./blocks";
@@ -30,8 +31,8 @@ function Cards({ title, cards, query }: { title: string; cards: UnitRow[]; query
   );
 }
 
-/** Содержимое уровней «Республика» и «РМ / направление». */
-export function GroupPage({
+/** Содержимое уровней «Республика» и «РМ / направление». Серверный (подключают только страницы): перевод — getT(). */
+export async function GroupPage({
   data,
   sp,
   query,
@@ -48,6 +49,7 @@ export function GroupPage({
   /** «в республике», «в направлении» — для пояснений. */
   scopeName: string;
 }) {
+  const t = await getT();
   const { period } = data;
   const from = Number(param(sp, "from") ?? 1);
   const to = Number(param(sp, "to") ?? Math.max(1, period.workedDays));
@@ -62,10 +64,10 @@ export function GroupPage({
       <KpiRow kpi={data.kpi} period={period} />
       <UnassignedWarning kgValue={data.unassigned.kg} share={data.unassigned.share} />
 
-      <Cards title="Региональные менеджеры" cards={directions} query={query} />
-      <Cards title={directions.length > 0 ? "Регионы без РМ" : "Регионы"} cards={regions} query={query} />
+      <Cards title={t("Региональные менеджеры")} cards={directions} query={query} />
+      <Cards title={directions.length > 0 ? t("Регионы без РМ") : t("Регионы")} cards={regions} query={query} />
 
-      {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle="Регион" />}
+      {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle={t("Регион")} />}
       <CategoryCards cards={data.categoryCards} scope={scopeName} query={categoryQuery} plans={data.categoryPlans} />
 
       {/* План и факт по категориям и АКБ по месяцам — сразу под карточками, на широком экране рядом. */}
@@ -80,21 +82,21 @@ export function GroupPage({
           rows={data.regions}
           query={query}
           title={regionsTitle}
-          hint={`текущий темп × ${period.daysInMonth} дн. (отработано ${period.workedDays})`}
+          hint={t("текущий темп × {days} дн. (отработано {worked})", { days: period.daysInMonth, worked: period.workedDays })}
         />
         <MonthCalendarTable
           calendar={data.calendar}
           year={period.year}
           month={period.month}
           categories={data.categoryCards.filter((c) => c.id !== "none").map((c) => ({ id: Number(c.id), name: c.name }))}
-          title="Календарь месяца по регионам"
-          rowLabel="Регион"
+          title={t("Календарь месяца по регионам")}
+          rowLabel={t("Регион")}
           rowKind="region"
         />
         <VisitCalendarTable
           rows={data.visitCalendar}
           totalRow={data.visitCalendarTotal}
-          totalName="Итого"
+          totalName={t("Итого")}
           from={from}
           to={to}
           maxDay={period.daysInMonth}
@@ -104,16 +106,16 @@ export function GroupPage({
         />
         <SameDaysTable
           rows={data.sameDays}
-          nameLabel="Регион"
-          hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`}
+          nameLabel={t("Регион")}
+          hint={t("{month}, 1–{day} числа", { month: monthGenitive(prevMonth, t), day: cutoffDay })}
           link="region"
           query={query}
         />
         <NotBoughtTable
           rows={data.notBought}
           total={data.notBoughtTotal}
-          nameLabel="Регион"
-          hint={`база — ${monthName(prevMonth)}, кто пока молчит`}
+          nameLabel={t("Регион")}
+          hint={t("база — {month}, кто пока молчит", { month: monthName(prevMonth, t) })}
           workedDays={period.workedDays}
           daysInMonth={period.daysInMonth}
         />

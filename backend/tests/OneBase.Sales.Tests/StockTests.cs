@@ -226,4 +226,111 @@ public class StockTests
         Assert.Equal(("rm", "abc"), StockService.ParseScope("rm:abc"));
         Assert.Equal(("country", null), StockService.ParseScope("rm:"));
     }
+
+    /// <summary>
+    /// Как в «Полевом контроле»: ни остатка, ни продаж — «нет остатка», а не «норма»; ТОП-товар, которого у дилера нет вовсе, —
+    /// стартовый заказ 10 коробок (иначе по скорости заказ был бы нулём навсегда).
+    /// </summary>
+    [Fact]
+    public void Empty_pair_status_and_top_start_order()
+    {
+        Assert.Equal(StockStatuses.Empty, StockStatuses.Of(0, 0));
+        Assert.Equal(StockStatuses.Empty, StockStatuses.Of(0, null));
+        Assert.Equal(StockStatuses.Dead, StockStatuses.Of(5, 0));
+        Assert.Equal(StockStatuses.Deficit, StockStatuses.Of(5, 1));
+
+        Assert.Equal(30m, StockMath.TopStartKg(0, 0, 3));
+        Assert.Null(StockMath.TopStartKg(0.5m, 0, 3)); // продаётся — заказ по скорости
+        Assert.Null(StockMath.TopStartKg(0, 2, 3));    // лежит остаток
+        Assert.Null(StockMath.TopStartKg(0, 0, null)); // коробки не знаем
+    }
+
+    /// <summary>«Собрать в Excel»: столбцы — по ключам в порядке каталога, неизвестные отброшены, пусто — как в таблице; дни и цена не складываются.</summary>
+    [Fact]
+    public void Excel_columns_come_from_the_catalog()
+    {
+        Assert.Equal(["name", "stockKg", "orderKg"], StockExport.Parse("orderKg, name ,unknown,stockKg").Select(c => c.Key));
+        Assert.Equal(StockExport.DefaultKeys, StockExport.Parse(null).Select(c => c.Key));
+        Assert.Equal(StockExport.DefaultKeys, StockExport.Parse("nothing").Select(c => c.Key));
+        Assert.False(StockExport.Columns.Single(c => c.Key == "days").Sum);
+        Assert.False(StockExport.Columns.Single(c => c.Key == "price").Sum);
+        Assert.True(StockExport.Columns.Single(c => c.Key == "orderKg").Sum);
+        Assert.All(StockExport.Columns, c => Assert.False(string.IsNullOrWhiteSpace(c.Uz)));
+        Assert.Equal("дефицит", StockExport.StatusLabel(StockStatuses.Deficit));
+    }
+
+    /// <summary>Единица Linko и единиц в коробке: «кг» — вес коробки, «шт» — штук из названия, иначе коробка ÷ штука; строка акта — коробки × единиц × цена.</summary>
+    [Fact]
+    public void Auto_order_units_per_box_and_act_row()
+    {
+        Assert.Equal(3m, AutoOrderMath.UnitsPerBox("кг", null, 1m, 3m));
+        Assert.Equal(28m, AutoOrderMath.UnitsPerBox("шт", new PackInfo(0.98m, 28, 0.035m), 0.035m, 0.98m));
+        Assert.Equal(10m, AutoOrderMath.UnitsPerBox("шт", null, 0.4m, 4m));
+        Assert.Null(AutoOrderMath.UnitsPerBox("шт", null, null, 4m));
+        Assert.Null(AutoOrderMath.UnitsPerBox("кг", null, 1m, null));
+        Assert.Equal("шт", AutoOrderMath.UnitOf(" ШТ ", 1m));
+        Assert.Equal("кг", AutoOrderMath.UnitOf(null, 1m));
+        Assert.Equal("шт", AutoOrderMath.UnitOf(null, 0.4m));
+
+        var bamboo = new AutoOrderItem(494, "494", "494 Хрустящие палочки Bamboo (400г) 10 шт.", "Бамбук", true, "шт", 10, 4, 9396, 129, 63.6m, 38.6m);
+        Assert.Equal(new TransferActRow(bamboo.Name, 129, "шт", 1290, 9396, 12_120_840), AutoOrderMath.Row(bamboo, 129));
+        var keko = bamboo with { Unit = "кг", UnitsPerBox = 2.5m, BoxKg = 2.5m, Price = null };
+        Assert.Equal(new TransferActRow(keko.Name, 3, "кг", 7.5m, null, null), AutoOrderMath.Row(keko, 3));
+    }
+
+    /// <summary>
+    /// Автозаказ региона: товары с коробкой (трубочки без коробки — в счётчике), рекомендация — заказ склада в коробках, рекомендованные —
+    /// первыми; без региона — первый по алфавиту.
+    /// </summary>
+    [Fact]
+    public void Auto_order_recommends_boxes_for_the_region()
+    {
+        var denov = StockService.ComposeAutoOrder(Base(), "R2");
+        Assert.Equal(("r2", "Денов"), (denov.RegionId, denov.RegionName));
+        Assert.Equal(["Бухоро", "Денов"], denov.Regions.Select(r => r.Name));
+        Assert.Equal(1, denov.WithoutBox);
+        Assert.Equal(15, denov.CoverDays);
+        Assert.Equal([(1L, 40), (2L, 0)], denov.Items.Select(i => (i.ProductId, i.RecBoxes))); // 120 кг ÷ 3 кг
+        var bambuk = denov.Items[0];
+        Assert.Equal(("кг", 3m, 22800m, 30m), (bambuk.Unit, bambuk.UnitsPerBox, bambuk.Price, bambuk.StockKg));
+
+        var first = StockService.ComposeAutoOrder(Base(), null);
+        Assert.Equal("Бухоро", first.RegionName);
+        Assert.Equal([(2L, 10), (1L, 0)], first.Items.Select(i => (i.ProductId, i.RecBoxes))); // KEKO: 25 кг ÷ 2,5 кг
+    }
+
+    /// <summary>
+    /// Акт из автозаказа: с клиента только коробки — товары без коробки, чужие и нулевые отбрасываются, строки — по категории и названию,
+    /// цены и единицы — свои; Word-документ проходит проверку OpenXML, подписи переносятся вместе с абзацем об ответственности.
+    /// </summary>
+    [Fact]
+    public void Transfer_act_takes_only_boxes_from_the_client_and_is_a_valid_word_document()
+    {
+        var input = new AutoOrderActInput("r2", null, [new(2, 4), new(1, 40), new(3, 5), new(99, 1), new(1, 0)]);
+        var act = StockService.ComposeAct(Base(), input, "Ritm Admin", new DateOnly(2026, 10, 22));
+        Assert.Equal(("Завод", "Денов", new DateOnly(2026, 10, 22), "Ritm Admin"), (act.From, act.To, act.Date, act.Sender));
+        Assert.Equal(
+            [new TransferActRow(Bambuk.Name, 40, "кг", 120, 22800, 2_736_000), new TransferActRow(Keko.Name, 4, "кг", 10, 33500, 335_000)],
+            act.Rows);
+        Assert.Equal(3_071_000m, act.Total);
+        Assert.Equal(new DateOnly(2026, 11, 1), StockService.ComposeAct(Base(), input with { Date = new DateOnly(2026, 11, 1) }, "x", default).Date);
+
+        Assert.Throws<ArgumentException>(() => StockService.ComposeAct(Base(), input with { RegionId = " " }, "x", default));
+        Assert.Throws<KeyNotFoundException>(() => StockService.ComposeAct(Base(), input with { RegionId = "nope" }, "x", default));
+        Assert.Throws<ArgumentException>(() => StockService.ComposeAct(Base(), input with { Lines = [new(3, 5), new(1, 0)] }, "x", default));
+
+        var bytes = new OneBase.Infrastructure.Reports.TransferActWriter().Write(act);
+        using var document = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(new MemoryStream(bytes), false);
+        var errors = new DocumentFormat.OpenXml.Validation.OpenXmlValidator().Validate(document).Select(e => $"{e.Path?.XPath}: {e.Description}").ToList();
+        Assert.Empty(errors);
+        var body = document.MainDocumentPart!.Document.Body!;
+        var text = body.InnerText.Replace(' ', ' ');
+        foreach (var expected in new[] { "ПРИЕМА-ПЕРЕДАЧИ", "Завод → Денов", "22 Октябрь 2026", "передает Ritm Admin", "Итого:", "2 736 000", "3 071 000", "Сдал", "Принял" })
+        {
+            Assert.Contains(expected, text);
+        }
+
+        var responsibility = body.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>().Single(p => p.InnerText.StartsWith("Менеджер по продажам"));
+        Assert.NotNull(responsibility.ParagraphProperties?.KeepNext);
+    }
 }

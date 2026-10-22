@@ -4,11 +4,13 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { fieldHomePath, isFieldHost, requestHost } from "@/lib/field/host";
 import { homeFor } from "@/lib/navigation";
+import { getT } from "@/i18n/server";
 import { API_URL, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/server-api";
 
 export type LoginState = { error?: string };
 
 export async function login(_: LoginState, form: FormData): Promise<LoginState> {
+  const t = await getT();
   const login = String(form.get("login") ?? "").trim();
   const password = String(form.get("password") ?? "");
   // Вход Sales Base (его домен или его страница входа) — по умолчанию его главная, иначе — продажи OneBase.
@@ -29,12 +31,12 @@ export async function login(_: LoginState, form: FormData): Promise<LoginState> 
       cache: "no-store",
     });
   } catch {
-    return { error: "Сервер OneBase недоступен. Попробуйте позже." };
+    return { error: t("Сервер OneBase недоступен. Попробуйте позже.") };
   }
 
-  if (response.status === 401) return { error: "Неверный логин или пароль." };
-  if (response.status === 429) return { error: "Слишком много попыток. Подождите минуту." };
-  if (!response.ok) return { error: `Ошибка входа (${response.status}).` };
+  if (response.status === 401) return { error: t("Неверный логин или пароль.") };
+  if (response.status === 429) return { error: t("Слишком много попыток. Подождите минуту.") };
+  if (!response.ok) return { error: t("Ошибка входа ({status}).", { status: response.status }) };
 
   // Сеанс — до выхода: cookie на 400 дней (дольше браузеры не хранят), proxy продлевает её при каждом заходе.
   const { accessToken } = (await response.json()) as { accessToken: string };

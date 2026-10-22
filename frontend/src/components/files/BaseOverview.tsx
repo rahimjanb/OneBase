@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { MonitorUp } from "lucide-react";
 import { EmptyState, SearchInput } from "@/components/ui";
+import { useT } from "@/i18n/client";
 import { fileSize, filesLabel, foldersLabel } from "@/lib/format";
 import { accessLabel, filesApi, modifiedLabel, type DepartmentSummary, type SearchRow } from "@/lib/files";
 import { FileIcon, FolderIcon } from "./file-meta";
@@ -17,6 +18,7 @@ const connectionBadge = {
 
 /** «Файлы»: отделы, к которым есть доступ, и поиск по всем сразу. */
 export function BaseOverview({ departments }: { departments: DepartmentSummary[] }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<SearchRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +35,7 @@ export function BaseOverview({ departments }: { departments: DepartmentSummary[]
     <>
       <SearchInput
         className="w-full sm:max-w-md"
-        placeholder="Поиск файлов: имя, тип, папка, отдел, автор"
+        placeholder={t("Поиск файлов: имя, тип, папка, отдел, автор")}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -41,7 +43,7 @@ export function BaseOverview({ departments }: { departments: DepartmentSummary[]
 
       {found ? (
         found.length === 0 ? (
-          <div className="mt-6"><EmptyState>Ничего не найдено</EmptyState></div>
+          <div className="mt-6"><EmptyState>{t("Ничего не найдено")}</EmptyState></div>
         ) : (
           <div className="mt-4 divide-y divide-line">
             {found.map((row) => (
@@ -49,7 +51,7 @@ export function BaseOverview({ departments }: { departments: DepartmentSummary[]
                 <FileIcon extension={row.file.extension} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{row.file.name}</span>
-                  <span className="block truncate text-xs text-ink-3">{row.folderPath} · {modifiedLabel(row.file.updatedAt)}</span>
+                  <span className="block truncate text-xs text-ink-3">{row.folderPath} · {modifiedLabel(row.file.updatedAt, t)}</span>
                 </span>
                 <span className="text-xs text-ink-3">{fileSize(row.file.sizeBytes)}</span>
               </button>
@@ -57,17 +59,17 @@ export function BaseOverview({ departments }: { departments: DepartmentSummary[]
           </div>
         )
       ) : departments.length === 0 ? (
-        <div className="mt-6"><EmptyState>Нет отделов, к файлам которых у вас есть доступ</EmptyState></div>
+        <div className="mt-6"><EmptyState>{t("Нет отделов, к файлам которых у вас есть доступ")}</EmptyState></div>
       ) : (
         // Отделы — папки верхнего уровня: та же таблица, что внутри отдела («Файлы» → «Производство» → «Отчёты»).
         <div className="mt-5 overflow-x-auto">
           <div className="min-w-[640px]">
             <div className="grid grid-cols-[minmax(0,2fr)_130px_minmax(0,1.3fr)_90px_minmax(0,1.2fr)] gap-3 border-b border-line py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-              <span>Отдел</span>
-              <span>Доступ</span>
-              <span>Содержимое</span>
-              <span>Размер</span>
-              <span>Изменён</span>
+              <span>{t("Отдел")}</span>
+              <span>{t("Доступ")}</span>
+              <span>{t("Содержимое")}</span>
+              <span>{t("Размер")}</span>
+              <span>{t("Изменён")}</span>
             </div>
             {departments.map((d) => {
               const badge = connectionBadge[d.connection.status];
@@ -79,20 +81,20 @@ export function BaseOverview({ departments }: { departments: DepartmentSummary[]
                 >
                   <span className="flex min-w-0 items-center gap-3">
                     <FolderIcon />
-                    <span className="truncate font-medium group-hover:text-accent">{d.name}</span>
+                    <span className="truncate font-medium group-hover:text-accent">{t(d.name)}</span>
                     {badge && (
-                      <span className={`hidden shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] sm:inline-flex ${badge.cls}`} title={badge.label}>
+                      <span className={`hidden shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] sm:inline-flex ${badge.cls}`} title={t(badge.label)}>
                         <MonitorUp className="size-3" />
                         Windows
                       </span>
                     )}
                   </span>
-                  <span className="text-xs text-ink-2">{accessLabel[d.access]}</span>
+                  <span className="text-xs text-ink-2">{t(accessLabel[d.access])}</span>
                   <span className="text-xs text-ink-2">
-                    {foldersLabel(d.folders)} · {filesLabel(d.files)}
+                    {foldersLabel(d.folders, t)} · {filesLabel(d.files, t)}
                   </span>
                   <span className="text-xs text-ink-2">{d.files > 0 ? fileSize(d.sizeBytes) : "—"}</span>
-                  <span className="text-xs text-ink-2">{d.updatedAt ? modifiedLabel(d.updatedAt) : "файлов пока нет"}</span>
+                  <span className="text-xs text-ink-2">{d.updatedAt ? modifiedLabel(d.updatedAt, t) : t("файлов пока нет")}</span>
                 </Link>
               );
             })}

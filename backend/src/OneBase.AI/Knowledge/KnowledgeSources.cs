@@ -18,6 +18,18 @@ public static class KnowledgeSources
     /// <summary>Sales Base: полевая команда — маршруты, визиты, задачи, статусы агентов, рекомендации AI.</summary>
     public const string FieldSales = "field.sales";
     public const string FinancePayments = "finance.payments";
+
+    /// <summary>Продажи по SKU за период: ABC, динамика, регионы и точки товара.</summary>
+    public const string SalesSku = "sales.sku";
+
+    /// <summary>Экспорт: продажи экспортным точкам по странам и отгрузки завода на экспорт.</summary>
+    public const string SalesExport = "sales.export";
+
+    /// <summary>P&L дилеров: выручка, себестоимость, прочие расходы и прибыль — данные, загруженные через AI Data Manager.</summary>
+    public const string DealerPnl = "finance.pnl";
+
+    /// <summary>Задачи отделов OneBase: открытые, просроченные, выполненные, исполнители.</summary>
+    public const string WorkTasks = "work.tasks";
     public const string SupplyProviders = "supply.providers";
     public const string Documents = "knowledge.documents";
 
@@ -45,6 +57,14 @@ public static class KnowledgeSources
             "linko.Payments", "—", Permissions.FinanceRead),
         new(SupplyProviders, "Поставщики", "Справочник поставщиков Linko (только названия; закупок и цен закупки в OneBase нет).",
             "linko.Providers", "—", Permissions.SalesRead),
+        new(SalesSku, "Продажи по SKU", "Продажи товаров за любой период: кг и выручка, ABC, динамика, сколько регионов и точек берут товар.",
+            "linko.Orders, OrderLines, OrderReturns, OrderReturnLines, Products, ProductTypes, sales.Regions", "Продажи: продажи по SKU", Permissions.SalesRead),
+        new(SalesExport, "Экспорт", "Экспорт по странам (кг, сумма, точки, динамика, с начала года) и продажи филиала «Завод» (экспорт и опт) по покупателям, агентам и товарам. Плана экспорта в OneBase нет.",
+            "linko.Orders, OrderLines, OrderReturns, OrderReturnLines, Markets, Products, ProductTypes", "Продажи: экспорт, первичка → экспорт", Permissions.SalesRead),
+        new(DealerPnl, "P&L дилеров", "Прибыль завода на дилерах по месяцам: продажи, себестоимость, валовая прибыль и маржа, расходы, EBIT, ROS, EAT; загружается через AI Data Manager.",
+            "sales.PnlValues, Regions, Directions, ai.DataChangeSets, DataFiles", "Продажи: P&L", Permissions.FinanceRead),
+        new(WorkTasks, "Задачи отделов", "Задачи отделов OneBase: открытые, просроченные и выполненные, исполнители, сроки — только отделы, доступные пользователю.",
+            "work.Tasks", "Задачи", null),
         new(Documents, "База знаний", "Документы, загруженные в базу знаний AI: регламенты, отчёты, выгрузки Excel и CSV.",
             "ai.KnowledgeDocuments, ai.KnowledgeChunks", "Настройки → AI → База знаний", Permissions.FilesRead),
     ];

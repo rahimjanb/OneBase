@@ -259,6 +259,12 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .Where(p => p.Year == year || (p.Year == next.Year && p.Month == next.Month))
             .ToListAsync(ct);
         var staffIds = staff.Select(s => s.LinkoUserId).Distinct().ToList();
+        var monthIndicators = staff.Where(s => s.Year == year && s.Month == month).Select(s => s.IndicatorId).Distinct().ToList();
+        var indicatorLevels = (await db.SalesStaffIndicators.AsNoTracking()
+                .Where(i => monthIndicators.Contains(i.Id))
+                .Select(i => new { i.Id, i.Levels })
+                .ToListAsync(ct))
+            .ToDictionary(i => i.Id, i => KpiMath.ParseLevels(i.Levels));
         var excludedStaff = (await db.LinkoUsers.AsNoTracking()
                 .Where(u => staffIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.JobName })
@@ -363,8 +369,11 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             NextPlans = nextPlans,
             Indicators = staff
                 .Where(s => s.Year == year && s.Month == month)
-                .Select(s => new StaffIndicator(s.LinkoUserId, s.IndicatorId, CleanIndicatorName(s.IndicatorName), s.PlanType, s.PlanAmount, s.FactAmount))
+                .Select(s => new StaffIndicator(s.LinkoUserId, s.IndicatorId, CleanIndicatorName(s.IndicatorName), s.PlanType, s.PlanAmount, s.FactAmount,
+                    s.SalesAmount, s.ReturnAmount, s.Level, s.SalaryAmount, s.BonusAmount, s.IndicatorName))
                 .ToList(),
+            IndicatorLevels = indicatorLevels,
+            IndicatorsLoadedAt = staff.Where(s => s.Year == year && s.Month == month).Select(s => (DateTimeOffset?)s.LoadedAt).Max(),
             RevenuePlans = staff
                 .Where(s => s.Year == year && s.Month == month && s.PlanType == StaffPlanTypes.SalesSum && !excludedStaff.Contains(s.LinkoUserId))
                 .GroupBy(s => s.LinkoUserId)

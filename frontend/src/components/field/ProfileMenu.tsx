@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ChevronUp, LogOut, Settings2 } from "lucide-react";
 import { LogoutLink } from "@/components/shell/AppBridge";
+import { useT } from "@/i18n/client";
 import { PermissionsSheet } from "@/components/shell/PermissionsSheet";
 import { FIELD_LOGOUT_PATH } from "@/lib/field/host";
 import { roleLabel } from "@/lib/field/labels";
@@ -29,6 +30,7 @@ function Avatar({ name, className = "" }: { name: string; className?: string }) 
  * sidebar — строка внизу панели. Закрывается повторным нажатием, кликом мимо, Esc и переходом на другую страницу.
  */
 export function ProfileMenu({ me, variant }: { me: FieldMe; variant: "header" | "sidebar" }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [permissions, setPermissions] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -50,7 +52,7 @@ export function ProfileMenu({ me, variant }: { me: FieldMe; variant: "header" | 
     };
   }, [open]);
 
-  const details = [roleLabel[me.role], me.teamName, me.supervisorName ? `супервайзер ${me.supervisorName}` : null].filter(Boolean).join(" · ");
+  const details = [t(roleLabel[me.role]), me.teamName, me.supervisorName ? t("супервайзер {name}", { name: me.supervisorName }) : null].filter(Boolean).join(" · ");
 
   return (
     <div ref={ref} className="relative">
@@ -60,7 +62,7 @@ export function ProfileMenu({ me, variant }: { me: FieldMe; variant: "header" | 
           onClick={() => setOpen((v) => !v)}
           aria-haspopup="menu"
           aria-expanded={open}
-          aria-label={`Профиль: ${me.name}`}
+          aria-label={t("Профиль: {name}", { name: me.name })}
           className="grid size-10 place-items-center rounded-full hover:bg-white/10 lg:size-9 lg:hover:bg-muted"
         >
           <Avatar name={me.name} className="size-8 text-xs lg:size-7 lg:text-[11px]" />
@@ -76,7 +78,7 @@ export function ProfileMenu({ me, variant }: { me: FieldMe; variant: "header" | 
           <Avatar name={me.name} className="size-8 text-xs" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm text-sidebar-text">{me.name}</span>
-            <span className="block truncate text-xs text-sidebar-muted">{me.teamName ?? roleLabel[me.role]}</span>
+            <span className="block truncate text-xs text-sidebar-muted">{me.teamName ?? t(roleLabel[me.role])}</span>
           </span>
           <ChevronUp className={`size-4 shrink-0 text-sidebar-muted transition-transform ${open ? "" : "rotate-180"}`} />
         </button>
@@ -107,11 +109,11 @@ export function ProfileMenu({ me, variant }: { me: FieldMe; variant: "header" | 
               className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-sm text-ink hover:bg-muted"
             >
               <Settings2 className="size-4 text-ink-3" strokeWidth={1.75} />
-              Уведомления и геолокация
+              {t("Уведомления и геолокация")}
             </button>
             <LogoutLink role="menuitem" href={FIELD_LOGOUT_PATH} className="flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-sm font-medium text-bad hover:bg-bad-soft">
               <LogOut className="size-4" strokeWidth={1.75} />
-              Выйти
+              {t("Выйти")}
             </LogoutLink>
           </div>
         </div>

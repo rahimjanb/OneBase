@@ -15,6 +15,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { useT } from "@/i18n/client";
 import { canOpen } from "@/lib/navigation";
 
 /**
@@ -48,8 +49,9 @@ export function isActive(pathname: string, item: NavItem) {
 
 /** Логотип «1Base» — белая надпись с синей единицей, для тёмного сайдбара и шапки на телефоне. Файл — из public/brand (4× для чётких экранов). */
 export function Logo() {
+  const t = useT();
   return (
-    <Link href="/" aria-label="OneBase — на главную" className="flex items-center">
+    <Link href="/" aria-label={t("OneBase — на главную")} className="flex items-center">
       <img src="/brand/logo-light.png" alt="OneBase" className="h-7 w-auto" />
     </Link>
   );
@@ -62,13 +64,14 @@ const activeClass =
   "flex items-center gap-3 rounded-xl bg-sidebar-active px-3 py-2.5 text-[13px] font-semibold text-white ring-1 ring-inset ring-white/15 backdrop-blur-md";
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+  const t = useT();
   const Icon = item.icon;
   if (item.soon) {
     return (
-      <span aria-disabled="true" title="Раздел в разработке" className="flex cursor-default items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-sidebar-muted">
+      <span aria-disabled="true" title={t("Раздел в разработке")} className="flex cursor-default items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-sidebar-muted">
         <Icon className="size-4 shrink-0" strokeWidth={1.75} />
-        {item.label}
-        <span className="ml-auto rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] text-sidebar-muted">скоро</span>
+        {t(item.label)}
+        <span className="ml-auto rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] text-sidebar-muted">{t("скоро")}</span>
       </span>
     );
   }
@@ -79,7 +82,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       className={active ? activeClass : linkClass}
     >
       <Icon className="size-4 shrink-0" strokeWidth={1.75} />
-      {item.label}
+      {t(item.label)}
     </Link>
   );
 }
@@ -91,6 +94,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
  */
 export function Sidebar({ canOpenSettings, permissions }: { canOpenSettings: boolean; permissions: readonly string[] | null }) {
   const pathname = usePathname();
+  const t = useT();
 
   return (
     <aside className="hidden h-full w-[232px] shrink-0 flex-col overflow-y-auto border-r border-white/[0.07] bg-sidebar px-3 pb-6 lg:flex">
@@ -100,7 +104,7 @@ export function Sidebar({ canOpenSettings, permissions }: { canOpenSettings: boo
       </div>
 
       <div className="mt-5 px-3 text-[10px] font-semibold uppercase tracking-[1px] text-sidebar-muted">
-        Рабочее пространство
+        {t("Рабочее пространство")}
       </div>
       <nav className="mt-3 space-y-1">
         {visibleWorkspace(permissions).map((item) => (
@@ -113,7 +117,7 @@ export function Sidebar({ canOpenSettings, permissions }: { canOpenSettings: boo
         {canOpenSettings && <NavLink item={settings} active={isActive(pathname, settings)} />}
         <a href="#" className={`${linkClass} whitespace-nowrap`}>
           <CircleQuestionMark className="size-4 shrink-0" strokeWidth={1.75} />
-          Помощь и поддержка
+          {t("Помощь и поддержка")}
         </a>
       </nav>
     </aside>

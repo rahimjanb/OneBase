@@ -1,5 +1,10 @@
 /** AI Data Manager: чат администратора с Claude, отчёты, планы изменений данных OneBase. */
 
+import { makeT, type T } from "@/i18n/core";
+
+/** Тексты по-русски — t по умолчанию; компоненты передают свой t (язык интерфейса). */
+const ru = makeT(null);
+
 export type DataStatus = { ready: boolean; message: string | null; model: string; extensions: string[]; maxFileBytes: number };
 
 export type DataStep = { tool: string; title: string; status: "running" | "done" | "failed"; note: string | null };
@@ -135,7 +140,7 @@ export type DataEvent =
   | { type: "error"; data: { message?: DataMessage; error: string } };
 
 /** POST с ответом text/event-stream: события отдаются по мере прихода (чат, подтверждение, откат). */
-export async function streamDataManager(path: string, body: unknown, onEvent: (e: DataEvent) => void): Promise<void> {
+export async function streamDataManager(path: string, body: unknown, onEvent: (e: DataEvent) => void, t: T = ru): Promise<void> {
   const response = await fetch(`/bff/api/data-manager/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -149,7 +154,15 @@ export async function streamDataManager(path: string, body: unknown, onEvent: (e
     } catch {
       // не JSON
     }
-    throw new Error(response.status === 403 ? "Нет права «AI Data Manager»." : response.status === 429 ? "Слишком много запросов подряд — подождите минуту." : text || `Ошибка ${response.status}`);
+    // Текст ошибки сервера — на языке интерфейса (по словарю или шаблону).
+    text = text && t(text);
+    throw new Error(
+      response.status === 403
+        ? t("Нет права «AI Data Manager».")
+        : response.status === 429
+          ? t("Слишком много запросов подряд — подождите минуту.")
+          : text || t("Ошибка {status}", { status: response.status }),
+    );
   }
 
   const reader = response.body.getReader();
@@ -175,7 +188,7 @@ export async function streamDataManager(path: string, body: unknown, onEvent: (e
 }
 
 /** Загрузка отчёта с прогрессом (XHR — у fetch нет прогресса отправки). */
-export function uploadReport(file: File, conversationId: string | null, onProgress: (loaded: number, total: number) => void): Promise<DataFile> {
+export function uploadReport(file: File, conversationId: string | null, onProgress: (loaded: number, total: number) => void, t: T = ru): Promise<DataFile> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.append("file", file, file.name);
@@ -183,16 +196,17 @@ export function uploadReport(file: File, conversationId: string | null, onProgre
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/bff/api/data-manager/files");
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded, e.total);
-    xhr.onerror = () => reject(new Error("Нет связи с сервером OneBase — файл не загружен."));
+    xhr.onerror = () => reject(new Error(t("Нет связи с сервером OneBase — файл не загружен.")));
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) return resolve(JSON.parse(xhr.responseText) as DataFile);
-      let message = `Ошибка ${xhr.status}`;
+      let message = t("Ошибка {status}", { status: xhr.status });
       try {
-        message = JSON.parse(xhr.responseText).error ?? message;
+        const error = JSON.parse(xhr.responseText).error;
+        if (error) message = t(error);
       } catch {
         // не JSON
       }
-      reject(new Error(xhr.status === 413 ? "Файл слишком большой для загрузки через сайт." : message));
+      reject(new Error(xhr.status === 413 ? t("Файл слишком большой для загрузки через сайт.") : message));
     };
     xhr.send(form);
   });
@@ -225,6 +239,31 @@ export const itemStatusLabel: Record<ItemStatus, string> = {
   RollbackConflict: "не откачено: изменили позже",
 };
 
+/**
+ * Пометка шага инструмента на языке интерфейса. План изменений сервер пишет как «Название плана: Draft» —
+ * название переводится по словарю, статус — подписью статуса.
+ */
+export function stepNote(note: string, t: T): string {
+  const plan = /^(.*): (Draft|Applying|Applied|Stale|Cancelled|Failed|RolledBack|PartiallyRolledBack)$/s.exec(note);
+  return plan ? `${t(plan[1])}: ${t(statusView[plan[2] as SetStatus].label)}` : t(note);
+}
+
+/** Служебные вставки сервера в ответ модели (отдельными абзацами): «Готово.», «ответ обрезан…», «лимит шагов…». */
+const serverInserts = new Set([
+  "Готово.",
+  "Ответ не получен.",
+  "Модель отказалась выполнять этот запрос.",
+  "_(ответ обрезан по длине — попросите продолжить)_",
+  "_(достигнут лимит шагов за один ход — напишите «продолжи»)_",
+]);
+
+/** Ответ AI Data Manager: текст модели как есть, служебные вставки сервера — на языке интерфейса. */
+export const answerText = (content: string, t: T) =>
+  content
+    .split("\n\n")
+    .map((part) => (serverInserts.has(part) ? t(part) : part))
+    .join("\n\n");
+
 export const exampleTasks = [
   "Обнови план РОП на октябрь по этому отчёту",
   "Сверь факт продаж из отчёта с OneBase за сентябрь",
@@ -243,6 +282,6 @@ export function valueText(value: string | null): string {
   return Number.isFinite(n) && /^-?\d+(\.\d+)?$/.test(value) ? number.format(n) : value;
 }
 
-export const kg = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${number.format(v)} кг`);
+export const kg = (v: number | null | undefined, t: T = ru) => (v === null || v === undefined ? "—" : t("{n} кг", { n: number.format(v) }));
 export const pct = (v: number | null | undefined) => (v === null || v === undefined ? "—" : percent.format(v));
 export const when = (iso: string | null | undefined) => (iso ? dateTime.format(new Date(iso)) : "—");

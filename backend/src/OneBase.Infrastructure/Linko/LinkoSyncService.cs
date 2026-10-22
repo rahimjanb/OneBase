@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OneBase.Application.Sales;
@@ -20,6 +21,8 @@ public sealed record LinkoSyncReport(DateTimeOffset StartedAt, DateTimeOffset Fi
 /// Полная загрузка идёт в два этапа — сначала текущий и прошлый месяц (дашборды работают сразу), потом история.
 /// Обычное обновление — изменения по last_tm; визиты (без tm) — за последние дни, раз в 6 часов — за весь месяц.
 /// Данные разных серверов Linko не смешиваются: при смене сервера нужно очистить данные.
+/// Ночная сверка (Reconcile) — полная загрузка без истории. EarliestChanged — самая ранняя дата среди изменённых заказов и возвратов:
+/// по ней координатор решает, сбрасывать ли кэш давних месяцев.
 /// </summary>
 public sealed class LinkoSyncService(
     LinkoClient client,
@@ -38,8 +41,25 @@ public sealed class LinkoSyncService(
     private static readonly string[] Dictionaries =
     [
         "users", "product_types", "products", "borders", "markets", "market_users",
-        "stocks", "price_lists", "price_list_items", "providers", "currencies", "contracts",
+        "stocks", "price_lists", "price_list_items", "providers", "currencies", "contracts", "promotions",
     ];
+
+    /// <summary>
+    /// Отметка разовой дозагрузки скидок по строкам заказов (раздел «Акции»): строки, загруженные раньше, скидок не имеют — один раз
+    /// перечитываются заказы свежего окна и истории, дальше — обычное обновление.
+    /// </summary>
+    public const string OrderDiscountsState = "order_discounts";
+
+    /// <summary>Самая ранняя дата (создания или приёмки, было и стало) среди заказов и возвратов, которые пришли в этой синхронизации.</summary>
+    public DateOnly? EarliestChanged { get; private set; }
+
+    private void Changed(DateOnly? date)
+    {
+        if (date is { } d && (EarliestChanged is null || d < EarliestChanged))
+        {
+            EarliestChanged = d;
+        }
+    }
 
     public async Task<LinkoSyncReport> SyncAsync(LinkoSyncMode mode, CancellationToken ct = default)
     {
@@ -64,7 +84,10 @@ public sealed class LinkoSyncService(
         // Первая загрузка (или после очистки) — всегда полная.
         var full = mode != LinkoSyncMode.Incremental
             || !await db.LinkoSyncStates.AnyAsync(s => s.Entity == "orders" && s.LastSuccessAt != null, ct);
-        progress.Plan(PlanOf(full, connection.HasPlanCredentials));
+        // Ночная сверка — полная загрузка свежего окна, но без истории (её хватает раз при подключении и по кнопке).
+        var history = full && mode != LinkoSyncMode.Reconcile;
+        var backfillDiscounts = (await db.LinkoSyncStates.AsNoTracking().FirstOrDefaultAsync(s => s.Entity == OrderDiscountsState, ct))?.LastSuccessAt is null;
+        progress.Plan(PlanOf(full, connection.HasPlanCredentials, history, backfillDiscounts && !history));
 
         // 1. Справочники.
         foreach (var entity in Dictionaries)
@@ -73,7 +96,8 @@ public sealed class LinkoSyncService(
             {
                 "users" => SyncUsersAsync(ct),
                 "product_types" => SyncProductTypesAsync(full ? null : state.LastTm, ct),
-                "products" => SyncProductsAsync(full ? null : state.LastTm, ct),
+                // Единицы товаров появились позже: пока хоть у одного её нет — справочник товаров читается целиком (315 строк).
+                "products" => SyncProductsAsync(full || db.LinkoProducts.Any(p => p.Measurement == null) ? null : state.LastTm, ct),
                 "borders" => SyncBordersAsync(full ? null : state.LastTm, ct),
                 "markets" => SyncMarketsAsync(full ? null : state.LastTm, ct),
                 "market_users" => SyncMarketUsersAsync(ct),
@@ -83,6 +107,7 @@ public sealed class LinkoSyncService(
                 "providers" => SyncProvidersAsync(ct),
                 "currencies" => SyncCurrenciesAsync(ct),
                 "contracts" => SyncContractsAsync(full ? null : state.LastTm, ct),
+                "promotions" => SyncPromotionsAsync(full ? null : state.LastTm, ct),
                 _ => throw new InvalidOperationException($"Неизвестный справочник Linko: {entity}"),
             }, ct));
         }
@@ -91,7 +116,7 @@ public sealed class LinkoSyncService(
         var (recentFrom, recentTo) = RecentWindow();
         var phase = full ? "Текущий и прошлый месяц" : "Обновление";
         results.Add(await RunStepAsync("orders", phase, accumulate: false, state =>
-            SyncOrdersAsync(full || state.LastTm is null ? Window(recentFrom, recentTo) : Since(state.LastTm), ct), ct));
+            SyncOrdersAsync(full || backfillDiscounts || state.LastTm is null ? Window(recentFrom, recentTo) : Since(state.LastTm), ct), ct));
         results.Add(await RunStepAsync("order_returns", phase, accumulate: false, state =>
             SyncReturnsAsync(full || state.LastTm is null ? Window(recentFrom, recentTo) : Since(state.LastTm), ct), ct));
         results.Add(await RunStepAsync("visits", phase, accumulate: false, _ => SyncVisitsAsync(full, recentFrom, recentTo, ct), ct));
@@ -115,7 +140,7 @@ public sealed class LinkoSyncService(
         cacheSignal.Invalidate(); // свежие месяцы и планы уже видны в дашбордах
 
         // 3. История — после того как свежие данные уже доступны.
-        if (full)
+        if (history)
         {
             var (historyFrom, _) = BackfillWindow();
             var historyTo = recentFrom.AddDays(-1);
@@ -127,8 +152,38 @@ public sealed class LinkoSyncService(
                 await EnsureRegionsAsync(ct);
             }
         }
+        else if (backfillDiscounts)
+        {
+            // Разовая дозагрузка скидок по строкам: только заказы истории (возвраты и визиты от этого не меняются).
+            var (historyFrom, _) = BackfillWindow();
+            var historyTo = recentFrom.AddDays(-1);
+            if (historyFrom <= historyTo)
+            {
+                results.Add(await RunStepAsync("orders", "История", accumulate: true, _ => SyncOrdersAsync(Window(historyFrom, historyTo), ct), ct));
+            }
+        }
+
+        if (backfillDiscounts && results.Where(r => r.Entity == "orders").All(r => r.Error is null))
+        {
+            var state = await ReloadStateAsync(OrderDiscountsState, ct);
+            state.LastRunAt = time.GetUtcNow();
+            state.LastSuccessAt = state.LastRunAt;
+            state.LastRows = results.Where(r => r.Entity == "orders").Sum(r => r.Rows);
+            state.LastError = null;
+            await db.SaveChangesAsync(ct);
+        }
 
         results.Add(await RunStepAsync("kpi_plans", "Планы Linko", accumulate: false, _ => SyncKpiPlansAsync(ct), ct));
+        if (mode == LinkoSyncMode.Reconcile)
+        {
+            var state = await ReloadStateAsync(LinkoSyncSchedule.ReconcileState, ct);
+            state.LastRunAt = time.GetUtcNow();
+            state.LastSuccessAt = state.LastRunAt;
+            state.LastRows = results.Sum(r => r.Rows);
+            state.LastError = results.FirstOrDefault(r => r.Error is not null) is { } failed ? $"{failed.Entity}: {failed.Error}" : null;
+            await db.SaveChangesAsync(ct);
+        }
+
         return new LinkoSyncReport(started, time.GetUtcNow(), results);
     }
 
@@ -136,7 +191,7 @@ public sealed class LinkoSyncService(
     /// План шагов для индикатора «сколько выполнено»: те же entity и phase, что у шагов ниже. Вес — примерная доля времени:
     /// при полной загрузке основное время уходит на историю заказов и визитов, справочники — быстрые.
     /// </summary>
-    private IReadOnlyList<LinkoSyncPlanStep> PlanOf(bool full, bool staffPlans)
+    private IReadOnlyList<LinkoSyncPlanStep> PlanOf(bool full, bool staffPlans, bool history, bool backfillDiscounts = false)
     {
         var phase = full ? "Текущий и прошлый месяц" : "Обновление";
         var steps = Dictionaries
@@ -152,9 +207,13 @@ public sealed class LinkoSyncService(
             steps.Add(new("staff_balance", "Планы агентов", 2));
         }
 
-        if (full && BackfillWindow().From <= RecentWindow().From.AddDays(-1))
+        if (history && BackfillWindow().From <= RecentWindow().From.AddDays(-1))
         {
             steps.AddRange([new("orders", "История", 30), new("order_returns", "История", 6), new("visits", "История", 30)]);
+        }
+        else if (backfillDiscounts && BackfillWindow().From <= RecentWindow().From.AddDays(-1))
+        {
+            steps.Add(new("orders", "История", 30));
         }
 
         steps.Add(new("kpi_plans", "Планы Linko", 3));
@@ -196,8 +255,8 @@ public sealed class LinkoSyncService(
         "linko.\"ProductTypes\"", "linko.\"Borders\"", "linko.\"KpiPlans\"", "linko.\"SyncState\"",
         "linko.\"Stocks\"", "linko.\"ProductBalances\"", "linko.\"StockTransferLines\"", "linko.\"StockTransfers\"",
         "linko.\"Payments\"", "linko.\"PriceLists\"", "linko.\"PriceListItems\"", "linko.\"Providers\"",
-        "linko.\"Currencies\"", "linko.\"Contracts\"",
-        "sales.\"StaffPlans\"",
+        "linko.\"Currencies\"", "linko.\"Contracts\"", "linko.\"Promotions\"", "linko.\"PromotionProducts\"",
+        "sales.\"StaffPlans\"", "sales.\"StaffIndicators\"",
     ];
 
     private static readonly string PurgeSql = "TRUNCATE " + string.Join(", ", PurgedTables);
@@ -410,6 +469,7 @@ public sealed class LinkoSyncService(
                     e.Code = d.Code;
                     e.TypeId = d.Type?.Id;
                     e.IsWeighted = d.Measurement?.IsWeighted ?? false;
+                    e.Measurement = d.Measurement?.Name?.Trim() is { Length: > 0 } unit ? unit[..Math.Min(unit.Length, 16)] : null;
                     e.Tm = d.Tm ?? 0;
                 }, ct);
         }, ct);
@@ -736,6 +796,11 @@ public sealed class LinkoSyncService(
         {
             maxTm = Max(maxTm, page.Max(p => p.Tm));
             var ids = page.Select(p => p.Id).ToList();
+            // Даты изменённых заказов — и прежние (у нас), и новые: изменение давнего месяца сбрасывает его кэш.
+            Changed(await db.LinkoOrders.Where(o => ids.Contains(o.Id)).MinAsync(o => (DateOnly?)o.CreatedDate, ct));
+            Changed(await db.LinkoOrders.Where(o => ids.Contains(o.Id)).MinAsync(o => o.AcceptedDate, ct));
+            Changed(page.Min(p => (DateOnly?)DateOnly.FromDateTime(p.CreatedDate)));
+            Changed(page.Where(p => p.AcceptedTime is not null).Select(p => (DateOnly?)DateOnly.FromDateTime(p.AcceptedTime!.Value)).Min());
 
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             await db.LinkoOrderLines.Where(l => ids.Contains(l.OrderId)).ExecuteDeleteAsync(ct);
@@ -771,12 +836,51 @@ public sealed class LinkoSyncService(
                 Price = l.Price ?? 0,
                 TotalPrice = l.TotalPrice ?? 0,
                 TotalWeight = l.TotalWeight ?? 0,
+                OriginPrice = l.OriginPrice ?? l.Price ?? 0,
+                TotalDiscount = l.TotalDiscount ?? 0,
+                DiscountPercent = l.DiscountPercent ?? 0,
             })));
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             db.ChangeTracker.Clear();
         }, ct);
 
+        return (rows, maxTm);
+    }
+
+    /// <summary>Акции Linko: справочник (173 на 21.10.2026), товары акции заменяются вместе с акцией.</summary>
+    private async Task<(int, decimal?)> SyncPromotionsAsync(decimal? lastTm, CancellationToken ct)
+    {
+        decimal? maxTm = null;
+        var rows = await client.ReadAllAsync<LinkoPromotionDto>("promotions", Since(lastTm), async page =>
+        {
+            maxTm = Max(maxTm, page.Max(p => p.Tm));
+            var ids = page.Select(p => p.Id).ToList();
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            await db.LinkoPromotionProducts.Where(p => ids.Contains(p.PromotionId)).ExecuteDeleteAsync(ct);
+            await UpsertAsync(page, d => d.Id, db.LinkoPromotions,
+                d => new LinkoPromotion { Id = d.Id, Name = "", Type = "" },
+                (d, e) =>
+                {
+                    e.Name = Clip((d.Name ?? $"Акция {d.Id}").Trim(), 300);
+                    e.Type = d.Type ?? "";
+                    e.PromotionType = d.PromotionType;
+                    e.DiscountType = d.DiscountType;
+                    e.Discount = d.Discount;
+                    e.BeginDate = d.BeginDate is { } b ? DateOnly.FromDateTime(b) : null;
+                    e.TillDate = d.TillDate is { } t ? DateOnly.FromDateTime(t) : null;
+                    e.IsApplyAll = d.IsApplyAll ?? false;
+                    e.Tm = d.Tm ?? 0;
+                }, ct);
+            db.LinkoPromotionProducts.AddRange(page
+                .SelectMany(p => (p.Products ?? [])
+                    .Where(x => x.Product?.Id is > 0)
+                    .Select(x => new LinkoPromotionProduct { PromotionId = p.Id, ProductId = x.Product!.Id, Type = x.Type ?? "conditional", Amount = x.Amount }))
+                .DistinctBy(x => (x.PromotionId, x.ProductId, x.Type)));
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            db.ChangeTracker.Clear();
+        }, ct);
         return (rows, maxTm);
     }
 
@@ -788,6 +892,8 @@ public sealed class LinkoSyncService(
         {
             maxTm = Max(maxTm, page.Max(p => p.Tm));
             var ids = page.Select(p => p.Id).ToList();
+            Changed(await db.LinkoOrderReturns.Where(r => ids.Contains(r.Id)).MinAsync(r => (DateOnly?)r.CreatedDate, ct));
+            Changed(page.Min(p => (DateOnly?)DateOnly.FromDateTime(p.CreatedDate)));
 
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             await db.LinkoOrderReturnLines.Where(l => ids.Contains(l.ReturnId)).ExecuteDeleteAsync(ct);
@@ -890,7 +996,10 @@ public sealed class LinkoSyncService(
         var lastDate = await client.StaffLastDateAsync(ct);
         decimal? stamp = lastDate is { } d ? d.Ticks / TimeSpan.TicksPerSecond : null;
 
-        if (!full && stamp is not null && lastStamp is not null && stamp <= lastStamp)
+        // Справочника уровней ещё нет (первая синхронизация после появления раздела «KPI») — месяцы перечитываются и без нового пересчёта:
+        // иначе оклад и премии появились бы только после следующего пересчёта Linko.
+        var noIndicators = !await db.SalesStaffIndicators.AnyAsync(ct);
+        if (!full && !noIndicators && stamp is not null && lastStamp is not null && stamp <= lastStamp)
         {
             return (0, lastStamp); // пересчёта не было — нечего обновлять
         }
@@ -913,13 +1022,61 @@ public sealed class LinkoSyncService(
         }
 
         var total = 0;
+        var indicators = new HashSet<long>();
         foreach (var month in months)
         {
             var rows = await client.StaffBalanceAsync(month.Year, month.Month, ct);
+            indicators.UnionWith(rows.Where(r => r.PerformanceIndicator is not null).Select(r => r.PerformanceIndicator!.Id));
             total += await ReplaceStaffMonthAsync(month.Year, month.Month, rows, ct);
         }
 
+        await SyncStaffIndicatorsAsync(full, indicators, ct);
         return (total, stamp);
+    }
+
+    private static string Clip(string text, int max) => text.Length > max ? text[..max] : text;
+
+    /// <summary>
+    /// Уровни премии KPI-показателей (performance_indicator/): при полной загрузке, когда в планах появился неизвестный показатель, и не
+    /// реже раза в 6 часов — уровни правят в Linko в течение месяца. Справочник заменяется целиком.
+    /// </summary>
+    private async Task SyncStaffIndicatorsAsync(bool full, IReadOnlySet<long> used, CancellationToken ct)
+    {
+        var known = await db.SalesStaffIndicators.AsNoTracking().Select(i => new { i.Id, i.LoadedAt }).ToListAsync(ct);
+        var fresh = known.Count > 0 && known.Min(i => i.LoadedAt) > time.GetUtcNow().AddHours(-6);
+        if (!full && fresh && used.All(id => known.Any(k => k.Id == id)))
+        {
+            return;
+        }
+
+        var now = time.GetUtcNow();
+        var entities = (await client.PerformanceIndicatorsAsync(ct))
+            .DistinctBy(i => i.Id)
+            .Select(i => new SalesStaffIndicator
+            {
+                Id = i.Id,
+                Name = Clip((i.Name ?? $"Показатель {i.Id}").Trim(), 300),
+                PlanType = i.PlanType ?? "unknown",
+                ForSupervisor = i.ForSupervisor ?? false,
+                IsActive = i.IsActive ?? true,
+                Levels = JsonSerializer.Serialize((i.Levels ?? [])
+                    .OrderBy(l => l.FromAmount ?? 0)
+                    .Select(l => new { from = l.FromAmount ?? 0, to = l.ToAmount, bonus = l.BonusAmount ?? 0, type = l.CalculationType ?? "" })),
+                LoadedAt = now,
+            })
+            .ToList();
+        if (entities.Count == 0)
+        {
+            return; // пустой ответ не стирает справочник
+        }
+
+        db.ChangeTracker.Clear();
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.SalesStaffIndicators.ExecuteDeleteAsync(ct);
+        db.SalesStaffIndicators.AddRange(entities);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        db.ChangeTracker.Clear();
     }
 
     private async Task<int> ReplaceStaffMonthAsync(int year, int month, IReadOnlyList<LinkoStaffBalanceDto> rows, CancellationToken ct)
@@ -944,6 +1101,8 @@ public sealed class LinkoSyncService(
                 PlanForecast = r.PlanForecast ?? 0,
                 FactPercent = r.FactPercent,
                 ForecastPercent = r.ForecastPercent,
+                SalaryAmount = r.SalaryAmount ?? 0,
+                BonusAmount = r.BonusAmount ?? 0,
                 LoadedAt = now,
             })
             .ToList();

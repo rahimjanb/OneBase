@@ -27,6 +27,7 @@ internal static class SalesModel
         {
             e.ToTable("Products", "linko");
             e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Measurement).HasMaxLength(16);
         });
 
         b.Entity<LinkoProductType>(e =>
@@ -177,6 +178,24 @@ internal static class SalesModel
             e.ToTable("Contracts", "linko");
             e.Property(x => x.Id).ValueGeneratedNever();
         });
+
+        b.Entity<LinkoPromotion>(e =>
+        {
+            e.ToTable("Promotions", "linko");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(300);
+            e.Property(x => x.Type).HasMaxLength(32);
+            e.Property(x => x.PromotionType).HasMaxLength(64);
+            e.Property(x => x.DiscountType).HasMaxLength(32);
+        });
+
+        b.Entity<LinkoPromotionProduct>(e =>
+        {
+            e.ToTable("PromotionProducts", "linko");
+            e.HasKey(x => new { x.PromotionId, x.ProductId, x.Type });
+            e.Property(x => x.Type).HasMaxLength(32);
+            e.HasIndex(x => x.ProductId);
+        });
     }
 
     public static void ConfigureSales(ModelBuilder b)
@@ -228,6 +247,36 @@ internal static class SalesModel
             e.Property(x => x.IndicatorName).HasMaxLength(300);
             e.Property(x => x.PlanType).HasMaxLength(64);
             e.HasIndex(x => new { x.Year, x.Month, x.LinkoUserId, x.IndicatorId }).IsUnique();
+        });
+
+        b.Entity<SalesDealerLedgerEntry>(e =>
+        {
+            e.ToTable("DealerLedger", "sales");
+            e.Property(x => x.Field).HasMaxLength(32);
+            e.Property(x => x.Dealer).HasMaxLength(200);
+            e.Property(x => x.DealerKey).HasMaxLength(200);
+            e.Property(x => x.Kind).HasMaxLength(64);
+            e.Property(x => x.Category).HasMaxLength(200);
+            e.Property(x => x.Comment).HasMaxLength(500);
+            e.Property(x => x.SourceRef).HasMaxLength(120);
+            e.HasIndex(x => new { x.Field, x.DealerKey, x.Date });
+        });
+
+        b.Entity<SalesDealerTerm>(e =>
+        {
+            e.ToTable("DealerTerms", "sales");
+            e.HasKey(x => x.DealerKey);
+            e.Property(x => x.DealerKey).HasMaxLength(200);
+            e.Property(x => x.Dealer).HasMaxLength(200);
+        });
+
+        b.Entity<SalesStaffIndicator>(e =>
+        {
+            e.ToTable("StaffIndicators", "sales");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(300);
+            e.Property(x => x.PlanType).HasMaxLength(64);
+            e.Property(x => x.Levels).HasColumnType("jsonb");
         });
 
         b.Entity<SalesTarget>(e =>

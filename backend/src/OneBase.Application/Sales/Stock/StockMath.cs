@@ -300,6 +300,16 @@ public static partial class StockMath
     /// Рекомендуемый заказ дилера, кг: довести остаток до запаса на coverDays по скорости с поправкой, вверх до целой коробки.
     /// Хватает (нужно ≤ 0,0001 кг) — 0; вес коробки неизвестен — ровно сколько не хватает.
     /// </summary>
+    /// <summary>Стартовый заказ ТОП-товара, которого у дилера нет вовсе (ни остатка, ни продаж за базу), — коробок.</summary>
+    public const int TopStartBoxes = 10;
+
+    /// <summary>
+    /// ТОП-товар, которого у дилера нет: ни остатка, ни продаж — по скорости заказ вышел бы нулём навсегда, поэтому стартовый заказ
+    /// <see cref="TopStartBoxes"/> коробок (как в «Полевом контроле»). null — правило не применяется (товар есть, продаётся или коробки нет).
+    /// </summary>
+    public static decimal? TopStartKg(decimal kgPerDay, decimal stockKg, decimal? boxKg) =>
+        stockKg <= 0 && kgPerDay <= 0 && boxKg is > 0 ? TopStartBoxes * boxKg.Value : null;
+
     public static decimal OrderKg(decimal kgPerDay, decimal stockKg, decimal? boxKg, int coverDays = OrderCoverDays)
     {
         var need = kgPerDay * coverDays - stockKg;

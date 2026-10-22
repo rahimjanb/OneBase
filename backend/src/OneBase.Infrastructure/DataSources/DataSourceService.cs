@@ -83,7 +83,8 @@ public sealed class DataSourceService(
     DataSourceOwnershipService ownershipMap,
     IAuditLogger audit,
     TimeProvider clock,
-    ILogger<DataSourceService> logger)
+    ILogger<DataSourceService> logger,
+    OneBase.Application.Sales.SalesCacheSignal salesSignal)
 {
     private const int MaxMessage = 1000;
     private readonly IDataProtector _protector = protection.CreateProtector("OneBase.DataSources.GoogleServiceAccount");
@@ -667,6 +668,27 @@ public sealed class DataSourceService(
         if (DataSourceRules.StructureError(document, fieldSheets, binding.HeaderRow, f) is { } changed)
         {
             return new DataSourceFieldResult(field.Key, field.Label, DataSourceRules.Error, changed);
+        }
+
+        // Реестры (оплаты, расходы, условия дилеров): копия листа целиком, без плана изменений.
+        if (field.Kind is "ledger" or "terms" or "balance")
+        {
+            try
+            {
+                return field.Kind switch
+                {
+                    "ledger" => await DataSourceRegisters.ReplaceLedgerAsync(db, field,
+                        DataSourceRegisters.Ledger(field, binding.Id, binding.HeaderRow, f.Ledger!, document, fieldSheets), salesSignal, ct),
+                    "balance" => await DataSourceRegisters.ReplaceLedgerAsync(db, field,
+                        DataSourceRegisters.Balances(field, binding.Id, binding.HeaderRow, f.Balance!, document, fieldSheets), salesSignal, ct),
+                    _ => await DataSourceRegisters.ReplaceTermsAsync(db, field,
+                        DataSourceRegisters.Terms(binding.Id, binding.HeaderRow, f.Terms!, document, fieldSheets, clock.GetUtcNow()), salesSignal, ct),
+                };
+            }
+            catch (DataManagerException ex)
+            {
+                return new DataSourceFieldResult(field.Key, field.Label, DataSourceRules.Error, ex.Message);
+            }
         }
 
         DataChangeSetView view;

@@ -4,13 +4,18 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { useT } from "@/i18n/client";
 import { Note, Section, levelClass } from "./bits";
 import { CopyButton, TableHead, nextSort, sortRows, toTsv, type Column } from "./DataTable";
 import { kg, money, num, pct } from "@/lib/sales/format";
 import type { MonthCalendar, VisitCalendarRow } from "@/lib/sales/types";
 
+/** Строка продаж без региона: её имя «Без региона» — подпись сервера (переводится), у остальных строк имя — данные. */
+const NO_REGION = "00000000-0000-0000-0000-000000000000";
+
 // ---------- Календарь визитов ----------
 
+// Подписи колонок — русские ключи словаря: их переводят TableHead и toTsv.
 const visitColumns: Column<VisitCalendarRow>[] = [
   { key: "name", label: "Регион / ТП", value: (r) => r.name },
   { key: "plan", label: "План", align: "right", value: (r) => r.plan },
@@ -27,10 +32,11 @@ const visitColumns: Column<VisitCalendarRow>[] = [
 const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
 
 function OrderCell({ count, sum }: { count: number; sum: number }) {
+  const t = useT();
   return (
     <span className="block">
       <span className="block">{count > 0 ? num(count) : "·"}</span>
-      {count > 0 && <span className="block text-[11px] text-ink-3">{money(sum)}</span>}
+      {count > 0 && <span className="block text-[11px] text-ink-3">{money(sum, t)}</span>}
     </span>
   );
 }
@@ -58,6 +64,7 @@ function VisitCells({ row }: { row: VisitCalendarRow }) {
  * дни после отчётного помечены «факта нет». Меняет from/to в адресе — считает сервер.
  */
 function DayRange({ from, to, maxDay, factDays, year, month }: { from: number; to: number; maxDay: number; factDays: number; year: number; month: number }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -68,35 +75,35 @@ function DayRange({ from, to, maxDay, factDays, year, month }: { from: number; t
   const listed = (from === 1 && to <= factDays) || from === to;
   return (
     <select
-      aria-label="Дни"
+      aria-label={t("Дни")}
       value={value}
       onChange={(e) => {
-        const [f, t] = e.target.value.split("-");
+        const [f, to] = e.target.value.split("-");
         const next = new URLSearchParams(params);
         next.set("from", f);
-        next.set("to", t);
+        next.set("to", to);
         router.push(`${pathname}?${next}`, { scroll: false });
       }}
       className="h-8 rounded-lg border border-line bg-surface px-2 text-xs text-ink"
     >
       {cumulative.length > 0 && (
-        <optgroup label="С начала месяца">
+        <optgroup label={t("С начала месяца")}>
           {cumulative.map((day) => (
             <option key={day} value={`1-${day}`}>
-              с 1-го по {day}-е
+              {t("с 1-го по {day}-е", { day })}
             </option>
           ))}
         </optgroup>
       )}
-      <optgroup label="Один день">
+      <optgroup label={t("Один день")}>
         {days.map((day) => (
           <option key={day} value={`${day}-${day}`}>
-            {day} · {WEEKDAYS[new Date(year, month - 1, day).getDay()]}
-            {day > factDays ? " · факта нет" : ""}
+            {day} · {t(WEEKDAYS[new Date(year, month - 1, day).getDay()])}
+            {day > factDays ? ` · ${t("факта нет")}` : ""}
           </option>
         ))}
       </optgroup>
-      {!listed && <option value={value}>{`с ${from}-го по ${to}-е`}</option>}
+      {!listed && <option value={value}>{t("с {from}-го по {to}-е", { from, to })}</option>}
     </select>
   );
 }
@@ -132,6 +139,7 @@ export function VisitCalendarTable({
   year: number;
   month: number;
 }) {
+  const t = useT();
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
 
@@ -151,12 +159,12 @@ export function VisitCalendarTable({
 
   return (
     <Section
-      title="Календарь визитов"
-      hint={singleDay ? `${from}-е число${noFact ? " · факта нет" : ""}` : `с ${from}-го по ${to}-е число`}
+      title={t("Календарь визитов")}
+      hint={singleDay ? `${t("{day}-е число", { day: from })}${noFact ? ` · ${t("факта нет")}` : ""}` : t("с {from}-го по {to}-е число", { from, to })}
       actions={
         <>
           <DayRange from={from} to={to} maxDay={maxDay} factDays={factDays} year={year} month={month} />
-          <CopyButton onCopy={() => toTsv(visitColumns, [...sorted.flatMap((r) => [r, ...r.children]), ...(total ? [total] : [])])} />
+          <CopyButton onCopy={() => toTsv(visitColumns, [...sorted.flatMap((r) => [r, ...r.children]), ...(total ? [total] : [])], t)} />
         </>
       }
     >
@@ -179,11 +187,11 @@ export function VisitCalendarTable({
                           <ChevronRight className={`mt-0.5 size-4 shrink-0 text-ink-3 transition-transform ${isOpen ? "rotate-90" : ""}`} />
                         )}
                         <span>
-                          <span className="block font-medium text-ink">{row.name}</span>
-                          {row.subtitle && <span className="block text-xs text-ink-3">{row.subtitle}</span>}
+                          <span className="block font-medium text-ink">{row.id === NO_REGION ? t(row.name) : row.name}</span>
+                          {row.subtitle && <span className="block text-xs text-ink-3">{t(row.subtitle)}</span>}
                           {row.visitsOutsideTeam > 0 && (
-                            <span className="block text-xs text-ink-3" title="Выполненные визиты не ТП (операторы, супервайзеры): в строки ТП не входят">
-                              не ТП: {num(row.visitsOutsideTeam)} визитов
+                            <span className="block text-xs text-ink-3" title={t("Выполненные визиты не ТП (операторы, супервайзеры): в строки ТП не входят")}>
+                              {t("не ТП: {n} визитов", { n: num(row.visitsOutsideTeam) })}
                             </span>
                           )}
                         </span>
@@ -210,7 +218,7 @@ export function VisitCalendarTable({
               <tr className="border-t-2 border-line bg-muted/60 font-semibold">
                 <td className="px-3 py-2">
                   <span className="block text-ink">{total.name}</span>
-                  {total.subtitle && <span className="block text-xs font-normal text-ink-3">{total.subtitle}</span>}
+                  {total.subtitle && <span className="block text-xs font-normal text-ink-3">{t(total.subtitle)}</span>}
                 </td>
                 <VisitCells row={total} />
               </tr>
@@ -218,14 +226,14 @@ export function VisitCalendarTable({
           )}
         </table>
       </div>
-      {top.length === 0 && <p className="py-6 text-center text-sm text-ink-3">{noFact ? "За этот день факта ещё нет" : "Визитов за период нет"}</p>}
+      {top.length === 0 && <p className="py-6 text-center text-sm text-ink-3">{noFact ? t("За этот день факта ещё нет") : t("Визитов за период нет")}</p>}
       <Note>
-        Строки — ТП подразделения (как в «Команде ТП»). План — визиты по маршруту за выбранные дни; «по маршруту» — плановый визит выполнен,
-        «вне маршрута» — визит без плана. Заказы — принятые в эти дни; «с визита», если в день ввода заказа в этот магазин был выполненный визит
-        (по маршруту или вне его), иначе — без визита{total && total.ordersNoVisit > 0 ? `: таких ${num(total.ordersNoVisit)}` : ""}. Под числом заказов —
-        их сумма. «Не посещено» и «% плана» у региона и итога — по их суммарному плану и визитам.
-        {total && total.visitsOutsideTeam > 0 && ` Ещё ${num(total.visitsOutsideTeam)} выполненных визитов — не ТП (операторы, супервайзеры), в строки не входят.`}
-        {!flatten && " Нажмите на регион, чтобы раскрыть торговых представителей."}
+        {t(
+          "Строки — ТП подразделения (как в «Команде ТП»). План — визиты по маршруту за выбранные дни; «по маршруту» — плановый визит выполнен, «вне маршрута» — визит без плана. Заказы — принятые в эти дни; «с визита», если в день ввода заказа в этот магазин был выполненный визит (по маршруту или вне его), иначе — без визита{noVisit}. Под числом заказов — их сумма. «Не посещено» и «% плана» у региона и итога — по их суммарному плану и визитам.",
+          { noVisit: total && total.ordersNoVisit > 0 ? t(": таких {n}", { n: num(total.ordersNoVisit) }) : "" },
+        )}
+        {total && total.visitsOutsideTeam > 0 && t(" Ещё {n} выполненных визитов — не ТП (операторы, супервайзеры), в строки не входят.", { n: num(total.visitsOutsideTeam) })}
+        {!flatten && t(" Нажмите на регион, чтобы раскрыть торговых представителей.")}
       </Note>
     </Section>
   );
@@ -245,7 +253,7 @@ export function MonthCalendarTable({
   month,
   categories,
   title = "Календарь месяца по ТП",
-  rowLabel = "ТП",
+  rowLabel: rowText = "ТП",
   rowKind = "agent",
 }: {
   calendar: MonthCalendar;
@@ -257,12 +265,14 @@ export function MonthCalendarTable({
   /** Строки — ТП (с ID) или регионы. */
   rowKind?: "agent" | "region";
 }) {
+  const t = useT();
+  const rowLabel = t(rowText);
   const pathname = usePathname();
   const params = useSearchParams();
   const router = useRouter();
   const [sortByTotal, setSortByTotal] = useState(true);
 
-  const format = (v: number | null) => (v == null ? "·" : calendar.metric === "sum" ? money(v) : calendar.metric === "akb" ? num(v) : kg(v));
+  const format = (v: number | null) => (v == null ? "·" : calendar.metric === "sum" ? money(v, t) : calendar.metric === "akb" ? num(v) : kg(v));
   const href = (metric: string, category?: number | null) => {
     const next = new URLSearchParams(params);
     next.set("metric", metric);
@@ -276,15 +286,15 @@ export function MonthCalendarTable({
 
   const tsv = () =>
     [
-      [rowLabel, ...days.map(String), "Итого"].join("\t"),
+      [rowLabel, ...days.map(String), t("Итого")].join("\t"),
       ...rows.map((r) => [r.name, ...r.days.map((d) => (d == null ? "" : String(d).replace(".", ","))), String(r.total).replace(".", ",")].join("\t")),
-      ["Итого", ...calendar.totalDays.map((d) => (d == null ? "" : String(d).replace(".", ","))), String(calendar.total).replace(".", ",")].join("\t"),
+      [t("Итого"), ...calendar.totalDays.map((d) => (d == null ? "" : String(d).replace(".", ","))), String(calendar.total).replace(".", ",")].join("\t"),
     ].join("\n");
 
   return (
     <Section
-      title={title}
-      hint={`${String(month).padStart(2, "0")}.${year} · столбец = день месяца`}
+      title={t(title)}
+      hint={t("{period} · столбец = день месяца", { period: `${String(month).padStart(2, "0")}.${year}` })}
       actions={
         <>
           <div className="flex overflow-hidden rounded-lg border border-line text-xs">
@@ -295,17 +305,17 @@ export function MonthCalendarTable({
                 href={href(m.key)}
                 className={`px-2.5 py-1.5 ${calendar.metric === m.key && (m.key !== "akb" || !calendar.categoryId) ? "bg-accent text-white" : "bg-surface text-ink hover:bg-muted"}`}
               >
-                {m.label}
+                {t(m.label)}
               </Link>
             ))}
           </div>
           <select
-            aria-label="АКБ по категории"
+            aria-label={t("АКБ по категории")}
             value={calendar.metric === "akb" && calendar.categoryId ? String(calendar.categoryId) : ""}
             onChange={(e) => router.push(e.target.value ? href("akb", Number(e.target.value)) : href("akb"), { scroll: false })}
             className="h-8 max-w-44 rounded-lg border border-line bg-surface px-2 text-xs text-ink"
           >
-            <option value="">АКБ по категории…</option>
+            <option value="">{t("АКБ по категории…")}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -332,7 +342,7 @@ export function MonthCalendarTable({
               ))}
               <th className="px-2 py-2 text-right font-semibold">
                 <button type="button" onClick={() => setSortByTotal(true)} className="uppercase hover:text-ink">
-                  Итого
+                  {t("Итого")}
                 </button>
               </th>
             </tr>
@@ -341,7 +351,7 @@ export function MonthCalendarTable({
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-line">
                 <td className="sticky left-0 z-10 bg-surface-solid px-2 py-1.5">
-                  <span className="block whitespace-nowrap text-[13px] font-medium text-ink">{r.name}</span>
+                  <span className="block whitespace-nowrap text-[13px] font-medium text-ink">{r.id === NO_REGION ? t(r.name) : r.name}</span>
                   {rowKind === "agent" && <span className="block text-[11px] text-ink-3">ID {r.id}</span>}
                 </td>
                 {r.days.map((v, i) => (
@@ -355,7 +365,7 @@ export function MonthCalendarTable({
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-line bg-muted/60 font-semibold">
-              <td className="sticky left-0 z-10 bg-muted-solid px-2 py-1.5">Итого</td>
+              <td className="sticky left-0 z-10 bg-muted-solid px-2 py-1.5">{t("Итого")}</td>
               {calendar.totalDays.map((v, i) => (
                 <td key={i} className="px-1.5 py-1.5 text-right tabular-nums">
                   {format(v)}
@@ -367,8 +377,9 @@ export function MonthCalendarTable({
         </table>
       </div>
       <Note>
-        Воскресенья выделены серым столбцом, «·» — нет данных за день. Кг и деньги: сумма дней — итог месяца. АКБ в итогах — уникальные ТТ за период,
-        а не сумма по дням.
+        {t(
+          "Воскресенья выделены серым столбцом, «·» — нет данных за день. Кг и деньги: сумма дней — итог месяца. АКБ в итогах — уникальные ТТ за период, а не сумма по дням.",
+        )}
       </Note>
     </Section>
   );

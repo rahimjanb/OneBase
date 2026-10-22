@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/client";
 
 /** Модальное окно раздела «Файлы»: Escape и клик по фону закрывают, фокус — на окне. */
 export function Modal({
@@ -15,6 +16,7 @@ export function Modal({
   children: React.ReactNode;
   wide?: boolean;
 }) {
+  const t = useT();
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -35,7 +37,7 @@ export function Modal({
       >
         <div className="flex items-center gap-3 border-b border-line px-5 py-4">
           <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Закрыть" className="rounded-md p-1 text-ink-3 hover:bg-muted hover:text-ink">
+          <button type="button" onClick={onClose} aria-label={t("Закрыть")} className="rounded-md p-1 text-ink-3 hover:bg-muted hover:text-ink">
             <X className="size-4" />
           </button>
         </div>

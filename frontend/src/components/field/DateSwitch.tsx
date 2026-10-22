@@ -1,7 +1,9 @@
 "use client";
 
+import { formatDate } from "@/i18n/core";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useLocale, useT } from "@/i18n/client";
 
 const shift = (iso: string, days: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -11,6 +13,8 @@ const shift = (iso: string, days: number) => {
 
 /** Выбор дня: стрелки и календарь; пишет ?date= в адрес, сервер пересчитывает страницу. */
 export function DateSwitch({ value, today, param = "date" }: { value: string; today: string; param?: string }) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -21,17 +25,17 @@ export function DateSwitch({ value, today, param = "date" }: { value: string; to
     const q = next.toString();
     router.push(q ? `${pathname}?${q}` : pathname);
   };
-  const label = new Date(`${value}T00:00:00Z`).toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "long", timeZone: "UTC" });
+  const label = formatDate(new Date(`${value}T00:00:00Z`), locale, { weekday: "short", day: "numeric", month: "long", timeZone: "UTC" });
   return (
     <div className="inline-flex items-center rounded-lg border border-line bg-surface">
-      <button type="button" aria-label="Предыдущий день" onClick={() => go(shift(value, -1))} className="grid size-11 place-items-center text-ink-2 hover:bg-muted lg:size-10">
+      <button type="button" aria-label={t("Предыдущий день")} onClick={() => go(shift(value, -1))} className="grid size-11 place-items-center text-ink-2 hover:bg-muted lg:size-10">
         <ChevronLeft className="size-4" />
       </button>
       <label className="relative flex h-11 items-center px-2 text-sm font-medium text-ink lg:h-10">
-        {value === today ? `Сегодня, ${label}` : label}
-        <input type="date" value={value} onChange={(e) => e.target.value && go(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Выбрать дату" />
+        {value === today ? t("Сегодня, {date}", { date: label }) : label}
+        <input type="date" value={value} onChange={(e) => e.target.value && go(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label={t("Выбрать дату")} />
       </label>
-      <button type="button" aria-label="Следующий день" onClick={() => go(shift(value, 1))} className="grid size-11 place-items-center text-ink-2 hover:bg-muted lg:size-10">
+      <button type="button" aria-label={t("Следующий день")} onClick={() => go(shift(value, 1))} className="grid size-11 place-items-center text-ink-2 hover:bg-muted lg:size-10">
         <ChevronRight className="size-4" />
       </button>
     </div>

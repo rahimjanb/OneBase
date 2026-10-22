@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { Inter, Manrope } from "next/font/google";
 import { PwaRegister } from "@/components/shell/PwaRegister";
 import { themeInitScript } from "@/components/shell/ThemeToggle";
+import { I18nProvider } from "@/i18n/client";
+import { getLang } from "@/i18n/server";
 import { isFieldHost, requestHost } from "@/lib/field/host";
 import "./globals.css";
 
@@ -79,14 +81,18 @@ export async function generateViewport(): Promise<Viewport> {
  */
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const field = isFieldHost(requestHost(await headers()));
+  // Язык интерфейса (кнопка RU/UZ): атрибут lang — для озвучки и переносов, провайдер — для клиентских компонентов.
+  const lang = await getLang();
   return (
-    <html lang="ru" className={`${inter.variable} ${manrope.variable}`} data-brand={field ? undefined : "onebase"} suppressHydrationWarning>
+    <html lang={lang} className={`${inter.variable} ${manrope.variable}`} data-brand={field ? undefined : "onebase"} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="font-sans">
-        {children}
-        <PwaRegister />
+        <I18nProvider lang={lang}>
+          {children}
+          <PwaRegister />
+        </I18nProvider>
       </body>
     </html>
   );

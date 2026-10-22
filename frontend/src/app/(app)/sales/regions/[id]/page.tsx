@@ -7,6 +7,7 @@ import { MonthCalendarTable, VisitCalendarTable } from "@/components/sales/calen
 import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { NotBoughtTable, NotInDirectoryTable, SameDaysTable, TeamTable } from "@/components/sales/tables";
+import { getT } from "@/i18n/server";
 import { apiGetOrNull } from "@/lib/server-api";
 import { monthGenitive, monthName } from "@/lib/sales/format";
 import { apiQuery, param, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
@@ -19,6 +20,7 @@ export default async function RegionPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<SalesSearchParams>;
 }) {
+  const t = await getT();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const path = `/sales/regions/${id}`;
   const data = await apiGetOrNull<RegionView>(`/api/sales/regions/${id}${apiQuery(sp, ["from", "to", "metric", "category"])}`, path);
@@ -32,18 +34,18 @@ export default async function RegionPage({
   const cutoffDay = Number(period.previousCutoff.slice(8, 10));
 
   // Регион без РМ: крошки «Республика → Регион», без служебной группы «Без направления».
-  const republic = { label: "Республика", href: withQuery("/sales/republic", q) };
+  const republic = { label: t("Республика"), href: withQuery("/sales/republic", q) };
   const parent = data.directionId
-    ? { label: data.directionName ?? "Направление", href: withQuery(`/sales/directions/${data.directionId}`, q) }
+    ? { label: data.directionName ?? t("Направление"), href: withQuery(`/sales/directions/${data.directionId}`, q) }
     : null;
 
   // СВР и дилер — оргструктура OneBase («Настройки продаж»): в Linko их нет.
-  const people = [data.supervisor && `СВР: ${data.supervisor}`, data.dealer && `дилер: ${data.dealer}`].filter(Boolean).join(", ");
+  const people = [data.supervisor && t("СВР: {name}", { name: data.supervisor }), data.dealer && t("дилер: {name}", { name: data.dealer })].filter(Boolean).join(", ");
 
   return (
     <SalesFrame
       title={data.name}
-      subtitle={people || (data.isChannel ? undefined : "СВР и дилер не указаны — их можно задать в настройках продаж")}
+      subtitle={people || (data.isChannel ? undefined : t("СВР и дилер не указаны — их можно задать в настройках продаж"))}
       crumbs={[republic, ...(parent ? [parent] : []), { label: data.name }]}
       back={(parent ?? republic).href}
       sp={sp}
@@ -54,8 +56,8 @@ export default async function RegionPage({
 
       <PlanFactMonths months={data.months} current={period.month} />
       <VolumeMix categories={data.categories} />
-      {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle="Категория" />}
-      <CategoryCards cards={data.categoryCards} scope="регионе" query={queryWith(q, { region: id })} plans={data.categoryPlans} />
+      {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle={t("Категория")} />}
+      <CategoryCards cards={data.categoryCards} scope={t("регионе")} query={queryWith(q, { region: id })} plans={data.categoryPlans} />
 
       {/* План и факт по категориям и АКБ по месяцам — сразу под карточками, на широком экране рядом. */}
       <div key={`charts-${period.year}-${period.month}`} className={`grid items-start gap-x-6 ${data.categoryPlans.length > 0 ? "2xl:grid-cols-2" : ""}`}>
@@ -83,12 +85,12 @@ export default async function RegionPage({
           month={period.month}
         />
         <TeamTable rows={data.team} query={q} />
-        <SameDaysTable rows={data.sameDays} nameLabel="ТП" hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`} link="agent" query={q} />
+        <SameDaysTable rows={data.sameDays} nameLabel={t("ТП")} hint={t("{month}, 1–{day} числа", { month: t(monthGenitive(prevMonth, t)), day: cutoffDay })} link="agent" query={q} />
         <NotBoughtTable
           rows={data.notBought}
           total={data.notBoughtTotal}
-          nameLabel="ТП"
-          hint={`база — ${monthName(prevMonth)}, кто пока молчит`}
+          nameLabel={t("ТП")}
+          hint={t("база — {month}, кто пока молчит", { month: t(monthName(prevMonth, t)) })}
           workedDays={period.workedDays}
           daysInMonth={period.daysInMonth}
           expandable

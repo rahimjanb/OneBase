@@ -28,7 +28,12 @@ public sealed record ConnectionView(
     bool CanView,
     bool CanManage,
     IReadOnlyList<string> Guide,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    // Адрес без пароля со скрытым кодом («https://files.1base.uz/k/••••••••/production»); сам адрес — по «Показать» (POST …/link).
+    string? LinkAddress = null);
+
+/// <summary>Секретная ссылка отдела: адрес для «Подключить сетевой диск» и тот же адрес путём Windows.</summary>
+public sealed record ConnectionLink(string Address, string? UncPath);
 
 public sealed record ConnectionTestStep(string Name, bool Ok, string Detail);
 
@@ -47,6 +52,9 @@ public sealed record DavAuthResult(DavAuthStatus Status, FileActor? Actor);
 /// Подключение папки отдела к Windows (WebDAV по HTTPS, один логин на отдел): создание, смена пароля, отзыв, повторный показ пароля,
 /// проверка входа и настоящая проверка подключения (хранилище, база, публичный адрес WebDAV с логином и паролем).
 /// Пароль в журнал, логи и ответы, кроме явного «Показать пароль», не попадает.
+/// Главный способ — секретная ссылка (адрес без пароля /k/{код}/{отдел}): Word и Excel (Microsoft 365) блокируют вход по паролю (Basic)
+/// на любой сервер, пока это не разрешено на компьютере, а по ссылке открывают и сохраняют файлы без вопросов. Ссылка — как пароль:
+/// в базе хэш и шифр, показывается по «Показать» (в журнал — факт показа), новая ссылка отменяет старую сразу.
 /// </summary>
 public sealed class FileConnectionsService(
     OneBaseDbContext db,
@@ -67,7 +75,11 @@ public sealed class FileConnectionsService(
     private static readonly TimeSpan AuthCacheTtl = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan TouchEvery = TimeSpan.FromMinutes(1);
 
+    private static readonly TimeSpan LinkMissTtl = TimeSpan.FromMinutes(1);
+    private const string Masked = "••••••••";
+
     private readonly IDataProtector _protector = protection.CreateProtector("OneBase.Files.ConnectionPassword");
+    private readonly IDataProtector _links = protection.CreateProtector("OneBase.Files.ConnectionLink");
 
     private sealed record AuthEntry(Guid ConnectionId, string Username, Guid DepartmentId, AccessLevel Access, string Fingerprint);
 
@@ -80,6 +92,13 @@ public sealed class FileConnectionsService(
         var address = options.FolderUrl(department.Code);
         var active = status == "active" && canView;
         var username = active ? connection!.Username : null;
+        if (status == "active" && connection!.LinkTokenHash is null)
+        {
+            // Подключения, созданные до ссылок, получают её при первом открытии окна.
+            await IssueLinkAsync(connection.Id, onlyIfMissing: true, ct);
+            await audit.LogAsync(ActorType.User, actor.UserId?.ToString() ?? "unknown", "files.connection.link.created", "FileConnection", connection.Id.ToString(),
+                new { department = department.Code, connection.Username }, ct);
+        }
 
         return new ConnectionView(
             status,
@@ -95,8 +114,9 @@ public sealed class FileConnectionsService(
             address is not null,
             canView,
             canManage,
-            active && address is not null ? Guide(department, address, username!) : [],
-            Notes(department));
+            active && address is not null ? Guide(department) : [],
+            Notes(department, address, username),
+            active ? options.LinkUrl(Masked, department.Code) : null);
     }
 
     public async Task<ConnectionView> CreateAsync(FileActor actor, Department department, CancellationToken ct)
@@ -108,12 +128,16 @@ public sealed class FileConnectionsService(
         }
 
         var password = ConnectionCredentials.NewPassword();
+        var token = ConnectionCredentials.NewLinkToken();
         var connection = new FileConnection
         {
             DepartmentId = department.Id,
             Username = await FreeUsernameAsync(department.Code, ct),
             PasswordHash = ConnectionCredentials.Hash(password),
             ProtectedPassword = _protector.Protect(password),
+            LinkTokenHash = ConnectionCredentials.LinkHash(token),
+            ProtectedLinkToken = _links.Protect(token),
+            LinkChangedAt = DateTimeOffset.UtcNow,
             CreatedById = actor.UserId,
         };
         db.FileConnections.Add(connection);
@@ -144,9 +168,11 @@ public sealed class FileConnectionsService(
     {
         RequireManage(actor);
         var connection = await ActiveAsync(department.Id, ct) ?? throw FilesException.NotFound("У отдела нет действующего подключения.");
+        var link = await CurrentLinkHashAsync(connection.Id, ct);
         connection.RevokedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         Forget(connection.Username);
+        ForgetLink(link);
         await audit.LogAsync(ActorType.User, actor.UserId?.ToString() ?? "unknown", "files.connection.revoked", "FileConnection", connection.Id.ToString(),
             new { department = department.Code, connection.Username }, ct);
         return await GetAsync(actor, department, ct);
@@ -165,6 +191,65 @@ public sealed class FileConnectionsService(
         await audit.LogAsync(ActorType.User, actor.UserId?.ToString() ?? "unknown", "files.connection.revealed", "FileConnection", connection.Id.ToString(),
             new { department = department.Code, connection.Username }, ct);
         return password;
+    }
+
+    /// <summary>Секретная ссылка для «Показать» и «Скопировать»: тем же, кому виден пароль; факт показа — в журнал (без кода).</summary>
+    public async Task<ConnectionLink> RevealLinkAsync(FileActor actor, Department department, CancellationToken ct)
+    {
+        if (!FileAccessRules.CanSeeConnection(actor, department.Id))
+        {
+            throw FilesException.Forbidden();
+        }
+
+        // Без отслеживания: ссылку меняет ExecuteUpdate, и запись из кэша контекста показала бы старую.
+        var connection = await db.FileConnections.AsNoTracking().FirstOrDefaultAsync(c => c.DepartmentId == department.Id && c.RevokedAt == null, ct)
+                         ?? throw FilesException.NotFound("У отдела нет действующего подключения.");
+        var token = connection.ProtectedLinkToken is { } stored ? _links.Unprotect(stored) : await IssueLinkAsync(connection.Id, onlyIfMissing: false, ct);
+        var address = options.LinkUrl(token, department.Code)
+                      ?? throw new FilesException(409, "Адрес подключения не настроен: администратору нужно задать FILE_STORAGE_DOMAIN.");
+        await audit.LogAsync(ActorType.User, actor.UserId?.ToString() ?? "unknown", "files.connection.link.revealed", "FileConnection", connection.Id.ToString(),
+            new { department = department.Code, connection.Username }, ct);
+        return new ConnectionLink(address, options.LinkUncPath(token, department.Code));
+    }
+
+    /// <summary>Новая ссылка: старая перестаёт работать сразу (кэш входа сбрасывается), компьютеры подключают диск по новой.</summary>
+    public async Task<ConnectionView> RegenerateLinkAsync(FileActor actor, Department department, CancellationToken ct)
+    {
+        RequireManage(actor);
+        var connection = await ActiveAsync(department.Id, ct) ?? throw FilesException.NotFound("У отдела нет действующего подключения.");
+        var old = await CurrentLinkHashAsync(connection.Id, ct);
+        await IssueLinkAsync(connection.Id, onlyIfMissing: false, ct);
+        ForgetLink(old);
+        await audit.LogAsync(ActorType.User, actor.UserId?.ToString() ?? "unknown", "files.connection.link.regenerated", "FileConnection", connection.Id.ToString(),
+            new { department = department.Code, connection.Username }, ct);
+        return await GetAsync(actor, department, ct);
+    }
+
+    /// <summary>
+    /// Вход WebDAV по секретной ссылке: подключение отдела по хэшу кода. Найденное и ненайденное ненадолго кэшируются — Проводник и Office
+    /// делают десятки запросов в секунду, а компьютер со старой ссылкой повторяет их без конца. Подобрать код (160 бит) нельзя.
+    /// </summary>
+    public async Task<FileActor?> AuthenticateLinkAsync(string token, CancellationToken ct)
+    {
+        if (ConnectionCredentials.LinkHash(token) is not { } hash)
+        {
+            return null;
+        }
+
+        if (cache.TryGetValue(LinkKey(hash), out AuthEntry? entry))
+        {
+            return entry is null ? null : FileActor.Connection(entry.ConnectionId, entry.Username, entry.DepartmentId, entry.Access);
+        }
+
+        var connection = await db.FileConnections.AsNoTracking().FirstOrDefaultAsync(c => c.LinkTokenHash == hash && c.RevokedAt == null, ct);
+        if (connection is null)
+        {
+            cache.Set<AuthEntry?>(LinkKey(hash), null, LinkMissTtl);
+            return null;
+        }
+
+        cache.Set<AuthEntry?>(LinkKey(hash), new AuthEntry(connection.Id, connection.Username, connection.DepartmentId, connection.Access, hash), AuthCacheTtl);
+        return FileActor.Connection(connection.Id, connection.Username, connection.DepartmentId, connection.Access);
     }
 
     /// <summary>Вход WebDAV по логину и паролю (Basic). Неверный пароль — счётчик по адресу и логину; после 10 ошибок — пауза 5 минут.</summary>
@@ -239,6 +324,8 @@ public sealed class FileConnectionsService(
         if (url is not null && connection is not null)
         {
             steps.Add(await WebDavStepAsync(url, connection, ct));
+            var token = connection.ProtectedLinkToken is { } stored ? _links.Unprotect(stored) : await IssueLinkAsync(connection.Id, onlyIfMissing: false, ct);
+            steps.Add(await LinkStepAsync(options.LinkUrl(token, department.Code)!, department, ct));
         }
         else
         {
@@ -291,21 +378,44 @@ public sealed class FileConnectionsService(
         }
     }
 
-    private static IReadOnlyList<string> Guide(Department department, string address, string username) =>
+    private async Task<ConnectionTestStep> LinkStepAsync(string url, Department department, CancellationToken ct)
+    {
+        try
+        {
+            using var client = httpClients.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(20);
+            using var request = new HttpRequestMessage(new HttpMethod("PROPFIND"), url.TrimEnd('/') + "/");
+            request.Headers.Add("Depth", "0");
+            using var response = await client.SendAsync(request, ct);
+            return response.StatusCode == HttpStatusCode.MultiStatus
+                ? new ConnectionTestStep("Адрес без пароля", true, $"Ссылка отдела «{department.Name}» открывается без логина и пароля (207) — Word и Excel откроют файлы с диска.")
+                : new ConnectionTestStep("Адрес без пароля", false, $"Ссылка ответила {(int)response.StatusCode} {response.ReasonPhrase} вместо 207 — проверьте маршрут Cloudflare → nginx:82.");
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            return new ConnectionTestStep("Адрес без пароля", false, $"Ссылка не отвечает ({e.GetType().Name}) — проверьте домен в Cloudflare и nginx:82.");
+        }
+    }
+
+    /// <summary>Как подключить диск по ссылке — без логина и пароля. Сама ссылка в инструкцию не пишется: она выдаётся по «Скопировать».</summary>
+    private static IReadOnlyList<string> Guide(Department department) =>
     [
         "Откройте Проводник и выберите «Этот компьютер».",
         "Нажмите «Подключить сетевой диск» (вверху окна; в Windows 11 — в меню «…»).",
         "Выберите свободную букву диска, например Z:.",
-        $"В поле «Папка» вставьте адрес: {address}",
-        "Отметьте «Восстанавливать подключение при входе в систему» и «Использовать другие учётные данные», нажмите «Готово».",
-        $"Введите логин {username} и пароль подключения, отметьте «Запомнить учётные данные» и нажмите «ОК».",
-        $"Диск Z: с папкой отдела «{department.Name}» появится в «Этом компьютере». Файлы, положенные туда, сразу видны в OneBase.",
+        "В поле «Папка» вставьте адрес без пароля: в окне OneBase «Подключить к Windows» — «Скопировать» у поля «Адрес без пароля».",
+        "Отметьте «Восстанавливать подключение при входе в систему» и нажмите «Готово» — логин и пароль не нужны.",
+        $"Диск Z: с папкой отдела «{department.Name}» появится в «Этом компьютере». Файлы, положенные туда, сразу видны в OneBase; Word и Excel открывают и сохраняют их прямо с диска.",
     ];
 
-    private IReadOnlyList<string> Notes(Department department) =>
+    private IReadOnlyList<string> Notes(Department department, string? address, string? username) =>
     [
-        options.UncPath(department.Code) is { } unc ? $"Тот же адрес в виде пути Windows: {unc}" : "Адрес подключения не настроен: администратору нужно задать FILE_STORAGE_DOMAIN.",
+        "Адрес без пароля работает как пароль: не пересылайте его посторонним. Если он попал не туда, администратор нажимает «Новая ссылка» — старая перестаёт работать сразу, а диск на компьютерах отдела подключают по новой.",
         "Если Windows пишет «Указанное имя папки недействительно», запустите службу «Веб-клиент» (WebClient): Win+R → services.msc → «Веб-клиент» → «Запустить», тип запуска — «Автоматически».",
+        .. address is not null && username is not null
+            ? [$"Вход по логину {username} и паролю ({address}) тоже работает, но Word и Excel из Microsoft 365 по нему файлы не откроют («заблокировал доступ… метод входа, который может быть небезопасным») — подключайте диск по адресу без пароля."]
+            : Array.Empty<string>(),
+        .. address is null ? ["Адрес подключения не настроен: администратору нужно задать FILE_STORAGE_DOMAIN."] : Array.Empty<string>(),
         @"Windows по умолчанию открывает через сетевую папку файлы до 50 МБ. Чтобы поднять предел, выполните в PowerShell от имени администратора: reg add HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters /v FileSizeLimitInBytes /t REG_DWORD /d 4294967295 /f; Restart-Service WebClient",
         "Через сетевую папку проходит файл до 100 МБ (ограничение Cloudflare) — большие файлы загружайте на сайте OneBase.",
         "Файлы, загруженные на сайте, появятся в Проводнике после обновления папки (F5).",
@@ -344,4 +454,38 @@ public sealed class FileConnectionsService(
     private void Forget(string username) => cache.Remove(AuthKey(username.ToLowerInvariant()));
 
     private static string AuthKey(string login) => $"files-dav-auth:{login}";
+
+    private void ForgetLink(string? hash)
+    {
+        if (hash is not null)
+        {
+            cache.Remove(LinkKey(hash));
+        }
+    }
+
+    private static string LinkKey(string hash) => $"files-dav-link:{hash}";
+
+    /// <summary>Хэш ссылки прямо из базы: ссылку меняет ExecuteUpdate, и запись из кэша контекста могла бы быть старой.</summary>
+    private Task<string?> CurrentLinkHashAsync(Guid connectionId, CancellationToken ct) =>
+        db.FileConnections.AsNoTracking().Where(c => c.Id == connectionId).Select(c => c.LinkTokenHash).FirstOrDefaultAsync(ct);
+
+    /// <summary>Выпускает код ссылки (onlyIfMissing — только если ссылки ещё нет: два одновременных открытия окна не перебьют друг друга).</summary>
+    private async Task<string> IssueLinkAsync(Guid connectionId, bool onlyIfMissing, CancellationToken ct)
+    {
+        var token = ConnectionCredentials.NewLinkToken();
+        var hash = ConnectionCredentials.LinkHash(token)!;
+        var protectedToken = _links.Protect(token);
+        var now = DateTimeOffset.UtcNow;
+        var query = db.FileConnections.Where(c => c.Id == connectionId);
+        if (onlyIfMissing)
+        {
+            query = query.Where(c => c.LinkTokenHash == null);
+        }
+
+        await query.ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.LinkTokenHash, hash)
+            .SetProperty(c => c.ProtectedLinkToken, protectedToken)
+            .SetProperty(c => c.LinkChangedAt, now), ct);
+        return token;
+    }
 }

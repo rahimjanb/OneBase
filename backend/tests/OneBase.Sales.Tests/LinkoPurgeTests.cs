@@ -21,10 +21,10 @@ public class LinkoPurgeTests
         var entities = db.Model.GetEntityTypes().Where(e => e.GetTableName() is not null).ToList();
         var purged = LinkoSyncService.PurgedTables.ToHashSet();
 
-        // Копия Linko очищается вся (и только существующие таблицы); из схемы sales — только планы ТП из API планов Linko.
+        // Копия Linko очищается вся (и только существующие таблицы); из схемы sales — только планы ТП и KPI-показатели из API планов Linko.
         var mirror = entities.Where(e => e.GetSchema() == "linko").Select(Table).ToHashSet();
         Assert.Equal(mirror.Order(), purged.Where(t => t.StartsWith("linko.")).Order());
-        Assert.Equal(["sales.\"StaffPlans\""], purged.Where(t => !t.StartsWith("linko.")));
+        Assert.Equal(["sales.\"StaffPlans\"", "sales.\"StaffIndicators\""], purged.Where(t => !t.StartsWith("linko.")));
 
         // Данные OneBase остаются: направления, регионы (РМ, СВР, дилер), планы РОП и «Завод», планы и профили агентов, цели.
         foreach (var owned in new[] { typeof(SalesDirection), typeof(SalesRegion), typeof(SalesRegionPlan), typeof(SalesAgentPlan), typeof(SalesAgentProfile), typeof(SalesTarget) })

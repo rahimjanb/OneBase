@@ -278,6 +278,28 @@ public sealed class LinkoClient(
         return await SendAsync<List<LinkoStaffBalanceDto>>(connection, StaffPrefix, "staff_balance/", query, false, options.MaxAttempts, ct);
     }
 
+    /// <summary>
+    /// KPI-показатели Linko с уровнями премии (performance_indicator/, страницы по 25). Ссылку next не используем и не логируем — в ней
+    /// токен: идём по page, пока она есть.
+    /// </summary>
+    public async Task<List<LinkoPerformanceIndicatorDto>> PerformanceIndicatorsAsync(CancellationToken ct = default)
+    {
+        var connection = await ReadyPlansAsync(ct);
+        var all = new List<LinkoPerformanceIndicatorDto>();
+        for (var page = 1; page <= 500; page++)
+        {
+            var query = new Dictionary<string, string?> { ["token"] = connection.PlanToken, ["format"] = "json", ["page"] = page.ToString() };
+            var result = await SendAsync<LinkoStaffPage<LinkoPerformanceIndicatorDto>>(connection, StaffPrefix, "performance_indicator/", query, false, options.MaxAttempts, ct);
+            all.AddRange(result.Results ?? []);
+            if (string.IsNullOrEmpty(result.Next) || (result.Results?.Count ?? 0) == 0)
+            {
+                break;
+            }
+        }
+
+        return all;
+    }
+
     /// <summary>Строки staff_balance как есть — только для диагностики набора полей (linko-fields staff_balance); значения не сохраняются.</summary>
     public async Task<List<System.Text.Json.JsonElement>> StaffBalanceRawAsync(int year, int month, CancellationToken ct = default)
     {

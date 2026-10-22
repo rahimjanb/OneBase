@@ -1,4 +1,5 @@
 import { Search } from "lucide-react";
+import { Tr } from "@/i18n/client";
 import type { DepartmentStatus } from "@/lib/demo-data";
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -44,7 +45,7 @@ export function StatusDot({ status }: { status: DepartmentStatus }) {
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${s.text}`}>
       <span className={`size-2 rounded-full ${s.dot}`} />
-      {s.label}
+      <Tr>{s.label}</Tr>
     </span>
   );
 }

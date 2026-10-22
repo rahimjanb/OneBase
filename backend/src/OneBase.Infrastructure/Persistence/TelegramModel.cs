@@ -29,6 +29,8 @@ internal static class TelegramModel
             e.HasOne<TelegramAccount>().WithOne().HasForeignKey<TelegramAgentSettings>(x => x.AccountId).OnDelete(DeleteBehavior.Cascade);
             e.Property(x => x.ModelProvider).HasMaxLength(32);
             e.Property(x => x.Model).HasMaxLength(100);
+            e.Property(x => x.GenerationModelProvider).HasMaxLength(32);
+            e.Property(x => x.GenerationModel).HasMaxLength(100);
             e.Property(x => x.SystemPrompt).HasMaxLength(8000);
             e.Property(x => x.Restrictions).HasMaxLength(8000);
             e.Property(x => x.ResponseStyle).HasMaxLength(16);

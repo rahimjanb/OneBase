@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Loader2, PlugZap, RefreshCw, XCircle } from "lucide-react";
 import { Note, Section } from "@/components/sales/bits";
+import { useT } from "@/i18n/client";
 import { aiProviderStatus, type AiProviderTestResult, type AiProviderView } from "@/lib/ai";
 import { bff } from "@/lib/bff";
 import { dateTime, num } from "@/lib/sales/format";
@@ -17,6 +18,7 @@ const keyPlaceholder: Record<string, string> = {
 };
 
 function ProviderCard({ initial, onSaved }: { initial: AiProviderView; onSaved: (list: AiProviderView[]) => void }) {
+  const t = useT();
   const [data, setData] = useState(initial);
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -54,7 +56,7 @@ function ProviderCard({ initial, onSaved }: { initial: AiProviderView; onSaved: 
       });
       apply(list);
       setApiKey("");
-      setMessage({ tone: "ok", text: kind === "clear" ? "Ключ удалён из OneBase." : "Настройки сохранены." });
+      setMessage({ tone: "ok", text: kind === "clear" ? t("Ключ удалён из OneBase.") : t("Настройки сохранены.") });
     });
 
   const runTest = () =>
@@ -70,7 +72,7 @@ function ProviderCard({ initial, onSaved }: { initial: AiProviderView; onSaved: 
     run("refresh", async () => {
       const result = await bff<{ count: number }>(`ai/providers/${data.code}/models/refresh`, { method: "POST" });
       apply(await bff<AiProviderView[]>("ai/providers"));
-      setMessage({ tone: "ok", text: `Список моделей обновлён: ${num(result.count)}. Отметьте нужные в разделе «Модели».` });
+      setMessage({ tone: "ok", text: t("Список моделей обновлён: {n}. Отметьте нужные в разделе «Модели».", { n: num(result.count) }) });
     });
 
   const status = aiProviderStatus[data.status];
@@ -78,8 +80,8 @@ function ProviderCard({ initial, onSaved }: { initial: AiProviderView; onSaved: 
   return (
     <Section
       title={data.name}
-      hint={data.supportsEmbeddings ? "чат, инструменты, эмбеддинги" : "чат и инструменты"}
-      actions={<span className={`rounded-full px-3 py-1 text-xs font-medium ${status.className}`}>{status.label}</span>}
+      hint={data.supportsEmbeddings ? t("чат, инструменты, эмбеддинги") : t("чат и инструменты")}
+      actions={<span className={`rounded-full px-3 py-1 text-xs font-medium ${status.className}`}>{t(status.label)}</span>}
     >
       {message && (
         <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm ${message.tone === "ok" ? "bg-ok-soft text-ok" : "bg-bad-soft text-bad"}`}>{message.text}</div>
@@ -87,63 +89,73 @@ function ProviderCard({ initial, onSaved }: { initial: AiProviderView; onSaved: 
 
       <div className="grid gap-5 lg:grid-cols-2">
         <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-ink">Ключ API</span>
+          <span className="mb-1.5 block text-sm font-medium text-ink">{t("Ключ API")}</span>
           <span className="relative block">
             <input
               className={`${field} pr-10`}
               type={showKey ? "text" : "password"}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={data.hasKey ? `${data.keyHint} — оставьте пустым, чтобы не менять` : keyPlaceholder[data.code] ?? "Ключ API"}
+              placeholder={
+                data.hasKey
+                  ? t("{hint} — оставьте пустым, чтобы не менять", { hint: data.keyHint ?? "" })
+                  : keyPlaceholder[data.code]
+                    ? t(keyPlaceholder[data.code])
+                    : t("Ключ API")
+              }
               autoComplete="off"
               spellCheck={false}
             />
             <button
               type="button"
               onClick={() => setShowKey((v) => !v)}
-              aria-label={showKey ? "Скрыть ключ" : "Показать ключ"}
+              aria-label={showKey ? t("Скрыть ключ") : t("Показать ключ")}
               className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-md text-ink-3 hover:text-ink"
             >
               {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </span>
           <span className="mt-1 block text-xs text-ink-3">
-            {data.hasKey ? `Ключ ${data.keyHint} ${sourceLabel[data.keySource]}. Сам ключ не показывается.` : "Ключ не задан — модели этого провайдера недоступны."}
+            {data.hasKey
+              ? t("Ключ {hint} {source}. Сам ключ не показывается.", { hint: data.keyHint ?? "", source: sourceLabel[data.keySource] ? t(sourceLabel[data.keySource]) : "" })
+              : t("Ключ не задан — модели этого провайдера недоступны.")}
           </span>
         </label>
 
         <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-ink">Адрес API</span>
+          <span className="mb-1.5 block text-sm font-medium text-ink">{t("Адрес API")}</span>
           <input className={field} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={data.defaultBaseUrl} spellCheck={false} />
-          <span className="mt-1 block text-xs text-ink-3">Пусто — {data.defaultBaseUrl}. Свой адрес — для прокси или совместимого сервера.</span>
+          <span className="mt-1 block text-xs text-ink-3">{t("Пусто — {url}. Свой адрес — для прокси или совместимого сервера.", { url: data.defaultBaseUrl })}</span>
         </label>
       </div>
 
       <label className="mt-5 flex items-center gap-2.5 text-sm text-ink">
         <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
-        Провайдер включён
+        {t("Провайдер включён")}
       </label>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <button className={button} onClick={runTest} disabled={busy !== null}>
           {busy === "test" ? <Loader2 className="size-4 animate-spin" /> : <PlugZap className="size-4" />}
-          Проверить ключ
+          {t("Проверить ключ")}
         </button>
         <button className={primary} onClick={() => save(apiKey.trim() || null, "save")} disabled={busy !== null || !dirty}>
           {busy === "save" && <Loader2 className="size-4 animate-spin" />}
-          Сохранить
+          {t("Сохранить")}
         </button>
         <button className={button} onClick={refresh} disabled={busy !== null || !data.hasKey}>
           <RefreshCw className={`size-4 ${busy === "refresh" ? "animate-spin" : ""}`} />
-          Обновить список моделей
+          {t("Обновить список моделей")}
         </button>
         {data.keySource === "OneBase" && (
           <button
             className={danger}
             disabled={busy !== null}
-            onClick={() => confirm(`Удалить ключ ${data.name}, сохранённый в OneBase? Если ключ есть в .env сервера, будет использоваться он.`) && save("", "clear")}
+            onClick={() =>
+              confirm(t("Удалить ключ {name}, сохранённый в OneBase? Если ключ есть в .env сервера, будет использоваться он.", { name: data.name })) && save("", "clear")
+            }
           >
-            Удалить ключ
+            {t("Удалить ключ")}
           </button>
         )}
       </div>
@@ -152,22 +164,26 @@ function ProviderCard({ initial, onSaved }: { initial: AiProviderView; onSaved: 
         <div className={`mt-4 flex items-start gap-3 rounded-lg px-4 py-3 text-sm ${test.ok ? "bg-ok-soft" : "bg-bad-soft"}`}>
           {test.ok ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-ok" /> : <XCircle className="mt-0.5 size-5 shrink-0 text-bad" />}
           <div>
-            <div className={`font-semibold ${test.ok ? "text-ok" : "text-bad"}`}>{test.message}</div>
-            <div className="mt-0.5 text-ink-2">{test.ok ? `Ответ за ${num(test.elapsedMs)} мс. Ничего не сохранено.` : "Настройки не изменены."}</div>
+            <div className={`font-semibold ${test.ok ? "text-ok" : "text-bad"}`}>{t(test.message)}</div>
+            <div className="mt-0.5 text-ink-2">{test.ok ? t("Ответ за {ms} мс. Ничего не сохранено.", { ms: num(test.elapsedMs) }) : t("Настройки не изменены.")}</div>
           </div>
         </div>
       )}
       {!test && data.lastTest && (
         <p className="mt-4 text-xs text-ink-3">
-          Последняя проверка {dateTime(data.lastTest.at)}: {data.lastTest.ok ? "успешно" : "ошибка"} — {data.lastTest.message}
+          {t("Последняя проверка {date}: {result} — {message}", {
+            date: dateTime(data.lastTest.at),
+            result: data.lastTest.ok ? t("успешно") : t("ошибка"),
+            message: data.lastTest.message ? t(data.lastTest.message) : "",
+          })}
         </p>
       )}
 
       <p className="mt-4 text-sm text-ink-2">
-        Моделей у провайдера: {num(data.modelsAvailable)}, разрешено в OneBase: {num(data.modelsEnabled)}
-        {data.modelsRefreshedAt ? ` · список обновлён ${dateTime(data.modelsRefreshedAt)}` : " · список ещё не загружался"}.{" "}
+        {t("Моделей у провайдера: {available}, разрешено в OneBase: {enabled}", { available: num(data.modelsAvailable), enabled: num(data.modelsEnabled) })}
+        {data.modelsRefreshedAt ? ` · ${t("список обновлён {date}", { date: dateTime(data.modelsRefreshedAt) })}` : ` · ${t("список ещё не загружался")}`}.{" "}
         <Link href="/settings/ai/models" className="font-medium text-accent-strong hover:underline">
-          Модели →
+          {t("Модели →")}
         </Link>
       </p>
     </Section>
@@ -175,6 +191,7 @@ function ProviderCard({ initial, onSaved }: { initial: AiProviderView; onSaved: 
 }
 
 export function ProvidersSettings({ initial }: { initial: AiProviderView[] }) {
+  const t = useT();
   const [, setProviders] = useState(initial);
   return (
     <>
@@ -182,8 +199,9 @@ export function ProvidersSettings({ initial }: { initial: AiProviderView[] }) {
         <ProviderCard key={p.code} initial={p} onSaved={setProviders} />
       ))}
       <Note>
-        «Проверить ключ» запрашивает у провайдера список моделей — генерации нет, токены не тратятся. Ключ хранится на сервере зашифрованным, в браузер не
-        передаётся и в журнал не пишется. Все запросы к OpenAI и Anthropic идут только с сервера OneBase.
+        {t(
+          "«Проверить ключ» запрашивает у провайдера список моделей — генерации нет, токены не тратятся. Ключ хранится на сервере зашифрованным, в браузер не передаётся и в журнал не пишется. Все запросы к OpenAI и Anthropic идут только с сервера OneBase.",
+        )}
       </Note>
     </>
   );

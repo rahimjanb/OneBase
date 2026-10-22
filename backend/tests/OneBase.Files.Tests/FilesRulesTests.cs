@@ -221,6 +221,34 @@ public class FilesRulesTests
         Assert.Null(new FilesOptions().UncPath("production"));
     }
 
+    /// <summary>
+    /// Секретная ссылка отдела (адрес без пароля): код из 32 строчных знаков без похожих, хэш не зависит от регистра (Windows может менять
+    /// регистр в адресе), чужая форма — не ищется. Адрес и путь Windows — с префиксом /k/{код}, Destination переноса — внутри той же ссылки.
+    /// </summary>
+    [Fact]
+    public void Department_link_token_address_and_paths()
+    {
+        var token = ConnectionCredentials.NewLinkToken();
+        Assert.Matches("^[a-km-np-z2-9]{32}$", token);
+        Assert.NotEqual(token, ConnectionCredentials.NewLinkToken());
+        Assert.Equal(ConnectionCredentials.LinkHash(token), ConnectionCredentials.LinkHash(" " + token.ToUpperInvariant()));
+        Assert.Equal(64, ConnectionCredentials.LinkHash(token)!.Length);
+        Assert.Null(ConnectionCredentials.LinkHash(token[..31]));
+        Assert.Null(ConnectionCredentials.LinkHash(token[..31] + "0"));
+        Assert.Null(ConnectionCredentials.LinkHash(null));
+
+        var options = new FilesOptions { PublicDomain = "files.1base.uz" };
+        Assert.Equal($"https://files.1base.uz/k/{token}/supply", options.LinkUrl(token, "supply"));
+        Assert.Equal($@"\\files.1base.uz@SSL\k\{token}\supply", options.LinkUncPath(token, "supply"));
+        Assert.Null(new FilesOptions().LinkUrl(token, "supply"));
+
+        var root = $"/k/{token}";
+        Assert.Equal(["supply", "Документы", "заявка.docx"],
+            DavPath.FromDestination($"https://files.1base.uz/k/{token}/supply/%D0%94%D0%BE%D0%BA%D1%83%D0%BC%D0%B5%D0%BD%D1%82%D1%8B/%D0%B7%D0%B0%D1%8F%D0%B2%D0%BA%D0%B0.docx", root));
+        Assert.Null(DavPath.FromDestination("https://files.1base.uz/supply/a.docx", root)); // вне своей ссылки — отказ
+        Assert.Equal($"/k/{token}/supply/", DavPath.Href(root, ["supply"], true));
+    }
+
     // ---------- XML WebDAV ----------
 
     [Fact]

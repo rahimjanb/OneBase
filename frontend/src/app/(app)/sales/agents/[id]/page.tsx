@@ -7,8 +7,10 @@ import { CategoryCards } from "@/components/sales/categories";
 import { ReportMonthExit } from "@/components/sales/MonthExit";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { NewMarketsTable, SameDaysTable, SilentMarketsTable } from "@/components/sales/tables";
+import { getT } from "@/i18n/server";
+import type { T } from "@/i18n/core";
 import { apiGetOrNull } from "@/lib/server-api";
-import { kg, money, monthGenitive, monthName, num, ordersLabel, pct } from "@/lib/sales/format";
+import { kg, money, monthGenitive, monthName, num, pct, plural } from "@/lib/sales/format";
 import { apiQuery, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { AgentFlag, AgentView } from "@/lib/sales/types";
 
@@ -18,17 +20,18 @@ const findingStyles = {
   Info: "border-line bg-muted",
 } as const;
 
-function Findings({ flags }: { flags: AgentFlag[] }) {
+async function Findings({ flags }: { flags: AgentFlag[] }) {
+  const t = await getT();
   return (
-    <Section title="Что нашлось">
+    <Section title={t("Что нашлось")}>
       {flags.length === 0 ? (
-        <p className="rounded-lg bg-ok-soft px-4 py-3 text-sm text-ok">Замечаний нет: показатели в пределах нормы региона.</p>
+        <p className="rounded-lg bg-ok-soft px-4 py-3 text-sm text-ok">{t("Замечаний нет: показатели в пределах нормы региона.")}</p>
       ) : (
         <div className="space-y-2">
           {flags.map((f) => (
             <div key={f.kind} className={`rounded-lg border-l-4 px-4 py-3 ${findingStyles[f.severity]}`}>
-              <div className="text-sm font-semibold text-ink">{f.title}</div>
-              <p className="mt-0.5 text-sm text-ink-2">{f.explanation}</p>
+              <div className="text-sm font-semibold text-ink">{t(f.title)}</div>
+              <p className="mt-0.5 text-sm text-ink-2">{t(f.explanation)}</p>
             </div>
           ))}
         </div>
@@ -41,11 +44,11 @@ function Findings({ flags }: { flags: AgentFlag[] }) {
  * Плана в кг нет — что есть в Linko (API планов, staff_balance): план по выручке, план в штуках или ничего.
  * Штуки в кг не пересчитываются: в показателе нет веса единицы.
  */
-function planNote(data: AgentView, month: string): string {
-  if (data.revenuePlan != null) return `в кг плана нет; в Linko — план по выручке ${money(data.revenuePlan)} сум`;
-  if (data.indicators.some((i) => i.planType === "product_sales_amount")) return "в кг плана нет; в Linko план в штуках — см. «Планы Linko» ниже";
-  if (data.indicators.length > 0) return "в кг плана нет; в Linko только другие показатели — см. «Планы Linko» ниже";
-  return `в Linko плана на ${month} нет`;
+function planNote(data: AgentView, month: string, t: T): string {
+  if (data.revenuePlan != null) return t("в кг плана нет; в Linko — план по выручке {sum} сум", { sum: money(data.revenuePlan, t) });
+  if (data.indicators.some((i) => i.planType === "product_sales_amount")) return t("в кг плана нет; в Linko план в штуках — см. «Планы Linko» ниже");
+  if (data.indicators.length > 0) return t("в кг плана нет; в Linko только другие показатели — см. «Планы Linko» ниже");
+  return t("в Linko плана на {month} нет", { month });
 }
 
 export default async function AgentPage({
@@ -55,6 +58,7 @@ export default async function AgentPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<SalesSearchParams>;
 }) {
+  const t = await getT();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const path = `/sales/agents/${id}`;
   const data = await apiGetOrNull<AgentView>(`/api/sales/agents/${id}${apiQuery(sp)}`, path);
@@ -65,11 +69,13 @@ export default async function AgentPage({
   const prevMonth = period.month === 1 ? 12 : period.month - 1;
   const cutoffDay = Number(period.previousCutoff.slice(8, 10));
 
-  const crumbs = [{ label: "Республика", href: withQuery("/sales/republic", q) }];
-  if (data.directionId) crumbs.push({ label: data.directionName ?? "Направление", href: withQuery(`/sales/directions/${data.directionId}`, q) });
-  if (data.regionId) crumbs.push({ label: data.regionName ?? "Регион", href: withQuery(`/sales/regions/${data.regionId}`, q) });
+  const crumbs = [{ label: t("Республика"), href: withQuery("/sales/republic", q) }];
+  if (data.directionId) crumbs.push({ label: data.directionName ?? t("Направление"), href: withQuery(`/sales/directions/${data.directionId}`, q) });
+  if (data.regionId) crumbs.push({ label: data.regionName ?? t("Регион"), href: withQuery(`/sales/regions/${data.regionId}`, q) });
 
-  const subtitle = [data.directionName, data.regionName, `ID ${data.agentId}`, data.isVacancy ? "вакансия" : null].filter(Boolean).join(" · ");
+  // Без региона сервер присылает подпись «Без региона» — она переводится; название региона — данные.
+  const regionName = data.regionId ? data.regionName : data.regionName && t(data.regionName);
+  const subtitle = [data.directionName, regionName, `ID ${data.agentId}`, data.isVacancy ? t("вакансия") : null].filter(Boolean).join(" · ");
   const regionHref = data.regionId ? `/sales/regions/${data.regionId}` : "/sales/republic";
 
   return (
@@ -88,40 +94,40 @@ export default async function AgentPage({
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 min-[87.5rem]:grid-cols-5">
-        <KpiTile label="План ТП на месяц" value={kg(data.planKg)} unit={data.planKg != null ? "кг" : undefined} tone={levelTone(data.executionLevel)}>
-          {data.planKg != null ? `выполнено ${pct(data.execution)}` : planNote(data, monthName(period.month))}
+        <KpiTile label={t("План ТП на месяц")} value={kg(data.planKg)} unit={data.planKg != null ? t("кг") : undefined} tone={levelTone(data.executionLevel)}>
+          {data.planKg != null ? t("выполнено {pct}", { pct: pct(data.execution) }) : planNote(data, t(monthName(period.month, t)), t)}
         </KpiTile>
-        <KpiTile label="Выручка за месяц" value={money(data.revenue)} unit="сум" tone={data.revenuePlan != null ? levelTone(data.revenueExecutionLevel) : "ink"}>
-          {kg(data.factKg)} кг
-          {data.revenuePlan != null && <> · {pct(data.revenueExecution)} плана ({money(data.revenuePlan)})</>}
+        <KpiTile label={t("Выручка за месяц")} value={money(data.revenue, t)} unit={t("сум")} tone={data.revenuePlan != null ? levelTone(data.revenueExecutionLevel) : "ink"}>
+          {kg(data.factKg)} {t("кг")}
+          {data.revenuePlan != null && <> · {t("{pct} плана ({sum})", { pct: pct(data.revenueExecution), sum: money(data.revenuePlan, t) })}</>}
         </KpiTile>
-        <KpiTile label="Визиты" value={num(data.visits)} title={`${num(data.visitsWithOrder)} визитов, в день которых в этой точке введён заказ`}>
-          {ordersLabel(data.orders)} за месяц
+        <KpiTile label={t("Визиты")} value={num(data.visits)} title={t("{n} визитов, в день которых в этой точке введён заказ", { n: num(data.visitsWithOrder) })}>
+          {t("{orders} за месяц", { orders: `${num(data.orders)} ${t(plural(data.orders, ["заказ", "заказа", "заказов"]))}` })}
         </KpiTile>
-        <KpiTile label="Конверсия" value={pct(data.conversion.value, 1)} title="Заказы, принятые в месяце ÷ выполненные визиты; бывает больше 100%">
-          медиана региона {pct(data.conversion.regionMedian)}
+        <KpiTile label={t("Конверсия")} value={pct(data.conversion.value, 1)} title={t("Заказы, принятые в месяце ÷ выполненные визиты; бывает больше 100%")}>
+          {t("медиана региона {value}", { value: pct(data.conversion.regionMedian) })}
         </KpiTile>
-        <KpiTile label="Сум с визита" value={money(data.sumPerVisit.value)}>
-          медиана региона {money(data.sumPerVisit.regionMedian)}
+        <KpiTile label={t("Сум с визита")} value={money(data.sumPerVisit.value, t)}>
+          {t("медиана региона {value}", { value: money(data.sumPerVisit.regionMedian, t) })}
         </KpiTile>
-        <KpiTile label="АКБ — точек с отгрузкой" value={num(data.akb)}>
-          {data.revenuePerOutlet != null ? `${money(data.revenuePerOutlet)} сум с точки` : "покупок за месяц нет"}
+        <KpiTile label={t("АКБ — точек с отгрузкой")} value={num(data.akb)}>
+          {data.revenuePerOutlet != null ? t("{sum} сум с точки", { sum: money(data.revenuePerOutlet, t) }) : t("покупок за месяц нет")}
         </KpiTile>
-        <KpiTile label="Средний чек" value={money(data.avgCheck.value)} unit="сум">
-          медиана региона {money(data.avgCheck.regionMedian)}
+        <KpiTile label={t("Средний чек")} value={money(data.avgCheck.value, t)} unit={t("сум")}>
+          {t("медиана региона {value}", { value: money(data.avgCheck.regionMedian, t) })}
         </KpiTile>
-        <KpiTile label="Вес на точку" value={kg(data.kgPerOutlet)} unit={data.kgPerOutlet != null ? "кг" : undefined} />
-        <KpiTile label="Категорий" value={num(data.categories)} unit={data.planCategories ? `из ${data.planCategories} в плане` : undefined}>
-          цель — {num(data.categoryTarget)} на активную точку
+        <KpiTile label={t("Вес на точку")} value={kg(data.kgPerOutlet)} unit={data.kgPerOutlet != null ? t("кг") : undefined} />
+        <KpiTile label={t("Категорий")} value={num(data.categories)} unit={data.planCategories ? t("из {n} в плане", { n: data.planCategories }) : undefined}>
+          {t("цель — {n} на активную точку", { n: num(data.categoryTarget) })}
         </KpiTile>
-        <KpiTile label="Темп к своему среднему" value={pct(data.tempo)}>
-          с поправкой на {period.workedDays} из {period.daysInMonth} дней
+        <KpiTile label={t("Темп к своему среднему")} value={pct(data.tempo)}>
+          {t("с поправкой на {worked} из {days} дней", { worked: period.workedDays, days: period.daysInMonth })}
         </KpiTile>
       </div>
 
       <Findings flags={data.flags} />
       {data.assortment && (
-        <CategoryCards cards={data.assortment.categories} scope="продажах этого ТП" query={queryWith(q, { agent: data.agentId })} plans={data.categoryPlan} />
+        <CategoryCards cards={data.assortment.categories} scope={t("продажах этого ТП")} query={queryWith(q, { agent: data.agentId })} plans={data.categoryPlan} />
       )}
 
       {/* Ключ по месяцу: смена месяца сбрасывает раскрытые секции, сортировки и раскрытые строки (DOC-filters §12). */}
@@ -136,7 +142,7 @@ export default async function AgentPage({
             <LaggingTable rows={data.assortment.lagging} />
           </>
         )}
-        <SameDaysTable rows={[data.sameDays]} nameLabel="ТП" hint={`${monthGenitive(prevMonth)}, 1–${cutoffDay} числа`} query={q} />
+        <SameDaysTable rows={[data.sameDays]} nameLabel={t("ТП")} hint={t("{month}, 1–{day} числа", { month: t(monthGenitive(prevMonth, t)), day: cutoffDay })} query={q} />
         <SilentMarketsTable
           rows={data.silent}
           base={data.silentBase}

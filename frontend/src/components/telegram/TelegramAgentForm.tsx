@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Note } from "@/components/sales/bits";
+import { useT } from "@/i18n/client";
 import { telegramApi, type TelegramAccount, type TelegramAgentSettings } from "@/lib/telegram";
 
 /** Настройки AI-агента аккаунта: применяются сразу. Права пользователей проверяет сервер — инструкция их не расширяет. */
 export function TelegramAgentForm({ account, onSaved }: { account: TelegramAccount; onSaved: (enabled: boolean) => void }) {
+  const t = useT();
   const [s, setS] = useState<TelegramAgentSettings | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function TelegramAgentForm({ account, onSaved }: { account: TelegramAccou
       const saved = await telegramApi.saveSettings(account.id, s);
       setS(saved);
       onSaved(saved.enabled);
-      setMessage("Сохранено — действует сразу.");
+      setMessage(t("Сохранено — действует сразу."));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -42,76 +44,88 @@ export function TelegramAgentForm({ account, onSaved }: { account: TelegramAccou
   return (
     <div className="max-w-4xl">
       <div className="grid gap-3 sm:grid-cols-2">
-        <Check label="Агент включён" hint="Отвечает на входящие этого аккаунта" checked={s.enabled} onChange={(v) => set("enabled", v)} />
-        <Check label="Отвечать автоматически" hint="Выключено — сообщения только записываются" checked={s.autoReply} onChange={(v) => set("autoReply", v)} />
+        <Check label={t("Агент включён")} hint={t("Отвечает на входящие этого аккаунта")} checked={s.enabled} onChange={(v) => set("enabled", v)} />
+        <Check label={t("Отвечать автоматически")} hint={t("Выключено — сообщения только записываются")} checked={s.autoReply} onChange={(v) => set("autoReply", v)} />
       </div>
-      <p className="mt-2 text-xs text-ink-3">Кому отвечать (всем по отправленным данным или только списку) — во вкладке «Пользователи».</p>
+      <p className="mt-2 text-xs text-ink-3">{t("Кому отвечать (всем по отправленным данным или только списку) — во вкладке «Пользователи».")}</p>
 
       <div className="mt-5">
         <Field
-          label="Как агент представляется"
-          hint="На «кто ты?» агент отвечает от лица компании. На прямой вопрос «ты человек или бот?» он не выдаёт себя за человека — отвечает, что он виртуальный сотрудник."
+          label={t("Как агент представляется")}
+          hint={t("На «кто ты?» агент отвечает от лица компании. На прямой вопрос «ты человек или бот?» он не выдаёт себя за человека — отвечает, что он виртуальный сотрудник.")}
         >
           <input className={field} value={s.persona ?? ""} onChange={(e) => set("persona", e.target.value || null)} maxLength={1000} placeholder="сотрудник компании Candy Gold" />
         </Field>
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <Field label="Модель" hint="«провайдер/модель», например openai/gpt-5; пусто — основная модель консультанта («Настройки → AI»)">
+        <Field label={t("Модель ответов")} hint={t("«провайдер/модель», например openai/gpt-5; пусто — основная модель консультанта («Настройки → AI»)")}>
           <input
             className={field}
             value={s.modelProvider && s.model ? `${s.modelProvider}/${s.model}` : (s.model ?? "")}
             onChange={(e) => setS({ ...s, model: e.target.value || null, modelProvider: null })}
-            placeholder="основная"
+            placeholder={t("основная")}
             spellCheck={false}
           />
         </Field>
-        <Field label="Стиль ответа">
+        <Field
+          label={t("Модель генерации")}
+          hint={t("Для просьб собрать отчёт, таблицу, документ, письмо. Пусто — Claude из AI Data Manager, если подключён ключ Anthropic.")}
+        >
+          <input
+            className={field}
+            value={s.generationModelProvider && s.generationModel ? `${s.generationModelProvider}/${s.generationModel}` : (s.generationModel ?? "")}
+            onChange={(e) => setS({ ...s, generationModel: e.target.value || null, generationModelProvider: null })}
+            placeholder="anthropic/claude-opus-5-5"
+            spellCheck={false}
+          />
+        </Field>
+        <Field label={t("Стиль ответа")}>
           <select className={field} value={s.responseStyle} onChange={(e) => set("responseStyle", e.target.value as TelegramAgentSettings["responseStyle"])}>
-            <option value="short">Коротко</option>
-            <option value="normal">Обычно</option>
-            <option value="detailed">Подробно</option>
+            <option value="short">{t("Коротко")}</option>
+            <option value="normal">{t("Обычно")}</option>
+            <option value="detailed">{t("Подробно")}</option>
           </select>
         </Field>
-        <Field label="Язык ответа">
+        <Field label={t("Язык ответа")}>
           <select className={field} value={s.language} onChange={(e) => set("language", e.target.value as TelegramAgentSettings["language"])}>
-            <option value="auto">На языке вопроса</option>
-            <option value="ru">Русский</option>
-            <option value="uz">Узбекский</option>
-            <option value="en">Английский</option>
+            <option value="auto">{t("На языке вопроса")}</option>
+            <option value="ru">{t("Русский")}</option>
+            <option value="uz">{t("Узбекский")}</option>
+            <option value="en">{t("Английский")}</option>
           </select>
         </Field>
-        <Field label="Ответов одному пользователю в час">
+        <Field label={t("Ответов одному пользователю в час")}>
           <input className={field} type="number" min={1} max={500} value={s.maxMessagesPerHour} onChange={(e) => set("maxMessagesPerHour", Number(e.target.value))} />
         </Field>
-        <Field label="Длина ответа, токенов">
+        <Field label={t("Длина ответа, токенов")}>
           <input className={field} type="number" min={200} max={8000} step={100} value={s.maxOutputTokens} onChange={(e) => set("maxOutputTokens", Number(e.target.value))} />
         </Field>
-        <Field label="Пауза перед ответом, секунд">
+        <Field label={t("Пауза перед ответом, секунд")}>
           <input className={field} type="number" min={0} max={60} value={s.replyDelaySeconds} onChange={(e) => set("replyDelaySeconds", Number(e.target.value))} />
         </Field>
-        <Field label="Принимаемые файлы" hint="Расширения через запятую">
+        <Field label={t("Принимаемые файлы")} hint={t("Расширения через запятую")}>
           <input className={field} value={s.allowedAttachments} onChange={(e) => set("allowedAttachments", e.target.value)} />
         </Field>
-        <Field label="Размер файла, МБ">
+        <Field label={t("Размер файла, МБ")}>
           <input className={field} type="number" min={1} max={50} value={s.maxFileMb} onChange={(e) => set("maxFileMb", Number(e.target.value))} />
         </Field>
       </div>
 
       <div className="mt-4 grid gap-4">
         <Check
-          label="Отчёты Excel"
-          hint="Агент может прислать отчёт файлом — тем, у кого в списке разрешены отчёты и полный доступ"
+          label={t("Отчёты и документы файлом")}
+          hint={t("На просьбу подготовить отчёт, письмо или другой документ агент пишет «минутку» и присылает файл (Excel или Word) без текста — тем, у кого в списке разрешены файлы и полный доступ. Остальным — текстом.")}
           checked={s.allowReports}
           onChange={(v) => set("allowReports", v)}
         />
-        <Field label="Инструкция агента" hint="Кто он, как обращаться, что важно компании. Права доступа инструкция не расширяет.">
+        <Field label={t("Инструкция агента")} hint={t("Кто он, как обращаться, что важно компании. Права доступа инструкция не расширяет.")}>
           <textarea className={`${field} h-28 py-2`} value={s.systemPrompt ?? ""} onChange={(e) => set("systemPrompt", e.target.value || null)} maxLength={8000} />
         </Field>
-        <Field label="Ограничения" hint="О чём не говорить, чего не обещать. Дополняют проверки сервера, но не заменяют их.">
+        <Field label={t("Ограничения")} hint={t("О чём не говорить, чего не обещать. Дополняют проверки сервера, но не заменяют их.")}>
           <textarea className={`${field} h-24 py-2`} value={s.restrictions ?? ""} onChange={(e) => set("restrictions", e.target.value || null)} maxLength={8000} />
         </Field>
-        <Field label="Ответ, если данных нет">
+        <Field label={t("Ответ, если данных нет")}>
           <input className={field} value={s.noInfoReply} onChange={(e) => set("noInfoReply", e.target.value)} maxLength={1000} />
         </Field>
       </div>
@@ -121,17 +135,16 @@ export function TelegramAgentForm({ account, onSaved }: { account: TelegramAccou
       <div className="mt-4 flex gap-2">
         <button className={primary} onClick={save} disabled={busy}>
           {busy && <Loader2 className="size-4 animate-spin" />}
-          Сохранить
+          {t("Сохранить")}
         </button>
         <button className={button} onClick={() => telegramApi.settings(account.id).then(setS)} disabled={busy}>
-          Отменить изменения
+          {t("Отменить изменения")}
         </button>
       </div>
       <Note>
-        Полный доступ — ответы по данным OneBase с правами пользователя, выбранного во вкладке «Пользователи». «Только отправленные данные» — ответы лишь по
-        сообщениям и отчётам, отправленным в этот чат через OneBase: агент объясняет, что в отчёте и насколько всё хорошо или плохо, говорит, когда следующая
-        отправка; чего в материалах нет — так и отвечает. В группах агент отвечает, только если включён для группы во вкладке «Чаты» и к нему обратились.
-        Как он ответит — можно проверить во вкладке «Проверка».
+        {t(
+          "Полный доступ — ответы по данным OneBase с правами пользователя, выбранного во вкладке «Пользователи». «Только отправленные данные» — ответы лишь по сообщениям и отчётам, отправленным в этот чат через OneBase: агент объясняет, что в отчёте и насколько всё хорошо или плохо, говорит, когда следующая отправка; чего в материалах нет — так и отвечает. В группах агент отвечает, только если включён для группы во вкладке «Чаты» и к нему обратились. Как он ответит — можно проверить во вкладке «Проверка».",
+        )}
       </Note>
     </div>
   );

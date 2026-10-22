@@ -4,19 +4,24 @@ import { RecommendationList } from "@/components/field/Recommendations";
 import { NewTaskButton, TaskList } from "@/components/field/TaskBoard";
 import { Chip, FieldPage, Panel, Stat, buttonClass } from "@/components/field/ui";
 import { VisitPanel } from "@/components/field/VisitPanel";
+import { getT } from "@/i18n/server";
 import { fieldGet, fieldMe } from "@/lib/field/api";
 import { yandexNavigateTo } from "@/lib/field/yandex";
 import { customerStatusLabel, priorityLabel, visitResultLabel } from "@/lib/field/labels";
 import { date, kg, money, monthShort, pct } from "@/lib/sales/format";
 import type { FieldCustomerCard } from "@/lib/field/types";
 
-export const metadata = { title: "Точка" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Точка") };
+}
 
 const statusRu: Record<string, string> = { delivered: "доставлен", given: "отдан", requested: "заявка", cancelled: "отменён", not_delivered: "не доставлен" };
 
 /** Карточка точки: кто ведёт, продажи 7/30/90 и по месяцам, план, визиты (Sales Base + Linko), заказы, задачи, AI; начать визит. */
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const t = await getT();
   const me = await fieldMe();
   const card = await fieldGet<FieldCustomerCard>(`customers/${id}`, `/field/customers/${id}`);
   const c = card.customer;
@@ -31,11 +36,11 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
         <span className="flex flex-wrap items-center gap-1.5">
           {c.branch && <span>{c.branch}</span>}
           {c.type && <span>· {c.type}</span>}
-          <Chip tone={customerStatusLabel[c.status][1]}>{customerStatusLabel[c.status][0]}</Chip>
-          {c.priority !== "Medium" && <Chip tone={priorityLabel[c.priority][1]}>{priorityLabel[c.priority][0]} приоритет</Chip>}
+          <Chip tone={customerStatusLabel[c.status][1]}>{t(customerStatusLabel[c.status][0])}</Chip>
+          {c.priority !== "Medium" && <Chip tone={priorityLabel[c.priority][1]}>{t("{level} приоритет", { level: t(priorityLabel[c.priority][0]) })}</Chip>}
         </span>
       }
-      back={{ href: "/field/customers", label: "Точки" }}
+      back={{ href: "/field/customers", label: t("Точки") }}
       actions={
         <>
           {card.canEdit && <EditCustomerButton marketId={c.marketId} canPlan={card.canChangeAgent} initial={{ priority: c.priority, status: c.status, monthlyTarget: c.monthlyTarget, contactPerson: card.contactPerson, phone: card.phone, note: card.note }} />}
@@ -49,7 +54,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
       )}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Panel title="Точка" className="lg:col-span-1">
+        <Panel title={t("Точка")} className="lg:col-span-1">
           <dl className="space-y-2.5 text-sm">
             {c.address && (
               <div className="flex gap-2">
@@ -60,9 +65,9 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
             <div className="flex gap-2">
               <User className="mt-0.5 size-4 shrink-0 text-ink-3" />
               <span>
-                <span className="text-ink">{c.agentName ?? <span className="text-warn">Агент не назначен</span>}</span>
-                {card.supervisorName && <span className="block text-xs text-ink-3">супервайзер {card.supervisorName}</span>}
-                {card.linkoResponsibleName && card.linkoResponsibleName !== c.agentName && <span className="block text-xs text-ink-3">в Linko: {card.linkoResponsibleName}</span>}
+                <span className="text-ink">{c.agentName ?? <span className="text-warn">{t("Агент не назначен")}</span>}</span>
+                {card.supervisorName && <span className="block text-xs text-ink-3">{t("супервайзер {name}", { name: card.supervisorName })}</span>}
+                {card.linkoResponsibleName && card.linkoResponsibleName !== c.agentName && <span className="block text-xs text-ink-3">{t("в Linko: {name}", { name: card.linkoResponsibleName })}</span>}
               </span>
             </div>
             {(card.contactPerson || card.phone) && (
@@ -82,46 +87,46 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
           </dl>
           {yandex && (
             <a href={yandex} target="_blank" rel="noreferrer" className={`${buttonClass.outline} mt-3 w-full`}>
-              <MapPin className="size-4" /> Проложить маршрут
+              <MapPin className="size-4" /> {t("Проложить маршрут")}
             </a>
           )}
         </Panel>
 
         <div className="grid grid-cols-2 gap-3 lg:col-span-2 lg:grid-cols-3">
-          <Stat label="Продажи 7 дней" value={money(c.sales7)} unit="сум" />
-          <Stat label="Продажи 30 дней" value={money(c.sales30)} unit="сум" hint={c.trendPct != null ? <span className={c.trendPct < 0 ? "text-bad" : "text-ok"}>{c.trendPct > 0 ? "+" : ""}{Math.round(c.trendPct)}% к прошлым 30</span> : `${card.orders30} заказов`} />
-          <Stat label="Продажи 90 дней" value={money(c.sales90)} unit="сум" />
-          <Stat label="План месяца" value={c.monthlyTarget ? money(c.monthlyTarget) : "—"} hint={c.monthlyTarget ? `выполнено ${pct(card.monthShare)} (${money(card.monthToDate)})` : `факт месяца ${money(card.monthToDate)}`} share={card.monthShare} />
-          <Stat label="Последний визит" value={c.lastVisitDate ? date(c.lastVisitDate) : "—"} hint={`визитов за 30 дней: ${card.visits30}`} />
-          <Stat label="Последняя продажа" value={c.lastOrderDate ? date(c.lastOrderDate) : "—"} />
+          <Stat label={t("Продажи 7 дней")} value={money(c.sales7, t)} unit={t("сум")} />
+          <Stat label={t("Продажи 30 дней")} value={money(c.sales30, t)} unit={t("сум")} hint={c.trendPct != null ? <span className={c.trendPct < 0 ? "text-bad" : "text-ok"}>{t("{pct}% к прошлым 30", { pct: `${c.trendPct > 0 ? "+" : ""}${Math.round(c.trendPct)}` })}</span> : t("{n} заказов", { n: card.orders30 })} />
+          <Stat label={t("Продажи 90 дней")} value={money(c.sales90, t)} unit={t("сум")} />
+          <Stat label={t("План месяца")} value={c.monthlyTarget ? money(c.monthlyTarget, t) : "—"} hint={c.monthlyTarget ? t("выполнено {pct} ({sum})", { pct: pct(card.monthShare), sum: money(card.monthToDate, t) }) : t("факт месяца {sum}", { sum: money(card.monthToDate, t) })} share={card.monthShare} />
+          <Stat label={t("Последний визит")} value={c.lastVisitDate ? date(c.lastVisitDate) : "—"} hint={t("визитов за 30 дней: {n}", { n: card.visits30 })} />
+          <Stat label={t("Последняя продажа")} value={c.lastOrderDate ? date(c.lastOrderDate) : "—"} />
         </div>
       </div>
 
-      <Panel title="Продажи по месяцам" hint="доставленные, сум">
+      <Panel title={t("Продажи по месяцам")} hint={t("доставленные, сум")}>
         <div className="flex h-36 items-end gap-2">
           {card.months.map((m) => (
             <div key={`${m.year}-${m.month}`} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
-              <span className="text-[11px] tabular-nums text-ink-3">{m.sum ? money(m.sum) : ""}</span>
-              <div className="w-full max-w-[56px] rounded-t-md bg-accent" style={{ height: `${Math.max(m.sum > 0 ? 3 : 0, (m.sum / maxMonth) * 100)}%` }} title={`${kg(m.kg)} кг · ${m.orders} заказов`} />
-              <span className="text-xs text-ink-2">{monthShort(m.month)}</span>
+              <span className="text-[11px] tabular-nums text-ink-3">{m.sum ? money(m.sum, t) : ""}</span>
+              <div className="w-full max-w-[56px] rounded-t-md bg-accent" style={{ height: `${Math.max(m.sum > 0 ? 3 : 0, (m.sum / maxMonth) * 100)}%` }} title={t("{kg} кг · {orders} заказов", { kg: kg(m.kg), orders: m.orders })} />
+              <span className="text-xs text-ink-2">{t(monthShort(m.month, t))}</span>
             </div>
           ))}
         </div>
       </Panel>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Активные задачи">
-          <TaskList tasks={card.tasks.filter((t) => ["New", "Accepted", "InProgress", "Postponed", "Completed"].includes(t.status))} emptyText="Задач по точке нет" />
+        <Panel title={t("Активные задачи")}>
+          <TaskList tasks={card.tasks.filter((task) => ["New", "Accepted", "InProgress", "Postponed", "Completed"].includes(task.status))} emptyText="Задач по точке нет" />
         </Panel>
-        <Panel title="AI-рекомендации">
-          {card.recommendations.length > 0 ? <RecommendationList items={card.recommendations} agents={card.agentOptions} compact /> : <p className="text-sm text-ink-3">Рекомендаций по точке нет.</p>}
+        <Panel title={t("AI-рекомендации")}>
+          {card.recommendations.length > 0 ? <RecommendationList items={card.recommendations} agents={card.agentOptions} compact /> : <p className="text-sm text-ink-3">{t("Рекомендаций по точке нет.")}</p>}
         </Panel>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="История визитов" hint="Sales Base и Linko">
+        <Panel title={t("История визитов")} hint={t("Sales Base и Linko")}>
           {card.visits.length === 0 ? (
-            <p className="text-sm text-ink-3">Визитов не было.</p>
+            <p className="text-sm text-ink-3">{t("Визитов не было.")}</p>
           ) : (
             <ul className="divide-y divide-line">
               {card.visits.map((v, i) => {
@@ -132,11 +137,11 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                     <span className="min-w-0 flex-1 truncate text-ink">{v.agent ?? "—"}</span>
                     <Chip tone={v.source === "Linko" ? "muted" : "accent"}>{v.source}</Chip>
                     {result ? (
-                      <Chip tone={result[1]}>{result[0]}</Chip>
+                      <Chip tone={result[1]}>{t(result[0])}</Chip>
                     ) : (
                       <span className="text-xs text-ink-2">
-                        {v.source === "Sales Base" ? (v.status === "Cancelled" ? "отменён" : v.status === "InProgress" ? "идёт" : v.status) : v.status}
-                        {v.source === "Linko" && v.result ? ` · ${v.result}` : ""}
+                        {v.source === "Sales Base" ? (v.status === "Cancelled" ? t("отменён") : v.status === "InProgress" ? t("идёт") : v.status) : t(v.status)}
+                        {v.source === "Linko" && v.result ? ` · ${t(v.result)}` : ""}
                       </span>
                     )}
                     {v.comment && <span className="w-full text-xs text-ink-3 sm:pl-28">«{v.comment}»</span>}
@@ -146,17 +151,17 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
             </ul>
           )}
         </Panel>
-        <Panel title="История продаж" hint="заказы Linko">
+        <Panel title={t("История продаж")} hint={t("заказы Linko")}>
           {card.orders.length === 0 ? (
-            <p className="text-sm text-ink-3">Заказов за полгода нет.</p>
+            <p className="text-sm text-ink-3">{t("Заказов за полгода нет.")}</p>
           ) : (
             <ul className="divide-y divide-line">
               {card.orders.map((o) => (
                 <li key={o.id} className="flex items-center gap-2 py-2 text-sm">
                   <span className="w-20 shrink-0 text-xs text-ink-3">{date(o.date)}</span>
                   <span className="min-w-0 flex-1 truncate text-ink-2">{o.agent ?? "—"}</span>
-                  <span className={`text-xs ${o.status === "delivered" ? "text-ok" : o.status === "cancelled" || o.status === "not_delivered" ? "text-bad" : "text-ink-3"}`}>{statusRu[o.status] ?? o.status}</span>
-                  <span className="w-24 text-right font-medium tabular-nums text-ink">{money(o.sum)}</span>
+                  <span className={`text-xs ${o.status === "delivered" ? "text-ok" : o.status === "cancelled" || o.status === "not_delivered" ? "text-bad" : "text-ink-3"}`}>{statusRu[o.status] ? t(statusRu[o.status]) : o.status}</span>
+                  <span className="w-24 text-right font-medium tabular-nums text-ink">{money(o.sum, t)}</span>
                 </li>
               ))}
             </ul>

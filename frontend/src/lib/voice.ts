@@ -1,7 +1,12 @@
 /**
  * Голос AI-консультанта: вопрос голосом (запись → распознавание на сервере) и озвучка ответа (mp3 частями с сервера).
  * Если на сервере голос не настроен (нет ключа OpenAI) — голос самого браузера: Web Speech API, где он есть.
+ * Тексты ошибок — через t компонента (язык интерфейса); без него — по-русски.
  */
+
+import { makeT, type T } from "@/i18n/core";
+
+const ru = makeT(null);
 
 export type VoiceStatus = { ready: boolean; message: string | null; speechModel: string | null; transcribeModel: string | null };
 
@@ -40,21 +45,21 @@ export class VoiceRecorder {
   private chunks: Blob[] = [];
   private stream: MediaStream | null = null;
 
-  async start(): Promise<void> {
+  async start(t: T = ru): Promise<void> {
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
     } catch (e) {
       const name = (e as DOMException).name;
       throw new Error(
         name === "NotAllowedError" || name === "SecurityError"
-          ? "Нет доступа к микрофону — разрешите его в настройках браузера для этого сайта."
+          ? t("Нет доступа к микрофону — разрешите его в настройках браузера для этого сайта.")
           : name === "NotFoundError"
-            ? "Микрофон не найден."
-            : "Не удалось включить микрофон.",
+            ? t("Микрофон не найден.")
+            : t("Не удалось включить микрофон."),
       );
     }
 
-    const mimeType = recordTypes.find((t) => MediaRecorder.isTypeSupported(t));
+    const mimeType = recordTypes.find((type) => MediaRecorder.isTypeSupported(type));
     this.recorder = new MediaRecorder(this.stream, mimeType ? { mimeType } : undefined);
     this.chunks = [];
     this.recorder.ondataavailable = (e) => e.data.size > 0 && this.chunks.push(e.data);
@@ -93,31 +98,33 @@ export class VoiceRecorder {
 
 const extensionOf = (type: string) => (type.includes("mp4") ? "mp4" : type.includes("ogg") ? "ogg" : type.includes("wav") ? "wav" : "webm");
 
-async function errorOf(response: Response): Promise<Error> {
+async function errorOf(response: Response, t: T): Promise<Error> {
   const json = await response.json().catch(() => ({}) as { error?: string });
   return new Error(
     response.status === 403
-      ? "Нет права пользоваться консультантом."
+      ? t("Нет права пользоваться консультантом.")
       : response.status === 429
-        ? "Слишком много голосовых запросов подряд — подождите минуту."
-        : (json.error ?? `Ошибка ${response.status}`),
+        ? t("Слишком много голосовых запросов подряд — подождите минуту.")
+        : json.error
+          ? t(json.error)
+          : t("Ошибка {status}", { status: response.status }),
   );
 }
 
 /** Распознать запись на сервере (OpenAI): текст вопроса. */
-export async function transcribe(blob: Blob): Promise<string> {
+export async function transcribe(blob: Blob, t: T = ru): Promise<string> {
   const form = new FormData();
   form.append("audio", blob, `question.${extensionOf(blob.type)}`);
   const response = await fetch("/bff/api/ai/voice/transcribe", { method: "POST", body: form });
-  if (!response.ok) throw await errorOf(response);
+  if (!response.ok) throw await errorOf(response, t);
   return ((await response.json()) as { text: string }).text;
 }
 
 /** Распознавание голосом браузера (Chrome, Edge, Safari): слушает до паузы и отдаёт текст. */
-export function recognizeInBrowser(onDone: (text: string) => void, onError: (message: string) => void): { stop: () => void } {
+export function recognizeInBrowser(onDone: (text: string) => void, onError: (message: string) => void, t: T = ru): { stop: () => void } {
   const Recognition = recognitionClass();
   if (!Recognition) {
-    onError("Этот браузер не распознаёт речь.");
+    onError(t("Этот браузер не распознаёт речь."));
     return { stop: () => {} };
   }
 
@@ -131,7 +138,7 @@ export function recognizeInBrowser(onDone: (text: string) => void, onError: (mes
       .map((r) => r[0].transcript)
       .join(" ");
   };
-  recognition.onerror = (e) => onError(e.error === "not-allowed" ? "Нет доступа к микрофону." : "Речь не распознана — попробуйте ещё раз.");
+  recognition.onerror = (e) => onError(e.error === "not-allowed" ? t("Нет доступа к микрофону.") : t("Речь не распознана — попробуйте ещё раз."));
   recognition.onend = () => onDone(text.trim());
   recognition.start();
   return { stop: () => recognition.stop() };
@@ -174,6 +181,12 @@ export class SpeechPlayer {
   private audio: HTMLAudioElement | null = null;
   private run = 0;
   private finish: (() => void) | null = null;
+  /** Перевод текстов ошибок (язык интерфейса). */
+  private readonly t: T;
+
+  constructor(t: T = ru) {
+    this.t = t;
+  }
 
   /** Вызвать из обработчика нажатия: на iPhone потом звук можно включить и без нажатия (автоозвучка ответа). */
   unlock() {
@@ -199,7 +212,7 @@ export class SpeechPlayer {
     onState("loading");
     try {
       const textResponse = await fetch(`/bff/api/ai/messages/${messageId}/speech-text`);
-      if (!textResponse.ok) throw await errorOf(textResponse);
+      if (!textResponse.ok) throw await errorOf(textResponse, this.t);
       const { parts } = (await textResponse.json()) as { parts: string[] };
       if (!alive()) return;
       if (server) await this.speakServer(messageId, parts.length, alive, onState);
@@ -217,7 +230,7 @@ export class SpeechPlayer {
   private async speakServer(messageId: string, count: number, alive: () => boolean, onState: (state: SpeechState) => void) {
     const load = async (part: number) => {
       const response = await fetch(`/bff/api/ai/messages/${messageId}/speech?part=${part}`);
-      if (!response.ok) throw await errorOf(response);
+      if (!response.ok) throw await errorOf(response, this.t);
       return URL.createObjectURL(await response.blob());
     };
 
@@ -245,20 +258,20 @@ export class SpeechPlayer {
     return new Promise((resolve, reject) => {
       this.finish = resolve;
       audio.onended = () => resolve();
-      audio.onerror = () => reject(new Error("Не удалось воспроизвести звук."));
+      audio.onerror = () => reject(new Error(this.t("Не удалось воспроизвести звук.")));
       audio.src = url;
       audio
         .play()
         .then(() => onState("playing"))
         .catch((e: DOMException) =>
-          reject(new Error(e.name === "NotAllowedError" ? "Браузер не дал включить звук — нажмите «Озвучить»." : "Не удалось воспроизвести звук.")),
+          reject(new Error(e.name === "NotAllowedError" ? this.t("Браузер не дал включить звук — нажмите «Озвучить».") : this.t("Не удалось воспроизвести звук."))),
         );
     });
   }
 
   /** Голос браузера (когда ключа OpenAI нет) — как и на сервере, мужской и естественный. */
   private async speakBrowser(parts: string[], alive: () => boolean, onState: (state: SpeechState) => void) {
-    if (!canSpeakInBrowser()) throw new Error("Этот браузер не умеет читать вслух.");
+    if (!canSpeakInBrowser()) throw new Error(this.t("Этот браузер не умеет читать вслух."));
     const synth = window.speechSynthesis;
     const voice = russianMaleVoice(synth.getVoices());
     for (const text of parts) {

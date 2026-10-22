@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useT } from "@/i18n/client";
 import { useMonthExit } from "./MonthExit";
 import { useAvailablePlans } from "./PlanAvailability";
 import { monthLabel, planMissingText } from "@/lib/sales/format";
@@ -33,6 +34,7 @@ export function SalesToolbar({
   /** Переключатель только на страницах с планом подразделений (см. usesPlan). */
   showPlan: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -68,7 +70,7 @@ export function SalesToolbar({
   return (
     <div className="flex flex-wrap items-center gap-2 max-lg:w-full">
       <select
-        aria-label="Период"
+        aria-label={t("Период")}
         value={`${year}-${month}`}
         onChange={(e) => {
           const [y, m] = e.target.value.split("-");
@@ -78,12 +80,12 @@ export function SalesToolbar({
       >
         {options.map((m) => (
           <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`}>
-            {monthLabel(m.year, m.month)}
+            {monthLabel(m.year, m.month, t)}
           </option>
         ))}
       </select>
       {showPlan && (
-        <div className="flex h-9 overflow-hidden rounded-lg border border-line text-sm max-lg:h-11" role="group" aria-label="План">
+        <div className="flex h-9 overflow-hidden rounded-lg border border-line text-sm max-lg:h-11" role="group" aria-label={t("План")}>
           {plans.map((p) => {
             const selected = plan === p.key;
             const missing = available != null && !available.includes(p.key);
@@ -95,7 +97,7 @@ export function SalesToolbar({
                 type="button"
                 aria-pressed={selected}
                 aria-disabled={blocked || undefined}
-                title={missing ? `${planMissingText(p.key)} — план ТП из Linko` : undefined}
+                title={missing ? t("{missing} — план ТП из Linko", { missing: planMissingText(p.key, t) }) : undefined}
                 onClick={() => {
                   if (!blocked) go({ plan: p.key === "rop" ? null : p.key });
                 }}
@@ -109,7 +111,7 @@ export function SalesToolbar({
                       : "bg-surface text-ink hover:bg-muted"
                 }`}
               >
-                {p.label}
+                {t(p.label)}
               </button>
             );
           })}

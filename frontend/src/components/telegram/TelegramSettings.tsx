@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Bot, FlaskConical, KeyRound, Loader2, MessageSquare, Plus, ScrollText, Smartphone, Users } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Note, Section } from "@/components/sales/bits";
+import { useT } from "@/i18n/client";
 import { accountStatus, telegramApi, type TelegramAccount, type TelegramOverview } from "@/lib/telegram";
 import { TelegramAccountPanel } from "./TelegramAccountPanel";
 import { TelegramAgentForm } from "./TelegramAgentForm";
@@ -25,6 +26,7 @@ const tabs: { key: Tab; label: string; icon: typeof Bot }[] = [
 
 /** «Настройки → Telegram»: ключи приложения, аккаунты и для выбранного аккаунта — подключение, агент, пользователи, чаты, проверка агента, журнал. */
 export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
+  const t = useT();
   const [data, setData] = useState(initial);
   const [selected, setSelected] = useState<string | null>(initial.accounts[0]?.id ?? null);
   const [tab, setTab] = useState<Tab>("connection");
@@ -72,37 +74,37 @@ export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
       <Credentials data={data} onSaved={setData} />
 
       <Section
-        title="Аккаунты Telegram"
+        title={t("Аккаунты Telegram")}
         hint={`${data.accounts.length}`}
         actions={
           <button className={primary} onClick={() => setCreating(true)} disabled={busy || !data.credentials.configured}>
             <Plus className="size-4" />
-            Добавить аккаунт
+            {t("Добавить аккаунт")}
           </button>
         }
       >
         {!data.credentials.configured && (
-          <p className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">Сначала укажите api_id и api_hash приложения Telegram — выше.</p>
+          <p className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{t("Сначала укажите api_id и api_hash приложения Telegram — выше.")}</p>
         )}
         {creating && (
           <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-accent/30 bg-accent-soft/30 p-4">
             <label className="block min-w-[260px] flex-1">
-              <span className="mb-1.5 block text-sm font-medium text-ink">Название</span>
-              <input className={field} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder="Например, «Отдел продаж»" autoFocus />
+              <span className="mb-1.5 block text-sm font-medium text-ink">{t("Название")}</span>
+              <input className={field} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder={t("Например, «Отдел продаж»")} autoFocus />
             </label>
             <button className={primary} onClick={create} disabled={busy || !name.trim()}>
               {busy && <Loader2 className="size-4 animate-spin" />}
-              Создать
+              {t("Создать")}
             </button>
             <button className={button} onClick={() => setCreating(false)} disabled={busy}>
-              Отмена
+              {t("Отмена")}
             </button>
             {error && <p className="w-full rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
           </div>
         )}
 
         {data.accounts.length === 0 ? (
-          <p className="text-sm text-ink-3">Аккаунтов пока нет.</p>
+          <p className="text-sm text-ink-3">{t("Аккаунтов пока нет.")}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {data.accounts.map((a) => (
@@ -116,11 +118,11 @@ export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium text-ink">{a.name}</span>
                   <span className="block truncate text-xs text-ink-3">
-                    {a.username ? `@${a.username}` : (a.displayName ?? a.phoneHint ?? "не подключён")}
-                    {a.agentEnabled && " · агент включён"}
+                    {a.username ? `@${a.username}` : (a.displayName ?? a.phoneHint ?? t("не подключён"))}
+                    {a.agentEnabled && t(" · агент включён")}
                   </span>
                 </span>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${accountStatus[a.status].className}`}>{accountStatus[a.status].label}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${accountStatus[a.status].className}`}>{t(accountStatus[a.status].label)}</span>
               </button>
             ))}
           </div>
@@ -130,18 +132,18 @@ export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
       {account && (
         <section className="mt-6 rounded-xl border border-line bg-surface">
           <div className="flex flex-wrap gap-1 border-b border-line px-3 pt-3">
-            {tabs.map((t) => (
+            {tabs.map((item) => (
               <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
+                key={item.key}
+                onClick={() => setTab(item.key)}
                 className={`-mb-px flex items-center gap-2 rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium ${
-                  tab === t.key ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"
+                  tab === item.key ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"
                 }`}
               >
-                <t.icon className="size-4" />
-                {t.label}
-                {t.key === "users" && <span className="text-xs text-ink-3">{account.permissions}</span>}
-                {t.key === "chats" && <span className="text-xs text-ink-3">{account.chats}</span>}
+                <item.icon className="size-4" />
+                {t(item.label)}
+                {item.key === "users" && <span className="text-xs text-ink-3">{account.permissions}</span>}
+                {item.key === "chats" && <span className="text-xs text-ink-3">{account.chats}</span>}
               </button>
             ))}
           </div>
@@ -160,6 +162,7 @@ export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
 
 /** api_id и api_hash приложения (my.telegram.org → API development tools). api_hash в ответах не возвращается — только последние символы. */
 function Credentials({ data, onSaved }: { data: TelegramOverview; onSaved: (o: TelegramOverview) => void }) {
+  const t = useT();
   const c = data.credentials;
   const [editing, setEditing] = useState(!c.configured);
   const [apiId, setApiId] = useState(c.apiId?.toString() ?? "");
@@ -183,13 +186,13 @@ function Credentials({ data, onSaved }: { data: TelegramOverview; onSaved: (o: T
 
   return (
     <Section
-      title="Приложение Telegram"
-      hint={c.configured ? `api_id ${c.apiId} · api_hash …${c.apiHashHint}` : "не настроено"}
+      title={t("Приложение Telegram")}
+      hint={c.configured ? `api_id ${c.apiId} · api_hash …${c.apiHashHint}` : t("не настроено")}
       actions={
         !editing && (
           <button className={button} onClick={() => setEditing(true)}>
             <KeyRound className="size-4" />
-            Изменить
+            {t("Изменить")}
           </button>
         )
       }
@@ -206,7 +209,7 @@ function Credentials({ data, onSaved }: { data: TelegramOverview; onSaved: (o: T
               className={field}
               value={apiHash}
               onChange={(e) => setApiHash(e.target.value)}
-              placeholder={c.configured ? "Пусто — оставить прежний" : "32 символа"}
+              placeholder={c.configured ? t("Пусто — оставить прежний") : t("32 символа")}
               autoComplete="off"
               spellCheck={false}
               type="password"
@@ -215,22 +218,23 @@ function Credentials({ data, onSaved }: { data: TelegramOverview; onSaved: (o: T
           <div className="flex gap-2">
             <button className={primary} onClick={save} disabled={busy || !apiId || (!c.configured && !apiHash.trim())}>
               {busy && <Loader2 className="size-4 animate-spin" />}
-              Сохранить
+              {t("Сохранить")}
             </button>
             {c.configured && (
               <button className={button} onClick={() => setEditing(false)} disabled={busy}>
-                Отмена
+                {t("Отмена")}
               </button>
             )}
           </div>
           {error && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad sm:col-span-3">{error}</p>}
         </div>
       ) : (
-        <p className="text-sm text-ink-2">Ключи заданы. api_hash хранится зашифрованным и в браузер не передаётся.</p>
+        <p className="text-sm text-ink-2">{t("Ключи заданы. api_hash хранится зашифрованным и в браузер не передаётся.")}</p>
       )}
       <Note>
-        api_id и api_hash выдаёт Telegram на my.telegram.org → «API development tools». Они нужны, чтобы OneBase работал от имени
-        пользовательского аккаунта (не бота): видел его чаты, отвечал и делал рассылки. Хранятся только на сервере, зашифрованными.
+        {t(
+          "api_id и api_hash выдаёт Telegram на my.telegram.org → «API development tools». Они нужны, чтобы OneBase работал от имени пользовательского аккаунта (не бота): видел его чаты, отвечал и делал рассылки. Хранятся только на сервере, зашифрованными.",
+        )}
       </Note>
     </Section>
   );

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OneBase.AI.Agents;
 using OneBase.AI.Consultant;
+using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
 
@@ -22,7 +23,8 @@ public sealed class AgentOrchestrator(IServiceScopeFactory scopes, ILogger<Agent
         Guid? conversationId,
         Func<ConsultantProgress, Task> progress,
         CancellationToken ct,
-        bool report = false)
+        bool report = false,
+        AiModelRef? model = null)
     {
         // События прогресса идут из нескольких потоков — пишем их в поток ответа по одному.
         var gate = new SemaphoreSlim(1, 1);
@@ -52,7 +54,7 @@ public sealed class AgentOrchestrator(IServiceScopeFactory scopes, ILogger<Agent
                 using var scope = scopes.CreateScope();
                 var runner = scope.ServiceProvider.GetRequiredService<AgentRunner>();
                 var task = tasks.GetValueOrDefault(a.Code) ?? question;
-                var run = await runner.RunAsync(new AgentTask(a.Code, task, userId, conversationId, contexts.GetValueOrDefault(a.Code), report), Report, ct);
+                var run = await runner.RunAsync(new AgentTask(a.Code, task, userId, conversationId, contexts.GetValueOrDefault(a.Code), report, model), Report, ct);
                 var ok = run.Result.Status is "completed" or "partial" or "no_data";
                 await Report(new ConsultantProgress("agent", a.Code, a.Name, ok ? ProgressStatus.Done : ProgressStatus.Failed,
                     run.Result.Status == "no_data" ? "нет данных" : null));

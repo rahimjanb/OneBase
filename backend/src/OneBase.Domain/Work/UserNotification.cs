@@ -22,6 +22,9 @@ public enum UserNotificationKind
 
     /// <summary>Начался месяц, а плана на него (РОП, «Завод», первички) нет, хотя в прошлом месяце был, — тем, кто загружает планы.</summary>
     MonthPlanMissing,
+
+    /// <summary>Обмен с Linko не работает (данные устарели) или восстановился — тем, кто управляет интеграциями.</summary>
+    DataSyncProblem,
 }
 
 /// <summary>

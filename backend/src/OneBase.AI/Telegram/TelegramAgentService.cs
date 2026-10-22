@@ -10,6 +10,8 @@ using OneBase.AI.Providers;
 using OneBase.AI.Reports;
 using OneBase.AI.Security;
 using OneBase.Application.Abstractions;
+using OneBase.Application.DataManager;
+using OneBase.Application.Reports;
 using OneBase.Application.Security;
 using OneBase.Application.Telegram;
 using OneBase.Domain.Telegram;
@@ -42,7 +44,9 @@ public sealed record AgentTestResult(
     long DurationMs,
     Guid? ConversationId,
     int Materials,
-    string? Error);
+    string? Error,
+    // Документ Word, который ушёл бы файлом, — HTML для предпросмотра в «Проверке».
+    string? Document = null);
 
 /// <summary>
 /// AI-агент аккаунта Telegram: входящее сообщение → проверки → ответ.
@@ -51,6 +55,8 @@ public sealed record AgentTestResult(
 /// Права — по строке пользователя (Telegram ID, добавленный по username): полный доступ — консультант OneBase с правами выбранного
 /// пользователя OneBase; иначе (и всем остальным, если включено «Отвечать всем») — только по материалам, отправленным в этот чат.
 /// Ответ сначала собирается (Compose…), потом отправляется — так же собирается и ответ проверки в настройках, без отправки.
+/// Просьба подготовить отчёт или документ: сразу «минутку, уже делаю», потом готовое — файлом без текста (Excel-отчёт консультанта или
+/// документ Word), если файлы разрешены аккаунту и человеку; иначе — текстом.
 /// </summary>
 public sealed class TelegramAgentService(
     IAppDbContext db,
@@ -61,6 +67,9 @@ public sealed class TelegramAgentService(
     IAiGateway ai,
     IUserPermissions permissions,
     IDocumentTextExtractor extractor,
+    IAiSettingsSource aiSettings,
+    DataManagerOptions dataManager,
+    IDocumentWriter documents,
     TimeProvider clock,
     ILogger<TelegramAgentService> logger)
 {
@@ -72,18 +81,22 @@ public sealed class TelegramAgentService(
     public static readonly TimeSpan HistoryWindow = TimeSpan.FromHours(6);
 
     public const string NoInfoMarker = "NO_INFO";
+
+    /// <summary>Ответ на просьбу о документе, который сделать нельзя (нет данных или прав): «NO_DOC: причина» — уходит текстом.</summary>
+    public const string NoDocMarker = "NO_DOC";
     public const string DefaultPersona = "сотрудник компании Candy Gold";
     private const int MaxQuestion = 4000;
     private const int MaxFileText = 12_000;
     private const string XlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    private const string DocxType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private static readonly TimeSpan Tashkent = TimeSpan.FromHours(5);
 
     /// <summary>Пауза перед ответом (в тестах — без ожидания).</summary>
     public Func<TimeSpan, CancellationToken, Task> Delay { get; set; } = Task.Delay;
 
-    /// <summary>Собранный ответ: Text — Markdown (или простой текст), файлы, итог для журнала.</summary>
+    /// <summary>Собранный ответ: Text — Markdown (или простой текст), файлы, итог для журнала. FilesOnly — в чат только файлы, Text — в журнал.</summary>
     private sealed record Composed(string Status, string? Text, bool Markdown, IReadOnlyList<TelegramFile> Files, string? Model, int InputTokens, int OutputTokens,
-        string? Error = null, Guid? ReportId = null, Guid? ConversationId = null, int Materials = 0);
+        string? Error = null, Guid? ReportId = null, Guid? ConversationId = null, int Materials = 0, bool FilesOnly = false);
 
     public async Task ProcessAsync(TelegramIncoming m, CancellationToken ct)
     {
@@ -229,6 +242,9 @@ public sealed class TelegramAgentService(
         }
 
         var mode = rightsUser is null ? "sent_only" : "full";
+        // Просьба подготовить отчёт или документ (по тексту сообщения, не по приложенному файлу).
+        var generate = GenerationIntent.Requested(m.Text);
+        var asFile = generate && FilesAllowed(settings, permission);
         var execution = NewExecution(m, incoming, mode, question);
         var watch = Stopwatch.StartNew();
         // Пока готовится ответ (консультант — до минуты), в чате «печатает…».
@@ -236,10 +252,16 @@ public sealed class TelegramAgentService(
         var typingLoop = TypingLoopAsync(m, typing.Token);
         try
         {
+            if (generate)
+            {
+                // Документ готовится дольше обычного ответа — сразу «минутку, уже делаю», чтобы человек не гадал, понял ли его агент.
+                await SendTextAsync(m, GenerationIntent.Ack(settings.Language, m.Text, m.MessageId), ct);
+            }
+
             Composed composed;
             if (rightsUser is { } userId)
             {
-                composed = await ComposeFullAsync(userId, permission!.ConversationId, permission, settings, m.AccountId, m.Chat.PeerId, question, ct);
+                composed = await ComposeFullAsync(userId, permission!.ConversationId, permission, settings, m.AccountId, m.Chat.PeerId, question, generate, asFile, ct);
                 if (composed.ConversationId is { } conversation && conversation != permission.ConversationId)
                 {
                     await db.TelegramUserPermissions.Where(p => p.Id == permission.Id)
@@ -249,7 +271,12 @@ public sealed class TelegramAgentService(
             else
             {
                 var history = await HistoryAsync(m.AccountId, m.Chat.PeerId, from, ct);
-                composed = await ComposeSentOnlyAsync(m.AccountId, m.Chat.PeerId, permission, settings, question, history, null, ct);
+                composed = await ComposeSentOnlyAsync(m.AccountId, m.Chat.PeerId, permission, settings, question, history, null, generate, asFile, ct);
+            }
+
+            if (asFile)
+            {
+                composed = AsFile(composed, question);
             }
 
             await typing.CancelAsync();
@@ -259,15 +286,30 @@ public sealed class TelegramAgentService(
             execution.OutputTokens = composed.OutputTokens;
             execution.Error = Short(composed.Error, 1000);
             execution.ReportId = composed.ReportId;
-            if (composed.Text is { Length: > 0 } reply)
+            if (composed.FilesOnly)
             {
-                execution.Answer = Short(reply, 8000);
-                execution.ReplyMessageId = (await SendTextAsync(m, reply, ct, composed.Markdown)).FirstOrDefault();
+                // Готовый документ — только файлом; в журнал — какой файл и что в нём.
+                execution.Answer = Short($"[Файл: {string.Join(", ", composed.Files.Select(f => f.FileName))}]\n{composed.Text}".TrimEnd(), 8000);
+                int? replyTo = m.Chat.Type == TelegramChatType.Group ? m.MessageId : null;
+                foreach (var f in composed.Files)
+                {
+                    var sent = await telegram.SendAsync(m.AccountId, m.Chat, new TelegramOutgoing(null, false, [f], replyTo), ct);
+                    execution.ReplyMessageId ??= sent.MessageIds.FirstOrDefault();
+                    replyTo = null;
+                }
             }
-
-            foreach (var f in composed.Files)
+            else
             {
-                await telegram.SendAsync(m.AccountId, m.Chat, new TelegramOutgoing(null, false, [f]), ct);
+                if (composed.Text is { Length: > 0 } reply)
+                {
+                    execution.Answer = Short(reply, 8000);
+                    execution.ReplyMessageId = (await SendTextAsync(m, reply, ct, composed.Markdown)).FirstOrDefault();
+                }
+
+                foreach (var f in composed.Files)
+                {
+                    await telegram.SendAsync(m.AccountId, m.Chat, new TelegramOutgoing(null, false, [f]), ct);
+                }
             }
         }
         catch (TelegramException ex)
@@ -362,17 +404,24 @@ public sealed class TelegramAgentService(
             notes.Add("Полный доступ не действует: не выбран пользователь OneBase с правом на AI-консультанта — ответ по отправленным данным.");
         }
 
+        var generate = GenerationIntent.Requested(question);
+        var asFile = generate && FilesAllowed(settings, permission);
         Composed composed;
         try
         {
             if (rightsUser is { } userId)
             {
-                composed = await ComposeFullAsync(userId, input.ConversationId, permission!, settings, accountId, peerId, question, ct);
+                composed = await ComposeFullAsync(userId, input.ConversationId, permission!, settings, accountId, peerId, question, generate, asFile, ct);
             }
             else
             {
                 var history = (input.History ?? []).TakeLast(HistoryTurns).Select(t => (t.Question, t.Answer)).ToList();
-                composed = await ComposeSentOnlyAsync(accountId, peerId, permission, settings, question, history, input.SampleMaterial, ct);
+                composed = await ComposeSentOnlyAsync(accountId, peerId, permission, settings, question, history, input.SampleMaterial, generate, asFile, ct);
+            }
+
+            if (asFile)
+            {
+                composed = AsFile(composed, question);
             }
         }
         catch (KeyNotFoundException)
@@ -380,22 +429,36 @@ public sealed class TelegramAgentService(
             throw new TelegramException("Чат консультанта для проверки не найден — начните проверку заново.", TelegramErrorKind.Config);
         }
 
-        IReadOnlyList<string> replies = composed.Text is { Length: > 0 } text
-            ? TelegramRules.Split(composed.Markdown ? TelegramRules.MarkdownToTelegramHtml(text) : TelegramRules.Escape(text))
-            : [];
+        var replies = new List<string>();
+        if (generate)
+        {
+            replies.Add(TelegramRules.Escape(GenerationIntent.Ack(settings.Language, question, 0)));
+        }
+
+        if (!composed.FilesOnly && composed.Text is { Length: > 0 } text)
+        {
+            replies.AddRange(TelegramRules.Split(composed.Markdown ? TelegramRules.MarkdownToTelegramHtml(text) : TelegramRules.Escape(text)));
+        }
+
+        var document = composed.FilesOnly && composed.Files.Any(f => f.ContentType == DocxType) && composed.Text is { Length: > 0 } body
+            ? TelegramRules.MarkdownToTelegramHtml(body)
+            : null;
         return new AgentTestResult(rightsUser is null ? "sent_only" : "full", composed.Status, notes.Count == 0 ? null : string.Join(' ', notes), replies,
             composed.Files.Select(f => f.FileName).ToList(), composed.Model, composed.InputTokens, composed.OutputTokens, watch.ElapsedMilliseconds,
-            composed.ConversationId, composed.Materials, composed.Error);
+            composed.ConversationId, composed.Materials, composed.Error, document);
     }
 
     // ---------- Полный доступ ----------
 
     private async Task<Composed> ComposeFullAsync(Guid userId, Guid? conversationId, TelegramUserPermission permission, TelegramAgentSettings settings, Guid accountId,
-        long peerId, string question, CancellationToken ct)
+        long peerId, string question, bool generate, bool asFile, CancellationToken ct)
     {
         var allowReports = settings.AllowReports && permission.AllowReports;
         var schedule = await ScheduleAsync(accountId, peerId, ct);
-        var channel = new ConsultantChannel("telegram", ChannelInstructions(settings, permission, schedule), ModelOf(settings), settings.MaxOutputTokens, allowReports);
+        // Просьба сформировать отчёт или документ — модель генерации (Claude) и у итогового ответа, и у AI-сотрудников, которые его собирают.
+        var (model, generation) = await PickModelAsync(settings, generate, ct);
+        var channel = new ConsultantChannel("telegram", ChannelInstructions(settings, permission, schedule, asFile), model, MaxTokens(settings, generation), allowReports,
+            generation ? model : null);
         ConsultantReply reply;
         try
         {
@@ -428,7 +491,7 @@ public sealed class TelegramAgentService(
             ReportId: reportId, ConversationId: reply.ConversationId);
     }
 
-    private static string ChannelInstructions(TelegramAgentSettings settings, TelegramUserPermission permission, string schedule)
+    private static string ChannelInstructions(TelegramAgentSettings settings, TelegramUserPermission permission, string schedule, bool document = false)
     {
         var sb = new StringBuilder();
         sb.AppendLine(IdentityRule(settings));
@@ -438,6 +501,11 @@ public sealed class TelegramAgentService(
         sb.AppendLine("Если просят объяснить отчёт — коротко: что в нём (показатели, период), и насколько всё хорошо или плохо — по цифрам.");
         sb.AppendLine(StyleRule(settings.ResponseStyle));
         sb.AppendLine(LanguageRule(settings.Language));
+        if (document)
+        {
+            sb.AppendLine(DocumentRule);
+        }
+
         sb.AppendLine(schedule);
         if (!string.IsNullOrWhiteSpace(settings.SystemPrompt))
         {
@@ -457,7 +525,7 @@ public sealed class TelegramAgentService(
     // ---------- Только отправленные данные ----------
 
     private async Task<Composed> ComposeSentOnlyAsync(Guid accountId, long peerId, TelegramUserPermission? permission, TelegramAgentSettings settings, string question,
-        IReadOnlyList<(string Question, string Answer)> history, string? sampleMaterial, CancellationToken ct)
+        IReadOnlyList<(string Question, string Answer)> history, string? sampleMaterial, bool generate, bool asFile, CancellationToken ct)
     {
         IReadOnlyList<(TelegramMaterialChunk Chunk, string Title, DateTimeOffset SentAt)> found =
             peerId == 0 ? [] : await TelegramMaterials.FindAsync(db, accountId, peerId, question, 6, ct);
@@ -468,7 +536,7 @@ public sealed class TelegramAgentService(
         }
 
         var schedule = await ScheduleAsync(accountId, peerId, ct);
-        var prompt = SentOnlyPrompt(settings, materials, schedule, clock.GetUtcNow());
+        var prompt = SentOnlyPrompt(settings, materials, schedule, clock.GetUtcNow(), asFile);
         List<LlmMessage> messages = [new(LlmRole.System, prompt)];
         foreach (var (q, a) in history)
         {
@@ -480,10 +548,11 @@ public sealed class TelegramAgentService(
         AiCallResult result;
         try
         {
+            var (model, generation) = await PickModelAsync(settings, generate, ct);
             result = await ai.CompleteAsync(messages, [], new AiCallOptions
             {
-                Model = ModelOf(settings),
-                MaxOutputTokens = settings.MaxOutputTokens,
+                Model = model,
+                MaxOutputTokens = MaxTokens(settings, generation),
                 Context = new AiCallContext(permission?.UserId, "telegram", null, "telegram.sent_only"),
             }, ct);
         }
@@ -521,7 +590,7 @@ public sealed class TelegramAgentService(
     /// Инструкция администратора не может отменить правило «факты — только из материалов».
     /// </summary>
     public static string SentOnlyPrompt(TelegramAgentSettings settings, IReadOnlyList<(string Title, DateTimeOffset SentAt, string Text)> materials, string schedule,
-        DateTimeOffset now)
+        DateTimeOffset now, bool document = false)
     {
         var sb = new StringBuilder();
         sb.AppendLine(IdentityRule(settings));
@@ -544,6 +613,11 @@ public sealed class TelegramAgentService(
         sb.AppendLine("- Номера фрагментов не упоминай; можно сказать «в отчёте от 15.10».");
         sb.AppendLine(StyleRule(settings.ResponseStyle));
         sb.AppendLine(LanguageRule(settings.Language));
+        if (document)
+        {
+            sb.AppendLine(DocumentRule);
+        }
+
         if (!string.IsNullOrWhiteSpace(settings.SystemPrompt))
         {
             sb.AppendLine("Инструкция администратора (правило «факты — только из материалов» она не отменяет):");
@@ -855,6 +929,93 @@ public sealed class TelegramAgentService(
 
     private static AiModelRef? ModelOf(TelegramAgentSettings settings) =>
         settings is { ModelProvider: { Length: > 0 } provider, Model: { Length: > 0 } model } ? new AiModelRef(provider, model) : null;
+
+    /// <summary>
+    /// Модель ответа. Обычный вопрос — модель ответов агента (OpenAI). Просьба сформировать отчёт, документ, письмо, таблицу (GenerationIntent) —
+    /// модель генерации: выбранная в настройках агента, иначе Claude из AI Data Manager, если ключ Anthropic подключён; без Claude — модель ответов.
+    /// </summary>
+    internal async Task<(AiModelRef? Model, bool Generation)> PickModelAsync(TelegramAgentSettings settings, bool generate, CancellationToken ct)
+    {
+        if (!generate)
+        {
+            return (ModelOf(settings), false);
+        }
+
+        if (settings is { GenerationModelProvider: { Length: > 0 } provider, GenerationModel: { Length: > 0 } model })
+        {
+            return (new AiModelRef(provider, model), true);
+        }
+
+        var anthropic = await aiSettings.GetProviderAsync(AnthropicProvider.ProviderCode, ct);
+        return anthropic is { IsReady: true } && !string.IsNullOrWhiteSpace(dataManager.Model)
+            ? (new AiModelRef(AnthropicProvider.ProviderCode, dataManager.Model.Trim()), true)
+            : (ModelOf(settings), false);
+    }
+
+    /// <summary>Файлы (отчёты Excel и документы Word) — если разрешены аккаунту и этому человеку с полным доступом в списке; остальным — текстом.</summary>
+    private static bool FilesAllowed(TelegramAgentSettings settings, TelegramUserPermission? permission) =>
+        settings.AllowReports && permission is { AllowReports: true, Mode: TelegramAccessMode.Full };
+
+    /// <summary>Просьба о документе, который уйдёт файлом: в ответе — только сам документ (Markdown → Word).</summary>
+    private const string DocumentRule = $"""
+        Сейчас просят подготовить документ (отчёт, письмо, таблицу, план, разбор и т. п.). Он уйдёт человеку файлом Word без сообщения в чат, поэтому ответ — только сам документ:
+        первая строка — заголовок «# Название», дальше содержание в Markdown (## подзаголовки, списки, таблицы). Без вступлений («Вот ваш отчёт», «Конечно») и без вопросов в конце.
+        Правила о длине ответа и о таблицах в Telegram к документу не относятся: пиши так полно, как нужно по смыслу.
+        Если к ответу прикладывается отчёт Excel, файлом уйдёт он, а этот текст не отправится.
+        Если подготовить документ нельзя (нет данных или прав), ответь одной строкой, которая начинается с {NoDocMarker}:, и коротко объясни человеку причину.
+        """;
+
+    /// <summary>
+    /// Готовое — файлом без текста: отчёт Excel, если консультант его сформировал, иначе ответ → документ Word (название — из «# …»).
+    /// «NO_DOC: причина», «нет данных» и ошибки уходят обычным текстом.
+    /// </summary>
+    private Composed AsFile(Composed composed, string question)
+    {
+        if (composed.Status != "answered")
+        {
+            return composed;
+        }
+
+        if (composed.Files.Count > 0)
+        {
+            return composed with { FilesOnly = true };
+        }
+
+        var text = composed.Text?.Trim() ?? string.Empty;
+        if (text.Contains(NoDocMarker, StringComparison.Ordinal))
+        {
+            var reason = text.Replace(NoDocMarker, string.Empty, StringComparison.Ordinal).Trim().TrimStart(':', ' ', '—', '-').Trim();
+            return composed with { Text = reason.Length > 0 ? reason : "Не получилось подготовить документ." };
+        }
+
+        if (text.Length == 0)
+        {
+            return composed;
+        }
+
+        var title = DocumentTitle(text, question);
+        var name = Path.ChangeExtension(ReportService.FileName(title), ".docx");
+        return composed with { Files = [new TelegramFile(name, DocxType, documents.Write(title, text, clock.GetUtcNow()))], FilesOnly = true };
+    }
+
+    /// <summary>Название документа: первый заголовок «# …», иначе первая строка (до 80 знаков), иначе — по вопросу.</summary>
+    internal static string DocumentTitle(string markdown, string question)
+    {
+        var lines = markdown.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+        var heading = lines.FirstOrDefault(l => l.StartsWith('#'));
+        var title = (heading ?? lines.FirstOrDefault() ?? question).TrimStart('#').Trim().Replace("**", string.Empty).Replace("__", string.Empty).Trim('*', '_', ' ');
+        if (title.Length > 80)
+        {
+            var cut = title.LastIndexOf(' ', 80);
+            title = title[..(cut > 20 ? cut : 80)].TrimEnd(' ', ',', '.', ':', '—') + "…";
+        }
+
+        return title.Length > 0 ? title : "Документ";
+    }
+
+    /// <summary>Сгенерированный документ длиннее обычного ответа: не меньше 4000 токенов.</summary>
+    private static int MaxTokens(TelegramAgentSettings settings, bool generation) =>
+        generation ? Math.Max(settings.MaxOutputTokens, 4000) : settings.MaxOutputTokens;
 
     private static string StyleRule(string style) => style switch
     {

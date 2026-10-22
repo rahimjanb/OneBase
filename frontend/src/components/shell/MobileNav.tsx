@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Sheet } from "@/components/field/Sheet";
 import { LinkTelegramButton } from "@/components/telegram/LinkTelegramButton";
+import { useT } from "@/i18n/client";
 import { canOpen } from "@/lib/navigation";
 import { initials, type Me } from "@/lib/users";
 import { LogoutLink } from "./AppBridge";
@@ -63,6 +64,7 @@ const isCurrent = (pathname: string, s: Section) => {
  */
 export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null; canOpenSettings: boolean; permissions: readonly string[] | null }) {
   const pathname = usePathname();
+  const t = useT();
   const keyboardOpen = useKeyboardOpen();
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState(false);
@@ -93,8 +95,8 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
     if (!fab || !bar) return;
     const cx = fab.left + fab.width / 2;
     const cy = fab.top + fab.height / 2;
-    setLayout(fanLayout(items.map((i) => i.label), window.innerWidth, cx, cy, bar.top - cy));
-  }, [items]);
+    setLayout(fanLayout(items.map((i) => t(i.label)), window.innerWidth, cx, cy, bar.top - cy));
+  }, [items, t]);
 
   const close = useCallback((refocus = false) => {
     setOpen(false);
@@ -130,7 +132,7 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
 
   return (
     <nav
-      aria-label="Основные разделы"
+      aria-label={t("Основные разделы")}
       data-open={open || undefined}
       className={`rnav shrink-0 px-1.5 lg:hidden ${keyboardOpen ? "hidden" : ""}`}
     >
@@ -138,7 +140,7 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
         <div className="rnav-overlay" onClick={() => close()} />
       </div>
 
-      <div id="rnav-fan" className="rnav-anchor" role="group" aria-label="Разделы и действия" inert={!open}>
+      <div id="rnav-fan" className="rnav-anchor" role="group" aria-label={t("Разделы и действия")} inert={!open}>
         {items.map((item, i) => {
           const slot = layout?.slots[i] ?? { x: 0, y: 0 };
           const delay = open ? i * 32 : (n - 1 - i) * 22;
@@ -171,7 +173,7 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
               <span className="rnav-btn">
                 <Icon className={size < 60 ? "size-[22px]" : "size-6"} strokeWidth={2} />
               </span>
-              <span className="rnav-label">{item.label}</span>
+              <span className="rnav-label">{t(item.label)}</span>
             </Link>
           );
         })}
@@ -197,7 +199,7 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
               className="rnav-tab flex h-full w-full flex-col items-center justify-center gap-1 text-[11px] font-medium"
             >
               <UserRound className="size-6" strokeWidth={profile ? 2.2 : 1.8} />
-              <span className="max-w-full truncate px-0.5">Профиль</span>
+              <span className="max-w-full truncate px-0.5">{t("Профиль")}</span>
             </button>
           </li>
         </ul>
@@ -208,7 +210,7 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
         ref={fabRef}
         type="button"
         onClick={toggle}
-        aria-label={open ? "Закрыть меню" : "Открыть меню разделов"}
+        aria-label={open ? t("Закрыть меню") : t("Открыть меню разделов")}
         aria-expanded={open}
         aria-controls="rnav-fan"
         className="rnav-fab"
@@ -217,7 +219,7 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
         <X className="rnav-fab-close size-7" strokeWidth={2.4} aria-hidden />
       </button>
 
-      <Sheet open={profile} onClose={() => setProfile(false)} title="Профиль">
+      <Sheet open={profile} onClose={() => setProfile(false)} title={t("Профиль")}>
         {me && (
           <div className="flex items-center gap-3 rounded-xl bg-muted px-3 py-3">
             <span className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent-strong">{initials(me)}</span>
@@ -232,7 +234,7 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
           {/* Обычная ссылка: /logout при загрузке закрывает сеанс, заранее его загружать нельзя. */}
           <LogoutLink href="/logout" className="flex items-center gap-2 rounded-md px-2.5 py-2.5 text-sm text-bad hover:bg-muted">
             <LogOut className="size-4" />
-            Выйти
+            {t("Выйти")}
           </LogoutLink>
         </div>
       </Sheet>
@@ -241,6 +243,7 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
 }
 
 function TabLink({ tab, active }: { tab: Section; active: boolean }) {
+  const t = useT();
   const Icon = tab.icon;
   return (
     <Link
@@ -251,11 +254,11 @@ function TabLink({ tab, active }: { tab: Section; active: boolean }) {
       <Icon className="size-6" strokeWidth={active ? 2.2 : 1.8} fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.16 : 0} />
       {tab.short ? (
         <>
-          <span className="max-w-full truncate tracking-[-0.02em] max-[374px]:hidden">{tab.label}</span>
-          <span className="max-w-full truncate px-0.5 min-[375px]:hidden">{tab.short}</span>
+          <span className="max-w-full truncate tracking-[-0.02em] max-[374px]:hidden">{t(tab.label)}</span>
+          <span className="max-w-full truncate px-0.5 min-[375px]:hidden">{t(tab.short)}</span>
         </>
       ) : (
-        <span className="max-w-full truncate px-0.5">{tab.label}</span>
+        <span className="max-w-full truncate px-0.5">{t(tab.label)}</span>
       )}
     </Link>
   );

@@ -3,7 +3,8 @@ import { ArrowRight, ArrowUp, CircleAlert, Clock, Sparkle } from "lucide-react";
 import { DepartmentStatusCard } from "@/components/departments";
 import { PageBody } from "@/components/shell/PageHeader";
 import { Card, SectionTitle, SelectField } from "@/components/ui";
-import { categoryNames, type AiAlertsView } from "@/lib/ai";
+import { getLocale, getT } from "@/i18n/server";
+import { alertText, categoryNames, type AiAlertsView } from "@/lib/ai";
 import { departments, focusOfDay, kpis } from "@/lib/demo-data";
 import { greeting, todayLabel } from "@/lib/format";
 import { redirect } from "next/navigation";
@@ -11,7 +12,10 @@ import { canOpen, homeFor } from "@/lib/navigation";
 import { apiSession, apiTry } from "@/lib/server-api";
 import type { Me } from "@/lib/users";
 
-export const metadata = { title: "Обзор · OneBase" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Обзор · OneBase") };
+}
 
 const trendStyles = {
   up: { icon: ArrowUp, className: "text-ok" },
@@ -24,25 +28,26 @@ export default async function DashboardPage() {
   const [me, alerts] = await Promise.all([apiSession<Me>("/api/auth/me"), apiTry<AiAlertsView>("/api/ai/alerts")]);
   // Роль без общих разделов (например, «Админ 2») начинает со своего первого раздела.
   if (me && !canOpen("/", me.permissions)) redirect(homeFor(me.permissions));
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const name = me?.firstName || me?.name || me?.login;
   const problems = alerts?.alerts.filter((a) => a.severity !== "Opportunity").slice(0, 2) ?? [];
 
   return (
     <PageBody>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">{todayLabel()}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">{todayLabel(new Date(), locale)}</div>
       <h1 className="mt-1.5 text-[1.625rem] font-semibold leading-tight tracking-tight text-ink sm:text-[1.75rem]">
-        {greeting()}
+        {t(greeting())}
         {name ? `, ${name}` : ""}!
       </h1>
-      <p className="mt-1.5 text-sm text-ink-2">Вот что происходит в компании сегодня.</p>
+      <p className="mt-1.5 text-sm text-ink-2">{t("Вот что происходит в компании сегодня.")}</p>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        <SelectField options={["Последние 30 дней", "Последние 7 дней", "Квартал", "Год"]} className="max-lg:w-full" />
-        <SelectField options={["Все отделы", ...departments.map((d) => d.name)]} className="max-lg:w-full" />
-        <SelectField options={["Все сотрудники", "Иван Иванов", "Анна Петрова", "Мария Орлова"]} className="max-lg:w-full" />
+        <SelectField options={[t("Последние 30 дней"), t("Последние 7 дней"), t("Квартал"), t("Год")]} className="max-lg:w-full" />
+        <SelectField options={[t("Все отделы"), ...departments.map((d) => d.name)]} className="max-lg:w-full" />
+        <SelectField options={[t("Все сотрудники"), "Иван Иванов", "Анна Петрова", "Мария Орлова"]} className="max-lg:w-full" />
         <span className="flex items-center gap-2 text-xs text-ink-3">
           <span className="size-1.5 rounded-full bg-ink-3" />
-          Обновлено 5 минут назад
+          {t("Обновлено 5 минут назад")}
         </span>
       </div>
 
@@ -51,11 +56,11 @@ export default async function DashboardPage() {
           const trend = trendStyles[kpi.tone];
           return (
             <Card key={kpi.label} className="p-5 max-lg:p-4">
-              <div className="text-sm text-ink-2">{kpi.label}</div>
+              <div className="text-sm text-ink-2">{t(kpi.label)}</div>
               <div className="mt-3 text-[2rem] font-semibold leading-none tracking-tight max-lg:text-2xl">{kpi.value}</div>
               <div className={`mt-4 flex items-center gap-1.5 text-xs ${trend.className}`}>
                 <trend.icon className="size-3.5" />
-                {kpi.trend}
+                {t(kpi.trend)}
               </div>
             </Card>
           );
@@ -64,11 +69,11 @@ export default async function DashboardPage() {
 
       <div className="mt-8">
         <SectionTitle
-          title="Состояние отделов"
-          subtitle="Показатели и динамика команд"
+          title={t("Состояние отделов")}
+          subtitle={t("Показатели и динамика команд")}
           action={
             <Link href="/departments" className="flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline">
-              Все отделы <ArrowRight className="size-3.5" />
+              {t("Все отделы")} <ArrowRight className="size-3.5" />
             </Link>
           }
         />
@@ -83,25 +88,25 @@ export default async function DashboardPage() {
       <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-accent/20 bg-accent-soft px-5 py-4">
         <Sparkle className="size-5 shrink-0 text-accent-strong" />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-ink">Фокус дня</div>
+          <div className="text-sm font-semibold text-ink">{t("Фокус дня")}</div>
           <p className="mt-0.5 text-sm text-ink-2">
             {alerts === null ? (
-              focusOfDay
+              t(focusOfDay)
             ) : problems.length === 0 ? (
-              "Проактивный анализ не нашёл проблем в данных OneBase."
+              t("Проактивный анализ не нашёл проблем в данных OneBase.")
             ) : (
               problems.map((a, i) => (
                 <span key={a.id}>
                   {i > 0 && " · "}
-                  <span className={a.severity === "Critical" ? "font-semibold text-bad" : "font-semibold text-warn"}>{categoryNames[a.category] ?? a.category}: </span>
-                  {a.title}
+                  <span className={a.severity === "Critical" ? "font-semibold text-bad" : "font-semibold text-warn"}>{t(categoryNames[a.category] ?? a.category)}: </span>
+                  {alertText(a.title, t)}
                 </span>
               ))
             )}
           </p>
         </div>
         <Link href={alerts ? "/ai" : "/consultant"} className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent-strong hover:underline">
-          {alerts ? "Открыть обзор" : "Открыть консультанта"} <ArrowRight className="size-3.5" />
+          {alerts ? t("Открыть обзор") : t("Открыть консультанта")} <ArrowRight className="size-3.5" />
         </Link>
       </div>
     </PageBody>

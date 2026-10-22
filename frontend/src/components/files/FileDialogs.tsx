@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui";
+import { useT } from "@/i18n/client";
 import { fileSize } from "@/lib/format";
 import { downloadUrl, filesApi, modifiedLabel, typeGroup, type FilePreview, type FileRow, type FolderView, type VersionRow } from "@/lib/files";
 import { FolderIcon } from "./file-meta";
@@ -22,6 +23,7 @@ export function NameDialog({
   onSubmit: (name: string) => Promise<void>;
   onClose: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,7 +57,7 @@ export function NameDialog({
         />
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end gap-2">
-          <Button onClick={onClose}>Отмена</Button>
+          <Button onClick={onClose}>{t("Отмена")}</Button>
           <Button variant="primary" type="submit" disabled={busy || !name.trim()}>
             {busy && <Loader2 className="size-4 animate-spin" />}
             {action}
@@ -80,6 +82,7 @@ export function MoveDialog({
   onMove: (targetFolderId: string) => Promise<void>;
   onClose: () => void;
 }) {
+  const t = useT();
   const [view, setView] = useState<FolderView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -103,7 +106,7 @@ export function MoveDialog({
   };
 
   return (
-    <Modal title={`Перенести «${itemName}»`} onClose={onClose}>
+    <Modal title={t("Перенести «{name}»", { name: itemName })} onClose={onClose}>
       {!view ? (
         <Loader2 className="size-5 animate-spin text-ink-3" />
       ) : (
@@ -119,7 +122,7 @@ export function MoveDialog({
             ))}
           </nav>
           <div className="max-h-72 divide-y divide-line overflow-y-auto rounded-lg border border-line">
-            {view.folders.filter((f) => f.id !== excludeFolderId).length === 0 && <p className="px-3 py-3 text-sm text-ink-3">Вложенных папок нет</p>}
+            {view.folders.filter((f) => f.id !== excludeFolderId).length === 0 && <p className="px-3 py-3 text-sm text-ink-3">{t("Вложенных папок нет")}</p>}
             {view.folders
               .filter((f) => f.id !== excludeFolderId)
               .map((f) => (
@@ -132,10 +135,10 @@ export function MoveDialog({
           </div>
           {error && <p className="text-sm text-bad">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button onClick={onClose}>Отмена</Button>
+            <Button onClick={onClose}>{t("Отмена")}</Button>
             <Button variant="primary" onClick={move} disabled={busy || !view.canWrite}>
               {busy && <Loader2 className="size-4 animate-spin" />}
-              Перенести в «{view.name}»
+              {t("Перенести в «{name}»", { name: view.name })}
             </Button>
           </div>
         </div>
@@ -146,13 +149,14 @@ export function MoveDialog({
 
 /** История версий: каждую можно скачать. */
 export function VersionsDialog({ file, onClose }: { file: FileRow; onClose: () => void }) {
+  const t = useT();
   const [rows, setRows] = useState<VersionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     filesApi.versions(file.id).then(setRows, (e: Error) => setError(e.message));
   }, [file.id]);
   return (
-    <Modal title={`Версии «${file.name}»`} onClose={onClose}>
+    <Modal title={t("Версии «{name}»", { name: file.name })} onClose={onClose}>
       {error && <p className="text-sm text-bad">{error}</p>}
       {!rows && !error && <Loader2 className="size-5 animate-spin text-ink-3" />}
       <div className="divide-y divide-line">
@@ -160,10 +164,10 @@ export function VersionsDialog({ file, onClose }: { file: FileRow; onClose: () =
           <div key={v.number} className="flex items-center gap-3 py-2.5 text-sm">
             <span className="w-10 font-medium">v{v.number}</span>
             <span className="flex-1 text-ink-2">
-              {modifiedLabel(v.createdAt)} · {v.by?.name ?? "—"} · {fileSize(v.sizeBytes)}
-              {v.current && <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">текущая</span>}
+              {modifiedLabel(v.createdAt, t)} · {v.by?.name ?? "—"} · {fileSize(v.sizeBytes)}
+              {v.current && <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">{t("текущая")}</span>}
             </span>
-            <a href={downloadUrl(file, false, v.number)} className="rounded-md p-1.5 text-ink-3 hover:bg-muted hover:text-ink" aria-label={`Скачать версию ${v.number}`}>
+            <a href={downloadUrl(file, false, v.number)} className="rounded-md p-1.5 text-ink-3 hover:bg-muted hover:text-ink" aria-label={t("Скачать версию {n}", { n: v.number })}>
               <Download className="size-4" />
             </a>
           </div>
@@ -175,6 +179,7 @@ export function VersionsDialog({ file, onClose }: { file: FileRow; onClose: () =
 
 /** Предпросмотр: картинки и PDF — прямо по ссылке скачивания, CSV/XLSX — таблица, DOCX/TXT — текст (готовые данные с сервера). */
 export function PreviewDialog({ file, onClose }: { file: FileRow; onClose: () => void }) {
+  const t = useT();
   const [preview, setPreview] = useState<FilePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState(0);
@@ -226,9 +231,9 @@ export function PreviewDialog({ file, onClose }: { file: FileRow; onClose: () =>
                   ))}
                 </tbody>
               </table>
-              {current?.rows.length === 0 && <p className="p-3 text-sm text-ink-3">Лист пустой</p>}
+              {current?.rows.length === 0 && <p className="p-3 text-sm text-ink-3">{t("Лист пустой")}</p>}
             </div>
-            {current?.truncated && <p className="text-xs text-ink-3">Показаны первые строки и столбцы — весь файл откройте после скачивания.</p>}
+            {current?.truncated && <p className="text-xs text-ink-3">{t("Показаны первые строки и столбцы — весь файл откройте после скачивания.")}</p>}
           </>
         )}
         {preview?.kind === "text" && (
@@ -236,14 +241,14 @@ export function PreviewDialog({ file, onClose }: { file: FileRow; onClose: () =>
             {preview.paragraphs.map((p, i) => (
               <p key={i} className="whitespace-pre-wrap">{p}</p>
             ))}
-            {preview.truncated && <p className="text-xs text-ink-3">Показано начало документа.</p>}
+            {preview.truncated && <p className="text-xs text-ink-3">{t("Показано начало документа.")}</p>}
           </div>
         )}
-        {preview?.note && <p className="text-sm text-ink-2">{preview.note}</p>}
+        {preview?.note && <p className="text-sm text-ink-2">{t(preview.note)}</p>}
         <div className="flex justify-end">
           <a href={downloadUrl(file)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line px-4 text-sm font-medium hover:bg-muted">
             <Download className="size-4" />
-            Скачать · {fileSize(file.sizeBytes)}
+            {t("Скачать")} · {fileSize(file.sizeBytes)}
           </a>
         </div>
       </div>

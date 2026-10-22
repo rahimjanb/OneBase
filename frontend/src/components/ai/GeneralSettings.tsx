@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { Note, Section } from "@/components/sales/bits";
+import { useT } from "@/i18n/client";
 import { modelLabel, type AiModelRef, type AiModelTestResult, type AiModelView, type AiProviderView, type AiSettingsView } from "@/lib/ai";
 import { bff } from "@/lib/bff";
 import { dateTime, num } from "@/lib/sales/format";
@@ -25,6 +26,7 @@ const decode = (v: string): AiModelRef | null => {
 };
 
 export function GeneralSettings({ initial, models, providers }: { initial: AiSettingsView; models: AiModelView[]; providers: AiProviderView[] }) {
+  const t = useT();
   const [data, setData] = useState(initial);
   const [enabled, setEnabled] = useState(initial.enabled);
   const [values, setValues] = useState<Record<Slot, string>>({
@@ -48,26 +50,26 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
       .filter((g) => g.models.length > 0);
 
   const save = async () => {
-    const t = temperature.trim().replace(",", ".");
+    const temp = temperature.trim().replace(",", ".");
     const body = {
       enabled,
       primary: decode(values.primary),
       fallback: decode(values.fallback),
       router: decode(values.router),
       embedding: decode(values.embedding),
-      temperature: t === "" ? null : Number(t),
+      temperature: temp === "" ? null : Number(temp),
       maxOutputTokens: Number(maxTokens),
       reasoningEffort: reasoning === "" ? null : reasoning,
     };
     if (body.temperature !== null && !Number.isFinite(body.temperature)) {
-      setMessage({ tone: "bad", text: "Температура — число от 0 до 1." });
+      setMessage({ tone: "bad", text: t("Температура — число от 0 до 1.") });
       return;
     }
     setBusy("save");
     setMessage(null);
     try {
       setData(await bff<AiSettingsView>("ai/settings", { method: "PUT", body: JSON.stringify(body) }));
-      setMessage({ tone: "ok", text: "Настройки сохранены." });
+      setMessage({ tone: "ok", text: t("Настройки сохранены.") });
     } catch (e) {
       setMessage({ tone: "bad", text: (e as Error).message });
     } finally {
@@ -97,13 +99,13 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
         {data.ready ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-ok" /> : <XCircle className="mt-0.5 size-5 shrink-0 text-warn" />}
         <div>
           <div className={`font-semibold ${data.ready ? "text-ok" : "text-warn"}`}>
-            {data.ready ? "AI готов к работе" : "AI пока не работает"}
+            {data.ready ? t("AI готов к работе") : t("AI пока не работает")}
           </div>
           <div className="mt-0.5 text-ink-2">
             {data.ready
-              ? `Основная модель: ${data.primary ? `${providerName(data.primary.provider)} · ${data.primary.model}` : "—"}${data.primaryFromEnvironment ? " (из .env сервера)" : ""}.`
-              : data.readinessMessage}
-            {data.updatedAt && ` Настройки изменены ${dateTime(data.updatedAt)}.`}
+              ? `${t("Основная модель: {model}", { model: data.primary ? `${providerName(data.primary.provider)} · ${data.primary.model}` : "—" })}${data.primaryFromEnvironment ? ` ${t("(из .env сервера)")}` : ""}.`
+              : data.readinessMessage && t(data.readinessMessage)}
+            {data.updatedAt && ` ${t("Настройки изменены {date}.", { date: dateTime(data.updatedAt) })}`}
           </div>
         </div>
       </div>
@@ -112,16 +114,16 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
         <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm ${message.tone === "ok" ? "bg-ok-soft text-ok" : "bg-bad-soft text-bad"}`}>{message.text}</div>
       )}
 
-      <Section title="Модели для задач">
+      <Section title={t("Модели для задач")}>
         {noModels && (
           <p className="mb-4 rounded-lg bg-muted px-4 py-3 text-sm text-ink-2">
-            Нет разрешённых моделей. Добавьте ключ в{" "}
+            {t("Нет разрешённых моделей. Добавьте ключ в")}{" "}
             <Link href="/settings/ai/providers" className="font-medium text-accent-strong hover:underline">
-              Провайдерах
+              {t("Провайдерах")}
             </Link>
-            , загрузите список и отметьте модели в разделе{" "}
+            {t(", загрузите список и отметьте модели в разделе")}{" "}
             <Link href="/settings/ai/models" className="font-medium text-accent-strong hover:underline">
-              Модели
+              {t("Модели")}
             </Link>
             .
           </p>
@@ -135,16 +137,16 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
             return (
               <div key={slot.key}>
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-medium text-ink">{slot.label}</span>
+                  <span className="mb-1.5 block text-sm font-medium text-ink">{t(slot.label)}</span>
                   <select
                     className={field}
                     value={values[slot.key]}
                     onChange={(e) => setValues((prev) => ({ ...prev, [slot.key]: e.target.value }))}
                   >
                     <option value="">
-                      {slot.key === "primary" && data.primaryFromEnvironment && data.primary ? `Из .env: ${data.primary.model}` : "Не выбрана"}
+                      {slot.key === "primary" && data.primaryFromEnvironment && data.primary ? t("Из .env: {model}", { model: data.primary.model }) : t("Не выбрана")}
                     </option>
-                    {!known && current && <option value={values[slot.key]}>{`${providerName(current.provider)} · ${current.model} (не разрешена)`}</option>}
+                    {!known && current && <option value={values[slot.key]}>{`${providerName(current.provider)} · ${current.model} ${t("(не разрешена)")}`}</option>}
                     {groups.map((g) => (
                       <optgroup key={g.provider.code} label={g.provider.name}>
                         {g.models.map((m) => (
@@ -155,18 +157,20 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
                       </optgroup>
                     ))}
                   </select>
-                  <span className="mt-1 block text-xs text-ink-3">{slot.hint}</span>
+                  <span className="mt-1 block text-xs text-ink-3">{t(slot.hint)}</span>
                 </label>
                 {slot.test && current && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <button className={button} onClick={() => test(slot.key)} disabled={busy !== null}>
                       {busy === `test-${slot.key}` && <Loader2 className="size-4 animate-spin" />}
-                      Проверить модель
+                      {t("Проверить модель")}
                     </button>
                     {result && (
                       <span className={`text-sm ${result.ok ? "text-ok" : "text-bad"}`}>
-                        {result.message}
-                        {result.ok && result.usage && ` ${num(result.elapsedMs)} мс, токенов ${num(result.usage.inputTokens + result.usage.outputTokens)}.`}
+                        {t(result.message)}
+                        {result.ok &&
+                          result.usage &&
+                          ` ${t("{ms} мс, токенов {tokens}.", { ms: num(result.elapsedMs), tokens: num(result.usage.inputTokens + result.usage.outputTokens) })}`}
                       </span>
                     )}
                   </div>
@@ -177,47 +181,49 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
         </div>
       </Section>
 
-      <Section title="Параметры ответа">
+      <Section title={t("Параметры ответа")}>
         <div className="grid gap-5 lg:grid-cols-2">
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-ink">Температура</span>
-            <input className={field} value={temperature} onChange={(e) => setTemperature(e.target.value)} placeholder="по умолчанию провайдера" inputMode="decimal" />
-            <span className="mt-1 block text-xs text-ink-3">0 — точные, повторяемые ответы; 1 — разнообразнее. Для аналитики подходит 0–0,3. Пусто — не передаётся.</span>
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Температура")}</span>
+            <input className={field} value={temperature} onChange={(e) => setTemperature(e.target.value)} placeholder={t("по умолчанию провайдера")} inputMode="decimal" />
+            <span className="mt-1 block text-xs text-ink-3">{t("0 — точные, повторяемые ответы; 1 — разнообразнее. Для аналитики подходит 0–0,3. Пусто — не передаётся.")}</span>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-ink">Максимум токенов ответа</span>
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Максимум токенов ответа")}</span>
             <input className={field} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} inputMode="numeric" />
-            <span className="mt-1 block text-xs text-ink-3">Ограничивает длину и стоимость одного ответа модели (256–64 000).</span>
+            <span className="mt-1 block text-xs text-ink-3">{t("Ограничивает длину и стоимость одного ответа модели (256–64 000).")}</span>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-ink">Глубина рассуждений</span>
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Глубина рассуждений")}</span>
             <select className={field} value={reasoning} onChange={(e) => setReasoning(e.target.value)}>
-              <option value="low">Низкая — быстрее и дешевле (рекомендуется)</option>
-              <option value="medium">Средняя</option>
-              <option value="high">Высокая — дольше и дороже</option>
-              <option value="">По умолчанию модели</option>
+              <option value="low">{t("Низкая — быстрее и дешевле (рекомендуется)")}</option>
+              <option value="medium">{t("Средняя")}</option>
+              <option value="high">{t("Высокая — дольше и дороже")}</option>
+              <option value="">{t("По умолчанию модели")}</option>
             </select>
             <span className="mt-1 block text-xs text-ink-3">
-              Для reasoning-моделей OpenAI: сколько модель «думает» перед ответом. Выбор AI-сотрудников всегда идёт с низкой. Модели, которые параметр не
-              принимают, и Anthropic работают как раньше.
+              {t(
+                "Для reasoning-моделей OpenAI: сколько модель «думает» перед ответом. Выбор AI-сотрудников всегда идёт с низкой. Модели, которые параметр не принимают, и Anthropic работают как раньше.",
+              )}
             </span>
           </label>
         </div>
         <label className="mt-5 flex items-center gap-2.5 text-sm text-ink">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
-          AI включён для пользователей
+          {t("AI включён для пользователей")}
         </label>
         <div className="mt-5">
           <button className={primary} onClick={save} disabled={busy !== null}>
             {busy === "save" && <Loader2 className="size-4 animate-spin" />}
-            Сохранить
+            {t("Сохранить")}
           </button>
         </div>
       </Section>
 
       <Note>
-        «Проверить модель» отправляет модели короткий запрос — провайдер берёт оплату за несколько десятков токенов. Резервная модель включается автоматически
-        при ошибке основной: сбой сервера или сети (после одного повтора), лимит запросов, недоступный ключ.
+        {t(
+          "«Проверить модель» отправляет модели короткий запрос — провайдер берёт оплату за несколько десятков токенов. Резервная модель включается автоматически при ошибке основной: сбой сервера или сети (после одного повтора), лимит запросов, недоступный ключ.",
+        )}
       </Note>
     </>
   );

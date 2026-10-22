@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/client";
 
 /**
  * Нижняя шторка на телефоне и диалог по центру на большом экране. Закрывается крестиком, Esc и тапом по фону.
@@ -13,6 +14,7 @@ import { X } from "lucide-react";
  */
 export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; footer?: React.ReactNode }) {
   const panel = useRef<HTMLDivElement>(null);
+  const t = useT();
 
   useEffect(() => {
     if (!open) return;
@@ -52,7 +54,7 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
         </div>
         <div className="flex items-center justify-between gap-3 border-b border-line py-1 pl-4 pr-2 sm:py-2">
           <h2 className="text-base font-semibold text-ink">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Закрыть" className="grid size-10 place-items-center rounded-full text-ink-3 hover:bg-muted">
+          <button type="button" onClick={onClose} aria-label={t("Закрыть")} className="grid size-10 place-items-center rounded-full text-ink-3 hover:bg-muted">
             <X className="size-5" />
           </button>
         </div>

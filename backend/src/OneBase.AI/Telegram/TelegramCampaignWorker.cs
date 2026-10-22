@@ -8,12 +8,20 @@ namespace OneBase.AI.Telegram;
 /// Фоновая отправка рассылок: при запуске — разбор прерванных отправок, затем каждые 5 секунд — запланированные в очередь и по задаче на
 /// каждый аккаунт, которому есть что отправлять (одна задача на аккаунт: он шлёт строго по очереди).
 /// </summary>
-internal sealed class TelegramCampaignWorker(TelegramCampaignRunner runner, ILogger<TelegramCampaignWorker> logger) : BackgroundService
+internal sealed class TelegramCampaignWorker(TelegramCampaignRunner runner, Microsoft.Extensions.Configuration.IConfiguration config, ILogger<TelegramCampaignWorker> logger)
+    : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid, Task> _running = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!Microsoft.Extensions.Configuration.ConfigurationBinder.GetValue(config, "Telegram:Enabled", true))
+        {
+            // Telegram выключен в этой среде (локально): рассылки не отправляются и их статусы в базе не меняются.
+            logger.LogInformation("Рассылки: Telegram выключен в этой среде (Telegram:Enabled=false)");
+            return;
+        }
+
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);

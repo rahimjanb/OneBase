@@ -90,6 +90,7 @@ public static class DependencyInjection
         services.AddSingleton<LinkoSyncProgress>();
         services.AddHttpClient<LinkoClient>(http => http.Timeout = TimeSpan.FromSeconds(linko.TimeoutSeconds));
         services.AddScoped<LinkoSyncService>();
+        services.AddScoped<LinkoSyncHealth>();
         services.AddScoped<LinkoVerifier>();
         services.AddScoped<ISalesHistoryReader, SalesHistoryReader>();
         services.AddMemoryCache();
@@ -99,6 +100,8 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Sales.Stock.OutstockService>();
         services.AddScoped<OneBase.Application.Sales.Primary.PrimaryService>();
         services.AddScoped<OneBase.Application.Sales.SkuSales.SkuSalesService>();
+        services.AddScoped<OneBase.Application.Sales.Promo.PromoService>();
+        services.AddScoped<OneBase.Application.Sales.Settlements.SettlementsService>();
         services.AddScoped<OneBase.Application.Sales.Pnl.PnlService>();
         services.AddSingleton<LinkoSyncCoordinator>();
 
@@ -129,8 +132,10 @@ public static class DependencyInjection
         services.AddScoped<DataSources.DataSourceService>();
         services.AddHostedService<DataSources.DataSourceSyncWorker>();
 
-        // Отчёты AI-консультанта: файл Excel из листов отчёта.
+        // Отчёты AI-консультанта: файл Excel из листов отчёта; документы Telegram-агента (письма, планы, разборы) — Word из Markdown.
         services.AddSingleton<OneBase.Application.Reports.IReportWorkbookWriter, Reports.ReportWorkbookWriter>();
+        services.AddSingleton<OneBase.Application.Reports.IDocumentWriter, Reports.DocumentWriter>();
+        services.AddSingleton<OneBase.Application.Sales.Stock.ITransferActWriter, Reports.TransferActWriter>();
         services.AddScoped<OneBase.Application.DataManager.DataFileService>();
         services.AddScoped<OneBase.Application.DataSources.FieldOwnership>();
         services.AddScoped<OneBase.Application.DataManager.DataChangeService>();

@@ -3,11 +3,15 @@ import { AssignBoard } from "@/components/field/AssignBoard";
 import { DateSwitch, ParamSelect } from "@/components/field/DateSwitch";
 import { RouteBoard } from "@/components/field/RouteBoard";
 import { Chip, Empty, FieldPage, Tabs, buttonClass } from "@/components/field/ui";
+import { getT } from "@/i18n/server";
 import { fieldGet, fieldMe, qs, sp, type FieldSearchParams } from "@/lib/field/api";
 import { routeSourceLabel } from "@/lib/field/labels";
 import type { FieldRoute, FieldRouteSummary } from "@/lib/field/types";
 
-export const metadata = { title: "Маршруты" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Маршруты") };
+}
 
 type AgentOption = { id: string; name: string; teamName: string | null; role: string };
 
@@ -17,6 +21,7 @@ type AgentOption = { id: string; name: string; teamName: string | null; role: st
  */
 export default async function RoutesPage({ searchParams }: { searchParams: Promise<FieldSearchParams> }) {
   const params = await searchParams;
+  const t = await getT();
   const me = await fieldMe();
   const date = sp(params, "date") ?? me.today;
   const back = `/field/routes${qs({ date: sp(params, "date") })}`;
@@ -24,7 +29,7 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
   if (me.role === "Agent") {
     const route = await fieldGet<FieldRoute | null>(`routes/for${qs({ date })}`, back);
     return (
-      <FieldPage title="Маршрут" actions={<DateSwitch value={date} today={me.today} />}>
+      <FieldPage title={t("Маршрут")} actions={<DateSwitch value={date} today={me.today} />}>
         <RouteBoard key={`${me.memberId}-${date}`} route={route} agentId={me.memberId!} agentName={me.name} date={date} isOwn canPlan={false} active={me.activeVisit} geoRadiusM={me.geoRadiusM} />
       </FieldPage>
     );
@@ -38,8 +43,8 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
   ]);
   const agentOptions = agents.filter((a) => a.role === "Agent");
   const tabs = [
-    { key: "list", label: "Маршруты", href: `/field/routes${qs({ date: sp(params, "date") })}` },
-    { key: "assign", label: "Распределение", href: `/field/routes${qs({ date: sp(params, "date"), tab: "assign" })}` },
+    { key: "list", label: t("Маршруты"), href: `/field/routes${qs({ date: sp(params, "date") })}` },
+    { key: "assign", label: t("Распределение"), href: `/field/routes${qs({ date: sp(params, "date"), tab: "assign" })}` },
   ];
 
   // Маршрут конкретного агента (из карточки агента или выбора) — сразу с действиями.
@@ -47,7 +52,7 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
     const route = await fieldGet<FieldRoute | null>(`routes/for${qs({ agentId: agentParam, date })}`, back);
     const agent = agentOptions.find((a) => a.id === agentParam);
     return (
-      <FieldPage title={`Маршрут: ${agent?.name ?? "агент"}`} back={{ href: back, label: "Маршруты" }} actions={<DateSwitch value={date} today={me.today} />}>
+      <FieldPage title={t("Маршрут: {name}", { name: agent?.name ?? t("агент") })} back={{ href: back, label: t("Маршруты") }} actions={<DateSwitch value={date} today={me.today} />}>
         <RouteBoard key={`${agentParam}-${date}`} route={route} agentId={agentParam} agentName={agent?.name ?? ""} date={date} isOwn={false} canPlan={me.canPlan} active={null} geoRadiusM={me.geoRadiusM} />
       </FieldPage>
     );
@@ -61,17 +66,17 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
     );
     const teams = [...new Set(agentOptions.map((a) => a.teamName).filter(Boolean))] as string[];
     return (
-      <FieldPage title="Распределение точек" subtitle="Перетащите точку к другому агенту — она закрепится за ним, маршруты пересчитаются" actions={<DateSwitch value={date} today={me.today} />}>
+      <FieldPage title={t("Распределение точек")} subtitle={t("Перетащите точку к другому агенту — она закрепится за ним, маршруты пересчитаются")} actions={<DateSwitch value={date} today={me.today} />}>
         <Tabs items={tabs} current={tab} />
-        {teams.length > 1 && <ParamSelect param="team" value={team ?? ""} label="Команда" options={[{ value: "", label: teams.length > 1 ? "Выберите команду" : "Все" }, ...teams.map((t) => ({ value: t, label: t }))]} />}
-        {teams.length > 1 && !team ? <Empty>Выберите команду — доска показывает агентов одной команды.</Empty> : <AssignBoard columns={columns} />}
+        {teams.length > 1 && <ParamSelect param="team" value={team ?? ""} label={t("Команда")} options={[{ value: "", label: teams.length > 1 ? t("Выберите команду") : t("Все") }, ...teams.map((name) => ({ value: name, label: name }))]} />}
+        {teams.length > 1 && !team ? <Empty>{t("Выберите команду — доска показывает агентов одной команды.")}</Empty> : <AssignBoard columns={columns} />}
       </FieldPage>
     );
   }
 
   const withRoute = new Set(routes.map((r) => r.agentId));
   return (
-    <FieldPage title="Маршруты" subtitle={`${routes.length} из ${agentOptions.length} агентов с маршрутом`} actions={<DateSwitch value={date} today={me.today} />}>
+    <FieldPage title={t("Маршруты")} subtitle={t("{n} из {total} агентов с маршрутом", { n: routes.length, total: agentOptions.length })} actions={<DateSwitch value={date} today={me.today} />}>
       <Tabs items={tabs} current={tab} />
       {routes.length > 0 && (
         <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
@@ -81,10 +86,10 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-ink">{r.agentName}</div>
                   <div className="truncate text-xs text-ink-3">
-                    {r.teamName} · {routeSourceLabel[r.source]} · {r.distanceKm} км
+                    {r.teamName} · {t(routeSourceLabel[r.source])} · {r.distanceKm} {t("км")}
                   </div>
                 </div>
-                {r.skipped > 0 && <Chip tone="bad">пропущено {r.skipped}</Chip>}
+                {r.skipped > 0 && <Chip tone="bad">{t("пропущено {n}", { n: r.skipped })}</Chip>}
                 <div className="w-20 text-right">
                   <div className="text-sm font-semibold tabular-nums text-ink">
                     {r.visited}/{r.planned}
@@ -100,7 +105,7 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
       )}
       {agentOptions.some((a) => !withRoute.has(a.id)) && (
         <section className="rounded-xl border border-line bg-surface">
-          <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">Без маршрута</div>
+          <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">{t("Без маршрута")}</div>
           <ul className="divide-y divide-line">
             {agentOptions
               .filter((a) => !withRoute.has(a.id))
@@ -110,7 +115,7 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
                     {a.name} <span className="text-xs text-ink-3">{a.teamName}</span>
                   </span>
                   <Link href={`/field/routes${qs({ agent: a.id, date: sp(params, "date") })}`} className={buttonClass.outline}>
-                    Сформировать
+                    {t("Сформировать")}
                   </Link>
                 </li>
               ))}

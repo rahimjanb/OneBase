@@ -509,9 +509,11 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, IMem
             }
         }
 
-        // Приход дилеру и движения завода — перемещения в статусах отгрузки по дате выдачи (без неё — приёмки, без неё —
-        // создания), как отгрузки по дням в первичке. Дилеру приход засчитывается, только если перемещение принято к моменту
-        // снимка (OutstockMath.ReceiptCounts): непринятого товара в снимке ещё нет. Возвраты дилера заводу вычитаются из прихода.
+        // Движения завода — перемещения в статусах отгрузки по дате выдачи (без неё — приёмки, без неё — создания), как отгрузки по
+        // дням в первичке. Склад дилера: приход — в день приёмки (Linko прибавляет товар к остатку дилера при приёмке) и только если
+        // перемещение принято к моменту снимка (OutstockMath.ReceiptCounts); расход — в день выдачи. Так — любые перемещения склада
+        // дилера: с заводом, между дилерами (Наманган → Хоразм) и с прочими складами. Плюс возвраты магазинов дилеру — товар снова на
+        // складе. Без них остаток назад от снимка выходил больше настоящего, и дни без товара пропадали (сверка с «Полевым контролем»).
         var regionOfStock = snapshot.Regions.ToDictionary(r => r.StockId, r => r.Id);
         var factoryStock = snapshot.Factory?.StockId;
         var shipped = options.ShippedTransferStatuses;
@@ -536,18 +538,28 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, IMem
             return arr;
         }
 
+        bool InRange(DateOnly d) => d >= monthStart && d <= snapshotDate;
         foreach (var t in transfers)
         {
-            var fromFactory = factoryStock is { } f && t.FromStockId == f;
-            var toFactory = factoryStock is { } f2 && t.ToStockId == f2;
             var when = t.GivenAt ?? t.AcceptedAt ?? t.CreatedAt;
-            if ((!fromFactory && !toFactory) || when is null || when.Value > snapshotLocal)
+            var given = when is { } w && w <= snapshotLocal ? DateOnly.FromDateTime(w) : (DateOnly?)null;
+
+            // Склад дилера-получателя: приход в день приёмки.
+            if (t.ToStockId is { } toStock && regionOfStock.TryGetValue(toStock, out var toRegion) && OutstockMath.ReceiptCounts(t.AcceptedAt, snapshotLocal)
+                && DateOnly.FromDateTime(t.AcceptedAt!.Value) is var accepted && InRange(accepted))
             {
-                continue;
+                Series(receivedByDay, (toRegion, t.ProductId))[Index(accepted)] += t.TotalWeight;
             }
 
-            var date = DateOnly.FromDateTime(when.Value);
-            if (date < monthStart || date > snapshotDate)
+            // Склад дилера-отправителя (возврат заводу, перемещение другому дилеру): расход в день выдачи.
+            if (t.FromStockId is { } fromStock && regionOfStock.TryGetValue(fromStock, out var fromRegion) && given is { } out1 && InRange(out1))
+            {
+                Series(receivedByDay, (fromRegion, t.ProductId))[Index(out1)] -= t.TotalWeight;
+            }
+
+            var fromFactory = factoryStock is { } f && t.FromStockId == f;
+            var toFactory = factoryStock is { } f2 && t.ToStockId == f2;
+            if ((!fromFactory && !toFactory) || given is not { } date || !InRange(date))
             {
                 continue;
             }
@@ -556,19 +568,29 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, IMem
             if (fromFactory)
             {
                 Series(factoryOut, t.ProductId)[i] += t.TotalWeight;
-                if (t.ToStockId is { } toStock && regionOfStock.TryGetValue(toStock, out var region) && OutstockMath.ReceiptCounts(t.AcceptedAt, snapshotLocal))
-                {
-                    Series(receivedByDay, (region, t.ProductId))[i] += t.TotalWeight;
-                }
             }
 
             if (toFactory)
             {
                 Series(factoryIn, t.ProductId)[i] += t.TotalWeight;
-                if (t.FromStockId is { } fromStock && regionOfStock.TryGetValue(fromStock, out var region))
-                {
-                    Series(receivedByDay, (region, t.ProductId))[i] -= t.TotalWeight; // возврат дилера заводу
-                }
+            }
+        }
+
+        // Возвраты магазинов дилеру (доставленные) — товар снова на складе дилера с дня возврата (другой даты у возврата нет).
+        var returned = options.ReturnStatuses;
+        var storeReturns = await (
+                from l in db.LinkoOrderReturnLines
+                join r in db.LinkoOrderReturns on l.ReturnId equals r.Id
+                where returned.Contains(r.Status) && r.CreatedDate >= monthStart && r.CreatedDate <= snapshotDate && l.ProductId != null
+                      && (r.BranchName == null || !excluded.Contains(r.BranchName.ToLower()))
+                group l by new { r.CreatedDate, r.BranchId, l.ProductId } into g
+                select new { g.Key.CreatedDate, g.Key.BranchId, ProductId = g.Key.ProductId!.Value, Kg = g.Sum(x => x.TotalWeight) })
+            .ToListAsync(ct);
+        foreach (var r in storeReturns)
+        {
+            if (r.BranchId is { } branch && regionOfBranch.TryGetValue(branch, out var region))
+            {
+                Series(receivedByDay, (region, r.ProductId))[Index(r.CreatedDate)] += r.Kg;
             }
         }
 

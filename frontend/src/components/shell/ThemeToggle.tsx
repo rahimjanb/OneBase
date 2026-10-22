@@ -2,6 +2,7 @@
 
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useT } from "@/i18n/client";
 
 const KEY = "onebase-theme";
 
@@ -21,6 +22,7 @@ function currentTheme(): "light" | "dark" {
 
 /** Кнопка темы в шапке: цвет берёт от шапки (на телефоне она тёмная, на больших экранах — светлая). */
 export function ThemeToggle() {
+  const t = useT();
   const [theme, setTheme] = useState<"light" | "dark" | null>(null);
 
   useEffect(() => setTheme(currentTheme()), []);
@@ -46,7 +48,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      aria-label={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
+      aria-label={theme === "dark" ? t("Светлая тема") : t("Тёмная тема")}
       className="grid size-10 place-items-center rounded-full text-current transition-colors hover:bg-white/10 hover:text-white lg:size-9 lg:hover:bg-muted lg:hover:text-ink"
     >
       {theme === "dark" ? <Sun className="size-4" strokeWidth={1.75} /> : <Moon className="size-4" strokeWidth={1.75} />}

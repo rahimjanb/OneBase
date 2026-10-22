@@ -21,11 +21,14 @@ import {
   X,
 } from "lucide-react";
 import { Markdown } from "@/components/ai/Markdown";
+import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { phoneQuery, useMedia } from "@/lib/media";
 import { historySection } from "@/lib/consultant";
 import {
+  answerText,
   exampleTasks,
+  stepNote,
   streamDataManager,
   uploadReport,
   when,
@@ -55,10 +58,11 @@ type Attachment = { key: string; name: string; size: number; progress: number; f
 const base = "/data-manager";
 
 export function DataManager({ status, conversations: initialList, conversation, canConfigure, canChange }: Props) {
+  const t = useT();
   const router = useRouter();
   const [list, setList] = useState(initialList);
   const [activeId, setActiveId] = useState<string | null>(conversation?.id ?? null);
-  const [title, setTitle] = useState(conversation?.title ?? "Новый чат");
+  const [title, setTitle] = useState(conversation?.title ?? t("Новый чат"));
   const [messages, setMessages] = useState<DataMessage[]>(conversation?.messages ?? []);
   const [files, setFiles] = useState<DataFile[]>(conversation?.files ?? []);
   const [sets, setSets] = useState<Record<string, ChangeSet>>(() => Object.fromEntries((conversation?.changeSets ?? []).map((s) => [s.id, s])));
@@ -145,14 +149,17 @@ export function DataManager({ status, conversations: initialList, conversation, 
     for (const file of Array.from(picked)) {
       const key = `${file.name}-${file.size}-${Date.now()}-${Math.random()}`;
       if (file.size > status.maxFileBytes) {
-        setAttachments((prev) => [...prev, { key, name: file.name, size: file.size, progress: 0, error: `Больше ${fileSize(status.maxFileBytes)}` }]);
+        setAttachments((prev) => [...prev, { key, name: file.name, size: file.size, progress: 0, error: t("Больше {size}", { size: fileSize(status.maxFileBytes) }) }]);
         continue;
       }
 
       setAttachments((prev) => [...prev, { key, name: file.name, size: file.size, progress: 0 }]);
       try {
-        const uploaded = await uploadReport(file, activeId, (loaded, total) =>
-          setAttachments((prev) => prev.map((a) => (a.key === key ? { ...a, progress: total ? loaded / total : 0 } : a))),
+        const uploaded = await uploadReport(
+          file,
+          activeId,
+          (loaded, total) => setAttachments((prev) => prev.map((a) => (a.key === key ? { ...a, progress: total ? loaded / total : 0 } : a))),
+          t,
         );
         setAttachments((prev) => prev.map((a) => (a.key === key ? { ...a, progress: 1, file: uploaded } : a)));
       } catch (e) {
@@ -178,7 +185,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
     setAttachments([]);
     setFiles((prev) => [...prev, ...sending.filter((f) => !prev.some((p) => p.id === f.id))]);
     try {
-      await streamDataManager("chat", { conversationId: activeId, message, fileIds: sending.map((f) => f.id) }, (e) => handle(e, null));
+      await streamDataManager("chat", { conversationId: activeId, message, fileIds: sending.map((f) => f.id) }, (e) => handle(e, null), t);
     } catch (e) {
       setError((e as Error).message);
       setInput(message);
@@ -193,15 +200,21 @@ export function DataManager({ status, conversations: initialList, conversation, 
     const counts = set.summary.counts;
     const question =
       kind === "apply"
-        ? `Применить план «${set.title}»?\n\nСоздать: ${counts.create}, изменить: ${counts.update}, удалить: ${counts.delete}. Конфликтные строки (${counts.conflict}) не применяются.`
-        : `Откатить план «${set.title}»?\n\nВернутся прежние значения. Строки, которые с тех пор кто-то изменил, останутся как есть.`;
+        ? t("Применить план «{title}»?\n\nСоздать: {create}, изменить: {update}, удалить: {delete}. Конфликтные строки ({conflict}) не применяются.", {
+            title: t(set.title),
+            create: counts.create,
+            update: counts.update,
+            delete: counts.delete,
+            conflict: counts.conflict,
+          })
+        : t("Откатить план «{title}»?\n\nВернутся прежние значения. Строки, которые с тех пор кто-то изменил, останутся как есть.", { title: t(set.title) });
     if (!confirm(question)) return;
     setError(null);
     setActing(set.id);
     setRunning(true);
     setSteps([]);
     try {
-      await streamDataManager(`change-sets/${set.id}/${kind}`, {}, (e) => handle(e, set.conversationId));
+      await streamDataManager(`change-sets/${set.id}/${kind}`, {}, (e) => handle(e, set.conversationId), t);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -213,7 +226,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
   };
 
   const cancel = async (set: ChangeSet) => {
-    if (!confirm(`Отменить план «${set.title}»? Он не будет применён.`)) return;
+    if (!confirm(t("Отменить план «{title}»? Он не будет применён.", { title: t(set.title) }))) return;
     setError(null);
     setActing(set.id);
     try {
@@ -232,7 +245,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
 
   const rename = async () => {
     if (!activeId) return;
-    const next = prompt("Название чата", title)?.trim();
+    const next = prompt(t("Название чата"), title)?.trim();
     if (!next || next === title) return;
     try {
       await bff(`data-manager/conversations/${activeId}`, { method: "PATCH", body: JSON.stringify({ title: next }) });
@@ -244,7 +257,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
   };
 
   const archive = async (id: string) => {
-    if (!confirm("Убрать чат из истории? Применённые изменения и журнал операций останутся.")) return;
+    if (!confirm(t("Убрать чат из истории? Применённые изменения и журнал операций останутся."))) return;
     try {
       await bff(`data-manager/conversations/${id}`, { method: "DELETE" });
       setList((prev) => prev.filter((c) => c.id !== id));
@@ -294,14 +307,14 @@ export function DataManager({ status, conversations: initialList, conversation, 
           onClick={() => setHistoryOpen(false)}
         >
           <Plus className="size-4" />
-          Новый чат
+          {t("Новый чат")}
         </Link>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
-        {list.length === 0 && <p className="px-3 py-6 text-center text-sm text-ink-3">Чатов пока нет</p>}
+        {list.length === 0 && <p className="px-3 py-6 text-center text-sm text-ink-3">{t("Чатов пока нет")}</p>}
         {groups.map((g) => (
           <div key={g.label} className="mt-2 first:mt-0">
-            <div className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[1px] text-ink-3">{g.label}</div>
+            <div className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[1px] text-ink-3">{t(g.label)}</div>
             <div className="space-y-0.5">
               {g.items.map((c) => {
                 const active = c.id === activeId;
@@ -323,7 +336,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
                     </Link>
                     <button
                       type="button"
-                      aria-label="Убрать чат из истории"
+                      aria-label={t("Убрать чат из истории")}
                       onClick={() => archive(c.id)}
                       className="absolute right-2 hidden size-7 place-items-center rounded-lg text-ink-3 hover:bg-bad-soft hover:text-bad focus:grid group-hover:grid"
                     >
@@ -345,7 +358,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
 
       {historyOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <button type="button" aria-label="Закрыть историю" className="absolute inset-0 bg-black/30" onClick={() => setHistoryOpen(false)} />
+          <button type="button" aria-label={t("Закрыть историю")} className="absolute inset-0 bg-black/30" onClick={() => setHistoryOpen(false)} />
           <div className="absolute inset-y-0 left-0 w-80 max-w-[85vw] bg-surface-solid shadow-xl">{historyPanel}</div>
         </div>
       )}
@@ -359,7 +372,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
           <button
             type="button"
             onClick={() => setHistoryOpen(true)}
-            aria-label="История чатов"
+            aria-label={t("История чатов")}
             className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-muted text-ink-2 backdrop-blur-md hover:text-ink lg:hidden"
           >
             <History className="size-4" />
@@ -367,7 +380,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
           <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-line bg-muted p-1 backdrop-blur-md lg:gap-3 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
             <DatabaseZap className="hidden size-5 shrink-0 text-accent-strong lg:block" strokeWidth={1.75} />
             <h1 className="min-w-0 flex-1 truncate pl-2 text-[13px] font-semibold text-ink lg:pl-0 lg:text-base">{activeId ? title : "AI Data Manager"}</h1>
-            <div role="tablist" aria-label="Раздел" className="flex shrink-0 gap-0.5 rounded-full lg:border lg:border-line lg:bg-muted lg:p-1 lg:backdrop-blur-md">
+            <div role="tablist" aria-label={t("Раздел")} className="flex shrink-0 gap-0.5 rounded-full lg:border lg:border-line lg:bg-muted lg:p-1 lg:backdrop-blur-md">
               {(
                 [
                   ["chat", "Чат", null],
@@ -385,13 +398,13 @@ export function DataManager({ status, conversations: initialList, conversation, 
                   }`}
                 >
                   {Icon && <Icon className="hidden size-3.5 lg:block" strokeWidth={1.75} />}
-                  {label}
+                  {t(label)}
                 </button>
               ))}
             </div>
           </div>
           {activeId && tab === "chat" && (
-            <button type="button" onClick={rename} aria-label="Переименовать чат" className="grid size-9 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-muted hover:text-ink">
+            <button type="button" onClick={rename} aria-label={t("Переименовать чат")} className="grid size-9 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-muted hover:text-ink">
               <Pencil className="size-3.5" />
             </button>
           )}
@@ -399,7 +412,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
 
         {tab === "journal" ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {error && <div className="mx-auto mt-4 max-w-5xl rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</div>}
+            {error && <div className="mx-auto mt-4 max-w-5xl rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{t(error)}</div>}
             <OperationsJournal
               canChange={canChange}
               version={journalVersion}
@@ -417,11 +430,11 @@ export function DataManager({ status, conversations: initialList, conversation, 
                   <div className="mb-6 flex items-start gap-3 rounded-lg bg-warn-soft px-4 py-3 text-sm">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" />
                     <div>
-                      <div className="font-semibold text-ink">Claude API не подключён</div>
-                      <div className="mt-0.5 text-ink-2">{status.message}</div>
+                      <div className="font-semibold text-ink">{t("Claude API не подключён")}</div>
+                      <div className="mt-0.5 text-ink-2">{status.message && t(status.message)}</div>
                       {canConfigure && (
                         <Link href="/settings/ai/providers" className="mt-1 inline-block font-medium text-accent-strong hover:underline">
-                          Открыть «Настройки → AI → Провайдеры»
+                          {t("Открыть «Настройки → AI → Провайдеры»")}
                         </Link>
                       )}
                     </div>
@@ -442,10 +455,12 @@ export function DataManager({ status, conversations: initialList, conversation, 
                     <div className="mx-auto grid size-16 place-items-center rounded-full bg-muted text-accent-strong shadow-[0_0_48px_-6px_rgb(46_107_255/0.55)] ring-1 ring-inset ring-white/15 backdrop-blur-md">
                       <DatabaseZap className="size-7" strokeWidth={1.5} />
                     </div>
-                    <h2 className="mt-5 text-xl font-bold tracking-tight text-ink sm:text-2xl">Обновление данных по отчёту</h2>
+                    <h2 className="mt-5 text-xl font-bold tracking-tight text-ink sm:text-2xl">{t("Обновление данных по отчёту")}</h2>
                     <p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-ink-2">
-                      Приложите отчёт Excel или CSV и напишите, что сделать. Claude ({status.model}) разберёт файл, сверит его с данными OneBase и подготовит план
-                      изменений «было → стало». Данные меняются только после вашего подтверждения; факт продаж из Linko только сверяется — он не правится.
+                      {t(
+                        "Приложите отчёт Excel или CSV и напишите, что сделать. Claude ({model}) разберёт файл, сверит его с данными OneBase и подготовит план изменений «было → стало». Данные меняются только после вашего подтверждения; факт продаж из Linko только сверяется — он не правится.",
+                        { model: status.model },
+                      )}
                     </p>
                     {/* Подсказки — столбиком по центру; на телефоне — на всю ширину, текст переносится. */}
                     <div className="mx-auto mt-7 flex max-w-xl flex-col items-center gap-2.5">
@@ -454,10 +469,10 @@ export function DataManager({ status, conversations: initialList, conversation, 
                           key={q}
                           type="button"
                           disabled={!status.ready}
-                          onClick={() => setInput(q)}
+                          onClick={() => setInput(t(q))}
                           className="rounded-full border border-line bg-muted px-5 py-2.5 text-center text-[0.8125rem] leading-snug text-ink-2 backdrop-blur-md transition-colors hover:border-accent/50 hover:text-ink active:bg-accent-soft disabled:opacity-50 max-lg:w-full max-lg:rounded-2xl max-lg:py-3"
                         >
-                          {q}
+                          {t(q)}
                         </button>
                       ))}
                     </div>
@@ -479,7 +494,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
                   )}
                   {pending && <UserBubble message={{ content: pending, fileIds: [] }} files={fileById} />}
                   {loose.map(card)}
-                  {(waiting || (running && steps.length > 0)) && <StepsCard steps={steps} title={acting ? "Применяю и проверяю…" : "Анализирую…"} />}
+                  {(waiting || (running && steps.length > 0)) && <StepsCard steps={steps} title={acting ? t("Применяю и проверяю…") : t("Анализирую…")} />}
                 </div>
                 <div ref={bottom} />
               </div>
@@ -489,8 +504,8 @@ export function DataManager({ status, conversations: initialList, conversation, 
               <div className="mx-auto max-w-5xl">
                 {error && (
                   <div className="mb-2 flex items-start gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">
-                    <span className="flex-1">{error}</span>
-                    <button type="button" aria-label="Скрыть" onClick={() => setError(null)}>
+                    <span className="flex-1">{t(error)}</span>
+                    <button type="button" aria-label={t("Скрыть")} onClick={() => setError(null)}>
                       <X className="size-4" />
                     </button>
                   </div>
@@ -505,8 +520,8 @@ export function DataManager({ status, conversations: initialList, conversation, 
                         {a.file ? <Check className="size-3.5 text-ok" /> : a.error ? <AlertTriangle className="size-3.5" /> : <Loader2 className="size-3.5 animate-spin" />}
                         <span className="truncate">{a.name}</span>
                         <span className="text-ink-3">{a.error ?? (a.file ? fileSize(a.size) : `${Math.round(a.progress * 100)}%`)}</span>
-                        {a.file?.duplicates.length ? <span className="text-warn">уже загружался</span> : null}
-                        <button type="button" aria-label="Убрать файл" onClick={() => setAttachments((prev) => prev.filter((x) => x.key !== a.key))}>
+                        {a.file?.duplicates.length ? <span className="text-warn">{t("уже загружался")}</span> : null}
+                        <button type="button" aria-label={t("Убрать файл")} onClick={() => setAttachments((prev) => prev.filter((x) => x.key !== a.key))}>
                           <X className="size-3.5" />
                         </button>
                       </span>
@@ -530,8 +545,8 @@ export function DataManager({ status, conversations: initialList, conversation, 
                   />
                   <button
                     type="button"
-                    aria-label="Приложить отчёт"
-                    title={`Приложить отчёт (${status.extensions.join(", ")}, до ${fileSize(status.maxFileBytes)})`}
+                    aria-label={t("Приложить отчёт")}
+                    title={t("Приложить отчёт ({extensions}, до {size})", { extensions: status.extensions.join(", "), size: fileSize(status.maxFileBytes) })}
                     disabled={!status.ready || running}
                     onClick={() => picker.current?.click()}
                     className="grid size-10 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-white/5 hover:text-ink disabled:opacity-40 max-lg:size-11 lg:rounded-full"
@@ -550,14 +565,16 @@ export function DataManager({ status, conversations: initialList, conversation, 
                     }}
                     rows={1}
                     maxLength={8000}
-                    placeholder={!status.ready ? "Claude API не подключён" : phone ? "Что сделать с отчётом?" : "Что сделать с отчётом? Например: «Обнови план РОП на октябрь»"}
+                    placeholder={
+                      !status.ready ? t("Claude API не подключён") : phone ? t("Что сделать с отчётом?") : t("Что сделать с отчётом? Например: «Обнови план РОП на октябрь»")
+                    }
                     disabled={!status.ready}
-                    aria-label="Сообщение AI Data Manager"
+                    aria-label={t("Сообщение AI Data Manager")}
                     className="max-h-[200px] min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2.5 text-base text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-60 sm:text-sm"
                   />
                   <button
                     type="submit"
-                    aria-label="Отправить"
+                    aria-label={t("Отправить")}
                     disabled={!status.ready || running || uploading || input.trim() === ""}
                     className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent text-white hover:bg-accent-strong disabled:opacity-40 max-lg:size-11 lg:rounded-full"
                   >
@@ -566,8 +583,8 @@ export function DataManager({ status, conversations: initialList, conversation, 
                 </form>
                 {/* Подсказка про клавиши — только при мыши и клавиатуре: на сенсорном экране Shift + Enter нет. */}
                 <p className="mt-2 text-center text-[11px] leading-relaxed text-ink-3">
-                  <span className="pointer-coarse:hidden">Enter — отправить, Shift+Enter — новая строка. </span>
-                  Изменения применяются только кнопкой «Подтвердить»; каждое действие пишется в журнал.
+                  <span className="pointer-coarse:hidden">{t("Enter — отправить, Shift+Enter — новая строка.")} </span>
+                  {t("Изменения применяются только кнопкой «Подтвердить»; каждое действие пишется в журнал.")}
                 </p>
               </div>
             </div>
@@ -579,6 +596,7 @@ export function DataManager({ status, conversations: initialList, conversation, 
 }
 
 function FileChip({ file }: { file: DataFile }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-lg border border-line bg-surface text-xs">
@@ -586,20 +604,22 @@ function FileChip({ file }: { file: DataFile }) {
         <FileSpreadsheet className="size-3.5 text-accent-strong" />
         <span className="max-w-[18rem] truncate font-medium text-ink">{file.fileName}</span>
         <span className="text-ink-3">{fileSize(file.sizeBytes)}</span>
-        {file.duplicates.length > 0 && <span className="text-warn">повтор</span>}
+        {file.duplicates.length > 0 && <span className="text-warn">{t("повтор")}</span>}
         <ChevronDown className={`size-3.5 transition-transform ${open ? "" : "-rotate-90"}`} />
       </button>
       {open && (
         <div className="border-t border-line px-2.5 py-2 text-ink-2">
           {file.sheets.map((s) => (
             <div key={s.name}>
-              Лист «{s.name}»: {s.rows} строк × {s.columns} столбцов{s.truncated ? " (прочитана часть)" : ""}
+              {t("Лист «{name}»: {rows} строк × {columns} столбцов", { name: s.name, rows: s.rows, columns: s.columns })}
+              {s.truncated ? ` ${t("(прочитана часть)")}` : ""}
             </div>
           ))}
-          <div className="mt-1 text-ink-3">Загружен {when(file.createdAt)} · SHA-256 {file.sha256.slice(0, 12)}…</div>
+          <div className="mt-1 text-ink-3">{t("Загружен {date} · SHA-256 {hash}…", { date: when(file.createdAt), hash: file.sha256.slice(0, 12) })}</div>
           {file.duplicates.map((d) => (
             <div key={d.fileId} className="mt-1 text-warn">
-              Этот же файл уже загружали {when(d.uploadedAt)} («{d.fileName}»){d.appliedChangeSets.length > 0 ? " и применяли" : ""}.
+              {t("Этот же файл уже загружали {date} («{name}»)", { date: when(d.uploadedAt), name: d.fileName })}
+              {d.appliedChangeSets.length > 0 ? ` ${t("и применяли")}` : ""}.
             </div>
           ))}
         </div>
@@ -609,6 +629,7 @@ function FileChip({ file }: { file: DataFile }) {
 }
 
 function UserBubble({ message, files }: { message: Pick<DataMessage, "content" | "fileIds">; files: Map<string, DataFile> }) {
+  const t = useT();
   return (
     <div className="flex flex-col items-end gap-1.5">
       {message.fileIds.length > 0 && (
@@ -616,7 +637,7 @@ function UserBubble({ message, files }: { message: Pick<DataMessage, "content" |
           {message.fileIds.map((id) => (
             <span key={id} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink-2">
               <FileSpreadsheet className="size-3.5 text-accent-strong" />
-              {files.get(id)?.fileName ?? "файл"}
+              {files.get(id)?.fileName ?? t("файл")}
             </span>
           ))}
         </div>
@@ -627,12 +648,14 @@ function UserBubble({ message, files }: { message: Pick<DataMessage, "content" |
 }
 
 function EventNote({ message }: { message: DataMessage }) {
+  const t = useT();
   return (
     <div className="flex justify-center">
       <div className="inline-flex max-w-[90%] items-start gap-2 rounded-full bg-muted px-3.5 py-1.5 text-xs text-ink-2">
         <Info className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
         <span>
-          {message.content} <span className="text-ink-3">· {when(message.createdAt)}</span>
+          {/* Событие (подтверждение, откат, отмена) пишет сервер — показывается на языке интерфейса. */}
+          {t(message.content)} <span className="text-ink-3">· {when(message.createdAt)}</span>
         </span>
       </div>
     </div>
@@ -640,6 +663,7 @@ function EventNote({ message }: { message: DataMessage }) {
 }
 
 function AssistantMessage({ message }: { message: DataMessage }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const failed = message.status === "Failed";
   return (
@@ -649,15 +673,15 @@ function AssistantMessage({ message }: { message: DataMessage }) {
       </span>
       <div className="min-w-0 flex-1">
         <div className={`rounded-2xl rounded-tl-md border px-4 py-3 ${failed ? "border-bad/30 bg-bad-soft" : "border-line bg-surface"}`}>
-          {failed && <div className="mb-1 text-sm font-semibold text-bad">Ответ не получен</div>}
-          <Markdown text={message.content} />
-          {message.error && <p className="mt-2 text-sm text-bad">{message.error}</p>}
+          {failed && <div className="mb-1 text-sm font-semibold text-bad">{t("Ответ не получен")}</div>}
+          <Markdown text={answerText(message.content, t)} />
+          {message.error && <p className="mt-2 text-sm text-bad">{t(message.error)}</p>}
         </div>
         {message.steps.length > 0 && (
           <div className="mt-1.5">
             <button type="button" onClick={() => setOpen(!open)} className="inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink">
               <ChevronDown className={`size-3.5 transition-transform ${open ? "" : "-rotate-90"}`} />
-              Инструменты: {message.steps.length}
+              {t("Инструменты: {n}", { n: message.steps.length })}
             </button>
             {open && (
               <ul className="mt-1 space-y-1 text-xs text-ink-2">
@@ -665,8 +689,8 @@ function AssistantMessage({ message }: { message: DataMessage }) {
                   <li key={i} className="flex items-start gap-2">
                     <StepIcon status={s.status} />
                     <span>
-                      <span className="font-medium text-ink">{s.title}</span>
-                      {s.note && <span className="text-ink-3"> — {s.note}</span>}
+                      <span className="font-medium text-ink">{t(s.title)}</span>
+                      {s.note && <span className="text-ink-3"> — {stepNote(s.note, t)}</span>}
                     </span>
                   </li>
                 ))}
@@ -686,6 +710,7 @@ function StepIcon({ status }: { status: DataStep["status"] }) {
 }
 
 function StepsCard({ steps, title }: { steps: DataStep[]; title: string }) {
+  const t = useT();
   return (
     <div className="flex gap-3">
       <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
@@ -699,8 +724,8 @@ function StepsCard({ steps, title }: { steps: DataStep[]; title: string }) {
               <li key={i} className="flex items-start gap-2">
                 <StepIcon status={s.status} />
                 <span>
-                  {s.title}
-                  {s.note && <span className="text-ink-3"> — {s.note}</span>}
+                  {t(s.title)}
+                  {s.note && <span className="text-ink-3"> — {stepNote(s.note, t)}</span>}
                 </span>
               </li>
             ))}

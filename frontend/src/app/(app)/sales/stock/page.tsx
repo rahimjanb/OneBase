@@ -1,14 +1,19 @@
 import Link from "next/link";
 import { Alert, CollapsedSections, KpiTile, Note, Section } from "@/components/sales/bits";
 import { SalesFrame } from "@/components/sales/SalesFrame";
+import { getT } from "@/i18n/server";
 import { apiGet } from "@/lib/server-api";
 import { date, dateTime, kg, money, monthLabel, num, pct } from "@/lib/sales/format";
 import { param, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { StockView } from "@/lib/sales/types";
 import { PackFilter, StockScopeSelect, StockSearch } from "./filters";
+import { AutoOrder } from "./autoorder";
 import { OtherStocksTable, StockExcludedTable, StockMatrix, StockTable, type StockUnit } from "./tables";
 
-export const metadata = { title: "Рекомендуемый остаток · Продажи" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Рекомендуемый остаток · Продажи") };
+}
 
 const units: { key: StockUnit; label: string }[] = [
   { key: "kg", label: "кг" },
@@ -36,12 +41,13 @@ const statuses = [
   { key: "dead", label: "Не продаётся" },
 ] as const;
 
-function Chips<T extends string>({ items, current, href, title }: { items: readonly { key: T; label: string }[]; current: T; href: (key: T) => string; title?: string }) {
+async function Chips<T extends string>({ items, current, href, title }: { items: readonly { key: T; label: string }[]; current: T; href: (key: T) => string; title?: string }) {
+  const t = await getT();
   return (
     <div className="no-scrollbar flex max-w-full overflow-x-auto rounded-lg border border-line text-sm" title={title}>
       {items.map((i) => (
         <Link key={i.key} href={href(i.key)} className={`shrink-0 whitespace-nowrap px-3 py-1.5 max-lg:py-2.5 ${current === i.key ? "bg-accent text-white" : "bg-surface text-ink hover:bg-muted"}`}>
-          {i.label}
+          {t(i.label)}
         </Link>
       ))}
     </div>
@@ -66,6 +72,7 @@ const signedPct = (share: number | null) => (share == null ? "—" : `${share >=
  * вид и единица — параметры адреса; строки, плитки и итоги по отфильтрованному набору считает сервер.
  */
 export default async function StockPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
+  const tr = await getT();
   const sp = await searchParams;
   const legacyRegion = param(sp, "region");
   const scope = param(sp, "scope") ?? (legacyRegion ? `region:${legacyRegion}` : undefined);
@@ -100,40 +107,40 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
   const c = data.correction;
   const plant = data.scope === "plant";
   const exportScope = data.scope === "export";
-  const priceList = data.priceList ?? "вход дилеру";
+  const priceList = data.priceList ?? tr("вход дилеру");
   const corrected = t.rawKgPerDay != null && t.kgPerDay != null && t.rawKgPerDay !== t.kgPerDay;
 
   return (
     <SalesFrame
-      title="Рекомендуемый остаток"
-      subtitle={`Запас дилеров по складам: хватит ли до поставки, что заказать и сколько он стоит · ${data.scopeName}`}
-      crumbs={[{ label: "Рек. остаток" }]}
+      title={tr("Рекомендуемый остаток")}
+      subtitle={`${tr("Запас дилеров по складам: хватит ли до поставки, что заказать и сколько он стоит")} · ${tr(data.scopeName)}`}
+      crumbs={[{ label: tr("Рек. остаток") }]}
       sp={sp}
     >
       <div className="flex flex-wrap items-center gap-3">
         <StockSearch value={data.query ?? ""} />
         <StockScopeSelect data={data} />
         <Chips items={views} current={view} href={(k) => href({ view: k === "list" ? null : k })} />
-        <Chips items={units} current={unit} href={(k) => href({ unit: k === "kg" ? null : k })} title="Единица: кг, коробки (где вес коробки известен), деньги по входу дилера, штуки как в Linko" />
+        <Chips items={units} current={unit} href={(k) => href({ unit: k === "kg" ? null : k })} title={tr("Единица: кг, коробки (где вес коробки известен), деньги по входу дилера, штуки как в Linko")} />
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         {data.topConfigured ? (
-          <Chips items={tops} current={data.top} href={(k) => href({ top: k === "all" ? null : k })} title="ТОП — коды товаров из настройки Sales:TopProducts" />
+          <Chips items={tops} current={data.top} href={(k) => href({ top: k === "all" ? null : k })} title={tr("ТОП — коды товаров из настройки Sales:TopProducts")} />
         ) : (
-          <span className="rounded-lg border border-dashed border-line px-3 py-1.5 text-xs text-ink-3">ТОП-товары не настроены (Sales:TopProducts)</span>
+          <span className="rounded-lg border border-dashed border-line px-3 py-1.5 text-xs text-ink-3">{tr("ТОП-товары не настроены (Sales:TopProducts)")}</span>
         )}
         <Chips items={statuses} current={data.status as (typeof statuses)[number]["key"]} href={(k) => href({ status: k === "all" ? null : k })} />
         <PackFilter packs={data.packs} selected={data.selectedPacks} />
         {filtered && (
           <Link href={href({ q: null, cat: null, pack: null, top: null, status: null })} className="ml-auto rounded-lg border border-line px-3 py-1.5 text-sm text-ink hover:bg-muted">
-            Сбросить фильтры
+            {tr("Сбросить фильтры")}
           </Link>
         )}
       </div>
       {data.categories.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1 text-xs">
           <Link href={href({ cat: null })} className={`rounded-full px-2.5 py-1 max-lg:py-2 ${data.selectedCategories.length === 0 ? "bg-accent-soft font-semibold text-ink" : "text-ink-2 hover:bg-muted"}`}>
-            все категории
+            {tr("все категории")}
           </Link>
           {data.categories.map((name) => {
             const on = data.selectedCategories.includes(name);
@@ -146,53 +153,89 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      {!data.syncedAt && <Alert>Остатки ещё не загружены из Linko — они появятся после ближайшей синхронизации (или нажмите «Обновить»).</Alert>}
+      {!data.syncedAt && <Alert>{tr("Остатки ещё не загружены из Linko — они появятся после ближайшей синхронизации (или нажмите «Обновить»).")}</Alert>}
 
       <div className={`mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 ${plant ? "min-[87.5rem]:grid-cols-5" : "min-[87.5rem]:grid-cols-6"}`}>
-        <KpiTile label="Остаток" value={kg(t.kg)} unit="кг" title="Штуки Linko × вес единицы; коробки — где вес коробки известен">
-          {num(t.boxes)} коробок · {num(t.skus)} SKU
-        </KpiTile>
-        <KpiTile label="Стоимость запаса" value={money(t.valueSum)} unit="сум" title={`Штуки × цена за единицу учёта из прайса «${priceList}», действовавшая на ${date(data.priceAsOf)}`}>
-          по входу дилера на {date(data.priceAsOf)}
-          {t.withoutPrice > 0 ? ` · без цены ${num(t.withoutPrice)} SKU` : ""}
+        <KpiTile label={tr("Остаток")} value={kg(t.kg)} unit={tr("кг")} title={tr("Штуки Linko × вес единицы; коробки — где вес коробки известен")}>
+          {tr("{boxes} коробок · {skus} SKU", { boxes: num(t.boxes), skus: num(t.skus) })}
         </KpiTile>
         <KpiTile
-          label="Хватит на"
+          label={tr("Стоимость запаса")}
+          value={money(t.valueSum, tr)}
+          unit={tr("сум")}
+          title={tr("Штуки × цена за единицу учёта из прайса «{priceList}», действовавшая на {date}", { priceList, date: date(data.priceAsOf) })}
+        >
+          {tr("по входу дилера на {date}", { date: date(data.priceAsOf) })}
+          {t.withoutPrice > 0 ? tr(" · без цены {n} SKU", { n: num(t.withoutPrice) }) : ""}
+        </KpiTile>
+        <KpiTile
+          label={tr("Хватит на")}
           value={num(t.daysOfCover, 1)}
-          unit="дн."
+          unit={tr("дн.")}
           tone={exportScope || t.daysOfCover == null ? "muted" : t.daysOfCover < 15 ? "bad" : t.daysOfCover > 30 ? "warn" : "ok"}
-          title={plant ? "Скорость завода — продажи всей страны" : "Остаток ÷ продажи в день с поправкой на аутсток"}
+          title={plant ? tr("Скорость завода — продажи всей страны") : tr("Остаток ÷ продажи в день с поправкой на аутсток")}
         >
-          {exportScope ? "у экспорта своей скорости продаж нет" : `${kg(t.kgPerDay)} кг в день${corrected ? ` (без поправки на аутсток ${kg(t.rawKgPerDay)})` : ""}`}
+          {exportScope
+            ? tr("у экспорта своей скорости продаж нет")
+            : `${tr("{kg} кг в день", { kg: kg(t.kgPerDay) })}${corrected ? tr(" (без поправки на аутсток {kg})", { kg: kg(t.rawKgPerDay) }) : ""}`}
         </KpiTile>
-        <KpiTile label="SKU в дефиците" value={num(t.deficit)} tone={exportScope ? "muted" : t.deficit > 0 ? "bad" : "ok"} title="Хватит меньше чем на 15 дней продаж">
-          затоварка — {num(t.overstock)}, не продаётся — {num(t.dead)}
+        <KpiTile label={tr("SKU в дефиците")} value={num(t.deficit)} tone={exportScope ? "muted" : t.deficit > 0 ? "bad" : "ok"} title={tr("Хватит меньше чем на 15 дней продаж")}>
+          {tr("затоварка — {overstock}, не продаётся — {dead}", { overstock: num(t.overstock), dead: num(t.dead) })}
         </KpiTile>
         <KpiTile
-          label={plant ? "Не хватает на заводе" : "Рек. заказ дилерам"}
+          label={plant ? tr("Не хватает на заводе") : tr("Рек. заказ дилерам")}
           value={kg(t.orderKg)}
-          unit="кг"
+          unit={tr("кг")}
           tone={exportScope ? "muted" : t.orderKg > 0 ? "accent" : "ok"}
-          title={plant ? "Сумма рекомендуемых заказов всех дилеров минус остаток на заводе" : "Скорость с поправкой на аутсток × 15 дней − остаток, вверх до целой коробки; 0 — хватает"}
+          title={
+            plant
+              ? tr("Сумма рекомендуемых заказов всех дилеров минус остаток на заводе")
+              : tr("Скорость с поправкой на аутсток × 15 дней − остаток, вверх до целой коробки; 0 — хватает")
+          }
         >
-          {exportScope ? "у экспорта заказа нет" : `${money(t.orderSum)} сум · ${num(t.orderSkus)} SKU${plant ? "" : " · до запаса на 15 дней"}`}
+          {exportScope
+            ? tr("у экспорта заказа нет")
+            : `${tr("{sum} сум · {skus} SKU", { sum: money(t.orderSum, tr), skus: num(t.orderSkus) })}${plant ? "" : tr(" · до запаса на 15 дней")}`}
         </KpiTile>
         {!plant && (
-          <KpiTile label="Остаток завода" value={kg(f?.kg ?? null)} unit="кг" title={f?.valueSum ? `${money(f.valueSum)} сум по входной цене` : undefined}>
+          <KpiTile
+            label={tr("Остаток завода")}
+            value={kg(f?.kg ?? null)}
+            unit={tr("кг")}
+            title={f?.valueSum ? tr("{sum} сум по входной цене", { sum: money(f.valueSum, tr) }) : undefined}
+          >
             {data.factory && f
-              ? `не хватает ${kg(f.orderKg)} кг (${num(f.orderSkus)} SKU)${f.daysOfCover != null ? ` · хватит на ${num(f.daysOfCover, 1)} дн. по скорости всей страны` : ""} · в итог страны не входит`
-              : "склад завода не найден"}
+              ? `${tr("не хватает {kg} кг ({skus} SKU)", { kg: kg(f.orderKg), skus: num(f.orderSkus) })}${f.daysOfCover != null ? tr(" · хватит на {days} дн. по скорости всей страны", { days: num(f.daysOfCover, 1) }) : ""}${tr(" · в итог страны не входит")}`
+              : tr("склад завода не найден")}
           </KpiTile>
         )}
       </div>
       <p className="mt-3 text-xs text-ink-3">
-        Остатки на {dateTime(data.syncedAt)} (снимок Linko {date(data.snapshotDate)}). Скорость — вторичка нетто возвратов за {num(data.velocityDays)} дн. ({date(data.velocityFrom)} –{" "}
-        {date(data.velocityTo)}) с поправкой на дни в нуле за {monthLabel(c.year, c.month).toLowerCase()}: по стране {kg(c.rawKgPerDay)} → {kg(c.kgPerDay)} кг в день ({signedPct(c.change)}, пар с
-        поправкой — {num(c.pairs)}). Вес единицы — по строкам заказов с {date(data.unitWeightFrom)}; цена — прайс «{priceList}» на {date(data.priceAsOf)}.{" "}
-        {t.approxWeight > 0 && `У ${num(t.approxWeight)} SKU продаж за год не было — вес из названия, значения помечены «≈». `}
-        {t.withoutPrice > 0 && `${num(t.withoutPrice)} SKU нет в прайсе — в стоимость не вошли. `}
+        {tr(
+          "Остатки на {syncedAt} (снимок Linko {snapshot}). Скорость — вторичка нетто возвратов за {days} дн. ({from} – {to}) с поправкой на дни в нуле за {month}: по стране {raw} → {corrected} кг в день ({change}, пар с поправкой — {pairs}). Вес единицы — по строкам заказов с {unitFrom}; цена — прайс «{priceList}» на {priceAsOf}.",
+          {
+            syncedAt: dateTime(data.syncedAt),
+            snapshot: date(data.snapshotDate),
+            days: num(data.velocityDays),
+            from: date(data.velocityFrom),
+            to: date(data.velocityTo),
+            month: monthLabel(c.year, c.month, tr).replace(/^\S+/, (w) => tr(w)).toLowerCase(),
+            raw: kg(c.rawKgPerDay),
+            corrected: kg(c.kgPerDay),
+            change: signedPct(c.change),
+            pairs: num(c.pairs),
+            unitFrom: date(data.unitWeightFrom),
+            priceList,
+            priceAsOf: date(data.priceAsOf),
+          },
+        )}{" "}
+        {t.approxWeight > 0 && tr("У {n} SKU продаж за год не было — вес из названия, значения помечены «≈». ", { n: num(t.approxWeight) })}
+        {t.withoutPrice > 0 && tr("{n} SKU нет в прайсе — в стоимость не вошли. ", { n: num(t.withoutPrice) })}
         {data.excludedOutsideReport + data.excludedWithoutWeight > 0 &&
-          `Вне таблицы: ${num(data.excludedOutsideReport)} SKU вне категорий отчёта, ${num(data.excludedWithoutWeight)} без веса единицы.`}
+          tr("Вне таблицы: {outside} SKU вне категорий отчёта, {noWeight} без веса единицы.", {
+            outside: num(data.excludedOutsideReport),
+            noWeight: num(data.excludedWithoutWeight),
+          })}
       </p>
 
       {data.categoryTiles.length > 1 && (
@@ -202,7 +245,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
               key={tile.name}
               href={tileHref(tile.name)}
               aria-pressed={tile.selected}
-              title="Клик — только эта категория; повторный клик снимает выбор"
+              title={tr("Клик — только эта категория; повторный клик снимает выбор")}
               className={`block min-w-0 rounded-xl border bg-surface px-4 py-3.5 shadow-sm transition max-lg:px-3.5 max-lg:py-3 ${
                 tile.selected ? "border-accent ring-1 ring-accent" : "border-line hover:border-ink-3"
               }`}
@@ -210,24 +253,26 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
               <div className="truncate text-sm font-semibold text-ink">{tile.name}</div>
               <div className="text-xs text-ink-3">{num(tile.skus)} SKU</div>
               <div className="mt-2 text-[1.375rem] font-semibold leading-none tracking-tight text-ink tabular-nums max-lg:text-xl">
-                {kg(tile.kg)} <span className="text-xs font-normal text-ink-3">кг</span>
+                {kg(tile.kg)} <span className="text-xs font-normal text-ink-3">{tr("кг")}</span>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                <Fact label="Хватит, дн." value={num(tile.daysOfCover, 1)} />
-                <Fact label="Сумма" value={money(tile.valueSum)} />
-                <Fact label="Дефицит" value={`${num(tile.deficit)} SKU`} />
-                <Fact label="Рек. заказ" value={`${kg(tile.orderKg)} кг`} />
+                <Fact label={tr("Хватит, дн.")} value={num(tile.daysOfCover, 1)} />
+                <Fact label={tr("Сумма")} value={money(tile.valueSum, tr)} />
+                <Fact label={tr("Дефицит")} value={`${num(tile.deficit)} SKU`} />
+                <Fact label={tr("Рек. заказ")} value={`${kg(tile.orderKg)} ${tr("кг")}`} />
               </div>
             </Link>
           ))}
         </div>
       )}
 
+      {data.syncedAt && data.regions.length > 0 && <AutoOrder initialRegion={data.scope.startsWith("region:") ? data.scope.slice(7) : null} />}
+
       {data.items.length === 0 ? (
         <Alert tone="info" className="mt-6">
-          По этим фильтрам товаров нет.{" "}
+          {tr("По этим фильтрам товаров нет.")}{" "}
           <Link href={href({ q: null, cat: null, pack: null, top: null, status: null })} className="text-accent hover:underline">
-            Сбросить фильтры
+            {tr("Сбросить фильтры")}
           </Link>
         </Alert>
       ) : view === "matrix" ? (
@@ -241,30 +286,39 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
         <OtherStocksTable rows={data.otherStocks} />
       </CollapsedSections>
 
-      <Section title="Как считается" hint="все данные — из Linko; правила — DOC §9.4">
+      <Section title={tr("Как считается")} hint={tr("все данные — из Linko; правила — DOC §9.4")}>
         <ul className="space-y-2 text-sm text-ink-2">
           <li>
-            <b className="text-ink">Остаток</b> — снимок Linko на дату последней загрузки, а не итог месяца, поэтому переключателя периода нет. «Вся страна» — только склады
-            дилеров (по одному на регион справочника); склады старых филиалов, «Основной», интеграционные — в «Прочих складах»; завод и экспорт — отдельные охваты и в итог страны
-            не входят.
+            <b className="text-ink">{tr("Остаток")}</b>{" "}
+            {tr(
+              "— снимок Linko на дату последней загрузки, а не итог месяца, поэтому переключателя периода нет. «Вся страна» — только склады дилеров (по одному на регион справочника); склады старых филиалов, «Основной», интеграционные — в «Прочих складах»; завод и экспорт — отдельные охваты и в итог страны не входят.",
+            )}
           </li>
           <li>
-            <b className="text-ink">Продажи в день</b> — вторичка нетто возвратов за {num(data.velocityDays)} дн. до последнего полного дня в регионе склада, делённая на (
-            {num(data.velocityDays)} − дни в нуле этого товара в регионе за последний закрытый месяц, не больше 30): дни, когда товара не было, продаж не занижают. «Хватит» —
-            остаток ÷ скорость; дефицит — меньше 15 дней, норма 15–30, затоварка — больше 30, «не продаётся» — остаток лежит, а продаж за базу не было.
+            <b className="text-ink">{tr("Продажи в день")}</b>{" "}
+            {tr(
+              "— вторичка нетто возвратов за {days} дн. до последнего полного дня в регионе склада, делённая на ({days} − дни в нуле этого товара в регионе за последний закрытый месяц, не больше 30): дни, когда товара не было, продаж не занижают. «Хватит» — остаток ÷ скорость; дефицит — меньше 15 дней, норма 15–30, затоварка — больше 30, «не продаётся» — остаток лежит, а продаж за базу не было.",
+              { days: num(data.velocityDays) },
+            )}
           </li>
           <li>
-            <b className="text-ink">Рек. заказ дилера</b> = скорость с поправкой × 15 − остаток, вверх до целой коробки (0 — хватает); деньги — по входной цене. <b className="text-ink">Заказ у
-            завода</b> = сумма заказов всех дилеров (при любом охвате) − остаток завода: сколько не хватает, чтобы отгрузить всем. Своего запаса «на 15 дней» у завода и экспорта нет.
+            <b className="text-ink">{tr("Рек. заказ дилера")}</b> {tr("= скорость с поправкой × 15 − остаток, вверх до целой коробки (0 — хватает); деньги — по входной цене.")}{" "}
+            <b className="text-ink">{tr("Заказ у завода")}</b>{" "}
+            {tr("= сумма заказов всех дилеров (при любом охвате) − остаток завода: сколько не хватает, чтобы отгрузить всем. Своего запаса «на 15 дней» у завода и экспорта нет.")}
           </li>
           <li>
-            <b className="text-ink">Единица учёта, коробка и цена.</b> Остаток и цена в Linko — за единицу учёта (кг у весового, штука или шоубокс у штучного). Кг = штуки × вес единицы
-            (Σ веса ÷ Σ количества по строкам заказов с 1-го числа закрытого месяца, без свежих продаж — за год, без продаж — из названия, «≈»). Коробка — из названия (у весового
-            любой вес, у штучного — если в коробке целое число штук), иначе по отгрузкам завода (целыми коробками). Стоимость — штуки × цена прайса «{priceList}», действовавшая на
-            начало текущего месяца: повышение, введённое в этом месяце, остаток не переоценивает.
+            <b className="text-ink">{tr("Единица учёта, коробка и цена.")}</b>{" "}
+            {tr(
+              "Остаток и цена в Linko — за единицу учёта (кг у весового, штука или шоубокс у штучного). Кг = штуки × вес единицы (Σ веса ÷ Σ количества по строкам заказов с 1-го числа закрытого месяца, без свежих продаж — за год, без продаж — из названия, «≈»). Коробка — из названия (у весового любой вес, у штучного — если в коробке целое число штук), иначе по отгрузкам завода (целыми коробками). Стоимость — штуки × цена прайса «{priceList}», действовавшая на начало текущего месяца: повышение, введённое в этом месяце, остаток не переоценивает.",
+              { priceList },
+            )}
           </li>
         </ul>
-        <Note>Умножать штуки на вес коробки нельзя — это завышает остаток во столько раз, сколько штук в коробке. Фильтры применяет сервер: плитки, итоги и карточки категорий — по отфильтрованным строкам.</Note>
+        <Note>
+          {tr(
+            "Умножать штуки на вес коробки нельзя — это завышает остаток во столько раз, сколько штук в коробке. Фильтры применяет сервер: плитки, итоги и карточки категорий — по отфильтрованным строкам.",
+          )}
+        </Note>
       </Section>
     </SalesFrame>
   );

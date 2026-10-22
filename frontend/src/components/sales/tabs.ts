@@ -1,6 +1,6 @@
-import { Activity, Boxes, CalendarDays, Layers, LayoutGrid, Package, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
+import { Activity, Award, BadgePercent, Boxes, CalendarDays, Clock, FileCheck2, Layers, LayoutGrid, Package, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
 
-export type SalesTab = "analytics" | "assortment" | "skuSales" | "primary" | "stock" | "outstock" | "plans" | "problems" | "pnl" | "method";
+export type SalesTab = "analytics" | "assortment" | "skuSales" | "primary" | "stock" | "outstock" | "plans" | "kpi" | "promo" | "problems" | "pnl" | "akt" | "dso" | "method";
 
 /**
  * Разделы продаж — кнопки в верхней панели, каждая открывает свою страницу. Настройки продаж — в «Настройки».
@@ -14,8 +14,12 @@ export const salesTabs: { key: SalesTab; label: string; href: string; icon: type
   { key: "stock", label: "Рек. остаток", href: "/sales/stock", icon: Layers },
   { key: "outstock", label: "Аутсток", href: "/sales/outstock", icon: Activity },
   { key: "plans", label: "Планы", href: "/sales/plans", icon: CalendarDays },
+  { key: "promo", label: "Акции", href: "/sales/promo", icon: BadgePercent },
+  { key: "kpi", label: "KPI", href: "/sales/kpi", icon: Award },
   { key: "problems", label: "Проблемные агенты", href: "/sales/problems", icon: TriangleAlert },
   { key: "pnl", label: "P&L дилеров", href: "/sales/pnl", icon: Wallet, permission: "finance.read" },
+  { key: "akt", label: "Акт сверки", href: "/sales/akt", icon: FileCheck2, permission: "finance.read" },
+  { key: "dso", label: "DSO", href: "/sales/dso", icon: Clock, permission: "finance.read" },
   // «Как считается» (/sales/method) без кнопки: страница открывается по адресу.
 ];
 
@@ -31,7 +35,7 @@ export function usesPlan(pathname: string): boolean {
 export function activeSalesTab(pathname: string): SalesTab | null {
   if (!pathname.startsWith("/sales")) return null;
   if (pathname.startsWith("/sales/sku-sales")) return "skuSales";
-  for (const key of ["assortment", "primary", "stock", "outstock", "plans", "problems", "pnl", "method"] as const) {
+  for (const key of ["assortment", "primary", "stock", "outstock", "plans", "kpi", "promo", "problems", "pnl", "akt", "dso", "method"] as const) {
     if (pathname.startsWith(`/sales/${key}`)) return key;
   }
   if (pathname.startsWith("/sales/setup")) return null;

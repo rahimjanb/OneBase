@@ -1,5 +1,7 @@
-import Link from "next/link";
 import { ArrowUpRight, CircleAlert, CircleCheck, Info, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Tr } from "@/i18n/client";
+import { FlagPill } from "./FlagPill";
+import { SummaryLink } from "./SummaryLink";
 import type { AgentFlag, FlagCounts, TargetLevel, TargetValue } from "@/lib/sales/types";
 import { delta } from "@/lib/sales/format";
 
@@ -43,7 +45,10 @@ export function execClass(value: number | null): string {
 /** Тон изменения к прошлому периоду: рост зелёный, падение до −10% оранжевый, сильнее — красный. */
 export const deltaTone = (value: number | null | undefined): Tone => (value == null ? "muted" : value >= 0 ? "ok" : value > -0.1 ? "warn" : "bad");
 
-/** Плитка KPI: подпись капителью, крупное значение (цвет — tone) и одна строка пояснения; подробности — в title. */
+/**
+ * Плитка KPI: подпись капителью, крупное значение (цвет — tone) и одна строка пояснения; подробности — в title.
+ * Модуль общий для сервера и браузера: подпись и единица переводятся через <Tr> (уже переведённые не меняются), title — готовой строкой.
+ */
 export function KpiTile({
   label,
   value,
@@ -62,10 +67,16 @@ export function KpiTile({
 }) {
   return (
     <div className="flex min-w-0 flex-col rounded-xl border border-line bg-surface px-4 py-3.5 shadow-sm max-lg:px-3.5 max-lg:py-3" title={title}>
-      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3">{label}</div>
+      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3">
+        <Tr>{label}</Tr>
+      </div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5">
         <span className={`text-[1.5rem] font-semibold leading-none tracking-tight tabular-nums max-lg:text-xl ${toneClass[tone]}`}>{value}</span>
-        {unit && <span className="text-sm text-ink-3">{unit}</span>}
+        {unit && (
+          <span className="text-sm text-ink-3">
+            <Tr>{unit}</Tr>
+          </span>
+        )}
       </div>
       {children && <div className="mt-1.5 text-xs leading-relaxed text-ink-2">{children}</div>}
     </div>
@@ -76,7 +87,9 @@ export function KpiTile({
 export function Stat({ label, value, tone = "ink" }: { label: string; value: React.ReactNode; tone?: Tone }) {
   return (
     <div className="flex min-w-0 flex-col justify-between">
-      <dt className="text-[10px] font-medium uppercase leading-tight tracking-[0.08em] text-ink-3">{label}</dt>
+      <dt className="text-[10px] font-medium uppercase leading-tight tracking-[0.08em] text-ink-3">
+        <Tr>{label}</Tr>
+      </dt>
       <dd className={`mt-1 whitespace-nowrap text-sm font-semibold tabular-nums ${toneClass[tone]}`}>{value}</dd>
     </div>
   );
@@ -105,7 +118,7 @@ export function SummaryCard({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
-            {title}
+            <Tr>{title}</Tr>
             {aside && arrow}
           </h2>
           {subtitle && <p className="mt-0.5 text-xs text-ink-3">{subtitle}</p>}
@@ -116,9 +129,9 @@ export function SummaryCard({
     </section>
   );
   return href ? (
-    <Link href={href} aria-label={`Открыть «${title}»`} className="group block max-lg:active:opacity-75">
+    <SummaryLink href={href} title={title}>
       {body}
-    </Link>
+    </SummaryLink>
   ) : (
     body
   );
@@ -137,22 +150,23 @@ const severityStyles = {
   Info: "border-line bg-muted text-ink-2",
 } as const;
 
-/** Флаги агента: «● Конверсия», «● Темп» — красные критичные, оранжевые риски. */
+/** Флаги агента: «● Конверсия», «● Темп» — красные критичные, оранжевые риски. Подпись и подсказка флага — с сервера, переводятся по словарю. */
 export function FlagPills({ flags, empty = "Замечаний нет" }: { flags: AgentFlag[]; empty?: string | null }) {
   if (flags.length === 0) {
-    return empty ? <span className="inline-block rounded-full bg-ok-soft px-2 py-0.5 text-xs font-medium text-ok">{empty}</span> : null;
+    return empty ? (
+      <span className="inline-block rounded-full bg-ok-soft px-2 py-0.5 text-xs font-medium text-ok">
+        <Tr>{empty}</Tr>
+      </span>
+    ) : null;
   }
   return (
     <span className="inline-flex flex-wrap gap-1.5">
       {flags.map((f) => (
-        <span
+        <FlagPill
           key={f.kind}
-          title={f.title}
+          flag={f}
           className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${severityStyles[f.severity]}`}
-        >
-          <span className="size-1.5 rounded-full bg-current" />
-          {f.label}
-        </span>
+        />
       ))}
     </span>
   );
@@ -160,20 +174,24 @@ export function FlagPills({ flags, empty = "Замечаний нет" }: { flag
 
 export function FlagCountPills({ flags }: { flags: FlagCounts }) {
   if (flags.critical === 0 && flags.risk === 0) {
-    return <span className="inline-block whitespace-nowrap rounded-full bg-ok-soft px-2 py-0.5 text-xs font-medium text-ok">Замечаний нет</span>;
+    return (
+      <span className="inline-block whitespace-nowrap rounded-full bg-ok-soft px-2 py-0.5 text-xs font-medium text-ok">
+        <Tr>Замечаний нет</Tr>
+      </span>
+    );
   }
   return (
     <span className="inline-flex flex-wrap gap-1.5">
       {flags.critical > 0 && (
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-bad/25 bg-bad-soft px-2 py-0.5 text-xs font-semibold text-bad">
           <span className="size-1.5 rounded-full bg-current" />
-          {flags.critical} критично
+          <Tr vars={{ n: flags.critical }}>{"{n} критично"}</Tr>
         </span>
       )}
       {flags.risk > 0 && (
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-warn/25 bg-warn-soft px-2 py-0.5 text-xs font-semibold text-warn">
           <span className="size-1.5 rounded-full bg-current" />
-          {flags.risk} риск
+          <Tr vars={{ n: flags.risk }}>{"{n} риск"}</Tr>
         </span>
       )}
     </span>

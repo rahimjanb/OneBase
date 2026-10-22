@@ -53,6 +53,24 @@ public static class ConnectionCredentials
         }
     }
 
+    /// <summary>Длина кода секретной ссылки: 32 знака из 32-символьного алфавита — 160 бит, подобрать нельзя.</summary>
+    public const int LinkTokenLength = 32;
+
+    // Только строчные буквы и цифры без похожих (l, o, 0, 1): регистр в адресах Windows может меняться, код иногда переписывают.
+    private const string LinkAlphabet = "abcdefghijkmnpqrstuvwxyz23456789";
+
+    /// <summary>Код секретной ссылки отдела — адреса без пароля «https://files.1base.uz/k/{код}/production».</summary>
+    public static string NewLinkToken() => RandomNumberGenerator.GetString(LinkAlphabet, LinkTokenLength);
+
+    /// <summary>Хэш кода ссылки для поиска в базе (SHA-256, hex): сам код в базе только зашифрованным. null — код не той формы.</summary>
+    public static string? LinkHash(string? token)
+    {
+        var value = token?.Trim().ToLowerInvariant();
+        return value is { Length: LinkTokenLength } && value.All(c => LinkAlphabet.Contains(c))
+            ? Convert.ToHexStringLower(SHA256.HashData(Encoding.ASCII.GetBytes(value)))
+            : null;
+    }
+
     /// <summary>Отпечаток пары логин/пароль для кэша проверенных входов (сам пароль в памяти кэша не держится).</summary>
     public static string Fingerprint(string username, string password) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{username}\n{password}")));

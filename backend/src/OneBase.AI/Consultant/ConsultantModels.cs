@@ -11,9 +11,10 @@ public sealed record ConsultantTurn(Guid UserId, Guid ConversationId, string Que
 
 /// <summary>
 /// Канал вопроса вне чата OneBase (Telegram): свои инструкции (стиль, язык, ограничения администратора), модель и длина ответа, можно ли
-/// формировать отчёты. Права на данные — по-прежнему права пользователя: канал их не расширяет.
+/// формировать отчёты. AgentModel — модель для AI-сотрудников этого вопроса вместо их собственных (Claude, когда просят сформировать отчёт);
+/// null — свои модели сотрудников. Права на данные — по-прежнему права пользователя: канал их не расширяет.
 /// </summary>
-public sealed record ConsultantChannel(string Name, string? Instructions, AiModelRef? Model, int? MaxOutputTokens, bool AllowReports);
+public sealed record ConsultantChannel(string Name, string? Instructions, AiModelRef? Model, int? MaxOutputTokens, bool AllowReports, AiModelRef? AgentModel = null);
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ProgressStatus

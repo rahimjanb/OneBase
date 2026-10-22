@@ -1,4 +1,9 @@
-/** Русское склонение: plural(5, ["файл", "файла", "файлов"]) → "файлов". */
+import { formatDate } from "@/i18n/core";
+import type { T } from "@/i18n/core";
+
+const same: T = (text) => text;
+
+/** Русское склонение: plural(5, ["файл", "файла", "файлов"]) → "файлов". В узбекском форма одна — каждое слово переводится через t. */
 export function plural(n: number, forms: [one: string, few: string, many: string]): string {
   const mod10 = n % 10;
   const mod100 = n % 100;
@@ -7,8 +12,9 @@ export function plural(n: number, forms: [one: string, few: string, many: string
   return forms[2];
 }
 
-export const filesLabel = (n: number) => `${n} ${plural(n, ["файл", "файла", "файлов"])}`;
-export const foldersLabel = (n: number) => `${n} ${plural(n, ["папка", "папки", "папок"])}`;
+/** «5 файлов»; t — перевод интерфейса (useT / getT), без него — по-русски. */
+export const filesLabel = (n: number, t: T = same) => `${n} ${t(plural(n, ["файл", "файла", "файлов"]))}`;
+export const foldersLabel = (n: number, t: T = same) => `${n} ${t(plural(n, ["папка", "папки", "папок"]))}`;
 
 export const percent = (value: number, digits = 0) =>
   `${value.toLocaleString("ru-RU", { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`;
@@ -21,14 +27,14 @@ export function fileSize(bytes: number): string {
 /** Часовой пояс компании: по нему считаются дата и приветствие на главной. */
 export const TIME_ZONE = "Asia/Tashkent";
 
-/** «суббота · 3 октября» — строка над приветствием на главной. */
-export function todayLabel(date = new Date()): string {
-  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "long", timeZone: TIME_ZONE }).format(date);
-  const day = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", timeZone: TIME_ZONE }).format(date);
+/** «суббота · 3 октября» — строка над приветствием на главной; locale — язык интерфейса (getLocale / useLocale). */
+export function todayLabel(date = new Date(), locale = "ru-RU"): string {
+  const weekday = formatDate(date, locale, { weekday: "long", timeZone: TIME_ZONE });
+  const day = formatDate(date, locale, { day: "numeric", month: "long", timeZone: TIME_ZONE });
   return `${weekday} · ${day}`;
 }
 
-/** Приветствие по времени суток компании: утро 5–11, день 12–17, вечер 18–22, ночь — остальное. */
+/** Приветствие по времени суток компании: утро 5–11, день 12–17, вечер 18–22, ночь — остальное; на языке интерфейса — t(greeting()). */
 export function greeting(date = new Date()): string {
   const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: TIME_ZONE }).format(date));
   if (hour >= 5 && hour < 12) return "Доброе утро";

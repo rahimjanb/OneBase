@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\OneBase.AI\OneBase.AI.csproj" />
     <ProjectReference Include="..\..\src\OneBase.Infrastructure\OneBase.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\OneBase.Api\OneBase.Api.csproj" />
   </ItemGroup>
 
 </Project>

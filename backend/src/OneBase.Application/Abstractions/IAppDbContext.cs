@@ -61,6 +61,8 @@ public interface IAppDbContext
     DbSet<LinkoVisit> LinkoVisits { get; }
     DbSet<LinkoKpiPlan> LinkoKpiPlans { get; }
     DbSet<LinkoSyncState> LinkoSyncStates { get; }
+    DbSet<LinkoPromotion> LinkoPromotions { get; }
+    DbSet<LinkoPromotionProduct> LinkoPromotionProducts { get; }
     DbSet<LinkoStock> LinkoStocks { get; }
     DbSet<LinkoProductBalance> LinkoProductBalances { get; }
     DbSet<LinkoStockTransfer> LinkoStockTransfers { get; }
@@ -80,6 +82,9 @@ public interface IAppDbContext
     DbSet<SalesTarget> SalesTargets { get; }
     DbSet<SalesPnlValue> SalesPnlValues { get; }
     DbSet<SalesStaffPlan> SalesStaffPlans { get; }
+    DbSet<SalesStaffIndicator> SalesStaffIndicators { get; }
+    DbSet<SalesDealerLedgerEntry> SalesDealerLedger { get; }
+    DbSet<SalesDealerTerm> SalesDealerTerms { get; }
 
     DbSet<FieldMember> FieldMembers { get; }
     DbSet<FieldTeam> FieldTeams { get; }

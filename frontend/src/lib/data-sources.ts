@@ -1,7 +1,14 @@
+import { makeT, type T } from "@/i18n/core";
 import { bff } from "./bff";
 
-/** Поле OneBase, которое можно обновлять из Google Sheets: plan — регион × категория × месяц, profile — регион → текст, pnl — P&L. */
-export type DataSourceField = { key: string; label: string; kind: "plan" | "profile" | "pnl"; description: string };
+/** Без перевода (русский) — если вызывающий не передал t. */
+const plain: T = makeT(null);
+
+/**
+ * Поле OneBase, которое можно обновлять из Google Sheets: plan — регион × категория × месяц, profile — регион → текст, pnl — P&L,
+ * ledger — реестр по дням (оплаты, расходы), terms — условия контрагента, balance — остатки контрагентов на дату.
+ */
+export type DataSourceField = { key: string; label: string; kind: "plan" | "profile" | "pnl" | "ledger" | "terms" | "balance"; description: string };
 
 export type SheetInfo = { name: string; rows: number; columns: number };
 
@@ -56,14 +63,46 @@ export type PnlMapping = {
 /** Какие месяцы листа брать: all — все (не больше 24), current — текущий месяц, year — текущий год, last — последние months, range — from…to («2026-01»). */
 export type PeriodFilter = { mode: "all" | "current" | "year" | "last" | "range"; months?: number | null; from?: string | null; to?: string | null };
 
-export const periodText = (p: PeriodFilter | null | undefined) =>
-  !p || p.mode === "all" ? "все месяцы" : p.mode === "current" ? "текущий месяц" : p.mode === "year" ? "текущий год" : p.mode === "last" ? `последние ${p.months} мес.` : `${p.from} — ${p.to}`;
+export const periodText = (p: PeriodFilter | null | undefined, t: T = plain) =>
+  !p || p.mode === "all"
+    ? t("все месяцы")
+    : p.mode === "current"
+      ? t("текущий месяц")
+      : p.mode === "year"
+        ? t("текущий год")
+        : p.mode === "last"
+          ? t("последние {n} мес.", { n: p.months ?? "" })
+          : `${p.from} — ${p.to}`;
+
+/**
+ * Реестр (оплаты, расходы): дата, контрагент, сумма; kind — кошелёк или статья; categories — отбор строк по началу категории («101»);
+ * dateFrom — строки раньше этой даты не берутся (остатки на начало, записанные в реестр расходом). Лист копируется целиком.
+ */
+export type LedgerMapping = {
+  dateColumn: string;
+  dealerColumn: string;
+  amountColumn: string;
+  kindColumn: string | null;
+  categoryColumn: string | null;
+  categories: string[] | null;
+  commentColumn: string | null;
+  dateFrom: string | null;
+};
+
+/** Условия контрагента: срок оплаты в днях (пусто — без срока) и остаток долга на дату openingDate. */
+export type TermsMapping = { dealerColumn: string; normColumn: string | null; openingColumn: string | null; openingDate: string | null };
+
+/** Остатки контрагентов на дату: дата — из ячейки dateCell («F1»: лист каждый месяц на новый месяц) или date. */
+export type BalanceMapping = { dealerColumn: string; amountColumn: string; dateCell: string | null; date: string | null };
 
 export type FieldBinding = {
   field: string;
   plan?: PlanMapping | null;
   profile?: ProfileMapping | null;
   pnl?: PnlMapping | null;
+  ledger?: LedgerMapping | null;
+  terms?: TermsMapping | null;
+  balance?: BalanceMapping | null;
   replace: boolean;
   monthFromSheet?: boolean;
   currentMonth?: boolean;
@@ -126,7 +165,7 @@ export type AutoMapConfirmInput = AutoMapInput & {
 /** «Все листы таблицы» в списке листов привязки — и те, что появятся позже. */
 export const AllSheets = "*";
 
-export const sheetsText = (sheets: string[]) => (sheets.includes(AllSheets) ? "все листы" : sheets.map((s) => `«${s}»`).join(", "));
+export const sheetsText = (sheets: string[], t: T = plain) => (sheets.includes(AllSheets) ? t("все листы") : sheets.map((s) => `«${s}»`).join(", "));
 
 export type Schedule = "manual" | "interval" | "daily";
 export type SyncStatus = "ok" | "unchanged" | "conflicts" | "waiting" | "error";
@@ -289,11 +328,29 @@ export const statusLabel: Record<SyncStatus, { label: string; className: string 
   error: { label: "Ошибка", className: "bg-bad-soft text-bad" },
 };
 
-export function scheduleText(b: { schedule: Schedule; intervalMinutes: number | null; dailyAt: string | null }): string {
+/**
+ * Текст сервера, собранный из частей «подпись: итог · подпись: итог» (итог синхронизации привязки по полям, строка с ошибкой «регион:
+ * причина»), — на языке интерфейса: целиком по словарю, иначе по частям — подпись и итог отдельно. Нет перевода — как прислал сервер.
+ */
+export function partsText(message: string, t: T = plain): string {
+  const whole = t(message);
+  if (whole !== message) return whole;
+  return message
+    .split(" · ")
+    .map((part) => {
+      const full = t(part);
+      if (full !== part) return full;
+      const i = part.indexOf(": ");
+      return i > 0 ? `${t(part.slice(0, i))}: ${t(part.slice(i + 2))}` : part;
+    })
+    .join(" · ");
+}
+
+export function scheduleText(b: { schedule: Schedule; intervalMinutes: number | null; dailyAt: string | null }, t: T = plain): string {
   if (b.schedule === "interval" && b.intervalMinutes) {
     const m = b.intervalMinutes;
-    return m % 60 === 0 ? `каждые ${m / 60} ч` : `каждые ${m} мин`;
+    return m % 60 === 0 ? t("каждые {n} ч", { n: m / 60 }) : t("каждые {n} мин", { n: m });
   }
-  if (b.schedule === "daily" && b.dailyAt) return `ежедневно в ${b.dailyAt}`;
-  return "вручную";
+  if (b.schedule === "daily" && b.dailyAt) return t("ежедневно в {time}", { time: b.dailyAt });
+  return t("вручную");
 }

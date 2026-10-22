@@ -1,4 +1,8 @@
+import { makeT, type T } from "@/i18n/core";
 import type { SyncProgress } from "@/lib/sales/types";
+
+/** Без перевода (русский) — если вызывающий не передал t. */
+const plain: T = makeT(null);
 
 export type IntegrationStatus = "connected" | "error" | "disabled" | "not_configured";
 
@@ -75,6 +79,8 @@ export const linkoEntityLabels: Record<string, string> = {
   providers: "Поставщики",
   currencies: "Валюты",
   contracts: "Договоры",
+  reconcile: "Ночная сверка (остатки и месяц целиком)",
+  alert: "Контроль обмена",
 };
 
 export const statusView: Record<IntegrationStatus, { label: string; className: string }> = {
@@ -85,26 +91,30 @@ export const statusView: Record<IntegrationStatus, { label: string; className: s
 };
 
 /** «Заказы · История · 12 000 из 30 000 строк». */
-export function progressText(progress: SyncProgress | null): string {
-  if (!progress) return "Обновляется…";
+export function progressText(progress: SyncProgress | null, t: T = plain): string {
+  if (!progress) return t("Обновляется…");
   const n = (v: number) => new Intl.NumberFormat("ru-RU").format(v);
-  const entity = progress.entity ? linkoEntityLabels[progress.entity] ?? progress.entity : null;
+  const entity = progress.entity ? t(linkoEntityLabels[progress.entity] ?? progress.entity) : null;
   const rows =
-    progress.rows > 0 ? ` · ${n(progress.rows)}${progress.expected ? ` из ${n(progress.expected)}` : ""} строк` : progress.expected ? ` · ${n(progress.expected)} строк` : "";
-  return [entity, progress.phase].filter(Boolean).join(" · ") + rows;
+    progress.rows > 0
+      ? ` · ${progress.expected ? t("{rows} из {total} строк", { rows: n(progress.rows), total: n(progress.expected) }) : t("{rows} строк", { rows: n(progress.rows) })}`
+      : progress.expected
+        ? ` · ${t("{rows} строк", { rows: n(progress.expected) })}`
+        : "";
+  return [entity, progress.phase ? t(progress.phase) : null].filter(Boolean).join(" · ") + rows;
 }
 
 /** «осталось ~3 мин»; null — оценивать ещё рано. */
-export function remainingText(progress: SyncProgress | null): string | null {
+export function remainingText(progress: SyncProgress | null, t: T = plain): string | null {
   const s = progress?.remainingSeconds;
   if (s == null) return null;
-  if (s < 60) return "осталось меньше минуты";
+  if (s < 60) return t("осталось меньше минуты");
   const minutes = Math.round(s / 60);
-  return minutes < 60 ? `осталось ~${minutes} мин` : `осталось ~${Math.floor(minutes / 60)} ч ${minutes % 60} мин`;
+  return minutes < 60 ? t("осталось ~{m} мин", { m: minutes }) : t("осталось ~{h} ч {m} мин", { h: Math.floor(minutes / 60), m: minutes % 60 });
 }
 
 /** Коротко: «42% · осталось ~3 мин». */
-export function progressShort(progress: SyncProgress | null): string {
-  if (!progress || progress.percent == null || !progress.stepsTotal) return "Обновляется…";
-  return [`${progress.percent}%`, remainingText(progress)].filter(Boolean).join(" · ");
+export function progressShort(progress: SyncProgress | null, t: T = plain): string {
+  if (!progress || progress.percent == null || !progress.stepsTotal) return t("Обновляется…");
+  return [`${progress.percent}%`, remainingText(progress, t)].filter(Boolean).join(" · ");
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, LogOut, Pencil, RefreshCw, Smartphone, Trash2 } from "lucide-react";
 import { button, danger, field, primary } from "@/components/ai/form";
 import { Note } from "@/components/sales/bits";
+import { useT } from "@/i18n/client";
 import { accountStatus, ago, telegramApi, type TelegramAccount } from "@/lib/telegram";
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "—");
@@ -21,6 +22,7 @@ export function TelegramAccountPanel({
   onChange: (a: TelegramAccount) => void;
   onRemoved: () => Promise<void>;
 }) {
+  const t = useT();
   const [step, setStep] = useState<"idle" | "phone" | "code" | "password">(
     account.status === "CodeRequired" ? "code" : account.status === "PasswordRequired" ? "password" : "idle",
   );
@@ -52,7 +54,7 @@ export function TelegramAccountPanel({
     else if (status === "PasswordRequired") setStep("password");
     else {
       setStep("idle");
-      if (status === "Connected") setMessage(`Подключено: ${a.username ? "@" + a.username : a.displayName}. Чаты загружены.`);
+      if (status === "Connected") setMessage(t("Подключено: {name}. Чаты загружены.", { name: a.username ? "@" + a.username : (a.displayName ?? "") }));
     }
   };
 
@@ -76,45 +78,45 @@ export function TelegramAccountPanel({
                   })
                 }
               >
-                Сохранить
+                {t("Сохранить")}
               </button>
             </div>
           ) : (
             <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
               {account.name}
-              <button className="text-ink-3 hover:text-ink" onClick={() => setRenaming(true)} title="Переименовать">
+              <button className="text-ink-3 hover:text-ink" onClick={() => setRenaming(true)} title={t("Переименовать")}>
                 <Pencil className="size-3.5" />
               </button>
             </h3>
           )}
           <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-            <dt className="text-ink-3">Статус</dt>
+            <dt className="text-ink-3">{t("Статус")}</dt>
             <dd>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.className}`}>{s.label}</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.className}`}>{t(s.label)}</span>
             </dd>
-            <dt className="text-ink-3">Аккаунт</dt>
+            <dt className="text-ink-3">{t("Аккаунт")}</dt>
             <dd className="text-ink">
               {account.displayName ?? "—"}
               {account.username && <span className="ml-1 text-ink-2">@{account.username}</span>}
             </dd>
-            <dt className="text-ink-3">Номер</dt>
+            <dt className="text-ink-3">{t("Номер")}</dt>
             <dd className="text-ink">{account.phoneHint ?? "—"}</dd>
-            <dt className="text-ink-3">Подключён</dt>
+            <dt className="text-ink-3">{t("Подключён")}</dt>
             <dd className="text-ink">{when(account.connectedAt)}</dd>
-            <dt className="text-ink-3">Активность</dt>
+            <dt className="text-ink-3">{t("Активность")}</dt>
             <dd className="text-ink">{when(account.lastActivityAt)}</dd>
             {account.status === "Connected" && (
               <>
-                <dt className="text-ink-3">Приём сообщений</dt>
+                <dt className="text-ink-3">{t("Приём сообщений")}</dt>
                 <dd className="text-ink">
                   {!account.live?.online ? (
-                    <span className="text-warn">клиент не запущен — нажмите «Проверить»</span>
+                    <span className="text-warn">{t("клиент не запущен — нажмите «Проверить»")}</span>
                   ) : account.live.events === 0 ? (
-                    <span className="text-ink-2">работает, событий от Telegram пока не было</span>
+                    <span className="text-ink-2">{t("работает, событий от Telegram пока не было")}</span>
                   ) : (
                     <span className="text-ok">
-                      работает · последнее событие {ago(account.live.lastEventAt)}
-                      {account.live.messages > 0 && `, новых сообщений с запуска: ${account.live.messages}`}
+                      {t("работает · последнее событие {ago}", { ago: ago(account.live.lastEventAt, t) })}
+                      {account.live.messages > 0 && t(", новых сообщений с запуска: {n}", { n: account.live.messages })}
                     </span>
                   )}
                 </dd>
@@ -122,39 +124,39 @@ export function TelegramAccountPanel({
             )}
           </dl>
           {/* Причина последней ошибки аккаунта; если только что была ошибка действия — она показана ниже, дважды не выводим. */}
-          {account.lastError && !error && <p className="mt-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{account.lastError}</p>}
+          {account.lastError && !error && <p className="mt-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{t(account.lastError)}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
           {connected ? (
             <>
               <button className={button} disabled={!!busy} onClick={() => run("check", async () => {
                 onChange(await telegramApi.check(account.id));
-                setMessage("Сессия действует.");
+                setMessage(t("Сессия действует."));
               })}>
                 {busy === "check" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                Проверить
+                {t("Проверить")}
               </button>
               <button className={button} disabled={!!busy} onClick={() => setStep("phone")}>
                 <Smartphone className="size-4" />
-                Переподключить
+                {t("Переподключить")}
               </button>
               <button
                 className={danger}
                 disabled={!!busy}
                 onClick={() => {
-                  if (confirm("Отключить аккаунт? OneBase выйдет из сессии Telegram; агент и рассылки этого аккаунта остановятся.")) {
+                  if (confirm(t("Отключить аккаунт? OneBase выйдет из сессии Telegram; агент и рассылки этого аккаунта остановятся."))) {
                     run("disconnect", async () => onChange(await telegramApi.disconnect(account.id)));
                   }
                 }}
               >
                 <LogOut className="size-4" />
-                Отключить
+                {t("Отключить")}
               </button>
             </>
           ) : (
             <button className={primary} disabled={!!busy} onClick={() => setStep("phone")}>
               <Smartphone className="size-4" />
-              Подключить
+              {t("Подключить")}
             </button>
           )}
           {!connected && (
@@ -162,7 +164,7 @@ export function TelegramAccountPanel({
               className={danger}
               disabled={!!busy}
               onClick={() => {
-                if (confirm(`Удалить аккаунт «${account.name}» вместе со списком пользователей, чатами и журналом агента?`)) {
+                if (confirm(t("Удалить аккаунт «{name}» вместе со списком пользователей, чатами и журналом агента?", { name: account.name }))) {
                   run("delete", async () => {
                     await telegramApi.deleteAccount(account.id);
                     await onRemoved();
@@ -171,7 +173,7 @@ export function TelegramAccountPanel({
               }}
             >
               <Trash2 className="size-4" />
-              Удалить
+              {t("Удалить")}
             </button>
           )}
         </div>
@@ -181,8 +183,8 @@ export function TelegramAccountPanel({
         <div className="mt-5 max-w-xl rounded-lg border border-accent/30 bg-accent-soft/30 p-4">
           {step === "phone" && (
             <Step
-              label="Номер телефона аккаунта"
-              hint="Telegram пришлёт код в приложение Telegram на этом номере (или SMS). Прежняя сессия OneBase этого аккаунта завершится."
+              label={t("Номер телефона аккаунта")}
+              hint={t("Telegram пришлёт код в приложение Telegram на этом номере (или SMS). Прежняя сессия OneBase этого аккаунта завершится.")}
               busy={busy === "login"}
               disabled={phone.replace(/\D/g, "").length < 10}
               onCancel={() => setStep("idle")}
@@ -192,15 +194,15 @@ export function TelegramAccountPanel({
                   advance(r.status, r.account);
                 })
               }
-              action="Получить код"
+              action={t("Получить код")}
             >
               <input className={field} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998 90 123 45 67" type="tel" autoComplete="off" />
             </Step>
           )}
           {step === "code" && (
             <Step
-              label="Код из Telegram"
-              hint="Код пришёл в приложение Telegram (чат «Telegram») или SMS. Не пересылайте его никому — даже в OneBase он не сохраняется."
+              label={t("Код из Telegram")}
+              hint={t("Код пришёл в приложение Telegram (чат «Telegram») или SMS. Не пересылайте его никому — даже в OneBase он не сохраняется.")}
               busy={busy === "code"}
               disabled={code.replace(/\D/g, "").length < 4}
               onCancel={() => setStep("idle")}
@@ -211,15 +213,15 @@ export function TelegramAccountPanel({
                   advance(r.status, r.account);
                 })
               }
-              action="Подтвердить"
+              action={t("Подтвердить")}
             >
               <input className={field} value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" autoFocus />
             </Step>
           )}
           {step === "password" && (
             <Step
-              label="Пароль двухэтапной защиты"
-              hint="У аккаунта включена двухэтапная защита (облачный пароль Telegram). Пароль не сохраняется."
+              label={t("Пароль двухэтапной защиты")}
+              hint={t("У аккаунта включена двухэтапная защита (облачный пароль Telegram). Пароль не сохраняется.")}
               busy={busy === "password"}
               disabled={!password}
               onCancel={() => setStep("idle")}
@@ -230,7 +232,7 @@ export function TelegramAccountPanel({
                   advance(r.status, r.account);
                 })
               }
-              action="Войти"
+              action={t("Войти")}
             >
               <input className={field} value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="off" autoFocus />
             </Step>
@@ -242,9 +244,9 @@ export function TelegramAccountPanel({
       {error && <p className="mt-4 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
 
       <Note>
-        OneBase работает от имени этого аккаунта: видит его чаты, отвечает (если включён агент) и рассылает сообщения. Сессия хранится на сервере
-        зашифрованной и в браузер не передаётся. Отозвать доступ можно и из Telegram: «Настройки → Устройства» — сессия «OneBase».
-        Telegram ограничивает частоту сообщений и может заблокировать аккаунт за массовые сообщения незнакомым людям — пишите тем, кто ждёт сообщений.
+        {t(
+          "OneBase работает от имени этого аккаунта: видит его чаты, отвечает (если включён агент) и рассылает сообщения. Сессия хранится на сервере зашифрованной и в браузер не передаётся. Отозвать доступ можно и из Telegram: «Настройки → Устройства» — сессия «OneBase». Telegram ограничивает частоту сообщений и может заблокировать аккаунт за массовые сообщения незнакомым людям — пишите тем, кто ждёт сообщений.",
+        )}
       </Note>
     </div>
   );
@@ -269,6 +271,7 @@ function Step({
   onCancel: () => void;
   children: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <form
       onSubmit={(e) => {
@@ -285,7 +288,7 @@ function Step({
           {action}
         </button>
         <button type="button" className={button} onClick={onCancel} disabled={busy}>
-          Отмена
+          {t("Отмена")}
         </button>
       </div>
     </form>

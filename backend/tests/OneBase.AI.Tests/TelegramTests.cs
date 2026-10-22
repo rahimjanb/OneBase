@@ -1,8 +1,10 @@
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OneBase.AI.Consultant;
+using OneBase.AI.Gateway;
 using OneBase.AI.Providers;
 using OneBase.AI.Reports;
 using OneBase.AI.Telegram;
@@ -289,11 +291,14 @@ public class TelegramTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
             new ConsultantDetails([], [], "fake/consultant", false, Reports: turn.Channel!.AllowReports ? [new ReportRef(reportId, "Продажи по регионам", 1, 1)] : null),
             new AiTokenUsage(10, 5));
 
-        // Отчёты разрешены и аккаунту, и пользователю — файл Excel уходит следом за ответом.
+        // Отчёты разрешены и аккаунту, и пользователю — «минутку», потом только файл Excel, без текста.
         await agent.ProcessAsync(Msg(accountId, Ivan, 1, 5001, "Сделай отчёт по продажам в Excel"), default);
         Assert.True(fixture.Consultant.Turns[^1].Channel!.AllowReports);
+        Assert.Equal(2, fixture.Telegram.Sent.Count);
+        Assert.Equal(GenerationIntent.Ack("auto", "Сделай отчёт по продажам в Excel", 1), fixture.Telegram.Sent[0].Message.Text);
         var file = Assert.Single(fixture.Telegram.Sent[^1].Message.Files);
         Assert.EndsWith(".xlsx", file.FileName);
+        Assert.Null(fixture.Telegram.Sent[^1].Message.Text);
         Assert.Equal(reportId, (await accounts.ExecutionsAsync(accountId, "answered"))[0].ReportId);
 
         // Пользователю отчёты не разрешены — консультант получает запрет, файл не отправляется.
@@ -301,7 +306,8 @@ public class TelegramTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         var sent = fixture.Telegram.Sent.Count;
         await agent.ProcessAsync(Msg(accountId, Ivan, 2, 5001, "Сделай отчёт по продажам в Excel"), default);
         Assert.False(fixture.Consultant.Turns[^1].Channel!.AllowReports);
-        Assert.Equal(sent + 1, fixture.Telegram.Sent.Count);
+        Assert.Equal(sent + 2, fixture.Telegram.Sent.Count); // «минутку» и ответ текстом
+        Assert.Equal("Отчёт готов.", fixture.Telegram.Sent[^1].Message.Text);
         Assert.Empty(fixture.Telegram.Sent[^1].Message.Files);
 
         // Файл от пользователя с полным доступом: разрешённый — текст уходит консультанту; запрещённый тип — отказ.
@@ -320,6 +326,67 @@ public class TelegramTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         await agent.ProcessAsync(Msg(accountId, Dealer, 5, 5002, "Какие продажи?"), default);
         Assert.Equal(turns, fixture.Consultant.Turns.Count);
         Assert.Equal(NoInfo, fixture.Telegram.Sent[^1].Message.Text);
+    }
+
+    [PostgresFact]
+    public async Task Request_for_a_document_gets_a_quick_ack_and_then_only_the_word_file()
+    {
+        await fixture.ResetAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        var accounts = sp.GetRequiredService<TelegramAccountService>();
+        var agent = sp.GetRequiredService<TelegramAgentService>();
+        var accountId = await ConnectAsync(sp);
+        var manager = await ManagerAsync(db);
+        await accounts.SavePermissionAsync(accountId, null, new TelegramPermissionInput(5001, null, "Иван", TelegramAccessMode.Full, manager, true, true), fixture.AdminId);
+        const string letter = "# Письмо дилеру о скидке\n\nУважаемый партнёр!\n\nС **1 ноября** скидка на кекс:\n\n- 15% — от 100 кг\n- 20% — от 500 кг\n\n| Объём | Скидка |\n|---|---|\n| 100 кг | 15% |\n| 500 кг | 20% |";
+        fixture.Consultant.Answer = _ => new ConsultantAnswer(letter, new ConsultantDetails([], [], "fake/consultant", false), new AiTokenUsage(10, 5));
+
+        // Просьба составить письмо: сразу «минутку», потом только файл Word — без текста в чат.
+        await agent.ProcessAsync(Msg(accountId, Ivan, 1, 5001, "Составь письмо дилеру о скидке на кекс"), default);
+        Assert.Contains("документ", fixture.Consultant.Turns[^1].Channel!.Instructions);
+        Assert.Equal(2, fixture.Telegram.Sent.Count);
+        Assert.Equal(GenerationIntent.Ack("auto", "Составь письмо дилеру о скидке на кекс", 1), fixture.Telegram.Sent[0].Message.Text);
+        Assert.Null(fixture.Telegram.Sent[1].Message.Text);
+        var file = Assert.Single(fixture.Telegram.Sent[1].Message.Files);
+        Assert.Equal("Письмо дилеру о скидке.docx", file.FileName);
+        using (var zip = new ZipArchive(new MemoryStream(file.Content)))
+        {
+            using var reader = new StreamReader(zip.GetEntry("word/document.xml")!.Open());
+            var xml = await reader.ReadToEndAsync();
+            Assert.Contains("Уважаемый партнёр!", xml);
+            Assert.Contains("500 кг", xml);
+        }
+
+        var execution = (await accounts.ExecutionsAsync(accountId, "answered"))[0];
+        Assert.StartsWith("[Файл: Письмо дилеру о скидке.docx]", execution.Answer);
+
+        // Документ сделать нельзя — «минутку», потом причина обычным текстом, без файла.
+        fixture.Consultant.Answer = _ => new ConsultantAnswer($"{TelegramAgentService.NoDocMarker}: за сентябрь данных о скидках нет.",
+            new ConsultantDetails([], [], "fake/consultant", false), new AiTokenUsage(10, 5));
+        await agent.ProcessAsync(Msg(accountId, Ivan, 2, 5001, "Подготовь план продаж на ноябрь"), default);
+        Assert.Equal("за сентябрь данных о скидках нет.", fixture.Telegram.Sent[^1].Message.Text);
+        Assert.Empty(fixture.Telegram.Sent[^1].Message.Files);
+
+        // Обычный вопрос — без «минутку» и без файла.
+        fixture.Consultant.Answer = null;
+        var sent = fixture.Telegram.Sent.Count;
+        await agent.ProcessAsync(Msg(accountId, Ivan, 3, 5001, "Какие продажи за сентябрь?"), default);
+        Assert.Equal(sent + 1, fixture.Telegram.Sent.Count);
+        Assert.Contains("<b>Продажи</b>", fixture.Telegram.Sent[^1].Message.Text);
+
+        // Узбекский — «минутку» по-узбекски; в «Проверке» — то же и предпросмотр документа, в Telegram ничего не уходит.
+        fixture.Consultant.Answer = _ => new ConsultantAnswer(letter, new ConsultantDetails([], [], "fake/consultant", false), new AiTokenUsage(10, 5));
+        await agent.ProcessAsync(Msg(accountId, Ivan, 4, 5001, "Dilerga chegirma haqida xat yozing"), default);
+        Assert.Contains("daqiqa", fixture.Telegram.Sent[^2].Message.Text);
+        sent = fixture.Telegram.Sent.Count;
+        var permission = (await accounts.PermissionsAsync(accountId, null, null)).Single();
+        var test = await agent.SimulateAsync(accountId, new AgentTestInput(null, permission.Id, "Составь письмо дилеру о скидке на кекс"), default);
+        Assert.Equal(["Минутку, уже делаю."], test.Replies);
+        Assert.Equal(["Письмо дилеру о скидке.docx"], test.Files);
+        Assert.Contains("Уважаемый партнёр!", test.Document);
+        Assert.Equal(sent, fixture.Telegram.Sent.Count);
     }
 
     // ---------- 1б: кому и когда агент отвечает ----------
@@ -456,6 +523,48 @@ public class TelegramTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         // Файл от пользователя «только отправленные» — не принимается.
         await agent.ProcessAsync(Msg(accountId, Ivan, 32, 5001, "Посмотри файл", file: new TelegramIncomingFile("a.txt", "text/plain", 10)), default);
         Assert.Contains("только от тех, у кого полный доступ", fixture.Telegram.Sent[^1].Message.Text);
+    }
+
+    [PostgresFact]
+    public async Task Plain_questions_use_the_answer_model_and_requests_to_compose_use_the_generation_model()
+    {
+        await fixture.ResetAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        var accounts = sp.GetRequiredService<TelegramAccountService>();
+        var agent = sp.GetRequiredService<TelegramAgentService>();
+        var gpt = new AiModelRef("openai", "gpt-5");
+        var claude = new AiModelRef("anthropic", "claude-opus-5-5");
+        var accountId = await ConnectAsync(sp, Settings(replyToUnknown: true) with { Model = "openai/gpt-5", GenerationModel = "anthropic/claude-opus-5-5" });
+        var saved = await accounts.SettingsAsync(accountId);
+        Assert.Equal(("anthropic", "claude-opus-5-5"), (saved.GenerationModelProvider, saved.GenerationModel));
+
+        // Обычный вопрос — модель ответов (OpenAI).
+        fixture.Gateway.Script.Enqueue(_ => "Акций сейчас нет.");
+        await agent.SimulateAsync(accountId, new AgentTestInput(null, null, "Какие сейчас акции?"), default);
+        Assert.Equal((gpt, 1500), (fixture.Gateway.Calls[^1].Options.Model, fixture.Gateway.Calls[^1].Options.MaxOutputTokens));
+
+        // Просьба составить письмо — модель генерации (Claude), и места для ответа больше.
+        fixture.Gateway.Script.Enqueue(_ => "Уважаемый партнёр! С 1 ноября скидка 15% на кекс.");
+        await agent.SimulateAsync(accountId, new AgentTestInput(null, null, "Составь письмо дилеру о скидке на кекс"), default);
+        Assert.Equal((claude, 4000), (fixture.Gateway.Calls[^1].Options.Model, fixture.Gateway.Calls[^1].Options.MaxOutputTokens));
+
+        // Полный доступ: обычный вопрос — консультант на модели ответов; отчёт — Claude и у ответа, и у AI-сотрудников, которые его собирают.
+        var manager = await ManagerAsync(db);
+        await accounts.SaveAccessAsync(accountId, new TelegramAccessInput(true, manager), fixture.AdminId);
+        fixture.Telegram.Users["ivan"] = new TelegramResolvedUser(5001, "Ivan", "Иван Петров", false);
+        var ivan = await accounts.SavePermissionAsync(accountId, null, new TelegramPermissionInput(null, "@Ivan", null, TelegramAccessMode.Full, null, true, true), fixture.AdminId);
+        await agent.SimulateAsync(accountId, new AgentTestInput(null, ivan.Id, "Какие продажи за сентябрь?"), default);
+        Assert.Equal((gpt, (AiModelRef?)null), (fixture.Consultant.Turns[^1].Channel!.Model, fixture.Consultant.Turns[^1].Channel!.AgentModel));
+        await agent.SimulateAsync(accountId, new AgentTestInput(null, ivan.Id, "Собери отчёт по продажам за сентябрь по регионам"), default);
+        Assert.Equal((claude, claude), (fixture.Consultant.Turns[^1].Channel!.Model, fixture.Consultant.Turns[^1].Channel!.AgentModel));
+
+        // Модель генерации не задана и ключа Anthropic нет — просьба тоже идёт в модель ответов.
+        await accounts.SaveSettingsAsync(accountId, Settings(replyToUnknown: true) with { Model = "openai/gpt-5" }, fixture.AdminId);
+        fixture.Gateway.Script.Enqueue(_ => "Уважаемый партнёр!");
+        await agent.SimulateAsync(accountId, new AgentTestInput(null, null, "Составь письмо дилеру о скидке на кекс"), default);
+        Assert.Equal((gpt, 1500), (fixture.Gateway.Calls[^1].Options.Model, fixture.Gateway.Calls[^1].Options.MaxOutputTokens));
     }
 
     [PostgresFact]
@@ -826,6 +935,70 @@ public class TelegramRulesTests
     public void Api_views_serialize_with_web_json_options(Type type) =>
         Assert.NotNull(new JsonSerializerOptions(JsonSerializerDefaults.Web) { TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver() }
             .GetTypeInfo(type));
+
+    /// <summary>Просьба что-то сформировать (отчёт, письмо, таблицу, план) — модель генерации; обычный вопрос — модель ответов.</summary>
+    [Theory]
+    [InlineData("Собери отчёт по продажам за сентябрь", true)]
+    [InlineData("Составь письмо дилеру о скидке", true)]
+    [InlineData("Сделай таблицу по регионам", true)]
+    [InlineData("Подготовь план продаж на ноябрь", true)]
+    [InlineData("Напиши пост для канала про новый кекс", true)]
+    [InlineData("Viloyatlar bo'yicha jadval tuzib ber", true)]
+    [InlineData("Dilerga xat yozing", true)]
+    [InlineData("Продажи по регионам в Excel", true)]
+    [InlineData("Нужен отчёт по продажам за сентябрь", true)]
+    [InlineData("Пришли отчёт по Хорезму", true)]
+    [InlineData("Hisobot kerak", true)]
+    [InlineData("Когда будет следующий отчёт?", false)]
+    [InlineData("Что в отчёте?", false)]
+    [InlineData("Насколько всё плохо по отчёту?", false)]
+    [InlineData("Hisobot qachon keladi?", false)]
+    [InlineData("Какие продажи в Хорезме за сентябрь?", false)]
+    [InlineData("Сколько осталось на складе?", false)]
+    [InlineData("Собери данные по поставкам", false)]
+    [InlineData("Напиши, кто сегодня не вышел на маршрут", false)]
+    [InlineData("Xorazmda savdo qanday?", false)]
+    [InlineData("", false)]
+    public void Generation_requests_are_told_apart_from_questions(string question, bool generation) =>
+        Assert.Equal(generation, GenerationIntent.Requested(question));
+
+    [Theory]
+    [InlineData("auto", "Составь письмо дилеру", "Минутку")]
+    [InlineData("auto", "Viloyatlar bo'yicha jadval tuzib ber", "daqiqa")]
+    [InlineData("auto", "Ҳисобот тайёрла", "daqiqa")]
+    [InlineData("auto", "Please prepare a sales report", "One moment")]
+    [InlineData("ru", "Prepare a report", "Минутку")]
+    [InlineData("uz", "Сделай отчёт", "daqiqa")]
+    public void Ack_is_in_the_language_of_the_chat(string language, string question, string expected) =>
+        Assert.Contains(expected, GenerationIntent.Ack(language, question, 0));
+
+    [Fact]
+    public void Ack_phrase_varies_and_document_title_comes_from_the_heading()
+    {
+        Assert.Equal(3, Enumerable.Range(0, 6).Select(i => GenerationIntent.Ack("ru", "", i)).Distinct().Count());
+        Assert.NotEmpty(GenerationIntent.Ack("ru", "", -1));
+        Assert.Equal("План продаж на ноябрь", TelegramAgentService.DocumentTitle("# План продаж на **ноябрь**\n\nТекст", "вопрос"));
+        Assert.Equal("Уважаемый партнёр!", TelegramAgentService.DocumentTitle("Уважаемый партнёр!\n\nТекст", "вопрос"));
+        Assert.EndsWith("…", TelegramAgentService.DocumentTitle(string.Join(' ', Enumerable.Repeat("очень длинная строка", 10)), "вопрос"));
+    }
+
+    /// <summary>Документ Word из Markdown AI проходит проверку схемы Open XML (Word его откроет) и содержит текст, списки и таблицу.</summary>
+    [Fact]
+    public void Markdown_becomes_a_valid_word_document()
+    {
+        var markdown = "# Отчёт по Хорезму\n\nВыполнение **96%**, рост *к августу* +4% ([страница](https://1base.uz/sales)).\n\n## Что сделать\n\n1. Догрузить кекс\n2. Проверить `ТП-12`\n   - вложенный пункт\n\n> Важно: срок до 31.10\n\n---\n\n| Регион | Кг | % |\n|:---|---:|---:|\n| Хорезм | 35 600 | 96 |\n| Бухара | 12 000 |\n\n```\nкод\n```\nстрока\u0001с управляющим знаком";
+        var bytes = new OneBase.Infrastructure.Reports.DocumentWriter().Write("Отчёт по Хорезму", markdown, DateTimeOffset.UtcNow);
+        using var document = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(new MemoryStream(bytes), false);
+        var errors = new DocumentFormat.OpenXml.Validation.OpenXmlValidator().Validate(document).Select(e => $"{e.Path?.XPath}: {e.Description}").ToList();
+        Assert.Empty(errors);
+        var text = document.MainDocumentPart!.Document.Body!.InnerText;
+        Assert.Contains("Выполнение 96%", text);
+        Assert.Contains("страница (https://1base.uz/sales)", text);
+        Assert.Contains("Догрузить кекс", text);
+        Assert.Contains("35 600", text);
+        Assert.Equal("Отчёт по Хорезму", document.PackageProperties.Title);
+        Assert.Single(document.MainDocumentPart.Document.Body.Elements<DocumentFormat.OpenXml.Wordprocessing.Table>());
+    }
 
     [Fact]
     public void Link_codes_phones_and_usernames()

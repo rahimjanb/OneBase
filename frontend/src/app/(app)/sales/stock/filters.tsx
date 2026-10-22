@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/i18n/client";
 import { num } from "@/lib/sales/format";
 import type { StockView } from "@/lib/sales/types";
 
@@ -30,6 +31,7 @@ function useSetParams() {
  * в адресе (q), поэтому переживает смену охвата, категории, ТОПа и статуса (DOC-filters §12).
  */
 export function StockSearch({ value }: { value: string }) {
+  const t = useT();
   const set = useSetParams();
   const [text, setText] = useState(value);
   const pushed = useRef(value);
@@ -45,8 +47,8 @@ export function StockSearch({ value }: { value: string }) {
     <input
       type="search"
       value={text}
-      placeholder="Поиск: код или название"
-      aria-label="Поиск по товарам"
+      placeholder={t("Поиск: код или название")}
+      aria-label={t("Поиск по товарам")}
       autoComplete="off"
       onChange={(e) => {
         const v = e.target.value;
@@ -64,18 +66,19 @@ export function StockSearch({ value }: { value: string }) {
 
 /** Охват: вся страна (склады дилеров), РМ, регион, завод, экспорт — параметр scope. */
 export function StockScopeSelect({ data }: { data: StockView }) {
+  const t = useT();
   const set = useSetParams();
   return (
     <label className="inline-flex items-center gap-2 text-sm text-ink-2 max-lg:w-full">
-      Охват
+      {t("Охват")}
       <select
         value={data.scope === "country" ? "" : data.scope}
         onChange={(e) => set({ scope: e.target.value || null, region: null })}
         className={`${control} font-medium max-lg:min-w-0 max-lg:flex-1`}
       >
-        <option value="">Вся страна (склады дилеров)</option>
+        <option value="">{t("Вся страна (склады дилеров)")}</option>
         {data.directions.length > 0 && (
-          <optgroup label="РМ">
+          <optgroup label={t("РМ")}>
             {data.directions.map((d) => (
               <option key={d.id} value={`rm:${d.id}`}>
                 {d.name}
@@ -83,7 +86,7 @@ export function StockScopeSelect({ data }: { data: StockView }) {
             ))}
           </optgroup>
         )}
-        <optgroup label="Регионы">
+        <optgroup label={t("Регионы")}>
           {data.regions.map((r) => (
             <option key={r.id} value={`region:${r.id}`}>
               {r.name}
@@ -91,7 +94,7 @@ export function StockScopeSelect({ data }: { data: StockView }) {
           ))}
         </optgroup>
         {(data.factory || data.export) && (
-          <optgroup label="Отдельные склады">
+          <optgroup label={t("Отдельные склады")}>
             {data.factory && <option value="plant">{data.factory.name}</option>}
             {data.export && <option value="export">{data.export.name}</option>}
           </optgroup>
@@ -103,19 +106,20 @@ export function StockScopeSelect({ data }: { data: StockView }) {
 
 /** Фасовка из названия — несколько значений (параметр pack); список весов — по всем товарам охвата, не по отфильтрованным. */
 export function PackFilter({ packs, selected }: { packs: number[]; selected: number[] }) {
+  const t = useT();
   const set = useSetParams();
-  const label = (p: number) => `${num(p, p < 0.1 ? 3 : 2)} кг`;
+  const label = (p: number) => `${num(p, p < 0.1 ? 3 : 2)} ${t("кг")}`;
   if (packs.length === 0) return null;
   const toggle = (p: number) => set({ pack: (selected.includes(p) ? selected.filter((x) => x !== p) : [...selected, p]).join(",") || null });
   return (
     <details className="relative">
       <summary className={`${control} inline-flex cursor-pointer select-none list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden`}>
-        Фасовка: <span className="font-medium">{selected.length ? selected.map(label).join(", ") : "все веса"}</span>
+        {t("Фасовка:")} <span className="font-medium">{selected.length ? selected.map(label).join(", ") : t("все веса")}</span>
       </summary>
       <div className="absolute left-0 top-full z-20 mt-1 max-h-72 min-w-[190px] overflow-y-auto rounded-lg border border-line bg-surface-solid p-2 shadow-lg">
         {selected.length > 0 && (
           <button type="button" onClick={() => set({ pack: null })} className="mb-1 block w-full rounded px-2 py-1 text-left text-xs font-medium text-accent hover:bg-muted">
-            Все веса
+            {t("Все веса")}
           </button>
         )}
         {packs.map((p) => (

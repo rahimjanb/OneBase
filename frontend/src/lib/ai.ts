@@ -1,3 +1,5 @@
+import type { T } from "@/i18n/core";
+
 export type AiProviderStatus = "connected" | "error" | "disabled" | "not_configured";
 
 export type AiProviderView = {
@@ -241,6 +243,23 @@ export type AiLogRow = {
   responsePreview: string | null;
   error: string | null;
 };
+
+/**
+ * Единицы в готовом тексте сервера («12,3 т», «5 400 кг», «1,2 млн сум», «3 дн.») — на языке интерфейса.
+ * Нужно находкам AI Dashboard: числа с единицами сервер подставляет в текст, и шаблон перевода оставляет их как есть.
+ */
+export function localizeUnits(text: string, t: T): string {
+  return text.replace(/(\d)(\s)(млн сум|сум|кг|т|дн\.)(?=$|[\s.,;:)])/g, (_, digit: string, space: string, unit: string) =>
+    `${digit}${space}${unit.split(" ").map((u) => t(u)).join(" ")}`,
+  );
+}
+
+/** Текст находки AI Dashboard (заголовок, описание, рекомендация) на языке интерфейса. */
+export const alertText = (text: string, t: T) => localizeUnits(t(text), t);
+
+/** Служебные «пользователи» журнала и учёта AI (имена людей — данные, их не переводим). */
+const systemUsers = new Set(["система", "удалённый пользователь"]);
+export const userLabel = (name: string, t: T) => (systemUsers.has(name) ? t(name) : name);
 
 export const purposeNames: Record<string, string> = {
   "consultant.route": "Маршрутизация",

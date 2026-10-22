@@ -43,6 +43,9 @@ public static class StockStatuses
 
     public const string Ok = "ok";
 
+    /// <summary>Ни остатка, ни продаж за базу — «нет остатка» (как в «Полевом контроле»), а не «норма».</summary>
+    public const string Empty = "empty";
+
     /// <summary>Нет веса штуки — дни запаса не посчитать.</summary>
     public const string Unknown = "unknown";
 
@@ -58,7 +61,7 @@ public static class StockStatuses
 
         if (kgPerDay is not > 0)
         {
-            return kg > 0 ? Dead : Ok;
+            return kg > 0 ? Dead : Empty;
         }
 
         var days = kg.Value / kgPerDay.Value;
@@ -246,6 +249,85 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
     {
         var b = await SalesViewCache.GetAsync(cache, signal, "sales:stock:base", () => BuildBaseAsync(ct));
         return Compose(b, q);
+    }
+
+    private static readonly StringComparer Russian = StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), false);
+
+    /// <summary>Автозаказ региона (см. <see cref="ComposeAutoOrder"/>).</summary>
+    public async Task<AutoOrderView> AutoOrderAsync(string? regionId, CancellationToken ct = default) =>
+        ComposeAutoOrder(await SalesViewCache.GetAsync(cache, signal, "sales:stock:base", () => BuildBaseAsync(ct)), regionId);
+
+    /// <summary>Акт приёма-передачи по коробкам автозаказа (см. <see cref="ComposeAct"/>); дата по умолчанию — сегодня по Ташкенту.</summary>
+    public async Task<TransferAct> TransferActAsync(AutoOrderActInput input, CancellationToken ct = default)
+    {
+        var b = await SalesViewCache.GetAsync(cache, signal, "sales:stock:base", () => BuildBaseAsync(ct));
+        var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(StockSnapshotBuilder.CompanyOffset).DateTime);
+        return ComposeAct(b, input, options.TransferActSender, today);
+    }
+
+    /// <summary>
+    /// Автозаказ региона — без фильтров страницы: все товары, у которых известна коробка (единица Linko и сколько единиц в коробке),
+    /// рекомендация — рекомендуемый заказ склада региона в коробках. Регион не задан или не найден — первый по алфавиту.
+    /// </summary>
+    public static AutoOrderView ComposeAutoOrder(StockBase b, string? regionId)
+    {
+        var s = b.Snapshot;
+        var regions = s.Regions.OrderBy(r => r.Name, Russian).ToList();
+        var region = regions.FirstOrDefault(r => string.Equals(r.Id, regionId, StringComparison.OrdinalIgnoreCase)) ?? regions.FirstOrDefault()
+                     ?? throw new KeyNotFoundException("Складов дилеров нет — остатки ещё не загружены из Linko.");
+        var items = new List<AutoOrderItem>();
+        var withoutBox = 0;
+        foreach (var i in b.Items)
+        {
+            var p = i.Product;
+            var unit = AutoOrderMath.UnitOf(p.Measurement, p.UnitKg);
+            if (p.BoxKg is not > 0 || AutoOrderMath.UnitsPerBox(unit, p.Pack, p.UnitKg, p.BoxKg) is not { } perBox)
+            {
+                withoutBox++;
+                continue;
+            }
+
+            var cell = i.Regions.GetValueOrDefault(region.Id);
+            var rec = cell is null ? 0 : (int)Math.Round(cell.OrderKg / p.BoxKg.Value);
+            items.Add(new AutoOrderItem(p.Id, p.Code, p.Name, i.Category, i.Top, unit, perBox, p.BoxKg, p.Price, rec, cell?.Kg ?? 0, cell?.KgPerDay));
+        }
+
+        return new AutoOrderView(region.Id, region.Name, regions, s.SnapshotDate, s.PriceList, StockMath.OrderCoverDays,
+            items.OrderByDescending(x => x.RecBoxes > 0).ThenBy(x => x.Category, Russian).ThenBy(x => x.Name, Russian).ToList(), withoutBox);
+    }
+
+    /// <summary>
+    /// Акт приёма-передачи «Завод → регион» по коробкам автозаказа: названия, единицы, количество и цены — с сервера (с клиента только
+    /// коробки), строки — по категории и названию, как в бланке Linko. Товар, которого нет в автозаказе региона, отбрасывается.
+    /// </summary>
+    public static TransferAct ComposeAct(StockBase b, AutoOrderActInput input, string sender, DateOnly today)
+    {
+        if (string.IsNullOrWhiteSpace(input.RegionId))
+        {
+            throw new ArgumentException("Не выбран регион.");
+        }
+
+        var view = ComposeAutoOrder(b, input.RegionId);
+        if (!string.Equals(view.RegionId, input.RegionId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new KeyNotFoundException("Регион не найден среди складов дилеров.");
+        }
+
+        var byId = view.Items.ToDictionary(x => x.ProductId);
+        var rows = (input.Lines ?? [])
+            .Where(l => l.Boxes > 0 && byId.ContainsKey(l.ProductId))
+            .GroupBy(l => l.ProductId)
+            .Select(g => (Item: byId[g.Key], Boxes: Math.Min(g.Last().Boxes, 1_000_000)))
+            .OrderBy(x => x.Item.Category, Russian)
+            .ThenBy(x => x.Item.Name, Russian)
+            .Select(x => AutoOrderMath.Row(x.Item, x.Boxes))
+            .ToList();
+        if (rows.Count == 0)
+        {
+            throw new ArgumentException("В акте нет ни одной коробки.");
+        }
+
+        return new TransferAct(b.Snapshot.Factory?.Name ?? "Завод", view.RegionName, input.Date ?? today, sender, rows, rows.Sum(r => r.Sum ?? 0));
     }
 
     /// <summary>Фасовки из адреса: «3,2.5,0.18».</summary>
@@ -558,7 +640,7 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
                 var kg87 = baseKg.GetValueOrDefault((region.Id, productId));
                 var raw = Math.Max(0, kg87) / days;
                 var (corrected, z) = StockMath.CorrectedKgPerDay(kg87, days, zeroDays.GetValueOrDefault((region.Id, productId)));
-                var cell = Cell(s, product, region.StockId, corrected, raw, z, corrected, null);
+                var cell = Cell(s, product, region.StockId, corrected, raw, z, corrected, null, top.Contains(product.Code));
                 cells[region.Id] = cell;
                 countryRaw += raw;
                 countryCorrected += corrected;
@@ -592,11 +674,12 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
     /// Клетка склада: у дилера заказ — до запаса на 15 дней по скорости с поправкой (orderSpeed), у завода — заказы дилеров минус его остаток
     /// (dealerOrdersKg), у экспорта ни скорости, ни заказа.
     /// </summary>
-    private static StockCell Cell(StockSnapshot s, StockProduct p, long stockId, decimal? kgPerDay, decimal? rawKgPerDay, int zeroDays, decimal? orderSpeed, decimal? dealerOrdersKg)
+    private static StockCell Cell(StockSnapshot s, StockProduct p, long stockId, decimal? kgPerDay, decimal? rawKgPerDay, int zeroDays, decimal? orderSpeed, decimal? dealerOrdersKg,
+        bool top = false)
     {
         var pieces = s.PiecesOf(p.Id, stockId);
         var kg = StockMath.Kg(pieces, p.UnitKg) ?? 0;
-        var order = orderSpeed is { } speed ? StockMath.OrderKg(speed, kg, p.BoxKg)
+        var order = orderSpeed is { } speed ? (top ? StockMath.TopStartKg(speed, kg, p.BoxKg) : null) ?? StockMath.OrderKg(speed, kg, p.BoxKg)
             : dealerOrdersKg is { } demand ? StockMath.FactoryOrderKg(demand, kg)
             : 0;
         var orderPieces = p.UnitKg is { } u && u > 0 ? order / u : (decimal?)null;

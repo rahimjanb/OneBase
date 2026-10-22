@@ -5,7 +5,7 @@ namespace OneBase.Domain.Files;
 /// <summary>
 /// Подключение папки отдела к Windows (WebDAV по HTTPS): один логин на отдел. Пароль хранится дважды — хэшем для проверки входа и
 /// зашифрованным Data Protection (<see cref="ProtectedPassword"/>), чтобы его можно было показать сотрудникам отдела ещё раз.
-/// Открытого пароля в базе нет.
+/// Открытого пароля в базе нет. Секретная ссылка (адрес без пароля /k/{код}/{отдел}) — так же: хэш для входа и шифр для «Показать».
 /// </summary>
 public class FileConnection : Entity
 {
@@ -17,6 +17,15 @@ public class FileConnection : Entity
     public required string PasswordHash { get; set; }
 
     public required string ProtectedPassword { get; set; }
+
+    /// <summary>SHA-256 кода секретной ссылки — по нему WebDAV находит подключение без логина и пароля; null — ссылки ещё нет.</summary>
+    public string? LinkTokenHash { get; set; }
+
+    /// <summary>Код ссылки, зашифрованный Data Protection, — для «Показать» и «Скопировать».</summary>
+    public string? ProtectedLinkToken { get; set; }
+
+    /// <summary>Когда ссылку выпустили последний раз.</summary>
+    public DateTimeOffset? LinkChangedAt { get; set; }
 
     /// <summary>Что даёт подключение в папке своего отдела: чтение или чтение и запись.</summary>
     public AccessLevel Access { get; set; } = AccessLevel.Write;

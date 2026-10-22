@@ -56,7 +56,25 @@ public sealed record LinkoOrderLineDto(
     decimal? ReturnAmount,
     decimal? Price,
     decimal? TotalPrice,
-    decimal? TotalWeight);
+    decimal? TotalWeight,
+    decimal? OriginPrice = null,
+    decimal? TotalDiscount = null,
+    decimal? DiscountPercent = null);
+
+public sealed record LinkoPromotionProductDto(LinkoRef? Product, decimal? Amount, string? Type);
+
+public sealed record LinkoPromotionDto(
+    long Id,
+    string? Name,
+    string? Type,
+    string? PromotionType,
+    string? DiscountType,
+    decimal? Discount,
+    DateTime? BeginDate,
+    DateTime? TillDate,
+    bool? IsApplyAll,
+    decimal? Tm,
+    List<LinkoPromotionProductDto>? Products);
 
 public sealed record LinkoOrderDto(
     long Id,
@@ -164,8 +182,9 @@ public sealed record LinkoCurrencyDto(long Id, string? Name);
 
 public sealed record LinkoContractDto(long Id, DateTime? Date, string? Number, string? Status, bool? IsDelete, decimal? Tm);
 
-// ---------- API планов (staff_balance) ----------
-// Читаются только нужные поля: зарплата, бонусы и контакты сотрудников не загружаются.
+// ---------- API планов (staff_balance, performance_indicator) ----------
+// Читаются только нужные поля: план, факт, уровень, оклад и начисленная премия (раздел «KPI», право finance.read); контакты сотрудников
+// не загружаются.
 
 public sealed record LinkoStaffLastDate(DateTime? LastDate);
 
@@ -183,7 +202,22 @@ public sealed record LinkoStaffBalanceDto(
     decimal? PlanForecast,
     decimal? FactPercent,
     decimal? ForecastPercent,
-    LinkoStaffIndicator? PerformanceIndicator);
+    LinkoStaffIndicator? PerformanceIndicator,
+    decimal? SalaryAmount = null,
+    decimal? BonusAmount = null);
+
+/// <summary>Страница API планов: count, next (ссылка с токеном — не логировать), results.</summary>
+public sealed record LinkoStaffPage<T>(int Count, string? Next, List<T>? Results);
+
+public sealed record LinkoIndicatorLevelDto(long Id, string? CalculationType, decimal? FromAmount, decimal? ToAmount, decimal? BonusAmount);
+
+public sealed record LinkoPerformanceIndicatorDto(
+    long Id,
+    string? Name,
+    string? PlanType,
+    bool? ForSupervisor,
+    bool? IsActive,
+    List<LinkoIndicatorLevelDto>? Levels);
 
 public sealed record LinkoKpiPlanDto(
     long Id,

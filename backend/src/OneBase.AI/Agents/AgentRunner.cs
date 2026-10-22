@@ -16,7 +16,8 @@ namespace OneBase.AI.Agents;
 /// Задача AI-сотруднику: что выяснить и (от оркестратора) что уже известно от других сотрудников. Report — пользователь сам попросил
 /// отчёт Excel (ReportIntent): только тогда сотруднику даётся инструмент create_report.
 /// </summary>
-public sealed record AgentTask(string AgentCode, string Task, Guid UserId, Guid? ConversationId = null, string? Context = null, bool Report = false);
+/// <summary>Model — модель для этого запуска вместо модели сотрудника (канал попросил другую, например Claude для генерации отчёта).</summary>
+public sealed record AgentTask(string AgentCode, string Task, Guid UserId, Guid? ConversationId = null, string? Context = null, bool Report = false, AiModelRef? Model = null);
 
 public sealed record AgentRun(AgentResult Result, AiTokenUsage Usage, string? Model);
 
@@ -94,7 +95,7 @@ public sealed class AgentRunner(
         string? model = null;
         var options = new AiCallOptions
         {
-            Model = agent.Model,
+            Model = task.Model ?? agent.Model,
             Temperature = agent.Temperature,
             MaxOutputTokens = agent.MaxOutputTokens,
             JsonOutput = true,

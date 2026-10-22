@@ -4,13 +4,17 @@ import { MessageSquareText } from "lucide-react";
 import { ParamSelect } from "@/components/field/DateSwitch";
 import { GenerateButton, RecommendationList } from "@/components/field/Recommendations";
 import { FieldPage, Pager, Panel, Tabs, buttonClass } from "@/components/field/ui";
+import { getT } from "@/i18n/server";
 import { fieldGet, fieldMe, qs, sp, type FieldSearchParams } from "@/lib/field/api";
 import { oneBaseHref, requestHost } from "@/lib/field/host";
 import { recommendationKindLabel } from "@/lib/field/labels";
 import { apiTry } from "@/lib/server-api";
 import type { FieldRecommendation, Page } from "@/lib/field/types";
 
-export const metadata = { title: "AI-планирование" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("AI-планирование") };
+}
 
 type AgentOption = { id: string; name: string; teamName: string | null; role: string };
 
@@ -20,6 +24,7 @@ type AgentOption = { id: string; name: string; teamName: string | null; role: st
  */
 export default async function AiPage({ searchParams }: { searchParams: Promise<FieldSearchParams> }) {
   const params = await searchParams;
+  const t = await getT();
   const me = await fieldMe();
   if (me.role === "Agent") redirect("/field/tasks?by=Ai");
   const status = sp(params, "status") ?? "pending";
@@ -40,29 +45,29 @@ export default async function AiPage({ searchParams }: { searchParams: Promise<F
   };
 
   return (
-    <FieldPage title="AI-планирование" subtitle="Какие точки посетить, кому назначить, где агент не выполняет план" actions={<GenerateButton />}>
+    <FieldPage title={t("AI-планирование")} subtitle={t("Какие точки посетить, кому назначить, где агент не выполняет план")} actions={<GenerateButton />}>
       <Tabs
         items={[
-          { key: "pending", label: `Ждут решения${status === "pending" ? ` · ${data.total}` : ""}`, href: link({ status: null }) },
-          { key: "decided", label: "Решённые", href: link({ status: "decided" }) },
-          { key: "all", label: "Все", href: link({ status: "all" }) },
+          { key: "pending", label: `${t("Ждут решения")}${status === "pending" ? ` · ${data.total}` : ""}`, href: link({ status: null }) },
+          { key: "decided", label: t("Решённые"), href: link({ status: "decided" }) },
+          { key: "all", label: t("Все"), href: link({ status: "all" }) },
         ]}
         current={status}
       />
-      <ParamSelect param="kind" value={kind ?? ""} label="Тип" options={[{ value: "", label: "Все типы" }, ...Object.entries(recommendationKindLabel).map(([k, l]) => ({ value: k, label: l }))]} />
+      <ParamSelect param="kind" value={kind ?? ""} label={t("Тип")} options={[{ value: "", label: t("Все типы") }, ...Object.entries(recommendationKindLabel).map(([k, l]) => ({ value: k, label: t(l) }))]} />
       <RecommendationList items={data.items} agents={agents.filter((a) => a.role === "Agent").map((a) => ({ id: a.id, name: a.name, teamName: a.teamName }))} />
       <Pager page={data.page} pageSize={data.pageSize} total={data.total} href={(p) => link({ page: p })} />
 
-      <Panel title="AI-консультант" hint="вопросы по данным продаж и команды">
-        <p className="text-sm text-ink-2">«Почему команда сегодня не выполняет план?», «Какие магазины требуют визита?», «Кто из агентов хуже выполняет маршрут?», «Кому завтра дать больше точек?»</p>
+      <Panel title={t("AI-консультант")} hint={t("вопросы по данным продаж и команды")}>
+        <p className="text-sm text-ink-2">{t("«Почему команда сегодня не выполняет план?», «Какие магазины требуют визита?», «Кто из агентов хуже выполняет маршрут?», «Кому завтра дать больше точек?»")}</p>
         {canAsk && consultantHref ? (
           <a href={consultantHref} className={`${buttonClass.outline} mt-3`}>
-            <MessageSquareText className="size-4" /> Открыть консультанта
+            <MessageSquareText className="size-4" /> {t("Открыть консультанта")}
           </a>
         ) : canAsk ? (
-          <p className="mt-2 text-xs text-ink-3">Консультант открывается в OneBase.</p>
+          <p className="mt-2 text-xs text-ink-3">{t("Консультант открывается в OneBase.")}</p>
         ) : (
-          <p className="mt-2 text-xs text-ink-3">Консультант доступен ролям с правом «AI-консультант» (у РМ оно есть по умолчанию).</p>
+          <p className="mt-2 text-xs text-ink-3">{t("Консультант доступен ролям с правом «AI-консультант» (у РМ оно есть по умолчанию).")}</p>
         )}
       </Panel>
     </FieldPage>

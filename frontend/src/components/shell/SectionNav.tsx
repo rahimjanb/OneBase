@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { activeSalesTab, salesTabs, type SalesTab } from "@/components/sales/tabs";
 import { periodQuery } from "@/lib/sales/query";
+import { useT } from "@/i18n/client";
 
 /**
  * Кнопки разделов в верхней панели — только внутри «Продаж»; в других разделах панель без них.
@@ -12,6 +13,7 @@ import { periodQuery } from "@/lib/sales/query";
  * Нажатая кнопка подсвечивается сразу, а не после загрузки страницы: иначе ещё секунду горит прежний раздел.
  */
 export function SectionNav({ permissions }: { permissions: string[] | null }) {
+  const tr = useT();
   const pathname = usePathname();
   const params = useSearchParams();
   // Нажатая кнопка — пока адрес не сменился; после перехода подсветку определяет адрес.
@@ -25,7 +27,7 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
   const query = periodQuery(Object.fromEntries(params));
 
   return (
-    <nav className="no-scrollbar order-last flex basis-full gap-2 -mx-1 overflow-x-auto px-1 py-1 pb-3 lg:order-none lg:min-w-0 lg:shrink lg:basis-auto lg:pb-1" aria-label="Разделы продаж">
+    <nav className="no-scrollbar order-last flex basis-full gap-2 -mx-1 overflow-x-auto px-1 py-1 pb-3 lg:order-none lg:min-w-0 lg:shrink lg:basis-auto lg:pb-1" aria-label={tr("Разделы продаж")}>
       {salesTabs.filter((t) => !t.permission || permissions?.includes(t.permission)).map((t) => {
         const on = active === t.key;
         return (
@@ -41,7 +43,7 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
             }`}
           >
             <t.icon className="size-3.5 shrink-0" strokeWidth={1.75} />
-            {t.label}
+            {tr(t.label)}
           </Link>
         );
       })}

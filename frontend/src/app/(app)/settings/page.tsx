@@ -2,10 +2,14 @@ import Link from "next/link";
 import { ArrowRight, Bot, Building2, DatabaseZap, FileSpreadsheet, Plug, ScrollText, Send, Sparkle, TrendingUp, Users } from "lucide-react";
 import { redirect } from "next/navigation";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import { getT } from "@/i18n/server";
 import { apiGet } from "@/lib/server-api";
 import { has, type Me } from "@/lib/users";
 
-export const metadata = { title: "Настройки · OneBase" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Настройки · OneBase") };
+}
 
 /** Карточка видна только с правом permission: директору — лишь «Пользователи и роли», сотрудникам раздел закрыт. */
 const sections = [
@@ -73,9 +77,14 @@ export default async function SettingsPage() {
   const me = await apiGet<Me>("/api/auth/me", "/settings");
   if (!me.canOpenSettings) redirect("/no-access?from=%2Fsettings");
   const visible = sections.filter((s) => has(me, s.permission));
+  const t = await getT();
   return (
     <>
-      <PageHeader title="Настройки" subtitle="Компания, пользователи, доступы и интеграции" breadcrumbs={[{ label: "OneBase", href: "/" }, { label: "Настройки" }]} />
+      <PageHeader
+        title={t("Настройки")}
+        subtitle={t("Компания, пользователи, доступы и интеграции")}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Настройки") }]}
+      />
       <PageBody>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visible.map((s) => {
@@ -85,14 +94,14 @@ export default async function SettingsPage() {
                   <span className="grid size-10 place-items-center rounded-full bg-accent-soft text-accent-strong">
                     <s.icon className="size-[18px]" />
                   </span>
-                  <span className="flex-1 font-semibold text-ink">{s.title}</span>
+                  <span className="flex-1 font-semibold text-ink">{t(s.title)}</span>
                   {s.href ? (
                     <ArrowRight className="size-4 text-ink-3 group-hover:text-accent-strong" />
                   ) : (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-ink-3">скоро</span>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-ink-3">{t("скоро")}</span>
                   )}
                 </div>
-                <p className="mt-3 text-sm text-ink-2">{s.text}</p>
+                <p className="mt-3 text-sm text-ink-2">{t(s.text)}</p>
               </div>
             );
             return s.href ? (

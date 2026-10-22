@@ -1,25 +1,30 @@
 import Link from "next/link";
 import { ShieldAlert } from "lucide-react";
 import { LogoutLink } from "@/components/shell/AppBridge";
+import { getT } from "@/i18n/server";
 
-export const metadata = { title: "Нет доступа · OneBase" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Нет доступа · OneBase") };
+}
 
-export default function NoAccessPage() {
+export default async function NoAccessPage() {
+  const t = await getT();
   return (
     <div className="mx-auto max-w-[1800px] px-4 py-16 sm:px-6">
       <div className="max-w-lg rounded-xl border border-line bg-surface p-6">
         <ShieldAlert className="size-7 text-warn" />
-        <h1 className="mt-3 text-lg font-semibold text-ink">Недостаточно прав</h1>
+        <h1 className="mt-3 text-lg font-semibold text-ink">{t("Недостаточно прав")}</h1>
         <p className="mt-2 text-sm text-ink-2">
-          У вашей учётной записи нет доступа к этому разделу. Попросите администратора выдать нужное право или войдите под другим пользователем.
+          {t("У вашей учётной записи нет доступа к этому разделу. Попросите администратора выдать нужное право или войдите под другим пользователем.")}
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           {/* Не Link: Link заранее загружает адрес, а /logout при загрузке удаляет сессию. LogoutLink сначала отключает уведомления устройства. */}
           <LogoutLink href="/logout" className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong max-lg:h-11">
-            Войти под другим пользователем
+            {t("Войти под другим пользователем")}
           </LogoutLink>
           <Link href="/" className="inline-flex h-9 items-center rounded-lg border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-muted max-lg:h-11">
-            На главную
+            {t("На главную")}
           </Link>
         </div>
       </div>

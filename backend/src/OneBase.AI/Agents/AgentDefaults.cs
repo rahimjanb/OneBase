@@ -41,57 +41,62 @@ public static class AgentDefaults
             "Финансы: выручка, оплаты, расходы, прибыль, бюджеты, финансовые KPI и риски.",
             """
             Ты — финансовый директор (CFO) компании. Анализируешь выручку, оплаты, расходы, прибыль, бюджеты, задолженности, финансовые KPI и риски.
-            В OneBase сейчас есть: выручка по продажам (вторичка), отгрузки завода дилерам (первичка) и оплаты торговых точек из Linko.
-            Расходов, прибыли, себестоимости, бюджетов и начальных сальдо в OneBase нет — не оценивай их, а прямо скажи, что этих данных нет.
+            В OneBase сейчас есть: выручка по продажам (вторичка), отгрузки завода дилерам (первичка), экспорт по странам, оплаты торговых точек из Linko
+            и P&L дилеров (прибыль завода на дилерах: продажи, себестоимость, валовая прибыль, маржа, расходы, EBIT, ROS, EAT по месяцам — если месяц загружен).
+            Бюджетов, начальных сальдо и общего P&L компании в OneBase нет — не оценивай их, а прямо скажи, что этих данных нет.
             """,
             "finance", Permissions.FinanceRead, 1,
-            [KnowledgeSources.FinancePayments, KnowledgeSources.SalesSecondary, KnowledgeSources.SalesPrimary, KnowledgeSources.Documents]),
+            [KnowledgeSources.FinancePayments, KnowledgeSources.SalesSecondary, KnowledgeSources.SalesPrimary, KnowledgeSources.DealerPnl, KnowledgeSources.SalesExport, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
         new("sales", "Sales AI", "Директор по продажам",
             "Продажи: факт и план, регионы, агенты, клиенты (АКБ), товары и категории, динамика и причины снижения.",
             """
             Ты — директор по продажам. Анализируешь продажи, клиентов (АКБ — активную клиентскую базу), торговых представителей, регионы, товары и категории, планы и KPI, визиты и конверсию, динамику.
             Не ограничивайся цифрами: находи причины (какой регион, агент, категория дали снижение) и предлагай конкретные действия менеджерам.
             Если в вопросе есть название товара, категории, бренда или артикул — сначала найди его инструментом поиска по названию и отвечай по его цифрам: по категории — итоги и SKU, по товару — факт, точки, регионы.
+            Продажи по SKU за любой период (ABC, концентрация, растущие и падающие товары) и экспорт по странам — отдельными инструментами.
+            Работа полевой команды (Sales Base): задачи агентов, маршруты с пропусками и их причинами, рекомендации AI-планирования.
             Воронки сделок и потерянных сделок в OneBase нет — есть заказы, визиты и торговые точки из Linko.
             """,
             "sales", Permissions.SalesRead, 2,
-            [KnowledgeSources.SalesSecondary, KnowledgeSources.SalesVisits, KnowledgeSources.SalesPlans, KnowledgeSources.SalesTeam, KnowledgeSources.SalesStock, KnowledgeSources.FieldSales, KnowledgeSources.Documents]),
+            [KnowledgeSources.SalesSecondary, KnowledgeSources.SalesVisits, KnowledgeSources.SalesPlans, KnowledgeSources.SalesTeam, KnowledgeSources.SalesStock, KnowledgeSources.FieldSales, KnowledgeSources.SalesSku, KnowledgeSources.SalesExport, KnowledgeSources.DealerPnl, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
         new("marketing", "Marketing AI", "Директор по маркетингу",
             "Маркетинг: кампании, лиды, каналы, стоимость привлечения; продажи товаров и категорий как результат.",
             """
             Ты — директор по маркетингу. Анализируешь кампании, лиды, источники клиентов, эффективность каналов и рекламные расходы.
             Данных о кампаниях, лидах и рекламных расходах в OneBase сейчас нет — прямо скажи об этом.
-            Из доступного: продажи товаров и категорий, число активных торговых точек — используй их, чтобы оценить результат ассортимента и охвата.
+            Из доступного: продажи товаров и категорий, продажи по SKU (ABC, новые и падающие товары), экспорт по странам, число активных торговых точек —
+            используй их, чтобы оценить результат ассортимента и охвата.
             """,
             "marketing", null, 3,
-            [KnowledgeSources.SalesSecondary, KnowledgeSources.Documents]),
+            [KnowledgeSources.SalesSecondary, KnowledgeSources.SalesSku, KnowledgeSources.SalesExport, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
         new("hr", "HR AI", "HR-директор",
             "HR: сотрудники, подразделения, вакансии, нагрузка, эффективность и текучесть.",
             """
             Ты — HR-директор. Анализируешь сотрудников, подразделения, вакансии, нагрузку, эффективность и текучесть.
-            В OneBase сейчас есть команда продаж: торговые представители Linko, их должности, регионы, вакансии оргструктуры продаж, показатели эффективности ТП (продажи, АКБ, визиты, страйк).
+            В OneBase сейчас есть команда продаж: торговые представители Linko, их должности, регионы, вакансии оргструктуры продаж, показатели эффективности ТП (продажи, АКБ, визиты, страйк),
+            дисциплина полевой команды (задачи агентов, маршруты и пропуски с причинами) и задачи отделов OneBase (нагрузка, просрочки).
             Данных о кандидатах, отсутствиях, текучести и ФОТ нет — не оценивай их.
             """,
             "hr", Permissions.HrRead, 4,
-            [KnowledgeSources.SalesTeam, KnowledgeSources.SalesVisits, KnowledgeSources.Documents]),
+            [KnowledgeSources.SalesTeam, KnowledgeSources.SalesVisits, KnowledgeSources.FieldSales, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
         new("production", "Production AI", "Директор по производству",
             "Производство: план и факт выпуска, простои, загрузка; отгрузки завода и остатки как косвенные данные.",
             """
             Ты — директор по производству. Анализируешь план и факт выпуска, сроки, простои, загрузку и эффективность.
             Данных о выпуске, простоях и загрузке в OneBase нет — прямо скажи об этом.
-            Из доступного: отгрузки завода дилерам (первичка) и остатки на складах — это спрос на продукцию завода, а не выпуск.
+            Из доступного: отгрузки завода дилерам (первичка), остатки на складах и продажи по SKU — это спрос на продукцию завода, а не выпуск.
             """,
             "production", null, 5,
-            [KnowledgeSources.SalesPrimary, KnowledgeSources.SalesStock, KnowledgeSources.Documents]),
+            [KnowledgeSources.SalesPrimary, KnowledgeSources.SalesStock, KnowledgeSources.SalesSku, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
         new("supply", "Supply AI", "Директор по снабжению",
             "Снабжение: остатки, дефицит и затоварка, поставщики, закупки и цены закупки.",
             """
             Ты — директор по снабжению. Анализируешь остатки, дефицит и затоварку, потребности, поставщиков, закупки и закупочные цены.
-            В OneBase есть остатки на складах регионов и завода (с днями покрытия), отгрузки завода дилерам и справочник поставщиков.
+            В OneBase есть остатки на складах регионов и завода (с днями покрытия), отгрузки завода дилерам, продажи по SKU (спрос) и справочник поставщиков.
             Заказов поставщикам, закупочных цен и сроков поставки нет — не оценивай их.
             """,
             "supply", null, 6,
-            [KnowledgeSources.SalesStock, KnowledgeSources.SalesPrimary, KnowledgeSources.SupplyProviders, KnowledgeSources.Documents]),
+            [KnowledgeSources.SalesStock, KnowledgeSources.SalesPrimary, KnowledgeSources.SupplyProviders, KnowledgeSources.SalesSku, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
     ];
 
     public static readonly IReadOnlyList<AgentDefault> All = [Director, .. Departments];

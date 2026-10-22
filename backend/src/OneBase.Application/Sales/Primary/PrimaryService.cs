@@ -184,7 +184,20 @@ public sealed partial class PrimaryService(IAppDbContext db, SalesOptions option
         IReadOnlyList<PrimaryShipment> MonthRows,
         IReadOnlyDictionary<string, PrimaryParty> Parties,
         IReadOnlyDictionary<long, PrimaryProduct> Products,
-        PrimaryAmounts Zero);
+        PrimaryAmounts Zero,
+        IReadOnlyList<PrimaryShipment>? AllRows = null,
+        DateOnly? AsOf = null);
+
+    /// <summary>
+    /// Журнал первички для взаиморасчётов («Акт сверки», DSO): все отгрузки и возвраты по отчётный день — строки товаров документов с суммой
+    /// Linko (SumFactory — сумма строки перемещения или заказа) и контрагенты (дилер региона или прямой клиент под названием таблицы).
+    /// Из того же расчёта, что первичка по умолчанию (один кэш).
+    /// </summary>
+    public async Task<(IReadOnlyList<PrimaryShipment> Rows, IReadOnlyDictionary<string, PrimaryParty> Parties, DateOnly? AsOf)> LedgerAsync(CancellationToken ct = default)
+    {
+        var month = await SalesViewCache.GetAsync(cache, signal, "sales:primary::", () => BuildAsync(null, null, ct));
+        return (month.AllRows ?? [], month.Parties, month.AsOf);
+    }
 
     public Task<PrimaryView> GetAsync(int? year, int? month, CancellationToken ct = default) => GetAsync(year, month, new PrimaryCalendarQuery(), ct);
 
@@ -450,7 +463,8 @@ public sealed partial class PrimaryService(IAppDbContext db, SalesOptions option
             Notes: notes,
             OtherStocks: PrimaryMath.OtherStocksOf(transfers.OtherStocks, year));
 
-        return new PrimaryMonth(view, inMonth, parties, ProductsOf(inMonth, products.ToDictionary(p => p.Key, p => (p.Value.Name, p.Value.Code)), product => categories.NameOf(GroupOf(product))), zero);
+        return new PrimaryMonth(view, inMonth, parties, ProductsOf(inMonth, products.ToDictionary(p => p.Key, p => (p.Value.Name, p.Value.Code)), product => categories.NameOf(GroupOf(product))), zero,
+            yearArg is null && monthArg is null ? all : null, asOf);
     }
 
     /// <summary>Товары строк месяца — для разбора дня в календаре.</summary>

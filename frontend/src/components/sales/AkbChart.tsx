@@ -2,6 +2,8 @@
 
 import { useCallback, useId, useState } from "react";
 import { Download } from "lucide-react";
+import { useT } from "@/i18n/client";
+import type { T } from "@/i18n/core";
 import { Note, Section } from "./bits";
 import { CopyButton } from "./DataTable";
 import { monthLabel, monthShort, num, tsvValue } from "@/lib/sales/format";
@@ -39,10 +41,10 @@ function linePath(values: (number | null)[], x: (i: number) => number, y: (v: nu
   return d.trim();
 }
 
-function tableRows(data: AkbByMonth, series: Series[]): (string | number | null)[][] {
+function tableRows(data: AkbByMonth, series: Series[], t: T): (string | number | null)[][] {
   return [
-    ["Месяц", ...series.map((s) => s.name)],
-    ...data.months.map((m, i) => [monthLabel(data.year, m), ...series.map((s) => s.values[i])]),
+    [t("Месяц"), ...series.map((s) => s.name)],
+    ...data.months.map((m, i) => [monthLabel(data.year, m, t), ...series.map((s) => s.values[i])]),
   ];
 }
 
@@ -81,6 +83,7 @@ function AkbTable({
   totalLabel: string;
   format: Format;
 }) {
+  const t = useT();
   const last = data.months.length - 1;
   const th = "px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-ink-3";
   const cell = (v: number | null) => (v == null ? <span className="text-ink-3">—</span> : v === 0 ? <span className="text-ink-3">0</span> : format(v));
@@ -95,11 +98,11 @@ function AkbTable({
             <th className={`${th} text-left`}>{head}</th>
             {data.months.map((m, i) => (
               <th key={m} className={th}>
-                {monthShort(m)}
-                {i === last && data.lastPartial ? " (идёт)" : ""}
+                {monthShort(m, t)}
+                {i === last && data.lastPartial ? t(" (идёт)") : ""}
               </th>
             ))}
-            <th className={th}>Сред/мес</th>
+            <th className={th}>{t("Сред/мес")}</th>
           </tr>
         </thead>
         <tbody>
@@ -149,14 +152,14 @@ function AkbTable({
  */
 export function AkbChart({
   data,
-  title = "АКБ по месяцам",
-  hint = "уникальные точки, купившие за месяц",
-  head = "Категория — АКБ, точек",
-  totalLabel = "Всего точек",
+  title: titleText = "АКБ по месяцам",
+  hint: hintText = "уникальные точки, купившие за месяц",
+  head: headText = "Категория — АКБ, точек",
+  totalLabel: totalText = "Всего точек",
   format = num,
   actions,
   note,
-  averageNote = "«Сред/мес» — среднее за месяц по месяцам с данными (идущий месяц тоже), считает сервер.",
+  averageNote: averageText = "«Сред/мес» — среднее за месяц по месяцам с данными (идущий месяц тоже), считает сервер.",
 }: {
   data: AkbByMonth;
   title?: string;
@@ -168,6 +171,13 @@ export function AkbChart({
   note?: React.ReactNode;
   averageNote?: string;
 }) {
+  // Подписи приходят русскими (константы вызывающих) — переводятся здесь; уже переведённые не меняются.
+  const t = useT();
+  const title = t(titleText);
+  const hint = t(hintText);
+  const head = t(headText);
+  const totalLabel = t(totalText);
+  const averageNote = t(averageText);
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<string | null>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -185,10 +195,10 @@ export function AkbChart({
   }, []);
 
   const series: Series[] = [
-    { id: TOTAL, name: "Итого", values: data.total, average: data.average ?? null, color: "var(--color-ink)", total: true },
+    { id: TOTAL, name: t("Итого"), values: data.total, average: data.average ?? null, color: "var(--color-ink)", total: true },
     ...data.categories.map((c, i) => ({ id: c.id, name: c.name, values: c.values, average: c.average ?? null, color: PALETTE[i % PALETTE.length], total: false })),
   ];
-  const rows = tableRows(data, series);
+  const rows = tableRows(data, series, t);
   const toggle = (id: string) => setActive((a) => (a === id ? null : id));
 
   const narrow = width < 560;
@@ -215,15 +225,19 @@ export function AkbChart({
   return (
     <Section
       title={title}
-      hint={bars ? `${hint} · ${shown.total ? "итог" : shown.name}; клик по категории — её столбцы` : `${hint} · клик по линии — подсветить, ещё раз — снять`}
+      hint={
+        bars
+          ? t("{hint} · {shown}; клик по категории — её столбцы", { hint, shown: shown.total ? t("итог") : shown.name })
+          : t("{hint} · клик по линии — подсветить, ещё раз — снять", { hint })
+      }
       actions={
         <>
           {actions}
-          <div className="flex overflow-hidden rounded-lg border border-line text-xs" role="group" aria-label="Вид графика">
+          <div className="flex overflow-hidden rounded-lg border border-line text-xs" role="group" aria-label={t("Вид графика")}>
             {(
               [
-                ["bars", "Столбцы"],
-                ["lines", "Линии"],
+                ["bars", t("Столбцы")],
+                ["lines", t("Линии")],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -241,7 +255,7 @@ export function AkbChart({
           <button
             type="button"
             onClick={() => downloadCsv(`${title} ${data.year}`, rows)}
-            title="Скачать таблицу для Excel (CSV)"
+            title={t("Скачать таблицу для Excel (CSV)")}
             className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-muted"
           >
             <Download className="size-3.5" />
@@ -271,17 +285,17 @@ export function AkbChart({
                 <stop offset="1" style={{ stopColor: shown.total ? "var(--color-accent)" : shown.color, stopOpacity: shown.total ? 1 : 0.6 }} />
               </linearGradient>
             </defs>
-            {ticks.map((t) => (
-              <g key={t}>
-                <line x1={pad.left} x2={width - pad.right} y1={y(t)} y2={y(t)} stroke="var(--color-line)" />
-                <text x={pad.left - 8} y={y(t)} dy="0.32em" textAnchor="end" fontSize={11} fill="var(--color-ink-3)" className="tabular-nums">
-                  {format(t)}
+            {ticks.map((tick) => (
+              <g key={tick}>
+                <line x1={pad.left} x2={width - pad.right} y1={y(tick)} y2={y(tick)} stroke="var(--color-line)" />
+                <text x={pad.left - 8} y={y(tick)} dy="0.32em" textAnchor="end" fontSize={11} fill="var(--color-ink-3)" className="tabular-nums">
+                  {format(tick)}
                 </text>
               </g>
             ))}
             {data.months.map((m, i) => (
               <text key={m} x={x(i)} y={HEIGHT - 8} textAnchor="middle" fontSize={11} fill={i === hover ? "var(--color-ink)" : "var(--color-ink-3)"}>
-                {monthShort(m)}
+                {monthShort(m, t)}
               </text>
             ))}
             {hover != null && !bars && <line x1={x(hover)} x2={x(hover)} y1={pad.top} y2={pad.top + plotH} stroke="var(--color-ink-3)" strokeDasharray="3 3" />}
@@ -383,8 +397,8 @@ export function AkbChart({
             style={x(hover) > width / 2 ? { left: x(hover) - 12, transform: "translateX(-100%)" } : { left: x(hover) + 12 }}
           >
             <div className="mb-1 font-semibold text-ink">
-              {monthLabel(data.year, data.months[hover])}
-              {hover === lastIndex && data.lastPartial && <span className="font-normal text-ink-3"> · месяц идёт</span>}
+              {monthLabel(data.year, data.months[hover], t)}
+              {hover === lastIndex && data.lastPartial && <span className="font-normal text-ink-3"> · {t("месяц идёт")}</span>}
             </div>
             {hovered.map((s) => (
               <div key={s.id} className={`flex items-center justify-between gap-4 ${s.total || s.id === active ? "font-semibold text-ink" : "text-ink-2"}`}>
@@ -425,12 +439,11 @@ export function AkbChart({
       <Note>
         {note ?? (
           <>
-            АКБ — уникальные ТТ, у которых чистая покупка (продажи минус возвраты) за месяц больше нуля. Итог — не сумма категорий: одна ТТ
-            покупает несколько категорий.{" "}
+            {t("АКБ — уникальные ТТ, у которых чистая покупка (продажи минус возвраты) за месяц больше нуля. Итог — не сумма категорий: одна ТТ покупает несколько категорий.")}{" "}
           </>
         )}
-        {data.lastPartial && (bars ? "Бледный столбец с пунктиром — месяц ещё идёт. " : "Пустая точка — месяц ещё идёт. ")}
-        {averageNote} Наведите на график — значения за месяц.
+        {data.lastPartial && (bars ? t("Бледный столбец с пунктиром — месяц ещё идёт. ") : t("Пустая точка — месяц ещё идёт. "))}
+        {averageNote} {t("Наведите на график — значения за месяц.")}
       </Note>
     </Section>
   );

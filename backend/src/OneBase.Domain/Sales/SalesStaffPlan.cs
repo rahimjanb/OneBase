@@ -1,8 +1,8 @@
 namespace OneBase.Domain.Sales;
 
 /// <summary>
-/// План и факт агента по KPI-показателю из Linko (staff_balance — «пересчёт»).
-/// Зарплата и бонусы не хранятся: для аналитики продаж они не нужны.
+/// План и факт агента по KPI-показателю из Linko (staff_balance — «пересчёт»). Оклад и начисленная премия — для раздела «KPI»
+/// (видны только с правом finance.read); контакты сотрудников не хранятся.
 /// </summary>
 public class SalesStaffPlan
 {
@@ -26,6 +26,30 @@ public class SalesStaffPlan
     public decimal PlanForecast { get; set; }
     public decimal? FactPercent { get; set; }
     public decimal? ForecastPercent { get; set; }
+
+    /// <summary>Оклад сотрудника за месяц (salary_amount; одинаков во всех его показателях).</summary>
+    public decimal SalaryAmount { get; set; }
+
+    /// <summary>Премия по показателю, начисленная Linko на момент пересчёта (bonus_amount).</summary>
+    public decimal BonusAmount { get; set; }
+
+    public DateTimeOffset LoadedAt { get; set; }
+}
+
+/// <summary>
+/// KPI-показатель Linko (API планов, performance_indicator): тип плана и уровни премии. Порог и «Бонус 100%» раздела «KPI» — первый
+/// уровень с ненулевым бонусом.
+/// </summary>
+public class SalesStaffIndicator
+{
+    public long Id { get; set; }
+    public required string Name { get; set; }
+    public required string PlanType { get; set; }
+    public bool ForSupervisor { get; set; }
+    public bool IsActive { get; set; }
+
+    /// <summary>Уровни (jsonb): [{ "from": 80, "to": 100, "bonus": 1770000, "type": "percent_from_bonus_amount" }], проценты — как в Linko.</summary>
+    public required string Levels { get; set; }
 
     public DateTimeOffset LoadedAt { get; set; }
 }

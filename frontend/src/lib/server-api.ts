@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
+import { getLang, getT } from "@/i18n/server";
 import { redirect } from "next/navigation";
 
 export const SESSION_COOKIE = "onebase_token";
@@ -26,7 +27,7 @@ export async function apiGet<T>(path: string, returnTo = "/sales"): Promise<T> {
   if (!token) redirect(`/login?next=${encodeURIComponent(returnTo)}`);
 
   const response = await fetch(`${API_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, "Accept-Language": await getLang() },
     cache: "no-store",
   });
 
@@ -34,7 +35,7 @@ export async function apiGet<T>(path: string, returnTo = "/sales"): Promise<T> {
   if (response.status === 403) redirect(`/no-access?from=${encodeURIComponent(returnTo)}`);
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiRequestError(response.status, text || `Сервер OneBase ответил HTTP ${response.status}`);
+    throw new ApiRequestError(response.status, text || (await getT())("Сервер OneBase ответил HTTP {status}", { status: response.status }));
   }
   return (await response.json()) as T;
 }
@@ -60,7 +61,7 @@ export const apiSession = cache(async <T>(path: string): Promise<T | null> => {
   if (!token) return null;
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    response = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}`, "Accept-Language": await getLang() }, cache: "no-store" });
   } catch {
     return null;
   }
@@ -73,7 +74,7 @@ export async function apiTry<T>(path: string): Promise<T | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   try {
-    const response = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    const response = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}`, "Accept-Language": await getLang() }, cache: "no-store" });
     return response.ok ? ((await response.json()) as T) : null;
   } catch {
     return null;

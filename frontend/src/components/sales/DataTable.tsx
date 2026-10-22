@@ -3,9 +3,12 @@
 import { useRouter } from "next/navigation";
 import { Fragment, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Copy } from "lucide-react";
+import { useT } from "@/i18n/client";
+import { makeT, type T as Translate } from "@/i18n/core";
 import { tsvValue } from "@/lib/sales/format";
 import { Note, Section } from "./bits";
 
+/** Подписи колонок и групп — русские (ключи словаря): переводятся при отрисовке и копировании. */
 export type Column<T> = {
   key: string;
   label: string;
@@ -22,6 +25,7 @@ export type Column<T> = {
 type Sort = { key: string; dir: "asc" | "desc" } | null;
 
 export function CopyButton({ onCopy }: { onCopy: () => string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -38,13 +42,16 @@ export function CopyButton({ onCopy }: { onCopy: () => string }) {
       className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-muted max-lg:hidden"
     >
       <Copy className="size-3.5" />
-      {copied ? "Скопировано" : "Копировать"}
+      {copied ? t("Скопировано") : t("Копировать")}
     </button>
   );
 }
 
-export function toTsv<T>(columns: Column<T>[], rows: T[]): string {
-  const header = columns.map((c) => (c.group ? `${c.group}: ${c.label}` : c.label)).join("\t");
+/** Без перевода (русский) — если вызывающий не передал t. */
+const plain: Translate = makeT(null);
+
+export function toTsv<T>(columns: Column<T>[], rows: T[], t: Translate = plain): string {
+  const header = columns.map((c) => (c.group ? `${t(c.group)}: ${t(c.label)}` : t(c.label))).join("\t");
   const lines = rows.map((row) => columns.map((c) => tsvValue(c.value(row))).join("\t"));
   return [header, ...lines].join("\n");
 }
@@ -67,6 +74,7 @@ export function sortRows<T>(rows: T[], columns: Column<T>[], sort: Sort): T[] {
 
 /** Шапка с сортировкой по клику и поддержкой групп колонок. */
 export function TableHead<T>({ columns, sort, onSort }: { columns: Column<T>[]; sort: Sort; onSort: (key: string) => void }) {
+  const t = useT();
   const hasGroups = columns.some((c) => c.group);
   const groups: { label: string; span: number }[] = [];
   for (const c of columns) {
@@ -86,7 +94,7 @@ export function TableHead<T>({ columns, sort, onSort }: { columns: Column<T>[]; 
               colSpan={g.span}
               className={`px-3 pb-1 pt-2 text-center text-[11px] font-semibold uppercase tracking-wide text-ink-3 first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5 ${g.label ? "border-b border-line" : ""}`}
             >
-              {g.label}
+              {g.label && t(g.label)}
             </th>
           ))}
         </tr>
@@ -101,7 +109,7 @@ export function TableHead<T>({ columns, sort, onSort }: { columns: Column<T>[]; 
                 onClick={() => onSort(c.key)}
                 className={`inline-flex items-center gap-1 text-[11px] uppercase tracking-wide hover:text-ink ${active ? "text-ink" : "text-ink-3"}`}
               >
-                {c.label}
+                {t(c.label)}
                 {active && (sort!.dir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
               </button>
             </th>
@@ -150,6 +158,7 @@ export function DataTable<T>({
   /** Сколько строк показать до «Показать все». Сортировка и «Копировать» — по всем строкам. */
   limit?: number;
 }) {
+  const t = useT();
   const router = useRouter();
   const [sort, setSort] = useState<Sort>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -165,7 +174,7 @@ export function DataTable<T>({
       actions={
         <>
           {actions}
-          {rows.length > 0 && <CopyButton onCopy={() => toTsv(columns, sorted)} />}
+          {rows.length > 0 && <CopyButton onCopy={() => toTsv(columns, sorted, t)} />}
         </>
       }
     >
@@ -210,17 +219,17 @@ export function DataTable<T>({
           {footer}
         </table>
       </div>
-      {rows.length === 0 && <p className="py-6 text-center text-sm text-ink-3">{empty}</p>}
+      {rows.length === 0 && <p className="py-6 text-center text-sm text-ink-3">{t(empty)}</p>}
       {limit != null && sorted.length > limit && (
         <button
           type="button"
           onClick={() => setShowAll((s) => !s)}
           className="mt-3 text-sm font-medium text-accent hover:underline max-lg:flex max-lg:h-11 max-lg:w-full max-lg:items-center max-lg:justify-center max-lg:rounded-lg max-lg:border max-lg:border-line max-lg:bg-surface"
         >
-          {showAll ? "Свернуть" : `Показать все (${sorted.length})`}
+          {showAll ? t("Свернуть") : t("Показать все ({n})", { n: sorted.length })}
         </button>
       )}
-      {note && <Note>{note}</Note>}
+      {note && <Note>{typeof note === "string" ? t(note) : note}</Note>}
     </Section>
   );
 }

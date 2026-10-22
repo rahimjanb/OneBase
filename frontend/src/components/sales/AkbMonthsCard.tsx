@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { useT } from "@/i18n/client";
 import { AkbChart } from "./AkbChart";
 import { kg, money, num } from "@/lib/sales/format";
 import type { AkbByMonth } from "@/lib/sales/types";
@@ -47,9 +48,10 @@ function dataOf(data: AkbByMonth, metric: AkbMetric): AkbByMonth {
 
 /** Переключатель меры «по месяцам»: кнопки АКБ / кг / сум. */
 export function AkbMetricSwitch() {
+  const t = useT();
   const [metric, setMetric] = useAkbMetric();
   return (
-    <div className="flex overflow-hidden rounded-lg border border-line text-xs" role="group" aria-label="Мера">
+    <div className="flex overflow-hidden rounded-lg border border-line text-xs" role="group" aria-label={t("Мера")}>
       {options.map((o) => (
         <button
           key={o.key}
@@ -58,7 +60,7 @@ export function AkbMetricSwitch() {
           onClick={() => setMetric(o.key)}
           className={`px-2.5 py-1.5 ${metric === o.key ? "bg-accent text-white" : "bg-surface text-ink hover:bg-muted"}`}
         >
-          {o.label}
+          {t(o.label)}
         </button>
       ))}
     </div>
@@ -70,8 +72,11 @@ export function AkbMetricSwitch() {
  * здесь только выбор, что показать. Категории — без скрытых и не больше семи (сервер), остальные есть в карточках категорий.
  */
 export function AkbMonthsCard({ data }: { data: AkbByMonth }) {
+  const t = useT();
   const [metric] = useAkbMetric();
   const view = views[metric];
+  // Сокращённые суммы — с единицами на языке интерфейса; подписи вида переводит AkbChart.
+  const format = metric === "sum" ? (v: number | null | undefined) => money(v, t) : view.format;
   return (
     <AkbChart
       data={dataOf(data, metric)}
@@ -79,13 +84,14 @@ export function AkbMonthsCard({ data }: { data: AkbByMonth }) {
       hint={view.hint}
       head={view.head}
       totalLabel={view.total}
-      format={view.format}
+      format={format}
       actions={<AkbMetricSwitch />}
       note={
         metric === "akb" ? undefined : (
           <>
-            Чистые {metric === "kg" ? "кг" : "суммы"} за месяц (заказы минус возвраты) по тем же месяцам и категориям, что АКБ; итог — все продажи
-            подразделения, в том числе категорий, которых на графике нет.{" "}
+            {metric === "kg"
+              ? t("Чистые кг за месяц (заказы минус возвраты) по тем же месяцам и категориям, что АКБ; итог — все продажи подразделения, в том числе категорий, которых на графике нет.")
+              : t("Чистые суммы за месяц (заказы минус возвраты) по тем же месяцам и категориям, что АКБ; итог — все продажи подразделения, в том числе категорий, которых на графике нет.")}{" "}
           </>
         )
       }

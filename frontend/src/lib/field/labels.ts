@@ -1,3 +1,4 @@
+import type { T } from "@/i18n/core";
 import type {
   AgentDayStatus,
   FieldActorType,
@@ -8,6 +9,7 @@ import type {
   FieldRecommendationKind,
   FieldRole,
   FieldRouteSource,
+  FieldTask,
   FieldTaskStatus,
   FieldVisitResult,
 } from "./types";
@@ -126,3 +128,17 @@ export const plural = (n: number, one: string, few: string, many: string) => {
   if (b === 1) return one;
   return many;
 };
+
+/**
+ * Текст сервера, собранный из частей через разделитель (пояснение статуса агента «… · …», заголовки рекомендаций в уведомлении
+ * «…; …»): каждая часть переводится по словарю отдельно.
+ */
+export const tParts = (t: T, text: string, separator: string) => text.split(separator).map((part) => t(part)).join(separator);
+
+/** Название задачи от AI или системы собрал сервер — переводится по словарю; задачи людей — как написали. */
+export const taskTitle = (t: T, task: Pick<FieldTask, "title" | "createdByType">) =>
+  task.createdByType === "Ai" || task.createdByType === "System" ? t(task.title) : task.title;
+
+/** Описание задачи от AI — причина рекомендации (текст сервера); у остальных, в том числе повторного визита, — текст людей. */
+export const taskDescription = (t: T, task: Pick<FieldTask, "description" | "createdByType">) =>
+  task.description && task.createdByType === "Ai" ? t(task.description) : task.description;

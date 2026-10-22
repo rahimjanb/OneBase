@@ -775,7 +775,7 @@ export type SkuSalesView = {
   outsideReport: number;
 };
 
-export type StockStatus = "deficit" | "overstock" | "dead" | "ok" | "unknown" | "none";
+export type StockStatus = "deficit" | "overstock" | "dead" | "ok" | "empty" | "unknown" | "none";
 
 /**
  * Клетка склада: штуки как в Linko, кг, коробки, стоимость; скорость с поправкой на аутсток (kgPerDay; rawKgPerDay — без поправки,
@@ -1256,4 +1256,122 @@ export type NextMonthPlan = {
   rows: { id: string; name: string; planKg: number; currentPlanKg: number | null; change: number | null }[];
   change: number | null;
   source: PlanSource;
+};
+
+/** Товар автозаказа «Рек. остатка»: единица Linko, единиц в коробке, рекомендация в коробках (StockService.AutoOrderAsync). */
+export type AutoOrderItem = {
+  productId: number;
+  code: string | null;
+  name: string;
+  category: string;
+  top: boolean;
+  unit: string;
+  unitsPerBox: number;
+  boxKg: number | null;
+  price: number | null;
+  recBoxes: number;
+  stockKg: number;
+  kgPerDay: number | null;
+};
+
+export type AutoOrderView = {
+  regionId: string;
+  regionName: string;
+  regions: StockRegion[];
+  snapshotDate: string;
+  priceList: string | null;
+  coverDays: number;
+  items: AutoOrderItem[];
+  withoutBox: number;
+};
+
+/** «KPI»: деньги (оклад, бонусы, премии, фонд оплаты) — только с правом «Финансы», иначе null (money = false). */
+export type KpiMoney = {
+  premiumSvr: number | null;
+  payrollSvr: number | null;
+  premiumTp: number | null;
+  payrollTp: number | null;
+  premium: number | null;
+  payroll: number | null;
+};
+
+export type KpiTone = "ok" | "warn" | "bad";
+
+export type KpiCell = {
+  key: string;
+  indicatorId: number;
+  name: string;
+  unit: string;
+  plan: number;
+  sale: number;
+  return: number;
+  fact: number;
+  pct: number;
+  tone: KpiTone;
+  level: number;
+  threshold: number | null;
+  bonus100: number | null;
+  premiumNow: number | null;
+  factForecast: number;
+  pctForecast: number;
+  toneForecast: KpiTone;
+  premiumForecast: number | null;
+};
+
+export type KpiPerson = {
+  id: number;
+  name: string;
+  role: "ТП" | "СВР";
+  region: string | null;
+  /** profile — указан вручную, supervisor — «СВР региона», sales — по продажам и визитам, name — по названию, none — не определён. */
+  regionSource: "profile" | "supervisor" | "sales" | "name" | "none";
+  factKg: number;
+  fix: number | null;
+  bonus100: number | null;
+  premiumNow: number | null;
+  premiumForecast: number | null;
+  salaryNow: number | null;
+  salaryForecast: number | null;
+  cells: KpiCell[];
+};
+
+export type KpiRegion = {
+  id: string;
+  name: string;
+  direction: string | null;
+  unit: string;
+  svr: number;
+  tp: number;
+  factKgSvr: number;
+  factKgTp: number;
+  now: KpiMoney;
+  forecast: KpiMoney;
+  columns: { key: string; label: string; unit: string }[];
+  people: KpiPerson[];
+};
+
+export type KpiView = {
+  period: Period;
+  money: boolean;
+  running: boolean;
+  share: number;
+  loadedAt: string | null;
+  tpCount: number;
+  svrCount: number;
+  factKgTp: number;
+  forecastKgTp: number | null;
+  now: KpiMoney;
+  forecast: KpiMoney;
+  regions: KpiRegion[];
+  directions: {
+    name: string;
+    regionIds: string[];
+    tp: number;
+    premiumNow: number | null;
+    premiumForecast: number | null;
+    payrollNow: number | null;
+    payrollForecast: number | null;
+  }[];
+  missingRegions: string[];
+  regionOptions: { id: string; name: string }[];
 };

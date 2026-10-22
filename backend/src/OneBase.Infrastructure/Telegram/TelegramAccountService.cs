@@ -51,7 +51,9 @@ public sealed record TelegramSettingsInput(
     string? AllowedAttachments,
     int MaxFileMb,
     bool AllowReports,
-    string? Persona = null);
+    string? Persona = null,
+    string? GenerationModelProvider = null,
+    string? GenerationModel = null);
 
 public sealed record TelegramPermissionInput(
     long? TelegramUserId,
@@ -418,21 +420,12 @@ public sealed class TelegramAccountService(
         settings.AutoReply = input.AutoReply;
         settings.ReplyToUnknown = input.ReplyToUnknown;
         // Модель — «провайдер/модель» (openai/gpt-5) или отдельно провайдер и модель; пусто — основная модель консультанта.
-        var model = Trim(input.Model, 140);
-        var provider = Trim(input.ModelProvider, 32);
-        if (model is not null && model.Contains('/'))
-        {
-            provider = model[..model.IndexOf('/')].Trim().ToLowerInvariant();
-            model = model[(model.IndexOf('/') + 1)..].Trim();
-        }
-
-        if (model is not null && provider is null)
-        {
-            throw new TelegramException("Модель — в виде «провайдер/модель», например openai/gpt-5; пусто — основная модель.", TelegramErrorKind.Config);
-        }
-
-        settings.ModelProvider = model is null ? null : provider;
-        settings.Model = model is null ? null : Trim(model, 100);
+        var (provider, model) = ModelRef(input.Model, input.ModelProvider, "Модель — в виде «провайдер/модель», например openai/gpt-5; пусто — основная модель.");
+        settings.ModelProvider = provider;
+        settings.Model = model;
+        // Модель генерации (отчёты, документы, письма) — так же «провайдер/модель», например anthropic/claude-opus-5-5; пусто — Claude из AI Data Manager.
+        (settings.GenerationModelProvider, settings.GenerationModel) = ModelRef(input.GenerationModel, input.GenerationModelProvider,
+            "Модель генерации — в виде «провайдер/модель», например anthropic/claude-opus-5-5; пусто — модель Claude из AI Data Manager.");
         settings.SystemPrompt = Trim(input.SystemPrompt, 8000);
         settings.Restrictions = Trim(input.Restrictions, 8000);
         settings.ResponseStyle = Styles.Contains(style) ? style : "normal";
@@ -900,5 +893,24 @@ public sealed class TelegramAccountService(
     {
         var t = value?.Trim();
         return string.IsNullOrEmpty(t) ? null : t.Length > max ? t[..max] : t;
+    }
+
+    /// <summary>Модель из настроек: «провайдер/модель» одной строкой или отдельно; пусто — (null, null).</summary>
+    private static (string? Provider, string? Model) ModelRef(string? value, string? providerValue, string error)
+    {
+        var model = Trim(value, 140);
+        var provider = Trim(providerValue, 32);
+        if (model is not null && model.Contains('/'))
+        {
+            provider = model[..model.IndexOf('/')].Trim().ToLowerInvariant();
+            model = model[(model.IndexOf('/') + 1)..].Trim();
+        }
+
+        if (model is null)
+        {
+            return (null, null);
+        }
+
+        return provider is null ? throw new TelegramException(error, TelegramErrorKind.Config) : (provider, Trim(model, 100));
     }
 }

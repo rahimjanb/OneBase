@@ -26,7 +26,8 @@ public sealed record StockProduct(
     decimal? BoxKg,
     string BoxNote,
     decimal? PackKg,
-    decimal? Price);
+    decimal? Price,
+    string? Measurement = null);
 
 /// <summary>
 /// Снимок остатков Linko (product_balances, штуки) на момент последней загрузки: склады дилеров (по одному на регион), завод, экспорт,
@@ -150,14 +151,14 @@ public static class StockSnapshotBuilder
                 .Where(x => x.Price is not null)
                 .ToDictionary(x => x.Key, x => x.Price!.Value);
 
-        var products = (await db.LinkoProducts.AsNoTracking().Select(p => new { p.Id, p.Name, p.Code, p.TypeId }).ToListAsync(ct))
+        var products = (await db.LinkoProducts.AsNoTracking().Select(p => new { p.Id, p.Name, p.Code, p.TypeId, p.Measurement }).ToListAsync(ct))
             .Select(p =>
             {
                 var pack = StockMath.ParsePack(p.Name);
                 var (unitKg, source) = StockMath.UnitWeight(recentWeight.GetValueOrDefault(p.Id), yearWeight.GetValueOrDefault(p.Id), pack);
                 var (boxKg, boxNote) = StockMath.BoxWeight(pack, unitKg, boxUnits.GetValueOrDefault(p.Id));
                 return new StockProduct(p.Id, p.Name, p.Code, p.TypeId, pack, unitKg, source, boxKg, boxNote, StockMath.PackKg(p.Name),
-                    prices.TryGetValue(p.Id, out var price) ? price : null);
+                    prices.TryGetValue(p.Id, out var price) ? price : null, p.Measurement);
             })
             .ToDictionary(p => p.Id);
 

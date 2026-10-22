@@ -1,7 +1,11 @@
+import { makeT, type T } from "@/i18n/core";
 import { money, monthName, num, pct } from "./format";
 import type { OutstockView } from "./types";
 
 export type Insight = { title: string; text: string };
+
+/** Без перевода (русский) — если вызывающий не передал t. */
+const plain: T = makeT(null);
 
 /** Форма слова по числу: 1 товар, 2 товара, 5 товаров. */
 export function plural(n: number, one: string, few: string, many: string): string {
@@ -19,88 +23,141 @@ const short = (name: string, max = 60) => (name.length > max ? `${name.slice(0, 
  * «Выводы» аутстока — текст из цифр сервера (OutstockView.insights и totals): меняется вместе с фильтрами (ТОП, категории, регион).
  * Здесь только шаблоны фраз: какой регион худший по доле, «каждый N-й килограмм», доля дней «потеря дилера», товары ядра — считает
  * OutstockService (DOC §9.5). Ничего не придумывает: каждая фраза — пересказ одного числа из данных.
+ * t — перевод фраз на язык интерфейса (getT() на странице); без него — русский текст.
  */
-export function outstockInsights(d: OutstockView): Insight[] {
-  const t = d.totals;
+export function outstockInsights(d: OutstockView, t: T = plain): Insight[] {
+  const tot = d.totals;
   const i = d.insights;
-  if (d.days === 0 || t.pairsWithLoss === 0) return [];
+  if (d.days === 0 || tot.pairsWithLoss === 0) return [];
 
   const out: Insight[] = [];
   const what = d.scope === "top" ? "ТОП-товарам" : d.scope === "rest" ? "товарам вне ТОПа" : "всем товарам";
   const catsText = d.selectedCategories.length ? ` (${d.selectedCategories.map((c) => `«${c}»`).join(", ")})` : "";
   const region = d.regionId ? d.regions.find((r) => r.id === d.regionId) : null;
-  const where = region ? ` в регионе ${region.name}` : "";
+  const where = region ? t(" в регионе {name}", { name: region.name }) : "";
 
   out.push({
-    title: "Коротко",
+    title: t("Коротко"),
     text:
-      `За ${monthName(d.month)} ${d.year} по ${what}${catsText}${where} мы недопродали примерно на ${money(t.lostSum)} сум. ` +
-      `Это ${pct(t.lossShare, 1)} от того, что реально продали. Причина одна: в магазин хотели купить товар, а у дилера на складе его не было — ` +
-      `полки пустые, деньги ушли конкуренту. Такое случилось ${num(t.pairsWithLoss)} ${plural(t.pairsWithLoss, "раз", "раза", "раз")}: ` +
-      `${num(t.productsWithLoss)} ${plural(t.productsWithLoss, "товар", "товара", "товаров")} в ${num(t.regionsWithLoss)} ${plural(t.regionsWithLoss, "регионе", "регионах", "регионах")}.`,
+      t("За {month} {year} по {what}{cats}{where} мы недопродали примерно на {sum} сум. ", {
+        month: monthName(d.month, t),
+        year: d.year,
+        what: t(what),
+        cats: catsText,
+        where,
+        sum: money(tot.lostSum, t),
+      }) +
+      t(
+        "Это {share} от того, что реально продали. Причина одна: в магазин хотели купить товар, а у дилера на складе его не было — полки пустые, деньги ушли конкуренту. ",
+        { share: pct(tot.lossShare, 1) },
+      ) +
+      t("Такое случилось {n} {times}: {products} {productsWord} {inRegions}.", {
+        n: num(tot.pairsWithLoss),
+        times: t(plural(tot.pairsWithLoss, "раз", "раза", "раз")),
+        products: num(tot.productsWithLoss),
+        productsWord: t(plural(tot.productsWithLoss, "товар", "товара", "товаров")),
+        inRegions: t(plural(tot.regionsWithLoss, "в {n} регионе", "в {n} регионах", "в {n} регионах"), { n: num(tot.regionsWithLoss) }),
+      }),
   });
 
-  if (!region && t.regionsWithLoss > 1 && i.topRegion) {
+  if (!region && tot.regionsWithLoss > 1 && i.topRegion) {
     const top = i.topRegion;
-    let text = `Больше всего денег потерял ${top.name}${top.dealer ? ` (${top.dealer})` : ""}: ${money(top.lostSum)}, это ${pct(top.lossShare)} от его продаж.`;
+    let text = t("Больше всего денег потерял {name}{dealer}: {sum}, это {share} от его продаж.", {
+      name: top.name,
+      dealer: top.dealer ? ` (${top.dealer})` : "",
+      sum: money(top.lostSum, t),
+      share: pct(top.lossShare),
+    });
     if (i.worstRegion) {
       const worst = i.worstRegion;
-      text += ` Хуже всего по доле — ${worst.name}: там не хватило ${pct(worst.lossShare)} товара${
-        worst.everyNthKg ? `, то есть примерно каждый ${num(worst.everyNthKg)}-й килограмм мы могли продать, но не продали` : ""
-      }.`;
+      text += t(" Хуже всего по доле — {name}: там не хватило {share} товара{nth}.", {
+        name: worst.name,
+        share: pct(worst.lossShare),
+        nth: worst.everyNthKg ? t(", то есть примерно каждый {n}-й килограмм мы могли продать, но не продали", { n: num(worst.everyNthKg) }) : "",
+      });
     } else if (top.everyNthKg) {
-      text += ` Примерно каждый ${num(top.everyNthKg)}-й килограмм там могли продать, но не продали.`;
+      text += t(" Примерно каждый {n}-й килограмм там могли продать, но не продали.", { n: num(top.everyNthKg) });
     }
-    out.push({ title: "Где теряем больше всего", text });
+    out.push({ title: t("Где теряем больше всего"), text });
   }
 
   if (i.topProduct) {
     const prod = i.topProduct;
-    let text = i.topCategory ? `Больше всего теряем на категории «${i.topCategory}» — это ${pct(i.topCategoryShare)} всех потерь. ` : "";
-    text += `Самый «дорогой» пропавший товар — ${short(prod.name)}: из-за его отсутствия ушло ${money(prod.lostSum)}`;
-    text += prod.regions > 1 ? `, и не хватало его сразу в ${num(prod.regions)} ${plural(prod.regions, "регионе", "регионах", "регионах")}.` : ".";
-    out.push({ title: "Каких товаров не хватает", text });
+    let text = i.topCategory
+      ? t("Больше всего теряем на категории «{category}» — это {share} всех потерь. ", { category: i.topCategory, share: pct(i.topCategoryShare) })
+      : "";
+    text += t("Самый «дорогой» пропавший товар — {name}: из-за его отсутствия ушло {sum}", { name: short(prod.name), sum: money(prod.lostSum, t) });
+    text +=
+      prod.regions > 1
+        ? t(", и не хватало его сразу {inRegions}.", {
+            inRegions: t(plural(prod.regions, "в {n} регионе", "в {n} регионах", "в {n} регионах"), { n: num(prod.regions) }),
+          })
+        : ".";
+    out.push({ title: t("Каких товаров не хватает"), text });
   }
 
-  if (t.corePairs > 0 && t.pairsWithLoss > t.corePairs) {
+  if (tot.corePairs > 0 && tot.pairsWithLoss > tot.corePairs) {
     const frequent = i.coreFrequent.map((name) => short(name, 48));
     out.push({
-      title: "Главное — не распыляться",
+      title: t("Главное — не распыляться"),
       text:
-        `Проблема сосредоточена в немногих местах. Если взять все ${num(t.pairsWithLoss)} ${plural(t.pairsWithLoss, "случай", "случая", "случаев")} ` +
-        `«товар закончился в регионе» и отсортировать по ущербу, то всего ${num(t.corePairs)} самых крупных из них дают 80% потерь — ${money(t.coreSum)}. ` +
-        `Значит, исправив эти ${num(t.corePairs)} ${plural(t.corePairs, "случай", "случая", "случаев")}, мы вернём основную часть денег.` +
-        (frequent.length > 1 ? ` Чаще всего в этом списке: ${frequent.join(", ")}.` : ""),
+        t(
+          "Проблема сосредоточена в немногих местах. Если взять все {n} {cases} «товар закончился в регионе» и отсортировать по ущербу, то всего {core} самых крупных из них дают 80% потерь — {sum}. ",
+          {
+            n: num(tot.pairsWithLoss),
+            cases: t(plural(tot.pairsWithLoss, "случай", "случая", "случаев")),
+            core: num(tot.corePairs),
+            sum: money(tot.coreSum, t),
+          },
+        ) +
+        t("Значит, исправив эти {core} {cases}, мы вернём основную часть денег.", {
+          core: num(tot.corePairs),
+          cases: t(plural(tot.corePairs, "случай", "случая", "случаев")),
+        }) +
+        (frequent.length > 1 ? t(" Чаще всего в этом списке: {list}.", { list: frequent.join(", ") }) : ""),
     });
   }
 
-  if (t.zeroDays > 0) {
+  if (tot.zeroDays > 0) {
     if (d.factoryKnown) {
       let text =
-        `В ${pct(i.dealerDaysShare)} дней, когда у дилера товара не было, на складе завода он был. То есть товар есть, но его вовремя не заказали или не довезли. ` +
-        `Только на этом мы потеряли ${money(t.dealerLossSum)}. Это не нехватка производства — это вопрос заказа и доставки.`;
-      if (t.factoryLossSum > 0) {
-        text += ` А ${money(t.factoryLossSum)} потеряли в дни, когда на заводе тоже было пусто: тут дилер не виноват, отгружать было нечего — это вопрос к производству.`;
+        t(
+          "В {share} дней, когда у дилера товара не было, на складе завода он был. То есть товар есть, но его вовремя не заказали или не довезли. ",
+          { share: pct(i.dealerDaysShare) },
+        ) +
+        t("Только на этом мы потеряли {sum}. Это не нехватка производства — это вопрос заказа и доставки.", { sum: money(tot.dealerLossSum, t) });
+      if (tot.factoryLossSum > 0) {
+        text += t(
+          " А {sum} потеряли в дни, когда на заводе тоже было пусто: тут дилер не виноват, отгружать было нечего — это вопрос к производству.",
+          { sum: money(tot.factoryLossSum, t) },
+        );
       }
-      if (t.unknownLossSum > 0) {
-        text += ` Ещё ${money(t.unknownLossSum)} — дни без данных по складу завода (${num(t.unknownDays)} ${plural(t.unknownDays, "день", "дня", "дней")}): чья это потеря, сказать нельзя.`;
+      if (tot.unknownLossSum > 0) {
+        text += t(" Ещё {sum} — дни без данных по складу завода ({n} {days}): чья это потеря, сказать нельзя.", {
+          sum: money(tot.unknownLossSum, t),
+          n: num(tot.unknownDays),
+          days: t(plural(tot.unknownDays, "день", "дня", "дней")),
+        });
       }
-      text += " Выпуска цехов в Linko нет, поэтому остаток завода в прошлые дни восстановлен только по перемещениям, и доля завода — оценка снизу.";
-      out.push({ title: "Почему так происходит", text });
+      text += t(" Выпуска цехов в Linko нет, поэтому остаток завода в прошлые дни восстановлен только по перемещениям, и доля завода — оценка снизу.");
+      out.push({ title: t("Почему так происходит"), text });
     } else {
       out.push({
-        title: "Почему так происходит",
-        text: "Склад завода в Linko не найден, поэтому все потери отнесены к дилерам: товар вовремя не заказали или не довезли.",
+        title: t("Почему так происходит"),
+        text: t("Склад завода в Linko не найден, поэтому все потери отнесены к дилерам: товар вовремя не заказали или не довезли."),
       });
     }
   }
 
-  if (t.chronic > 0) {
+  if (tot.chronic > 0) {
     out.push({
-      title: "Хронические дыры",
+      title: t("Хронические дыры"),
       text:
-        `${num(t.chronic)} ${plural(t.chronic, "пара", "пары", "пар")} «товар × регион» стояли в нуле половину месяца и дольше — ${money(t.chronicSum)}. ` +
-        "Это не разовый сбой доставки, а товар, которого в регионе системно нет: его стоит поставить в постоянный заказ.",
+        t("{n} {pairs} «товар × регион» стояли в нуле половину месяца и дольше — {sum}. ", {
+          n: num(tot.chronic),
+          pairs: t(plural(tot.chronic, "пара", "пары", "пар")),
+          sum: money(tot.chronicSum, t),
+        }) + t("Это не разовый сбой доставки, а товар, которого в регионе системно нет: его стоит поставить в постоянный заказ."),
     });
   }
 

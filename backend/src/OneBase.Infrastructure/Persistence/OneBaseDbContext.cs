@@ -89,6 +89,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<LinkoVisit> LinkoVisits => Set<LinkoVisit>();
     public DbSet<LinkoKpiPlan> LinkoKpiPlans => Set<LinkoKpiPlan>();
     public DbSet<LinkoSyncState> LinkoSyncStates => Set<LinkoSyncState>();
+    public DbSet<LinkoPromotion> LinkoPromotions => Set<LinkoPromotion>();
+    public DbSet<LinkoPromotionProduct> LinkoPromotionProducts => Set<LinkoPromotionProduct>();
     public DbSet<LinkoStock> LinkoStocks => Set<LinkoStock>();
     public DbSet<LinkoProductBalance> LinkoProductBalances => Set<LinkoProductBalance>();
     public DbSet<LinkoStockTransfer> LinkoStockTransfers => Set<LinkoStockTransfer>();
@@ -109,6 +111,9 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<SalesTarget> SalesTargets => Set<SalesTarget>();
     public DbSet<SalesPnlValue> SalesPnlValues => Set<SalesPnlValue>();
     public DbSet<SalesStaffPlan> SalesStaffPlans => Set<SalesStaffPlan>();
+    public DbSet<SalesStaffIndicator> SalesStaffIndicators => Set<SalesStaffIndicator>();
+    public DbSet<SalesDealerLedgerEntry> SalesDealerLedger => Set<SalesDealerLedgerEntry>();
+    public DbSet<SalesDealerTerm> SalesDealerTerms => Set<SalesDealerTerm>();
 
     // Sales Base (полевые продажи)
     public DbSet<FieldMember> FieldMembers => Set<FieldMember>();
@@ -308,6 +313,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.Property(x => x.PasswordHash).HasMaxLength(200);
             e.Property(x => x.Access).HasConversion<string>().HasMaxLength(16);
             e.HasIndex(x => x.Username).IsUnique();
+            e.Property(x => x.LinkTokenHash).HasMaxLength(64);
+            e.HasIndex(x => x.LinkTokenHash).IsUnique().HasFilter("\"LinkTokenHash\" IS NOT NULL");
             // У отдела одно действующее подключение; отозванные остаются для журнала.
             e.HasIndex(x => x.DepartmentId).IsUnique().HasFilter("\"RevokedAt\" IS NULL");
             e.HasOne<Department>().WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Cascade);

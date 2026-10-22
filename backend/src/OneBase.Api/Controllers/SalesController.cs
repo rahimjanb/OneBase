@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using OneBase.Api.Auth;
 using OneBase.Application.Sales;
@@ -90,6 +91,61 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     public async Task<PlansView> Plans([FromQuery] PeriodQuery q, CancellationToken ct) =>
         (await LoadDefaultPlan(q, ct)).CachedPlans();
 
+    /// <summary>
+    /// «KPI»: показатели Linko по людям — выполнение, премии и фонд оплаты по регионам и направлениям. Оклад, бонусы и премии — только с
+    /// правом «Финансы» (finance.read); без него те же цифры выполнения без денег.
+    /// </summary>
+    [HttpGet("kpi")]
+    public async Task<KpiView> Kpi(
+        [FromQuery] PeriodQuery q,
+        [FromServices] OneBase.AI.Security.IUserPermissions permissions,
+        CancellationToken ct)
+    {
+        var money = (await permissions.GetAsync(User.GetUserId(), ct)).Contains(Permissions.FinanceRead);
+        return (await LoadDefaultPlan(q, ct)).CachedKpi(money);
+    }
+
+    public sealed record KpiRegionInput(long LinkoUserId, Guid? RegionId);
+
+    /// <summary>
+    /// Регион человека для «KPI» и всего раздела продаж (профиль агента): у СВР в Linko филиала нет. RegionId = null — снять привязку,
+    /// регион снова определяется сам.
+    /// </summary>
+    [HttpPut("kpi/region")]
+    [HasPermission(Permissions.SalesManage)]
+    public async Task<IActionResult> KpiRegion(
+        [FromBody] KpiRegionInput input,
+        [FromServices] OneBase.Application.Abstractions.IAppDbContext db,
+        [FromServices] SalesCacheSignal signal,
+        CancellationToken ct)
+    {
+        if (!await db.LinkoUsers.AnyAsync(u => u.Id == input.LinkoUserId, ct))
+        {
+            return NotFound(new { error = "Пользователь Linko не найден." });
+        }
+
+        if (input.RegionId is { } regionId && !await db.SalesRegions.AnyAsync(r => r.Id == regionId, ct))
+        {
+            return NotFound(new { error = "Регион не найден." });
+        }
+
+        var profile = await db.SalesAgentProfiles.FirstOrDefaultAsync(p => p.LinkoUserId == input.LinkoUserId, ct);
+        if (profile is null)
+        {
+            if (input.RegionId is null)
+            {
+                return NoContent();
+            }
+
+            db.SalesAgentProfiles.Add(profile = new OneBase.Domain.Sales.SalesAgentProfile { LinkoUserId = input.LinkoUserId });
+        }
+
+        profile.RegionId = input.RegionId;
+        await db.SaveChangesAsync(ct);
+        signal.Invalidate();
+        return NoContent();
+    }
+
     [HttpGet("problems")]
     public async Task<ProblemsView> Problems(
         [FromQuery] PeriodQuery q,
@@ -149,6 +205,47 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     }
 
     /// <summary>
+    /// «Акт сверки»: взаиморасчёты с контрагентами за месяц (month=2026-9) — отгрузки и возвраты Linko, оплаты и расходы из реестров Google
+    /// Sheets, остаток из акта бухгалтерии. Финансовые данные — нужны права «Продажи» и «Финансы».
+    /// </summary>
+    [HttpGet("akt")]
+    [HasPermission(Permissions.FinanceRead)]
+    public async Task<OneBase.Application.Sales.Settlements.AktView> Akt(
+        [FromServices] OneBase.Application.Sales.Settlements.SettlementsService settlements,
+        [FromQuery] string? month,
+        CancellationToken ct) =>
+        OneBase.Application.Sales.Settlements.AktCompute.Build(await settlements.BaseAsync(ct), month);
+
+    /// <summary>«DSO»: долги дилеров по FIFO, просрочка по норме и прогноз оплат. Права «Продажи» и «Финансы».</summary>
+    [HttpGet("dso")]
+    [HasPermission(Permissions.FinanceRead)]
+    public async Task<OneBase.Application.Sales.Settlements.DsoView> Dso(
+        [FromServices] OneBase.Application.Sales.Settlements.SettlementsService settlements,
+        CancellationToken ct) =>
+        OneBase.Application.Sales.Settlements.DsoCompute.Build(await settlements.BaseAsync(ct));
+
+    /// <summary>
+    /// «Акции»: скидки и бонусы вторички по акциям Linko за месяц года (month=2026-9), РМ (rm) и отмеченные акции (promos=12,-1,-1000 —
+    /// id акций, -1 — ручная скидка, меньше -1 — группа неразличимых акций). Нет строк со скидкой за год — 404.
+    /// </summary>
+    [HttpGet("promo")]
+    public async Task<ActionResult<OneBase.Application.Sales.Promo.PromoView>> Promo(
+        [FromServices] OneBase.Application.Sales.Promo.PromoService promo,
+        [FromQuery] string? month,
+        [FromQuery] string? rm,
+        [FromQuery] string? promos,
+        CancellationToken ct)
+    {
+        var ids = (promos ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(x => long.TryParse(x, out var id) ? id : (long?)null)
+            .Where(x => x is not null)
+            .Select(x => x!.Value)
+            .Take(200)
+            .ToList();
+        return await promo.GetAsync(month, rm, ids, ct) is { } view ? view : NotFound(new { error = "Строк со скидками за год нет." });
+    }
+
+    /// <summary>
     /// «Продажи по SKU» за отрезок месяцев: from, to — «ГГГГ-ММ» (по умолчанию — с января года последних данных по их месяц; не длиннее
     /// 24 месяцев, from не позже to), region — id региона (пусто — вся страна), top=all|only|not, abc=all|A|B|C, cat — категории отчёта
     /// через запятую («Кекс,Помадка»). Ошибка в параметрах — 400 с текстом для пользователя.
@@ -193,6 +290,79 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
             StockService.ParsePacks(pack),
             top,
             status), ct);
+
+    /// <summary>
+    /// «Собрать в Excel» на «Рек. остатке»: те же охват и фильтры, что у /stock, колонки — columns (ключи StockExport.Columns через запятую,
+    /// пусто — как в таблице), warehouses=true — ещё лист «По складам». Имя файла — в пути, чтобы его взяли iOS и браузеры.
+    /// </summary>
+    [HttpGet("stock/xlsx/{fileName}")]
+    public async Task<IActionResult> StockWorkbook(
+        [FromServices] StockService stock,
+        [FromServices] OneBase.Application.Reports.IReportWorkbookWriter writer,
+        string fileName,
+        [FromQuery] string? region,
+        [FromQuery] string? scope,
+        [FromQuery] string? q,
+        [FromQuery] string? cat,
+        [FromQuery] string? pack,
+        [FromQuery] string? top,
+        [FromQuery] string? status,
+        [FromQuery] string? columns,
+        [FromQuery] bool warehouses,
+        CancellationToken ct)
+    {
+        var view = await stock.QueryAsync(new StockQuery(
+            string.IsNullOrEmpty(scope) ? (string.IsNullOrEmpty(region) ? null : $"{StockScopes.Region}:{region}") : scope,
+            q,
+            OutstockService.ParseCategories(cat),
+            StockService.ParsePacks(pack),
+            top,
+            status), ct);
+        var content = StockExport.Build(view, StockExport.Parse(columns), warehouses);
+        var name = OneBase.AI.Reports.ReportService.FileName(Path.GetFileNameWithoutExtension(fileName));
+        return File(writer.Write(content, DateTimeOffset.UtcNow), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name);
+    }
+
+    /// <summary>Автозаказ региона на «Рек. остатке»: товары с коробкой и рекомендация в коробках (без фильтров страницы).</summary>
+    [HttpGet("stock/autoorder")]
+    public async Task<ActionResult<AutoOrderView>> AutoOrder([FromServices] StockService stock, [FromQuery] string? region, CancellationToken ct)
+    {
+        try
+        {
+            return await stock.AutoOrderAsync(region, ct);
+        }
+        catch (KeyNotFoundException e)
+        {
+            return NotFound(new { error = e.Message });
+        }
+    }
+
+    /// <summary>
+    /// «Скачать акт»: акт приёма-передачи «Завод → регион» в Word по коробкам автозаказа. Имя файла — в пути, чтобы его взяли iOS и браузеры.
+    /// </summary>
+    [HttpPost("stock/autoorder/act/{fileName}")]
+    public async Task<IActionResult> AutoOrderAct(
+        [FromServices] StockService stock,
+        [FromServices] ITransferActWriter writer,
+        string fileName,
+        [FromBody] AutoOrderActInput input,
+        CancellationToken ct)
+    {
+        try
+        {
+            var act = await stock.TransferActAsync(input, ct);
+            var name = Path.ChangeExtension(OneBase.AI.Reports.ReportService.FileName(Path.GetFileNameWithoutExtension(fileName)), ".docx");
+            return File(writer.Write(act), "application/vnd.openxmlformats-officedocument.wordprocessingml.document", name);
+        }
+        catch (ArgumentException e)
+        {
+            return BadRequest(new { error = e.Message });
+        }
+        catch (KeyNotFoundException e)
+        {
+            return NotFound(new { error = e.Message });
+        }
+    }
 
     /// <summary>
     /// Аутсток: дни без товара у дилеров за месяц и упущенные продажи — по восстановленному назад от снимка остатку. Без year/month —

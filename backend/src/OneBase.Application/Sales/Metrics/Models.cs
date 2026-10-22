@@ -57,7 +57,20 @@ public sealed record PlanRow(Guid? RegionId, long? AgentId, int Month, long? Cat
 public sealed record CategoryPlanRow(long AgentId, int Year, int Month, IReadOnlyList<long> Groups, decimal PlanKg);
 
 /// <summary>KPI-показатель агента из Linko (staff_balance): план и факт так, как их считает Linko.</summary>
-public sealed record StaffIndicator(long AgentId, long IndicatorId, string Name, string PlanType, decimal Plan, decimal Fact);
+/// <summary>KPI-показатель человека из Linko: план и факт; для раздела «KPI» — продажи, возвраты, уровень, оклад и начисленная премия.</summary>
+public sealed record StaffIndicator(
+    long AgentId,
+    long IndicatorId,
+    string Name,
+    string PlanType,
+    decimal Plan,
+    decimal Fact,
+    decimal Sales = 0,
+    decimal Return = 0,
+    int Level = 0,
+    decimal Salary = 0,
+    decimal Bonus = 0,
+    string? FullName = null);
 
 public sealed record SalesTargets(decimal Conversion, decimal RevenuePerOutlet, decimal AkbPerAgent, decimal CategoriesPerOutlet);
 
@@ -119,6 +132,12 @@ public sealed class MonthData
 
     /// <summary>KPI-показатели агентов из Linko за выбранный месяц (включая супервайзеров).</summary>
     public IReadOnlyList<StaffIndicator> Indicators { get; init; } = [];
+
+    /// <summary>Уровни премии KPI-показателей месяца (по id показателя Linko) — для раздела «KPI».</summary>
+    public IReadOnlyDictionary<long, IReadOnlyList<KpiLevel>> IndicatorLevels { get; init; } = new Dictionary<long, IReadOnlyList<KpiLevel>>();
+
+    /// <summary>Когда загружен последний пересчёт KPI Linko за месяц.</summary>
+    public DateTimeOffset? IndicatorsLoadedAt { get; init; }
 
     /// <summary>Планы агентов по выручке (sales_sum), сум, за выбранный месяц. PlanKg здесь — сумма.</summary>
     public IReadOnlyList<PlanRow> RevenuePlans { get; init; } = [];

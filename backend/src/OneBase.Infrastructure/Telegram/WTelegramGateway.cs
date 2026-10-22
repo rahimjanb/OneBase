@@ -23,8 +23,16 @@ internal sealed class WTelegramGateway(
     TelegramCredentialsStore credentials,
     IDataProtectionProvider protection,
     TelegramInbox inbox,
+    Microsoft.Extensions.Configuration.IConfiguration config,
     ILogger<WTelegramGateway> logger) : ITelegramGateway, IAsyncDisposable
 {
+    /// <summary>
+    /// Telegram:Enabled=false (локальная среда) — аккаунты не подключаются вовсе: один и тот же аккаунт не должен работать локально и на
+    /// проде одновременно (два клиента отвечали бы людям дважды). Проверка агента в настройках работает и без подключения.
+    /// </summary>
+    public static bool Enabled(Microsoft.Extensions.Configuration.IConfiguration config) =>
+        Microsoft.Extensions.Configuration.ConfigurationBinder.GetValue(config, "Telegram:Enabled", true);
+
     private static readonly JsonSerializerOptions StateJson = new() { IncludeFields = true };
 
     private readonly IDataProtector _protector = protection.CreateProtector("OneBase.Telegram.Session");
@@ -432,6 +440,12 @@ internal sealed class WTelegramGateway(
 
     private async Task<Session> CreateAsync(Guid accountId, bool fresh, CancellationToken ct)
     {
+        if (!Enabled(config))
+        {
+            throw new TelegramException("Telegram в этой среде выключен (Telegram:Enabled=false): аккаунт работает на проде — локально его не подключаем.",
+                TelegramErrorKind.Config);
+        }
+
         var api = await credentials.GetAsync(ct)
                   ?? throw new TelegramException("Не заданы api_id и api_hash — укажите их в «Настройки → Telegram» (my.telegram.org).", TelegramErrorKind.Config);
         byte[]? saved = null;

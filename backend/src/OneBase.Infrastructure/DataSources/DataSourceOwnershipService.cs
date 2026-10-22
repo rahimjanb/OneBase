@@ -72,6 +72,12 @@ public sealed class DataSourceOwnershipService(OneBaseDbContext db, FieldOwnersh
                     $"{DataSourceRules.SheetsLabel(owner.Sheets)} · раздел «{section}» · {ScheduleText(binding)}",
                     synced, synced is null ? "ещё не синхронизировалось" : "синхронизация проверила таблицу"));
             }
+            else if (field.Kind is "ledger" or "terms" or "balance")
+            {
+                // Реестры взаиморасчётов загружаются только привязкой Google Sheets (копия листа) — без неё их нет.
+                rows.Add(new OwnershipRow(field.Key, field.Label, "Данные OneBase", "google_sheets", "Google Sheets",
+                    "не привязано: «Источники данных» → «Акт сверки» или «DSO» → «Привязать Google Sheets»", null, "ещё не загружено"));
+            }
             else
             {
                 var changed = await LastChangedAsync(field, ct);

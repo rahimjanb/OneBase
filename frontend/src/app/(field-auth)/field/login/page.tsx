@@ -1,9 +1,14 @@
 import { headers } from "next/headers";
 import { CalendarCheck, ChartColumn, Route, Sparkles } from "lucide-react";
 import { LoginForm } from "@/app/login/LoginForm";
+import { LanguageToggle } from "@/components/shell/LanguageToggle";
+import { getT } from "@/i18n/server";
 import { fieldHomePath, isFieldHost, requestHost } from "@/lib/field/host";
 
-export const metadata = { title: "Вход · Sales Base" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Вход · Sales Base") };
+}
 
 const features = [
   { icon: Route, title: "Маршрут на день", text: "Точки из плана Linko, задач и тех, кого пора навестить." },
@@ -18,11 +23,16 @@ const features = [
  */
 export default async function FieldLoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
+  const t = await getT();
   const host = requestHost(await headers());
   const home = fieldHomePath(host);
 
   return (
-    <main data-product="field" className="flex min-h-dvh flex-col bg-page lg:flex-row">
+    <main data-product="field" className="relative flex min-h-dvh flex-col bg-page lg:flex-row">
+      {/* Язык — до входа: форма и ошибки сразу на нём. На телефоне кнопка на тёмном блоке бренда — поверх него и светлая. */}
+      <div className="absolute right-3 top-[max(env(safe-area-inset-top),0.75rem)] z-20 text-sidebar-text lg:text-ink-2">
+        <LanguageToggle />
+      </div>
       {/* Бренд: сверху на телефоне, слева на большом экране */}
       <section className="relative overflow-hidden bg-sidebar px-6 pb-20 pt-[calc(env(safe-area-inset-top)+2.5rem)] text-sidebar-text lg:flex lg:w-[46%] lg:max-w-[640px] lg:flex-col lg:justify-between lg:px-12 lg:py-12">
         <RouteArt />
@@ -34,10 +44,10 @@ export default async function FieldLoginPage({ searchParams }: { searchParams: P
           </div>
         </div>
 
-        <p className="relative mt-6 max-w-sm text-sm text-sidebar-text lg:hidden">Маршруты, визиты, задачи и KPI полевой команды.</p>
+        <p className="relative mt-6 max-w-sm text-sm text-sidebar-text lg:hidden">{t("Маршруты, визиты, задачи и KPI полевой команды.")}</p>
 
         <div className="relative hidden lg:block">
-          <h2 className="max-w-md text-[28px] font-semibold leading-tight text-white">Полевые продажи в одном приложении</h2>
+          <h2 className="max-w-md text-[28px] font-semibold leading-tight text-white">{t("Полевые продажи в одном приложении")}</h2>
           <ul className="mt-8 space-y-5">
             {features.map((f) => (
               <li key={f.title} className="flex gap-3.5">
@@ -45,15 +55,15 @@ export default async function FieldLoginPage({ searchParams }: { searchParams: P
                   <f.icon className="size-5" strokeWidth={1.75} />
                 </span>
                 <span>
-                  <span className="block text-sm font-semibold text-white">{f.title}</span>
-                  <span className="block text-sm text-sidebar-muted">{f.text}</span>
+                  <span className="block text-sm font-semibold text-white">{t(f.title)}</span>
+                  <span className="block text-sm text-sidebar-muted">{t(f.text)}</span>
                 </span>
               </li>
             ))}
           </ul>
         </div>
 
-        <p className="relative hidden text-xs text-sidebar-muted lg:block">Часть OneBase · продажи и точки из Linko</p>
+        <p className="relative hidden text-xs text-sidebar-muted lg:block">{t("Часть OneBase · продажи и точки из Linko")}</p>
       </section>
 
       {/* Форма: на телефоне карточка заходит на тёмный блок */}
@@ -62,11 +72,11 @@ export default async function FieldLoginPage({ searchParams }: { searchParams: P
           <div className="rounded-xl shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25)] lg:shadow-none">
             <LoginForm next={next ?? home} product="field" title="Вход в Sales Base" hint="Логин и пароль выдаёт РМ или супервайзер." />
           </div>
-          <p className="mt-4 text-center text-xs text-ink-3">С телефона: откройте сайт в браузере и выберите «Установить приложение».</p>
+          <p className="mt-4 text-center text-xs text-ink-3">{t("С телефона: откройте сайт в браузере и выберите «Установить приложение».")}</p>
           {!isFieldHost(host) && (
             <p className="mt-2 text-center text-xs">
               <a href="/login" className="text-ink-3 underline-offset-2 hover:text-ink hover:underline">
-                Вход в OneBase
+                {t("Вход в OneBase")}
               </a>
             </p>
           )}

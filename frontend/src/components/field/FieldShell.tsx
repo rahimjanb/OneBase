@@ -22,6 +22,8 @@ import {
   WifiOff,
   type LucideIcon,
 } from "lucide-react";
+import { LanguageToggle } from "@/components/shell/LanguageToggle";
+import { useT } from "@/i18n/client";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { roleLabel } from "@/lib/field/labels";
 import type { FieldMe } from "@/lib/field/types";
@@ -69,8 +71,9 @@ function navFor(me: FieldMe): { items: Item[]; bottom: string[] } {
 const isActive = (pathname: string, item: Item) => (item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`));
 
 function Brand({ compact = false }: { compact?: boolean }) {
+  const t = useT();
   return (
-    <Link href="/field" className="flex items-center gap-2.5" aria-label="Sales Base — на главную">
+    <Link href="/field" className="flex items-center gap-2.5" aria-label={t("Sales Base — на главную")}>
       <img src="/icons/field-192.png" alt="" className={compact ? "size-8 rounded-lg" : "size-9 rounded-xl"} />
       <span className="leading-tight">
         <span className="block text-[15px] font-semibold text-white">Sales Base</span>
@@ -97,6 +100,7 @@ function useOnline() {
 
 /** Оболочка Sales Base: панель слева на большом экране, шапка и нижняя навигация на телефоне, баннер идущего визита. */
 export function FieldShell({ me, children }: { me: FieldMe; children: React.ReactNode }) {
+  const t = useT();
   // На домене Sales Base адреса без /field («/», «/tasks»): приводим к виду меню, иначе пункт не подсвечивается.
   const rawPath = usePathname();
   const pathname = rawPath === "/field" || rawPath.startsWith("/field/") ? rawPath : rawPath === "/" ? "/field" : `/field${rawPath}`;
@@ -126,7 +130,7 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
         <div className="px-2">
           <Brand />
         </div>
-        <div className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-sidebar-muted">{roleLabel[me.role]}</div>
+        <div className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-sidebar-muted">{t(roleLabel[me.role])}</div>
         <nav className="mt-2 space-y-0.5 overflow-y-auto">
           {items.map((item) => {
             const active = isActive(pathname, item);
@@ -138,7 +142,7 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${active ? "bg-sidebar-active font-semibold text-white" : "text-sidebar-text hover:bg-white/5 hover:text-white"}`}
               >
                 <item.icon className="size-4 shrink-0" strokeWidth={1.75} />
-                {item.label}
+                {t(item.label)}
               </Link>
             );
           })}
@@ -155,10 +159,11 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
             <div className="lg:hidden">
               <Brand compact />
             </div>
-            {me.dataAsOf && <span className="hidden text-xs text-ink-3 lg:inline">данные Linko на {new Date(me.dataAsOf).toLocaleDateString("ru-RU")}</span>}
+            {me.dataAsOf && <span className="hidden text-xs text-ink-3 lg:inline">{t("данные Linko на {date}", { date: new Date(me.dataAsOf).toLocaleDateString("ru-RU") })}</span>}
             <div className="ml-auto flex items-center gap-1">
               <ThemeToggle />
-              <Link href="/field/notifications" aria-label="Уведомления" className="relative grid size-10 place-items-center rounded-full hover:bg-white/10 lg:hover:bg-muted">
+              <LanguageToggle />
+              <Link href="/field/notifications" aria-label={t("Уведомления")} className="relative grid size-10 place-items-center rounded-full hover:bg-white/10 lg:hover:bg-muted">
                 <Bell className="size-[18px]" strokeWidth={1.75} />
                 {me.unreadNotifications > 0 && (
                   <span className="absolute right-1 top-1 grid min-w-[18px] place-items-center rounded-full bg-bad px-1 text-[10px] font-semibold leading-[18px] text-white">
@@ -171,14 +176,14 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
           </div>
           {!online && (
             <div className="flex items-center gap-2 bg-warn px-4 py-1.5 text-xs font-medium text-white sm:px-6">
-              <WifiOff className="size-3.5" /> Нет связи — показаны последние загруженные данные. Действия отправятся, когда связь появится, — повторите их.
+              <WifiOff className="size-3.5" /> {t("Нет связи — показаны последние загруженные данные. Действия отправятся, когда связь появится, — повторите их.")}
             </div>
           )}
           {visit && pathname !== `/field/customers/${visit.marketId}` && (
             <Link href={`/field/customers/${visit.marketId}`} className="flex items-center gap-2 bg-accent px-4 py-2 text-sm font-medium text-white sm:px-6">
               <CalendarCheck className="size-4 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">Идёт визит: {visit.marketName}</span>
-              <span className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 text-xs">Открыть</span>
+              <span className="min-w-0 flex-1 truncate">{t("Идёт визит: {name}", { name: visit.marketName })}</span>
+              <span className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 text-xs">{t("Открыть")}</span>
             </Link>
           )}
         </header>
@@ -191,7 +196,7 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
         </div>
 
       {/* Нижняя навигация — телефон: в потоке под содержимым, не двигается; при открытой клавиатуре прячется */}
-      <nav aria-label="Разделы Sales Base" className={`relative z-30 shrink-0 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden ${keyboardOpen ? "hidden" : ""}`}>
+      <nav aria-label={t("Разделы Sales Base")} className={`relative z-30 shrink-0 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden ${keyboardOpen ? "hidden" : ""}`}>
         <ul className="flex">
           {bottomItems.map((item) => {
             const active = isActive(pathname, item);
@@ -199,7 +204,7 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
               <li key={item.href} className="min-w-0 flex-1">
                 <Link href={item.href} aria-current={active ? "page" : undefined} className={`flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium active:bg-muted ${active ? "text-accent-strong" : "text-ink-3"}`}>
                   <item.icon className="size-[22px]" strokeWidth={active ? 2.25 : 1.75} />
-                  <span className="max-w-full truncate px-1">{item.short ?? item.label}</span>
+                  <span className="max-w-full truncate px-1">{t(item.short ?? item.label)}</span>
                 </Link>
               </li>
             );
@@ -207,7 +212,7 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
           <li className="min-w-0 flex-1">
             <button type="button" onClick={() => setMore(true)} className={`flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] font-medium active:bg-muted ${moreActive ? "text-accent-strong" : "text-ink-3"}`}>
               <Menu className="size-[22px]" strokeWidth={moreActive ? 2.25 : 1.75} />
-              Ещё
+              {t("Ещё")}
             </button>
           </li>
         </ul>
@@ -216,13 +221,13 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
 
       <ScrollManager />
       <AppBridge userId={me.userId} refreshOnFocus />
-      <Sheet open={more} onClose={() => setMore(false)} title="Разделы">
+      <Sheet open={more} onClose={() => setMore(false)} title={t("Разделы")}>
         <div className="mb-3 rounded-xl bg-muted px-3 py-2.5 text-sm">
           <div className="font-medium text-ink">{me.name}</div>
           <div className="text-xs text-ink-3">
-            {roleLabel[me.role]}
+            {t(roleLabel[me.role])}
             {me.teamName ? ` · ${me.teamName}` : ""}
-            {me.supervisorName ? ` · супервайзер ${me.supervisorName}` : ""}
+            {me.supervisorName ? ` · ${t("супервайзер {name}", { name: me.supervisorName })}` : ""}
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -233,12 +238,12 @@ export function FieldShell({ me, children }: { me: FieldMe; children: React.Reac
               className={`flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border text-center text-xs font-medium ${isActive(pathname, item) ? "border-accent bg-accent-soft text-accent-strong" : "border-line text-ink-2 active:bg-muted"}`}
             >
               <item.icon className="size-6" strokeWidth={1.75} />
-              <span className="px-1">{item.short ?? item.label}</span>
+              <span className="px-1">{t(item.short ?? item.label)}</span>
             </Link>
           ))}
           <LogoutLink href={FIELD_LOGOUT_PATH} className="flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border border-line text-xs font-medium text-bad active:bg-muted">
             <LogOut className="size-6" strokeWidth={1.75} />
-            Выйти
+            {t("Выйти")}
           </LogoutLink>
         </div>
       </Sheet>

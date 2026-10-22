@@ -1,8 +1,12 @@
 import { Consultant } from "@/components/ai/Consultant";
+import { getT } from "@/i18n/server";
 import type { AiStatus, ConversationSummary } from "@/lib/consultant";
 import { apiGet } from "@/lib/server-api";
 
-export const metadata = { title: "Консультант · OneBase" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Консультант · OneBase") };
+}
 
 type Me = { permissions: string[] };
 

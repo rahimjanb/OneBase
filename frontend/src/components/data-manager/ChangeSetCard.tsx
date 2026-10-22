@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { AlertTriangle, Check, FileSpreadsheet, Info, Loader2, RotateCcw, ShieldCheck, X } from "lucide-react";
+import { useT } from "@/i18n/client";
+import type { T } from "@/i18n/core";
 import {
   actionView,
   itemStatusLabel,
@@ -36,6 +38,7 @@ const pageSize = 30;
 
 /** План изменений: строки «было → стало», конфликты, предупреждения, влияние на KPI, проверка, подтверждение и откат. */
 export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCancel, onRollback }: Props) {
+  const t = useT();
   const counts = set.summary.counts;
   const byTab = useMemo(
     () => ({
@@ -53,57 +56,61 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
   const applicable = counts.create + counts.update + counts.delete;
 
   return (
-    <section className="rounded-xl border border-line bg-surface" aria-label={`План изменений: ${set.title}`}>
+    <section className="rounded-xl border border-line bg-surface" aria-label={t("План изменений: {title}", { title: t(set.title) })}>
       <header className="flex flex-wrap items-start gap-3 border-b border-line px-4 py-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
           <FileSpreadsheet className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold text-ink">{set.title}</h3>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.tone}`}>{status.label}</span>
+            <h3 className="font-semibold text-ink">{t(set.title)}</h3>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.tone}`}>{t(status.label)}</span>
           </div>
           <p className="mt-0.5 text-xs text-ink-3">
-            Подготовлен {when(set.createdAt)}
+            {t("Подготовлен {date}", { date: when(set.createdAt) })}
             {set.userName ? ` · ${set.userName}` : ""}
-            {set.mode === "replace" ? " · полная замена месяца" : ""}
-            {set.appliedAt ? ` · применён ${when(set.appliedAt)}${set.appliedBy ? ` (${set.appliedBy})` : ""}` : ""}
-            {set.rolledBackAt ? ` · откачен ${when(set.rolledBackAt)}${set.rolledBackBy ? ` (${set.rolledBackBy})` : ""}` : ""}
+            {set.mode === "replace" ? ` · ${t("полная замена месяца")}` : ""}
+            {set.appliedAt ? ` · ${t("применён {date}", { date: when(set.appliedAt) })}${set.appliedBy ? ` (${set.appliedBy})` : ""}` : ""}
+            {set.rolledBackAt ? ` · ${t("откачен {date}", { date: when(set.rolledBackAt) })}${set.rolledBackBy ? ` (${set.rolledBackBy})` : ""}` : ""}
           </p>
         </div>
       </header>
 
       <div className="space-y-3 px-4 py-3">
         <div className="flex flex-wrap gap-2 text-xs">
-          <Count label="Создать" value={counts.create} tone="bg-ok-soft text-ok" />
-          <Count label="Изменить" value={counts.update} tone="bg-accent-soft text-accent-strong" />
-          <Count label="Удалить" value={counts.delete} tone="bg-bad-soft text-bad" />
-          <Count label="Без изменений" value={counts.unchanged} tone="bg-muted text-ink-2" />
-          <Count label="Конфликты" value={counts.conflict} tone="bg-warn-soft text-warn" />
-          {set.summary.skippedEmpty > 0 && <span className="rounded-full bg-muted px-2.5 py-1 text-ink-3">пустых ячеек: {set.summary.skippedEmpty}</span>}
+          <Count label={t("Создать")} value={counts.create} tone="bg-ok-soft text-ok" />
+          <Count label={t("Изменить")} value={counts.update} tone="bg-accent-soft text-accent-strong" />
+          <Count label={t("Удалить")} value={counts.delete} tone="bg-bad-soft text-bad" />
+          <Count label={t("Без изменений")} value={counts.unchanged} tone="bg-muted text-ink-2" />
+          <Count label={t("Конфликты")} value={counts.conflict} tone="bg-warn-soft text-warn" />
+          {set.summary.skippedEmpty > 0 && (
+            <span className="rounded-full bg-muted px-2.5 py-1 text-ink-3">{t("пустых ячеек: {n}", { n: set.summary.skippedEmpty })}</span>
+          )}
         </div>
 
         {set.summary.previous && (
           <Banner tone="info">
-            Новая версия отчёта по сравнению с операцией от {when(set.summary.previous.appliedAt)}
-            {set.summary.previous.fileName ? ` («${set.summary.previous.fileName}»)` : ""}: исправлено строк — {set.summary.previous.correctedRows}.
+            {t("Новая версия отчёта по сравнению с операцией от {date}", { date: when(set.summary.previous.appliedAt) })}
+            {set.summary.previous.fileName ? ` («${set.summary.previous.fileName}»)` : ""}
+            {t(": исправлено строк — {n}.", { n: set.summary.previous.correctedRows })}
           </Banner>
         )}
+        {/* Пояснения, предупреждения и ошибки плана пишет сервер — на языке интерфейса (заметку администратора — как есть, если её нет в словаре). */}
         {set.summary.notes.map((n) => (
           <Banner key={n} tone="info">
-            {n}
+            {t(n)}
           </Banner>
         ))}
         {set.summary.warnings.map((w) => (
           <Banner key={w} tone="warn">
-            {w}
+            {t(w)}
           </Banner>
         ))}
-        {set.error && <Banner tone="bad">{set.error}</Banner>}
+        {set.error && <Banner tone="bad">{t(set.error)}</Banner>}
 
         {set.summary.pnl && set.summary.pnl.months.length > 0 && !set.verification && (
           <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-3">Как изменится P&L (расчёт OneBase, все дилеры)</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-3">{t("Как изменится P&L (расчёт OneBase, все дилеры)")}</h4>
             {set.summary.pnl.months.map((m) => (
               <PnlTotalsTable key={`${m.year}-${m.month}`} total={m} />
             ))}
@@ -113,7 +120,7 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
 
         {set.summary.impact.length > 0 && !set.verification && (
           <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-3">Как изменятся показатели</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-3">{t("Как изменятся показатели")}</h4>
             {set.summary.impact.map((i) => (
               <ImpactTable key={i.period} impact={i} />
             ))}
@@ -124,14 +131,16 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
           <div className={`rounded-lg px-3 py-2.5 text-sm ${set.verification.mismatches === 0 ? "bg-ok-soft" : "bg-bad-soft"}`}>
             <div className="flex items-center gap-2 font-medium text-ink">
               <ShieldCheck className={`size-4 ${set.verification.mismatches === 0 ? "text-ok" : "text-bad"}`} />
-              Проверка {when(set.verification.checkedAt)}: строк {set.verification.checked}, расхождений {set.verification.mismatches}
+              {t("Проверка {date}: строк {checked}, расхождений {mismatches}", {
+                date: when(set.verification.checkedAt),
+                checked: set.verification.checked,
+                mismatches: set.verification.mismatches,
+              })}
             </div>
             {set.verification.problems.length > 0 && (
               <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-ink-2">
                 {set.verification.problems.map((p) => (
-                  <li key={p.label}>
-                    {p.label}: ожидалось {valueText(p.expected)}, сейчас {valueText(p.actual)}
-                  </li>
+                  <li key={p.label}>{t("{label}: ожидалось {expected}, сейчас {actual}", { label: t(p.label), expected: valueText(p.expected), actual: valueText(p.actual) })}</li>
                 ))}
               </ul>
             )}
@@ -143,7 +152,7 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
             ))}
             {set.verification.notes.map((n) => (
               <p key={n} className="mt-1 text-xs text-ink-2">
-                {n}
+                {t(n)}
               </p>
             ))}
           </div>
@@ -153,9 +162,9 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
           <div role="tablist" className="flex flex-wrap gap-1 border-b border-line">
             {(
               [
-                ["changes", `Изменения (${byTab.changes.length})`],
-                ["conflicts", `Конфликты (${byTab.conflicts.length})`],
-                ["unchanged", `Без изменений (${byTab.unchanged.length})`],
+                ["changes", t("Изменения ({n})", { n: byTab.changes.length })],
+                ["conflicts", t("Конфликты ({n})", { n: byTab.conflicts.length })],
+                ["unchanged", t("Без изменений ({n})", { n: byTab.unchanged.length })],
               ] as [Tab, string][]
             ).map(([key, label]) => (
               <button
@@ -174,32 +183,32 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
             ))}
           </div>
           {rows.length === 0 ? (
-            <p className="py-4 text-center text-sm text-ink-3">Строк нет</p>
+            <p className="py-4 text-center text-sm text-ink-3">{t("Строк нет")}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="mt-1 w-full text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
-                    <th className="py-2 pr-3 font-semibold">Действие</th>
-                    <th className="py-2 pr-3 font-semibold">Запись</th>
-                    <th className="py-2 pr-3 text-right font-semibold">Было</th>
-                    <th className="py-2 pr-3 text-right font-semibold">Стало</th>
-                    <th className="py-2 pr-3 font-semibold">Источник и комментарий</th>
+                    <th className="py-2 pr-3 font-semibold">{t("Действие")}</th>
+                    <th className="py-2 pr-3 font-semibold">{t("Запись")}</th>
+                    <th className="py-2 pr-3 text-right font-semibold">{t("Было")}</th>
+                    <th className="py-2 pr-3 text-right font-semibold">{t("Стало")}</th>
+                    <th className="py-2 pr-3 font-semibold">{t("Источник и комментарий")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {shown.map((i) => (
                     <tr key={i.id} className="border-b border-line/60 align-top last:border-0">
                       <td className="py-2 pr-3">
-                        <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${actionView[i.action].tone}`}>{actionView[i.action].label}</span>
-                        {itemStatusLabel[i.status] && <div className="mt-1 text-[11px] text-ink-3">{itemStatusLabel[i.status]}</div>}
+                        <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${actionView[i.action].tone}`}>{t(actionView[i.action].label)}</span>
+                        {itemStatusLabel[i.status] && <div className="mt-1 text-[11px] text-ink-3">{t(itemStatusLabel[i.status])}</div>}
                       </td>
-                      <td className="py-2 pr-3 text-ink">{i.label}</td>
+                      <td className="py-2 pr-3 text-ink">{t(i.label)}</td>
                       <td className="whitespace-nowrap py-2 pr-3 text-right tabular-nums text-ink-2">{valueText(i.before)}</td>
                       <td className="whitespace-nowrap py-2 pr-3 text-right font-medium tabular-nums text-ink">{valueText(i.after)}</td>
                       <td className="py-2 pr-3 text-xs text-ink-3">
                         {i.sourceRef && <div>{i.sourceRef}</div>}
-                        {i.message && <div className={i.action === "Conflict" ? "text-warn" : ""}>{i.message}</div>}
+                        {i.message && <div className={i.action === "Conflict" ? "text-warn" : ""}>{t(i.message)}</div>}
                       </td>
                     </tr>
                   ))}
@@ -207,7 +216,7 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
               </table>
               {rows.length > pageSize && (
                 <button type="button" onClick={() => setAll(!all)} className="mt-2 text-sm font-medium text-accent-strong hover:underline">
-                  {all ? "Свернуть" : `Показать все ${rows.length}`}
+                  {all ? t("Свернуть") : t("Показать все {n}", { n: rows.length })}
                 </button>
               )}
             </div>
@@ -217,7 +226,7 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
 
       {(set.canApply || set.canCancel || set.canRollback) && (
         <footer className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
-          {!canChange && <p className="flex-1 text-xs text-ink-3">Подтвердить или откатить может пользователь с правом «AI Data Manager».</p>}
+          {!canChange && <p className="flex-1 text-xs text-ink-3">{t("Подтвердить или откатить может пользователь с правом «AI Data Manager».")}</p>}
           {canChange && set.canApply && (
             <button
               type="button"
@@ -226,7 +235,7 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
               className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-50 max-lg:h-11"
             >
               {acting ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              Подтвердить и применить ({applicable})
+              {t("Подтвердить и применить ({n})", { n: applicable })}
             </button>
           )}
           {canChange && set.canCancel && (
@@ -237,7 +246,7 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-muted disabled:opacity-50 max-lg:h-11"
             >
               <X className="size-4" />
-              Отменить
+              {t("Отменить")}
             </button>
           )}
           {canChange && set.canRollback && (
@@ -248,7 +257,7 @@ export function ChangeSetCard({ set, canChange, acting, locked, onApply, onCance
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-4 text-sm font-medium text-bad hover:bg-bad-soft disabled:opacity-50 max-lg:h-11"
             >
               {acting ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
-              Откатить
+              {t("Откатить")}
             </button>
           )}
         </footer>
@@ -289,10 +298,11 @@ const pnlRows: [string, string, boolean?][] = [
   ["ebit", "EBIT"],
 ];
 
-const sum = (v: number | null | undefined) => (v == null ? "—" : `${Math.round(v).toLocaleString("ru-RU")} сум`);
+const sum = (v: number | null | undefined, t: T) => (v == null ? "—" : t("{n} сум", { n: Math.round(v).toLocaleString("ru-RU") }));
 
 /** P&L месяца по всем дилерам: было → станет (план изменений) или ожидалось / в расчёте (проверка после применения). */
 function PnlTotalsTable({ total, verified = false }: { total: PnlMonthTotal; verified?: boolean }) {
+  const t = useT();
   const rows = pnlRows.filter(([key]) => total.before[key] != null || total.after[key] != null);
   return (
     <div className="mt-2 overflow-x-auto">
@@ -302,8 +312,8 @@ function PnlTotalsTable({ total, verified = false }: { total: PnlMonthTotal; ver
             <th className="py-1.5 pr-3 font-semibold">
               {String(total.month).padStart(2, "0")}.{total.year}
             </th>
-            <th className="py-1.5 pr-3 text-right font-semibold">{verified ? "Ожидалось" : "Было"}</th>
-            <th className="py-1.5 pr-3 text-right font-semibold">{verified ? "В расчёте OneBase" : "Станет"}</th>
+            <th className="py-1.5 pr-3 text-right font-semibold">{verified ? t("Ожидалось") : t("Было")}</th>
+            <th className="py-1.5 pr-3 text-right font-semibold">{verified ? t("В расчёте OneBase") : t("Станет")}</th>
           </tr>
         </thead>
         <tbody>
@@ -313,10 +323,10 @@ function PnlTotalsTable({ total, verified = false }: { total: PnlMonthTotal; ver
             const changed = (before ?? 0) !== (after ?? 0);
             return (
               <tr key={key} className={`border-b border-line/60 last:border-0 ${key === "ebit" ? "font-medium" : ""}`}>
-                <td className="py-1.5 pr-3 text-ink">{label}</td>
-                <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums text-ink-2">{isPct ? pct(before) : sum(before)}</td>
+                <td className="py-1.5 pr-3 text-ink">{t(label)}</td>
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums text-ink-2">{isPct ? pct(before) : sum(before, t)}</td>
                 <td className={`whitespace-nowrap py-1.5 pr-3 text-right tabular-nums ${changed ? (verified ? "text-bad" : "text-ink") : "text-ink-2"} ${changed && !verified ? "font-medium" : ""}`}>
-                  {isPct ? pct(after) : sum(after)}
+                  {isPct ? pct(after) : sum(after, t)}
                 </td>
               </tr>
             );
@@ -329,29 +339,30 @@ function PnlTotalsTable({ total, verified = false }: { total: PnlMonthTotal; ver
 
 /** Расчётные строки из отчёта (валовая, EBIT…), которые разошлись с расчётом OneBase по исходным строкам. */
 function PnlChecksTable({ checks, total }: { checks: PnlCheck[]; total: number }) {
+  const t = useT();
   const [all, setAll] = useState(false);
   const shown = all ? checks : checks.slice(0, 10);
-  const value = (c: PnlCheck, v: number | null) => (v == null ? "—" : c.line === "margin" || c.line === "ros" ? pct(v) : sum(v));
+  const value = (c: PnlCheck, v: number | null) => (v == null ? "—" : c.line === "margin" || c.line === "ros" ? pct(v) : sum(v, t));
   return (
     <div>
       <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-3">
-        Сверка расчётных строк отчёта: расхождений {checks.length} из {total}
+        {t("Сверка расчётных строк отчёта: расхождений {n} из {total}", { n: checks.length, total })}
       </h4>
       <div className="mt-1 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
-              <th className="py-1.5 pr-3 font-semibold">Дилер · строка</th>
-              <th className="py-1.5 pr-3 text-right font-semibold">В отчёте</th>
-              <th className="py-1.5 pr-3 text-right font-semibold">Расчёт OneBase</th>
-              <th className="py-1.5 pr-3 font-semibold">Ячейка</th>
+              <th className="py-1.5 pr-3 font-semibold">{t("Дилер · строка")}</th>
+              <th className="py-1.5 pr-3 text-right font-semibold">{t("В отчёте")}</th>
+              <th className="py-1.5 pr-3 text-right font-semibold">{t("Расчёт OneBase")}</th>
+              <th className="py-1.5 pr-3 font-semibold">{t("Ячейка")}</th>
             </tr>
           </thead>
           <tbody>
             {shown.map((c, i) => (
               <tr key={`${c.dealer}-${c.line}-${c.month}-${i}`} className="border-b border-line/60 last:border-0">
                 <td className="py-1.5 pr-3 text-ink">
-                  {c.dealer} · {c.label} · {String(c.month).padStart(2, "0")}.{c.year}
+                  {c.dealer} · {t(c.label)} · {String(c.month).padStart(2, "0")}.{c.year}
                 </td>
                 <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums">{value(c, c.report)}</td>
                 <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums text-warn">{value(c, c.oneBase)}</td>
@@ -363,7 +374,7 @@ function PnlChecksTable({ checks, total }: { checks: PnlCheck[]; total: number }
       </div>
       {checks.length > 10 && (
         <button type="button" onClick={() => setAll(!all)} className="mt-1 text-sm font-medium text-accent-strong hover:underline">
-          {all ? "Свернуть" : `Показать все ${checks.length}`}
+          {all ? t("Свернуть") : t("Показать все {n}", { n: checks.length })}
         </button>
       )}
     </div>
@@ -372,6 +383,7 @@ function PnlChecksTable({ checks, total }: { checks: PnlCheck[]; total: number }
 
 /** Показатели до/после: план, факт, выполнение — по республике и регионам плана. */
 function ImpactTable({ impact, after = false }: { impact: Impact; after?: boolean }) {
+  const t = useT();
   const rows = [...(impact.republic ? [impact.republic] : []), ...impact.regions];
   return (
     <div className="mt-2">
@@ -381,19 +393,20 @@ function ImpactTable({ impact, after = false }: { impact: Impact; after?: boolea
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
                 <th className="py-1.5 pr-3 font-semibold">{impact.period}</th>
-                <th className="py-1.5 pr-3 text-right font-semibold">{after ? "План в расчёте" : "План: было → станет"}</th>
-                <th className="py-1.5 pr-3 text-right font-semibold">Факт</th>
-                <th className="py-1.5 pr-3 text-right font-semibold">{after ? "Выполнение" : "Выполнение: было → станет"}</th>
+                <th className="py-1.5 pr-3 text-right font-semibold">{after ? t("План в расчёте") : t("План: было → станет")}</th>
+                <th className="py-1.5 pr-3 text-right font-semibold">{t("Факт")}</th>
+                <th className="py-1.5 pr-3 text-right font-semibold">{after ? t("Выполнение") : t("Выполнение: было → станет")}</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
                 <tr key={`${r.name}-${i}`} className={`border-b border-line/60 last:border-0 ${i === 0 && impact.republic ? "font-medium" : ""}`}>
-                  <td className="py-1.5 pr-3 text-ink">{r.name}</td>
+                  {/* Строка республики — подпись сервера («Республика»); регионы — данные, как есть. */}
+                  <td className="py-1.5 pr-3 text-ink">{i === 0 && impact.republic ? t(r.name) : r.name}</td>
                   <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums">
-                    {after ? kg(r.planAfter) : `${kg(r.planBefore)} → ${kg(r.planAfter)}`}
+                    {after ? kg(r.planAfter, t) : `${kg(r.planBefore, t)} → ${kg(r.planAfter, t)}`}
                   </td>
-                  <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums text-ink-2">{kg(r.factKg)}</td>
+                  <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums text-ink-2">{kg(r.factKg, t)}</td>
                   <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums">
                     {after ? pct(r.executionAfter) : `${pct(r.executionBefore)} → ${pct(r.executionAfter)}`}
                   </td>
@@ -403,7 +416,7 @@ function ImpactTable({ impact, after = false }: { impact: Impact; after?: boolea
           </table>
         </div>
       )}
-      <p className="mt-1 text-xs text-ink-3">{impact.note}</p>
+      <p className="mt-1 text-xs text-ink-3">{t(impact.note)}</p>
     </div>
   );
 }

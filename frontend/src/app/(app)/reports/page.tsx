@@ -1,14 +1,16 @@
 import { ComingSoon } from "@/components/ComingSoon";
+import { getT } from "@/i18n/server";
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
+  const t = await getT();
   return (
     <ComingSoon
-      title="Отчёты"
-      subtitle="Отчёты по отделам, финансам и сотрудникам"
+      title={t("Отчёты")}
+      subtitle={t("Отчёты по отделам, финансам и сотрудникам")}
       planned={[
-        "Каталог отчётов по продажам, финансам, отделам и сотрудникам",
-        "Фильтры по периоду и подразделению",
-        "Предпросмотр и экспорт",
+        t("Каталог отчётов по продажам, финансам, отделам и сотрудникам"),
+        t("Фильтры по периоду и подразделению"),
+        t("Предпросмотр и экспорт"),
       ]}
     />
   );

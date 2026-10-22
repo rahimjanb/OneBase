@@ -2027,6 +2027,13 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("LastUsedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("LinkChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LinkTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTimeOffset>("PasswordChangedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2034,6 +2041,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProtectedLinkToken")
+                        .HasColumnType("text");
 
                     b.Property<string>("ProtectedPassword")
                         .IsRequired()
@@ -2055,6 +2065,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("DepartmentId")
                         .IsUnique()
                         .HasFilter("\"RevokedAt\" IS NULL");
+
+                    b.HasIndex("LinkTokenHash")
+                        .IsUnique()
+                        .HasFilter("\"LinkTokenHash\" IS NOT NULL");
 
                     b.HasIndex("Username")
                         .IsUnique();
@@ -3002,8 +3016,14 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
 
+                    b.Property<decimal?>("DiscountPercent")
+                        .HasColumnType("numeric");
+
                     b.Property<long>("OrderId")
                         .HasColumnType("bigint");
+
+                    b.Property<decimal?>("OriginPrice")
+                        .HasColumnType("numeric");
 
                     b.Property<decimal>("Price")
                         .HasColumnType("numeric");
@@ -3012,6 +3032,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<decimal>("ReturnAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("TotalDiscount")
                         .HasColumnType("numeric");
 
                     b.Property<decimal>("TotalPrice")
@@ -3213,6 +3236,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsWeighted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Measurement")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -3267,6 +3294,71 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ProductTypes", "linko");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Sales.LinkoPromotion", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateOnly?>("BeginDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("Discount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("DiscountType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("IsApplyAll")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("PromotionType")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateOnly?>("TillDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("Tm")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Promotions", "linko");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Sales.LinkoPromotionProduct", b =>
+                {
+                    b.Property<long>("PromotionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ProductId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Type")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<decimal?>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("PromotionId", "ProductId", "Type");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("PromotionProducts", "linko");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Sales.LinkoProvider", b =>
@@ -3561,6 +3653,90 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("AgentProfiles", "sales");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Sales.SalesDealerLedgerEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<Guid?>("BindingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Dealer")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("DealerKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceRef")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Field", "DealerKey", "Date");
+
+                    b.ToTable("DealerLedger", "sales");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Sales.SalesDealerTerm", b =>
+                {
+                    b.Property<string>("DealerKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("BindingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Dealer")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("NormDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("Opening")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateOnly?>("OpeningDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("DealerKey");
+
+                    b.ToTable("DealerTerms", "sales");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Sales.SalesDirection", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3726,11 +3902,47 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("RegionPlans", "sales");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Sales.SalesStaffIndicator", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("ForSupervisor")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Levels")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("LoadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("PlanType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("StaffIndicators", "sales");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Sales.SalesStaffPlan", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<decimal>("BonusAmount")
+                        .HasColumnType("numeric");
 
                     b.Property<decimal>("FactAmount")
                         .HasColumnType("numeric");
@@ -3773,6 +3985,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.Property<decimal>("ReturnAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SalaryAmount")
                         .HasColumnType("numeric");
 
                     b.Property<decimal>("SalesAmount")
@@ -3964,6 +4179,14 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("FullAccessUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("GenerationModel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("GenerationModelProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("Language")
                         .IsRequired()

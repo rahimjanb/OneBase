@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Plug } from "lucide-react";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import { getT } from "@/i18n/server";
 import { statusView, type DepartmentIntegrations } from "@/lib/integrations";
 import { dateTime } from "@/lib/sales/format";
 import { apiGetOrNull } from "@/lib/server-api";
@@ -11,25 +12,26 @@ export default async function DepartmentIntegrationsPage({ params }: { params: P
   const path = `/settings/integrations/${dept}`;
   const department = await apiGetOrNull<DepartmentIntegrations>(`/api/integrations/departments/${dept}`, path);
   if (!department) notFound();
+  const t = await getT();
 
   return (
     <>
       <PageHeader
-        title={`Интеграции: ${department.name}`}
-        subtitle="Внешние системы, из которых отдел получает данные"
+        title={t("Интеграции: {name}", { name: t(department.name) })}
+        subtitle={t("Внешние системы, из которых отдел получает данные")}
         breadcrumbs={[
           { label: "OneBase", href: "/" },
-          { label: "Настройки", href: "/settings" },
-          { label: "Интеграции", href: "/settings/integrations" },
-          { label: department.name },
+          { label: t("Настройки"), href: "/settings" },
+          { label: t("Интеграции"), href: "/settings/integrations" },
+          { label: t(department.name) },
         ]}
       />
       <PageBody>
         {department.integrations.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line bg-surface/60 px-6 py-12 text-center">
             <Plug className="mx-auto size-6 text-ink-3" />
-            <p className="mt-3 text-sm text-ink-2">Для отдела «{department.name}» интеграций пока нет.</p>
-            <p className="mt-1 text-xs text-ink-3">Сейчас доступна интеграция с Linko для отдела «Продажи».</p>
+            <p className="mt-3 text-sm text-ink-2">{t("Для отдела «{name}» интеграций пока нет.", { name: t(department.name) })}</p>
+            <p className="mt-1 text-xs text-ink-3">{t("Сейчас доступна интеграция с Linko для отдела «Продажи».")}</p>
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
@@ -43,14 +45,14 @@ export default async function DepartmentIntegrationsPage({ params }: { params: P
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-ink">{i.name}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusView[i.status].className}`}>{statusView[i.status].label}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusView[i.status].className}`}>{t(statusView[i.status].label)}</span>
                       </div>
-                      <p className="mt-1.5 text-sm text-ink-2">{i.description}</p>
+                      <p className="mt-1.5 text-sm text-ink-2">{t(i.description)}</p>
                     </div>
                     <ArrowRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />
                   </div>
                   <div className="mt-4 border-t border-line pt-3 text-xs text-ink-3">
-                    {i.dataAsOf ? `Данные по ${dateTime(i.dataAsOf)}` : "Данные ещё не загружались"}
+                    {i.dataAsOf ? t("Данные по {date}", { date: dateTime(i.dataAsOf) }) : t("Данные ещё не загружались")}
                   </div>
                 </div>
               </Link>

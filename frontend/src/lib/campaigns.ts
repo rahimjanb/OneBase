@@ -1,4 +1,8 @@
+import { makeT, type T } from "@/i18n/core";
 import { bff } from "./bff";
+
+/** Без перевода (русский) — если вызывающий не передал t. */
+const plain: T = makeT(null);
 
 export type CampaignStatus = "Draft" | "Scheduled" | "Queued" | "Sending" | "Completed" | "CompletedWithErrors" | "Paused" | "Cancelled" | "Failed";
 
@@ -121,18 +125,19 @@ export const campaignsApi = {
 };
 
 /** Файл — multipart, мимо JSON-обёртки bff (у неё Content-Type: application/json). */
-export async function uploadCampaignFile(id: string, file: File): Promise<CampaignAttachment> {
+export async function uploadCampaignFile(id: string, file: File, t: T = plain): Promise<CampaignAttachment> {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(`/bff/api/${base}/${id}/files`, { method: "POST", body: form });
   if (!res.ok) {
-    let message = `Файл не загрузился (${res.status})`;
+    let message = t("Файл не загрузился ({status})", { status: res.status });
     try {
-      message = ((await res.json()) as { error?: string }).error ?? message;
+      const error = ((await res.json()) as { error?: string }).error;
+      if (error) message = t(error);
     } catch {
       // не JSON
     }
-    throw new Error(res.status === 413 ? "Файл слишком большой (до 50 МБ)." : message);
+    throw new Error(res.status === 413 ? t("Файл слишком большой (до 50 МБ).") : message);
   }
   return (await res.json()) as CampaignAttachment;
 }
@@ -177,4 +182,5 @@ export function toLocal(iso: string | null): string {
   return d.toISOString().slice(0, 16);
 }
 
-export const size = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} КБ` : `${(bytes / 1024 / 1024).toFixed(1)} МБ`);
+export const size = (bytes: number, t: T = plain) =>
+  bytes < 1024 * 1024 ? t("{n} КБ", { n: Math.max(1, Math.round(bytes / 1024)) }) : t("{n} МБ", { n: (bytes / 1024 / 1024).toFixed(1) });

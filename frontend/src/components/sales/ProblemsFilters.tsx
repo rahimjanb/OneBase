@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useT } from "@/i18n/client";
 import type { FlagKind } from "@/lib/sales/types";
 
 const criteria: { key: FlagKind; label: string }[] = [
@@ -17,6 +18,7 @@ const control = "h-9 rounded-lg border border-line bg-surface px-3 text-sm text-
 
 /** Фильтры «Проблемных агентов»: РМ, критерий, вакансии — применяются сразу, без кнопки. */
 export function ProblemsFilters({ directions, vacancies, found }: { directions: { id: string; name: string }[]; vacancies: number; found: number }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -34,8 +36,8 @@ export function ProblemsFilters({ directions, vacancies, found }: { directions: 
   return (
     <div className="flex flex-wrap items-center gap-2">
       {directions.length > 0 && (
-        <select key={`d${key}`} aria-label="РМ" defaultValue={params.get("direction") ?? ""} onChange={(e) => set("direction", e.target.value || null)} className={control}>
-          <option value="">Все РМ</option>
+        <select key={`d${key}`} aria-label={t("РМ")} defaultValue={params.get("direction") ?? ""} onChange={(e) => set("direction", e.target.value || null)} className={control}>
+          <option value="">{t("Все РМ")}</option>
           {directions.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
@@ -43,11 +45,11 @@ export function ProblemsFilters({ directions, vacancies, found }: { directions: 
           ))}
         </select>
       )}
-      <select key={`c${key}`} aria-label="Критерий" defaultValue={params.get("criterion") ?? ""} onChange={(e) => set("criterion", e.target.value || null)} className={control}>
-        <option value="">Любой критерий</option>
+      <select key={`c${key}`} aria-label={t("Критерий")} defaultValue={params.get("criterion") ?? ""} onChange={(e) => set("criterion", e.target.value || null)} className={control}>
+        <option value="">{t("Любой критерий")}</option>
         {criteria.map((c) => (
           <option key={c.key} value={c.key}>
-            {c.label}
+            {t(c.label)}
           </option>
         ))}
       </select>
@@ -59,9 +61,9 @@ export function ProblemsFilters({ directions, vacancies, found }: { directions: 
           onChange={(e) => set("vacancies", e.target.checked ? "true" : null)}
           className="size-4 accent-[var(--color-accent)]"
         />
-        Показывать вакансии ({vacancies})
+        {t("Показывать вакансии ({n})", { n: vacancies })}
       </label>
-      <span className="rounded-full border border-line bg-surface px-3 py-1 text-xs tabular-nums text-ink-2 max-lg:py-2">{found} ТП с замечаниями</span>
+      <span className="rounded-full border border-line bg-surface px-3 py-1 text-xs tabular-nums text-ink-2 max-lg:py-2">{t("{n} ТП с замечаниями", { n: found })}</span>
     </div>
   );
 }

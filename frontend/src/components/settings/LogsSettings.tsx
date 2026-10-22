@@ -6,6 +6,7 @@ import { button } from "@/components/ai/form";
 import { CancelSyncButton } from "@/components/sales/CancelSyncButton";
 import { SyncProgressBar } from "@/components/sales/SyncProgressBar";
 import { Note, Section } from "@/components/sales/bits";
+import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { sourceLabels, type LogEntry, type LogSource, type LogsView } from "@/lib/logs";
 import { dateTime } from "@/lib/sales/format";
@@ -27,6 +28,7 @@ const time = (iso: string) =>
   );
 
 export function LogsSettings({ initial, initialSync }: { initial: LogsView; initialSync: SyncStatus | null }) {
+  const t = useT();
   const [data, setData] = useState(initial);
   const [source, setSource] = useState<LogSource | "all">("all");
   const [level, setLevel] = useState("");
@@ -103,7 +105,7 @@ export function LogsSettings({ initial, initialSync }: { initial: LogsView; init
   return (
     <>
       {sync && (
-        <Section title="Синхронизация с Linko" hint={sync.dataAsOf ? `данные по ${dateTime(sync.dataAsOf)}` : "данных ещё нет"}>
+        <Section title={t("Синхронизация с Linko")} hint={sync.dataAsOf ? t("данные по {date}", { date: dateTime(sync.dataAsOf) }) : t("данных ещё нет")}>
           {sync.isRunning ? (
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
@@ -113,20 +115,20 @@ export function LogsSettings({ initial, initialSync }: { initial: LogsView; init
             </div>
           ) : (
             <p className="text-sm text-ink-2">
-              Сейчас не идёт.{" "}
-              {sync.hasErrors ? <span className="text-warn">Последняя синхронизация завершилась с ошибкой — подробности ниже.</span> : "Последняя прошла без ошибок."}
+              {t("Сейчас не идёт.")}{" "}
+              {sync.hasErrors ? <span className="text-warn">{t("Последняя синхронизация завершилась с ошибкой — подробности ниже.")}</span> : t("Последняя прошла без ошибок.")}
             </p>
           )}
         </Section>
       )}
 
       <Section
-        title="Журнал ошибок"
-        hint={`за ${days} дн. · хранится 90 дней`}
+        title={t("Журнал ошибок")}
+        hint={t("за {n} дн. · хранится 90 дней", { n: days })}
         actions={
           <button className={button} onClick={() => void load()} disabled={busy}>
             <RefreshCw className={`size-3.5 ${busy ? "animate-spin" : ""}`} />
-            Обновить
+            {t("Обновить")}
           </button>
         }
       >
@@ -140,37 +142,37 @@ export function LogsSettings({ initial, initialSync }: { initial: LogsView; init
                 source === s ? "border-accent bg-accent-soft text-accent-strong" : "border-line bg-surface text-ink-2 hover:bg-muted"
               }`}
             >
-              {s === "all" ? "Все" : sourceLabels[s]}
+              {s === "all" ? t("Все") : t(sourceLabels[s])}
               <span className="tabular-nums text-ink-3">{total(s)}</span>
             </button>
           ))}
-          <select className={select} value={level} onChange={(e) => setLevel(e.target.value)} aria-label="Уровень">
-            <option value="">Ошибки и предупреждения</option>
-            <option value="error">Только ошибки</option>
-            <option value="warning">Только предупреждения</option>
+          <select className={select} value={level} onChange={(e) => setLevel(e.target.value)} aria-label={t("Уровень")}>
+            <option value="">{t("Ошибки и предупреждения")}</option>
+            <option value="error">{t("Только ошибки")}</option>
+            <option value="warning">{t("Только предупреждения")}</option>
           </select>
-          <select className={select} value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Период">
-            <option value={1}>Сутки</option>
-            <option value={7}>7 дней</option>
-            <option value={30}>30 дней</option>
-            <option value={90}>90 дней</option>
+          <select className={select} value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label={t("Период")}>
+            <option value={1}>{t("Сутки")}</option>
+            <option value={7}>{t("{n} дней", { n: 7 })}</option>
+            <option value={30}>{t("{n} дней", { n: 30 })}</option>
+            <option value={90}>{t("{n} дней", { n: 90 })}</option>
           </select>
         </div>
 
         {error && <p className="mb-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
 
         {data.items.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-line px-4 py-8 text-center text-sm text-ink-3">За выбранный период записей нет.</p>
+          <p className="rounded-lg border border-dashed border-line px-4 py-8 text-center text-sm text-ink-3">{t("За выбранный период записей нет.")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
                   <th className="w-6 py-2" />
-                  <th className="py-2 pr-3 font-semibold">Время</th>
-                  <th className="py-2 pr-3 font-semibold">Уровень</th>
-                  <th className="py-2 pr-3 font-semibold">Источник</th>
-                  <th className="py-2 font-semibold">Сообщение</th>
+                  <th className="py-2 pr-3 font-semibold">{t("Время")}</th>
+                  <th className="py-2 pr-3 font-semibold">{t("Уровень")}</th>
+                  <th className="py-2 pr-3 font-semibold">{t("Источник")}</th>
+                  <th className="py-2 font-semibold">{t("Сообщение")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -185,13 +187,14 @@ export function LogsSettings({ initial, initialSync }: { initial: LogsView; init
           <div className="mt-3">
             <button className={button} onClick={more} disabled={busy}>
               {busy && <Loader2 className="size-3.5 animate-spin" />}
-              Показать ещё
+              {t("Показать ещё")}
             </button>
           </div>
         )}
         <Note>
-          «Интеграция Linko» — ответы и доступность API Linko, проверка подключения, токены. «Синхронизация» — шаги загрузки данных в
-          OneBase и отмены. «Система» — ошибки сервера OneBase. Токены, ключи и пароли из текста вырезаются при записи. Время — по Ташкенту.
+          {t(
+            "«Интеграция Linko» — ответы и доступность API Linko, проверка подключения, токены. «Синхронизация» — шаги загрузки данных в OneBase и отмены. «Система» — ошибки сервера OneBase. Токены, ключи и пароли из текста вырезаются при записи. Время — по Ташкенту.",
+          )}
         </Note>
       </Section>
     </>
@@ -199,6 +202,7 @@ export function LogsSettings({ initial, initialSync }: { initial: LogsView; init
 }
 
 function Row({ entry: e, open, toggle }: { entry: LogEntry; open: boolean; toggle: () => void }) {
+  const t = useT();
   const level = levelView[e.level] ?? levelView.Error;
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
@@ -209,10 +213,10 @@ function Row({ entry: e, open, toggle }: { entry: LogEntry; open: boolean; toggl
         </td>
         <td className="whitespace-nowrap py-2 pr-3 tabular-nums text-ink-2">{time(e.timestamp)}</td>
         <td className="py-2 pr-3">
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${level.className}`}>{level.label}</span>
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${level.className}`}>{t(level.label)}</span>
         </td>
-        <td className="whitespace-nowrap py-2 pr-3 text-ink-2">{sourceLabels[e.source] ?? e.source}</td>
-        <td className={`py-2 text-ink ${open ? "" : "line-clamp-2"}`}>{e.message}</td>
+        <td className="whitespace-nowrap py-2 pr-3 text-ink-2">{t(sourceLabels[e.source] ?? e.source)}</td>
+        <td className={`py-2 text-ink ${open ? "" : "line-clamp-2"}`}>{t(e.message)}</td>
       </tr>
       {open && (
         <tr className="border-b border-line bg-muted/40">
@@ -220,11 +224,11 @@ function Row({ entry: e, open, toggle }: { entry: LogEntry; open: boolean; toggl
           <td colSpan={4} className="py-3 pr-3 text-xs text-ink-2">
             <div className="mb-2 flex flex-wrap gap-x-6 gap-y-1">
               <span>
-                Где: <span className="font-mono text-ink">{e.category}</span>
+                {t("Где:")} <span className="font-mono text-ink">{e.category}</span>
               </span>
               {e.traceId && (
                 <span>
-                  Запрос: <span className="font-mono text-ink">{e.traceId}</span>
+                  {t("Запрос:")} <span className="font-mono text-ink">{e.traceId}</span>
                 </span>
               )}
             </div>
@@ -233,7 +237,7 @@ function Row({ entry: e, open, toggle }: { entry: LogEntry; open: boolean; toggl
                 {e.exception}
               </pre>
             ) : (
-              <span className="text-ink-3">Без исключения — только сообщение.</span>
+              <span className="text-ink-3">{t("Без исключения — только сообщение.")}</span>
             )}
           </td>
         </tr>

@@ -1,10 +1,14 @@
 import { notFound } from "next/navigation";
 import { CampaignEditor } from "@/components/campaigns/CampaignEditor";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import { getT } from "@/i18n/server";
 import type { Campaign, CampaignAccount } from "@/lib/campaigns";
 import { apiGet, apiGetOrNull } from "@/lib/server-api";
 
-export const metadata = { title: "Рассылка · OneBase" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Рассылка · OneBase") };
+}
 
 export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -14,13 +18,14 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     apiGet<CampaignAccount[]>("/api/telegram/campaigns/accounts", path),
   ]);
   if (!campaign) notFound();
+  const t = await getT();
   return (
     <>
       <PageHeader
         title={campaign.name}
-        subtitle={`Аккаунт «${campaign.accountName}»`}
+        subtitle={t("Аккаунт «{name}»", { name: campaign.accountName })}
         back="/campaigns"
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: "Рассылки", href: "/campaigns" }, { label: campaign.name }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Рассылки"), href: "/campaigns" }, { label: campaign.name }]}
       />
       <PageBody>
         <CampaignEditor key={campaign.id} initial={campaign} accounts={accounts} />

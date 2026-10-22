@@ -20,6 +20,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button, EmptyState, ProgressBar, SearchInput } from "@/components/ui";
+import { useT } from "@/i18n/client";
 import { fileSize, filesLabel, foldersLabel } from "@/lib/format";
 import {
   accessLabel,
@@ -57,6 +58,7 @@ const REFRESH_MS = 15_000;
  * появляются сами, без «Обновить».
  */
 export function FilesBrowser({ initial }: { initial: FolderView }) {
+  const t = useT();
   const [view, setView] = useState(initial);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [query, setQuery] = useState("");
@@ -110,10 +112,10 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
     const files = Array.from(list);
     if (files.length === 0 || !view.canWrite) return;
     setError(null);
-    const names = files.length === 1 ? files[0].name : `${files.length} ${files.length < 5 ? "файла" : "файлов"}`;
+    const names = files.length === 1 ? files[0].name : `${files.length} ${t(files.length < 5 ? "файла" : "файлов")}`;
     setUpload({ names, loaded: 0, total: files.reduce((s, f) => s + f.size, 0) });
     try {
-      await uploadFiles(view.id, files, (loaded, total) => setUpload({ names, loaded, total }));
+      await uploadFiles(view.id, files, (loaded, total) => setUpload({ names, loaded, total }), t);
       await reload();
     } catch (e) {
       setError((e as Error).message);
@@ -153,38 +155,38 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
       }}
       className={`relative rounded-xl transition-colors ${dragging ? "bg-accent/5 ring-2 ring-accent ring-offset-4" : ""}`}
     >
-      <nav className="mb-4 flex flex-wrap items-center gap-1 text-sm" aria-label="Путь к папке">
-        <Link href="/base" className="text-ink-3 hover:text-ink">Файлы</Link>
+      <nav className="mb-4 flex flex-wrap items-center gap-1 text-sm" aria-label={t("Путь к папке")}>
+        <Link href="/base" className="text-ink-3 hover:text-ink">{t("Файлы")}</Link>
         {view.path.map((p, i) => (
           <span key={p.id} className="flex items-center gap-1">
             <ChevronRight className="size-3.5 text-ink-3" />
             {i === view.path.length - 1 ? <span className="font-medium">{p.name}</span> : <Link href={hrefOf(p.id)} className="text-ink-2 hover:text-ink">{p.name}</Link>}
           </span>
         ))}
-        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-ink-2">{accessLabel[view.department.access]}</span>
+        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-ink-2">{t(accessLabel[view.department.access])}</span>
       </nav>
 
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput
           className="min-w-[220px] flex-1 sm:max-w-sm"
-          placeholder={`Поиск в отделе «${view.department.name}»`}
+          placeholder={t("Поиск в отделе «{name}»", { name: t(view.department.name) })}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className="ml-auto flex flex-wrap gap-2">
           <Button onClick={() => (trash ? setTrash(null) : filesApi.trash(code).then(setTrash, (e: Error) => setError(e.message)))}>
             <Trash2 className="size-4" />
-            {trash ? "К файлам" : "Корзина"}
+            {trash ? t("К файлам") : t("Корзина")}
           </Button>
           {view.canWrite && (
             <>
               <Button onClick={() => setDialog({ kind: "newFolder" })}>
                 <FolderPlus className="size-4" />
-                Новая папка
+                {t("Новая папка")}
               </Button>
               <Button variant="primary" onClick={() => input.current?.click()} disabled={!!upload}>
                 <Upload className="size-4" />
-                Загрузить
+                {t("Загрузить")}
               </Button>
               <input ref={input} type="file" multiple hidden onChange={(e) => (startUpload(e.target.files ?? []), (e.target.value = ""))} />
             </>
@@ -197,8 +199,8 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
         <div className="mt-4 rounded-lg border border-line p-3 text-sm">
           <div className="mb-2 flex items-center gap-2">
             <Loader2 className="size-4 animate-spin text-accent" />
-            <span className="flex-1 truncate">Загрузка: {upload.names}</span>
-            <span className="text-xs text-ink-3">{fileSize(upload.loaded)} из {fileSize(upload.total)}</span>
+            <span className="flex-1 truncate">{t("Загрузка: {names}", { names: upload.names })}</span>
+            <span className="text-xs text-ink-3">{t("{loaded} из {total}", { loaded: fileSize(upload.loaded), total: fileSize(upload.total) })}</span>
           </div>
           <ProgressBar value={upload.total ? (upload.loaded / upload.total) * 100 : 0} />
         </div>
@@ -206,7 +208,7 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
       {error && (
         <p className="mt-4 rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad" role="alert">
           {error}
-          <button type="button" className="ml-3 underline" onClick={() => setError(null)}>Скрыть</button>
+          <button type="button" className="ml-3 underline" onClick={() => setError(null)}>{t("Скрыть")}</button>
         </p>
       )}
 
@@ -220,29 +222,29 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
       ) : (
         <>
           <div className="mt-5 flex flex-wrap items-center gap-1.5">
-            {typeFilters.map((t) => (
+            {typeFilters.map((filter) => (
               <button
-                key={t.key}
+                key={filter.key}
                 type="button"
-                onClick={() => setType(t.key)}
-                className={`rounded-full px-3 py-1 text-xs ${type === t.key ? "bg-accent text-white" : "bg-muted text-ink-2 hover:text-ink"}`}
+                onClick={() => setType(filter.key)}
+                className={`rounded-full px-3 py-1 text-xs ${type === filter.key ? "bg-accent text-white" : "bg-muted text-ink-2 hover:text-ink"}`}
               >
-                {t.label}
+                {t(filter.label)}
               </button>
             ))}
             <span className="ml-auto text-xs text-ink-3">
-              {foldersLabel(view.folders.length)} · {filesLabel(view.files.filter((f) => !f.hidden).length)}
-              {view.canWrite && " · перетащите файлы сюда, чтобы загрузить"}
+              {foldersLabel(view.folders.length, t)} · {filesLabel(view.files.filter((f) => !f.hidden).length, t)}
+              {view.canWrite && ` · ${t("перетащите файлы сюда, чтобы загрузить")}`}
             </span>
           </div>
 
           <div className="mt-3 overflow-x-auto">
             <div className="min-w-[640px]">
               <div className="grid grid-cols-[minmax(0,2.4fr)_90px_90px_minmax(0,1.4fr)_40px] gap-3 border-b border-line py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-                <SortHeader label="Имя" k="name" sort={sort} onSort={toggleSort} />
-                <SortHeader label="Тип" k="type" sort={sort} onSort={toggleSort} />
-                <SortHeader label="Размер" k="size" sort={sort} onSort={toggleSort} />
-                <SortHeader label="Изменён" k="modified" sort={sort} onSort={toggleSort} />
+                <SortHeader label={t("файл::Имя")} k="name" sort={sort} onSort={toggleSort} />
+                <SortHeader label={t("Тип")} k="type" sort={sort} onSort={toggleSort} />
+                <SortHeader label={t("Размер")} k="size" sort={sort} onSort={toggleSort} />
+                <SortHeader label={t("Изменён")} k="modified" sort={sort} onSort={toggleSort} />
                 <span />
               </div>
               {type === "all" && folders.map((folder) => (
@@ -251,15 +253,15 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
                     <FolderIcon />
                     <span className="truncate font-medium">{folder.name}</span>
                   </Link>
-                  <span className="text-xs text-ink-2">Папка</span>
-                  <span className="text-xs text-ink-2">{folder.files + folder.folders > 0 ? `${folder.files + folder.folders} эл.` : "пусто"}</span>
-                  <span className="text-xs text-ink-2">{modifiedLabel(folder.updatedAt)}</span>
+                  <span className="text-xs text-ink-2">{t("Папка")}</span>
+                  <span className="text-xs text-ink-2">{folder.files + folder.folders > 0 ? t("{n} эл.", { n: folder.files + folder.folders }) : t("пусто")}</span>
+                  <span className="text-xs text-ink-2">{modifiedLabel(folder.updatedAt, t)}</span>
                   {view.canWrite ? (
                     <RowMenu
                       items={[
-                        { label: "Переименовать", icon: Pencil, onClick: () => setDialog({ kind: "renameFolder", folder }) },
-                        { label: "Перенести", icon: FolderInput, onClick: () => setDialog({ kind: "moveFolder", folder }) },
-                        { label: "В корзину", icon: Trash2, danger: true, onClick: () => window.confirm(`Папку «${folder.name}» со всем содержимым — в корзину?`) && act(() => filesApi.deleteFolder(folder.id)) },
+                        { label: t("Переименовать"), icon: Pencil, onClick: () => setDialog({ kind: "renameFolder", folder }) },
+                        { label: t("Перенести"), icon: FolderInput, onClick: () => setDialog({ kind: "moveFolder", folder }) },
+                        { label: t("В корзину"), icon: Trash2, danger: true, onClick: () => window.confirm(t("Папку «{name}» со всем содержимым — в корзину?", { name: folder.name })) && act(() => filesApi.deleteFolder(folder.id)) },
                       ]}
                     />
                   ) : <span />}
@@ -272,22 +274,22 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
                     <span className="truncate">{file.name}</span>
                     {file.version > 1 && <span className="shrink-0 rounded bg-muted px-1.5 text-[10px] text-ink-3">v{file.version}</span>}
                   </button>
-                  <span className="text-xs text-ink-2">{typeShort(file.extension)}</span>
+                  <span className="text-xs text-ink-2">{t(typeShort(file.extension))}</span>
                   <span className="text-xs text-ink-2">{fileSize(file.sizeBytes)}</span>
                   <span className="truncate text-xs text-ink-2" title={file.updatedBy?.name}>
-                    {modifiedLabel(file.updatedAt)}
+                    {modifiedLabel(file.updatedAt, t)}
                     {file.updatedBy && <span className="text-ink-3"> · {file.updatedBy.name}</span>}
                   </span>
                   <RowMenu
                     items={[
-                      { label: "Просмотр", icon: Eye, onClick: () => setDialog({ kind: "preview", file }) },
-                      { label: "Скачать", icon: Download, href: downloadUrl(file) },
-                      { label: "Версии", icon: History, onClick: () => setDialog({ kind: "versions", file }) },
+                      { label: t("Просмотр"), icon: Eye, onClick: () => setDialog({ kind: "preview", file }) },
+                      { label: t("Скачать"), icon: Download, href: downloadUrl(file) },
+                      { label: t("Версии"), icon: History, onClick: () => setDialog({ kind: "versions", file }) },
                       ...(view.canWrite
                         ? [
-                            { label: "Переименовать", icon: Pencil, onClick: () => setDialog({ kind: "renameFile", file }) },
-                            { label: "Перенести", icon: FolderInput, onClick: () => setDialog({ kind: "moveFile", file }) },
-                            { label: "В корзину", icon: Trash2, danger: true, onClick: () => window.confirm(`«${file.name}» — в корзину?`) && act(() => filesApi.deleteFile(file.id)) },
+                            { label: t("Переименовать"), icon: Pencil, onClick: () => setDialog({ kind: "renameFile", file }) },
+                            { label: t("Перенести"), icon: FolderInput, onClick: () => setDialog({ kind: "moveFile", file }) },
+                            { label: t("В корзину"), icon: Trash2, danger: true, onClick: () => window.confirm(t("«{name}» — в корзину?", { name: file.name })) && act(() => filesApi.deleteFile(file.id)) },
                           ]
                         : []),
                     ]}
@@ -298,21 +300,21 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
           </div>
           {folders.length === 0 && files.length === 0 && (
             <div className="mt-4">
-              <EmptyState>{query || type !== "all" ? "Ничего не найдено" : view.canWrite ? "Папка пустая — загрузите файлы или перетащите их сюда" : "Папка пустая"}</EmptyState>
+              <EmptyState>{query || type !== "all" ? t("Ничего не найдено") : view.canWrite ? t("Папка пустая — загрузите файлы или перетащите их сюда") : t("Папка пустая")}</EmptyState>
             </div>
           )}
         </>
       )}
 
       {dialog?.kind === "newFolder" && (
-        <NameDialog title="Новая папка" action="Создать" onClose={() => setDialog(null)} onSubmit={(name) => act(() => filesApi.createFolder(view.id, name)).then(() => undefined)} />
+        <NameDialog title={t("Новая папка")} action={t("Создать")} onClose={() => setDialog(null)} onSubmit={(name) => act(() => filesApi.createFolder(view.id, name)).then(() => undefined)} />
       )}
       {dialog?.kind === "renameFile" && (
-        <NameDialog title="Переименовать файл" initial={dialog.file.name} action="Сохранить" onClose={() => setDialog(null)}
+        <NameDialog title={t("Переименовать файл")} initial={dialog.file.name} action={t("Сохранить")} onClose={() => setDialog(null)}
           onSubmit={async (name) => { await filesApi.renameFile(dialog.file.id, name); await reload(); }} />
       )}
       {dialog?.kind === "renameFolder" && (
-        <NameDialog title="Переименовать папку" initial={dialog.folder.name} action="Сохранить" onClose={() => setDialog(null)}
+        <NameDialog title={t("Переименовать папку")} initial={dialog.folder.name} action={t("Сохранить")} onClose={() => setDialog(null)}
           onSubmit={async (name) => { await filesApi.renameFolder(dialog.folder.id, name); await reload(); }} />
       )}
       {dialog?.kind === "moveFile" && (
@@ -346,6 +348,7 @@ type MenuItem = { label: string; icon: typeof Eye; onClick?: () => unknown; href
  * (overflow-x-auto) оно обрезалось бы её краем. Снизу не хватает места — открывается вверх; прокрутка и смена размера окна закрывают его.
  */
 function RowMenu({ items }: { items: MenuItem[] }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -386,7 +389,7 @@ function RowMenu({ items }: { items: MenuItem[] }) {
 
   return (
     <div className="justify-self-end">
-      <button ref={button} type="button" aria-label="Действия" aria-expanded={open} onClick={toggle} className="rounded-md p-1.5 text-ink-3 hover:bg-muted hover:text-ink">
+      <button ref={button} type="button" aria-label={t("Действия")} aria-expanded={open} onClick={toggle} className="rounded-md p-1.5 text-ink-3 hover:bg-muted hover:text-ink">
         <MoreHorizontal className="size-4" />
       </button>
       {open && createPortal(
@@ -418,7 +421,8 @@ function RowMenu({ items }: { items: MenuItem[] }) {
 }
 
 function TrashList({ rows, canWrite, onRestore }: { rows: TrashRow[]; canWrite: boolean; onRestore: (row: TrashRow) => void }) {
-  if (rows.length === 0) return <div className="mt-4"><EmptyState>Корзина пустая</EmptyState></div>;
+  const t = useT();
+  if (rows.length === 0) return <div className="mt-4"><EmptyState>{t("Корзина пустая")}</EmptyState></div>;
   return (
     <div className="mt-4 divide-y divide-line">
       {rows.map((row) => (
@@ -426,12 +430,12 @@ function TrashList({ rows, canWrite, onRestore }: { rows: TrashRow[]; canWrite: 
           {row.isFolder ? <FolderIcon /> : <FileIcon extension={row.name.split(".").pop()?.toLowerCase() ?? ""} />}
           <span className="min-w-0 flex-1">
             <span className="block truncate">{row.name}</span>
-            <span className="block truncate text-xs text-ink-3">{row.folderPath} · удалено {modifiedLabel(row.deletedAt)}</span>
+            <span className="block truncate text-xs text-ink-3">{row.folderPath} · {t("удалено {date}", { date: modifiedLabel(row.deletedAt, t) })}</span>
           </span>
           {canWrite && (
             <Button size="sm" onClick={() => onRestore(row)}>
               <RotateCcw className="size-3.5" />
-              Восстановить
+              {t("Восстановить")}
             </Button>
           )}
         </div>
@@ -441,7 +445,8 @@ function TrashList({ rows, canWrite, onRestore }: { rows: TrashRow[]; canWrite: 
 }
 
 function SearchResults({ rows, onOpen }: { rows: SearchRow[]; onOpen: (file: FileRow) => void }) {
-  if (rows.length === 0) return <div className="mt-4"><EmptyState>Ничего не найдено</EmptyState></div>;
+  const t = useT();
+  if (rows.length === 0) return <div className="mt-4"><EmptyState>{t("Ничего не найдено")}</EmptyState></div>;
   return (
     <div className="mt-4 divide-y divide-line">
       {rows.map(({ file, folderPath }) => (
@@ -449,7 +454,7 @@ function SearchResults({ rows, onOpen }: { rows: SearchRow[]; onOpen: (file: Fil
           <FileIcon extension={file.extension} />
           <span className="min-w-0 flex-1">
             <span className="block truncate">{file.name}</span>
-            <span className="block truncate text-xs text-ink-3">{folderPath} · {modifiedLabel(file.updatedAt)}{file.updatedBy && ` · ${file.updatedBy.name}`}</span>
+            <span className="block truncate text-xs text-ink-3">{folderPath} · {modifiedLabel(file.updatedAt, t)}{file.updatedBy && ` · ${file.updatedBy.name}`}</span>
           </span>
           <span className="text-xs text-ink-3">{fileSize(file.sizeBytes)}</span>
         </button>

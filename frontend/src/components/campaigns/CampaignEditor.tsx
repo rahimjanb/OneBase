@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { button, danger, field, primary } from "@/components/ai/form";
+import { useT } from "@/i18n/client";
 import {
   active,
   attachmentUrl,
@@ -57,6 +58,7 @@ const inputOf = (c: Campaign): CampaignInput => ({
  * серым, с причиной), внизу — тест и отправка. Изменения сохраняются сами. После запуска — что отправлено, файлы, статус каждого получателя.
  */
 export function CampaignEditor({ initial, accounts }: { initial: Campaign; accounts: CampaignAccount[] }) {
+  const t = useT();
   const router = useRouter();
   const [c, setC] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
@@ -66,8 +68,8 @@ export function CampaignEditor({ initial, accounts }: { initial: Campaign; accou
 
   useEffect(() => {
     if (!active(c.status)) return;
-    const t = setInterval(() => reload().catch(() => undefined), 5000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => reload().catch(() => undefined), 5000);
+    return () => clearInterval(timer);
   }, [c.status, reload]);
 
   const run = async (what: string, action: () => Promise<void>) => {
@@ -90,18 +92,18 @@ export function CampaignEditor({ initial, accounts }: { initial: Campaign; accou
     <>
       <section className="rounded-xl border border-line bg-surface p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-3">
-          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${s.className}`}>{s.label}</span>
-          {c.status === "Scheduled" && <span className="text-sm text-ink-2">отправка {tashkent(c.scheduledAt)} (Ташкент)</span>}
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${s.className}`}>{t(s.label)}</span>
+          {c.status === "Scheduled" && <span className="text-sm text-ink-2">{t("отправка {date} (Ташкент)", { date: tashkent(c.scheduledAt) })}</span>}
           {sent && c.counts.total > 0 && (
             <div className="min-w-[220px] flex-1">
               <div className="h-2 overflow-hidden rounded-full bg-muted">
                 <div className="h-full bg-accent transition-all" style={{ width: `${Math.round((done / c.counts.total) * 100)}%` }} />
               </div>
               <span className="mt-1 block text-xs text-ink-2">
-                Отправлено {c.counts.sent} из {c.counts.total}
-                {c.counts.pending > 0 && ` · ждут ${c.counts.pending}`}
-                {c.counts.failed > 0 && <span className="text-bad"> · ошибок {c.counts.failed}</span>}
-                {c.counts.cancelled > 0 && ` · отменено ${c.counts.cancelled}`}
+                {t("Отправлено {sent} из {total}", { sent: c.counts.sent, total: c.counts.total })}
+                {c.counts.pending > 0 && ` · ${t("ждут {n}", { n: c.counts.pending })}`}
+                {c.counts.failed > 0 && <span className="text-bad"> · {t("ошибок {n}", { n: c.counts.failed })}</span>}
+                {c.counts.cancelled > 0 && ` · ${t("отменено {n}", { n: c.counts.cancelled })}`}
               </span>
             </div>
           )}
@@ -109,30 +111,30 @@ export function CampaignEditor({ initial, accounts }: { initial: Campaign; accou
             {(c.status === "Queued" || c.status === "Sending" || c.status === "Scheduled") && (
               <button className={button} disabled={!!busy} onClick={() => run("pause", async () => setC(await campaignsApi.pause(c.id)))}>
                 <Pause className="size-4" />
-                Пауза
+                {t("Пауза")}
               </button>
             )}
             {c.status === "Paused" && (
               <button className={primary} disabled={!!busy} onClick={() => run("resume", async () => setC(await campaignsApi.resume(c.id)))}>
                 <Play className="size-4" />
-                Продолжить
+                {t("Продолжить")}
               </button>
             )}
             {(c.status === "CompletedWithErrors" || c.status === "Failed" || (c.status === "Paused" && c.counts.failed > 0)) && (
               <button className={button} disabled={!!busy} onClick={() => run("retry", async () => setC(await campaignsApi.retry(c.id)))}>
                 <RotateCcw className="size-4" />
-                Повторить ошибки ({c.counts.failed})
+                {t("Повторить ошибки ({n})", { n: c.counts.failed })}
               </button>
             )}
             {sent && (
               <button
                 className={button}
                 disabled={!!busy}
-                title="Новый черновик с тем же текстом, файлами и получателями"
+                title={t("Новый черновик с тем же текстом, файлами и получателями")}
                 onClick={() => run("copy", async () => router.push(`/campaigns/${(await campaignsApi.duplicate(c.id)).id}`))}
               >
                 {busy === "copy" ? <Loader2 className="size-4 animate-spin" /> : <Copy className="size-4" />}
-                Повторить как новую
+                {t("Повторить как новую")}
               </button>
             )}
             {["Scheduled", "Queued", "Sending", "Paused"].includes(c.status) && (
@@ -140,13 +142,13 @@ export function CampaignEditor({ initial, accounts }: { initial: Campaign; accou
                 className={danger}
                 disabled={!!busy}
                 onClick={() => {
-                  if (confirm("Отменить рассылку? Неотправленным сообщение не уйдёт; отправленные останутся у получателей.")) {
+                  if (confirm(t("Отменить рассылку? Неотправленным сообщение не уйдёт; отправленные останутся у получателей."))) {
                     run("cancel", async () => setC(await campaignsApi.cancel(c.id)));
                   }
                 }}
               >
                 <X className="size-4" />
-                Отменить
+                {t("Отменить")}
               </button>
             )}
             {(c.status === "Draft" || c.status === "Cancelled") && c.counts.sent === 0 && (
@@ -154,7 +156,7 @@ export function CampaignEditor({ initial, accounts }: { initial: Campaign; accou
                 className={danger}
                 disabled={!!busy}
                 onClick={() => {
-                  if (confirm(`Удалить рассылку «${c.name}»?`)) {
+                  if (confirm(t("Удалить рассылку «{name}»?", { name: c.name }))) {
                     run("delete", async () => {
                       await campaignsApi.remove(c.id);
                       router.push("/campaigns");
@@ -163,12 +165,12 @@ export function CampaignEditor({ initial, accounts }: { initial: Campaign; accou
                 }}
               >
                 <Trash2 className="size-4" />
-                Удалить
+                {t("Удалить")}
               </button>
             )}
           </div>
         </div>
-        {c.lastError && <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{c.lastError}</p>}
+        {c.lastError && <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{t(c.lastError)}</p>}
         {error && <p className="mt-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
       </section>
 
@@ -193,6 +195,7 @@ function Composer({ c, accounts, onChange }: { c: Campaign; accounts: CampaignAc
 
 /** Текст (сохраняется сам), файлы — перетаскиванием или кнопкой, отчёты консультанта, предпросмотр. */
 function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: CampaignAccount[]; onChange: (c: Campaign) => void }) {
+  const t = useT();
   const [form, setForm] = useState<CampaignInput>(inputOf(c));
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
   const [uploading, setUploading] = useState<string[]>([]);
@@ -213,7 +216,7 @@ function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: Campaig
     const json = JSON.stringify(form);
     if (json === saved.current || !form.name.trim() || (form.text?.length ?? 0) > 4096) return;
     setSaving("saving");
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
         const next = await campaignsApi.update(c.id, form);
         saved.current = json;
@@ -225,16 +228,16 @@ function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: Campaig
         setSaving("idle");
       }
     }, 800);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [form, c.id, onChange]);
 
   useEffect(() => {
-    const t = setTimeout(() => campaignsApi.preview(c.id).then(setPreview, () => undefined), 300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => campaignsApi.preview(c.id).then(setPreview, () => undefined), 300);
+    return () => clearTimeout(timer);
   }, [c]);
 
   const changeAccount = (accountId: string) => {
-    if (c.counts.total > 0 && !confirm("Сменить аккаунт? Получатели очистятся — у другого аккаунта другие чаты.")) return;
+    if (c.counts.total > 0 && !confirm(t("Сменить аккаунт? Получатели очистятся — у другого аккаунта другие чаты."))) return;
     setForm((f) => ({ ...f, accountId }));
   };
 
@@ -245,7 +248,7 @@ function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: Campaig
     setUploading(list.map((f) => f.name));
     try {
       for (const file of list) {
-        await uploadCampaignFile(c.id, file);
+        await uploadCampaignFile(c.id, file, t);
       }
     } catch (e) {
       setError((e as Error).message);
@@ -265,14 +268,14 @@ function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: Campaig
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           maxLength={200}
-          aria-label="Название рассылки"
+          aria-label={t("Название рассылки")}
         />
-        <select className={field} value={form.accountId} onChange={(e) => changeAccount(e.target.value)} aria-label="Аккаунт Telegram">
+        <select className={field} value={form.accountId} onChange={(e) => changeAccount(e.target.value)} aria-label={t("Аккаунт Telegram")}>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}
               {a.username ? ` (@${a.username})` : ""}
-              {a.status !== "Connected" ? " — не подключён" : ""}
+              {a.status !== "Connected" ? t(" — не подключён") : ""}
             </option>
           ))}
         </select>
@@ -299,13 +302,13 @@ function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: Campaig
           className={`${field} h-56 resize-y py-3 leading-relaxed`}
           value={form.text ?? ""}
           onChange={(e) => setForm({ ...form, text: e.target.value || null })}
-          placeholder="Текст сообщения. Файлы — перетащите сюда или нажмите «Прикрепить файл»."
+          placeholder={t("Текст сообщения. Файлы — перетащите сюда или нажмите «Прикрепить файл».")}
         />
         {dragging && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-xl bg-surface-solid/80 text-sm font-medium text-accent-strong">
             <span className="flex items-center gap-2">
               <Upload className="size-5" />
-              Отпустите — файлы прикрепятся к рассылке
+              {t("Отпустите — файлы прикрепятся к рассылке")}
             </span>
           </div>
         )}
@@ -313,13 +316,13 @@ function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: Campaig
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-3">
         <span>
-          {saving === "saving" ? "Сохраняется…" : saving === "saved" ? "Сохранено" : "Изменения сохраняются сами"}
+          {saving === "saving" ? t("Сохраняется…") : saving === "saved" ? t("Сохранено") : t("Изменения сохраняются сами")}
           {" · "}
           <span className={textLength > 4096 ? "text-bad" : ""}>{textLength} / 4096</span>
         </span>
         <label className="flex items-center gap-2 text-ink-2">
           <input type="checkbox" checked={form.formatted} onChange={(e) => setForm({ ...form, formatted: e.target.checked })} className="size-4 accent-[var(--color-accent)]" />
-          Разметка: **жирный**, *курсив*, [ссылка](https://…)
+          {t("Разметка: **жирный**, *курсив*, [ссылка](https://…)")}
         </label>
       </div>
 
@@ -331,10 +334,10 @@ function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: Campaig
               <a href={attachmentUrl(c.id, a.id)} className="truncate text-ink hover:underline">
                 {a.fileName}
               </a>
-              <span className="shrink-0 text-xs text-ink-3">{size(a.sizeBytes)}</span>
+              <span className="shrink-0 text-xs text-ink-3">{size(a.sizeBytes, t)}</span>
               <button
                 className="shrink-0 text-ink-3 hover:text-bad"
-                title="Убрать"
+                title={t("Убрать")}
                 onClick={async () => {
                   await campaignsApi.removeAttachment(c.id, a.id);
                   onChange(await campaignsApi.get(c.id));
@@ -367,10 +370,10 @@ function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: Campaig
         />
         <button className={button} disabled={uploading.length > 0 || c.attachments.length >= 10} onClick={() => fileInput.current?.click()}>
           <Paperclip className="size-4" />
-          Прикрепить файл
+          {t("Прикрепить файл")}
         </button>
-        <select className={field.replace("w-full", "w-auto max-w-[260px]")} value={reportId} onChange={(e) => setReportId(e.target.value)} aria-label="Отчёт консультанта">
-          <option value="">{reports === null ? "Загрузка отчётов…" : reports.length === 0 ? "Отчётов консультанта нет" : "Отчёт консультанта…"}</option>
+        <select className={field.replace("w-full", "w-auto max-w-[260px]")} value={reportId} onChange={(e) => setReportId(e.target.value)} aria-label={t("Отчёт консультанта")}>
+          <option value="">{reports === null ? t("Загрузка отчётов…") : reports.length === 0 ? t("Отчётов консультанта нет") : t("Отчёт консультанта…")}</option>
           {reports?.map((r) => (
             <option key={r.id} value={r.id}>
               {r.title} · {tashkent(r.createdAt)}
@@ -391,17 +394,17 @@ function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: Campaig
             }}
           >
             <FileSpreadsheet className="size-4" />
-            Добавить отчёт
+            {t("Добавить отчёт")}
           </button>
         )}
-        <span className="text-xs text-ink-3">до 10 файлов по 50 МБ; отчёт фиксируется файлом Excel в момент добавления</span>
+        <span className="text-xs text-ink-3">{t("до 10 файлов по 50 МБ; отчёт фиксируется файлом Excel в момент добавления")}</span>
       </div>
 
       {error && <p className="mt-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
 
       {preview?.html && (
         <details className="mt-4">
-          <summary className="cursor-pointer text-sm font-medium text-ink-2 hover:text-ink">Как увидит получатель</summary>
+          <summary className="cursor-pointer text-sm font-medium text-ink-2 hover:text-ink">{t("Как увидит получатель")}</summary>
           <div className="mt-2 rounded-xl bg-muted/50 p-3">
             <div
               className="whitespace-pre-wrap break-words text-sm text-ink [&_a]:text-accent-strong [&_a]:underline [&_pre]:overflow-x-auto [&_pre]:text-xs"
@@ -416,6 +419,7 @@ function MessageCard({ c, accounts, onChange }: { c: Campaign; accounts: Campaig
 
 /** Чаты и группы аккаунта галочками: отметил — получатель добавлен; куда писать нельзя — серым, с причиной. */
 function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) => void }) {
+  const t = useT();
   const [chats, setChats] = useState<CampaignChat[] | null>(null);
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
@@ -431,8 +435,8 @@ function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) 
   }, [c.id, search, type]);
 
   useEffect(() => {
-    const t = setTimeout(load, 200);
-    return () => clearTimeout(t);
+    const timer = setTimeout(load, 200);
+    return () => clearTimeout(timer);
   }, [load, c.accountId]);
 
   const toggle = async (chat: CampaignChat) => {
@@ -444,7 +448,7 @@ function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) 
         if (r) await campaignsApi.removeRecipient(c.id, r.id);
       } else {
         const result = await campaignsApi.addRecipients(c.id, [chat.id]);
-        if (result.skipped.length > 0) setError(`${result.skipped[0].title}: ${result.skipped[0].reason}`);
+        if (result.skipped.length > 0) setError(`${result.skipped[0].title}: ${t(result.skipped[0].reason)}`);
       }
       setChats((list) => list?.map((x) => (x.id === chat.id ? { ...x, added: !x.added } : x)) ?? null);
       onChange(await campaignsApi.get(c.id));
@@ -459,7 +463,7 @@ function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) 
   const allSelected = (chats ?? []).filter((x) => x.canSend).length > 0 && available.length === 0;
 
   const selectAll = async () => {
-    if (allSelected && !confirm("Убрать всех получателей?")) return;
+    if (allSelected && !confirm(t("Убрать всех получателей?"))) return;
     setBusy("all");
     setError(null);
     try {
@@ -478,11 +482,11 @@ function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) 
     <section className="flex max-h-[720px] flex-col rounded-xl border border-line bg-surface p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-base font-semibold text-ink">
-          Получатели <span className="text-sm font-normal text-ink-3">· выбрано {c.counts.total}</span>
+          {t("Получатели")} <span className="text-sm font-normal text-ink-3">· {t("выбрано {n}", { n: c.counts.total })}</span>
         </h2>
         <button
           className="rounded-lg p-2 text-ink-3 hover:bg-muted hover:text-ink"
-          title="Обновить чаты из Telegram"
+          title={t("Обновить чаты из Telegram")}
           disabled={!!busy}
           onClick={async () => {
             setBusy("sync");
@@ -502,7 +506,7 @@ function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) 
 
       <div className="relative mt-3">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
-        <input className={`${field} pl-9`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Чат, группа или @username" />
+        <input className={`${field} pl-9`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("Чат, группа или @username")} />
       </div>
       <div className="mt-2 flex flex-wrap gap-1">
         {[
@@ -516,14 +520,18 @@ function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) 
             onClick={() => setType(key)}
             className={`rounded-full px-3 py-1 text-xs ${type === key ? "bg-accent-soft font-medium text-accent-strong" : "text-ink-2 hover:bg-muted"}`}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
 
       <div className="mt-2 flex items-center justify-between text-xs">
         <button className="text-accent-strong hover:underline disabled:opacity-50" disabled={!!busy || (available.length === 0 && !allSelected)} onClick={selectAll}>
-          {allSelected ? "Снять все" : `Выбрать все доступные${search || type ? " в списке" : ""} (${available.length})`}
+          {allSelected
+            ? t("Снять все")
+            : search || type
+              ? t("Выбрать все доступные в списке ({n})", { n: available.length })
+              : t("Выбрать все доступные ({n})", { n: available.length })}
         </button>
         {busy === "all" && <Loader2 className="size-4 animate-spin text-ink-3" />}
       </div>
@@ -534,7 +542,7 @@ function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) 
         {chats === null ? (
           <Loader2 className="m-3 size-5 animate-spin text-ink-3" />
         ) : chats.length === 0 ? (
-          <p className="p-3 text-sm text-ink-3">Чатов нет — обновите их из Telegram (кнопка справа вверху).</p>
+          <p className="p-3 text-sm text-ink-3">{t("Чатов нет — обновите их из Telegram (кнопка справа вверху).")}</p>
         ) : (
           chats.map((x) => (
             <label
@@ -542,7 +550,7 @@ function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) 
               className={`flex items-start gap-3 border-b border-line px-3 py-2.5 text-sm last:border-b-0 ${
                 x.canSend ? "cursor-pointer hover:bg-muted/40" : "cursor-not-allowed opacity-55"
               }`}
-              title={x.reason ?? undefined}
+              title={x.reason ? t(x.reason) : undefined}
             >
               {busy === x.id ? (
                 <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-ink-3" />
@@ -558,10 +566,10 @@ function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) 
               <span className="min-w-0 flex-1">
                 <span className={`block truncate ${x.canSend ? "text-ink" : "text-ink-3"}`}>{x.title}</span>
                 <span className="block text-xs text-ink-3">
-                  {typeLabel[x.type]}
+                  {t(typeLabel[x.type])}
                   {x.username && ` · @${x.username}`}
                 </span>
-                {!x.canSend && <span className="mt-0.5 block text-xs text-ink-3">Нельзя писать: {x.reason ?? "нет доступа"}</span>}
+                {!x.canSend && <span className="mt-0.5 block text-xs text-ink-3">{t("Нельзя писать: {reason}", { reason: x.reason ? t(x.reason) : t("нет доступа") })}</span>}
               </span>
             </label>
           ))
@@ -573,6 +581,7 @@ function RecipientsCard({ c, onChange }: { c: Campaign; onChange: (c: Campaign) 
 
 /** Тест в один чат, отправка сейчас или по расписанию. */
 function SendBar({ c, onChange }: { c: Campaign; onChange: (c: Campaign) => void }) {
+  const t = useT();
   const [testChat, setTestChat] = useState("");
   const [testChats, setTestChats] = useState<CampaignChat[]>([]);
   const [schedule, setSchedule] = useState(toLocal(c.scheduledAt));
@@ -602,10 +611,10 @@ function SendBar({ c, onChange }: { c: Campaign; onChange: (c: Campaign) => void
   const launch = (scheduled: boolean) =>
     run("launch", async () => {
       const at = scheduled ? fromLocal(schedule) : null;
-      if (scheduled && !at) throw new Error("Укажите дату и время отправки.");
+      if (scheduled && !at) throw new Error(t("Укажите дату и время отправки."));
       const question = scheduled
-        ? `Запланировать рассылку на ${schedule.replace("T", " ")} (Ташкент) для ${c.counts.total} получателей?`
-        : `Отправить сейчас ${c.counts.total} получателям?`;
+        ? t("Запланировать рассылку на {date} (Ташкент) для {n} получателей?", { date: schedule.replace("T", " "), n: c.counts.total })
+        : t("Отправить сейчас {n} получателям?", { n: c.counts.total });
       if (!confirm(question)) return;
       if (at !== c.scheduledAt) await campaignsApi.update(c.id, { ...inputOf(c), scheduledAt: at });
       onChange(await campaignsApi.launch(c.id));
@@ -615,10 +624,10 @@ function SendBar({ c, onChange }: { c: Campaign; onChange: (c: Campaign) => void
     <section className="mt-5 rounded-xl border border-line bg-surface p-4 sm:p-5">
       <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
         <div className="min-w-[260px] flex-1">
-          <span className="mb-1.5 block text-sm font-medium text-ink">Тест — отправить себе или коллеге</span>
+          <span className="mb-1.5 block text-sm font-medium text-ink">{t("Тест — отправить себе или коллеге")}</span>
           <div className="flex gap-2">
-            <select className={field} value={testChat} onChange={(e) => setTestChat(e.target.value)} aria-label="Чат для теста">
-              <option value="">Выберите чат…</option>
+            <select className={field} value={testChat} onChange={(e) => setTestChat(e.target.value)} aria-label={t("Чат для теста")}>
+              <option value="">{t("Выберите чат…")}</option>
               {testChats.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.title}
@@ -632,32 +641,32 @@ function SendBar({ c, onChange }: { c: Campaign; onChange: (c: Campaign) => void
               onClick={() =>
                 run("test", async () => {
                   const r = await campaignsApi.test(c.id, testChat);
-                  setMessage(`Тест отправлен: ${r.sentTo}.`);
+                  setMessage(t("Тест отправлен: {to}.", { to: r.sentTo }));
                 })
               }
             >
               {busy === "test" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              Тест
+              {t("Тест")}
             </button>
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-ink">По расписанию (Ташкент)</span>
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("По расписанию (Ташкент)")}</span>
             <input className={field.replace("w-full", "w-auto")} type="datetime-local" value={schedule} onChange={(e) => setSchedule(e.target.value)} />
           </label>
           <button className={button} disabled={!!busy || !schedule || c.counts.total === 0 || empty} onClick={() => launch(true)}>
             <CalendarClock className="size-4" />
-            Запланировать
+            {t("Запланировать")}
           </button>
           <button className={`${primary} h-10 px-5`} disabled={!!busy || c.counts.total === 0 || empty} onClick={() => launch(false)}>
             {busy === "launch" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-            Отправить сейчас · {c.counts.total}
+            {t("Отправить сейчас")} · {c.counts.total}
           </button>
         </div>
       </div>
       {(empty || c.counts.total === 0) && (
-        <p className="mt-3 text-xs text-ink-3">{empty ? "Напишите текст или прикрепите файл." : "Отметьте получателей справа."}</p>
+        <p className="mt-3 text-xs text-ink-3">{empty ? t("Напишите текст или прикрепите файл.") : t("Отметьте получателей справа.")}</p>
       )}
       {message && <p className="mt-3 rounded-lg bg-ok-soft px-3 py-2 text-sm text-ok">{message}</p>}
       {error && <p className="mt-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
@@ -669,6 +678,7 @@ function SendBar({ c, onChange }: { c: Campaign; onChange: (c: Campaign) => void
 
 /** Что отправлено (текст как у получателя, файлы — скачать) и статус каждого получателя. */
 function Details({ c }: { c: Campaign }) {
+  const t = useT();
   const [preview, setPreview] = useState<CampaignPreview | null>(null);
   const [filter, setFilter] = useState("");
 
@@ -681,11 +691,11 @@ function Details({ c }: { c: Campaign }) {
   return (
     <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
       <section className="rounded-xl border border-line bg-surface p-4 sm:p-5">
-        <h2 className="text-base font-semibold text-ink">Отправленные данные</h2>
+        <h2 className="text-base font-semibold text-ink">{t("Отправленные данные")}</h2>
         <p className="mt-0.5 text-xs text-ink-3">
           {c.accountName}
-          {c.startedAt && ` · начата ${tashkent(c.startedAt)}`}
-          {c.finishedAt && ` · завершена ${tashkent(c.finishedAt)}`}
+          {c.startedAt && ` · ${t("начата {date}", { date: tashkent(c.startedAt) })}`}
+          {c.finishedAt && ` · ${t("завершена {date}", { date: tashkent(c.finishedAt) })}`}
           {c.createdBy && ` · ${c.createdBy}`}
         </p>
         <div className="mt-3 rounded-xl bg-muted/50 p-3">
@@ -695,7 +705,7 @@ function Details({ c }: { c: Campaign }) {
               dangerouslySetInnerHTML={{ __html: preview.html }}
             />
           ) : (
-            <p className="text-sm text-ink-3">{c.text ? "…" : "Без текста"}</p>
+            <p className="text-sm text-ink-3">{c.text ? "…" : t("Без текста")}</p>
           )}
         </div>
         {c.attachments.length > 0 && (
@@ -704,7 +714,7 @@ function Details({ c }: { c: Campaign }) {
               <a key={a.id} href={attachmentUrl(c.id, a.id)} className="flex items-center gap-3 rounded-lg border border-line px-3 py-2 text-sm hover:bg-muted/40">
                 {a.kind === "report" ? <FileSpreadsheet className="size-4 shrink-0 text-ok" /> : <Paperclip className="size-4 shrink-0 text-ink-3" />}
                 <span className="min-w-0 flex-1 truncate text-ink">{a.fileName}</span>
-                <span className="text-xs text-ink-3">{size(a.sizeBytes)}</span>
+                <span className="text-xs text-ink-3">{size(a.sizeBytes, t)}</span>
                 <Download className="size-4 text-ink-3" />
               </a>
             ))}
@@ -715,13 +725,13 @@ function Details({ c }: { c: Campaign }) {
       <section className="rounded-xl border border-line bg-surface p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-ink">
-            Получатели <span className="text-sm font-normal text-ink-3">· {c.counts.total}</span>
+            {t("Получатели")} <span className="text-sm font-normal text-ink-3">· {c.counts.total}</span>
           </h2>
-          <select className={field.replace("w-full", "w-auto").replace("h-10", "h-9")} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Статус">
-            <option value="">Все</option>
+          <select className={field.replace("w-full", "w-auto").replace("h-10", "h-9")} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label={t("Статус")}>
+            <option value="">{t("Все")}</option>
             {Object.entries(recipientStatus).map(([key, v]) => (
               <option key={key} value={key}>
-                {v.label}
+                {t(v.label)}
               </option>
             ))}
           </select>
@@ -732,16 +742,16 @@ function Details({ c }: { c: Campaign }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-ink">{r.title}</span>
                 <span className="text-xs text-ink-3">
-                  {typeLabel[r.type]}
+                  {t(typeLabel[r.type])}
                   {r.username && ` · @${r.username}`}
-                  {r.attempts > 1 && ` · попыток ${r.attempts}`}
+                  {r.attempts > 1 && ` · ${t("попыток {n}", { n: r.attempts })}`}
                 </span>
-                {r.error && <span className="mt-0.5 block text-xs text-bad">{r.error}</span>}
+                {r.error && <span className="mt-0.5 block text-xs text-bad">{t(r.error)}</span>}
               </span>
               <span className="shrink-0 text-right">
-                <span className={`block text-sm ${recipientStatus[r.status].className}`}>{recipientStatus[r.status].label}</span>
+                <span className={`block text-sm ${recipientStatus[r.status].className}`}>{t(recipientStatus[r.status].label)}</span>
                 <span className="text-xs text-ink-3">
-                  {r.sentAt ? tashkent(r.sentAt) : r.nextAttemptAt && r.status === "Pending" ? `повтор ${tashkent(r.nextAttemptAt)}` : ""}
+                  {r.sentAt ? tashkent(r.sentAt) : r.nextAttemptAt && r.status === "Pending" ? t("повтор {date}", { date: tashkent(r.nextAttemptAt) }) : ""}
                 </span>
               </span>
             </div>

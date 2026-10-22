@@ -1,4 +1,5 @@
 import { type NextRequest } from "next/server";
+import { LANG_COOKIE, parseLang } from "@/i18n/core";
 import { API_URL, SESSION_COOKIE } from "@/lib/server-api";
 
 /**
@@ -12,7 +13,8 @@ async function proxy(request: NextRequest, { params }: { params: Promise<{ path:
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (!token) return Response.json({ error: "Нет сессии" }, { status: 401 });
 
-  const headers = new Headers({ Authorization: `Bearer ${token}` });
+  // Язык интерфейса — серверу: ошибки и подписи в ответах на нём.
+  const headers = new Headers({ Authorization: `Bearer ${token}`, "Accept-Language": parseLang(request.cookies.get(LANG_COOKIE)?.value) });
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("content-type", contentType);
 

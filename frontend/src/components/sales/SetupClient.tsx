@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Trash2 } from "lucide-react";
+import { useT } from "@/i18n/client";
 import { CancelSyncButton } from "./CancelSyncButton";
 import { SyncProgressBar } from "./SyncProgressBar";
 import { Note, Section } from "./bits";
@@ -48,6 +49,7 @@ async function bff<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   return (response.status === 204 || response.status === 202 ? undefined : await response.json()) as T;
 }
 
+// Подписи целей — русские ключи словаря, переводятся при выводе (TargetsSection).
 const targetLabels: Record<string, { label: string; hint: string; percent?: boolean }> = {
   visit_conversion: { label: "Конверсия визита", hint: "заказы ТП ÷ выполненные визиты", percent: true },
   revenue_per_outlet: { label: "Выручка на ТТ, сум", hint: "выручка / АКБ" },
@@ -56,6 +58,7 @@ const targetLabels: Record<string, { label: string; hint: string; percent?: bool
 };
 
 export function SetupClient() {
+  const t = useT();
   const [setup, setSetup] = useState<Setup | null>(null);
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
@@ -101,7 +104,7 @@ export function SetupClient() {
   return (
     <>
       {message && (
-        <div className={`rounded-lg px-4 py-2.5 text-sm ${message.tone === "ok" ? "bg-ok-soft text-ok" : "bg-bad-soft text-bad"}`}>{message.text}</div>
+        <div className={`rounded-lg px-4 py-2.5 text-sm ${message.tone === "ok" ? "bg-ok-soft text-ok" : "bg-bad-soft text-bad"}`}>{t(message.text)}</div>
       )}
       <SyncSection status={status} run={run} />
       <DirectionsSection directions={setup.directions} run={run} />
@@ -115,18 +118,19 @@ export function SetupClient() {
 type Run = (action: () => Promise<unknown>, ok: string) => Promise<void>;
 
 function SyncSection({ status, run }: { status: SyncStatus | null; run: Run }) {
+  const t = useT();
   return (
     <Section
-      title="Синхронизация с Linko"
-      hint={status?.dataAsOf ? `загружено ${dateTime(status.dataAsOf)}` : "данных ещё нет"}
+      title={t("Синхронизация с Linko")}
+      hint={status?.dataAsOf ? t("загружено {date}", { date: dateTime(status.dataAsOf) }) : t("данных ещё нет")}
       actions={
         <>
           <button className={primary} disabled={!status?.configured || status?.isRunning} onClick={() => run(() => bff("sync", { method: "POST" }), "Синхронизация запущена")}>
             <RefreshCw className={`size-3.5 ${status?.isRunning ? "animate-spin" : ""}`} />
-            {status?.isRunning ? "Обновляется…" : "Обновить"}
+            {status?.isRunning ? t("Обновляется…") : t("Обновить")}
           </button>
           <button className={button} disabled={!status?.configured || status?.isRunning} onClick={() => run(() => bff("sync?full=true", { method: "POST" }), "Полная перезагрузка запущена")}>
-            Полная перезагрузка
+            {t("Полная перезагрузка")}
           </button>
           {status?.isRunning && <CancelSyncButton cancelling={status.isCancelling} />}
         </>
@@ -138,9 +142,9 @@ function SyncSection({ status, run }: { status: SyncStatus | null; run: Run }) {
         </div>
       )}
       <p className={`mb-2 text-sm ${status?.configured ? "text-ink-2" : "text-warn"}`}>
-        {status?.configured ? "Адрес, токен и проверка подключения — в " : "Linko не настроен или выключен. Задайте адрес и токен в "}
+        {status?.configured ? t("Адрес, токен и проверка подключения — в ") : t("Linko не настроен или выключен. Задайте адрес и токен в ")}
         <a href="/settings/integrations/sales/linko" className="font-medium text-accent-strong hover:underline">
-          Настройки → Интеграции → Продажи → Linko
+          {t("Настройки → Интеграции → Продажи → Linko")}
         </a>
         .
       </p>
@@ -148,35 +152,38 @@ function SyncSection({ status, run }: { status: SyncStatus | null; run: Run }) {
         <table className="w-full min-w-max text-sm">
           <thead>
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
-              <th className="py-2 pr-3 font-semibold">Сущность</th>
-              <th className="py-2 pr-3 font-semibold">Последний успех</th>
-              <th className="py-2 pr-3 text-right font-semibold" title="Сколько записей пришло при последней загрузке: при обычном обновлении — только изменения">Строк за раз</th>
-              <th className="py-2 font-semibold">Ошибка</th>
+              <th className="py-2 pr-3 font-semibold">{t("Сущность")}</th>
+              <th className="py-2 pr-3 font-semibold">{t("Последний успех")}</th>
+              <th className="py-2 pr-3 text-right font-semibold" title={t("Сколько записей пришло при последней загрузке: при обычном обновлении — только изменения")}>
+                {t("Строк за раз")}
+              </th>
+              <th className="py-2 font-semibold">{t("Ошибка")}</th>
             </tr>
           </thead>
           <tbody>
             {status?.entities.map((e) => (
               <tr key={e.entity} className="border-b border-line last:border-b-0">
-                <td className="py-2 pr-3 font-medium text-ink">{linkoEntityLabels[e.entity] ?? e.entity}</td>
+                <td className="py-2 pr-3 font-medium text-ink">{t(linkoEntityLabels[e.entity] ?? e.entity)}</td>
                 <td className="py-2 pr-3 tabular-nums text-ink-2">{dateTime(e.lastSuccessAt)}</td>
                 <td className="py-2 pr-3 text-right tabular-nums">{num(e.lastRows)}</td>
-                <td className="py-2 text-xs text-bad">{e.lastError ?? ""}</td>
+                <td className="py-2 text-xs text-bad">{e.lastError ? t(e.lastError) : ""}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <Note>Автоматически данные обновляются каждые 20 минут. «Обновить» подтягивает изменения, «Полная перезагрузка» — заново всё окно истории.</Note>
+      <Note>{t("Автоматически данные обновляются каждые 20 минут. «Обновить» подтягивает изменения, «Полная перезагрузка» — заново всё окно истории.")}</Note>
     </Section>
   );
 }
 
 /** Направления — РМ и отдельные каналы (Базар, ключевые клиенты): в Linko их нет, ведутся здесь. */
 function DirectionsSection({ directions, run }: { directions: Direction[]; run: Run }) {
+  const t = useT();
   const empty = { name: "", kind: "RegionalManager" as Direction["kind"], managerName: "", description: "" };
   const [draft, setDraft] = useState(empty);
   return (
-    <Section title="Направления" hint="региональные менеджеры (РМ 1–4) и отдельные каналы (Базар, ключевые клиенты)">
+    <Section title={t("Направления")} hint={t("региональные менеджеры (РМ 1–4) и отдельные каналы (Базар, ключевые клиенты)")}>
       {directions.length > 0 && (
         <div className="space-y-2">
           {/* key — все поля: после сохранения строка заново берёт значения с сервера (обрезанные пробелы, пустое — null). */}
@@ -186,13 +193,13 @@ function DirectionsSection({ directions, run }: { directions: Direction[]; run: 
         </div>
       )}
       <div className="mt-4 grid gap-2 rounded-lg border border-dashed border-line p-3 sm:grid-cols-[1fr_150px_1fr_1fr_auto]">
-        <input className={input} placeholder="Название (РМ 1, Базар…)" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-        <select className={input} aria-label="Тип направления" value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as Direction["kind"] })}>
-          <option value="RegionalManager">РМ</option>
-          <option value="Channel">Канал</option>
+        <input className={input} placeholder={t("Название (РМ 1, Базар…)")} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+        <select className={input} aria-label={t("Тип направления")} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as Direction["kind"] })}>
+          <option value="RegionalManager">{t("РМ")}</option>
+          <option value="Channel">{t("Канал")}</option>
         </select>
-        <input className={input} placeholder="Руководитель" value={draft.managerName} onChange={(e) => setDraft({ ...draft, managerName: e.target.value })} />
-        <input className={input} placeholder="Описание (зона)" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+        <input className={input} placeholder={t("Руководитель")} value={draft.managerName} onChange={(e) => setDraft({ ...draft, managerName: e.target.value })} />
+        <input className={input} placeholder={t("Описание (зона)")} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
         <button
           className={primary}
           disabled={!draft.name.trim()}
@@ -203,37 +210,42 @@ function DirectionsSection({ directions, run }: { directions: Direction[]; run: 
             }, "Направление добавлено")
           }
         >
-          Добавить
+          {t("Добавить")}
         </button>
       </div>
       <Note>
-        Направление объединяет регионы: карточки РМ в республике, страница РМ, охват РМ в «Ассортименте» и фильтр в «Проблемных агентах». Каналы
-        показываются после РМ. Удалённое направление снимается с регионов, сами регионы остаются.
+        {t(
+          "Направление объединяет регионы: карточки РМ в республике, страница РМ, охват РМ в «Ассортименте» и фильтр в «Проблемных агентах». Каналы показываются после РМ. Удалённое направление снимается с регионов, сами регионы остаются.",
+        )}
       </Note>
     </Section>
   );
 }
 
 function DirectionRow({ direction, run }: { direction: Direction; run: Run }) {
+  const t = useT();
   const [d, setD] = useState(direction);
   const dirty = JSON.stringify(d) !== JSON.stringify(direction);
   return (
     <div className="grid items-center gap-2 sm:grid-cols-[1fr_150px_1fr_1fr_70px_auto_auto]">
-      <input className={input} aria-label="Название" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} />
-      <select className={input} aria-label="Тип направления" value={d.kind} onChange={(e) => setD({ ...d, kind: e.target.value as Direction["kind"] })}>
-        <option value="RegionalManager">РМ</option>
-        <option value="Channel">Канал</option>
+      <input className={input} aria-label={t("Название")} value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} />
+      <select className={input} aria-label={t("Тип направления")} value={d.kind} onChange={(e) => setD({ ...d, kind: e.target.value as Direction["kind"] })}>
+        <option value="RegionalManager">{t("РМ")}</option>
+        <option value="Channel">{t("Канал")}</option>
       </select>
-      <input className={input} placeholder="Руководитель" value={d.managerName ?? ""} onChange={(e) => setD({ ...d, managerName: e.target.value })} />
-      <input className={input} placeholder="Описание (зона)" value={d.description ?? ""} onChange={(e) => setD({ ...d, description: e.target.value })} />
-      <input className={input} type="number" title="Порядок" aria-label="Порядок" value={d.sortOrder} onChange={(e) => setD({ ...d, sortOrder: Number(e.target.value) })} />
+      <input className={input} placeholder={t("Руководитель")} value={d.managerName ?? ""} onChange={(e) => setD({ ...d, managerName: e.target.value })} />
+      <input className={input} placeholder={t("Описание (зона)")} value={d.description ?? ""} onChange={(e) => setD({ ...d, description: e.target.value })} />
+      <input className={input} type="number" title={t("Порядок")} aria-label={t("Порядок")} value={d.sortOrder} onChange={(e) => setD({ ...d, sortOrder: Number(e.target.value) })} />
       <button className={primary} disabled={!dirty || !d.name.trim()} onClick={() => run(() => bff(`setup/directions/${d.id}`, { method: "PUT", body: JSON.stringify(d) }), "Сохранено")}>
-        Сохранить
+        {t("Сохранить")}
       </button>
       <button
         className={button}
-        aria-label="Удалить направление"
-        onClick={() => confirm(`Удалить «${direction.name}»? Регионы останутся без направления.`) && run(() => bff(`setup/directions/${d.id}`, { method: "DELETE" }), "Удалено")}
+        aria-label={t("Удалить направление")}
+        onClick={() =>
+          confirm(t("Удалить «{name}»? Регионы останутся без направления.", { name: direction.name })) &&
+          run(() => bff(`setup/directions/${d.id}`, { method: "DELETE" }), "Удалено")
+        }
       >
         <Trash2 className="size-3.5" />
       </button>
@@ -246,20 +258,23 @@ function DirectionRow({ direction, run }: { direction: Direction; run: Run }) {
  * здесь не меняется.
  */
 function RegionsSection({ regions, directions, owners, run }: { regions: Region[]; directions: Direction[]; owners: Record<string, string>; run: Run }) {
+  const t = useT();
   const fromSheets = <span className="ml-1 font-normal normal-case tracking-normal text-accent-strong">· Google Sheets</span>;
   return (
-    <Section title="Регионы" hint="филиалы Linko · направление, СВР и дилер — данные OneBase">
+    <Section title={t("Регионы")} hint={t("филиалы Linko · направление, СВР и дилер — данные OneBase")}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-sm">
           <thead>
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
-              <th className="py-2 pr-2 font-semibold">Регион</th>
-              <th className="py-2 pr-2 font-semibold">Направление</th>
+              <th className="py-2 pr-2 font-semibold">{t("Регион")}</th>
+              <th className="py-2 pr-2 font-semibold">{t("Направление")}</th>
               <th className="py-2 pr-2 font-semibold" title={owners.supervisor}>
-                СВР{owners.supervisor && fromSheets}
+                {t("СВР")}
+                {owners.supervisor && fromSheets}
               </th>
               <th className="py-2 pr-2 font-semibold" title={owners.dealer}>
-                Дилер{owners.dealer && fromSheets}
+                {t("Дилер")}
+                {owners.dealer && fromSheets}
               </th>
               <th />
             </tr>
@@ -272,14 +287,16 @@ function RegionsSection({ regions, directions, owners, run }: { regions: Region[
         </table>
       </div>
       <Note>
-        Регион создаётся сам из филиала Linko и при «Очистить данные и загрузить заново» не удаляется — направление, СВР, дилер и планы РОП и «Завод»
-        остаются. Название — как в последнем заказе филиала: переименуют филиал в Linko — после синхронизации переименуется и регион. Дилер региона
-        виден в «Первичке» и «Аутстоке». «Завод», «К К Мерч» и старые филиалы («эски») регионами вторички не являются.
+        {t(
+          "Регион создаётся сам из филиала Linko и при «Очистить данные и загрузить заново» не удаляется — направление, СВР, дилер и планы РОП и «Завод» остаются. Название — как в последнем заказе филиала: переименуют филиал в Linko — после синхронизации переименуется и регион. Дилер региона виден в «Первичке» и «Аутстоке». «Завод», «К К Мерч» и старые филиалы («эски») регионами вторички не являются.",
+        )}
       </Note>
       {(owners.dealer || owners.supervisor) && (
         <Note>
-          {[owners.supervisor && `СВР: ${owners.supervisor}`, owners.dealer && `дилер: ${owners.dealer}`].filter(Boolean).join("; ")} — здесь только просмотр,
-          меняйте в таблице (или отключите привязку в «Настройки → Источники данных»).
+          {[owners.supervisor && t("СВР: {source}", { source: owners.supervisor }), owners.dealer && t("дилер: {source}", { source: owners.dealer })]
+            .filter(Boolean)
+            .join("; ")}{" "}
+          {t("— здесь только просмотр, меняйте в таблице (или отключите привязку в «Настройки → Источники данных»).")}
         </Note>
       )}
     </Section>
@@ -287,6 +304,7 @@ function RegionsSection({ regions, directions, owners, run }: { regions: Region[
 }
 
 function RegionRow({ region, directions, owners, run }: { region: Region; directions: Direction[]; owners: Record<string, string>; run: Run }) {
+  const t = useT();
   const [r, setR] = useState(region);
   const dirty = r.directionId !== region.directionId || (r.supervisorName ?? "") !== (region.supervisorName ?? "") || (r.dealerName ?? "") !== (region.dealerName ?? "");
   const inactive = region.note != null;
@@ -295,13 +313,13 @@ function RegionRow({ region, directions, owners, run }: { region: Region; direct
       <td className="py-1.5 pr-2">
         <span className={`block font-medium ${inactive ? "" : "text-ink"}`}>{region.name}</span>
         <span className="text-[11px] text-ink-3">
-          филиал Linko {region.linkoBranchId}
-          {region.note ? ` · ${region.note}` : ""}
+          {t("филиал Linko {id}", { id: region.linkoBranchId })}
+          {region.note ? ` · ${t(region.note)}` : ""}
         </span>
       </td>
       <td className="py-1.5 pr-2">
-        <select className={input} aria-label="Направление" disabled={inactive} value={r.directionId ?? ""} onChange={(e) => setR({ ...r, directionId: e.target.value || null })}>
-          <option value="">— без направления —</option>
+        <select className={input} aria-label={t("Направление")} disabled={inactive} value={r.directionId ?? ""} onChange={(e) => setR({ ...r, directionId: e.target.value || null })}>
+          <option value="">{t("— без направления —")}</option>
           {directions.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
@@ -312,7 +330,7 @@ function RegionRow({ region, directions, owners, run }: { region: Region; direct
       <td className="py-1.5 pr-2">
         <input
           className={input}
-          aria-label="СВР"
+          aria-label={t("СВР")}
           disabled={inactive || !!owners.supervisor}
           title={owners.supervisor}
           value={r.supervisorName ?? ""}
@@ -322,7 +340,7 @@ function RegionRow({ region, directions, owners, run }: { region: Region; direct
       <td className="py-1.5 pr-2">
         <input
           className={input}
-          aria-label="Дилер"
+          aria-label={t("Дилер")}
           disabled={inactive || !!owners.dealer}
           title={owners.dealer}
           value={r.dealerName ?? ""}
@@ -341,7 +359,7 @@ function RegionRow({ region, directions, owners, run }: { region: Region; direct
               )
             }
           >
-            Сохранить
+            {t("Сохранить")}
           </button>
         )}
       </td>
@@ -351,16 +369,17 @@ function RegionRow({ region, directions, owners, run }: { region: Region; direct
 
 /** Справочник ТП — из Linko, только для просмотра: ТП — по должности, вакансия — «вакан» в имени («вакант», «Вакан …») или ID 0. */
 function AgentsSection({ agents }: { agents: Agent[] }) {
+  const t = useT();
   const [all, setAll] = useState(false);
   const visible = agents.filter((a) => all || a.isSalesRep || a.hasSales);
   return (
     <Section
-      title="Справочник ТП"
-      hint="из Linko · только просмотр"
+      title={t("Справочник ТП")}
+      hint={t("из Linko · только просмотр")}
       actions={
         <label className="flex items-center gap-2 text-xs text-ink-2">
           <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
-          все пользователи Linko
+          {t("все пользователи Linko")}
         </label>
       }
     >
@@ -368,65 +387,66 @@ function AgentsSection({ agents }: { agents: Agent[] }) {
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
-              <th className="py-2 pr-2 font-semibold">Пользователь Linko</th>
-              <th className="py-2 pr-2 font-semibold">Должность</th>
-              <th className="py-2 pr-2 font-semibold">ТП</th>
-              <th className="py-2 pr-2 font-semibold">Вакансия</th>
-              <th className="py-2 font-semibold">Продажи</th>
+              <th className="py-2 pr-2 font-semibold">{t("Пользователь Linko")}</th>
+              <th className="py-2 pr-2 font-semibold">{t("Должность")}</th>
+              <th className="py-2 pr-2 font-semibold">{t("ТП")}</th>
+              <th className="py-2 pr-2 font-semibold">{t("Вакансия")}</th>
+              <th className="py-2 font-semibold">{t("Продажи")}</th>
             </tr>
           </thead>
           <tbody>
             {visible.map((a) => (
               <tr key={a.linkoUserId} className="border-b border-line last:border-b-0">
                 <td className="py-1.5 pr-2">
-                  <span className="block font-medium text-ink">{a.name || `Пользователь ${a.linkoUserId}`}</span>
+                  <span className="block font-medium text-ink">{a.name || t("Пользователь {id}", { id: a.linkoUserId })}</span>
                   <span className="text-[11px] text-ink-3">
                     ID {a.linkoUserId}
-                    {!a.isActive ? " · неактивен в Linko" : ""}
+                    {!a.isActive ? ` · ${t("неактивен в Linko")}` : ""}
                   </span>
                 </td>
                 <td className="py-1.5 pr-2 text-ink-2">{a.job ?? "—"}</td>
-                <td className="py-1.5 pr-2">{a.isSalesRep ? "да" : <span className="text-ink-3">нет</span>}</td>
-                <td className="py-1.5 pr-2">{a.isVacancy ? <span className="text-warn">вакансия</span> : <span className="text-ink-3">—</span>}</td>
-                <td className="py-1.5 text-ink-2">{a.hasSales ? "есть" : "—"}</td>
+                <td className="py-1.5 pr-2">{a.isSalesRep ? t("да") : <span className="text-ink-3">{t("нет")}</span>}</td>
+                <td className="py-1.5 pr-2">{a.isVacancy ? <span className="text-warn">{t("вакансия")}</span> : <span className="text-ink-3">—</span>}</td>
+                <td className="py-1.5 text-ink-2">{a.hasSales ? t("есть") : "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <Note>
-        Справочник ведётся в Linko. ТП — пользователи с должностью «Агент»; продающие без этой должности показываются в регионе отдельным списком «Продают, но
-        не заведены в справочнике». Вакансия — «вакан» в имени («вакант», «Вакан …») или ID 0: в рейтинг и численность ТП не входит. Регион ТП — по филиалу,
-        где у него больше продаж.
+        {t(
+          "Справочник ведётся в Linko. ТП — пользователи с должностью «Агент»; продающие без этой должности показываются в регионе отдельным списком «Продают, но не заведены в справочнике». Вакансия — «вакан» в имени («вакант», «Вакан …») или ID 0: в рейтинг и численность ТП не входит. Регион ТП — по филиалу, где у него больше продаж.",
+        )}
       </Note>
     </Section>
   );
 }
 
 function TargetsSection({ targets, run }: { targets: Record<string, number>; run: Run }) {
+  const t = useT();
   const [values, setValues] = useState(targets);
   return (
     <Section
-      title="Цели"
+      title={t("Цели")}
       actions={
         <button className={primary} onClick={() => run(() => bff("setup/targets", { method: "PUT", body: JSON.stringify(values) }), "Цели сохранены")}>
-          Сохранить
+          {t("Сохранить")}
         </button>
       }
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {Object.entries(targetLabels).map(([key, t]) => (
+        {Object.entries(targetLabels).map(([key, target]) => (
           <label key={key} className="block">
-            <span className="block text-sm text-ink">{t.label}</span>
-            <span className="mb-1 block text-[11px] text-ink-3">{t.hint}</span>
+            <span className="block text-sm text-ink">{t(target.label)}</span>
+            <span className="mb-1 block text-[11px] text-ink-3">{t(target.hint)}</span>
             <input
               className={input}
               type="number"
               step="any"
-              value={t.percent ? Math.round((values[key] ?? 0) * 1000) / 10 : (values[key] ?? 0)}
-              onChange={(e) => setValues({ ...values, [key]: t.percent ? Number(e.target.value) / 100 : Number(e.target.value) })}
+              value={target.percent ? Math.round((values[key] ?? 0) * 1000) / 10 : (values[key] ?? 0)}
+              onChange={(e) => setValues({ ...values, [key]: target.percent ? Number(e.target.value) / 100 : Number(e.target.value) })}
             />
-            {t.percent && <span className="text-[11px] text-ink-3">в процентах</span>}
+            {target.percent && <span className="text-[11px] text-ink-3">{t("в процентах")}</span>}
           </label>
         ))}
       </div>

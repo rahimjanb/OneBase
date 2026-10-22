@@ -12,7 +12,10 @@ namespace OneBase.Application.DataSources;
 /// <summary>Ошибка настройки источника — текст для администратора.</summary>
 public sealed class DataSourceException(string message) : Exception(message);
 
-/// <summary>Поле OneBase, которое можно обновлять из Google Sheets. Kind: plan (регион × категория × месяц), profile (регион → текст), pnl.</summary>
+/// <summary>
+/// Поле OneBase, которое можно обновлять из Google Sheets. Kind: plan (регион × категория × месяц), profile (регион → текст), pnl,
+/// ledger (реестр строк: дата × контрагент × сумма — копия листа), terms (условия контрагента: срок оплаты, остаток на дату).
+/// </summary>
 public sealed record DataSourceField(string Key, string Label, string Kind, string Description, PlanKind? PlanKind = null, string? ProfileField = null);
 
 /// <summary>Раздел продаж: откуда факт (всегда Linko) и какие поля OneBase раздела можно брать из Google Sheets.</summary>
@@ -30,6 +33,10 @@ public static class DataSourceCatalog
     public const string Dealer = "dealer";
     public const string Supervisor = "supervisor";
     public const string Pnl = "pnl";
+    public const string DealerPayments = "dealer_payments";
+    public const string DealerExpenses = "dealer_expenses";
+    public const string DealerTerms = "dealer_terms";
+    public const string DealerBalances = "dealer_balances";
 
     public static readonly IReadOnlyList<DataSourceField> Fields =
     [
@@ -39,6 +46,11 @@ public static class DataSourceCatalog
         new(Dealer, "Дилер региона", "profile", "Подпись строк первички, P&L и карточек регионов («Бобур Самарканд»).", null, RegionProfilePlanner.Dealer),
         new(Supervisor, "СВР региона", "profile", "Супервайзер региона во вторичке.", null, RegionProfilePlanner.Supervisor),
         new(Pnl, "P&L дилеров", "pnl", "Продажи, себестоимость и расходы по дилерам за месяц."),
+        new(DealerPayments, "Оплаты дилеров", "ledger", "Поступления от дилеров (касса и банк) по дням — акт сверки и DSO. Лист копируется целиком."),
+        new(DealerExpenses, "Расходы по дилерам", "ledger", "Бонусы, логистика, акции, кешбэк и прочие расходы по статьям — акт сверки и DSO. Лист копируется целиком."),
+        new(DealerTerms, "Нормы оплаты дилеров", "terms", "Срок оплаты дилера в днях (и остаток долга на дату, если он в том же листе) — DSO."),
+        new(DealerBalances, "Остатки дилеров на дату", "balance",
+            "Долг контрагента на начало месяца из бухгалтерского акта сверки — опора акта и DSO; дата — из ячейки листа или заданная."),
     ];
 
     public static readonly IReadOnlyList<DataSourceSection> Sections =
@@ -52,6 +64,10 @@ public static class DataSourceCatalog
         new("plans", "Планы", "/sales/plans", "Планы ТП — API планов Linko", [PlanRop, PlanFactory, PlanPrimary]),
         new("problems", "Проблемные агенты", "/sales/problems", "Визиты, заказы и планы ТП — Linko", []),
         new("pnl", "P&L дилеров", "/sales/pnl", "Данные OneBase (Linko не ведёт P&L)", [Pnl]),
+        new("akt", "Акт сверки", "/sales/akt", "Отгрузки и возвраты дилерам — Linko (первичка); оплат и расходов дилеров в Linko нет",
+            [DealerPayments, DealerExpenses, DealerBalances, DealerTerms]),
+        new("dso", "DSO", "/sales/dso", "Отгрузки дилерам — Linko (первичка); оплат и сроков оплаты в Linko нет",
+            [DealerPayments, DealerExpenses, DealerBalances, DealerTerms]),
     ];
 
     public static DataSourceField? Field(string key) => Fields.FirstOrDefault(f => f.Key == key);
@@ -75,6 +91,30 @@ public sealed record PlanFieldMapping(
 public sealed record ProfileFieldMapping(string RegionColumn, string ValueColumn);
 
 /// <summary>
+/// Реестр (оплаты, расходы): дата, контрагент, сумма; Kind — кошелёк («Нақд», банк) или статья; Category и Categories — отбор строк по
+/// началу категории («101» — поступления от дилеров), пусто — все строки; Comment — комментарий; DateFrom — строки раньше этой даты не берутся
+/// (остатки на начало, записанные в реестр расходом).
+/// </summary>
+public sealed record LedgerFieldMapping(
+    string DateColumn,
+    string DealerColumn,
+    string AmountColumn,
+    string? KindColumn = null,
+    string? CategoryColumn = null,
+    IReadOnlyList<string>? Categories = null,
+    string? CommentColumn = null,
+    DateOnly? DateFrom = null);
+
+/// <summary>
+/// Остатки контрагентов на дату: столбцы контрагента и суммы; дата — DateCell (ячейка листа, «F1» — начало периода акта: лист каждый месяц
+/// переходит на новый месяц) или Date.
+/// </summary>
+public sealed record BalanceFieldMapping(string DealerColumn, string AmountColumn, string? DateCell = null, DateOnly? Date = null);
+
+/// <summary>Условия контрагента: столбец контрагента, срока оплаты (дней; пусто — без срока) и остатка долга на дату OpeningDate.</summary>
+public sealed record TermsFieldMapping(string DealerColumn, string? NormColumn = null, string? OpeningColumn = null, DateOnly? OpeningDate = null);
+
+/// <summary>
 /// Поле привязки: какое поле OneBase обновлять и как читать его из листа. Replace (планы и P&L) — таблица полная за свои месяцы:
 /// строки этих месяцев, которых в таблице нет, удаляются; иначе — только добавляются и обновляются. Месяц (планы и P&L): MonthFromSheet —
 /// из названия листа («Сентябрь 2026», «09.2026»): лист на месяц; CurrentMonth — текущий месяц по Ташкенту на момент синхронизации:
@@ -93,7 +133,7 @@ public sealed record PeriodFilter(string Mode, int? Months = null, string? From 
 /// </remarks>
 public sealed record DataSourceFieldBinding(string Field, PlanFieldMapping? Plan = null, ProfileFieldMapping? Profile = null, PnlSheetMapping? Pnl = null,
     bool Replace = true, bool MonthFromSheet = false, bool CurrentMonth = false, IReadOnlyDictionary<string, string>? Headers = null,
-    PeriodFilter? Period = null);
+    PeriodFilter? Period = null, LedgerFieldMapping? Ledger = null, TermsFieldMapping? Terms = null, BalanceFieldMapping? Balance = null);
 
 /// <summary>
 /// Итог синхронизации поля: операция AI Data Manager, строки, ошибки. Period и Fingerprint — у поля «текущий месяц»: за какой месяц
@@ -347,9 +387,16 @@ public static partial class DataSourceRules
                           || (f.Plan.ValueColumns is not { Count: > 0 } && string.IsNullOrWhiteSpace(f.Plan.ValueColumn))
                           || (string.IsNullOrWhiteSpace(f.Plan.MonthColumn) && f.Plan.Month is null && !f.MonthFromSheet && !f.CurrentMonth),
                 "profile" => f.Profile is null || string.IsNullOrWhiteSpace(f.Profile.RegionColumn) || string.IsNullOrWhiteSpace(f.Profile.ValueColumn),
+                "ledger" => f.Ledger is null || string.IsNullOrWhiteSpace(f.Ledger.DateColumn) || string.IsNullOrWhiteSpace(f.Ledger.DealerColumn)
+                            || string.IsNullOrWhiteSpace(f.Ledger.AmountColumn),
+                "balance" => f.Balance is null || string.IsNullOrWhiteSpace(f.Balance.DealerColumn) || string.IsNullOrWhiteSpace(f.Balance.AmountColumn)
+                             || (string.IsNullOrWhiteSpace(f.Balance.DateCell) && f.Balance.Date is null),
+                "terms" => f.Terms is null || string.IsNullOrWhiteSpace(f.Terms.DealerColumn)
+                           || (string.IsNullOrWhiteSpace(f.Terms.NormColumn) && string.IsNullOrWhiteSpace(f.Terms.OpeningColumn))
+                           || (!string.IsNullOrWhiteSpace(f.Terms.OpeningColumn) && f.Terms.OpeningDate is null),
                 _ => f.Pnl is null,
             };
-            if (field.Kind != "profile" && PeriodError(f.Period) is { } periodError)
+            if (field.Kind is "plan" or "pnl" && PeriodError(f.Period) is { } periodError)
             {
                 return $"«{field.Label}»: {periodError}.";
             }
@@ -360,6 +407,9 @@ public static partial class DataSourceRules
                 {
                     "plan" => $"«{field.Label}»: укажите столбцы региона, значения (или столбцы категорий) и месяц.",
                     "profile" => $"«{field.Label}»: укажите столбцы региона и значения.",
+                    "ledger" => $"«{field.Label}»: укажите столбцы даты, контрагента и суммы.",
+                    "terms" => $"«{field.Label}»: укажите столбец контрагента и срока оплаты или остатка (с датой остатка).",
+                    "balance" => $"«{field.Label}»: укажите столбцы контрагента и остатка и ячейку с датой (или дату).",
                     _ => $"«{field.Label}»: укажите сопоставление столбцов.",
                 };
             }

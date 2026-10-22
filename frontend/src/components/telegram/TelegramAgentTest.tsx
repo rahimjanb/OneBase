@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, Loader2, RotateCcw, Send } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Note } from "@/components/sales/bits";
+import { useT } from "@/i18n/client";
 import {
   chatTypeLabel,
   modeLabel,
@@ -32,6 +33,7 @@ const sample = `Отчёт по продажам за сентябрь 2026 (в�
  * Отвечает настоящий ИИ, но в Telegram ничего не отправляется и журнал агента не пишется.
  */
 export function TelegramAgentTest({ account }: { account: TelegramAccount }) {
+  const t = useT();
   const [people, setPeople] = useState<TelegramPermission[]>([]);
   const [chats, setChats] = useState<TelegramChat[]>([]);
   const [permissionId, setPermissionId] = useState("");
@@ -99,45 +101,45 @@ export function TelegramAgentTest({ account }: { account: TelegramAccount }) {
     <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
       <div className="space-y-4">
         <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-ink">Кто пишет</span>
+          <span className="mb-1.5 block text-sm font-medium text-ink">{t("Кто пишет")}</span>
           <select className={field} value={permissionId} onChange={(e) => (setPermissionId(e.target.value), reset())}>
-            <option value="">Незнакомый человек (нет в списке)</option>
+            <option value="">{t("Незнакомый человек (нет в списке)")}</option>
             {people.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.username ? `@${p.username}` : p.title} — {modeLabel[p.mode].toLowerCase()}
+                {p.username ? `@${p.username}` : p.title} — {t(modeLabel[p.mode]).toLowerCase()}
               </option>
             ))}
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-ink">В каком чате</span>
+          <span className="mb-1.5 block text-sm font-medium text-ink">{t("В каком чате")}</span>
           <select className={field} value={chatId} onChange={(e) => (setChatId(e.target.value), reset())}>
-            <option value="">Без чата (только пример отчёта ниже)</option>
+            <option value="">{t("Без чата (только пример отчёта ниже)")}</option>
             {chats.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.title} · {chatTypeLabel[c.type]}
+                {c.title} · {t(chatTypeLabel[c.type])}
               </option>
             ))}
           </select>
-          <span className="mt-1 block text-xs text-ink-3">Агент видит то, что OneBase отправлял в этот чат, и его расписание рассылок.</span>
+          <span className="mt-1 block text-xs text-ink-3">{t("Агент видит то, что OneBase отправлял в этот чат, и его расписание рассылок.")}</span>
         </label>
         <label className="block">
           <span className="mb-1.5 flex items-baseline justify-between text-sm font-medium text-ink">
-            Пример отчёта
+            {t("Пример отчёта")}
             <button type="button" className="text-xs font-normal text-accent-strong hover:underline" onClick={() => setMaterial(sample)}>
-              вставить пример
+              {t("вставить пример")}
             </button>
           </span>
           <textarea
             className={`${field} h-40 py-2 text-xs`}
             value={material}
             onChange={(e) => setMaterial(e.target.value)}
-            placeholder="Текст «как будто отправленного» отчёта — только для проверки, никуда не сохраняется"
+            placeholder={t("Текст «как будто отправленного» отчёта — только для проверки, никуда не сохраняется")}
           />
         </label>
         <Note>
-          Отвечает настоящий ИИ по тем же правилам, что в Telegram, но в Telegram ничего не отправляется и журнал агента не пишется.
-          {who?.mode === "Full" && " Полный доступ отвечает в чате AI-консультанта пользователя OneBase («Telegram · …»)."}
+          {t("Отвечает настоящий ИИ по тем же правилам, что в Telegram, но в Telegram ничего не отправляется и журнал агента не пишется.")}
+          {who?.mode === "Full" && t(" Полный доступ отвечает в чате AI-консультанта пользователя OneBase («Telegram · …»).")}
         </Note>
       </div>
 
@@ -149,11 +151,11 @@ export function TelegramAgentTest({ account }: { account: TelegramAccount }) {
           </span>
           <button className={button} onClick={reset} disabled={busy || messages.length === 0}>
             <RotateCcw className="size-4" />
-            Заново
+            {t("Заново")}
           </button>
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
-          {messages.length === 0 && <p className="text-sm text-ink-3">Напишите вопрос или выберите готовый ниже.</p>}
+          {messages.length === 0 && <p className="text-sm text-ink-3">{t("Напишите вопрос или выберите готовый ниже.")}</p>}
           {messages.map((m, i) =>
             m.role === "user" ? (
               <div key={i} className="ml-auto max-w-[80%] rounded-2xl rounded-br-md bg-accent px-3.5 py-2 text-sm text-white">
@@ -166,7 +168,7 @@ export function TelegramAgentTest({ account }: { account: TelegramAccount }) {
           {busy && (
             <div className="flex items-center gap-2 text-sm text-ink-3">
               <Loader2 className="size-4 animate-spin" />
-              агент печатает…
+              {t("агент печатает…")}
             </div>
           )}
           <div ref={end} />
@@ -174,8 +176,8 @@ export function TelegramAgentTest({ account }: { account: TelegramAccount }) {
         {error && <p className="mx-4 mb-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
         <div className="flex flex-wrap gap-1.5 border-t border-line px-4 pt-3">
           {quick.map((q) => (
-            <button key={q} className="rounded-full border border-line px-3 py-1 text-xs text-ink-2 hover:bg-muted" onClick={() => ask(q)} disabled={busy}>
-              {q}
+            <button key={q} className="rounded-full border border-line px-3 py-1 text-xs text-ink-2 hover:bg-muted" onClick={() => ask(t(q))} disabled={busy}>
+              {t(q)}
             </button>
           ))}
         </div>
@@ -186,7 +188,7 @@ export function TelegramAgentTest({ account }: { account: TelegramAccount }) {
             ask(question);
           }}
         >
-          <input className={field} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Сообщение…" disabled={busy} />
+          <input className={field} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t("Сообщение…")} disabled={busy} />
           <button type="submit" className={primary} disabled={busy || !question.trim()}>
             <Send className="size-4" />
           </button>
@@ -205,6 +207,7 @@ const statusText: Record<AgentTestResult["status"], string> = {
 };
 
 function AgentBubble({ result }: { result: AgentTestResult }) {
+  const t = useT();
   return (
     <div className="max-w-[85%]">
       {result.replies.map((html, i) => (
@@ -219,18 +222,27 @@ function AgentBubble({ result }: { result: AgentTestResult }) {
           📎 {f}
         </div>
       ))}
+      {result.document && (
+        <details className="mb-1 rounded-xl border border-line px-3 py-2 text-xs text-ink-2">
+          <summary className="cursor-pointer select-none">{t("Что в файле")}</summary>
+          <div
+            className="mt-2 max-h-80 overflow-y-auto whitespace-pre-wrap break-words text-sm text-ink [&_a]:text-accent-strong [&_a]:underline [&_pre]:overflow-x-auto [&_pre]:text-xs"
+            dangerouslySetInnerHTML={{ __html: result.document }}
+          />
+        </details>
+      )}
       {result.replies.length === 0 && result.files.length === 0 && (
-        <div className="rounded-2xl rounded-bl-md border border-dashed border-line px-3.5 py-2 text-sm text-ink-3">Агент промолчал бы.</div>
+        <div className="rounded-2xl rounded-bl-md border border-dashed border-line px-3.5 py-2 text-sm text-ink-3">{t("Агент промолчал бы.")}</div>
       )}
       <div className="mt-1 text-[11px] text-ink-3">
-        {result.mode === "full" ? "полный доступ" : result.mode === "sent_only" ? "по отправленным данным" : "—"} · {statusText[result.status]}
-        {result.materials > 0 && ` · материалов ${result.materials}`}
+        {result.mode === "full" ? t("полный доступ") : result.mode === "sent_only" ? t("по отправленным данным") : "—"} · {t(statusText[result.status])}
+        {result.materials > 0 && ` · ${t("материалов {n}", { n: result.materials })}`}
         {result.model && ` · ${result.model}`}
-        {result.inputTokens + result.outputTokens > 0 && ` · ${result.inputTokens + result.outputTokens} ток.`}
-        {` · ${(result.durationMs / 1000).toFixed(1)} с`}
+        {result.inputTokens + result.outputTokens > 0 && ` · ${t("{n} ток.", { n: result.inputTokens + result.outputTokens })}`}
+        {` · ${t("{n} с", { n: (result.durationMs / 1000).toFixed(1) })}`}
       </div>
-      {result.note && <div className="mt-1 rounded-lg bg-warn-soft px-2.5 py-1.5 text-xs text-warn">{result.note}</div>}
-      {result.error && <div className="mt-1 rounded-lg bg-bad-soft px-2.5 py-1.5 text-xs text-bad">{result.error}</div>}
+      {result.note && <div className="mt-1 rounded-lg bg-warn-soft px-2.5 py-1.5 text-xs text-warn">{t(result.note)}</div>}
+      {result.error && <div className="mt-1 rounded-lg bg-bad-soft px-2.5 py-1.5 text-xs text-bad">{t(result.error)}</div>}
     </div>
   );
 }

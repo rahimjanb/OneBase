@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
+import { getLang, getT } from "@/i18n/server";
 import { notFound, redirect } from "next/navigation";
 import { API_URL, SESSION_COOKIE } from "@/lib/server-api";
 import { fieldLoginPath, requestHost } from "./host";
@@ -19,10 +20,10 @@ export async function fieldGet<T>(path: string, returnTo: string): Promise<T> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return await login();
 
-  const response = await fetch(`${API_URL}/api/field/${path}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+  const response = await fetch(`${API_URL}/api/field/${path}`, { headers: { Authorization: `Bearer ${token}`, "Accept-Language": await getLang() }, cache: "no-store" });
   if (response.status === 401) return await login();
   if (response.status === 403) {
-    let message = "Нет доступа к этому разделу Sales Base.";
+    let message = (await getT())("Нет доступа к этому разделу Sales Base.");
     try {
       message = ((await response.json()) as { error?: string }).error ?? message;
     } catch {

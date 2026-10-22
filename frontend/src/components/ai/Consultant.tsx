@@ -33,12 +33,15 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { useLocale, useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { phoneQuery, useMedia } from "@/lib/media";
 import {
   exampleQuestions,
   historySection,
   historyTime,
+  periodText,
+  progressNote,
   streamChat,
   type AiStatus,
   type ChatMessage,
@@ -78,6 +81,9 @@ const pill = "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border 
 /** Значки подсказок пустого чата — по порядку exampleQuestions. */
 const suggestionIcons: LucideIcon[] = [TrendingUp, Target, TrendingDown, GitCompareArrows, PackageSearch, Lightbulb];
 
+/** Ответ сервера, когда модель вернула пустой текст. */
+const emptyAnswer = "Модель вернула пустой ответ.";
+
 const stageLabel: Record<string, string> = {
   routing: "Определяю, каких AI-сотрудников привлечь",
   compose: "Формирую ответ",
@@ -85,10 +91,12 @@ const stageLabel: Record<string, string> = {
 };
 
 export function Consultant({ status, conversations: initialList, conversation, canConfigure, initialQuestion }: Props) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const [list, setList] = useState(initialList);
   const [activeId, setActiveId] = useState<string | null>(conversation?.id ?? null);
-  const [title, setTitle] = useState(conversation?.title ?? "Новый чат");
+  const [title, setTitle] = useState(conversation?.title ?? t("Новый чат"));
   const [messages, setMessages] = useState<ChatMessage[]>(conversation?.messages ?? []);
   const [input, setInput] = useState(initialQuestion ?? "");
   // Телефон: короткая подсказка в поле — длинная переносилась и растягивала поле на две строки.
@@ -146,7 +154,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
 
   /** Озвучить ответ; повторное нажатие на тот же ответ — остановить. */
   const speak = async (id: string) => {
-    const p = (player.current ??= new SpeechPlayer());
+    const p = (player.current ??= new SpeechPlayer(t));
     if (speaking?.id === id) {
       p.stop();
       setSpeaking(null);
@@ -164,7 +172,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
 
   const toggleVoiceMode = () => {
     const next = !voiceMode;
-    if (next) (player.current ??= new SpeechPlayer()).unlock();
+    if (next) (player.current ??= new SpeechPlayer(t)).unlock();
     else {
       player.current?.stop();
       setSpeaking(null);
@@ -183,7 +191,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
   const heard = (text: string) => {
     if (cancelled.current) return;
     if (!text) {
-      setError("Речь не распознана — попробуйте ещё раз.");
+      setError(t("Речь не распознана — попробуйте ещё раз."));
       return;
     }
 
@@ -199,13 +207,13 @@ export function Consultant({ status, conversations: initialList, conversation, c
   const startRecording = async () => {
     player.current?.stop();
     setSpeaking(null);
-    (player.current ??= new SpeechPlayer()).unlock();
+    (player.current ??= new SpeechPlayer(t)).unlock();
     setError(null);
     cancelled.current = false;
     if (serverVoice) {
       const r = new VoiceRecorder();
       try {
-        await r.start();
+        await r.start(t);
       } catch (e) {
         setError((e as Error).message);
         return;
@@ -228,6 +236,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
         setRecording(false);
         if (!cancelled.current) setError(message);
       },
+      t,
     );
   };
 
@@ -243,13 +252,13 @@ export function Consultant({ status, conversations: initialList, conversation, c
     if (!r) return;
     const blob = await r.stop();
     if (!blob) {
-      setError("Запись пустая — проверьте микрофон.");
+      setError(t("Запись пустая — проверьте микрофон."));
       return;
     }
 
     setTranscribing(true);
     try {
-      heard(await transcribe(blob));
+      heard(await transcribe(blob, t));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -319,7 +328,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
             else setError(e.data.error);
             break;
         }
-      });
+      }, t);
     } catch (e) {
       setError((e as Error).message);
       setInput(question);
@@ -334,7 +343,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
 
   const rename = async () => {
     if (!activeId) return;
-    const next = prompt("Название чата", title)?.trim();
+    const next = prompt(t("Название чата"), title)?.trim();
     if (!next || next === title) return;
     try {
       await bff(`ai/conversations/${activeId}`, { method: "PATCH", body: JSON.stringify({ title: next }) });
@@ -346,7 +355,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
   };
 
   const archive = async (id: string) => {
-    if (!confirm("Убрать чат из истории?")) return;
+    if (!confirm(t("Убрать чат из истории?"))) return;
     try {
       await bff(`ai/conversations/${id}`, { method: "DELETE" });
       setList((prev) => prev.filter((c) => c.id !== id));
@@ -380,7 +389,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
           onClick={() => setHistoryOpen(false)}
         >
           <Plus className="size-4" />
-          Новый чат
+          {t("Новый чат")}
         </Link>
         <label className="flex h-10 items-center gap-2 rounded-full border border-line bg-muted px-3.5 text-ink-3 backdrop-blur-md focus-within:border-accent/60">
           <Search className="size-4 shrink-0" strokeWidth={1.75} />
@@ -388,18 +397,18 @@ export function Consultant({ status, conversations: initialList, conversation, c
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Поиск по чатам"
-            aria-label="Поиск по чатам"
+            placeholder={t("Поиск по чатам")}
+            aria-label={t("Поиск по чатам")}
             className="min-w-0 flex-1 bg-transparent text-[13px] text-ink placeholder:text-ink-3 focus:outline-none"
           />
         </label>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
-        {list.length === 0 && <p className="px-3 py-6 text-center text-sm text-ink-3">Чатов пока нет</p>}
-        {list.length > 0 && groups.length === 0 && <p className="px-3 py-6 text-center text-sm text-ink-3">Ничего не найдено</p>}
+        {list.length === 0 && <p className="px-3 py-6 text-center text-sm text-ink-3">{t("Чатов пока нет")}</p>}
+        {list.length > 0 && groups.length === 0 && <p className="px-3 py-6 text-center text-sm text-ink-3">{t("Ничего не найдено")}</p>}
         {groups.map((g) => (
           <div key={g.label} className="mt-2 first:mt-0">
-            <div className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[1px] text-ink-3">{g.label}</div>
+            <div className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[1px] text-ink-3">{t(g.label)}</div>
             <div className="space-y-0.5">
               {g.items.map((c) => {
                 const active = c.id === activeId;
@@ -420,12 +429,12 @@ export function Consultant({ status, conversations: initialList, conversation, c
                       <MessageSquare className={`size-4 shrink-0 ${active ? "text-accent-strong" : "text-ink-3"}`} strokeWidth={1.75} />
                       <span className={`min-w-0 flex-1 truncate text-[13px] ${active ? "font-medium text-ink" : "text-ink-2"}`}>{c.title}</span>
                       <span className="shrink-0 text-[11px] tabular-nums text-ink-3 group-focus-within:invisible group-hover:invisible">
-                        {historyTime(c.lastMessageAt)}
+                        {historyTime(c.lastMessageAt, undefined, locale)}
                       </span>
                     </Link>
                     <button
                       type="button"
-                      aria-label="Убрать чат из истории"
+                      aria-label={t("Убрать чат из истории")}
                       onClick={() => archive(c.id)}
                       className="absolute right-2 hidden size-7 place-items-center rounded-lg text-ink-3 hover:bg-bad-soft hover:text-bad focus:grid group-hover:grid"
                     >
@@ -447,7 +456,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
 
       {historyOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <button type="button" aria-label="Закрыть историю" className="absolute inset-0 bg-black/30" onClick={() => setHistoryOpen(false)} />
+          <button type="button" aria-label={t("Закрыть историю")} className="absolute inset-0 bg-black/30" onClick={() => setHistoryOpen(false)} />
           <div className="absolute inset-y-0 left-0 w-80 max-w-[85vw] bg-surface-solid shadow-xl">{historyPanel}</div>
         </div>
       )}
@@ -457,17 +466,17 @@ export function Consultant({ status, conversations: initialList, conversation, c
           <button
             type="button"
             onClick={() => setHistoryOpen(true)}
-            aria-label="История чатов"
+            aria-label={t("История чатов")}
             className="grid size-10 shrink-0 place-items-center rounded-full border border-line bg-muted text-ink-2 hover:text-ink lg:hidden"
           >
             <History className="size-4" />
           </button>
           <Sparkles className="hidden size-5 shrink-0 text-accent-strong sm:block" strokeWidth={1.75} />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-semibold text-ink">{activeId ? title : "AI-консультант"}</h1>
+            <h1 className="truncate text-base font-semibold text-ink">{activeId ? title : t("AI-консультант")}</h1>
             <div className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-3">
               <span className={`size-2 shrink-0 rounded-full ${status.ready ? "bg-ok shadow-[0_0_8px_var(--color-ok)]" : "bg-warn"}`} aria-hidden />
-              <span className="truncate">{status.ready ? "подключён к данным OneBase" : "не настроен"}</span>
+              <span className="truncate">{status.ready ? t("подключён к данным OneBase") : t("не настроен")}</span>
             </div>
           </div>
           {(caps.listen || caps.speak) && (
@@ -475,11 +484,11 @@ export function Consultant({ status, conversations: initialList, conversation, c
               type="button"
               onClick={toggleVoiceMode}
               aria-pressed={voiceMode}
-              title={voiceMode ? "Голосовой режим включён: вопрос голосом отправляется сразу, ответ читается вслух" : "Включить голосовой режим"}
+              title={voiceMode ? t("Голосовой режим включён: вопрос голосом отправляется сразу, ответ читается вслух") : t("Включить голосовой режим")}
               className={`${pill} ${voiceMode ? "border-accent/60 bg-accent-soft text-accent-strong" : "border-line bg-muted text-ink-2 hover:text-ink"}`}
             >
               <AudioLines className="size-4" strokeWidth={1.75} />
-              <span className="hidden sm:inline">Голос</span>
+              <span className="hidden sm:inline">{t("Голос")}</span>
             </button>
           )}
           <Link href="/ai" className={`${pill} border-line bg-muted text-ink-2 hover:text-ink`} aria-label="AI Dashboard">
@@ -487,7 +496,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
             <span className="hidden sm:inline">AI Dashboard</span>
           </Link>
           {activeId && (
-            <button type="button" onClick={rename} aria-label="Переименовать чат" className="grid size-9 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-muted hover:text-ink">
+            <button type="button" onClick={rename} aria-label={t("Переименовать чат")} className="grid size-9 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-muted hover:text-ink">
               <Pencil className="size-3.5" />
             </button>
           )}
@@ -500,11 +509,11 @@ export function Consultant({ status, conversations: initialList, conversation, c
               <div className="mb-6 flex items-start gap-3 rounded-lg bg-warn-soft px-4 py-3 text-sm">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" />
                 <div>
-                  <div className="font-semibold text-ink">Консультант пока не работает</div>
-                  <div className="mt-0.5 text-ink-2">{status.message}</div>
+                  <div className="font-semibold text-ink">{t("Консультант пока не работает")}</div>
+                  <div className="mt-0.5 text-ink-2">{status.message && t(status.message)}</div>
                   {canConfigure && (
                     <Link href="/settings/ai" className="mt-1 inline-block font-medium text-accent-strong hover:underline">
-                      Открыть «Настройки → AI»
+                      {t("Открыть «Настройки → AI»")}
                     </Link>
                   )}
                 </div>
@@ -517,10 +526,11 @@ export function Consultant({ status, conversations: initialList, conversation, c
                 <div className="mx-auto grid size-16 place-items-center rounded-full bg-muted text-accent-strong shadow-[0_0_48px_-6px_rgb(46_107_255/0.55)] ring-1 ring-inset ring-white/15 backdrop-blur-md">
                   <Sparkles className="size-7" strokeWidth={1.5} />
                 </div>
-                <h2 className="mt-5 text-xl font-bold tracking-tight text-ink sm:text-2xl">Чем помочь вашему бизнесу?</h2>
+                <h2 className="mt-5 text-xl font-bold tracking-tight text-ink sm:text-2xl">{t("Чем помочь вашему бизнесу?")}</h2>
                 <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-ink-2">
-                  Спросите обычным языком: консультант привлечёт нужных AI-сотрудников, возьмёт цифры из данных OneBase, к которым у вас есть доступ,
-                  и отделит факты от рекомендаций.
+                  {t(
+                    "Спросите обычным языком: консультант привлечёт нужных AI-сотрудников, возьмёт цифры из данных OneBase, к которым у вас есть доступ, и отделит факты от рекомендаций.",
+                  )}
                 </p>
                 <div className="mx-auto mt-7 grid w-full max-w-[1120px] gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                   {exampleQuestions.map((q, i) => {
@@ -530,11 +540,11 @@ export function Consultant({ status, conversations: initialList, conversation, c
                         key={q}
                         type="button"
                         disabled={!status.ready}
-                        onClick={() => send(q)}
+                        onClick={() => send(t(q))}
                         className="flex items-center gap-2.5 rounded-full border border-line bg-muted px-4 py-2.5 text-left text-xs text-ink-2 backdrop-blur-md transition-colors hover:border-accent/50 hover:text-ink disabled:opacity-50 max-lg:py-3"
                       >
                         <Icon className="size-4 shrink-0 text-accent-strong" strokeWidth={1.75} />
-                        <span className="min-w-0 leading-snug">{q}</span>
+                        <span className="min-w-0 leading-snug">{t(q)}</span>
                       </button>
                     );
                   })}
@@ -566,8 +576,8 @@ export function Consultant({ status, conversations: initialList, conversation, c
           <div className="mx-auto max-w-4xl">
             {error && (
               <div className="mb-2 flex items-start gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">
-                <span className="flex-1">{error}</span>
-                <button type="button" aria-label="Скрыть" onClick={() => setError(null)}>
+                <span className="flex-1">{t(error)}</span>
+                <button type="button" aria-label={t("Скрыть")} onClick={() => setError(null)}>
                   <X className="size-4" />
                 </button>
               </div>
@@ -578,17 +588,20 @@ export function Consultant({ status, conversations: initialList, conversation, c
                   <>
                     <span className="size-2.5 animate-pulse rounded-full bg-bad" />
                     <span className="flex-1">
-                      Слушаю… {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
-                      <span className="ml-2 text-ink-3">нажмите ■, когда закончите{voiceMode ? " — вопрос уйдёт сразу" : ""}</span>
+                      {t("Слушаю… {time}", { time: `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` })}
+                      <span className="ml-2 text-ink-3">
+                        {t("нажмите ■, когда закончите")}
+                        {voiceMode ? ` — ${t("вопрос уйдёт сразу")}` : ""}
+                      </span>
                     </span>
-                    <button type="button" onClick={cancelRecording} className="text-ink-3 hover:text-bad" aria-label="Отменить запись">
+                    <button type="button" onClick={cancelRecording} className="text-ink-3 hover:text-bad" aria-label={t("Отменить запись")}>
                       <X className="size-4" />
                     </button>
                   </>
                 ) : (
                   <>
                     <Loader2 className="size-4 animate-spin text-accent-strong" />
-                    <span>Распознаю речь…</span>
+                    <span>{t("Распознаю речь…")}</span>
                   </>
                 )}
               </div>
@@ -603,8 +616,8 @@ export function Consultant({ status, conversations: initialList, conversation, c
               {caps.listen && (
                 <button
                   type="button"
-                  aria-label={recording ? "Закончить запись" : "Задать вопрос голосом"}
-                  title={recording ? "Закончить запись" : "Задать вопрос голосом"}
+                  aria-label={recording ? t("Закончить запись") : t("Задать вопрос голосом")}
+                  title={recording ? t("Закончить запись") : t("Задать вопрос голосом")}
                   disabled={!status.ready || busy || transcribing}
                   onClick={() => void (recording ? finishRecording() : startRecording())}
                   className={`grid size-10 shrink-0 place-items-center rounded-full max-lg:size-11 disabled:opacity-40 ${
@@ -626,14 +639,14 @@ export function Consultant({ status, conversations: initialList, conversation, c
                 }}
                 rows={1}
                 maxLength={4000}
-                placeholder={!status.ready ? "Консультант не настроен" : phone ? "Спросите о продажах…" : "Спросите о продажах, складе или клиентах…"}
+                placeholder={!status.ready ? t("Консультант не настроен") : phone ? t("Спросите о продажах…") : t("Спросите о продажах, складе или клиентах…")}
                 disabled={!status.ready}
-                aria-label="Вопрос консультанту"
+                aria-label={t("Вопрос консультанту")}
                 className="max-h-[200px] min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2.5 text-base text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-60 sm:text-sm"
               />
               <button
                 type="submit"
-                aria-label="Отправить"
+                aria-label={t("Отправить")}
                 disabled={!status.ready || busy || input.trim() === ""}
                 className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-white hover:bg-accent-strong disabled:opacity-40 max-lg:size-11"
               >
@@ -641,7 +654,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
               </button>
             </form>
             {/* Подсказка про клавиши — только при мыши и клавиатуре: на сенсорном экране Shift + Enter нет. */}
-            <p className="mt-2 text-center text-[11px] text-ink-3 pointer-coarse:hidden">Enter — отправить · Shift + Enter — новая строка</p>
+            <p className="mt-2 text-center text-[11px] text-ink-3 pointer-coarse:hidden">{t("Enter — отправить · Shift + Enter — новая строка")}</p>
           </div>
         </div>
       </section>
@@ -673,6 +686,7 @@ function StepIcon({ status }: { status: ConsultantProgress["status"] }) {
 }
 
 function ProgressCard({ steps }: { steps: ConsultantProgress[] }) {
+  const t = useT();
   return (
     <div className="flex gap-3">
       <div className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
@@ -681,15 +695,17 @@ function ProgressCard({ steps }: { steps: ConsultantProgress[] }) {
       <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-line bg-surface px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-medium text-ink">
           <Loader2 className="size-4 animate-spin text-accent-strong" />
-          Анализирую…
+          {t("Анализирую…")}
         </div>
         {steps.length > 0 && (
           <ul className="mt-2 space-y-1.5">
             {steps.map((s) => (
               <li key={`${s.stage}:${s.agent ?? ""}`} className="flex items-center gap-2 text-sm text-ink-2">
                 <StepIcon status={s.status} />
-                <span className={s.status === "Running" ? "text-ink" : ""}>{s.agentName ?? stageLabel[s.stage] ?? s.stage}</span>
-                {s.note && <span className="truncate text-xs text-ink-3">— {s.note}</span>}
+                <span className={s.status === "Running" ? "text-ink" : ""}>
+                  {s.agentName ? t(s.agentName) : stageLabel[s.stage] ? t(stageLabel[s.stage]) : s.stage}
+                </span>
+                {s.note && <span className="truncate text-xs text-ink-3">— {progressNote(s.note, t)}</span>}
               </li>
             ))}
           </ul>
@@ -701,6 +717,7 @@ function ProgressCard({ steps }: { steps: ConsultantProgress[] }) {
 
 /** speech — состояние озвучки этого ответа (null — озвучка недоступна в этом браузере). */
 function AssistantMessage({ message, speech, onSpeak }: { message: ChatMessage; speech: SpeechState | null; onSpeak: () => void }) {
+  const t = useT();
   const failed = message.status === "failed";
   return (
     <div className="flex gap-3">
@@ -710,14 +727,15 @@ function AssistantMessage({ message, speech, onSpeak }: { message: ChatMessage; 
       <div className="min-w-0 flex-1">
         {failed ? (
           <div className="rounded-2xl rounded-tl-md bg-bad-soft px-4 py-3 text-sm text-bad">
-            <div className="font-semibold">Ответ не получен</div>
-            <div className="mt-1 text-ink-2">{message.error}</div>
+            <div className="font-semibold">{t("Ответ не получен")}</div>
+            <div className="mt-1 text-ink-2">{message.error && t(message.error)}</div>
           </div>
         ) : (
           <>
             {message.details && <Summary details={message.details} />}
             <div className="rounded-2xl rounded-tl-md border border-line bg-surface px-4 py-3">
-              <Markdown text={message.content} />
+              {/* Ответ модели — как есть (он уже на языке интерфейса); служебная пометка сервера — переводится. */}
+              <Markdown text={message.content === emptyAnswer ? t(emptyAnswer) : message.content} />
             </div>
             {/* Отчёты Excel — только если пользователь их просил: предпросмотр и скачивание. */}
             {message.details?.reports?.map((r) => <ReportCard key={r.id} report={r} />)}
@@ -725,7 +743,7 @@ function AssistantMessage({ message, speech, onSpeak }: { message: ChatMessage; 
               <button
                 type="button"
                 onClick={onSpeak}
-                aria-label={speech === "idle" ? "Озвучить ответ" : "Остановить озвучку"}
+                aria-label={speech === "idle" ? t("Озвучить ответ") : t("Остановить озвучку")}
                 className={`mt-1.5 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium max-lg:py-2 ${
                   speech === "idle" ? "text-ink-3 hover:bg-muted hover:text-ink" : "bg-accent-soft text-accent-strong"
                 }`}
@@ -737,7 +755,7 @@ function AssistantMessage({ message, speech, onSpeak }: { message: ChatMessage; 
                 ) : (
                   <Volume2 className="size-3.5" />
                 )}
-                {speech === "loading" ? "Готовлю звук…" : speech === "playing" ? "Остановить" : "Озвучить"}
+                {speech === "loading" ? t("Готовлю звук…") : speech === "playing" ? t("Остановить") : t("Озвучить")}
               </button>
             )}
             {message.details && <Details details={message.details} durationMs={message.durationMs} />}
@@ -749,20 +767,22 @@ function AssistantMessage({ message, speech, onSpeak }: { message: ChatMessage; 
 }
 
 function Summary({ details }: { details: ConsultantDetails }) {
+  const t = useT();
   const agents = details.agents.filter((a) => a.status !== "disabled" && a.status !== "forbidden");
   if (agents.length === 0) return null;
   const findings = agents.reduce((n, a) => n + a.findings.length + a.problems.length, 0);
   const recommendations = agents.reduce((n, a) => n + a.recommendations.length, 0);
   return (
     <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-3">
-      <span>Проанализировано подразделений: {agents.length}</span>
-      <span>Найдено фактов и проблем: {findings}</span>
-      <span>Рекомендаций: {recommendations}</span>
+      <span>{t("Проанализировано подразделений: {n}", { n: agents.length })}</span>
+      <span>{t("Найдено фактов и проблем: {n}", { n: findings })}</span>
+      <span>{t("Рекомендаций: {n}", { n: recommendations })}</span>
     </div>
   );
 }
 
 function Details({ details, durationMs }: { details: ConsultantDetails; durationMs: number }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const sources = details.sources;
   const hasMore = details.agents.length > 0 || sources.length > 0;
@@ -770,36 +790,41 @@ function Details({ details, durationMs }: { details: ConsultantDetails; duration
     <div className="mt-2">
       {sources.length > 0 && (
         <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="text-ink-3">Источники:</span>
+          <span className="text-ink-3">{t("Источники:")}</span>
           {sources.map((s, i) =>
             s.href ? (
               <Link key={i} href={s.href} className="rounded-full border border-line bg-surface px-2.5 py-0.5 text-ink-2 hover:border-accent/40 hover:text-accent-strong">
-                {s.title}
-                {s.period ? ` · ${s.period}` : ""}
+                {t(s.title)}
+                {s.period ? ` · ${periodText(s.period, t)}` : ""}
               </Link>
             ) : (
               <span key={i} className="rounded-full border border-line bg-surface px-2.5 py-0.5 text-ink-2">
-                {s.title}
-                {s.period ? ` · ${s.period}` : ""}
+                {t(s.title)}
+                {s.period ? ` · ${periodText(s.period, t)}` : ""}
               </span>
             ),
           )}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-3">
-        {details.model && <span>Модель: {details.model}{details.usedFallback ? " (резервная)" : ""}</span>}
-        <span>{(durationMs / 1000).toFixed(1)} с</span>
-        {(details.memoryUsed ?? 0) > 0 && <span>учтены прошлые анализы: {details.memoryUsed}</span>}
+        {details.model && (
+          <span>
+            {t("Модель: {model}", { model: details.model })}
+            {details.usedFallback ? ` ${t("(резервная)")}` : ""}
+          </span>
+        )}
+        <span>{t("{s} с", { s: (durationMs / 1000).toFixed(1) })}</span>
+        {(details.memoryUsed ?? 0) > 0 && <span>{t("учтены прошлые анализы: {n}", { n: details.memoryUsed ?? 0 })}</span>}
         {hasMore && details.agents.length > 0 && (
           <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 font-medium text-accent-strong hover:underline">
-            Как получен ответ
+            {t("Как получен ответ")}
             <ChevronDown className={`size-3 transition-transform ${open ? "rotate-180" : ""}`} />
           </button>
         )}
       </div>
       {open && (
         <div className="mt-3 space-y-3">
-          {details.routingReason && <p className="text-xs text-ink-2">Почему эти AI-сотрудники: {details.routingReason}</p>}
+          {details.routingReason && <p className="text-xs text-ink-2">{t("Почему эти AI-сотрудники: {reason}", { reason: t(details.routingReason) })}</p>}
           {details.agents.map((a) => (
             <AgentCard key={a.agent} result={a} />
           ))}
@@ -808,6 +833,9 @@ function Details({ details, durationMs }: { details: ConsultantDetails; duration
     </div>
   );
 }
+
+/** Статусы, при которых итог сотрудника написала модель. */
+const answered = new Set(["completed", "partial", "no_data"]);
 
 const agentStatus: Record<string, { label: string; className: string }> = {
   completed: { label: "готово", className: "bg-ok-soft text-ok" },
@@ -819,6 +847,7 @@ const agentStatus: Record<string, { label: string; className: string }> = {
 };
 
 export function AgentCard({ result }: { result: ConsultantDetails["agents"][number] }) {
+  const t = useT();
   const section = (title: string, items: string[]) =>
     items.length > 0 && (
       <div className="mt-2">
@@ -833,13 +862,14 @@ export function AgentCard({ result }: { result: ConsultantDetails["agents"][numb
   return (
     <div className="rounded-xl border border-line bg-surface px-4 py-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-ink">{result.agentName}</span>
+        <span className="text-sm font-semibold text-ink">{t(result.agentName)}</span>
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${(agentStatus[result.status] ?? agentStatus.failed).className}`}>
-          {(agentStatus[result.status] ?? agentStatus.failed).label}
+          {t((agentStatus[result.status] ?? agentStatus.failed).label)}
         </span>
       </div>
-      {result.summary && <p className="mt-1 text-sm text-ink-2">{result.summary}</p>}
-      {result.error && <p className="mt-1 text-sm text-bad">{result.error}</p>}
+      {/* Итог пишет модель; у неотработавшего сотрудника (выключен, нет доступа, ошибка) — текст сервера, он переводится. */}
+      {result.summary && <p className="mt-1 text-sm text-ink-2">{answered.has(result.status) ? result.summary : t(result.summary)}</p>}
+      {result.error && <p className="mt-1 text-sm text-bad">{t(result.error)}</p>}
       {result.metrics.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
           {result.metrics.map((m, i) => (
@@ -850,10 +880,10 @@ export function AgentCard({ result }: { result: ConsultantDetails["agents"][numb
           ))}
         </div>
       )}
-      {section("Факты", result.findings)}
-      {section("Проблемы", result.problems)}
-      {section("Рекомендации", result.recommendations)}
-      {result.toolsUsed.length > 0 && <p className="mt-2 text-[11px] text-ink-3">Инструменты: {result.toolsUsed.join(", ")}</p>}
+      {section(t("Факты"), result.findings)}
+      {section(t("Проблемы"), result.problems)}
+      {section(t("Рекомендации"), result.recommendations)}
+      {result.toolsUsed.length > 0 && <p className="mt-2 text-[11px] text-ink-3">{t("Инструменты: {list}", { list: result.toolsUsed.join(", ") })}</p>}
     </div>
   );
 }

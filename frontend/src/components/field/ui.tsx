@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { chipTone, type Tone } from "@/lib/field/labels";
+import { Tr } from "@/i18n/client";
 
 /** Страница Sales Base: заголовок, подзаголовок, действия справа; на телефоне — компактно. */
 export function FieldPage({
@@ -99,14 +100,14 @@ export function Stat({
   );
 }
 
-/** Полоса выполнения: зелёная от 100%, синяя-бирюзовая до, оранжевая ниже 70%. */
-export function Bar({ share, expected, className = "" }: { share: number; expected?: number; className?: string }) {
+/** Полоса выполнения: зелёная от 100%, синяя-бирюзовая до, оранжевая ниже 70%. expectedLabel — подсказка отметки темпа (уже переведённая). */
+export function Bar({ share, expected, expectedLabel = "Ожидаемый темп", className = "" }: { share: number; expected?: number; expectedLabel?: string; className?: string }) {
   const pct = Math.max(0, Math.min(100, share * 100));
   const color = share >= 1 ? "bg-ok" : share >= 0.7 ? "bg-accent" : "bg-warn";
   return (
     <div className={`relative h-1.5 w-full overflow-hidden rounded-full bg-muted ${className}`}>
       <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      {expected != null && <div className="absolute top-0 h-full w-0.5 bg-ink-3" style={{ left: `${Math.min(100, expected * 100)}%` }} title="Ожидаемый темп" />}
+      {expected != null && <div className="absolute top-0 h-full w-0.5 bg-ink-3" style={{ left: `${Math.min(100, expected * 100)}%` }} title={expectedLabel} />}
     </div>
   );
 }
@@ -163,17 +164,17 @@ export function Pager({ page, pageSize, total, href }: { page: number; pageSize:
   return (
     <div className="flex items-center justify-between gap-3 text-sm text-ink-2">
       <span>
-        {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} из {total.toLocaleString("ru-RU")}
+        <Tr vars={{ from: (page - 1) * pageSize + 1, to: Math.min(page * pageSize, total), total: total.toLocaleString("ru-RU") }}>{"{from}–{to} из {total}"}</Tr>
       </span>
       <div className="flex gap-2">
         {page > 1 && (
           <Link href={href(page - 1)} className="rounded-lg border border-line bg-surface px-3 py-1.5 hover:bg-muted max-lg:py-2.5">
-            Назад
+            <Tr>Назад</Tr>
           </Link>
         )}
         {page < pages && (
           <Link href={href(page + 1)} className="rounded-lg border border-line bg-surface px-3 py-1.5 hover:bg-muted max-lg:py-2.5">
-            Дальше
+            <Tr>Дальше</Tr>
           </Link>
         )}
       </div>

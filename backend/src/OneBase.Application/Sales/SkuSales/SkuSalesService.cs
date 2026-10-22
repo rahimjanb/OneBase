@@ -187,6 +187,10 @@ public sealed class SkuSalesService(IAppDbContext db, SalesOptions options, Sale
         return new SkuSalesRegions(structure.Regions.OrderBy(r => r.Name, StringComparer.CurrentCulture).ToList(), branchRegions);
     }
 
+    /// <summary>Вторичка по SKU × регион × месяц за дни [from; to] — для «Акций» (эффект акций, продажи регионов по месяцам); тот же кэш.</summary>
+    public Task<SkuSalesAggregate> AggregateAsync(DateOnly from, DateOnly to, IReadOnlyDictionary<long, Guid> branchRegions, CancellationToken ct = default) =>
+        RawAsync(from, to, branchRegions, ct);
+
     /// <summary>Агрегат дней [from; to] из кэша; на промахе — один расчёт за раз (RawGate), после ожидания кэш проверяется снова.</summary>
     private async Task<SkuSalesAggregate> RawAsync(DateOnly from, DateOnly to, IReadOnlyDictionary<long, Guid> branchRegions, CancellationToken ct)
     {

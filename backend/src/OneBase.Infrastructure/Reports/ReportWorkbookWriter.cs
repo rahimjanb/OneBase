@@ -22,8 +22,10 @@ public sealed class ReportWorkbookWriter : IReportWorkbookWriter
     {
         using var workbook = new XLWorkbook();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var stamp = $"Сформировано в OneBase {createdAt.ToOffset(CompanyOffset):dd.MM.yyyy HH:mm} (Ташкент)"
-                    + (report.Sources.Count > 0 ? $" · источники: {string.Join("; ", report.Sources)}" : "");
+        // Шапка — на языке интерфейса того, кто скачивает (UiLanguage из Accept-Language запроса).
+        var uz = OneBase.Application.Abstractions.UiLanguage.IsUzbek;
+        var stamp = (uz ? $"OneBase'da tuzilgan {createdAt.ToOffset(CompanyOffset):dd.MM.yyyy HH:mm} (Toshkent)" : $"Сформировано в OneBase {createdAt.ToOffset(CompanyOffset):dd.MM.yyyy HH:mm} (Ташкент)")
+                    + (report.Sources.Count > 0 ? (uz ? " · manbalar: " : " · источники: ") + string.Join("; ", report.Sources) : "");
         foreach (var sheet in report.Sheets)
         {
             var ws = workbook.Worksheets.Add(SheetName(sheet.Name, names));
@@ -81,15 +83,15 @@ public sealed class ReportWorkbookWriter : IReportWorkbookWriter
             {
                 var cell = ws.Cell(row, c + 1);
                 var format = sheet.Columns[c].Format;
-                if (ReportFormats.IsSummable(format))
+                if (ReportFormats.IsSummable(format) && sheet.Columns[c].Sum)
                 {
                     var letter = cell.WorksheetColumn().ColumnLetter();
                     cell.FormulaA1 = $"SUM({letter}{HeaderRow + 1}:{letter}{lastData})";
-                    cell.Style.NumberFormat.Format = NumberFormat(format);
+                    cell.Style.NumberFormat.Format = format is ReportFormats.Number ? "#,##0.0##" : NumberFormat(format);
                 }
                 else if (!labelled)
                 {
-                    cell.Value = "Итого";
+                    cell.Value = OneBase.Application.Abstractions.UiLanguage.IsUzbek ? "Jami" : "Итого";
                     labelled = true;
                 }
 
@@ -128,7 +130,9 @@ public sealed class ReportWorkbookWriter : IReportWorkbookWriter
             case JsonValueKind.Number:
                 var number = value.TryGetDecimal(out var d) ? d : (decimal)value.GetDouble();
                 cell.Value = format == ReportFormats.Percent ? number / 100m : number;
-                cell.Style.NumberFormat.Format = NumberFormat(ReportFormats.IsNumeric(format) ? format : ReportFormats.Number);
+                // Дробный формат у целого числа рисовал бы «6 872.» с висящей точкой — целым числам формат без дробной части.
+                var numeric = ReportFormats.IsNumeric(format) ? format : ReportFormats.Number;
+                cell.Style.NumberFormat.Format = numeric == ReportFormats.Number && number == decimal.Truncate(number) ? "#,##0" : NumberFormat(numeric);
                 break;
             case JsonValueKind.String:
                 var text = value.GetString() ?? string.Empty;
@@ -153,7 +157,7 @@ public sealed class ReportWorkbookWriter : IReportWorkbookWriter
     {
         ReportFormats.Integer or ReportFormats.Kg or ReportFormats.Money => "#,##0",
         ReportFormats.Percent => "0.0%",
-        _ => "#,##0.##",
+        _ => "#,##0.###",
     };
 
     /// <summary>Имя листа Excel: до 31 знака, без []:*?/\, уникальное в книге.</summary>

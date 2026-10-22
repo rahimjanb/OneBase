@@ -1,4 +1,7 @@
 import { bff } from "@/lib/bff";
+import type { T } from "@/i18n/core";
+
+const same: T = (text) => text;
 
 /** «Файлы отделов»: типы ответов /api/files и запросы из браузера (через /bff, токен в httpOnly-cookie). */
 
@@ -73,7 +76,11 @@ export type ConnectionView = {
   canManage: boolean;
   guide: string[];
   notes: string[];
+  /** Адрес без пароля (секретная ссылка отдела) со скрытым кодом; сам адрес — filesApi.link по «Показать»/«Скопировать». */
+  linkAddress: string | null;
 };
+
+export type ConnectionLink = { address: string; uncPath: string | null };
 
 export type ConnectionTest = { ok: boolean; steps: { name: string; ok: boolean; detail: string }[] };
 
@@ -103,6 +110,8 @@ export const filesApi = {
   regenerate: (code: string) => bff<ConnectionView>(`files/departments/${code}/connection/regenerate`, { method: "POST" }),
   revoke: (code: string) => bff<ConnectionView>(`files/departments/${code}/connection/revoke`, { method: "POST" }),
   password: (code: string) => bff<{ password: string }>(`files/departments/${code}/connection/password`, { method: "POST" }),
+  link: (code: string) => bff<ConnectionLink>(`files/departments/${code}/connection/link`, { method: "POST" }),
+  regenerateLink: (code: string) => bff<ConnectionView>(`files/departments/${code}/connection/link/regenerate`, { method: "POST" }),
   test: (code: string) => bff<ConnectionTest>(`files/departments/${code}/connection/test`, { method: "POST" }),
   access: (code: string) => bff<DepartmentAccessRow[]>(`files/departments/${code}/access`),
   setAccess: (code: string, departmentId: string, access: "none" | "read" | "write") =>
@@ -118,25 +127,26 @@ export const downloadUrl = (file: { id: string; name: string }, inline = false, 
 
 /**
  * Загрузка файлов в папку одним запросом (multipart). XMLHttpRequest — ради прогресса: fetch его не сообщает.
- * Ошибка — Error с текстом сервера.
+ * Ошибка — Error с текстом сервера. t — перевод интерфейса (useT), без него — по-русски.
  */
-export function uploadFiles(folderId: string, files: File[], onProgress: (loaded: number, total: number) => void): Promise<void> {
+export function uploadFiles(folderId: string, files: File[], onProgress: (loaded: number, total: number) => void, t: T = same): Promise<void> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     for (const file of files) form.append("files", file, file.name);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/bff/api/files/folders/${folderId}/upload`);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded, e.total);
-    xhr.onerror = () => reject(new Error("Нет связи с сервером OneBase — файл не загружен."));
+    xhr.onerror = () => reject(new Error(t("Нет связи с сервером OneBase — файл не загружен.")));
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) return resolve();
-      let message = `Ошибка ${xhr.status}`;
+      let message = t("Ошибка {status}", { status: xhr.status });
       try {
-        message = JSON.parse(xhr.responseText).error ?? message;
+        const error: string | undefined = JSON.parse(xhr.responseText).error;
+        if (error) message = t(error);
       } catch {
         // не JSON
       }
-      reject(new Error(xhr.status === 413 ? "Файл слишком большой для загрузки через сайт." : message));
+      reject(new Error(xhr.status === 413 ? t("Файл слишком большой для загрузки через сайт.") : message));
     };
     xhr.send(form);
   });
@@ -153,15 +163,15 @@ const dateTime = new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Tashkent", d
 const timeOnly = new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Tashkent", hour: "2-digit", minute: "2-digit" });
 const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tashkent" });
 
-/** «Сегодня, 14:05», «Вчера, 09:30» или «03.10.2026, 18:00». */
-export function modifiedLabel(iso: string | null | undefined): string {
+/** «Сегодня, 14:05», «Вчера, 09:30» или «03.10.2026, 18:00»; t — перевод интерфейса (useT), без него — по-русски. */
+export function modifiedLabel(iso: string | null | undefined, t: T = same): string {
   if (!iso) return "—";
   const date = new Date(iso);
   const today = dayKey.format(new Date());
   const yesterday = dayKey.format(new Date(Date.now() - 86_400_000));
   const day = dayKey.format(date);
-  if (day === today) return `Сегодня, ${timeOnly.format(date)}`;
-  if (day === yesterday) return `Вчера, ${timeOnly.format(date)}`;
+  if (day === today) return t("Сегодня, {time}", { time: timeOnly.format(date) });
+  if (day === yesterday) return t("Вчера, {time}", { time: timeOnly.format(date) });
   return dateTime.format(date);
 }
 

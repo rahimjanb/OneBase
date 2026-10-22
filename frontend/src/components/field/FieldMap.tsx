@@ -4,6 +4,8 @@ import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as Leaflet from "leaflet";
 import { LocateFixed } from "lucide-react";
+import { useT } from "@/i18n/client";
+import type { T } from "@/i18n/core";
 import { mapStateStyle } from "@/lib/field/labels";
 import type { FieldMapView } from "@/lib/field/types";
 import { locate as locateMe } from "@/lib/geo";
@@ -11,7 +13,7 @@ import { fieldApi } from "./hooks";
 
 const routeColors = ["#0d9488", "#3b76f6", "#e0922f", "#b5179e", "#1f9d6b", "#dc4c4c", "#6d28d9", "#0891b2"];
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-const money = (v: number) => (v >= 1e6 ? `${(v / 1e6).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} млн` : v >= 1e3 ? `${Math.round(v / 1e3)} тыс` : String(Math.round(v)));
+const money = (v: number, t: T) => (v >= 1e6 ? `${(v / 1e6).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} ${t("млн")}` : v >= 1e3 ? `${Math.round(v / 1e3)} ${t("тыс")}` : String(Math.round(v)));
 
 /** Фильтр точек по статусу в маршруте дня. */
 type PointFilter = "all" | "planned" | "visited" | "skipped";
@@ -29,6 +31,7 @@ const FILTER_KEY = "sales-base-map-points";
  * При сдвиге карты точки подгружаются для видимой области (до 1500, крупные первыми).
  */
 export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; query: string; followMe: boolean }) {
+  const t = useT();
   const box = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
   const layersRef = useRef<{ points: Leaflet.LayerGroup; routes: Leaflet.LayerGroup; agents: Leaflet.LayerGroup; me: Leaflet.LayerGroup } | null>(null);
@@ -90,11 +93,11 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
         timer = setTimeout(async () => {
           const b = map.getBounds();
           try {
-            setStatus("Загружаем точки…");
+            setStatus(t("Загружаем точки…"));
             const q = queryRef.current;
             const next = await fieldApi.get<FieldMapView>(`map?${q}${q ? "&" : ""}south=${b.getSouth()}&west=${b.getWest()}&north=${b.getNorth()}&east=${b.getEast()}`);
             setView(next);
-            setStatus(next.truncated ? `Показаны ${next.points.length} крупнейших из ${next.total} — приблизьте карту` : null);
+            setStatus(next.truncated ? t("Показаны {n} крупнейших из {total} — приблизьте карту", { n: next.points.length, total: next.total }) : null);
           } catch (e) {
             setStatus(e instanceof Error ? e.message : String(e));
           }
@@ -144,7 +147,7 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
     const shown = filterRef.current === "all" ? v.points : v.points.filter((p) => p.state === filterRef.current);
     for (const p of shown) {
       const style = mapStateStyle[p.state] ?? mapStateStyle.normal;
-      const popup = `<div style="min-width:180px"><b>${esc(p.name)}</b><br/><span style="color:${style.color}">${style.label}</span>${p.sales30 ? `<br/>Продажи 30 дн: ${money(p.sales30)} сум` : ""}<br/><a href="/field/customers/${p.marketId}">Открыть карточку →</a></div>`;
+      const popup = `<div style="min-width:180px"><b>${esc(p.name)}</b><br/><span style="color:${style.color}">${t(style.label)}</span>${p.sales30 ? `<br/>${t("Продажи 30 дн: {sum} сум", { sum: money(p.sales30, t) })}` : ""}<br/><a href="/field/customers/${p.marketId}">${t("Открыть карточку →")}</a></div>`;
       if (p.sequence != null) {
         const icon = L.divIcon({
           className: "",
@@ -167,7 +170,7 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
         iconAnchor: [16, 16],
       });
       L.marker([a.lat, a.lon], { icon, zIndexOffset: 1000 })
-        .bindPopup(`<b>${esc(a.name)}</b><br/>визит в ${new Date(a.at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`)
+        .bindPopup(`<b>${esc(a.name)}</b><br/>${t("визит в {time}", { time: new Date(a.at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) })}`)
         .addTo(layers.agents);
     }
   }
@@ -208,13 +211,13 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
         layers.me.clearLayers();
         const ll: [number, number] = [pos.coords.latitude, pos.coords.longitude];
         L.circle(ll, { radius: Math.min(pos.coords.accuracy, 500), color: "#3b76f6", weight: 1, fillOpacity: 0.1 }).addTo(layers.me);
-        L.circleMarker(ll, { radius: 7, color: "#fff", weight: 2, fillColor: "#3b76f6", fillOpacity: 1 }).bindTooltip("Вы здесь").addTo(layers.me);
+        L.circleMarker(ll, { radius: 7, color: "#fff", weight: 2, fillColor: "#3b76f6", fillOpacity: 1 }).bindTooltip(t("Вы здесь")).addTo(layers.me);
       },
       () => undefined,
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 },
     );
     return () => navigator.geolocation.clearWatch(id);
-  }, [followMe, canWatch]);
+  }, [followMe, canWatch, t]);
 
   // По нажатию: здесь окно разрешения уместно. Удалось — дальше следим за позицией без запросов.
   const locate = async () => {
@@ -226,14 +229,14 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
       if (followMe) setCanWatch(true);
     } else {
       setStatus(
-        reason === "denied" || reason === "dismissed" ? "Геолокация не разрешена — разрешить можно в профиле: «Уведомления и геолокация»" : "Не удалось определить местоположение — проверьте GPS",
+        reason === "denied" || reason === "dismissed" ? t("Геолокация не разрешена — разрешить можно в профиле: «Уведомления и геолокация»") : t("Не удалось определить местоположение — проверьте GPS"),
       );
     }
   };
 
   return (
     <div className="space-y-2">
-      <div role="group" aria-label="Статус точек маршрута" className="flex flex-wrap gap-1.5">
+      <div role="group" aria-label={t("Статус точек маршрута")} className="flex flex-wrap gap-1.5">
         {pointFilters.map((f) => {
           const on = filter === f.key;
           return (
@@ -245,7 +248,7 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
               className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors ${on ? "border-accent bg-accent-soft font-semibold text-accent-strong" : "border-line bg-surface text-ink-2 hover:bg-muted"}`}
             >
               {f.key !== "all" && <span className="size-2.5 rounded-full" style={{ background: mapStateStyle[f.key].color }} />}
-              {f.label}
+              {t(f.label)}
               <span className={`text-xs tabular-nums ${on ? "text-accent-strong" : "text-ink-3"}`}>{counts[f.key]}</span>
             </button>
           );
@@ -255,10 +258,10 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
       <div ref={box} className="h-[calc(100dvh-23rem)] min-h-[360px] w-full bg-muted lg:h-[calc(100dvh-16rem)]" />
       {filter !== "all" && counts[filter] === 0 && (
         <div className="absolute inset-x-3 top-14 z-[500] mx-auto max-w-xs rounded-lg bg-surface/95 px-3 py-2 text-center text-xs text-ink-2 shadow">
-          В маршрутах этого дня нет точек со статусом «{pointFilters.find((x) => x.key === filter)?.label.toLowerCase()}».
+          {t("В маршрутах этого дня нет точек со статусом «{status}».", { status: t(pointFilters.find((x) => x.key === filter)?.label ?? "").toLowerCase() })}
         </div>
       )}
-      <button type="button" onClick={locate} aria-label="Моё местоположение" className="absolute bottom-24 right-3 z-[500] grid size-11 place-items-center rounded-full bg-surface text-ink shadow-md lg:bottom-6">
+      <button type="button" onClick={locate} aria-label={t("Моё местоположение")} className="absolute bottom-24 right-3 z-[500] grid size-11 place-items-center rounded-full bg-surface text-ink shadow-md lg:bottom-6">
         <LocateFixed className={`size-5 ${locating ? "animate-pulse text-accent" : ""}`} />
       </button>
       {status && <div className="absolute left-1/2 top-3 z-[500] -translate-x-1/2 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-ink shadow">{status}</div>}
@@ -266,7 +269,7 @@ export function FieldMap({ initial, query, followMe }: { initial: FieldMapView; 
         {Object.entries(mapStateStyle).map(([key, s]) => (
           <span key={key} className="inline-flex items-center gap-1">
             <span className="size-2.5 rounded-full" style={{ background: s.color }} />
-            {s.label}
+            {t(s.label)}
           </span>
         ))}
       </div>

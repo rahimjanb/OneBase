@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Note, Section } from "@/components/sales/bits";
+import { useT } from "@/i18n/client";
 import type { AiModelView, AiProviderView } from "@/lib/ai";
 import { bff } from "@/lib/bff";
 import { date } from "@/lib/sales/format";
@@ -20,6 +21,7 @@ function parsePrice(text: string): number | null | undefined {
 }
 
 export function ModelsSettings({ initial, providers }: { initial: AiModelView[]; providers: AiProviderView[] }) {
+  const t = useT();
   const [models, setModels] = useState(initial);
   const [query, setQuery] = useState("");
   const [onlyEnabled, setOnlyEnabled] = useState(false);
@@ -51,11 +53,11 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
 
   if (models.length === 0) {
     return (
-      <Section title="Модели">
+      <Section title={t("Модели")}>
         <p className="text-sm text-ink-2">
-          Список моделей ещё не загружен. Сохраните ключ провайдера и нажмите «Обновить список моделей» в разделе{" "}
+          {t("Список моделей ещё не загружен. Сохраните ключ провайдера и нажмите «Обновить список моделей» в разделе")}{" "}
           <Link href="/settings/ai/providers" className="font-medium text-accent-strong hover:underline">
-            Провайдеры
+            {t("Провайдеры")}
           </Link>
           .
         </p>
@@ -66,10 +68,10 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-4">
-        <input className={`${field} max-w-xs`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск модели" />
+        <input className={`${field} max-w-xs`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Поиск модели")} />
         <label className="flex items-center gap-2 text-sm text-ink">
           <input type="checkbox" checked={onlyEnabled} onChange={(e) => setOnlyEnabled(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
-          Только разрешённые
+          {t("Только разрешённые")}
         </label>
         {error && <span className="text-sm text-bad">{error}</span>}
       </div>
@@ -78,16 +80,20 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
         const rows = visible.filter((m) => m.provider === p.code);
         if (rows.length === 0) return null;
         return (
-          <Section key={p.code} title={p.name} hint={`${rows.filter((m) => m.enabled).length} разрешено из ${rows.length}`}>
+          <Section key={p.code} title={p.name} hint={t("{n} разрешено из {total}", { n: rows.filter((m) => m.enabled).length, total: rows.length })}>
             <div className="-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
               <table className="w-full min-w-max text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
-                    <th className="py-2 pr-3 font-semibold">Разрешить</th>
-                    <th className="py-2 pr-3 font-semibold">Модель</th>
-                    <th className="py-2 pr-3 font-semibold">Выпущена</th>
-                    <th className="py-2 pr-3 text-right font-semibold" title="Цена 1 млн входных токенов, USD — для расчёта стоимости">Вход, $/1М</th>
-                    <th className="py-2 text-right font-semibold" title="Цена 1 млн выходных токенов, USD">Выход, $/1М</th>
+                    <th className="py-2 pr-3 font-semibold">{t("Разрешить")}</th>
+                    <th className="py-2 pr-3 font-semibold">{t("Модель")}</th>
+                    <th className="py-2 pr-3 font-semibold">{t("Выпущена")}</th>
+                    <th className="py-2 pr-3 text-right font-semibold" title={t("Цена 1 млн входных токенов, USD — для расчёта стоимости")}>
+                      {t("Вход, $/1М")}
+                    </th>
+                    <th className="py-2 text-right font-semibold" title={t("Цена 1 млн выходных токенов, USD")}>
+                      {t("Выход, $/1М")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -100,7 +106,7 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
                             checked={m.enabled}
                             disabled={saving === m.id}
                             onChange={(e) => save(m, { enabled: e.target.checked })}
-                            aria-label={`Разрешить ${m.model}`}
+                            aria-label={t("Разрешить {title}", { title: m.model })}
                             className="size-4 accent-[var(--color-accent)]"
                           />
                           {saving === m.id && <Loader2 className="size-3.5 animate-spin text-ink-3" />}
@@ -109,7 +115,9 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
                       <td className="py-2 pr-3">
                         <div className="font-medium text-ink">{m.displayName ?? m.model}</div>
                         {m.displayName && <div className="font-mono text-xs text-ink-3">{m.model}</div>}
-                        {!m.available && <span className="mt-0.5 inline-block rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn">нет в последнем списке провайдера</span>}
+                        {!m.available && (
+                          <span className="mt-0.5 inline-block rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn">{t("нет в последнем списке провайдера")}</span>
+                        )}
                       </td>
                       <td className="py-2 pr-3 tabular-nums text-ink-2">{m.createdAt ? date(m.createdAt) : "—"}</td>
                       {(["inputPricePerMillion", "outputPricePerMillion"] as const).map((key) => (
@@ -120,11 +128,11 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
                             key={`${m.id}-${key}-${m[key]}`}
                             placeholder="—"
                             inputMode="decimal"
-                            aria-label={key === "inputPricePerMillion" ? "Цена входа" : "Цена выхода"}
+                            aria-label={key === "inputPricePerMillion" ? t("токены::Цена входа") : t("токены::Цена выхода")}
                             onBlur={(e) => {
                               const value = parsePrice(e.target.value);
                               if (value === undefined) {
-                                setError("Цена — неотрицательное число, например 2.5");
+                                setError(t("Цена — неотрицательное число, например 2.5"));
                                 return;
                               }
                               if (value !== m[key]) void save(m, { [key]: value });
@@ -142,8 +150,9 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
       })}
 
       <Note>
-        Список моделей приходит из API провайдера. Разрешённые модели можно назначать консультанту и AI-сотрудникам. Цены провайдеры через API не отдают —
-        укажите их по прайсу провайдера, если нужен расчёт стоимости в разделе «Использование»; без цены стоимость не считается.
+        {t(
+          "Список моделей приходит из API провайдера. Разрешённые модели можно назначать консультанту и AI-сотрудникам. Цены провайдеры через API не отдают — укажите их по прайсу провайдера, если нужен расчёт стоимости в разделе «Использование»; без цены стоимость не считается.",
+        )}
       </Note>
     </>
   );

@@ -216,6 +216,22 @@ public sealed class FilesController(DepartmentFilesService files, FileConnection
         return Ok(new { password = await connections.RevealAsync(actor, await files.DepartmentAsync(actor, code, ct), ct) });
     }
 
+    /// <summary>Адрес без пароля (секретная ссылка отдела) — тоже отдельным POST по «Показать»/«Скопировать».</summary>
+    [HttpPost("departments/{code}/connection/link")]
+    public async Task<IActionResult> ConnectionLink(string code, CancellationToken ct)
+    {
+        var actor = await ActorAsync(ct);
+        Response.Headers.CacheControl = "no-store";
+        return Ok(await connections.RevealLinkAsync(actor, await files.DepartmentAsync(actor, code, ct), ct));
+    }
+
+    [HttpPost("departments/{code}/connection/link/regenerate")]
+    public async Task<IActionResult> RegenerateConnectionLink(string code, CancellationToken ct)
+    {
+        var actor = await ActorAsync(ct);
+        return Ok(await connections.RegenerateLinkAsync(actor, await files.DepartmentAsync(actor, code, ct), ct));
+    }
+
     [HttpPost("departments/{code}/connection/test")]
     public async Task<IActionResult> TestConnection(string code, CancellationToken ct)
     {

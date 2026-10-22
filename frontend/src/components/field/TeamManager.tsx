@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Download, KeyRound, Pencil, Plus, UserPlus } from "lucide-react";
+import { useT } from "@/i18n/client";
 import { roleLabel } from "@/lib/field/labels";
 import type { FieldMemberView, FieldRole, FieldStructure, FieldTeamView } from "@/lib/field/types";
 import { Chip, Empty, buttonClass, inputClass } from "./ui";
@@ -13,6 +14,7 @@ import { fieldApi, useAction } from "./hooks";
  * Супервайзер видит свою команду без правки.
  */
 export function TeamManager({ data }: { data: FieldStructure }) {
+  const t = useT();
   const { busy, error, run } = useAction();
   const [team, setTeam] = useState<Partial<FieldTeamView> | null>(null);
   const [member, setMember] = useState<Partial<FieldMemberView> | null>(null);
@@ -27,7 +29,7 @@ export function TeamManager({ data }: { data: FieldStructure }) {
     const text = filter.trim().toLowerCase();
     const visible = data.members.filter((m) => !text || m.fullName.toLowerCase().includes(text) || (m.login ?? "").includes(text));
     return {
-      teams: data.teams.map((t) => ({ team: t, agents: visible.filter((m) => m.teamId === t.id && m.role === "Agent") })),
+      teams: data.teams.map((tm) => ({ team: tm, agents: visible.filter((m) => m.teamId === tm.id && m.role === "Agent") })),
       noTeam: visible.filter((m) => m.role === "Agent" && !m.teamId),
       leads: visible.filter((m) => m.role !== "Agent"),
     };
@@ -37,18 +39,18 @@ export function TeamManager({ data }: { data: FieldStructure }) {
     <li key={m.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-ink">
-          {m.fullName} {!m.isActive && <Chip tone="muted">отключён</Chip>}
+          {m.fullName} {!m.isActive && <Chip tone="muted">{t("отключён")}</Chip>}
         </div>
         <div className="truncate text-xs text-ink-3">
-          {roleLabel[m.role]}
+          {t(roleLabel[m.role])}
           {m.linkoPosition ? ` · ${m.linkoPosition}` : ""}
-          {m.markets ? ` · точек: ${m.markets}` : ""}
-          {m.login ? ` · вход: ${m.login}` : " · входа нет"}
+          {m.markets ? ` · ${t("точек: {n}", { n: m.markets })}` : ""}
+          {m.login ? ` · ${t("вход: {login}", { login: m.login })}` : ` · ${t("входа нет")}`}
         </div>
       </div>
       {m.editable && (
         <div className="flex gap-1.5">
-          <button type="button" onClick={() => setMember(m)} className="grid size-9 place-items-center rounded-lg border border-line text-ink-2 hover:bg-muted" aria-label="Изменить">
+          <button type="button" onClick={() => setMember(m)} className="grid size-9 place-items-center rounded-lg border border-line text-ink-2 hover:bg-muted" aria-label={t("Изменить")}>
             <Pencil className="size-4" />
           </button>
           <button
@@ -60,7 +62,7 @@ export function TeamManager({ data }: { data: FieldStructure }) {
             }}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-2.5 text-xs text-ink-2 hover:bg-muted"
           >
-            <KeyRound className="size-3.5" /> {m.userId ? "Пароль" : "Выдать вход"}
+            <KeyRound className="size-3.5" /> {m.userId ? t("Пароль") : t("Выдать вход")}
           </button>
         </div>
       )}
@@ -77,64 +79,64 @@ export function TeamManager({ data }: { data: FieldStructure }) {
             disabled={busy !== null}
             onClick={() =>
               run("import", () => fieldApi.post<{ agents: number; supervisors: number; teamsCreated: number; supervisorsLinked: number }>("structure/import"), {
-                onDone: (r) => setImported(`Добавлено агентов: ${r.agents}, супервайзеров: ${r.supervisors}, команд: ${r.teamsCreated}, супервайзеров во главе команд: ${r.supervisorsLinked}.`),
+                onDone: (r) => setImported(t("Добавлено агентов: {agents}, супервайзеров: {supervisors}, команд: {teams}, супервайзеров во главе команд: {linked}.", { agents: r.agents, supervisors: r.supervisors, teams: r.teamsCreated, linked: r.supervisorsLinked })),
               })
             }
             className={buttonClass.primary}
           >
-            <Download className="size-4" /> {busy === "import" ? "Импорт…" : `Импорт из Linko${data.candidates.length ? ` (${data.candidates.length})` : ""}`}
+            <Download className="size-4" /> {busy === "import" ? t("Импорт…") : `${t("Импорт из Linko")}${data.candidates.length ? ` (${data.candidates.length})` : ""}`}
           </button>
           )}
           <button type="button" onClick={() => setTeam({ isActive: true })} className={buttonClass.outline}>
-            <Plus className="size-4" /> Команда
+            <Plus className="size-4" /> {t("Команда")}
           </button>
           <button type="button" onClick={() => setMember({ role: "Agent", isActive: true })} className={buttonClass.outline}>
-            <UserPlus className="size-4" /> Участник
+            <UserPlus className="size-4" /> {t("Участник")}
           </button>
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Поиск по имени или логину" className={`${inputClass} sm:ml-auto sm:max-w-xs`} />
+          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t("Поиск по имени или логину")} className={`${inputClass} sm:ml-auto sm:max-w-xs`} />
         </div>
       )}
       {imported && <p className="rounded-lg bg-ok-soft px-3 py-2 text-sm text-ok">{imported}</p>}
       {error && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
 
       {data.members.length === 0 && (
-        <Empty>В Sales Base ещё никого нет. Импорт из Linko добавит агентов и супервайзеров и соберёт команды по филиалам.</Empty>
+        <Empty>{t("В Sales Base ещё никого нет. Импорт из Linko добавит агентов и супервайзеров и соберёт команды по филиалам.")}</Empty>
       )}
 
       {byTeam.leads.length > 0 && (
         <section className="overflow-hidden rounded-xl border border-line bg-surface">
-          <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">Руководители</div>
+          <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">{t("Руководители")}</div>
           <ul className="divide-y divide-line">{byTeam.leads.map(memberRow)}</ul>
         </section>
       )}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        {byTeam.teams.map(({ team: t, agents }) => (
-          <section key={t.id} className="overflow-hidden rounded-xl border border-line bg-surface">
+        {byTeam.teams.map(({ team: tm, agents }) => (
+          <section key={tm.id} className="overflow-hidden rounded-xl border border-line bg-surface">
             <div className="flex items-center gap-2 border-b border-line px-4 py-3">
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-ink">
-                  {t.name} {!t.isActive && <Chip tone="muted">неактивна</Chip>}
+                  {tm.name} {!tm.isActive && <Chip tone="muted">{t("неактивна")}</Chip>}
                 </div>
                 <div className="truncate text-xs text-ink-3">
-                  {t.supervisorName ? `Супервайзер: ${t.supervisorName}` : "Супервайзер не назначен"}
-                  {t.branchName ? ` · филиал ${t.branchName}` : ""} · агентов: {t.agents}
+                  {tm.supervisorName ? t("Супервайзер: {name}", { name: tm.supervisorName }) : t("Супервайзер не назначен")}
+                  {tm.branchName ? ` · ${t("филиал {name}", { name: tm.branchName })}` : ""} · {t("агентов: {n}", { n: tm.agents })}
                 </div>
               </div>
               {data.canManage && (
-                <button type="button" onClick={() => setTeam(t)} className="grid size-9 place-items-center rounded-lg border border-line text-ink-2 hover:bg-muted" aria-label="Изменить команду">
+                <button type="button" onClick={() => setTeam(tm)} className="grid size-9 place-items-center rounded-lg border border-line text-ink-2 hover:bg-muted" aria-label={t("Изменить команду")}>
                   <Pencil className="size-4" />
                 </button>
               )}
             </div>
-            {agents.length > 0 ? <ul className="divide-y divide-line">{agents.map(memberRow)}</ul> : <p className="px-4 py-4 text-sm text-ink-3">Агентов нет</p>}
+            {agents.length > 0 ? <ul className="divide-y divide-line">{agents.map(memberRow)}</ul> : <p className="px-4 py-4 text-sm text-ink-3">{t("Агентов нет")}</p>}
           </section>
         ))}
       </div>
 
       {byTeam.noTeam.length > 0 && (
         <section className="overflow-hidden rounded-xl border border-warn/40 bg-surface">
-          <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">Агенты без команды</div>
+          <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">{t("Агенты без команды")}</div>
           <ul className="divide-y divide-line">{byTeam.noTeam.map(memberRow)}</ul>
         </section>
       )}
@@ -143,7 +145,7 @@ export function TeamManager({ data }: { data: FieldStructure }) {
       <Sheet
         open={team !== null}
         onClose={() => setTeam(null)}
-        title={team?.id ? "Команда" : "Новая команда"}
+        title={team?.id ? t("Команда") : t("Новая команда")}
         footer={
           <button
             type="button"
@@ -154,20 +156,20 @@ export function TeamManager({ data }: { data: FieldStructure }) {
             }
             className={`${buttonClass.primary} w-full`}
           >
-            Сохранить
+            {t("Сохранить")}
           </button>
         }
       >
         {team && (
           <div className="space-y-3">
             <label className="block">
-              <span className="mb-1.5 block text-sm text-ink-2">Название</span>
+              <span className="mb-1.5 block text-sm text-ink-2">{t("Название")}</span>
               <input value={team.name ?? ""} onChange={(e) => setTeam({ ...team, name: e.target.value })} className={inputClass} />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-sm text-ink-2">Супервайзер</span>
+              <span className="mb-1.5 block text-sm text-ink-2">{t("Супервайзер")}</span>
               <select value={team.supervisorId ?? ""} onChange={(e) => setTeam({ ...team, supervisorId: e.target.value || null })} className={inputClass}>
-                <option value="">— не назначен —</option>
+                <option value="">{t("— не назначен —")}</option>
                 {supervisors.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.fullName}
@@ -176,9 +178,9 @@ export function TeamManager({ data }: { data: FieldStructure }) {
               </select>
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-sm text-ink-2">Филиал Linko</span>
+              <span className="mb-1.5 block text-sm text-ink-2">{t("Филиал Linko")}</span>
               <select value={team.branchId ?? ""} onChange={(e) => setTeam({ ...team, branchId: e.target.value ? Number(e.target.value) : null })} className={inputClass}>
-                {(data.canManageOrg || !team.branchId) && <option value="">{data.canManageOrg ? "— без филиала —" : "— выберите филиал —"}</option>}
+                {(data.canManageOrg || !team.branchId) && <option value="">{data.canManageOrg ? t("— без филиала —") : t("— выберите филиал —")}</option>}
                 {data.branches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name}
@@ -187,7 +189,7 @@ export function TeamManager({ data }: { data: FieldStructure }) {
               </select>
             </label>
             <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={team.isActive ?? true} onChange={(e) => setTeam({ ...team, isActive: e.target.checked })} className="size-5" /> Команда работает
+              <input type="checkbox" checked={team.isActive ?? true} onChange={(e) => setTeam({ ...team, isActive: e.target.checked })} className="size-5" /> {t("Команда работает")}
             </label>
           </div>
         )}
@@ -197,7 +199,7 @@ export function TeamManager({ data }: { data: FieldStructure }) {
       <Sheet
         open={member !== null}
         onClose={() => setMember(null)}
-        title={member?.id ? "Участник" : "Новый участник"}
+        title={member?.id ? t("Участник") : t("Новый участник")}
         footer={
           <button
             type="button"
@@ -215,40 +217,40 @@ export function TeamManager({ data }: { data: FieldStructure }) {
             }
             className={`${buttonClass.primary} w-full`}
           >
-            Сохранить
+            {t("Сохранить")}
           </button>
         }
       >
         {member && (
           <div className="space-y-3">
             <label className="block">
-              <span className="mb-1.5 block text-sm text-ink-2">Имя</span>
+              <span className="mb-1.5 block text-sm text-ink-2">{t("Имя")}</span>
               <input value={member.fullName ?? ""} onChange={(e) => setMember({ ...member, fullName: e.target.value })} className={inputClass} />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1.5 block text-sm text-ink-2">Роль</span>
+                <span className="mb-1.5 block text-sm text-ink-2">{t("Роль")}</span>
                 <select value={member.role} onChange={(e) => setMember({ ...member, role: e.target.value as FieldRole })} className={inputClass}>
                   {((data.canManageOrg || member.role === "Rm" ? ["Agent", "Supervisor", "Rm"] : ["Agent", "Supervisor"]) as FieldRole[]).map((r) => (
                     <option key={r} value={r}>
-                      {roleLabel[r]}
+                      {t(roleLabel[r])}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-sm text-ink-2">Телефон</span>
+                <span className="mb-1.5 block text-sm text-ink-2">{t("Телефон")}</span>
                 <input type="tel" value={member.phone ?? ""} onChange={(e) => setMember({ ...member, phone: e.target.value })} className={inputClass} />
               </label>
             </div>
             {member.role === "Agent" && (
               <label className="block">
-                <span className="mb-1.5 block text-sm text-ink-2">Команда</span>
+                <span className="mb-1.5 block text-sm text-ink-2">{t("Команда")}</span>
                 <select value={member.teamId ?? ""} onChange={(e) => setMember({ ...member, teamId: e.target.value || null })} className={inputClass}>
-                  <option value="">— без команды —</option>
-                  {data.teams.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
+                  <option value="">{t("— без команды —")}</option>
+                  {data.teams.map((tm) => (
+                    <option key={tm.id} value={tm.id}>
+                      {tm.name}
                     </option>
                   ))}
                 </select>
@@ -256,7 +258,7 @@ export function TeamManager({ data }: { data: FieldStructure }) {
             )}
             {member.role === "Rm" && (
               <fieldset>
-                <legend className="mb-1.5 text-sm text-ink-2">Филиалы РМ (пусто — вся организация)</legend>
+                <legend className="mb-1.5 text-sm text-ink-2">{t("Филиалы РМ (пусто — вся организация)")}</legend>
                 <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
                   {data.branches.map((b) => {
                     const on = (member.branchIds ?? []).includes(b.id);
@@ -275,11 +277,11 @@ export function TeamManager({ data }: { data: FieldStructure }) {
               </fieldset>
             )}
             <label className="block">
-              <span className="mb-1.5 block text-sm text-ink-2">Сотрудник Linko (id)</span>
-              <input inputMode="numeric" value={member.linkoUserId ?? ""} onChange={(e) => setMember({ ...member, linkoUserId: e.target.value ? Number(e.target.value.replace(/\D/g, "")) : null })} className={inputClass} placeholder="продажи, визиты и планы — по нему" />
+              <span className="mb-1.5 block text-sm text-ink-2">{t("Сотрудник Linko (id)")}</span>
+              <input inputMode="numeric" value={member.linkoUserId ?? ""} onChange={(e) => setMember({ ...member, linkoUserId: e.target.value ? Number(e.target.value.replace(/\D/g, "")) : null })} className={inputClass} placeholder={t("продажи, визиты и планы — по нему")} />
             </label>
             <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={member.isActive ?? true} onChange={(e) => setMember({ ...member, isActive: e.target.checked })} className="size-5" /> Работает (отключённый не входит и не виден в планах)
+              <input type="checkbox" checked={member.isActive ?? true} onChange={(e) => setMember({ ...member, isActive: e.target.checked })} className="size-5" /> {t("Работает (отключённый не входит и не виден в планах)")}
             </label>
           </div>
         )}
@@ -289,7 +291,7 @@ export function TeamManager({ data }: { data: FieldStructure }) {
       <Sheet
         open={access !== null}
         onClose={() => setAccess(null)}
-        title={access?.userId ? "Новый пароль" : "Выдать вход в Sales Base"}
+        title={access?.userId ? t("Новый пароль") : t("Выдать вход в Sales Base")}
         footer={
           !credentials && (
             <button
@@ -298,29 +300,29 @@ export function TeamManager({ data }: { data: FieldStructure }) {
               onClick={() => access && run("access", () => fieldApi.post<{ login: string; password: string }>(`members/${access.id}/access`, { login: login || null }), { onDone: (r) => setCredentials(r) })}
               className={`${buttonClass.primary} w-full`}
             >
-              {access?.userId ? "Задать новый пароль" : "Создать вход"}
+              {access?.userId ? t("Задать новый пароль") : t("Создать вход")}
             </button>
           )
         }
       >
         <p className="text-sm text-ink-2">
-          {access?.fullName} · {access ? roleLabel[access.role] : ""}
+          {access?.fullName} · {access ? t(roleLabel[access.role]) : ""}
         </p>
         {credentials ? (
           <div className="mt-3 space-y-2 rounded-xl bg-ok-soft p-4 text-sm">
             <div>
-              Логин: <b className="select-all font-mono">{credentials.login}</b>
+              {t("Логин:")} <b className="select-all font-mono">{credentials.login}</b>
             </div>
             <div>
-              Пароль: <b className="select-all font-mono">{credentials.password}</b>
+              {t("Пароль:")} <b className="select-all font-mono">{credentials.password}</b>
             </div>
-            <p className="text-xs text-ink-2">Пароль показывается один раз — передайте его сотруднику. Вход: sales.1base.uz с телефона.</p>
+            <p className="text-xs text-ink-2">{t("Пароль показывается один раз — передайте его сотруднику. Вход: sales.1base.uz с телефона.")}</p>
           </div>
         ) : (
           !access?.userId && (
             <label className="mt-3 block">
-              <span className="mb-1.5 block text-sm text-ink-2">Логин (пусто — из Linko)</span>
-              <input value={login} onChange={(e) => setLogin(e.target.value.toLowerCase())} className={inputClass} placeholder="латиница, цифры, точка" />
+              <span className="mb-1.5 block text-sm text-ink-2">{t("Логин (пусто — из Linko)")}</span>
+              <input value={login} onChange={(e) => setLogin(e.target.value.toLowerCase())} className={inputClass} placeholder={t("латиница, цифры, точка")} />
             </label>
           )
         )}

@@ -1,3 +1,4 @@
+import { tNow } from "@/i18n/client";
 /**
  * Push-уведомления в браузере (Web Push). Разрешение браузер помнит сам — приложение спрашивает его только по нажатию
  * «Включить уведомления», а при каждом запуске тихо проверяет, что подписка этого устройства есть и принадлежит
@@ -174,7 +175,7 @@ export async function sendTestPush(): Promise<number> {
   const response = await fetch("/bff/api/push/test", { method: "POST" }).catch(() => null);
   if (response?.ok) return ((await response.json()) as { devices: number }).devices;
   const body = response ? ((await response.json().catch(() => null)) as { error?: unknown } | null) : null;
-  throw new Error(typeof body?.error === "string" ? body.error : "Не удалось отправить проверку.");
+  throw new Error(typeof body?.error === "string" ? body.error : tNow("Не удалось отправить проверку."));
 }
 
 /** Баннер «Включите уведомления» не показываем 14 дней после «Не сейчас» или закрытого окна разрешения. */

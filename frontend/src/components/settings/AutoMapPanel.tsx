@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, Loader2, Sparkles, X } from "lucide-react";
 import { PeriodSelect } from "@/components/settings/PeriodSelect";
+import { useT } from "@/i18n/client";
 import type { MappingDecision, MappingFieldSetting, MappingStatus, MappingSuggestion, PeriodFilter, SheetMappingProposal } from "@/lib/data-sources";
 
 const select = "h-8 w-full rounded-md border border-line bg-surface px-2 text-xs text-ink focus:border-accent/60 focus:outline-none disabled:opacity-60";
@@ -48,6 +49,7 @@ export function AutoMapPanel({
   onToManual: (decisions: MappingDecision[], settings: MappingFieldSetting[]) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [rows, setRows] = useState<Row[]>(() =>
     proposal.suggestions.map((s) => ({
       suggestion: s,
@@ -71,7 +73,7 @@ export function AutoMapPanel({
   const needMonth = chosenFields.filter(
     (f) => proposal.targets.some((t) => t.field === f && t.role === "month") && !decisions.some((d) => byKey.get(d.targetField.toLowerCase())?.field === f && byKey.get(d.targetField.toLowerCase())?.role === "month"),
   );
-  const fieldLabel = (f: string) => proposal.targets.find((t) => t.field === f)?.label.split(" · ")[0] ?? f;
+  const fieldLabel = (f: string) => t(proposal.targets.find((x) => x.field === f)?.label.split(" · ")[0] ?? f);
   // Период — у полей, где месяцев в листе может быть много: месяц столбцом или в названиях листов. По умолчанию — текущий год.
   const hasMonthColumn = (f: string) => decisions.some((d) => byKey.get(d.targetField.toLowerCase())?.field === f && byKey.get(d.targetField.toLowerCase())?.role === "month");
   const periodFields = chosenFields.filter((f) => hasMonthColumn(f) || settings[f]?.monthSource === "sheet");
@@ -94,10 +96,10 @@ export function AutoMapPanel({
             : kind === "plan"
               ? !roles.has("value") && !roles.has("category_value") && "плана"
               : !roles.has("value") && "значения";
-      return missing ? `«${fieldLabel(f)}»: нет столбца ${missing}` : null;
+      return missing ? t("«{field}»: нет столбца {what}", { field: fieldLabel(f), what: t(missing) }) : null;
     })
     .filter((x): x is string => !!x);
-  const problems = [...incomplete, ...missingMonth.map((f) => `«${fieldLabel(f)}»: выберите месяц`)];
+  const problems = [...incomplete, ...missingMonth.map((f) => t("«{field}»: выберите месяц", { field: fieldLabel(f) }))];
 
   const update = (i: number, change: Partial<Row>) => setRows((prev) => prev.map((r, j) => (j === i ? { ...r, ...change } : r)));
   const acceptAll = () =>
@@ -108,21 +110,28 @@ export function AutoMapPanel({
     <div className="rounded-xl border border-accent/50 bg-accent-soft/40 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <Sparkles className="size-4 text-accent-strong" />
-        <span className="text-sm font-semibold text-ink">Предложение ИИ — лист «{proposal.sheet}»</span>
+        <span className="text-sm font-semibold text-ink">{t("Предложение ИИ — лист «{sheet}»", { sheet: proposal.sheet })}</span>
         <span className="text-xs text-ink-3">
-          модель {proposal.model} · выбрано {counts.accepted ?? 0}, проверить {counts.review ?? 0}, без поля {(counts.unmatched ?? 0) + (counts.rejected ?? 0) + (counts.blocked ?? 0)}
+          {t("модель {model} · выбрано {accepted}, проверить {review}, без поля {none}", {
+            model: proposal.model,
+            accepted: counts.accepted ?? 0,
+            review: counts.review ?? 0,
+            none: (counts.unmatched ?? 0) + (counts.rejected ?? 0) + (counts.blocked ?? 0),
+          })}
         </span>
-        <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-ink-3 hover:bg-muted hover:text-ink" aria-label="Закрыть предложение">
+        <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-ink-3 hover:bg-muted hover:text-ink" aria-label={t("Закрыть предложение")}>
           <X className="size-4" />
         </button>
       </div>
       <p className="mt-1 text-xs text-ink-3">
-        Сразу выбраны соответствия с уверенностью от {Math.round(proposal.acceptConfidence * 100)}%; от {Math.round(proposal.reviewConfidence * 100)}% — отметьте сами после
-        проверки. Поле можно поменять в списке. Ничего не записано, пока вы не подтвердите.
+        {t(
+          "Сразу выбраны соответствия с уверенностью от {accept}%; от {review}% — отметьте сами после проверки. Поле можно поменять в списке. Ничего не записано, пока вы не подтвердите.",
+          { accept: Math.round(proposal.acceptConfidence * 100), review: Math.round(proposal.reviewConfidence * 100) },
+        )}
       </p>
       {proposal.stale.length > 0 && (
         <div className="mt-2 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
-          Сохранённое сопоставление устарело: {proposal.stale.join("; ")}.
+          {t("Сохранённое сопоставление устарело: {list}.", { list: proposal.stale.map((x) => t(x)).join("; ") })}
         </div>
       )}
 
@@ -136,7 +145,7 @@ export function AutoMapPanel({
               <div className="grid items-center gap-2 sm:grid-cols-[auto_minmax(0,11rem)_minmax(0,1fr)_auto]">
                 <input
                   type="checkbox"
-                  aria-label={`Принять: ${s.sourceColumn}`}
+                  aria-label={t("Принять: {column}", { column: s.sourceColumn })}
                   checked={r.accepted}
                   disabled={!r.targetField}
                   onChange={(e) => update(i, { accepted: e.target.checked })}
@@ -144,25 +153,25 @@ export function AutoMapPanel({
                 />
                 <div className="min-w-0 text-sm">
                   <span className="font-semibold text-ink">{s.sourceColumn}</span>
-                  <span className="text-ink-2"> · {s.header || "без заголовка"}</span>
+                  <span className="text-ink-2"> · {s.header || t("без заголовка")}</span>
                 </div>
                 <div className="flex min-w-0 gap-2">
                   <select
-                    aria-label={`Поле OneBase для ${s.sourceColumn}`}
+                    aria-label={t("Поле OneBase для {column}", { column: s.sourceColumn })}
                     value={r.targetField ?? ""}
                     onChange={(e) => update(i, { targetField: e.target.value || null, accepted: !!e.target.value })}
                     className={select}
                   >
-                    <option value="">— не сопоставлять —</option>
-                    {targets.map((t) => (
-                      <option key={t.key} value={t.key}>
-                        {t.label}
+                    <option value="">{t("— не сопоставлять —")}</option>
+                    {targets.map((x) => (
+                      <option key={x.key} value={x.key}>
+                        {t(x.label)}
                       </option>
                     ))}
                   </select>
                   {target?.role === "category_value" && (
-                    <select aria-label="Категория" value={r.category ?? ""} onChange={(e) => update(i, { category: e.target.value || null })} className={`${select} max-w-36`}>
-                      <option value="">категория…</option>
+                    <select aria-label={t("Категория")} value={r.category ?? ""} onChange={(e) => update(i, { category: e.target.value || null })} className={`${select} max-w-36`}>
+                      <option value="">{t("категория…")}</option>
                       {proposal.categories.map((c) => (
                         <option key={c} value={c}>
                           {c}
@@ -173,17 +182,17 @@ export function AutoMapPanel({
                 </div>
                 <div className="flex items-center gap-2 text-xs sm:justify-end">
                   {s.targetField && s.status !== "rejected" && <span className={`font-semibold ${confidenceClass(s.confidence, proposal)}`}>{Math.round(s.confidence * 100)}%</span>}
-                  <span className={`rounded-full px-2 py-0.5 font-medium ${view.className}`}>{view.label}</span>
+                  <span className={`rounded-full px-2 py-0.5 font-medium ${view.className}`}>{t(view.label)}</span>
                 </div>
               </div>
               <div className="mt-1 text-xs text-ink-3 sm:pl-6">
-                {s.reason}
-                {s.transformType !== "none" && ` · преобразование: ${s.transformType === "tons_to_kg" ? "тонны → кг" : s.transformType}`}
+                {t(s.reason)}
+                {s.transformType !== "none" && ` · ${t("преобразование: {type}", { type: s.transformType === "tons_to_kg" ? t("тонны → кг") : s.transformType })}`}
               </div>
               {s.warnings.length > 0 && (
                 <div className="mt-1 flex items-start gap-1.5 text-xs text-warn sm:pl-6">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  <span>{s.warnings.join(" · ")}</span>
+                  <span>{s.warnings.map((w) => t(w)).join(" · ")}</span>
                 </div>
               )}
             </div>
@@ -193,7 +202,7 @@ export function AutoMapPanel({
 
       {needMonth.length > 0 && (
         <div className="mt-3 space-y-2 rounded-lg border border-line bg-surface p-2.5">
-          <div className="text-xs font-medium text-ink-2">Месяц полей без столбца месяца</div>
+          <div className="text-xs font-medium text-ink-2">{t("Месяц полей без столбца месяца")}</div>
           {needMonth.map((f) => {
             const s = settings[f];
             const set = (change: Partial<MappingFieldSetting>) =>
@@ -201,18 +210,18 @@ export function AutoMapPanel({
             return (
               <div key={f} className="grid items-center gap-2 text-xs sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_5rem_4rem]">
                 <span className="font-medium text-ink">{fieldLabel(f)}</span>
-                <select aria-label={`Месяц: ${fieldLabel(f)}`} value={s && s.monthSource !== "column" ? s.monthSource : ""} onChange={(e) => set({ monthSource: e.target.value as MappingFieldSetting["monthSource"] })} className={select}>
-                  <option value="">— выберите —</option>
+                <select aria-label={t("Месяц: {field}", { field: fieldLabel(f) })} value={s && s.monthSource !== "column" ? s.monthSource : ""} onChange={(e) => set({ monthSource: e.target.value as MappingFieldSetting["monthSource"] })} className={select}>
+                  <option value="">{t("— выберите —")}</option>
                   {monthSources.map((m) => (
                     <option key={m.value} value={m.value}>
-                      {m.label}
+                      {t(m.label)}
                     </option>
                   ))}
                 </select>
                 {s?.monthSource === "fixed" && (
                   <>
-                    <input type="number" aria-label="Год" placeholder="год" value={s.year ?? ""} onChange={(e) => set({ year: Number(e.target.value) || null })} className={select} />
-                    <input type="number" aria-label="Месяц" placeholder="мес." min={1} max={12} value={s.month ?? ""} onChange={(e) => set({ month: Number(e.target.value) || null })} className={select} />
+                    <input type="number" aria-label={t("Год")} placeholder={t("год")} value={s.year ?? ""} onChange={(e) => set({ year: Number(e.target.value) || null })} className={select} />
+                    <input type="number" aria-label={t("Месяц")} placeholder={t("мес.")} min={1} max={12} value={s.month ?? ""} onChange={(e) => set({ month: Number(e.target.value) || null })} className={select} />
                   </>
                 )}
               </div>
@@ -232,14 +241,14 @@ export function AutoMapPanel({
         </div>
       )}
 
-      {proposal.notes.length > 0 && <div className="mt-2 text-xs text-ink-3">ИИ: {proposal.notes.join(" ")}</div>}
+      {proposal.notes.length > 0 && <div className="mt-2 text-xs text-ink-3">{t("ИИ:")} {proposal.notes.join(" ")}</div>}
       {problems.length > 0 && (
         <div className="mt-2 flex items-start gap-1.5 text-xs text-warn">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-          <span>Чтобы сохранить: {problems.join("; ")} — или снимите отметку с этого поля.</span>
+          <span>{t("Чтобы сохранить: {problems} — или снимите отметку с этого поля.", { problems: problems.join("; ") })}</span>
         </div>
       )}
-      {proposal.fieldErrors.length > 0 && <div className="mt-2 text-xs text-warn">{proposal.fieldErrors.join(" ")}</div>}
+      {proposal.fieldErrors.length > 0 && <div className="mt-2 text-xs text-warn">{proposal.fieldErrors.map((x) => t(x)).join(" ")}</div>}
       {error && <div className="mt-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</div>}
 
       <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -249,7 +258,7 @@ export function AutoMapPanel({
           disabled={!!busy || rows.every((r) => r.accepted || !r.targetField || !(r.suggestion.status === "accepted" || r.suggestion.status === "review"))}
           className="mr-auto inline-flex h-9 items-center gap-2 rounded-lg border border-line px-3 text-sm text-ink hover:bg-muted disabled:opacity-50"
         >
-          Принять все предложения ИИ
+          {t("Принять все предложения ИИ")}
         </button>
         <button
           type="button"
@@ -258,7 +267,7 @@ export function AutoMapPanel({
           className="inline-flex h-9 items-center gap-2 rounded-lg border border-line px-3 text-sm text-ink hover:bg-muted disabled:opacity-50"
         >
           {busy === "manual" && <Loader2 className="size-4 animate-spin" />}
-          В ручной редактор
+          {t("В ручной редактор")}
         </button>
         <button
           type="button"
@@ -268,7 +277,7 @@ export function AutoMapPanel({
           className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white hover:bg-accent-strong disabled:opacity-50"
         >
           {busy === "confirm" && <Loader2 className="size-4 animate-spin" />}
-          Подтвердить и сохранить
+          {t("Подтвердить и сохранить")}
         </button>
       </div>
     </div>

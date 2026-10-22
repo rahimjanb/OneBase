@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, Smartphone, X } from "lucide-react";
+import { useT } from "@/i18n/client";
 import { enablePush, forgetDeviceBeforeLogout, isIos, notificationPermission, prefetchPushKey, promptRecentlyDismissed, pushSupport, rememberPromptDismissed, ensurePush } from "@/lib/push";
 
 /**
@@ -93,6 +94,7 @@ export function AppBridge({ userId, refreshOnFocus = false }: { userId: string |
  * «Не сейчас». Окно разрешения браузера — по нажатию «Включить» (так требует iPhone, и так Chrome не блокирует сайт).
  */
 export function PushPrompt({ appName, text }: { appName: string; text: string }) {
+  const t = useT();
   const [state, setState] = useState<"hidden" | "ask" | "install" | "done">("hidden");
 
   useEffect(() => {
@@ -116,14 +118,16 @@ export function PushPrompt({ appName, text }: { appName: string; text: string })
       {state === "install" ? <Smartphone className="mt-0.5 size-5 shrink-0 text-accent-strong" /> : <Bell className="mt-0.5 size-5 shrink-0 text-accent-strong" />}
       <div className="min-w-0 flex-1">
         {state === "done" ? (
-          <p className="text-ink">Готово: уведомления включены на этом устройстве.</p>
+          <p className="text-ink">{t("Готово: уведомления включены на этом устройстве.")}</p>
         ) : state === "install" ? (
           <p className="text-ink">
-            Чтобы получать уведомления на {isIos() ? "iPhone" : "телефоне"}, установите {appName}: в Safari «Поделиться» → «На экран „Домой“» и открывайте с иконки.
+            {isIos()
+              ? t("Чтобы получать уведомления на iPhone, установите {app}: в Safari «Поделиться» → «На экран „Домой“» и открывайте с иконки.", { app: appName })
+              : t("Чтобы получать уведомления на телефоне, установите {app}: в Safari «Поделиться» → «На экран „Домой“» и открывайте с иконки.", { app: appName })}
           </p>
         ) : (
           <>
-            <p className="text-ink">{text}</p>
+            <p className="text-ink">{t(text)}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -133,16 +137,16 @@ export function PushPrompt({ appName, text }: { appName: string; text: string })
                 }}
                 className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3.5 text-sm font-semibold text-white hover:bg-accent-strong"
               >
-                Включить
+                {t("Включить")}
               </button>
               <button type="button" onClick={dismiss} className="inline-flex h-9 items-center rounded-lg px-3 text-sm text-ink-2 hover:bg-surface">
-                Не сейчас
+                {t("Не сейчас")}
               </button>
             </div>
           </>
         )}
       </div>
-      <button type="button" onClick={dismiss} aria-label="Скрыть" className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-surface">
+      <button type="button" onClick={dismiss} aria-label={t("Скрыть")} className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-surface">
         <X className="size-4" />
       </button>
     </div>

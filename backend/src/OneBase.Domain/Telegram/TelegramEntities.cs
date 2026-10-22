@@ -66,9 +66,16 @@ public class TelegramAgentSettings
     /// <summary>Отвечать тем, кого нет в списке пользователей (только по отправленным им материалам).</summary>
     public bool ReplyToUnknown { get; set; }
 
-    /// <summary>Модель (провайдер и модель из «Настройки → AI»); пусто — основная.</summary>
+    /// <summary>Модель ответов (провайдер и модель из «Настройки → AI»); пусто — основная.</summary>
     public string? ModelProvider { get; set; }
     public string? Model { get; set; }
+
+    /// <summary>
+    /// Модель генерации — когда просят сформировать отчёт, документ, письмо, таблицу (Claude). Пусто — модель Claude из AI Data Manager,
+    /// если ключ Anthropic подключён, иначе модель ответов.
+    /// </summary>
+    public string? GenerationModelProvider { get; set; }
+    public string? GenerationModel { get; set; }
 
     /// <summary>Инструкция агента.</summary>
     public string? SystemPrompt { get; set; }

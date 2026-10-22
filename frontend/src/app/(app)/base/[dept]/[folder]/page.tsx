@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { FilesBrowser } from "@/components/files/FilesBrowser";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import { getT } from "@/i18n/server";
 import type { FolderView } from "@/lib/files";
 import { apiGetOrNull } from "@/lib/server-api";
 
@@ -13,16 +14,17 @@ export default async function FolderPage({ params }: { params: Promise<{ dept: s
   if (!view) notFound();
   // Папка другого отдела по чужому адресу — на её настоящий адрес (доступ API уже проверил).
   if (view.department.code !== dept) redirect(view.parentId ? `/base/${view.department.code}/${view.id}` : `/base/${view.department.code}`);
+  const t = await getT();
 
   return (
     <>
       <PageHeader
         title={view.name}
-        subtitle={`Папка отдела «${view.department.name}»`}
+        subtitle={t("Папка отдела «{name}»", { name: t(view.department.name) })}
         breadcrumbs={[
           { label: "OneBase", href: "/" },
-          { label: "Файлы", href: "/base" },
-          { label: view.department.name, href: `/base/${view.department.code}` },
+          { label: t("Файлы"), href: "/base" },
+          { label: t(view.department.name), href: `/base/${view.department.code}` },
           { label: view.name },
         ]}
       />

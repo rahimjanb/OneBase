@@ -11,8 +11,8 @@ namespace OneBase.Api.Files;
 /// <summary>
 /// Подключение папки отдела к Windows: WebDAV (RFC 4918, класс 1 и 2) на /dav. Снаружи — https://{FILE_STORAGE_DOMAIN}/{код отдела}:
 /// Cloudflare → nginx :82 → API /dav (nginx передаёт X-Dav-Root: «/», чтобы адреса в ответах были в пространстве клиента).
-/// Вход — логин и пароль подключения отдела (Basic, только по HTTPS снаружи). Все операции идут через DepartmentFilesService —
-/// те же права, версии, корзина и журнал, что и на сайте; содержимое — в том же MinIO, без второй копии.
+/// Вход — секретная ссылка отдела (/k/{код}/{отдел}, без пароля) или логин и пароль подключения отдела (Basic, только по HTTPS снаружи).
+/// Все операции идут через DepartmentFilesService — те же права, версии, корзина и журнал, что и на сайте; содержимое — в том же MinIO.
 /// </summary>
 public static class WebDavHandler
 {
@@ -42,18 +42,42 @@ public static class WebDavHandler
             return;
         }
 
-        var actor = await AuthenticateAsync(http, connections, ct);
-        if (actor is null)
-        {
-            return;
-        }
-
         var publicBase = http.Request.Headers["X-Dav-Root"].FirstOrDefault() is { } root ? root.TrimEnd('/') : http.Request.PathBase.Value ?? "/dav";
         var segments = DavPath.Segments(http.Request.Path.Value);
         if (segments is null)
         {
             http.Response.StatusCode = StatusCodes.Status400BadRequest; // «.» или «..» в пути
             return;
+        }
+
+        FileActor? actor;
+        if (segments.Count > 0 && segments[0].Equals("k", StringComparison.OrdinalIgnoreCase))
+        {
+            // Секретная ссылка отдела: /k/{код}/… — без логина и пароля. Никакого 401: на запрос пароля (Basic) Word и Excel из Microsoft 365
+            // отвечают блокировкой файла, а по ссылке открывают и сохраняют сразу. Неверный код — 404, как несуществующий адрес.
+            actor = segments.Count > 1 ? await connections.AuthenticateLinkAsync(segments[1], ct) : null;
+            if (actor is null)
+            {
+                http.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            await connections.TouchAsync(actor.ConnectionId!.Value, ct);
+            publicBase = $"{publicBase}/k/{segments[1]}";
+            segments = segments.Skip(2).ToList();
+        }
+        else if (OfficeProbe(http, segments))
+        {
+            http.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+        else
+        {
+            actor = await AuthenticateAsync(http, connections, ct);
+            if (actor is null)
+            {
+                return;
+            }
         }
 
         var dav = new Context(http, files, actor, publicBase, segments, cache, options, ct);
@@ -90,6 +114,28 @@ public static class WebDavHandler
                 http.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
             }
         }
+    }
+
+    /// <summary>
+    /// Служебные запросы без входа к корню сервера и к адресам FrontPage («/_vti_…»): так Word и Excel выясняют, что за сервер, открывая
+    /// файл по ссылке. Ответ 401 с запросом пароля Microsoft 365 считает «небезопасным входом» и блокирует файл — поэтому здесь 404.
+    /// Проводник (WebClient) у корня по-прежнему получает 401 и входит по логину и паролю.
+    /// </summary>
+    private static bool OfficeProbe(HttpContext http, IReadOnlyList<string> segments)
+    {
+        if (http.Request.Headers.Authorization.Count > 0)
+        {
+            return false;
+        }
+
+        if (segments.Count > 0)
+        {
+            return segments[0].StartsWith("_vti", StringComparison.OrdinalIgnoreCase);
+        }
+
+        var agent = http.Request.Headers.UserAgent.ToString();
+        return agent.Contains("Microsoft Office", StringComparison.OrdinalIgnoreCase) || agent.Contains("MSOffice", StringComparison.OrdinalIgnoreCase)
+               || agent.Contains("Microsoft.Office", StringComparison.OrdinalIgnoreCase) || agent.Contains("FrontPage", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<FileActor?> AuthenticateAsync(HttpContext http, FileConnectionsService connections, CancellationToken ct)

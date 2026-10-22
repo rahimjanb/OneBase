@@ -25,8 +25,8 @@ public static class ReportFormats
     public static bool IsSummable(string format) => format is Integer or Number or Kg or Money;
 }
 
-/// <summary>Колонка листа: заголовок и формат (ReportFormats).</summary>
-public sealed record AiReportColumn(string Header, string Format);
+/// <summary>Колонка листа: заголовок и формат (ReportFormats). Sum=false — числовая колонка, которую итоговая строка не складывает (дни, цена, вес).</summary>
+public sealed record AiReportColumn(string Header, string Format, bool Sum = true);
 
 /// <summary>
 /// Лист отчёта. Ячейки строк — JSON: число, строка или null. Total — внизу итоговая строка (сумма суммируемых колонок).

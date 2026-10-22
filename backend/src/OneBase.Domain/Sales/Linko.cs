@@ -39,6 +39,10 @@ public class LinkoProduct
     public string? Code { get; set; }
     public long? TypeId { get; set; }
     public bool IsWeighted { get; set; }
+
+    /// <summary>Единица учёта Linko (measurement.name): «кг» или «шт» — в ней остаток, цена и акт передачи.</summary>
+    public string? Measurement { get; set; }
+
     public decimal Tm { get; set; }
 }
 
@@ -110,6 +114,51 @@ public class LinkoOrderLine
     public decimal Price { get; set; }
     public decimal TotalPrice { get; set; }
     public decimal TotalWeight { get; set; }
+
+    /// <summary>Цена до скидки (origin_price). null — строка загружена до появления скидок по строкам (раздел «Акции»).</summary>
+    public decimal? OriginPrice { get; set; }
+
+    /// <summary>Скидка строки, сум (total_discount): у бонусного товара (цена 0) — его стоимость по исходной цене.</summary>
+    public decimal? TotalDiscount { get; set; }
+
+    /// <summary>Процент скидки строки (discount_percent): 5, 10; у бонусного товара — 100.</summary>
+    public decimal? DiscountPercent { get; set; }
+}
+
+/// <summary>Акция Linko (promotions/): скидка или бонус товаром, сроки и охват. Строке заказа акция в API не указывается.</summary>
+public class LinkoPromotion
+{
+    public long Id { get; set; }
+    public required string Name { get; set; }
+
+    /// <summary>discount — скидка, bonus — бонус товаром, cash_back, ball.</summary>
+    public required string Type { get; set; }
+
+    /// <summary>promotion_branches, promotion_all, promotion_agents, promotion_market_types, promotion_one.</summary>
+    public string? PromotionType { get; set; }
+
+    /// <summary>percent, manual, static, percent_condition.</summary>
+    public string? DiscountType { get; set; }
+
+    /// <summary>Процент акции; у многих процентных акций 0 — процент у каждого товара (LinkoPromotionProduct.Amount).</summary>
+    public decimal? Discount { get; set; }
+
+    public DateOnly? BeginDate { get; set; }
+    public DateOnly? TillDate { get; set; }
+
+    /// <summary>Акция на все товары (без списка товаров).</summary>
+    public bool IsApplyAll { get; set; }
+
+    public decimal Tm { get; set; }
+}
+
+/// <summary>Товар акции: conditional — товар, на который скидка (Amount — её процент) или условие бонуса; bonus — бонусный товар.</summary>
+public class LinkoPromotionProduct
+{
+    public long PromotionId { get; set; }
+    public long ProductId { get; set; }
+    public required string Type { get; set; }
+    public decimal? Amount { get; set; }
 }
 
 public class LinkoOrderReturn

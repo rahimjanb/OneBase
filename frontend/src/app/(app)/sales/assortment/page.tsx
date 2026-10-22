@@ -6,13 +6,18 @@ import { DataQualityNotes } from "@/components/sales/blocks";
 import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { ScopeSelect } from "@/components/sales/ScopeSelect";
+import { getT } from "@/i18n/server";
 import { apiGet } from "@/lib/server-api";
 import { apiQuery, param, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { AssortmentView, GroupView } from "@/lib/sales/types";
 
-export const metadata = { title: "Ассортимент · Продажи" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Ассортимент · Продажи") };
+}
 
 export default async function AssortmentPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
+  const t = await getT();
   const sp = await searchParams;
   const [data, republic] = await Promise.all([
     apiGet<AssortmentView>(`/api/sales/assortment${apiQuery(sp, ["region", "direction"])}`, "/sales/assortment"),
@@ -21,20 +26,22 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
   const q = periodQuery(sp);
 
   const options = [
-    { value: "", label: "Вся республика" },
-    ...republic.cards.filter((c) => c.kind === "direction").map((c) => ({ value: `direction:${c.id}`, label: `${c.name} — целиком`, group: "Региональные менеджеры" })),
+    { value: "", label: t("Вся республика") },
+    ...republic.cards.filter((c) => c.kind === "direction").map((c) => ({ value: `direction:${c.id}`, label: t("{name} — целиком", { name: c.name }), group: t("Региональные менеджеры") })),
     ...republic.regions
       .filter((r) => r.factKg !== 0 || r.akb > 0)
-      .map((r) => ({ value: `region:${r.id}`, label: r.name, group: "Регионы" })),
+      .map((r) => ({ value: `region:${r.id}`, label: r.name, group: t("Регионы") })),
   ];
-  const scopeLabel = data.scopeName === "Республика" ? "республике" : data.scopeName;
+  // Охват — название региона или РМ (данные) либо подпись сервера («Республика», «Направление»): подписи переводятся по словарю.
+  const scopeName = t(data.scopeName);
+  const scopeLabel = data.scopeName === "Республика" ? t("республике") : scopeName;
   const s = data.summary;
 
   return (
     <SalesFrame
-      title="Ассортимент"
-      subtitle={`Что и где продаётся: категории, артикулы, дистрибуция · ${data.scopeName}`}
-      crumbs={[{ label: "Ассортимент" }]}
+      title={t("Ассортимент")}
+      subtitle={`${t("Что и где продаётся: категории, артикулы, дистрибуция")} · ${scopeName}`}
+      crumbs={[{ label: t("Ассортимент") }]}
       sp={sp}
       period={data.period}
     >
@@ -42,20 +49,20 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
         <ScopeSelect options={options} />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <KpiTile label="Факт, кг" value={kg(s.factKg)} unit="кг">
-          {s.prevMonthKg ? `прошлый месяц целиком: ${kg(s.prevMonthKg)} кг` : "в прошлом месяце продаж не было"}
+        <KpiTile label={t("Факт, кг")} value={kg(s.factKg)} unit={t("кг")}>
+          {s.prevMonthKg ? t("прошлый месяц целиком: {kg} кг", { kg: kg(s.prevMonthKg) }) : t("в прошлом месяце продаж не было")}
         </KpiTile>
-        <KpiTile label="Выручка" value={money(s.revenue)} unit="сум" />
+        <KpiTile label={t("Выручка")} value={money(s.revenue, t)} unit={t("сум")} />
         <KpiTile
-          label="Продаётся SKU"
+          label={t("Продаётся SKU")}
           value={num(s.skuSold)}
           unit={`/ ${num(s.skuTotal)}`}
-          title="Из SKU, которые продавались во вторичке с 1 января по конец месяца; «продаётся» — есть точка с положительной строкой"
+          title={t("Из SKU, которые продавались во вторичке с 1 января по конец месяца; «продаётся» — есть точка с положительной строкой")}
         >
-          {s.skuLost > 0 ? <span className="font-semibold text-bad">пропало {num(s.skuLost)}</span> : "ничего не пропало"}
+          {s.skuLost > 0 ? <span className="font-semibold text-bad">{t("пропало {n}", { n: num(s.skuLost) })}</span> : t("ничего не пропало")}
         </KpiTile>
-        <KpiTile label="ТТ" value={num(s.outlets)} title="«Только он» — точки, которые из всех SKU купили ровно один">
-          точек с покупкой за месяц · только один SKU — {num(s.mono)}
+        <KpiTile label={t("ТТ")} value={num(s.outlets)} title={t("«Только он» — точки, которые из всех SKU купили ровно один")}>
+          {t("точек с покупкой за месяц · только один SKU — {n}", { n: num(s.mono) })}
         </KpiTile>
       </div>
       <CategoryCards cards={data.categories} scope={scopeLabel} query={queryWith(q, { direction: param(sp, "direction"), region: param(sp, "region") })} />
@@ -63,13 +70,13 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
         <AkbChart data={data.akbMonths} />
         {data.regions.length > 0 && <AssortmentRegionsTable rows={data.regions} query={q} />}
         <AssortmentMatrix data={data} />
-        <ProductsTable rows={data.products} hint={`по выручке за месяц · ${data.scopeName}`} outsideReport={data.productsOutsideReport} quality />
+        <ProductsTable rows={data.products} hint={`${t("по выручке за месяц")} · ${scopeName}`} outsideReport={data.productsOutsideReport} quality />
         <DataQualityNotes quality={data.quality} period={data.period} />
       </CollapsedSections>
       <p className="mt-4 text-xs text-ink-3">
-        Регион подробнее — на его странице во «Вторичке»:{" "}
+        {t("Регион подробнее — на его странице во «Вторичке»:")}{" "}
         <a className="text-accent hover:underline" href={withQuery("/sales/republic", q)}>
-          все регионы
+          {t("все регионы")}
         </a>
         .
       </p>

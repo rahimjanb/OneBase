@@ -77,7 +77,7 @@ public sealed class OrchestratedConsultantEngine(
 
         var (runs, agentUsage) = chosen.Count == 0
             ? ([], AiTokenUsage.None)
-            : await orchestrator.RunAsync(chosen, routing.Tasks, turn.Question, contexts, turn.UserId, turn.ConversationId, progress, ct, wantsReport);
+            : await orchestrator.RunAsync(chosen, routing.Tasks, turn.Question, contexts, turn.UserId, turn.ConversationId, progress, ct, wantsReport, turn.Channel?.AgentModel);
         var created = wantsReport ? await reports.CreatedAsync(turn.UserId, turn.ConversationId, startedAt, ct) : [];
 
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Running));

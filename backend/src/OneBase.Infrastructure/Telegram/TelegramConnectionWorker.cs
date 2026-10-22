@@ -12,12 +12,22 @@ namespace OneBase.Infrastructure.Telegram;
 /// Подключённые аккаунты Telegram после запуска сервера: клиент поднимается по сохранённой сессии (с ним — приём входящих), затем раз в
 /// 5 минут проверяется. Отозванная в Telegram сессия → «Отключён» с причиной; временные ошибки — повтор на следующем круге.
 /// </summary>
-internal sealed class TelegramConnectionWorker(IServiceScopeFactory scopes, ILogger<TelegramConnectionWorker> logger) : BackgroundService
+internal sealed class TelegramConnectionWorker(
+    IServiceScopeFactory scopes,
+    Microsoft.Extensions.Configuration.IConfiguration config,
+    ILogger<TelegramConnectionWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(5);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!WTelegramGateway.Enabled(config))
+        {
+            // Без проверки подключений: иначе неудачное подключение пометило бы аккаунт «Отключён» в базе этой среды.
+            logger.LogInformation("Telegram выключен в этой среде (Telegram:Enabled=false) — аккаунты не подключаются");
+            return;
+        }
+
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);

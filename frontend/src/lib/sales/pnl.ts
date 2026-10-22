@@ -1,6 +1,10 @@
 // P&L дилеров: ответы /api/sales/pnl и форматирование значений (как во вкладке «P&L дилеров» Полевого контроля).
 
+import { makeT, type T } from "@/i18n/core";
 import { DASH, money, pct } from "./format";
+
+/** Без перевода (русский) — если вызывающий не передал t. */
+const plain: T = makeT(null);
 
 export type PnlLine = { key: string; label: string; format: "money" | "pct" | "na"; minus: boolean; detail: boolean; input: boolean };
 export type PnlValues = Record<string, number | null>;
@@ -34,19 +38,19 @@ export type PnlDealerCard = {
   growth: PnlValues | null;
 };
 
-/** Значение строки: деньги — сокращённо («12,19 млрд»), ноль — «—»; проценты — с одним знаком; строки без данных — «—». */
-export function pnlText(line: PnlLine, value: number | null | undefined): string {
+/** Значение строки: деньги — сокращённо («12,19 млрд»), ноль — «—»; проценты — с одним знаком; строки без данных — «—». t — перевод единиц. */
+export function pnlText(line: PnlLine, value: number | null | undefined, t: T = plain): string {
   if (line.format === "na" || value == null) return DASH;
   if (line.format === "pct") return pct(value, 1);
-  return value === 0 ? DASH : money(value);
+  return value === 0 ? DASH : money(value, t);
 }
 
-/** Темп роста: деньги — изменение в процентах, проценты — разница в п. п. */
-export function growthText(line: PnlLine, value: number | null | undefined): string {
+/** Темп роста: деньги — изменение в процентах, проценты — разница в п. п. t — перевод «п. п.». */
+export function growthText(line: PnlLine, value: number | null | undefined, t: T = plain): string {
   if (value == null || line.format === "na") return DASH;
   const sign = value > 0 ? "+" : value < 0 ? "−" : "";
   const abs = Math.abs(value * 100).toLocaleString("ru-RU", { maximumFractionDigits: 1 });
-  return line.format === "pct" ? `${sign}${abs} п. п.` : `${sign}${abs}%`;
+  return line.format === "pct" ? `${sign}${abs} ${t("п. п.")}` : `${sign}${abs}%`;
 }
 
 /** Отрицательная прибыль — красным (расходы хранятся положительными и не краснеют). */

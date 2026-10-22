@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AlertTriangle, ArrowRight, Lightbulb, Loader2, MessageSquare, RefreshCw, TriangleAlert } from "lucide-react";
-import { categoryNames, type AiAlert, type AiAlertsView } from "@/lib/ai";
+import { useT } from "@/i18n/client";
+import { alertText, categoryNames, type AiAlert, type AiAlertsView } from "@/lib/ai";
 import { bff } from "@/lib/bff";
 import { dateTime } from "@/lib/sales/format";
 import { button } from "./form";
@@ -27,34 +28,38 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: "ba
 }
 
 function AlertCard({ alert }: { alert: AiAlert }) {
+  const t = useT();
   const view = severityView[alert.severity];
-  const ask = `Разбери находку: «${alert.title}». ${alert.message} Что делать?`;
+  // Находку пишет сервер по-русски — показывается на языке интерфейса (шаблоны словаря, единицы).
+  const title = alertText(alert.title, t);
+  const message = alertText(alert.message, t);
+  const ask = t("Разбери находку: «{title}». {message} Что делать?", { title, message });
   return (
     <div className={`rounded-xl border border-l-4 border-line bg-surface p-4 ${view.border}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${view.className}`}>
           <view.icon className="size-3" />
-          {view.label}
+          {t(view.label)}
         </span>
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-ink-2">{categoryNames[alert.category] ?? alert.category}</span>
-        <span className="ml-auto text-[11px] text-ink-3">с {dateTime(alert.detectedAt)}</span>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-ink-2">{categoryNames[alert.category] ? t(categoryNames[alert.category]) : alert.category}</span>
+        <span className="ml-auto text-[11px] text-ink-3">{t("с {date}", { date: dateTime(alert.detectedAt) })}</span>
       </div>
-      <div className="mt-2 font-semibold text-ink">{alert.title}</div>
-      <p className="mt-1 text-sm text-ink-2">{alert.message}</p>
+      <div className="mt-2 font-semibold text-ink">{title}</div>
+      <p className="mt-1 text-sm text-ink-2">{message}</p>
       {alert.recommendation && (
         <p className="mt-2 text-sm text-ink">
-          <span className="font-medium">Рекомендация: </span>
-          {alert.recommendation}
+          <span className="font-medium">{t("Рекомендация:")} </span>
+          {alertText(alert.recommendation, t)}
         </p>
       )}
       <div className="mt-3 flex flex-wrap gap-3 text-sm">
         {alert.href && (
           <Link href={alert.href} className="inline-flex items-center gap-1 font-medium text-accent-strong hover:underline">
-            Открыть данные <ArrowRight className="size-3.5" />
+            {t("Открыть данные")} <ArrowRight className="size-3.5" />
           </Link>
         )}
         <Link href={`/consultant?ask=${encodeURIComponent(ask)}`} className="inline-flex items-center gap-1 font-medium text-accent-strong hover:underline">
-          <MessageSquare className="size-3.5" /> Спросить консультанта
+          <MessageSquare className="size-3.5" /> {t("Спросить консультанта")}
         </Link>
       </div>
     </div>
@@ -62,6 +67,7 @@ function AlertCard({ alert }: { alert: AiAlert }) {
 }
 
 export function AlertsDashboard({ initial, canRun }: { initial: AiAlertsView; canRun: boolean }) {
+  const t = useT();
   const router = useRouter();
   const [data, setData] = useState(initial);
   const [category, setCategory] = useState<string | null>(null);
@@ -88,10 +94,10 @@ export function AlertsDashboard({ initial, canRun }: { initial: AiAlertsView; ca
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Tile label="Обнаружено проблем" value={data.summary.problems} />
-        <Tile label="Критических" value={data.summary.critical} tone={data.summary.critical > 0 ? "bad" : undefined} />
-        <Tile label="Рекомендаций" value={data.summary.recommendations} />
-        <Tile label="Новых возможностей" value={data.summary.opportunities} tone={data.summary.opportunities > 0 ? "ok" : undefined} />
+        <Tile label={t("Обнаружено проблем")} value={data.summary.problems} />
+        <Tile label={t("Критических")} value={data.summary.critical} tone={data.summary.critical > 0 ? "bad" : undefined} />
+        <Tile label={t("Рекомендаций")} value={data.summary.recommendations} />
+        <Tile label={t("Новых возможностей")} value={data.summary.opportunities} tone={data.summary.opportunities > 0 ? "ok" : undefined} />
       </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
@@ -100,7 +106,7 @@ export function AlertsDashboard({ initial, canRun }: { initial: AiAlertsView; ca
           onClick={() => setCategory(null)}
           className={`rounded-full border px-3 py-1 text-sm ${category === null ? "border-accent bg-accent-soft text-accent-strong" : "border-line bg-surface text-ink-2 hover:text-ink"}`}
         >
-          Все · {data.alerts.length}
+          {t("Все")} · {data.alerts.length}
         </button>
         {categories.map((c) => {
           const count = c.problems + c.opportunities;
@@ -112,24 +118,24 @@ export function AlertsDashboard({ initial, canRun }: { initial: AiAlertsView; ca
               disabled={count === 0}
               className={`rounded-full border px-3 py-1 text-sm disabled:opacity-40 ${category === c.category ? "border-accent bg-accent-soft text-accent-strong" : "border-line bg-surface text-ink-2 hover:text-ink"}`}
             >
-              {categoryNames[c.category]} · {count}
-              {c.critical > 0 && <span className="ml-1 text-bad">({c.critical} крит.)</span>}
+              {categoryNames[c.category] ? t(categoryNames[c.category]) : categoryNames[c.category]} · {count}
+              {c.critical > 0 && <span className="ml-1 text-bad">{t("({n} крит.)", { n: c.critical })}</span>}
             </button>
           );
         })}
         <span className="ml-auto flex items-center gap-3 text-xs text-ink-3">
-          {data.lastRun ? `Проверено ${dateTime(data.lastRun.at)}` : "Проверка по расписанию — раз в час"}
+          {data.lastRun ? t("Проверено {date}", { date: dateTime(data.lastRun.at) }) : t("Проверка по расписанию — раз в час")}
           {canRun && (
             <button className={button} onClick={run} disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-              Проверить сейчас
+              {t("Проверить сейчас")}
             </button>
           )}
         </span>
       </div>
-      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
+      {error && <p className="mt-2 text-sm text-bad">{t(error)}</p>}
       {data.lastRun && data.lastRun.errors.length > 0 && (
-        <p className="mt-2 text-sm text-warn">Не всё проверено: {data.lastRun.errors.join("; ")}</p>
+        <p className="mt-2 text-sm text-warn">{t("Не всё проверено: {errors}", { errors: data.lastRun.errors.map((e) => t(e)).join("; ") })}</p>
       )}
 
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
@@ -139,12 +145,13 @@ export function AlertsDashboard({ initial, canRun }: { initial: AiAlertsView; ca
       </div>
       {shown.length === 0 && (
         <p className="mt-6 rounded-xl border border-dashed border-line p-6 text-center text-sm text-ink-2">
-          {data.alerts.length === 0 ? "Находок нет: проверка не нашла отклонений или ещё не запускалась." : "В этом отделе находок нет."}
+          {data.alerts.length === 0 ? t("Находок нет: проверка не нашла отклонений или ещё не запускалась.") : t("В этом отделе находок нет.")}
         </p>
       )}
       <p className="mt-4 text-xs text-ink-3">
-        Находки ищут правила по данным OneBase (без модели — цифры точные): снижение продаж к тем же дням прошлого месяца, план, дефицит и неликвид на складах,
-        проблемные агенты, ассортимент. Для финансов, маркетинга, HR и производства данных в OneBase пока нет — находок по ним не будет.
+        {t(
+          "Находки ищут правила по данным OneBase (без модели — цифры точные): снижение продаж к тем же дням прошлого месяца, план, дефицит и неликвид на складах, проблемные агенты, ассортимент. Для финансов, маркетинга, HR и производства данных в OneBase пока нет — находок по ним не будет.",
+        )}
       </p>
     </>
   );

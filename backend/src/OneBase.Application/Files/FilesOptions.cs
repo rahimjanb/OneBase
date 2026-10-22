@@ -24,6 +24,15 @@ public sealed class FilesOptions
     public string? PublicRoot() =>
         string.IsNullOrWhiteSpace(PublicDomain) ? null : $"{PublicScheme.Trim()}://{PublicDomain.Trim().Trim('/')}";
 
+    /// <summary>
+    /// Адрес без пароля — секретная ссылка отдела: «https://files.1base.uz/k/{код}/production». Word и Excel (Microsoft 365) блокируют
+    /// вход по логину и паролю (Basic) на любой сервер, пока это не разрешено на компьютере; по ссылке пароль не спрашивается вовсе.
+    /// </summary>
+    public string? LinkUrl(string token, string departmentCode) => PublicRoot() is { } root ? $"{root}/k/{token}/{departmentCode}" : null;
+
+    /// <summary>Тот же адрес путём Windows: «\\files.1base.uz@SSL\k\{код}\production».</summary>
+    public string? LinkUncPath(string token, string departmentCode) => UncPath($@"k\{token}\{departmentCode}");
+
     /// <summary>Адрес папки отдела для «Подключить сетевой диск»: «https://files.1base.uz/production».</summary>
     public string? FolderUrl(string departmentCode) => PublicRoot() is { } root ? $"{root}/{departmentCode}" : null;
 
