@@ -321,7 +321,7 @@ const dict: Dict = {
   "Не брал": "Olmagan",
   "продаётся {sold} из {total} SKU": "{total} SKU dan {sold} tasi sotilmoqda",
   "план {kg} кг": "reja {kg} kg",
-  "{share} веса": "vaznning {share}",
+  "{share} от общего веса": "umumiy vaznning {share}",
   "Выполнение плана категории": "Toifa rejasi bajarilishi",
   "Выполнение плана {pct}": "Reja bajarilishi {pct}",
   "Доля по весу {pct}": "Vazn ulushi {pct}",

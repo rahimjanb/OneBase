@@ -75,6 +75,8 @@ function Card({ card, plan, href }: { card: CategoryCard; plan: CategoryPlanFact
   const t = useT();
   const planned = plan?.planKg != null;
   const bar = planned ? plan!.execution : card.weightShare;
+  // Доля категории в общем весе подразделения (не выполнение плана). Меньше 10% — с десятыми: иначе 0,4% выглядит как «0%».
+  const share = pct(card.weightShare, card.weightShare != null && Math.abs(card.weightShare) < 0.1 ? 1 : 0);
   return (
     <Link
       href={href}
@@ -96,7 +98,7 @@ function Card({ card, plan, href }: { card: CategoryCard; plan: CategoryPlanFact
             {kg(card.factKg)} <span className="text-sm font-semibold text-ink-3">{t("кг")}</span>
           </div>
           <div className="mt-1.5 text-xs text-ink-3">
-            {planned ? <>{t("план {kg} кг", { kg: kg(plan!.planKg) })}</> : t("плана нет")} · {t("{share} веса", { share: pct(card.weightShare) })}
+            {planned ? <>{t("план {kg} кг", { kg: kg(plan!.planKg) })}</> : t("плана нет")} · {t("{share} от общего веса", { share })}
           </div>
         </div>
         {planned && plan!.execution != null && (
@@ -111,7 +113,7 @@ function Card({ card, plan, href }: { card: CategoryCard; plan: CategoryPlanFact
 
       <div
         className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted"
-        title={planned ? t("Выполнение плана {pct}", { pct: pct(plan!.execution) }) : t("Доля по весу {pct}", { pct: pct(card.weightShare) })}
+        title={planned ? t("Выполнение плана {pct}", { pct: pct(plan!.execution) }) : t("Доля по весу {pct}", { pct: share })}
       >
         <div
           className={`h-full rounded-full ${planned && plan!.executionLevel === "Bad" ? "bg-bad" : planned && plan!.executionLevel === "Warning" ? "bg-warn" : "bg-accent"}`}
