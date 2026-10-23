@@ -1054,7 +1054,7 @@ public sealed partial class SalesAnalytics
         return new TeamRow(agent, AgentName(agent), plan, fact, execution, forecast, forecastExecution, lines.Sum(l => l.Revenue),
             stats.Visits.Done, stats.Orders, stats.Conversion, stats.SumPerVisit, stats.Categories,
             IsVacancy(agent), _d.Agents.TryGetValue(agent, out var info) && info.InDirectory, FlagsOf(agent), IsSalesRep(agent), info?.Job,
-            SalesMath.ExecutionLevelOf(execution), SalesMath.ExecutionLevelOf(forecastExecution));
+            SalesMath.ExecutionLevelOf(execution), SalesMath.ExecutionLevelOf(forecastExecution), SalesMath.Akb(lines));
     };
 
     private List<NotInDirectoryRow> NotInDirectory(Guid region) =>

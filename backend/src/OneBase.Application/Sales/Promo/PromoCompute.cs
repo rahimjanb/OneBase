@@ -479,12 +479,13 @@ public static partial class PromoCompute
             list.Add(C("Больше всего ушло на «{promo}» — {sum}, {share} всех скидок.", ("promo", top.Name), ("sum", Money(top.Sum)), ("share", Pct(top.Sum / tiles.Total, 0))));
         }
 
-        if (regions.Where(r => r.P is not null).MaxBy(r => r.P) is { P: { } p } best)
+        // regions — кортежи (значимый тип): MaxBy пустого списка бросает исключение, а не возвращает default.
+        if (regions.Where(r => r.P is not null).ToList() is { Count: > 0 } priced && priced.MaxBy(r => r.P) is { P: { } p } best)
         {
             list.Add(C("Выше всех доля скидок к продажам у региона {region}: {pct}.", ("region", best.Region), ("pct", Pct(p, 2))));
         }
 
-        if (tiles.Manual > 0 && regions.MaxBy(r => r.Man) is { } man)
+        if (tiles.Manual > 0 && regions.Count > 0 && regions.MaxBy(r => r.Man) is { } man)
         {
             list.Add(C("Без акции (скидку поставили вручную) — {sum}, {share} всех скидок; больше всего у региона {region} ({regionSum}).",
                 ("sum", Money(tiles.Manual)), ("share", Pct(tiles.Total > 0 ? tiles.Manual / tiles.Total : 0, 0)), ("region", man.Region), ("regionSum", Money(man.Man))));

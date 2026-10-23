@@ -326,6 +326,7 @@ public sealed record MonthCalendarRow(string Id, string Name, IReadOnlyList<deci
 
 public sealed record MonthCalendar(string Metric, long? CategoryId, IReadOnlyList<bool> Sundays, IReadOnlyList<MonthCalendarRow> Rows, IReadOnlyList<decimal?> TotalDays, decimal Total);
 
+/// <summary>ТП в команде региона. Akb — ТТ, где у агента за месяц чистая покупка больше нуля (каналы не входят), как АКБ подразделения.</summary>
 public sealed record TeamRow(
     long AgentId,
     string Name,
@@ -346,7 +347,8 @@ public sealed record TeamRow(
     bool IsSalesRep = true,
     string? Job = null,
     TargetLevel? ExecutionLevel = null,
-    TargetLevel? ForecastExecutionLevel = null);
+    TargetLevel? ForecastExecutionLevel = null,
+    int Akb = 0);
 
 public sealed record NotInDirectoryRow(long AgentId, string Name, decimal Kg, decimal Revenue);
 

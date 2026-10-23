@@ -126,6 +126,16 @@ public static class DependencyInjection
         services.AddScoped<ITool, GetSuppliersTool>();
         services.AddScoped<ITool, SearchKnowledgeTool>();
 
+        // Детализация до записей: карточки ТП и точки, визиты по точкам, заказы с позициями, KPI, «Акции», «Акт сверки», DSO.
+        services.AddScoped<ITool, GetAgentTool>();
+        services.AddScoped<ITool, GetAgentVisitsTool>();
+        services.AddScoped<ITool, GetStoreTool>();
+        services.AddScoped<ITool, GetOrdersTool>();
+        services.AddScoped<ITool, GetKpiTool>();
+        services.AddScoped<ITool, GetPromoTool>();
+        services.AddScoped<ITool, GetAktTool>();
+        services.AddScoped<ITool, GetDsoTool>();
+
         // База знаний: документы, фрагменты, полнотекстовый и семантический поиск.
         services.AddScoped<OneBase.AI.Knowledge.KnowledgeService>();
         services.AddScoped<IToolRegistry, ToolRegistry>();

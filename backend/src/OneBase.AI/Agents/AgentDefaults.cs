@@ -23,6 +23,12 @@ public static class AgentDefaults
 {
     public const string Consultant = AgentProfiles.DirectorCode;
 
+    /// <summary>
+    /// Все источники данных OneBase. У каждого AI-сотрудника — все: вопрос «не своего» отдела он отвечает по данным, а не «нет доступа».
+    /// Что увидит пользователь, по-прежнему решают его права — ToolExecutor проверяет их при каждом вызове инструмента.
+    /// </summary>
+    private static readonly IReadOnlyList<string> AllSources = KnowledgeSources.All.Select(s => s.Code).ToList();
+
     public static readonly AgentDefault Director = new(
         Consultant, "Главный консультант", "CEO-консультант",
         "Понимает вопрос, решает, каких AI-сотрудников привлечь, и собирает их результаты в единый управленческий ответ.",
@@ -46,7 +52,7 @@ public static class AgentDefaults
             Бюджетов, начальных сальдо и общего P&L компании в OneBase нет — не оценивай их, а прямо скажи, что этих данных нет.
             """,
             "finance", Permissions.FinanceRead, 1,
-            [KnowledgeSources.FinancePayments, KnowledgeSources.SalesSecondary, KnowledgeSources.SalesPrimary, KnowledgeSources.DealerPnl, KnowledgeSources.SalesExport, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
+            AllSources),
         new("sales", "Sales AI", "Директор по продажам",
             "Продажи: факт и план, регионы, агенты, клиенты (АКБ), товары и категории, динамика и причины снижения.",
             """
@@ -58,7 +64,7 @@ public static class AgentDefaults
             Воронки сделок и потерянных сделок в OneBase нет — есть заказы, визиты и торговые точки из Linko.
             """,
             "sales", Permissions.SalesRead, 2,
-            [KnowledgeSources.SalesSecondary, KnowledgeSources.SalesVisits, KnowledgeSources.SalesPlans, KnowledgeSources.SalesTeam, KnowledgeSources.SalesStock, KnowledgeSources.FieldSales, KnowledgeSources.SalesSku, KnowledgeSources.SalesExport, KnowledgeSources.DealerPnl, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
+            AllSources),
         new("marketing", "Marketing AI", "Директор по маркетингу",
             "Маркетинг: кампании, лиды, каналы, стоимость привлечения; продажи товаров и категорий как результат.",
             """
@@ -68,7 +74,7 @@ public static class AgentDefaults
             используй их, чтобы оценить результат ассортимента и охвата.
             """,
             "marketing", null, 3,
-            [KnowledgeSources.SalesSecondary, KnowledgeSources.SalesSku, KnowledgeSources.SalesExport, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
+            AllSources),
         new("hr", "HR AI", "HR-директор",
             "HR: сотрудники, подразделения, вакансии, нагрузка, эффективность и текучесть.",
             """
@@ -78,7 +84,7 @@ public static class AgentDefaults
             Данных о кандидатах, отсутствиях, текучести и ФОТ нет — не оценивай их.
             """,
             "hr", Permissions.HrRead, 4,
-            [KnowledgeSources.SalesTeam, KnowledgeSources.SalesVisits, KnowledgeSources.FieldSales, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
+            AllSources),
         new("production", "Production AI", "Директор по производству",
             "Производство: план и факт выпуска, простои, загрузка; отгрузки завода и остатки как косвенные данные.",
             """
@@ -87,7 +93,7 @@ public static class AgentDefaults
             Из доступного: отгрузки завода дилерам (первичка), остатки на складах и продажи по SKU — это спрос на продукцию завода, а не выпуск.
             """,
             "production", null, 5,
-            [KnowledgeSources.SalesPrimary, KnowledgeSources.SalesStock, KnowledgeSources.SalesSku, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
+            AllSources),
         new("supply", "Supply AI", "Директор по снабжению",
             "Снабжение: остатки, дефицит и затоварка, поставщики, закупки и цены закупки.",
             """
@@ -96,7 +102,7 @@ public static class AgentDefaults
             Заказов поставщикам, закупочных цен и сроков поставки нет — не оценивай их.
             """,
             "supply", null, 6,
-            [KnowledgeSources.SalesStock, KnowledgeSources.SalesPrimary, KnowledgeSources.SupplyProviders, KnowledgeSources.SalesSku, KnowledgeSources.WorkTasks, KnowledgeSources.Documents]),
+            AllSources),
     ];
 
     public static readonly IReadOnlyList<AgentDefault> All = [Director, .. Departments];

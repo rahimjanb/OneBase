@@ -45,12 +45,12 @@
 | Код | Сотрудник | Кому доступен | Данные сейчас |
 |---|---|---|---|
 | director | Главный консультант | всем с `ai.agents.run` | результаты сотрудников, история чата |
-| sales | Sales AI | `sales.read` | вторичка, визиты, планы, команда |
-| finance | Finance AI | `finance.read` | оплаты Linko, выручка вторички и первички |
-| marketing | Marketing AI | всем | продажи товаров и категорий (кампаний и лидов нет) |
-| hr | HR AI | `hr.read` | команда продаж, визиты (ФОТ, кандидатов, текучести нет) |
-| production | Production AI | всем | первичка и остатки (выпуска нет) |
-| supply | Supply AI | всем | остатки, первичка, поставщики (закупок нет) |
+| sales | Sales AI | `sales.read` | все источники; в фокусе вторичка, визиты, планы, команда |
+| finance | Finance AI | `finance.read` | все источники; в фокусе оплаты, акт сверки, DSO, P&L, выручка |
+| marketing | Marketing AI | всем | все источники; в фокусе товары, категории, акции (кампаний и лидов нет) |
+| hr | HR AI | `hr.read` | все источники; в фокусе команда продаж и визиты (ФОТ, кандидатов, текучести нет) |
+| production | Production AI | всем | все источники; в фокусе первичка и остатки (выпуска нет) |
+| supply | Supply AI | всем | все источники; в фокусе остатки, первичка, поставщики (закупок нет) |
 
 У каждого сотрудника в «Настройки → AI → Агенты» настраиваются:
 
@@ -64,7 +64,7 @@
 
 ## Инструменты
 
-`get_sales`, `get_sales_by_branch`, `get_sales_by_employee`, `get_problem_agents`, `get_products`, `find_products`, `get_customers`, `get_visits`, `get_sales_kpi`, `get_sales_trend`, `get_sku_sales`, `get_export_sales`, `get_dealer_pnl`, `get_inventory`, `get_outstock`, `get_primary_shipments`, `get_payments`, `get_suppliers`, `get_field_team`, `get_field_tasks`, `get_field_routes`, `get_field_recommendations`, `get_department_tasks`, `search_knowledge`.
+`get_sales`, `get_sales_by_branch`, `get_sales_by_employee`, `get_problem_agents`, `get_products`, `find_products`, `get_customers`, `get_visits`, `get_sales_kpi`, `get_sales_trend`, `get_sku_sales`, `get_export_sales`, `get_dealer_pnl`, `get_inventory`, `get_outstock`, `get_primary_shipments`, `get_payments`, `get_suppliers`, `get_field_team`, `get_field_tasks`, `get_field_routes`, `get_field_recommendations`, `get_department_tasks`, `search_knowledge`, `get_agent`, `get_agent_visits`, `get_store`, `get_orders`, `get_kpi`, `get_promo`, `get_akt`, `get_dso`.
 
 | Инструмент | Источник | Право | Что отдаёт |
 |---|---|---|---|
@@ -77,9 +77,26 @@
 | `get_department_tasks` | `work.tasks` | — (видимость отделов решает `WorkTaskService`) | Задачи отделов: открыто, просрочено, выполнено за период; список с исполнителем, сроком, итогом или причиной отмены. Чужой отдел — отказ. |
 
 Инструменты Sales Base видят только область пользователя: агент — себя, супервайзер — свою команду, РМ — всё или свои филиалы.
-Источники выдаются сотрудникам в `AgentDefaults` (при запуске `AiSeeder` дописывает недостающие): `sales.sku` — sales, marketing,
-production, supply; `sales.export` — sales, finance, marketing; `finance.pnl` — finance, sales; `field.sales` — sales, hr;
-`work.tasks` — все отделы.
+Источники выдаются сотрудникам в `AgentDefaults` (при запуске `AiSeeder` дописывает недостающие, выключенное администратором заново
+не включает): у каждого отдельского сотрудника — все источники, чтобы вопрос «не своего» отдела он отвечал по данным, а не «нет доступа».
+Что увидит пользователь, решают его права: `ToolExecutor` проверяет их при каждом вызове инструмента.
+
+Детализация до отдельных записей (`DrillTools.cs`):
+
+| Инструмент | Источник | Право | Что отдаёт |
+|---|---|---|---|
+| `get_agent` | `sales.team` | `sales.read` | Карточка ТП за месяц — как его страница: план и факт, выручка, АКБ, визиты, конверсия, средний чек, категории, показатели Linko, замечания, молчащие и новые точки, ассортимент. |
+| `get_agent_visits` | `sales.visits` | `sales.read` | Куда ходил ТП за день или до 31 дня: каждый визит (время, точка, адрес, по маршруту или вне, выполнен ли, заказ в этот день), итоги по маршруту / вне / не посещено, заказы без визита. |
+| `get_store` | `sales.secondary` | `sales.read` | Карточка точки по названию, адресу или id: ответственный ТП, продажи месяца, товары, последние визиты и заказы; несколько совпадений — список. |
+| `get_orders` | `sales.secondary` | `sales.read` | Заказы по ТП, точке, региону, статусу и дням (до 62 дней) или один по номеру; с `lines=true` — позиции. |
+| `get_kpi` | `sales.plans` | `sales.read` | Страница «KPI»: показатели Linko по людям, выполнение, пороги; деньги — только с `finance.read`. |
+| `get_promo` | `sales.secondary` | `sales.read` | Страница «Акции»: скидки и бонусы по акциям, эффект, регионы, ручные скидки, ТП и точки. |
+| `get_akt` | `finance.payments` | `finance.read` | Страница «Акт сверки» за месяц; с `dealer` — карточка контрагента с документами и оплатами. |
+| `get_dso` | `finance.payments` | `finance.read` | Страница «DSO»: долги дилеров по FIFO, просрочка, ожидаемые оплаты; с `dealer` — один дилер. |
+
+Страницы целиком отдаются через `PageJson`: длинные списки — первые строки и число всех (`…Total`), дробные числа округлены.
+Результат инструмента режется на 40 000 символов (`AgentRunner.MaxToolResultChars`). ТП ищется по имени кириллицей или узбекской латиницей
+(«Jasur Xamidov» = «Жасур Хамидов»); несколько совпадений — ошибка со списком, модель уточняет.
 
 `find_products` ищет категорию, тип Linko или товар по части названия, бренду или артикулу — кириллицей или латиницей («помадка» находит и тип «Помадка», и товары «POMADKA») — и отдаёт продажи найденного: по категории — итоги и SKU, по товару — факт, точки и регионы.
 

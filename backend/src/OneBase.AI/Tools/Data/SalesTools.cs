@@ -210,7 +210,7 @@ internal sealed class GetSalesByEmployeeTool(SalesDataLoader loader) : SalesTool
     public override string Source => KnowledgeSources.SalesTeam;
 
     public override string Description =>
-        "Торговые представители (ТП): план и факт в кг, выполнение, прогноз, выручка, визиты, заказы, страйк, категории, замечания. " +
+        "Торговые представители (ТП): план и факт в кг, выполнение, прогноз, выручка, АКБ агента и выручка с одной точки, визиты, заказы, страйк, категории, замечания. " +
         "С регионом — вся команда региона; без региона — лучшие и худшие ТП республики по прогнозу выполнения.";
 
     public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg, RegionArg,
@@ -267,6 +267,8 @@ internal sealed class GetSalesByEmployeeTool(SalesDataLoader loader) : SalesTool
         ExecutionPct = Pct(t.Execution),
         ForecastExecutionPct = Pct(t.ForecastExecution),
         RevenueSum = R(t.Revenue),
+        t.Akb,
+        RevenuePerOutletSum = t.Akb > 0 ? R(t.Revenue / t.Akb) : (decimal?)null,
         t.Visits,
         t.Orders,
         StrikePct = Pct(t.Strike),
@@ -393,8 +395,9 @@ internal sealed class GetCustomersTool(SalesDataLoader loader) : SalesTool(loade
     public override string Source => KnowledgeSources.SalesSecondary;
 
     public override string Description =>
-        "Клиенты — торговые точки: АКБ по месяцам года (точки с чистой покупкой > 0), точки, которые покупали в прошлом месяце и не купили в этом " +
-        "(«молчат», с выручкой прошлого месяца), новые точки — по республике или по регионам.";
+        "Клиенты — торговые точки: АКБ по месяцам года (точки с чистой покупкой > 0); по регионам республики или, с регионом, по ТП региона — " +
+        "база прошлого месяца, «молчат» (покупали в прошлом месяце и не купили в этом, с выручкой прошлого месяца), новые точки, " +
+        "АКБ и выручка текущего месяца и выручка с одной точки.";
 
     public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg, RegionArg);
 
@@ -406,10 +409,14 @@ internal sealed class GetCustomersTool(SalesDataLoader loader) : SalesTool(loade
         var p = republic.Period;
         var akb = republic.AkbMonths;
         var notBought = republic.NotBought;
+
+        // АКБ и выручка строки за текущий месяц: у республики строки — регионы, у региона — его ТП.
+        var current = republic.Regions.DistinctBy(r => r.Id).ToDictionary(r => r.Id, r => (r.Akb, r.Revenue));
         if (region is not null)
         {
             var view = analytics.CachedRegion(Guid.Parse(region.Id), null, null, "kg", null);
             (akb, notBought) = (view.AkbMonths, view.NotBought);
+            current = view.Team.DistinctBy(t => t.AgentId).ToDictionary(t => t.AgentId.ToString(), t => (t.Akb, t.Revenue));
         }
 
         return Data(new
@@ -422,15 +429,24 @@ internal sealed class GetCustomersTool(SalesDataLoader loader) : SalesTool(loade
                 Months = akb.Months.Select((m, i) => new { Month = MonthName(m), Akb = akb.Total.ElementAtOrDefault(i) }),
                 LastMonthPartial = akb.LastPartial,
             },
-            NotBoughtThisMonth = notBought.Select(n => new
+            Rows = region is null ? "регионы" : "ТП региона",
+            Outlets = notBought.Select(n =>
             {
-                n.Name,
-                BaseOutlets = n.Base,
-                SilentOutlets = n.Silent,
-                SilentSharePct = Pct(n.Share),
-                SilentPrevRevenueSum = R(n.SilentPrevRevenue),
-                NewOutlets = n.New,
+                var known = current.TryGetValue(n.Id, out var now);
+                return new
+                {
+                    n.Name,
+                    BaseOutlets = n.Base,
+                    SilentOutlets = n.Silent,
+                    SilentSharePct = Pct(n.Share),
+                    SilentPrevRevenueSum = R(n.SilentPrevRevenue),
+                    NewOutlets = n.New,
+                    AkbNow = known ? now.Akb : (int?)null,
+                    RevenueSum = known ? R(now.Revenue) : (decimal?)null,
+                    RevenuePerOutletSum = known && now.Akb > 0 ? R(now.Revenue / now.Akb) : (decimal?)null,
+                };
             }),
+            Note = "BaseOutlets — точки, купившие в прошлом месяце; AkbNow — точки с чистой покупкой в этом месяце; RevenuePerOutletSum — выручка ÷ АКБ.",
         }, region is null ? RepublicSource(p) : RegionSource(p, region));
     }
 }

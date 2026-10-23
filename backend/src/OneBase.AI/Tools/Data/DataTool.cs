@@ -137,6 +137,17 @@ public sealed class ToolArgs(JsonElement root)
             ? v.GetString()!.Trim()
             : null;
 
+    public bool? Bool(string name) =>
+        root.ValueKind == JsonValueKind.Object && root.TryGetProperty(name, out var v)
+            ? v.ValueKind switch
+            {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.String when bool.TryParse(v.GetString(), out var b) => b,
+                _ => null,
+            }
+            : null;
+
     public (int? Year, int? Month) Period()
     {
         var year = Int("year", 2000, 2100);

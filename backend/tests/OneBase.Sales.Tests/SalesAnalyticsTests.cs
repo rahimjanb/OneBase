@@ -237,6 +237,17 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
+    public void Team_row_akb_is_the_agent_akb()
+    {
+        var analytics = new SalesAnalytics(Data());
+
+        var row = analytics.Region(North, Sep1, new DateOnly(2026, 9, 10), "kg", null).Team.Single(t => t.AgentId == 1);
+
+        Assert.True(row.Akb > 0);
+        Assert.Equal(analytics.Agent(1).Akb, row.Akb); // те же ТТ с чистой покупкой, что на странице агента
+    }
+
+    [Fact]
     public void Agent_akb_by_month_takes_old_months_from_the_agent_history()
     {
         var history = new[]
