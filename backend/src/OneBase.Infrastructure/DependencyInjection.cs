@@ -135,7 +135,7 @@ public static class DependencyInjection
         // Отчёты AI-консультанта: файл Excel из листов отчёта; документы Telegram-агента (письма, планы, разборы) — Word из Markdown.
         services.AddSingleton<OneBase.Application.Reports.IReportWorkbookWriter, Reports.ReportWorkbookWriter>();
         services.AddSingleton<OneBase.Application.Reports.IDocumentWriter, Reports.DocumentWriter>();
-        services.AddSingleton<OneBase.Application.Sales.Stock.ITransferActWriter, Reports.TransferActWriter>();
+        services.AddSingleton<OneBase.Application.Sales.Stock.ITransferActWriter, Reports.TransferActWorkbookWriter>();
         services.AddScoped<OneBase.Application.DataManager.DataFileService>();
         services.AddScoped<OneBase.Application.DataSources.FieldOwnership>();
         services.AddScoped<OneBase.Application.DataSources.SourceOfTruthService>();
@@ -174,9 +174,11 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Telegram.TelegramMaterialService>();
         services.AddHostedService<Telegram.TelegramConnectionWorker>();
 
-        // Автоотчёты в Telegram: картинки PNG на сервере (SkiaSharp), расписания утро/обед/вечер, очередь в PostgreSQL.
-        services.AddSingleton<OneBase.Application.Telegram.Reports.IDailyReportRenderer, Telegram.Reports.SkiaDailyReportRenderer>();
-        services.AddScoped<OneBase.Application.Telegram.Reports.DailyReportBuilder>();
+        // Автоотчёты в Telegram: шесть отчётов для РМ, СВ и ТП, картинки PNG 16:9 на сервере (SkiaSharp), 13 запусков по расписанию,
+        // очередь и журнал в PostgreSQL.
+        services.AddSingleton<OneBase.Application.Telegram.Reports.IReportRenderer, Telegram.Reports.SkiaReportRenderer>();
+        services.AddScoped<OneBase.Application.Telegram.Reports.ReportDataService>();
+        services.AddScoped<OneBase.Application.Telegram.Reports.ReportEngine>();
         services.AddScoped<Telegram.Reports.TelegramReportSender>();
         services.AddScoped<Telegram.Reports.TelegramReportService>();
         services.AddSingleton<Telegram.Reports.TelegramReportRunner>();

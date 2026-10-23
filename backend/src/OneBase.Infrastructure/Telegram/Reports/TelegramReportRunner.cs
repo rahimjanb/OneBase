@@ -8,107 +8,253 @@ using OneBase.Application.Abstractions;
 using OneBase.Application.Telegram;
 using OneBase.Application.Telegram.Reports;
 using OneBase.Domain.Telegram;
+using OneBase.Infrastructure.Linko;
 using OneBase.Infrastructure.Persistence;
 
 namespace OneBase.Infrastructure.Telegram.Reports;
 
 /// <summary>
-/// Очередь автоотчётов (строки журнала в PostgreSQL): наступило время расписания — по строке на каждый чат каждой автоотправки с этим
-/// отчётом (уникальный индекс: автоотправка × чат × отчёт × день — второй экземпляр службы или повторный круг дубля не создадут); затем
-/// строки отправляются по одной. «Отправляется» дольше 10 минут (сервер упал посреди отправки) — ошибка без автоповтора: лучше пропуск,
-/// чем дубль.
+/// Очередь автоотчётов в PostgreSQL. Наступил запуск расписания — строка журнала запусков (один запуск на код и день: второй экземпляр
+/// службы его не начнёт) и по строке отправки на каждый чат каждого получателя этого запуска; ключ «запуск × день × чат × область»
+/// уникален — человек в двух получателях или повторный круг дубля не создадут. Затем строки отправляются по одной; ошибка одного получателя
+/// не останавливает остальных. Запуск, пропущенный дольше CatchUpMinutes (сервер не работал), не отправляется — в журнал «пропущен».
+/// «Отправляется» дольше 10 минут (сервер упал посреди отправки) — «неизвестно»: лучше пропуск, чем дубль.
 /// </summary>
 public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvider clock, ILogger<TelegramReportRunner> logger)
 {
     /// <summary>Пауза между отправками одного аккаунта (в тестах — без ожидания).</summary>
     public Func<TimeSpan, CancellationToken, Task> Delay { get; set; } = Task.Delay;
 
+    /// <summary>Обновление данных Linko перед отправкой; в тестах — подставное.</summary>
+    public Func<IServiceProvider, CancellationToken, Task>? Refresh { get; set; }
+
     public static readonly TimeSpan Pause = TimeSpan.FromSeconds(3);
 
-    /// <summary>Один круг: запуски, которым пора, → строки в очередь; затем отправка готовых строк.</summary>
+    /// <summary>Свежее этого данные Linko перед отправкой не обновляются.</summary>
+    public static readonly TimeSpan FreshEnough = TimeSpan.FromMinutes(10);
+
     public async Task<int> TickAsync(CancellationToken ct)
     {
         await EnqueueDueAsync(ct);
-        return await SendPendingAsync(ct);
+        var sent = await SendPendingAsync(ct);
+        await FinishRunsAsync(ct);
+        return sent;
     }
 
-    /// <summary>Наступившие запуски расписаний → строки журнала «ожидает»: каждая включённая автоотправка этого отчёта × каждый её чат.</summary>
+    /// <summary>Наступившие запуски → журнал запусков и строки отправок «в очереди»; пропущенные после простоя — «пропущен».</summary>
     public async Task<int> EnqueueDueAsync(CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<OneBaseDbContext>();
         var now = clock.GetUtcNow();
         await db.TelegramReportDeliveries.Where(d => d.Status == TelegramReportSender.Sending && d.LastAttemptAt < now - TelegramRules.StaleSending)
-            .ExecuteUpdateAsync(u => u.SetProperty(d => d.Status, TelegramReportSender.Failed).SetProperty(d => d.NextAttemptAt, (DateTimeOffset?)null)
+            .ExecuteUpdateAsync(u => u.SetProperty(d => d.Status, TelegramReportSender.Unknown).SetProperty(d => d.NextAttemptAt, (DateTimeOffset?)null)
                 .SetProperty(d => d.Error, "Неизвестно, дошёл ли отчёт: сервер прервал отправку. Автоповтора нет, чтобы не отправить дважды — проверьте чат и при необходимости отправьте вручную."), ct);
+        // Строки прежнего вида дневного отчёта, оставшиеся в очереди при обновлении, — не отправляются.
+        await db.TelegramReportDeliveries.Where(d => d.Report == null && d.Status == TelegramReportSender.Pending)
+            .ExecuteUpdateAsync(u => u.SetProperty(d => d.Status, TelegramReportSender.Skipped).SetProperty(d => d.NextAttemptAt, (DateTimeOffset?)null)
+                .SetProperty(d => d.Error, "Автоотчёты обновлены: отправка прежнего вида отменена."), ct);
 
         var settings = await db.TelegramReportSettings.AsNoTracking().FirstOrDefaultAsync(ct);
-        if (settings?.AccountId is not { } account)
-        {
-            return 0;
-        }
-
+        var jobs = await db.TelegramReportJobs.AsNoTracking().Where(j => j.Enabled).ToListAsync(ct);
         var added = 0;
-        foreach (var schedule in await db.TelegramReportSchedules.AsNoTracking().Where(s => s.Enabled).ToListAsync(ct))
+        var refreshed = false;
+        foreach (var job in jobs)
         {
-            if (DailyReportSchedules.Due(schedule, now) is not { } slot)
+            if (ReportCatalog.Find(job.Code) is not { } info)
             {
                 continue;
             }
 
-            var kind = schedule.Kind;
-            var subscriptions = await db.TelegramReportSubscriptions.AsNoTracking().Include(s => s.Chats)
-                .Where(s => s.Enabled && (kind == TelegramReportKind.Morning ? s.Morning : kind == TelegramReportKind.Midday ? s.Midday : s.Evening))
-                .ToListAsync(ct);
-            var done = (await db.TelegramReportDeliveries.AsNoTracking()
-                    .Where(d => d.Trigger == "schedule" && d.Kind == kind && d.Period == slot.Period && d.SubscriptionId != null && d.ChatId != null)
-                    .Select(d => new { Subscription = d.SubscriptionId!.Value, Chat = d.ChatId!.Value }).ToListAsync(ct))
-                .Select(d => (d.Subscription, d.Chat))
-                .ToHashSet();
-            var queued = 0;
-            foreach (var subscription in subscriptions)
+            if (ReportSchedules.Missed(job, now) is { } missed && !await db.TelegramReportRuns.AnyAsync(r => r.Job == job.Code && r.Period == missed.Period, ct))
             {
-                foreach (var chat in subscription.Chats.Where(c => !done.Contains((subscription.Id, c.ChatId))))
+                await CreateRunAsync(db, new TelegramReportRun
                 {
-                    db.TelegramReportDeliveries.Add(new TelegramReportDelivery
-                    {
-                        Kind = kind,
-                        Period = slot.Period,
-                        Trigger = "schedule",
-                        DataMode = "real",
-                        SubscriptionId = subscription.Id,
-                        AccountId = account,
-                        ChatId = chat.ChatId,
-                        RecipientTitle = "…",
-                        ScopeTitle = "…",
-                        RegionId = subscription.RegionId,
-                        SupervisorId = subscription.SupervisorId,
-                        CreatedById = subscription.CreatedById,
-                    });
-                    try
-                    {
-                        await db.SaveChangesAsync(ct);
-                        added++;
-                        queued++;
-                    }
-                    catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
-                    {
-                        // Эту строку уже поставил другой экземпляр или прошлый круг — второй раз не отправляем.
-                        foreach (var entry in db.ChangeTracker.Entries<TelegramReportDelivery>().Where(e => e.State == EntityState.Added).ToList())
-                        {
-                            entry.State = EntityState.Detached;
-                        }
-                    }
-                }
+                    Job = job.Code, Period = missed.Period, ScheduledAt = missed.At, StartedAt = now, FinishedAt = now, Status = "skipped",
+                    Error = $"Сервер не работал в {ReportSchedules.Local(missed.At, job.TimeZone):dd.MM HH:mm}: отчёт старше {job.CatchUpMinutes} мин не отправлен.",
+                }, ct);
             }
 
-            if (queued > 0)
+            if (ReportSchedules.Due(job, now) is not { } slot)
             {
-                logger.LogInformation("Автоотчёт {Kind} за {Period}: в очередь {Count} отправок", kind, slot.Period, queued);
+                continue;
             }
+
+            var run = await db.TelegramReportRuns.FirstOrDefaultAsync(r => r.Job == job.Code && r.Period == slot.Period, ct);
+            if (run is { Status: "skipped" })
+            {
+                continue; // запуск пропущен после простоя — не отправляется
+            }
+
+            if (settings?.AccountId is not { } account)
+            {
+                if (run is null)
+                {
+                    await CreateRunAsync(db, new TelegramReportRun
+                    {
+                        Job = job.Code, Period = slot.Period, ScheduledAt = slot.At, StartedAt = now, FinishedAt = now, Status = "failed",
+                        Error = "Не выбран аккаунт Telegram автоотчётов — «Автоматические отчёты → Расписание».",
+                    }, ct);
+                }
+
+                continue;
+            }
+
+            if (run is null)
+            {
+                if (settings.RefreshBeforeSend && !refreshed)
+                {
+                    await RefreshAsync(sp, ct);
+                    refreshed = true;
+                }
+
+                run = await CreateRunAsync(db, new TelegramReportRun { Job = job.Code, Period = slot.Period, ScheduledAt = slot.At, StartedAt = now }, ct);
+                if (run is null)
+                {
+                    continue; // запуск начал другой экземпляр службы
+                }
+
+                run.DataAsOf = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "orders").Select(s => s.LastSuccessAt).FirstOrDefaultAsync(ct);
+                await db.SaveChangesAsync(ct);
+            }
+
+            var queued = await EnqueueRunAsync(db, run, info, account, ct);
+            if (queued > 0 && run.Status != "running")
+            {
+                // Получатель добавлен, пока не прошло время догона: запуск снова идёт.
+                run.Status = "running";
+                run.FinishedAt = null;
+                await db.SaveChangesAsync(ct);
+            }
+
+            added += queued;
         }
 
         return added;
+    }
+
+    /// <summary>Строки отправок запуска: каждый включённый получатель с этим запуском × каждый его чат; ключ — запуск, день, чат, область.</summary>
+    private async Task<int> EnqueueRunAsync(OneBaseDbContext db, TelegramReportRun run, ReportJobInfo info, Guid account, CancellationToken ct)
+    {
+        var recipients = (await db.TelegramReportSubscriptions.AsNoTracking().Include(s => s.Chats).Where(s => s.Enabled).ToListAsync(ct))
+            .Where(s => ReportCatalog.Parse(s.Reports).Contains(info.Code) && info.Roles.Contains(s.Role))
+            .ToList();
+        var done = (await db.TelegramReportDeliveries.AsNoTracking()
+                .Where(d => d.Trigger == "schedule" && d.Report == info.Code && d.Period == run.Period && d.ChatId != null)
+                .Select(d => new { Chat = d.ChatId!.Value, d.ScopeKey }).ToListAsync(ct))
+            .Select(d => (d.Chat, d.ScopeKey ?? ""))
+            .ToHashSet();
+        var added = 0;
+        foreach (var recipient in recipients)
+        {
+            var key = ReportScope.Of(recipient).Key;
+            foreach (var chat in recipient.Chats.Where(c => done.Add((c.ChatId, key))))
+            {
+                db.TelegramReportDeliveries.Add(new TelegramReportDelivery
+                {
+                    Report = info.Code,
+                    RunId = run.Id,
+                    Period = run.Period,
+                    Trigger = "schedule",
+                    DataMode = "real",
+                    SubscriptionId = recipient.Id,
+                    Role = recipient.Role,
+                    ScopeKey = key,
+                    AccountId = account,
+                    ChatId = chat.ChatId,
+                    RecipientTitle = "…",
+                    ScopeTitle = "…",
+                    RegionId = recipient.RegionId,
+                    SupervisorId = recipient.SupervisorId,
+                    CreatedById = recipient.CreatedById,
+                });
+                try
+                {
+                    await db.SaveChangesAsync(ct);
+                    added++;
+                }
+                catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+                {
+                    // Эту строку уже поставил другой экземпляр или прошлый круг — второй раз не отправляем.
+                    Detach(db);
+                }
+            }
+        }
+
+        if (added > 0)
+        {
+            logger.LogInformation("Автоотчёт {Job} за {Period}: в очередь {Count} отправок", info.Code, run.Period, added);
+        }
+
+        return added;
+    }
+
+    private static async Task<TelegramReportRun?> CreateRunAsync(OneBaseDbContext db, TelegramReportRun run, CancellationToken ct)
+    {
+        db.TelegramReportRuns.Add(run);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return run;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            Detach(db);
+            return null;
+        }
+    }
+
+    private static void Detach(OneBaseDbContext db)
+    {
+        foreach (var entry in db.ChangeTracker.Entries().Where(e => e.State == EntityState.Added).ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
+    }
+
+    /// <summary>
+    /// Свежие заказы и визиты перед отправкой: последнее обновление старше 10 минут — обычное обновление Linko (идёт плановое — дождаться,
+    /// до 10 минут). Linko недоступен — отчёт уйдёт по последним данным с пометкой «данные на …» или «неполные данные».
+    /// </summary>
+    private async Task RefreshAsync(IServiceProvider sp, CancellationToken ct)
+    {
+        if (Refresh is { } refresh)
+        {
+            await refresh(sp, ct);
+            return;
+        }
+
+        var db = sp.GetRequiredService<IAppDbContext>();
+        var last = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "orders").Select(s => s.LastSuccessAt).FirstOrDefaultAsync(ct);
+        if (last is { } l && clock.GetUtcNow() - l < FreshEnough)
+        {
+            return;
+        }
+
+        var coordinator = sp.GetService<LinkoSyncCoordinator>();
+        if (coordinator is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limit.CancelAfter(TimeSpan.FromMinutes(10));
+            if (await coordinator.RunAsync(LinkoSyncMode.Incremental, limit.Token) is null)
+            {
+                // Идёт другое обновление (плановое в 11:00 / 17:00) — дождаться его.
+                while (coordinator.IsRunning && !limit.IsCancellationRequested)
+                {
+                    await Delay(TimeSpan.FromSeconds(15), limit.Token);
+                }
+            }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Автоотчёты: данные Linko перед отправкой не обновились — отчёты уйдут по последним данным");
+        }
     }
 
     /// <summary>Отправить готовые строки (по расписанию и ручные с повтором) по одной, с паузой. Возвращает, сколько ушло.</summary>
@@ -123,7 +269,7 @@ public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvid
             var db = sp.GetRequiredService<IAppDbContext>();
             var now = clock.GetUtcNow();
             var delivery = await db.TelegramReportDeliveries
-                .Where(d => d.Status == TelegramReportSender.Pending && d.SubscriptionId != null && d.ChatId != null && (d.NextAttemptAt == null || d.NextAttemptAt <= now)
+                .Where(d => d.Status == TelegramReportSender.Pending && d.Report != null && d.ChatId != null && (d.NextAttemptAt == null || d.NextAttemptAt <= now)
                             && !tried.Contains(d.Id))
                 .OrderBy(d => d.CreatedAt)
                 .FirstOrDefaultAsync(ct);
@@ -144,21 +290,31 @@ public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvid
         return sent;
     }
 
-    /// <summary>Строка автоотправки: аккаунт подключён, чат доступен, отчёт региона и супервайзера на реальных данных, отправка.</summary>
+    /// <summary>
+    /// Строка отправки: получатель ещё включён и подписан, аккаунт подключён, чат доступен (иначе — «пропущено» с причиной), отчёт области
+    /// (область — из ключа строки: права проверяются при построении) и отправка.
+    /// </summary>
     private static async Task<ReportSendResult> ProcessAsync(IServiceProvider sp, TelegramReportDelivery delivery, CancellationToken ct)
     {
         var db = sp.GetRequiredService<IAppDbContext>();
         var sender = sp.GetRequiredService<TelegramReportSender>();
-        var subscription = await db.TelegramReportSubscriptions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == delivery.SubscriptionId, ct);
-        if (subscription is null)
+        var chat = await db.TelegramChats.AsNoTracking().FirstOrDefaultAsync(c => c.Id == delivery.ChatId, ct);
+        delivery.RecipientTitle = TelegramReportSender.Trim(chat?.Title ?? "—", 255);
+        if (delivery.SubscriptionId is { } subscriptionId)
         {
-            return await sender.FailAsync(delivery, "Автоотправка удалена.");
+            var subscription = await db.TelegramReportSubscriptions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == subscriptionId, ct);
+            if (subscription is null || !subscription.Enabled || (delivery.Trigger == "schedule" && !ReportCatalog.Parse(subscription.Reports).Contains(delivery.Report!)))
+            {
+                return await sender.SkipAsync(delivery, subscription is null ? "Получатель удалён." : "Получатель отключён или отписан от этого отчёта.");
+            }
+        }
+
+        if (ReportScope.Parse(delivery.ScopeKey) is not { } scope)
+        {
+            return await sender.FailAsync(delivery, "Область отчёта не определена.");
         }
 
         var settings = await db.TelegramReportSettings.AsNoTracking().FirstOrDefaultAsync(ct);
-        var chat = await db.TelegramChats.AsNoTracking().FirstOrDefaultAsync(c => c.Id == delivery.ChatId, ct);
-        delivery.RecipientTitle = TelegramReportSender.Trim(chat?.Title ?? "—", 255);
-        delivery.ScopeTitle = await sender.ScopeTitleAsync(subscription.RegionId, subscription.SupervisorId, subscription.SupervisorName, ct);
         var account = settings?.AccountId is { } accountId ? await db.TelegramAccounts.AsNoTracking().FirstOrDefaultAsync(x => x.Id == accountId, ct) : null;
         if (account is not null)
         {
@@ -172,18 +328,43 @@ public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvid
 
         if (TelegramReportSender.ChatProblem(chat, account.Id) is { } problem)
         {
-            return await sender.FailAsync(delivery, problem);
+            return await sender.SkipAsync(delivery, problem);
         }
 
-        var kind = delivery.Kind;
+        var job = delivery.Report!;
         var period = delivery.Period;
-        return await sender.AttemptAsync(delivery, chat!,
-            token => sender.BuildRealAsync(kind, subscription.RegionId, subscription.SupervisorId, subscription.SupervisorName, period, check: false, token), retry: true, ct);
+        return await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, null, token), retry: true, ct);
+    }
+
+    /// <summary>Запуски, у которых не осталось отправок в очереди: итог (done / partial) и счётчики.</summary>
+    public async Task FinishRunsAsync(CancellationToken ct)
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
+        var now = clock.GetUtcNow();
+        foreach (var run in await db.TelegramReportRuns.Where(r => r.Status == "running").ToListAsync(ct))
+        {
+            var statuses = await db.TelegramReportDeliveries.AsNoTracking().Where(d => d.RunId == run.Id).Select(d => d.Status).ToListAsync(ct);
+            run.Planned = statuses.Count;
+            run.Sent = statuses.Count(s => s == TelegramReportSender.Sent);
+            run.Failed = statuses.Count(s => s is TelegramReportSender.Failed or TelegramReportSender.Unknown);
+            run.Skipped = statuses.Count(s => s == TelegramReportSender.Skipped);
+            if (statuses.Any(s => s is TelegramReportSender.Pending or TelegramReportSender.Sending))
+            {
+                continue;
+            }
+
+            run.Status = run.Failed > 0 ? "partial" : "done";
+            run.FinishedAt = now;
+            run.Error = run.Planned == 0 ? "Нет получателей с этим отчётом." : null;
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 }
 
 /// <summary>
-/// Фоновая служба автоотчётов: раз в 30 секунд — наступившие запуски расписаний и очередь отправки. В среде, где Telegram выключен
+/// Фоновая служба автоотчётов: раз в 30 секунд — наступившие запуски, очередь отправки, итоги запусков. В среде, где Telegram выключен
 /// (локально: Telegram:Enabled=false — аккаунт работает на проде), не запускается: две копии одной сессии разорвали бы её.
 /// </summary>
 internal sealed class TelegramReportWorker(TelegramReportRunner runner, IConfiguration config, ILogger<TelegramReportWorker> logger) : BackgroundService

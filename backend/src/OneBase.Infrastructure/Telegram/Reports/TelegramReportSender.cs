@@ -1,21 +1,24 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Telegram;
 using OneBase.Application.Telegram.Reports;
 using OneBase.Domain.Telegram;
+using ReportDocument = OneBase.Application.Telegram.Reports.ReportDocument;
 
 namespace OneBase.Infrastructure.Telegram.Reports;
 
 /// <summary>
-/// Одна отправка автоотчёта в один чат: отчёт → сверка итогов → PNG 16:9 → Telegram → журнал. Временная ошибка сети — повтор (до 3
-/// попыток), FLOOD_WAIT — ожидание без попытки, остальное — ошибка в журнале с понятной причиной.
+/// Одна отправка автоотчёта в один чат: отчёт области → PNG 16:9 → Telegram → журнал. Условие не выполнено (напоминание ТП с заказами) —
+/// «пропущено». Картинка не построилась — уходит текст с ключевыми цифрами (резерв). FLOOD_WAIT — ожидание без попытки; сбой связи —
+/// повтор (до 3 попыток); тайм-аут посреди отправки — «неизвестно, дошёл ли»: автоповтора нет, чтобы не отправить дважды.
 /// </summary>
 public sealed class TelegramReportSender(
     IAppDbContext db,
     ITelegramGateway gateway,
-    IDailyReportRenderer renderer,
-    DailyReportBuilder builder,
+    IReportRenderer renderer,
+    ReportEngine engine,
     TelegramMaterialService materials,
     TimeProvider clock,
     ILogger<TelegramReportSender> logger)
@@ -24,43 +27,38 @@ public sealed class TelegramReportSender(
     public const string Pending = "pending";
     public const string Sending = "sending";
     public const string Failed = "failed";
+    public const string Skipped = "skipped";
+    public const string Unknown = "unknown";
 
     /// <summary>Почему в чат нельзя отправить; null — можно.</summary>
     public static string? ChatProblem(TelegramChat? chat, Guid? accountId) => chat switch
     {
-        null => "Чат не найден у аккаунта автоотчётов — обновите чаты.",
+        null => "Чат не найден у аккаунта автоотчётов — обновите чаты в «Настройки → Telegram → Чаты».",
         _ when chat.AccountId != accountId => "Чат принадлежит другому аккаунту Telegram.",
-        { CanSend: false } => chat.CannotSendReason ?? "В этот чат писать нельзя.",
+        { CanSend: false } => chat.CannotSendReason ?? "В этот чат писать нельзя (бот заблокирован или нет прав).",
         _ => null,
     };
 
-    /// <summary>Отчёт на реальных данных — с показателем из расписания вида и языком из настроек.</summary>
-    public async Task<DailyReport> BuildRealAsync(TelegramReportKind kind, Guid regionId, long? supervisorId, string? supervisorName, DateOnly period, bool check,
-        CancellationToken ct)
+    /// <summary>
+    /// Отчёт запуска для области на реальных данных. at — момент формирования (предпросмотр «на 13:00»); по умолчанию — сейчас в поясе
+    /// расписания. Язык — из настроек, если не задан.
+    /// </summary>
+    public async Task<ReportDocument> BuildAsync(string job, ReportScope scope, DateOnly period, DateTimeOffset? at, string? language, CancellationToken ct)
     {
-        var schedule = await db.TelegramReportSchedules.AsNoTracking().FirstOrDefaultAsync(s => s.Kind == kind, ct) ?? DailyReportSchedules.Default(kind);
         var settings = await db.TelegramReportSettings.AsNoTracking().FirstOrDefaultAsync(ct);
-        var now = DailyReportSchedules.Local(clock.GetUtcNow(), schedule.TimeZone);
-        return await builder.BuildAsync(kind, regionId, supervisorId, supervisorName, period, schedule.Metric == "kg" ? ReportMetric.Kg : ReportMetric.Sum,
-            settings?.Language ?? "ru", now, check, ct);
-    }
-
-    /// <summary>«Ташкент · Азиз Каримов» — регион и супервайзер для журнала.</summary>
-    public async Task<string> ScopeTitleAsync(Guid regionId, long? supervisorId, string? supervisorName, CancellationToken ct)
-    {
-        var region = await db.SalesRegions.AsNoTracking().Where(r => r.Id == regionId).Select(r => new { r.Name, r.SupervisorName }).FirstOrDefaultAsync(ct);
-        var supervisor = supervisorId is not null ? supervisorName : region?.SupervisorName;
-        var title = string.Join(" · ", new[] { region?.Name ?? "—", supervisor }.Where(x => !string.IsNullOrWhiteSpace(x)));
-        return Trim(title, 255);
+        var schedule = await db.TelegramReportJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Code == job, ct);
+        var now = at ?? ReportSchedules.Local(clock.GetUtcNow(), schedule?.TimeZone);
+        return await engine.BuildAsync(job, scope, period, now, language ?? settings?.Language ?? "ru", settings?.NoPurchaseDays ?? 30, ct);
     }
 
     /// <summary>
-    /// Одна попытка: отчёт → сверка → картинки → Telegram. Строка журнала обновляется в любом исходе. retry — временная ошибка ставит
-    /// повтор (по расписанию и вручную); без него (тест) — сразу ошибка.
+    /// Одна попытка: отчёт → картинки → Telegram. Строка журнала обновляется в любом исходе. retry — временная ошибка ставит повтор (по
+    /// расписанию и вручную); без него (тест) — сразу ошибка.
     /// </summary>
-    public async Task<ReportSendResult> AttemptAsync(TelegramReportDelivery delivery, TelegramChat chat, Func<CancellationToken, Task<DailyReport>> build, bool retry,
-        CancellationToken ct)
+    public async Task<ReportSendResult> AttemptAsync(TelegramReportDelivery delivery, TelegramChat chat, Func<CancellationToken, Task<ReportDocument>> build, bool retry,
+        CancellationToken ct, bool test = false)
     {
+        var watch = Stopwatch.StartNew();
         delivery.Status = Sending;
         delivery.Attempts++;
         delivery.LastAttemptAt = clock.GetUtcNow();
@@ -70,46 +68,54 @@ public sealed class TelegramReportSender(
 
         try
         {
-            var report = await build(ct);
-            if (DailyReportMath.Verify(report) is { Count: > 0 } problems)
+            var report = await build(ct) with { Test = test };
+            delivery.ScopeTitle = Trim(report.Scope, 255);
+            delivery.Summary = Trim(report.Summary, 500);
+            delivery.DataAsOf = report.DataAsOf?.ToUniversalTime(); // в базу — только UTC
+            if (!report.Applies)
             {
-                // Итоги не сходятся с суммой строк — такой отчёт не уходит: лучше без отчёта, чем с неверными цифрами.
-                return await FailAsync(delivery, "Отчёт не отправлен: итоги не сходятся с суммой строк. " + string.Join(" ", problems));
+                return await SkipAsync(delivery, report.SkipReason ?? "Условие отчёта не выполнено.", watch);
             }
 
-            var pages = renderer.Render(report);
+            IReadOnlyList<byte[]> pages;
+            try
+            {
+                pages = renderer.Render(report);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Картинка не построилась — уходит текст: получатель всё равно узнаёт цифры.
+                logger.LogError(ex, "Автоотчёт {Delivery}: картинка не построена — отправка текстом", delivery.Id);
+                pages = [];
+            }
+
             delivery.Pages = pages.Count;
             delivery.Bytes = pages.Sum(p => (long)p.Length);
-            delivery.Summary = Trim(DailyReportText.Summary(report), 500);
-            delivery.DataAsOf = report.DataAsOf?.ToUniversalTime(); // в базу — только UTC
-            var files = pages.Select((p, i) => new TelegramFile($"onebase-{delivery.Kind.ToString().ToLowerInvariant()}-{report.Date:yyyyMMdd}-{i + 1}.png", "image/png", p, Photo: true))
-                .ToList();
+            var files = pages.Select((p, i) => new TelegramFile($"onebase-{report.Job.Replace('.', '-')}-{report.Date:yyyyMMdd}-{i + 1}.png", "image/png", p, Photo: true)).ToList();
+            var text = pages.Count > 0 ? Trim(report.Caption, TelegramRules.MaxCaptionLength) : Trim(report.Plain(), TelegramRules.MaxMessageLength);
             var sent = await gateway.SendAsync(delivery.AccountId, new TelegramPeerRef(chat.PeerId, chat.Type, chat.IsChannelPeer, chat.AccessHash),
-                new TelegramOutgoing(Trim(DailyReportText.Caption(report), TelegramRules.MaxCaptionLength), false, files), ct);
+                new TelegramOutgoing(text, false, files), ct);
 
             delivery.Status = Sent;
             delivery.SentAt = clock.GetUtcNow();
-            delivery.Error = null;
+            delivery.Error = pages.Count == 0 ? "Картинка не построилась — отчёт отправлен текстом." : null;
             delivery.NextAttemptAt = null;
             delivery.MessageIds = Trim(string.Join(',', sent.MessageIds), 500);
+            delivery.DurationMs = (int)watch.ElapsedMilliseconds;
             await db.SaveChangesAsync(CancellationToken.None);
 
-            // Реальный отчёт — материал чата: Telegram-агент ответит на «что в отчёте?» по тому, что ушло. Демонстрационный — нет.
-            if (!report.Demo)
+            // Реальный отчёт — материал чата: Telegram-агент ответит на «что в отчёте?» по тому, что ушло.
+            try
             {
-                try
-                {
-                    await materials.RecordTextAsync(delivery.AccountId, chat.PeerId, "report",
-                        $"{DailyReportTexts.Name(report.Kind, report.Language)} · {report.Region} · {report.Date:dd.MM.yyyy}", DailyReportText.Plain(report), null,
-                        delivery.CreatedById, CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Автоотчёт {Delivery}: материал для чата не записан", delivery.Id);
-                }
+                await materials.RecordTextAsync(delivery.AccountId, chat.PeerId, "report", $"{report.Title} · {report.Scope} · {report.Period}", report.Plain(), null,
+                    delivery.CreatedById, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Автоотчёт {Delivery}: материал для чата не записан", delivery.Id);
             }
 
-            logger.LogInformation("Автоотчёт {Kind} за {Period} отправлен: {Recipient}, страниц {Pages}", delivery.Kind, delivery.Period, delivery.RecipientTitle, pages.Count);
+            logger.LogInformation("Автоотчёт {Job} за {Period} отправлен: {Recipient}, страниц {Pages}", delivery.Report, delivery.Period, delivery.RecipientTitle, pages.Count);
             return Result(delivery);
         }
         catch (TelegramException ex) when (ex.Kind == TelegramErrorKind.Flood)
@@ -119,6 +125,16 @@ public sealed class TelegramReportSender(
             delivery.Attempts = Math.Max(0, delivery.Attempts - 1);
             delivery.NextAttemptAt = clock.GetUtcNow().AddSeconds(Math.Max(ex.WaitSeconds ?? 30, 5));
             delivery.Error = ex.Message;
+            await db.SaveChangesAsync(CancellationToken.None);
+            return Result(delivery);
+        }
+        catch (TelegramException ex) when (ex.Kind == TelegramErrorKind.Transient && IsTimeout(ex))
+        {
+            // Тайм-аут посреди отправки: Telegram мог принять сообщение. Повтор — только вручную, после проверки чата.
+            delivery.Status = Unknown;
+            delivery.NextAttemptAt = null;
+            delivery.Error = "Неизвестно, дошёл ли отчёт: Telegram не ответил вовремя. Автоповтора нет — проверьте чат и при необходимости отправьте вручную.";
+            delivery.DurationMs = (int)watch.ElapsedMilliseconds;
             await db.SaveChangesAsync(CancellationToken.None);
             return Result(delivery);
         }
@@ -132,26 +148,40 @@ public sealed class TelegramReportSender(
         }
         catch (TelegramException ex)
         {
-            return await FailAsync(delivery, ex.Message);
+            return await FailAsync(delivery, ex.Kind == TelegramErrorKind.Permanent ? $"Получатель недоступен: {ex.Message}" : ex.Message, watch);
         }
-        catch (KeyNotFoundException ex)
+        catch (Exception ex) when (ex is KeyNotFoundException or ArgumentException)
         {
-            return await FailAsync(delivery, ex.Message);
+            return await FailAsync(delivery, ex.Message, watch);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             logger.LogError(ex, "Автоотчёт {Delivery}: ошибка формирования или отправки", delivery.Id);
-            return await FailAsync(delivery, "Внутренняя ошибка OneBase — подробности в журнале сервера.");
+            return await FailAsync(delivery, "Внутренняя ошибка OneBase — подробности в журнале сервера.", watch);
         }
     }
 
-    public async Task<ReportSendResult> FailAsync(TelegramReportDelivery delivery, string error)
+    private static bool IsTimeout(TelegramException ex) =>
+        ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("не ответил", StringComparison.OrdinalIgnoreCase);
+
+    public async Task<ReportSendResult> FailAsync(TelegramReportDelivery delivery, string error, Stopwatch? watch = null)
     {
         delivery.Status = Failed;
         delivery.Error = Trim(error, 1000);
         delivery.NextAttemptAt = null;
+        delivery.DurationMs = watch is null ? delivery.DurationMs : (int)watch.ElapsedMilliseconds;
         await db.SaveChangesAsync(CancellationToken.None);
-        logger.LogWarning("Автоотчёт {Kind} за {Period} не отправлен ({Recipient}): {Error}", delivery.Kind, delivery.Period, delivery.RecipientTitle, delivery.Error);
+        logger.LogWarning("Автоотчёт {Job} за {Period} не отправлен ({Recipient}): {Error}", delivery.Report, delivery.Period, delivery.RecipientTitle, delivery.Error);
+        return Result(delivery);
+    }
+
+    public async Task<ReportSendResult> SkipAsync(TelegramReportDelivery delivery, string reason, Stopwatch? watch = null)
+    {
+        delivery.Status = Skipped;
+        delivery.Error = Trim(reason, 1000);
+        delivery.NextAttemptAt = null;
+        delivery.DurationMs = watch is null ? delivery.DurationMs : (int)watch.ElapsedMilliseconds;
+        await db.SaveChangesAsync(CancellationToken.None);
         return Result(delivery);
     }
 

@@ -263,6 +263,8 @@ internal sealed class GetAgentVisitsTool(SalesDataLoader loader, IAppDbContext d
 {
     private const int MaxDays = 31;
 
+    private sealed record VisitOrder(long Id, DateOnly CreatedDate, long? MarketId, string Status, decimal TotalPrice, decimal TotalWeight);
+
     public override string Name => "get_agent_visits";
     public override string Title => "Визиты ТП по точкам";
     public override string Source => KnowledgeSources.SalesVisits;
@@ -272,8 +274,10 @@ internal sealed class GetAgentVisitsTool(SalesDataLoader loader, IAppDbContext d
 
     public override string Description =>
         "Куда ходил торговый представитель: каждый визит Linko за день или отрезок до 31 дня — время, точка (название, адрес), по маршруту (в плане) " +
-        "или вне маршрута, выполнен ли, был ли в этот день в точке заказ этого ТП (число, сумма, кг, статус). Итоги: план, по маршруту, вне маршрута, " +
-        "не посещено, заказы с визитов и заказы без визита. Без дат — сегодня.";
+        "или вне маршрута, выполнен ли, был ли в этот день в точке заказ этого ТП (число, сумма, кг, статус). Итоги и разбивка по дням — полные " +
+        "(не зависят от длины списка визитов): план, по маршруту, вне маршрута, не посещено, визиты с заказом по маршруту и вне, заказы (число, " +
+        "сумма, кг, точки) с визитов по маршруту, вне маршрута и без визита. Заказы — введённые ТП в эти дни (любой статус, кроме отменённых и " +
+        "недоставленных). Без дат — сегодня. Итоги «Продаж» (принятые заказы, выручка, АКБ) по маршруту за отрезок — get_visits.";
 
     public override JsonElement InputSchema { get; } = Schema(DrillLookup.AgentArg, DrillLookup.DateArg, DrillLookup.FromArg, DrillLookup.ToArg);
 
@@ -289,8 +293,31 @@ internal sealed class GetAgentVisitsTool(SalesDataLoader loader, IAppDbContext d
             .ToListAsync(ct);
         var orders = await db.LinkoOrders.AsNoTracking()
             .Where(o => o.AgentId == agentId && o.CreatedDate >= from && o.CreatedDate <= to)
-            .Select(o => new { o.Id, o.CreatedDate, o.MarketId, o.Status, o.TotalPrice, o.TotalWeight })
+            .Select(o => new VisitOrder(o.Id, o.CreatedDate, o.MarketId, o.Status, o.TotalPrice, o.TotalWeight))
             .ToListAsync(ct);
+        // Заказ «по маршруту» — в день ввода в этой точке был выполненный визит по плану (любого ТП, как календарь визитов), «вне маршрута» —
+        // только визит без плана, иначе «без визита». Отменённые и недоставленные в итогах по маршруту не считаются.
+        var orderMarkets = orders.Where(o => o.MarketId != null).Select(o => o.MarketId!.Value).Distinct().ToArray();
+        var doneAt = (await db.LinkoVisits.AsNoTracking()
+                .Where(v => v.Status == "done" && v.MarketId != null && orderMarkets.Contains(v.MarketId.Value) && v.Day >= from && v.Day <= to)
+                .Select(v => new { Market = v.MarketId!.Value, v.Day, v.IsInPlan })
+                .ToListAsync(ct))
+            .GroupBy(v => (v.Market, v.Day))
+            .ToDictionary(g => g.Key, g => g.Any(v => v.IsInPlan));
+        string RouteOf(DateOnly day, long? market) =>
+            market is { } m && doneAt.TryGetValue((m, day), out var inPlan) ? inPlan ? "byRoute" : "offRoute" : "noVisit";
+        var taken = orders.Where(o => !OneBase.Application.Field.LinkoMirrorSalesProvider.NotTaken.Contains(o.Status)).ToList();
+        object Orders(IEnumerable<VisitOrder> list)
+        {
+            var items = list.ToList();
+            return new
+            {
+                Count = items.Count,
+                SumUzs = R(items.Sum(o => o.TotalPrice)),
+                Kg = R(items.Sum(o => o.TotalWeight), 1),
+                Stores = items.Where(o => o.MarketId != null).Select(o => o.MarketId).Distinct().Count(),
+            };
+        }
         var marketIds = visits.Where(v => v.MarketId != null).Select(v => v.MarketId!.Value)
             .Concat(orders.Where(o => o.MarketId != null).Select(o => o.MarketId!.Value))
             .Distinct().ToArray();
@@ -321,6 +348,10 @@ internal sealed class GetAgentVisitsTool(SalesDataLoader loader, IAppDbContext d
             DoneOffRoute = g.Count(v => !v.IsInPlan && v.Status == "done"),
             NotVisited = g.Count(v => v.IsInPlan && v.Status != "done"),
             VisitsWithOrder = g.Count(v => v.Status == "done" && v.MarketId is { } m && ordersAt.Contains((g.Key, m))),
+            VisitsWithOrderByRoute = g.Count(v => v.IsInPlan && v.Status == "done" && v.MarketId is { } m && ordersAt.Contains((g.Key, m))),
+            OrdersByRoute = Orders(taken.Where(o => o.CreatedDate == g.Key && RouteOf(o.CreatedDate, o.MarketId) == "byRoute")),
+            OrdersOffRoute = Orders(taken.Where(o => o.CreatedDate == g.Key && RouteOf(o.CreatedDate, o.MarketId) == "offRoute")),
+            OrdersNoVisit = Orders(taken.Where(o => o.CreatedDate == g.Key && RouteOf(o.CreatedDate, o.MarketId) == "noVisit")),
         }).ToList();
 
         return Data(new
@@ -337,6 +368,13 @@ internal sealed class GetAgentVisitsTool(SalesDataLoader loader, IAppDbContext d
                 DoneAll = done.Count,
                 NotVisited = visits.Count(v => v.IsInPlan && v.Status != "done"),
                 VisitsWithOrder = done.Count(v => v.MarketId is { } m && ordersAt.Contains((v.Day, m))),
+                VisitsWithOrderByRoute = done.Count(v => v.IsInPlan && v.MarketId is { } m && ordersAt.Contains((v.Day, m))),
+                VisitsWithOrderOffRoute = done.Count(v => !v.IsInPlan && v.MarketId is { } m && ordersAt.Contains((v.Day, m))),
+                OrdersByRoute = Orders(taken.Where(o => RouteOf(o.CreatedDate, o.MarketId) == "byRoute")),
+                OrdersOffRoute = Orders(taken.Where(o => RouteOf(o.CreatedDate, o.MarketId) == "offRoute")),
+                OrdersNoVisit = Orders(taken.Where(o => RouteOf(o.CreatedDate, o.MarketId) == "noVisit")),
+                OrdersTaken = Orders(taken),
+                OrdersCancelled = orders.Count - taken.Count,
                 Orders = orders.Count,
                 OrdersSumUzs = R(orders.Sum(o => o.TotalPrice)),
                 OrdersWithoutVisit = withoutVisit.Count,
@@ -363,7 +401,9 @@ internal sealed class GetAgentVisitsTool(SalesDataLoader loader, IAppDbContext d
                 SumUzs = R(o.TotalPrice),
                 Kg = R(o.TotalWeight, 1),
             }),
-            Note = "ByRoute — визит из плана (маршрута) Linko; заказ визита — заказ этого ТП в этой точке, введённый в день визита (любой статус).",
+            Note = "ByRoute — визит из плана (маршрута) Linko; заказ визита — заказ этого ТП в этой точке, введённый в день визита (любой статус). " +
+                   "Totals и Days — полные; Visits и OrdersWithoutVisit — первые строки списка (VisitsTotal — сколько всего). OrdersByRoute / OffRoute / " +
+                   "NoVisit — заказы без отменённых и недоставленных, по визитам любого ТП в точке в день ввода (как календарь визитов).",
         }, new DataSource($"Linko → визиты {name}", from == to ? DrillLookup.Date(from) : $"{DrillLookup.Date(from)} — {DrillLookup.Date(to)}",
             $"/sales/agents/{agentId}"));
     }

@@ -11,11 +11,38 @@ import { kg, money, num } from "@/lib/sales/format";
 import type { AutoOrderItem, AutoOrderView } from "@/lib/sales/types";
 
 // Автозаказ на «Рек. остатке»: регион → рекомендуемый заказ в коробках (сервер, StockService.AutoOrderAsync) → правка коробок → акт
-// приёма-передачи в Word (сервер собирает его по коробкам, названия, единицы и цены — свои). Правки держатся в браузере по региону.
+// приёма-передачи в Excel (сервер собирает его по коробкам, названия, единицы и цены — свои; остатков завода в акте нет). Правки держатся
+// в браузере по региону.
 
 const storageKey = "onebase.autoorder";
+const unitKey = "onebase.autoorder.unit";
 type Edits = Record<string, Record<string, number>>;
 type Show = "rec" | "all" | "edited";
+type Unit = "kg" | "boxes" | "pieces" | "sum";
+
+const units: { key: Unit; label: string; short: string }[] = [
+  { key: "kg", label: "кг", short: "кг" },
+  { key: "boxes", label: "коробки", short: "кор." },
+  { key: "pieces", label: "штуки", short: "шт" },
+  { key: "sum", label: "деньги", short: "сум" },
+];
+
+function loadUnit(): Unit {
+  try {
+    const saved = window.localStorage.getItem(unitKey);
+    return units.some((u) => u.key === saved) ? (saved as Unit) : "kg";
+  } catch {
+    return "kg";
+  }
+}
+
+function saveUnit(unit: Unit) {
+  try {
+    window.localStorage.setItem(unitKey, unit);
+  } catch {
+    // приватный режим — выбор живёт до перезагрузки страницы
+  }
+}
 
 function loadEdits(): Edits {
   try {
@@ -45,6 +72,37 @@ const sumOf = (it: AutoOrderItem, boxes: number) => (it.price ? Math.round(qtyOf
 // Для вставки в Excel: дробь с запятой, без разделителя тысяч — как ждёт русская и узбекская локаль.
 const cellNum = (n: number) => n.toLocaleString("ru-RU", { useGrouping: false, maximumFractionDigits: 3 });
 const qtyText = (it: AutoOrderItem, q: number) => num(q, it.unit === "кг" && q % 1 ? 1 : 0);
+
+/** Килограммы строки в выбранной единице: коробки — по весу коробки, штуки — единицы Linko (шт или кг), деньги — по цене прайса. */
+function kgIn(it: AutoOrderItem, kgValue: number | null | undefined, unit: Unit): number | null {
+  if (kgValue == null) return null;
+  if (unit === "kg") return kgValue;
+  if (!it.boxKg) return null;
+  return boxesIn(it, kgValue / it.boxKg, unit);
+}
+
+/** Коробки строки в выбранной единице. */
+function boxesIn(it: AutoOrderItem, boxes: number, unit: Unit): number | null {
+  if (unit === "boxes") return boxes;
+  if (unit === "kg") return it.boxKg ? boxes * it.boxKg : null;
+  const quantity = boxes * it.unitsPerBox;
+  return unit === "pieces" ? quantity : it.price ? quantity * it.price : null;
+}
+
+/** Число в единице; у штук — с единицей Linko строки (весовой товар считается в кг). */
+function UnitValue({ it, value, unit, suffix = false }: { it: AutoOrderItem; value: number | null; unit: Unit; suffix?: boolean }) {
+  const t = useT();
+  if (value == null) return <>—</>;
+  const text =
+    unit === "sum" ? money(value, t) : unit === "boxes" ? num(value, Math.abs(value) < 10 && value % 1 ? 1 : 0) : unit === "pieces" ? qtyText(it, value) : kg(value);
+  const label = unit === "pieces" ? t(it.unit) : suffix ? t(units.find((u) => u.key === unit)!.short) : null;
+  return (
+    <>
+      {text}
+      {label && <span className="text-ink-3"> {label}</span>}
+    </>
+  );
+}
 
 /** Карточка «Автозаказ» над таблицей «Рек. остатка»: свёрнута до «Собрать заказ». */
 export function AutoOrder({ initialRegion }: { initialRegion: string | null }) {
@@ -77,7 +135,7 @@ export function AutoOrder({ initialRegion }: { initialRegion: string | null }) {
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-ink">{t("Автозаказ")}</h2>
-          <p className="text-xs text-ink-3">{t("Заказ на склад региона в коробках: рекомендация, ваша правка и акт приёма-передачи в Word")}</p>
+          <p className="text-xs text-ink-3">{t("Заказ на склад региона в коробках: рекомендация, ваша правка и акт приёма-передачи в Excel")}</p>
         </div>
         {open ? (
           <Button size="sm" onClick={() => setOpen(false)}>
@@ -113,6 +171,12 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
   const [date, setDate] = useState(today);
   const [show, setShow] = useState<Show>("rec");
   const [query, setQuery] = useState("");
+  const [unit, setUnitState] = useState<Unit>(loadUnit);
+  const setUnit = (u: Unit) => {
+    setUnitState(u);
+    saveUnit(u);
+  };
+  const unitShort = t(units.find((u) => u.key === unit)!.short);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const mine = edits[view.regionId] ?? {};
@@ -175,7 +239,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
     const [y, m, d] = date.split("-");
     const name = `${t("Акт приёма-передачи")} ${view.regionName} ${d}.${m}.${y}`.replace(/[\\/:*?"<>|«»]/g, " ").replace(/\s+/g, " ").trim();
     try {
-      const response = await fetch(`/bff/api/sales/stock/autoorder/act/${encodeURIComponent(name)}.docx`, {
+      const response = await fetch(`/bff/api/sales/stock/autoorder/act/${encodeURIComponent(name)}.xlsx`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ regionId: view.regionId, date, lines: picked.map(({ it, boxes }) => ({ productId: it.productId, boxes })) }),
@@ -193,7 +257,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
       }
 
       const url = URL.createObjectURL(await response.blob());
-      const a = Object.assign(document.createElement("a"), { href: url, download: `${name}.docx` });
+      const a = Object.assign(document.createElement("a"), { href: url, download: `${name}.xlsx` });
       document.body.append(a);
       a.click();
       a.remove();
@@ -222,7 +286,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
   const step = "flex size-8 items-center justify-center rounded-md border border-line text-ink-2 hover:bg-muted disabled:opacity-40 max-lg:size-10";
   return (
     <>
-      <div className="grid grid-cols-1 gap-3 px-4 pt-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-[minmax(180px,220px)_170px_auto_minmax(200px,1fr)] lg:items-end">
+      <div className="grid grid-cols-1 gap-3 px-4 pt-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-[minmax(180px,220px)_170px_auto_auto] lg:items-end 2xl:grid-cols-[minmax(180px,220px)_170px_auto_auto_minmax(200px,1fr)]">
         <label className="block">
           <span className={caption}>{t("Склад региона")}</span>
           <select value={view.regionId} onChange={(e) => onRegion(e.target.value)} className={`${control} font-medium`}>
@@ -255,7 +319,27 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
             ))}
           </div>
         </div>
-        <div>
+        <div className="min-w-0">
+          <span className={caption}>{t("Единицы")}</span>
+          <div
+            className="no-scrollbar flex max-w-full overflow-x-auto rounded-lg border border-line text-sm"
+            role="group"
+            title={t("Остатки завода и склада и рекомендация: кг, коробки (по весу коробки), штуки (единицы Linko) или деньги (по прайсу)")}
+          >
+            {units.map((u) => (
+              <button
+                key={u.key}
+                type="button"
+                onClick={() => setUnit(u.key)}
+                aria-pressed={unit === u.key}
+                className={`flex h-10 shrink-0 items-center whitespace-nowrap px-3 max-lg:h-11 ${unit === u.key ? "bg-accent text-white" : "bg-surface text-ink hover:bg-muted"}`}
+              >
+                {t(u.label)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="sm:col-span-2 lg:col-span-4 2xl:col-span-1">
           <span className={caption}>{t("Поиск")}</span>
           <SearchInput value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Название, код или категория")} />
         </div>
@@ -285,8 +369,17 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
           <thead className="sticky top-0 z-[2] bg-surface-solid shadow-[inset_0_-1px_0_var(--color-line)]">
             <tr>
               <th className={`${th} sticky left-0 z-[1] bg-surface-solid pl-4 text-left sm:pl-5`}>{t("Товар")}</th>
-              <th className={`${th} text-right max-lg:hidden`} title={t("Остаток склада региона; бронь — заказы магазинов, которые ещё не отгружены; рекомендация считается от доступного")}>
-                {t("На складе, кг")}
+              <th
+                className={`${th} text-right max-lg:hidden`}
+                title={t("Доступно на складе завода: остаток минус бронь (заказы и перемещения, которые ещё не отгружены, и перемещения в пути к дилерам). В акт не попадает.")}
+              >
+                {t("Завод, доступно, {unit}", { unit: unitShort })}
+              </th>
+              <th
+                className={`${th} text-right max-lg:hidden`}
+                title={t("Доступно на складе региона: остаток минус бронь (заказы магазинов, которые ещё не отгружены, и перемещения в пути); от него считается рекомендация")}
+              >
+                {t("Склад, доступно, {unit}", { unit: unitShort })}
               </th>
               <th className={`${th} text-right max-lg:hidden`}>{t("Рекомендация")}</th>
               <th className={`${th} text-center`}>{t("Коробки")}</th>
@@ -299,7 +392,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-ink-3">
+                <td colSpan={9} className="px-4 py-8 text-center text-sm text-ink-3">
                   {needle
                     ? t("Ничего не найдено")
                     : show === "edited"
@@ -325,15 +418,18 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
                           .join(" · ")}
                       </span>
                       <span className="block text-xs text-ink-3 lg:hidden">
-                        <Stock it={it} inline />
+                        <Stock it={it} unit={unit} inline />
                       </span>
                     </span>
                   </td>
                   <td className={`${td} text-right tabular-nums max-lg:hidden`}>
-                    <Stock it={it} />
+                    <Factory it={it} unit={unit} />
                   </td>
                   <td className={`${td} text-right tabular-nums max-lg:hidden`}>
-                    <Recommendation it={it} changed={changed} onReset={() => resetRow(it)} />
+                    <Stock it={it} unit={unit} />
+                  </td>
+                  <td className={`${td} text-right tabular-nums max-lg:hidden`}>
+                    <Recommendation it={it} unit={unit} changed={changed} onReset={() => resetRow(it)} />
                   </td>
                   <td className={td}>
                     {/* На телефоне колонки «Рекомендация» нет — она под полем, чтобы коробки были видны без прокрутки вбок. */}
@@ -357,7 +453,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
                       </button>
                     </div>
                     <div className="mt-1 text-center text-xs lg:hidden">
-                      <Recommendation it={it} changed={changed} onReset={() => resetRow(it)} short />
+                      <Recommendation it={it} unit={unit} changed={changed} onReset={() => resetRow(it)} short />
                     </div>
                   </td>
                   <td className={`${td} whitespace-nowrap text-right tabular-nums`}>
@@ -393,7 +489,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
 
       <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3.5 sm:px-5">
         <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-3 max-lg:basis-full">
-          {t("Рекомендация — заказ, который доводит доступный остаток склада (остаток − бронь: заказы магазинов, которые ещё не отгружены) до запаса на {days} дн. продаж, в целых коробках. Цена — прайс «{priceList}».", {
+          {t("Рекомендация — заказ, который доводит доступный остаток склада (остаток − бронь: заказы магазинов, которые ещё не отгружены, и перемещения в пути) до запаса на {days} дн. продаж, в целых коробках. Цена — прайс «{priceList}».", {
             days: view.coverDays,
             priceList: view.priceList ?? "Дилерга кириш нарх",
           })}
@@ -408,7 +504,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
           <Button variant="primary" onClick={download} disabled={busy} className="max-sm:w-full">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
             {t("Акт приёма-передачи")}
-            <span className="rounded bg-white/20 px-1.5 py-px text-[10px] font-semibold uppercase">Word</span>
+            <span className="rounded bg-white/20 px-1.5 py-px text-[10px] font-semibold uppercase">Excel</span>
           </Button>
         </div>
       </div>
@@ -416,45 +512,65 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
   );
 }
 
-/** Остаток склада региона и бронь: доступно = остаток − бронь (от него — рекомендация). inline — строкой под названием на телефоне. */
-function Stock({ it, inline = false }: { it: AutoOrderItem; inline?: boolean }) {
+/**
+ * Доступно на складе региона — остаток минус бронь (от него — рекомендация); остаток и бронь — в подсказке. inline — строкой под названием
+ * на телефоне (там же доступное на заводе: колонки «Завод» на телефоне нет).
+ */
+function Stock({ it, unit, inline = false }: { it: AutoOrderItem; unit: Unit; inline?: boolean }) {
   const t = useT();
-  const reserved = it.reservedKg > 0;
+  const free = it.freeKg ?? it.stockKg;
+  const v = (value: number | null | undefined) => <UnitValue it={it} value={kgIn(it, value, unit)} unit={unit} suffix={inline} />;
   if (inline) {
     return (
       <>
-        {t("на складе {n} кг", { n: kg(it.stockKg) })}
-        {reserved && ` · ${t("бронь {r} кг · доступно {f} кг", { r: kg(it.reservedKg), f: kg(it.freeKg) })}`}
+        {t("доступно на складе")} {v(free)}
+        {it.factoryKg != null && (
+          <>
+            {" "}
+            · {t("на заводе")} {v(it.factoryFreeKg ?? it.factoryKg)}
+          </>
+        )}
       </>
     );
   }
 
   return (
-    <span className="inline-flex flex-col items-end leading-tight">
-      <span className={it.stockKg > 0 ? "text-ink" : "text-ink-3"}>{it.stockKg > 0 ? kg(it.stockKg) : "0"}</span>
-      {reserved && (
-        <span className="whitespace-nowrap text-[11px] text-ink-3" title={t("Заказы магазинов, которые ещё не отгружены: рекомендация считается от доступного")}>
-          {t("бронь {r} · доступно {f}", { r: kg(it.reservedKg), f: kg(it.freeKg) })}
-        </span>
-      )}
+    <span className={free > 0 ? "text-ink" : "text-ink-3"} title={t("Остаток {stock} кг, бронь {reserved} кг", { stock: kg(it.stockKg), reserved: kg(it.reservedKg) })}>
+      {free > 0 ? v(free) : "0"}
     </span>
   );
 }
 
-/** Рекомендация строки; после правки — ссылка, возвращающая её. short — подпись под полем на телефоне. */
-function Recommendation({ it, changed, onReset, short = false }: { it: AutoOrderItem; changed: boolean; onReset: () => void; short?: boolean }) {
+/** Доступно на складе завода — остаток минус бронь: сколько можно отгрузить; остаток и бронь — в подсказке. В акт не попадает. */
+function Factory({ it, unit }: { it: AutoOrderItem; unit: Unit }) {
   const t = useT();
-  const text = it.recBoxes ? t("{n} кор.", { n: num(it.recBoxes) }) : short ? "0" : "—";
+  if (it.factoryKg == null) return <span className="text-ink-3" title={t("Остаток завода не загружен")}>—</span>;
+  const free = it.factoryFreeKg ?? it.factoryKg;
+  return (
+    <span className={free > 0 ? "text-ink" : "text-ink-3"} title={t("Остаток {stock} кг, бронь {reserved} кг", { stock: kg(it.factoryKg), reserved: kg(it.factoryKg - free) })}>
+      {free > 0 ? <UnitValue it={it} value={kgIn(it, free, unit)} unit={unit} /> : "0"}
+    </span>
+  );
+}
+
+/**
+ * Рекомендация строки — в коробках или в выбранной единице; после правки — ссылка, возвращающая её. short — подпись под полем на
+ * телефоне (там всегда коробки: поле рядом — в коробках).
+ */
+function Recommendation({ it, unit, changed, onReset, short = false }: { it: AutoOrderItem; unit: Unit; changed: boolean; onReset: () => void; short?: boolean }) {
+  const t = useT();
+  const boxes = it.recBoxes ? t("{n} кор.", { n: num(it.recBoxes) }) : short ? "0" : "—";
+  const value = !it.recBoxes || unit === "boxes" ? boxes : <UnitValue it={it} value={boxesIn(it, it.recBoxes, unit)} unit={unit} suffix />;
   if (changed) {
     return (
       <button type="button" onClick={onReset} title={t("Вернуть рекомендацию")} className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline max-lg:min-h-8">
         <RotateCcw className="size-3" />
-        {short ? t("рек. {n}", { n: text }) : it.recBoxes ? text : "0"}
+        {short ? t("рек. {n}", { n: boxes }) : it.recBoxes ? value : "0"}
       </button>
     );
   }
 
-  return <span className="text-ink-3">{short ? (it.recBoxes ? t("рек. {n}", { n: text }) : null) : text}</span>;
+  return <span className="text-ink-3">{short ? (it.recBoxes ? t("рек. {n}", { n: boxes }) : null) : value}</span>;
 }
 
 function Fact({ label, value }: { label: string; value: string }) {

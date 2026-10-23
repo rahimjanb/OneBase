@@ -63,7 +63,8 @@ public abstract class DataTool : ITool
     public static string MonthName(int month) => MonthNames[month - 1];
 
     public static string PeriodText(PeriodInfo p) =>
-        $"{MonthName(p.Month)} {p.Year}, данные по {p.DataThrough:dd.MM.yyyy}";
+        $"{MonthName(p.Month)} {p.Year}, данные по {p.DataThrough:dd.MM.yyyy}" +
+        (p.Today == p.DataThrough ? " (сегодня — неполный день, на время последней синхронизации Linko)" : "");
 
     public static string Query(int year, int month) => $"year={year}&month={month}";
 
@@ -76,7 +77,7 @@ public abstract class DataTool : ITool
         DataThrough = p.DataThrough.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         p.WorkedDays,
         p.DaysInMonth,
-        Complete = p.DataThrough.Day >= p.DaysInMonth,
+        Complete = p.Closed,
     };
 
     /// <summary>Округление: кг и суммы — до целых.</summary>

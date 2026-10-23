@@ -205,8 +205,8 @@ const dict: Dict = {
   "текущий темп × {days} дн. (отработано {worked})": "joriy sur'at × {days} kun (ishlangan {worked})",
   "{month}, 1–{day} числа": "{month}, 1–{day}-kunlar",
   "база — {month}, кто пока молчит": "baza — {month}, hozircha jim turganlar",
-  "Отчёт — по {date}, последний полный день: приёмки сегодняшнего дня войдут в отчёт завтра":
-    "Hisobot — {date} gacha, oxirgi to'liq kun: bugungi qabullar hisobotga ertaga kiradi",
+  "Отчёт — по {date} включительно; за сегодняшний день — данные на время последней синхронизации Linko (каждые 30 минут)":
+    "Hisobot — {date} ni qo'shib; bugungi kun uchun — Linko bilan oxirgi sinxronlash vaqtidagi ma'lumotlar (har 30 daqiqada)",
   "данные по {date}": "{date} holatiga ma'lumot",
   "вакансии": "bo'sh o'rin",
   "вакансий": "bo'sh o'rin",
@@ -430,12 +430,12 @@ const dict: Dict = {
   "Выручка в {currency}:": "{currency} dagi tushum:",
   "({orders}) — курса в данных нет, поэтому с сумами не складывается; вес этих заказов в факт входит.":
     "({orders}) — ma'lumotlarda kurs yo'q, shuning uchun so'm bilan qo'shilmaydi; bu buyurtmalar vazni faktga kiradi.",
-  "проданный заказ этого месяца принят после отчётного дня — сегодня или с датой приёмки в будущем. Отчёт идёт по последний полный день (вчера): в факт он попадёт на следующий день после приёмки.":
-    "ta shu oyda sotilgan buyurtma hisobot kunidan keyin qabul qilingan — bugun yoki kelajakdagi qabul sanasi bilan. Hisobot oxirgi to'liq kungacha (kecha): faktga qabuldan keyingi kuni kiradi.",
-  "проданных заказа этого месяца приняты после отчётного дня — сегодня или с датой приёмки в будущем. Отчёт идёт по последний полный день (вчера): в факт они попадут на следующий день после приёмки.":
-    "ta shu oyda sotilgan buyurtma hisobot kunidan keyin qabul qilingan — bugun yoki kelajakdagi qabul sanasi bilan. Hisobot oxirgi to'liq kungacha (kecha): faktga qabuldan keyingi kuni kiradi.",
-  "проданных заказов этого месяца приняты после отчётного дня — сегодня или с датой приёмки в будущем. Отчёт идёт по последний полный день (вчера): в факт они попадут на следующий день после приёмки.":
-    "ta shu oyda sotilgan buyurtma hisobot kunidan keyin qabul qilingan — bugun yoki kelajakdagi qabul sanasi bilan. Hisobot oxirgi to'liq kungacha (kecha): faktga qabuldan keyingi kuni kiradi.",
+  "проданный заказ этого месяца принят после отчётного дня — с датой приёмки в будущем: в факт он попадёт в день приёмки.":
+    "ta shu oyda sotilgan buyurtma hisobot kunidan keyin qabul qilingan — kelajakdagi qabul sanasi bilan: faktga qabul kunida kiradi.",
+  "проданных заказа этого месяца приняты после отчётного дня — с датой приёмки в будущем: в факт они попадут в день приёмки.":
+    "ta shu oyda sotilgan buyurtma hisobot kunidan keyin qabul qilingan — kelajakdagi qabul sanasi bilan: faktga qabul kunida kiradi.",
+  "проданных заказов этого месяца приняты после отчётного дня — с датой приёмки в будущем: в факт они попадут в день приёмки.":
+    "ta shu oyda sotilgan buyurtma hisobot kunidan keyin qabul qilingan — kelajakdagi qabul sanasi bilan: faktga qabul kunida kiradi.",
   "возвратов с нулевым весом в шапке учтены по строкам: {kg} кг. Шапке документа верить нельзя — у них вес лежит только в строках.":
     "ta sarlavhada nol vaznli qaytarish qatorlar bo'yicha hisobga olindi: {kg} kg. Hujjat sarlavhasiga ishonib bo'lmaydi — ularda vazn faqat qatorlarda.",
   "Вне категорий отчёта": "Hisobot toifalaridan tashqari",
@@ -574,8 +574,8 @@ const dict: Dict = {
     "«Dala nazorati» bilan vazn mos keladi, diler summasi esa farq qilishi mumkin: bu yerda narx — diler qabul qilgan Linko hujjatidan, birlamchi jadvali esa yangi prays narxlariga Linko'dan kechroq o'tishi mumkin. Jadval jo'natmani yuklashda yozadi, bu yerda u ko'chirish «отдано» bo'lganda paydo bo'ladi — yangi jo'natmalar bir-ikki kun kechikishi mumkin.",
   "Цены завода в Linko нет, поэтому «суммы завода», как в таблице первички, здесь нет. План и факт по категориям, дилерам и прямым клиентам — всегда в кг. Коробки — по весу коробки из справочника (как в таблице первички), у остальных товаров — из названия, если он делится на вес единицы ({kg} кг с начала года без коробок).":
     "Linko'da zavod narxi yo'q, shuning uchun birlamchi jadvalidagi kabi «zavod summasi» bu yerda yo'q. Toifalar, dilerlar va to'g'ridan-to'g'ri mijozlar bo'yicha reja va fakt — doim kg da. Qutilar — ma'lumotnomadagi quti vazni bo'yicha (birlamchi jadvalidagidek), boshqa tovarlarda — nomidan, agar u birlik vazniga bo'linsa (yil boshidan qutisiz {kg} kg).",
-  "План — загруженный в OneBase план вида «Первичка»{noPlan}; строки позже отчётного дня (вчера, не позже синхронизации) в отчёт не входят; прогноз — по дате данных{asOf}, а не по сегодняшнему дню.":
-    "Reja — OneBase'ga yuklangan «Birlamchi» turidagi reja{noPlan}; hisobot kunidan (kecha, sinxronlashdan kech emas) keyingi qatorlar hisobotga kirmaydi; prognoz — bugungi kun bo'yicha emas, ma'lumot sanasi bo'yicha{asOf}.",
+  "План — загруженный в OneBase план вида «Первичка»{noPlan}; строки позже отчётного дня (сегодня, не позже синхронизации) в отчёт не входят; прогноз — по дате данных{asOf}.":
+    "Reja — OneBase'ga yuklangan «Birlamchi» turidagi reja{noPlan}; hisobot kunidan (bugun, sinxronlashdan kech emas) keyingi qatorlar hisobotga kirmaydi; prognoz — ma'lumot sanasi bo'yicha{asOf}.",
   " (сейчас не загружен — первичка без плана)": " (hozir yuklanmagan — birlamchi rejasiz)",
   "{n} стран": "{n} davlat",
   "все страны": "barcha davlatlar",
@@ -647,8 +647,8 @@ const dict: Dict = {
     "Oxirgi yuklashda nechta yozuv kelgani: oddiy yangilashda — faqat o'zgarishlar",
   "Строк за раз": "Bir martada qatorlar",
   "Ошибка": "Xato",
-  "Автоматически данные обновляются в 11:00 и 17:00 (Ташкент). «Обновить» подтягивает изменения сразу, «Полная перезагрузка» — заново всё окно истории.":
-    "Ma'lumotlar soat 11:00 va 17:00 da (Toshkent) avtomatik yangilanadi. «Yangilash» o'zgarishlarni darhol oladi, «To'liq qayta yuklash» — butun tarix oynasini qaytadan.",
+  "Автоматически данные обновляются каждые 30 минут, ночью в 03:00 — сверка с Linko. «Обновить» подтягивает изменения сразу, «Полная перезагрузка» — заново всё окно истории.":
+    "Ma'lumotlar har 30 daqiqada avtomatik yangilanadi, tunda soat 03:00 da — Linko bilan solishtirish. «Yangilash» o'zgarishlarni darhol oladi, «To'liq qayta yuklash» — butun tarix oynasini qaytadan.",
   "Направления": "Yo'nalishlar",
   "региональные менеджеры (РМ 1–4) и отдельные каналы (Базар, ключевые клиенты)": "hududiy menejerlar (RM 1–4) va alohida kanallar (Bozor, asosiy mijozlar)",
   "Название (РМ 1, Базар…)": "Nomi (RM 1, Bozor…)",

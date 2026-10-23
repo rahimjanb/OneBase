@@ -212,7 +212,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
         )}
       </div>
       <p className="mt-3 text-xs text-ink-3">
-        {data.reservedAt && `${tr("Бронь (неотгруженные заказы и перемещения) — на {time}.", { time: dateTime(data.reservedAt) })} `}
+        {data.reservedAt && `${tr("Бронь (неотгруженные заказы и перемещения, перемещения в пути) — на {time}.", { time: dateTime(data.reservedAt) })} `}
         {tr(
           "Остатки на {syncedAt} (снимок Linko {snapshot}). Скорость — вторичка нетто возвратов за {days} дн. ({from} – {to}) с поправкой на дни в нуле за {month}: по стране {raw} → {corrected} кг в день ({change}, пар с поправкой — {pairs}). Вес единицы — по строкам заказов с {unitFrom}; цена — прайс «{priceList}» на {priceAsOf}.",
           {

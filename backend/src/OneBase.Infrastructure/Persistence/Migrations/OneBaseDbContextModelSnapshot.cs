@@ -4742,12 +4742,14 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
 
+                    b.Property<int?>("DurationMs")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Error")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
                     b.Property<string>("Kind")
-                        .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
@@ -4777,6 +4779,21 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("RegionId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Report")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ScopeKey")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
 
                     b.Property<string>("ScopeTitle")
                         .IsRequired()
@@ -4813,13 +4830,123 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedAt");
 
+                    b.HasIndex("RunId");
+
                     b.HasIndex("Status", "NextAttemptAt");
+
+                    b.HasIndex("Report", "Period", "ChatId", "ScopeKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ReportDeliveries_ScheduleKey")
+                        .HasFilter("\"Trigger\" = 'schedule' AND \"Report\" IS NOT NULL AND \"ChatId\" IS NOT NULL");
 
                     b.HasIndex("SubscriptionId", "ChatId", "Kind", "Period")
                         .IsUnique()
                         .HasFilter("\"Trigger\" = 'schedule' AND \"SubscriptionId\" IS NOT NULL AND \"ChatId\" IS NOT NULL");
 
                     b.ToTable("ReportDeliveries", "telegram");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Telegram.TelegramReportJob", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset?>("ArmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CatchUpMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Days")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<TimeOnly>("Time")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Code");
+
+                    b.ToTable("ReportJobs", "telegram");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Telegram.TelegramReportRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DataAsOf")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Job")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateOnly>("Period")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Planned")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("ScheduledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Sent")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Skipped")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedAt");
+
+                    b.HasIndex("Job", "Period")
+                        .IsUnique();
+
+                    b.ToTable("ReportRuns", "telegram");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Telegram.TelegramReportSchedule", b =>
@@ -4874,6 +5001,12 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
 
+                    b.Property<int>("NoPurchaseDays")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("RefreshBeforeSend")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -4893,10 +5026,20 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<long?>("AgentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("AgentName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DirectionId")
                         .HasColumnType("uuid");
 
                     b.Property<bool>("Enabled")
@@ -4911,13 +5054,27 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Morning")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("RegionId")
+                    b.Property<Guid?>("RegionId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Reports")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
 
                     b.Property<long?>("SupervisorId")
                         .HasColumnType("bigint");
 
                     b.Property<string>("SupervisorName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Title")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 

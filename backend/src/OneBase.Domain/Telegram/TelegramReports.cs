@@ -2,7 +2,10 @@ using OneBase.Domain.Common;
 
 namespace OneBase.Domain.Telegram;
 
-/// <summary>Автоматический отчёт в Telegram: утро — план на день, обед — план/факт, вечер — итоги дня.</summary>
+/// <summary>
+/// Прежние три запуска дневного отчёта (утро, обед, вечер). Хранятся в старых строках журнала и расписаниях; новые запуски — коды
+/// <see cref="TelegramReportJob"/> («daily.morning», «promo.evening»…).
+/// </summary>
 public enum TelegramReportKind
 {
     Morning,
@@ -11,8 +14,8 @@ public enum TelegramReportKind
 }
 
 /// <summary>
-/// Общие настройки автоотчётов (одна строка): с какого аккаунта Telegram отправлять и на каком языке подписи картинок. Аккаунт один на
-/// все отчёты — получатели-чаты принадлежат его диалогам.
+/// Общие настройки автоотчётов (одна строка): с какого аккаунта Telegram отправлять, язык картинок, порог «без закупа» и обновление данных
+/// Linko перед отправкой. Аккаунт один на все отчёты — личные чаты и группы получателей принадлежат его диалогам.
 /// </summary>
 public class TelegramReportSettings
 {
@@ -21,33 +24,32 @@ public class TelegramReportSettings
 
     public Guid? AccountId { get; set; }
 
-    /// <summary>ru или uz — подписи на картинке (имена и названия — как в Linko и Sales Base).</summary>
+    /// <summary>ru или uz — подписи на картинке (имена и названия — как в Linko).</summary>
     public string Language { get; set; } = "ru";
+
+    /// <summary>«Клиенты без закупа»: сколько дней без подтверждённого закупа (по умолчанию 30).</summary>
+    public int NoPurchaseDays { get; set; } = 30;
+
+    /// <summary>Перед отправкой обновить данные Linko (заказы, визиты), если последнее обновление старше 10 минут.</summary>
+    public bool RefreshBeforeSend { get; set; } = true;
 
     public DateTimeOffset? UpdatedAt { get; set; }
     public Guid? UpdatedById { get; set; }
 }
 
-/// <summary>
-/// Расписание одного вида отчёта. Включается отдельно: сохранение настроек ничего не отправляет. ArmedAt — с какого момента расписание
-/// действует: запуск, время которого прошло до включения (или до изменения времени), не догоняется.
-/// </summary>
+/// <summary>Прежнее расписание дневного отчёта по трём видам. Перенесено в <see cref="TelegramReportJob"/> (daily.*) и больше не читается.</summary>
 public class TelegramReportSchedule
 {
     public TelegramReportKind Kind { get; set; }
 
     public bool Enabled { get; set; }
 
-    /// <summary>Время отправки в часовом поясе TimeZone.</summary>
     public TimeOnly Time { get; set; }
 
-    /// <summary>IANA, по умолчанию Asia/Tashkent.</summary>
     public string TimeZone { get; set; } = "Asia/Tashkent";
 
-    /// <summary>Дни недели битами: пн = 1, вт = 2, … вс = 64. По умолчанию пн–сб (63).</summary>
     public int Days { get; set; } = 63;
 
-    /// <summary>sum — план и факт в сумах, kg — в килограммах.</summary>
     public string Metric { get; set; } = "sum";
 
     public DateTimeOffset? ArmedAt { get; set; }
@@ -57,19 +59,107 @@ public class TelegramReportSchedule
 }
 
 /// <summary>
-/// Автоотправка: регион OneBase (sales.Regions) → супервайзер региона → чаты и группы аккаунта, куда уходят отчёты, и какие из трёх
-/// отчётов. Агенты на картинке — команда региона, подставляются сами. Таких строк может быть сколько угодно.
+/// Расписание одного запуска отчёта: код «отчёт.запуск» («daily.midday» — дневной план в 13:00, «weekly.monday» — итоги недели в понедельник).
+/// Включается отдельно; ArmedAt — с какого момента действует (запуск, время которого прошло до включения или изменения, не догоняется).
+/// CatchUpMinutes — сколько минут после времени запуска отчёт ещё можно отправить, если сервер в это время не работал: старый дневной
+/// отчёт после долгого простоя не уходит. Version растёт при каждом изменении — входит в ключ отправки.
+/// </summary>
+public class TelegramReportJob
+{
+    public required string Code { get; set; }
+
+    public bool Enabled { get; set; }
+
+    /// <summary>Время отправки в часовом поясе TimeZone.</summary>
+    public TimeOnly Time { get; set; }
+
+    /// <summary>IANA, по умолчанию Asia/Tashkent.</summary>
+    public string TimeZone { get; set; } = "Asia/Tashkent";
+
+    /// <summary>Дни недели битами: пн = 1, вт = 2, … вс = 64.</summary>
+    public int Days { get; set; }
+
+    public int CatchUpMinutes { get; set; } = 120;
+
+    public int Version { get; set; } = 1;
+
+    public DateTimeOffset? ArmedAt { get; set; }
+
+    public DateTimeOffset? UpdatedAt { get; set; }
+    public Guid? UpdatedById { get; set; }
+}
+
+/// <summary>
+/// Запуск по расписанию: один на код и день (уникальный индекс — второй экземпляр службы тот же запуск не начнёт). Planned/Sent/Failed/Skipped —
+/// отправки запуска; Status: running (идут отправки), done, partial (есть ошибки), failed (запуск не выполнен), skipped (опоздал: простой
+/// дольше CatchUpMinutes).
+/// </summary>
+public class TelegramReportRun : Entity
+{
+    public required string Job { get; set; }
+
+    /// <summary>День отчёта (в часовом поясе расписания).</summary>
+    public DateOnly Period { get; set; }
+
+    public DateTimeOffset ScheduledAt { get; set; }
+    public DateTimeOffset StartedAt { get; set; }
+    public DateTimeOffset? FinishedAt { get; set; }
+
+    public string Status { get; set; } = "running";
+
+    public int Planned { get; set; }
+    public int Sent { get; set; }
+    public int Failed { get; set; }
+    public int Skipped { get; set; }
+
+    /// <summary>Свежесть данных Linko на момент постановки отправок.</summary>
+    public DateTimeOffset? DataAsOf { get; set; }
+
+    public string? Error { get; set; }
+}
+
+/// <summary>Роль получателя: РМ — свод по регионам направления, СВ — по ТП своего региона, ТП — только свои цифры и точки.</summary>
+public static class TelegramReportRoles
+{
+    public const string Rm = "rm";
+    public const string Sv = "sv";
+    public const string Tp = "tp";
+
+    public static readonly IReadOnlyList<string> All = [Rm, Sv, Tp];
+}
+
+/// <summary>
+/// Получатель автоотчётов: роль и область из раздела «Продажи» (РМ — направление, пусто — вся страна; СВ — регион и супервайзер; ТП — агент
+/// Linko), чаты аккаунта, куда уходят отчёты (личный чат человека и/или группы), и на какие запуски он подписан (Reports — коды через
+/// запятую). Таких строк может быть сколько угодно.
 /// </summary>
 public class TelegramReportSubscription : Entity
 {
-    public Guid RegionId { get; set; }
+    public string Role { get; set; } = TelegramReportRoles.Sv;
+
+    /// <summary>Имя получателя для списка («Азиз Каримов»); пусто — по области.</summary>
+    public string? Title { get; set; }
+
+    /// <summary>РМ: направление (sales.Directions); null — все направления.</summary>
+    public Guid? DirectionId { get; set; }
+
+    /// <summary>СВ и ТП: регион OneBase (sales.Regions).</summary>
+    public Guid? RegionId { get; set; }
 
     /// <summary>Супервайзер — пользователь Linko; null — без супервайзера (на картинке «СВР региона» из оргструктуры).</summary>
     public long? SupervisorId { get; set; }
 
-    /// <summary>Имя супервайзера при сохранении — для списка, если он пропадёт из данных месяца.</summary>
     public string? SupervisorName { get; set; }
 
+    /// <summary>ТП: агент Linko.</summary>
+    public long? AgentId { get; set; }
+
+    public string? AgentName { get; set; }
+
+    /// <summary>Коды запусков через запятую: «daily.morning,daily.evening,weekly.saturday».</summary>
+    public string Reports { get; set; } = "";
+
+    /// <summary>Прежние флаги дневного отчёта — перенесены в Reports.</summary>
     public bool Morning { get; set; }
     public bool Midday { get; set; }
     public bool Evening { get; set; }
@@ -82,7 +172,7 @@ public class TelegramReportSubscription : Entity
     public List<TelegramReportSubscriptionChat> Chats { get; set; } = [];
 }
 
-/// <summary>Чат или группа автоотправки (один чат — один раз в строке).</summary>
+/// <summary>Чат или группа получателя (один чат — один раз в строке).</summary>
 public class TelegramReportSubscriptionChat
 {
     public Guid SubscriptionId { get; set; }
@@ -90,12 +180,21 @@ public class TelegramReportSubscriptionChat
 }
 
 /// <summary>
-/// Журнал отправок: одна строка — один отчёт в один чат. По расписанию один и тот же отчёт автоотправки за один день в один чат уходит
-/// один раз (уникальный индекс); вручную — повторно только явно.
+/// Журнал отправок: одна строка — один отчёт в один чат. Ключ отправки по расписанию — запуск (Report), день, чат и область (ScopeKey):
+/// уникальный индекс не даст отправить тот же отчёт той же области в тот же чат дважды, даже если человек попал в несколько получателей
+/// или служба запущена в двух экземплярах. Status: pending, sending, sent, failed, skipped (условие не выполнено, нет чата и т. п. —
+/// причина в Error), unknown (сеть оборвалась посреди отправки: дошёл ли отчёт — неизвестно, автоповтора нет).
 /// </summary>
 public class TelegramReportDelivery : Entity
 {
-    public TelegramReportKind Kind { get; set; }
+    /// <summary>Прежний вид дневного отчёта (старые строки); у новых — null.</summary>
+    public TelegramReportKind? Kind { get; set; }
+
+    /// <summary>Код запуска: «daily.midday».</summary>
+    public string? Report { get; set; }
+
+    /// <summary>Запуск по расписанию, в который вошла отправка.</summary>
+    public Guid? RunId { get; set; }
 
     /// <summary>День отчёта (в часовом поясе расписания).</summary>
     public DateOnly Period { get; set; }
@@ -103,11 +202,15 @@ public class TelegramReportDelivery : Entity
     /// <summary>schedule, manual, test.</summary>
     public required string Trigger { get; set; }
 
-    /// <summary>real — данные OneBase, demo — демонстрационные (на картинке «ТЕСТОВЫЕ ДАННЫЕ»).</summary>
+    /// <summary>real — данные OneBase.</summary>
     public required string DataMode { get; set; }
 
-    /// <summary>Автоотправка, по которой ушёл отчёт (тест — без неё).</summary>
+    /// <summary>Получатель, по которому ушёл отчёт (тест — без него).</summary>
     public Guid? SubscriptionId { get; set; }
+
+    /// <summary>Роль и область отчёта: «sv:регион:супервайзер», «tp:агент», «rm:направление».</summary>
+    public string? Role { get; set; }
+    public string? ScopeKey { get; set; }
 
     public Guid AccountId { get; set; }
     public Guid? ChatId { get; set; }
@@ -116,13 +219,12 @@ public class TelegramReportDelivery : Entity
     /// <summary>Чат или группа — как в момент отправки.</summary>
     public required string RecipientTitle { get; set; }
 
-    /// <summary>Регион и супервайзер — как на картинке.</summary>
+    /// <summary>Область — как на картинке: «Ташкент · Азиз Каримов».</summary>
     public required string ScopeTitle { get; set; }
 
     public Guid? RegionId { get; set; }
     public long? SupervisorId { get; set; }
 
-    /// <summary>pending, sending, sent, failed.</summary>
     public string Status { get; set; } = "pending";
 
     public int Attempts { get; set; }
@@ -130,6 +232,9 @@ public class TelegramReportDelivery : Entity
     public DateTimeOffset? LastAttemptAt { get; set; }
     public DateTimeOffset? SentAt { get; set; }
     public string? Error { get; set; }
+
+    /// <summary>Сколько миллисекунд заняли формирование и отправка.</summary>
+    public int? DurationMs { get; set; }
 
     public int Pages { get; set; }
     public long Bytes { get; set; }

@@ -64,7 +64,7 @@
 
 ## Инструменты
 
-`get_sales`, `get_sales_by_branch`, `get_sales_by_employee`, `get_problem_agents`, `get_products`, `find_products`, `get_customers`, `get_visits`, `get_sales_kpi`, `get_sales_trend`, `get_sku_sales`, `get_export_sales`, `get_dealer_pnl`, `get_inventory`, `get_outstock`, `get_primary_shipments`, `get_payments`, `get_suppliers`, `get_field_team`, `get_field_tasks`, `get_field_routes`, `get_field_recommendations`, `get_department_tasks`, `search_knowledge`, `get_agent`, `get_agent_visits`, `get_store`, `get_orders`, `get_kpi`, `get_promo`, `get_akt`, `get_dso`.
+`get_sales`, `get_sales_by_branch`, `get_sales_by_employee`, `get_problem_agents`, `get_products`, `find_products`, `get_customers`, `get_visits`, `get_sales_kpi`, `get_sales_trend`, `get_sku_sales`, `get_export_sales`, `get_dealer_pnl`, `get_inventory`, `get_outstock`, `get_primary_shipments`, `get_payments`, `get_suppliers`, `get_field_team`, `get_field_tasks`, `get_field_routes`, `get_field_recommendations`, `get_department_tasks`, `search_knowledge`, `get_agent`, `get_agent_visits`, `get_store`, `get_orders`, `get_kpi`, `get_promo`, `get_akt`, `get_dso`, `get_sales_days`, `get_telegram`.
 
 | Инструмент | Источник | Право | Что отдаёт |
 |---|---|---|---|
@@ -74,6 +74,9 @@
 | `get_field_tasks` | `field.sales` | `field.use` | Задачи полевой команды: сводка, по исполнителям, причины постановки (у задач AI — причина рекомендации), итоги и переносы. |
 | `get_field_routes` | `field.sales` | `field.use` | Маршруты: по агенту — точки по порядку, посещена/пропущена с причиной, визиты вне маршрута, заказы Linko; по команде — охват, пропуски, частые причины. |
 | `get_field_recommendations` | `field.sales` | `field.use` | Рекомендации AI-планирования: по статусам, видам и агентам; кто и когда решил. Агенту — отказ, как на странице. |
+| `get_visits` | `sales.visits` | `sales.read` | Маршрут и визиты за день, отрезок дней или месяц — республика (регионы), направление РМ, регион (каждый ТП) или один ТП: план, по маршруту, вне маршрута, не посещено, визиты с заказом по маршруту и вне; заказы, выручка, кг и АКБ с визитов по маршруту, вне маршрута и без визита, возвраты, итог (= факт «Продаж»), страйк. Правила — как календарь визитов (`SalesAnalytics.RouteSplit`). |
+| `get_sales_days` | `sales.secondary` | `sales.read` | Продажи за день или отрезок дней месяца (сегодня, неделя, «с 1 по 15») — итог, каждый день, регионы или ТП; республика, направление РМ, регион, ТП. |
+| `get_telegram` | `system.telegram` | `telegram.manage` или `telegram.campaigns` | Автоотчёты (только с `telegram.manage`): запуски, следующий и последний, получатели, отправки и неудачные с причиной; рассылки: статус и доставка. Без права раздел не отдаётся. |
 | `get_department_tasks` | `work.tasks` | — (видимость отделов решает `WorkTaskService`) | Задачи отделов: открыто, просрочено, выполнено за период; список с исполнителем, сроком, итогом или причиной отмены. Чужой отдел — отказ. |
 
 Инструменты Sales Base видят только область пользователя: агент — себя, супервайзер — свою команду, РМ — всё или свои филиалы.
@@ -86,7 +89,7 @@
 | Инструмент | Источник | Право | Что отдаёт |
 |---|---|---|---|
 | `get_agent` | `sales.team` | `sales.read` | Карточка ТП за месяц — как его страница: план и факт, выручка, АКБ, визиты, конверсия, средний чек, категории, показатели Linko, замечания, молчащие и новые точки, ассортимент. |
-| `get_agent_visits` | `sales.visits` | `sales.read` | Куда ходил ТП за день или до 31 дня: каждый визит (время, точка, адрес, по маршруту или вне, выполнен ли, заказ в этот день), итоги по маршруту / вне / не посещено, заказы без визита. |
+| `get_agent_visits` | `sales.visits` | `sales.read` | Куда ходил ТП за день или до 31 дня: каждый визит (время, точка, адрес, по маршруту или вне, выполнен ли, заказ в этот день); итоги и дни — полные: по маршруту / вне / не посещено, визиты с заказом по маршруту и вне, заказы (число, сумма, кг, точки) по маршруту, вне маршрута и без визита. |
 | `get_store` | `sales.secondary` | `sales.read` | Карточка точки по названию, адресу или id: ответственный ТП, продажи месяца, товары, последние визиты и заказы; несколько совпадений — список. |
 | `get_orders` | `sales.secondary` | `sales.read` | Заказы по ТП, точке, региону, статусу и дням (до 62 дней) или один по номеру; с `lines=true` — позиции. |
 | `get_kpi` | `sales.plans` | `sales.read` | Страница «KPI»: показатели Linko по людям, выполнение, пороги; деньги — только с `finance.read`. |
@@ -96,7 +99,9 @@
 
 Страницы целиком отдаются через `PageJson`: длинные списки — первые строки и число всех (`…Total`), дробные числа округлены.
 Результат инструмента режется на 40 000 символов (`AgentRunner.MaxToolResultChars`). ТП ищется по имени кириллицей или узбекской латиницей
-(«Jasur Xamidov» = «Жасур Хамидов»); несколько совпадений — ошибка со списком, модель уточняет.
+(«Jasur Xamidov» = «Жасур Хамидов»); несколько совпадений — ошибка со списком, модель уточняет. `get_sales` принимает и направление РМ
+(`direction`). В системном промпте сотрудника — правило: не перечислять, каких данных «нет», пока не вызваны инструменты; разрез «по маршруту»
+есть у `get_visits`, продажи за дни — у `get_sales_days`.
 
 `find_products` ищет категорию, тип Linko или товар по части названия, бренду или артикулу — кириллицей или латиницей («помадка» находит и тип «Помадка», и товары «POMADKA») — и отдаёт продажи найденного: по категории — итоги и SKU, по товару — факт, точки и регионы.
 

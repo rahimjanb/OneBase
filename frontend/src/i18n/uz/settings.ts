@@ -15,7 +15,8 @@ const dict: Dict = {
   "Склады": "Omborlar",
   "Остатки (штуки)": "Qoldiqlar (dona)",
   "Перемещения между складами": "Omborlar orasida ko'chirish",
-  "Бронь складов (неотгруженные заказы и перемещения)": "Omborlar broni (jo'natilmagan buyurtmalar va ko'chirishlar)",
+  "Бронь складов (неотгруженные заказы и перемещения, перемещения в пути)":
+    "Omborlar broni (jo'natilmagan buyurtmalar va ko'chirishlar, yo'ldagi ko'chirishlar)",
   "Платежи": "To'lovlar",
   "Прайс-листы": "Narxnomalar",
   "Цены прайс-листов": "Narxnoma narxlari",
@@ -378,7 +379,8 @@ const dict: Dict = {
   "Токен API пересчёта планов Linko": "Linko rejalarni qayta hisoblash API tokeni",
   "Токен {hint} {source}. Планы агентов загружаются автоматически после каждого пересчёта в Linko.": "{hint} tokeni {source}. Agentlar rejalari Linko'dagi har bir qayta hisobdan keyin avtomatik yuklanadi.",
   "Без него планы не загружаются — выполнение плана будет «—».": "Usiz rejalar yuklanmaydi — reja bajarilishi «—» bo'ladi.",
-  "Интеграция включена — данные загружаются автоматически в 11:00 и 17:00 (Ташкент)": "Integratsiya yoqilgan — ma'lumotlar soat 11:00 va 17:00 da (Toshkent) avtomatik yuklanadi",
+  "Интеграция включена — данные загружаются автоматически каждые 30 минут":
+    "Integratsiya yoqilgan — ma'lumotlar har 30 daqiqada avtomatik yuklanadi",
   "Проверить подключение": "Ulanishni tekshirish",
   "Удалить токен, сохранённый в OneBase? Если в .env сервера есть LINKO_TOKEN, будет использоваться он.": "OneBase'da saqlangan token o'chirilsinmi? Agar server .env faylida LINKO_TOKEN bo'lsa, u ishlatiladi.",
   "Удалить токен": "Tokenni o'chirish",

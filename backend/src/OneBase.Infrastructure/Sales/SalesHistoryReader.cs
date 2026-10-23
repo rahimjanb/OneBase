@@ -25,13 +25,12 @@ public sealed class SalesHistoryReader(OneBaseDbContext db, SalesOptions options
         DateOnly from, DateOnly to, IReadOnlyDictionary<long, long> categoryGroups, CancellationToken ct)
     {
         var orderDate = OrderDate;
-        // Точки-каналы и последний день последнего закрытого месяца (на отчётный день — вчера): идущий месяц каналов не получает.
+        // Точки-каналы и последний день последнего закрытого месяца (календарного): идущий месяц каналов не получает.
         var channels = options.ChannelRegions
             .SelectMany((c, i) => c.Markets.Select(m => (Market: m, Branch: SalesOptions.ChannelBranchId(i), Since: c.SinceMonth() ?? DateOnly.MinValue)))
             .DistinctBy(c => c.Market)
             .ToList();
-        var afterCutoff = SecondarySales.ReportCutoff(DateTimeOffset.UtcNow).AddDays(1);
-        var closedThrough = new DateOnly(afterCutoff.Year, afterCutoff.Month, 1).AddDays(-1);
+        var closedThrough = SecondarySales.ClosedThrough(DateTimeOffset.UtcNow);
 
         // АКБ — уникальные ТТ, у которых чистый вес за месяц (заказы минус возвраты) больше нуля: в каждом разрезе
         // (республика / филиал / агент, все категории / категория) чистый вес считается отдельно. Рядом — чистые кг и выручка разреза

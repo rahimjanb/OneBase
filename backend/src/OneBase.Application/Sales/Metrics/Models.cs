@@ -83,6 +83,12 @@ public sealed class MonthData
     /// <summary>Дата последних данных (для прогноза и «тех же дней»).</summary>
     public required DateOnly DataThrough { get; init; }
 
+    /// <summary>
+    /// Сегодня по местному времени: отчётный день может быть сегодняшним (неполным) — месяц, у которого идёт последний день, ещё не закрыт.
+    /// Не задан (MaxValue) — месяц закрыт, как только данные есть за все его дни.
+    /// </summary>
+    public DateOnly Today { get; init; } = DateOnly.MaxValue;
+
     /// <summary>Продажи текущего месяца (с 1-го по DataThrough).</summary>
     public required IReadOnlyList<SaleLine> Current { get; init; }
 
@@ -212,6 +218,6 @@ public sealed class MonthData
     public int DaysInMonth => DateTime.DaysInMonth(Year, Month);
     public int WorkedDays => SalesMath.WorkedDays(MonthStart, DataThrough);
 
-    /// <summary>Месяц закрыт: данные есть за все его дни — прогноза на конец месяца нет.</summary>
-    public bool Closed => WorkedDays >= DaysInMonth;
+    /// <summary>Месяц закрыт: данные есть за все его дни и месяц уже кончился — прогноза на конец месяца нет.</summary>
+    public bool Closed => WorkedDays >= DaysInMonth && MonthStart.AddMonths(1) <= Today;
 }

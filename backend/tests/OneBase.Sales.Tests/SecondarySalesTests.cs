@@ -86,11 +86,22 @@ public class SecondarySalesTests
     }
 
     [Theory]
-    [InlineData("2026-10-05T18:59:00Z", "2026-10-04")] // 23:59 по Ташкенту 5 октября — полный день ещё 4-е
-    [InlineData("2026-10-05T19:00:00Z", "2026-10-05")] // 00:00 по Ташкенту 6 октября — 5-е уже полный день
-    [InlineData("2026-11-01T03:00:00Z", "2026-10-31")]
-    public void Report_day_is_the_last_full_day_in_Tashkent(string utcNow, string expected) =>
-        Assert.Equal(D(expected), SecondarySales.ReportCutoff(DateTimeOffset.Parse(utcNow)));
+    [InlineData("2026-10-05T18:59:00Z", "2026-10-05", "2026-10-04")] // 23:59 по Ташкенту 5 октября — сегодня 5-е, полный день ещё 4-е
+    [InlineData("2026-10-05T19:00:00Z", "2026-10-06", "2026-10-05")] // 00:00 по Ташкенту 6 октября — 5-е уже полный день
+    [InlineData("2026-11-01T03:00:00Z", "2026-11-01", "2026-10-31")]
+    public void Report_day_is_today_in_Tashkent_or_the_last_full_day(string utcNow, string today, string lastFull)
+    {
+        var now = DateTimeOffset.Parse(utcNow);
+        Assert.Equal(D(today), SecondarySales.ReportCutoff(now)); // Sales:IncludeToday — по умолчанию
+        Assert.Equal(D(lastFull), SecondarySales.ReportCutoff(now, includeToday: false)); // как «Полевой контроль»
+        Assert.Equal(D(lastFull), SecondarySales.LastFullDay(now)); // база скорости склада
+    }
+
+    [Theory]
+    [InlineData("2026-10-31T10:00:00Z", "2026-09-30")] // последний день октября: октябрь ещё идёт
+    [InlineData("2026-10-31T19:00:00Z", "2026-10-31")] // 00:00 1 ноября по Ташкенту — октябрь закрыт
+    public void Closed_months_end_before_the_current_calendar_month(string utcNow, string expected) =>
+        Assert.Equal(D(expected), SecondarySales.ClosedThrough(DateTimeOffset.Parse(utcNow)));
 
     [Theory]
     [InlineData("2026-10-05", "2026-10-01", "2026-10-05")] // идущий месяц — по отчётный день

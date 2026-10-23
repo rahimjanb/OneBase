@@ -139,7 +139,7 @@ public sealed class ProactiveAnalyzer(
 
             // Месяц закрыт — пишем «не выполнен» (прогноза у закрытого месяца нет — берётся выполнение); идёт — «под угрозой»
             // с прогнозом на конец месяца.
-            var closed = p.DataThrough.Day >= p.DaysInMonth;
+            var closed = p.Closed;
             static decimal? Expected(UnitRow r) => r.ForecastExecution ?? r.Execution;
             var behind = republic.Regions.Where(r => r.PlanKg is > 0 && Expected(r) is < 0.9m).OrderBy(Expected).ToList();
             foreach (var r in behind.Where(r => Expected(r) < 0.75m))
@@ -181,9 +181,9 @@ public sealed class ProactiveAnalyzer(
             {
                 list.Add(new AlertCandidate("sales", "sales.republic.plan", $"sales.republic.plan:{month}",
                     expected < 0.85m ? AiAlertSeverity.Critical : AiAlertSeverity.Warning,
-                    p.DataThrough.Day >= p.DaysInMonth ? $"План продаж компании не выполнен — {Pct(expected)}" : $"План продаж компании под угрозой — прогноз {Pct(expected)}",
+                    p.Closed ? $"План продаж компании не выполнен — {Pct(expected)}" : $"План продаж компании под угрозой — прогноз {Pct(expected)}",
                     $"План {Kg(k.PlanKg.Value)}, факт {Kg(k.FactKg)} ({Pct(k.Execution)}) {period}" +
-                    (p.DataThrough.Day >= p.DaysInMonth ? ". " : $", прогноз {Kg(k.ForecastKg ?? k.FactKg)}. ") +
+                    (p.Closed ? ". " : $", прогноз {Kg(k.ForecastKg ?? k.FactKg)}. ") +
                     $"Регионов с прогнозом ниже 90%: {republic.Regions.Count(r => r.PlanKg is > 0 && Expected(r) is < 0.9m)}.",
                     "Сосредоточиться на регионах с наибольшим отставанием в кг; проверить дефицит на складах этих регионов.",
                     $"/sales/republic?{query}", Permissions.SalesRead));

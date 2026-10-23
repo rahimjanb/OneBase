@@ -9,7 +9,7 @@ namespace OneBase.Application.Sales.Primary;
 /// вторички. Дата — приёмка заказа (как во вторичке), у возврата — дата возврата.
 /// Строки — страны: страна берётся из названия или адреса точки (SalesOptions.ExportCountries), иначе — название точки.
 /// Сумма — сумма заказа в основной валюте; заказы в другой валюте дают вес без суммы. Коробок нет (в строках заказа — штуки и кг): null.
-/// Приёмки позже отчётного дня (вчера, не позже синхронизации) в отчёт не входят.
+/// Приёмки позже отчётного дня (сегодня, не позже синхронизации) в отчёт не входят.
 /// </summary>
 public sealed partial class PrimaryService
 {
@@ -88,9 +88,9 @@ public sealed partial class PrimaryService
         var sold = options.ExportSoldStatuses;
 
         // Месяц по умолчанию, дата данных и «данные по» — по заказам филиала «Завод» (любого типа точки), а не только экспорта.
-        // Приёмки позже отчётного дня (сегодня и в будущем) в отчёт не входят — как во вторичке.
+        // Приёмки позже отчётного дня (в будущем; при Sales:IncludeToday = false — и сегодня) в отчёт не входят — как во вторичке.
         var syncedAt = (await db.LinkoSyncStates.AsNoTracking().FirstOrDefaultAsync(s => s.Entity == "orders", ct))?.LastSuccessAt;
-        var cutoff = PrimaryMath.DataLimit(SecondarySales.ReportCutoff(DateTimeOffset.UtcNow), SyncedOn([syncedAt]));
+        var cutoff = PrimaryMath.DataLimit(SecondarySales.ReportCutoff(DateTimeOffset.UtcNow, options.IncludeToday), SyncedOn([syncedAt]));
         var factoryDays = (await db.LinkoOrders.AsNoTracking()
                 .Where(o => sold.Contains(o.Status) && o.AcceptedDate != null && o.BranchName != null && branches.Contains(o.BranchName))
                 .Select(o => o.AcceptedDate!.Value)

@@ -16,7 +16,7 @@ export default async function TelegramReportsPage() {
     <>
       <PageHeader
         title={t("Автоматические отчёты")}
-        subtitle={t("План на день, план / факт и итоги дня картинками 16:9 в чаты и группы Telegram — по регионам и супервайзерам")}
+        subtitle={t("Шесть отчётов по расписанию картинками 16:9 в Telegram — для РМ, СВ и ТП, по оргструктуре «Продаж»")}
         back="/settings/telegram"
         breadcrumbs={[
           { label: "OneBase", href: "/" },

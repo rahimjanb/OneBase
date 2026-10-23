@@ -166,7 +166,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         }
     }
 
-    /// <summary>Отчётный день (последний день с продажами вторички, не позже вчера) — для отчётов за несколько месяцев («Продажи по SKU»).</summary>
+    /// <summary>Отчётный день (последний день с продажами вторички, не позже отчётного — сегодня) — для отчётов за несколько месяцев («Продажи по SKU»).</summary>
     public Task<DateOnly?> LastDataAsync(CancellationToken ct = default) => Cached("sales:last-data", () => LastDataDateAsync(ct));
 
     /// <summary>Небольшие справочные запросы (месяцы, дата последних данных) — до следующей синхронизации.</summary>
@@ -185,8 +185,8 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
     /// <summary>
     /// Отчётный день: последний день с продажами вторички (по дате реализации, без «Завода» и пропускаемых филиалов), но не позже
-    /// последнего полного дня — вчера по местному времени. Сегодняшние приёмки войдут в отчёт завтра; у части заказов Linko
-    /// дата приёмки стоит в будущем — отчётный день из-за них не уезжает вперёд.
+    /// сегодняшнего по местному времени (Sales:IncludeToday = false — вчерашнего). У части заказов Linko дата приёмки стоит в будущем —
+    /// отчётный день из-за них не уезжает вперёд.
     /// </summary>
     private async Task<DateOnly?> LastDataDateAsync(CancellationToken ct)
     {
@@ -198,8 +198,8 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .MaxAsync(o => o.Date, ct);
     }
 
-    /// <summary>Последний полный день по местному времени (вчера) — см. SecondarySales.ReportCutoff.</summary>
-    private static DateOnly ReportCutoff => SecondarySales.ReportCutoff(DateTimeOffset.UtcNow);
+    /// <summary>Отчётный день: сегодня (Sales:IncludeToday) или вчера — см. SecondarySales.ReportCutoff.</summary>
+    private DateOnly ReportCutoff => SecondarySales.ReportCutoff(DateTimeOffset.UtcNow, options.IncludeToday);
 
     /// <summary>
     /// Заказ вторички по филиалу: без филиала или не «Завод» и не «К К Мерч» (skippedLower — их названия в нижнем регистре, NotSecondaryLower).
@@ -345,6 +345,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             Year = year,
             Month = month,
             DataThrough = dataThrough,
+            Today = SecondarySales.Today(DateTimeOffset.UtcNow),
             Current = current.Lines,
             Previous = previous.Lines,
             VisitOrders = SecondarySales.VisitOrders(rawOrders, monthStart, salesEnd, options),
@@ -577,8 +578,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
     /// </summary>
     private async Task<List<MonthlyFact>> ChannelHistoryAsync(DateOnly start, DateOnly end, CancellationToken ct)
     {
-        var afterCutoff = ReportCutoff.AddDays(1);
-        var closedThrough = new DateOnly(afterCutoff.Year, afterCutoff.Month, 1).AddDays(-1);
+        var closedThrough = SecondarySales.ClosedThrough(DateTimeOffset.UtcNow);
         var to = end < closedThrough ? end : closedThrough;
         var markets = options.ChannelRegions.SelectMany(c => c.Markets).Distinct().ToArray();
         if (markets.Length == 0 || to < start)

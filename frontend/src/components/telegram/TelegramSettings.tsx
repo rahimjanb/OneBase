@@ -82,7 +82,7 @@ export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
         <span className="min-w-0 flex-1">
           <span className="block font-semibold text-ink">{t("Автоматические отчёты")}</span>
           <span className="block text-sm text-ink-2">
-            {t("План на день, план / факт и итоги дня картинками в чаты и группы — регион, супервайзер и его агенты, по расписанию, с журналом отправок.")}
+            {t("Дневной план, клиенты без закупа, ТП без заказов, акции, категории и итоги недели — картинками для РМ, СВ и ТП по расписанию, с историей отправок.")}
           </span>
         </span>
         <ArrowRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />

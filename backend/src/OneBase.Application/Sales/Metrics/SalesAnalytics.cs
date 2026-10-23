@@ -70,7 +70,8 @@ public sealed partial class SalesAnalytics
         ComputeAgentStats();
     }
 
-    public PeriodInfo Period => new(_d.Year, _d.Month, _d.DataThrough, _d.WorkedDays, _d.DaysInMonth, _previousCutoff, _d.SelectedPlan, _d.AvailablePlans);
+    public PeriodInfo Period => new(_d.Year, _d.Month, _d.DataThrough, _d.WorkedDays, _d.DaysInMonth, _previousCutoff, _d.SelectedPlan, _d.AvailablePlans,
+        _d.Today == DateOnly.MaxValue ? null : _d.Today);
 
     // ================= Готовые ответы =================
     // SalesAnalytics живёт в кэше, пока не изменились данные, поэтому посчитанный уровень можно отдавать повторно:
@@ -977,7 +978,7 @@ public sealed partial class SalesAnalytics
         }
 
         var akbTotal = total.Select(v => v.Akb).ToList();
-        var lastPartial = _d.DataThrough < _d.MonthStart.AddMonths(1).AddDays(-1);
+        var lastPartial = !_d.Closed; // идущий месяц (и его последний, ещё не кончившийся день) — неполный
         return new AkbByMonth(
             _d.Year,
             months,

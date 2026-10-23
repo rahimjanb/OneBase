@@ -8,7 +8,8 @@ namespace OneBase.Application.Sales.Stock;
 /// Остаток SKU на одном складе: штуки как в Linko, кг, коробки и стоимость; скорость без поправки (RawKgPerDay) и с поправкой на аутсток
 /// (KgPerDay; ZeroDays — зачтённые дни в нуле закрытого месяца), та же скорость в коробках и деньгах (BoxesPerDay, SumPerDay — для матрицы
 /// в выбранной единице); запас на 15 дней в кг, коробках и деньгах; рекомендуемый заказ (OrderKg — вверх до целой коробки; у завода —
-/// заказ у завода). Бронь (Reserved…) — товар неотгруженных заказов и перемещений склада («Забронировано» в Linko), FreeKg — доступно
+/// заказ у завода). Бронь (Reserved…) — товар неотгруженных заказов и перемещений склада и перемещений в пути («Забронировано» и «В пути»
+/// в Linko), FreeKg — доступно
 /// (остаток − бронь): «хватит, дн.», статус и заказ дилера считаются от доступного; заказ у завода — от всего остатка (бронь завода — это
 /// отгрузки по тем же заказам дилеров, иначе её заказали бы дважды). Все переводы в коробки, штуки и деньги сделаны здесь — страница ничего
 /// не пересчитывает.
@@ -597,7 +598,7 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
         var days = Math.Max(1, options.StockVelocityDays);
 
         // База скорости: StockVelocityDays дней до последнего полного дня данных — вчера или последней приёмки не позже вчера.
-        var cutoff = SecondarySales.ReportCutoff(DateTimeOffset.UtcNow);
+        var cutoff = SecondarySales.LastFullDay(DateTimeOffset.UtcNow); // скорость — по полным дням: неполный сегодняшний её бы занижал
         var lastAccepted = await db.LinkoOrders.AsNoTracking()
             .Where(o => sold.Contains(o.Status) && o.AcceptedDate != null && o.AcceptedDate <= cutoff && (o.BranchName == null || !excluded.Contains(o.BranchName.ToLower())))
             .MaxAsync(o => o.AcceptedDate, ct);

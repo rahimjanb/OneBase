@@ -131,6 +131,8 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Telegram.TelegramReportSubscription> TelegramReportSubscriptions { get; }
     DbSet<OneBase.Domain.Telegram.TelegramReportSubscriptionChat> TelegramReportSubscriptionChats { get; }
     DbSet<OneBase.Domain.Telegram.TelegramReportDelivery> TelegramReportDeliveries { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramReportJob> TelegramReportJobs { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramReportRun> TelegramReportRuns { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

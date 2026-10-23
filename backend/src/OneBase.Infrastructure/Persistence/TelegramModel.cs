@@ -173,11 +173,34 @@ internal static class TelegramModel
             e.Property(x => x.Metric).HasMaxLength(8);
         });
 
+        // Расписания запусков (код «отчёт.запуск») и журнал запусков: один запуск на код и день.
+        b.Entity<TelegramReportJob>(e =>
+        {
+            e.ToTable("ReportJobs", Schema);
+            e.HasKey(x => x.Code);
+            e.Property(x => x.Code).HasMaxLength(40);
+            e.Property(x => x.TimeZone).HasMaxLength(64);
+        });
+
+        b.Entity<TelegramReportRun>(e =>
+        {
+            e.ToTable("ReportRuns", Schema);
+            e.Property(x => x.Job).HasMaxLength(40);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.Error).HasMaxLength(1000);
+            e.HasIndex(x => new { x.Job, x.Period }).IsUnique();
+            e.HasIndex(x => x.StartedAt);
+        });
+
         b.Entity<TelegramReportSubscription>(e =>
         {
             e.ToTable("ReportSubscriptions", Schema);
+            e.Property(x => x.Role).HasMaxLength(8);
+            e.Property(x => x.Title).HasMaxLength(200);
             e.Property(x => x.SupervisorName).HasMaxLength(200);
-            // Регион — без внешнего ключа: схема sales своя (как у остальных ссылок Telegram на данные продаж).
+            e.Property(x => x.AgentName).HasMaxLength(200);
+            e.Property(x => x.Reports).HasMaxLength(1000);
+            // Регион и направление — без внешнего ключа: схема sales своя (как у остальных ссылок Telegram на данные продаж).
             e.HasIndex(x => x.RegionId);
             e.HasMany(x => x.Chats).WithOne().HasForeignKey(x => x.SubscriptionId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -194,6 +217,9 @@ internal static class TelegramModel
         {
             e.ToTable("ReportDeliveries", Schema);
             e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Report).HasMaxLength(40);
+            e.Property(x => x.Role).HasMaxLength(8);
+            e.Property(x => x.ScopeKey).HasMaxLength(120);
             e.Property(x => x.Trigger).HasMaxLength(16);
             e.Property(x => x.DataMode).HasMaxLength(8);
             e.Property(x => x.RecipientTitle).HasMaxLength(255);
@@ -202,9 +228,15 @@ internal static class TelegramModel
             e.Property(x => x.Error).HasMaxLength(1000);
             e.Property(x => x.MessageIds).HasMaxLength(500);
             e.Property(x => x.Summary).HasMaxLength(500);
-            // По расписанию: один отчёт автоотправки за один день в один чат — один раз, даже при двух экземплярах службы.
+            // Прежние строки дневного отчёта: один отчёт автоотправки за день в один чат.
             e.HasIndex(x => new { x.SubscriptionId, x.ChatId, x.Kind, x.Period }).IsUnique()
                 .HasFilter("\"Trigger\" = 'schedule' AND \"SubscriptionId\" IS NOT NULL AND \"ChatId\" IS NOT NULL");
+            // Ключ отправки по расписанию: запуск × день × чат × область — один раз, даже если человек в нескольких получателях
+            // или служба запущена в двух экземплярах.
+            e.HasIndex(x => new { x.Report, x.Period, x.ChatId, x.ScopeKey }).IsUnique()
+                .HasFilter("\"Trigger\" = 'schedule' AND \"Report\" IS NOT NULL AND \"ChatId\" IS NOT NULL")
+                .HasDatabaseName("IX_ReportDeliveries_ScheduleKey");
+            e.HasIndex(x => x.RunId);
             e.HasIndex(x => new { x.Status, x.NextAttemptAt });
             e.HasIndex(x => x.CreatedAt);
         });

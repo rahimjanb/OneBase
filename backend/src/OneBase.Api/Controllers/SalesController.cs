@@ -338,7 +338,8 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     }
 
     /// <summary>
-    /// «Скачать акт»: акт приёма-передачи «Завод → регион» в Word по коробкам автозаказа. Имя файла — в пути, чтобы его взяли iOS и браузеры.
+    /// «Скачать акт»: акт приёма-передачи «Завод → регион» в Excel по коробкам автозаказа (остатков завода в нём нет). Имя файла — в пути,
+    /// чтобы его взяли iOS и браузеры.
     /// </summary>
     [HttpPost("stock/autoorder/act/{fileName}")]
     public async Task<IActionResult> AutoOrderAct(
@@ -351,8 +352,8 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         try
         {
             var act = await stock.TransferActAsync(input, ct);
-            var name = Path.ChangeExtension(OneBase.AI.Reports.ReportService.FileName(Path.GetFileNameWithoutExtension(fileName)), ".docx");
-            return File(writer.Write(act), "application/vnd.openxmlformats-officedocument.wordprocessingml.document", name);
+            var name = Path.ChangeExtension(OneBase.AI.Reports.ReportService.FileName(Path.GetFileNameWithoutExtension(fileName)), ".xlsx");
+            return File(writer.Write(act), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name);
         }
         catch (ArgumentException e)
         {

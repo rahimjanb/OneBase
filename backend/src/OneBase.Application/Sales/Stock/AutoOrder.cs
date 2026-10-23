@@ -50,7 +50,7 @@ public sealed record TransferActRow(string Name, int Boxes, string Unit, decimal
 /// <summary>Акт приёма-передачи (бланк Linko): откуда → куда, дата, кто передаёт, строки и итог.</summary>
 public sealed record TransferAct(string From, string To, DateOnly Date, string Sender, IReadOnlyList<TransferActRow> Rows, decimal Total);
 
-/// <summary>Документ Word «Акт приёма-передачи» по бланку Linko.</summary>
+/// <summary>Файл Excel «Акт приёма-передачи» по бланку Linko.</summary>
 public interface ITransferActWriter
 {
     byte[] Write(TransferAct act);

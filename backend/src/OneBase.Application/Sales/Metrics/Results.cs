@@ -3,7 +3,8 @@ namespace OneBase.Application.Sales.Metrics;
 // Результаты расчёта — отдаются API как есть. Доли — от 0 до 1; null — «нет данных» (в UI «—»).
 
 /// <summary>
-/// Период отчёта. DataThrough — отчётный день (последний полный день с данными); Closed — месяц закрыт: прогноза нет, чип «данные по» не нужен.
+/// Период отчёта. DataThrough — отчётный день (последний день с данными, может быть сегодняшним — тогда он неполный); Closed — месяц закрыт:
+/// данные за все дни и месяц кончился (Today — сегодня по местному времени; null — по данным), прогноза нет, чип «данные по» не нужен.
 /// Plan — вид плана, по которому посчитан ответ (rop / factory); AvailablePlans — какие планы регионов заведены на этот месяц (подмножество
 /// rop, factory): переключатель плана не предлагает остальные, а без выбранного вида план подразделений — из Linko (KpiTiles.PlanSource).
 /// </summary>
@@ -15,9 +16,10 @@ public sealed record PeriodInfo(
     int DaysInMonth,
     DateOnly PreviousCutoff,
     string Plan,
-    IReadOnlyList<string> AvailablePlans)
+    IReadOnlyList<string> AvailablePlans,
+    DateOnly? Today = null)
 {
-    public bool Closed => WorkedDays >= DaysInMonth;
+    public bool Closed => WorkedDays >= DaysInMonth && (Today is not { } today || new DateOnly(Year, Month, 1).AddMonths(1) <= today);
 }
 
 public sealed record TargetValue(decimal? Value, decimal Target, decimal? Ratio, TargetLevel? Level)

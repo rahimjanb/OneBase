@@ -18,8 +18,10 @@ export type PlanKind = "rop" | "factory";
 export type Period = {
   year: number;
   month: number;
-  /** Отчётный день — последний полный день с данными (вчера для идущего месяца). */
+  /** Отчётный день — последний день с данными; у идущего месяца может быть сегодняшним (неполным — на время синхронизации). */
   dataThrough: string;
+  /** Сегодня по Ташкенту (сервер): отчётный день, равный ему, — неполный. */
+  today?: string | null;
   workedDays: number;
   daysInMonth: number;
   previousCutoff: string;
@@ -802,7 +804,7 @@ export type StockCell = {
   orderSum: number | null;
   /** Статус клетки по доступному остатку и скорости; у экспорта — none. */
   status: StockStatus;
-  /** Бронь склада — неотгруженные заказы и перемещения («Забронировано» в Linko); доступно = остаток − бронь. */
+  /** Бронь склада — неотгруженные заказы и перемещения и перемещения в пути («Забронировано» и «В пути» в Linko); доступно = остаток − бронь. */
   reservedKg: number;
   reservedBoxes: number | null;
   reservedSum: number | null;
@@ -848,7 +850,7 @@ export type StockItem = {
   status: StockStatus;
   regions: Record<string, StockCell>;
   factory: StockCell | null;
-  /** Бронь склада — неотгруженные заказы и перемещения («Забронировано» в Linko); доступно = остаток − бронь. */
+  /** Бронь склада — неотгруженные заказы и перемещения и перемещения в пути («Забронировано» и «В пути» в Linko); доступно = остаток − бронь. */
   reservedKg: number;
   reservedBoxes: number | null;
   reservedSum: number | null;
@@ -1180,7 +1182,7 @@ export type PrimaryView = {
   year: number;
   month: number;
   dataThrough: string | null;
-  /** Дата данных: последний день с отгрузкой не позже вчера. */
+  /** Дата данных: последний день с отгрузкой не позже сегодня и последней синхронизации. */
   asOf: string | null;
   /** Выбранный месяц идёт (прогноз только у него); runningMonth — какой месяц года идёт. */
   running: boolean;

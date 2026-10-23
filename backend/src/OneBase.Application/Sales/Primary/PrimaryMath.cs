@@ -316,12 +316,13 @@ public static class PrimaryMath
                     .ToList());
 
     /// <summary>
-    /// Отчётный день первички: вчера по местному времени (cutoff), но не позже дня синхронизации (syncedOn) — за день после неё данных ещё нет.
+    /// Отчётный день первички: сегодня по местному времени (cutoff, Sales:IncludeToday), но не позже дня синхронизации (syncedOn) — за день
+    /// после неё данных ещё нет.
     /// </summary>
     public static DateOnly DataLimit(DateOnly cutoff, DateOnly? syncedOn) => syncedOn is { } s && s < cutoff ? s : cutoff;
 
     /// <summary>
-    /// Дата данных первички: последний день со строкой не позже отчётного дня (DataLimit — вчера и не позже синхронизации): строки с датой
+    /// Дата данных первички: последний день со строкой не позже отчётного дня (DataLimit — сегодня и не позже синхронизации): строки с датой
     /// в будущем её не сдвигают. null — таких дней нет.
     /// </summary>
     public static DateOnly? AsOf(IEnumerable<DateOnly> days, DateOnly cutoff, DateOnly? syncedOn)

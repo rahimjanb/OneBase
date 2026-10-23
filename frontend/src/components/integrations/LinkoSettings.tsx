@@ -232,7 +232,7 @@ export function LinkoSettings({ initial }: { initial: LinkoDetails }) {
 
         <label className="mt-5 flex items-center gap-2.5 text-sm text-ink">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
-          {t("Интеграция включена — данные загружаются автоматически в 11:00 и 17:00 (Ташкент)")}
+          {t("Интеграция включена — данные загружаются автоматически каждые 30 минут")}
         </label>
 
         <div className="mt-5 flex flex-wrap items-center gap-2">

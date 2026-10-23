@@ -39,6 +39,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Telegram.TelegramReportSubscription> TelegramReportSubscriptions => Set<OneBase.Domain.Telegram.TelegramReportSubscription>();
     public DbSet<OneBase.Domain.Telegram.TelegramReportSubscriptionChat> TelegramReportSubscriptionChats => Set<OneBase.Domain.Telegram.TelegramReportSubscriptionChat>();
     public DbSet<OneBase.Domain.Telegram.TelegramReportDelivery> TelegramReportDeliveries => Set<OneBase.Domain.Telegram.TelegramReportDelivery>();
+    public DbSet<OneBase.Domain.Telegram.TelegramReportJob> TelegramReportJobs => Set<OneBase.Domain.Telegram.TelegramReportJob>();
+    public DbSet<OneBase.Domain.Telegram.TelegramReportRun> TelegramReportRuns => Set<OneBase.Domain.Telegram.TelegramReportRun>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<User> Users => Set<User>();

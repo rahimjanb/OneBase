@@ -9,15 +9,15 @@ using OneBase.Infrastructure.Persistence;
 namespace OneBase.Infrastructure.Linko;
 
 /// <summary>
-/// Контроль обмена с Linko после каждой синхронизации по расписанию (Sales:Sync:Times): если этот запуск не обновил заказы, возвраты,
+/// Контроль обмена с Linko после каждой синхронизации по расписанию (Sales:Sync:IntervalMinutes и Times): если этот запуск не обновил заказы, возвраты,
 /// визиты, остатки, перемещения или бронь — уведомление (колокольчик и push) тем, кто управляет интеграциями; когда обмен восстановился —
-/// второе уведомление. По одному на проблему: открытая проблема хранится в строке «alert». Запусков два в день — ждать следующего,
-/// чтобы сообщить, поздно: до него отчёты живут со старыми данными.
+/// второе уведомление. По одному на проблему: открытая проблема хранится в строке «alert». Данные устарели — дольше самого долгого
+/// промежутка между запусками и часа запаса (при запуске каждые 30 минут — 1,5 часа).
 /// </summary>
 public sealed class LinkoSyncHealth(OneBaseDbContext db, SalesOptions options, TimeProvider time, ILogger<LinkoSyncHealth> logger)
 {
     /// <summary>Без привязки к запуску данные устарели, если не обновлялись дольше самого долгого промежутка между запусками и часа запаса.</summary>
-    public TimeSpan StaleAfter => LinkoSyncSchedule.LongestGap(LinkoSyncSchedule.ParseTimes(options.Sync.Times)) + TimeSpan.FromHours(1);
+    public TimeSpan StaleAfter => LinkoSyncSchedule.LongestGap(LinkoSyncSchedule.TimesOf(options.Sync)) + TimeSpan.FromHours(1);
 
     /// <summary>
     /// Проверяет обмен; true — отправлено уведомление (о проблеме или о восстановлении). <paramref name="since"/> — начало только что
@@ -84,7 +84,7 @@ public sealed class LinkoSyncHealth(OneBaseDbContext db, SalesOptions options, T
 
     private string NextRunText(DateTimeOffset now)
     {
-        var times = LinkoSyncSchedule.ParseTimes(options.Sync.Times);
+        var times = LinkoSyncSchedule.TimesOf(options.Sync);
         return times.Count == 0
             ? ""
             : $"Следующая синхронизация по расписанию — {LinkoSyncSchedule.NextRun(now, times).ToOffset(LinkoSyncSchedule.CompanyOffset):dd.MM HH:mm} (Ташкент). ";

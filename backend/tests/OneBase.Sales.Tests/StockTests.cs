@@ -226,6 +226,18 @@ public class StockTests
             new Dictionary<(long, long), decimal> { [(1, 15)] = 40, [(1, 14)] = 30, [(1, 5)] = 100 }, DateTimeOffset.Parse("2026-10-22T12:05:00Z"));
 
     /// <summary>
+    /// Бронь = «Забронировано» + «В пути» Linko: заказы «не доставлен», перемещения одобренные, но не отданные, и отданные, но не принятые
+    /// получателем (решение 23.10.2026) — всё это уже не свободный товар склада-отправителя.
+    /// </summary>
+    [Fact]
+    public void Reservation_includes_reserved_and_in_transit_documents()
+    {
+        var options = new SalesOptions();
+        Assert.Equal(["not_delivered"], options.ReservedOrderStatuses);
+        Assert.Equal(["approved", "given"], options.ReservedTransferStatuses);
+    }
+
+    /// <summary>
     /// Бронь (как в «Полевом контроле»): у дилера она уже продана магазинам — «хватит, дн.», статус и заказ считаются от доступного (остаток − бронь);
     /// у завода бронь — отгрузки по тем же заказам дилеров, поэтому заказ у завода считается от всего остатка, иначе бронь заказали бы дважды.
     /// </summary>
@@ -356,10 +368,10 @@ public class StockTests
 
     /// <summary>
     /// Акт из автозаказа: с клиента только коробки — товары без коробки, чужие и нулевые отбрасываются, строки — по категории и названию,
-    /// цены и единицы — свои; Word-документ проходит проверку OpenXML, подписи переносятся вместе с абзацем об ответственности.
+    /// цены и единицы — свои; файл — Excel по бланку Linko, суммы — числами.
     /// </summary>
     [Fact]
-    public void Transfer_act_takes_only_boxes_from_the_client_and_is_a_valid_word_document()
+    public void Transfer_act_takes_only_boxes_from_the_client_and_is_an_excel_sheet()
     {
         var input = new AutoOrderActInput("r2", null, [new(2, 4), new(1, 40), new(3, 5), new(99, 1), new(1, 0)]);
         var act = StockService.ComposeAct(Base(), input, "Ritm Admin", new DateOnly(2026, 10, 22));
@@ -374,18 +386,17 @@ public class StockTests
         Assert.Throws<KeyNotFoundException>(() => StockService.ComposeAct(Base(), input with { RegionId = "nope" }, "x", default));
         Assert.Throws<ArgumentException>(() => StockService.ComposeAct(Base(), input with { Lines = [new(3, 5), new(1, 0)] }, "x", default));
 
-        var bytes = new OneBase.Infrastructure.Reports.TransferActWriter().Write(act);
-        using var document = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(new MemoryStream(bytes), false);
-        var errors = new DocumentFormat.OpenXml.Validation.OpenXmlValidator().Validate(document).Select(e => $"{e.Path?.XPath}: {e.Description}").ToList();
-        Assert.Empty(errors);
-        var body = document.MainDocumentPart!.Document.Body!;
-        var text = body.InnerText.Replace(' ', ' ');
-        foreach (var expected in new[] { "ПРИЕМА-ПЕРЕДАЧИ", "Завод → Денов", "22 Октябрь 2026", "передает Ritm Admin", "Итого:", "2 736 000", "3 071 000", "Сдал", "Принял" })
+        var bytes = new OneBase.Infrastructure.Reports.TransferActWorkbookWriter().Write(act);
+        using var workbook = new ClosedXML.Excel.XLWorkbook(new MemoryStream(bytes));
+        var cells = workbook.Worksheet(1).CellsUsed().ToList();
+        var text = string.Join("\n", cells.Select(c => c.GetString()));
+        foreach (var expected in new[] { "ПРИЕМА-ПЕРЕДАЧИ", "Завод → Денов", "22 Октябрь 2026", "передает Ritm Admin", "Итого:", "Менеджер по продажам", "Сдал", "Принял" })
         {
             Assert.Contains(expected, text);
         }
 
-        var responsibility = body.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>().Single(p => p.InnerText.StartsWith("Менеджер по продажам"));
-        Assert.NotNull(responsibility.ParagraphProperties?.KeepNext);
+        var bambuk = cells.Single(c => c.GetString() == Bambuk.Name).WorksheetRow();
+        Assert.Equal((40d, 120d, 2_736_000d), (bambuk.Cell(2).GetDouble(), bambuk.Cell(4).GetDouble(), bambuk.Cell(6).GetDouble()));
+        Assert.Equal(3_071_000d, cells.Single(c => c.GetString() == "Итого:").WorksheetRow().Cell(6).GetDouble());
     }
 }

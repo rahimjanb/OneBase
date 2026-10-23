@@ -45,8 +45,10 @@ public class SalesAnalyticsTests
         IReadOnlyList<PlanRow>? nextPlans = null,
         string selectedPlan = PlanSources.Rop,
         IReadOnlyList<string>? availablePlans = null,
-        IReadOnlyList<string>? akbHidden = null) => new()
+        IReadOnlyList<string>? akbHidden = null,
+        DateOnly? today = null) => new()
     {
+        Today = today ?? DateOnly.MaxValue,
         PlanSource = planSource,
         SelectedPlan = selectedPlan,
         AvailablePlans = availablePlans ?? [],
@@ -450,6 +452,16 @@ public class SalesAnalyticsTests
         // «Экспорт и опт» — по тому же правилу, что карточки категорий: ни прогноза, ни сравнения с прошлым месяцем по нему.
         Assert.True(republic.Excluded!.ForecastKg is null && republic.Excluded.VsPrevMonth is null);
         Assert.Equal((300m, 600m), (republic.Excluded.FactKg, republic.Excluded.PrevMonthKg));
+
+        // Отчётный день — сегодня, последний день месяца: данные есть за все дни, но день ещё идёт — месяц не закрыт, прогноз есть.
+        var lastDay = new SalesAnalytics(Data(previous, revenuePlans: revenuePlans, excludedCurrent: factory, excludedPrevious: factoryBefore,
+            dataThrough: new DateOnly(2026, 9, 30), today: new DateOnly(2026, 9, 30)));
+        var today = lastDay.Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30));
+        Assert.False(today.Period.Closed);
+        Assert.Equal(new DateOnly(2026, 9, 30), today.Period.Today);
+        Assert.Equal(210m, today.Kpi.ForecastKg); // 210 кг за 30 дней × 30
+        // Наступило 1 октября — сентябрь закрыт.
+        Assert.True(new SalesAnalytics(Data(previous, dataThrough: new DateOnly(2026, 9, 30), today: new DateOnly(2026, 10, 1))).Period.Closed);
         Assert.All(closed.Region(North, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), "kg", null).Team,
             t => Assert.True(t.ForecastKg is null && t.ForecastExecution is null));
         Assert.Null(closed.CachedOverview().Republic.ForecastKg);
@@ -975,6 +987,61 @@ public class SalesAnalyticsTests
         var day12 = analytics.Region(North, new DateOnly(2026, 9, 12), new DateOnly(2026, 9, 12), "kg", null).VisitCalendar.Single().Children.Single(c => c.Id == "1");
         Assert.Equal((1, 0, 1), (day12.OrdersTotal, day12.OrdersInPlan, day12.OrdersNoVisit)); // введён 10-го без визита — «без визита»
         Assert.Equal((new DateOnly(2026, 9, 4), new DateOnly(2026, 9, 4)), analytics.VisitRange(4, 4));
+    }
+
+    [Fact]
+    public void Route_split_divides_visits_orders_revenue_and_akb_by_route_for_every_level()
+    {
+        // Тот же сценарий, что у календаря визитов, плюс возврат ТП 1 8-го: заказ 1 — с визита по маршруту, 2 — с визита вне маршрута,
+        // 3 — без визита, 4 — «по маршруту» (в ТТ 13 7-го по плану был ТП 2), 5 принят 12-го — вне отрезка 1–10.
+        var visits = new[] { Visit(1, 10, 3), Visit(1, 11, 5, inPlan: false), Visit(2, 13, 7), Visit(1, 14, 9, status: VisitStatus.Pending) };
+        var current = new[]
+        {
+            Accepted(1, 10, 3, 4), Accepted(2, 11, 5, 6), Accepted(3, 12, 6, 6), Accepted(4, 13, 7, 8), Accepted(5, 10, 10, 12),
+            new SaleLine(new DateOnly(2026, 9, 8), 1, 10, 101, 1, 100, -5, -50, null), // возврат
+        };
+        // Заказы по дню ввода — для «визита с заказом» (как SecondarySales.VisitOrders).
+        var visitOrders = current.Where(l => l.OrderId != null).Select(l => l with { Date = l.CreatedDate!.Value }).ToList();
+        var analytics = new SalesAnalytics(Data(current: current, visits: visits, visitOrders: visitOrders, agents: RepsAndOperator(), salesRepJobs: ["Агент"],
+            dataThrough: new DateOnly(2026, 9, 10)));
+
+        var region = analytics.RouteSplit(Sep1, new DateOnly(2026, 9, 10), region: North);
+        var agent = region.Regions.Single().Agents.Single(a => a.Id == "1");
+        Assert.Equal((2, 1, 1, 1), (agent.Plan, agent.DoneInPlan, agent.DoneOffPlan, agent.NotVisited));
+        Assert.Equal((1, 1), (agent.VisitsWithOrderInPlan, agent.VisitsWithOrderOffPlan));
+        Assert.Equal(new RouteSales(2, 200, 20, 2), agent.ByRoute); // заказы 1 и 4, точки 10 и 13
+        Assert.Equal(new RouteSales(1, 100, 10, 1), agent.OffRoute);
+        Assert.Equal(new RouteSales(1, 100, 10, 1), agent.NoVisit);
+        Assert.Equal((-50m, -5m), (agent.ReturnsRevenue, agent.ReturnsKg));
+        Assert.Equal(new RouteSales(4, 350, 35, 4), agent.Total); // факт с возвратом; АКБ — 10, 11, 12, 13
+        Assert.Equal(0.5m, agent.ByRouteRevenueShare);
+
+        // Совпадает с календарём визитов страницы региона.
+        var calendar = analytics.Region(North, Sep1, new DateOnly(2026, 9, 10), "kg", null).VisitCalendar.Single().Children.Single(c => c.Id == "1");
+        Assert.Equal((calendar.OrdersInPlan, calendar.OrdersInPlanSum, calendar.OrdersOffPlan, calendar.OrdersNoVisit),
+            (agent.ByRoute.Orders, agent.ByRoute.Revenue, agent.OffRoute.Orders, agent.NoVisit.Orders));
+
+        // Регион — сумма ТП (ТП 2: визит по плану без заказа); республика и РМ — то же (у Юга нет ни визитов, ни продаж); один ТП — его строка.
+        var total = region.Total;
+        Assert.Equal((3, 2, 1, 1), (total.Plan, total.DoneInPlan, total.DoneOffPlan, total.NotVisited));
+        Assert.Equal(agent.Total, total.Total);
+        Assert.Equal(["1", "2"], region.Regions.Single().Agents.Select(a => a.Id).Order());
+        var republic = analytics.RouteSplit(Sep1, new DateOnly(2026, 9, 10));
+        Assert.Equal(total.Total, republic.Total.Total);
+        Assert.Equal("Север", Assert.Single(republic.Regions).Name);
+        Assert.Empty(republic.Regions.Single().Agents); // у республики строки ТП — только с withAgents
+        Assert.NotEmpty(analytics.RouteSplit(Sep1, new DateOnly(2026, 9, 10), withAgents: true).Regions.Single().Agents);
+        Assert.Equal(total.Total, analytics.RouteSplit(Sep1, new DateOnly(2026, 9, 10), direction: Rm1).Total.Total);
+        var one = analytics.RouteSplit(Sep1, new DateOnly(2026, 9, 10), agent: 1);
+        Assert.Equal(("Агент 1", agent.Total), (one.Total.Name, one.Total.Total));
+
+        // Дни: заказ — в день приёмки; возврат — 8-го; отрезок не дальше отчётного дня.
+        Assert.Equal(10, republic.Days.Count);
+        Assert.Equal((100m, 1), (republic.Days.Single(d => d.Date.Day == 4).Revenue, republic.Days.Single(d => d.Date.Day == 4).Orders));
+        Assert.Equal(50m, republic.Days.Single(d => d.Date.Day == 8).Revenue); // заказ 4 (100) и возврат (−50)
+        Assert.Equal(new DateOnly(2026, 9, 10), analytics.RouteSplit(Sep1, new DateOnly(2026, 9, 30)).To);
+        var day = analytics.RouteSplit(new DateOnly(2026, 9, 6), new DateOnly(2026, 9, 6), agent: 1).Total;
+        Assert.Equal((2, 200m), (day.Total.Orders, day.Total.Revenue)); // заказы 2 и 3 приняты 6-го
     }
 
     [Fact]

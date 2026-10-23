@@ -2,15 +2,14 @@ using Microsoft.AspNetCore.Mvc;
 using OneBase.Api.Auth;
 using OneBase.Application.Security;
 using OneBase.Application.Telegram;
-using OneBase.Domain.Telegram;
 using OneBase.Infrastructure.Telegram.Reports;
 
 namespace OneBase.Api.Controllers;
 
 /// <summary>
-/// «Настройки → Telegram → Автоматические отчёты» (telegram.manage): аккаунт и язык, расписания утро/обед/вечер, автоотправки
-/// «регион → супервайзер → чаты», предпросмотр, тестовая и ручная отправка, журнал. Реальные данные продаж — только с правом sales.read
-/// (проверяется на сервере, из токена).
+/// «Настройки → Telegram → Автоматические отчёты» (telegram.manage): аккаунт, язык и параметры; расписание 13 запусков шести отчётов;
+/// получатели «роль (РМ/СВ/ТП) → область → чаты → отчёты»; предпросмотр, тест в выбранный чат, ручная отправка и повтор; история.
+/// Реальные данные продаж — только с правом sales.read (проверяется на сервере, из токена).
 /// </summary>
 [ApiController]
 [Route("api/settings/telegram/reports")]
@@ -24,49 +23,54 @@ public sealed class TelegramReportsController(TelegramReportService reports) : C
     public Task<IActionResult> SaveSettings(ReportSettingsInput input, CancellationToken ct) =>
         Run(async () => Ok(await reports.SaveSettingsAsync(input, User.GetUserId(), ct)));
 
-    [HttpPut("schedules/{kind}")]
-    public Task<IActionResult> SaveSchedule(string kind, ReportScheduleInput input, CancellationToken ct) =>
-        Run(async () => Enum.TryParse<TelegramReportKind>(kind, true, out var k)
-            ? Ok(await reports.SaveScheduleAsync(k, input, User.GetUserId(), ct))
-            : BadRequest(new { error = "Вид отчёта — Morning, Midday или Evening." }));
+    /// <summary>Расписание запуска (code — «daily.midday», «weekly.saturday» …): включение, время, дни, пояс, догон пропущенного.</summary>
+    [HttpPut("jobs/{code}")]
+    public Task<IActionResult> SaveJob(string code, ReportJobInput input, CancellationToken ct) =>
+        Run(async () => Ok(await reports.SaveJobAsync(code, input, User.GetUserId(), ct)));
 
-    [HttpPost("subscriptions")]
-    public Task<IActionResult> CreateSubscription(ReportSubscriptionInput input, CancellationToken ct) =>
-        Run(async () => Ok(await reports.SaveSubscriptionAsync(null, input, CanUseSales, User.GetUserId(), ct)));
+    [HttpPost("recipients")]
+    public Task<IActionResult> CreateRecipient(ReportRecipientInput input, CancellationToken ct) =>
+        Run(async () => Ok(await reports.SaveRecipientAsync(null, input, CanUseSales, User.GetUserId(), ct)));
 
-    [HttpPut("subscriptions/{id:guid}")]
-    public Task<IActionResult> UpdateSubscription(Guid id, ReportSubscriptionInput input, CancellationToken ct) =>
-        Run(async () => Ok(await reports.SaveSubscriptionAsync(id, input, CanUseSales, User.GetUserId(), ct)));
+    [HttpPut("recipients/{id:guid}")]
+    public Task<IActionResult> UpdateRecipient(Guid id, ReportRecipientInput input, CancellationToken ct) =>
+        Run(async () => Ok(await reports.SaveRecipientAsync(id, input, CanUseSales, User.GetUserId(), ct)));
 
-    [HttpDelete("subscriptions/{id:guid}")]
-    public Task<IActionResult> DeleteSubscription(Guid id, CancellationToken ct) =>
+    [HttpDelete("recipients/{id:guid}")]
+    public Task<IActionResult> DeleteRecipient(Guid id, CancellationToken ct) =>
         Run(async () =>
         {
-            await reports.DeleteSubscriptionAsync(id, User.GetUserId(), ct);
+            await reports.DeleteRecipientAsync(id, User.GetUserId(), ct);
             return NoContent();
         });
 
-    /// <summary>Отправить отчёт автоотправки сейчас во все её чаты (реальные данные); уже отправлен сегодня — 409, повтор — с force.</summary>
-    [HttpPost("subscriptions/{id:guid}/send")]
+    /// <summary>Отправить отчёт получателю сейчас во все его чаты (реальные данные); уже отправлен сегодня — 409, повтор — с force.</summary>
+    [HttpPost("recipients/{id:guid}/send")]
     public Task<IActionResult> Send(Guid id, ReportSendInput input, CancellationToken ct) =>
         Run(async () => Ok(await reports.SendNowAsync(id, input, CanUseSales, User.GetUserId(), ct)));
 
-    /// <summary>Картинки отчёта без отправки: демонстрационные или реальные данные региона и супервайзера (или автоотправки).</summary>
+    /// <summary>Картинки отчёта без отправки: запуск, роль и область (или получатель), день и время формирования, язык.</summary>
     [HttpPost("preview")]
     public Task<IActionResult> Preview(ReportPreviewInput input, CancellationToken ct) =>
         Run(async () => Ok(await reports.PreviewAsync(input, CanUseSales, ct)));
 
-    /// <summary>Тестовая отправка в выбранный чат: по умолчанию демонстрационные данные с пометкой «ТЕСТОВЫЕ ДАННЫЕ».</summary>
+    /// <summary>Тестовая отправка — только в выбранный чат, с пометкой «ТЕСТОВАЯ ОТПРАВКА»; получатели её не получают.</summary>
     [HttpPost("test")]
     public Task<IActionResult> Test(ReportTestInput input, CancellationToken ct) =>
         Run(async () => Ok(await reports.TestAsync(input, CanUseSales, User.GetUserId(), ct)));
 
-    /// <summary>Журнал: последние 300 отправок (kind, status — pending/sending/sent/failed, mode — real/demo).</summary>
-    [HttpGet("deliveries")]
-    public Task<IActionResult> Deliveries([FromQuery] string? kind, [FromQuery] string? status, [FromQuery] string? mode, CancellationToken ct) =>
-        Run(async () => Ok(await reports.DeliveriesAsync(kind, status, mode, ct)));
+    /// <summary>Повтор неудачной отправки; «неизвестно, дошёл ли» — только с force после проверки чата.</summary>
+    [HttpPost("deliveries/{id:guid}/retry")]
+    public Task<IActionResult> Retry(Guid id, [FromQuery] bool force, CancellationToken ct) =>
+        Run(async () => Ok(await reports.RetryAsync(id, force, CanUseSales, User.GetUserId(), ct)));
 
-    /// <summary>Право на данные продаж — из токена: без него — только демонстрационные данные.</summary>
+    /// <summary>История: отправки (фильтры — период, отчёт или запуск, регион, статус; по 50) и последние запуски расписания.</summary>
+    [HttpGet("history")]
+    public Task<IActionResult> History([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? report, [FromQuery] Guid? regionId,
+        [FromQuery] string? status, [FromQuery] int page = 1, CancellationToken ct = default) =>
+        Run(async () => Ok(await reports.HistoryAsync(new ReportHistoryQuery(from, to, report, regionId, status, page), ct)));
+
+    /// <summary>Право на данные продаж — из токена.</summary>
     private bool CanUseSales => User.FindAll(OneBaseClaims.Permission).Any(c => c.Value == Permissions.SalesRead);
 
     private static async Task<IActionResult> Run(Func<Task<IActionResult>> action)

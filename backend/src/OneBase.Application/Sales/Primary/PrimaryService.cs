@@ -104,7 +104,7 @@ public sealed record PrimaryCalendar(
     PrimaryAmounts? DetailTotal);
 
 /// <summary>
-/// Первичка за месяц и год. AsOf — дата данных (последний день с отгрузкой не позже отчётного дня — вчера и не позже синхронизации; строки
+/// Первичка за месяц и год. AsOf — дата данных (последний день с отгрузкой не позже отчётного дня — сегодня и не позже синхронизации; строки
 /// позже отчётного дня в отчёт не входят); Running — выбранный месяц идёт (прогноз только у него), RunningMonth — какой месяц года идёт.
 /// Выполнение, «осталось», прогноз к плану, доли, цены за кг, наценку, долю возвратов и итоги таблиц считает сервер — страница их только
 /// форматирует. Calendar — по периоду и разбору из запроса. OtherStocks — склады вне справочника регионов за год: не дилеры, в первичке их нет.
@@ -168,7 +168,7 @@ public sealed record PrimaryView(
 /// на завод и возвраты по таким заказам — строки со знаком минус: месяцы, строки, календарь и с начала года — нетто. Перемещение между
 /// складами дилеров разных регионов — возврат у одного и отгрузка другому (как в таблице первички ГП).
 /// Дата перемещения — доставка (DeliveryDate), без неё — выдача, приёмка, создание; дата заказа — создание, возврата — его создание.
-/// Строки позже отчётного дня (вчера, не позже синхронизации) в отчёт не входят — как salesEnd во вторичке.
+/// Строки позже отчётного дня (сегодня, не позже синхронизации) в отчёт не входят — как salesEnd во вторичке.
 /// Склады сводятся к регионам (SalesOptions.PrimaryStockRegion: StockRegionAliases, склады прежних дилеров — их старые филиалы), дилер — склад
 /// с регионом из справочника, подпись строки — дилер региона. Прямые клиенты — под названиями таблицы первички (PrimaryClientNames).
 /// План — sales."RegionPlans" вида «Первичка».
@@ -291,11 +291,11 @@ public sealed partial class PrimaryService(IAppDbContext db, SalesOptions option
             dealerRegionNames.Contains, DealerId, pricing);
         var direct = PrimaryMath.DirectOrders(orderLines, returnLines, options, pricing);
 
-        // Отчётный день — вчера по местному времени и не позже синхронизации: строки позже него (сегодня, плановая доставка в будущем)
+        // Отчётный день — сегодня по местному времени (Sales:IncludeToday) и не позже синхронизации: строки позже него (плановая доставка в будущем)
         // в факт, прогноз, календарь и «данные по» не входят — войдут, когда их день станет отчётным.
         var syncs = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "stock_transfers" || s.Entity == "orders").ToListAsync(ct);
         var syncedAt = syncs.FirstOrDefault(s => s.Entity == "stock_transfers")?.LastSuccessAt;
-        var cutoff = PrimaryMath.DataLimit(SecondarySales.ReportCutoff(DateTimeOffset.UtcNow), SyncedOn(syncs.Select(s => s.LastSuccessAt)));
+        var cutoff = PrimaryMath.DataLimit(SecondarySales.ReportCutoff(DateTimeOffset.UtcNow, options.IncludeToday), SyncedOn(syncs.Select(s => s.LastSuccessAt)));
         var (all, afterCutoff) = PrimaryMath.ReportRows(transfers.Rows.Concat(direct.Rows), cutoff);
         var asOf = PrimaryMath.AsOf(all.Select(s => s.Date), cutoff, null);
 

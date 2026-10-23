@@ -55,7 +55,60 @@ public sealed class PromoService(
         return PromoCompute.Build(data, current, string.IsNullOrWhiteSpace(rm) ? null : rm, promos ?? [], basis);
     }
 
+    /// <summary>
+    /// Акции заказов — для автоотчётов: строки со скидкой этих заказов сверяются с акциями Linko так же, как на странице «Акции» (PromoMatch).
+    /// Ключ — заказ, значение — названия акций его строк («Ручная скидка» — скидка без акции). Заказов без строк со скидкой в ответе нет.
+    /// </summary>
+    public async Task<Dictionary<long, IReadOnlyList<string>>> OrderPromosAsync(IReadOnlyCollection<long> orderIds, CancellationToken ct = default)
+    {
+        if (orderIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = orderIds.ToArray();
+        var raw = await (
+                from l in db.LinkoOrderLines
+                join o in db.LinkoOrders on l.OrderId equals o.Id
+                where ids.Contains(o.Id) && l.TotalDiscount > 0 && l.ProductId != null
+                select new { o.Id, o.CreatedDate, o.AcceptedDate, o.BranchId, o.BranchName, o.AgentId, o.MarketId, o.IsFullReturn,
+                    ProductId = l.ProductId!.Value, l.Amount, l.ReturnAmount, l.TotalPrice, Discount = l.TotalDiscount!.Value, Percent = l.DiscountPercent ?? 0 })
+            .ToListAsync(ct);
+        if (raw.Count == 0)
+        {
+            return [];
+        }
+
+        var structure = SkuSalesService.RegionsOf(await db.SalesRegions.AsNoTracking().ToListAsync(ct), options);
+        var regionNames = structure.Regions.ToDictionary(r => r.Id, r => r.Name);
+        var regionList = regionNames.Values.ToList();
+        var catalog = await CatalogAsync(ct);
+        var names = catalog.ToDictionary(p => p.Id, p => p.Name);
+        var lines = raw.Select(r => new PromoLine(r.Id, r.CreatedDate, r.AcceptedDate ?? r.CreatedDate, r.BranchId,
+                r.BranchId is { } b && structure.BranchRegions.TryGetValue(b, out var region) && regionNames.TryGetValue(region, out var name) ? name : r.BranchName ?? "—",
+                r.AgentId, r.MarketId, r.ProductId, r.Amount, r.ReturnAmount, r.TotalPrice, r.Discount, r.Percent, r.IsFullReturn))
+            .ToList();
+        var parts = PromoMatch.AllocateAll(lines, catalog, (promo, region) => PromoMatch.RegionMentioned(promo, region, regionList));
+        string NameOf(IReadOnlyList<long> promos) =>
+            promos.Count == 0 ? "Ручная скидка" : GroupName(promos.Select(p => names.GetValueOrDefault(p, $"Акция {p}")).ToList());
+        return lines
+            .SelectMany((line, i) => parts[i].Select(part => (line.OrderId, Name: NameOf(part.Promos))))
+            .GroupBy(x => x.OrderId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(x => x.Name).Distinct().ToList());
+    }
+
     // ---------- Загрузка ----------
+
+    /// <summary>Акции Linko с товарами: со скидкой или условием и бонусные.</summary>
+    private async Task<List<PromoInfo>> CatalogAsync(CancellationToken ct)
+    {
+        var promoProducts = await db.LinkoPromotionProducts.AsNoTracking().ToListAsync(ct);
+        return (await db.LinkoPromotions.AsNoTracking().ToListAsync(ct))
+            .Select(p => new PromoInfo(p.Id, p.Name, p.Type, p.PromotionType, p.DiscountType, p.Discount, p.BeginDate, p.TillDate, p.IsApplyAll,
+                promoProducts.Where(x => x.PromotionId == p.Id && x.Type != "bonus").GroupBy(x => x.ProductId).ToDictionary(g => g.Key, g => g.First().Amount),
+                promoProducts.Where(x => x.PromotionId == p.Id && x.Type == "bonus").Select(x => x.ProductId).ToHashSet()))
+            .ToList();
+    }
 
     private async Task<PromoBase> BuildBaseAsync(CancellationToken ct)
     {
@@ -75,12 +128,7 @@ public sealed class PromoService(
             branch is { } b && structure.BranchRegions.TryGetValue(b, out var id) && regionNames.TryGetValue(id, out var name) ? name : branchName ?? "—";
 
         // Акции и товары.
-        var promoProducts = await db.LinkoPromotionProducts.AsNoTracking().ToListAsync(ct);
-        var catalog = (await db.LinkoPromotions.AsNoTracking().ToListAsync(ct))
-            .Select(p => new PromoInfo(p.Id, p.Name, p.Type, p.PromotionType, p.DiscountType, p.Discount, p.BeginDate, p.TillDate, p.IsApplyAll,
-                promoProducts.Where(x => x.PromotionId == p.Id && x.Type != "bonus").GroupBy(x => x.ProductId).ToDictionary(g => g.Key, g => g.First().Amount),
-                promoProducts.Where(x => x.PromotionId == p.Id && x.Type == "bonus").Select(x => x.ProductId).ToHashSet()))
-            .ToList();
+        var catalog = await CatalogAsync(ct);
         var byId = catalog.ToDictionary(p => p.Id);
         var regionList = regionNames.Values.ToList();
         bool InName(string name, string region) => PromoMatch.RegionMentioned(name, region, regionList);

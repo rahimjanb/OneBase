@@ -135,8 +135,9 @@ public sealed class LinkoSyncCoordinator(
 }
 
 /// <summary>
-/// Обмен с Linko без людей — только по расписанию Sales:Sync:Times (по умолчанию 11:00 и 17:00 по Ташкенту): обновление изменений;
-/// первый запуск дня после Sales:Sync:ReconcileHour — сверка (полная загрузка свежего окна и остатков). Между запусками данные свежее
+/// Обмен с Linko без людей — по расписанию: каждые Sales:Sync:IntervalMinutes минут (по умолчанию 30, от 00:00 по Ташкенту) и в
+/// Sales:Sync:Times — обновление изменений; первый запуск дня после Sales:Sync:ReconcileHour (03:00) — сверка (полная загрузка свежего
+/// окна и остатков). Между запусками данные свежее
 /// делает только кнопка «Обновить». Сервер был выключен во время запуска (или запуск не прошёл) — после старта синхронизация догоняется
 /// сразу. После каждого запуска — контроль обмена (LinkoSyncHealth): запуск не обновил данные — уведомление администраторам интеграций,
 /// восстановилось — тоже. После синхронизации координатор сбрасывает кэши всех отчётов на данных Linko и пересчитывает частые страницы;
@@ -152,10 +153,10 @@ internal sealed class LinkoSyncWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var times = LinkoSyncSchedule.ParseTimes(sales.Sync.Times);
+        var times = LinkoSyncSchedule.TimesOf(sales.Sync);
         if (!sales.Sync.Enabled || times.Count == 0)
         {
-            logger.LogInformation("Фоновая синхронизация Linko выключена (Sales:Sync:Enabled или пустое Sales:Sync:Times) — данные обновляет только кнопка «Обновить»");
+            logger.LogInformation("Фоновая синхронизация Linko выключена (Sales:Sync:Enabled или нет ни Sales:Sync:IntervalMinutes, ни Sales:Sync:Times) — данные обновляет только кнопка «Обновить»");
             return;
         }
 

@@ -5,13 +5,13 @@ import { date, dayMonth } from "@/lib/sales/format";
 import { periodQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { Period } from "@/lib/sales/types";
 
-/** Чип «данные по ДД.ММ» — отчётный день идущего месяца (последний полный день); у закрытого месяца не показывается. */
+/** Чип «данные по ДД.ММ» — отчётный день идущего месяца (может быть сегодняшним — на время синхронизации); у закрытого месяца не показывается. */
 async function DataThroughChip({ period }: { period: Period }) {
   const t = await getT();
   return (
     <span
       className="rounded-full border border-line bg-surface px-3 py-1 text-xs tabular-nums text-ink-2 max-lg:py-1.5"
-      title={t("Отчёт — по {date}, последний полный день: приёмки сегодняшнего дня войдут в отчёт завтра", { date: date(period.dataThrough) })}
+      title={t("Отчёт — по {date} включительно; за сегодняшний день — данные на время последней синхронизации Linko (каждые 30 минут)", { date: date(period.dataThrough) })}
     >
       {t("данные по {date}", { date: dayMonth(period.dataThrough) })}
     </span>

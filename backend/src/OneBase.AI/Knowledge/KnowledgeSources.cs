@@ -33,6 +33,9 @@ public static class KnowledgeSources
     public const string SupplyProviders = "supply.providers";
     public const string Documents = "knowledge.documents";
 
+    /// <summary>Telegram: автоотчёты (расписание, получатели, отправки) и рассылки — права проверяет инструмент по разделу.</summary>
+    public const string Telegram = "system.telegram";
+
     public static readonly IReadOnlyList<KnowledgeSource> All =
     [
         new(SalesSecondary, "Продажи (вторичка)",
@@ -65,6 +68,10 @@ public static class KnowledgeSources
             "sales.PnlValues, Regions, Directions, ai.DataChangeSets, DataFiles", "Продажи: P&L", Permissions.FinanceRead),
         new(WorkTasks, "Задачи отделов", "Задачи отделов OneBase: открытые, просроченные и выполненные, исполнители, сроки — только отделы, доступные пользователю.",
             "work.Tasks", "Задачи", null),
+        new(Telegram, "Telegram: автоотчёты и рассылки",
+            "Автоматические отчёты в Telegram (расписание 13 запусков, получатели РМ/СВ/ТП, отправки и ошибки) и рассылки (статусы, доставка).",
+            "telegram.ReportJobs, ReportRuns, ReportSubscriptions, ReportDeliveries, Campaigns, CampaignRecipients",
+            "Настройки → Telegram → Автоматические отчёты; Рассылки", null),
         new(Documents, "База знаний", "Документы, загруженные в базу знаний AI: регламенты, отчёты, выгрузки Excel и CSV.",
             "ai.KnowledgeDocuments, ai.KnowledgeChunks", "Настройки → AI → База знаний", Permissions.FilesRead),
     ];

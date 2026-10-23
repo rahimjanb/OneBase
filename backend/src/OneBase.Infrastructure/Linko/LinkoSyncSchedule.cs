@@ -1,3 +1,4 @@
+using OneBase.Application.Sales;
 using OneBase.Domain.Sales;
 
 namespace OneBase.Infrastructure.Linko;
@@ -36,6 +37,25 @@ public static class LinkoSyncSchedule
             .Distinct()
             .Order()
             .ToList();
+
+    /// <summary>
+    /// Расписание синхронизации: каждые Sales:Sync:IntervalMinutes минут от 00:00 по Ташкенту (5–720; 0 — без интервала) и время из
+    /// Sales:Sync:Times — вместе, по порядку, без повторов.
+    /// </summary>
+    public static IReadOnlyList<TimeOnly> TimesOf(SalesSyncOptions sync)
+    {
+        var times = ParseTimes(sync.Times).ToList();
+        if (sync.IntervalMinutes > 0)
+        {
+            var step = Math.Clamp(sync.IntervalMinutes, 5, 720);
+            for (var minute = 0; minute < 24 * 60; minute += step)
+            {
+                times.Add(new TimeOnly(minute / 60, minute % 60));
+            }
+        }
+
+        return times.Distinct().Order().ToList();
+    }
 
     /// <summary>Ближайший запуск по расписанию строго после <paramref name="nowUtc"/>.</summary>
     public static DateTimeOffset NextRun(DateTimeOffset nowUtc, IReadOnlyList<TimeOnly> times)

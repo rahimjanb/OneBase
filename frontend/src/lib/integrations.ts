@@ -73,7 +73,7 @@ export const linkoEntityLabels: Record<string, string> = {
   stocks: "Склады",
   product_balances: "Остатки (штуки)",
   stock_transfers: "Перемещения между складами",
-  reservations: "Бронь складов (неотгруженные заказы и перемещения)",
+  reservations: "Бронь складов (неотгруженные заказы и перемещения, перемещения в пути)",
   payments: "Платежи",
   price_lists: "Прайс-листы",
   price_list_items: "Цены прайс-листов",

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using OneBase.AI.Consultant;
 using OneBase.AI.Knowledge;
+using OneBase.Application.Abstractions;
 using OneBase.Application.Sales;
 using OneBase.Application.Sales.Metrics;
 using OneBase.Domain.Sales;
@@ -43,6 +44,29 @@ public abstract class SalesTool(SalesDataLoader loader) : DataTool
         return match ?? throw new ToolArgumentException(
             $"Региона «{region}» нет. Регионы: {string.Join(", ", republic.Regions.Select(r => r.Name))}.");
     }
+
+    /// <summary>Направление (РМ) по id или названию (и имени РМ); null — не задано. Неизвестное — ошибка со списком направлений.</summary>
+    protected static UnitRow? FindDirection(GroupView republic, string? direction)
+    {
+        if (direction is null)
+        {
+            return null;
+        }
+
+        var cards = republic.Cards.Where(c => Guid.TryParse(c.Id, out _)).ToList();
+        return cards.FirstOrDefault(c => string.Equals(c.Id, direction, StringComparison.OrdinalIgnoreCase))
+               ?? cards.FirstOrDefault(c => string.Equals(c.Name, direction, StringComparison.OrdinalIgnoreCase))
+               ?? cards.FirstOrDefault(c => c.Name.Contains(direction, StringComparison.OrdinalIgnoreCase) || (c.Subtitle?.Contains(direction, StringComparison.OrdinalIgnoreCase) ?? false))
+               ?? throw new ToolArgumentException(cards.Count == 0
+                   ? "Направлений (РМ) в оргструктуре продаж нет — спрашивайте по республике или региону."
+                   : $"Направления «{direction}» нет. Направления: {string.Join(", ", cards.Select(c => $"{c.Name}{(c.Subtitle is null ? "" : $" ({c.Subtitle})")}"))}.");
+    }
+
+    protected static DataSource DirectionSource(PeriodInfo p, UnitRow direction) =>
+        new($"OneBase → Продажи → {direction.Name}", PeriodText(p), $"/sales/directions/{direction.Id}?{Query(p.Year, p.Month)}");
+
+    protected static readonly (string, object) DirectionArg =
+        ("direction", new { type = "string", description = "Направление (РМ): название, имя РМ или id. Без него и без региона — республика." });
 
     protected static DataSource RepublicSource(PeriodInfo p, string title = "OneBase → Продажи → Республика") =>
         new(title, PeriodText(p), $"/sales/republic?{Query(p.Year, p.Month)}");
@@ -101,17 +125,45 @@ internal sealed class GetSalesTool(SalesDataLoader loader) : SalesTool(loader)
     public override string Source => KnowledgeSources.SalesSecondary;
 
     public override string Description =>
-        "Итоги вторичных продаж за месяц по республике или региону: факт и план в кг, выполнение, прогноз на конец месяца, выручка в сумах, " +
-        "АКБ (активные торговые точки), страйк, визиты, число ТП; сравнение с теми же днями прошлого месяца; экспорт и опт (филиал «Завод») отдельно.";
+        "Итоги вторичных продаж за месяц по республике, направлению РМ (с его регионами) или региону: факт и план в кг, выполнение, прогноз на " +
+        "конец месяца, выручка в сумах, АКБ (активные торговые точки), страйк, визиты, число ТП; сравнение с теми же днями прошлого месяца; " +
+        "экспорт и опт (филиал «Завод») отдельно. За день или отрезок дней — get_sales_days.";
 
-    public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg, RegionArg);
+    public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg, RegionArg, DirectionArg);
 
     protected override async Task<ToolResult> RunAsync(ToolArgs args, CancellationToken ct)
     {
         var analytics = await LoadAsync(args, ct);
         var republic = analytics.CachedRepublic(null, null);
         var region = FindRegion(republic, args.Str("region"));
+        var direction = region is null ? FindDirection(republic, args.Str("direction")) : null;
         var p = republic.Period;
+
+        if (direction is not null)
+        {
+            var view = analytics.CachedDirection(direction.Id, null, null);
+            return Data(new
+            {
+                Period = PeriodOf(p),
+                Direction = view.Name,
+                Manager = view.Subtitle,
+                Kpi = Kpi(view.Kpi),
+                SameDaysPreviousMonth = SameDays(view.SameDays),
+                Regions = view.Regions.Select(r => new
+                {
+                    r.Name,
+                    PlanKg = R(r.PlanKg),
+                    FactKg = R(r.FactKg),
+                    ExecutionPct = Pct(r.Execution),
+                    ForecastKg = R(r.ForecastKg),
+                    ForecastExecutionPct = Pct(r.ForecastExecution),
+                    RevenueSum = R(r.Revenue),
+                    r.Akb,
+                    StrikePct = Pct(r.Strike),
+                }),
+                Note = "Вторичка: заказы − возвраты по дате приёмки, без филиала «Завод».",
+            }, DirectionSource(p, direction));
+        }
 
         if (region is not null)
         {
@@ -448,47 +500,6 @@ internal sealed class GetCustomersTool(SalesDataLoader loader) : SalesTool(loade
             }),
             Note = "BaseOutlets — точки, купившие в прошлом месяце; AkbNow — точки с чистой покупкой в этом месяце; RevenuePerOutletSum — выручка ÷ АКБ.",
         }, region is null ? RepublicSource(p) : RegionSource(p, region));
-    }
-}
-
-internal sealed class GetVisitsTool(SalesDataLoader loader) : SalesTool(loader)
-{
-    public override string Name => "get_visits";
-    public override string Title => "Визиты и страйк";
-    public override string Source => KnowledgeSources.SalesVisits;
-
-    public override string Description =>
-        "Визиты ТП за месяц по регионам: план визитов, выполненные (в плане и вне), заказы с визитов и их сумма, непосещённые точки, " +
-        "страйк (заказы ТП, принятые в месяце ÷ выполненные визиты ТП; бывает больше 100%), визиты без заказа (визиты − заказы), визиты не ТП отдельно.";
-
-    public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg);
-
-    protected override async Task<ToolResult> RunAsync(ToolArgs args, CancellationToken ct)
-    {
-        var analytics = await LoadAsync(args, ct);
-        var republic = analytics.CachedRepublic(null, null);
-        var strike = republic.Regions.ToDictionary(r => r.Name, r => r.Strike);
-        return Data(new
-        {
-            Period = PeriodOf(republic.Period),
-            StrikePct = Pct(republic.Kpi.Conversion.Value),
-            StrikeTargetPct = Pct(republic.Kpi.Conversion.Target),
-            republic.Kpi.VisitsDone,
-            republic.Kpi.VisitsWithoutOrder,
-            republic.Kpi.VisitsOutsideTeam,
-            Regions = republic.VisitCalendar.Select(r => new
-            {
-                r.Name,
-                PlannedVisits = r.Plan,
-                r.DoneInPlan,
-                r.DoneOffPlan,
-                r.NotVisited,
-                PlanDonePct = Pct(r.PlanShare),
-                Orders = r.OrdersTotal,
-                OrdersSum = R(r.OrdersTotalSum),
-                StrikePct = Pct(strike.GetValueOrDefault(r.Name)),
-            }),
-        }, RepublicSource(republic.Period, "OneBase → Продажи → Республика → Визиты"));
     }
 }
 

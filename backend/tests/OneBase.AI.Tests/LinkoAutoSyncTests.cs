@@ -65,16 +65,17 @@ public class LinkoAutoSyncTests(DataManagerDb fixture) : IClassFixture<DataManag
                 db.LinkoSyncStates.Add(state = new LinkoSyncState { Entity = entity });
             }
 
-            state.LastSuccessAt = now.AddHours(-5);
+            state.LastSuccessAt = now.AddHours(-1);
             state.LastError = entity == "orders" ? "Linko ответил 401: токен недействителен" : null;
         }
 
         await db.SaveChangesAsync();
         Task<List<UserNotification>> Notes() => db.UserNotifications.AsNoTracking().Where(n => n.RecipientId == admin.Id).OrderBy(n => n.CreatedAt).ToListAsync();
 
-        // Без запуска пять часов — ещё не повод (между запусками по расписанию до 18 часов).
+        // Без запуска час — ещё не повод (запуск каждые 30 минут: данные устарели через 1,5 часа без обновления).
         Assert.False(await health.CheckAsync());
         Assert.Empty(await Notes());
+        Assert.Equal(TimeSpan.FromMinutes(90), health.StaleAfter);
 
         // Запуск по расписанию 10 минут назад данные не обновил — одно уведомление с причиной, следующим запуском и ссылкой на настройки;
         // повторная проверка не дублирует.
@@ -103,7 +104,7 @@ public class LinkoAutoSyncTests(DataManagerDb fixture) : IClassFixture<DataManag
     }
 }
 
-/// <summary>Расписание обмена с Linko без базы: запуски в 11:00 и 17:00, пропущенный запуск, сверка, давние месяцы, текст проблемы.</summary>
+/// <summary>Расписание обмена с Linko без базы: запуски каждые 30 минут и в 11:00 и 17:00, пропущенный запуск, сверка, давние месяцы, текст проблемы.</summary>
 public class LinkoSyncScheduleTests
 {
     private static DateTimeOffset Tashkent(int year, int month, int day, int hour, int minute = 0) => new(year, month, day, hour, minute, 0, TimeSpan.FromHours(5));
@@ -145,6 +146,29 @@ public class LinkoSyncScheduleTests
         Assert.False(LinkoSyncSchedule.Missed(Tashkent(2026, 10, 23, 2), Tashkent(2026, 10, 22, 17, 4), Times));
         Assert.True(LinkoSyncSchedule.Missed(Tashkent(2026, 10, 22, 12), null, Times)); // ни разу не загружалось
         Assert.False(LinkoSyncSchedule.Missed(Tashkent(2026, 10, 22, 12), null, [])); // расписания нет — только кнопкой
+    }
+
+    [Fact]
+    public void Interval_schedule_runs_every_half_hour_around_the_clock()
+    {
+        var every30 = LinkoSyncSchedule.TimesOf(new OneBase.Application.Sales.SalesSyncOptions { IntervalMinutes = 30, Times = [] });
+        Assert.Equal(48, every30.Count);
+        Assert.Equal(Tashkent(2026, 10, 22, 13, 30), LinkoSyncSchedule.NextRun(Tashkent(2026, 10, 22, 13, 5), every30));
+        Assert.Equal(Tashkent(2026, 10, 23, 0), LinkoSyncSchedule.NextRun(Tashkent(2026, 10, 22, 23, 40), every30));
+        Assert.Equal(TimeSpan.FromMinutes(30), LinkoSyncSchedule.LongestGap(every30)); // данные устарели — через 1,5 часа без обновления
+        // Сервер не работал в 13:00 — догнать сразу; после 13:00 загрузилось — ждать 13:30.
+        Assert.True(LinkoSyncSchedule.Missed(Tashkent(2026, 10, 22, 13, 10), Tashkent(2026, 10, 22, 12, 31), every30));
+        Assert.False(LinkoSyncSchedule.Missed(Tashkent(2026, 10, 22, 13, 10), Tashkent(2026, 10, 22, 13, 2), every30));
+        // Сверка (час 3) — ночной запуск в 03:00, днём — обычные обновления.
+        Assert.True(LinkoSyncSchedule.ReconcileDue(Tashkent(2026, 10, 22, 3), Tashkent(2026, 10, 21, 3, 20), 3));
+        Assert.False(LinkoSyncSchedule.ReconcileDue(Tashkent(2026, 10, 22, 13), Tashkent(2026, 10, 22, 3, 20), 3));
+
+        // Интервал и время вместе; без интервала — только время; интервал ужимается в 5–720 минут.
+        var mixed = LinkoSyncSchedule.TimesOf(new OneBase.Application.Sales.SalesSyncOptions { IntervalMinutes = 360, Times = ["11:00"] });
+        Assert.Equal([new TimeOnly(0, 0), new TimeOnly(6, 0), new TimeOnly(11, 0), new TimeOnly(12, 0), new TimeOnly(18, 0)], mixed);
+        Assert.Equal(Times, LinkoSyncSchedule.TimesOf(new OneBase.Application.Sales.SalesSyncOptions { IntervalMinutes = 0, Times = ["11:00", "17:00"] }));
+        Assert.Equal(288, LinkoSyncSchedule.TimesOf(new OneBase.Application.Sales.SalesSyncOptions { IntervalMinutes = 1, Times = [] }).Count);
+        Assert.Equal(48, LinkoSyncSchedule.TimesOf(new OneBase.Application.Sales.SalesSyncOptions()).Count); // по умолчанию — каждые 30 минут
     }
 
     [Fact]

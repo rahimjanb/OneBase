@@ -644,6 +644,155 @@ const dict: Dict = {
   "DSO — долги дилеров": "DSO — dilerlar qarzlari",
   "Страница «DSO»: долг дилеров по FIFO (неоплаченные отгрузки), просрочка по норме дней, оплачено и отгружено за месяц, ожидаемые оплаты на неделю, дилеры (долг, просрочка, норма, факт дней), недели, оплаты по месяцам и каналы. С dealer — один дилер.":
     "«DSO» sahifasi: FIFO bo'yicha dilerlar qarzi (to'lanmagan jo'natmalar), kunlar normasi bo'yicha muddati o'tgani, oy uchun to'langan va jo'natilgan, haftaga kutilayotgan to'lovlar, dilerlar (qarz, muddati o'tgani, norma, kunlar fakti), haftalar, oylar bo'yicha to'lovlar va kanallar. dealer bilan — bitta diler.",
+  // Маршрут, продажи по дням, Telegram, описания инструментов и их аргументов (Tools/Data/*.cs).
+  "Визиты и маршрут":
+    "Tashriflar va marshrut",
+  "Маршрут и визиты за день, отрезок дней или месяц — по республике (регионы), направлению РМ (регионы), региону (каждый ТП) или одному ТП. У каждой строки: визиты — план (в маршруте), выполнено по маршруту, вне маршрута, не посещено, % выполнения плана; визиты с заказом — по маршруту и вне маршрута; продажи — заказы, выручка (сум), кг и АКБ (точки с чистой покупкой) отдельно с визитов по маршруту, с визитов вне маршрута и без визита, возвраты и итог (= факт «Продаж» за эти дни), доля выручки с маршрута, страйк (заказы ÷ выполненные визиты). agents=true — строки ТП и у республики и направления. Отрезок — в пределах одного месяца; без дат — месяц по отчётный день.":
+    "Kun, kunlar oralig'i yoki oy bo'yicha marshrut va tashriflar — respublika (mintaqalar), RM yo'nalishi (mintaqalar), mintaqa (har bir TP) yoki bitta TP bo'yicha. Har bir qatorda: tashriflar — reja (marshrutda), marshrut bo'yicha bajarilgan, marshrutdan tashqari, borilmagan, rejaning bajarilishi %; buyurtmali tashriflar — marshrut bo'yicha va marshrutdan tashqari; savdo — buyurtmalar, tushum (so'm), kg va AKB (sof xaridli nuqtalar) alohida: marshrut bo'yicha tashriflardan, marshrutdan tashqari tashriflardan va tashrifsiz, qaytarishlar va jami (= shu kunlardagi «Savdo» fakti), marshrutdan tushum ulushi, strayk (buyurtmalar ÷ bajarilgan tashriflar). agents=true — respublika va yo'nalishda ham TP qatorlari. Oraliq — bitta oy ichida; sanalarsiz — hisobot kunigacha oy.",
+  "Вторичные продажи за день или отрезок дней одного месяца — по республике, направлению РМ, региону или ТП: факт за отрезок (кг, выручка в сумах, заказы, АКБ — точки с чистой покупкой за отрезок, возвраты), каждый день отрезка (кг, выручка, заказы, АКБ дня, выполненные визиты) и строки регионов (у республики и направления) или ТП (у региона; agents=true — ТП и шире). Правила — как в «Продажах»: заказы − возвраты по дате приёмки, без филиала «Завод»; сегодняшний день — на время последней синхронизации Linko. Без дат — месяц по отчётный день.":
+    "Bir oy ichidagi kun yoki kunlar oralig'i uchun ikkilamchi savdo — respublika, RM yo'nalishi, mintaqa yoki TP bo'yicha: oraliq fakti (kg, so'mda tushum, buyurtmalar, AKB — oraliqda sof xaridli nuqtalar, qaytarishlar), oraliqning har bir kuni (kg, tushum, buyurtmalar, kun AKB si, bajarilgan tashriflar) va mintaqalar qatorlari (respublika va yo'nalishda) yoki TP lar (mintaqada; agents=true — TP lar kengroq ham). Qoidalar — «Savdo»dagidek: qabul sanasi bo'yicha buyurtmalar − qaytarishlar, «Zavod» filialisiz; bugungi kun — Linko bilan oxirgi sinxronlash vaqtiga. Sanalarsiz — hisobot kunigacha oy.",
+  "Куда ходил торговый представитель: каждый визит Linko за день или отрезок до 31 дня — время, точка (название, адрес), по маршруту (в плане) или вне маршрута, выполнен ли, был ли в этот день в точке заказ этого ТП (число, сумма, кг, статус). Итоги и разбивка по дням — полные (не зависят от длины списка визитов): план, по маршруту, вне маршрута, не посещено, визиты с заказом по маршруту и вне, заказы (число, сумма, кг, точки) с визитов по маршруту, вне маршрута и без визита. Заказы — введённые ТП в эти дни (любой статус, кроме отменённых и недоставленных). Без дат — сегодня. Итоги «Продаж» (принятые заказы, выручка, АКБ) по маршруту за отрезок — get_visits.":
+    "Savdo vakili qayerga borgan: kun yoki 31 kungacha davr uchun Linko'ning har bir tashrifi — vaqt, nuqta (nomi, manzili), marshrut bo'yicha (rejada) yoki marshrutdan tashqari, bajarilganmi, shu kuni nuqtada shu TP ning buyurtmasi bo'lganmi (soni, summasi, kg, holati). Jamilar va kunlar bo'yicha taqsimot — to'liq (tashriflar ro'yxati uzunligiga bog'liq emas): reja, marshrut bo'yicha, marshrutdan tashqari, borilmagan, marshrut bo'yicha va tashqari buyurtmali tashriflar, marshrut bo'yicha tashriflardan, marshrutdan tashqari va tashrifsiz buyurtmalar (soni, summasi, kg, nuqtalar). Buyurtmalar — TP shu kunlarda kiritganlari (bekor qilingan va yetkazilmaganlardan tashqari har qanday holat). Sanalarsiz — bugun. Davr uchun marshrut bo'yicha «Savdo» jamilari (qabul qilingan buyurtmalar, tushum, AKB) — get_visits.",
+  "Итоги вторичных продаж за месяц по республике, направлению РМ (с его регионами) или региону: факт и план в кг, выполнение, прогноз на конец месяца, выручка в сумах, АКБ (активные торговые точки), страйк, визиты, число ТП; сравнение с теми же днями прошлого месяца; экспорт и опт (филиал «Завод») отдельно. За день или отрезок дней — get_sales_days.":
+    "Respublika, RM yo'nalishi (mintaqalari bilan) yoki mintaqa bo'yicha oylik ikkilamchi savdo yakunlari: kg da fakt va reja, bajarilish, oy oxiriga prognoz, so'mda tushum, AKB (faol savdo nuqtalari), strayk, tashriflar, TP soni; o'tgan oyning shu kunlari bilan taqqoslash; eksport va ulgurji («Zavod» filiali) alohida. Kun yoki kunlar oralig'i uchun — get_sales_days.",
+  "Telegram: автоотчёты и рассылки":
+    "Telegram: avtomatik hisobotlar va tarqatmalar",
+  "Автоматические отчёты в Telegram: аккаунт и язык, 13 запусков шести отчётов (включён ли, время, следующий запуск, последний запуск с итогом: отправлено / ошибок / пропущено), получатели (роль РМ/СВ/ТП, область, чаты, отчёты, включён ли), отправки за последние дни по статусам и список неудачных и «неизвестно, дошёл ли» с причиной. Рассылки: название, статус, время, сколько получателей, отправлено, ошибок, в очереди, последняя ошибка. Аргумент days — за сколько дней (1–30, по умолчанию 7).":
+    "Telegram'dagi avtomatik hisobotlar: akkaunt va til, oltita hisobotning 13 ta ishga tushishi (yoqilganmi, vaqt, keyingi ishga tushish, natijali oxirgi ishga tushish: yuborildi / xatolar / o'tkazib yuborildi), qabul qiluvchilar (RM/SV/TP roli, hudud, chatlar, hisobotlar, yoqilganmi), oxirgi kunlardagi yuborishlar holatlar bo'yicha va muvaffaqiyatsiz hamda «yetib bordimi — noma'lum» ro'yxati sababi bilan. Tarqatmalar: nomi, holati, vaqti, qabul qiluvchilar soni, yuborildi, xatolar, navbatda, oxirgi xato. days argumenti — necha kun uchun (1–30, standart 7).",
+  "Автоматические отчёты в Telegram (расписание 13 запусков, получатели РМ/СВ/ТП, отправки и ошибки) и рассылки (статусы, доставка).":
+    "Telegram'dagi avtomatik hisobotlar (13 ta ishga tushish jadvali, RM/SV/TP qabul qiluvchilari, yuborishlar va xatolar) va tarqatmalar (holatlar, yetkazish).",
+  "Продажи по SKU за период":
+    "Davr uchun SKU bo'yicha savdo",
+  "Продажи по SKU за период из месяцев (вторичка, как страница «Продажи → Продажи по SKU»): итоги — кг, выручка в сумах, цена за кг, SKU с продажами, регионы; ABC по весу (A — первые 80% кг, B — до 95%, C — остальные), концентрация (главный SKU, доли топ-5/10/25), кг по месяцам, категории, регионы; топ SKU по весу — кг, выручка, доля, ABC, точки (сколько ТТ купили SKU за период), регионов с продажами, динамика (кг в день последнего квартала периода к первому); «новые» SKU (в первом квартале продаж не было) и падающие (−10% и больше). По умолчанию — последние 3 месяца по месяц последних данных (если они в одном квартале — 4, чтобы считалась динамика), вся страна, все SKU. Фильтры: регион, категории, ТОП, группа ABC, поиск SKU по названию или коду.":
+    "Oylardan iborat davr uchun SKU bo'yicha savdo (ikkilamchi, «Savdo → SKU bo'yicha savdo» sahifasidagidek): jamilar — kg, so'mda tushum, kg narxi, savdosi bor SKU lar, mintaqalar; vazn bo'yicha ABC (A — birinchi 80% kg, B — 95% gacha, C — qolganlari), konsentratsiya (asosiy SKU, top-5/10/25 ulushlari), oylar bo'yicha kg, toifalar, mintaqalar; vazn bo'yicha top SKU — kg, tushum, ulush, ABC, nuqtalar (davrda SKU ni nechta SN sotib olgan), savdosi bor mintaqalar, dinamika (davrning oxirgi choragida kunlik kg birinchisiga nisbatan); «yangi» SKU lar (birinchi chorakda savdo bo'lmagan) va tushayotganlar (−10% va undan ko'p). Standart — oxirgi ma'lumotlar oyigacha oxirgi 3 oy (agar ular bitta chorakda bo'lsa — dinamika hisoblanishi uchun 4), butun mamlakat, barcha SKU lar. Filtrlar: mintaqa, toifalar, TOP, ABC guruhi, SKU ni nomi yoki kodi bo'yicha qidirish.",
+  "Экспорт: страны и филиал «Завод»":
+    "Eksport: mamlakatlar va «Zavod» filiali",
+  "Экспорт за месяц (вес — кг, суммы — сум). По странам — отгрузки завода на экспорт («Первичка → Экспорт»: заказы филиала «Завод» экспортным точкам): кг, сумма, доля, точки страны, прошлый месяц и изменение, с начала года; итог экспорта, прогноз, по месяцам года, категории. Отдельно — продажи филиала «Завод» («Продажи → Экспорт и опт»: экспорт и крупный опт): кг, выручка, заказы, точки, прогноз, к прошлому месяцу, покупатели (со страной, если точка экспортная), агенты, категории, товары, суммы в другой валюте. Плана экспорта в OneBase нет. Во вторичку республики экспорт не входит.":
+    "Oylik eksport (vazn — kg, summalar — so'm). Mamlakatlar bo'yicha — zavodning eksportga jo'natmalari («Birlamchi → Eksport»: «Zavod» filialining eksport nuqtalariga buyurtmalari): kg, summa, ulush, mamlakat nuqtalari, o'tgan oy va o'zgarish, yil boshidan; eksport jami, prognoz, yil oylari bo'yicha, toifalar. Alohida — «Zavod» filiali savdosi («Savdo → Eksport va ulgurji»: eksport va yirik ulgurji): kg, tushum, buyurtmalar, nuqtalar, prognoz, o'tgan oyga nisbatan, xaridorlar (nuqta eksport bo'lsa — mamlakati bilan), agentlar, toifalar, mahsulotlar, boshqa valyutadagi summalar. OneBase'da eksport rejasi yo'q. Respublika ikkilamchisiga eksport kirmaydi.",
+  "P&L дилеров (страница «Продажи → P&L дилеров») — прибыль завода на дилере, все суммы в сумах: продажи (выручка), себестоимость, валовая прибыль и маржа, расходы (отдел продаж и маркетинга, ретробонусы, доставка и склад, административные, прочие, амортизация), прибыль после продаж и ROS (рентабельность продаж), EBIT, чистая прибыль EAT (если загружены банковские услуги и налоги) — итог, по РМ и по дилерам с изменением к прошлому месяцу. За месяц (year+month; без них — последний месяц с продажами и расходами, как на странице) или за период (from/to ГГГГ-ММ, либо year без month — сумма загруженных месяцев и помесячная динамика). dealer — один дилер подробно. Если P&L за месяц не загружен — ответ скажет об этом (загрузка — через AI Data Manager).":
+    "Dilerlar P&L («Savdo → Dilerlar P&L» sahifasi) — zavodning dilerdagi foydasi, barcha summalar so'mda: savdo (tushum), tannarx, yalpi foyda va marja, xarajatlar (savdo va marketing bo'limi, retrobonuslar, yetkazib berish va ombor, ma'muriy, boshqa, amortizatsiya), savdodan keyingi foyda va ROS (savdo rentabelligi), EBIT, sof foyda EAT (bank xizmatlari va soliqlar yuklangan bo'lsa) — jami, RM va dilerlar bo'yicha o'tgan oyga nisbatan o'zgarish bilan. Oy uchun (year+month; ularsiz — sahifadagidek savdo va xarajatli oxirgi oy) yoki davr uchun (from/to YYYY-OO yoki month siz year — yuklangan oylar yig'indisi va oylik dinamika). dealer — bitta diler batafsil. Oy uchun P&L yuklanmagan bo'lsa — javob shuni aytadi (yuklash — AI Data Manager orqali).",
+  "Рекомендуемый остаток: запас на складах регионов (кг, коробки, стоимость по входной цене дилера) и скорость продаж за последние 87 дней с поправкой на дни без товара: дни покрытия, запас на 15 и 30 дней, рекомендуемый заказ дилера, дефицит (меньше 15 дней продаж), затоварка (больше 30 дней), «не продаётся» (остаток есть, продаж нет), «нет остатка» (ни остатка, ни продаж); отдельно — склад завода (его запас меряется скоростью всей страны). Можно по одному региону.":
+    "Tavsiya etilgan qoldiq: mintaqalar omborlaridagi zaxira (kg, qutilar, dilerning kirish narxi bo'yicha qiymat) va tovarsiz kunlarga tuzatish bilan oxirgi 87 kundagi savdo tezligi: qamrov kunlari, 15 va 30 kunlik zaxira, dilerga tavsiya etilgan buyurtma, taqchillik (15 kunlik savdodan kam), ortiqcha zaxira (30 kundan ko'p), «sotilmaydi» (qoldiq bor, savdo yo'q), «qoldiq yo'q» (na qoldiq, na savdo); alohida — zavod ombori (uning zaxirasi butun mamlakat tezligi bilan o'lchanadi). Bitta mintaqa bo'yicha ham mumkin.",
+  "Задачи отделов":
+    "Bo'limlar vazifalari",
+  "Задачи отделов OneBase (раздел «Задачи»). Возвращает: по каждому отделу, доступному пользователю, — сколько задач открыто, просрочено и выполнено за последние days дней (по умолчанию 30); список задач — название, отдел, исполнитель, автор, приоритет, срок (yyyy-MM-dd), статус, просрочка в днях, дата и итог выполнения или причина отмены. Аргументы: department — код (sales, production, supply, finance, marketing, hr) или название отдела, без него — все доступные отделы; status — open (по умолчанию) / overdue / done / cancelled / all; assignee — исполнитель (имя или «me»); days; limit — сколько задач в списке (20). Задачи отдела видят его сотрудники и руководство — к чужим отделам доступа нет. Задачи торговых агентов и супервайзеров — не здесь, а в get_field_tasks.":
+    "OneBase bo'limlari vazifalari («Vazifalar» bo'limi). Qaytaradi: foydalanuvchiga ochiq har bir bo'lim bo'yicha — oxirgi days kunda (standart 30) nechta vazifa ochiq, muddati o'tgan va bajarilgan; vazifalar ro'yxati — nomi, bo'lim, ijrochi, muallif, ustuvorlik, muddat (yyyy-MM-dd), holat, kunlarda kechikish, bajarilish sanasi va natijasi yoki bekor qilish sababi. Argumentlar: department — kod (sales, production, supply, finance, marketing, hr) yoki bo'lim nomi, usiz — barcha ochiq bo'limlar; status — open (standart) / overdue / done / cancelled / all; assignee — ijrochi (ism yoki «me»); days; limit — ro'yxatda nechta vazifa (20). Bo'lim vazifalarini uning xodimlari va rahbariyati ko'radi — boshqa bo'limlarga kirish yo'q. Savdo agentlari va supervayzerlar vazifalari — bu yerda emas, get_field_tasks da.",
+  "Sales Base: задачи полевой команды":
+    "Sales Base: dala jamoasi vazifalari",
+  "Задачи полевой команды продаж (Sales Base) — агентов и супервайзеров. Возвращает: сводку — открыто, просрочено, на сегодня, отложено, поставлено AI, выполнено за days дней; разбивку по исполнителям (открыто, просрочено, выполнено); список задач — название, исполнитель и команда, торговая точка, приоритет, срок (yyyy-MM-dd), статус, просрочка в днях, кто поставил (AI-планирование, супервайзер, РМ, система, офис), причина постановки (у задач AI — причина рекомендации), итог исполнителя или причина переноса/отмены. Аргументы: status — open (по умолчанию) / overdue / today / postponed / done / cancelled; agent — исполнитель (имя или «me»); team — команда; days — окно для выполненных и отменённых (30); limit — строк (20). Агент видит свои задачи, супервайзер — своей команды, РМ — организации или своих филиалов.":
+    "Savdo dala jamoasi (Sales Base) vazifalari — agentlar va supervayzerlar. Qaytaradi: xulosa — ochiq, muddati o'tgan, bugunga, kechiktirilgan, AI qo'ygan, days kunda bajarilgan; ijrochilar bo'yicha taqsimot (ochiq, muddati o'tgan, bajarilgan); vazifalar ro'yxati — nomi, ijrochi va jamoa, savdo nuqtasi, ustuvorlik, muddat (yyyy-MM-dd), holat, kunlarda kechikish, kim qo'ygan (AI-rejalashtirish, supervayzer, RM, tizim, ofis), qo'yish sababi (AI vazifalarida — tavsiya sababi), ijrochi natijasi yoki ko'chirish/bekor qilish sababi. Argumentlar: status — open (standart) / overdue / today / postponed / done / cancelled; agent — ijrochi (ism yoki «me»); team — jamoa; days — bajarilgan va bekor qilinganlar oynasi (30); limit — qatorlar (20). Agent o'z vazifalarini, supervayzer — jamoasinikini, RM — tashkilot yoki o'z filiallarinikini ko'radi.",
+  "Sales Base: маршруты и визиты":
+    "Sales Base: marshrutlar va tashriflar",
+  "Маршруты и визиты полевой команды продаж (Sales Base) за день или период до 31 дня. С агентом (agent) — по дням: статус и источник маршрута, точки плана по порядку со статусом (посещена, пропущена с причиной, не посещена), время прибытия и ухода, результат визита (заказ, отказ, нет ЛПР…), сумма и комментарий агента, визиты вне маршрута, заказы агента в Linko за день; за период — пропущенные точки с причинами. Без агента — по команде или всей зоне: по каждому агенту точки плана, посещено, пропущено, не посещено, охват %, визиты и визиты с заказом, заказы Linko; агенты без маршрута; частые причины пропуска и пропущенные точки; отказы на визитах с комментариями. Аргументы: date (yyyy-MM-dd, по умолчанию сегодня) или from и to (yyyy-MM-dd); agent; team; limit — строк в списках (20). Агент видит только себя, супервайзер — команду, РМ — организацию или свои филиалы.":
+    "Savdo dala jamoasi (Sales Base) marshrutlari va tashriflari kun yoki 31 kungacha davr uchun. Agent (agent) bilan — kunlar bo'yicha: marshrut holati va manbai, reja nuqtalari tartib bo'yicha holati bilan (borilgan, sababi bilan o'tkazib yuborilgan, borilmagan), kelish va ketish vaqti, tashrif natijasi (buyurtma, rad etish, QQS yo'q…), agent summasi va izohi, marshrutdan tashqari tashriflar, agentning kunlik Linko buyurtmalari; davr uchun — sabablari bilan o'tkazib yuborilgan nuqtalar. Agentsiz — jamoa yoki butun hudud bo'yicha: har bir agent uchun reja nuqtalari, borilgan, o'tkazib yuborilgan, borilmagan, qamrov %, tashriflar va buyurtmali tashriflar, Linko buyurtmalari; marshrutsiz agentlar; o'tkazib yuborishning tez-tez sabablari va o'tkazib yuborilgan nuqtalar; izohli tashriflardagi rad etishlar. Argumentlar: date (yyyy-MM-dd, standart bugun) yoki from va to (yyyy-MM-dd); agent; team; limit — ro'yxatlardagi qatorlar (20). Agent faqat o'zini, supervayzer — jamoani, RM — tashkilot yoki o'z filiallarini ko'radi.",
+  "Sales Base: рекомендации AI-планирования":
+    "Sales Base: AI-rejalashtirish tavsiyalari",
+  "Рекомендации AI-планирования Sales Base: что предложено по торговым точкам и агентам и что решили супервайзер или РМ. Возвращает: сколько рекомендаций ждут решения, принято, отклонено, истекло; разбивку по видам и агентам; список — вид (падение продаж, давно не посещали, клиент перестал покупать, отставание от плана, пропущенная точка, высокий потенциал, точка без агента), заголовок, причина с цифрами, статус, агент, супервайзер, точка, приоритет, срок (yyyy-MM-dd), уверенность %, кто и когда решил, комментарий решения, создана ли задача. Аргументы: status — pending (по умолчанию) / approved / rejected / expired / decided / all; kind; agent; team; limit (20). Видят супервайзер (своя команда) и РМ; агенту рекомендации не показываются.":
+    "Sales Base AI-rejalashtirish tavsiyalari: savdo nuqtalari va agentlar bo'yicha nima taklif qilingan va supervayzer yoki RM nima qaror qilgan. Qaytaradi: nechta tavsiya qaror kutmoqda, qabul qilingan, rad etilgan, muddati o'tgan; turlar va agentlar bo'yicha taqsimot; ro'yxat — turi (savdo tushishi, uzoq vaqt borilmagan, mijoz xarid qilishni to'xtatgan, rejadan orqada qolish, o'tkazib yuborilgan nuqta, yuqori salohiyat, agentsiz nuqta), sarlavha, raqamli sabab, holat, agent, supervayzer, nuqta, ustuvorlik, muddat (yyyy-MM-dd), ishonch %, kim va qachon qaror qilgan, qaror izohi, vazifa yaratilganmi. Argumentlar: status — pending (standart) / approved / rejected / expired / decided / all; kind; agent; team; limit (20). Supervayzer (o'z jamoasi) va RM ko'radi; agentga tavsiyalar ko'rsatilmaydi.",
+  "Продажи товаров за любой период: кг и выручка, ABC, динамика, сколько регионов и точек берут товар.":
+    "Istalgan davr uchun mahsulotlar savdosi: kg va tushum, ABC, dinamika, tovarni nechta mintaqa va nuqta oladi.",
+  "Экспорт по странам (кг, сумма, точки, динамика, с начала года) и продажи филиала «Завод» (экспорт и опт) по покупателям, агентам и товарам. Плана экспорта в OneBase нет.":
+    "Mamlakatlar bo'yicha eksport (kg, summa, nuqtalar, dinamika, yil boshidan) va «Zavod» filiali savdosi (eksport va ulgurji) xaridorlar, agentlar va mahsulotlar bo'yicha. OneBase'da eksport rejasi yo'q.",
+  "Прибыль завода на дилерах по месяцам: продажи, себестоимость, валовая прибыль и маржа, расходы, EBIT, ROS, EAT; загружается через AI Data Manager.":
+    "Zavodning dilerlardagi oylik foydasi: savdo, tannarx, yalpi foyda va marja, xarajatlar, EBIT, ROS, EAT; AI Data Manager orqali yuklanadi.",
+  "Задачи отделов OneBase: открытые, просроченные и выполненные, исполнители, сроки — только отделы, доступные пользователю.":
+    "OneBase bo'limlari vazifalari: ochiq, muddati o'tgan va bajarilgan, ijrochilar, muddatlar — faqat foydalanuvchiga ochiq bo'limlar.",
+  "ТП (агент): имя или часть имени, кириллицей или латиницей, либо id Linko.":
+    "TP (agent): ism yoki ismning bir qismi, kirill yoki lotin yozuvida, yoki Linko id.",
+  "Один день ГГГГ-ММ-ДД. Вместо него можно from и to.":
+    "Bitta kun YYYY-OO-KK. Uning o'rniga from va to bo'lishi mumkin.",
+  "С какого дня, ГГГГ-ММ-ДД.":
+    "Qaysi kundan, YYYY-OO-KK.",
+  "По какой день, ГГГГ-ММ-ДД; без него — по сегодня.":
+    "Qaysi kungacha, YYYY-OO-KK; usiz — bugungacha.",
+  "Точка: название или часть названия, часть адреса или id Linko.":
+    "Nuqta: nomi yoki nomining bir qismi, manzilning bir qismi yoki Linko id.",
+  "Торговая точка: id Linko или название.":
+    "Savdo nuqtasi: Linko id yoki nomi.",
+  "Статус заказа Linko, например delivered, given, not_delivered.":
+    "Linko buyurtmasi holati, masalan delivered, given, not_delivered.",
+  "Номер (id) одного заказа — с позициями.":
+    "Bitta buyurtma raqami (id) — pozitsiyalari bilan.",
+  "true — с позициями заказов.":
+    "true — buyurtmalar pozitsiyalari bilan.",
+  "Человек: имя или часть имени.":
+    "Inson: ism yoki ismning bir qismi.",
+  "Направление (РМ) — как на странице «Акции»; без него — вся страна.":
+    "Yo'nalish (RM) — «Aksiyalar» sahifasidagidek; usiz — butun mamlakat.",
+  "Дилер или контрагент: название или часть названия.":
+    "Diler yoki kontragent: nomi yoki nomining bir qismi.",
+  "Дилер: название или часть названия.":
+    "Diler: nomi yoki nomining bir qismi.",
+  "Строки каждого ТП и у республики и направления (у региона и ТП — всегда).":
+    "Respublika va yo'nalishda ham har bir TP qatorlari (mintaqa va TP da — har doim).",
+  "Первый месяц периода, ГГГГ-ММ (например 2026-07). Без from — последние months месяцев по to.":
+    "Davrning birinchi oyi, YYYY-OO (masalan 2026-07). from siz — to gacha oxirgi months oy.",
+  "Последний месяц периода, ГГГГ-ММ. Без to — месяц последних данных (идущий, неполный).":
+    "Davrning oxirgi oyi, YYYY-OO. to siz — oxirgi ma'lumotlar oyi (joriy, to'liq emas).",
+  "Сколько последних месяцев взять, если from не задан: 1–24, по умолчанию 3.":
+    "from berilmagan bo'lsa, nechta oxirgi oyni olish: 1–24, standart 3.",
+  "Регион: id или название (например «Самарканд»). Без региона — вся страна.":
+    "Mintaqa: id yoki nomi (masalan «Samarqand»). Mintaqasiz — butun mamlakat.",
+  "Категории отчёта через запятую, например «Кекс,Помадка». Без категории — все.":
+    "Vergul bilan hisobot toifalari, masalan «Кекс,Помадка». Toifasiz — hammasi.",
+  "Поиск SKU по части названия или коду (кириллицей или латиницей): вернутся только подходящие SKU.":
+    "SKU ni nomining bir qismi yoki kodi bo'yicha qidirish (kirill yoki lotin yozuvida): faqat mos SKU lar qaytadi.",
+  "Список ТОП: all — все SKU (по умолчанию), only — только ТОП-товары, not — кроме ТОПа.":
+    "TOP ro'yxati: all — barcha SKU (standart), only — faqat TOP-mahsulotlar, not — TOP dan tashqari.",
+  "Только группа ABC: A, B или C. Без abc — все группы.":
+    "Faqat ABC guruhi: A, B yoki C. abc siz — barcha guruhlar.",
+  "Год, например 2026. С month — P&L месяца; без month — весь год (сумма загруженных месяцев).":
+    "Yil, masalan 2026. month bilan — oy P&L i; month siz — butun yil (yuklangan oylar yig'indisi).",
+  "Месяц 1–12. Без year и month — последний месяц с продажами и расходами.":
+    "Oy 1–12. year va month siz — savdo va xarajatli oxirgi oy.",
+  "Начало периода, ГГГГ-ММ: P&L за несколько месяцев (сумма и помесячно). Без to — по последний загруженный месяц.":
+    "Davr boshi, YYYY-OO: bir necha oy uchun P&L (yig'indi va oylar bo'yicha). to siz — oxirgi yuklangan oygacha.",
+  "Конец периода, ГГГГ-ММ.":
+    "Davr oxiri, YYYY-OO.",
+  "Дилер: имя или часть имени, или регион (например «Самарканд») — только он, со всеми строками P&L.":
+    "Diler: ism yoki ismning bir qismi, yoki mintaqa (masalan «Samarqand») — faqat u, P&L ning barcha qatorlari bilan.",
+  "Направление (РМ): название, имя РМ или id. Без него и без региона — республика.":
+    "Yo'nalish (RM): nomi, RM ismi yoki id. Usiz va mintaqasiz — respublika.",
+  "За сколько последних дней отправки (1–30, по умолчанию 7).":
+    "Oxirgi necha kundagi yuborishlar (1–30, standart 7).",
+  "Отдел: код (sales, production, supply, finance, marketing, hr) или название («Финансы»). Без отдела — все отделы, доступные пользователю.":
+    "Bo'lim: kod (sales, production, supply, finance, marketing, hr) yoki nomi («Moliya»). Bo'limsiz — foydalanuvchiga ochiq barcha bo'limlar.",
+  "open — открытые (по умолчанию), overdue — просроченные, done — выполненные за days дней, cancelled — отменённые за days дней, all — открытые и закрытые за days дней.":
+    "open — ochiq (standart), overdue — muddati o'tgan, done — days kunda bajarilgan, cancelled — days kunda bekor qilingan, all — days kundagi ochiq va yopilgan.",
+  "Исполнитель: имя или часть имени; «me» — сам пользователь. Без него — все исполнители.":
+    "Ijrochi: ism yoki ismning bir qismi; «me» — foydalanuvchining o'zi. Usiz — barcha ijrochilar.",
+  "Окно для выполненных и отменённых задач, дней: по умолчанию 30, до 365.":
+    "Bajarilgan va bekor qilingan vazifalar oynasi, kun: standart 30, 365 gacha.",
+  "Сколько задач вернуть в списке: по умолчанию 20, до 100.":
+    "Ro'yxatda nechta vazifa qaytarish: standart 20, 100 gacha.",
+  "open — открытые (по умолчанию), overdue — просроченные, today — срок сегодня, postponed — отложенные, done — выполненные за days дней, cancelled — отменённые за days дней.":
+    "open — ochiq (standart), overdue — muddati o'tgan, today — muddati bugun, postponed — kechiktirilgan, done — days kunda bajarilgan, cancelled — days kunda bekor qilingan.",
+  "Исполнитель: агент или супервайзер, имя или часть имени; «me» — сам пользователь. Без него — вся зона пользователя.":
+    "Ijrochi: agent yoki supervayzer, ism yoki ismning bir qismi; «me» — foydalanuvchining o'zi. Usiz — foydalanuvchining butun hududi.",
+  "Окно для выполненных и отменённых задач, дней: по умолчанию 30, до 180.":
+    "Bajarilgan va bekor qilingan vazifalar oynasi, kun: standart 30, 180 gacha.",
+  "День yyyy-MM-dd. Без даты (и без from/to) — сегодня.":
+    "Kun yyyy-MM-dd. Sanasiz (va from/to siz) — bugun.",
+  "Начало периода yyyy-MM-dd (вместо date). Период — до 31 дня; без to — по сегодня.":
+    "Davr boshi yyyy-MM-dd (date o'rniga). Davr — 31 kungacha; to siz — bugungacha.",
+  "Конец периода yyyy-MM-dd (вместо date).":
+    "Davr oxiri yyyy-MM-dd (date o'rniga).",
+  "Агент: имя или часть имени. С агентом — его маршрут по точкам и визиты. Агент всегда видит только себя.":
+    "Agent: ism yoki ismning bir qismi. Agent bilan — uning nuqtalar bo'yicha marshruti va tashriflari. Agent har doim faqat o'zini ko'radi.",
+  "Команда: название. Без агента и команды — вся зона пользователя.":
+    "Jamoa: nomi. Agent va jamoasiz — foydalanuvchining butun hududi.",
+  "Сколько строк в списках (пропущенные точки, визиты, отказы): по умолчанию 20, до 100.":
+    "Ro'yxatlarda nechta qator (o'tkazib yuborilgan nuqtalar, tashriflar, rad etishlar): standart 20, 100 gacha.",
+  "pending — ждут решения (по умолчанию), approved — принятые, rejected — отклонённые, expired — истёкшие, decided — все с решением, all — все.":
+    "pending — qaror kutayotganlar (standart), approved — qabul qilinganlar, rejected — rad etilganlar, expired — muddati o'tganlar, decided — qarorli hammasi, all — hammasi.",
+  "Вид: sales_decline — падение продаж, not_visited — давно не посещали, lost_customer — клиент перестал покупать, agent_behind_plan — отставание от плана, skipped_point — пропущенная точка, high_potential — высокий потенциал, reassign — точка без агента. Без вида — все.":
+    "Turi: sales_decline — savdo tushishi, not_visited — uzoq vaqt borilmagan, lost_customer — mijoz xarid qilishni to'xtatgan, agent_behind_plan — rejadan orqada qolish, skipped_point — o'tkazib yuborilgan nuqta, high_potential — yuqori salohiyat, reassign — agentsiz nuqta. Turisiz — hammasi.",
+  "Агент: имя или часть имени. Без агента — вся зона пользователя.":
+    "Agent: ism yoki ismning bir qismi. Agentsiz — foydalanuvchining butun hududi.",
+  "Команда: название. Без команды — вся зона пользователя.":
+    "Jamoa: nomi. Jamoasiz — foydalanuvchining butun hududi.",
+  "Сколько рекомендаций вернуть в списке: по умолчанию 20, до 100.":
+    "Ro'yxatda nechta tavsiya qaytarish: standart 20, 100 gacha.",
 };
 
 export default dict;

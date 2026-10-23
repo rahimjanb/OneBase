@@ -38,7 +38,7 @@ public sealed record AgentTotals(long LinkoUserId, int Orders, decimal Sum, deci
 public sealed record AgentVisitStats(long LinkoUserId, int Planned, int Done, int DoneInPlan, int Markets);
 
 /// <summary>
-/// Источник фактических данных Sales Base. Сейчас — зеркало Linko в БД OneBase (синхронизация в 11:00 и 17:00 по Ташкенту и кнопкой «Обновить»);
+/// Источник фактических данных Sales Base. Сейчас — зеркало Linko в БД OneBase (синхронизация каждые 30 минут и кнопкой «Обновить»);
 /// при прямом API Linko или другой SFA заменяется реализация, интерфейс и UI остаются.
 /// </summary>
 public interface ILinkoSalesProvider
@@ -62,7 +62,7 @@ public interface ILinkoSalesProvider
 public sealed class LinkoMirrorSalesProvider(IAppDbContext db, SalesOptions options) : ILinkoSalesProvider
 {
     /// <summary>Заказ «принят агентом», если его не отменили и магазин не отказался.</summary>
-    private static readonly string[] NotTaken = ["cancelled", "not_delivered"];
+    public static readonly string[] NotTaken = ["cancelled", "not_delivered"];
 
     private string[] Excluded => options.ExcludedBranches.Select(b => b.Trim().ToLowerInvariant()).ToArray();
 

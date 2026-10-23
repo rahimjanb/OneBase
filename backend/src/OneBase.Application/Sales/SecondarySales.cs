@@ -69,11 +69,25 @@ public static class SecondarySales
     /// <summary>Узбекистан — UTC+5: отчётный день считается по местному времени.</summary>
     public static readonly TimeSpan CompanyOffset = TimeSpan.FromHours(5);
 
+    /// <summary>Сегодня по местному времени.</summary>
+    public static DateOnly Today(DateTimeOffset now) => DateOnly.FromDateTime(now.ToOffset(CompanyOffset).DateTime);
+
+    /// <summary>Последний полный день — вчера по местному времени (база скорости продаж: неполный сегодняшний день её бы занижал).</summary>
+    public static DateOnly LastFullDay(DateTimeOffset now) => Today(now).AddDays(-1);
+
     /// <summary>
-    /// Последний день, который входит в отчёт: последний полный день — вчера по местному времени. Приёмки сегодняшнего дня
-    /// появятся завтра (до тех пор они в «Качестве данных»), как отчётный день N в «Полевом контроле».
+    /// Последний день, который входит в отчёт: сегодня (Sales:IncludeToday, по умолчанию) — приёмки идущего дня видны сразу, на время
+    /// последней синхронизации Linko (каждые 30 минут); includeToday = false — вчера, как отчётный день N в «Полевом контроле» (приёмки
+    /// сегодняшнего дня тогда войдут в отчёт завтра, до тех пор они в «Качестве данных»).
     /// </summary>
-    public static DateOnly ReportCutoff(DateTimeOffset now) => DateOnly.FromDateTime(now.ToOffset(CompanyOffset).DateTime).AddDays(-1);
+    public static DateOnly ReportCutoff(DateTimeOffset now, bool includeToday = true) => includeToday ? Today(now) : LastFullDay(now);
+
+    /// <summary>Последний день последнего закрытого месяца (до идущего календарного месяца).</summary>
+    public static DateOnly ClosedThrough(DateTimeOffset now)
+    {
+        var today = Today(now);
+        return new DateOnly(today.Year, today.Month, 1).AddDays(-1);
+    }
 
     /// <summary>
     /// Отчётный день месяца: последний день с продажами (не позже ReportCutoff), но не дальше конца месяца.
