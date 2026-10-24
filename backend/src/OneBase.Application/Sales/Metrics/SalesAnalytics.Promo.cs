@@ -1,13 +1,17 @@
 namespace OneBase.Application.Sales.Metrics;
 
-/// <summary>Вторичка месяца для раздела «Акции»: продажи регионов и агентов, отчётный день и АКБ «Могуль» (точки, купившие помадку) по регионам и агентам.</summary>
+/// <summary>
+/// Вторичка месяца для раздела «Акции»: продажи регионов и агентов, отчётный день и АКБ «Могуль» (точки, купившие помадку) по регионам и агентам.
+/// ElapsedDays — прошедшие дни месяца с долей неполного сегодняшнего (SalesMath.ElapsedDays): база «кг в день» идущего месяца.
+/// </summary>
 public sealed record PromoSalesBasis(
     int DataDay,
     IReadOnlyDictionary<string, decimal> RegionRevenue,
     IReadOnlyDictionary<long, decimal> AgentRevenue,
     IReadOnlyDictionary<long, Guid> AgentRegion,
     IReadOnlyDictionary<Guid, int> MogulByRegion,
-    IReadOnlyDictionary<long, int> MogulByAgent);
+    IReadOnlyDictionary<long, int> MogulByAgent,
+    decimal? ElapsedDays = null);
 
 public sealed partial class SalesAnalytics
 {
@@ -25,6 +29,7 @@ public sealed partial class SalesAnalytics
             _d.Current.Where(l => l.AgentId != null).GroupBy(l => l.AgentId!.Value).ToDictionary(g => g.Key, g => g.Sum(l => l.Revenue)),
             new Dictionary<long, Guid>(_agentRegion),
             mogul.GroupBy(RegionOf).ToDictionary(g => g.Key, g => g.Select(l => l.MarketId!.Value).Distinct().Count()),
-            mogul.Where(l => l.AgentId != null).GroupBy(l => l.AgentId!.Value).ToDictionary(g => g.Key, g => g.Select(l => l.MarketId!.Value).Distinct().Count()));
+            mogul.Where(l => l.AgentId != null).GroupBy(l => l.AgentId!.Value).ToDictionary(g => g.Key, g => g.Select(l => l.MarketId!.Value).Distinct().Count()),
+            _elapsed);
     })!;
 }

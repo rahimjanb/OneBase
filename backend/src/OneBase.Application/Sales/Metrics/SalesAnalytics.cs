@@ -32,6 +32,12 @@ public sealed partial class SalesAnalytics
     private readonly DateOnly _previousStart;
     private readonly DateOnly _previousCutoff;
 
+    /// <summary>Прошедшие дни месяца с долей неполного сегодняшнего (SalesMath.ElapsedDays) — база прогноза и темпа.</summary>
+    private readonly decimal _elapsed;
+
+    /// <summary>Доля последнего дня «тех же дней» прошлого месяца: сегодня идёт — та же доля, что у сегодняшнего; иначе 1.</summary>
+    private readonly decimal _previousLastDayShare = 1;
+
     /// <summary>Выполненные визиты месяца по плану и без плана: (ТТ, день) любого ТП — сшивка заказа с визитом в календаре визитов.</summary>
     private readonly HashSet<(long Market, DateOnly Date)> _doneInPlan;
     private readonly HashSet<(long Market, DateOnly Date)> _doneOffPlan;
@@ -64,6 +70,11 @@ public sealed partial class SalesAnalytics
 
         _previousStart = data.MonthStart.AddMonths(-1);
         _previousCutoff = SalesMath.SameDaysCutoff(_previousStart, Math.Max(1, data.WorkedDays));
+        _elapsed = SalesMath.ElapsedDays(data.Current, data.MonthStart, data.WorkedDays, data.FullDays);
+        if (data.FullDays < data.WorkedDays && _previousCutoff.Day == data.WorkedDays)
+        {
+            _previousLastDayShare = Math.Max(0, _elapsed - data.FullDays); // 1-го числа (полных дней нет) — 0: сравнивать ещё нечего
+        }
 
         ResolveRegions();
         _roster = BuildRoster();
@@ -71,7 +82,7 @@ public sealed partial class SalesAnalytics
     }
 
     public PeriodInfo Period => new(_d.Year, _d.Month, _d.DataThrough, _d.WorkedDays, _d.DaysInMonth, _previousCutoff, _d.SelectedPlan, _d.AvailablePlans,
-        _d.Today == DateOnly.MaxValue ? null : _d.Today);
+        _d.Today == DateOnly.MaxValue ? null : _d.Today, _elapsed);
 
     // ================= Готовые ответы =================
     // SalesAnalytics живёт в кэше, пока не изменились данные, поэтому посчитанный уровень можно отдавать повторно:
@@ -103,6 +114,7 @@ public sealed partial class SalesAnalytics
 
     public GroupView CachedDirection(string id, int? from, int? to, string metric = "kg", long? category = null)
     {
+        id = DirectionKey(id);
         var (f, t) = VisitRange(from, to);
         return View($"direction:{id}:{f}:{t}:{metric}:{category}", () => Direction(id, f, t, metric, category));
     }
@@ -122,7 +134,14 @@ public sealed partial class SalesAnalytics
 
     public bool HasRegion(Guid id) => _regions.ContainsKey(id);
 
-    public bool HasDirection(string id) => id == NoDirectionId || (Guid.TryParse(id, out var g) && _directions.ContainsKey(g));
+    /// <summary>
+    /// Есть ли такое направление в отчёте: «Без направления» — только если есть регионы без РМ; GUID — в любом регистре
+    /// (иначе адрес /directions/none или GUID заглавными давал 500 вместо 404).
+    /// </summary>
+    public bool HasDirection(string id) => DirectionGroups().Any(g => g.Id == DirectionKey(id));
+
+    /// <summary>Ключ направления в адресе: GUID — в каноническом виде (строчными), иначе как есть.</summary>
+    private static string DirectionKey(string id) => Guid.TryParse(id, out var g) ? g.ToString() : id;
 
     public bool HasAgent(long id) => _roster.Contains(id) || _d.Agents.ContainsKey(id);
 
@@ -159,7 +178,7 @@ public sealed partial class SalesAnalytics
 
     public GroupView Direction(string id, DateOnly visitsFrom, DateOnly visitsTo, string calendarMetric = "kg", long? calendarCategory = null)
     {
-        var group = DirectionGroups().FirstOrDefault(g => g.Id == id)
+        var group = DirectionGroups().FirstOrDefault(g => g.Id == DirectionKey(id))
             ?? throw new KeyNotFoundException($"Направление {id} не найдено");
         var cards = group.Regions.Select(RegionUnit).ToList();
         return Group(group.Name, group.Subtitle, group.Regions, cards, visitsFrom, visitsTo, calendarMetric, calendarCategory);
@@ -351,7 +370,8 @@ public sealed partial class SalesAnalytics
         var regionIds = RegionIds(scope).ToList();
         var set = scope?.ToHashSet();
         var categories = CategoryCardsOf(set);
-        var notBought = regionIds.Select(RegionNotBought).OrderBy(r => r.Name).ToList();
+        // Регионов-каналов (базар, сети) в «Ещё не купили» нет: их точки в АКБ не входят, строка всегда была бы «нет данных» — и у итога не было бы доли.
+        var notBought = regionIds.Where(r => !IsChannelRegion(r)).Select(RegionNotBought).OrderBy(r => r.Name).ToList();
         var categoryPlans = CategoryPlansOf(set);
         // Календарь визитов: регионы с планом, визитами или заказами; итог — по этим же строкам (с сервера, а не в браузере).
         var visitRows = regionIds.Select(r => RegionVisitRow(r, from, to)).Where(r => r.Plan + r.DoneAll + r.OrdersTotal + r.VisitsOutsideTeam > 0)
@@ -426,7 +446,7 @@ public sealed partial class SalesAnalytics
     }
 
     /// <summary>Прогноз на конец месяца (факт по текущему темпу) — только у идущего месяца; у закрытого прогноза нет.</summary>
-    private decimal? ForecastOf(decimal fact) => _d.Closed ? null : SalesMath.Forecast(fact, _d.WorkedDays, _d.DaysInMonth);
+    private decimal? ForecastOf(decimal fact) => _d.Closed ? null : SalesMath.Forecast(fact, _elapsed, _d.DaysInMonth);
 
     /// <summary>План по выручке подразделения: агенты с планом sales_sum и их же выручка (без агентов без плана).</summary>
     private RevenuePlanTile? RevenuePlanOf(IReadOnlySet<Guid>? scope, IReadOnlyList<SaleLine> scopeLines)
@@ -600,7 +620,7 @@ public sealed partial class SalesAnalytics
 
         var inPlan = orders.Where(o => _doneInPlan.Contains(o.Key)).ToList();
         var offPlan = orders.Where(o => !_doneInPlan.Contains(o.Key) && _doneOffPlan.Contains(o.Key)).ToList();
-        var plan = visits.Count(v => v.InPlan);
+        var plan = visits.Count(PlannedSoFar);
         var doneInCount = visits.Count(v => v.Status == VisitStatus.Done && v.InPlan);
         var doneOffCount = visits.Count(v => v.Status == VisitStatus.Done && !v.InPlan);
         var planShare = SalesMath.Ratio(doneInCount, plan);
@@ -610,6 +630,12 @@ public sealed partial class SalesAnalytics
             inPlan.Count, inPlan.Sum(o => o.Sum), offPlan.Count, offPlan.Sum(o => o.Sum), orders.Count, orders.Sum(o => o.Sum),
             Math.Max(0, plan - doneInCount), planShare, [], orders.Count - inPlan.Count - offPlan.Count, 0, SalesMath.ExecutionLevelOf(planShare));
     }
+
+    /// <summary>
+    /// Визит маршрута, который уже должен был состояться: сегодняшний визит «в ожидании» ещё впереди — ни в план дней, ни в «не посещено»
+    /// он не идёт (иначе с отчётным днём «сегодня» утром весь сегодняшний маршрут считался бы непосещённым). Прошедшие дни — как есть.
+    /// </summary>
+    private bool PlannedSoFar(VisitRecord v) => v.InPlan && !(v.Status == VisitStatus.Pending && v.Date >= _d.Today);
 
     /// <summary>
     /// Итог строк (регион по ТП, республика и РМ по регионам): суммы, а «не посещено» и «% плана» — по суммарному плану и суммарным визитам
@@ -631,9 +657,11 @@ public sealed partial class SalesAnalytics
     {
         var nowList = now.ToList();
         var before = previousMonth.Where(l => l.Date <= _previousCutoff).ToList();
-        var kgBefore = before.Sum(l => l.Kg);
+        // Сегодня идёт — последний из «тех же дней» прошлого месяца берётся той же долей, что прошла у сегодняшнего (кг и деньги; АКБ — целиком).
+        decimal Share(SaleLine l) => l.Date == _previousCutoff ? _previousLastDayShare : 1;
+        var kgBefore = before.Sum(l => l.Kg * Share(l));
         var kgNow = nowList.Sum(l => l.Kg);
-        var sumBefore = before.Sum(l => l.Revenue);
+        var sumBefore = before.Sum(l => l.Revenue * Share(l));
         var sumNow = nowList.Sum(l => l.Revenue);
         var akbBefore = SalesMath.Akb(before);
         var akbNow = SalesMath.Akb(nowList);
@@ -641,6 +669,9 @@ public sealed partial class SalesAnalytics
         return new SameDaysRow(id, name, subtitle, kgBefore, kgNow, SalesMath.Delta(kgBefore, kgNow),
             sumBefore, sumNow, SalesMath.Delta(sumBefore, sumNow), akbNow, SalesMath.Delta(akbBefore, akbNow));
     }
+
+    /// <summary>Регион-канал (Sales:ChannelRegions: базар, сети) — виртуальный филиал с отрицательным id.</summary>
+    private bool IsChannelRegion(Guid id) => _regions.TryGetValue(id, out var region) && SalesOptions.IsChannelBranch(region.BranchId);
 
     /// <summary>
     /// «Ещё не купили» по региону. Регион, где в этом месяце нет ни одной покупки, — почти всегда дыра в данных, а не разом
@@ -1526,7 +1557,7 @@ public sealed partial class SalesAnalytics
             var categories = SalesMath.CategoryCount(lines.Where(l => InReport(GroupOf(l.CategoryId))), GroupOf);
 
             _stats[agent] = new AgentStats(agent, kg, lines.Sum(l => l.Revenue), SalesMath.Akb(lines), categories,
-                visits, SalesMath.TempoToOwnAverage(kg, _d.WorkedDays, _d.DaysInMonth, past), IsVacancy(agent));
+                visits, SalesMath.TempoToOwnAverage(kg, _elapsed, _d.DaysInMonth, past), IsVacancy(agent));
         }
 
         // Медиана региона — по ТП: операторы и супервайзеры с их «визитами» сдвинули бы базу сравнения;
@@ -1540,7 +1571,7 @@ public sealed partial class SalesAnalytics
         foreach (var (agent, stats) in _stats)
         {
             var medians = _medians.GetValueOrDefault(_agentRegion.GetValueOrDefault(agent, NoRegionId)) ?? new RegionMedians(null, null, null);
-            _flags[agent] = AgentFlags.Evaluate(stats, medians, _d.Thresholds, categoryTarget, _d.WorkedDays, _d.DaysInMonth);
+            _flags[agent] = AgentFlags.Evaluate(stats, medians, _d.Thresholds, categoryTarget, _elapsed, _d.DaysInMonth);
         }
     }
 }

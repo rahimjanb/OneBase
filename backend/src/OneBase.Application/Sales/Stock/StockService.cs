@@ -544,9 +544,9 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
                 free);
         }
 
-        if (total.Kg is not > 0 && total.KgPerDay is not > 0)
+        if (total.Kg is not > 0 && total.KgPerDay is not > 0 && total.OrderKg is not > 0)
         {
-            return null; // в охвате ни остатка, ни продаж
+            return null; // в охвате ни остатка, ни продаж, ни заказа (стартовый заказ ТОП-товара строку оставляет)
         }
 
         var status = scope == StockScopes.Export ? StockStatuses.None : StockStatuses.Of(total.FreeKg ?? total.Kg, total.KgPerDay);

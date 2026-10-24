@@ -296,7 +296,7 @@ internal sealed class GetAgentVisitsTool(SalesDataLoader loader, IAppDbContext d
             .Select(o => new VisitOrder(o.Id, o.CreatedDate, o.MarketId, o.Status, o.TotalPrice, o.TotalWeight))
             .ToListAsync(ct);
         // Заказ «по маршруту» — в день ввода в этой точке был выполненный визит по плану (любого ТП, как календарь визитов), «вне маршрута» —
-        // только визит без плана, иначе «без визита». Отменённые и недоставленные в итогах по маршруту не считаются.
+        // только визит без плана, иначе «без визита». Отменённые в итогах по маршруту не считаются («ещё не отгружен» — обычный взятый заказ).
         var orderMarkets = orders.Where(o => o.MarketId != null).Select(o => o.MarketId!.Value).Distinct().ToArray();
         var doneAt = (await db.LinkoVisits.AsNoTracking()
                 .Where(v => v.Status == "done" && v.MarketId != null && orderMarkets.Contains(v.MarketId.Value) && v.Day >= from && v.Day <= to)

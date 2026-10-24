@@ -208,11 +208,12 @@ public sealed partial class SalesAnalytics
     /// «SKU идёт» — сколько артикулов из тех, что продаются по республике в этом месяце, есть в регионе; «не возят» — остальные;
     /// «пропало» — продавались в прошлом месяце, в этом нет. Регион без единой покупки за месяц не пропадает из таблицы, а помечен
     /// «нет данных» (NoData, счётчики — нули): это почти всегда дыра в выгрузке, а не регион, который ничего не возит.
-    /// category — id категории отчёта (как у карточки); null — все категории отчёта.
+    /// category — id категории отчёта (как у карточки); null — все категории отчёта. Регионов-каналов (базар, сети) здесь нет: их точки в АКБ
+    /// не входят, и строка всегда была бы «нет данных», хотя выгрузка в порядке.
     /// </summary>
     private List<AssortmentRegionRow> RegionRowsOf(IReadOnlySet<Guid>? scope, string? category)
     {
-        var ids = RegionIds(scope).Where(id => id != NoRegionId).ToList();
+        var ids = RegionIds(scope).Where(id => id != NoRegionId && !IsChannelRegion(id)).ToList();
         if (ids.Count < 2)
         {
             return [];

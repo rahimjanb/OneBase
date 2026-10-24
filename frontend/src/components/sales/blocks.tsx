@@ -5,7 +5,7 @@ import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
 import { Alert, ExecutionBar, FlagCountPills, KpiTile, Note, Section, Stat, SummaryCard, levelBarTone, levelClass, levelTone, targetTone } from "./bits";
 import { plural } from "@/lib/format";
-import { delta, kg, money, monthLabel, monthShort, num, ordersLabel, pct, planMissingText } from "@/lib/sales/format";
+import { delta, kg, money, monthLabel, monthShort, num, ordersLabel, paceDays, pct, planMissingText } from "@/lib/sales/format";
 import { planOf } from "@/lib/sales/query";
 import type { CategoryPlanFact, DataQuality, IndicatorPlan, KpiTiles, NextMonthPlan, Period, PlanKind, PlanSource, UnitRow } from "@/lib/sales/types";
 
@@ -36,7 +36,7 @@ export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
   const fromLinko = kpi.planSource === "linko";
   const missing = planMissingText(planOf(period.plan), t); // «плана РОП на этот месяц нет» / «плана «Завод» на этот месяц нет»
   const source = t(planSourceText[kpi.planSource]);
-  const pace = t("по темпу {worked} из {days} дн.", { worked: period.workedDays, days: period.daysInMonth });
+  const pace = t("по темпу {worked} из {days} дн.", { worked: paceDays(period), days: period.daysInMonth });
   const planDetails = hasPlan
     ? [
         fromLinko
@@ -178,7 +178,8 @@ export function UnitCard({ unit, href, showFlags = true }: { unit: UnitRow; href
  * Серьёзное (заказы без даты приёмки, возвраты без строк) — предупреждением, остальное — справкой.
  * «Приняты после отчётного дня» — только у идущего месяца: у закрытого их нет (сервер отдаёт 0, и здесь не показываем).
  */
-export function DataQualityNotes({ quality, period }: { quality: DataQuality; period: Period }) {
+/** republicWide — страница региона или направления: проверки качества считаются по всей выгрузке, это сказано в подписи. */
+export function DataQualityNotes({ quality, period, republicWide = false }: { quality: DataQuality; period: Period; republicWide?: boolean }) {
   const t = useT();
   const serious = quality.deliveredWithoutAcceptance > 0 || quality.returnsWithoutLines > 0;
   const otherCurrency = quality.otherCurrency ?? [];
@@ -188,7 +189,7 @@ export function DataQualityNotes({ quality, period }: { quality: DataQuality; pe
 
   const missing = quality.deliveredWithoutAcceptance;
   return (
-    <Section title={t("Качество данных")} hint={t("что учтено иначе, чем выглядит в Linko")}>
+    <Section title={t("Качество данных")} hint={t(republicWide ? "что учтено иначе, чем выглядит в Linko — по всей республике" : "что учтено иначе, чем выглядит в Linko")}>
       <div className="space-y-2 text-sm">
         {missing > 0 && (
           <Alert tone="bad">
@@ -252,7 +253,7 @@ export function DataQualityNotes({ quality, period }: { quality: DataQuality; pe
               ))}
             </tbody>
           </table>
-          <Note>{t("Типы товаров Linko, которых нет в восьми категориях отчёта (импорт, бонус, оборудование…). В итог они входят, в карточки категорий — нет.")}</Note>
+          <Note>{t("Типы товаров Linko, которых нет в категориях отчёта (бонус, оборудование…). В итог они входят, в карточки категорий — нет.")}</Note>
         </div>
       )}
     </Section>

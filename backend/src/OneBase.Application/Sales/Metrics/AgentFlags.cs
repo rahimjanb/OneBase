@@ -97,7 +97,7 @@ public static class AgentFlags
         RegionMedians m,
         FlagThresholds t,
         int categoryTarget,
-        int workedDays,
+        decimal workedDays,
         int daysInMonth)
     {
         if (a.IsVacancy)
@@ -173,7 +173,7 @@ public static class AgentFlags
                 var raw = daysInMonth == 0 ? tempo : tempo * workedDays / daysInMonth;
                 flags.Add(new AgentFlag(FlagKind.TempoDrop, s, "Темп", "Падение темпа",
                     $"Текущий месяц — {SalesFormat.Pct(tempo)} от собственного среднего. Считается с поправкой на неполный месяц: " +
-                    $"отработано {workedDays} из {daysInMonth} дней, без поправки вышло бы {SalesFormat.Pct(raw)}."));
+                    $"отработано {SalesFormat.Days(workedDays)} из {daysInMonth} дней, без поправки вышло бы {SalesFormat.Pct(raw)}."));
             }
         }
 
@@ -210,6 +210,9 @@ public static class SalesFormat
             _ => value.ToString("0", Ru),
         };
     }
+
+    /// <summary>Дни с долей неполного сегодняшнего: «24», «23,4».</summary>
+    public static string Days(decimal days) => days.ToString("0.#", Ru);
 
     public static string Pct(decimal share) => (share * 100).ToString(share * 100 >= 10 ? "0" : "0.#", Ru) + "%";
 

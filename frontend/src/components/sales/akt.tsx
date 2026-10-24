@@ -23,7 +23,7 @@ export function AktReport({ data }: { data: AktView }) {
   const t = useT();
   const options = data.months.map((m) => ({
     value: `${m.year}-${m.month}`,
-    label: `${monthLabel(m.year, m.month, t).replace(/^\S+/, (w) => t(w))}${m.partial ? ` ${t("(по {day}-е)", { day: new Date(data.asOf).getDate() })}` : ""}`,
+    label: `${monthLabel(m.year, m.month, t).replace(/^\S+/, (w) => t(w))}${m.partial ? ` ${t("(по {day}-е)", { day: Number(data.asOf.slice(8, 10)) })}` : ""}`,
   }));
   const all = data.groups.flatMap((g) => g.rows);
   const sum = (f: (r: AktRow) => number) => all.reduce((a, r) => a + f(r), 0);

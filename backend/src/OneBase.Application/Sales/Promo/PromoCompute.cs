@@ -26,6 +26,8 @@ public static partial class PromoCompute
         var mk = month.Key;
         var monthIndex = data.Months.ToList().FindIndex(m => m.Key == mk);
         var sDay = Math.Min(basis.DataDay, month.Days);
+        // «Кг (сум) в день» идущего месяца — по прошедшим дням: неполный сегодняшний день не считается целым (1-го числа — 0, роста ещё нет).
+        var paceDay = basis.ElapsedDays is { } elapsed && elapsed < sDay ? elapsed : sDay;
         var pk = selected.ToHashSet();
         bool RegOk(string region) => rm is null || (data.RmOfRegion.TryGetValue(region, out var r) && r == rm);
         bool PkOk(long promo) => pk.Count == 0 || pk.Contains(promo);
@@ -81,7 +83,7 @@ public static partial class PromoCompute
         }
 
         // ---------- Эффект акций ----------
-        var (effDay, effects) = Effects(data, month, noPk, byPromo, RegOk, PkOk, basis.DataDay);
+        var (effDay, effects) = Effects(data, month, noPk, byPromo, RegOk, PkOk, basis.DataDay, paceDay);
 
         // ---------- Регионы ----------
         var prev = monthIndex > 0 ? data.Months[monthIndex - 1] : null;
@@ -93,7 +95,7 @@ public static partial class PromoCompute
             {
                 var sl = monthSales?.GetValueOrDefault(g.Key) is { } x and not 0 ? x : (decimal?)null;
                 var pv = prevSales?.GetValueOrDefault(g.Key) is { } y and not 0 ? y : (decimal?)null;
-                decimal? growth = sl is { } a && pv is { } b && prev is not null ? (a / sDay) / (b / prev.Days) - 1 : null;
+                decimal? growth = sl is { } a && pv is { } b && prev is not null && paceDay > 0 ? (a / paceDay) / (b / prev.Days) - 1 : null;
                 return (Region: g.Key, S: g.Sum(r => r.Discount), STo: g.Where(r => r.Day <= sDay).Sum(r => r.Discount),
                     Man: g.Where(r => r.Promo == PromoMatch.Manual).Sum(r => r.Discount), Sl: sl, Growth: growth,
                     P: sl is { } s ? g.Where(r => r.Day <= sDay).Sum(r => r.Discount) / s : (decimal?)null);
@@ -270,12 +272,13 @@ public static partial class PromoCompute
     /// оцениваются: «до акции» в данных нет.
     /// </summary>
     private static (int Day, IReadOnlyList<PromoEffect> Effects) Effects(PromoBase data, PromoMonth month, IReadOnlyList<PromoRow> noPk, IReadOnlyList<PromoByPromo> byPromo,
-        Func<string, bool> regOk, Func<long, bool> pkOk, int dataDay)
+        Func<string, bool> regOk, Func<long, bool> pkOk, int dataDay, decimal paceDay)
     {
         var year = month.Year;
         var mi = month.Month - 1;
-        var days = Enumerable.Range(1, 12).Select(m => m < month.Month ? DateTime.DaysInMonth(year, m) : m == month.Month ? Math.Min(dataDay, month.Days) : 0).ToArray();
-        var effDay = days[mi];
+        var effDay = Math.Min(dataDay, month.Days);
+        // Дни месяцев для «кг в день»; у месяца акции — прошедшие (paceDay: с долей неполного сегодняшнего).
+        var days = Enumerable.Range(1, 12).Select(m => m < month.Month ? DateTime.DaysInMonth(year, m) : m == month.Month ? Math.Min(paceDay, effDay) : 0m).ToArray();
         var regionIds = data.RegionNames.ToDictionary(x => x.Value, x => x.Key);
 
         // кг и выручка: (товар, регион, месяц) и итоги (регион, месяц).

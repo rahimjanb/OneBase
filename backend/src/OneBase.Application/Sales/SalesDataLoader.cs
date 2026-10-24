@@ -153,6 +153,9 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             }
 
             var token = signal.Token; // до загрузки: если данные обновятся во время расчёта, результат сразу устареет
+            // Отчётный день — заново, уже после токена: прочитанный до него мог устареть (синхронизация между чтением и токеном),
+            // и отчёт со старым днём держался бы в кэше под новым токеном до конца срока.
+            lastData = await Cached("sales:last-data", () => LastDataDateAsync(ct));
             var data = await BuildAsync(y, m, kind, lastData, ct);
             var analytics = new SalesAnalytics(data);
             cache.Set(key, analytics, new MemoryCacheEntryOptions()
@@ -241,9 +244,13 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         var (rawReturns, returnHeaders) = await RawReturnsAsync(previousStart, salesEnd, ct);
         var missingAcceptance = await DeliveredWithoutAcceptanceAsync(monthStart.AddDays(-45), salesEnd, ct);
 
-        var current = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, monthStart, dataThrough, options, missingAcceptance);
+        // Точки-каналы (базар, сети) — во вторичке только закрытого месяца; прошлый месяц — в том же режиме, что текущий: иначе
+        // «к прошлому месяцу» сравнивал бы вторичку с каналами и без них (а «Экспорт и опт» — без них и с ними).
+        var today = SecondarySales.Today(DateTimeOffset.UtcNow);
+        var channels = SecondarySales.ChannelsOn(monthStart, dataThrough, options, today);
+        var current = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, monthStart, dataThrough, options, missingAcceptance, channels);
         current = current with { Quality = current.Quality with { AcceptedInFuture = await AcceptedInFutureAsync(monthStart, dataThrough, ct) } };
-        var previous = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, previousStart, monthStart.AddDays(-1), options);
+        var previous = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, previousStart, monthStart.AddDays(-1), options, channels: channels);
         var historyFrom = new[] { new DateOnly(year, 1, 1), monthStart.AddMonths(-3) }.Min();
 
         var visits = await db.LinkoVisits.AsNoTracking()
@@ -272,7 +279,12 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .Where(u => u.JobName is { } job && options.StaffPlanExcludeJobs.Any(x => job.Contains(x, StringComparison.OrdinalIgnoreCase)))
             .Select(u => u.Id)
             .ToHashSet();
-        var weight = staff.Where(s => s.PlanType == StaffPlanTypes.SalesWeight && !excludedStaff.Contains(s.LinkoUserId)).ToList();
+        // СВР бывают и с должностью «Агент»: командный план у них — показатель «… Супер» (как их узнаёт «KPI»). Его план — не план ТП:
+        // в план подразделения и в планы ТП он не складывается, в «Планах» — командным, в тот месяц, где у человека такой показатель.
+        var supervisorMonths = staff.Where(s => KpiMath.IsSupervisorIndicator(s.IndicatorName)).Select(s => (s.LinkoUserId, s.Year, s.Month)).ToHashSet();
+        bool TeamPlan(SalesStaffPlan s) => excludedStaff.Contains(s.LinkoUserId) || supervisorMonths.Contains((s.LinkoUserId, s.Year, s.Month));
+        var teamStaff = excludedStaff.Concat(supervisorMonths.Where(x => x.Year == year && x.Month == month).Select(x => x.LinkoUserId)).ToHashSet();
+        var weight = staff.Where(s => s.PlanType == StaffPlanTypes.SalesWeight && !TeamPlan(s)).ToList();
         var yearAgentPlans = weight
             .Where(s => s.Year == year)
             .GroupBy(s => (AgentId: (long?)s.LinkoUserId, s.Month))
@@ -345,7 +357,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             Year = year,
             Month = month,
             DataThrough = dataThrough,
-            Today = SecondarySales.Today(DateTimeOffset.UtcNow),
+            Today = today,
             Current = current.Lines,
             Previous = previous.Lines,
             VisitOrders = SecondarySales.VisitOrders(rawOrders, monthStart, salesEnd, options),
@@ -376,11 +388,13 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             IndicatorLevels = indicatorLevels,
             IndicatorsLoadedAt = staff.Where(s => s.Year == year && s.Month == month).Select(s => (DateTimeOffset?)s.LoadedAt).Max(),
             RevenuePlans = staff
-                .Where(s => s.Year == year && s.Month == month && s.PlanType == StaffPlanTypes.SalesSum && !excludedStaff.Contains(s.LinkoUserId))
+                .Where(s => s.Year == year && s.Month == month && s.PlanType == StaffPlanTypes.SalesSum && !TeamPlan(s))
                 .GroupBy(s => s.LinkoUserId)
                 .Select(g => new PlanRow(null, g.Key, month, null, g.Sum(s => s.PlanAmount)))
                 .ToList(),
-            TeamPlanStaff = excludedStaff,
+            TeamPlanStaff = teamStaff,
+            KpiRegions = await db.SalesAgentProfiles.AsNoTracking().Where(p => p.RegionId != null)
+                .ToDictionaryAsync(p => p.LinkoUserId, p => p.RegionId!.Value, ct),
             Agents = users.ToDictionary(u => u.Id, u => new AgentInfo(
                 u.Id,
                 u.DisplayName,

@@ -76,6 +76,8 @@ public abstract class DataTool : ITool
         MonthName = MonthName(p.Month),
         DataThrough = p.DataThrough.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         p.WorkedDays,
+        // Прошедшие дни — база прогноза и темпа: сегодняшний неполный день входит своей долей (продано сегодня к среднему дню).
+        ElapsedDays = p.ElapsedDays is { } elapsed ? Math.Round(elapsed, 1) : (decimal?)null,
         p.DaysInMonth,
         Complete = p.Closed,
     };

@@ -111,7 +111,7 @@ public sealed partial class SalesAnalytics
         var done = visits.Where(v => v.Status == VisitStatus.Done).ToList();
         // Визит «с заказом» — у этого ТП в этой точке в этот день есть заказ по дню ввода (как «Визиты с заказом» карточки ТП).
         var orderKeys = _visitByAgent[agent].Where(l => l.OrderId != null && l.MarketId != null).Select(l => (l.MarketId!.Value, l.Date)).ToHashSet();
-        var plan = visits.Count(v => v.InPlan);
+        var plan = visits.Count(PlannedSoFar);
         var doneIn = done.Count(v => v.InPlan);
         var lines = AgentLines(agent, from, to).ToList();
         var (byRoute, offRoute, noVisit, returns) = SplitLines(lines);

@@ -39,6 +39,7 @@ export default async function DirectionPage({
         categoryQuery={queryWith(q, { direction: id })}
         regionsTitle={t("Сравнение регионов")}
         scopeName={t("направлении")}
+        republicWide
       />
     </SalesFrame>
   );

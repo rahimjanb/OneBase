@@ -412,6 +412,15 @@ public class PrimaryTests
         Assert.False(PrimaryMath.IsRunning(2026, 10, new DateOnly(2026, 10, 31)));
         Assert.Null(PrimaryMath.RunningMonth(2026, new DateOnly(2026, 10, 31)));
         Assert.Null(PrimaryMath.Forecast(1m, 2026, 10, null));
+
+        // Отчётный день — сегодня, последний день месяца: день ещё идёт — месяц не закрыт; наступило 1-е — закрыт.
+        var lastDay = new DateOnly(2026, 10, 31);
+        Assert.True(PrimaryMath.IsRunning(2026, 10, lastDay, today: lastDay));
+        Assert.Equal(10, PrimaryMath.RunningMonth(2026, lastDay, today: lastDay));
+        Assert.Equal(31, PrimaryMath.WorkedDays(2026, 10, lastDay, hasData: true, today: lastDay));
+        Assert.Equal(62m, PrimaryMath.Forecast(62m, 2026, 10, lastDay, today: lastDay)); // за все дни — прогноз = факт
+        Assert.False(PrimaryMath.IsRunning(2026, 10, lastDay, today: new DateOnly(2026, 11, 1)));
+        Assert.False(PrimaryMath.IsRunning(2026, 9, lastDay, today: lastDay)); // прошлый месяц закрыт и сегодня
     }
 
     [Fact]

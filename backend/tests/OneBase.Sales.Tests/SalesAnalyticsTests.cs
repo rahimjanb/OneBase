@@ -46,9 +46,13 @@ public class SalesAnalyticsTests
         string selectedPlan = PlanSources.Rop,
         IReadOnlyList<string>? availablePlans = null,
         IReadOnlyList<string>? akbHidden = null,
-        DateOnly? today = null) => new()
+        DateOnly? today = null,
+        IReadOnlyList<StaffIndicator>? indicators = null,
+        IReadOnlyDictionary<long, Guid>? kpiRegions = null) => new()
     {
         Today = today ?? DateOnly.MaxValue,
+        Indicators = indicators ?? [],
+        KpiRegions = kpiRegions ?? new Dictionary<long, Guid>(),
         PlanSource = planSource,
         SelectedPlan = selectedPlan,
         AvailablePlans = availablePlans ?? [],
@@ -459,7 +463,7 @@ public class SalesAnalyticsTests
         var today = lastDay.Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30));
         Assert.False(today.Period.Closed);
         Assert.Equal(new DateOnly(2026, 9, 30), today.Period.Today);
-        Assert.Equal(210m, today.Kpi.ForecastKg); // 210 кг за 30 дней × 30
+        Assert.Equal(210m / 29 * 30, today.Kpi.ForecastKg); // сегодня ещё не продано ничего — темп 29 полных дней × 30
         // Наступило 1 октября — сентябрь закрыт.
         Assert.True(new SalesAnalytics(Data(previous, dataThrough: new DateOnly(2026, 9, 30), today: new DateOnly(2026, 10, 1))).Period.Closed);
         Assert.All(closed.Region(North, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), "kg", null).Team,
@@ -537,6 +541,34 @@ public class SalesAnalyticsTests
 
         Assert.Equal(80m, north.KgBefore);
         Assert.Equal(175m, north.KgNow);
+    }
+
+    [Fact]
+    public void Partial_today_counts_as_its_share_of_an_average_day_in_forecast_same_days_and_tempo()
+    {
+        // 1–9 сентября — по 10 кг, сегодня (10-е, день идёт) — пока 2 кг: прошло 9,2 дня, а не 10.
+        var current = Enumerable.Range(1, 9).Select(d => Line(d, 1, 10, branch: 101, kg: 10, revenue: 100, order: d))
+            .Append(Line(10, 1, 10, branch: 101, kg: 2, revenue: 20, order: 10)).ToList();
+        var previous = Enumerable.Range(1, 31).Select(d => Line(d, 1, 10, branch: 101, kg: 10, revenue: 100, order: 100 + d, month: 8)).ToList();
+        var analytics = new SalesAnalytics(Data(previous, current: current, dataThrough: new DateOnly(2026, 9, 10), today: new DateOnly(2026, 9, 10)));
+        var republic = analytics.Republic(Sep1, new DateOnly(2026, 9, 10));
+
+        Assert.Equal(9.2m, republic.Period.ElapsedDays);
+        Assert.Equal(300m, republic.Kpi.ForecastKg); // темп полных дней (10 кг) × 30, а не 92 / 10 × 30 = 276
+        // «За те же дни»: 1–9 августа целиком и 10 августа той же долей (0,2) — 92 кг против 92, без ложного падения.
+        var north = republic.SameDays.Single(r => r.Id == North.ToString());
+        Assert.Equal((92m, 92m), (north.KgBefore, north.KgNow));
+        Assert.Equal(0m, north.KgDelta);
+
+        // День закончился (наступило 11-е): прошедших дней — 10, как отработанных.
+        var after = new SalesAnalytics(Data(previous, current: current, dataThrough: new DateOnly(2026, 9, 10), today: new DateOnly(2026, 9, 11)));
+        Assert.Equal(10m, after.Period.ElapsedDays);
+        Assert.Equal(276m, after.Republic(Sep1, new DateOnly(2026, 9, 10)).Kpi.ForecastKg);
+
+        // 1-е число: полных дней ещё нет — прогноза нет (а не факт утра × 30).
+        var first = new SalesAnalytics(Data(previous, current: [Line(1, 1, 10, branch: 101, kg: 3, revenue: 30, order: 1)],
+            dataThrough: Sep1, today: Sep1));
+        Assert.Null(first.Republic(Sep1, Sep1).Kpi.ForecastKg);
     }
 
     [Fact]
@@ -1067,6 +1099,41 @@ public class SalesAnalyticsTests
         Assert.Equal((4, 2, 2, 0.5m, 2), (total.Plan, total.DoneInPlan, total.NotVisited, total.PlanShare!.Value, total.VisitsOutsideTeam));
         Assert.Equal(republic.VisitCalendar.Sum(r => r.OrdersTotal), total.OrdersTotal);
         Assert.Equal(TargetLevel.Bad, total.PlanShareLevel);
+    }
+
+    [Fact]
+    public void Kpi_region_set_on_the_page_places_a_supervisor_without_a_region()
+    {
+        // СВР с должностью «Агент»: филиала в Linko нет, продаж и визитов нет, регион в названиях не назван — «Без региона».
+        var agents = RepsAndOperator();
+        agents[7] = new AgentInfo(7, "Шахноза опа", true, null, false, false, "Агент");
+        StaffIndicator[] indicators = [new(7, 501, "Вес Супер", "product_sales_weight", 1000, 200, FullName: "Вес Супер")];
+        KpiPerson Person(KpiView view) => view.Regions.SelectMany(r => r.People).Single(p => p.Id == 7);
+
+        var none = new SalesAnalytics(Data(agents: agents, indicators: indicators)).Kpi(false);
+        Assert.Equal("none", Person(none).RegionSource);
+
+        // Регион, выбранный на странице «KPI» (профиль агента), держится и после пересчёта раздела.
+        var set = new SalesAnalytics(Data(agents: agents, indicators: indicators, kpiRegions: new Dictionary<long, Guid> { [7] = South })).Kpi(false);
+        Assert.Equal("profile", Person(set).RegionSource);
+        Assert.Contains(set.Regions.Single(r => r.Id == South.ToString()).People, p => p.Id == 7);
+    }
+
+    [Fact]
+    public void Todays_pending_route_visits_are_not_counted_as_missed_while_the_day_goes_on()
+    {
+        // Сегодня 3-е: визит ТП 1 на 3-е ещё «в ожидании» — впереди, не «не посещено»; ожидающий визит 2-го — уже пропущен.
+        var visits = new[] { Visit(1, 10, 1), Visit(1, 15, 2, status: VisitStatus.Pending), Visit(1, 16, 3, status: VisitStatus.Pending), Visit(1, 17, 3) };
+        var analytics = new SalesAnalytics(Data(agents: RepsAndOperator(), salesRepJobs: ["Агент"], visits: visits,
+            dataThrough: new DateOnly(2026, 9, 3), today: new DateOnly(2026, 9, 3)));
+        var agent = analytics.Republic(Sep1, new DateOnly(2026, 9, 3)).VisitCalendar.Single(r => r.Id == North.ToString()).Children.Single(c => c.Id == "1");
+        Assert.Equal((3, 2, 1), (agent.Plan, agent.DoneInPlan, agent.NotVisited));
+
+        // Тот же отрезок, когда 3-е уже прошло, — ожидающий визит 3-го не состоялся.
+        var later = new SalesAnalytics(Data(agents: RepsAndOperator(), salesRepJobs: ["Агент"], visits: visits,
+            dataThrough: new DateOnly(2026, 9, 3), today: new DateOnly(2026, 9, 4)));
+        var past = later.Republic(Sep1, new DateOnly(2026, 9, 3)).VisitCalendar.Single(r => r.Id == North.ToString()).Children.Single(c => c.Id == "1");
+        Assert.Equal((4, 2, 2), (past.Plan, past.DoneInPlan, past.NotVisited));
     }
 
     [Fact]

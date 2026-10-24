@@ -18,6 +18,11 @@ export function num(value: number | null | undefined, digits = 0): string {
   return value == null || Number.isNaN(value) ? DASH : ru(digits).format(value);
 }
 
+/** Дни темпа («по темпу 23,4 из 31 дн.»): прошедшие дни с долей неполного сегодняшнего, без них — отработанные. */
+export function paceDays(period: { workedDays: number; elapsedDays?: number | null }): string {
+  return num(period.elapsedDays ?? period.workedDays, 1);
+}
+
 /** Килограммы: до 100 — с одним знаком, дальше целые. */
 export function kg(value: number | null | undefined): string {
   return value == null ? DASH : num(value, Math.abs(value) < 100 ? 1 : 0);

@@ -118,7 +118,8 @@ public sealed partial class PrimaryService
         var yearRows = all.Where(s => s.Date.Year == year).ToList();
         var inMonth = yearRows.Where(s => s.Date.Month == month).ToList();
         var ytdRows = yearRows.Where(s => s.Date.Month <= month).ToList();
-        var running = PrimaryMath.IsRunning(year, month, asOf);
+        var today = SecondarySales.Today(DateTimeOffset.UtcNow);
+        var running = PrimaryMath.IsRunning(year, month, asOf, today); // последний день месяца, пока он идёт, — месяц ещё не закрыт
 
         // Строки — страны; подпись — точки Linko этой страны.
         var parties = yearSales
@@ -172,16 +173,16 @@ public sealed partial class PrimaryService
         var ytdReturns = ytdRows.Where(s => s.IsReturn).ToList();
         var ytdReturnsKg = -ytdReturns.Sum(s => s.Amounts.Kg);
         var monthsWithData = yearRows.Select(s => s.Date.Month).Distinct().Order().ToList();
-        var forecast = PrimaryMath.Forecast(monthTotal.Kg, year, month, asOf);
+        var forecast = PrimaryMath.Forecast(monthTotal.Kg, year, month, asOf, today);
         var view = new PrimaryView(
             Year: year,
             Month: month,
             DataThrough: running ? asOf : monthFactoryDays.Count > 0 ? monthFactoryDays.Max() : inMonth.Count == 0 ? null : inMonth.Max(s => s.Date),
             AsOf: asOf,
             Running: running,
-            RunningMonth: PrimaryMath.RunningMonth(year, asOf),
+            RunningMonth: PrimaryMath.RunningMonth(year, asOf, today),
             DaysInMonth: days,
-            WorkedDays: PrimaryMath.WorkedDays(year, month, asOf, inMonth.Count > 0 || monthFactoryDays.Count > 0),
+            WorkedDays: PrimaryMath.WorkedDays(year, month, asOf, inMonth.Count > 0 || monthFactoryDays.Count > 0, today),
             SyncedAt: syncedAt,
             FactoryStock: null,
             ExportStock: null,

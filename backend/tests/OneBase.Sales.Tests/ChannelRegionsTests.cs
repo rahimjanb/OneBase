@@ -65,6 +65,13 @@ public class ChannelRegionsTests
         Assert.Equal([1L], result.Excluded.Select(l => l.OrderId!.Value).ToArray());
         Assert.False(SecondarySales.ChannelsOn(Sep1, new DateOnly(2026, 9, 28), Options));
         Assert.True(SecondarySales.ChannelsOn(Sep1, Sep30, Options));
+        // Отчётный день — сегодня, 30-е: данные по последний день, но месяц не кончился — каналы ещё в «Экспорте и опте».
+        Assert.False(SecondarySales.ChannelsOn(Sep1, Sep30, Options, today: Sep30));
+        Assert.True(SecondarySales.ChannelsOn(Sep1, Sep30, Options, today: new DateOnly(2026, 10, 1)));
+        // Прошлый месяц для сравнения строится в режиме текущего: каналы выключены явно — строка канала в «Экспорте», не во вторичке.
+        var previous = SecondarySales.Build([Order(4, "Завод", Havas, 100)], [], [], Sep1, Sep30, Options, channels: false);
+        Assert.Empty(previous.Lines);
+        Assert.Equal([4L], previous.Excluded.Select(l => l.OrderId!.Value).ToArray());
     }
 
     [Fact]

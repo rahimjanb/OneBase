@@ -17,7 +17,8 @@ public sealed record PeriodInfo(
     DateOnly PreviousCutoff,
     string Plan,
     IReadOnlyList<string> AvailablePlans,
-    DateOnly? Today = null)
+    DateOnly? Today = null,
+    decimal? ElapsedDays = null)
 {
     public bool Closed => WorkedDays >= DaysInMonth && (Today is not { } today || new DateOnly(Year, Month, 1).AddMonths(1) <= today);
 }

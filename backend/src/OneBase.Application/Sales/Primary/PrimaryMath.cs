@@ -385,19 +385,28 @@ public static class PrimaryMath
         return share > ClosedShare ? 1 : share;
     }
 
-    /// <summary>Месяц идёт: это месяц даты данных и прошло не больше 98% его дней. Прогноз и пометка «идёт» — только у него.</summary>
-    public static bool IsRunning(int year, int month, DateOnly? asOf) => MonthShare(year, month, asOf) is > 0 and < 1;
+    /// <summary>
+    /// Месяц идёт: это месяц даты данных и прошло не больше 98% его дней — или (today — сегодня по местному времени) сегодня ещё его день:
+    /// с отчётным днём «сегодня» последний день месяца, пока он идёт, — не итог. Прогноз и пометка «идёт» — только у него.
+    /// </summary>
+    public static bool IsRunning(int year, int month, DateOnly? asOf, DateOnly? today = null)
+    {
+        var share = MonthShare(year, month, asOf);
+        return share is > 0 and < 1
+            || (share == 1 && asOf is { } day && day.Year == year && day.Month == month && today is { } t && t <= new DateOnly(year, month, 1).AddMonths(1).AddDays(-1));
+    }
 
     /// <summary>Какой месяц года идёт; null — ни один.</summary>
-    public static int? RunningMonth(int year, DateOnly? asOf) => asOf is { } day && day.Year == year && IsRunning(year, day.Month, asOf) ? day.Month : null;
+    public static int? RunningMonth(int year, DateOnly? asOf, DateOnly? today = null) =>
+        asOf is { } day && day.Year == year && IsRunning(year, day.Month, asOf, today) ? day.Month : null;
 
     /// <summary>Отработано дней («темп по N-е число»): у идущего месяца — день даты данных, у месяца с отгрузками — все дни, иначе 0.</summary>
-    public static int WorkedDays(int year, int month, DateOnly? asOf, bool hasData) =>
-        IsRunning(year, month, asOf) ? asOf!.Value.Day : hasData ? DateTime.DaysInMonth(year, month) : 0;
+    public static int WorkedDays(int year, int month, DateOnly? asOf, bool hasData, DateOnly? today = null) =>
+        IsRunning(year, month, asOf, today) ? asOf!.Value.Day : hasData ? DateTime.DaysInMonth(year, month) : 0;
 
     /// <summary>Прогноз на конец месяца = факт ÷ доля прошедшего месяца — только у идущего; у закрытого это факт (null).</summary>
-    public static decimal? Forecast(decimal fact, int year, int month, DateOnly? asOf) =>
-        IsRunning(year, month, asOf) ? SalesMath.Forecast(fact, asOf!.Value.Day, DateTime.DaysInMonth(year, month)) : null;
+    public static decimal? Forecast(decimal fact, int year, int month, DateOnly? asOf, DateOnly? today = null) =>
+        IsRunning(year, month, asOf, today) ? SalesMath.Forecast(fact, asOf!.Value.Day, DateTime.DaysInMonth(year, month)) : null;
 
     public static PrimaryAmounts SumOf(IEnumerable<PrimaryAmounts> source, PrimaryAmounts zero) => source.Aggregate(zero, (a, s) => a.Add(s));
 

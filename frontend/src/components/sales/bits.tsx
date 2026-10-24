@@ -87,7 +87,7 @@ export function KpiTile({
 export function Stat({ label, value, tone = "ink" }: { label: string; value: React.ReactNode; tone?: Tone }) {
   return (
     <div className="flex min-w-0 flex-col justify-between">
-      <dt className="text-[10px] font-medium uppercase leading-tight tracking-[0.08em] text-ink-3">
+      <dt className="hyphens-auto break-words text-[10px] font-medium uppercase leading-tight tracking-[0.06em] text-ink-3">
         <Tr>{label}</Tr>
       </dt>
       <dd className={`mt-1 whitespace-nowrap text-sm font-semibold tabular-nums ${toneClass[tone]}`}>{value}</dd>

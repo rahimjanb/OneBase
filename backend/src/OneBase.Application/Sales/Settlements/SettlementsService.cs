@@ -21,7 +21,8 @@ public sealed record SettlementsBase(
     DateOnly? PaymentsFrom,
     DateOnly? PaymentsTo,
     DateOnly? ExpensesTo,
-    IReadOnlyList<string>? ActGroups = null);
+    IReadOnlyList<string>? ActGroups = null,
+    DateOnly? Today = null);
 
 /// <summary>
 /// Взаиморасчёты с дилерами для «Акта сверки» и DSO: отгрузки и возвраты — первичка OneBase из Linko (перемещения завод → склады дилеров и
@@ -120,7 +121,7 @@ public sealed class SettlementsService(IAppDbContext db, PrimaryService primary,
 
         return new SettlementsBase(asOf, books, payments.Count > 0, expenses.Count > 0, actDate is not null, terms.Count > 0,
             payments.Count > 0 ? payments.Min(p => p.Date) : null, payments.Count > 0 ? payments.Max(p => p.Date) : null,
-            expenses.Count > 0 ? expenses.Max(p => p.Date) : null, actGroups);
+            expenses.Count > 0 ? expenses.Max(p => p.Date) : null, actGroups, today);
     }
 
     /// <summary>Номер строки листа из «АКТ-СВЕРКА!E61» (порядок строк акта).</summary>

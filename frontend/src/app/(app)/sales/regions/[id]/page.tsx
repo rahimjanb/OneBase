@@ -96,7 +96,7 @@ export default async function RegionPage({
           expandable
         />
         {data.notInDirectory.length > 0 && <NotInDirectoryTable rows={data.notInDirectory} query={q} />}
-        <DataQualityNotes quality={data.quality} period={period} />
+        <DataQualityNotes quality={data.quality} period={period} republicWide />
       </CollapsedSections>
     </SalesFrame>
   );

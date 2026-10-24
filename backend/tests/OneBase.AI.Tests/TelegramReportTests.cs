@@ -370,6 +370,20 @@ public class TelegramReportTests
         var stale = Build("daily.evening", Sv, At(Day, 18), Facts(At(Day.AddDays(-1), 18)));
         Assert.True(stale.Incomplete);
         Assert.Contains(stale.Notes, n => n.Contains("не загружены"));
+
+        // Визитов выполнено много, а заказов нет ни у кого — у СВ и РМ замечание «проверьте обновление заказов Linko» (нули — не факт);
+        // у ТП его нет (один человек без заказов — для этого есть «ТП без заказов»), утром факта ещё нет.
+        var full = Facts();
+        var noOrders = new ReportFacts
+        {
+            Categories = full.Categories, CategoryPrice = full.CategoryPrice, Plans = full.Plans, Orders = [], OrdersAsOf = full.OrdersAsOf, VisitsAsOf = full.VisitsAsOf,
+            Visits = Enumerable.Range(0, 12).Select(i => new FactVisit(61, 2000 + i, Day, new TimeOnly(9 + i % 8, 0), true, true)).ToList(),
+        };
+        Assert.Contains(Build("daily.evening", Sv, At(Day, 18), noOrders).Notes, n => n.Contains("проверьте обновление заказов"));
+        Assert.Contains(Build("no-orders.evening", Rm, At(Day, 18), noOrders).Notes, n => n.Contains("Визитов выполнено 12"));
+        Assert.DoesNotContain(Build("daily.evening", Tp(61), At(Day, 18), noOrders).Notes, n => n.Contains("проверьте обновление заказов"));
+        Assert.DoesNotContain(Build("daily.morning", Sv, At(Day, 8, 30), noOrders).Notes, n => n.Contains("проверьте обновление заказов"));
+        Assert.DoesNotContain(Build("daily.evening", Sv, At(Day, 18)).Notes, n => n.Contains("проверьте обновление заказов"));
     }
 
     [Fact]

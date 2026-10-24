@@ -35,9 +35,40 @@ public static class SalesMath
         return dataThrough > monthEnd ? monthEnd.Day : dataThrough.Day;
     }
 
-    /// <summary>Прогноз = факт / отработанных дней × дней в месяце.</summary>
-    public static decimal? Forecast(decimal fact, int workedDays, int daysInMonth) =>
-        workedDays <= 0 ? null : fact / workedDays * daysInMonth;
+    /// <summary>Прогноз = факт / прошедших дней × дней в месяце (прошедшие дни — ElapsedDays, с долей неполного сегодняшнего).</summary>
+    public static decimal? Forecast(decimal fact, decimal elapsedDays, int daysInMonth) =>
+        elapsedDays <= 0 ? null : fact / elapsedDays * daysInMonth;
+
+    /// <summary>
+    /// Прошедшие дни месяца — база темпа (прогноз, темп к своему среднему, «те же дни»). Последний день полный — отработанные дни.
+    /// Отчётный день — сегодняшний, неполный: полные дни + доля сегодняшнего = продажи (кг) сегодня к среднему полному дню, не больше 1.
+    /// Иначе утром сегодняшний день считался бы целым при малой части его продаж и прогноз проседал бы (2-го числа — почти вдвое).
+    /// Так прогноз республики — ровно темп полных дней, пока сегодня продано меньше среднего дня. Полных дней нет (1-е число) — 0: темпа нет.
+    /// </summary>
+    public static decimal ElapsedDays(IEnumerable<SaleLine> lines, DateOnly monthStart, int workedDays, int fullDays)
+    {
+        if (fullDays >= workedDays || fullDays <= 0)
+        {
+            return fullDays >= workedDays ? workedDays : 0;
+        }
+
+        var today = monthStart.AddDays(fullDays);
+        decimal before = 0, now = 0;
+        foreach (var l in lines)
+        {
+            if (l.Date < today)
+            {
+                before += l.Kg;
+            }
+            else if (l.Date == today)
+            {
+                now += l.Kg;
+            }
+        }
+
+        var average = before / fullDays;
+        return fullDays + (average <= 0 ? 1 : Math.Clamp(now / average, 0, 1));
+    }
 
     /// <summary>
     /// АКБ — число уникальных ТТ (market.id), у которых чистый вес в наборе (продажи минус возвраты) больше нуля.
@@ -144,10 +175,10 @@ public static class SalesMath
     /// Темп к своему среднему = прогноз месяца / средний факт прошлых месяцев.
     /// Учитываются только месяцы, где у агента были продажи.
     /// </summary>
-    public static decimal? TempoToOwnAverage(decimal fact, int workedDays, int daysInMonth, IEnumerable<decimal> previousMonths)
+    public static decimal? TempoToOwnAverage(decimal fact, decimal elapsedDays, int daysInMonth, IEnumerable<decimal> previousMonths)
     {
         var history = previousMonths.Where(v => v > 0).ToList();
-        var forecast = Forecast(fact, workedDays, daysInMonth);
+        var forecast = Forecast(fact, elapsedDays, daysInMonth);
         return forecast is null || history.Count == 0 ? null : forecast / history.Average();
     }
 

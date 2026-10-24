@@ -12,8 +12,9 @@ public sealed partial class SalesAnalytics
     /// </summary>
     public KpiView Kpi(bool money)
     {
-        var share = KpiMath.MonthShare(_d.WorkedDays, _d.DaysInMonth);
-        var running = share < 1;
+        // Месяц идёт, пока не закрыт (и в свой последний день); 1-го числа полных дней ещё нет — прогноза нет.
+        var running = !_d.Closed && _elapsed > 0;
+        var share = running ? KpiMath.MonthShare(_elapsed, _d.DaysInMonth) : 1;
         decimal? M(decimal value) => money ? value : null;
 
         var byPerson = _d.Indicators.Where(i => i.Plan != 0 || i.Fact != 0).GroupBy(i => i.AgentId).ToList();
@@ -189,13 +190,19 @@ public sealed partial class SalesAnalytics
             cells);
     }
 
-    /// <summary>Регион ТП — как во всём разделе продаж: профиль агента, продажи, визиты.</summary>
+    /// <summary>Регион, заданный человеку на странице «KPI» (MonthData.KpiRegions), если такой регион есть в разделе.</summary>
+    private Guid? KpiProfile(long agent) => _d.KpiRegions.TryGetValue(agent, out var region) && _regions.ContainsKey(region) ? region : null;
+
+    /// <summary>
+    /// Регион ТП — как во всём разделе продаж (продажи, визиты); не определился — регион, заданный на странице «KPI» (страница предлагает
+    /// выбрать его только человеку «Без региона»).
+    /// </summary>
     private (Guid Region, string Source) AgentRegion(long agent)
     {
         var region = _agentRegion.GetValueOrDefault(agent, NoRegionId);
         if (region == NoRegionId)
         {
-            return (NoRegionId, "none");
+            return KpiProfile(agent) is { } profile ? (profile, "profile") : (NoRegionId, "none");
         }
 
         return (region, _d.Agents.TryGetValue(agent, out var info) && info.ProfileRegionId == region ? "profile" : "sales");
@@ -207,7 +214,7 @@ public sealed partial class SalesAnalytics
     /// </summary>
     private (Guid Region, string Source) SupervisorRegion(long agent, IEnumerable<StaffIndicator> items)
     {
-        if (_d.Agents.TryGetValue(agent, out var info) && info.ProfileRegionId is { } profile && _regions.ContainsKey(profile))
+        if (KpiProfile(agent) is { } profile)
         {
             return (profile, "profile");
         }
@@ -225,7 +232,7 @@ public sealed partial class SalesAnalytics
             return (activity, "sales");
         }
 
-        var text = string.Join(" ", items.Select(i => i.FullName ?? i.Name).Prepend(info?.Job ?? ""));
+        var text = string.Join(" ", items.Select(i => i.FullName ?? i.Name).Prepend(_d.Agents.GetValueOrDefault(agent)?.Job ?? ""));
         var byText = _regions.Values
             .Where(r => r.DirectionId is not { } d || !_directions.TryGetValue(d, out var x) || !x.IsChannel)
             .Where(r => RegionAliases(r.Name).Any(alias => text.Contains(alias, StringComparison.OrdinalIgnoreCase)))

@@ -202,9 +202,11 @@ public sealed class PromoService(
                 .Select(x =>
                 {
                     var kept = x.Line.Kept;
+                    // Составная скидка («5% + 2%») делит строку по долям скидки (Share) — и скидку, и продажу, и штуки: иначе продажа строки
+                    // вошла бы в «Продажу по акции» региона, агента и магазина дважды (а «Без акций» — занижено).
                     var discount = x.Line.Discount * kept * x.Share;
-                    var sale = x.Line.IsBonus ? (x.Promo >= 0 || x.Promo <= -1000 ? discount * PromoMatch.BonusSaleFactor(NameOf(x.Promo)) : 0) : x.Line.TotalPrice * kept;
-                    var qty = x.Line.FullReturn ? 0 : Math.Max(0, x.Line.Amount - x.Line.ReturnAmount);
+                    var sale = x.Line.IsBonus ? (x.Promo >= 0 || x.Promo <= -1000 ? discount * PromoMatch.BonusSaleFactor(NameOf(x.Promo)) : 0) : x.Line.TotalPrice * kept * x.Share;
+                    var qty = x.Line.FullReturn ? 0 : Math.Max(0, x.Line.Amount - x.Line.ReturnAmount) * x.Share;
                     return (x.Line, x.Promo, discount, qty, sale);
                 })
                 .GroupBy(x => (x.Line.Accepted.Day, x.Line.Region, x.Promo, x.Line.AgentId, x.Line.MarketId))
@@ -213,7 +215,7 @@ public sealed class PromoService(
             var skuRows = delivered
                 .GroupBy(x => (x.Line.Region, x.Promo, x.Line.ProductId))
                 .Select(g => new PromoSkuRow(g.Key.Region, g.Key.Promo, g.Key.ProductId, g.Sum(x => x.Line.Discount * x.Line.Kept * x.Share),
-                    g.Sum(x => x.Line.FullReturn ? 0 : Math.Max(0, x.Line.Amount - x.Line.ReturnAmount))))
+                    g.Sum(x => x.Line.FullReturn ? 0 : Math.Max(0, x.Line.Amount - x.Line.ReturnAmount) * x.Share)))
                 .ToList();
             var pending = mStart == monthStart
                 ? attributed.Where(x => x.Raw.Status == "given")

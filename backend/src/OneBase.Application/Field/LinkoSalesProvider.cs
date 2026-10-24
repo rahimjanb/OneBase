@@ -61,8 +61,12 @@ public interface ILinkoSalesProvider
 
 public sealed class LinkoMirrorSalesProvider(IAppDbContext db, SalesOptions options) : ILinkoSalesProvider
 {
-    /// <summary>Заказ «принят агентом», если его не отменили и магазин не отказался.</summary>
-    public static readonly string[] NotTaken = ["cancelled", "not_delivered"];
+    /// <summary>
+    /// Заказ «принят агентом» (взят), если его не отменили. Статус Linko <c>not_delivered</c> — не «отказ магазина», а «ещё не отгружен»:
+    /// так выглядит каждый свежий заказ до отгрузки со склада (бронь остатков, первичка — «заказ в пути»); исключать его — значит не видеть
+    /// ни одного заказа текущего дня (факт дня в автоотчётах Telegram и «взято» Sales Base были нулями до вечера следующего дня).
+    /// </summary>
+    public static readonly string[] NotTaken = ["cancelled"];
 
     private string[] Excluded => options.ExcludedBranches.Select(b => b.Trim().ToLowerInvariant()).ToArray();
 

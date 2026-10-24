@@ -147,17 +147,12 @@ public static partial class KpiMath
         };
     }
 
-    /// <summary>Доля прошедшего месяца для прогноза: отработанные дни ÷ дней в месяце; от 0,98 — месяц считается полным.</summary>
-    public static decimal MonthShare(int workedDays, int daysInMonth)
-    {
-        if (daysInMonth <= 0 || workedDays <= 0)
-        {
-            return 1;
-        }
-
-        var share = (decimal)workedDays / daysInMonth;
-        return share > 0.98m ? 1 : share;
-    }
+    /// <summary>
+    /// Доля прошедшего месяца для прогноза: прошедшие дни (с долей неполного сегодняшнего — SalesMath.ElapsedDays) ÷ дней в месяце;
+    /// прошедших дней нет — 1. Идёт ли месяц, решает не доля, а закрыт ли он: последний день месяца, пока он идёт, — ещё не итог.
+    /// </summary>
+    public static decimal MonthShare(decimal elapsedDays, int daysInMonth) =>
+        daysInMonth <= 0 || elapsedDays <= 0 ? 1 : Math.Min(1, elapsedDays / daysInMonth);
 
     /// <summary>Цвет выполнения: от 100% — зелёный, от порога премии — оранжевый, ниже — красный (без бонуса всё ниже 100% красное).</summary>
     public static string Tone(decimal ratio, decimal? threshold) => ratio >= 1 ? "ok" : threshold is { } t && ratio >= t ? "warn" : "bad";

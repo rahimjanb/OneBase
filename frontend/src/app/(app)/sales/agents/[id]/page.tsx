@@ -10,7 +10,7 @@ import { NewMarketsTable, SameDaysTable, SilentMarketsTable } from "@/components
 import { getT } from "@/i18n/server";
 import type { T } from "@/i18n/core";
 import { apiGetOrNull } from "@/lib/server-api";
-import { kg, money, monthGenitive, monthName, num, pct, plural } from "@/lib/sales/format";
+import { kg, money, monthGenitive, monthName, num, paceDays, pct, plural } from "@/lib/sales/format";
 import { apiQuery, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { AgentFlag, AgentView } from "@/lib/sales/types";
 
@@ -121,7 +121,7 @@ export default async function AgentPage({
           {t("цель — {n} на активную точку", { n: num(data.categoryTarget) })}
         </KpiTile>
         <KpiTile label={t("Темп к своему среднему")} value={pct(data.tempo)}>
-          {t("с поправкой на {worked} из {days} дней", { worked: period.workedDays, days: period.daysInMonth })}
+          {t("с поправкой на {worked} из {days} дней", { worked: paceDays(period), days: period.daysInMonth })}
         </KpiTile>
       </div>
 

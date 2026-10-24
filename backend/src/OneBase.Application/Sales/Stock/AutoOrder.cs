@@ -97,6 +97,7 @@ public static class AutoOrderMath
     public static TransferActRow Row(AutoOrderItem item, int boxes)
     {
         var quantity = Math.Round(boxes * item.UnitsPerBox, 3);
-        return new TransferActRow(item.Name, boxes, item.Unit, quantity, item.Price, item.Price is { } p ? Math.Round(quantity * p) : null);
+        // Как на странице (Math.round): половина — вверх, а не к чётному — иначе итог страницы и акта расходится на 1 сум.
+        return new TransferActRow(item.Name, boxes, item.Unit, quantity, item.Price, item.Price is { } p ? Math.Round(quantity * p, MidpointRounding.AwayFromZero) : null);
     }
 }

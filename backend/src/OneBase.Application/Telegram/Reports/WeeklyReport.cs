@@ -42,7 +42,7 @@ public static class WeeklyReport
     {
         var (from, to) = Period(c.Job, c.Date);
         var notes = new List<string>();
-        var incomplete = ReportKit.Freshness(c, notes, needsFact: true);
+        var incomplete = ReportKit.Freshness(c, notes, needsFact: true, from, to);
         var visitKnown = ReportKit.VisitPlanKnown(c, from, to);
         if (!visitKnown)
         {

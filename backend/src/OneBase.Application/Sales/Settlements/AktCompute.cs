@@ -70,7 +70,9 @@ public static class AktCompute
         var months = new List<AktMonthOption>();
         for (var m = first; m <= last; m = m.AddMonths(1))
         {
-            months.Add(new AktMonthOption($"{m.Year}-{m.Month}", m.Year, m.Month, m == last && data.AsOf.Day < DateTime.DaysInMonth(m.Year, m.Month)));
+            // Месяц неполный: данные не за все дни — или сегодня его последний день (отчётный день «сегодня»: день ещё идёт).
+            var partial = data.AsOf.Day < DateTime.DaysInMonth(m.Year, m.Month) || (data.Today is { } today && today < m.AddMonths(1));
+            months.Add(new AktMonthOption($"{m.Year}-{m.Month}", m.Year, m.Month, m == last && partial));
         }
 
         var month = months.FirstOrDefault(m => m.Key == monthKey) ?? months[^1];

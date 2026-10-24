@@ -195,7 +195,7 @@ export default async function SkuSalesPage({ searchParams }: { searchParams: Pro
         </KpiTile>
       </div>
       <p className="mt-3 text-xs text-ink-3">
-        {tr("Нетто: заказы по дате приёмки минус возвраты по дате возврата, без «Завода» и «К К Мерч»; только восемь категорий отчёта")}
+        {tr("Нетто: заказы по дате приёмки минус возвраты по дате возврата, без «Завода» и «К К Мерч»; только категории отчёта")}
         {d.outsideReport > 0
           ? tr(" (ещё {n} {products} других типов Linko — бонус, подарки — не {verb})", {
               n: num(d.outsideReport),

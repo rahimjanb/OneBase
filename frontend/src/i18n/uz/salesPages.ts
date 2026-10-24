@@ -260,8 +260,8 @@ const dict: Dict = {
   "группа A — {n} SKU (80% веса)": "A guruhi — {n} SKU (vaznning 80%)",
   " · регионов {n}": " · mintaqalar: {n}",
   "выбранные категории — {pct} веса карточек": "tanlangan toifalar — kartochkalar vaznining {pct}",
-  "Нетто: заказы по дате приёмки минус возвраты по дате возврата, без «Завода» и «К К Мерч»; только восемь категорий отчёта":
-    "Netto: qabul sanasi bo'yicha buyurtmalar minus qaytarish sanasi bo'yicha qaytarishlar, «Zavod» va «К К Мерч»siz; faqat hisobotning sakkizta toifasi",
+  "Нетто: заказы по дате приёмки минус возвраты по дате возврата, без «Завода» и «К К Мерч»; только категории отчёта":
+    "Netto: qabul sanasi bo'yicha buyurtmalar minus qaytarish sanasi bo'yicha qaytarishlar, «Zavod» va «К К Мерч»siz; faqat hisobot toifalari",
   " (ещё {n} {products} других типов Linko — бонус, подарки — не {verb})": " (Linko'ning boshqa turlaridagi yana {n} ta tovar — bonus, sovg'alar — kirmaydi)",
   " Последний месяц не закрыт — данные по {date}.": " Oxirgi oy yopilmagan — ma'lumotlar {date} holatiga.",
 
@@ -484,8 +484,8 @@ const dict: Dict = {
   "Вне таблицы": "Jadvaldan tashqari",
   "вне категорий отчёта — {outside}, без веса единицы — {noWeight}": "hisobot toifalaridan tashqari — {outside}, birlik vaznisiz — {noWeight}",
   "Все товары с остатком — в таблице": "Qoldig'i bor barcha tovarlar — jadvalda",
-  "Бонусные товары, подарочные наборы и импорт (типы Linko вне восьми категорий отчёта) в остаток не входят — как в «Полевом контроле». Товар без веса единицы (нет продаж за год и фасовки в названии) в кг не пересчитать, поэтому он тоже вне таблицы и итогов.":
-    "Bonus tovarlar, sovg'a to'plamlari va import (hisobotning sakkiz toifasidan tashqari Linko turlari) qoldiqqa kirmaydi — «Dala nazorati»dagidek. Birlik vazni yo'q tovarni (bir yil savdo yo'q, nomida qadoq yo'q) kg ga o'tkazib bo'lmaydi, shuning uchun u ham jadval va jamilardan tashqarida.",
+  "Бонусные товары и подарочные наборы (типы Linko вне категорий отчёта) в остаток не входят — как в «Полевом контроле». Товар без веса единицы (нет продаж за год и фасовки в названии) в кг не пересчитать, поэтому он тоже вне таблицы и итогов.":
+    "Bonus tovarlar va sovg'a to'plamlari (hisobot toifalaridan tashqari Linko turlari) qoldiqqa kirmaydi — «Dala nazorati»dagidek. Birlik vazni yo'q tovarni (bir yil savdo yo'q, nomida qadoq yo'q) kg ga o'tkazib bo'lmaydi, shuning uchun u ham jadval va jamilardan tashqarida.",
   "Чей склад": "Kimning ombori",
   "Штук": "Dona",
   "Прочие склады": "Boshqa omborlar",
@@ -550,10 +550,10 @@ const dict: Dict = {
   "Заказ входит, если статус «доставлен» (delivered) или «отдан» (given), дата приёмки магазином (accepted_time) попадает в месяц и не позже отчётного дня, а филиал — не «Завод» и не «К К Мерч». «Отдан» — магазин товар принял, а статус в Linko не переставили; у отменённых и недоставленных приёмки нет. Вес и сумма заказа — по строкам документа, и в плитках, и в «Плане и факте по месяцам».":
     "Buyurtma kiradi, agar holati «yetkazildi» (delivered) yoki «berildi» (given) bo'lsa, do'kon qabul qilgan sana (accepted_time) shu oyga to'g'ri kelsa va hisobot kunidan kech bo'lmasa, filial esa «Zavod» ham, «К К Мерч» ham bo'lmasa. «Berildi» — do'kon tovarni qabul qilgan, lekin Linko'da holat o'zgartirilmagan; bekor qilingan va yetkazilmaganlarda qabul yo'q. Buyurtma vazni va summasi — hujjat qatorlari bo'yicha, plitkalarda ham, «Oylar bo'yicha reja va fakt»da ham.",
   "Отчётный день": "Hisobot kuni",
-  "— сегодня по ташкентскому времени: приёмки идущего дня видны сразу — на время последней синхронизации Linko (каждые 30 минут); приёмки этого месяца с датой в будущем войдут в отчёт в свой день, а пока видны в «Качестве данных» — только у идущего месяца. Сегодняшний день считается отработанным, поэтому утром прогноз и «к прошлому месяцу» немного ниже, к вечеру выравниваются. Чип «данные по ДД.ММ» в шапке — отчётный день идущего месяца; у закрытого месяца его нет.":
-    "— Toshkent vaqti bo'yicha bugun: joriy kun qabullari darhol ko'rinadi — Linko bilan oxirgi sinxronlash vaqtiga (har 30 daqiqada); shu oyning kelajakdagi sanali qabullari hisobotga o'z kunida kiradi, hozircha esa «Ma'lumotlar sifati»da ko'rinadi — faqat joriy oyda. Bugungi kun ishlangan kun hisoblanadi, shuning uchun ertalab prognoz va «o'tgan oyga nisbatan» biroz past, kechga tomon tenglashadi. Sarlavhadagi «KK.OO holatiga ma'lumot» belgisi — joriy oyning hisobot kuni; yopilgan oyda u yo'q.",
-  "на конец месяца (факт ÷ отработанные дни × дней в месяце) — только у идущего месяца; «к прошлому месяцу» у категорий и «Экспорта и опта» — это прогноз к прошлому месяцу, поэтому у закрытого месяца его тоже нет.":
-    "oy oxiriga (fakt ÷ ishlangan kunlar × oydagi kunlar) — faqat joriy oyda; toifalar va «Eksport va ulgurji»dagi «o'tgan oyga» — bu o'tgan oyga nisbatan prognoz, shuning uchun yopilgan oyda u ham yo'q.",
+  "— сегодня по ташкентскому времени: приёмки идущего дня видны сразу — на время последней синхронизации Linko (каждые 30 минут); приёмки этого месяца с датой в будущем войдут в отчёт в свой день, а пока видны в «Качестве данных» — только у идущего месяца. Неполный сегодняшний день в темпе считается своей долей: сколько продано сегодня к среднему дню (не больше целого дня) — поэтому утром прогноз и «к прошлому месяцу» не проседают; сегодняшние визиты «в ожидании» ещё впереди и в «не посещено» не входят. Чип «данные по ДД.ММ» в шапке — отчётный день идущего месяца; у закрытого месяца его нет.":
+    "— Toshkent vaqti bo'yicha bugun: joriy kun qabullari darhol ko'rinadi — Linko'ning oxirgi sinxronizatsiyasi vaqtiga (har 30 daqiqada); shu oyning kelajak sanali qabullari hisobotga o'z kunida kiradi, hozircha esa «Ma'lumotlar sifati»da ko'rinadi — faqat joriy oyda. To'liq bo'lmagan bugungi kun sur'atda o'z ulushi bilan hisoblanadi: bugun o'rtacha kunga nisbatan qancha sotilgani (butun kundan ko'p emas) — shuning uchun ertalab prognoz va «o'tgan oyga» pasaymaydi; bugungi «kutilmoqda» tashriflari hali oldinda va «tashrif qilinmagan»ga kirmaydi. Sarlavhadagi «ma'lumotlar KK.OO gacha» chipi — joriy oyning hisobot kuni; yopilgan oyda u yo'q.",
+  "на конец месяца (факт ÷ прошедшие дни × дней в месяце) — только у идущего месяца; «к прошлому месяцу» у категорий и «Экспорта и опта» — это прогноз к прошлому месяцу, поэтому у закрытого месяца его тоже нет.":
+    "oy oxiriga (fakt ÷ o'tgan kunlar × oydagi kunlar) — faqat joriy oyda; toifalar va «Eksport va ulgurji»dagi «o'tgan oyga» — bu o'tgan oyga nisbatan prognoz, shuning uchun yopilgan oyda u ham yo'q.",
   "Дата продажи — приёмка (accepted_time), а не плановая доставка.": "Sotuv sanasi — qabul (accepted_time), rejadagi yetkazish emas.",
   "Плановую доставку назначают и на воскресенье, а принимают в понедельник. accepted_time Linko отдаёт по местному времени (Ташкент): у заказов, не менявшихся после приёмки, он ровно на 5 часов больше времени изменения в UTC.":
     "Rejadagi yetkazish yakshanbaga ham belgilanadi, qabul esa dushanbada bo'ladi. Linko accepted_time ni mahalliy vaqtda (Toshkent) beradi: qabuldan keyin o'zgarmagan buyurtmalarda u UTC dagi o'zgartirish vaqtidan roppa-rosa 5 soat ko'p.",
@@ -661,7 +661,8 @@ const dict: Dict = {
   "— 20 товаров с наибольшей выручкой; клетка — дистрибуция в регионе, «Всего» — по всему охвату (все ТТ с товаром ÷ все ТТ с покупкой). Красный — товара в регионе нет, оранжевый — меньше 40% от «Всего». Матрица и таблица регионов — только если в охвате два региона и больше; регион без покупок за месяц — «нет данных».":
     "— eng ko'p tushumli 20 ta tovar; katak — mintaqadagi distributsiya, «Jami» — butun qamrov bo'yicha (tovarli barcha nuqtalar ÷ xaridli barcha nuqtalar). Qizil — mintaqada tovar yo'q, to'q sariq — «Jami»ning 40% idan kam. Matritsa va mintaqalar jadvali — faqat qamrovda ikki va undan ko'p mintaqa bo'lsa; oy davomida xaridsiz mintaqa — «ma'lumot yo'q».",
   "«Товары»": "«Mahsulotlar»",
-  "— только восемь категорий отчёта (бонусы и подарки — отдельным числом).": "— faqat hisobotning sakkizta toifasi (bonuslar va sovg'alar — alohida son bilan).",
+  "— только категории отчёта (бонусы и подарки — отдельным числом).":
+    "— faqat hisobot toifalari (bonuslar va sovg'alar — alohida son bilan).",
   "у магазина — по весу. Метка": "do'konda — vazn bo'yicha. Belgi",
   "«ТОП»": "«TOP»",
   "— 59 кодов списка ТОП «Полевого контроля» (настройка Sales:TopProducts).": "— «Dala nazorati» TOP ro'yxatining 59 ta kodi (Sales:TopProducts sozlamasi).",

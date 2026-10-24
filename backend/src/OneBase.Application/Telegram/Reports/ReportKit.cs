@@ -109,14 +109,17 @@ public static class ReportKit
 
     /// <summary>
     /// Замечания о данных: заказы Linko не обновлялись после начала дня (факт неизвестен — отчёт неполный) или обновлялись давно
-    /// (факт на время обновления). Возвращает, неполный ли отчёт.
+    /// (факт на время обновления); визиты области за отрезок выполнены, а заказов нет совсем — скорее всего заказы Linko не догружены.
+    /// Возвращает, неполный ли отчёт.
     /// </summary>
-    public static bool Freshness(ReportContext c, List<string> notes, bool needsFact)
+    public static bool Freshness(ReportContext c, List<string> notes, bool needsFact, DateOnly? from = null, DateOnly? to = null)
     {
         if (!needsFact)
         {
             return false;
         }
+
+        OrdersMissing(c, notes, from ?? c.Date, to ?? c.Date);
 
         var dayStart = ReportSchedules.At(c.Date, TimeOnly.MinValue, null);
         if (c.Facts.OrdersAsOf is not { } at || at < dayStart)
@@ -133,6 +136,28 @@ public static class ReportKit
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// У РМ и СВ: ТП области выполнили за отрезок (до среза) от 10 визитов, а заказов у них нет ни одного — это не «никто ничего не взял»,
+    /// а, как правило, незагруженные заказы Linko: замечание, чтобы нули в отчёте не приняли за факт. У ТП один человек без заказов —
+    /// обычная ситуация (для неё есть «ТП без заказов»), замечания нет.
+    /// </summary>
+    public static void OrdersMissing(ReportContext c, List<string> notes, DateOnly from, DateOnly to)
+    {
+        if (c.Role == TelegramReportRoles.Tp)
+        {
+            return;
+        }
+
+        var agents = c.Scope.Agents.Select(a => a.Id).ToHashSet();
+        var until = c.Cutoff == TimeOnly.MaxValue ? (TimeOnly?)null : c.Cutoff;
+        var orders = c.Facts.Orders.Any(o => agents.Contains(o.AgentId) && o.Date >= from && o.Date <= to && (until is null || o.Time < until));
+        var visits = c.Facts.Visits.Count(v => agents.Contains(v.AgentId) && v.Done && v.Day >= from && v.Day <= to && (until is null || v.Time < until));
+        if (!orders && visits >= 10)
+        {
+            notes.Add(c.F("Визитов выполнено {0}, а заказов у ТП в копии Linko нет — проверьте обновление заказов Linko («Настройки → Интеграции → Linko»)", visits));
+        }
     }
 
     /// <summary>Кто без плана в Linko — отдельной строкой замечаний.</summary>

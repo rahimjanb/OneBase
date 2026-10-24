@@ -132,6 +132,7 @@ public static class SecondarySales
     /// строки пропускаемых филиалов (IgnoredBranches, «К К Мерч») не попадают никуда.
     /// Исключение — точки-каналы (Sales:ChannelRegions: базар, сети) из филиалов первички: в закрытом месяце (to — последний день
     /// месяца from) их строки идут во вторичку с виртуальным филиалом своего региона-канала; в идущем месяце — как раньше.
+    /// channels задаёт это явно: прошлый месяц для сравнения строится в том же режиме, что текущий (ChannelsOn текущего).
     /// </summary>
     public static SecondarySalesResult Build(
         IEnumerable<RawOrderLine> orders,
@@ -140,14 +141,15 @@ public static class SecondarySales
         DateOnly from,
         DateOnly to,
         SalesOptions options,
-        int deliveredWithoutAcceptance = 0)
+        int deliveredWithoutAcceptance = 0,
+        bool? channels = null)
     {
         var sold = options.SoldStatuses.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var returned = options.ReturnStatuses.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var lines = new List<SaleLine>();
         var excluded = new List<SaleLine>();
         var otherCurrency = new List<(string Currency, decimal Amount, long OrderId, bool Excluded)>();
-        var channelsOn = ChannelsOn(from, to, options);
+        var channelsOn = channels ?? ChannelsOn(from, to, options);
 
         foreach (var o in orders)
         {
@@ -215,9 +217,15 @@ public static class SecondarySales
             Totals(otherCurrency.Where(x => x.Excluded)));
     }
 
-    /// <summary>Каналы считаются за закрытый месяц: период [from; to] доходит до последнего дня месяца from.</summary>
-    public static bool ChannelsOn(DateOnly from, DateOnly to, SalesOptions options) =>
-        options.ChannelRegions.Count > 0 && to >= new DateOnly(from.Year, from.Month, 1).AddMonths(1).AddDays(-1);
+    /// <summary>
+    /// Каналы считаются за закрытый месяц: период [from; to] доходит до последнего дня месяца from, и этот день уже прошёл (today —
+    /// сегодня по местному времени: в последний день идущего месяца отчётный день — он сам, но месяц ещё не закрыт).
+    /// </summary>
+    public static bool ChannelsOn(DateOnly from, DateOnly to, SalesOptions options, DateOnly? today = null)
+    {
+        var monthEnd = new DateOnly(from.Year, from.Month, 1).AddMonths(1).AddDays(-1);
+        return options.ChannelRegions.Count > 0 && to >= monthEnd && monthEnd < (today ?? DateOnly.MaxValue);
+    }
 
     /// <summary>
     /// Виртуальный филиал региона-канала для строки точки-канала из филиала первички («Завод», «К К Мерч») не раньше первого месяца

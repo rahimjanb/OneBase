@@ -165,7 +165,7 @@ function RegionPanel({ item, regions, factory, unit }: { item: StockItem; region
     ...regions
       .flatMap((r) => {
         const c = item.regions[r.id];
-        return c && ((c.kg ?? 0) > 0 || (c.kgPerDay ?? 0) > 0) ? [{ id: r.id, name: r.name, c, plant: false }] : [];
+        return c && ((c.kg ?? 0) > 0 || (c.kgPerDay ?? 0) > 0 || (c.orderKg ?? 0) > 0) ? [{ id: r.id, name: r.name, c, plant: false }] : [];
       })
       .sort((a, b) => (b.c.kg ?? 0) - (a.c.kg ?? 0)),
   ];
@@ -342,7 +342,8 @@ const totalOf = (t: StockTotals, unit: StockUnit, m: Metric) =>
 
 type Group = { key: string; name: string; plant: boolean; cellOf: (r: StockItem) => Amounts | null; totals: StockTotals | null };
 
-const empty = (c: Amounts | null): c is null => !c || ((c.kg ?? 0) === 0 && (c.kgPerDay ?? 0) === 0);
+// Стартовый заказ ТОП-товара (10 коробок при нуле остатка и продаж) — не пустая клетка.
+const empty = (c: Amounts | null): c is null => !c || ((c.kg ?? 0) === 0 && (c.kgPerDay ?? 0) === 0 && (c.orderKg ?? 0) === 0);
 
 /** Пять клеток одного склада: остаток, в день, дн., 15 дн., заказ — в выбранной единице. */
 function Trio({ c, unit, plant, unitKg }: { c: Amounts | null; unit: StockUnit; plant: boolean; unitKg?: number | null }) {
@@ -530,7 +531,7 @@ export function StockExcludedTable({ rows, outsideReport, withoutWeight }: { row
       limit={20}
       empty={t("Все товары с остатком — в таблице")}
       note={t(
-        "Бонусные товары, подарочные наборы и импорт (типы Linko вне восьми категорий отчёта) в остаток не входят — как в «Полевом контроле». Товар без веса единицы (нет продаж за год и фасовки в названии) в кг не пересчитать, поэтому он тоже вне таблицы и итогов.",
+        "Бонусные товары и подарочные наборы (типы Linko вне категорий отчёта) в остаток не входят — как в «Полевом контроле». Товар без веса единицы (нет продаж за год и фасовки в названии) в кг не пересчитать, поэтому он тоже вне таблицы и итогов.",
       )}
     />
   );

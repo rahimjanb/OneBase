@@ -214,9 +214,18 @@ public sealed class MonthData
     /// <summary>Категории отчёта, которых нет в «АКБ по месяцам» (Sales:AkbChartHiddenCategories; «Песочный»). Без учёта регистра.</summary>
     public IReadOnlyList<string> AkbChartHiddenCategories { get; init; } = [];
 
+    /// <summary>
+    /// Регион человека, заданный вручную на странице «KPI» (PUT kpi/region — профиль агента): Linko user id → регион. Только для «KPI»
+    /// (у СВР в Linko филиала нет); остальной раздел регион по профилям не берёт — оргструктура OneBase в продажах не используется.
+    /// </summary>
+    public IReadOnlyDictionary<long, Guid> KpiRegions { get; init; } = new Dictionary<long, Guid>();
+
     public DateOnly MonthStart => new(Year, Month, 1);
     public int DaysInMonth => DateTime.DaysInMonth(Year, Month);
     public int WorkedDays => SalesMath.WorkedDays(MonthStart, DataThrough);
+
+    /// <summary>Полные дни месяца: отработанные без сегодняшнего, пока он идёт (отчётный день — сегодня).</summary>
+    public int FullDays => WorkedDays > 0 && DataThrough >= Today ? WorkedDays - 1 : WorkedDays;
 
     /// <summary>Месяц закрыт: данные есть за все его дни и месяц уже кончился — прогноза на конец месяца нет.</summary>
     public bool Closed => WorkedDays >= DaysInMonth && MonthStart.AddMonths(1) <= Today;

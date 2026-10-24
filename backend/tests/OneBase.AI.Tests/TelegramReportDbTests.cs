@@ -84,13 +84,14 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         await db.LinkoOrders.Where(o => ids.Contains(o.Id)).ExecuteDeleteAsync();
         var id = 800_000_001L;
 
-        void Add(long agent, DateOnly day, int hour, decimal sum, decimal kg, long market, decimal? discount = null)
+        void Add(long agent, DateOnly day, int hour, decimal sum, decimal kg, long market, decimal? discount = null, string status = "delivered")
         {
             var at = day.ToDateTime(new TimeOnly(hour, 0));
+            var accepted = status == "delivered"; // свежий заказ (not_delivered, cancelled) приёмки ещё не имеет
             db.LinkoOrders.Add(new LinkoOrder
             {
-                Id = id, CreatedAt = at, CreatedDate = day, AcceptedAt = at, AcceptedDate = day, Status = "delivered", MarketId = market, BranchId = 5,
-                BranchName = "Хоразм", AgentId = agent, TotalPrice = sum, TotalWeight = kg,
+                Id = id, CreatedAt = at, CreatedDate = day, AcceptedAt = accepted ? at : null, AcceptedDate = accepted ? day : null, Status = status, MarketId = market,
+                BranchId = 5, BranchName = "Хоразм", AgentId = agent, TotalPrice = sum, TotalWeight = kg,
             });
             db.LinkoOrderLines.Add(new LinkoOrderLine
             {
@@ -99,15 +100,17 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
             id++;
         }
 
-        // Вчера — команда региона в «Продажах»; 40 дней назад — последняя покупка точки 1102 (без закупа 30+ дней); сегодня — факт отчётов.
+        // Вчера — команда региона в «Продажах»; 40 дней назад — последняя покупка точки 1102 (без закупа 30+ дней); сегодня — факт отчётов:
+        // как в Linko днём, свежие заказы ещё не отгружены (not_delivered, без приёмки) — они и есть факт дня; отменённый — нет.
         foreach (var agent in agents)
         {
             Add(agent, today.AddDays(-1), 11, 1_000_000, 30, 1101);
         }
 
         Add(61, today.AddDays(-40), 11, 2_500_000, 80, 1102);
-        Add(61, today, 9, 25_000_000, 400, 1101, discount: 1_250_000);
-        Add(62, today, 10, 15_000_000, 300, 1103);
+        Add(61, today, 9, 25_000_000, 400, 1101, discount: 1_250_000, status: "not_delivered");
+        Add(62, today, 10, 15_000_000, 300, 1103, status: "not_delivered");
+        Add(62, today, 11, 9_000_000, 100, 1103, status: "cancelled");
 
         await db.LinkoMarkets.Where(m => m.Id >= 1101 && m.Id <= 1104).ExecuteDeleteAsync();
         db.LinkoMarkets.AddRange(
@@ -367,6 +370,55 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         Assert.Equal(0, await runner.SendPendingAsync(default));
         Assert.All(await db.TelegramReportDeliveries.AsNoTracking().Where(d => queued.Select(q => q.DeliveryId).Contains(d.Id)).ToListAsync(),
             d => Assert.Equal(("skipped", "Получатель удалён."), (d.Status, d.Error)));
+        fixture.Clock.Now = null;
+    }
+
+    [PostgresFact]
+    public async Task Two_morning_runs_at_the_same_time_go_out_to_every_role_and_fresh_orders_count_as_the_fact()
+    {
+        var s = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var service = sp.GetRequiredService<TelegramReportService>();
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        string[] reports = ["daily.morning", "no-purchase.morning", "daily.evening"];
+
+        // Три роли: РМ (вся страна) — в личный чат, СВ — в группу и личный чат, ТП — в свой чат; у всех оба утренних отчёта и итог дня.
+        await service.SaveRecipientAsync(null, new ReportRecipientInput(TelegramReportRoles.Rm, null, null, null, null, null, [s.OtherChatId], reports, true), true, s.AdminId, default);
+        await service.SaveRecipientAsync(null, Sv(s, [s.GroupChatId, s.PrivateChatId], reports), true, s.AdminId, default);
+        await service.SaveRecipientAsync(null, Tp(63, s.AgentChatId, reports), true, s.AdminId, default);
+
+        // Включены в 8:00 — в 8:30 наступают два запуска сразу; оба уходят в каждый чат, друг другу не мешая.
+        fixture.Clock.Now = Utc(s.Today, 8);
+        await service.SaveJobAsync("daily.morning", new ReportJobInput(true, "08:30", "Asia/Tashkent", EveryDay, null), s.AdminId, default);
+        await service.SaveJobAsync("no-purchase.morning", new ReportJobInput(true, "08:30", "Asia/Tashkent", EveryDay, null), s.AdminId, default);
+        await service.SaveJobAsync("daily.evening", new ReportJobInput(true, "18:00", "Asia/Tashkent", EveryDay, null), s.AdminId, default);
+        var runner = Runner(sp);
+        Assert.Equal(0, await runner.TickAsync(default));
+
+        fixture.Clock.Now = Utc(s.Today, 8, 31);
+        Assert.Equal(8, await runner.TickAsync(default)); // 4 чата × 2 отчёта
+        Assert.Equal(0, await runner.TickAsync(default));
+        var runs = await db.TelegramReportRuns.AsNoTracking().ToDictionaryAsync(r => r.Job);
+        Assert.Equal(("done", 4, 4, 0, 0), (runs["daily.morning"].Status, runs["daily.morning"].Planned, runs["daily.morning"].Sent, runs["daily.morning"].Failed, runs["daily.morning"].Skipped));
+        Assert.Equal(("done", 4, 4, 0, 0), (runs["no-purchase.morning"].Status, runs["no-purchase.morning"].Planned, runs["no-purchase.morning"].Sent,
+            runs["no-purchase.morning"].Failed, runs["no-purchase.morning"].Skipped));
+        Assert.Equal(2, fixture.Telegram.Sent.Count(m => m.Peer.PeerId == GroupPeer)); // в группу — и «Дневной план», и «Клиенты без закупа»
+        Assert.All(fixture.Telegram.Sent, m => Assert.NotEmpty(m.Message.Files));
+        Assert.Equal(4, fixture.Telegram.Sent.Count(m => m.Message.Text?.Contains("Дневной план") == true));
+        Assert.Equal(4, fixture.Telegram.Sent.Count(m => m.Message.Text?.Contains("Клиенты без закупа") == true));
+        Assert.Contains(fixture.Telegram.Sent, m => m.Peer.PeerId == OtherPeer && m.Message.Text?.Contains("Вся страна") == true);
+
+        // Итог дня: заказы, ещё не отгруженные со склада (not_delivered), — это и есть взятое за день; отменённый не считается.
+        fixture.Clock.Now = Utc(s.Today, 18, 2);
+        Assert.Equal(4, await runner.TickAsync(default));
+        var evening = fixture.Telegram.Sent.Single(m => m.Peer.PeerId == GroupPeer && m.Message.Text?.Contains("Итог дня") == true).Message.Text!;
+        Assert.Contains("40 000 000", evening); // 25 + 15 млн, без отменённых 9 млн
+        Assert.Contains("заказов 2,", evening);
+        Assert.DoesNotContain("проверьте обновление заказов", evening);
+        var deliveries = await db.TelegramReportDeliveries.AsNoTracking().Where(d => d.Trigger == "schedule").ToListAsync();
+        Assert.Equal(12, deliveries.Count);
+        Assert.All(deliveries, d => Assert.Equal("sent", d.Status));
         fixture.Clock.Now = null;
     }
 

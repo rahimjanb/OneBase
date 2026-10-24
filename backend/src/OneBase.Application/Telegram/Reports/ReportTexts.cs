@@ -115,6 +115,8 @@ public static class ReportTexts
         ["Заказов с акцией {0} из {1} ({2}), на сумму {3} сум."] = "Aksiyali buyurtmalar: {1} tadan {0} ta ({2}), {3} so'mlik.",
         ["Заказов с акцией нет"] = "Aksiyali buyurtmalar yo'q",
         ["Заказов, шт"] = "Buyurtmalar, dona",
+        ["Визитов выполнено {0}, а заказов у ТП в копии Linko нет — проверьте обновление заказов Linko («Настройки → Интеграции → Linko»)"] =
+            "{0} ta tashrif bajarilgan, lekin Linko nusxasida TP buyurtmalari yo'q — Linko buyurtmalarining yangilanishini tekshiring («Sozlamalar → Integratsiyalar → Linko»)",
         ["Заказы Linko ещё не загружались — факт неизвестен"] = "Linko buyurtmalari hali yuklanmagan — fakt noma'lum",
         ["Заказы Linko за этот день ещё не загружены (последнее обновление {0}) — факт неполный"] = "Bu kun uchun Linko buyurtmalari hali yuklanmagan (oxirgi yangilanish {0}) — fakt to'liq emas",
         ["Заказы, шт"] = "Buyurtmalar, dona",

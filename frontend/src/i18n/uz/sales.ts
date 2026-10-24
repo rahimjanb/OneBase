@@ -271,8 +271,8 @@ const dict: Dict = {
   "Ещё {items} других типов Linko (бонус, подарки) в таблицу не входят": "Linko'ning boshqa turdagi yana {items} (bonus, sovg'alar) jadvalga kirmaydi",
   " — их вес и сумма в «Качестве данных»": " — ularning vazni va summasi «Ma'lumotlar sifati»da",
   "код {code}": "kod {code}",
-  "Только восемь категорий отчёта. Доля — от выручки этих товаров. ТТ — точки с положительной строкой товара (кг или сумма больше нуля); дистрибуция — их доля от всех ТТ с покупкой. «ТОП» — товар из списка ТОП.":
-    "Faqat hisobotning sakkiz toifasi. Ulush — shu tovarlar tushumidan. Nuqta — tovar qatori musbat bo'lgan nuqtalar (kg yoki summa noldan katta); distributsiya — ularning xaridli barcha nuqtalardagi ulushi. «TOP» — TOP ro'yxatidagi tovar.",
+  "Только категории отчёта. Доля — от выручки этих товаров. ТТ — точки с положительной строкой товара (кг или сумма больше нуля); дистрибуция — их доля от всех ТТ с покупкой. «ТОП» — товар из списка ТОП.":
+    "Faqat hisobot toifalari. Ulush — shu tovarlar tushumidan. Nuqta — tovar qatori musbat bo'lgan nuqtalar (kg yoki summa noldan katta); distributsiya — ularning xaridli barcha nuqtalardagi ulushi. «TOP» — TOP ro'yxatidagi tovar.",
   "ТТ у ТП": "TP nuqtalari",
   "Нет товаров, которые регион ставит заметно шире": "Mintaqa sezilarli kengroq qo'yadigan tovarlar yo'q",
   "Товар попадает сюда, если в регионе его покупает не меньше 15% точек, а у этого ТП — меньше половины от доли региона. Дистрибуция — доля ТТ с покупкой, купивших товар.":
@@ -419,6 +419,7 @@ const dict: Dict = {
   "Факт в плане": "Rejadagi fakt",
   "Качество данных": "Ma'lumotlar sifati",
   "что учтено иначе, чем выглядит в Linko": "Linko'dagidan boshqacha hisobga olinganlar",
+  "что учтено иначе, чем выглядит в Linko — по всей республике": "Linko'dagidan boshqacha hisobga olinganlar — butun respublika bo'yicha",
   "доставленный заказ без даты приёмки — в факт не попал. Обычно это значит, что копия Linko загружена не до конца: запустите полную перезагрузку в «Настройки → Интеграции → Linko».":
     "ta yetkazilgan buyurtma qabul sanasisiz — faktga kirmadi. Odatda bu Linko nusxasi to'liq yuklanmaganini bildiradi: «Sozlamalar → Integratsiyalar → Linko»da to'liq qayta yuklashni ishga tushiring.",
   "доставленных заказа без даты приёмки — в факт не попали. Обычно это значит, что копия Linko загружена не до конца: запустите полную перезагрузку в «Настройки → Интеграции → Linko».":
@@ -439,8 +440,8 @@ const dict: Dict = {
   "возвратов с нулевым весом в шапке учтены по строкам: {kg} кг. Шапке документа верить нельзя — у них вес лежит только в строках.":
     "ta sarlavhada nol vaznli qaytarish qatorlar bo'yicha hisobga olindi: {kg} kg. Hujjat sarlavhasiga ishonib bo'lmaydi — ularda vazn faqat qatorlarda.",
   "Вне категорий отчёта": "Hisobot toifalaridan tashqari",
-  "Типы товаров Linko, которых нет в восьми категориях отчёта (импорт, бонус, оборудование…). В итог они входят, в карточки категорий — нет.":
-    "Hisobotning sakkiz toifasida yo'q Linko tovar turlari (import, bonus, uskunalar…). Ular jamiga kiradi, toifa kartochkalariga — yo'q.",
+  "Типы товаров Linko, которых нет в категориях отчёта (бонус, оборудование…). В итог они входят, в карточки категорий — нет.":
+    "Hisobot toifalarida yo'q Linko tovar turlari (bonus, uskunalar…). Ular jamiga kiradi, toifa kartochkalariga — yo'q.",
   "кг · плана нет": "kg · reja yo'q",
   ", где его нет — ": ", u yo'q joyda — ",
   "Плана нет": "Reja yo'q",
@@ -618,10 +619,10 @@ const dict: Dict = {
     "Bitta SKU — butun vaznning {share}: {name} ({kg} kg, {sum} so'm, pulning {money}). Top-5 SKU — vaznning {top5}, top-10 — {top10}, top-25 — {top25}.",
   "Группа A — {a} SKU (первые 80% веса), B — {b} (до 95%). Хвост группы C — {c} SKU, вместе {share} веса: кандидаты на чистку матрицы.":
     "A guruhi — {a} SKU (vaznning birinchi 80% i), B — {b} (95% gacha). C guruhi dumi — {c} SKU, birgalikda vaznning {share}: matritsani tozalashga nomzodlar.",
-  "Ещё {items} других типов Linko (бонус, подарки) продавался за период, но в восемь категорий отчёта не входит — здесь его нет.":
-    "Linko'ning boshqa turdagi yana {items} (bonus, sovg'alar) davrda sotilgan, lekin hisobotning sakkiz toifasiga kirmaydi — bu yerda ular yo'q.",
-  "Ещё {items} других типов Linko (бонус, подарки) продавались за период, но в восемь категорий отчёта не входят — здесь их нет.":
-    "Linko'ning boshqa turdagi yana {items} (bonus, sovg'alar) davrda sotilgan, lekin hisobotning sakkiz toifasiga kirmaydi — bu yerda ular yo'q.",
+  "Ещё {items} других типов Linko (бонус, подарки) продавался за период, но в категории отчёта не входит — здесь его нет.":
+    "Linko'ning boshqa turdagi yana {items} (bonus, sovg'alar) davrda sotilgan, lekin hisobot toifalariga kirmaydi — bu yerda ular yo'q.",
+  "Ещё {items} других типов Linko (бонус, подарки) продавались за период, но в категории отчёта не входят — здесь их нет.":
+    "Linko'ning boshqa turdagi yana {items} (bonus, sovg'alar) davrda sotilgan, lekin hisobot toifalariga kirmaydi — bu yerda ular yo'q.",
 
   // ---------- Настройка продаж (SetupClient) ----------
   "Недостаточно прав (нужно sales.manage)": "Huquq yetarli emas (sales.manage kerak)",

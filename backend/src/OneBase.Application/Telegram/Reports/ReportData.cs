@@ -123,8 +123,8 @@ public sealed record NoPurchaseAgent(long AgentId, int Base, int Silent, int OnR
 
 /// <summary>
 /// Источник данных автоотчётов — только данные OneBase (зеркало Linko и оргструктура «Продаж»), никаких строк из Excel: заказы ТП,
-/// принятые им (как «Продажи за день» Sales Base: без отменённых и недоставленных, без «Завода»), строки заказов по категориям отчёта,
-/// акции (как на странице «Акции»), визиты Linko, планы staff_balance.
+/// взятые им за день (как «взято» Sales Base: по дню ввода, все статусы кроме отменённых — свежий заказ в Linko стоит в «ещё не отгружен»
+/// до отгрузки; без «Завода»), строки заказов по категориям отчёта, акции (как на странице «Акции»), визиты Linko, планы staff_balance.
 /// </summary>
 public sealed class ReportDataService(IAppDbContext db, SalesDataLoader loader, SalesOptions options, ILinkoSalesProvider linko, PromoService promo, IMemoryCache cache)
 {

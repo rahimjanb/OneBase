@@ -6,7 +6,7 @@ import { CategoryPlanCard } from "./category-plan";
 import { MonthCalendarTable, VisitCalendarTable } from "./calendars";
 import { CategoryCards } from "./categories";
 import { NotBoughtTable, RegionsTable, SameDaysTable } from "./tables";
-import { monthGenitive, monthName } from "@/lib/sales/format";
+import { monthGenitive, monthName, paceDays } from "@/lib/sales/format";
 import { param, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { GroupView, UnitRow } from "@/lib/sales/types";
 
@@ -39,6 +39,7 @@ export async function GroupPage({
   categoryQuery,
   regionsTitle,
   scopeName,
+  republicWide = false,
 }: {
   data: GroupView;
   sp: SalesSearchParams;
@@ -48,6 +49,8 @@ export async function GroupPage({
   regionsTitle: string;
   /** «в республике», «в направлении» — для пояснений. */
   scopeName: string;
+  /** Страница направления: «Качество данных» — по всей республике. */
+  republicWide?: boolean;
 }) {
   const t = await getT();
   const { period } = data;
@@ -82,7 +85,7 @@ export async function GroupPage({
           rows={data.regions}
           query={query}
           title={regionsTitle}
-          hint={t("текущий темп × {days} дн. (отработано {worked})", { days: period.daysInMonth, worked: period.workedDays })}
+          hint={t("текущий темп × {days} дн. (отработано {worked})", { days: period.daysInMonth, worked: paceDays(period) })}
         />
         <MonthCalendarTable
           calendar={data.calendar}
@@ -119,7 +122,7 @@ export async function GroupPage({
           workedDays={period.workedDays}
           daysInMonth={period.daysInMonth}
         />
-        <DataQualityNotes quality={data.quality} period={period} />
+        <DataQualityNotes quality={data.quality} period={period} republicWide={republicWide} />
       </CollapsedSections>
     </>
   );
