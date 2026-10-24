@@ -107,3 +107,14 @@ public static class SalesTargetKeys
         [CategoriesPerOutlet] = 4m,
     };
 }
+
+/// <summary>
+/// Справочник праздников OneBase — нерабочие дни помимо воскресений (государственные праздники Узбекистана; хайиты вносятся по указу на год).
+/// Используется в дневном плане ТП автоотчётов («ТП без заказов»): праздник не считается рабочим днём и в такой день план дня не считается.
+/// </summary>
+public class SalesHoliday : Entity
+{
+    public DateOnly Date { get; set; }
+    public required string Name { get; set; }
+    public Guid? CreatedById { get; set; }
+}

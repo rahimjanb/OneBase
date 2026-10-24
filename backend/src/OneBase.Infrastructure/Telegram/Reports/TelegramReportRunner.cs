@@ -33,12 +33,45 @@ public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvid
     /// <summary>Свежее этого данные Linko перед отправкой не обновляются.</summary>
     public static readonly TimeSpan FreshEnough = TimeSpan.FromMinutes(10);
 
+    /// <summary>На какой день дневные планы ТП уже подготовлены этим экземпляром (строки в базе — защита от повтора при перезапуске).</summary>
+    private DateOnly _dailyPlansPreparedFor;
+
     public async Task<int> TickAsync(CancellationToken ct)
     {
+        await PrepareDailyPlansAsync(ct);
         await EnqueueDueAsync(ct);
         var sent = await SendPendingAsync(ct);
         await FinishRunsAsync(ct);
         return sent;
+    }
+
+    /// <summary>
+    /// Утренняя задача дневных планов ТП («ТП без заказов»): с 08:00 по Ташкенту один раз в день — всем ТП оргструктуры; строки уже есть
+    /// (перезапуск, второй экземпляр) — ничего не добавляется. Не вышло — журнал и следующий круг.
+    /// </summary>
+    public async Task PrepareDailyPlansAsync(CancellationToken ct)
+    {
+        var local = ReportSchedules.Local(clock.GetUtcNow(), ReportSchedules.DefaultTimeZone);
+        var today = DateOnly.FromDateTime(local.DateTime);
+        if (_dailyPlansPreparedFor == today || TimeOnly.FromDateTime(local.DateTime) < DailyPlanService.MorningAt)
+        {
+            return;
+        }
+
+        using var scope = scopes.CreateScope();
+        try
+        {
+            var added = await scope.ServiceProvider.GetRequiredService<DailyPlanService>().PrepareAsync(today, ct);
+            _dailyPlansPreparedFor = today;
+            if (added > 0)
+            {
+                logger.LogInformation("Дневные планы ТП на {Date}: посчитано {Count}", today, added);
+            }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Дневные планы ТП на {Date} не посчитаны — следующий круг", today);
+        }
     }
 
     /// <summary>Наступившие запуски → журнал запусков и строки отправок «в очереди»; пропущенные после простоя — «пропущен».</summary>

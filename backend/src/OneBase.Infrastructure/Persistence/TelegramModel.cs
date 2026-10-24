@@ -192,6 +192,18 @@ internal static class TelegramModel
             e.HasIndex(x => x.StartedAt);
         });
 
+        b.Entity<TelegramReportDailyPlan>(e =>
+        {
+            e.ToTable("ReportDailyPlans", Schema);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.Trigger).HasMaxLength(16);
+            e.Property(x => x.Note).HasMaxLength(300);
+            e.Property(x => x.Reason).HasMaxLength(300);
+            // Одна действующая строка на ТП и день: второй экземпляр службы или повторный круг дубля не создадут; история — с SupersededAt.
+            e.HasIndex(x => new { x.LinkoUserId, x.Date }).IsUnique().HasFilter("\"SupersededAt\" IS NULL").HasDatabaseName("IX_ReportDailyPlans_Active");
+            e.HasIndex(x => x.Date);
+        });
+
         b.Entity<TelegramReportSubscription>(e =>
         {
             e.ToTable("ReportSubscriptions", Schema);

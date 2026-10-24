@@ -4,6 +4,7 @@ using OneBase.Application.Abstractions;
 using OneBase.Application.Sales.Metrics;
 using OneBase.Application.Telegram.Reports;
 using OneBase.Domain.Audit;
+using OneBase.Domain.Sales;
 using OneBase.Domain.Telegram;
 
 namespace OneBase.Infrastructure.Telegram.Reports;
@@ -21,7 +22,8 @@ public sealed class TelegramReportService(
     IReportRenderer renderer,
     IAuditLogger audit,
     IConfiguration config,
-    TimeProvider clock)
+    TimeProvider clock,
+    DailyPlanService dailyPlans)
 {
     private static readonly string[] Languages = ["ru", "uz"];
     private const int PageSize = 50;
@@ -623,6 +625,97 @@ public sealed class TelegramReportService(
     }
 
     private DateOnly Today() => DateOnly.FromDateTime(ReportSchedules.Local(clock.GetUtcNow(), ReportSchedules.DefaultTimeZone).DateTime);
+
+    // ---------- Дневные планы ТП («ТП без заказов») и праздники ----------
+
+    /// <summary>Дневные планы на день: действующие строки и история пересчётов; имена и регионы — из оргструктуры «Продаж» месяца.</summary>
+    public async Task<ReportDailyPlans> DailyPlansAsync(DateOnly? date, bool canUseSales, CancellationToken ct)
+    {
+        if (!canUseSales)
+        {
+            throw new ReportForbiddenException(NoSales);
+        }
+
+        var day = date ?? Today();
+        var rows = await db.TelegramReportDailyPlans.AsNoTracking().Where(p => p.Date == day).OrderBy(p => p.ComputedAt).ToListAsync(ct);
+        var (teams, _) = await engine.StructureAsync(day, ct);
+        var regionOf = teams.SelectMany(t => t.Agents.Select(a => (a.Id, t.Name))).GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().Name);
+        var ids = rows.Select(r => r.LinkoUserId).Distinct().ToArray();
+        var names = (await db.LinkoUsers.AsNoTracking().Where(u => ids.Contains(u.Id)).ToListAsync(ct)).ToDictionary(u => u.Id, u => u.DisplayName);
+        var userIds = rows.Where(r => r.CreatedById != null).Select(r => r.CreatedById!.Value).Distinct().ToArray();
+        var users = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        ReportDailyPlanView View(TelegramReportDailyPlan p) => new(p.Id, p.LinkoUserId, names.GetValueOrDefault(p.LinkoUserId, $"ТП {p.LinkoUserId}"),
+            regionOf.GetValueOrDefault(p.LinkoUserId), p.Date, p.MonthPlanSum, p.FactBeforeSum, p.RemainingSum, p.WorkDaysLeft, p.DailyPlanSum, p.Status, p.Note,
+            p.Trigger, p.Reason, p.ComputedAt, p.SupersededAt, p.CreatedById is { } by ? users.GetValueOrDefault(by) : null);
+        var monthStart = new DateOnly(day.Year, day.Month, 1);
+        var holidays = await dailyPlans.HolidaysAsync(monthStart, monthStart.AddMonths(1).AddDays(-1), ct);
+        return new ReportDailyPlans(day, DailyPlanMath.IsWorkingDay(day, holidays), DailyPlanMath.WorkDaysLeft(day, holidays),
+            rows.Where(r => r.SupersededAt == null).Select(View).OrderBy(v => v.Region).ThenBy(v => v.Agent).ToList(),
+            rows.Where(r => r.SupersededAt != null).Select(View).OrderByDescending(v => v.ComputedAt).ToList());
+    }
+
+    /// <summary>Пересчёт администратором с причиной: прежние строки дня остаются историей, новые считаются по текущим данным.</summary>
+    public async Task<ReportDailyPlans> RecalculateDailyPlansAsync(DailyPlanRecalcInput input, bool canUseSales, Guid userId, CancellationToken ct)
+    {
+        if (!canUseSales)
+        {
+            throw new ReportForbiddenException(NoSales);
+        }
+
+        var reason = input.Reason?.Trim();
+        if (string.IsNullOrEmpty(reason))
+        {
+            throw new ReportValidationException("Укажите причину пересчёта.");
+        }
+
+        var day = input.Date ?? Today();
+        var added = await dailyPlans.RecalculateAsync(day, input.AgentId, reason[..Math.Min(reason.Length, 300)], userId, ct);
+        await audit.LogAsync(ActorType.User, userId.ToString(), "telegram.reports.daily_plan_recalculated", nameof(TelegramReportDailyPlan), day.ToString("yyyy-MM-dd"),
+            new { input.AgentId, reason, Rows = added.Count }, ct);
+        return await DailyPlansAsync(day, true, ct);
+    }
+
+    /// <summary>Справочник праздников OneBase за год (нерабочие дни помимо воскресений).</summary>
+    public async Task<IReadOnlyList<ReportHolidayView>> HolidaysAsync(int? year, CancellationToken ct)
+    {
+        var y = year ?? Today().Year;
+        var (from, to) = (new DateOnly(y, 1, 1), new DateOnly(y, 12, 31));
+        return await db.SalesHolidays.AsNoTracking().Where(h => h.Date >= from && h.Date <= to).OrderBy(h => h.Date)
+            .Select(h => new ReportHolidayView(h.Id, h.Date, h.Name)).ToListAsync(ct);
+    }
+
+    public async Task<ReportHolidayView> AddHolidayAsync(HolidayInput input, Guid userId, CancellationToken ct)
+    {
+        var name = input.Name?.Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            throw new ReportValidationException("Укажите название праздника.");
+        }
+
+        if (input.Date.DayOfWeek == DayOfWeek.Sunday)
+        {
+            throw new ReportValidationException("Воскресенье и так нерабочий день — в справочник не нужно.");
+        }
+
+        if (await db.SalesHolidays.AnyAsync(h => h.Date == input.Date, ct))
+        {
+            throw new ReportConflictException("Эта дата уже в справочнике праздников.");
+        }
+
+        var row = new SalesHoliday { Date = input.Date, Name = name[..Math.Min(name.Length, 200)], CreatedById = userId };
+        db.SalesHolidays.Add(row);
+        await db.SaveChangesAsync(ct);
+        await audit.LogAsync(ActorType.User, userId.ToString(), "sales.holiday_added", nameof(SalesHoliday), row.Id.ToString(), new { row.Date, row.Name }, ct);
+        return new ReportHolidayView(row.Id, row.Date, row.Name);
+    }
+
+    public async Task DeleteHolidayAsync(Guid id, Guid userId, CancellationToken ct)
+    {
+        var row = await db.SalesHolidays.FirstOrDefaultAsync(h => h.Id == id, ct) ?? throw new KeyNotFoundException();
+        db.SalesHolidays.Remove(row);
+        await db.SaveChangesAsync(ct);
+        await audit.LogAsync(ActorType.User, userId.ToString(), "sales.holiday_deleted", nameof(SalesHoliday), id.ToString(), new { row.Date, row.Name }, ct);
+    }
 
     // ---------- История ----------
 

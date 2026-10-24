@@ -83,6 +83,7 @@ public interface IAppDbContext
     DbSet<SalesTarget> SalesTargets { get; }
     DbSet<SalesPnlValue> SalesPnlValues { get; }
     DbSet<SalesStaffPlan> SalesStaffPlans { get; }
+    DbSet<SalesHoliday> SalesHolidays { get; }
     DbSet<SalesStaffIndicator> SalesStaffIndicators { get; }
     DbSet<SalesDealerLedgerEntry> SalesDealerLedger { get; }
     DbSet<SalesDealerTerm> SalesDealerTerms { get; }
@@ -133,6 +134,10 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Telegram.TelegramReportDelivery> TelegramReportDeliveries { get; }
     DbSet<OneBase.Domain.Telegram.TelegramReportJob> TelegramReportJobs { get; }
     DbSet<OneBase.Domain.Telegram.TelegramReportRun> TelegramReportRuns { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramReportDailyPlan> TelegramReportDailyPlans { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Отслеживаемые сущности — чтобы отбросить несохранённые строки после конфликта уникального индекса (второй экземпляр службы).</summary>
+    Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker ChangeTracker { get; }
 }

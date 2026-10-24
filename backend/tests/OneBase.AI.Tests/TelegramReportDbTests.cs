@@ -79,9 +79,13 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
                 });
         }
 
-        long[] ids = Enumerable.Range(0, 12).Select(i => 800_000_001L + i).ToArray();
+        // 800_000_099 и ТП 69 — из теста дневных планов: чтобы тесты не влияли друг на друга, сев начинает с чистого листа.
+        long[] ids = Enumerable.Range(0, 12).Select(i => 800_000_001L + i).Append(800_000_099L).ToArray();
         await db.LinkoOrderLines.Where(l => ids.Contains(l.Id)).ExecuteDeleteAsync();
         await db.LinkoOrders.Where(o => ids.Contains(o.Id)).ExecuteDeleteAsync();
+        await db.SalesStaffPlans.Where(p => p.LinkoUserId == 69).ExecuteDeleteAsync();
+        await db.LinkoUsers.Where(u => u.Id == 69).ExecuteDeleteAsync();
+        await db.TelegramReportDailyPlans.ExecuteDeleteAsync();
         var id = 800_000_001L;
 
         void Add(long agent, DateOnly day, int hour, decimal sum, decimal kg, long market, decimal? discount = null, string status = "delivered")
@@ -419,6 +423,118 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         var deliveries = await db.TelegramReportDeliveries.AsNoTracking().Where(d => d.Trigger == "schedule").ToListAsync();
         Assert.Equal(12, deliveries.Count);
         Assert.All(deliveries, d => Assert.Equal("sent", d.Status));
+        fixture.Clock.Now = null;
+    }
+
+    /// <summary>
+    /// Дневной план ТП («ТП без заказов»): утренняя задача фиксирует его на бизнес-дату, повтор дубля не создаёт, отчёт 13:00 берёт
+    /// сохранённое значение, новый факт после расчёта план не меняет; пересчёт администратора — с причиной и историей; праздник — «—»;
+    /// план, появившийся в Linko позже, учитывается с пометкой.
+    /// </summary>
+    [PostgresFact]
+    public async Task Daily_plan_is_fixed_in_the_morning_reused_later_not_duplicated_and_recalculated_with_history()
+    {
+        var s = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        var plans = sp.GetRequiredService<DailyPlanService>();
+        var service = sp.GetRequiredService<TelegramReportService>();
+        var engine = sp.GetRequiredService<ReportEngine>();
+        await db.TelegramReportDailyPlans.ExecuteDeleteAsync();
+        await db.SalesHolidays.ExecuteDeleteAsync();
+
+        // Бизнес-дата — первый рабочий день месяца с сегодняшнего (воскресенье не подходит: план дня не считается).
+        var monthStart = new DateOnly(s.Today.Year, s.Today.Month, 1);
+        var day = s.Today;
+        while (day.DayOfWeek == DayOfWeek.Sunday && day.Month == s.Today.Month)
+        {
+            day = day.AddDays(1);
+        }
+
+        fixture.Clock.Now = Utc(day, 8, 5);
+        var holidays = new Dictionary<DateOnly, string>();
+
+        // Утро: планы всем ТП оргструктуры; повтор ничего не добавляет и дубля не создаёт.
+        Assert.True(await plans.PrepareAsync(day, default) >= 3);
+        Assert.Equal(0, await plans.PrepareAsync(day, default));
+        var first = await db.TelegramReportDailyPlans.AsNoTracking().SingleAsync(p => p.LinkoUserId == 61 && p.Date == day && p.SupersededAt == null);
+        Assert.Equal(("morning", DailyPlanMath.Ok, 780_000_000m), (first.Trigger, first.Status, first.MonthPlanSum));
+        Assert.Equal(DailyPlanMath.WorkDaysLeft(day, holidays), first.WorkDaysLeft);
+        Assert.Equal(first.RemainingSum!.Value / first.WorkDaysLeft, first.DailyPlanSum);
+        Assert.Equal(first.MonthPlanSum - first.FactBeforeSum, first.RemainingSum);
+
+        // Факт по вчера вырос после утреннего расчёта — план дня остаётся прежним (и в отчёте 13:00 — он же).
+        var late = day.AddDays(-1);
+        db.LinkoOrders.Add(new LinkoOrder
+        {
+            Id = 800_000_099, CreatedAt = late.ToDateTime(new TimeOnly(15, 0)), CreatedDate = late, AcceptedAt = late.ToDateTime(new TimeOnly(16, 0)), AcceptedDate = late,
+            Status = "delivered", MarketId = 1101, BranchId = 5, BranchName = "Хоразм", AgentId = 61, TotalPrice = 5_000_000, TotalWeight = 100,
+        });
+        db.LinkoOrderLines.Add(new LinkoOrderLine { Id = 800_000_099, OrderId = 800_000_099, ProductId = 100, Amount = 100, Price = 50_000, TotalPrice = 5_000_000, TotalWeight = 100 });
+        await db.SaveChangesAsync();
+        sp.GetRequiredService<SalesCacheSignal>().Invalidate();
+        var again = await plans.EnsureAsync([61], day, DailyPlanService.Report, default);
+        Assert.Equal(first.DailyPlanSum, again[61].DailyPlan);
+        Assert.Equal(1, await db.TelegramReportDailyPlans.CountAsync(p => p.LinkoUserId == 61 && p.Date == day && p.SupersededAt == null));
+
+        fixture.Clock.Now = Utc(day, 13, 4);
+        var midday = await engine.BuildAsync("no-orders.midday", new ReportScope("sv", RegionId: s.RegionId, SupervisorId: SupervisorId), day, Local(day, 13, 4), "ru", 30, default);
+        var row = midday.Tables[0].Rows.Single(r => r[1].Text == "Бахтиёр Юлдашев");
+        Assert.Equal(ReportFormat.Number(first.DailyPlanSum), row[2].Text);
+        // Факт к 13:00 — взятые заказы ТП за бизнес-дату до 13:00 (без отменённых); бизнес-дата может отличаться от дня сева, поэтому — из базы.
+        var noon = day.ToDateTime(new TimeOnly(13, 0));
+        var fact13 = await db.LinkoOrders.AsNoTracking().Where(o => o.AgentId == 61 && o.CreatedDate == day && o.Status != "cancelled" && o.CreatedAt < noon).SumAsync(o => o.TotalPrice);
+        Assert.Equal(ReportFormat.Percent(fact13 / first.DailyPlanSum!.Value), row[5].Text);
+        var total = midday.Tables[0].Total!;
+        Assert.DoesNotContain("NaN", total[5].Text);
+
+        // Пересчёт администратором: без причины — отказ; с причиной — прежняя строка в истории, новая с выросшим фактом и причиной.
+        await Assert.ThrowsAsync<ReportValidationException>(() => service.RecalculateDailyPlansAsync(new DailyPlanRecalcInput(day, 61, " "), true, s.AdminId, default));
+        var view = await service.RecalculateDailyPlansAsync(new DailyPlanRecalcInput(day, 61, "Догрузили вчерашние заказы"), true, s.AdminId, default);
+        var current = view.Items.Single(p => p.AgentId == 61);
+        Assert.Equal(("admin", "Догрузили вчерашние заказы", "Администратор отчётов"), (current.Trigger, current.Reason, current.By));
+        Assert.Equal(first.FactBeforeSum + (late >= monthStart ? 5_000_000m : 0m), current.FactBeforeSum);
+        Assert.Single(view.History, p => p.AgentId == 61 && p.SupersededAt != null && p.Trigger == "morning");
+        Assert.Equal(1, await db.TelegramReportDailyPlans.CountAsync(p => p.LinkoUserId == 61 && p.Date == day && p.SupersededAt == null));
+
+        // Праздник из справочника: воскресенье в него не добавить, повтор даты — конфликт; в праздник план дня — «—».
+        await Assert.ThrowsAsync<ReportValidationException>(() => service.AddHolidayAsync(new HolidayInput(new DateOnly(2026, 10, 25), "Воскресенье"), s.AdminId, default));
+        var holiday = await service.AddHolidayAsync(new HolidayInput(day, "Проверочный праздник"), s.AdminId, default);
+        await Assert.ThrowsAsync<ReportConflictException>(() => service.AddHolidayAsync(new HolidayInput(day, "Ещё раз"), s.AdminId, default));
+        Assert.Contains(await service.HolidaysAsync(day.Year, default), h => h.Id == holiday.Id);
+        var offDay = await service.RecalculateDailyPlansAsync(new DailyPlanRecalcInput(day, null, "Праздник"), true, s.AdminId, default);
+        Assert.False(offDay.WorkingDay);
+        Assert.All(offDay.Items.Where(p => p.MonthPlanSum > 0), p => Assert.Equal(DailyPlanMath.DayOff, p.Status));
+        var report = await engine.BuildAsync("no-orders.midday", new ReportScope("sv", RegionId: s.RegionId, SupervisorId: SupervisorId), day, Local(day, 13, 4), "ru", 30, default);
+        Assert.All(report.Tables[0].Rows, r => Assert.Equal("—", r[2].Text));
+        Assert.Contains(report.Notes, n => n.Contains("праздник"));
+        await service.DeleteHolidayAsync(holiday.Id, s.AdminId, default);
+        await service.RecalculateDailyPlansAsync(new DailyPlanRecalcInput(day, null, "Праздник снят"), true, s.AdminId, default);
+
+        // ТП без плана месяца — «нет плана» (не ноль); план появился в Linko — новая строка с пометкой, прежняя в истории.
+        await db.LinkoUsers.Where(u => u.Id == 69).ExecuteDeleteAsync();
+        await db.SalesStaffPlans.Where(p => p.LinkoUserId == 69).ExecuteDeleteAsync();
+        db.LinkoUsers.Add(new LinkoUser { Id = 69, FirstName = "Без", SecondName = "Плана", IsActive = true, JobName = "Агент" });
+        await db.SaveChangesAsync();
+        var noPlan = await plans.EnsureAsync([69], day, DailyPlanService.Report, default);
+        Assert.Equal(DailyPlanMath.NoPlan, noPlan[69].Status);
+        db.SalesStaffPlans.Add(new SalesStaffPlan
+        {
+            Year = day.Year, Month = day.Month, LinkoUserId = 69, IndicatorId = 9_069, IndicatorName = "Выручка", PlanType = StaffPlanTypes.SalesSum, PlanAmount = 100_000_000m,
+            LoadedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var appeared = await plans.EnsureAsync([69], day, DailyPlanService.Report, default);
+        Assert.Equal((DailyPlanMath.Ok, 100_000_000m), (appeared[69].Status, appeared[69].MonthPlan));
+        var rows69 = await db.TelegramReportDailyPlans.AsNoTracking().Where(p => p.LinkoUserId == 69 && p.Date == day).ToListAsync();
+        Assert.Equal(["plan-appeared"], rows69.Where(p => p.SupersededAt == null).Select(p => p.Trigger));
+        Assert.Single(rows69, p => p.SupersededAt != null && p.Status == DailyPlanMath.NoPlan);
+
+        // Прошлый день: считается на лету, в базу не пишется.
+        var past = day.AddDays(-7);
+        await plans.EnsureAsync([61], past, DailyPlanService.Report, default);
+        Assert.False(await db.TelegramReportDailyPlans.AnyAsync(p => p.Date == past));
         fixture.Clock.Now = null;
     }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarClock, Eye, History, Link2, Loader2, Pencil, Plus, Search, Send, Trash2, Users } from "lucide-react";
+import { CalendarClock, CalendarDays, Eye, History, Link2, Loader2, Pencil, Plus, Search, Send, Trash2, Users } from "lucide-react";
 import { button, danger, field, primary } from "@/components/ai/form";
 import { Alert, Note, Section } from "@/components/sales/bits";
 import { useT } from "@/i18n/client";
@@ -21,14 +21,16 @@ import {
   type ReportRecipientInput,
   type ReportRole,
 } from "@/lib/telegramReports";
+import { TelegramDailyPlans } from "./TelegramDailyPlans";
 import { ReportHistoryPanel, ReportPreviewPanel, RoleChip, ScopePicker, defaultScope, when, type Scope } from "./TelegramReportsPreview";
 
-type Tab = "schedule" | "recipients" | "preview" | "history";
+type Tab = "schedule" | "recipients" | "preview" | "dailyplan" | "history";
 
 const tabs: { key: Tab; label: string; icon: typeof Users }[] = [
   { key: "schedule", label: "Расписание", icon: CalendarClock },
   { key: "recipients", label: "Получатели", icon: Users },
   { key: "preview", label: "Предпросмотр и тест", icon: Eye },
+  { key: "dailyplan", label: "Дневной план", icon: CalendarDays },
   { key: "history", label: "История", icon: History },
 ];
 
@@ -82,6 +84,7 @@ export function TelegramReports({ initial }: { initial: ReportOverview }) {
           {tab === "schedule" && <Schedule data={data} onSaved={(job) => setData((d) => ({ ...d, jobs: d.jobs.map((j) => (j.code === job.code ? job : j)) }))} />}
           {tab === "recipients" && <Recipients data={data} onChanged={reload} />}
           {tab === "preview" && <ReportPreviewPanel data={data} />}
+          {tab === "dailyplan" && <TelegramDailyPlans canUseSales={data.canUseSales} />}
           {tab === "history" && <ReportHistoryPanel data={data} onChanged={reload} />}
         </div>
       </section>

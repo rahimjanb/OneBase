@@ -44,7 +44,8 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
             ? teams.First(r => r.Id == resolved.Regions[0].Id).Agents
             : null;
         var agents = resolved.Agents.Select(a => a.Id).Concat(peers?.Select(p => p.Id) ?? []).Distinct().ToList();
-        var facts = await data.LoadAsync(agents, from, to, withPromos: info.Report is ReportType.Promo or ReportType.Weekly, ct);
+        var facts = await data.LoadAsync(agents, from, to, withPromos: info.Report is ReportType.Promo or ReportType.Weekly,
+            withDailyPlans: info.Report == ReportType.NoOrders, ct);
 
         var today = DateOnly.FromDateTime(now.DateTime);
         var cutoff = info.IsMidday ? date == today ? TimeOnly.FromDateTime(now.DateTime) : jobTime : TimeOnly.MaxValue;

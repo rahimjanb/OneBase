@@ -309,6 +309,52 @@ async function sendOnce<T>(path: string, body: unknown): Promise<T | { conflict:
   return result as T;
 }
 
+/** Дневной план ТП («ТП без заказов»): ok — план есть; no-plan — плана месяца в Linko нет; done — выполнен; day-off — выходной или праздник; no-days — нет рабочих дней. */
+export type DailyPlanStatus = "ok" | "no-plan" | "done" | "day-off" | "no-days";
+
+export const dailyPlanStatus: Record<DailyPlanStatus, { label: string; className: string }> = {
+  ok: { label: "план есть", className: "bg-ok/15 text-ok" },
+  "no-plan": { label: "нет плана месяца", className: "bg-surface-2 text-ink-3" },
+  done: { label: "план выполнен", className: "bg-ok/15 text-ok" },
+  "day-off": { label: "выходной / праздник", className: "bg-surface-2 text-ink-3" },
+  "no-days": { label: "нет рабочих дней", className: "bg-warn/15 text-warn" },
+};
+
+export type ReportDailyPlan = {
+  id: string;
+  agentId: number;
+  agent: string;
+  region: string | null;
+  date: string;
+  monthPlanSum: number | null;
+  factBeforeSum: number;
+  remainingSum: number | null;
+  workDaysLeft: number;
+  dailyPlanSum: number | null;
+  status: DailyPlanStatus;
+  note: string | null;
+  /** morning — утренняя задача, report — первый отчёт дня, admin — пересчёт администратором, plan-appeared — план появился в Linko. */
+  trigger: string;
+  reason: string | null;
+  computedAt: string;
+  /** Заменён пересчётом — строка истории. */
+  supersededAt: string | null;
+  by: string | null;
+};
+
+export type ReportDailyPlans = { date: string; workingDay: boolean; workDaysLeft: number; items: ReportDailyPlan[]; history: ReportDailyPlan[] };
+
+export type ReportHoliday = { id: string; date: string; name: string };
+
+export const dailyPlansApi = {
+  list: (date?: string) => bff<ReportDailyPlans>(`${base}/daily-plans${date ? `?date=${date}` : ""}`),
+  /** Пересчёт с причиной: один ТП (agentId) или все на день; прежние строки остаются историей. */
+  recalculate: (input: { date: string; agentId: number | null; reason: string }) => bff<ReportDailyPlans>(`${base}/daily-plans/recalculate`, { method: "POST", body: json(input) }),
+  holidays: (year?: number) => bff<ReportHoliday[]>(`${base}/holidays${year ? `?year=${year}` : ""}`),
+  addHoliday: (input: { date: string; name: string }) => bff<ReportHoliday>(`${base}/holidays`, { method: "POST", body: json(input) }),
+  deleteHoliday: (id: string) => bff<void>(`${base}/holidays/${id}`, { method: "DELETE" }),
+};
+
 export const reportsApi = {
   overview: () => bff<ReportOverview>(base),
   saveSettings: (s: Pick<ReportSettings, "accountId" | "language" | "noPurchaseDays" | "refreshBeforeSend">) =>

@@ -255,6 +255,13 @@ internal static class SalesModel
             e.HasIndex(x => new { x.Year, x.Month, x.LinkoUserId, x.IndicatorId }).IsUnique();
         });
 
+        b.Entity<SalesHoliday>(e =>
+        {
+            e.ToTable("Holidays", "sales");
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.HasIndex(x => x.Date).IsUnique();
+        });
+
         b.Entity<SalesDealerLedgerEntry>(e =>
         {
             e.ToTable("DealerLedger", "sales");

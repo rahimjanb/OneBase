@@ -71,7 +71,19 @@ public class TelegramReportTests
             ],
         OrdersAsOf = ordersAsOf ?? At(Day, 17, 55),
         VisitsAsOf = ordersAsOf ?? At(Day, 17, 55),
+        // Дневные планы («ТП без заказов»): 61 — остаток 160 млн на 8 дней = 20 млн; 62 — план месяца выполнен; 63 — 170 млн / 8 = 21,25 млн; 64 — плана нет.
+        DailyPlans = empty
+            ? new Dictionary<long, DailyPlanRow>()
+            : new Dictionary<long, DailyPlanRow>
+            {
+                [61] = DailyPlanMath.Compute(810_000_000m, 650_000_000m, Day, NoHolidays),
+                [62] = DailyPlanMath.Compute(540_000_000m, 540_000_000m, Day, NoHolidays),
+                [63] = DailyPlanMath.Compute(270_000_000m, 100_000_000m, Day, NoHolidays),
+                [64] = DailyPlanMath.Compute(null, 0m, Day, NoHolidays),
+            },
     };
+
+    private static readonly IReadOnlyDictionary<DateOnly, string> NoHolidays = new Dictionary<DateOnly, string>();
 
     private static ReportDocument Build(string job, ReportScope scope, DateTimeOffset now, ReportFacts? facts = null, string language = "ru",
         IReadOnlyDictionary<long, NoPurchaseAgent>? noPurchase = null, DateOnly? day = null)
@@ -320,6 +332,39 @@ public class TelegramReportTests
         // Напоминание 17:00 — только ТП.
         Assert.Throws<KeyNotFoundException>(() => ReportScopes.Resolve(Tp(999), Teams, Directions, s => s));
         Assert.DoesNotContain(TelegramReportRoles.Sv, ReportCatalog.Find("no-orders.reminder")!.Roles);
+    }
+
+    /// <summary>
+    /// «ТП без заказов»: «План, сум» и «% плана 13:00» — зафиксированный дневной план (остаток ÷ рабочие дни), а не месячный ÷ дни; факт —
+    /// срез 13:00 (заказы после 13:00 не входят); выполненный план — «выполнен», без плана — «—»; итог региона — из сумм.
+    /// </summary>
+    [Fact]
+    public void No_orders_report_uses_the_fixed_daily_plan_with_the_13_00_fact_slice_and_regional_totals_from_sums()
+    {
+        var midday = Build("no-orders.midday", Sv, At(Day, 13, 7)); // запуск в 13:07 — факт всё равно до 13:00
+        var rows = midday.Tables[0].Rows.ToDictionary(r => r[1].Text, r => r);
+        static string Plain(string s) => System.Text.RegularExpressions.Regex.Replace(s, @"[\s\u00A0\u202F]", " ");
+        Assert.Equal(("20 000 000", "60%"), (Plain(rows["Бахтиёр Юлдашев"][2].Text), rows["Бахтиёр Юлдашев"][5].Text)); // 12 млн к 13:00 из 20 (32 за день — не считается)
+        Assert.Equal(("0", "выполнен", ReportTone.Good), (rows["Дилшод Рахимов"][2].Text, rows["Дилшод Рахимов"][5].Text, rows["Дилшод Рахимов"][5].Tone));
+        Assert.Equal(("21 250 000", "0%"), (Plain(rows["Отабек Назаров"][2].Text), rows["Отабек Назаров"][5].Text));
+        var total = midday.Tables[0].Total!;
+        Assert.Equal("41 250 000", Plain(total[2].Text)); // 20 + 21,25 млн — сумма планов ТП с расчётом
+        Assert.Equal("70%", total[5].Text); // (12 + 17 + 0) / 41,25 — из сумм, не среднее (60 + 0 + выполнен)
+        Assert.DoesNotContain(midday.Notes, n => n.Contains("Нет плана месяца"));
+
+        // Вечером проценты от того же плана дня — он не пересчитывается по факту; у РМ ТП без плана месяца — замечание, не ноль.
+        var evening = Build("no-orders.evening", Sv, At(Day, 18));
+        Assert.Equal("60%", evening.Tables[0].Rows.Single(r => r[1].Text == "Бахтиёр Юлдашев")[5].Text);
+        var rm = Build("no-orders.evening", Rm, At(Day, 18));
+        Assert.Contains(rm.Notes, n => n.Contains("Нет плана месяца в Linko: Жасур Хамидов"));
+        var tp = Build("no-orders.evening", Tp(61), At(Day, 18));
+        Assert.Contains("план дня 160%", tp.Caption); // 32 млн за день из 20
+        Assert.Contains("20 000 000", Plain(tp.Plain()));
+
+        // Без строк дневного плана (не посчитан) — «—», не ноль и не ошибка.
+        var none = Build("no-orders.midday", Sv, At(Day, 13), Facts(empty: true));
+        Assert.All(none.Tables[0].Rows, r => Assert.Equal("—", r[2].Text));
+        Assert.DoesNotContain("NaN", none.Plain());
     }
 
     [Fact]

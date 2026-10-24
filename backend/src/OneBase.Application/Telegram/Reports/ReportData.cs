@@ -42,6 +42,14 @@ public sealed class ReportFacts
     public required IReadOnlyList<FactOrder> Orders { get; init; }
     public required IReadOnlyList<FactVisit> Visits { get; init; }
 
+    /// <summary>
+    /// Дневные планы ТП на день отчёта («ТП без заказов»: зафиксированы утром — DailyPlanService, DailyPlanMath); нет строки — план не
+    /// посчитан (показывается «—»).
+    /// </summary>
+    public IReadOnlyDictionary<long, DailyPlanRow> DailyPlans { get; init; } = new Dictionary<long, DailyPlanRow>();
+
+    public DailyPlanRow? DailyPlanOf(long agent) => DailyPlans.GetValueOrDefault(agent);
+
     /// <summary>Последнее успешное обновление заказов и визитов Linko.</summary>
     public DateTimeOffset? OrdersAsOf { get; init; }
     public DateTimeOffset? VisitsAsOf { get; init; }
@@ -126,11 +134,13 @@ public sealed record NoPurchaseAgent(long AgentId, int Base, int Silent, int OnR
 /// взятые им за день (как «взято» Sales Base: по дню ввода, все статусы кроме отменённых — свежий заказ в Linko стоит в «ещё не отгружен»
 /// до отгрузки; без «Завода»), строки заказов по категориям отчёта, акции (как на странице «Акции»), визиты Linko, планы staff_balance.
 /// </summary>
-public sealed class ReportDataService(IAppDbContext db, SalesDataLoader loader, SalesOptions options, ILinkoSalesProvider linko, PromoService promo, IMemoryCache cache)
+public sealed class ReportDataService(IAppDbContext db, SalesDataLoader loader, SalesOptions options, ILinkoSalesProvider linko, PromoService promo, IMemoryCache cache,
+    DailyPlanService dailyPlans)
 {
     private static readonly string[] TestWords = ["тест", "test"];
 
-    public async Task<ReportFacts> LoadAsync(IReadOnlyCollection<long> agents, DateOnly from, DateOnly to, bool withPromos, CancellationToken ct)
+    /// <summary>withDailyPlans — дневные планы ТП на день to («ТП без заказов»): сохранённые утром или посчитанные при первом обращении.</summary>
+    public async Task<ReportFacts> LoadAsync(IReadOnlyCollection<long> agents, DateOnly from, DateOnly to, bool withPromos, bool withDailyPlans, CancellationToken ct)
     {
         var months = Enumerable.Range(0, to.DayNumber - from.DayNumber + 1).Select(i => from.AddDays(i)).Select(d => (d.Year, d.Month)).Distinct().ToList();
         var analytics = await loader.LoadAsync(to.Year, to.Month, ct);
@@ -194,6 +204,7 @@ public sealed class ReportDataService(IAppDbContext db, SalesDataLoader loader, 
             Categories = categories,
             CategoryPrice = await CategoryPricesAsync(analytics, from, ct),
             Plans = plans,
+            DailyPlans = withDailyPlans ? await dailyPlans.EnsureAsync(agents, to, DailyPlanService.Report, ct) : new Dictionary<long, DailyPlanRow>(),
             Orders = facts,
             Visits = visits.Select(v => new FactVisit(v.AgentId, v.MarketId, v.Day, TimeOnly.FromDateTime(v.Date), v.IsInPlan, v.Status == "done")).ToList(),
             OrdersAsOf = states.GetValueOrDefault("orders"),

@@ -6,19 +6,24 @@ namespace OneBase.Application.Telegram.Reports;
 /// <summary>
 /// 3. ТП без заказов (лист «3 Агенты без заказов»): 13:00 — контроль, 17:00 — личное напоминание ТП, 18:00 — итог дня. Без заказов —
 /// у ТП нет ни одного заказа, принятого им за день до среза. ТП получает напоминание, только если это правда про него (иначе — «пропущено»).
+/// «План, сум» и «% плана» — дневной план, зафиксированный утром (DailyPlanMath: остаток месячного плана ÷ оставшиеся рабочие дни);
+/// итог региона — из сумм (DailyPlanMath.Sum); ТП без плана месяца — «—», не ноль, и вне расчёта региона; месячный план выполнен — «выполнен».
 /// </summary>
 public static class NoOrdersReport
 {
+    private sealed record Row(long Id, string Name, string Region, DayMetrics M, DailyPlanRow? Plan);
+
     public static ReportDocument Build(ReportContext c)
     {
         var day = c.Date;
         var notes = new List<string>();
         var incomplete = ReportKit.Freshness(c, notes, needsFact: true);
         var visitKnown = ReportKit.VisitPlanKnown(c, day, day);
-        var agents = c.Scope.Agents.Select(a => (a.Name, Region: c.Scope.Regions.First(r => r.Agents.Contains(a)).Name, M: ReportKit.Day(c, a.Id, day, visitKnown))).ToList();
-        var evening = c.Evening;
-        bool None13((string Name, string Region, DayMetrics M) a) => a.M.Orders13 == 0;
-        bool None((string Name, string Region, DayMetrics M) a) => a.M.Orders == 0;
+        var agents = c.Scope.Agents
+            .Select(a => new Row(a.Id, a.Name, c.Scope.Regions.First(r => r.Agents.Contains(a)).Name, ReportKit.Day(c, a.Id, day, visitKnown), c.Facts.DailyPlanOf(a.Id)))
+            .ToList();
+        bool None13(Row a) => a.M.Orders13 == 0;
+        bool None(Row a) => a.M.Orders == 0;
         var kpis = new List<ReportKpi>
         {
             new(c.T("ТП в работе"), Number(agents.Count)),
@@ -51,21 +56,24 @@ public static class NoOrdersReport
                 cols.Add(new(c.CutoffText));
             }
 
-            IReadOnlyList<ReportCell> Row(string n, string label, string at13, string now) =>
+            IReadOnlyList<ReportCell> Row(string n, string label, ReportCell at13, ReportCell now) =>
                 c.Job.Slot == "midday" ? [n, label, at13] : [n, label, at13, now];
+            var share13 = DailyPlanMath.PercentCell(me.M.FactSum13, me.Plan, c.T);
+            var share = DailyPlanMath.PercentCell(me.M.FactSum, me.Plan, c.T);
             tables.Add(new ReportTable(c.T("1. Мой статус"), cols,
             [
                 Row("1", c.T("Заказов, шт"), Number(me.M.Orders13), Number(me.M.Orders)),
                 Row("2", c.T("Факт, сум"), Number(me.M.FactSum13), Number(me.M.FactSum)),
-                Row("3", c.T("% дневного плана"), Percent(me.M.Share13), Percent(me.M.Share)),
-                Row("4", c.T("Визиты факт / план"), $"{me.M.Visits13} / {Number(me.M.VisitPlan)}", $"{me.M.Visits} / {Number(me.M.VisitPlan)}"),
+                Row("3", c.T("План на день, сум"), DailyPlanMath.PlanCell(me.Plan), DailyPlanMath.PlanCell(me.Plan)),
+                Row("4", c.T("% дневного плана"), share13, share),
+                Row("5", c.T("Визиты факт / план"), $"{me.M.Visits13} / {Number(me.M.VisitPlan)}", $"{me.M.Visits} / {Number(me.M.VisitPlan)}"),
             ]));
             caption = c.Job.Slot switch
             {
                 "midday" => c.F("⚠ {0}, на {1} у вас нет ни одного заказа. План на день: {2} сум. Визитов: {3} / {4}. Возьмите первый заказ как можно скорее!",
-                    me.Name, c.MiddayText, Number(me.M.PlanSum), me.M.Visits13, Number(me.M.VisitPlan)),
+                    me.Name, c.MiddayText, DailyPlanMath.PlanCell(me.Plan).Text, me.M.Visits13, Number(me.M.VisitPlan)),
                 "reminder" => c.F("⏰ Напоминание: до конца дня {0}, заказов пока нет. Зайдите в оставшиеся точки маршрута и возьмите заказ.", HoursLeft(c)),
-                _ => c.F("Итог дня: заказов {0} на {1} сум ({2} плана).", me.M.Orders, Number(me.M.FactSum), Percent(me.M.Share)),
+                _ => c.F("Итог дня: заказов {0} на {1} сум, план дня {2}.", me.M.Orders, Number(me.M.FactSum), share.Text),
             };
         }
         else if (c.Role == TelegramReportRoles.Rm)
@@ -112,8 +120,8 @@ public static class NoOrdersReport
             ReportCell Status(int orders) => orders == 0 ? new(c.T("Нет заказов"), ReportTone.Bad, true) : new(c.T("ОК"), ReportTone.Good);
             var rows = agents.Select((a, i) =>
             {
-                var row = new List<ReportCell> { $"{i + 1}", a.Name, Number(a.M.PlanSum), Number(a.M.Orders13), Number(a.M.FactSum13), PercentCell(a.M.Share13),
-                    Number(a.M.VisitPlan), Number(a.M.Visits13), Status(a.M.Orders13) };
+                var row = new List<ReportCell> { $"{i + 1}", a.Name, DailyPlanMath.PlanCell(a.Plan), Number(a.M.Orders13), Number(a.M.FactSum13),
+                    DailyPlanMath.PercentCell(a.M.FactSum13, a.Plan, c.T), Number(a.M.VisitPlan), Number(a.M.Visits13), Status(a.M.Orders13) };
                 if (c.Job.Slot != "midday")
                 {
                     row.AddRange([Number(a.M.Orders), Status(a.M.Orders)]);
@@ -123,15 +131,19 @@ public static class NoOrdersReport
                 return (IReadOnlyList<ReportCell>)row;
             }).ToList();
             var t = DayMetrics.Sum(agents.Select(a => a.M).ToList());
-            var total = new List<ReportCell> { "", new(ReportKit.TotalTitle(c), Bold: true), Number(t.PlanSum), Number(t.Orders13), Number(t.FactSum13), PercentCell(t.Share13, true),
-                Number(t.VisitPlan), Number(t.Visits13), new(c.F("{0} без заказов", agents.Count(None13)), agents.Any(None13) ? ReportTone.Bad : ReportTone.Good, true) };
+            // Итог региона: план дня — сумма планов ТП с расчётом, процент — из сумм их плана и факта (не среднее процентов).
+            var regional = DailyPlanMath.Sum(agents.Select(a => (a.Plan, a.M.FactSum13)));
+            var total = new List<ReportCell> { "", new(ReportKit.TotalTitle(c), Bold: true), DailyPlanMath.TotalPlanCell(regional), Number(t.Orders13), Number(t.FactSum13),
+                DailyPlanMath.TotalPercentCell(regional, c.T), Number(t.VisitPlan), Number(t.Visits13),
+                new(c.F("{0} без заказов", agents.Count(None13)), agents.Any(None13) ? ReportTone.Bad : ReportTone.Good, true) };
             if (c.Job.Slot != "midday")
             {
                 total.AddRange([Number(t.Orders), new(c.F("{0} без заказов", agents.Count(None)), agents.Any(None) ? ReportTone.Bad : ReportTone.Good, true)]);
             }
 
             total.Add("");
-            tables.Add(new ReportTable(c.T("1. Статус заказов по ТП"), cols, rows, total, c.T("«Нет заказов» — выделено красным")));
+            tables.Add(new ReportTable(c.T("1. Статус заказов по ТП"), cols, rows, total,
+                c.T("«Нет заказов» — красным; план — остаток плана месяца ÷ оставшиеся рабочие дни")));
             caption = $"{c.T(ReportCatalog.Title(c.Job.Report))} · {c.Scope.Title} · {Date(day)}\n" +
                       c.F("Без заказов к {0}: {1} из {2} ТП.", c.Job.Slot == "midday" ? c.MiddayText : c.CutoffText,
                           c.Job.Slot == "midday" ? agents.Count(None13) : agents.Count(None), agents.Count);
@@ -146,8 +158,35 @@ public static class NoOrdersReport
             }
         }
 
+        PlanNotes(c, agents, notes);
         var summary = c.F("Без заказов {0} из {1} ТП", c.Job.Slot == "midday" ? agents.Count(None13) : agents.Count(None), agents.Count);
         return ReportKit.Document(c, ReportKit.Title(c), Date(day), kpis, tables, problems, notes, caption, summary, incomplete, applies, skip);
+    }
+
+    /// <summary>
+    /// Замечания о дневном плане: у кого нет плана месяца в Linko (не ноль — «—», вне расчёта региона), выходной или праздник, нет рабочих
+    /// дней — чтобы «—» в таблице не приняли за ошибку.
+    /// </summary>
+    private static void PlanNotes(ReportContext c, IReadOnlyList<Row> agents, List<string> notes)
+    {
+        var noPlan = agents.Where(a => a.Plan is null || a.Plan.Status == DailyPlanMath.NoPlan).Select(a => a.Name).ToList();
+        if (noPlan.Count > 0)
+        {
+            notes.Add(c.Role == TelegramReportRoles.Tp
+                ? c.T("Нет плана месяца в Linko — план дня не считается")
+                : c.F("Нет плана месяца в Linko: {0} — план дня «—», в % плана региона не входят",
+                    string.Join(", ", noPlan.Take(10)) + (noPlan.Count > 10 ? $" +{noPlan.Count - 10}" : "")));
+        }
+
+        if (agents.Any(a => a.Plan?.Status == DailyPlanMath.DayOff))
+        {
+            notes.Add(c.T("Выходной или праздник — план на день не считается"));
+        }
+
+        if (agents.Any(a => a.Plan?.Status == DailyPlanMath.NoDays))
+        {
+            notes.Add(c.T("Рабочих дней до конца месяца не осталось — план на день не считается"));
+        }
     }
 
     /// <summary>«1 час» — сколько осталось до 18:00 от времени напоминания.</summary>

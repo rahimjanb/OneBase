@@ -3806,6 +3806,37 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("Directions", "sales");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Sales.SalesHoliday", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date")
+                        .IsUnique();
+
+                    b.ToTable("Holidays", "sales");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Sales.SalesPnlValue", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4708,6 +4739,81 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("AccountId", "PeerId");
 
                     b.ToTable("MaterialChunks", "telegram");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Telegram.TelegramReportDailyPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("DailyPlanSum")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("FactBeforeSum")
+                        .HasColumnType("numeric");
+
+                    b.Property<long>("LinkoUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("MonthPlanSum")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<decimal?>("RemainingSum")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("SupersededAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SupersededById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("WorkDaysLeft")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date");
+
+                    b.HasIndex("LinkoUserId", "Date")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ReportDailyPlans_Active")
+                        .HasFilter("\"SupersededAt\" IS NULL");
+
+                    b.ToTable("ReportDailyPlans", "telegram");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Telegram.TelegramReportDelivery", b =>

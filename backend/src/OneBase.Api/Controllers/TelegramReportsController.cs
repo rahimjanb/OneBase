@@ -70,6 +70,30 @@ public sealed class TelegramReportsController(TelegramReportService reports) : C
         [FromQuery] string? status, [FromQuery] int page = 1, CancellationToken ct = default) =>
         Run(async () => Ok(await reports.HistoryAsync(new ReportHistoryQuery(from, to, report, regionId, status, page), ct)));
 
+    /// <summary>Дневные планы ТП на день для «ТП без заказов» (зафиксированы утром): действующие строки и история пересчётов.</summary>
+    [HttpGet("daily-plans")]
+    public Task<IActionResult> DailyPlans([FromQuery] DateOnly? date, CancellationToken ct) => Run(async () => Ok(await reports.DailyPlansAsync(date, CanUseSales, ct)));
+
+    /// <summary>Пересчёт дневного плана администратором (день, один ТП или все) — причина обязательна; прежние строки остаются историей.</summary>
+    [HttpPost("daily-plans/recalculate")]
+    public Task<IActionResult> RecalculateDailyPlans(DailyPlanRecalcInput input, CancellationToken ct) =>
+        Run(async () => Ok(await reports.RecalculateDailyPlansAsync(input, CanUseSales, User.GetUserId(), ct)));
+
+    /// <summary>Справочник праздников OneBase (нерабочие дни помимо воскресений) — для дневного плана.</summary>
+    [HttpGet("holidays")]
+    public Task<IActionResult> Holidays([FromQuery] int? year, CancellationToken ct) => Run(async () => Ok(await reports.HolidaysAsync(year, ct)));
+
+    [HttpPost("holidays")]
+    public Task<IActionResult> AddHoliday(HolidayInput input, CancellationToken ct) => Run(async () => Ok(await reports.AddHolidayAsync(input, User.GetUserId(), ct)));
+
+    [HttpDelete("holidays/{id:guid}")]
+    public Task<IActionResult> DeleteHoliday(Guid id, CancellationToken ct) =>
+        Run(async () =>
+        {
+            await reports.DeleteHolidayAsync(id, User.GetUserId(), ct);
+            return NoContent();
+        });
+
     /// <summary>Право на данные продаж — из токена.</summary>
     private bool CanUseSales => User.FindAll(OneBaseClaims.Permission).Any(c => c.Value == Permissions.SalesRead);
 

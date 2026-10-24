@@ -177,6 +177,7 @@ public static class DependencyInjection
         // Автоотчёты в Telegram: шесть отчётов для РМ, СВ и ТП, картинки PNG 16:9 на сервере (SkiaSharp), 13 запусков по расписанию,
         // очередь и журнал в PostgreSQL.
         services.AddSingleton<OneBase.Application.Telegram.Reports.IReportRenderer, Telegram.Reports.SkiaReportRenderer>();
+        services.AddScoped<OneBase.Application.Telegram.Reports.DailyPlanService>();
         services.AddScoped<OneBase.Application.Telegram.Reports.ReportDataService>();
         services.AddScoped<OneBase.Application.Telegram.Reports.ReportEngine>();
         services.AddScoped<Telegram.Reports.TelegramReportSender>();

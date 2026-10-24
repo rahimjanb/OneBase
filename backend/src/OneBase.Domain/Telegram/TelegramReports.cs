@@ -118,6 +118,40 @@ public class TelegramReportRun : Entity
     public string? Error { get; set; }
 }
 
+/// <summary>
+/// Дневной план ТП для «ТП без заказов»: считается один раз утром на бизнес-дату — остаток месячного плана (план − факт по вчера) ÷
+/// оставшиеся рабочие дни (пн–сб без праздников, с сегодняшнего) — и не меняется до конца дня, как бы ни менялся факт. Status: ok — план
+/// есть; no-plan — плана месяца в Linko нет (не ноль, а «—»); done — месячный план выполнен; day-off — воскресенье или праздник; no-days —
+/// рабочих дней не осталось. Пересчёт (администратор с причиной, план появился в Linko) не правит строку, а заменяет её новой: прежняя
+/// остаётся историей с SupersededAt. Одна действующая строка на ТП и день (частичный уникальный индекс).
+/// </summary>
+public class TelegramReportDailyPlan : Entity
+{
+    public long LinkoUserId { get; set; }
+    public DateOnly Date { get; set; }
+
+    /// <summary>План месяца, сум (staff_balance Linko); null — в Linko плана нет.</summary>
+    public decimal? MonthPlanSum { get; set; }
+
+    /// <summary>Факт с 1-го числа по вчера включительно (проданное по дате приёмки, как в «Продажах»).</summary>
+    public decimal FactBeforeSum { get; set; }
+
+    public decimal? RemainingSum { get; set; }
+    public int WorkDaysLeft { get; set; }
+    public decimal? DailyPlanSum { get; set; }
+    public required string Status { get; set; }
+    public string? Note { get; set; }
+
+    /// <summary>Кто посчитал: morning (утренняя задача), report (первое построение отчёта), admin (пересчёт), plan-appeared (план появился в Linko).</summary>
+    public required string Trigger { get; set; }
+
+    public string? Reason { get; set; }
+    public DateTimeOffset ComputedAt { get; set; }
+    public Guid? CreatedById { get; set; }
+    public DateTimeOffset? SupersededAt { get; set; }
+    public Guid? SupersededById { get; set; }
+}
+
 /// <summary>Роль получателя: РМ — свод по регионам направления, СВ — по ТП своего региона, ТП — только свои цифры и точки.</summary>
 public static class TelegramReportRoles
 {

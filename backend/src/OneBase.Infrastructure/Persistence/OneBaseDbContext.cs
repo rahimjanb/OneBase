@@ -41,6 +41,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Telegram.TelegramReportDelivery> TelegramReportDeliveries => Set<OneBase.Domain.Telegram.TelegramReportDelivery>();
     public DbSet<OneBase.Domain.Telegram.TelegramReportJob> TelegramReportJobs => Set<OneBase.Domain.Telegram.TelegramReportJob>();
     public DbSet<OneBase.Domain.Telegram.TelegramReportRun> TelegramReportRuns => Set<OneBase.Domain.Telegram.TelegramReportRun>();
+    public DbSet<OneBase.Domain.Telegram.TelegramReportDailyPlan> TelegramReportDailyPlans => Set<OneBase.Domain.Telegram.TelegramReportDailyPlan>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<User> Users => Set<User>();
@@ -119,6 +120,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<SalesTarget> SalesTargets => Set<SalesTarget>();
     public DbSet<SalesPnlValue> SalesPnlValues => Set<SalesPnlValue>();
     public DbSet<SalesStaffPlan> SalesStaffPlans => Set<SalesStaffPlan>();
+    public DbSet<SalesHoliday> SalesHolidays => Set<SalesHoliday>();
     public DbSet<SalesStaffIndicator> SalesStaffIndicators => Set<SalesStaffIndicator>();
     public DbSet<SalesDealerLedgerEntry> SalesDealerLedger => Set<SalesDealerLedgerEntry>();
     public DbSet<SalesDealerTerm> SalesDealerTerms => Set<SalesDealerTerm>();

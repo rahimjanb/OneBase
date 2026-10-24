@@ -101,6 +101,9 @@ public sealed partial class SalesAnalytics
         return new RouteSplitView(Period, from, to, total, regionRows, days);
     }
 
+    /// <summary>Выручка ТП за дни отрезка по правилам вторички (проданное по дате приёмки, без «Завода») — факт месяца к дню для дневного плана.</summary>
+    public decimal AgentRevenue(long agent, DateOnly from, DateOnly to) => AgentLines(agent, from, to).Sum(l => l.Revenue);
+
     /// <summary>Строки факта ТП за дни отрезка (по дате реализации — как в «Продажах»).</summary>
     private IEnumerable<SaleLine> AgentLines(long agent, DateOnly from, DateOnly to) =>
         _currentByAgent[agent].Where(l => l.Date >= from && l.Date <= to);

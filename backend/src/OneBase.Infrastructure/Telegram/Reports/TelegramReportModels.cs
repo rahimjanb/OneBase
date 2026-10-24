@@ -162,3 +162,17 @@ public sealed record ReportRunView(Guid Id, string Job, string Title, DateOnly P
 public sealed record ReportHistoryQuery(DateOnly? From, DateOnly? To, string? Report, Guid? RegionId, string? Status, int Page = 1);
 
 public sealed record ReportHistory(IReadOnlyList<ReportDeliveryView> Items, int Total, int Page, int PageSize, IReadOnlyList<ReportRunView> Runs);
+
+/// <summary>Дневной план ТП на день («ТП без заказов»): план месяца, факт по вчера, остаток, рабочие дни, план дня, статус, кто и почему посчитал.</summary>
+public sealed record ReportDailyPlanView(Guid Id, long AgentId, string Agent, string? Region, DateOnly Date, decimal? MonthPlanSum, decimal FactBeforeSum,
+    decimal? RemainingSum, int WorkDaysLeft, decimal? DailyPlanSum, string Status, string? Note, string Trigger, string? Reason, DateTimeOffset ComputedAt,
+    DateTimeOffset? SupersededAt, string? By);
+
+public sealed record ReportDailyPlans(DateOnly Date, bool WorkingDay, int WorkDaysLeft, IReadOnlyList<ReportDailyPlanView> Items, IReadOnlyList<ReportDailyPlanView> History);
+
+/// <summary>Пересчёт администратором: день (по умолчанию сегодня), один ТП или все, причина обязательна.</summary>
+public sealed record DailyPlanRecalcInput(DateOnly? Date, long? AgentId, string? Reason);
+
+public sealed record ReportHolidayView(Guid Id, DateOnly Date, string Name);
+
+public sealed record HolidayInput(DateOnly Date, string? Name);
