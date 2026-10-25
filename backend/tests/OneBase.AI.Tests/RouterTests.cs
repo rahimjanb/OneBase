@@ -13,7 +13,8 @@ public class RouterTests
     private static readonly AgentConfig[] Available = [Agent("sales"), Agent("supply"), Agent("marketing")];
 
     private static AiRouter Router(string? reply) =>
-        new(new ScriptedGateway(reply), new StaticSettings(new AiSettingsSnapshot(true, new("openai", "main"), null, new("openai", "fast"), null, null, 1024, false)));
+        new(new ScriptedGateway(reply), new StaticSettings(new AiSettingsSnapshot(true, new("openai", "main"), null, new("openai", "fast"), null, null, 1024, false,
+            TaskRoutingEnabled: true, RouterMode: OneBase.Domain.AI.AiTaskMode.On)));
 
     [Fact]
     public async Task Router_takes_agents_and_tasks_from_model()
@@ -88,7 +89,8 @@ public class RouterTests
         public Task<AiCallResult> CompleteAsync(IReadOnlyList<LlmMessage> messages, IReadOnlyList<LlmToolDefinition> tools, AiCallOptions options, CancellationToken cancellationToken = default)
         {
             Assert.True(options.JsonOutput);
-            Assert.Equal("fast", options.Model?.Model);
+            // Модель маршрутизации; некорректный ответ — один повтор исходной (основной) моделью.
+            Assert.Contains(options.Model?.Model, new[] { "fast", "main" });
             return Task.FromResult(new AiCallResult(reply, [], new AiTokenUsage(5, 5), options.Model!, false, 1, "stop"));
         }
 

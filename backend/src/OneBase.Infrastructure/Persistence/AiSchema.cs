@@ -28,6 +28,8 @@ internal static class AiSchema
             e.Property(x => x.DisplayName).HasMaxLength(200);
             e.Property(x => x.InputPricePerMillion).HasPrecision(12, 4);
             e.Property(x => x.OutputPricePerMillion).HasPrecision(12, 4);
+            e.Property(x => x.CacheReadPricePerMillion).HasPrecision(12, 4);
+            e.Property(x => x.CacheWritePricePerMillion).HasPrecision(12, 4);
             e.HasIndex(x => new { x.ProviderCode, x.ModelId }).IsUnique();
         });
 
@@ -44,6 +46,31 @@ internal static class AiSchema
             e.Property(x => x.EmbeddingProvider).HasMaxLength(32);
             e.Property(x => x.EmbeddingModel).HasMaxLength(200);
             e.Property(x => x.ReasoningEffort).HasMaxLength(16);
+            e.Property(x => x.DailyBudgetUsd).HasPrecision(12, 2);
+            e.Property(x => x.MonthlyBudgetUsd).HasPrecision(12, 2);
+            e.Property(x => x.RouterMode).HasMaxLength(16);
+            e.Property(x => x.ExtractProvider).HasMaxLength(32);
+            e.Property(x => x.ExtractModel).HasMaxLength(200);
+            e.Property(x => x.ExtractMode).HasMaxLength(16);
+        });
+
+        b.Entity<AiModelComparison>(e =>
+        {
+            e.ToTable("ModelComparisons", Schema);
+            e.HasKey(x => x.Id).HasName("PK_AiModelComparisons");
+            e.Property(x => x.Category).HasMaxLength(16);
+            e.Property(x => x.Source).HasMaxLength(16);
+            e.Property(x => x.CaseCode).HasMaxLength(64);
+            e.Property(x => x.Task).HasMaxLength(500);
+            e.Property(x => x.BaselineModel).HasMaxLength(250);
+            e.Property(x => x.CandidateModel).HasMaxLength(250);
+            e.Property(x => x.BaselineResult).HasMaxLength(1000);
+            e.Property(x => x.CandidateResult).HasMaxLength(1000);
+            e.Property(x => x.Expected).HasMaxLength(1000);
+            e.Property(x => x.BaselineCostUsd).HasPrecision(14, 6);
+            e.Property(x => x.CandidateCostUsd).HasPrecision(14, 6);
+            e.Property(x => x.CandidateError).HasMaxLength(500);
+            e.HasIndex(x => new { x.Category, x.CreatedAt });
         });
 
         b.Entity<AiConversation>(e =>

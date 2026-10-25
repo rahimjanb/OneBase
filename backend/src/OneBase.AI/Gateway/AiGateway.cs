@@ -20,6 +20,12 @@ public sealed record AiCallOptions
     /// <summary>false — только указанная модель, без переключения на резервную (проверка модели в настройках).</summary>
     public bool AllowFallback { get; init; } = true;
 
+    /// <summary>
+    /// Повторить ту же модель один раз при сбое сервера или сети. false — сразу резервная модель: для модели категории простых задач, чтобы
+    /// сбой не стоил двух её вызовов плюс вызова резервной (запрос, оборвавшийся по времени, провайдер мог уже посчитать).
+    /// </summary>
+    public bool RetrySameModel { get; init; } = true;
+
     public double? Temperature { get; init; }
     public int? MaxOutputTokens { get; init; }
 
@@ -31,6 +37,19 @@ public sealed record AiCallOptions
 
     /// <summary>false — инструменты остаются в запросе (они есть в истории), но вызывать их нельзя: модель отвечает текстом.</summary>
     public bool AllowToolCalls { get; init; } = true;
+
+    /// <summary>
+    /// Кэш промпта у провайдера (Anthropic prompt caching): инструменты и первое системное сообщение (неизменная часть инструкций) помечаются
+    /// для кэширования, повторные вызовы с тем же началом читают его по сниженной цене. false — для промптов, уникальных в каждом запросе:
+    /// запись в кэш стоит дороже входа. Меняющееся (дата, данные под вопрос) — во втором системном сообщении или в сообщениях пользователя.
+    /// </summary>
+    public bool CachePrompt { get; init; } = true;
+
+    /// <summary>
+    /// Кэшировать и переписку (хвост промпта) — для циклов с инструментами, где каждый шаг повторяет все предыдущие. false — для разового
+    /// вызова, у которого повтор с тем же хвостом маловероятен: тогда кэшируется только неизменное начало.
+    /// </summary>
+    public bool CacheConversation { get; init; } = true;
 
     public AiCallContext Context { get; init; } = new();
 }
@@ -91,7 +110,8 @@ internal sealed class AiGateway(
     IAiSettingsSource store,
     AiProviderRegistry registry,
     IAiUsageRecorder recorder,
-    ILogger<AiGateway> logger) : IAiGateway, ILlmClient
+    ILogger<AiGateway> logger,
+    OneBase.AI.Monitoring.IAiLimits limits) : IAiGateway, ILlmClient
 {
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1.5);
 
@@ -103,6 +123,9 @@ internal sealed class AiGateway(
 
     /// <summary>Модели, которые не принимают глубину рассуждений (не reasoning-модели или другое значение) — параметр не отправляется.</summary>
     private readonly ConcurrentDictionary<string, bool> _noReasoning = new(StringComparer.Ordinal);
+
+    /// <summary>Модели (адреса), отвергнувшие пометки кэша промпта (cache_control) ошибкой 400: дальше запросы идут без них.</summary>
+    private readonly ConcurrentDictionary<string, bool> _noPromptCache = new(StringComparer.Ordinal);
 
     public async Task<AiReadiness> GetReadinessAsync(CancellationToken cancellationToken = default)
     {
@@ -147,6 +170,9 @@ internal sealed class AiGateway(
         {
             throw new LlmNotConfiguredException(readiness.Message);
         }
+
+        // Бюджет на AI исчерпан — новые вызовы не выполняются (пользователь видит понятную причину, администратор получил уведомление).
+        await limits.EnsureBudgetAsync(cancellationToken);
 
         var primary = options.Model ?? settings.Primary!;
         var fallback = options.AllowFallback ? options.Fallback ?? settings.Fallback : null;
@@ -194,14 +220,20 @@ internal sealed class AiGateway(
 
             var key = model.ToString();
             var request = new AiCompletionRequest(model.Model, messages, tools, _noTemperature.ContainsKey(key) ? null : temperature, maxTokens, options.JsonOutput,
-                _noReasoning.ContainsKey(key) ? null : reasoning, options.AllowToolCalls);
+                _noReasoning.ContainsKey(key) ? null : reasoning, options.AllowToolCalls, options.CachePrompt && !_noPromptCache.ContainsKey(key),
+                options.CacheConversation);
             for (var attempt = 1; ; attempt++)
             {
                 var watch = Stopwatch.StartNew();
                 AiCompletion completion;
                 try
                 {
-                    completion = await provider.CompleteAsync(state.Credentials, request, cancellationToken);
+                    // Одновременных вызовов не больше лимита из настроек: остальные ждут очереди (а не получают 429 от провайдера).
+                    using (await limits.EnterAsync(cancellationToken))
+                    {
+                        completion = await provider.CompleteAsync(state.Credentials, request, cancellationToken);
+                    }
+
                     watch.Stop();
                     await RecordAsync(new AiCallRecord(options.Context, model, completion.Usage, watch.ElapsedMilliseconds, true, null));
                 }
@@ -231,8 +263,18 @@ internal sealed class AiGateway(
                         continue;
                     }
 
+                    // Провайдер или адрес (прокси, старая модель) не принимает пометки кэша промпта — повторяем без кэша и запоминаем.
+                    if (request.CachePrompt && ex.StatusCode == 400 && ex.Message.Contains("cache_control", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _noPromptCache[key] = true;
+                        logger.LogInformation("AI: модель {Model} не принимает кэш промпта (cache_control) — запросы отправляются без него", key);
+                        request = request with { CachePrompt = false };
+                        attempt--;
+                        continue;
+                    }
+
                     // Один повтор при сбое сервера или сети; при лимите (429) повтор обычно бесполезен — сразу резерв.
-                    if (attempt == 1 && ex.Transient && ex.StatusCode is not 429)
+                    if (attempt == 1 && ex.Transient && ex.StatusCode is not 429 && options.RetrySameModel)
                     {
                         await Task.Delay(RetryDelay, cancellationToken);
                         continue;

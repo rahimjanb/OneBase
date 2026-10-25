@@ -72,7 +72,7 @@ public sealed partial class AnthropicProvider(IHttpClientFactory httpFactory) : 
 
     internal static JsonObject BuildBody(AiCompletionRequest request)
     {
-        var system = new StringBuilder();
+        var system = new List<string>();
         var messages = new JsonArray();
         JsonArray? pendingResults = null;
 
@@ -90,12 +90,7 @@ public sealed partial class AnthropicProvider(IHttpClientFactory httpFactory) : 
             switch (m.Role)
             {
                 case LlmRole.System:
-                    if (system.Length > 0)
-                    {
-                        system.Append("\n\n");
-                    }
-
-                    system.Append(m.Content);
+                    system.Add(m.Content);
                     break;
 
                 case LlmRole.Tool:
@@ -159,9 +154,21 @@ public sealed partial class AnthropicProvider(IHttpClientFactory httpFactory) : 
             ["messages"] = messages,
         };
 
-        if (system.Length > 0)
+        if (system.Count > 0)
         {
-            body["system"] = system.ToString();
+            // Кэш промпта: точка кэширования на первом системном сообщении — неизменной части инструкций (вместе с инструментами перед ним:
+            // они идут первыми в префиксе). Следующие системные сообщения (дата, данные под вопрос) — отдельными блоками после точки кэша.
+            body["system"] = request.CachePrompt
+                ? new JsonArray(system.Select((text, i) => (JsonNode?)(i == 0
+                    ? new JsonObject { ["type"] = "text", ["text"] = text, ["cache_control"] = Ephemeral() }
+                    : new JsonObject { ["type"] = "text", ["text"] = text })).ToArray())
+                : string.Join("\n\n", system);
+        }
+
+        // Хвост переписки кэшируется автоматически (cache_control на уровне запроса): каждый следующий шаг цикла читает предыдущие из кэша.
+        if (request.CachePrompt && request.CacheConversation)
+        {
+            body["cache_control"] = Ephemeral();
         }
 
         if (request.Temperature is { } temperature && AcceptsTemperature(request.Model))
@@ -192,6 +199,9 @@ public sealed partial class AnthropicProvider(IHttpClientFactory httpFactory) : 
 
         return body;
     }
+
+    /// <summary>Пометка кэша промпта на 5 минут (чтение кэша дешевле входа в разы; запись — на четверть дороже, окупается со второго запроса).</summary>
+    private static JsonObject Ephemeral() => new() { ["type"] = "ephemeral" };
 
     /// <summary>
     /// Принимает ли модель temperature. Claude 5 (Opus, Sonnet, Haiku, Fable) и Opus 4.7–4.8 отвечают на неё ошибкой 400 —
@@ -255,7 +265,10 @@ public sealed partial class AnthropicProvider(IHttpClientFactory httpFactory) : 
             }
         }
 
-        var usage = root.TryGetProperty("usage", out var u) ? new AiTokenUsage(Int(u, "input_tokens"), Int(u, "output_tokens")) : AiTokenUsage.None;
+        // input_tokens у Anthropic — только вход без кэша; кэш промпта приходит отдельными счётчиками и стоит иначе.
+        var usage = root.TryGetProperty("usage", out var u)
+            ? new AiTokenUsage(Int(u, "input_tokens"), Int(u, "output_tokens"), Int(u, "cache_read_input_tokens"), Int(u, "cache_creation_input_tokens"))
+            : AiTokenUsage.None;
         return new AiCompletion(text.Length > 0 ? text.ToString() : null, calls, usage, Str(root, "model") ?? requestedModel, Str(root, "stop_reason"),
             content.ValueKind == JsonValueKind.Array ? content.Clone() : null);
     }

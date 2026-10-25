@@ -33,7 +33,7 @@ public sealed class SheetMappingTests
             Categories, blocked ?? new Dictionary<string, string>(), [], new DateOnly(2026, 10, 17));
     }
 
-    private static SheetMappingRequest Primary(IReadOnlyDictionary<string, string>? blocked = null) => Request("primary", blocked,
+    internal static SheetMappingRequest Primary(IReadOnlyDictionary<string, string>? blocked = null) => Request("primary", blocked,
         ("Регион", ["Хоразм", "Бухоро"]), ("Категория", ["Кекс", "Бамбук"]), ("Месяц", ["сентябрь 2026", "сентябрь 2026"]),
         ("План, кг", ["1000", "500"]), ("Дилер", ["Азизбек Хоразм", "Мехриддин Бухоро"]), ("Фактические продажи", ["980", "450"]));
 

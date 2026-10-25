@@ -97,7 +97,7 @@ public sealed class AgentRunner(
         var messages = new List<LlmMessage>
         {
             new(LlmRole.System, SystemPrompt(agent, tools, glossaryText, reportTool is not null)),
-            new(LlmRole.User, task.Context is null ? task.Task : $"{task.Task}\n\nКонтекст от главного консультанта:\n{task.Context}"),
+            new(LlmRole.User, UserMessage(task, clock.GetUtcNow().ToOffset(CompanyOffset))),
         };
 
         var context = new ToolContext(agent.Code, task.UserId, 0, task.ConversationId);
@@ -227,13 +227,23 @@ public sealed class AgentRunner(
             .Concat(r.Metrics.Select(m => $"{m.Name}: {m.Value} {m.Unit}".Trim()))
             .Concat(r.Problems));
 
-    private string SystemPrompt(AgentConfig agent, IReadOnlyList<ITool> tools, string? glossaryText, bool report = false)
+    /// <summary>
+    /// Первое сообщение пользователя: дата и время — здесь, а не в системном промпте. Системный промпт с инструментами одинаков от вызова
+    /// к вызову и читается из кэша провайдера; строка с текущей минутой в его начале делала бы каждый запрос уникальным.
+    /// </summary>
+    internal static string UserMessage(AgentTask task, DateTimeOffset now)
     {
-        var today = clock.GetUtcNow().ToOffset(CompanyOffset);
+        var text = $"Сегодня {now:dd.MM.yyyy}, {now:HH:mm} по Ташкенту.\n\n{task.Task}";
+        return task.Context is null ? text : $"{text}\n\nКонтекст от главного консультанта:\n{task.Context}";
+    }
+
+    /// <summary>Системный промпт сотрудника — без даты и других меняющихся значений (см. UserMessage), чтобы кэшироваться у провайдера.</summary>
+    private static string SystemPrompt(AgentConfig agent, IReadOnlyList<ITool> tools, string? glossaryText, bool report = false)
+    {
         var sb = new StringBuilder();
         sb.AppendLine(agent.Prompt);
         sb.AppendLine();
-        sb.AppendLine($"Сегодня {today:dd.MM.yyyy}, {today:HH:mm} по Ташкенту. Компания работает в Узбекистане, суммы — в сумах (UZS), вес — в кг.");
+        sb.AppendLine("Компания работает в Узбекистане, суммы — в сумах (UZS), вес — в кг. Текущая дата и время — в сообщении пользователя.");
         sb.AppendLine(tools.Count == 0
             ? "Инструментов с данными OneBase у тебя сейчас нет — значит, данных для ответа нет."
             : $"Бери цифры только из результатов инструментов. Вызывай инструменты столько раз, сколько нужно, с точными фильтрами (период, регион). " +

@@ -15,10 +15,18 @@ public class AiUsage
 
     public required string Provider { get; set; }
     public required string Model { get; set; }
+    /// <summary>Вход по базовой цене — без токенов кэша промпта.</summary>
     public int InputTokens { get; set; }
+
     public int OutputTokens { get; set; }
 
-    /// <summary>Стоимость по ценам модели на момент вызова, USD; null — цена модели не задана.</summary>
+    /// <summary>Прочитано из кэша промпта (Anthropic cache_read_input_tokens) — тариф ниже базового входа.</summary>
+    public int CacheReadTokens { get; set; }
+
+    /// <summary>Записано в кэш промпта (Anthropic cache_creation_input_tokens) — тариф выше базового входа.</summary>
+    public int CacheWriteTokens { get; set; }
+
+    /// <summary>Стоимость по ценам модели на момент вызова, USD; null — цена модели (или цена кэша при кэш-токенах) не задана.</summary>
     public decimal? CostUsd { get; set; }
 
     public long DurationMs { get; set; }
@@ -59,6 +67,9 @@ public class AiAuditLog
     public int OutputTokens { get; set; }
     public decimal? CostUsd { get; set; }
     public long DurationMs { get; set; }
+
+    /// <summary>Ответ взят из кэша ответов консультанта (тот же вопрос, данные не обновлялись) — без вызовов модели.</summary>
+    public bool FromCache { get; set; }
 
     /// <summary>completed | failed.</summary>
     public required string Status { get; set; }

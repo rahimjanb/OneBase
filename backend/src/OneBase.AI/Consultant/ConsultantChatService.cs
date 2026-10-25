@@ -35,6 +35,7 @@ public sealed class ConsultantChatService(
     IAppDbContext db,
     IConsultantEngine engine,
     AiAuditService audit,
+    ConsultantAnswerCache answers,
     ILogger<ConsultantChatService> logger)
 {
     public const int MaxQuestionLength = 4000;
@@ -152,18 +153,36 @@ public sealed class ConsultantChatService(
         var watch = Stopwatch.StartNew();
         var startedAt = DateTimeOffset.UtcNow;
         ConsultantDetails? details = null;
+        var fromCache = false;
         var reply = new AiMessage { ConversationId = conversation.Id, Role = AiMessageRole.Assistant, Content = string.Empty };
         try
         {
-            var answer = await engine.AnswerAsync(
-                new ConsultantTurn(userId, conversation.Id, question, history, channel, lastAnswerId),
-                p => emit(new ChatEvent("progress", p)),
-                ct);
-            reply.Content = answer.Content.Length > 0 ? answer.Content : "Модель вернула пустой ответ.";
-            reply.Details = JsonSerializer.Serialize(answer.Details, Json);
-            details = answer.Details;
-            reply.InputTokens = answer.Usage.InputTokens;
-            reply.OutputTokens = answer.Usage.OutputTokens;
+            // Тот же первый вопрос того же пользователя, а данные с тех пор не обновлялись, — ответ из кэша, без вызовов модели.
+            var cacheKey = await answers.KeyAsync(userId, question, history.Count, channel, ct);
+            if (cacheKey is not null && await answers.GetAsync(cacheKey, ct) is { } cached)
+            {
+                reply.Content = cached.Content;
+                reply.Details = cached.Details;
+                details = JsonSerializer.Deserialize<ConsultantDetails>(cached.Details, Json);
+                fromCache = true;
+            }
+            else
+            {
+                var answer = await engine.AnswerAsync(
+                    new ConsultantTurn(userId, conversation.Id, question, history, channel, lastAnswerId),
+                    p => emit(new ChatEvent("progress", p)),
+                    ct);
+                reply.Content = answer.Content.Length > 0 ? answer.Content : "Модель вернула пустой ответ.";
+                reply.Details = JsonSerializer.Serialize(answer.Details, Json);
+                details = answer.Details;
+                // Токены сообщения — весь промпт (вход, включая кэш промпта) и выход.
+                reply.InputTokens = answer.Usage.PromptTokens;
+                reply.OutputTokens = answer.Usage.OutputTokens;
+                if (cacheKey is not null && answer.Content.Length > 0)
+                {
+                    await answers.StoreAsync(cacheKey, reply.Content, answer.Details, reply.Details, ct);
+                }
+            }
         }
         catch (Exception ex) when (ex is LlmNotConfiguredException or AiProviderException)
         {
@@ -191,7 +210,7 @@ public sealed class ConsultantChatService(
         try
         {
             await audit.WriteAsync(channel?.Name ?? "consultant", userId, conversation.Id, reply.Id, question, startedAt, reply.DurationMs, details,
-                reply.Status == AiMessageStatus.Completed ? reply.Content : null, reply.Error, CancellationToken.None);
+                reply.Status == AiMessageStatus.Completed ? reply.Content : null, reply.Error, CancellationToken.None, fromCache);
         }
         catch (Exception ex)
         {

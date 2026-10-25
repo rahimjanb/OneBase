@@ -96,7 +96,7 @@ public sealed class AiAgentsController(
         {
             var run = await runner.RunAsync(new AgentTask(code, request.Task.Trim(), User.GetUserId()), null, ct);
             await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "ai.agent.executed", "ai_agent", code,
-                new { run.Result.Status, run.Result.ToolsUsed, run.Model, run.Usage.InputTokens, run.Usage.OutputTokens }, ct);
+                new { run.Result.Status, run.Result.ToolsUsed, run.Model, InputTokens = run.Usage.PromptTokens, run.Usage.OutputTokens }, ct);
             await aiAudit.WriteAsync("agent", User.GetUserId(), null, null, request.Task.Trim(), startedAt, watch.ElapsedMilliseconds,
                 new OneBase.AI.Consultant.ConsultantDetails([run.Result], run.Result.DataSources, run.Model, false),
                 run.Result.Summary, run.Result.Error, ct);

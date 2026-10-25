@@ -35,15 +35,20 @@ public class ClaudeSwitchMigrationTests
             await using (var db = new OneBaseDbContext(options))
             {
                 await db.GetService<IMigrator>().MigrateAsync(Before);
-                db.AiSettings.Add(new AiSettings
-                {
-                    PrimaryProvider = "openai", PrimaryModel = "gpt-5", RouterProvider = "openai", RouterModel = "gpt-5-mini",
-                    EmbeddingProvider = "openai", EmbeddingModel = "text-embedding-3-small", MaxOutputTokens = 4096,
-                });
+                // Настройки и модель — SQL по схеме той миграции: у сущностей AiSettings и AiModel уже есть колонки (бюджет, цены кэша),
+                // которых в базе на этом шаге ещё нет.
+                await db.Database.ExecuteSqlRawAsync("""
+                    INSERT INTO ai."Settings" ("Id", "Enabled", "PrimaryProvider", "PrimaryModel", "RouterProvider", "RouterModel", "EmbeddingProvider",
+                        "EmbeddingModel", "MaxOutputTokens", "ReasoningEffort")
+                    VALUES (1, TRUE, 'openai', 'gpt-5', 'openai', 'gpt-5-mini', 'openai', 'text-embedding-3-small', 4096, 'low')
+                    """);
                 db.AiAgents.AddRange(
                     new AiAgent { Code = "sales", Name = "Продажи", ProviderCode = "openai", ModelId = "gpt-5-mini" },
                     new AiAgent { Code = "finance", Name = "Финансы", ProviderCode = "anthropic", ModelId = "claude-sonnet-4-6" });
-                db.AiModels.Add(new AiModel { ProviderCode = "anthropic", ModelId = "claude-opus-5-5", Enabled = false, InputPricePerMillion = 5, OutputPricePerMillion = 25 });
+                await db.Database.ExecuteSqlRawAsync("""
+                    INSERT INTO ai."Models" ("Id", "ProviderCode", "ModelId", "Available", "Enabled", "InputPricePerMillion", "OutputPricePerMillion", "CreatedAt")
+                    VALUES ({0}, 'anthropic', 'claude-opus-5-5', TRUE, FALSE, 5, 25, {1})
+                    """, Guid.CreateVersion7(), DateTimeOffset.UtcNow);
                 var user = new User { Login = "claude-switch", FullName = "Администратор" };
                 db.Users.Add(user);
                 var account = new TelegramAccount { Name = "Отдел продаж", CreatedById = user.Id };
@@ -60,7 +65,7 @@ public class ClaudeSwitchMigrationTests
 
             await using (var db = new OneBaseDbContext(options))
             {
-                var s = await db.AiSettings.SingleAsync();
+                var s = await SettingsAsync(db);
                 Assert.Equal(("anthropic", "claude-opus-5-5"), (s.PrimaryProvider, s.PrimaryModel));
                 Assert.Equal(("anthropic", "claude-sonnet-5-5"), (s.FallbackProvider, s.FallbackModel));
                 Assert.Equal(("anthropic", "claude-haiku-5-5"), (s.RouterProvider, s.RouterModel));
@@ -73,7 +78,7 @@ public class ClaudeSwitchMigrationTests
                 var telegram = await db.TelegramAgentSettings.SingleAsync(t => t.AccountId == accountId);
                 Assert.Equal((null, null, null, null), (telegram.ModelProvider, telegram.Model, telegram.GenerationModelProvider, telegram.GenerationModel));
 
-                var models = await db.AiModels.Where(m => m.ProviderCode == "anthropic").OrderBy(m => m.ModelId).ToListAsync();
+                var models = await ModelsAsync(db);
                 Assert.Equal(["claude-haiku-5-5", "claude-opus-5-5", "claude-sonnet-5-5"], models.Select(m => m.ModelId));
                 Assert.All(models, m => Assert.True(m.Enabled && m.Available));
                 Assert.Equal((5m, 25m), (models[1].InputPricePerMillion, models[1].OutputPricePerMillion)); // заданные цены не трогаются
@@ -83,14 +88,14 @@ public class ClaudeSwitchMigrationTests
 
             await using (var db = new OneBaseDbContext(options))
             {
-                var s = await db.AiSettings.SingleAsync();
+                var s = await SettingsAsync(db);
                 Assert.Equal(("openai", "gpt-5", null, null), (s.PrimaryProvider, s.PrimaryModel, s.FallbackProvider, s.FallbackModel));
                 Assert.Equal(("openai", "gpt-5-mini", 4096), (s.RouterProvider, s.RouterModel, s.MaxOutputTokens));
                 var sales = await db.AiAgents.SingleAsync(a => a.Code == "sales");
                 Assert.Equal(("openai", "gpt-5-mini"), (sales.ProviderCode, sales.ModelId));
                 var telegram = await db.TelegramAgentSettings.SingleAsync(t => t.AccountId == accountId);
                 Assert.Equal(("openai", "gpt-5", "openai", "gpt-5"), (telegram.ModelProvider, telegram.Model, telegram.GenerationModelProvider, telegram.GenerationModel));
-                var model = await db.AiModels.SingleAsync(m => m.ProviderCode == "anthropic");
+                var model = Assert.Single(await ModelsAsync(db));
                 Assert.Equal(("claude-opus-5-5", false), (model.ModelId, model.Enabled));
             }
         }
@@ -102,6 +107,43 @@ public class ClaudeSwitchMigrationTests
             await new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{database}\" WITH (FORCE)", connection).ExecuteNonQueryAsync();
         }
     }
+
+    private sealed class ModelRow
+    {
+        public string ModelId { get; set; } = string.Empty;
+        public bool Enabled { get; set; }
+        public bool Available { get; set; }
+        public decimal? InputPricePerMillion { get; set; }
+        public decimal? OutputPricePerMillion { get; set; }
+    }
+
+    private sealed class SettingsRow
+    {
+        public string? PrimaryProvider { get; set; }
+        public string? PrimaryModel { get; set; }
+        public string? FallbackProvider { get; set; }
+        public string? FallbackModel { get; set; }
+        public string? RouterProvider { get; set; }
+        public string? RouterModel { get; set; }
+        public string? EmbeddingProvider { get; set; }
+        public string? EmbeddingModel { get; set; }
+        public int MaxOutputTokens { get; set; }
+    }
+
+    /// <summary>Настройки AI по колонкам старой схемы: сущность AiSettings знает бюджет, который появляется лишь в поздней миграции.</summary>
+    private static async Task<SettingsRow> SettingsAsync(OneBaseDbContext db) =>
+        Assert.Single(await db.Database.SqlQueryRaw<SettingsRow>("""
+            SELECT "PrimaryProvider", "PrimaryModel", "FallbackProvider", "FallbackModel", "RouterProvider", "RouterModel", "EmbeddingProvider",
+                   "EmbeddingModel", "MaxOutputTokens"
+            FROM ai."Settings"
+            """).ToListAsync());
+
+    /// <summary>Модели Anthropic по колонкам старой схемы: сущность AiModel знает цены кэша, которые появляются лишь в поздней миграции.</summary>
+    private static Task<List<ModelRow>> ModelsAsync(OneBaseDbContext db) =>
+        db.Database.SqlQueryRaw<ModelRow>("""
+            SELECT "ModelId", "Enabled", "Available", "InputPricePerMillion", "OutputPricePerMillion"
+            FROM ai."Models" WHERE "ProviderCode" = 'anthropic' ORDER BY "ModelId"
+            """).ToListAsync();
 
     [PostgresFact]
     public async Task Fresh_database_starts_on_claude()

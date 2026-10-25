@@ -45,9 +45,14 @@ public static class DependencyInjection
         services.AddSingleton<AiSettingsStore>();
         services.AddSingleton<IAiSettingsSource>(sp => sp.GetRequiredService<AiSettingsStore>());
 
-        // Учёт вызовов моделей (токены, стоимость) и AI-журнал запросов.
+        // Учёт вызовов моделей (токены, стоимость), бюджет и лимит одновременных вызовов, AI-журнал запросов.
+        services.AddSingleton<OneBase.AI.Monitoring.IAiLimits, OneBase.AI.Monitoring.AiLimits>();
         services.AddSingleton<IAiUsageRecorder, OneBase.AI.Monitoring.DbUsageRecorder>();
         services.AddScoped<OneBase.AI.Monitoring.AiAuditService>();
+        // Модели по категориям простых задач: сравнение исходной модели и модели категории (фон и эталонный набор).
+        services.AddSingleton<OneBase.AI.Monitoring.IModelComparisons, OneBase.AI.Monitoring.ModelComparisons>();
+        services.AddScoped<OneBase.AI.Monitoring.RoutingEvaluation>();
+        services.AddSingleton<OneBase.AI.Monitoring.RoutingEvaluationRunner>();
         services.AddSingleton<AiGateway>();
         services.AddSingleton<IAiGateway>(sp => sp.GetRequiredService<AiGateway>());
         services.AddSingleton<ILlmClient>(sp => sp.GetRequiredService<AiGateway>());
@@ -77,6 +82,9 @@ public static class DependencyInjection
         services.AddScoped<OneBase.AI.Orchestration.AiRouter>();
         services.AddScoped<OneBase.AI.Orchestration.AgentOrchestrator>();
         services.AddScoped<IConsultantEngine, OneBase.AI.Orchestration.OrchestratedConsultantEngine>();
+        // Кэш ответов: тот же первый вопрос того же пользователя при неизменных данных — без вызовов модели (Ai:AnswerCache:Minutes, 0 — выкл.).
+        services.AddSingleton(config.GetSection(AnswerCacheOptions.Section).Get<AnswerCacheOptions>() ?? new AnswerCacheOptions());
+        services.AddScoped<ConsultantAnswerCache>();
         services.AddScoped<ConsultantChatService>();
         services.AddScoped<OneBase.AI.Reports.ReportService>();
         // Telegram: AI-агент аккаунтов — входящие из очереди TelegramInbox (её наполняет клиент Telegram из Infrastructure).

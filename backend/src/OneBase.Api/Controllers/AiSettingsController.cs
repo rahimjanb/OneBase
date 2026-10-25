@@ -26,7 +26,12 @@ public sealed class AiSettingsController(
 
     public sealed record ProviderTestInput(string? BaseUrl, string? ApiKey);
 
-    public sealed record ModelInput(bool Enabled, decimal? InputPricePerMillion, decimal? OutputPricePerMillion);
+    public sealed record ModelInput(
+        bool Enabled,
+        decimal? InputPricePerMillion,
+        decimal? OutputPricePerMillion,
+        decimal? CacheReadPricePerMillion = null,
+        decimal? CacheWritePricePerMillion = null);
 
     public sealed record ModelRefInput(string? Provider, string? Model);
 
@@ -38,7 +43,15 @@ public sealed class AiSettingsController(
         ModelRefInput? Embedding,
         double? Temperature,
         int MaxOutputTokens,
-        string? ReasoningEffort = null);
+        string? ReasoningEffort = null,
+        decimal? DailyBudgetUsd = null,
+        decimal? MonthlyBudgetUsd = null,
+        int? BudgetWarnPercent = null,
+        int? MaxConcurrentCalls = null,
+        bool? TaskRoutingEnabled = null,
+        string? RouterMode = null,
+        ModelRefInput? Extract = null,
+        string? ExtractMode = null);
 
     [HttpGet("providers")]
     public async Task<IActionResult> Providers(CancellationToken ct) => Ok(await ProvidersViewAsync(ct));
@@ -117,7 +130,7 @@ public sealed class AiSettingsController(
     [HttpPut("models/{id:guid}")]
     public async Task<IActionResult> SaveModel(Guid id, ModelInput input, CancellationToken ct)
     {
-        if (input.InputPricePerMillion is < 0 || input.OutputPricePerMillion is < 0)
+        if (input.InputPricePerMillion is < 0 || input.OutputPricePerMillion is < 0 || input.CacheReadPricePerMillion is < 0 || input.CacheWritePricePerMillion is < 0)
         {
             return BadRequest(new { error = "Цена не может быть отрицательной." });
         }
@@ -131,10 +144,12 @@ public sealed class AiSettingsController(
         model.Enabled = input.Enabled;
         model.InputPricePerMillion = input.InputPricePerMillion;
         model.OutputPricePerMillion = input.OutputPricePerMillion;
+        model.CacheReadPricePerMillion = input.CacheReadPricePerMillion;
+        model.CacheWritePricePerMillion = input.CacheWritePricePerMillion;
         model.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "ai.model.updated", "ai_model", $"{model.ProviderCode}/{model.ModelId}",
-            new { input.Enabled, input.InputPricePerMillion, input.OutputPricePerMillion }, ct);
+            new { input.Enabled, input.InputPricePerMillion, input.OutputPricePerMillion, input.CacheReadPricePerMillion, input.CacheWritePricePerMillion }, ct);
         return Ok(await ModelsViewAsync(ct));
     }
 
@@ -160,9 +175,33 @@ public sealed class AiSettingsController(
             return BadRequest(new { error = "Глубина рассуждений — low, medium, high или по умолчанию модели." });
         }
 
+        if (input.DailyBudgetUsd is <= 0 || input.MonthlyBudgetUsd is <= 0)
+        {
+            return BadRequest(new { error = "Бюджет — положительная сумма в долларах; пусто — без ограничения." });
+        }
+
+        if (input.BudgetWarnPercent is < 1 or > 100)
+        {
+            return BadRequest(new { error = "Порог предупреждения — от 1 до 100 % бюджета." });
+        }
+
+        foreach (var mode in new[] { input.RouterMode, input.ExtractMode })
+        {
+            if (mode is not null && !AiTaskMode.All.Contains(mode))
+            {
+                return BadRequest(new { error = "Режим модели задач — off, shadow или on." });
+            }
+        }
+
+        if (input.MaxConcurrentCalls is < 0 or > 100)
+        {
+            return BadRequest(new { error = "Одновременных вызовов — от 1 до 100; 0 — без ограничения." });
+        }
+
         var refs = new List<(string Slot, ModelRefInput? Ref)>
         {
             ("основной", input.Primary), ("резервной", input.Fallback), ("маршрутизации", input.Router), ("эмбеддингов", input.Embedding),
+            ("извлечения JSON", input.Extract),
         };
         foreach (var (slot, value) in refs)
         {
@@ -202,6 +241,18 @@ public sealed class AiSettingsController(
         row.Temperature = input.Temperature;
         row.MaxOutputTokens = input.MaxOutputTokens;
         row.ReasoningEffort = reasoning;
+        row.DailyBudgetUsd = input.DailyBudgetUsd;
+        row.MonthlyBudgetUsd = input.MonthlyBudgetUsd;
+        row.BudgetWarnPercent = input.BudgetWarnPercent ?? row.BudgetWarnPercent;
+        row.MaxConcurrentCalls = input.MaxConcurrentCalls ?? row.MaxConcurrentCalls;
+        // Модели по категориям задач: не переданы (старый клиент) — без изменений.
+        row.TaskRoutingEnabled = input.TaskRoutingEnabled ?? row.TaskRoutingEnabled;
+        row.RouterMode = input.RouterMode ?? row.RouterMode;
+        row.ExtractMode = input.ExtractMode ?? row.ExtractMode;
+        if (input.ExtractMode is not null || input.Extract is not null)
+        {
+            (row.ExtractProvider, row.ExtractModel) = Split(input.Extract);
+        }
         row.UpdatedAt = DateTimeOffset.UtcNow;
         row.UpdatedById = User.GetUserId();
         await db.SaveChangesAsync(ct);
@@ -218,6 +269,14 @@ public sealed class AiSettingsController(
                 input.Temperature,
                 input.MaxOutputTokens,
                 reasoning,
+                input.DailyBudgetUsd,
+                input.MonthlyBudgetUsd,
+                row.BudgetWarnPercent,
+                row.MaxConcurrentCalls,
+                row.TaskRoutingEnabled,
+                row.RouterMode,
+                extract = Normalize(input.Extract)?.ToString(),
+                row.ExtractMode,
             }, ct);
         return Ok(await SettingsViewAsync(ct));
     }
@@ -293,6 +352,8 @@ public sealed class AiSettingsController(
             m.Enabled,
             m.InputPricePerMillion,
             m.OutputPricePerMillion,
+            m.CacheReadPricePerMillion,
+            m.CacheWritePricePerMillion,
             CreatedAt = m.ProviderCreatedAt,
         });
     }
@@ -313,6 +374,14 @@ public sealed class AiSettingsController(
             settings.Temperature,
             settings.MaxOutputTokens,
             settings.ReasoningEffort,
+            settings.DailyBudgetUsd,
+            settings.MonthlyBudgetUsd,
+            settings.BudgetWarnPercent,
+            settings.MaxConcurrentCalls,
+            settings.TaskRoutingEnabled,
+            settings.RouterMode,
+            Extract = settings.Extract,
+            settings.ExtractMode,
             Ready = readiness.Ready,
             ReadinessMessage = readiness.Message,
             UpdatedAt = row?.UpdatedAt,

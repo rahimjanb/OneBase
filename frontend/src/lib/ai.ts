@@ -32,8 +32,12 @@ export type AiModelView = {
   enabled: boolean;
   inputPricePerMillion: number | null;
   outputPricePerMillion: number | null;
+  cacheReadPricePerMillion: number | null;
+  cacheWritePricePerMillion: number | null;
   createdAt: string | null;
 };
+
+export type AiModelPriceKey = "inputPricePerMillion" | "outputPricePerMillion" | "cacheReadPricePerMillion" | "cacheWritePricePerMillion";
 
 export type AiModelRef = { provider: string; model: string };
 
@@ -48,6 +52,17 @@ export type AiSettingsView = {
   maxOutputTokens: number;
   /** low | medium | high; null — по умолчанию модели. */
   reasoningEffort: string | null;
+  /** Бюджет на AI, USD; null — без ограничения. */
+  dailyBudgetUsd: number | null;
+  monthlyBudgetUsd: number | null;
+  budgetWarnPercent: number;
+  /** Одновременных вызовов моделей; 0 — без ограничения. */
+  maxConcurrentCalls: number;
+  /** Отдельные модели для простых задач (общий флаг) и режимы категорий: off | shadow | on. */
+  taskRoutingEnabled: boolean;
+  routerMode: string;
+  extract: AiModelRef | null;
+  extractMode: string;
   ready: boolean;
   readinessMessage: string | null;
   updatedAt: string | null;
@@ -79,6 +94,7 @@ export const aiSettingsTabs = [
   { href: "/settings/ai/tools", label: "Инструменты" },
   { href: "/settings/ai/knowledge", label: "База знаний" },
   { href: "/settings/ai/usage", label: "Использование" },
+  { href: "/settings/ai/routing", label: "Модели по задачам" },
   { href: "/settings/ai/logs", label: "Журнал" },
 ] as const;
 
@@ -211,18 +227,52 @@ export const categoryNames: Record<string, string> = {
   supply: "Снабжение",
 };
 
-type UsageTotals = { calls: number; inputTokens: number; outputTokens: number; costUsd: number; costIncomplete: boolean };
+/** inputTokens — вход без кэша; cacheReadTokens / cacheWriteTokens — кэш промпта (тариф другой); promptTokens — весь промпт. */
+type UsageTotals = {
+  calls: number;
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  promptTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  costIncomplete: boolean;
+};
+
+type UsageSlice = { calls: number; tokens: number; cacheReadTokens: number; costUsd: number };
 
 export type AiUsageView = {
   from: string;
   days: number;
-  today: { requests: number; usage: UsageTotals };
-  period: { requests: number; failedRequests: number; avgResponseMs: number; failedCalls: number; usage: UsageTotals };
-  byDay: { date: string; requests: number; inputTokens: number; outputTokens: number; costUsd: number }[];
-  byModel: { model: string; calls: number; failed: number; inputTokens: number; outputTokens: number; costUsd: number; priceMissing: boolean; avgMs: number }[];
-  byUser: { user: string; requests: number; calls: number; tokens: number; costUsd: number }[];
-  byAgent: { agent: string; calls: number; tokens: number; costUsd: number }[];
-  byPurpose: { purpose: string; calls: number; tokens: number; costUsd: number }[];
+  budget: {
+    dailyUsd: number | null;
+    monthlyUsd: number | null;
+    warnPercent: number;
+    spentToday: number;
+    spentMonth: number;
+    exceeded: boolean;
+    warning: boolean;
+  };
+  /** fromCache — ответы из кэша ответов консультанта, без вызовов модели. */
+  today: { requests: number; fromCache: number; usage: UsageTotals };
+  period: { requests: number; failedRequests: number; fromCache: number; avgResponseMs: number; failedCalls: number; usage: UsageTotals };
+  byDay: { date: string; requests: number; inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number; costUsd: number }[];
+  byModel: {
+    model: string;
+    calls: number;
+    failed: number;
+    inputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    outputTokens: number;
+    costUsd: number;
+    priceMissing: boolean;
+    avgMs: number;
+  }[];
+  byUser: ({ user: string; requests: number } & UsageSlice)[];
+  byDepartment: ({ department: string; requests: number } & UsageSlice)[];
+  byAgent: ({ agent: string } & UsageSlice)[];
+  byPurpose: ({ purpose: string } & UsageSlice)[];
 };
 
 export type AiLogRow = {
@@ -268,10 +318,113 @@ export const userLabel = (name: string, t: T) => (systemUsers.has(name) ? t(name
 
 export const purposeNames: Record<string, string> = {
   "consultant.route": "Маршрутизация",
+  "consultant.route.fallback": "Маршрутизация — повтор основной моделью",
+  "consultant.route.shadow": "Маршрутизация — сравнение в фоне",
+  "eval.route": "Маршрутизация — эталонный набор",
   "consultant.answer": "Ответ консультанта",
+  "consultant.revise": "Проверка ответа",
   agent: "AI-сотрудники",
+  "data-manager": "AI Data Manager",
+  "telegram.sent_only": "Telegram-агент",
+  "datasources.automap": "Подбор колонок источника",
+  "datasources.automap.fallback": "Подбор колонок — повтор основной моделью",
+  "datasources.automap.shadow": "Подбор колонок — сравнение в фоне",
   "knowledge.index": "Индексация базы знаний",
   "knowledge.search": "Поиск по базе знаний",
   "settings.test": "Проверка модели",
   chat: "Прочее",
+};
+
+type ComparisonSideTotals = {
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  costIncomplete: boolean;
+  avgMs: number;
+};
+
+export type EvalModelSummary = {
+  model: string;
+  cases: number;
+  valid: number;
+  correct: number;
+  errors: number;
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  avgMs: number;
+};
+
+export type EvalRun = {
+  category: string;
+  status: "running" | "done" | "failed";
+  startedAt: string;
+  finishedAt: string | null;
+  done: number;
+  total: number;
+  baseline: EvalModelSummary | null;
+  candidate: EvalModelSummary | null;
+  agree: number;
+  cases: { code: string; question: string; expected: string; baseline: string | null; baselineCorrect: boolean; candidate: string | null; candidateCorrect: boolean; candidateError: string | null }[];
+  error: string | null;
+};
+
+/** «Модели по задачам»: сравнение исходной модели и модели категории (фон и эталонный набор). */
+export type AiRoutingView = {
+  days: number;
+  settings: {
+    taskRoutingEnabled: boolean;
+    primary: string | null;
+    router: string | null;
+    routerMode: string;
+    extract: string | null;
+    extractMode: string;
+    route: { model: string | null; fallback: string | null; shadow: string | null; baseline: string | null };
+    extractRoute: { model: string | null; fallback: string | null; shadow: string | null; baseline: string | null };
+  };
+  groups: {
+    category: string;
+    source: string;
+    baselineModel: string;
+    candidateModel: string;
+    count: number;
+    agree: number;
+    similarity: number;
+    baselineValid: number;
+    candidateValid: number;
+    graded: number;
+    baselineCorrect: number;
+    candidateCorrect: number;
+    candidateErrors: number;
+    baseline: ComparisonSideTotals;
+    candidate: ComparisonSideTotals;
+  }[];
+  recent: {
+    createdAt: string;
+    category: string;
+    source: string;
+    caseCode: string | null;
+    task: string | null;
+    expected: string | null;
+    baselineModel: string;
+    candidateModel: string;
+    baselineResult: string | null;
+    candidateResult: string | null;
+    agree: boolean;
+    similarity: number;
+    baselineValid: boolean;
+    candidateValid: boolean;
+    baselineCorrect: boolean | null;
+    candidateCorrect: boolean | null;
+    baselineCostUsd: number | null;
+    candidateCostUsd: number | null;
+    baselineMs: number;
+    candidateMs: number;
+    candidateError: string | null;
+  }[];
+  evaluation: EvalRun | null;
+  evalCases: number;
 };

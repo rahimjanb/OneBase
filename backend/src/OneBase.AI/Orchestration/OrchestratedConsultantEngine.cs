@@ -96,10 +96,11 @@ public sealed partial class OrchestratedConsultantEngine(
         var results = runs.Select(r => r.Result).ToList();
         var evidence = Evidence(runs, turn, correction, rememberedText);
         var review = correction is null ? null : CorrectionGuard.Review(correction, evidence, turn.LastAnswerId);
+        // Два системных сообщения: неизменные правила ответа (кэшируются у провайдера между вопросами) и данные этого вопроса.
         List<LlmMessage> messages =
         [
-            new(LlmRole.System, ComposePrompt(consultant, results, forbidden, rememberedText, wantsReport ? created : null, turn.Channel, asksReport && !wantsReport,
-                review)),
+            new(LlmRole.System, ComposeRules(consultant)),
+            new(LlmRole.System, ComposePrompt(results, forbidden, rememberedText, wantsReport ? created : null, turn.Channel, asksReport && !wantsReport, review)),
             .. turn.History,
             new(LlmRole.User, turn.Question),
         ];
@@ -109,6 +110,8 @@ public sealed partial class OrchestratedConsultantEngine(
             Model = turn.Channel?.Model ?? consultant?.Model,
             Temperature = consultant?.Temperature,
             MaxOutputTokens = turn.Channel?.MaxOutputTokens ?? consultant?.MaxOutputTokens,
+            // Данные и история — свои у каждого вопроса: кэшируются только правила, запись хвоста в кэш окупилась бы лишь при перепроверке.
+            CacheConversation = false,
             Context = context with { Purpose = "consultant.answer" },
         }, evidence, turn.Question, ct, correction?.PreviousAnswer);
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Done,
@@ -244,19 +247,28 @@ public sealed partial class OrchestratedConsultantEngine(
         return sb.Length == 0 ? null : sb.ToString();
     }
 
-    private string ComposePrompt(AgentConfig? consultant, IReadOnlyList<AgentResult> results, IReadOnlyList<AgentConfig> forbidden, string? remembered,
-        IReadOnlyList<ReportRef>? reportsCreated, ConsultantChannel? channel = null, bool reportsForbidden = false, CorrectionReview? review = null)
+    /// <summary>Неизменная часть инструкций итогового ответа — одинакова для всех вопросов, поэтому читается из кэша промпта провайдера.</summary>
+    internal static string ComposeRules(AgentConfig? consultant)
     {
-        var today = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(5));
         var sb = new StringBuilder();
         sb.AppendLine(consultant?.Prompt ?? AgentDefaults.Director.Prompt);
         sb.AppendLine();
-        sb.AppendLine($"Сегодня {today:dd.MM.yyyy} (Ташкент). Суммы — в сумах, вес — в кг.");
+        sb.AppendLine("Суммы — в сумах, вес — в кг.");
         sb.AppendLine();
         sb.AppendLine(ConsultantPrompts.QualityRules);
         sb.AppendLine();
         sb.AppendLine("Каждое число ответа сверяется кодом с данными AI-сотрудников: число, которого нет в их результатах, будет помечено как не подтверждённое.");
         sb.AppendLine("Числа, которые сотрудник отметил как unverified, — не факт: не приводи их или скажи, что они не подтверждены данными.");
+        return sb.ToString();
+    }
+
+    /// <summary>Данные этого вопроса для итогового ответа: дата, результаты сотрудников, память чата, отчёты, ограничения доступа.</summary>
+    private string ComposePrompt(IReadOnlyList<AgentResult> results, IReadOnlyList<AgentConfig> forbidden, string? remembered,
+        IReadOnlyList<ReportRef>? reportsCreated, ConsultantChannel? channel = null, bool reportsForbidden = false, CorrectionReview? review = null)
+    {
+        var today = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(5));
+        var sb = new StringBuilder();
+        sb.AppendLine($"Сегодня {today:dd.MM.yyyy} (Ташкент).");
         sb.AppendLine();
         if (review is not null)
         {

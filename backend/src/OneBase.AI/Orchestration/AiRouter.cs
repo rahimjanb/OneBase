@@ -3,6 +3,7 @@ using OneBase.AI.Agents;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
+using OneBase.AI.Monitoring;
 using OneBase.AI.Providers;
 using OneBase.AI.Tools.Data;
 using OneBase.Domain.AI;
@@ -16,7 +17,7 @@ public sealed record RoutingDecision(IReadOnlyList<string> Agents, IReadOnlyDict
 /// AI Router: по вопросу (и истории чата) определяет нужных AI-сотрудников. Если модель не ответила разборчиво —
 /// запасной выбор по ключевым словам; если ни одно слово не подошло — все доступные сотрудники.
 /// </summary>
-public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, SalesGlossary? glossary = null)
+public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, SalesGlossary? glossary = null, IModelComparisons? comparisons = null)
 {
     /// <summary>Основы слов, по которым вопрос относится к отделу (запасной маршрут).</summary>
     internal static readonly IReadOnlyDictionary<string, string[]> Keywords = new Dictionary<string, string[]>
@@ -42,32 +43,84 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, Sal
         // Названия категорий, товаров и регионов знает только отдел продаж — словарь нужен, когда он доступен пользователю.
         var hasSales = available.Any(a => a.Code == "sales");
         var glossaryText = hasSales && glossary is not null ? await glossary.TextAsync(ct) : null;
-        var result = await gateway.CompleteAsync(
-            [new LlmMessage(LlmRole.System, Prompt(available, glossaryText)), new LlmMessage(LlmRole.User, Request(question, history, memory))],
-            [],
-            // Выбор сотрудников — простая задача: рассуждения всегда минимальные, чтобы не ждать десятки секунд. Лимит — с запасом на рассуждения:
-            // у Claude 5 они идут всегда и входят в max_tokens.
-            new AiCallOptions
-            {
-                Model = s.Router, JsonOutput = true, MaxOutputTokens = 4096, ReasoningEffort = AiReasoning.Low, Context = context with { Purpose = "consultant.route" },
-            },
-            ct);
+        var messages = Messages(available, glossaryText, question, history, memory);
 
-        var json = JsonText.ExtractObject(result.Text);
-        if (json is null)
+        // Модель категории «Маршрутизация» (обычно Haiku): включена — задача идёт ею, при сбое — исходной моделью без повтора дешёвой.
+        var route = AiTaskRouting.For(s, AiTaskCategory.Route);
+        var options = Options(context, route);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var result = await gateway.CompleteAsync(messages, [], options, ct);
+        var elapsed = watch.ElapsedMilliseconds;
+        var decision = Parse(result.Text, available, result.Usage);
+        var usage = result.Usage;
+        if (decision is null && route.Routed && !result.UsedFallback)
         {
-            // Слова словаря нужны только запасному маршруту — заранее их не считаем.
-            return ByKeywords(question, available, result.Usage, hasSales && glossary is not null ? await glossary.KeywordsAsync(ct) : null);
+            // Модель категории ответила некорректно (не JSON или только несуществующие сотрудники) — один раз исходной моделью.
+            // Бюджет проверяет шлюз: исчерпан — выбор по ключевым словам, без ещё одного списания.
+            try
+            {
+                var again = await gateway.CompleteAsync(messages, [],
+                    options with { Model = route.Baseline, Fallback = null, RetrySameModel = true, Context = options.Context with { Purpose = "consultant.route.fallback" } }, ct);
+                usage = usage.Add(again.Usage);
+                decision = Parse(again.Text, available, usage);
+            }
+            catch (Exception ex) when (ex is LlmNotConfiguredException or AiProviderException)
+            {
+                decision = null;
+            }
+        }
+
+        // Режим «Сравнение»: пользователь получает этот выбор, модель категории решает ту же задачу в фоне — итог только в журнал сравнения.
+        if (route.Shadow is { } shadow && comparisons is not null)
+        {
+            var baseline = new ComparisonSide(result.Model.ToString(), decision is null ? null : RouteResult(decision), decision is not null, result.Usage, elapsed);
+            _ = comparisons.ShadowAsync(AiTaskCategory.Route, messages, options, shadow, question, baseline,
+                text => Parse(text, available, AiTokenUsage.None) is { } d ? (RouteResult(d), true) : (null, false), RouteSimilarity);
+        }
+
+        return decision ?? ByKeywords(question, available, usage, hasSales && glossary is not null ? await glossary.KeywordsAsync(ct) : null);
+    }
+
+    /// <summary>Сообщения маршрутизатору: правила и список сотрудников (неизменные — кэшируются у провайдера) и вопрос с историей.</summary>
+    internal static IReadOnlyList<LlmMessage> Messages(IReadOnlyList<AgentConfig> available, string? glossaryText, string question,
+        IReadOnlyList<LlmMessage> history, string? memory) =>
+        [new LlmMessage(LlmRole.System, Prompt(available, glossaryText)), new LlmMessage(LlmRole.User, Request(question, history, memory))];
+
+    /// <summary>
+    /// Выбор сотрудников — простая задача: рассуждения всегда минимальные, чтобы не ждать десятки секунд. Лимит — с запасом на рассуждения:
+    /// у Claude 5 они идут всегда и входят в max_tokens.
+    /// </summary>
+    internal static AiCallOptions Options(AiCallContext context, AiTaskRoute route) => new()
+    {
+        Model = route.Model,
+        Fallback = route.Fallback,
+        RetrySameModel = !route.Routed,
+        JsonOutput = true,
+        MaxOutputTokens = 4096,
+        ReasoningEffort = AiReasoning.Low,
+        Context = context with { Purpose = "consultant.route" },
+    };
+
+    /// <summary>Разбор ответа маршрутизатора; null — ответ некорректен: не JSON, нет списка agents или в нём только несуществующие сотрудники.</summary>
+    internal static RoutingDecision? Parse(string? text, IReadOnlyList<AgentConfig> available, AiTokenUsage usage)
+    {
+        var json = JsonText.ExtractObject(text);
+        if (json is null || !json.Value.TryGetProperty("agents", out var list) || list.ValueKind != System.Text.Json.JsonValueKind.Array)
+        {
+            return null;
         }
 
         var codes = available.Select(a => a.Code).ToHashSet();
-        var agents = JsonText.Array(json.Value, "agents")
+        var named = list.EnumerateArray()
             .Select(a => a.ValueKind == System.Text.Json.JsonValueKind.String ? a.GetString() : null)
             .OfType<string>()
             .Select(a => a.Trim().ToLowerInvariant())
-            .Where(codes.Contains)
-            .Distinct()
             .ToList();
+        var agents = named.Where(codes.Contains).Distinct().ToList();
+        if (named.Count > 0 && agents.Count == 0)
+        {
+            return null;
+        }
 
         var tasks = new Dictionary<string, string>();
         if (json.Value.TryGetProperty("tasks", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.Object)
@@ -81,7 +134,20 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, Sal
             }
         }
 
-        return new RoutingDecision(agents, tasks, JsonText.Str(json.Value, "reason") ?? string.Empty, false, result.Usage);
+        return new RoutingDecision(agents, tasks, JsonText.Str(json.Value, "reason") ?? string.Empty, false, usage);
+    }
+
+    /// <summary>Выбор в сравнимом виде: коды сотрудников по алфавиту через запятую; пусто — консультант отвечает сам.</summary>
+    internal static string RouteResult(RoutingDecision decision) => string.Join(",", decision.Agents.Order(StringComparer.Ordinal));
+
+    /// <summary>Мера Жаккара по сотрудникам двух выборов: 1 — одинаковые (в том числе оба пустые), 0 — без общих.</summary>
+    internal static double RouteSimilarity(string? a, string? b)
+    {
+        static HashSet<string> Set(string? v) => (v ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+        var x = Set(a);
+        var y = Set(b);
+        var union = x.Union(y).Count();
+        return union == 0 ? 1 : (double)x.Intersect(y).Count() / union;
     }
 
     /// <summary>salesWords — названия категорий, типов и регионов из словаря компании: вопрос про «помадку» — к продажам.</summary>

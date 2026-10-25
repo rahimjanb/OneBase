@@ -176,7 +176,7 @@ public class ProviderTests
         var body = AnthropicProvider.BuildBody(Conversation(0.3));
         var messages = body["messages"]!.AsArray();
 
-        Assert.Equal("Ты консультант.", (string?)body["system"]);
+        Assert.Equal("Ты консультант.", (string?)body["system"]![0]!["text"]);
         Assert.Equal(1024, (int)body["max_tokens"]!);
         Assert.Equal(0.3, (double)body["temperature"]!);
         Assert.Equal(["user", "assistant", "user"], messages.Select(m => (string?)m!["role"]));
@@ -196,13 +196,52 @@ public class ProviderTests
     }
 
     [Fact]
+    public void Anthropic_request_marks_the_system_prompt_and_the_conversation_tail_for_caching()
+    {
+        var body = AnthropicProvider.BuildBody(Conversation());
+
+        // Точка кэша на системном промпте (она покрывает и инструменты перед ним) + автоматическое кэширование хвоста переписки.
+        var system = Assert.Single(body["system"]!.AsArray());
+        Assert.Equal("Ты консультант.", (string?)system!["text"]);
+        Assert.Equal("ephemeral", (string?)system["cache_control"]!["type"]);
+        Assert.Equal("ephemeral", (string?)body["cache_control"]!["type"]);
+
+        // Промпт, уникальный в каждом запросе (Telegram-агент по материалам чата), не кэшируется: запись в кэш стоила бы дороже без выгоды.
+        var plain = AnthropicProvider.BuildBody(Conversation() with { CachePrompt = false });
+        Assert.Equal("Ты консультант.", (string?)plain["system"]);
+        Assert.False(plain.ContainsKey("cache_control"));
+    }
+
+    [Fact]
+    public void Only_the_stable_first_system_message_is_cached_and_the_tail_can_be_left_uncached()
+    {
+        // Итоговый ответ консультанта: правила (одинаковы для всех вопросов) + данные этого вопроса.
+        var request = Conversation() with
+        {
+            Messages = [new(LlmRole.System, "Правила ответа."), new(LlmRole.System, "Сегодня 25.10.2026. Результаты: …"), new(LlmRole.User, "Как продажи?")],
+            CacheConversation = false,
+        };
+
+        var body = AnthropicProvider.BuildBody(request);
+
+        var system = body["system"]!.AsArray();
+        Assert.Equal(["Правила ответа.", "Сегодня 25.10.2026. Результаты: …"], system.Select(b => (string?)b!["text"]));
+        Assert.Equal("ephemeral", (string?)system[0]!["cache_control"]!["type"]);
+        Assert.Null(system[1]!["cache_control"]); // данные под вопрос — после точки кэша
+        Assert.False(body.ContainsKey("cache_control")); // хвост не кэшируется: запись окупилась бы только при повторе
+
+        // Без кэша — одной строкой, как раньше.
+        Assert.Equal("Правила ответа.\n\nСегодня 25.10.2026. Результаты: …", (string?)AnthropicProvider.BuildBody(request with { CachePrompt = false })["system"]);
+    }
+
+    [Fact]
     public void Anthropic_response_gives_text_tool_calls_and_usage()
     {
         using var doc = JsonDocument.Parse("""
             {"model":"claude-x","stop_reason":"tool_use","content":[
               {"type":"text","text":"Смотрю продажи."},
               {"type":"tool_use","id":"tu_1","name":"get_sales","input":{"month":"2026-09"}}],
-             "usage":{"input_tokens":50,"output_tokens":12}}
+             "usage":{"input_tokens":50,"output_tokens":12,"cache_read_input_tokens":3000,"cache_creation_input_tokens":700}}
             """);
 
         var result = AnthropicProvider.ParseCompletion(doc.RootElement, "claude");
@@ -210,7 +249,9 @@ public class ProviderTests
         Assert.Equal("Смотрю продажи.", result.Text);
         Assert.Equal("claude-x", result.Model);
         Assert.Equal("tool_use", result.StopReason);
-        Assert.Equal(new AiTokenUsage(50, 12), result.Usage);
+        // Кэш промпта — отдельными счётчиками, в input_tokens он не входит.
+        Assert.Equal(new AiTokenUsage(50, 12, CacheReadTokens: 3000, CacheWriteTokens: 700), result.Usage);
+        Assert.Equal(3750, result.Usage.PromptTokens);
         var call = Assert.Single(result.ToolCalls);
         Assert.Equal(("tu_1", "get_sales"), (call.Id, call.Name));
         Assert.Equal("2026-09", call.Arguments.GetProperty("month").GetString());

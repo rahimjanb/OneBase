@@ -76,6 +76,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<AiAlert> AiAlerts => Set<AiAlert>();
     public DbSet<AiUsage> AiUsage => Set<AiUsage>();
     public DbSet<AiAuditLog> AiAuditLogs => Set<AiAuditLog>();
+    public DbSet<AiModelComparison> AiModelComparisons => Set<AiModelComparison>();
 
     public DbSet<DataConversation> DataConversations => Set<DataConversation>();
     public DbSet<DataMessage> DataMessages => Set<DataMessage>();

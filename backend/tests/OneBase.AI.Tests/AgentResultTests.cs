@@ -8,6 +8,20 @@ public class AgentResultTests
     private static readonly AgentConfig Sales = new("sales", "Sales AI", "Директор по продажам", null, "prompt", true, null, null, null, true, 2, "sales", null, []);
 
     [Fact]
+    public void Date_and_time_go_into_the_user_message_so_the_system_prompt_stays_cacheable()
+    {
+        var now = new DateTimeOffset(2026, 10, 25, 13, 40, 0, TimeSpan.FromHours(5));
+        var task = new AgentTask("sales", "Как продажи за октябрь?", Guid.NewGuid(), Context: "Пользователь — РМ Хорезма");
+
+        var message = AgentRunner.UserMessage(task, now);
+
+        Assert.StartsWith("Сегодня 25.10.2026, 13:40 по Ташкенту.", message);
+        Assert.Contains("Как продажи за октябрь?", message);
+        Assert.EndsWith("Контекст от главного консультанта:\nПользователь — РМ Хорезма", message);
+        Assert.Equal("Сегодня 25.10.2026, 13:40 по Ташкенту.\n\nКак продажи?", AgentRunner.UserMessage(task with { Context = null, Task = "Как продажи?" }, now));
+    }
+
+    [Fact]
     public void Structured_result_is_read_from_json_even_with_text_around()
     {
         const string text = """

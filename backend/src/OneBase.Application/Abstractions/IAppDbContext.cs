@@ -41,6 +41,7 @@ public interface IAppDbContext
     DbSet<AiAlert> AiAlerts { get; }
     DbSet<AiUsage> AiUsage { get; }
     DbSet<AiAuditLog> AiAuditLogs { get; }
+    DbSet<AiModelComparison> AiModelComparisons { get; }
 
     // AI Data Manager: чаты, отчёты, планы изменений
     DbSet<DataConversation> DataConversations { get; }

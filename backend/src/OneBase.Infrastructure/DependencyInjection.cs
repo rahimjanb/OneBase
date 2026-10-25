@@ -42,6 +42,7 @@ public static class DependencyInjection
             options.AbortOnConnectFail = false;
             return ConnectionMultiplexer.Connect(options);
         });
+        services.AddSingleton<ISharedCache, Caching.SharedCache>();
 
         // MinIO — содержимое файлов
         var minio = config.GetSection(MinioOptions.Section).Get<MinioOptions>() ?? new MinioOptions();

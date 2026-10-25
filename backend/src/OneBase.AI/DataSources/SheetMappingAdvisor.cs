@@ -5,6 +5,7 @@ using System.Text.Unicode;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
+using OneBase.AI.Monitoring;
 using OneBase.AI.Providers;
 using OneBase.Application.DataSources;
 using OneBase.Domain.AI;
@@ -16,7 +17,7 @@ namespace OneBase.AI.DataSources;
 /// резервная при сбое, учёт токенов). Модель видит заголовки, примеры значений, допустимые цели раздела, категории и правила владения
 /// и отвечает JSON. Ответ проверяет SheetMapping.Validate: модель только предлагает — ничего не пишет и полей не создаёт.
 /// </summary>
-internal sealed class SheetMappingAdvisor(IAiGateway gateway) : ISheetMappingAdvisor
+internal sealed class SheetMappingAdvisor(IAiGateway gateway, IAiSettingsSource? settings = null, IModelComparisons? comparisons = null) : ISheetMappingAdvisor
 {
     internal const string Prompt = """
         Ты сопоставляешь столбцы листа Google Sheets с полями OneBase — системы продаж кондитерской компании (Узбекистан, регионы и дилеры).
@@ -71,18 +72,38 @@ internal sealed class SheetMappingAdvisor(IAiGateway gateway) : ISheetMappingAdv
             throw new SheetMappingException(readiness.Message ?? "AI не настроен в «Настройки → AI».");
         }
 
+        // Модель категории «Извлечение JSON»: включена — подбор идёт ею, при сбое или некорректном JSON — один раз исходной моделью.
+        var route = settings is null
+            ? new AiTaskRoute(AiTaskCategory.Extract, null, null, null, null)
+            : AiTaskRouting.For(await settings.GetSettingsAsync(ct), AiTaskCategory.Extract);
+        IReadOnlyList<LlmMessage> messages = [new LlmMessage(LlmRole.System, Prompt), new LlmMessage(LlmRole.User, Request(request))];
+        var options = new AiCallOptions
+        {
+            Model = route.Model, Fallback = route.Fallback, RetrySameModel = !route.Routed,
+            JsonOutput = true, MaxOutputTokens = 6000, ReasoningEffort = AiReasoning.Medium,
+            CachePrompt = false, // разовый вызов при подключении листа — повторов с тем же началом не будет
+            Context = new AiCallContext(userId, Purpose: "datasources.automap"),
+        };
+
         AiCallResult result;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            result = await gateway.CompleteAsync(
-                [new LlmMessage(LlmRole.System, Prompt), new LlmMessage(LlmRole.User, Request(request))],
-                [],
-                new AiCallOptions
-                {
-                    JsonOutput = true, MaxOutputTokens = 6000, ReasoningEffort = AiReasoning.Medium,
-                    Context = new AiCallContext(userId, Purpose: "datasources.automap"),
-                },
-                ct);
+            result = await gateway.CompleteAsync(messages, [], options, ct);
+            var elapsed = watch.ElapsedMilliseconds;
+            if (TryParse(result) is null && route.Routed && !result.UsedFallback)
+            {
+                result = await gateway.CompleteAsync(messages, [],
+                    options with { Model = route.Baseline, Fallback = null, RetrySameModel = true, Context = options.Context with { Purpose = "datasources.automap.fallback" } }, ct);
+            }
+
+            if (route.Shadow is { } shadow && comparisons is not null)
+            {
+                var parsed = TryParse(result);
+                var baseline = new ComparisonSide(result.Model.ToString(), parsed is null ? null : ExtractResult(parsed), parsed is not null, result.Usage, elapsed);
+                _ = comparisons.ShadowAsync(AiTaskCategory.Extract, messages, options, shadow, $"{request.Spreadsheet} · {request.Sheet}", baseline,
+                    text => TryParse(text, "shadow") is { } m ? (ExtractResult(m), true) : (null, false), ExtractSimilarity);
+            }
         }
         catch (LlmNotConfiguredException ex)
         {
@@ -96,6 +117,45 @@ internal sealed class SheetMappingAdvisor(IAiGateway gateway) : ISheetMappingAdv
         var json = JsonText.ExtractObject(result.Text)
                    ?? throw new SheetMappingException("ИИ ответил не в формате JSON — повторите или сопоставьте столбцы вручную.");
         return Parse(json, $"{result.Model.Provider}/{result.Model.Model}");
+    }
+
+    /// <summary>Ответ модели разобран по схеме; null — не JSON или без списка suggestions.</summary>
+    private static RawMapping? TryParse(AiCallResult result) => TryParse(result.Text, result.Model.ToString());
+
+    private static RawMapping? TryParse(string? text, string model)
+    {
+        if (JsonText.ExtractObject(text) is not { } json)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Parse(json, model);
+        }
+        catch (SheetMappingException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Сопоставление в сравнимом виде: «столбец→поле[:категория]» по алфавиту через «; ».</summary>
+    internal static string ExtractResult(RawMapping mapping) => string.Join("; ", mapping.Suggestions
+        .Select(s => $"{s.SourceColumn}→{s.TargetField ?? "-"}{(s.Category is { Length: > 0 } c ? ":" + c : "")}")
+        .Order(StringComparer.Ordinal));
+
+    /// <summary>Доля столбцов, которые обе модели сопоставили одинаково (все поля столбца, включая «без поля»).</summary>
+    internal static double ExtractSimilarity(string? a, string? b)
+    {
+        static Dictionary<string, string> ByColumn(string? v) => (v ?? "").Split("; ", StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Split('→', 2))
+            .Where(p => p.Length == 2)
+            .GroupBy(p => p[0])
+            .ToDictionary(g => g.Key, g => string.Join("|", g.Select(p => p[1]).Order(StringComparer.Ordinal)));
+        var x = ByColumn(a);
+        var y = ByColumn(b);
+        var columns = x.Keys.Union(y.Keys).ToList();
+        return columns.Count == 0 ? 1 : (double)columns.Count(c => x.GetValueOrDefault(c) == y.GetValueOrDefault(c)) / columns.Count;
     }
 
     /// <summary>Сообщение модели: всё, что нужно для сопоставления, одним JSON.</summary>

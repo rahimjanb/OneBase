@@ -7,11 +7,19 @@ namespace OneBase.AI.Providers;
 /// <summary>Ключ и адрес, с которыми вызывается провайдер. Живёт только в памяти backend.</summary>
 public sealed record AiCredentials(string ApiKey, string BaseUrl);
 
-public sealed record AiTokenUsage(int InputTokens, int OutputTokens)
+/// <summary>
+/// Токены вызова по ответу провайдера. InputTokens — вход по базовой цене (без кэша промпта); CacheReadTokens и CacheWriteTokens —
+/// прочитано из кэша промпта и записано в него (Anthropic: cache_read_input_tokens, cache_creation_input_tokens) — тарифицируются иначе.
+/// </summary>
+public sealed record AiTokenUsage(int InputTokens, int OutputTokens, int CacheReadTokens = 0, int CacheWriteTokens = 0)
 {
     public static readonly AiTokenUsage None = new(0, 0);
 
-    public AiTokenUsage Add(AiTokenUsage other) => new(InputTokens + other.InputTokens, OutputTokens + other.OutputTokens);
+    /// <summary>Весь промпт: вход без кэша + чтение кэша + запись в кэш.</summary>
+    public int PromptTokens => InputTokens + CacheReadTokens + CacheWriteTokens;
+
+    public AiTokenUsage Add(AiTokenUsage other) => new(
+        InputTokens + other.InputTokens, OutputTokens + other.OutputTokens, CacheReadTokens + other.CacheReadTokens, CacheWriteTokens + other.CacheWriteTokens);
 }
 
 /// <summary>
@@ -26,7 +34,9 @@ public sealed record AiCompletionRequest(
     int MaxOutputTokens,
     bool JsonOutput = false,
     string? ReasoningEffort = null,
-    bool AllowToolCalls = true);
+    bool AllowToolCalls = true,
+    bool CachePrompt = true,
+    bool CacheConversation = true);
 
 /// <summary>Raw — ответ в формате провайдера (Anthropic: блоки content) для повторной отправки без изменений.</summary>
 public sealed record AiCompletion(

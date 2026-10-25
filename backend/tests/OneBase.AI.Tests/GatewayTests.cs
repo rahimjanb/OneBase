@@ -12,7 +12,7 @@ public class GatewayTests
     private static readonly LlmMessage[] Question = [new(LlmRole.User, "Как продажи?")];
 
     private static (AiGateway Gateway, FakeProvider OpenAi, FakeProvider Anthropic, Recorder Recorder) Build(
-        AiSettingsSnapshot? settings = null, bool anthropicKey = true)
+        AiSettingsSnapshot? settings = null, bool anthropicKey = true, OneBase.AI.Monitoring.IAiLimits? limits = null)
     {
         var openAi = new FakeProvider("openai");
         var anthropic = new FakeProvider("anthropic");
@@ -24,7 +24,8 @@ public class GatewayTests
                 ["anthropic"] = new AiProviderState("anthropic", "Anthropic", "https://anthropic.test", false, true, anthropicKey ? "ant-key" : "", AiKeySource.OneBase, null),
             });
         var recorder = new Recorder();
-        var gateway = new AiGateway(source, new AiProviderRegistry([openAi, anthropic]), recorder, NullLogger<AiGateway>.Instance);
+        var gateway = new AiGateway(source, new AiProviderRegistry([openAi, anthropic]), recorder, NullLogger<AiGateway>.Instance,
+            limits ?? OneBase.AI.Monitoring.NoAiLimits.Instance);
         return (gateway, openAi, anthropic, recorder);
     }
 
@@ -133,6 +134,29 @@ public class GatewayTests
         Assert.Equal(Primary, second.Model);
         Assert.Empty(anthropic.Requests);
         Assert.Equal([0.2, null, null], openAi.Requests.Select(r => r.Temperature));
+    }
+
+    [Fact]
+    public async Task Prompt_cache_is_on_by_default_and_switched_off_for_a_model_that_rejects_it()
+    {
+        var (gateway, openAi, _, _) = Build(new AiSettingsSnapshot(true, Primary, Reserve, null, null, null, 2048, false));
+        openAi.Fail(new AiProviderException("openai", 400, "Провайдер отклонил запрос (HTTP 400). Ответ провайдера: cache_control: Extra inputs are not permitted", false), times: 1);
+
+        await gateway.CompleteAsync(Question, [], new AiCallOptions());
+        await gateway.CompleteAsync(Question, [], new AiCallOptions());
+
+        // Первый запрос — с кэшем; после отказа повтор без кэша и все следующие — тоже; это не считается сбоем (без резервной модели).
+        Assert.Equal([true, false, false], openAi.Requests.Select(r => r.CachePrompt));
+    }
+
+    [Fact]
+    public async Task Caller_can_disable_the_prompt_cache_for_a_one_off_prompt()
+    {
+        var (gateway, openAi, _, _) = Build(new AiSettingsSnapshot(true, Primary, Reserve, null, null, null, 2048, false));
+
+        await gateway.CompleteAsync(Question, [], new AiCallOptions { CachePrompt = false });
+
+        Assert.False(Assert.Single(openAi.Requests).CachePrompt);
     }
 
     [Fact]

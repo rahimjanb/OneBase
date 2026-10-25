@@ -266,6 +266,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<bool>("FromCache")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Grounding")
                         .HasColumnType("jsonb");
 
@@ -573,6 +576,14 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Available")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("CacheReadPricePerMillion")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<decimal?>("CacheWritePricePerMillion")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -613,6 +624,123 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Models", "ai");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.AI.AiModelComparison", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Agree")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("BaselineCacheReadTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BaselineCacheWriteTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("BaselineCorrect")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("BaselineCostUsd")
+                        .HasPrecision(14, 6)
+                        .HasColumnType("numeric(14,6)");
+
+                    b.Property<int>("BaselineInputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BaselineModel")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<long>("BaselineMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("BaselineOutputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BaselineResult")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("BaselineValid")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CandidateCacheReadTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CandidateCacheWriteTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("CandidateCorrect")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("CandidateCostUsd")
+                        .HasPrecision(14, 6)
+                        .HasColumnType("numeric(14,6)");
+
+                    b.Property<string>("CandidateError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("CandidateInputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CandidateModel")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<long>("CandidateMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("CandidateOutputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CandidateResult")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("CandidateValid")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CaseCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Expected")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<double>("Similarity")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Task")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AiModelComparisons");
+
+                    b.HasIndex("Category", "CreatedAt");
+
+                    b.ToTable("ModelComparisons", "ai");
                 });
 
             modelBuilder.Entity("OneBase.Domain.AI.AiProvider", b =>
@@ -712,6 +840,13 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<int>("Id")
                         .HasColumnType("integer");
 
+                    b.Property<int>("BudgetWarnPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("DailyBudgetUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
                     b.Property<string>("EmbeddingModel")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -723,6 +858,19 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ExtractMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ExtractModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ExtractProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("FallbackModel")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -731,8 +879,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int>("MaxConcurrentCalls")
+                        .HasColumnType("integer");
+
                     b.Property<int>("MaxOutputTokens")
                         .HasColumnType("integer");
+
+                    b.Property<decimal?>("MonthlyBudgetUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
 
                     b.Property<string>("PrimaryModel")
                         .HasMaxLength(200)
@@ -746,6 +901,11 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("RouterMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("RouterModel")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -753,6 +913,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<string>("RouterProvider")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("TaskRoutingEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<double?>("Temperature")
                         .HasColumnType("double precision");
@@ -777,6 +940,12 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<string>("AgentCode")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<int>("CacheReadTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CacheWriteTokens")
+                        .HasColumnType("integer");
 
                     b.Property<Guid?>("ConversationId")
                         .HasColumnType("uuid");

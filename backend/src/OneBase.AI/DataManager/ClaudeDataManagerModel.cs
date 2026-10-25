@@ -64,7 +64,8 @@ internal sealed class ClaudeDataManagerModel(
     IAiSettingsSource settings,
     IAiUsageRecorder usage,
     DataManagerOptions options,
-    ILogger<ClaudeDataManagerModel> logger) : IDataManagerModel
+    ILogger<ClaudeDataManagerModel> logger,
+    OneBase.AI.Monitoring.IAiLimits limits) : IDataManagerModel
 {
     private const string ProviderCode = AnthropicProvider.ProviderCode;
 
@@ -125,16 +126,28 @@ internal sealed class ClaudeDataManagerModel(
             Messages = transcript.Select(ToParam).ToList(),
         };
 
+        // Бюджет на AI — общий с консультантом: исчерпан — ход не начинается (сообщение — пользователю).
+        var budget = (await limits.StatusAsync(ct)).BlockMessage;
+        if (budget is not null)
+        {
+            throw new DataManagerModelException(budget, transient: false);
+        }
+
         var watch = Stopwatch.StartNew();
         var model = new AiModelRef(ProviderCode, options.Model);
         try
         {
-            BetaMessage response = await client.Beta.Messages.Create(request, ct);
+            BetaMessage response;
+            using (await limits.EnterAsync(ct))
+            {
+                response = await client.Beta.Messages.Create(request, ct);
+            }
+            // Кэш промпта — отдельными счётчиками: чтение из кэша стоит в разы дешевле входа, и в учёте это видно.
             var tokens = new AiTokenUsage(
-                (int)(response.Usage.InputTokens + (response.Usage.CacheReadInputTokens ?? 0) + (response.Usage.CacheCreationInputTokens ?? 0)),
-                (int)response.Usage.OutputTokens);
+                (int)response.Usage.InputTokens, (int)response.Usage.OutputTokens,
+                (int)(response.Usage.CacheReadInputTokens ?? 0), (int)(response.Usage.CacheCreationInputTokens ?? 0));
             await usage.RecordAsync(new AiCallRecord(context, model, tokens, watch.ElapsedMilliseconds, true, null), ct);
-            return new ModelReply(FromResponse(response), StopReasonOf(response), tokens.InputTokens, tokens.OutputTokens, options.Model);
+            return new ModelReply(FromResponse(response), StopReasonOf(response), tokens.PromptTokens, tokens.OutputTokens, options.Model);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {

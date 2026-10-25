@@ -25,6 +25,9 @@ public enum UserNotificationKind
 
     /// <summary>Обмен с Linko не работает (данные устарели) или восстановился — тем, кто управляет интеграциями.</summary>
     DataSyncProblem,
+
+    /// <summary>Траты на AI дошли до порога предупреждения или исчерпали дневной / месячный бюджет — тем, кто управляет AI.</summary>
+    AiBudget,
 }
 
 /// <summary>

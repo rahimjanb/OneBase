@@ -553,6 +553,8 @@ public sealed class TelegramAgentService(
             {
                 Model = model,
                 MaxOutputTokens = MaxTokens(settings, generation),
+                // Промпт собран из материалов под конкретный вопрос — в каждом запросе свой, кэшировать нечего.
+                CachePrompt = false,
                 Context = new AiCallContext(permission?.UserId, "telegram", null, "telegram.sent_only"),
             }, ct);
         }
@@ -565,12 +567,12 @@ public sealed class TelegramAgentService(
         var bare = text.Trim().TrimEnd('.', '!', ' ');
         if (bare.Length == 0 || bare == NoInfoMarker || text.StartsWith(NoInfoMarker, StringComparison.Ordinal))
         {
-            return new Composed("no_info", settings.NoInfoReply, false, [], result.Model.ToString(), result.Usage.InputTokens, result.Usage.OutputTokens,
+            return new Composed("no_info", settings.NoInfoReply, false, [], result.Model.ToString(), result.Usage.PromptTokens, result.Usage.OutputTokens,
                 Materials: materials.Count);
         }
 
         return new Composed("answered", text.Replace(NoInfoMarker, string.Empty, StringComparison.Ordinal).Trim(), true, [], result.Model.ToString(),
-            result.Usage.InputTokens, result.Usage.OutputTokens, Materials: materials.Count);
+            result.Usage.PromptTokens, result.Usage.OutputTokens, Materials: materials.Count);
     }
 
     /// <summary>Кем агент представляется: на «кто ты» — от лица компании; на прямой вопрос «человек или ИИ» — не выдаёт себя за человека.</summary>

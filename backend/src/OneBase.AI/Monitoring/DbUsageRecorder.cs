@@ -7,17 +7,18 @@ using OneBase.Domain.AI;
 namespace OneBase.AI.Monitoring;
 
 /// <summary>Пишет каждый вызов модели в ai.Usage со стоимостью по ценам модели из «Настройки → AI → Модели».</summary>
-internal sealed class DbUsageRecorder(IServiceScopeFactory scopes) : IAiUsageRecorder
+internal sealed class DbUsageRecorder(IServiceScopeFactory scopes, IAiLimits limits) : IAiUsageRecorder
 {
     public async Task RecordAsync(AiCallRecord record, CancellationToken cancellationToken = default)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
-        var price = await db.AiModels.AsNoTracking()
+        var prices = await db.AiModels.AsNoTracking()
             .Where(m => m.ProviderCode == record.Model.Provider && m.ModelId == record.Model.Model)
-            .Select(m => new { m.InputPricePerMillion, m.OutputPricePerMillion })
+            .Select(m => new AiModelPrices(m.InputPricePerMillion, m.OutputPricePerMillion, m.CacheReadPricePerMillion, m.CacheWritePricePerMillion))
             .FirstOrDefaultAsync(cancellationToken);
 
+        var cost = AiPricing.Cost(record.Usage, prices, record.Model.Model);
         db.AiUsage.Add(new AiUsage
         {
             UserId = record.Context.UserId,
@@ -28,17 +29,19 @@ internal sealed class DbUsageRecorder(IServiceScopeFactory scopes) : IAiUsageRec
             Model = record.Model.Model,
             InputTokens = record.Usage.InputTokens,
             OutputTokens = record.Usage.OutputTokens,
-            CostUsd = Cost(record.Usage.InputTokens, record.Usage.OutputTokens, price?.InputPricePerMillion, price?.OutputPricePerMillion),
+            CacheReadTokens = record.Usage.CacheReadTokens,
+            CacheWriteTokens = record.Usage.CacheWriteTokens,
+            CostUsd = cost,
             DurationMs = record.ElapsedMs,
             Success = record.Success,
             Error = record.Error is { Length: > 1000 } e ? e[..1000] : record.Error,
         });
         await db.SaveChangesAsync(cancellationToken);
-    }
 
-    /// <summary>Стоимость, если у модели заданы обе цены; вызов без токенов (ошибка) — 0.</summary>
-    internal static decimal? Cost(int input, int output, decimal? inputPrice, decimal? outputPrice) =>
-        input == 0 && output == 0 ? 0
-        : inputPrice is null || outputPrice is null ? null
-        : Math.Round(input / 1_000_000m * inputPrice.Value + output / 1_000_000m * outputPrice.Value, 6);
+        // Траты против бюджета: обновить и при переходе порога уведомить администраторов AI.
+        if (cost is > 0)
+        {
+            await limits.SpentAsync(cost.Value, cancellationToken);
+        }
+    }
 }

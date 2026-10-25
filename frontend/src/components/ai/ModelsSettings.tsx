@@ -5,13 +5,21 @@ import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Note, Section } from "@/components/sales/bits";
 import { useT } from "@/i18n/client";
-import type { AiModelView, AiProviderView } from "@/lib/ai";
+import type { AiModelPriceKey, AiModelView, AiProviderView } from "@/lib/ai";
 import { bff } from "@/lib/bff";
 import { date } from "@/lib/sales/format";
 import { field } from "./form";
 
 const priceField =
   "h-8 w-24 rounded-md border border-line bg-surface px-2 text-right text-sm tabular-nums text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
+
+/** Четыре цены модели за 1 млн токенов: вход, выход, чтение кэша промпта, запись в кэш (у Claude — свои тарифы на кэш). */
+const priceColumns: { key: AiModelPriceKey; head: string; title: string; label: string }[] = [
+  { key: "inputPricePerMillion", head: "Вход, $/1М", title: "Цена 1 млн входных токенов, USD — для расчёта стоимости", label: "токены::Цена входа" },
+  { key: "outputPricePerMillion", head: "Выход, $/1М", title: "Цена 1 млн выходных токенов, USD", label: "токены::Цена выхода" },
+  { key: "cacheReadPricePerMillion", head: "Кэш-чтение, $/1М", title: "Цена 1 млн токенов, прочитанных из кэша промпта, USD", label: "токены::Цена кэш-чтения" },
+  { key: "cacheWritePricePerMillion", head: "Кэш-запись, $/1М", title: "Цена 1 млн токенов, записанных в кэш промпта, USD", label: "токены::Цена кэш-записи" },
+];
 
 function parsePrice(text: string): number | null | undefined {
   const t = text.trim().replace(",", ".");
@@ -28,7 +36,7 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const save = async (m: AiModelView, patch: Partial<Pick<AiModelView, "enabled" | "inputPricePerMillion" | "outputPricePerMillion">>) => {
+  const save = async (m: AiModelView, patch: Partial<Pick<AiModelView, "enabled" | AiModelPriceKey>>) => {
     setSaving(m.id);
     setError(null);
     const next = { ...m, ...patch };
@@ -36,7 +44,13 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
       setModels(
         await bff<AiModelView[]>(`ai/models/${m.id}`, {
           method: "PUT",
-          body: JSON.stringify({ enabled: next.enabled, inputPricePerMillion: next.inputPricePerMillion, outputPricePerMillion: next.outputPricePerMillion }),
+          body: JSON.stringify({
+            enabled: next.enabled,
+            inputPricePerMillion: next.inputPricePerMillion,
+            outputPricePerMillion: next.outputPricePerMillion,
+            cacheReadPricePerMillion: next.cacheReadPricePerMillion,
+            cacheWritePricePerMillion: next.cacheWritePricePerMillion,
+          }),
         }),
       );
     } catch (e) {
@@ -88,12 +102,11 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
                     <th className="py-2 pr-3 font-semibold">{t("Разрешить")}</th>
                     <th className="py-2 pr-3 font-semibold">{t("Модель")}</th>
                     <th className="py-2 pr-3 font-semibold">{t("Выпущена")}</th>
-                    <th className="py-2 pr-3 text-right font-semibold" title={t("Цена 1 млн входных токенов, USD — для расчёта стоимости")}>
-                      {t("Вход, $/1М")}
-                    </th>
-                    <th className="py-2 text-right font-semibold" title={t("Цена 1 млн выходных токенов, USD")}>
-                      {t("Выход, $/1М")}
-                    </th>
+                    {priceColumns.map((c) => (
+                      <th key={c.key} className="py-2 pr-3 text-right font-semibold last:pr-0" title={t(c.title)}>
+                        {t(c.head)}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -120,7 +133,7 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
                         )}
                       </td>
                       <td className="py-2 pr-3 tabular-nums text-ink-2">{m.createdAt ? date(m.createdAt) : "—"}</td>
-                      {(["inputPricePerMillion", "outputPricePerMillion"] as const).map((key) => (
+                      {priceColumns.map(({ key, label }) => (
                         <td key={key} className="py-2 pr-3 text-right last:pr-0">
                           <input
                             className={priceField}
@@ -128,7 +141,7 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
                             key={`${m.id}-${key}-${m[key]}`}
                             placeholder="—"
                             inputMode="decimal"
-                            aria-label={key === "inputPricePerMillion" ? t("токены::Цена входа") : t("токены::Цена выхода")}
+                            aria-label={t(label)}
                             onBlur={(e) => {
                               const value = parsePrice(e.target.value);
                               if (value === undefined) {
@@ -152,6 +165,9 @@ export function ModelsSettings({ initial, providers }: { initial: AiModelView[];
       <Note>
         {t(
           "Список моделей приходит из API провайдера. Разрешённые модели можно назначать консультанту и AI-сотрудникам. Цены провайдеры через API не отдают — укажите их по прайсу провайдера, если нужен расчёт стоимости в разделе «Использование»; без цены стоимость не считается.",
+        )}{" "}
+        {t(
+          "У Claude четыре цены: вход, выход, чтение и запись кэша промпта (platform.claude.com/docs/en/about-claude/pricing); без цен кэша вызовы с кэшем остаются без стоимости. Haiku 5.5 при промпте длиннее 100 000 токенов считается по тарифу в 5 раз выше — это учитывается автоматически.",
         )}
       </Note>
     </>

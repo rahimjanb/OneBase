@@ -51,7 +51,15 @@ public sealed record AiSettingsSnapshot(
     double? Temperature,
     int MaxOutputTokens,
     bool PrimaryFromEnvironment,
-    string? ReasoningEffort = null);
+    string? ReasoningEffort = null,
+    decimal? DailyBudgetUsd = null,
+    decimal? MonthlyBudgetUsd = null,
+    int BudgetWarnPercent = 80,
+    int MaxConcurrentCalls = 8,
+    bool TaskRoutingEnabled = false,
+    string RouterMode = AiTaskMode.Off,
+    AiModelRef? Extract = null,
+    string ExtractMode = AiTaskMode.Off);
 
 /// <summary>Запасные значения из окружения сервера (.env / docker-compose).</summary>
 public sealed class AiEnvironment
@@ -204,7 +212,15 @@ public sealed class AiSettingsStore(
             row?.Temperature,
             row?.MaxOutputTokens ?? 4096,
             fromEnvironment,
-            row is null ? AiReasoning.Low : row.ReasoningEffort);
+            row is null ? AiReasoning.Low : row.ReasoningEffort,
+            row?.DailyBudgetUsd,
+            row?.MonthlyBudgetUsd,
+            row?.BudgetWarnPercent ?? 80,
+            row?.MaxConcurrentCalls ?? 8,
+            row?.TaskRoutingEnabled ?? false,
+            row?.RouterMode ?? AiTaskMode.Off,
+            Ref(row?.ExtractProvider, row?.ExtractModel),
+            row?.ExtractMode ?? AiTaskMode.Off);
         _settings = settings;
         return settings;
     }

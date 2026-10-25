@@ -14,8 +14,15 @@ public sealed class SalesCacheSignal
 {
     private CancellationTokenSource _cts = new();
     private CancellationTokenSource _history = new();
+    private long _version;
+
+    /// <summary>Запуск процесса: после перезапуска версии начинаются заново, и сохранённое в Redis под старой версией не совпадёт.</summary>
+    private static readonly string Instance = Guid.NewGuid().ToString("N")[..8];
 
     public IChangeToken Token => new CancellationChangeToken(_cts.Token);
+
+    /// <summary>Версия данных продаж: меняется при каждом сбросе кэша (правки данных, загрузки, синхронизации). Для ключей внешних кэшей.</summary>
+    public string Version => $"{Instance}.{Interlocked.Read(ref _version)}";
 
     /// <summary>Кэш агрегатов по давним месяцам: сбрасывается только полной загрузкой или очисткой данных.</summary>
     public IChangeToken HistoryToken => new CancellationChangeToken(_history.Token);
@@ -29,8 +36,9 @@ public sealed class SalesCacheSignal
         Reset(ref _cts);
     }
 
-    private static void Reset(ref CancellationTokenSource source)
+    private void Reset(ref CancellationTokenSource source)
     {
+        Interlocked.Increment(ref _version);
         var old = Interlocked.Exchange(ref source, new CancellationTokenSource());
         old.Cancel();
         old.Dispose();

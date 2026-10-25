@@ -25,12 +25,13 @@ public sealed class AiAuditService(IAppDbContext db)
         ConsultantDetails? details,
         string? response,
         string? error,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool fromCache = false)
     {
-        // Токены и стоимость — по записям учёта вызовов этого запроса (они пишутся AI Gateway).
+        // Токены и стоимость — по записям учёта вызовов этого запроса (они пишутся AI Gateway). Вход в журнале — весь промпт, включая кэш.
         var usage = await db.AiUsage.AsNoTracking()
             .Where(u => u.UserId == userId && u.ConversationId == conversationId && u.CreatedAt >= startedAt)
-            .Select(u => new { u.InputTokens, u.OutputTokens, u.CostUsd })
+            .Select(u => new { InputTokens = u.InputTokens + u.CacheReadTokens + u.CacheWriteTokens, u.OutputTokens, u.CostUsd })
             .ToListAsync(ct);
 
         var agents = details?.Agents.Select(a => a.Agent).ToList() ?? [];
@@ -50,6 +51,7 @@ public sealed class AiAuditService(IAppDbContext db)
             OutputTokens = usage.Sum(u => u.OutputTokens),
             CostUsd = usage.Count == 0 ? 0 : usage.Any(u => u.CostUsd is null) ? null : usage.Sum(u => u.CostUsd),
             DurationMs = durationMs,
+            FromCache = fromCache,
             Status = error is null ? "completed" : "failed",
             ResponsePreview = Trim(response, 1000),
             Error = Trim(error, 1000),

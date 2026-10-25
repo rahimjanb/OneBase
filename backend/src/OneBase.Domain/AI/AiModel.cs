@@ -27,6 +27,12 @@ public class AiModel : Entity
     /// <summary>Цена 1 млн выходных токенов, USD.</summary>
     public decimal? OutputPricePerMillion { get; set; }
 
+    /// <summary>Цена 1 млн токенов, прочитанных из кэша промпта, USD (у Claude — доля базовой цены входа).</summary>
+    public decimal? CacheReadPricePerMillion { get; set; }
+
+    /// <summary>Цена 1 млн токенов, записанных в кэш промпта (5 минут), USD (у Claude — 1,25 базовой цены входа).</summary>
+    public decimal? CacheWritePricePerMillion { get; set; }
+
     /// <summary>Дата выпуска модели по данным провайдера.</summary>
     public DateTimeOffset? ProviderCreatedAt { get; set; }
 }
