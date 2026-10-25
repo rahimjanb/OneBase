@@ -58,20 +58,20 @@ export default async function DashboardPage() {
       <FilterBar departments={departmentRows.map((d) => d.name)} updatedMinutesAgo={summary.updatedMinutesAgo} />
       <AiFocusPanel insights={alerts ? insightsOf(alerts, t) : []} available={alerts !== null} departments={summary.departments} tasks={summary.activeTasks} t={t} />
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {kpis.map((kpi) => (
           <KpiCard key={kpi.id} kpi={kpi} t={t} />
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <KpiTrendChart series={trendSeries} />
         <TasksDonut total={taskStatuses.total} done={taskStatuses.done} slices={taskStatuses.slices} t={t} />
       </div>
 
       <DepartmentsTable rows={rows} t={t} />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_280px_320px]">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_280px_320px]">
         <UpcomingTasks items={upcoming} total={tasks.filter((x) => x.task.status === "New" || x.task.status === "InProgress").length} available={departments !== null} />
         <LeadersCard leaders={[]} t={t} />
         <ActivityFeed events={notifications ? activityOf(notifications.items, now, t) : []} available={notifications !== null} t={t} />

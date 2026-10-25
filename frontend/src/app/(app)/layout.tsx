@@ -12,7 +12,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const me = await apiSession<Me>("/api/auth/me");
   const canOpenSettings = !!me?.canOpenSettings;
   // Разделы меню — по правам; если API недоступен (me = null), меню не прячем — страницы сами проверят доступ.
-  const permissions = me?.permissions ?? null;
+  // Руководителю отдела раздел HR открыт без права «HR» — признаком из /api/auth/me (данные backend отдаёт только по его подразделениям).
+  const permissions = me ? (me.hrAccess ? [...me.permissions, "hr.department"] : me.permissions) : null;
   // Оболочка как у приложения: закреплена на весь экран, верхняя и нижняя панели не двигаются,
   // прокручивается только <main data-app-scroll>.
   return (

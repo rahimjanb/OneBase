@@ -35,4 +35,7 @@ public class IntegrationConnection
     public DateTimeOffset? LastTestAt { get; set; }
     public bool? LastTestOk { get; set; }
     public string? LastTestMessage { get; set; }
+
+    /// <summary>Прочие несекретные настройки интеграции (JSON), например у Verifix — client_id, организация, расписание синхронизации.</summary>
+    public string? SettingsJson { get; set; }
 }

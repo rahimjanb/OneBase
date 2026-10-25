@@ -15,7 +15,7 @@ public sealed class LogsController(IAppDbContext db) : ControllerBase
 {
     private const int PageSize = 100;
 
-    private static readonly string[] Sources = [SystemLogSources.Linko, SystemLogSources.Sync, SystemLogSources.System];
+    private static readonly string[] Sources = [SystemLogSources.Linko, SystemLogSources.Sync, SystemLogSources.Verifix, SystemLogSources.System];
 
     /// <summary>
     /// Записи за последние days дней, новые сверху. source — linko | sync | system; level — warning (предупреждения)

@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { activeSalesTab, salesTabs, type SalesTab } from "@/components/sales/tabs";
 import { periodQuery } from "@/lib/sales/query";
+import { sectionOf } from "./sections";
 import { useT } from "@/i18n/client";
 
 /**
- * Кнопки разделов в верхней панели — только внутри «Продаж»; в других разделах панель без них.
+ * Кнопки разделов в верхней панели — в «Продажах», «HR» и «Задачах» (sections.ts); в других разделах панель без них.
  * На компьютере — в одной строке с меню пользователя; не помещаются — ряд прокручивается по горизонтали, у обрезанного края — затухание,
  * открытый раздел сам прокручивается в видимую часть. На телефоне — отдельной строкой под логотипом, так же с прокруткой.
  * Нажатая кнопка подсвечивается сразу, а не после загрузки страницы: иначе ещё секунду горит прежний раздел.
@@ -18,7 +18,7 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
   const pathname = usePathname();
   const params = useSearchParams();
   // Нажатая кнопка — пока адрес не сменился; после перехода подсветку определяет адрес.
-  const [pending, setPending] = useState<{ tab: SalesTab; from: string } | null>(null);
+  const [pending, setPending] = useState<{ tab: string; from: string } | null>(null);
   const nav = useRef<HTMLElement>(null);
   const measure = useRef<() => void>(null);
   // Ширина имени в меню пользователя — запоминается, пока имя видно.
@@ -27,9 +27,23 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
   const [edges, setEdges] = useState({ left: false, right: false });
   const edgesNow = useRef(edges);
 
-  const current = activeSalesTab(pathname);
-  const sales = pathname.startsWith("/sales");
-  const tabs = salesTabs.filter((t) => !t.permission || permissions?.includes(t.permission));
+  const section = sectionOf(pathname);
+  const sectionId = section?.id ?? null;
+  const current = section?.active(pathname) ?? null;
+  // «Задачи»: вкладка «Предложения AI» — руководителям, со счётчиком ожидающих решения (обновляется при переходах внутри раздела).
+  const [work, setWork] = useState<{ heads: boolean; pendingSuggestions: number } | null>(null);
+  useEffect(() => {
+    if (sectionId !== "tasks") return;
+    let live = true;
+    fetch("/bff/api/work/nav")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => live && data && setWork(data))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [sectionId, pathname]);
+  const tabs = (section?.tabs ?? []).filter((t) => (!t.permission || permissions?.includes(t.permission)) && (!t.headsOnly || work?.heads));
   // Подписи (язык, права) задают ширину ряда — по ним пересчёт.
   const labels = tabs.map((t) => tr(t.label)).join("|");
 
@@ -83,7 +97,7 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
       observer.disconnect();
       topbar?.removeAttribute("data-crowded");
     };
-  }, [sales]);
+  }, [sectionId]);
 
   useEffect(() => measure.current?.(), [labels]);
 
@@ -97,11 +111,11 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
     }
   }, [current]);
 
-  if (!sales) return null;
+  if (!section) return null;
   const active = pending && pending.from === pathname ? pending.tab : current;
 
-  // Период и план переносятся между разделами — тем же правилом, что ссылки внутри страниц (plan — только factory).
-  const query = periodQuery(Object.fromEntries(params));
+  // «Продажи»: период и план переносятся между разделами — тем же правилом, что ссылки внутри страниц (plan — только factory).
+  const query = section.keepPeriod ? periodQuery(Object.fromEntries(params)) : "";
 
   const fade = 28;
   const mask =
@@ -115,7 +129,7 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
       data-sections
       style={{ maskImage: mask, WebkitMaskImage: mask }}
       className="no-scrollbar order-last flex basis-full gap-2 -mx-1 overflow-x-auto px-1 py-1 pb-3 lg:order-none lg:min-w-0 lg:shrink lg:basis-auto lg:gap-1.5 lg:pb-1"
-      aria-label={tr("Разделы продаж")}
+      aria-label={tr(section.label)}
     >
       {tabs.map((t) => {
         const on = active === t.key;
@@ -133,6 +147,9 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
           >
             <t.icon className="size-3.5 shrink-0" strokeWidth={1.75} />
             {tr(t.label)}
+            {t.key === "suggestions" && sectionId === "tasks" && (work?.pendingSuggestions ?? 0) > 0 && (
+              <span className={`rounded-full px-1.5 text-[11px] font-semibold ${on ? "bg-white/25 text-white" : "bg-violet/20 text-violet-light"}`}>{work?.pendingSuggestions}</span>
+            )}
           </Link>
         );
       })}

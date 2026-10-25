@@ -2443,6 +2443,429 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Hr.HrAttendanceEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset?>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("DivisionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("LocalDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("LocalTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<long?>("LocationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MarkType")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<DateTimeOffset?>("MissingSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RawTime")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<long?>("ScheduleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("StaffId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TrackType")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<long>("VerifixEmployeeId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("VerifixTrackId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id")
+                        .HasName("PK_HrAttendanceEvents");
+
+                    b.HasIndex("VerifixTrackId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_HrAttendanceEvents_VerifixTrackId");
+
+                    b.HasIndex("EmployeeId", "LocalTime")
+                        .HasDatabaseName("IX_HrAttendanceEvents_EmployeeId_LocalTime");
+
+                    b.HasIndex("LocalDate", "VerifixEmployeeId")
+                        .HasDatabaseName("IX_HrAttendanceEvents_LocalDate_Employee");
+
+                    b.ToTable("AttendanceEvents", "hr");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Hr.HrEmployee", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("DismissalDate")
+                        .HasColumnType("date");
+
+                    b.Property<long?>("DivisionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("FirstSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<DateOnly?>("HiringDate")
+                        .HasColumnType("date");
+
+                    b.Property<long?>("JobId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("LastName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MiddleName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("MissingSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset?>("NoteUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("NoteUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("OrgUnitId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<long?>("ScheduleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SourceHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long?>("StaffId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<long>("VerifixId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id")
+                        .HasName("PK_HrEmployees");
+
+                    b.HasIndex("VerifixId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_HrEmployees_VerifixId");
+
+                    b.HasIndex("Status", "DivisionId")
+                        .HasDatabaseName("IX_HrEmployees_Status_DivisionId");
+
+                    b.ToTable("Employees", "hr");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Hr.HrReference", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<long>("VerifixId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateOnly?>("ClosedDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("DepartmentCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("MissingSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<long?>("ParentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.HasKey("Kind", "VerifixId")
+                        .HasName("PK_HrReferences");
+
+                    b.ToTable("References", "hr");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Hr.HrSyncRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Created")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Errors")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("HeartbeatAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateOnly?>("PeriodFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("PeriodTo")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("RetryOfId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Skipped")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("StartedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("StepsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("Updated")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id")
+                        .HasName("PK_HrSyncRuns");
+
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("IX_HrSyncRuns_StartedAt");
+
+                    b.HasIndex("Status")
+                        .IsUnique()
+                        .HasDatabaseName("IX_HrSyncRuns_SingleRunning")
+                        .HasFilter("\"Status\" = 'Running'");
+
+                    b.ToTable("SyncRuns", "hr");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Hr.HrSyncState", b =>
+                {
+                    b.Property<string>("Entity")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly?>("CoveredFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("CoveredThrough")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("LastErrorAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LastRows")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Entity")
+                        .HasName("PK_HrSyncStates");
+
+                    b.ToTable("SyncStates", "hr");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Hr.HrTimesheetDay", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("BreakBegin")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("BreakEnd")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("DayKind")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<long?>("DivisionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("DoneMarks")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FactsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime?>("FirstIn")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<long?>("InputLocationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("JobId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("LastOut")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTimeOffset?>("MissingSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("OutputLocationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("PlanBegin")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("PlanEnd")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("PlanMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PlannedMarks")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("ScheduleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("StaffId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("VerifixEmployeeId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id")
+                        .HasName("PK_HrTimesheetDays");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("Date", "EmployeeId")
+                        .HasDatabaseName("IX_HrTimesheetDays_Date_EmployeeId");
+
+                    b.HasIndex("StaffId", "Date")
+                        .IsUnique()
+                        .HasDatabaseName("IX_HrTimesheetDays_StaffId_Date");
+
+                    b.ToTable("TimesheetDays", "hr");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Identity.Department", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2948,6 +3371,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<string>("SecretHint")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<string>("SettingsJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -5578,14 +6004,100 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("Notifications", "work");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Work.WorkDepartmentHead", b =>
+                {
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("DepartmentId", "UserId")
+                        .HasName("PK_WorkDepartmentHeads");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_WorkDepartmentHeads_UserId");
+
+                    b.ToTable("DepartmentHeads", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkProject", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_WorkProjects");
+
+                    b.HasIndex("DepartmentId")
+                        .HasDatabaseName("IX_WorkProjects_DepartmentId");
+
+                    b.ToTable("Projects", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkProjectMember", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsManager")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("ProjectId", "UserId")
+                        .HasName("PK_WorkProjectMembers");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_WorkProjectMembers_UserId");
+
+                    b.ToTable("ProjectMembers", "work");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Work.WorkTask", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedById")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("AssigneeId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("BlockedReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -5606,14 +6118,315 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
 
+                    b.Property<DateOnly?>("DueSoonNotifiedFor")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsBlocked")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("OverdueNotifiedFor")
+                        .HasColumnType("date");
+
                     b.Property<string>("Priority")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<int>("Progress")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Result")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset?>("ReviewRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("SuggestionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_WorkTasks");
+
+                    b.HasIndex("ArchivedAt")
+                        .HasDatabaseName("IX_WorkTasks_ArchivedAt");
+
+                    b.HasIndex("CreatedById")
+                        .HasDatabaseName("IX_WorkTasks_CreatedById");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("IX_WorkTasks_ProjectId");
+
+                    b.HasIndex("AssigneeId", "Status")
+                        .HasDatabaseName("IX_WorkTasks_AssigneeId_Status");
+
+                    b.HasIndex("DepartmentId", "Status")
+                        .HasDatabaseName("IX_WorkTasks_DepartmentId_Status");
+
+                    b.HasIndex("Status", "DueDate")
+                        .HasDatabaseName("IX_WorkTasks_Status_DueDate");
+
+                    b.ToTable("Tasks", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTaskAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("ObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UploadedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_WorkTaskAttachments");
+
+                    b.HasIndex("TaskId")
+                        .HasDatabaseName("IX_WorkTaskAttachments_TaskId");
+
+                    b.HasIndex("UploadedById");
+
+                    b.ToTable("TaskAttachments", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTaskChecklistItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DoneAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DoneById")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDone")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_WorkTaskChecklist");
+
+                    b.HasIndex("TaskId", "SortOrder")
+                        .HasDatabaseName("IX_WorkTaskChecklist_TaskId_SortOrder");
+
+                    b.ToTable("TaskChecklist", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTaskComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AuthorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_WorkTaskComments");
+
+                    b.HasIndex("AuthorId");
+
+                    b.HasIndex("TaskId", "CreatedAt")
+                        .HasDatabaseName("IX_WorkTaskComments_TaskId_CreatedAt");
+
+                    b.ToTable("TaskComments", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTaskEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_WorkTaskEvents");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("TaskId", "CreatedAt")
+                        .HasDatabaseName("IX_WorkTaskEvents_TaskId_CreatedAt");
+
+                    b.ToTable("TaskEvents", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTaskSuggestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssigneeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedTaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DecidedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Facts")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid?>("GeneratedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("InsufficientData")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Problem")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Rationale")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("RequiredPermission")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceHref")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("SourceKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -5629,18 +6442,20 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id")
-                        .HasName("PK_WorkTasks");
+                        .HasName("PK_WorkTaskSuggestions");
 
-                    b.HasIndex("CreatedById")
-                        .HasDatabaseName("IX_WorkTasks_CreatedById");
+                    b.HasIndex("AssigneeId");
 
-                    b.HasIndex("AssigneeId", "Status")
-                        .HasDatabaseName("IX_WorkTasks_AssigneeId_Status");
+                    b.HasIndex("DepartmentId");
 
-                    b.HasIndex("DepartmentId", "Status")
-                        .HasDatabaseName("IX_WorkTasks_DepartmentId_Status");
+                    b.HasIndex("Fingerprint")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WorkTaskSuggestions_Fingerprint");
 
-                    b.ToTable("Tasks", "work");
+                    b.HasIndex("Status", "DepartmentId")
+                        .HasDatabaseName("IX_WorkTaskSuggestions_Status_DepartmentId");
+
+                    b.ToTable("TaskSuggestions", "work");
                 });
 
             modelBuilder.Entity("OneBase.Domain.AI.AiKnowledgeChunk", b =>
@@ -5854,6 +6669,24 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasOne("OneBase.Domain.Files.Folder", null)
                         .WithMany("Permissions")
                         .HasForeignKey("FolderId");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Hr.HrAttendanceEvent", b =>
+                {
+                    b.HasOne("OneBase.Domain.Hr.HrEmployee", null)
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_HrAttendanceEvents_HrEmployees_EmployeeId");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Hr.HrTimesheetDay", b =>
+                {
+                    b.HasOne("OneBase.Domain.Hr.HrEmployee", null)
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_HrTimesheetDays_HrEmployees_EmployeeId");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Identity.Role", b =>
@@ -6150,6 +6983,60 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Recipient");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Work.WorkDepartmentHead", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkDepartmentHeads_Departments_DepartmentId");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkDepartmentHeads_Users_UserId");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkProject", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkProjects_Departments_DepartmentId");
+
+                    b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkProjectMember", b =>
+                {
+                    b.HasOne("OneBase.Domain.Work.WorkProject", "Project")
+                        .WithMany("Members")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkProjectMembers_WorkProjects_ProjectId");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkProjectMembers_Users_UserId");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Work.WorkTask", b =>
                 {
                     b.HasOne("OneBase.Domain.Identity.User", "Assignee")
@@ -6171,9 +7058,109 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_WorkTasks_Departments_DepartmentId");
 
+                    b.HasOne("OneBase.Domain.Work.WorkProject", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_WorkTasks_Projects_ProjectId");
+
                     b.Navigation("Assignee");
 
                     b.Navigation("CreatedBy");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTaskAttachment", b =>
+                {
+                    b.HasOne("OneBase.Domain.Work.WorkTask", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkTaskAttachments_WorkTasks_TaskId");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "UploadedBy")
+                        .WithMany()
+                        .HasForeignKey("UploadedById")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_WorkTaskAttachments_Users_UploadedById");
+
+                    b.Navigation("Task");
+
+                    b.Navigation("UploadedBy");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTaskChecklistItem", b =>
+                {
+                    b.HasOne("OneBase.Domain.Work.WorkTask", "Task")
+                        .WithMany("Checklist")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkTaskChecklist_WorkTasks_TaskId");
+
+                    b.Navigation("Task");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTaskComment", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "Author")
+                        .WithMany()
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_WorkTaskComments_Users_AuthorId");
+
+                    b.HasOne("OneBase.Domain.Work.WorkTask", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkTaskComments_WorkTasks_TaskId");
+
+                    b.Navigation("Author");
+
+                    b.Navigation("Task");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTaskEvent", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_WorkTaskEvents_Users_ActorId");
+
+                    b.HasOne("OneBase.Domain.Work.WorkTask", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkTaskEvents_WorkTasks_TaskId");
+
+                    b.Navigation("Actor");
+
+                    b.Navigation("Task");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTaskSuggestion", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "Assignee")
+                        .WithMany()
+                        .HasForeignKey("AssigneeId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_WorkTaskSuggestions_Users_AssigneeId");
+
+                    b.HasOne("OneBase.Domain.Identity.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkTaskSuggestions_Departments_DepartmentId");
+
+                    b.Navigation("Assignee");
 
                     b.Navigation("Department");
                 });
@@ -6276,6 +7263,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("OneBase.Domain.Telegram.TelegramReportSubscription", b =>
                 {
                     b.Navigation("Chats");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkProject", b =>
+                {
+                    b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.WorkTask", b =>
+                {
+                    b.Navigation("Checklist");
                 });
 #pragma warning restore 612, 618
         }

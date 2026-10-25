@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, LayoutGrid } from "lucide-react";
 import { DateSwitch, ParamSelect, SearchBox } from "@/components/field/DateSwitch";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { FieldTeamTasks, type TeamMember } from "@/components/tasks/FieldTeamTasks";
-import { WorkTaskBoard } from "@/components/tasks/WorkTaskBoard";
+import { NewTaskButton } from "@/components/tasks/TaskForm";
+import { taskOptions } from "@/components/tasks/TaskListPage";
+import { TaskFilters, TaskTable } from "@/components/tasks/TaskTable";
 import { getT } from "@/i18n/server";
 import { apiGet, apiTry } from "@/lib/server-api";
 import type { FieldRouteSummary, FieldTask } from "@/lib/field/types";
 import { routeSourceLabel } from "@/lib/field/labels";
-import type { DepartmentTasks, PageResult, WorkAssignee, WorkTask } from "@/lib/tasks";
+import { taskFilterKeys, type DepartmentTasks, type PageResult, type WorkTask } from "@/lib/tasks";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -87,7 +89,7 @@ export default async function DepartmentTasksPage({ params, searchParams }: { pa
           )}
           {tab === "team" && <TeamTab sp={sp} page={page} today={today} returnTo={returnTo} />}
           {tab === "routes" && <RoutesTab sp={sp} today={today} />}
-          {tab === "office" && <OfficeTab code={code} sp={sp} page={page} today={today} returnTo={returnTo} />}
+          {tab === "office" && <OfficeTab code={code} sp={sp} returnTo={returnTo} />}
         </div>
       </PageBody>
     </>
@@ -247,33 +249,22 @@ async function RoutesTab({ sp, today }: { sp: SearchParams; today: string }) {
   );
 }
 
-/** Задачи отдела OneBase. */
-async function OfficeTab({ code, sp, page, today, returnTo }: { code: string; sp: SearchParams; page: number; today: string; returnTo: string }) {
-  const view = one(sp, "view") ?? "open";
-  const search = one(sp, "search");
-  const filter =
-    view === "mine" ? { status: "open", mine: "true" } : view === "created" ? { status: "open", createdByMe: "true" } : view === "overdue" ? { status: "overdue" } : view === "closed" ? { status: "closed" } : { status: "open" };
-  const [tasks, assignees] = await Promise.all([
-    apiGet<PageResult<WorkTask>>(`/api/work/tasks${qs({ department: code, ...filter, search, page, pageSize: 30 })}`, returnTo),
-    apiGet<WorkAssignee[]>(`/api/work/assignees${qs({ department: code })}`, returnTo),
-  ]);
-  const link = (p: Record<string, string | number | undefined>) => `${returnTo}${qs({ tab: "office", view, search, ...p })}`;
+/** Задачи отдела OneBase: те же фильтры и таблица, что в «Все задачи», только по этому отделу. */
+async function OfficeTab({ code, sp, returnTo }: { code: string; sp: SearchParams; returnTo: string }) {
   const t = await getT();
+  const { departments, projects } = await taskOptions(returnTo);
+  const filters = Object.fromEntries(taskFilterKeys.map((k) => [k, one(sp, k)]));
+  const data = await apiGet<PageResult<WorkTask>>(`/api/work/tasks${qs({ ...filters, scope: "department", department: code, pageSize: 25 })}`, returnTo);
   return (
     <div className="space-y-3">
-      <StatusTabs
-        current={view}
-        items={[
-          { key: "open", label: t("Открытые"), href: link({ view: "open", page: undefined }) },
-          { key: "mine", label: t("Мне"), href: link({ view: "mine", page: undefined }) },
-          { key: "created", label: t("Поставил я"), href: link({ view: "created", page: undefined }) },
-          { key: "overdue", label: t("Просроченные"), href: link({ view: "overdue", page: undefined }) },
-          { key: "closed", label: t("Закрытые"), href: link({ view: "closed", page: undefined }) },
-        ]}
-      />
-      <SearchBox value={search ?? ""} placeholder={t("Поиск по задачам")} />
-      <WorkTaskBoard department={code} items={tasks.items} assignees={assignees} today={today} />
-      <Pager page={tasks.page} pageSize={tasks.pageSize} total={tasks.total} href={(p) => link({ page: p })} />
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Link href={`/tasks/board${qs({ department: code })}`} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink hover:bg-muted">
+          <LayoutGrid className="size-4" /> {t("Канбан отдела")}
+        </Link>
+        <NewTaskButton departments={departments} projects={projects} defaultDepartment={code} />
+      </div>
+      <TaskFilters departments={departments} show={{ assignee: true, status: "all" }} fixedDepartment={code} />
+      <TaskTable data={data} empty="Задач отдела по этому фильтру нет." />
     </div>
   );
 }

@@ -33,7 +33,7 @@ export function TasksDonut({ total, done, slices, t }: { total: number; done: nu
   const donePct = Math.round((done / Math.max(1, total)) * 100);
 
   return (
-    <DashCard className="flex flex-col gap-5 p-5 xl:w-[380px]">
+    <DashCard className="flex min-w-0 flex-col gap-5 p-4 sm:p-5 xl:w-[380px]">
       <CardHeader
         title={t("Задачи по статусу")}
         subtitle={t("Всего {n} за 30 дней", { n: total })}

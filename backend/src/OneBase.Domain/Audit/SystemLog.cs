@@ -9,6 +9,9 @@ public static class SystemLogSources
     /// <summary>Синхронизация данных Linko в OneBase: шаги загрузки, отмена.</summary>
     public const string Sync = "sync";
 
+    /// <summary>Интеграция Verifix (HR): подключение, авторизация, ответы API и синхронизация.</summary>
+    public const string Verifix = "verifix";
+
     /// <summary>Всё остальное: ошибки сервера OneBase.</summary>
     public const string System = "system";
 }

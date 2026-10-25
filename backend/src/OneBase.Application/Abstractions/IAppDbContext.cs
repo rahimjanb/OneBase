@@ -104,9 +104,25 @@ public interface IAppDbContext
     DbSet<FieldSettings> FieldSettings { get; }
 
     DbSet<OneBase.Domain.Work.WorkTask> WorkTasks { get; }
+    DbSet<OneBase.Domain.Work.WorkTaskChecklistItem> WorkTaskChecklist { get; }
+    DbSet<OneBase.Domain.Work.WorkTaskComment> WorkTaskComments { get; }
+    DbSet<OneBase.Domain.Work.WorkTaskAttachment> WorkTaskAttachments { get; }
+    DbSet<OneBase.Domain.Work.WorkTaskEvent> WorkTaskEvents { get; }
+    DbSet<OneBase.Domain.Work.WorkProject> WorkProjects { get; }
+    DbSet<OneBase.Domain.Work.WorkProjectMember> WorkProjectMembers { get; }
+    DbSet<OneBase.Domain.Work.WorkDepartmentHead> WorkDepartmentHeads { get; }
+    DbSet<OneBase.Domain.Work.WorkTaskSuggestion> WorkTaskSuggestions { get; }
     DbSet<OneBase.Domain.Work.UserNotification> UserNotifications { get; }
     DbSet<OneBase.Domain.Work.PushSubscription> PushSubscriptions { get; }
     DbSet<OneBase.Domain.Work.PushKeys> PushKeys { get; }
+
+    // HR: сотрудники, справочники, отметки и табель из Verifix, журнал синхронизации.
+    DbSet<OneBase.Domain.Hr.HrEmployee> HrEmployees { get; }
+    DbSet<OneBase.Domain.Hr.HrReference> HrReferences { get; }
+    DbSet<OneBase.Domain.Hr.HrAttendanceEvent> HrAttendanceEvents { get; }
+    DbSet<OneBase.Domain.Hr.HrTimesheetDay> HrTimesheetDays { get; }
+    DbSet<OneBase.Domain.Hr.HrSyncRun> HrSyncRuns { get; }
+    DbSet<OneBase.Domain.Hr.HrSyncState> HrSyncStates { get; }
 
     // Источники данных: привязки Google Sheets определяют владельца полей OneBase; конфликты — журнал отказов и строк с ошибками.
     DbSet<OneBase.Domain.Integrations.DataSourceConnection> DataSourceConnections { get; }

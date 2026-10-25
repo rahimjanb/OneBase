@@ -71,7 +71,7 @@ export function DashCard({ className = "", children, ...props }: React.HTMLAttri
 /** Шапка карточки: заголовок 15px и подзаголовок 12.5px, справа — действие. */
 export function CardHeader({ title, subtitle, action, className = "" }: { title: string; subtitle?: string; action?: React.ReactNode; className?: string }) {
   return (
-    <div className={`flex items-start justify-between gap-3 ${className}`}>
+    <div className={`flex flex-wrap items-start justify-between gap-3 ${className}`}>
       <div className="min-w-0">
         <h2 className="text-[15px] font-semibold leading-tight text-ink">{title}</h2>
         {subtitle && <p className="mt-0.5 text-[12.5px] text-ink-4">{subtitle}</p>}

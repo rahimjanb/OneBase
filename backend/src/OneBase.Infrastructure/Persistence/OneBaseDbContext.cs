@@ -6,6 +6,7 @@ using OneBase.Domain.AI;
 using OneBase.Domain.Audit;
 using OneBase.Domain.Field;
 using OneBase.Domain.Files;
+using OneBase.Domain.Hr;
 using OneBase.Domain.Identity;
 using OneBase.Domain.Sales;
 using OneBase.Domain.Work;
@@ -142,9 +143,24 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<FieldSettings> FieldSettings => Set<FieldSettings>();
 
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
+    public DbSet<WorkTaskChecklistItem> WorkTaskChecklist => Set<WorkTaskChecklistItem>();
+    public DbSet<WorkTaskComment> WorkTaskComments => Set<WorkTaskComment>();
+    public DbSet<WorkTaskAttachment> WorkTaskAttachments => Set<WorkTaskAttachment>();
+    public DbSet<WorkTaskEvent> WorkTaskEvents => Set<WorkTaskEvent>();
+    public DbSet<WorkProject> WorkProjects => Set<WorkProject>();
+    public DbSet<WorkProjectMember> WorkProjectMembers => Set<WorkProjectMember>();
+    public DbSet<WorkDepartmentHead> WorkDepartmentHeads => Set<WorkDepartmentHead>();
+    public DbSet<WorkTaskSuggestion> WorkTaskSuggestions => Set<WorkTaskSuggestion>();
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<PushKeys> PushKeys => Set<PushKeys>();
+
+    public DbSet<HrEmployee> HrEmployees => Set<HrEmployee>();
+    public DbSet<HrReference> HrReferences => Set<HrReference>();
+    public DbSet<HrAttendanceEvent> HrAttendanceEvents => Set<HrAttendanceEvent>();
+    public DbSet<HrTimesheetDay> HrTimesheetDays => Set<HrTimesheetDay>();
+    public DbSet<HrSyncRun> HrSyncRuns => Set<HrSyncRun>();
+    public DbSet<HrSyncState> HrSyncStates => Set<HrSyncState>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -154,6 +170,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         DataManagerSchema.Configure(b);
         FieldModel.Configure(b);
         WorkModel.Configure(b);
+        HrModel.Configure(b);
         TelegramModel.Configure(b);
 
         // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.
@@ -223,6 +240,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.Property(x => x.BaseUrl).HasMaxLength(500);
             e.Property(x => x.SecretHint).HasMaxLength(16);
             e.Property(x => x.LastTestMessage).HasMaxLength(500);
+            e.Property(x => x.SettingsJson).HasColumnType("jsonb");
         });
 
         // Identity

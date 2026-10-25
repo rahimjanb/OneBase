@@ -8,6 +8,7 @@ import field from "./field";
 import fieldControl from "./fieldControl";
 import files from "./files";
 import home from "./home";
+import hr from "./hr";
 import lib from "./lib";
 import sales from "./sales";
 import salesPages from "./salesPages";
@@ -30,6 +31,7 @@ export const uz: Dict = {
   ...serverField,
   ...serverAi,
   ...serverSettings,
+  ...hr,
   ...lib,
   ...common,
   ...home,

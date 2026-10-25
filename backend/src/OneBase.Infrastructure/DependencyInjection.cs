@@ -186,9 +186,29 @@ public static class DependencyInjection
         services.AddSingleton<Telegram.Reports.TelegramReportRunner>();
         services.AddHostedService<Telegram.Reports.TelegramReportWorker>();
 
-        // Раздел «Задачи» OneBase: задачи отделов и уведомления пользователей.
+        // Раздел «Задачи» OneBase: задачи отделов и проектов, уведомления пользователей, напоминания о сроках.
         services.AddScoped<OneBase.Application.Work.UserNotifier>();
         services.AddScoped<OneBase.Application.Work.WorkTaskService>();
+        services.AddHostedService<Work.WorkTaskReminderWorker>();
+
+        // HR: Verifix — сотрудники, отметки и табель (только чтение API Verifix). client_secret — в «Настройки → Интеграции → HR → Verifix»
+        // (зашифрован Data Protection) или Verifix__ClientId / Verifix__ClientSecret в окружении сервера.
+        var verifix = config.GetSection(Hr.VerifixOptions.Section).Get<Hr.VerifixOptions>() ?? new Hr.VerifixOptions();
+        // Массив из настроек дописывается к значению по умолчанию — паузы повторов берём из настроек целиком.
+        if (config.GetSection($"{Hr.VerifixOptions.Section}:{nameof(Hr.VerifixOptions.RetryDelaysSeconds)}").Get<int[]>() is { Length: > 0 } delays)
+        {
+            verifix.RetryDelaysSeconds = delays;
+        }
+
+        services.AddSingleton(verifix);
+        services.AddSingleton<Hr.VerifixSettingsStore>();
+        services.AddSingleton<Hr.VerifixTokenCache>();
+        services.AddSingleton<OneBase.Application.Hr.IHrRules>(sp => sp.GetRequiredService<Hr.VerifixSettingsStore>());
+        services.AddHttpClient<Hr.VerifixClient>(http => http.Timeout = TimeSpan.FromSeconds(Math.Clamp(verifix.TimeoutSeconds, 5, 300)));
+        services.AddScoped<Hr.HrSyncService>();
+        services.AddSingleton<Hr.HrSyncCoordinator>();
+        services.AddScoped<OneBase.Application.Hr.HrService>();
+        services.AddHostedService<Hr.HrSyncWorker>();
 
         // Web Push (Lib.Net.Http.WebPush: aes128gcm + VAPID, как требует и Apple). Ключи VAPID — в базе, токены — в памяти
         // (Apple просит не обновлять JWT чаще раза в час); повтор по 429 — не больше двух раз.

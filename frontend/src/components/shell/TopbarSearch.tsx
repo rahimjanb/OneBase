@@ -4,11 +4,12 @@ import { useEffect, useRef } from "react";
 import { Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useT } from "@/i18n/client";
+import { sectionOf } from "./sections";
 import { isActive, settings, workspace } from "./Sidebar";
 
 /**
  * Поиск в шапке (ТЗ dashboard): 420×38, подсказка «⌘K»; Ctrl/⌘+K ставит курсор в поле, Esc убирает. Сам поиск по данным — следующий шаг.
- * В «Продажах» шапку занимают кнопки разделов — поиска там нет (и SectionNav меряет тесноту по блоку справа, как раньше).
+ * В «Продажах», «HR» и «Задачах» шапку занимают кнопки разделов — поиска там нет (и SectionNav меряет тесноту по блоку справа, как раньше).
  */
 export function TopbarSearch() {
   const t = useT();
@@ -27,7 +28,7 @@ export function TopbarSearch() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  if (pathname.startsWith("/sales")) return null;
+  if (sectionOf(pathname)) return null;
   return (
     <div className="hidden min-w-0 flex-1 justify-center lg:flex">
       <label className="flex h-[38px] w-full min-w-[200px] max-w-[420px] items-center gap-2 rounded-[10px] border border-line bg-surface px-3 transition-colors duration-150 focus-within:border-accent">

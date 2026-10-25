@@ -52,6 +52,8 @@ public static class DependencyInjection
         // Модели по категориям простых задач: сравнение исходной модели и модели категории (фон и эталонный набор).
         services.AddSingleton<OneBase.AI.Monitoring.IModelComparisons, OneBase.AI.Monitoring.ModelComparisons>();
         services.AddScoped<OneBase.AI.Monitoring.RoutingEvaluation>();
+        // AI-диспетчер задач: предложения по данным OneBase, создаются задачами только после подтверждения руководителем.
+        services.AddScoped<OneBase.AI.Work.TaskSuggestionService>();
         services.AddSingleton<OneBase.AI.Monitoring.RoutingEvaluationRunner>();
         services.AddSingleton<AiGateway>();
         services.AddSingleton<IAiGateway>(sp => sp.GetRequiredService<AiGateway>());

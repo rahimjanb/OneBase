@@ -2,18 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, Settings2 } from "lucide-react";
+import { Bell, BellRing, Settings2, X } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { tParts } from "@/lib/field/labels";
+import { enablePush, notificationPermission, pushSupport } from "@/lib/push";
 import { PermissionsSheet } from "./PermissionsSheet";
 
 type Row = { id: string; kind: string; title: string; body: string | null; link: string | null; createdAt: string; read: boolean };
 
 const timeOf = (iso: string) => new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
+/** Как часто проверять новые уведомления, пока страница открыта: на устройствах без push новая задача видна не позже чем через полминуты. */
+const POLL_MS = 30_000;
+
 /**
- * Колокольчик OneBase: уведомления пользователя (новые задачи отдела, выполненные задачи агентов). Число непрочитанных
- * обновляется при открытии, возвращении в приложение и после push; «Уведомления и геолокация» — настройки устройства.
+ * Колокольчик OneBase: уведомления пользователя (новые задачи, назначения, сроки, выполненные задачи агентов). Число непрочитанных
+ * обновляется при открытии, возвращении в приложение, после push и раз в 30 секунд, пока страница открыта. Новое уведомление на любом
+ * устройстве, где открыт OneBase, всплывает окном (кроме пришедших push — их уже показал телефон или компьютер). Push на закрытое
+ * приложение приходит на все устройства пользователя, где он вошёл и разрешил уведомления; на устройстве без разрешения список
+ * предлагает включить. «Уведомления и геолокация» — настройки устройства.
  */
 export function NotificationBell() {
   const t = useT();
@@ -26,6 +33,17 @@ export function NotificationBell() {
   const [pos, setPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  // Уже известные уведомления: новое среди них — повод показать окно. До первой загрузки — null (старые не всплывают).
+  const known = useRef<Set<string> | null>(null);
+  const [toast, setToast] = useState<{ row: Row; more: number } | null>(null);
+  const [push, setPush] = useState<"supported" | "ios-install" | "unsupported" | "granted" | "denied">("unsupported");
+
+  // Можно ли включить push на этом устройстве — для строки в списке.
+  const checkPush = useCallback(() => {
+    const support = pushSupport();
+    const permission = notificationPermission();
+    setPush(support !== "supported" ? support : permission === "granted" ? "granted" : permission === "denied" ? "denied" : "supported");
+  }, []);
 
   // Список — под колокольчиком, но в пределах экрана: на телефоне справа от колокольчика ещё аватар, и привязанный
   // к нему список шириной 320 px уходил за левый край.
@@ -37,13 +55,18 @@ export function NotificationBell() {
     setPos({ top: r.bottom + 8, left, width, maxHeight: Math.max(160, window.innerHeight - r.bottom - 16) });
   }, []);
 
-  const load = useCallback(async () => {
+  // silent — без всплывающего окна (уведомление уже показано push-ом).
+  const load = useCallback(async (silent = false) => {
     try {
       const response = await fetch("/bff/api/notifications?take=20", { cache: "no-store" });
       if (!response.ok) return;
       const data = (await response.json()) as { items: Row[]; unread: number };
       setItems(data.items);
       setUnread(data.unread);
+      const seen = known.current;
+      const fresh = seen ? data.items.filter((n) => !n.read && !seen.has(n.id)) : [];
+      known.current = new Set([...(seen ?? []), ...data.items.map((n) => n.id)]);
+      if (fresh.length > 0 && !silent) setToast({ row: fresh[0], more: fresh.length - 1 });
     } catch {
       // нет связи — покажем, что было
     }
@@ -51,15 +74,29 @@ export function NotificationBell() {
 
   useEffect(() => {
     void load();
-    const onVisible = () => document.visibilityState === "visible" && void load();
+    checkPush();
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void load();
+      checkPush();
+    };
     document.addEventListener("visibilitychange", onVisible);
-    const onMessage = (event: MessageEvent) => (event.data as { type?: string } | null)?.type === "push-received" && void load();
+    const onMessage = (event: MessageEvent) => (event.data as { type?: string } | null)?.type === "push-received" && void load(true);
     navigator.serviceWorker?.addEventListener("message", onMessage);
+    const timer = setInterval(() => document.visibilityState === "visible" && void load(), POLL_MS);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       navigator.serviceWorker?.removeEventListener("message", onMessage);
+      clearInterval(timer);
     };
-  }, [load]);
+  }, [load, checkPush]);
+
+  // Окно о новом уведомлении само закрывается через 12 секунд.
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 12_000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   useEffect(() => setOpen(false), [pathname]);
 
@@ -81,7 +118,13 @@ export function NotificationBell() {
     };
   }, [open, load, place]);
 
+  const turnOnPush = async () => {
+    await enablePush();
+    checkPush();
+  };
+
   const openItem = async (n: Row) => {
+    setToast((x) => (x?.row.id === n.id ? null : x));
     if (!n.read) {
       setItems((list) => list.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
       setUnread((u) => Math.max(0, u - 1));
@@ -150,6 +193,19 @@ export function NotificationBell() {
               ))}
             </ul>
           )}
+          {push !== "granted" && push !== "unsupported" && (
+            <div className="shrink-0 border-t border-line bg-accent-soft/40 px-4 py-2.5 text-xs text-ink-2">
+              {push === "supported" ? (
+                <button type="button" onClick={turnOnPush} className="flex items-center gap-2 text-left text-sm font-medium text-accent-strong hover:underline">
+                  <BellRing className="size-4 shrink-0" /> {t("Включить push на этом устройстве")}
+                </button>
+              ) : push === "denied" ? (
+                t("Уведомления для OneBase запрещены в браузере — разрешите их в настройках сайта, чтобы новые задачи приходили на это устройство.")
+              ) : (
+                t("На iPhone push приходят только в приложении: добавьте OneBase на экран «Домой».")
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -160,6 +216,23 @@ export function NotificationBell() {
           >
             <Settings2 className="size-4" /> {t("Уведомления и геолокация на этом устройстве")}
           </button>
+        </div>
+      )}
+      {toast && (
+        <div role="status" aria-live="polite" className="fixed right-4 top-20 z-50 w-[min(360px,calc(100vw-32px))] rounded-xl border border-line bg-surface-solid p-3 text-ink shadow-xl">
+          <div className="flex items-start gap-3">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
+              <BellRing className="size-4" />
+            </span>
+            <button type="button" onClick={() => openItem(toast.row)} className="min-w-0 flex-1 text-left">
+              <span className="block text-sm font-semibold text-ink">{t(toast.row.title)}</span>
+              {toast.row.body && <span className="mt-0.5 block line-clamp-2 text-xs text-ink-2">{tParts(t, toast.row.body, "; ")}</span>}
+              {toast.more > 0 && <span className="mt-1 block text-[11px] text-ink-3">{t("и ещё новых: {n}", { n: toast.more })}</span>}
+            </button>
+            <button type="button" onClick={() => setToast(null)} aria-label={t("Закрыть")} className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-muted hover:text-ink">
+              <X className="size-4" />
+            </button>
+          </div>
         </div>
       )}
       <PermissionsSheet open={settings} onClose={() => setSettings(false)} appName="OneBase" />

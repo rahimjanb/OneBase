@@ -4,11 +4,12 @@ using OneBase.Api.Auth;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Security;
 using OneBase.Domain.Audit;
+using OneBase.Infrastructure.Hr;
 using OneBase.Infrastructure.Linko;
 
 namespace OneBase.Api.Controllers;
 
-/// <summary>«Настройки → Интеграции»: интеграции по отделам и подключение к Linko. Токены наружу не отдаются.</summary>
+/// <summary>«Настройки → Интеграции»: интеграции по отделам и подключение к Linko (Verifix — VerifixController). Токены наружу не отдаются.</summary>
 [ApiController]
 [Route("api/integrations")]
 [HasPermission(Permissions.IntegrationsManage)]
@@ -19,6 +20,7 @@ public sealed class IntegrationsController(
     LinkoSyncCoordinator coordinator,
     LinkoSyncProgress progress,
     LinkoVerifier verifier,
+    VerifixSettingsStore verifix,
     IAuditLogger audit,
     ILogger<IntegrationsController> logger) : ControllerBase
 {
@@ -29,6 +31,7 @@ public sealed class IntegrationsController(
     [
         new("linko", "sales", "Linko SFA",
             "Заказы, возвраты, визиты, торговые точки и торговые представители — источник данных раздела «Продажи»."),
+        new(VerifixSettingsStore.Code, VerifixSettingsStore.Department, VerifixController.Name, VerifixController.Description),
     ];
 
     public sealed record IntegrationSummary(string Code, string Name, string Description, string Status, DateTimeOffset? DataAsOf);
@@ -150,7 +153,12 @@ public sealed class IntegrationsController(
         var list = new List<IntegrationSummary>();
         foreach (var item in Catalog.Where(c => c.Department == department))
         {
-            var (status, dataAsOf) = item.Code == LinkoSettingsStore.Code ? await LinkoStatusAsync(ct) : ("not_configured", null);
+            var (status, dataAsOf) = item.Code switch
+            {
+                LinkoSettingsStore.Code => await LinkoStatusAsync(ct),
+                VerifixSettingsStore.Code => await VerifixController.StatusAsync(db, verifix, ct),
+                _ => ("not_configured", (DateTimeOffset?)null),
+            };
             list.Add(new IntegrationSummary(item.Code, item.Name, item.Description, status, dataAsOf));
         }
 

@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   LifeBuoy,
   ListChecks,
+  UsersRound,
   Send,
   Settings2,
   Sparkles,
@@ -38,6 +39,7 @@ export const navGroups: NavGroup[] = [
       { href: "/", label: "Обзор", icon: LayoutGrid },
       { href: "/departments", label: "Отделы", icon: Building2, also: ["/sales"] },
       { href: "/tasks", label: "Задачи", icon: ListChecks },
+      { href: "/hr", label: "HR", icon: UsersRound },
       { href: "/reports", label: "Отчёты", icon: ChartColumn, soon: true, badge: "скоро" },
       { href: "/base", label: "Файлы", icon: Folder, also: ["/files"] },
     ],
@@ -76,7 +78,7 @@ export function isActive(pathname: string, item: NavItem) {
 export function Logo() {
   const t = useT();
   return (
-    <Link href="/" aria-label={t("OneBase — на главную")} className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+    <Link href="/" aria-label={t("OneBase — на главную")} className="-m-1 flex items-center gap-2.5 rounded-[10px] p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
       <span className="grid size-[30px] place-items-center rounded-lg bg-gradient-to-br from-brand-from to-brand-to text-[17px] font-extrabold leading-none text-white">1</span>
       <span className="text-[21px] font-bold tracking-[-0.5px] text-sidebar-ink">Base</span>
     </Link>

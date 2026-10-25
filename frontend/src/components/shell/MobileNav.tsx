@@ -16,6 +16,7 @@ import {
   X,
   Send,
   SlidersHorizontal,
+  UsersRound,
   Sparkles,
   UserRound,
   type LucideIcon,
@@ -44,6 +45,7 @@ const fanSections: (FanItem & { allowed: (p: readonly string[]) => boolean })[] 
   { href: "/base", label: "Файлы", icon: Database, color: "#ff8a00", also: ["/files"], allowed: (p) => canOpen("/base", p) },
   { href: "/data-manager", label: "Данные", icon: DatabaseZap, color: "#14b8a6", allowed: (p) => canOpen("/data-manager", p) },
   { href: tasksHref, label: "Задачи", icon: ClipboardList, color: "#8b5cf6", allowed: (p) => canOpen(tasksHref, p) },
+  { href: "/hr", label: "HR", icon: UsersRound, color: "#06b6d4", allowed: (p) => canOpen("/hr", p) },
   { href: "/campaigns", label: "Рассылки", icon: Send, color: "#0878ff", allowed: (p) => canOpen("/campaigns", p) },
   { href: "/campaigns?new=1", label: "Новая рассылка", icon: MessageSquarePlus, color: "#f43f5e", action: true, allowed: (p) => canOpen("/campaigns", p) },
 ];

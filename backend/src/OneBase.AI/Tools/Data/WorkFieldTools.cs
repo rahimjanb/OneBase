@@ -533,13 +533,9 @@ internal sealed class GetDepartmentTasksTool(WorkTaskService tasks, IUserPermiss
             return new WorkAssignee(userId, "сам пользователь", null);
         }
 
-        var people = new List<WorkAssignee>();
-        foreach (var department in departments)
-        {
-            people.AddRange(await tasks.AssigneesAsync(work, department.Code, ct));
-        }
-
-        return WorkFieldText.Find(people.DistinctBy(p => p.Id).ToList(), query, p => p.Name, "assignee", "Сотрудники доступных отделов");
+        // Исполнитель задачи — любой действующий пользователь OneBase: список один для всех доступных отделов.
+        var people = departments.Count > 0 ? await tasks.AssigneesAsync(work, departments[0].Code, ct) : [];
+        return WorkFieldText.Find(people, query, p => p.Name, "assignee", "Пользователи OneBase");
     }
 }
 

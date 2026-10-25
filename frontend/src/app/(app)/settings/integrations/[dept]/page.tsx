@@ -31,7 +31,7 @@ export default async function DepartmentIntegrationsPage({ params }: { params: P
           <div className="rounded-xl border border-dashed border-line bg-surface/60 px-6 py-12 text-center">
             <Plug className="mx-auto size-6 text-ink-3" />
             <p className="mt-3 text-sm text-ink-2">{t("Для отдела «{name}» интеграций пока нет.", { name: t(department.name) })}</p>
-            <p className="mt-1 text-xs text-ink-3">{t("Сейчас доступна интеграция с Linko для отдела «Продажи».")}</p>
+            <p className="mt-1 text-xs text-ink-3">{t("Сейчас доступны интеграции: Linko — для отдела «Продажи», Verifix — для HR.")}</p>
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">

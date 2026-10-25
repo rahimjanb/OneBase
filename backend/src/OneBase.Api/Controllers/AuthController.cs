@@ -98,7 +98,7 @@ public sealed class AuthController(
     /// <summary>Текущий пользователь: профиль — из БД (правки видны сразу), роли и права — актуальные (см. AuthSetup).</summary>
     [HttpGet("me")]
     [Authorize]
-    public async Task<IActionResult> Me(CancellationToken ct)
+    public async Task<IActionResult> Me([FromServices] OneBase.Application.Hr.HrService hr, CancellationToken ct)
     {
         var id = User.GetUserId();
         var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, ct);
@@ -120,6 +120,8 @@ public sealed class AuthController(
             Roles = User.FindAll(OneBaseClaims.Role).Select(c => c.Value).OrderBy(SystemRoles.OrderOf),
             Permissions = permissions,
             CanOpenSettings = SystemRoles.SettingsPermissions.Any(permissions.Contains),
+            // Раздел HR: право «HR», интеграции или руководитель отдела, к которому привязаны подразделения Verifix.
+            HrAccess = await hr.HasAccessAsync(id, permissions.ToHashSet(), ct),
         });
     }
 }

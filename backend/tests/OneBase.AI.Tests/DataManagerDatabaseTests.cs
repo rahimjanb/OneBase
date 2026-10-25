@@ -228,6 +228,7 @@ public sealed class DataManagerDb : IAsyncLifetime
     public FakeDataModel Model { get; } = new();
     public FakeSheets Sheets { get; } = new();
     public FakeLinko Linko { get; } = new();
+    public FakeVerifix Verifix { get; } = new();
     public FakeGateway Gateway { get; } = new();
     public FakeTelegram Telegram { get; } = new();
     public FakeConsultant Consultant { get; } = new();
@@ -263,6 +264,12 @@ public sealed class DataManagerDb : IAsyncLifetime
             ["LINKO_TOKEN"] = "test-token",
             ["Linko:MaxAttempts"] = "1",
             ["Sales:Sync:BackfillMonths"] = "1",
+            // Verifix — подставной сервер (FakeVerifix): повторы без пауз, фоновый запуск по расписанию не нужен.
+            ["Verifix:BaseUrl"] = FakeVerifix.BaseUrl,
+            ["Verifix:MaxAttempts"] = "3",
+            ["Verifix:RetryDelaysSeconds:0"] = "0",
+            ["Verifix:MaxRetryAfterSeconds"] = "0",
+            ["Verifix:WorkerEnabled"] = "false",
         }).Build();
         var services = new ServiceCollection();
         services.AddLogging();
@@ -278,6 +285,7 @@ public sealed class DataManagerDb : IAsyncLifetime
         services.AddSingleton<OneBase.Application.Telegram.ITelegramGateway>(Telegram);
         services.AddScoped<OneBase.AI.Consultant.IConsultantEngine>(_ => Consultant);
         services.AddHttpClient<OneBase.Infrastructure.Linko.LinkoClient>().ConfigurePrimaryHttpMessageHandler(() => Linko);
+        services.AddHttpClient<OneBase.Infrastructure.Hr.VerifixClient>().ConfigurePrimaryHttpMessageHandler(() => Verifix);
         Services = services.BuildServiceProvider();
 
         using var scope = Services.CreateScope();

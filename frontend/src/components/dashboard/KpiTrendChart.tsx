@@ -28,7 +28,7 @@ export function KpiTrendChart({ series }: { series: TrendSeries[] }) {
   const y = (v: number) => ((MAX - Math.min(MAX, Math.max(MIN, v))) / (MAX - MIN)) * HEIGHT;
 
   return (
-    <DashCard className="flex flex-col gap-5 p-5">
+    <DashCard className="flex min-w-0 flex-col gap-5 p-4 sm:p-5">
       <CardHeader
         title={t("Динамика общего KPI")}
         subtitle={t("По неделям · цель {n}%", { n: active.target })}
@@ -52,7 +52,7 @@ export function KpiTrendChart({ series }: { series: TrendSeries[] }) {
         }
       />
 
-      <dl className="flex flex-wrap gap-8">
+      <dl className="flex flex-wrap gap-x-8 gap-y-3">
         <div>
           <dt className="text-xs text-ink-4">{t("Среднее за период")}</dt>
           <dd className="mt-0.5 text-xl font-semibold text-ink tabular-nums">{pct(average)}</dd>
@@ -84,7 +84,7 @@ export function KpiTrendChart({ series }: { series: TrendSeries[] }) {
             <span className="absolute inset-x-0 border-t border-dashed border-warn" style={{ top: y(active.target) }} aria-hidden>
               <span className="absolute -top-5 left-0 rounded bg-warn/10 px-1.5 py-0.5 text-[10.5px] font-semibold leading-3 text-warn">{t("Цель {n}%", { n: active.target })}</span>
             </span>
-            <div className="absolute inset-0 flex items-end gap-3.5" role="img" aria-label={t("Динамика по неделям")}>
+            <div className="absolute inset-0 flex items-end gap-1.5 sm:gap-3.5" role="img" aria-label={t("Динамика по неделям")}>
               {values.map((v, i) => {
                 const last = i === values.length - 1;
                 const color = last ? "bg-gradient-to-t from-accent to-accent-bright" : v >= active.target ? "bg-accent/55" : "bg-accent/20";
@@ -107,9 +107,14 @@ export function KpiTrendChart({ series }: { series: TrendSeries[] }) {
               })}
             </div>
           </div>
-          <div className="mt-2 flex gap-3.5 text-[11px] text-ink-4">
+          <div className="mt-2 flex gap-1.5 text-[11px] text-ink-4 sm:gap-3.5">
             {active.weeks.map((w, i) => (
-              <span key={w} className={`flex-1 text-center tabular-nums ${i === active.weeks.length - 1 ? "font-medium text-ink" : ""}`}>
+              <span
+                key={w}
+                className={`min-w-0 flex-1 whitespace-nowrap text-center tabular-nums ${i === active.weeks.length - 1 ? "font-medium text-ink" : ""} ${
+                  (active.weeks.length - 1 - i) % 2 === 1 ? "max-sm:invisible" : ""
+                }`}
+              >
                 {w}
               </span>
             ))}

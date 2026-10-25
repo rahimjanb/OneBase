@@ -10,6 +10,9 @@ export const navPermissions: Record<string, string[]> = {
   "/": workspacePermissions,
   "/departments": workspacePermissions,
   "/tasks": workspacePermissions,
+  // HR: право «HR», администратор интеграций или руководитель отдела с привязанными подразделениями Verifix (hr.department — не право,
+  // а признак из /api/auth/me; доступ к данным всё равно проверяет backend).
+  "/hr": ["hr.read", "integrations.manage", "hr.department"],
   "/reports": workspacePermissions,
   "/base": ["files.read"],
   "/consultant": ["ai.agents.run"],
@@ -18,7 +21,7 @@ export const navPermissions: Record<string, string[]> = {
 };
 
 /** Порядок разделов в меню — по нему выбирается стартовая страница, если «Обзор» недоступен. */
-const order = ["/", "/departments", "/tasks", "/base", "/consultant", "/data-manager", "/campaigns"];
+const order = ["/", "/departments", "/tasks", "/hr", "/base", "/consultant", "/data-manager", "/campaigns"];
 
 export function canOpen(href: string, permissions: readonly string[]): boolean {
   const need = navPermissions[href];

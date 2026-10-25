@@ -471,22 +471,34 @@ public class FieldPlanningRulesTests
 
 public class WorkTaskRulesTests
 {
+    private static bool Can(OneBase.Domain.Work.WorkTaskStatus from, OneBase.Domain.Work.WorkTaskStatus to, bool canWork, bool canManage) =>
+        OneBase.Application.Work.WorkTaskService.CanTransition(from, to, canWork, canManage);
+
     [Fact]
-    public void Assignee_moves_task_forward_only()
+    public void Assignee_moves_task_forward_and_sends_it_to_review_but_does_not_accept_it()
     {
-        Assert.True(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.New, OneBase.Domain.Work.WorkTaskStatus.InProgress, isAssignee: true, canEdit: false));
-        Assert.True(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.InProgress, OneBase.Domain.Work.WorkTaskStatus.Done, isAssignee: true, canEdit: false));
-        Assert.False(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.New, OneBase.Domain.Work.WorkTaskStatus.Cancelled, isAssignee: true, canEdit: false));
-        Assert.False(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.Done, OneBase.Domain.Work.WorkTaskStatus.InProgress, isAssignee: true, canEdit: false));
+        Assert.True(Can(OneBase.Domain.Work.WorkTaskStatus.New, OneBase.Domain.Work.WorkTaskStatus.InProgress, canWork: true, canManage: false));
+        Assert.True(Can(OneBase.Domain.Work.WorkTaskStatus.InProgress, OneBase.Domain.Work.WorkTaskStatus.Review, canWork: true, canManage: false));
+        Assert.True(Can(OneBase.Domain.Work.WorkTaskStatus.New, OneBase.Domain.Work.WorkTaskStatus.Review, canWork: true, canManage: false));
+        // Результат принимает постановщик или руководитель: сам себе исполнитель задачу не закрывает.
+        Assert.False(Can(OneBase.Domain.Work.WorkTaskStatus.InProgress, OneBase.Domain.Work.WorkTaskStatus.Done, canWork: true, canManage: false));
+        Assert.False(Can(OneBase.Domain.Work.WorkTaskStatus.Review, OneBase.Domain.Work.WorkTaskStatus.Done, canWork: true, canManage: false));
+        Assert.False(Can(OneBase.Domain.Work.WorkTaskStatus.New, OneBase.Domain.Work.WorkTaskStatus.Cancelled, canWork: true, canManage: false));
+        Assert.False(Can(OneBase.Domain.Work.WorkTaskStatus.Done, OneBase.Domain.Work.WorkTaskStatus.InProgress, canWork: true, canManage: false));
     }
 
     [Fact]
-    public void Author_cancels_and_reopens()
+    public void Manager_accepts_returns_cancels_and_reopens()
     {
-        Assert.True(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.InProgress, OneBase.Domain.Work.WorkTaskStatus.Cancelled, isAssignee: false, canEdit: true));
-        Assert.True(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.Done, OneBase.Domain.Work.WorkTaskStatus.InProgress, isAssignee: false, canEdit: true));
-        Assert.True(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.Cancelled, OneBase.Domain.Work.WorkTaskStatus.InProgress, isAssignee: false, canEdit: true));
-        Assert.False(OneBase.Application.Work.WorkTaskService.CanTransition(OneBase.Domain.Work.WorkTaskStatus.Done, OneBase.Domain.Work.WorkTaskStatus.Cancelled, isAssignee: false, canEdit: true));
+        Assert.True(Can(OneBase.Domain.Work.WorkTaskStatus.Review, OneBase.Domain.Work.WorkTaskStatus.Done, canWork: true, canManage: true));
+        Assert.True(Can(OneBase.Domain.Work.WorkTaskStatus.Review, OneBase.Domain.Work.WorkTaskStatus.InProgress, canWork: true, canManage: true));
+        Assert.True(Can(OneBase.Domain.Work.WorkTaskStatus.InProgress, OneBase.Domain.Work.WorkTaskStatus.Done, canWork: true, canManage: true));
+        Assert.True(Can(OneBase.Domain.Work.WorkTaskStatus.InProgress, OneBase.Domain.Work.WorkTaskStatus.Cancelled, canWork: true, canManage: true));
+        Assert.True(Can(OneBase.Domain.Work.WorkTaskStatus.Review, OneBase.Domain.Work.WorkTaskStatus.Cancelled, canWork: true, canManage: true));
+        Assert.True(Can(OneBase.Domain.Work.WorkTaskStatus.Done, OneBase.Domain.Work.WorkTaskStatus.InProgress, canWork: true, canManage: true));
+        Assert.True(Can(OneBase.Domain.Work.WorkTaskStatus.Cancelled, OneBase.Domain.Work.WorkTaskStatus.InProgress, canWork: true, canManage: true));
+        Assert.False(Can(OneBase.Domain.Work.WorkTaskStatus.Done, OneBase.Domain.Work.WorkTaskStatus.Cancelled, canWork: true, canManage: true));
+        Assert.False(Can(OneBase.Domain.Work.WorkTaskStatus.Done, OneBase.Domain.Work.WorkTaskStatus.Review, canWork: true, canManage: true));
     }
 
     [Fact]
@@ -495,7 +507,7 @@ public class WorkTaskRulesTests
         foreach (var from in Enum.GetValues<OneBase.Domain.Work.WorkTaskStatus>())
         foreach (var to in Enum.GetValues<OneBase.Domain.Work.WorkTaskStatus>())
         {
-            Assert.False(OneBase.Application.Work.WorkTaskService.CanTransition(from, to, isAssignee: false, canEdit: false));
+            Assert.False(Can(from, to, canWork: false, canManage: false));
         }
     }
 }

@@ -28,6 +28,30 @@ public enum UserNotificationKind
 
     /// <summary>Траты на AI дошли до порога предупреждения или исчерпали дневной / месячный бюджет — тем, кто управляет AI.</summary>
     AiBudget,
+
+    /// <summary>Исполнитель отправил задачу на проверку — постановщику.</summary>
+    TaskReview,
+
+    /// <summary>Задачу вернули на доработку — исполнителю.</summary>
+    TaskReturned,
+
+    /// <summary>Результат принят, задача выполнена — исполнителю.</summary>
+    TaskAccepted,
+
+    /// <summary>Перенесён срок задачи — исполнителю.</summary>
+    TaskDeadlineChanged,
+
+    /// <summary>Срок задачи — завтра (одно напоминание на срок) — исполнителю.</summary>
+    TaskDueSoon,
+
+    /// <summary>Задача просрочена (одно уведомление на срок) — исполнителю и постановщику.</summary>
+    TaskOverdue,
+
+    /// <summary>Новый комментарий к задаче — исполнителю и постановщику, кроме автора комментария.</summary>
+    TaskComment,
+
+    /// <summary>AI-диспетчер предложил задачи — руководителям отделов (ждут подтверждения).</summary>
+    TaskSuggestion,
 }
 
 /// <summary>

@@ -11,6 +11,8 @@ export type Me = {
   permissions: string[];
   /** Есть хоть одно право раздела «Настройки»; без него раздел скрыт. */
   canOpenSettings: boolean;
+  /** Виден раздел HR (право «HR», интеграции или руководитель отдела с подразделениями Verifix). */
+  hrAccess?: boolean;
 };
 
 export type UserRow = {

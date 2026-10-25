@@ -27,6 +27,11 @@ public static class SystemLogRules
             return SystemLogSources.Linko;
         }
 
+        if (exception is Hr.VerifixApiException || category.Contains(".Infrastructure.Hr.", StringComparison.Ordinal) || category.EndsWith(".VerifixController", StringComparison.Ordinal))
+        {
+            return SystemLogSources.Verifix;
+        }
+
         return category.Contains(".Linko.", StringComparison.Ordinal) ? SystemLogSources.Sync : SystemLogSources.System;
     }
 
