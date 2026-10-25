@@ -1,15 +1,22 @@
-import Link from "next/link";
-import { ArrowRight, ArrowUp, CircleAlert, Clock, Sparkle } from "lucide-react";
-import { DepartmentStatusCard } from "@/components/departments";
-import { PageBody } from "@/components/shell/PageHeader";
-import { Card, SectionTitle, SelectField } from "@/components/ui";
-import { getLocale, getT } from "@/i18n/server";
-import { alertText, categoryNames, type AiAlertsView } from "@/lib/ai";
-import { departments, focusOfDay, kpis } from "@/lib/demo-data";
-import { greeting, todayLabel } from "@/lib/format";
 import { redirect } from "next/navigation";
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
+import { AiFocusPanel } from "@/components/dashboard/AiFocusPanel";
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { DepartmentsTable } from "@/components/dashboard/DepartmentsTable";
+import { FilterBar } from "@/components/dashboard/FilterBar";
+import { KpiCard } from "@/components/dashboard/KpiCard";
+import { KpiTrendChart } from "@/components/dashboard/KpiTrendChart";
+import { LeadersCard } from "@/components/dashboard/LeadersCard";
+import { TasksDonut } from "@/components/dashboard/TasksDonut";
+import { UpcomingTasks } from "@/components/dashboard/UpcomingTasks";
+import { getLocale, getT } from "@/i18n/server";
+import type { AiAlertsView } from "@/lib/ai";
+import { activityOf, insightsOf, upcomingOf, type NotificationRow } from "@/lib/dashboard";
+import { departmentRows, kpis, summary, taskStatuses, trendSeries } from "@/lib/dashboard.mock";
+import { headerClock } from "@/lib/dashboardClock";
 import { canOpen, homeFor } from "@/lib/navigation";
 import { apiSession, apiTry } from "@/lib/server-api";
+import type { DepartmentTasks, PageResult, WorkTask } from "@/lib/tasks";
 import type { Me } from "@/lib/users";
 
 export async function generateMetadata() {
@@ -17,98 +24,58 @@ export async function generateMetadata() {
   return { title: t("Обзор · OneBase") };
 }
 
-const trendStyles = {
-  up: { icon: ArrowUp, className: "text-ok" },
-  today: { icon: Clock, className: "text-ok" },
-  warn: { icon: CircleAlert, className: "text-warn" },
-} as const;
-
+/**
+ * Главная «Обзор» (ТЗ dashboard): приветствие и дата, фильтры, «Фокус дня» (находки консультанта), четыре KPI, динамика KPI и задачи по
+ * статусу, состояние отделов, дедлайны, лидеры и лента. Люди и события — только из реальных данных (задачи отделов, уведомления,
+ * консультант); где их нет — пустое состояние. Показатели в числах — из lib/dashboard.mock до подключения API.
+ */
 export default async function DashboardPage() {
-  // Приветствие по имени и «Фокус дня» — реальные находки проактивного анализа, если есть доступ к консультанту.
-  const [me, alerts] = await Promise.all([apiSession<Me>("/api/auth/me"), apiTry<AiAlertsView>("/api/ai/alerts")]);
+  const [me, alerts, departments, notifications] = await Promise.all([
+    apiSession<Me>("/api/auth/me"),
+    apiTry<AiAlertsView>("/api/ai/alerts"),
+    apiTry<DepartmentTasks[]>("/api/work/departments"),
+    apiTry<{ items: NotificationRow[] }>("/api/notifications?take=8"),
+  ]);
   // Роль без общих разделов (например, «Админ 2») начинает со своего первого раздела.
   if (me && !canOpen("/", me.permissions)) redirect(homeFor(me.permissions));
   const [t, locale] = await Promise.all([getT(), getLocale()]);
-  const name = me?.firstName || me?.name || me?.login;
-  const problems = alerts?.alerts.filter((a) => a.severity !== "Opportunity").slice(0, 2) ?? [];
+  const now = new Date();
+  const name = me?.firstName || me?.name || me?.login || "";
+
+  // Открытые задачи отделов, где они видны пользователю, — для дедлайнов недели.
+  const withTasks = (departments ?? []).filter((d) => d.hasTasks).slice(0, 8);
+  const pages = await Promise.all(withTasks.map((d) => apiTry<PageResult<WorkTask>>(`/api/work/tasks?department=${encodeURIComponent(d.code)}&pageSize=50`)));
+  const tasks = withTasks.flatMap((d, i) => (pages[i]?.items ?? []).map((task) => ({ task, department: d })));
+  const upcoming = upcomingOf(tasks, now, locale, t);
+  const rows = departmentRows.map((r) => {
+    const real = departments?.find((d) => d.code === r.code);
+    return real ? { ...r, tasks: real.openTasks, overdue: real.overdueTasks } : r;
+  });
 
   return (
-    <PageBody>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">{todayLabel(new Date(), locale)}</div>
-      <h1 className="mt-1.5 text-[1.625rem] font-semibold leading-tight tracking-tight text-ink sm:text-[1.75rem]">
-        {t(greeting())}
-        {name ? `, ${name}` : ""}!
-      </h1>
-      <p className="mt-1.5 text-sm text-ink-2">{t("Вот что происходит в компании сегодня.")}</p>
+    <div className="flex flex-col gap-5 px-4 pb-12 pt-6 sm:px-6 lg:px-8 lg:pt-8">
+      <DashboardHeader name={name} planShare={summary.planShare} attention={summary.attention} initial={headerClock(now, locale)} locale={locale} />
+      <FilterBar departments={departmentRows.map((d) => d.name)} updatedMinutesAgo={summary.updatedMinutesAgo} />
+      <AiFocusPanel insights={alerts ? insightsOf(alerts, t) : []} available={alerts !== null} departments={summary.departments} tasks={summary.activeTasks} t={t} />
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <SelectField options={[t("Последние 30 дней"), t("Последние 7 дней"), t("Квартал"), t("Год")]} className="max-lg:w-full" />
-        <SelectField options={[t("Все отделы"), ...departments.map((d) => d.name)]} className="max-lg:w-full" />
-        <SelectField options={[t("Все сотрудники"), "Иван Иванов", "Анна Петрова", "Мария Орлова"]} className="max-lg:w-full" />
-        <span className="flex items-center gap-2 text-xs text-ink-3">
-          <span className="size-1.5 rounded-full bg-ink-3" />
-          {t("Обновлено 5 минут назад")}
-        </span>
-      </div>
-
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        {kpis.map((kpi) => {
-          const trend = trendStyles[kpi.tone];
-          return (
-            <Card key={kpi.label} className="p-5 max-lg:p-4">
-              <div className="text-sm text-ink-2">{t(kpi.label)}</div>
-              <div className="mt-3 text-[2rem] font-semibold leading-none tracking-tight max-lg:text-2xl">{kpi.value}</div>
-              <div className={`mt-4 flex items-center gap-1.5 text-xs ${trend.className}`}>
-                <trend.icon className="size-3.5" />
-                {t(kpi.trend)}
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-
-      <div className="mt-8">
-        <SectionTitle
-          title={t("Состояние отделов")}
-          subtitle={t("Показатели и динамика команд")}
-          action={
-            <Link href="/departments" className="flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline">
-              {t("Все отделы")} <ArrowRight className="size-3.5" />
-            </Link>
-          }
-        />
-      </div>
-
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {departments.map((d) => (
-          <DepartmentStatusCard key={d.code} department={d} />
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        {kpis.map((kpi) => (
+          <KpiCard key={kpi.id} kpi={kpi} t={t} />
         ))}
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-accent/20 bg-accent-soft px-5 py-4">
-        <Sparkle className="size-5 shrink-0 text-accent-strong" />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-ink">{t("Фокус дня")}</div>
-          <p className="mt-0.5 text-sm text-ink-2">
-            {alerts === null ? (
-              t(focusOfDay)
-            ) : problems.length === 0 ? (
-              t("Проактивный анализ не нашёл проблем в данных OneBase.")
-            ) : (
-              problems.map((a, i) => (
-                <span key={a.id}>
-                  {i > 0 && " · "}
-                  <span className={a.severity === "Critical" ? "font-semibold text-bad" : "font-semibold text-warn"}>{t(categoryNames[a.category] ?? a.category)}: </span>
-                  {alertText(a.title, t)}
-                </span>
-              ))
-            )}
-          </p>
-        </div>
-        <Link href={alerts ? "/ai" : "/consultant"} className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent-strong hover:underline">
-          {alerts ? t("Открыть обзор") : t("Открыть консультанта")} <ArrowRight className="size-3.5" />
-        </Link>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <KpiTrendChart series={trendSeries} />
+        <TasksDonut total={taskStatuses.total} done={taskStatuses.done} slices={taskStatuses.slices} t={t} />
       </div>
-    </PageBody>
+
+      <DepartmentsTable rows={rows} t={t} />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_280px_320px]">
+        <UpcomingTasks items={upcoming} total={tasks.filter((x) => x.task.status === "New" || x.task.status === "InProgress").length} available={departments !== null} />
+        <LeadersCard leaders={[]} t={t} />
+        <ActivityFeed events={notifications ? activityOf(notifications.items, now, t) : []} available={notifications !== null} t={t} />
+      </div>
+    </div>
   );
 }

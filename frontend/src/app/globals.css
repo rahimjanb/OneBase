@@ -8,6 +8,10 @@
   --color-sidebar-active: #25324f;
   --color-sidebar-text: #c3cbd9;
   --color-sidebar-muted: #7f8ba3;
+  --color-sidebar-ink: #ffffff;
+  --color-sidebar-card: rgb(255 255 255 / 0.06);
+  --color-sidebar-line: rgb(255 255 255 / 0.1);
+  --color-sidebar-hover: rgb(255 255 255 / 0.07);
 
   --color-page: #f6f8fb;
   --color-surface: #ffffff;
@@ -30,6 +34,24 @@
   --color-warn-soft: #fdf2e3;
   --color-bad: #dc4c4c;
   --color-bad-soft: #fdecec;
+
+  /* Токены дизайна главной «Обзор» (ТЗ dashboard): обводки кнопок, пятый уровень текста, фиолетовый и цвета отделов, градиент бренда,
+     свечение AI-панели. Значения тёмной темы OneBase — ниже, здесь — светлые. */
+  --color-line-strong: #d3d9e3;
+  --color-ink-4: #9aa3b3;
+  --color-ink-soft: #2b3443;
+  --color-accent-bright: #2563eb;
+  --color-accent-light: #4f86ff;
+  --color-violet: #8b5cf6;
+  --color-violet-strong: #6d4ad8;
+  --color-violet-light: #5b3fd1;
+  --color-violet-soft: #ede7fe;
+  --color-pink: #e0529b;
+  --color-cyan: #0891b2;
+  --color-brand-from: #5b8cff;
+  --color-brand-to: #2448d8;
+  --color-ai-glow: #dbe6ff;
+  --color-ai-promo: #c7d6ff;
 }
 
 /* Тёмная тема: явный выбор (data-theme) или системная, если выбор не сделан. */
@@ -55,6 +77,18 @@
   --color-warn-soft: #3a2a12;
   --color-bad: #f07070;
   --color-bad-soft: #3a1818;
+  --color-line-strong: #34405c;
+  --color-ink-4: #5f6b85;
+  --color-ink-soft: #d6dcea;
+  --color-accent-bright: #7aa4ff;
+  --color-accent-light: #9dbbff;
+  --color-violet-strong: #a78bfa;
+  --color-violet-light: #c4b5fd;
+  --color-violet-soft: rgb(139 92 246 / 0.12);
+  --color-pink: #f472b6;
+  --color-cyan: #22d3ee;
+  --color-ai-glow: #152a66;
+  --color-ai-promo: #1d3a8a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -80,11 +114,34 @@
     --color-warn-soft: #3a2a12;
     --color-bad: #f07070;
     --color-bad-soft: #3a1818;
+    --color-line-strong: #34405c;
+    --color-ink-4: #5f6b85;
+    --color-ink-soft: #d6dcea;
+    --color-accent-bright: #7aa4ff;
+    --color-accent-light: #9dbbff;
+    --color-violet-strong: #a78bfa;
+    --color-violet-light: #c4b5fd;
+    --color-violet-soft: rgb(139 92 246 / 0.12);
+    --color-pink: #f472b6;
+    --color-cyan: #22d3ee;
+    --color-ai-glow: #152a66;
+    --color-ai-promo: #1d3a8a;
   }
 }
 
 :root {
   color-scheme: light;
+}
+
+/* OneBase — шрифт Onest (ТЗ dashboard; кириллица есть), заголовки тем же шрифтом; Sales Base внутри OneBase остаётся на Inter и Manrope. */
+:root[data-brand="onebase"] {
+  --font-sans: var(--font-onest), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-onest), ui-sans-serif, system-ui, sans-serif;
+}
+
+:root[data-brand="onebase"] [data-product="field"] {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-manrope), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
@@ -106,17 +163,26 @@ body {
   --color-sidebar-active: rgb(255 255 255 / 0.1);
   --color-sidebar-text: #d3dff3;
   --color-sidebar-muted: #a3b5d6;
+  --color-sidebar-ink: #f5f9ff;
+  --color-sidebar-card: rgb(255 255 255 / 0.06);
+  --color-sidebar-line: rgb(255 255 255 / 0.1);
+  --color-sidebar-hover: rgb(255 255 255 / 0.07);
   --color-page: transparent;
   --color-surface: rgb(255 255 255 / 0.055);
   --color-muted: rgb(255 255 255 / 0.07);
   --color-surface-solid: #0e1a36;
   --color-muted-solid: #16264a;
   --color-line: rgb(255 255 255 / 0.1);
+  --color-line-strong: rgb(255 255 255 / 0.18);
   --color-ink: #f5f9ff;
   --color-ink-2: #cfdbf1;
   --color-ink-3: #a3b5d6;
+  --color-ink-4: #7e93b8;
+  --color-ink-soft: #e3eaf7;
   --color-accent: #3056d3;
   --color-accent-strong: #a3c0ff;
+  --color-accent-bright: #7aa4ff;
+  --color-accent-light: #9dbbff;
   --color-accent-soft: rgb(91 140 255 / 0.18);
   --color-ok: #4fd88f;
   --color-ok-soft: rgb(52 199 121 / 0.16);
@@ -125,6 +191,16 @@ body {
   /* Алерты — яркий красный дизайн-системы: заливка 12 %, обводка 20 % (border-bad/20), точка и текст #FF2222. */
   --color-bad: #ff2222;
   --color-bad-soft: rgb(255 34 34 / 0.12);
+  --color-violet: #8b5cf6;
+  --color-violet-strong: #a78bfa;
+  --color-violet-light: #c4b5fd;
+  --color-violet-soft: rgb(139 92 246 / 0.16);
+  --color-pink: #f472b6;
+  --color-cyan: #22d3ee;
+  --color-brand-from: #5b8cff;
+  --color-brand-to: #2448d8;
+  --color-ai-glow: #152a66;
+  --color-ai-promo: #1d3a8a;
 }
 
 :root[data-brand="onebase"]:not([data-theme="light"]) body {
@@ -365,6 +441,8 @@ body {
 
 /* OneBase, светлая тема (явный выбор кнопкой темы): палитра дизайн-системы — тёплый фон, акцент #3056D3, алерты #E60F0F. */
 :root[data-brand="onebase"][data-theme="light"] {
+  --color-sidebar-active: rgb(91 140 255 / 0.22);
+  --color-sidebar-muted: #8793a7;
   --color-page: #f4f3ef;
   --color-surface: #ffffff;
   --color-muted: #efede7;

@@ -38,7 +38,7 @@ export function LanguageToggle({ align = "right" }: { align?: "left" | "right" }
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t("Язык интерфейса")}
-        className="flex h-10 items-center gap-1 rounded-full px-2.5 text-xs font-semibold text-current transition-colors hover:bg-white/10 hover:text-white lg:h-9 lg:hover:bg-muted lg:hover:text-ink"
+        className="flex h-10 items-center gap-1 rounded-full px-2.5 text-xs font-semibold text-current transition-colors duration-150 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:h-9 lg:rounded-[9px] lg:text-[12.5px] lg:text-ink-3 lg:hover:bg-muted lg:hover:text-ink"
       >
         <Languages className="size-4" strokeWidth={1.75} />
         {current.short}

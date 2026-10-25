@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { Inter, Manrope } from "next/font/google";
+import { Inter, Manrope, Onest } from "next/font/google";
 import { PwaRegister } from "@/components/shell/PwaRegister";
 import { themeInitScript } from "@/components/shell/ThemeToggle";
 import { I18nProvider } from "@/i18n/client";
@@ -11,6 +11,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-inter" });
 // Заголовки — Manrope (кириллица есть).
 const manrope = Manrope({ subsets: ["latin", "cyrillic"], variable: "--font-manrope" });
+// OneBase (главная и весь интерфейс вне Sales Base) — Onest: один шрифт для текста и заголовков, веса 400–800 (переменный).
+const onest = Onest({ subsets: ["latin", "cyrillic"], variable: "--font-onest" });
 
 /** На домене Sales Base — своё имя приложения (вкладка, установленное приложение на iOS). */
 export async function generateMetadata(): Promise<Metadata> {
@@ -84,7 +86,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   // Язык интерфейса (кнопка RU/UZ): атрибут lang — для озвучки и переносов, провайдер — для клиентских компонентов.
   const lang = await getLang();
   return (
-    <html lang={lang} className={`${inter.variable} ${manrope.variable}`} data-brand={field ? undefined : "onebase"} suppressHydrationWarning>
+    <html lang={lang} className={`${inter.variable} ${manrope.variable} ${onest.variable}`} data-brand={field ? undefined : "onebase"} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>

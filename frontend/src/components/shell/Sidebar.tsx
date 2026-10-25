@@ -3,15 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ChartNoAxesColumn,
-  Check,
-  CircleQuestionMark,
+  ArrowRight,
+  Building2,
+  CalendarDays,
+  ChartColumn,
   Database,
-  DatabaseZap,
-  Grid3x3,
+  Folder,
   LayoutGrid,
+  LifeBuoy,
+  ListChecks,
   Send,
-  SlidersHorizontal,
+  Settings2,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
@@ -22,21 +24,44 @@ import { canOpen } from "@/lib/navigation";
  * also — разделы, которые открываются из этого пункта и подсвечивают его (продажи — из «Отделов»).
  * soon — раздел ещё не сделан: пункт виден, но не кликается.
  * short — короткая подпись для нижней панели на телефоне.
+ * badge — счётчик или пометка справа («6», «128», «скоро», «new»); badgeTone «new» — акцентная.
  */
-export type NavItem = { href: string; label: string; icon: LucideIcon; also?: string[]; soon?: boolean; short?: string };
+export type NavItem = { href: string; label: string; icon: LucideIcon; also?: string[]; soon?: boolean; short?: string; badge?: string; badgeTone?: "default" | "new" };
 
-export const workspace: NavItem[] = [
-  { href: "/", label: "Обзор", icon: LayoutGrid },
-  { href: "/departments", label: "Отделы", icon: Grid3x3, also: ["/sales"] },
-  { href: "/tasks", label: "Задачи", icon: Check },
-  { href: "/reports", label: "Отчёты", icon: ChartNoAxesColumn, soon: true },
-  { href: "/base", label: "Файлы", icon: Database, also: ["/files"] },
-  { href: "/consultant", label: "AI-консультант", icon: Sparkles, also: ["/ai"], short: "AI" },
-  { href: "/data-manager", label: "AI Data Manager", icon: DatabaseZap, short: "Данные" },
-  { href: "/campaigns", label: "Рассылки", icon: Send },
+export type NavGroup = { title: string; items: NavItem[] };
+
+/** Группы меню (ТЗ dashboard): рабочее пространство, интеллект, коммуникации. Счётчики появятся вместе с данными разделов — выдуманных нет. */
+export const navGroups: NavGroup[] = [
+  {
+    title: "Рабочее пространство",
+    items: [
+      { href: "/", label: "Обзор", icon: LayoutGrid },
+      { href: "/departments", label: "Отделы", icon: Building2, also: ["/sales"] },
+      { href: "/tasks", label: "Задачи", icon: ListChecks },
+      { href: "/reports", label: "Отчёты", icon: ChartColumn, soon: true, badge: "скоро" },
+      { href: "/base", label: "Файлы", icon: Folder, also: ["/files"] },
+    ],
+  },
+  {
+    title: "Интеллект",
+    items: [
+      { href: "/consultant", label: "AI-консультант", icon: Sparkles, also: ["/ai"], short: "AI", badge: "new", badgeTone: "new" },
+      { href: "/data-manager", label: "AI Data Manager", icon: Database, short: "Данные" },
+    ],
+  },
+  {
+    title: "Коммуникации",
+    items: [
+      { href: "/campaigns", label: "Рассылки", icon: Send },
+      // Календаря в OneBase пока нет: пункт виден по макету, но не кликается (без ссылки на несуществующий раздел).
+      { href: "/calendar", label: "Календарь", icon: CalendarDays, soon: true },
+    ],
+  },
 ];
 
-export const settings: NavItem = { href: "/settings", label: "Настройки", icon: SlidersHorizontal };
+export const workspace: NavItem[] = navGroups.flatMap((g) => g.items);
+
+export const settings: NavItem = { href: "/settings", label: "Настройки", icon: Settings2 };
 
 /** Пункты меню, доступные пользователю (права — из /api/auth/me; без прав раздел скрыт, как и «Настройки»). */
 export const visibleWorkspace = (permissions: readonly string[] | null) =>
@@ -47,31 +72,38 @@ export function isActive(pathname: string, item: NavItem) {
   return item.href === "/" ? pathname === "/" : under(item.href) || (item.also ?? []).some(under);
 }
 
-/** Логотип «1Base» — белая надпись с синей единицей, для тёмного сайдбара и шапки на телефоне. Файл — из public/brand (4× для чётких экранов). */
+/** Логотип «1Base»: квадрат с градиентом бренда и белой «1», рядом «Base». В сайдбаре и в шапке на телефоне. */
 export function Logo() {
   const t = useT();
   return (
-    <Link href="/" aria-label={t("OneBase — на главную")} className="flex items-center">
-      <img src="/brand/logo-light.png" alt="OneBase" className="h-7 w-auto" />
+    <Link href="/" aria-label={t("OneBase — на главную")} className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+      <span className="grid size-[30px] place-items-center rounded-lg bg-gradient-to-br from-brand-from to-brand-to text-[17px] font-extrabold leading-none text-white">1</span>
+      <span className="text-[21px] font-bold tracking-[-0.5px] text-sidebar-ink">Base</span>
     </Link>
   );
 }
 
-const linkClass = "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-sidebar-text transition-colors hover:bg-white/5 hover:text-white";
+const itemBase =
+  "flex h-[38px] items-center gap-3 rounded-[9px] px-2.5 text-[13.5px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
-/** Активный пункт — «стеклянная» плашка: белый 10 %, обводка белый 15 %, размытие фона. */
-const activeClass =
-  "flex items-center gap-3 rounded-xl bg-sidebar-active px-3 py-2.5 text-[13px] font-semibold text-white ring-1 ring-inset ring-white/15 backdrop-blur-md";
+function Badge({ text, tone }: { text: string; tone?: "default" | "new" }) {
+  const t = useT();
+  return (
+    <span className={`ml-auto rounded-md px-[7px] py-0.5 text-[10.5px] font-semibold leading-4 ${tone === "new" ? "bg-accent text-white" : "bg-sidebar-hover text-sidebar-text"}`}>
+      {t(text)}
+    </span>
+  );
+}
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const t = useT();
   const Icon = item.icon;
   if (item.soon) {
     return (
-      <span aria-disabled="true" title={t("Раздел в разработке")} className="flex cursor-default items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-sidebar-muted">
-        <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+      <span aria-disabled="true" title={t("Раздел в разработке")} className={`${itemBase} cursor-default font-medium text-sidebar-muted`}>
+        <Icon className="size-[17px] shrink-0" strokeWidth={1.75} />
         {t(item.label)}
-        <span className="ml-auto rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] text-sidebar-muted">{t("скоро")}</span>
+        {item.badge && <Badge text={item.badge} />}
       </span>
     );
   }
@@ -79,47 +111,70 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      className={active ? activeClass : linkClass}
+      className={`${itemBase} ${active ? "bg-sidebar-active font-semibold text-sidebar-ink ring-1 ring-inset ring-accent/25" : "font-medium text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-ink"}`}
     >
-      <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+      <Icon className={`size-[17px] shrink-0 ${active ? "text-accent-strong" : "text-sidebar-text"}`} strokeWidth={1.75} />
       {t(item.label)}
+      {item.badge && <Badge text={item.badge} tone={item.badgeTone} />}
     </Link>
   );
 }
 
 /**
- * Боковая навигация на больших экранах. На телефоне вместо неё — шапка (Topbar) и нижняя панель (MobileNav).
+ * Боковая навигация на больших экранах (248px, ТЗ dashboard): логотип, группы разделов, промо AI-отчёта, внизу — настройки и помощь. На телефоне вместо неё — шапка (Topbar) и нижняя панель (MobileNav).
  * canOpenSettings — есть права раздела «Настройки»; обычным сотрудникам пункт не показывается.
  * permissions — права пользователя: пункты, к которым нет доступа, скрыты (роль «Админ 2» видит только «Файлы» и «AI Data Manager»).
  */
 export function Sidebar({ canOpenSettings, permissions }: { canOpenSettings: boolean; permissions: readonly string[] | null }) {
   const pathname = usePathname();
   const t = useT();
+  const allowed = (item: NavItem) => permissions === null || canOpen(item.href, permissions);
 
   return (
-    <aside className="hidden h-full w-[232px] shrink-0 flex-col overflow-y-auto border-r border-white/[0.07] bg-sidebar px-3 pb-6 lg:flex">
-      {/* Высота — как у верхней панели (72px): логотип и панель — одна строка. */}
-      <div className="flex h-[72px] shrink-0 items-center px-3">
+    <aside className="hidden h-full w-[248px] shrink-0 flex-col gap-7 overflow-y-auto border-r border-line bg-sidebar/80 px-4 py-6 lg:flex">
+      <div className="px-2">
         <Logo />
       </div>
 
-      <div className="mt-5 px-3 text-[10px] font-semibold uppercase tracking-[1px] text-sidebar-muted">
-        {t("Рабочее пространство")}
+      <div className="flex flex-col gap-6">
+        {navGroups.map((group) => {
+          const items = group.items.filter(allowed);
+          if (items.length === 0) return null;
+          return (
+            <nav key={group.title} aria-label={t(group.title)}>
+              <div className="px-2.5 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-sidebar-muted">{t(group.title)}</div>
+              <div className="space-y-0.5">
+                {items.map((item) => (
+                  <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
+                ))}
+              </div>
+            </nav>
+          );
+        })}
       </div>
-      <nav className="mt-3 space-y-1">
-        {visibleWorkspace(permissions).map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
-        ))}
-      </nav>
 
-      {/* Внизу — настройки (по правам) и помощь, как в макете. */}
-      <nav className="mt-auto space-y-1">
-        {canOpenSettings && <NavLink item={settings} active={isActive(pathname, settings)} />}
-        <a href="#" className={`${linkClass} whitespace-nowrap`}>
-          <CircleQuestionMark className="size-4 shrink-0" strokeWidth={1.75} />
-          {t("Помощь и поддержка")}
-        </a>
-      </nav>
+      <div className="mt-auto flex flex-col gap-5">
+        {/* Промо еженедельного AI-отчёта: ведёт в обзор находок консультанта. */}
+        <Link
+          href="/ai"
+          className="flex flex-col gap-2.5 rounded-xl border border-accent/20 bg-gradient-to-b from-ai-promo/40 to-transparent p-4 transition-colors duration-150 hover:border-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <Sparkles className="size-[18px] text-accent-strong" strokeWidth={1.75} />
+          <span className="text-[13px] font-semibold leading-snug text-sidebar-ink">{t("Еженедельный AI-отчёт готов")}</span>
+          <span className="text-xs leading-[1.45] text-sidebar-text">{t("3 риска и 5 рекомендаций по отделам за неделю.")}</span>
+          <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent-strong">
+            {t("Открыть отчёт")} <ArrowRight className="size-3.5" />
+          </span>
+        </Link>
+
+        <nav className="space-y-0.5" aria-label={t("Настройки")}>
+          {canOpenSettings && <NavLink item={settings} active={isActive(pathname, settings)} />}
+          <a href="#" className={`${itemBase} h-9 whitespace-nowrap font-medium text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-ink`}>
+            <LifeBuoy className="size-[17px] shrink-0 text-sidebar-text" strokeWidth={1.75} />
+            {t("Помощь и поддержка")}
+          </a>
+        </nav>
+      </div>
     </aside>
   );
 }

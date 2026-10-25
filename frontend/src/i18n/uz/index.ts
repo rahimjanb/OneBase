@@ -2,6 +2,7 @@ import type { Dict } from "../core";
 import ai from "./ai";
 import campaigns from "./campaigns";
 import common from "./common";
+import dashboard from "./dashboard";
 import dataManager from "./dataManager";
 import field from "./field";
 import fieldControl from "./fieldControl";
@@ -32,6 +33,7 @@ export const uz: Dict = {
   ...lib,
   ...common,
   ...home,
+  ...dashboard,
   ...tasks,
   ...files,
   ...ai,
