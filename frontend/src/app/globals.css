@@ -507,6 +507,19 @@ html:has([data-app-shell]) body {
   overscroll-behavior-y: none;
 }
 
+/*
+ * iPhone, приложение на экране «Домой» (iOS 26, WebKit 301108): со строкой состояния black-translucent и viewport-fit=cover окно приложения
+ * короче экрана на высоту строки состояния, пока документ ниже экрана. Оболочка (fixed, inset 0) кончается на этом крае, WebKit ниже
+ * не рисует — под нижней панелью оставалась пустая полоса. Документ выше окна на высоту строки состояния — iOS отдаёт весь экран, и панель
+ * доходит до низа. min(100lvh, …) — чтобы при непрозрачной строке состояния (там 100lvh = экран) страница не стала выше окна;
+ * там, где ошибки нет (iOS 26.1+, Android, браузер), окно и так во весь экран — правило ничего не меняет.
+ */
+@media (display-mode: standalone) {
+  html:has([data-app-shell]) {
+    min-height: min(100lvh, calc(100% + env(safe-area-inset-top)));
+  }
+}
+
 [data-app-scroll] {
   overflow-x: hidden;
   overflow-y: auto;
