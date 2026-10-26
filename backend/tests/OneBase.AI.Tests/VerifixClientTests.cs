@@ -99,17 +99,45 @@ public class VerifixClientTests
     }
 
     [Fact]
-    public async Task Expired_token_is_renewed_once_then_auth_error_is_reported()
+    public async Task Expired_token_is_renewed_once_then_access_denial_is_reported_with_the_reason()
     {
         _fake.Employees.Add(FakeVerifix.Employee(1, "Имя", "Фамилия", 901));
         _fake.RejectApiTokens = 1;
         Assert.Single(await ReadEmployeesAsync(Connection()));
         Assert.Equal(2, _fake.TokenRequests);
 
+        // Новый токен выдан, а метод всё равно 401 — ключи верны, нет доступа: не «проверьте client_secret», а причина от Verifix.
         _fake.RejectApiTokens = 10;
         var ex = await Assert.ThrowsAsync<VerifixApiException>(() => ReadEmployeesAsync(Connection()));
-        Assert.Equal(VerifixErrorKind.Auth, ex.Kind);
+        Assert.Equal(VerifixErrorKind.Forbidden, ex.Kind);
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, ex.Status);
+        Assert.Equal("token expired", ex.Reason);
         Assert.False(ex.Transient);
+    }
+
+    [Fact]
+    public async Task Client_not_attached_to_an_organization_gets_the_verifix_reason_and_a_hint()
+    {
+        const string reason = "Пользователь не прикреплен ни к одному филиалу или проекту";
+        _fake.SeedReferences();
+        foreach (var method in new[] { "core/filial$info", "core/employee$list", "core/division$list", "core/track$list", "core/timesheet$export" })
+        {
+            _fake.Denied[method] = reason;
+        }
+
+        var ex = await Assert.ThrowsAsync<VerifixApiException>(() => ReadEmployeesAsync(Connection()));
+        Assert.Equal(VerifixErrorKind.Forbidden, ex.Kind);
+        Assert.Equal(reason, ex.Reason);
+        var human = VerifixClient.Human(ex);
+        Assert.Contains("Токен выдан", human);
+        Assert.Contains(reason, human);
+        Assert.Contains("Привяжите клиента OAuth2 к организации", human);
+        Assert.DoesNotContain("client_secret", human);
+
+        var test = await _client.TestAsync(Connection(), new DateOnly(2026, 10, 21), CancellationToken.None);
+        Assert.False(test.Ok);
+        Assert.Contains(test.Checks, c => c.Method == "Сотрудники" && !c.Ok && c.Message.Contains(reason));
+        Assert.Contains("Токен получен", test.Message);
     }
 
     [Fact]

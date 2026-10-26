@@ -53,10 +53,13 @@ public enum VerifixErrorKind
     Format,
 }
 
-public sealed class VerifixApiException(string message, VerifixErrorKind kind, HttpStatusCode? status = null) : Exception(message)
+public sealed class VerifixApiException(string message, VerifixErrorKind kind, HttpStatusCode? status = null, string? reason = null) : Exception(message)
 {
     public VerifixErrorKind Kind { get; } = kind;
     public HttpStatusCode? Status { get; } = status;
+
+    /// <summary>Причина из ответа Verifix (текст ошибки, обрезан и без секретов), например «Пользователь не прикреплен ни к одному филиалу или проекту».</summary>
+    public string? Reason { get; } = reason;
 
     /// <summary>Временная ошибка — повтор синхронизации может пройти.</summary>
     public bool Transient => Kind is VerifixErrorKind.RateLimited or VerifixErrorKind.Server or VerifixErrorKind.Network;
@@ -149,7 +152,7 @@ public sealed class VerifixClient(HttpClient http, VerifixOptions options, Verif
         }
         catch (VerifixApiException ex)
         {
-            return new VerifixTestResult(false, ex.Kind == VerifixErrorKind.Auth ? "Verifix не принял client_id или client_secret." : Human(ex), null, [], watch.ElapsedMilliseconds);
+            return new VerifixTestResult(false, Human(ex), null, [], watch.ElapsedMilliseconds);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -202,12 +205,35 @@ public sealed class VerifixClient(HttpClient http, VerifixOptions options, Verif
         static string Rows<TItem>(VerifixPage<TItem> page) => (page.Data?.Count ?? 0) > 0 ? "доступно, данные есть" : "доступно, за сегодня данных нет";
     }
 
-    /// <summary>Текст ошибки для человека: без адресов, токенов и тела ответа.</summary>
-    public static string Human(VerifixApiException ex) => ex.Kind switch
+    /// <summary>
+    /// Текст ошибки для человека: без адресов и токенов; причина из ответа Verifix — в кавычках, если она есть. 401 при выданном токене —
+    /// не неверные ключи, а нет доступа: так Verifix отвечает, когда клиент OAuth2 не привязан к организации.
+    /// </summary>
+    public static string Human(VerifixApiException ex)
+    {
+        var text = HumanKind(ex);
+        if (string.IsNullOrWhiteSpace(ex.Reason))
+        {
+            return text;
+        }
+
+        text += $" Verifix: «{ex.Reason}».";
+        if (ex.Reason.Contains("филиал", StringComparison.OrdinalIgnoreCase) || ex.Reason.Contains("проект", StringComparison.OrdinalIgnoreCase))
+        {
+            text += " Привяжите клиента OAuth2 к организации, из которой загружаются данные (Администрирование → Настройки → Внешние системы → "
+                    + "«Клиенты OAuth2 для сервера для компании»), и назначьте его роль в этой организации.";
+        }
+
+        return text;
+    }
+
+    private static string HumanKind(VerifixApiException ex) => ex.Kind switch
     {
         VerifixErrorKind.NotConfigured => ex.Message,
-        VerifixErrorKind.Auth => "Verifix не принял токен (HTTP 401) — проверьте client_id и client_secret.",
-        VerifixErrorKind.Forbidden => "Нет доступа (HTTP 403): роли клиента OAuth2 в Verifix не прикреплена эта форма «Внешние системы».",
+        VerifixErrorKind.Auth => "Verifix не принял client_id или client_secret.",
+        VerifixErrorKind.Forbidden => ex.Status == HttpStatusCode.Unauthorized
+            ? "Токен выдан, но Verifix не дал доступ к этому методу (HTTP 401)."
+            : "Нет доступа (HTTP 403): роли клиента OAuth2 в Verifix не прикреплена эта форма «Внешние системы».",
         VerifixErrorKind.NotFound => "Метод не найден (HTTP 404) — проверьте адрес API или тариф Verifix.",
         VerifixErrorKind.BadRequest => $"Verifix отклонил запрос (HTTP {(int?)ex.Status ?? 400}).",
         VerifixErrorKind.RateLimited => "Verifix ограничил частоту запросов (HTTP 429).",
@@ -215,6 +241,54 @@ public sealed class VerifixClient(HttpClient http, VerifixOptions options, Verif
         VerifixErrorKind.Network => "Verifix недоступен (сеть или таймаут).",
         _ => "Verifix ответил не в формате API.",
     };
+
+    /// <summary>Текст ошибки из ответа: поле error / message / error_description JSON или сам текст; без HTML, до 200 символов, без секретов.</summary>
+    private static async Task<string?> ReasonAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        string text;
+        try
+        {
+            text = await response.Content.ReadAsStringAsync(ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        text = text.Length > 2000 ? text[..2000] : text;
+        try
+        {
+            using var json = JsonDocument.Parse(text);
+            if (json.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var name in new[] { "error_description", "message", "error" })
+                {
+                    if (json.RootElement.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)
+                    {
+                        text = value.GetString() ?? string.Empty;
+                        break;
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        text = System.Text.RegularExpressions.Regex.Replace(text, "<[^>]*>", " ");
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+        if (text.Length == 0)
+        {
+            return null;
+        }
+
+        return VerifixLog.Safe(text.Length > 200 ? text[..200] + "…" : text);
+    }
 
     private async Task<T> SendAsync<T>(VerifixConnection connection, string method, object body, long? cursor, int? limit, CancellationToken ct, int? maxAttempts = null)
     {
@@ -272,13 +346,17 @@ public sealed class VerifixClient(HttpClient http, VerifixOptions options, Verif
                         continue;
                     }
 
-                    throw new VerifixApiException($"Verifix {method}: токен не принят (HTTP 401)", VerifixErrorKind.Auth, status);
+                    // Новый токен выдан (ключи верны), а метод всё равно 401 — это отказ в доступе (например, клиент не привязан к организации),
+                    // не неверные ключи: остальные методы синхронизации пробуются дальше.
+                    var denied = await ReasonAsync(response, ct);
+                    throw new VerifixApiException($"Verifix {method}: нет доступа (HTTP 401){(denied is null ? "" : $" — {denied}")}", VerifixErrorKind.Forbidden, status, denied);
                 }
 
                 var kind = Kind(status);
                 if (kind is not (VerifixErrorKind.RateLimited or VerifixErrorKind.Server) || attempt >= attempts)
                 {
-                    throw new VerifixApiException($"Verifix {method}: HTTP {(int)status}", kind, status);
+                    var reason = await ReasonAsync(response, ct);
+                    throw new VerifixApiException($"Verifix {method}: HTTP {(int)status}{(reason is null ? "" : $" — {reason}")}", kind, status, reason);
                 }
 
                 retryAfter = RetryAfter(response);
@@ -361,7 +439,9 @@ public sealed class VerifixClient(HttpClient http, VerifixOptions options, Verif
                     var kind = status is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden ? VerifixErrorKind.Auth : Kind(status);
                     if (kind is not (VerifixErrorKind.RateLimited or VerifixErrorKind.Server) || attempt >= maxAttempts)
                     {
-                        throw new VerifixApiException($"Verifix: токен не выдан (HTTP {(int)status})", kind, status);
+                        // Причина отказа в токене (например, invalid_client) — без самих ключей.
+                        var reason = await ReasonAsync(response, ct);
+                        throw new VerifixApiException($"Verifix: токен не выдан (HTTP {(int)status})", kind, status, reason);
                     }
 
                     logger.LogWarning("Verifix: токен не выдан (HTTP {Status}), попытка {Attempt} из {Max}", (int)status, attempt, maxAttempts);

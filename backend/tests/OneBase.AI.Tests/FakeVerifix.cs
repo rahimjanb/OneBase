@@ -41,6 +41,10 @@ public sealed class FakeVerifix : HttpMessageHandler
     /// <summary>Сколько первых запросов API отклонить с 401 (истёкший токен).</summary>
     public int RejectApiTokens;
 
+    /// <summary>Методы без доступа: всегда 401 с текстом причины обычной строкой — так отвечает настоящий Verifix, когда клиент OAuth2 не
+    /// привязан к организации («Пользователь не прикреплен ни к одному филиалу или проекту»).</summary>
+    public Dictionary<string, string> Denied { get; } = [];
+
     /// <summary>Последняя страница возвращает не -1, а позицию для следующей выгрузки (как в примерах документации); следующий запрос — пустой.</summary>
     public bool TrailingCursor;
 
@@ -64,6 +68,7 @@ public sealed class FakeVerifix : HttpMessageHandler
         Timesheet.Clear();
         Failures.Clear();
         Garbage.Clear();
+        Denied.Clear();
         Calls.Clear();
         RejectApiTokens = 0;
         TrailingCursor = false;
@@ -173,6 +178,11 @@ public sealed class FakeVerifix : HttpMessageHandler
         }
 
         var method = path.Replace("b/vhr/api/v1/", "", StringComparison.Ordinal);
+        if (Denied.TryGetValue(method, out var reason))
+        {
+            return new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new StringContent(reason, Encoding.UTF8, "text/plain") };
+        }
+
         if (Failures.TryGetValue(method, out var failures) && failures.TryDequeue(out var code))
         {
             var failure = Json(code, new JsonObject { ["error"] = "fail" });

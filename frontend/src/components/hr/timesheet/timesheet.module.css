@@ -1,0 +1,123 @@
+/*
+ * Токены страницы «Рабочее время и табели» (редизайн): только для этой страницы — остальное приложение их не видит.
+ * Светлая тема — по умолчанию; тёмная — когда тёмная тема у OneBase (по умолчанию у бренда OneBase или явный выбор data-theme="dark").
+ * Компоненты берут цвета только отсюда: bg-(--ts-surface), text-(--ts-muted) и т. п.
+ */
+.root {
+  --ts-bg: #f5f6f8;
+  --ts-surface: #ffffff;
+  --ts-surface-2: #f1f3f6;
+  --ts-weekend: #f7f8fa;
+  --ts-border: #e7e9ee;
+  --ts-border-strong: #d6dae2;
+  --ts-text: #0e1322;
+  --ts-text-2: #3a4255;
+  --ts-muted: #5d667a;
+  --ts-subtle: #8f97a8;
+  --ts-accent: #2f6bff;
+  --ts-accent-soft: #2f6bff14;
+  --ts-success: #0f9f4f;
+  --ts-success-soft: #12a15016;
+  --ts-warning: #c26a00;
+  --ts-warning-soft: #f59e0b1c;
+  --ts-danger: #dc3545;
+  --ts-danger-soft: #e5484d14;
+  --ts-violet: #7c3aed;
+  --ts-violet-soft: #7c3aed12;
+  /* Строка под курсором: surface-2 с прозрачностью 50 % поверх surface — непрозрачная, чтобы закреплённые колонки не просвечивали. */
+  --ts-row-hover: color-mix(in srgb, var(--ts-surface-2) 50%, var(--ts-surface));
+  --ts-weekend-hover: color-mix(in srgb, var(--ts-surface-2) 50%, var(--ts-weekend));
+  /* Всплывающая карточка дня — тёмная в обеих темах. */
+  --ts-pop-bg: #0e1322;
+  --ts-pop-border: transparent;
+  --ts-pop-shadow: 0 12px 32px #0e132240;
+  --ts-sticky-shadow: #0e13221f;
+  --ts-seg-shadow: 0 1px 2px #0e13221a;
+  --ts-on-accent: #ffffff;
+  /* Карточка дня: текст и статусы на тёмном фоне. */
+  --ts-pop-text: #ffffff;
+  --ts-pop-muted: #ffffff99;
+  --ts-pop-divider: #ffffff1f;
+  --ts-pop-link: #8db0ff;
+  --ts-pop-success: #4ade80;
+  --ts-pop-success-bg: #12a15033;
+  --ts-pop-warning: #fbbf24;
+  --ts-pop-warning-bg: #f59e0b33;
+  --ts-pop-violet: #c4b5fd;
+  --ts-pop-violet-bg: #7c3aed40;
+  --ts-pop-danger: #fda4af;
+  --ts-pop-danger-bg: #e5484d33;
+  --ts-pop-accent: #8db0ff;
+  --ts-pop-accent-bg: #2f6bff40;
+  --ts-pop-neutral-bg: #ffffff1f;
+
+  font-family: var(--font-onest), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+  background: var(--ts-bg);
+  color: var(--ts-text);
+}
+
+:global(:root[data-theme="dark"]) .root,
+:global(:root[data-brand="onebase"]:not([data-theme="light"])) .root {
+  --ts-bg: #060a14;
+  --ts-surface: #0c1221;
+  --ts-surface-2: #121a2d;
+  --ts-weekend: #0a0f1c;
+  --ts-border: #1a2338;
+  --ts-border-strong: #26314d;
+  --ts-text: #eef1f7;
+  --ts-text-2: #c9cfdc;
+  --ts-muted: #8d97ae;
+  --ts-subtle: #5c6680;
+  --ts-accent: #3d7bff;
+  --ts-accent-soft: #3d7bff1f;
+  --ts-success: #2bd47d;
+  --ts-success-soft: #2bd47d1c;
+  --ts-warning: #f6a93b;
+  --ts-warning-soft: #f6a93b1f;
+  --ts-danger: #ff5a6a;
+  --ts-danger-soft: #ff5a6a1c;
+  --ts-violet: #a78bfa;
+  --ts-violet-soft: #a78bfa1f;
+  --ts-pop-bg: #18213a;
+  --ts-pop-border: #26314d;
+  --ts-pop-shadow: 0 12px 32px #00000080;
+  --ts-sticky-shadow: #00000066;
+  --ts-seg-shadow: 0 1px 2px #00000066;
+}
+
+/* Скроллбар горизонтальной прокрутки таблицы — тонкий, в цвет границ. */
+.scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ts-border-strong) transparent;
+}
+
+.noScrollbar {
+  scrollbar-width: none;
+}
+
+.noScrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Плашка skeleton — мягкое мерцание. */
+.skeleton {
+  background: linear-gradient(90deg, var(--ts-surface-2) 0%, color-mix(in srgb, var(--ts-surface-2) 55%, var(--ts-surface)) 50%, var(--ts-surface-2) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

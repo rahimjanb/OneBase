@@ -407,6 +407,29 @@ public class HrSyncDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
     }
 
     [PostgresFact]
+    public async Task Access_denied_methods_do_not_stop_the_rest_of_the_sync()
+    {
+        await SeedAsync();
+        const string reason = "Пользователь не прикреплен ни к одному филиалу или проекту";
+        Verifix.Denied["core/employee$list"] = reason;
+        Verifix.Denied["core/track$list"] = reason;
+
+        var run = await SyncAsync();
+
+        // Справочники, табель загружены; сотрудники и отметки — ошибка шага с причиной от Verifix, не «неверные ключи».
+        Assert.Equal(HrSyncStatus.Partial, run.Status);
+        Assert.Contains(reason, run.Message);
+        Assert.DoesNotContain("client_secret", run.Message);
+        var steps = System.Text.Json.JsonDocument.Parse(run.StepsJson).RootElement.EnumerateArray()
+            .ToDictionary(s => s.GetProperty("step").GetString()!, s => s.GetProperty("status").GetString());
+        Assert.Equal("failed", steps["employees"]);
+        Assert.Equal("failed", steps["tracks"]);
+        Assert.Equal("ok", steps["location"]);
+        Assert.Equal("ok", steps["timesheet"]);
+        Assert.Equal(3, await WithAsync(sp => sp.GetRequiredService<OneBaseDbContext>().HrReferences.CountAsync(r => r.Kind == HrReferenceKinds.Division)));
+    }
+
+    [PostgresFact]
     public async Task Disabled_integration_does_not_start_and_secret_is_stored_encrypted()
     {
         await SeedAsync(enabled: false);
