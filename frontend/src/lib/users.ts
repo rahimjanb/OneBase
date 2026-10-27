@@ -28,6 +28,10 @@ export type UserRow = {
   createdAt: string;
   roleId: string | null;
   roleName: string | null;
+  /** Открытые разделы (коды каталога) — по роли или отмеченные вручную. */
+  sections: string[];
+  /** Разделы отмечены вручную (иначе — как у роли). */
+  sectionsCustom: boolean;
   isMe: boolean;
   /** false — у пользователя роль с правами, которых нет у вас: изменить может только администратор. */
   canEdit: boolean;
@@ -43,9 +47,20 @@ export type RoleRow = {
   /** Можно назначить: у вас есть все права роли. */
   assignable: boolean;
   opensSettings: boolean;
+  /** Разделы по умолчанию для этой роли. */
+  sections: string[];
 };
 
-export type UsersView = { users: UserRow[]; roles: RoleRow[] };
+/** Раздел OneBase, который выбирается пользователю галочкой; grantable — у вас есть его права, выдать можно. */
+export type UserSection = { key: string; title: string; description: string; grantable: boolean };
+
+export type UsersView = { users: UserRow[]; roles: RoleRow[]; sections: UserSection[] };
+
+/** Права разделов — их показываем галочками, а не в списке «роль также даёт». */
+export const sectionPermissions = new Set([
+  "sales.read", "sales.manage", "finance.read", "hr.read", "work.tasks", "files.read", "files.write", "files.read.all", "files.manage",
+  "ai.agents.run", "field.plan", "field.use", "field.manage", "ai.data.manage", "telegram.campaigns",
+]);
 
 export const has = (me: Me | null, permission: string) => !!me?.permissions.includes(permission);
 

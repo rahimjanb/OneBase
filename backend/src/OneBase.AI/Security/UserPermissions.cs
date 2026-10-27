@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
+using OneBase.Application.Security;
 
 namespace OneBase.AI.Security;
 
 /// <summary>
 /// Права пользователя, от имени которого работает AI. AI видит только то, что видит сам пользователь:
-/// инструмент или AI-сотрудник с правом, которого у пользователя нет, данных не получает.
+/// инструмент или AI-сотрудник с правом, которого у пользователя нет, данных не получает. Права — роли с учётом отмеченных пользователю
+/// разделов (UserSections): раздел снят — AI-сотрудник и инструменты этого раздела ему не отвечают.
 /// </summary>
 public interface IUserPermissions
 {
@@ -24,13 +26,7 @@ internal sealed class UserPermissions(IAppDbContext db) : IUserPermissions
             return cached;
         }
 
-        var codes = await db.Users.AsNoTracking()
-            .Where(u => u.Id == userId && u.IsActive)
-            .SelectMany(u => u.Roles.SelectMany(r => r.Role.Permissions.Select(p => p.Code)))
-            .Distinct()
-            .ToListAsync(ct);
-
-        var set = codes.ToHashSet(StringComparer.Ordinal);
+        IReadOnlySet<string> set = await db.EffectivePermissionsAsync(userId, ct) ?? new HashSet<string>(StringComparer.Ordinal);
         _cache[userId] = set;
         return set;
     }

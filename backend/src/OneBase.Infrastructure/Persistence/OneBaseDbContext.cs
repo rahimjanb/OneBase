@@ -262,6 +262,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.Property(x => x.FullName).HasMaxLength(200);
             e.Property(x => x.Phone).HasMaxLength(32);
             e.Property(x => x.Position).HasMaxLength(150);
+            e.Property(x => x.Sections).HasColumnType("text[]");
             e.HasIndex(x => x.Login).IsUnique();
             e.HasIndex(x => x.Email).IsUnique();
             e.HasOne(x => x.Department).WithMany(x => x.Users).HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.SetNull);

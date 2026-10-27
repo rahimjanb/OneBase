@@ -118,7 +118,8 @@ public sealed partial class FieldController(
         if (member.UserId is { } existingId && await db.Users.FirstOrDefaultAsync(u => u.Id == existingId, ct) is { } existing)
         {
             var mine = MyPermissions();
-            var currentPermissions = await db.Roles.Where(r => r.Users.Any(u => u.UserId == existing.Id)).SelectMany(r => r.Permissions.Select(p => p.Code)).ToListAsync(ct);
+            // Итоговые права: роль и отмеченные разделы (UserSections) — и у отключённого.
+            var currentPermissions = await OneBase.Application.Security.UserSections.EffectivePermissionsAsync(db, existing.Id, ct, includeInactive: true) ?? [];
             if (!currentPermissions.All(mine.Contains))
             {
                 throw new FieldForbiddenException("У этого пользователя права, которых у вас нет, — пароль меняет администратор.");

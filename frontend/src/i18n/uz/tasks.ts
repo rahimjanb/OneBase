@@ -319,6 +319,8 @@ const dict: Dict = {
   "Исполнитель — действующий сотрудник этого отдела.": "Ijrochi — shu bo'limning amaldagi xodimi.",
   "Исполнитель — действующий сотрудник отдела или участник проекта.": "Ijrochi — bo'limning amaldagi xodimi yoki loyiha ishtirokchisi.",
   "Исполнитель — действующий пользователь OneBase.": "Ijrochi — OneBase'ning faol foydalanuvchisi.",
+  "Исполнителю не открыт раздел «Задачи» — он не увидит задачу. Раздел отмечается в «Настройки → Пользователи и роли».":
+    "Ijrochiga «Vazifalar» bo'limi ochilmagan — u vazifani ko'rmaydi. Bo'lim «Sozlamalar → Foydalanuvchilar va rollar»da belgilanadi.",
   // Выбор исполнителя: любой пользователь OneBase
   "Убрать исполнителя": "Ijrochini olib tashlash",
   "Имя, должность или отдел": "Ism, lavozim yoki bo'lim",

@@ -111,7 +111,7 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
             return null;
         }
 
-        var permissions = user.Roles.SelectMany(r => r.Role.Permissions).Select(p => p.Code).ToHashSet();
+        var permissions = OneBase.Application.Security.UserSections.Effective(user.Roles.SelectMany(r => r.Role.Permissions).Select(p => p.Code), user.Sections);
         var own = user.Roles.Select(r => r.Role.DepartmentId).Append(user.DepartmentId).OfType<Guid>().ToHashSet();
         var userKey = user.Id.ToString();
         var roleKeys = user.Roles.Select(r => r.RoleId.ToString()).ToList();

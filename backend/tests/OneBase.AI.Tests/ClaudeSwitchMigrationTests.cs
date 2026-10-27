@@ -49,8 +49,12 @@ public class ClaudeSwitchMigrationTests
                     INSERT INTO ai."Models" ("Id", "ProviderCode", "ModelId", "Available", "Enabled", "InputPricePerMillion", "OutputPricePerMillion", "CreatedAt")
                     VALUES ({0}, 'anthropic', 'claude-opus-5-5', TRUE, FALSE, 5, 25, {1})
                     """, Guid.CreateVersion7(), DateTimeOffset.UtcNow);
+                // Пользователь — тоже SQL: у сущности User уже есть колонка Sections (разделы), которой в базе на этом шаге нет.
                 var user = new User { Login = "claude-switch", FullName = "Администратор" };
-                db.Users.Add(user);
+                await db.Database.ExecuteSqlRawAsync("""
+                    INSERT INTO "Users" ("Id", "Login", "FirstName", "LastName", "FullName", "PasswordHash", "IsActive", "CreatedAt")
+                    VALUES ({0}, {1}, '', '', {2}, '', TRUE, {3})
+                    """, user.Id, user.Login, user.FullName, DateTimeOffset.UtcNow);
                 var account = new TelegramAccount { Name = "Отдел продаж", CreatedById = user.Id };
                 db.TelegramAccounts.Add(account);
                 db.TelegramAgentSettings.Add(new TelegramAgentSettings

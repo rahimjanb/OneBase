@@ -72,6 +72,26 @@ const dict: Dict = {
     "«{role}» roli sizda yo'q huquqlarni beradi — uni faqat administrator tayinlay oladi.",
   "Логин «{login}» уже занят.": "«{login}» logini allaqachon band.",
   "Эта почта уже указана у другого пользователя.": "Bu pochta boshqa foydalanuvchida ko'rsatilgan.",
+  "Свои разделы изменить нельзя — попросите другого администратора.": "O'z bo'limlaringizni o'zgartirib bo'lmaydi — boshqa administratordan so'rang.",
+  "Неизвестный раздел: {keys}.": "Noma'lum bo'lim: {keys}.",
+  "Раздел «{title}» выдать нельзя: у вас самих нет к нему доступа.": "«{title}» bo'limini berib bo'lmaydi: sizning o'zingizda unga kirish yo'q.",
+
+  // ---------- Разделы пользователя (UserSections) ----------
+  "Вторичка, первичка, планы, АКБ, остатки, акции, KPI; AI отвечает по продажам, ассортименту и клиентам.":
+    "Ikkilamchi va birlamchi savdo, rejalar, AKB, qoldiqlar, aksiyalar, KPI; AI savdo, assortiment va mijozlar bo'yicha javob beradi.",
+  "Оплаты, P&L дилеров, акт сверки, DSO, суммы KPI; AI-сотрудник финансов.":
+    "To'lovlar, dilerlar P&L, solishtirma dalolatnoma, DSO, KPI summalari; moliya AI-xodimi.",
+  "Сотрудники, посещаемость, опоздания и табели Verifix; HR AI по всем сотрудникам.":
+    "Verifix xodimlari, davomat, kechikishlar va tabellar; barcha xodimlar bo'yicha HR AI.",
+  "Задачи своего отдела и проектов; AI отвечает по задачам и просрочкам.":
+    "O'z bo'limi va loyihalar vazifalari; AI vazifalar va muddati o'tganlar bo'yicha javob beradi.",
+  "Файлы своего отдела — просмотр и загрузка; документы базы знаний в ответах AI.":
+    "O'z bo'limi fayllari — ko'rish va yuklash; AI javoblarida bilimlar bazasi hujjatlari.",
+  "Чат с консультантом и AI-сотрудниками отделов, Telegram-агент от имени пользователя.":
+    "Maslahatchi va bo'limlar AI-xodimlari bilan chat, foydalanuvchi nomidan Telegram-agent.",
+  "Полевая команда: задачи агентам и супервайзерам, маршруты, визиты.": "Dala jamoasi: agentlar va supervayzerlarga vazifalar, marshrutlar, tashriflar.",
+  "Загрузка отчётов и изменение планов, целей и дилеров с подтверждением.": "Hisobotlarni yuklash va rejalar, maqsadlar va dilerlarni tasdiqlash bilan o'zgartirish.",
+  "Рассылки в Telegram: создание, запуск и отмена.": "Telegram tarqatmalari: yaratish, ishga tushirish va bekor qilish.",
 
   // ---------- Интеграции: Linko ----------
   "Заказы, возвраты, визиты, торговые точки и торговые представители — источник данных раздела «Продажи».":

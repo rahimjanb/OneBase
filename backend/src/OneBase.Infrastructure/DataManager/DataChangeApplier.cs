@@ -213,9 +213,7 @@ internal sealed class DataChangeApplier(
 
     private async Task RequireAsync(Guid userId, CancellationToken ct)
     {
-        var allowed = await db.Users.AsNoTracking()
-            .Where(u => u.Id == userId && u.IsActive)
-            .AnyAsync(u => u.Roles.Any(r => r.Role.Permissions.Any(p => p.Code == Permissions.DataManage)), ct);
+        var allowed = (await db.EffectivePermissionsAsync(userId, ct))?.Contains(Permissions.DataManage) == true;
         if (!allowed)
         {
             throw new DataManagerException("Недостаточно прав: нужно право «AI Data Manager».");

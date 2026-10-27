@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using OneBase.Application.Security;
 using OneBase.Infrastructure.Persistence;
 
 namespace OneBase.Api.Auth;
@@ -7,7 +8,7 @@ namespace OneBase.Api.Auth;
 public sealed record UserAccess(IReadOnlyList<string> Roles, IReadOnlyList<string> Permissions);
 
 /// <summary>
-/// Актуальные роли и права пользователя из БД (кэш на минуту).
+/// Актуальные роли и права пользователя из БД (кэш на минуту): права ролей с учётом разделов пользователя (UserSections).
 /// Права в JWT могут устареть — новые права и смена ролей действуют без повторного входа.
 /// </summary>
 public sealed class UserAccessCache(IServiceScopeFactory scopes, IMemoryCache cache)
@@ -31,14 +32,14 @@ public sealed class UserAccessCache(IServiceScopeFactory scopes, IMemoryCache ca
         UserAccess? access = user is { IsActive: true }
             ? new UserAccess(
                 user.Roles.Select(r => r.Role.Name).Distinct().ToList(),
-                user.Roles.SelectMany(r => r.Role.Permissions).Select(p => p.Code).Distinct().ToList())
+                UserSections.Effective(user.Roles.SelectMany(r => r.Role.Permissions).Select(p => p.Code), user.Sections).ToList())
             : null;
 
         cache.Set(Key(userId), access, Ttl);
         return access;
     }
 
-    /// <summary>Роли или активность пользователя изменились — права перечитываются сразу, а не через минуту.</summary>
+    /// <summary>Роли, разделы или активность пользователя изменились — права перечитываются сразу, а не через минуту.</summary>
     public void Invalidate(Guid userId) => cache.Remove(Key(userId));
 
     private static string Key(Guid userId) => $"user-access:{userId}";

@@ -88,11 +88,11 @@ public class WorkFieldToolsTests
     }
 
     [Fact]
-    public void Department_tasks_are_guarded_by_the_service_and_field_tools_by_field_rights()
+    public void Department_tasks_need_the_tasks_section_and_field_tools_field_rights()
     {
         var departments = DepartmentTasks();
         Assert.Equal(KnowledgeSources.WorkTasks, departments.Source);
-        Assert.Null(departments.RequiredPermission);
+        Assert.Equal(Permissions.WorkTasks, departments.RequiredPermission); // раздел «Задачи»; отделы внутри проверяет сервис
         foreach (var tool in new DataTool[] { FieldTasks(), FieldRoutes(), FieldRecommendations() })
         {
             Assert.Equal(KnowledgeSources.FieldSales, tool.Source);

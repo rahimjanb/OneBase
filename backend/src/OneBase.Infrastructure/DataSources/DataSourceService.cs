@@ -158,10 +158,7 @@ public sealed class DataSourceService(
             return;
         }
 
-        var recipients = await db.Users.AsNoTracking()
-            .Where(u => u.IsActive && u.Roles.Any(r => r.Role.Permissions.Any(p => p.Code == Permissions.DataManage)))
-            .Select(u => u.Id)
-            .ToListAsync(ct);
+        var recipients = await db.ActiveUsersWithAsync(Permissions.DataManage, ct);
         var previous = MonthTitle(local.AddMonths(-1).Month).ToLowerInvariant();
         foreach (var plan in missing)
         {
@@ -956,9 +953,8 @@ public sealed class DataSourceService(
         }
     }
 
-    private Task<bool> CanApplyAsync(Guid userId, CancellationToken ct) =>
-        db.Users.AsNoTracking().Where(u => u.Id == userId && u.IsActive)
-            .AnyAsync(u => u.Roles.Any(r => r.Role.Permissions.Any(p => p.Code == Permissions.DataManage)), ct);
+    private async Task<bool> CanApplyAsync(Guid userId, CancellationToken ct) =>
+        (await db.EffectivePermissionsAsync(userId, ct))?.Contains(Permissions.DataManage) == true;
 
     private static string Clip(string text) => text.Length <= MaxMessage ? text : text[..MaxMessage] + "…";
 }

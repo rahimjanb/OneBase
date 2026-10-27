@@ -48,8 +48,12 @@ public class TelegramReportsMigrationTests
             {
                 await db.GetService<IMigrator>().MigrateAsync(Before);
                 // Пользователь, аккаунт и чат — таблицы, которые миграция не меняет.
+                // Пользователь — SQL по схеме той миграции: у сущности User уже есть колонка Sections (разделы), которой в базе на этом шаге нет.
                 var user = new User { Login = "tg-reports-migration", FullName = "Администратор" };
-                db.Users.Add(user);
+                await db.Database.ExecuteSqlRawAsync("""
+                    INSERT INTO "Users" ("Id", "Login", "FirstName", "LastName", "FullName", "PasswordHash", "IsActive", "CreatedAt")
+                    VALUES ({0}, {1}, '', '', {2}, '', TRUE, {3})
+                    """, user.Id, user.Login, user.FullName, DateTimeOffset.UtcNow);
                 var account = new TelegramAccount { Name = "Отчёты", CreatedById = user.Id };
                 db.TelegramAccounts.Add(account);
                 var chat = new TelegramChat { AccountId = account.Id, PeerId = -100_700, Type = TelegramChatType.Group, Title = "Хоразм — продажи" };

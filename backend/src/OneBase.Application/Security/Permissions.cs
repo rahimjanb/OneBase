@@ -53,6 +53,9 @@ public static class Permissions
     /// <summary>Рассылки в Telegram: создание, запуск, пауза, отмена.</summary>
     public const string TelegramCampaigns = "telegram.campaigns";
 
+    /// <summary>«Задачи»: задачи отделов и проекты (что из них видно — решает WorkTaskService по отделу и руководству), и в ответах AI.</summary>
+    public const string WorkTasks = "work.tasks";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
@@ -76,5 +79,6 @@ public static class Permissions
         FieldPlan,
         TelegramManage,
         TelegramCampaigns,
+        WorkTasks,
     ];
 }

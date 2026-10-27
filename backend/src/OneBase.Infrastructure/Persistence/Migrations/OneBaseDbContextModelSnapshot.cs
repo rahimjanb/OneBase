@@ -3102,6 +3102,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.PrimitiveCollection<List<string>>("Sections")
+                        .HasColumnType("text[]");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 

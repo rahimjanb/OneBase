@@ -65,7 +65,7 @@ public sealed class AuthController(
         await db.SaveChangesAsync(ct);
 
         var roles = user.Roles.Select(ur => ur.Role.Name);
-        var permissions = user.Roles.SelectMany(ur => ur.Role.Permissions).Select(p => p.Code);
+        var permissions = UserSections.Effective(user.Roles.SelectMany(ur => ur.Role.Permissions).Select(p => p.Code), user.Sections);
         var (token, expiresAt) = tokens.Create(user, session.Id, roles, permissions);
 
         await audit.LogAsync(ActorType.User, user.Id.ToString(), "auth.login", cancellationToken: ct);

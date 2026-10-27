@@ -31,8 +31,10 @@ public class WorkTasksDbTests(DataManagerDb fixture) : IClassFixture<DataManager
         var supply = new Department { Code = $"wt-sup-{s}", Name = $"Снабжение {s}" };
         var directorRole = new Role { Name = $"Директор {s}" };
         directorRole.Permissions.Add(new RolePermission { Code = Permissions.UsersManage });
+        directorRole.Permissions.Add(new RolePermission { Code = Permissions.WorkTasks });
         var employeeRole = new Role { Name = $"Сотрудник {s}" };
         employeeRole.Permissions.Add(new RolePermission { Code = Permissions.FilesRead });
+        employeeRole.Permissions.Add(new RolePermission { Code = Permissions.WorkTasks });
         User Person(string login, string name, Department? department, Role role)
         {
             var u = new User { Login = $"{login}-{s}", FullName = name, Department = department };
@@ -102,6 +104,13 @@ public class WorkTasksDbTests(DataManagerDb fixture) : IClassFixture<DataManager
         await sp.GetRequiredService<OneBaseDbContext>().SaveChangesAsync();
         Assert.DoesNotContain(await tasks.AssigneesAsync(employee, org.Finance.Code, default), p => p.Id == disabled.Id);
         await Assert.ThrowsAsync<FieldValidationException>(() => tasks.CreateAsync(employee, org.Finance.Code, new WorkTaskInput("Отключённому", null, disabled.Id), default));
+        // Раздел «Задачи» снят галочкой — человека нет в выборе исполнителя и назначить ему задачу нельзя (он бы её не увидел).
+        var noTasks = new User { Login = $"wt-nt-{Guid.NewGuid():N}"[..20], FullName = "Без Задач", Sections = [UserSections.Files] };
+        noTasks.Roles.Add(new UserRole { RoleId = org.Employee.Roles.First().RoleId });
+        sp.GetRequiredService<OneBaseDbContext>().Users.Add(noTasks);
+        await sp.GetRequiredService<OneBaseDbContext>().SaveChangesAsync();
+        Assert.DoesNotContain(await tasks.AssigneesAsync(employee, org.Finance.Code, default), p => p.Id == noTasks.Id);
+        await Assert.ThrowsAsync<FieldValidationException>(() => tasks.CreateAsync(employee, org.Finance.Code, new WorkTaskInput("Без раздела", null, noTasks.Id), default));
         // Срок — не в прошлом и не раньше начала; пустое название — ошибка.
         await Assert.ThrowsAsync<FieldValidationException>(() => tasks.CreateAsync(employee, org.Finance.Code, new WorkTaskInput("Прошлое", null, null, DueDate: today.AddDays(-1)), default));
         await Assert.ThrowsAsync<FieldValidationException>(() => tasks.CreateAsync(employee, org.Finance.Code,

@@ -12,7 +12,25 @@ import { useT } from "@/i18n/client";
  * откуда открыли: кнопка, открывшая шторку, не остаётся в фокусе под ней. Отступ снизу — под жест «домой» (safe area). Рисуется в корне оболочки приложения (портал): открытая из шапки
  * шторка иначе оказалась бы под нижней панелью; корень несёт тему продукта (data-product), цвета сохраняются.
  */
-export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; footer?: React.ReactNode }) {
+export function Sheet({
+  open,
+  onClose,
+  title,
+  subtitle,
+  children,
+  footer,
+  size = "md",
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  /** Строка под заголовком (кого редактируем). */
+  subtitle?: string;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  /** md — узкий диалог (по умолчанию), xl — широкий для форм в две колонки. */
+  size?: "md" | "xl";
+}) {
   const panel = useRef<HTMLDivElement>(null);
   const t = useT();
 
@@ -46,14 +64,17 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
       <div
         ref={panel}
         tabIndex={-1}
-        className="field-sheet flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-surface-solid shadow-xl outline-none sm:max-w-lg sm:rounded-2xl"
+        className={`field-sheet flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-surface-solid shadow-xl outline-none sm:rounded-2xl ${size === "xl" ? "sm:max-w-6xl" : "sm:max-w-lg"}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-center pt-2.5 sm:hidden" aria-hidden>
           <div className="h-1 w-10 rounded-full bg-line" />
         </div>
         <div className="flex items-center justify-between gap-3 border-b border-line py-1 pl-4 pr-2 sm:py-2">
-          <h2 className="text-base font-semibold text-ink">{title}</h2>
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold text-ink">{title}</h2>
+            {subtitle && <p className="truncate text-xs text-ink-3">{subtitle}</p>}
+          </div>
           <button type="button" onClick={onClose} aria-label={t("Закрыть")} className="grid size-10 place-items-center rounded-full text-ink-3 hover:bg-muted">
             <X className="size-5" />
           </button>

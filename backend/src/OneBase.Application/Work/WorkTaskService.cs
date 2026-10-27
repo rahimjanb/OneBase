@@ -490,10 +490,17 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
         var members = projectId is { } p
             ? await db.WorkProjectMembers.AsNoTracking().Where(m => m.ProjectId == p).Select(m => m.UserId).ToListAsync(ct)
             : [];
-        var users = await db.Users.AsNoTracking()
-            .Where(u => u.IsActive)
-            .Select(u => new { u.Id, u.FullName, u.Login, u.Position, u.DepartmentId, Department = u.Department != null ? u.Department.Name : null })
-            .ToListAsync(ct);
+        // Исполнитель — тот, кому открыт раздел «Задачи» (роль и отмеченные разделы): иначе он не увидит поставленную задачу.
+        var users = (await db.Users.AsNoTracking()
+                .Where(u => u.IsActive)
+                .Select(u => new
+                {
+                    u.Id, u.FullName, u.Login, u.Position, u.DepartmentId, Department = u.Department != null ? u.Department.Name : null, u.Sections,
+                    Permissions = u.Roles.SelectMany(r => r.Role.Permissions.Select(p => p.Code)).ToList(),
+                })
+                .ToListAsync(ct))
+            .Where(u => OneBase.Application.Security.UserSections.Effective(u.Permissions, u.Sections).Contains(OneBase.Application.Security.Permissions.WorkTasks))
+            .ToList();
         return users
             .Select(u => new WorkAssignee(u.Id, string.IsNullOrWhiteSpace(u.FullName) ? u.Login : u.FullName, u.Position, u.Department,
                 u.DepartmentId == department.Id || members.Contains(u.Id)))
@@ -502,7 +509,7 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
             .ToList();
     }
 
-    /// <summary>Исполнитель — любой действующий пользователь OneBase (задачу он видит как назначенную ему, в «Моих задачах»).</summary>
+    /// <summary>Действующий пользователь OneBase (задачу он видит как назначенную ему, в «Моих задачах»); раздел «Задачи» проверяет ValidAssigneeAsync.</summary>
     private async Task<bool> IsValidAssigneeAsync(Guid userId, CancellationToken ct) =>
         await db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct);
 
@@ -516,6 +523,11 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
         if (!await IsValidAssigneeAsync(id, ct))
         {
             throw new FieldValidationException("Исполнитель — действующий пользователь OneBase.");
+        }
+
+        if ((await OneBase.Application.Security.UserSections.EffectivePermissionsAsync(db, id, ct))?.Contains(OneBase.Application.Security.Permissions.WorkTasks) != true)
+        {
+            throw new FieldValidationException("Исполнителю не открыт раздел «Задачи» — он не увидит задачу. Раздел отмечается в «Настройки → Пользователи и роли».");
         }
 
         return id;

@@ -309,8 +309,8 @@ internal sealed class GetDepartmentTasksTool(WorkTaskService tasks, IUserPermiss
     public override string Title => "Задачи отделов";
     public override string Source => KnowledgeSources.WorkTasks;
 
-    /// <summary>Отдельного права нет: какие отделы видны, решает WorkTaskService (сотрудники отдела и руководство).</summary>
-    public override string? RequiredPermission => null;
+    /// <summary>Право «Задачи» (раздел пользователя); какие отделы видны, решает WorkTaskService (сотрудники отдела и руководство).</summary>
+    public override string? RequiredPermission => Permissions.WorkTasks;
 
     public override string Description =>
         "Задачи отделов OneBase (раздел «Задачи»). Возвращает: по каждому отделу, доступному пользователю, — сколько задач открыто, просрочено " +

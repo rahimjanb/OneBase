@@ -4,12 +4,13 @@
  */
 
 /** Общие разделы компании (Обзор, Отделы, Задачи, Отчёты): сотрудники отделов, директор, администратор, Sales Base. */
-export const workspacePermissions = ["ai.agents.run", "sales.read", "finance.read", "hr.read", "field.use", "field.plan"];
+export const workspacePermissions = ["ai.agents.run", "sales.read", "finance.read", "hr.read", "work.tasks", "field.use", "field.plan"];
 
 export const navPermissions: Record<string, string[]> = {
   "/": workspacePermissions,
   "/departments": workspacePermissions,
-  "/tasks": workspacePermissions,
+  // Задачи — раздел пользователя (галочка «Задачи» в «Пользователях»); что из задач видно, решает backend.
+  "/tasks": ["work.tasks"],
   // HR: право «HR», администратор интеграций или руководитель отдела с привязанными подразделениями Verifix (hr.department — не право,
   // а признак из /api/auth/me; доступ к данным всё равно проверяет backend).
   "/hr": ["hr.read", "integrations.manage", "hr.department"],

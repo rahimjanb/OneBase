@@ -30,5 +30,11 @@ public class User : Entity
 
     public ICollection<UserRole> Roles { get; set; } = [];
 
+    /// <summary>
+    /// Разделы, отмеченные пользователю (коды UserSections: sales, finance, hr, tasks…). null — разделы как у роли. Итоговые права —
+    /// UserSections.Effective: по ним открываются разделы и отвечают AI-сотрудники.
+    /// </summary>
+    public List<string>? Sections { get; set; }
+
     public static string FullNameOf(string firstName, string lastName) => $"{firstName.Trim()} {lastName.Trim()}".Trim();
 }

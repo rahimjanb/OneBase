@@ -11,10 +11,12 @@ namespace OneBase.Api.Controllers;
 /// <summary>
 /// Раздел «Задачи» OneBase: отделы, задачи отделов и проектов (таблица, канбан, карточка), чек-листы, комментарии, вложения, история,
 /// проекты, руководители отделов и предложения AI-диспетчера. Доступ решает WorkTaskService по отделу, руководству, проектам и правам
-/// пользователя — никогда по параметрам запроса. Задачи полевой команды продаж — в /api/field/tasks.
+/// пользователя — никогда по параметрам запроса. Сам раздел — с правом «Задачи» (раздел пользователя, UserSections). Задачи полевой
+/// команды продаж — в /api/field/tasks.
 /// </summary>
 [ApiController]
 [Authorize]
+[HasPermission(OneBase.Application.Security.Permissions.WorkTasks)]
 [FieldErrors]
 [Route("api/work")]
 public sealed class WorkController(WorkTaskService tasks, OneBase.AI.Work.TaskSuggestionService suggestions, IFileStorage storage) : ControllerBase

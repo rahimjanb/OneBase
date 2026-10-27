@@ -445,6 +445,44 @@ const dict: Dict = {
   "Ячейка с датой": "Sanali katak",
   "Строки-заголовки групп («Диллер», «Ритейл», «Долги») и «Итого» не контрагенты — они задают группу строк ниже. Ячейка с датой — когда лист каждый месяц переходит на новый месяц (акт на «Сентябрь 2026» — дата 01.09.2026).":
     "Guruh sarlavhasi qatorlari («Diller», «Riteyl», «Qarzlar») va «Jami» kontragent emas — ular quyidagi qatorlar guruhini belgilaydi. Sanali katak — varaq har oy yangi oyga o'tganda (dalolatnoma «Sentabr 2026» uchun — sana 01.09.2026).",
+
+  // ---------- Окно пользователя: профиль, роль и разделы (UserDialog) ----------
+  "Изменить пользователя": "Foydalanuvchini tahrirlash",
+  "Профиль, роль и разделы, к которым будет доступ": "Profil, rol va kirish beriladigan bo'limlar",
+  "Пароль передайте сотруднику — после входа он сможет работать сразу.": "Parolni xodimga bering — kirgach darhol ishlay oladi.",
+  "Роль, разделы и пароль действуют сразу.": "Rol, bo'limlar va parol darhol kuchga kiradi.",
+  "Создать пользователя": "Foydalanuvchi yaratish",
+  "Пусто — пароль не меняется; новый закроет входы на других устройствах": "Bo'sh — parol o'zgarmaydi; yangisi boshqa qurilmalardagi kirishlarni yopadi",
+  "Скопировать пароль": "Parolni nusxalash",
+  "Себя отключить нельзя.": "O'zingizni o'chirib bo'lmaydi.",
+  "Отключённый не входит в OneBase и Telegram-агент; история сохраняется.": "O'chirilgan foydalanuvchi OneBase va Telegram-agentga kira olmaydi; tarix saqlanadi.",
+  "Свои роль и разделы меняет другой администратор": "O'z rolingiz va bo'limlaringizni boshqa administrator o'zgartiradi",
+  "Роль также даёт:": "Rol yana beradi:",
+  "как у роли": "roldagidek",
+  "настроены вручную": "qo'lda sozlangan",
+  "Как у роли": "Roldagidek",
+  "У вас нет доступа к этому разделу — выдать его может администратор": "Bu bo'limga sizda kirish yo'q — uni administrator bera oladi",
+  "AI-сотрудники отвечают только по отмеченным разделам": "AI-xodimlar faqat belgilangan bo'limlar bo'yicha javob beradi",
+  "Ответят: {list}.": "Javob beradi: {list}.",
+  "Разделов с данными не отмечено — консультант ответит только на общие вопросы.": "Ma'lumotli bo'limlar belgilanmagan — maslahatchi faqat umumiy savollarga javob beradi.",
+  "Не ответят по: {list}.": "Javob bermaydi: {list}.",
+  "AI-консультант не отмечен — чат с ИИ и Telegram-агент от имени сотрудника ему недоступны.":
+    "AI-maslahatchi belgilanmagan — AI bilan chat va xodim nomidan Telegram-agent unga yopiq.",
+  "продажи, ассортимент и клиенты — Sales AI, а также маркетинг, производство и снабжение по данным продаж":
+    "savdo, assortiment va mijozlar — Sales AI, shuningdek savdo ma'lumotlari bo'yicha marketing, ishlab chiqarish va ta'minot",
+  "оплаты, P&L и долги — Finance AI": "to'lovlar, P&L va qarzlar — Finance AI",
+  "сотрудники и посещаемость — HR AI": "xodimlar va davomat — HR AI",
+  "задачи отделов и просрочки": "bo'lim vazifalari va muddati o'tganlari",
+  "документы базы знаний": "bilimlar bazasi hujjatlari",
+  "полевая команда Sales Base": "Sales Base dala jamoasi",
+  "нет разделов": "bo'limlar yo'q",
+  "Разделы отмечены вручную, не как у роли": "Bo'limlar qo'lda belgilangan, roldagidek emas",
+  "Изменить {name}": "{name} — tahrirlash",
+  "Поиск: имя, логин, должность, роль": "Qidiruv: ism, login, lavozim, rol",
+  "Поиск пользователей": "Foydalanuvchilarni qidirish",
+  "Никого не нашли": "Hech kim topilmadi",
+  "Удаления нет: отключённый пользователь не может войти, а его история в OneBase сохраняется. Роль задаёт права на управление и настройки и разделы по умолчанию; разделы можно изменить галочками — по ним открываются страницы и отвечают AI-сотрудники. Выдать роль или раздел можно, только если у вас самих есть эти права, — поэтому администраторов меняет только администратор.":
+    "O'chirish yo'q: o'chirilgan foydalanuvchi kira olmaydi, uning OneBase'dagi tarixi esa saqlanadi. Rol boshqaruv va sozlamalar huquqlarini hamda standart bo'limlarni belgilaydi; bo'limlarni belgilash orqali o'zgartirish mumkin — ular bo'yicha sahifalar ochiladi va AI-xodimlar javob beradi. Rol yoki bo'limni faqat o'zingizda shu huquqlar bo'lsa bera olasiz — shuning uchun administratorlarni faqat administrator o'zgartiradi.",
 };
 
 export default dict;

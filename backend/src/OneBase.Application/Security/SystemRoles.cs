@@ -27,8 +27,8 @@ public static class SystemRoles
 
     public sealed record Definition(string Name, string Description, string? DepartmentCode, IReadOnlyList<string> Permissions);
 
-    /// <summary>Общее для сотрудников отделов: консультант и файлы.</summary>
-    private static readonly string[] Employee = [Permissions.AgentsRun, Permissions.FilesRead, Permissions.FilesWrite];
+    /// <summary>Общее для сотрудников отделов: консультант, файлы и задачи.</summary>
+    private static readonly string[] Employee = [Permissions.AgentsRun, Permissions.FilesRead, Permissions.FilesWrite, Permissions.WorkTasks];
 
     public static readonly IReadOnlyList<Definition> All =
     [
@@ -37,7 +37,7 @@ public static class SystemRoles
         [
             Permissions.UsersManage, Permissions.SalesRead, Permissions.FinanceRead, Permissions.HrRead, Permissions.FilesRead, Permissions.FilesWrite,
             Permissions.FilesReadAll,
-            Permissions.AgentsRun, Permissions.ApprovalsDecide, Permissions.AuditRead, Permissions.FieldPlan,
+            Permissions.AgentsRun, Permissions.ApprovalsDecide, Permissions.AuditRead, Permissions.FieldPlan, Permissions.WorkTasks,
         ]),
         new(DataAdmin, "Файлы отдела продаж и AI Data Manager: загрузка отчётов, изменение планов, целей и дилеров регионов с подтверждением. "
                        + "В «Настройках» — только AI Data Manager.", "sales",
@@ -49,7 +49,7 @@ public static class SystemRoles
         new("Снабжение", "Сотрудник снабжения: остатки, поставщики и продажи товаров (раздел «Продажи»), консультант, файлы.", "supply", [Permissions.SalesRead, .. Employee]),
         new("Маркетинг", "Сотрудник маркетинга: продажи, ассортимент и клиенты (раздел «Продажи»), консультант, файлы.", "marketing", [Permissions.SalesRead, .. Employee]),
         new(FieldRm, "Sales Base: вся структура полевых продаж — команды, точки, маршруты, задачи, KPI, решения по рекомендациям AI; аналитика продаж и консультант.", null,
-            [Permissions.FieldUse, Permissions.FieldManage, Permissions.SalesRead, Permissions.AgentsRun]),
+            [Permissions.FieldUse, Permissions.FieldManage, Permissions.SalesRead, Permissions.AgentsRun, Permissions.WorkTasks]),
         new(FieldSupervisor, "Sales Base: своя команда — агенты, точки, маршруты, визиты, задачи и KPI команды.", null, [Permissions.FieldUse]),
         new(FieldAgent, "Sales Base с телефона: свой маршрут, точки, визиты, задачи, продажи и KPI.", null, [Permissions.FieldUse]),
     ];
@@ -62,6 +62,15 @@ public static class SystemRoles
     [
         (Director, Permissions.FieldPlan),
         (Director, Permissions.FilesReadAll),
+        // «Задачи» стали отдельным правом (раньше их видели все с общими разделами) — у кого раздел был, у того и остаётся.
+        (Director, Permissions.WorkTasks),
+        ("Продажи", Permissions.WorkTasks),
+        ("Финансы", Permissions.WorkTasks),
+        ("HR", Permissions.WorkTasks),
+        ("Производство", Permissions.WorkTasks),
+        ("Снабжение", Permissions.WorkTasks),
+        ("Маркетинг", Permissions.WorkTasks),
+        (FieldRm, Permissions.WorkTasks),
     ];
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
@@ -105,5 +114,6 @@ public static class SystemRoles
         [Permissions.FieldPlan] = "Sales Base: задачи и маршруты",
         [Permissions.TelegramManage] = "Telegram: аккаунты и AI-агент",
         [Permissions.TelegramCampaigns] = "Рассылки в Telegram",
+        [Permissions.WorkTasks] = "Задачи отделов",
     };
 }

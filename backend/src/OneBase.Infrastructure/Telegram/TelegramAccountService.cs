@@ -625,8 +625,8 @@ public sealed class TelegramAccountService(
         return await AccessAsync(accountId, ct);
     }
 
-    private Task<bool> CanAskConsultantAsync(Guid userId, CancellationToken ct) =>
-        db.Users.AnyAsync(u => u.Id == userId && u.IsActive && u.Roles.Any(r => r.Role!.Permissions.Any(p => p.Code == OneBase.Application.Security.Permissions.AgentsRun)), ct);
+    private async Task<bool> CanAskConsultantAsync(Guid userId, CancellationToken ct) =>
+        (await OneBase.Application.Security.UserSections.EffectivePermissionsAsync(db, userId, ct))?.Contains(OneBase.Application.Security.Permissions.AgentsRun) == true;
 
     private async Task<Guid?> FullAccessUserAsync(Guid accountId, CancellationToken ct) =>
         await db.TelegramAgentSettings.AsNoTracking().Where(s => s.AccountId == accountId).Select(s => s.FullAccessUserId).FirstOrDefaultAsync(ct);

@@ -15,7 +15,8 @@ namespace OneBase.Api.Controllers;
 /// <summary>
 /// «Настройки → Пользователи и роли». Удаления нет — сотрудника отключают (вход закрывается, история остаётся).
 /// Назначать роль и менять пользователя можно, только если у вас есть все права этой роли (и текущей роли пользователя):
-/// директор не выдаст себе или другим права администратора и не изменит администратора.
+/// директор не выдаст себе или другим права администратора и не изменит администратора. Разделы (UserSections) отмечаются галочками:
+/// роль подставляет свои, выдать раздел можно, только если его права есть у вас; совпали с ролью — хранится «как у роли» (null).
 /// </summary>
 [ApiController]
 [Route("api/users")]
@@ -37,7 +38,8 @@ public sealed partial class UsersController(
         string? Position,
         Guid? RoleId,
         string? Password,
-        bool IsActive = true);
+        bool IsActive = true,
+        IReadOnlyList<string>? Sections = null);
 
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
@@ -46,6 +48,7 @@ public sealed partial class UsersController(
         var roles = await RolesAsync(ct);
         var users = await db.Users.AsNoTracking()
             .Include(u => u.Roles)
+            .AsSplitQuery()
             .OrderBy(u => u.LastName).ThenBy(u => u.FirstName).ThenBy(u => u.Login)
             .ToListAsync(ct);
 
@@ -54,6 +57,7 @@ public sealed partial class UsersController(
             Users = users.Select(u =>
             {
                 var userRoles = roles.Where(r => u.Roles.Any(ur => ur.RoleId == r.Id)).ToList();
+                var effective = UserSections.Effective(userRoles.SelectMany(r => r.Permissions), u.Sections);
                 return new
                 {
                     u.Id,
@@ -69,7 +73,9 @@ public sealed partial class UsersController(
                     RoleId = userRoles.FirstOrDefault()?.Id,
                     RoleName = userRoles.Count == 0 ? null : string.Join(", ", userRoles.Select(r => r.Name)),
                     IsMe = u.Id == User.GetUserId(),
-                    CanEdit = userRoles.All(r => r.Permissions.All(mine.Contains)),
+                    CanEdit = userRoles.All(r => r.Permissions.All(mine.Contains)) && effective.All(mine.Contains),
+                    Sections = UserSections.Of(effective),
+                    SectionsCustom = u.Sections is not null,
                 };
             }),
             Roles = roles.Select(r => new
@@ -82,7 +88,10 @@ public sealed partial class UsersController(
                 Users = users.Count(u => u.Roles.Any(ur => ur.RoleId == r.Id)),
                 Assignable = r.Permissions.All(mine.Contains),
                 OpensSettings = SystemRoles.SettingsPermissions.Any(r.Permissions.Contains),
+                Sections = UserSections.Of(r.Permissions),
             }),
+            // Каталог разделов; Grantable — можете ли вы выдать раздел (его права есть у вас).
+            Sections = UserSections.All.Select(x => new { x.Key, x.Title, x.Description, Grantable = x.Grant.All(mine.Contains) }),
         });
     }
 
@@ -102,6 +111,7 @@ public sealed partial class UsersController(
 
         var user = new User { Login = values.Login, FullName = string.Empty };
         Apply(user, values);
+        user.Sections = values.Sections;
         user.PasswordHash = hasher.HashPassword(user, input.Password);
         user.Roles.Add(new UserRole { RoleId = values.Role.Id });
         db.Users.Add(user);
@@ -109,7 +119,7 @@ public sealed partial class UsersController(
 
         // В журнал — только идентификаторы и роль, без имени, телефона и почты.
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "users.created", "user", user.Id.ToString(),
-            new { role = values.Role.Name }, ct);
+            new { role = values.Role.Name, sections = values.Sections }, ct);
         return Ok(new { user.Id });
     }
 
@@ -125,7 +135,8 @@ public sealed partial class UsersController(
         var mine = MyPermissions();
         var roles = await RolesAsync(ct);
         var current = roles.Where(r => user.Roles.Any(ur => ur.RoleId == r.Id)).ToList();
-        if (!current.All(r => r.Permissions.All(mine.Contains)))
+        var currentEffective = UserSections.Effective(current.SelectMany(r => r.Permissions), user.Sections);
+        if (!current.All(r => r.Permissions.All(mine.Contains)) || !currentEffective.All(mine.Contains))
         {
             return BadRequest(new { error = "У этого пользователя роль с правами, которых у вас нет, — изменить его может только администратор." });
         }
@@ -145,6 +156,12 @@ public sealed partial class UsersController(
             return BadRequest(new { error = "Свою роль изменить нельзя — иначе можно потерять доступ к этому разделу. Попросите другого администратора." });
         }
 
+        var sectionsChanged = !UserSections.Of(UserSections.Effective(values.Role.Permissions, values.Sections)).SequenceEqual(UserSections.Of(currentEffective));
+        if (isMe && sectionsChanged)
+        {
+            return BadRequest(new { error = "Свои разделы изменить нельзя — попросите другого администратора." });
+        }
+
         if (isMe && !input.IsActive)
         {
             return BadRequest(new { error = "Нельзя отключить самого себя." });
@@ -158,6 +175,7 @@ public sealed partial class UsersController(
 
         var wasActive = user.IsActive;
         Apply(user, values);
+        user.Sections = values.Sections;
         user.IsActive = input.IsActive;
         user.UpdatedAt = DateTimeOffset.UtcNow;
         if (passwordChanged)
@@ -172,7 +190,7 @@ public sealed partial class UsersController(
         }
 
         await db.SaveChangesAsync(ct);
-        access.Invalidate(user.Id); // новая роль или отключение действуют сразу
+        access.Invalidate(user.Id); // новая роль, разделы или отключение действуют сразу
         if (passwordChanged)
         {
             // Новый пароль закрывает старые входы на всех устройствах; свой текущий вход администратор сохраняет.
@@ -188,13 +206,15 @@ public sealed partial class UsersController(
             new
             {
                 role = roleChanged ? values.Role.Name : null,
+                sections = sectionsChanged ? UserSections.Of(UserSections.Effective(values.Role.Permissions, values.Sections)) : null,
                 active = wasActive != user.IsActive ? user.IsActive : (bool?)null,
                 passwordChanged,
             }, ct);
         return Ok(new { user.Id });
     }
 
-    private sealed record Values(string Login, string FirstName, string LastName, string? Email, string? Phone, string Position, RoleInfo Role);
+    /// <summary>Sections — что сохранить: null — как у роли.</summary>
+    private sealed record Values(string Login, string FirstName, string LastName, string? Email, string? Phone, string Position, RoleInfo Role, List<string>? Sections);
 
     private sealed record RoleInfo(Guid Id, string Name, string? Description, Guid? DepartmentId, string? DepartmentName, IReadOnlyList<string> Permissions);
 
@@ -245,6 +265,25 @@ public sealed partial class UsersController(
             return (null, $"Роль «{role.Name}» даёт права, которых у вас нет, — назначить её может только администратор.");
         }
 
+        // Разделы: null — как у роли; выбранные совпали с разделами роли — тоже «как у роли» (пользователь пойдёт за ролью).
+        List<string>? sections = null;
+        if (input.Sections is not null)
+        {
+            var unknown = input.Sections.Where(k => UserSections.Find(k?.Trim()) is null).ToList();
+            if (unknown.Count > 0)
+            {
+                return (null, $"Неизвестный раздел: {string.Join(", ", unknown)}.");
+            }
+
+            var chosen = UserSections.Normalize(input.Sections);
+            sections = chosen.SequenceEqual(UserSections.Of(role.Permissions)) ? null : chosen;
+            var foreign = UserSections.All.Where(x => chosen.Contains(x.Key) && UserSections.Effective(role.Permissions, chosen).Intersect(x.Permissions).Any(p => !mine.Contains(p))).ToList();
+            if (foreign.Count > 0)
+            {
+                return (null, $"Раздел «{foreign[0].Title}» выдать нельзя: у вас самих нет к нему доступа.");
+            }
+        }
+
         if (await db.Users.AnyAsync(u => u.Id != (existing == null ? Guid.Empty : existing.Id) && (u.Login == login || u.Email == login), ct))
         {
             return (null, $"Логин «{login}» уже занят.");
@@ -255,7 +294,7 @@ public sealed partial class UsersController(
             return (null, "Эта почта уже указана у другого пользователя.");
         }
 
-        return (new Values(login, firstName, lastName, email, phone, position, role), null);
+        return (new Values(login, firstName, lastName, email, phone, position, role, sections), null);
     }
 
     private static void Apply(User user, Values values)
