@@ -98,6 +98,15 @@ cd ~/onebase && bash deploy/update.sh
 Миграции базы применяются при старте API. Данные (тома Docker) не затрагиваются. Если изменилась конфигурация nginx
 или `docker-compose.yml` (например, появился сайт Sales Base на порту 81), скрипт сам пересоздаёт контейнер nginx.
 
+## Браузеры
+
+Сборка фронтенда — под iOS / Safari 15.4+, Chrome, Edge и Firefox 100+ (`browserslist` в `frontend/package.json`). По умолчанию
+Next.js 16 собирает только под Safari 16.4+, и на iPhone с iOS 16.0–16.3 приложение не запускалось: блоки `static {}` в общем
+скрипте — синтаксическая ошибка. Проверка готовой сборки: в чанках `.next/static` нет `static {}`, RegExp с lookbehind и API новее
+Safari 15.4 без проверки. На iOS 16 и старше (`@supports (-webkit-touch-callout: none) and (not (font-size-adjust: 1))` в
+`globals.css`) отключено размытие фона под нижней панелью и карточками — на iPhone 8 и X оно тормозит прокрутку.
+Push-уведомления на iPhone — с iOS 16.4 и только в приложении на экране «Домой».
+
 ## Если что-то не так
 
 Sales Base на сервере без Cloudflare: `docker compose exec -T nginx wget -qO- http://127.0.0.1:81/health` — ответ `Healthy`.

@@ -102,6 +102,8 @@
 
 /* Плашка skeleton — мягкое мерцание. */
 .skeleton {
+  /* Safari до 16.2 не знает color-mix() — сплошная плашка вместо мерцания. */
+  background: var(--ts-surface-2);
   background: linear-gradient(90deg, var(--ts-surface-2) 0%, color-mix(in srgb, var(--ts-surface-2) 55%, var(--ts-surface)) 50%, var(--ts-surface-2) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
@@ -119,5 +121,13 @@
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
     animation: none;
+  }
+}
+
+/* Safari до 16.2 (iOS 16.0–16.1) не знает color-mix(): подсветка строки — сплошным surface-2. */
+@supports not (color: color-mix(in srgb, red, red)) {
+  .root {
+    --ts-row-hover: var(--ts-surface-2);
+    --ts-weekend-hover: var(--ts-surface-2);
   }
 }
