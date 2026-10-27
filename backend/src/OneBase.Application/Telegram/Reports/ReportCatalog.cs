@@ -22,6 +22,9 @@ public enum ReportType
 
     /// <summary>6. Итоги недели (пн–сб): суббота и обновление в понедельник.</summary>
     Weekly,
+
+    /// <summary>7. «Поле боя»: карточки целей ТП — маршрут дня 08:30, полдень 13:00, итог дня 18:00, итог недели в субботу (ТЗ v2).</summary>
+    Battle,
 }
 
 /// <summary>
@@ -48,8 +51,12 @@ public static class ReportCatalog
     public const string Promo = "promo";
     public const string Categories = "categories";
     public const string Weekly = "weekly";
+    public const string Battle = "battle";
 
     private static readonly IReadOnlyList<string> Everyone = TelegramReportRoles.All;
+
+    /// <summary>«Поле боя» — ТП лично и СВ (копии карточек своих ТП); РМ на тесте не шлём.</summary>
+    private static readonly IReadOnlyList<string> Field = [TelegramReportRoles.Tp, TelegramReportRoles.Sv];
 
     public static readonly IReadOnlyList<ReportJobInfo> Jobs =
     [
@@ -66,6 +73,10 @@ public static class ReportCatalog
         new("categories.evening", ReportType.Categories, "evening", new(18, 0), ReportSchedules.WorkDays, Everyone, 180),
         new("weekly.saturday", ReportType.Weekly, "saturday", new(18, 0), ReportSchedules.Saturday, Everyone, 240),
         new("weekly.monday", ReportType.Weekly, "monday", new(8, 30), ReportSchedules.Monday, Everyone, 360),
+        new("battle.morning", ReportType.Battle, "morning", new(8, 30), ReportSchedules.WorkDays, Field, 120),
+        new("battle.midday", ReportType.Battle, "midday", new(13, 0), ReportSchedules.WorkDays, Field, 120),
+        new("battle.evening", ReportType.Battle, "evening", new(18, 0), ReportSchedules.WorkDays, Field, 180),
+        new("battle.saturday", ReportType.Battle, "saturday", new(18, 0), ReportSchedules.Saturday, Field, 240),
     ];
 
     public static ReportJobInfo? Find(string? code) => Jobs.FirstOrDefault(j => j.Code == code);
@@ -77,6 +88,7 @@ public static class ReportCatalog
         ReportType.NoOrders => NoOrders,
         ReportType.Promo => Promo,
         ReportType.Categories => Categories,
+        ReportType.Battle => Battle,
         _ => Weekly,
     };
 
@@ -88,6 +100,7 @@ public static class ReportCatalog
         ReportType.NoOrders => "3. ТП без заказов",
         ReportType.Promo => "4. Заказы с акцией",
         ReportType.Categories => "5. Заказы по категориям",
+        ReportType.Battle => "7. Поле боя",
         _ => "6. Итоги недели",
     };
 
@@ -98,6 +111,10 @@ public static class ReportCatalog
         (ReportType.NoPurchase, "morning") => "список на день",
         (ReportType.NoOrders, "midday") => "контроль",
         (ReportType.Weekly, "saturday") => "неделя пн–сб",
+        (ReportType.Battle, "morning") => "маршрут дня",
+        (ReportType.Battle, "midday") => "полдень",
+        (ReportType.Battle, "evening") => "итог дня",
+        (ReportType.Battle, "saturday") => "итог недели",
         _ => SlotTitle(slot),
     };
 

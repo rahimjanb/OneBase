@@ -1,3 +1,4 @@
+using OneBase.Application.Telegram.Reports;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -145,7 +146,7 @@ public class RouteToolsDbTests(DataManagerDb fixture) : IClassFixture<DataManage
 
             var manager = await RunAsync("get_telegram", new { days = 3 }, user.Id);
             var jobs = manager.GetProperty("reports").GetProperty("jobs").EnumerateArray().ToList();
-            Assert.Equal(13, jobs.Count);
+            Assert.Equal(ReportCatalog.Jobs.Count, jobs.Count);
             Assert.All(jobs, j => Assert.False(j.GetProperty("enabled").GetBoolean()));
             Assert.Equal(JsonValueKind.Array, manager.GetProperty("campaigns").ValueKind); // telegram.manage видит и рассылки
         }

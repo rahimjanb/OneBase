@@ -26,6 +26,7 @@
     <ItemGroup>
       <!-- Inter (SIL OFL 1.1, Inter-OFL.txt): кириллица и узбекская латиница на картинках отчётов. -->
       <EmbeddedResource Include="Telegram\Reports\Fonts\*.ttf" LogicalName="OneBase.Fonts.%(Filename)%(Extension)" />
+      <EmbeddedResource Include="Telegram\Reports\Assets\*.png" LogicalName="OneBase.Battle.%(Filename)%(Extension)" />
     </ItemGroup>
 
 </Project>

@@ -1,5 +1,6 @@
 using OneBase.Application.Field;
 using OneBase.Application.Sales.Metrics;
+using OneBase.Application.Telegram.Battle;
 using OneBase.Application.Telegram.Reports;
 using OneBase.Domain.Telegram;
 using OneBase.Infrastructure.Telegram.Reports;
@@ -101,6 +102,7 @@ public class TelegramReportTests
             ReportType.NoOrders => NoOrdersReport.Build(context),
             ReportType.Promo => PromoReport.Build(context),
             ReportType.Categories => CategoriesReport.Build(context),
+            ReportType.Battle => BattleReport.Build(context, BattleTests.SampleCards(info.Slot, language, resolved.Agents.Select(a => (a.Id, a.Name)).ToList(), date)),
             _ => WeeklyReport.Build(context),
         };
     }
@@ -114,9 +116,10 @@ public class TelegramReportTests
     [Fact]
     public void Catalog_has_thirteen_runs_of_six_reports_at_the_specified_times()
     {
-        Assert.Equal(13, ReportCatalog.Jobs.Count);
+        Assert.Equal(17, ReportCatalog.Jobs.Count); // 13 запусков шести отчётов + 4 запуска «Поля боя»
         Assert.Equal(ReportCatalog.Jobs.Count, ReportCatalog.Jobs.Select(j => j.Code).Distinct().Count());
-        Assert.Equal(6, ReportCatalog.Jobs.Select(j => j.Report).Distinct().Count());
+        Assert.Equal(7, ReportCatalog.Jobs.Select(j => j.Report).Distinct().Count());
+        Assert.Equal("08:30 13:00 18:00 18:00", string.Join(" ", ReportCatalog.Jobs.Where(j => j.Report == ReportType.Battle).Select(j => j.Time.ToString("HH:mm"))));
         string Times(ReportType t) => string.Join(" ", ReportCatalog.Jobs.Where(j => j.Report == t).Select(j => j.Time.ToString("HH:mm")));
         Assert.Equal("08:30 13:00 18:00", Times(ReportType.Daily));
         Assert.Equal("08:30", Times(ReportType.NoPurchase));
@@ -129,7 +132,8 @@ public class TelegramReportTests
         Assert.Equal([TelegramReportRoles.Tp], ReportCatalog.Find("no-orders.reminder")!.Roles);
         Assert.Equal(ReportSchedules.Saturday, ReportCatalog.Find("weekly.saturday")!.Days);
         Assert.Equal(ReportSchedules.Monday, ReportCatalog.Find("weekly.monday")!.Days);
-        Assert.All(ReportCatalog.Jobs.Where(j => j.Report != ReportType.Weekly), j => Assert.Equal(ReportSchedules.WorkDays, j.Days));
+        Assert.Equal(ReportSchedules.Saturday, ReportCatalog.Find("battle.saturday")!.Days);
+        Assert.All(ReportCatalog.Jobs.Where(j => j.Report != ReportType.Weekly && j.Slot != "saturday"), j => Assert.Equal(ReportSchedules.WorkDays, j.Days));
 
         // Отчёты получателя: неизвестные коды и чужие роли отбрасываются.
         var codes = ReportCatalog.Parse("daily.morning, no-orders.reminder,unknown,daily.morning");
@@ -467,7 +471,7 @@ public class TelegramReportTests
     [Fact]
     public void Every_report_renders_as_16_by_9_png_pages_within_telegram_limits()
     {
-        foreach (var job in ReportCatalog.Jobs)
+        foreach (var job in ReportCatalog.Jobs.Where(j => j.Report != ReportType.Battle))
         {
             foreach (var scope in new[] { Rm, Sv, Tp(61) }.Where(s => job.Roles.Contains(s.Role)))
             {

@@ -181,6 +181,9 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Telegram.Reports.DailyPlanService>();
         services.AddScoped<OneBase.Application.Telegram.Reports.ReportDataService>();
         services.AddScoped<OneBase.Application.Telegram.Reports.ReportEngine>();
+        // «Поле боя»: правила (раздел Battle, по умолчанию — ТЗ v2) и цели ТП.
+        services.AddSingleton(config.GetSection("Battle").Get<OneBase.Application.Telegram.Battle.BattleOptions>() ?? new OneBase.Application.Telegram.Battle.BattleOptions());
+        services.AddScoped<OneBase.Application.Telegram.Battle.BattleGoalService>();
         services.AddScoped<Telegram.Reports.TelegramReportSender>();
         services.AddScoped<Telegram.Reports.TelegramReportService>();
         services.AddSingleton<Telegram.Reports.TelegramReportRunner>();

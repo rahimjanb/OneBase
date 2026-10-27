@@ -161,6 +161,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<HrTimesheetDay> HrTimesheetDays => Set<HrTimesheetDay>();
     public DbSet<HrSyncRun> HrSyncRuns => Set<HrSyncRun>();
     public DbSet<HrSyncState> HrSyncStates => Set<HrSyncState>();
+    public DbSet<OneBase.Domain.Battle.BattleGoal> BattleGoals => Set<OneBase.Domain.Battle.BattleGoal>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -171,6 +172,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         FieldModel.Configure(b);
         WorkModel.Configure(b);
         HrModel.Configure(b);
+        BattleModel.Configure(b);
         TelegramModel.Configure(b);
 
         // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.

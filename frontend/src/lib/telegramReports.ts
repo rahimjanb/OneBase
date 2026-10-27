@@ -13,7 +13,7 @@ export const reportRoles: { key: ReportRole; label: string; hint: string; classN
 export const roleOf = (role: string) => reportRoles.find((r) => r.key === role) ?? reportRoles[1];
 
 /** Шесть отчётов (листы ТЗ «ИИ ассистент в ТГ 2»). */
-export type ReportType = "daily" | "no-purchase" | "no-orders" | "promo" | "categories" | "weekly";
+export type ReportType = "daily" | "no-purchase" | "no-orders" | "promo" | "categories" | "weekly" | "battle";
 
 export const reportTypes: { key: ReportType; title: string; hint: string }[] = [
   { key: "daily", title: "1. Дневной план", hint: "8:30 — план дня в сумах и кг, по категориям и визитам; 13:00 — промежуточный итог; 18:00 — итог дня" },
@@ -22,6 +22,7 @@ export const reportTypes: { key: ReportType; title: string; hint: string }[] = [
   { key: "promo", title: "4. Заказы с акцией", hint: "13:00 и 18:00 — заказы с акцией, их доля и разбивка по акциям" },
   { key: "categories", title: "5. Заказы по категориям", hint: "13:00 и 18:00 — заказы, сумма и вес по категориям, выполнение плана категорий" },
   { key: "weekly", title: "6. Итоги недели", hint: "Суббота 18:00 — итоги недели пн–сб; понедельник 8:30 — пересчитанные итоги прошлой недели" },
+  { key: "battle", title: "7. Поле боя", hint: "Карточки целей ТП по магазинам маршрута: 8:30 — маршрут дня, 13:00 — полдень, 18:00 — итог дня, суббота 18:00 — итог недели; СВ — копии карточек своих ТП" },
 ];
 
 export type ReportSettings = { accountId: string | null; language: "ru" | "uz"; noPurchaseDays: number; refreshBeforeSend: boolean; updatedAt: string | null };

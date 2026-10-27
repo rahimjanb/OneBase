@@ -30,10 +30,15 @@ public sealed class SkiaReportRenderer : IReportRenderer
     private const float RowHeight = 21;
     private const float TallRowHeight = 32;
 
-    private static readonly Lazy<Typefaces> Faces = new(Typefaces.Load);
+    internal static readonly Lazy<Typefaces> Faces = new(Typefaces.Load);
 
     public IReadOnlyList<byte[]> Render(ReportDocument document)
     {
+        if (document.Battle is { } battle)
+        {
+            return BattleCardRenderer.Render(document, battle, Faces.Value);
+        }
+
         var layout = new Layout(document, Faces.Value, compact: false);
         var pages = layout.Paginate(layout.Blocks());
         if (pages.Count > 1)
@@ -53,7 +58,7 @@ public sealed class SkiaReportRenderer : IReportRenderer
     /// <summary>Кусок страницы: Group — карточка (фон под всеми её кусками на странице); Continuation — что поставить первым на новой странице.</summary>
     private sealed record Block(string Group, float Height, Action<SKCanvas, float> Draw, bool KeepWithNext = false, Block? Continuation = null, bool Plain = false);
 
-    private sealed class Typefaces
+    internal sealed class Typefaces
     {
         public required SKTypeface Regular { get; init; }
         public required SKTypeface Medium { get; init; }

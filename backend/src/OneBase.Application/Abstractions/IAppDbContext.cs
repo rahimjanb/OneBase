@@ -123,6 +123,7 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Hr.HrTimesheetDay> HrTimesheetDays { get; }
     DbSet<OneBase.Domain.Hr.HrSyncRun> HrSyncRuns { get; }
     DbSet<OneBase.Domain.Hr.HrSyncState> HrSyncStates { get; }
+    DbSet<OneBase.Domain.Battle.BattleGoal> BattleGoals { get; }
 
     // Источники данных: привязки Google Sheets определяют владельца полей OneBase; конфликты — журнал отказов и строк с ошибками.
     DbSet<OneBase.Domain.Integrations.DataSourceConnection> DataSourceConnections { get; }

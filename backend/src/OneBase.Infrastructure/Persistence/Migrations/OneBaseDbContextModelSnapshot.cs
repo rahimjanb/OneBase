@@ -1485,6 +1485,114 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("SystemLogs");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Battle.BattleGoal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("AgentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("AvgMonth")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("EvaluatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Final")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Level")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<long>("MarketId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MarketName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Percent")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProductCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("RouteSource")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("SecondPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("SecondSum")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Sub")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<long?>("TakenOrderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("TakenPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TakenSum")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("TargetSum")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Week")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id")
+                        .HasName("PK_BattleGoals");
+
+                    b.HasIndex("AgentId", "Week", "Date")
+                        .HasDatabaseName("IX_BattleGoals_Agent_Week_Date");
+
+                    b.HasIndex("AgentId", "Date", "MarketId", "Kind")
+                        .IsUnique()
+                        .HasDatabaseName("IX_BattleGoals_Agent_Date_Market_Kind");
+
+                    b.ToTable("Goals", "battle");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Field.FieldCustomer", b =>
                 {
                     b.Property<long>("MarketId")

@@ -194,7 +194,7 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         var khorazm = Assert.Single(overview.Regions, r => r.Id == s.RegionId);
         Assert.Contains(khorazm.Supervisors, p => p.Id == SupervisorId && p.Name == "Азиз Каримов");
         Assert.Equal(["Бахтиёр Юлдашев", "Дилшод Рахимов", "Отабек Назаров"], khorazm.Agents.Select(a => a.Name).Order());
-        Assert.Equal(13, overview.Jobs.Count);
+        Assert.Equal(ReportCatalog.Jobs.Count, overview.Jobs.Count);
         Assert.All(overview.Jobs, j => Assert.False(j.Enabled)); // по умолчанию ничего не отправляется
         Assert.Equal("Азиз Каримов (OneBase)", overview.Chats.Single(c => c.Id == s.PrivateChatId).LinkedUser);
         Assert.Empty((await service.OverviewAsync(canUseSales: false, default)).Regions);

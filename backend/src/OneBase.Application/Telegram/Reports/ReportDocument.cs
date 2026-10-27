@@ -58,6 +58,9 @@ public sealed record ReportDocument(
     /// <summary>Тестовая отправка (только выбранный чат): на картинке — полоса «ТЕСТОВАЯ ОТПРАВКА».</summary>
     public bool Test { get; init; }
 
+    /// <summary>Карточки «Поля боя» (вертикальные 1080 px) — рисуются отдельным рисовальщиком вместо таблиц; null — обычный отчёт 16:9.</summary>
+    public Battle.BattleCards? Battle { get; init; }
+
     /// <summary>Текст для Telegram-агента («что было в отчёте?») и резервной отправки без картинки.</summary>
     public string Plain()
     {

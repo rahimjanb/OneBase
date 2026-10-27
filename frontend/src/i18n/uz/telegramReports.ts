@@ -58,8 +58,8 @@ const telegramReports: Dict = {
   // Страница и разделы
   "Автоматические отчёты": "Avtomatik hisobotlar",
   "Автоматические отчёты · Telegram · OneBase": "Avtomatik hisobotlar · Telegram · OneBase",
-  "Шесть отчётов по расписанию картинками 16:9 в Telegram — для РМ, СВ и ТП, по оргструктуре «Продаж»":
-    "Jadval bo'yicha oltita hisobot 16:9 rasmlarda Telegram'ga — RM, SV va TP uchun, «Savdo» tashkiliy tuzilmasi bo'yicha",
+  "Семь отчётов по расписанию картинками в Telegram — для РМ, СВ и ТП, по оргструктуре «Продаж»; седьмой — карточки «Поля боя» для ТП и СВ":
+    "Telegram'da jadval bo'yicha rasmlar bilan yettita hisobot — RM, SV va TP uchun, «Savdo» tashkiliy tuzilmasi bo'yicha; yettinchisi — TP va SV uchun «Jang maydoni» kartochkalari",
   "Дневной план, клиенты без закупа, ТП без заказов, акции, категории и итоги недели — картинками для РМ, СВ и ТП по расписанию, с историей отправок.":
     "Kunlik reja, xaridsiz mijozlar, buyurtmasiz TP lar, aksiyalar, toifalar va hafta yakunlari — RM, SV va TP uchun jadval bo'yicha rasmlarda, yuborishlar tarixi bilan.",
   "Расписание": "Jadval",
@@ -103,6 +103,12 @@ const telegramReports: Dict = {
   "4. Заказы с акцией": "4. Aksiyali buyurtmalar",
   "5. Заказы по категориям": "5. Toifalar bo'yicha buyurtmalar",
   "6. Итоги недели": "6. Hafta yakunlari",
+  "7. Поле боя": "7. Jang maydoni",
+  "Карточки целей ТП по магазинам маршрута: 8:30 — маршрут дня, 13:00 — полдень, 18:00 — итог дня, суббота 18:00 — итог недели; СВ — копии карточек своих ТП":
+    "Marshrut do‘konlari bo‘yicha TP maqsad kartochkalari: 8:30 — kun marshruti, 13:00 — tush, 18:00 — kun yakuni, shanba 18:00 — hafta yakuni; SV — o‘z TP lari kartochkalari nusxalari",
+  "маршрут дня": "kun marshruti",
+  "полдень": "tush",
+  "итог недели": "hafta yakuni",
   "8:30 — план дня в сумах и кг, по категориям и визитам; 13:00 — промежуточный итог; 18:00 — итог дня":
     "8:30 — so'm va kg da kunlik reja, toifalar va tashriflar bo'yicha; 13:00 — oraliq yakun; 18:00 — kun yakuni",
   "8:30 — точки активной базы без закупа N+ дней, кто из них на маршруте сегодня": "8:30 — faol bazadagi N+ kun xaridsiz nuqtalar, ulardan qaysilari bugun marshrutda",
