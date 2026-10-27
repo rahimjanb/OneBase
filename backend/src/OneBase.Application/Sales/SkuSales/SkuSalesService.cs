@@ -219,7 +219,7 @@ public sealed class SkuSalesService(IAppDbContext db, SalesOptions options, Sale
         var products = await db.LinkoProducts.AsNoTracking()
             .Select(p => new ProductInfo(p.Id, p.Name, p.Code, p.TypeId))
             .ToDictionaryAsync(p => p.Id, ct);
-        var types = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+        var types = await LinkoTypeTree.LoadAsync(db, ct);
         var regions = RegionsOf(await db.SalesRegions.AsNoTracking().ToListAsync(ct), options);
         var catalog = new SkuSalesCatalog(products, SalesCategories.Build(options.Categories, types), regions.Regions, TopProductSet.Of(options));
         return new CatalogData(catalog, regions.BranchRegions);

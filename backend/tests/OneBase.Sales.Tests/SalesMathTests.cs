@@ -193,4 +193,37 @@ public class SalesMathTests
         Assert.Equal("Тип 99", cats.NameOf(cats.GroupOf(99))); // тип, которого нет даже в справочнике
         Assert.Null(cats.GroupOf(null));
     }
+
+    [Fact]
+    public void Linko_subtypes_inherit_the_category_of_their_parent()
+    {
+        // 27.10.2026 Linko разложил товары по подтипам («Кекс 1,5 кг» под «Кекс», «Снек 140 г» под «Снек»): категории отчёта не пропадают.
+        var names = new Dictionary<long, string>
+        {
+            [10] = "Кекс", [30] = "Кекс 1,5 кг", [38] = "Кекс 1 кг", [22] = "Снек", [26] = "Снек 140 г", [8] = "Помадка", [21] = "Помадка 0,5 кг",
+            [16] = "бонус", [60] = "Кекс 1,5 кг · акция", [77] = "Без родителя",
+        };
+        var parents = new Dictionary<long, long?>
+        {
+            [10] = null, [30] = 10, [38] = 10, [22] = null, [26] = 22, [8] = null, [21] = 8, [16] = null, [60] = 30, [77] = null,
+        };
+        var configured = new Dictionary<string, string> { ["Кекс"] = "10", ["Придзел"] = "22", ["Помадка"] = "8,21", ["Отдельно"] = "38" };
+        var cats = OneBase.Application.Sales.SalesCategories.Build(configured, new OneBase.Application.Sales.LinkoTypeTree(names, parents));
+
+        Assert.Equal("Кекс", cats.NameOf(cats.GroupOf(30)));
+        Assert.Equal("Кекс", cats.NameOf(cats.GroupOf(60))); // подтип подтипа
+        Assert.Equal("Придзел", cats.NameOf(cats.GroupOf(26)));
+        Assert.Equal("Помадка", cats.NameOf(cats.GroupOf(21)));
+        Assert.Equal("Отдельно", cats.NameOf(cats.GroupOf(38))); // своя строка в настройке важнее родителя
+        Assert.False(OneBase.Application.Sales.SalesCategories.IsConfigured(cats.GroupOf(16)));
+        Assert.Equal("Без родителя", cats.NameOf(cats.GroupOf(77)));
+
+        // Петля в справочнике не зацикливает построение.
+        var loop = OneBase.Application.Sales.SalesCategories.Build(configured,
+            new OneBase.Application.Sales.LinkoTypeTree(new Dictionary<long, string> { [1] = "A", [2] = "B" }, new Dictionary<long, long?> { [1] = 2, [2] = 1 }));
+        Assert.False(OneBase.Application.Sales.SalesCategories.IsConfigured(loop.GroupOf(1)));
+
+        Assert.Equal([22L, 26L], OneBase.Application.Sales.SalesCategories.WithDescendants([22L], parents).Order());
+        Assert.Equal([10L, 30L, 38L, 60L], OneBase.Application.Sales.SalesCategories.WithDescendants([10L], parents).Order());
+    }
 }

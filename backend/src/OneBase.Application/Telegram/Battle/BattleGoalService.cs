@@ -329,8 +329,10 @@ public sealed class BattleGoalService(IAppDbContext db, SalesOptions sales, Batt
             return [];
         }
 
-        var twizosTypes = options.TwizosTypeIds;
-        var mogulTypes = options.MogulTypeIds;
+        // Типы из настройки и все их подтипы Linko («Снек» → «Снек 140 г», «Помадка» → «Помадка 0,5 кг»).
+        var tree = await LinkoTypeTree.LoadAsync(db, ct);
+        var twizosTypes = SalesCategories.WithDescendants(options.TwizosTypeIds, tree.Parents).ToArray();
+        var mogulTypes = SalesCategories.WithDescendants(options.MogulTypeIds, tree.Parents).ToArray();
         var rows = await (from l in db.LinkoOrderLines.AsNoTracking()
                 join p in db.LinkoProducts.AsNoTracking() on l.ProductId equals p.Id
                 where orderIds.Contains(l.OrderId) && p.TypeId != null && (twizosTypes.Contains(p.TypeId.Value) || mogulTypes.Contains(p.TypeId.Value))

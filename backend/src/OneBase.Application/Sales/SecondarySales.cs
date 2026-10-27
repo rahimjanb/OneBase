@@ -268,7 +268,14 @@ public sealed class SalesCategories
 
     public static readonly SalesCategories None = new([], []);
 
-    public static SalesCategories Build(IReadOnlyDictionary<string, string> configured, IReadOnlyDictionary<long, string> linkoTypes)
+    /// <summary>
+    /// Карта по справочнику типов Linko с родителями: подтип без своей строки в настройке («Кекс 1,5 кг» → «Кекс») относится к категории
+    /// ближайшего родителя из настройки — 27.10.2026 Linko разложил товары по подтипам, и категории не должны от этого пропадать.
+    /// </summary>
+    public static SalesCategories Build(IReadOnlyDictionary<string, string> configured, LinkoTypeTree types) => Build(configured, types.Names, types.Parents);
+
+    public static SalesCategories Build(IReadOnlyDictionary<string, string> configured, IReadOnlyDictionary<long, string> linkoTypes,
+        IReadOnlyDictionary<long, long?>? parents = null)
     {
         var groupOfType = new Dictionary<long, long>();
         var names = new Dictionary<long, string>();
@@ -286,6 +293,16 @@ public sealed class SalesCategories
             }
         }
 
+        // Подтипы — в категорию ближайшего настроенного родителя (родители считаются по исходной настройке, а не по уже разнесённым подтипам).
+        var configuredTypes = groupOfType.Keys.ToHashSet();
+        foreach (var type in linkoTypes.Keys)
+        {
+            if (!groupOfType.ContainsKey(type) && ConfiguredAncestor(type, configuredTypes, parents) is { } ancestor)
+            {
+                groupOfType[type] = groupOfType[ancestor];
+            }
+        }
+
         foreach (var (type, name) in linkoTypes)
         {
             if (!groupOfType.ContainsKey(type))
@@ -296,6 +313,49 @@ public sealed class SalesCategories
         }
 
         return new SalesCategories(groupOfType, names);
+    }
+
+    /// <summary>Ближайший предок типа, указанный в настройке категорий; цепочка обрывается на 10 шагах (защита от петли в справочнике).</summary>
+    private static long? ConfiguredAncestor(long type, IReadOnlySet<long> configured, IReadOnlyDictionary<long, long?>? parents)
+    {
+        if (parents is null)
+        {
+            return null;
+        }
+
+        var current = type;
+        for (var depth = 0; depth < 10 && parents.TryGetValue(current, out var parent) && parent is { } p && p != current; depth++)
+        {
+            if (configured.Contains(p))
+            {
+                return p;
+            }
+
+            current = p;
+        }
+
+        return null;
+    }
+
+    /// <summary>Типы и все их подтипы (для правил по типам товаров, например «Поле боя»: Твизос — «Снек» и «Снек 140 г»).</summary>
+    public static HashSet<long> WithDescendants(IEnumerable<long> roots, IReadOnlyDictionary<long, long?> parents)
+    {
+        var result = roots.ToHashSet();
+        bool added;
+        do
+        {
+            added = false;
+            foreach (var (type, parent) in parents)
+            {
+                if (parent is { } p && result.Contains(p) && result.Add(type))
+                {
+                    added = true;
+                }
+            }
+        }
+        while (added);
+
+        return result;
     }
 
     /// <summary>Категория отчёта для типа товара; null — у товара нет типа.</summary>

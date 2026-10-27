@@ -318,8 +318,9 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         decimal Target(string k) => targets.TryGetValue(k, out var v) ? v : SalesTargetKeys.Defaults[k];
 
-        var linkoTypes = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
-        var categoryMap = SalesCategories.Build(options.Categories, linkoTypes);
+        var typeTree = await LinkoTypeTree.LoadAsync(db, ct);
+        var linkoTypes = typeTree.Names;
+        var categoryMap = SalesCategories.Build(options.Categories, typeTree);
 
         // План ТП по категориям — по названию весового показателя Linko; текущий и следующий месяц.
         var categoryPlans = weight

@@ -105,7 +105,7 @@ public sealed partial class PrimaryService
         var monthFactoryDays = factoryDays.Where(d => d.Year == year && d.Month == month).ToList();
 
         var products = await db.LinkoProducts.AsNoTracking().Select(p => new { p.Id, p.Name, p.Code, p.TypeId }).ToDictionaryAsync(p => p.Id, ct);
-        var types = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+        var types = await LinkoTypeTree.LoadAsync(db, ct);
         var categories = SalesCategories.Build(options.Categories, types);
         long? GroupOf(long? product) => categories.GroupOf(product is { } p && products.TryGetValue(p, out var info) ? info.TypeId : null);
 

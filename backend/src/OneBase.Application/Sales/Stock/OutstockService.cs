@@ -433,7 +433,7 @@ public sealed class OutstockService(IAppDbContext db, SalesOptions options, IMem
         var dealerOf = snapshot.KeptRegions.ToDictionary(r => r.Id.ToString(), r => r.Dealer);
         var regions = snapshot.Regions.Select(r => new OutstockRegionRef(r.Id, r.Name, dealerOf.GetValueOrDefault(r.Id))).ToList();
 
-        var types = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+        var types = await LinkoTypeTree.LoadAsync(db, ct);
         var categories = SalesCategories.Build(options.Categories, types);
         var top = TopProductSet.Of(options);
         var (topConfigured, topHint) = top.Configured

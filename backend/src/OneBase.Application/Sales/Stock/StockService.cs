@@ -637,7 +637,7 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
         var outs = await outstock.BaseAsync(s.ClosedYear, s.ClosedMonth, ct);
         var zeroDays = outs.Pairs.ToDictionary(p => (p.RegionId, p.ProductId), p => p.ZeroDays);
 
-        var types = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+        var types = await LinkoTypeTree.LoadAsync(db, ct);
         var categories = SalesCategories.Build(options.Categories, types);
         var top = TopProductSet.Of(options);
         var directionRows = await db.SalesDirections.AsNoTracking().Select(d => new { d.Id, d.Name, d.SortOrder }).ToListAsync(ct);

@@ -420,8 +420,8 @@ public sealed class SalesGlossary(IAppDbContext db, SalesOptions options, IMemor
 
         try
         {
-            var types = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
-            var rows = SalesAnalytics.BuildGlossary(SalesCategories.Build(options.Categories, types), types);
+            var types = await LinkoTypeTree.LoadAsync(db, ct);
+            var rows = SalesAnalytics.BuildGlossary(SalesCategories.Build(options.Categories, types), types.Names);
             var regions = await db.SalesRegions.AsNoTracking().OrderBy(r => r.Name).Select(r => r.Name).ToListAsync(ct);
             var products = await db.LinkoProducts.CountAsync(ct);
             var snapshot = new Snapshot(rows, regions, products);

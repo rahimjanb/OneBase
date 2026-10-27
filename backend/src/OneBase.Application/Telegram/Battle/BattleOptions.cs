@@ -15,7 +15,7 @@ public sealed record BattleBonusStep(int Percent, decimal Sum);
 /// </summary>
 public sealed class BattleOptions
 {
-    /// <summary>Типы товаров Linko категории Твизос (претцель) и Могул (помадка).</summary>
+    /// <summary>Типы товаров Linko категории Твизос (претцель) и Могул (помадка); подтипы Linko относятся к ним же.</summary>
     public long[] TwizosTypeIds { get; set; } = [22];
     public long[] MogulTypeIds { get; set; } = [8, 17, 18, 19, 20, 21];
 

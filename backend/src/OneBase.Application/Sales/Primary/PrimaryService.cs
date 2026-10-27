@@ -308,7 +308,7 @@ public sealed partial class PrimaryService(IAppDbContext db, SalesOptions option
         var today = SecondarySales.Today(DateTimeOffset.UtcNow);
         var running = PrimaryMath.IsRunning(year, month, asOf, today); // последний день месяца, пока он идёт, — месяц ещё не закрыт
 
-        var types = await db.LinkoProductTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+        var types = await LinkoTypeTree.LoadAsync(db, ct);
         var categories = SalesCategories.Build(options.Categories, types);
         long? GroupOf(long? product) => categories.GroupOf(product is { } p && products.TryGetValue(p, out var info) ? info.TypeId : null);
 
