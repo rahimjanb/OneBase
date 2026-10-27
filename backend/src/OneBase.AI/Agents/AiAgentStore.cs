@@ -110,6 +110,12 @@ public static class AiSeeder
                 });
             }
 
+            else if (AgentDefaults.OutdatedDescriptions.TryGetValue(d.Code, out var outdated)
+                && await db.AiAgents.FirstOrDefaultAsync(a => a.Code == d.Code, ct) is { Description: { } text } row && outdated.Contains(text))
+            {
+                row.Description = d.Description;
+            }
+
             foreach (var source in d.Sources.Where(s => !sources.Any(x => x.AgentCode == d.Code && x.SourceCode == s)))
             {
                 db.AiAgentKnowledgeSources.Add(new AiAgentKnowledgeSource { AgentCode = d.Code, SourceCode = source });

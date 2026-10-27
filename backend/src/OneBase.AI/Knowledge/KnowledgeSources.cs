@@ -30,6 +30,9 @@ public static class KnowledgeSources
 
     /// <summary>Задачи отделов OneBase: открытые, просроченные, выполненные, исполнители.</summary>
     public const string WorkTasks = "work.tasks";
+
+    /// <summary>HR (Verifix): сотрудники, посещаемость, опоздания, отсутствия, рабочее время и табели.</summary>
+    public const string HrAttendance = "hr.attendance";
     public const string SupplyProviders = "supply.providers";
     public const string Documents = "knowledge.documents";
 
@@ -68,6 +71,11 @@ public static class KnowledgeSources
             "sales.PnlValues, Regions, Directions, ai.DataChangeSets, DataFiles", "Продажи: P&L", Permissions.FinanceRead),
         new(WorkTasks, "Задачи отделов", "Задачи отделов OneBase: открытые, просроченные и выполненные, исполнители, сроки — только отделы, доступные пользователю.",
             "work.Tasks", "Задачи", null),
+        new(HrAttendance, "HR: сотрудники и посещаемость",
+            "Сотрудники из Verifix (подразделение, должность, график, статус, приём и увольнение), приходы и уходы, опоздания, ранние уходы, " +
+            "отсутствия, отпуска и больничные по документам Verifix, отработанные часы, табели и отчёты по подразделениям. ФОТ, кандидатов и оценок нет.",
+            "hr.Employees, References, AttendanceEvents, TimesheetDays, SyncRuns",
+            "HR: обзор, сотрудники, посещаемость, опоздания и отсутствия, рабочее время и табели, отчёты", Permissions.HrRead),
         new(Telegram, "Telegram: автоотчёты и рассылки",
             "Автоматические отчёты в Telegram (расписание 13 запусков, получатели РМ/СВ/ТП, отправки и ошибки) и рассылки (статусы, доставка).",
             "telegram.ReportJobs, ReportRuns, ReportSubscriptions, ReportDeliveries, Campaigns, CampaignRecipients",

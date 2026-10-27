@@ -176,7 +176,7 @@ public class TaskRoutingTests
         // Выключенный сотрудник из ожиданий убирается.
         var company = RouteEvalCases.All.Single(c => c.Code == "company");
         Assert.True(RouteEvalCases.Correct(company, D("finance", "sales"), new HashSet<string> { "finance", "sales" }));
-        Assert.Equal(24, RouteEvalCases.All.Count);
+        Assert.Equal(26, RouteEvalCases.All.Count);
         Assert.Equal(RouteEvalCases.All.Count, RouteEvalCases.All.Select(c => c.Code).Distinct().Count());
     }
 
@@ -321,16 +321,17 @@ public class ModelComparisonDbTests(DataManagerDb fixture) : IClassFixture<DataM
                 sp.GetRequiredService<SalesGlossary>(), new ModelComparisons(evalGateway, limits, scopes, NullLogger<ModelComparisons>.Instance), limits);
             var run = await evaluation.RunRouteAsync(fixture.AdminId, null, CancellationToken.None);
 
-            Assert.Equal(("done", 24, 24), (run.Status, run.Done, run.Total));
-            Assert.Equal((24, 24), (run.Baseline!.Correct, run.Baseline.Valid));
-            Assert.Equal(22, run.Candidate!.Correct); // «Привет» и «Спасибо» — лишний вызов продаж
-            Assert.Equal(22, run.Agree);
-            Assert.Equal(48, evalGateway.Calls.Count); // по вызову каждой модели на задачу, без повторов и резерва
+            var n = RouteEvalCases.All.Count;
+            Assert.Equal(("done", n, n), (run.Status, run.Done, run.Total));
+            Assert.Equal((n, n), (run.Baseline!.Correct, run.Baseline.Valid));
+            Assert.Equal(n - 2, run.Candidate!.Correct); // «Привет» и «Спасибо» — лишний вызов продаж
+            Assert.Equal(n - 2, run.Agree);
+            Assert.Equal(2 * n, evalGateway.Calls.Count); // по вызову каждой модели на задачу, без повторов и резерва
             Assert.All(evalGateway.Calls, o => Assert.Equal(("eval.route", false, false), (o.Context.Purpose, o.AllowFallback, o.RetrySameModel)));
 
             var db = sp.GetRequiredService<OneBaseDbContext>();
             var rows = await db.AiModelComparisons.AsNoTracking().Where(c => c.Source == "eval").ToListAsync();
-            Assert.Equal(24, rows.Count);
+            Assert.Equal(n, rows.Count);
             Assert.Equal(["greeting", "thanks"], rows.Where(r => r.CandidateCorrect == false).Select(r => r.CaseCode).Order());
             Assert.All(rows, r => Assert.NotNull(r.Expected));
         }

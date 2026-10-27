@@ -793,6 +793,65 @@ const dict: Dict = {
     "Jamoa: nomi. Jamoasiz — foydalanuvchining butun hududi.",
   "Сколько рекомендаций вернуть в списке: по умолчанию 20, до 100.":
     "Ro'yxatda nechta tavsiya qaytarish: standart 20, 100 gacha.",
+  // HR (Verifix): источник знаний, описание HR AI и инструменты get_hr_* (Tools/Data/HrTools.cs).
+  "HR: посещаемость за день":
+    "HR: kunlik davomat",
+  "Посещаемость сотрудников за день по данным Verifix (раздел HR): сколько активных, пришли, опоздали, отсутствуют, по документу (отпуск, больничный, командировка), ожидаются, выходной, нет графика, не ясно, отметок за день; то же по подразделениям; списки — кто отсутствует, кто опоздал (на сколько минут, приход и начало смены), кто по документу и у кого «не ясно»; когда данные Verifix синхронизированы. Аргументы: date — yyyy-MM-dd, «сегодня» (по умолчанию) или «вчера»; division — подразделение Verifix (название или ID). «Отсутствует» — рабочий день по графику Verifix без прихода и без документа при полностью загруженных отметках; «не ясно» — данных недостаточно (не прогул); «по документу» — отпуск, больничный, командировка, отгул; одна отметка без прихода — не рабочий день. Опоздание — приход позже начала смены больше допуска; ранний уход — уход раньше конца смены.":
+    "Verifix ma'lumotlari bo'yicha xodimlarning kunlik davomati (HR bo'limi): nechta faol, keldi, kechikdi, kelmagan, hujjat bo'yicha (ta'til, kasallik varaqasi, xizmat safari), kutilmoqda, dam olish kuni, jadval yo'q, aniq emas, kun davomidagi belgilar; xuddi shu bo'linmalar bo'yicha; ro'yxatlar — kim kelmagan, kim kechikkan (necha daqiqaga, kelish va smena boshlanishi), kim hujjat bo'yicha va kimda «aniq emas»; Verifix ma'lumotlari qachon sinxronlangan. Argumentlar: date — yyyy-MM-dd, «bugun» (standart) yoki «kecha»; division — Verifix bo'linmasi (nomi yoki ID). «Kelmagan» — Verifix jadvali bo'yicha ish kuni, kelish va hujjat yo'q, belgilar to'liq yuklangan; «aniq emas» — ma'lumot yetarli emas (progul emas); «hujjat bo'yicha» — ta'til, kasallik varaqasi, xizmat safari, javob; kelishsiz bitta belgi — ish kuni emas. Kechikish — smena boshlanishidan ruxsat etilgan vaqtdan ko'proq kech kelish; erta ketish — smena tugashidan oldin ketish.",
+  "День: yyyy-MM-dd, «сегодня» (по умолчанию) или «вчера».":
+    "Kun: yyyy-MM-dd, «bugun» (standart) yoki «kecha».",
+  "Подразделение Verifix: название или ID. Без него — все.":
+    "Verifix bo'linmasi: nomi yoki ID. Usiz — hammasi.",
+  "HR: сотрудники":
+    "HR: xodimlar",
+  "Сотрудники из Verifix: ФИО, ID Verifix, подразделение, должность, график, статус (работает, уволен, не принят), дата приёма и увольнения, последняя отметка, итог сегодняшнего дня; сколько человек по подразделениям. Аргументы: search — часть ФИО или ID Verifix; division — подразделение (название или ID); status — working (по умолчанию) / dismissed / not_hired / missing (пропали из Verifix) / all; sort — name (по умолчанию) / hired (сначала новые) / division; limit — сколько строк (50, до 200). Контакты (телефон, почта) не отдаются.":
+    "Verifix xodimlari: F.I.Sh., Verifix ID, bo'linma, lavozim, jadval, holat (ishlaydi, ishdan bo'shagan, qabul qilinmagan), ishga qabul va bo'shash sanasi, oxirgi belgi, bugungi kun natijasi; bo'linmalar bo'yicha necha kishi. Argumentlar: search — F.I.Sh. qismi yoki Verifix ID; division — bo'linma (nomi yoki ID); status — working (standart) / dismissed / not_hired / missing (Verifix'dan yo'qolgan) / all; sort — name (standart) / hired (avval yangilar) / division; limit — nechta qator (50, 200 gacha). Kontaktlar (telefon, pochta) berilmaydi.",
+  "Часть ФИО или ID Verifix.":
+    "F.I.Sh. qismi yoki Verifix ID.",
+  "Подразделение Verifix: название или ID.":
+    "Verifix bo'linmasi: nomi yoki ID.",
+  "working — работают (по умолчанию), dismissed — уволены, not_hired — не приняты, missing — пропали из Verifix, all — все.":
+    "working — ishlaydi (standart), dismissed — ishdan bo'shagan, not_hired — qabul qilinmagan, missing — Verifix'dan yo'qolgan, all — hammasi.",
+  "name — по ФИО (по умолчанию), hired — сначала недавно принятые, division — по подразделению.":
+    "name — F.I.Sh. bo'yicha (standart), hired — avval yaqinda qabul qilinganlar, division — bo'linma bo'yicha.",
+  "Сколько сотрудников вернуть: 50 по умолчанию, до 200.":
+    "Nechta xodim qaytarish: standart 50, 200 gacha.",
+  "HR: карточка сотрудника":
+    "HR: xodim kartochkasi",
+  "Карточка сотрудника по данным Verifix: подразделение, должность, график, статус, приём и увольнение, заметка HR; итоги за период (рабочих дней, с приходом, опозданий и минут, ранних уходов, отсутствий, дней по документам, отработано и план в часах) и каждый день — итог, начало и конец смены, приход, уход, опоздание, ранний уход, отработано, документ, пояснение. Аргументы: employee — ФИО (часть) или ID Verifix (обязательно); from, to — yyyy-MM-dd, по умолчанию последние 14 дней, не больше 62. «Отсутствует» — рабочий день по графику Verifix без прихода и без документа при полностью загруженных отметках; «не ясно» — данных недостаточно (не прогул); «по документу» — отпуск, больничный, командировка, отгул; одна отметка без прихода — не рабочий день. Опоздание — приход позже начала смены больше допуска; ранний уход — уход раньше конца смены.":
+    "Verifix ma'lumotlari bo'yicha xodim kartochkasi: bo'linma, lavozim, jadval, holat, ishga qabul va bo'shash, HR qaydi; davr yakunlari (ish kunlari, kelgan kunlar, kechikishlar va daqiqalar, erta ketishlar, kelmasliklar, hujjat bo'yicha kunlar, soatlarda ishlangan va reja) va har bir kun — natija, smena boshlanishi va tugashi, kelish, ketish, kechikish, erta ketish, ishlangan, hujjat, izoh. Argumentlar: employee — F.I.Sh. (qismi) yoki Verifix ID (majburiy); from, to — yyyy-MM-dd, standart oxirgi 14 kun, 62 kundan ko'p emas. «Kelmagan» — Verifix jadvali bo'yicha ish kuni, kelish va hujjat yo'q, belgilar to'liq yuklangan; «aniq emas» — ma'lumot yetarli emas (progul emas); «hujjat bo'yicha» — ta'til, kasallik varaqasi, xizmat safari, javob; kelishsiz bitta belgi — ish kuni emas. Kechikish — smena boshlanishidan ruxsat etilgan vaqtdan ko'proq kech kelish; erta ketish — smena tugashidan oldin ketish.",
+  "ФИО (можно часть) или ID Verifix. Обязательно.":
+    "F.I.Sh. (qismi ham bo'ladi) yoki Verifix ID. Majburiy.",
+  "Начало периода: yyyy-MM-dd.":
+    "Davr boshi: yyyy-MM-dd.",
+  "Конец периода: yyyy-MM-dd (по умолчанию сегодня).":
+    "Davr oxiri: yyyy-MM-dd (standart bugun).",
+  "HR: опоздания и отсутствия":
+    "HR: kechikishlar va kelmasliklar",
+  "Нарушения дисциплины за период по графикам Verifix: опоздания (минуты), ранние уходы, отсутствия, дни без отметки ухода. Возвращает сколько каждого вида, по сотрудникам (сколько раз и минут — от самых частых) и список случаев (дата, сотрудник, подразделение, вид, минуты, смена, приход, уход, пояснение). Аргументы: from, to — yyyy-MM-dd (по умолчанию последние 7 дней, не больше 62); kind — late / early / absent / noexit / all (по умолчанию); division — подразделение; limit — сколько случаев в списке (50). «Отсутствует» — рабочий день по графику Verifix без прихода и без документа при полностью загруженных отметках; «не ясно» — данных недостаточно (не прогул); «по документу» — отпуск, больничный, командировка, отгул; одна отметка без прихода — не рабочий день. Опоздание — приход позже начала смены больше допуска; ранний уход — уход раньше конца смены.":
+    "Verifix jadvallari bo'yicha davr uchun intizom buzilishlari: kechikishlar (daqiqalar), erta ketishlar, kelmasliklar, ketish qayd etilmagan kunlar. Qaytaradi: har bir turdan nechta, xodimlar bo'yicha (necha marta va daqiqa — eng ko'pidan) va holatlar ro'yxati (sana, xodim, bo'linma, tur, daqiqalar, smena, kelish, ketish, izoh). Argumentlar: from, to — yyyy-MM-dd (standart oxirgi 7 kun, 62 kundan ko'p emas); kind — late / early / absent / noexit / all (standart); division — bo'linma; limit — ro'yxatda nechta holat (50). «Kelmagan» — Verifix jadvali bo'yicha ish kuni, kelish va hujjat yo'q, belgilar to'liq yuklangan; «aniq emas» — ma'lumot yetarli emas (progul emas); «hujjat bo'yicha» — ta'til, kasallik varaqasi, xizmat safari, javob; kelishsiz bitta belgi — ish kuni emas. Kechikish — smena boshlanishidan ruxsat etilgan vaqtdan ko'proq kech kelish; erta ketish — smena tugashidan oldin ketish.",
+  "late — опоздания, early — ранние уходы, absent — отсутствия, noexit — нет ухода, all — все (по умолчанию).":
+    "late — kechikishlar, early — erta ketishlar, absent — kelmasliklar, noexit — ketish qayd etilmagan, all — hammasi (standart).",
+  "Сколько случаев в списке: 50 по умолчанию, до 300.":
+    "Ro'yxatda nechta holat: standart 50, 300 gacha.",
+  "HR: табель и отчёт":
+    "HR: tabel va hisobot",
+  "Табель и отчёт по рабочему времени за период по данным Verifix: итоги (сотрудников, рабочих дней по графику, с приходом, опозданий и минут, ранних уходов, отсутствий, дней по документам, «не ясно», отработано и план в часах, явка % — доля дней с приходом среди решённых рабочих, без опозданий % — доля приходов без опоздания); по подразделениям — то же; по сотрудникам — итоги периода. Аргументы: from, to — yyyy-MM-dd (по умолчанию текущий месяц, не больше 62 дней); division — подразделение; search — часть ФИО; sort — late / absent / worked / attendance / name (по умолчанию late — больше опозданий сверху); limit — сколько сотрудников (30). Для 1–5 сотрудников добавляются буквы дней табеля (Я — явка, ОП — опоздание, РУ — ранний уход, РВ — работа в выходной, ОТС — отсутствие, ОТ/Б/К/О/НО — документ, В — выходной, П — праздник, ? — не ясно).":
+    "Verifix ma'lumotlari bo'yicha davr uchun ish vaqti tabeli va hisoboti: yakunlar (xodimlar, jadval bo'yicha ish kunlari, kelgan kunlar, kechikishlar va daqiqalar, erta ketishlar, kelmasliklar, hujjat bo'yicha kunlar, «aniq emas», soatlarda ishlangan va reja, kelish % — hal bo'lgan ish kunlari orasida kelgan kunlar ulushi, kechikishsiz % — kechikishsiz kelishlar ulushi); bo'linmalar bo'yicha — xuddi shunday; xodimlar bo'yicha — davr yakunlari. Argumentlar: from, to — yyyy-MM-dd (standart joriy oy, 62 kundan ko'p emas); division — bo'linma; search — F.I.Sh. qismi; sort — late / absent / worked / attendance / name (standart late — kechikishlar ko'pi yuqorida); limit — nechta xodim (30). 1–5 xodim uchun tabel kunlari harflari qo'shiladi (Я — kelish, ОП — kechikish, РУ — erta ketish, РВ — dam olish kunida ish, ОТС — kelmaslik, ОТ/Б/К/О/НО — hujjat, В — dam olish kuni, П — bayram, ? — aniq emas).",
+  "Начало периода: yyyy-MM-dd (по умолчанию 1-е число текущего месяца).":
+    "Davr boshi: yyyy-MM-dd (standart joriy oyning 1-sanasi).",
+  "Часть ФИО сотрудника.":
+    "Xodim F.I.Sh. qismi.",
+  "Порядок сотрудников.":
+    "Xodimlar tartibi.",
+  "Сколько сотрудников вернуть: 30 по умолчанию, до 300.":
+    "Nechta xodim qaytarish: standart 30, 300 gacha.",
+  "HR: сотрудники и посещаемость":
+    "HR: xodimlar va davomat",
+  "Сотрудники из Verifix (подразделение, должность, график, статус, приём и увольнение), приходы и уходы, опоздания, ранние уходы, отсутствия, отпуска и больничные по документам Verifix, отработанные часы, табели и отчёты по подразделениям. ФОТ, кандидатов и оценок нет.":
+    "Verifix xodimlari (bo'linma, lavozim, jadval, holat, ishga qabul va bo'shash), kelish va ketishlar, kechikishlar, erta ketishlar, kelmasliklar, Verifix hujjatlari bo'yicha ta'til va kasallik varaqalari, ishlangan soatlar, bo'linmalar bo'yicha tabellar va hisobotlar. Ish haqi fondi, nomzodlar va baholashlar yo'q.",
+  "HR: сотрудники и подразделения (Verifix), посещаемость, опоздания, ранние уходы, отсутствия, отпуска и больничные, рабочее время и табели, приём и увольнения; команда продаж, вакансии, нагрузка и эффективность.":
+    "HR: xodimlar va bo'linmalar (Verifix), davomat, kechikishlar, erta ketishlar, kelmasliklar, ta'til va kasallik varaqalari, ish vaqti va tabellar, ishga qabul va bo'shashlar; savdo jamoasi, bo'sh ish o'rinlari, ish yuki va samaradorlik.",
 };
 
 export default dict;

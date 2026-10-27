@@ -57,6 +57,8 @@ public static class RouteEvalCases
         new("campaigns", "Какие рекламные кампании дали больше всего лидов?", [Marketing]),
         new("team-load", "Какая нагрузка у сотрудников и кто чаще пропускает маршруты?", [Hr], Allowed: [Sales]),
         new("overdue-tasks", "Какие задачи отделов просрочены?", [Hr], Allowed: [Sales]),
+        new("hr-late-today", "Кто сегодня опоздал на работу?", [Hr]),
+        new("hr-timesheet", "Сколько часов отработал каждый отдел в этом месяце и где больше всего прогулов?", [Hr]),
         new("company", "Что происходит в компании и что улучшить в первую очередь?", [Finance, Sales, Marketing, Hr, Production, Supply]),
         new("greeting", "Привет! Что ты умеешь?", []),
         new("thanks", "Спасибо, всё понятно", []),

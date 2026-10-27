@@ -171,6 +171,11 @@ export type HrReport = {
   sync: HrSyncBrief;
 };
 
+/** «Лидеры месяца» (/api/hr/leaders): ни разу не опоздавшие за месяц — по отработанным часам. */
+export type HrLeader = { place: number; employeeId: string; employee: string; division: string | null; job: string | null; workedMinutes: number; planMinutes: number; presentDays: number; planDays: number };
+
+export type HrLeaders = { from: string; to: string; employees: number; onTime: number; leaders: HrLeader[]; sync: HrSyncBrief };
+
 export type PageResult<T> = { items: T[]; total: number; page: number; pageSize: number };
 
 export type HrSyncStatus = "Running" | "Succeeded" | "Partial" | "Failed";

@@ -133,6 +133,13 @@ public static class DependencyInjection
         services.AddScoped<ITool, GetFieldRoutesTool>();
         services.AddScoped<ITool, GetFieldRecommendationsTool>();
         services.AddScoped<ITool, GetDepartmentTasksTool>();
+
+        // HR (Verifix): посещаемость за день, сотрудники, карточка, опоздания и отсутствия, табель — расчёты HrService.
+        services.AddScoped<ITool, GetHrDayTool>();
+        services.AddScoped<ITool, GetHrEmployeesTool>();
+        services.AddScoped<ITool, GetHrEmployeeTool>();
+        services.AddScoped<ITool, GetHrDeviationsTool>();
+        services.AddScoped<ITool, GetHrTimesheetTool>();
         services.AddScoped<ITool, GetPrimaryShipmentsTool>();
         services.AddScoped<ITool, GetPaymentsTool>();
         services.AddScoped<ITool, GetSuppliersTool>();

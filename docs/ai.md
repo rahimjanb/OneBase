@@ -48,7 +48,7 @@
 | sales | Sales AI | `sales.read` | все источники; в фокусе вторичка, визиты, планы, команда |
 | finance | Finance AI | `finance.read` | все источники; в фокусе оплаты, акт сверки, DSO, P&L, выручка |
 | marketing | Marketing AI | всем | все источники; в фокусе товары, категории, акции (кампаний и лидов нет) |
-| hr | HR AI | `hr.read` | все источники; в фокусе команда продаж и визиты (ФОТ, кандидатов, текучести нет) |
+| hr | HR AI | `hr.read` | все источники; в фокусе данные Verifix (сотрудники, посещаемость, опоздания, отсутствия, табели), команда продаж и задачи отделов (ФОТ, кандидатов, оценок нет) |
 | production | Production AI | всем | все источники; в фокусе первичка и остатки (выпуска нет) |
 | supply | Supply AI | всем | все источники; в фокусе остатки, первичка, поставщики (закупок нет) |
 
@@ -64,7 +64,7 @@
 
 ## Инструменты
 
-`get_sales`, `get_sales_by_branch`, `get_sales_by_employee`, `get_problem_agents`, `get_products`, `find_products`, `get_customers`, `get_visits`, `get_sales_kpi`, `get_sales_trend`, `get_sku_sales`, `get_export_sales`, `get_dealer_pnl`, `get_inventory`, `get_outstock`, `get_primary_shipments`, `get_payments`, `get_suppliers`, `get_field_team`, `get_field_tasks`, `get_field_routes`, `get_field_recommendations`, `get_department_tasks`, `search_knowledge`, `get_agent`, `get_agent_visits`, `get_store`, `get_orders`, `get_kpi`, `get_promo`, `get_akt`, `get_dso`, `get_sales_days`, `get_telegram`.
+`get_sales`, `get_sales_by_branch`, `get_sales_by_employee`, `get_problem_agents`, `get_products`, `find_products`, `get_customers`, `get_visits`, `get_sales_kpi`, `get_sales_trend`, `get_sku_sales`, `get_export_sales`, `get_dealer_pnl`, `get_inventory`, `get_outstock`, `get_primary_shipments`, `get_payments`, `get_suppliers`, `get_field_team`, `get_field_tasks`, `get_field_routes`, `get_field_recommendations`, `get_department_tasks`, `get_hr_day`, `get_hr_employees`, `get_hr_employee`, `get_hr_deviations`, `get_hr_timesheet`, `search_knowledge`, `get_agent`, `get_agent_visits`, `get_store`, `get_orders`, `get_kpi`, `get_promo`, `get_akt`, `get_dso`, `get_sales_days`, `get_telegram`.
 
 | Инструмент | Источник | Право | Что отдаёт |
 |---|---|---|---|
@@ -78,6 +78,11 @@
 | `get_sales_days` | `sales.secondary` | `sales.read` | Продажи за день или отрезок дней месяца (сегодня, неделя, «с 1 по 15») — итог, каждый день, регионы или ТП; республика, направление РМ, регион, ТП. |
 | `get_telegram` | `system.telegram` | `telegram.manage` или `telegram.campaigns` | Автоотчёты (только с `telegram.manage`): запуски, следующий и последний, получатели, отправки и неудачные с причиной; рассылки: статус и доставка. Без права раздел не отдаётся. |
 | `get_department_tasks` | `work.tasks` | — (видимость отделов решает `WorkTaskService`) | Задачи отделов: открыто, просрочено, выполнено за период; список с исполнителем, сроком, итогом или причиной отмены. Чужой отдел — отказ. |
+| `get_hr_day` | `hr.attendance` | `hr.read` | Посещаемость за день (Verifix): активных, пришли, опоздали, ранний уход, отсутствуют, по документу, ожидаются, выходной, нет графика, «не ясно»; по подразделениям; списки отсутствующих, опоздавших (минуты, приход, смена), по документу и «не ясно»; время синхронизации. |
+| `get_hr_employees` | `hr.attendance` | `hr.read` | Сотрудники Verifix: ФИО, ID, подразделение (с дочерними), должность, график, статус, приём и увольнение, итог сегодня; по подразделениям. Телефон и почта не отдаются. |
+| `get_hr_employee` | `hr.attendance` | `hr.read` | Карточка сотрудника (ФИО или ID Verifix) за период до 62 дней: итоги (рабочие дни, приходы, опоздания и минуты, ранние уходы, отсутствия, документы, часы и план, явка, пунктуальность) и каждый день. |
+| `get_hr_deviations` | `hr.attendance` | `hr.read` | Опоздания, ранние уходы, отсутствия, нет ухода за период: сколько каждого вида, по сотрудникам, список случаев. |
+| `get_hr_timesheet` | `hr.attendance` | `hr.read` | Табель за период (по умолчанию месяц): итоги, по подразделениям и сотрудникам — дни, опоздания, отсутствия, часы против плана, явка и пунктуальность; для 1–5 сотрудников — буквы дней. |
 
 Инструменты Sales Base видят только область пользователя: агент — себя, супервайзер — свою команду, РМ — всё или свои филиалы.
 Источники выдаются сотрудникам в `AgentDefaults` (при запуске `AiSeeder` дописывает недостающие, выключенное администратором заново

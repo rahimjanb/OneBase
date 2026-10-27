@@ -11,6 +11,7 @@ import { TasksDonut } from "@/components/dashboard/TasksDonut";
 import { UpcomingTasks } from "@/components/dashboard/UpcomingTasks";
 import { getLocale, getT } from "@/i18n/server";
 import type { AiAlertsView } from "@/lib/ai";
+import type { HrLeaders } from "@/lib/hr";
 import { activityOf, insightsOf, upcomingOf, type NotificationRow } from "@/lib/dashboard";
 import { departmentRows, kpis, summary, taskStatuses, trendSeries } from "@/lib/dashboard.mock";
 import { headerClock } from "@/lib/dashboardClock";
@@ -30,16 +31,20 @@ export async function generateMetadata() {
  * консультант); где их нет — пустое состояние. Показатели в числах — из lib/dashboard.mock до подключения API.
  */
 export default async function DashboardPage() {
-  const [me, alerts, departments, notifications] = await Promise.all([
+  const [me, alerts, departments, notifications, leaders] = await Promise.all([
     apiSession<Me>("/api/auth/me"),
     apiTry<AiAlertsView>("/api/ai/alerts"),
     apiTry<DepartmentTasks[]>("/api/work/departments"),
     apiTry<{ items: NotificationRow[] }>("/api/notifications?take=8"),
+    // Без доступа к HR сервер ответит 403 — блок покажет, кому виден рейтинг.
+    apiTry<HrLeaders>("/api/hr/leaders?take=7"),
   ]);
   // Роль без общих разделов (например, «Админ 2») начинает со своего первого раздела.
   if (me && !canOpen("/", me.permissions)) redirect(homeFor(me.permissions));
   const [t, locale] = await Promise.all([getT(), getLocale()]);
   const now = new Date();
+  // Месяц рейтинга словом («октябрь»): в первые дни месяца сервер берёт прошлый месяц.
+  const leadersMonth = (leaders ? new Date(`${leaders.from}T12:00:00Z`) : now).toLocaleDateString(locale, { month: "long", timeZone: leaders ? "UTC" : "Asia/Tashkent" });
   const name = me?.firstName || me?.name || me?.login || "";
 
   // Открытые задачи отделов, где они видны пользователю, — для дедлайнов недели.
@@ -73,7 +78,7 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_280px_320px]">
         <UpcomingTasks items={upcoming} total={tasks.filter((x) => x.task.status === "New" || x.task.status === "InProgress").length} available={departments !== null} />
-        <LeadersCard leaders={[]} t={t} />
+        <LeadersCard data={leaders} access={me?.hrAccess ?? false} month={leadersMonth} t={t} />
         <ActivityFeed events={notifications ? activityOf(notifications.items, now, t) : []} available={notifications !== null} t={t} />
       </div>
     </div>

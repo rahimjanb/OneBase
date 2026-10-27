@@ -1,6 +1,9 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using OneBase.AI.Tools;
+using OneBase.AI.Tools.Data;
 using OneBase.Application.Field;
 using OneBase.Application.Hr;
 using OneBase.Application.Security;
@@ -446,5 +449,137 @@ public class HrSyncDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         Assert.Equal(FakeVerifix.ClientSecret, connection.ClientSecret);
         Assert.False(connection.IsReady);
         Assert.Empty(Verifix.Calls);
+    }
+
+    /// <summary>«Лидеры месяца»: только работающие и ни разу не опоздавшие за месяц, по отработанным часам; в первые дни — прошлый месяц.</summary>
+    [PostgresFact]
+    public async Task Leaders_of_the_month_are_on_time_employees_by_worked_hours()
+    {
+        await SeedAsync();
+        await SyncAsync();
+
+        var leaders = await WithAsync(async sp => await sp.GetRequiredService<HrService>().LeadersAsync(await HrContextAsync(sp), 7, CancellationToken.None));
+        Assert.Equal((new DateOnly(2026, 10, 1), Today), (leaders.From, leaders.To));
+        Assert.Equal(4, leaders.Employees); // уволенный 01.10 не считается
+        // Алиев опоздал вчера, Расулов — сегодня, Юсупов в отпуске (нет приходов) — в рейтинг попадает только Каримова.
+        var only = Assert.Single(leaders.Leaders);
+        Assert.Equal(1, leaders.OnTime);
+        Assert.Equal((1, "Каримова Дилноза", "Команда Ташкент", 1), (only.Place, only.Employee, only.Division, only.PresentDays));
+        Assert.True(only.WorkedMinutes > 6 * 60, $"отработано {only.WorkedMinutes} мин"); // 08:58–18:02
+
+        // 2 ноября — ещё прошлый месяц целиком.
+        fixture.Clock.Now = new DateTimeOffset(2026, 11, 2, 5, 0, 0, TimeSpan.Zero);
+        var early = await WithAsync(async sp => await sp.GetRequiredService<HrService>().LeadersAsync(await HrContextAsync(sp), 7, CancellationToken.None));
+        Assert.Equal((new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)), (early.From, early.To));
+        fixture.Clock.Now = Now;
+
+        var outsider = Guid.NewGuid();
+        await WithAsync(async sp => await Assert.ThrowsAsync<FieldForbiddenException>(async () =>
+            await sp.GetRequiredService<HrService>().LeadersAsync(await HrContextAsync(sp, outsider, Employee), 7, CancellationToken.None)));
+    }
+
+    /// <summary>Инструменты HR AI-сотрудника: те же цифры, что страницы HR; без телефонов; без права «HR» — отказ.</summary>
+    [PostgresFact]
+    public async Task Ai_hr_tools_answer_from_verifix_data_and_refuse_without_hr_access()
+    {
+        await SeedAsync();
+        await SyncAsync();
+        var s = Guid.NewGuid().ToString("N")[..6];
+        var (hrUser, outsider) = await WithAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<OneBaseDbContext>();
+            var hrRole = new Role { Name = $"HR AI-теста {s}" };
+            hrRole.Permissions.Add(new RolePermission { Code = Permissions.HrRead });
+            var plain = new Role { Name = $"Сотрудник AI-теста {s}" };
+            plain.Permissions.Add(new RolePermission { Code = Permissions.FilesRead });
+            var hr = new User { Login = $"hr-ai-{s}", FullName = "HR Тестовый" };
+            hr.Roles.Add(new UserRole { Role = hrRole });
+            var other = new User { Login = $"hr-ai-other-{s}", FullName = "Сотрудник Тестовый" };
+            other.Roles.Add(new UserRole { Role = plain });
+            db.Users.AddRange(hr, other);
+            await db.SaveChangesAsync();
+            return (hr.Id, other.Id);
+        });
+
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        async Task<(ToolResult Result, JsonElement Json)> Ask<T>(Guid user, object args) where T : ITool
+        {
+            var result = await ActivatorUtilities.CreateInstance<T>(sp).ExecuteAsync(new ToolContext("hr", user, 0), JsonSerializer.SerializeToElement(args));
+            Assert.True(result.Success, result.Content);
+            Assert.DoesNotContain("998900000", result.Content); // телефоны модели не отдаются
+            return (result, JsonDocument.Parse(result.Content).RootElement.Clone());
+        }
+
+        // Сегодня: двое пришли (один опоздал на 40 минут), одна отсутствует, один в отпуске; уволенный не считается.
+        var (day, d) = await Ask<GetHrDayTool>(hrUser, new { });
+        Assert.Equal("2026-10-21", d.GetProperty("date").GetString());
+        var totals = d.GetProperty("totals");
+        Assert.Equal(4, totals.GetProperty("active").GetInt32());
+        Assert.Equal(2, totals.GetProperty("present").GetInt32());
+        Assert.Equal(1, totals.GetProperty("late").GetInt32());
+        Assert.Equal(1, totals.GetProperty("absent").GetInt32());
+        Assert.Equal(1, totals.GetProperty("onLeave").GetInt32());
+        var late = Assert.Single(d.GetProperty("lateList").EnumerateArray());
+        Assert.Equal("Расулов Тимур", late.GetProperty("employee").GetString());
+        Assert.Equal(40, late.GetProperty("lateMinutes").GetInt32());
+        Assert.Equal("09:40", late.GetProperty("firstIn").GetString());
+        Assert.Equal("Каримова Дилноза", Assert.Single(d.GetProperty("absentList").EnumerateArray()).GetProperty("employee").GetString());
+        Assert.True(d.GetProperty("sync").GetProperty("configured").GetBoolean());
+        Assert.NotNull(d.GetProperty("sync").GetProperty("lastSync").GetString());
+        Assert.Contains("/hr/attendance?date=2026-10-21", JsonSerializer.Serialize(day.Sources));
+
+        // Подразделение по части названия — с дочерними; уволенные — отдельным статусом.
+        var (_, team) = await Ask<GetHrEmployeesTool>(hrUser, new { division = "продаж" });
+        Assert.Equal("Отдел продаж", team.GetProperty("division").GetString());
+        Assert.Equal(["Алиев Бобур", "Каримова Дилноза", "Расулов Тимур"], team.GetProperty("employees").EnumerateArray().Select(e => e.GetProperty("fullName").GetString()));
+        var (_, dismissed) = await Ask<GetHrEmployeesTool>(hrUser, new { status = "уволенные" });
+        var gone = Assert.Single(dismissed.GetProperty("employees").EnumerateArray());
+        Assert.Equal("Уволенный Пётр", gone.GetProperty("fullName").GetString());
+        Assert.Equal("уволен", gone.GetProperty("status").GetString());
+        Assert.Equal("2026-10-01", gone.GetProperty("dismissed").GetString());
+
+        // Карточка по фамилии: итоги периода и каждый день.
+        var (_, card) = await Ask<GetHrEmployeeTool>(hrUser, new { employee = "алиев", from = "2026-10-20", to = "2026-10-21" });
+        Assert.Equal(101, card.GetProperty("verifixId").GetInt64());
+        Assert.Equal(1, card.GetProperty("summary").GetProperty("lateDays").GetInt32());
+        Assert.Equal(20, card.GetProperty("summary").GetProperty("lateMinutes").GetInt32());
+        Assert.Equal(2, card.GetProperty("summary").GetProperty("presentDays").GetInt32());
+        var days = card.GetProperty("days").EnumerateArray().ToList();
+        Assert.Equal(["2026-10-20", "2026-10-21"], days.Select(x => x.GetProperty("date").GetString()));
+        Assert.Equal("09:20", days[0].GetProperty("firstIn").GetString());
+        Assert.Equal(20, days[0].GetProperty("lateMinutes").GetInt32());
+
+        // Нарушения за два дня: отпуск — не нарушение.
+        var (_, dev) = await Ask<GetHrDeviationsTool>(hrUser, new { from = "2026-10-20", to = "2026-10-21" });
+        Assert.Equal(2, dev.GetProperty("counts").GetProperty("late").GetInt32());
+        Assert.Equal(60, dev.GetProperty("counts").GetProperty("lateMinutes").GetInt32());
+        Assert.Equal(1, dev.GetProperty("counts").GetProperty("absent").GetInt32());
+        Assert.DoesNotContain("Юсупов", dev.ToString());
+        var (_, lateOnly) = await Ask<GetHrDeviationsTool>(hrUser, new { from = "2026-10-20", to = "2026-10-21", kind = "опоздания" });
+        Assert.All(lateOnly.GetProperty("cases").EnumerateArray(), c => Assert.Equal("опоздание", c.GetProperty("kind").GetString()));
+
+        // Табель: по подразделениям и сотрудникам; буквы дней — когда сотрудников немного.
+        var (_, sheet) = await Ask<GetHrTimesheetTool>(hrUser, new { from = "2026-10-20", to = "2026-10-21", search = "Алиев" });
+        var bobur = Assert.Single(sheet.GetProperty("employeesList").EnumerateArray());
+        Assert.Equal("20:ОП 21:Я", bobur.GetProperty("days").GetString());
+        var (_, all) = await Ask<GetHrTimesheetTool>(hrUser, new { from = "2026-10-20", to = "2026-10-21" });
+        Assert.Equal("Расулов Тимур", all.GetProperty("employeesList")[0].GetProperty("employee").GetString()); // больше минут опоздания сверху
+        Assert.Contains(all.GetProperty("byDivision").EnumerateArray(), g => g.GetProperty("division").GetString() == "Бухгалтерия" && g.GetProperty("leaveDays").GetInt32() == 2);
+
+        // Неверные аргументы и чужие — понятная ошибка, без данных.
+        var tool = ActivatorUtilities.CreateInstance<GetHrDayTool>(sp);
+        var denied = await tool.ExecuteAsync(new ToolContext("hr", outsider, 0), JsonSerializer.SerializeToElement(new { }));
+        Assert.False(denied.Success);
+        Assert.Contains("Нет доступа", denied.Content);
+        Assert.DoesNotContain("Каримова", denied.Content);
+        var tooLong = await ActivatorUtilities.CreateInstance<GetHrDeviationsTool>(sp)
+            .ExecuteAsync(new ToolContext("hr", hrUser, 0), JsonSerializer.SerializeToElement(new { from = "2026-01-01", to = "2026-10-21" }));
+        Assert.False(tooLong.Success);
+        Assert.Contains("62", tooLong.Content);
+        var unknown = await ActivatorUtilities.CreateInstance<GetHrEmployeeTool>(sp)
+            .ExecuteAsync(new ToolContext("hr", hrUser, 0), JsonSerializer.SerializeToElement(new { employee = "Несуществующий" }));
+        Assert.False(unknown.Success);
+        Assert.Contains("не найден", unknown.Content);
     }
 }

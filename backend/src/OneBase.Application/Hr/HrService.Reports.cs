@@ -1,3 +1,5 @@
+using OneBase.Domain.Hr;
+
 namespace OneBase.Application.Hr;
 
 public sealed record HrTimesheetRow(Guid EmployeeId, string Employee, string? Division, string? Job, HrSummary Summary, IReadOnlyList<string> Codes);
@@ -19,8 +21,46 @@ public sealed record HrReport(
     IReadOnlyList<HrTimesheetRow> TopAbsent,
     HrSyncBrief Sync);
 
+/// <summary>Сотрудник рейтинга «Лидеры месяца»: место, отработано и план за период, дней с приходом (все — без опоздания).</summary>
+public sealed record HrLeader(int Place, Guid EmployeeId, string Employee, string? Division, string? Job, int WorkedMinutes, int PlanMinutes, int PresentDays, int PlanDays);
+
+/// <summary>«Лидеры месяца»: период, сколько работающих сотрудников и сколько из них ни разу не опоздали, первые места.</summary>
+public sealed record HrLeaders(DateOnly From, DateOnly To, int Employees, int OnTime, IReadOnlyList<HrLeader> Leaders, HrSyncBrief Sync);
+
 public sealed partial class HrService
 {
+    /// <summary>В первые дни месяца рейтинг — за прошлый месяц целиком: за день-два лидеров не выбрать.</summary>
+    public const int LeadersPreviousMonthDays = 3;
+
+    /// <summary>
+    /// «Лидеры месяца» на главной: работающие сотрудники, которые за месяц ни разу не опоздали (хотя бы один день с приходом), — по
+    /// отработанным часам (больше — выше), при равенстве — по дням с приходом. Период — с 1-го числа по сегодня; в первые
+    /// <see cref="LeadersPreviousMonthDays"/> дня — прошлый месяц. Видимость — как везде в HR.
+    /// </summary>
+    public async Task<HrLeaders> LeadersAsync(HrContext ctx, int take, CancellationToken ct)
+    {
+        Require(ctx);
+        var rules = await rulesSource.GetRulesAsync(ct);
+        var today = DateOnly.FromDateTime(Now(rules));
+        var (start, end) = today.Day <= LeadersPreviousMonthDays
+            ? (new DateOnly(today.Year, today.Month, 1).AddMonths(-1), new DateOnly(today.Year, today.Month, 1).AddDays(-1))
+            : (new DateOnly(today.Year, today.Month, 1), today);
+        var period = await EvaluateAsync(ctx, start, end, null, null, null, rules, ct);
+        var names = await NamesAsync(ct);
+
+        var working = period.Rows.Where(r => r.Employee.Status == HrEmployeeStatus.Working)
+            .Select(r => (r.Employee, Summary: HrSummary.Of(r.Days)))
+            .ToList();
+        var onTime = working.Where(x => x.Summary.PresentDays > 0 && x.Summary.LateDays == 0 && x.Summary.WorkedMinutes > 0)
+            .OrderByDescending(x => x.Summary.WorkedMinutes).ThenByDescending(x => x.Summary.PresentDays).ThenBy(x => x.Employee.FullName, StringComparer.Ordinal)
+            .ToList();
+        var leaders = onTime.Take(Math.Clamp(take, 1, 50))
+            .Select((x, i) => new HrLeader(i + 1, x.Employee.Id, x.Employee.FullName, Name(names.Divisions, x.Employee.DivisionId, null),
+                Name(names.Jobs, x.Employee.JobId, null), x.Summary.WorkedMinutes, x.Summary.PlanMinutes, x.Summary.PresentDays, x.Summary.PlanDays))
+            .ToList();
+        return new HrLeaders(start, end, working.Count, onTime.Count, leaders, await SyncBriefAsync(rules, ct));
+    }
+
     /// <summary>
     /// Буква дня в табеле: Я — явка, ОП — опоздание, РУ — ранний уход, РВ — работа в нерабочий день, ОТС — отсутствие, буква документа
     /// (ОТ, Б, К, О, НО) — отпуск и т. п., В — выходной, П — праздник, · — день ещё не начался, — — нет графика, ? — данных недостаточно.

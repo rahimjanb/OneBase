@@ -87,6 +87,11 @@ public sealed class HrController(HrService hr) : ControllerBase
         CancellationToken ct) =>
         await hr.TimesheetAsync(await ContextAsync(ct), from, to, divisionId, search, ct);
 
+    /// <summary>«Лидеры месяца» (главная): без единого опоздания за месяц — по отработанным часам.</summary>
+    [HttpGet("leaders")]
+    public async Task<HrLeaders> Leaders([FromQuery] int take = 7, CancellationToken ct = default) =>
+        await hr.LeadersAsync(await ContextAsync(ct), take, ct);
+
     [HttpGet("reports")]
     public async Task<HrReport> Report([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] long? divisionId, CancellationToken ct) =>
         await hr.ReportAsync(await ContextAsync(ct), from, to, divisionId, ct);

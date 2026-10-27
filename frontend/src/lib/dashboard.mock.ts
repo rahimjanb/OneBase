@@ -124,9 +124,6 @@ export type UpcomingTask = {
   done?: boolean;
 };
 
-/** Лидер рейтинга — появится вместе с KPI сотрудников; пока список пуст. */
-export type Leader = { name: string; department: string; kpi: string; initials: string; tone: Tone };
-
 /** Событие ленты — из уведомлений пользователя (/api/notifications). */
 export type ActivityEvent = {
   id: string;

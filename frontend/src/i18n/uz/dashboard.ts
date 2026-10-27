@@ -102,9 +102,15 @@ const dashboard: Dict = {
 
   // Лидеры и лента
   "Лидеры месяца": "Oy yetakchilari",
-  "По индивидуальному KPI": "Shaxsiy KPI bo'yicha",
+  "Лидер месяца": "Oy yetakchisi",
+  "Без опозданий · часы за {month}": "Kechikishsiz · {month} oyidagi soatlar",
+  "Без опозданий: {count} из {total}": "Kechikishsiz: {total} tadan {count} ta",
+  "Дней с приходом вовремя": "O'z vaqtida kelgan kunlar",
+  "Рейтинг виден HR и руководителям отделов": "Reyting HR va bo'lim rahbarlariga ko'rinadi",
+  "Не удалось загрузить данные Verifix": "Verifix ma'lumotlarini yuklab bo'lmadi",
+  "Подключите Verifix, чтобы увидеть лидеров": "Yetakchilarni ko'rish uchun Verifix'ni ulang",
+  "Пока никто не отработал месяц без опозданий": "Hozircha hech kim oyni kechikishsiz ishlamadi",
   "Полный рейтинг": "To'liq reyting",
-  "Рейтинг появится, когда будут подключены KPI сотрудников": "Xodimlar KPI si ulanganda reyting paydo bo'ladi",
   "Лента активности": "Faollik lentasi",
   "Последние события": "So'nggi voqealar",
   "Событий пока нет": "Hozircha voqealar yo'q",
