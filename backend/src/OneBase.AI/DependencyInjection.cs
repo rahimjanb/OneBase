@@ -118,6 +118,7 @@ public static class DependencyInjection
         services.AddScoped<ITool, GetProductsTool>();
         services.AddScoped<ITool, FindProductsTool>();
         services.AddScoped<ITool, GetCustomersTool>();
+        services.AddScoped<ITool, GetLapsedCustomersTool>();
         services.AddScoped<ITool, GetVisitsTool>();
         services.AddScoped<ITool, GetSalesDaysTool>();
         services.AddScoped<ITool, GetTelegramTool>();

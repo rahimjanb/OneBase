@@ -41,6 +41,8 @@ public static class RouteEvalCases
         new("sales-drop-region", "Почему упали продажи в Самарканде на прошлой неделе?", [Sales], Allowed: [Marketing, Supply]),
         new("field-visits", "Сколько визитов сделали торговые представители сегодня?", [Sales], Allowed: [Hr]),
         new("plan-category", "Как выполняется план по помадке в Ташкенте в этом месяце?", [Sales]),
+        new("lapsed-category", "Кто из клиентов по помадке, которые покупали в сентябре, ещё не купил в октябре?", [Sales], Allowed: [Marketing]),
+        new("lapsed-largest", "Кто из крупнейших клиентов по помадке ещё не купил в октябре?", [Sales], Allowed: [Marketing]),
         new("agents-plan", "Какие торговые представители не выполняют план и почему?", [Sales], Allowed: [Hr]),
         new("sku-growth", "Какие SKU растут быстрее всего в этом квартале?", [Sales], Allowed: [Marketing, Supply]),
         new("forecast", "Какой прогноз продаж на конец месяца по регионам?", [Sales]),

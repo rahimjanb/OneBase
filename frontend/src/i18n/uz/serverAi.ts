@@ -130,6 +130,23 @@ const dict: Dict = {
   "Клиенты (АКБ)": "Mijozlar (AKB)",
   "Клиенты — торговые точки: АКБ по месяцам года (точки с чистой покупкой > 0); по регионам республики или, с регионом, по ТП региона — база прошлого месяца, «молчат» (покупали в прошлом месяце и не купили в этом, с выручкой прошлого месяца), новые точки, АКБ и выручка текущего месяца и выручка с одной точки.":
     "Mijozlar — savdo nuqtalari: yil oylari bo'yicha AKB (sof xaridi > 0 bo'lgan nuqtalar); respublika mintaqalari bo'yicha yoki mintaqa bilan — mintaqa TP lari bo'yicha: o'tgan oy bazasi, «jim» nuqtalar (o'tgan oy xarid qilib, bu oy xarid qilmagan, o'tgan oy tushumi bilan), yangi nuqtalar, joriy oy AKB va tushumi hamda bitta nuqtaga tushum.",
+  "Клиенты, которые не купили": "Xarid qilmagan mijozlar",
+  "Клиенты — торговые точки, которые покупали категорию, бренд или товар в базовом периоде и ещё не купили их в выбранном месяце (или купили — status), списком: точка, регион, ТП, кг и выручка в базе, место по объёму, последняя покупка, сколько взяли в этом месяце, покупают ли другие товары, визиты в этом месяце; итоги — сколько точек в базе, сколько купили и не купили, их кг и выручка, новые точки. Примеры: «кто из клиентов по помадке, покупавших в сентябре, не купил в октябре», «кто из крупнейших клиентов по могулу ещё не взял», «какие точки перестали брать Yamelly», «кто из точек ТП … не купил шоколад». База — прошлый месяц (base_months — до 3 месяцев); largest — только N крупнейших точек базы по кг. Без category и product — все товары.":
+    "Mijozlar — bazaviy davrda toifa, brend yoki tovarni olgan va tanlangan oyda hali olmagan (yoki olgan — status) savdo nuqtalari, ro'yxat bilan: nuqta, mintaqa, TP, bazadagi kg va tushum, hajm bo'yicha o'rni, oxirgi xarid, shu oyda qancha olgani, boshqa tovarlarni olayotgani, shu oydagi tashriflar; jami — bazada nechta nuqta, nechtasi oldi va olmadi, ularning kg va tushumi, yangi nuqtalar. Misollar: «sentabrda pomadka olgan mijozlardan kim oktabrda olmadi», «mogul bo'yicha eng yirik mijozlardan kim hali olmadi», «qaysi nuqtalar Yamelly olishni to'xtatdi», «TP … nuqtalaridan kim shokolad olmadi». Baza — o'tgan oy (base_months — 3 oygacha); largest — bazadagi kg bo'yicha faqat N ta eng yirik nuqta. category va product siz — barcha tovarlar.",
+  "Категория или тип Linko: «помадка», «могул», «шоколад»; несколько — через запятую. Бренд или SKU — в product.":
+    "Toifa yoki Linko turi: «pomadka», «mogul», «shokolad»; bir nechta — vergul bilan. Brend yoki SKU — product da.",
+  "Товар, бренд или артикул: «Yamelly», «ARBUZ», «480». Вместе с category — товары внутри категории.":
+    "Tovar, brend yoki artikul: «Yamelly», «ARBUZ», «480». category bilan birga — toifa ichidagi tovarlar.",
+  "Месяц, в котором проверяем покупку (1–12). Без него — текущий; база — месяцы перед ним.":
+    "Xaridni tekshiradigan oy (1–12). Usiz — joriy oy; baza — undan oldingi oylar.",
+  "ТП: имя или id Linko — только точки, закреплённые за ним (кто продавал им больше всех в базе).":
+    "TP: ismi yoki Linko id — faqat unga biriktirilgan nuqtalar (bazada ularga eng ko'p sotgan).",
+  "База — сколько месяцев перед month: 1 (по умолчанию — прошлый месяц), 2 или 3.": "Baza — month dan oldingi necha oy: 1 (standart — o'tgan oy), 2 yoki 3.",
+  "Только N крупнейших точек базы по кг (для «крупнейших клиентов»), 1–500.":
+    "Bazadagi kg bo'yicha faqat N ta eng yirik nuqta («eng yirik mijozlar» uchun), 1–500.",
+  "not_bought — ещё не купили (по умолчанию), bought — купили, all — все точки базы.":
+    "not_bought — hali olmagan (standart), bought — olgan, all — bazadagi barcha nuqtalar.",
+  "Сколько точек в списке, по умолчанию 30, до 50.": "Ro'yxatda nechta nuqta, standart 30, 50 tagacha.",
   "Визиты ТП за месяц по регионам: план визитов, выполненные (в плане и вне), заказы с визитов и их сумма, непосещённые точки, страйк (заказы ТП, принятые в месяце ÷ выполненные визиты ТП; бывает больше 100%), визиты без заказа (визиты − заказы), визиты не ТП отдельно.":
     "Mintaqalar bo'yicha TP larning oylik tashriflari: tashriflar rejasi, bajarilganlari (rejadagi va rejadan tashqari), tashriflardan buyurtmalar va ularning summasi, borilmagan nuqtalar, strayk (oyda qabul qilingan TP buyurtmalari ÷ TP ning bajarilgan tashriflari; 100% dan oshishi mumkin), buyurtmasiz tashriflar (tashriflar − buyurtmalar), TP bo'lmaganlar tashriflari alohida.",
   "Планы и KPI продаж": "Savdo rejalari va KPI",

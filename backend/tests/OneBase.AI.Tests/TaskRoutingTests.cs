@@ -176,7 +176,7 @@ public class TaskRoutingTests
         // Выключенный сотрудник из ожиданий убирается.
         var company = RouteEvalCases.All.Single(c => c.Code == "company");
         Assert.True(RouteEvalCases.Correct(company, D("finance", "sales"), new HashSet<string> { "finance", "sales" }));
-        Assert.Equal(26, RouteEvalCases.All.Count);
+        Assert.Equal(28, RouteEvalCases.All.Count);
         Assert.Equal(RouteEvalCases.All.Count, RouteEvalCases.All.Select(c => c.Code).Distinct().Count());
     }
 
