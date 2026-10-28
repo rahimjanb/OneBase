@@ -134,6 +134,8 @@ public static class DependencyInjection
         services.AddScoped<ITool, GetFieldRoutesTool>();
         services.AddScoped<ITool, GetFieldRecommendationsTool>();
         services.AddScoped<ITool, GetDepartmentTasksTool>();
+        services.AddScoped<ITool, GetWorkProjectsTool>();
+        services.AddScoped<ITool, GetAiAlertsTool>();
 
         // HR (Verifix): посещаемость за день, сотрудники, карточка, опоздания и отсутствия, табель — расчёты HrService.
         services.AddScoped<ITool, GetHrDayTool>();
@@ -141,9 +143,11 @@ public static class DependencyInjection
         services.AddScoped<ITool, GetHrEmployeeTool>();
         services.AddScoped<ITool, GetHrDeviationsTool>();
         services.AddScoped<ITool, GetHrTimesheetTool>();
+        services.AddScoped<ITool, GetHrLeadersTool>();
         services.AddScoped<ITool, GetPrimaryShipmentsTool>();
         services.AddScoped<ITool, GetPaymentsTool>();
         services.AddScoped<ITool, GetSuppliersTool>();
+        services.AddScoped<ITool, GetPricesTool>();
         services.AddScoped<ITool, SearchKnowledgeTool>();
 
         // Детализация до записей: карточки ТП и точки, визиты по точкам, заказы с позициями, KPI, «Акции», «Акт сверки», DSO.

@@ -39,6 +39,9 @@ public static class KnowledgeSources
     /// <summary>Telegram: автоотчёты (расписание, получатели, отправки) и рассылки — права проверяет инструмент по разделу.</summary>
     public const string Telegram = "system.telegram";
 
+    /// <summary>Находки проактивного анализа («Фокус дня»): риски, предупреждения и возможности по отделам — видны по правам каждой находки.</summary>
+    public const string AiAlerts = "ai.alerts";
+
     public static readonly IReadOnlyList<KnowledgeSource> All =
     [
         new(SalesSecondary, "Продажи (вторичка)",
@@ -80,6 +83,9 @@ public static class KnowledgeSources
             "Автоматические отчёты в Telegram (расписание 13 запусков, получатели РМ/СВ/ТП, отправки и ошибки) и рассылки (статусы, доставка).",
             "telegram.ReportJobs, ReportRuns, ReportSubscriptions, ReportDeliveries, Campaigns, CampaignRecipients",
             "Настройки → Telegram → Автоматические отчёты; Рассылки", null),
+        new(AiAlerts, "Находки AI («Фокус дня»)",
+            "Что проактивный анализ OneBase нашёл в данных отделов: критичные риски, предупреждения и возможности с рекомендациями, когда найдено и закрыто.",
+            "ai.Alerts", "Обзор → Фокус дня; AI → Находки", Permissions.AgentsRun),
         new(Documents, "База знаний", "Документы, загруженные в базу знаний AI: регламенты, отчёты, выгрузки Excel и CSV.",
             "ai.KnowledgeDocuments, ai.KnowledgeChunks", "Настройки → AI → База знаний", Permissions.FilesRead),
     ];

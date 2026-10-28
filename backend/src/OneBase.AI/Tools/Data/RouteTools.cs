@@ -117,7 +117,9 @@ internal sealed class GetVisitsTool(SalesDataLoader loader, IAppDbContext db) : 
             Regions = q.Detailed ? null : view.Regions.Select(r => Row(r, cap)).ToList(),
             Agents = q.Detailed ? view.Regions.SelectMany(r => r.Agents).Take(cap).Select(r => Row(r)).ToList() : null,
             AgentsTotal = q.Detailed ? view.Regions.Sum(r => r.Agents.Count) : (int?)null,
-            Note = "Визит «по маршруту» — визит из плана (маршрута) Linko. Заказ «по маршруту» — в день его ввода в этой точке был выполненный визит " +
+            OutsideTeam = view.OutsideTeam is { Orders: > 0 } o ? Part(o) : null,
+            Note = "OutsideTeam — продажи вне команды ТП (заказы без ТП, «Филиал Оператор», «Офис»): они в Total и «без визита», строк ТП у них нет. " +
+                   "Визит «по маршруту» — визит из плана (маршрута) Linko. Заказ «по маршруту» — в день его ввода в этой точке был выполненный визит " +
                    "по плану, «вне маршрута» — только визит без плана, «без визита» — визита не было (как календарь визитов в OneBase). Заказы, выручка " +
                    "и кг — заказы, принятые в эти дни (те же, что дали факт «Продаж»); Total — факт целиком, с возвратами (возвраты к маршруту не " +
                    "относятся). АКБ части — точки с чистой покупкой в ней: точка, купившая и по маршруту, и вне его, есть в обеих, поэтому АКБ " +
@@ -205,7 +207,9 @@ internal sealed class GetSalesDaysTool(SalesDataLoader loader, IAppDbContext db)
             }),
             Regions = q.Detailed ? null : view.Regions.Select(Row).ToList(),
             Agents = q.Detailed || (args.Bool("agents") ?? false) ? view.Regions.SelectMany(r => r.Agents).OrderByDescending(a => a.Total.Revenue).Take(cap).Select(Row).ToList() : null,
-            Note = "Факт — заказы − возвраты по дате приёмки, без «Завода» (как в «Продажах»). АКБ отрезка — точки с чистой покупкой за весь отрезок " +
+            OutsideTeam = view.OutsideTeam is { Orders: > 0 } o ? new { FactKg = R(o.Kg, 1), RevenueSum = R(o.Revenue), o.Orders } : null,
+            Note = "OutsideTeam — продажи вне команды ТП (заказы без ТП, «Филиал Оператор», «Офис»): они в факте региона и дней, строк ТП у них нет. " +
+                   "Факт — заказы − возвраты по дате приёмки, без «Завода» (как в «Продажах»). АКБ отрезка — точки с чистой покупкой за весь отрезок " +
                    "(не сумма АКБ дней). Сегодняшний день — неполный, на время последней синхронизации Linko. Суммы — в сумах.",
         }, SourceOf(q, "по дням"));
     }

@@ -1077,6 +1077,35 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
+    public void Route_split_total_keeps_sales_outside_the_team_like_the_sales_pages()
+    {
+        // Агент 1 (Север) — заказ 4-го; «Филиал Оператор» (не ТП) продал в филиале Севера 5-го; заказ без ТП в филиале Юга 6-го.
+        var current = new[]
+        {
+            Accepted(1, 10, 3, 4),
+            Accepted(2, 20, 5, 5, agent: 3),
+            new SaleLine(new DateOnly(2026, 9, 6), null, 21, 102, 1, 100, 10, 100, 3, new DateOnly(2026, 9, 6)),
+        };
+        var analytics = new SalesAnalytics(Data(current: current, agents: RepsAndOperator(), salesRepJobs: ["Агент"], dataThrough: new DateOnly(2026, 9, 10)));
+
+        var north = analytics.RouteSplit(Sep1, new DateOnly(2026, 9, 10), region: North);
+        Assert.Equal((2, 200m), (north.Total.Total.Orders, north.Total.Total.Revenue)); // факт региона — все продажи филиала
+        Assert.Equal(new RouteSales(1, 100, 10, 1), north.OutsideTeam);
+        Assert.Equal(["1"], north.Regions.Single().Agents.Select(a => a.Id)); // оператор — не строка ТП
+        Assert.Equal(new RouteSales(2, 200, 20, 2), north.Regions.Single().NoVisit); // визитов нет ни у кого — оба заказа «без визита»
+
+        var republic = analytics.RouteSplit(Sep1, new DateOnly(2026, 9, 10));
+        Assert.Equal((3, 300m), (republic.Total.Total.Orders, republic.Total.Total.Revenue));
+        Assert.Equal(300m, republic.Days.Sum(d => d.Revenue));
+        Assert.Equal((2, 200m), (republic.OutsideTeam!.Orders, republic.OutsideTeam.Revenue));
+        Assert.Equal(100m, republic.Regions.Single(r => r.Name == "Юг").Total.Revenue);
+
+        var one = analytics.RouteSplit(Sep1, new DateOnly(2026, 9, 10), agent: 1);
+        Assert.Equal(100m, one.Total.Total.Revenue); // у одного ТП — только его продажи
+        Assert.Null(one.OutsideTeam);
+    }
+
+    [Fact]
     public void Visit_calendar_rows_are_the_team_and_the_total_comes_from_the_server_with_shortfall_on_sums()
     {
         // ТП 1 (Север): план 3, по маршруту 1; ТП 2 (Север): план 1, по маршруту 1; ТП 4 («Агент» без региона) — вне охвата регионов;

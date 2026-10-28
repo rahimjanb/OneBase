@@ -147,6 +147,37 @@ const dict: Dict = {
   "not_bought — ещё не купили (по умолчанию), bought — купили, all — все точки базы.":
     "not_bought — hali olmagan (standart), bought — olgan, all — bazadagi barcha nuqtalar.",
   "Сколько точек в списке, по умолчанию 30, до 50.": "Ro'yxatda nechta nuqta, standart 30, 50 tagacha.",
+  // Лидеры месяца HR, находки AI, проекты отделов, прайс-листы Linko
+  "HR: лидеры месяца": "HR: oy yetakchilari",
+  "«Лидеры месяца» — как блок на главной OneBase: работающие сотрудники, которые за месяц ни разу не опоздали, по отработанным часам (больше — выше, при равенстве — больше дней с приходом): место, ФИО, подразделение, должность, отработано и по графику в часах, дни с приходом и по графику; сколько всего работающих и сколько из них без опозданий. Период — с 1-го числа по сегодня, в первые 3 дня месяца — прошлый месяц. Вопросы: «кто лучший по дисциплине», «кто ни разу не опоздал в этом месяце», «топ сотрудников по отработанным часам».":
+    "«Oy yetakchilari» — OneBase bosh sahifasidagi blok kabi: oy davomida bir marta ham kechikmagan ishlayotgan xodimlar, ishlangan soatlar bo'yicha (ko'pi — yuqorida, teng bo'lsa — kelgan kunlari ko'pi): o'rni, F.I.Sh., bo'linma, lavozim, ishlangan va jadval bo'yicha soatlar, kelgan kunlar va jadval bo'yicha kunlar; jami ishlayotganlar va ulardan kechikmaganlar soni. Davr — oyning 1-sanasidan bugungacha, oyning dastlabki 3 kunida — o'tgan oy. Savollar: «intizom bo'yicha kim eng yaxshi», «bu oyda kim bir marta ham kechikmadi», «ishlangan soatlar bo'yicha top xodimlar».",
+  "Сколько лидеров: по умолчанию 10, до 50.": "Nechta yetakchi: standart 10, 50 tagacha.",
+  "Находки AI («Фокус дня»)": "AI topilmalari («Kun fokusi»)",
+  "Находки проактивного анализа OneBase — «Фокус дня» на главной и «AI → Находки»: что сейчас требует внимания (критичные, предупреждения) и возможности по отделам (продажи, финансы, маркетинг, HR, производство, снабжение): заголовок, суть с цифрами, рекомендация, ссылка на страницу, когда найдено и подтверждено в последний раз; resolved — закрытые за 30 дней. Только находки, к данным которых у пользователя есть доступ. Вопросы: «что сейчас требует внимания», «какие риски», «что важного нашёл AI», «какие есть возможности».":
+    "OneBase proaktiv tahlili topilmalari — bosh sahifadagi «Kun fokusi» va «AI → Topilmalar»: hozir e'tibor talab qiladigan narsalar (kritik, ogohlantirishlar) va bo'limlar bo'yicha imkoniyatlar (savdo, moliya, marketing, HR, ishlab chiqarish, ta'minot): sarlavha, raqamlar bilan mazmuni, tavsiya, sahifaga havola, qachon topilgani va oxirgi marta tasdiqlangani; resolved — 30 kun ichida yopilganlari. Faqat foydalanuvchi ma'lumotlariga kira oladigan topilmalar. Savollar: «hozir nimaga e'tibor berish kerak», «qanday xavflar bor», «AI nimani muhim deb topdi», «qanday imkoniyatlar bor».",
+  "Отдел: sales, finance, marketing, hr, production, supply; all или без него — все.":
+    "Bo'lim: sales, finance, marketing, hr, production, supply; all yoki usiz — hammasi.",
+  "critical — критичные, warning — предупреждения, opportunity — возможности, all — все (по умолчанию).":
+    "critical — kritik, warning — ogohlantirishlar, opportunity — imkoniyatlar, all — hammasi (standart).",
+  "true — закрытые за последние 30 дней вместо действующих.": "true — amaldagilar o'rniga so'nggi 30 kunda yopilganlari.",
+  "Сколько находок: по умолчанию 20, до 50.": "Nechta topilma: standart 20, 50 tagacha.",
+  "Проекты отделов": "Bo'lim loyihalari",
+  "Проекты раздела «Задачи» OneBase: название, отдел, описание, руководитель проекта (PM) и участники, задачи проекта — открыто, просрочено, на проверке, заблокировано, выполнено за 30 дней, ближайший срок. Только проекты, которые видит пользователь (проекты его отделов и те, где он участник; руководство — все). Вопросы: «какие у нас проекты», «кто ведёт проект …», «где в проектах просрочки». Задачи по отделам — get_department_tasks.":
+    "OneBase «Vazifalar» bo'limi loyihalari: nomi, bo'limi, tavsifi, loyiha rahbari (PM) va ishtirokchilar, loyiha vazifalari — ochiq, muddati o'tgan, tekshiruvda, bloklangan, 30 kunda bajarilgan, eng yaqin muddat. Faqat foydalanuvchi ko'radigan loyihalar (o'z bo'limlari loyihalari va o'zi ishtirok etadiganlari; rahbariyat — hammasi). Savollar: «bizda qanday loyihalar bor», «… loyihasini kim olib boradi», «loyihalarda qayerda muddat o'tgan». Bo'limlar bo'yicha vazifalar — get_department_tasks.",
+  "Часть названия проекта или имени участника. Без него — все видимые проекты.":
+    "Loyiha nomi yoki ishtirokchi ismining bir qismi. Usiz — barcha ko'rinadigan loyihalar.",
+  "Отдел проекта: код (sales, finance…) или название. Без него — все отделы.": "Loyiha bo'limi: kodi (sales, finance…) yoki nomi. Usiz — barcha bo'limlar.",
+  "true — вместе с архивными проектами. По умолчанию — только действующие.": "true — arxivdagi loyihalar bilan birga. Standart — faqat amaldagilar.",
+  "Сколько проектов: по умолчанию 20, до 50.": "Nechta loyiha: standart 20, 50 tagacha.",
+  "Прайс-листы Linko": "Linko narx varaqlari",
+  "Цены товаров по прайс-листам Linko (дилерский, магазинный и другие — как их ведёт Linko): по каждому найденному товару — цена в каждом прайс-листе и валюта; без товара — список прайс-листов с числом товаров. Поиск товара — product (название, бренд или артикул: «ARBUZ», «Yamelly», «480»), category (категория или тип Linko: «помадка»), price_list (часть названия прайс-листа). Это цены прайса, а не фактические: выручка и цена за кг по продажам — get_sku_sales и find_products.":
+    "Linko narx varaqlari bo'yicha tovar narxlari (diler, do'kon va boshqalar — Linko qanday yuritsa): topilgan har bir tovar uchun — har bir narx varag'idagi narx va valyuta; tovarsiz — tovarlar soni bilan narx varaqlari ro'yxati. Tovar qidiruvi — product (nomi, brend yoki artikul: «ARBUZ», «Yamelly», «480»), category (toifa yoki Linko turi: «pomadka»), price_list (narx varag'i nomining bir qismi). Bu narx varag'i narxlari, haqiqiy emas: savdo bo'yicha tushum va kg narxi — get_sku_sales va find_products.",
+  "Товар, бренд или артикул: «ARBUZ», «Yamelly», «480».": "Tovar, brend yoki artikul: «ARBUZ», «Yamelly», «480».",
+  "Категория отчёта или тип Linko: «помадка», «шоколад», «Помадка 1 кг».": "Hisobot toifasi yoki Linko turi: «pomadka», «shokolad», «Pomadka 1 kg».",
+  "Прайс-лист: часть названия. Без него — все прайс-листы.": "Narx varag'i: nomining bir qismi. Usiz — barcha narx varaqlari.",
+  "Сколько товаров: по умолчанию 20, до 60.": "Nechta tovar: standart 20, 60 tagacha.",
+  "Что проактивный анализ OneBase нашёл в данных отделов: критичные риски, предупреждения и возможности с рекомендациями, когда найдено и закрыто.":
+    "OneBase proaktiv tahlili bo'limlar ma'lumotlarida nimani topgani: kritik xavflar, ogohlantirishlar va tavsiyali imkoniyatlar, qachon topilgani va yopilgani.",
   "Визиты ТП за месяц по регионам: план визитов, выполненные (в плане и вне), заказы с визитов и их сумма, непосещённые точки, страйк (заказы ТП, принятые в месяце ÷ выполненные визиты ТП; бывает больше 100%), визиты без заказа (визиты − заказы), визиты не ТП отдельно.":
     "Mintaqalar bo'yicha TP larning oylik tashriflari: tashriflar rejasi, bajarilganlari (rejadagi va rejadan tashqari), tashriflardan buyurtmalar va ularning summasi, borilmagan nuqtalar, strayk (oyda qabul qilingan TP buyurtmalari ÷ TP ning bajarilgan tashriflari; 100% dan oshishi mumkin), buyurtmasiz tashriflar (tashriflar − buyurtmalar), TP bo'lmaganlar tashriflari alohida.",
   "Планы и KPI продаж": "Savdo rejalari va KPI",

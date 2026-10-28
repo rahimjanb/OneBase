@@ -37,8 +37,9 @@ public sealed record RouteSplitRow(
 /// <summary>День области: факт (кг, выручка, заказы, АКБ дня — с возвратами, как в «Продажах») и выполненные визиты.</summary>
 public sealed record RouteDay(DateOnly Date, decimal Kg, decimal Revenue, int Orders, int Akb, int VisitsDone);
 
+/// <summary>OutsideTeam — продажи вне команды (заказы без ТП, не ТП — «Филиал Оператор», «Офис», ТП без региона): они в итоге и днях, строк ТП у них нет.</summary>
 public sealed record RouteSplitView(PeriodInfo Period, DateOnly From, DateOnly To, RouteSplitRow Total, IReadOnlyList<RouteSplitRow> Regions,
-    IReadOnlyList<RouteDay> Days);
+    IReadOnlyList<RouteDay> Days, RouteSales? OutsideTeam = null);
 
 public sealed partial class SalesAnalytics
 {
@@ -65,6 +66,10 @@ public sealed partial class SalesAnalytics
         var rows = new List<RouteSplitRow>();
         var scopeLines = new List<SaleLine>();
         var scopeAgents = new List<long>();
+        // Продажи вне команды — по филиалу в итоге региона, как в «Продажах»: иначе факт дней меньше факта страниц (Самарканд — «Филиал Оператор»,
+        // Термез — «Офис»). ТП команды считаются по себе (в любом филиале), поэтому их строки сюда не попадают. У одного ТП — только его строки.
+        var counted = agent is null ? AgentsIn(null).Where(x => InTeam(x) && _agentRegion.GetValueOrDefault(x, NoRegionId) != NoRegionId).ToHashSet() : null;
+        var outside = new List<SaleLine>();
         foreach (var id in regions)
         {
             List<long> team = agent is { } one ? [one] : AgentsIn(new HashSet<Guid> { id }).Where(InTeam).ToList();
@@ -73,6 +78,13 @@ public sealed partial class SalesAnalytics
                 .OrderByDescending(x => x.Total.Revenue)
                 .ToList();
             var lines = team.SelectMany(x => AgentLines(x, from, to)).ToList();
+            if (counted is not null)
+            {
+                var extra = _currentByRegion[id].Where(l => l.Date >= from && l.Date <= to && (l.AgentId is not { } owner || !counted.Contains(owner))).ToList();
+                lines.AddRange(extra);
+                outside.AddRange(extra);
+            }
+
             scopeLines.AddRange(lines);
             scopeAgents.AddRange(team);
             var row = Combine(id.ToString(), _regions.TryGetValue(id, out var info) ? info.Name : "Без региона", null, agentRows, lines, keep);
@@ -98,7 +110,7 @@ public sealed partial class SalesAnalytics
             days.Add(new RouteDay(day, lines.Sum(l => l.Kg), lines.Sum(l => l.Revenue), SalesMath.OrderCount(lines), SalesMath.Akb(lines), visitsByDay[day].Count()));
         }
 
-        return new RouteSplitView(Period, from, to, total, regionRows, days);
+        return new RouteSplitView(Period, from, to, total, regionRows, days, counted is null ? null : Part(outside));
     }
 
     /// <summary>Выручка ТП за дни отрезка по правилам вторички (проданное по дате приёмки, без «Завода») — факт месяца к дню для дневного плана.</summary>
