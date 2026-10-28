@@ -10,7 +10,7 @@ import { Section } from "./Section";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
 import { date, money, monthLabel, num, tsvValue } from "@/lib/sales/format";
-import type { AktLine, AktRow, AktView } from "@/lib/sales/settlements";
+import { shipmentsName, type AktLine, type AktRow, type AktView } from "@/lib/sales/settlements";
 
 // «Акт сверки»: строки контрагентов за месяц — остаток, отгрузка и возврат (Linko), касса и банк, расходы по статьям (реестры Google Sheets),
 // остаток на конец. Расчёт на сервере (AktCompute); клик по строке — расшифровка контрагента.
@@ -48,7 +48,7 @@ export function AktReport({ data }: { data: AktView }) {
           {data.anchorDate && <span>{t("остаток — акт бухгалтерии на {date}", { date: date(data.anchorDate) })}</span>}
           {data.paymentsTo && <span>{t("оплаты по {date}", { date: date(data.paymentsTo) })}</span>}
           {data.expensesTo && <span>{t("расходы по {date}", { date: date(data.expensesTo) })}</span>}
-          <span>{t("отгрузки Linko по {date}", { date: date(data.asOf) })}</span>
+          <span>{t("отгрузки {src} по {date}", { src: shipmentsName(data.shipmentsSource, t), date: date(data.asOf) })}</span>
         </span>
       </div>
 
@@ -195,7 +195,7 @@ function AktGroupTable({ data, group }: { data: AktView; group: AktView["groups"
               {t("Закрыть")}
             </button>
           </div>
-          <AktCard card={openCard} row={openRow} />
+          <AktCard card={openCard} row={openRow} source={shipmentsName(data.shipmentsSource, t)} />
         </div>
       )}
     </Section>
@@ -215,11 +215,11 @@ const kindLabel: Record<string, string> = {
   other: "Прочие расходы",
 };
 
-function AktCard({ card, row }: { card: AktView["cards"][number]; row: AktRow }) {
+function AktCard({ card, row, source }: { card: AktView["cards"][number]; row: AktRow; source: string }) {
   const t = useT();
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <Lines title={t("Отгрузки и возвраты (Linko)")} lines={card.docs} t={t} />
+      <Lines title={t("Отгрузки и возвраты ({src})", { src: source })} lines={card.docs} t={t} />
       <Lines title={t("Оплаты (Kassa Bank)")} lines={card.payments} t={t} />
       <div>
         <Lines title={t("Расходы (реестр)")} lines={card.expenses} t={t} code />
@@ -283,9 +283,9 @@ function checkText(c: AktView["checks"][number], data: AktView, t: T): string {
     case "anchor":
       return t("Без остатка из акта бухгалтерии — остаток считается от начала реестров (может отличаться): {n}.", { n });
     case "unmatched":
-      return t("Отгрузки Linko, а в таблицах контрагента с таким именем нет (оплаты и остаток не найдены): {n}.", { n });
+      return t("Отгрузки {src}, а в таблицах контрагента с таким именем нет (оплаты и остаток не найдены): {n}.", { src: shipmentsName(data.shipmentsSource, t), n });
     case "nolinko":
-      return t("Оплаты есть, а отгрузок Linko под этим именем нет (контрагент таблиц не сопоставлен с дилером региона или клиентом): {n}.", { n });
+      return t("Оплаты есть, а отгрузок {src} под этим именем нет (контрагент таблиц не сопоставлен с дилером региона или клиентом): {n}.", { src: shipmentsName(data.shipmentsSource, t), n });
     case "outside":
       return t("Отгрузки или оплаты месяца у контрагентов, которых нет в акте бухгалтерии (в акт не входят): {n}.", { n });
     case "cashback":

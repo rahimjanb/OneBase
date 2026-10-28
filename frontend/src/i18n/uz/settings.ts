@@ -518,6 +518,17 @@ const dict: Dict = {
   "другие имена — через запятую": "boshqa nomlar — vergul bilan",
   "Прежние дилеры и второй дилер склада: по ним план и отчёты из таблиц находят регион. При смене дилера прежнее имя добавляется само.":
     "Oldingi dilerlar va omborning ikkinchi dileri: ular orqali jadvallardagi reja va hisobotlar mintaqani topadi. Diler almashganda oldingi nomi o'zi qo'shiladi.",
+
+  // ---------- Отгрузки дилерам из таблицы ГП (акт сверки, DSO) ----------
+  "Отгрузки дилерам (ГП)": "Dilerlarga jo'natmalar (GP)",
+  "Отгрузки и возвраты дилерам и прямым клиентам по дням, сумма дилера — акт сверки и DSO берут их вместо первички Linko (страница «Первичка» — Linko). Лист копируется целиком.":
+    "Dilerlar va to'g'ridan-to'g'ri mijozlarga kunlik jo'natma va qaytarmalar, diler summasi — solishtirma dalolatnoma va DSO ularni Linko birlamchi savdosi o'rniga oladi («Birlamchi savdo» sahifasi — Linko). Varaq to'liq nusxalanadi.",
+  "Отгрузки и возвраты дилерам — таблица ГП, если привязаны «Отгрузки дилерам (ГП)», иначе первичка Linko; оплат и расходов дилеров в Linko нет":
+    "Dilerlarga jo'natma va qaytarmalar — «Dilerlarga jo'natmalar (GP)» bog'langan bo'lsa GP jadvali, aks holda Linko birlamchi savdosi; dilerlar to'lovlari va xarajatlari Linko'da yo'q",
+  "Отгрузки дилерам — таблица ГП, если привязаны «Отгрузки дилерам (ГП)», иначе первичка Linko; оплат и сроков оплаты в Linko нет":
+    "Dilerlarga jo'natmalar — «Dilerlarga jo'natmalar (GP)» bog'langan bo'lsa GP jadvali, aks holda Linko birlamchi savdosi; to'lovlar va to'lov muddatlari Linko'da yo'q",
+  "отгрузки и возвраты — таблица ГП («Отгрузки дилерам (ГП)»), без привязки — Linko; оплаты, расходы, сроки и остатки акта — реестры Google Sheets; остаток и долг считаются, не хранятся":
+    "jo'natma va qaytarmalar — GP jadvali («Dilerlarga jo'natmalar (GP)»), bog'lanmasa — Linko; to'lovlar, xarajatlar, muddatlar va dalolatnoma qoldiqlari — Google Sheets reyestrlari; qoldiq va qarz hisoblanadi, saqlanmaydi",
 };
 
 export default dict;

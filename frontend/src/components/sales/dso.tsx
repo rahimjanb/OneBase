@@ -9,7 +9,7 @@ import { Section } from "./Section";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
 import { date, dayMonth, money, monthShort, num, pct, tsvValue } from "@/lib/sales/format";
-import type { DsoDealer, DsoOpen, DsoPayMonth, DsoView, DsoWeek } from "@/lib/sales/settlements";
+import { shipmentsName, type DsoDealer, type DsoOpen, type DsoPayMonth, type DsoView, type DsoWeek } from "@/lib/sales/settlements";
 
 // «DSO»: долги дилеров по неоплаченным отгрузкам (FIFO), просрочка по норме, прогноз оплат по неделям, оплаты кассой и банком.
 // Всё считает сервер (DsoCompute); страница только выбирает период и раскрывает строки. Дни — от даты данных, а не от сегодня.
@@ -40,7 +40,7 @@ export function DsoReport({ data }: { data: DsoView }) {
     <>
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
         <Database className="size-3.5" aria-hidden />
-        <span>{t("отгрузки Linko и оплаты по {date}", { date: date(data.asOf) })}</span>
+        <span>{t("отгрузки {src} и оплаты по {date}", { src: shipmentsName(data.shipmentsSource, t), date: date(data.asOf) })}</span>
         {data.paymentsTo && data.paymentsTo !== data.asOf && <span>{t("последняя оплата в реестре — {date}", { date: date(data.paymentsTo) })}</span>}
         <span>{t("дни считаются от даты данных")}</span>
       </p>
@@ -68,6 +68,7 @@ export function DsoReport({ data }: { data: DsoView }) {
       <OpenShipments data={data} />
 
       <Note>
+        {data.shipmentsSource === "sheets" && <>{t("Отгрузки и возвраты — таблица ГП «Сотув маълумотлар Базаси» (сумма дилера, как у бухгалтерии); страница «Первичка» — по Linko.")} </>}
         {t(
           "Отгрузки и возвраты — первичка из Linko (перемещения на склады дилеров и заказы прямых клиентов, сумма Linko), оплаты — реестр Kassa Bank (касса и банк), норма оплаты — лист Ostatka (не задана — {n} дн., «*»). Оплаты, возвраты и «Прочие расходы» гасят самые старые отгрузки (FIFO); долг на дату акта бухгалтерии раскладывается на последние отгрузки до неё. Просрочка — отгрузка + норма уже прошла. «По темпу оплат» — отгрузка + фактический DSO дилера: средний срок, за который он закрывал отгрузки последние {d} дн. (взвешен по сумме). Дилеры без отгрузок дольше 60 дней — «не работают с нами»: долг к взысканию, в прогноз не входит.",
           { n: data.defaultNorm, d: data.factDays },
@@ -367,7 +368,7 @@ function Channels({ data }: { data: DsoView }) {
   return (
     <Section
       title={t("Отгрузки и поступления по каналам")}
-      hint={t("{month}, 1–{day} число: отгрузки Linko и оплаты Kassa Bank", { month: `${monthShort(month.month, t)} ${month.year}`, day: upTo })}
+      hint={t("{month}, 1–{day} число: отгрузки {src} и оплаты Kassa Bank", { month: `${monthShort(month.month, t)} ${month.year}`, day: upTo, src: shipmentsName(data.shipmentsSource, t) })}
       actions={
         <>
           <select aria-label={t("Месяц")} value={month.key} onChange={(e) => { setMonthKey(e.target.value); setDay(31); }} className={select}>

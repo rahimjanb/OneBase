@@ -32,6 +32,11 @@ public static class DataSourceRegisters
         return DateTime.TryParseExact(t, DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? DateOnly.FromDateTime(d) : null;
     }
 
+    /// <summary>Строка отгрузок ГП — возврат («Возврат», «возврат товара»; узб. «қайтариш»).</summary>
+    public static bool IsReturn(string? operation) =>
+        operation is { Length: > 0 } o && (o.Contains("возврат", StringComparison.OrdinalIgnoreCase) || o.Contains("қайтар", StringComparison.OrdinalIgnoreCase)
+                                          || o.Contains("qaytar", StringComparison.OrdinalIgnoreCase));
+
     private static bool IsSummary(string text)
     {
         var name = DataValues.Normalize(text);
@@ -77,6 +82,13 @@ public static class DataSourceRegisters
                 if (day is null || day < m.DateFrom || !ok || value is null or 0)
                 {
                     continue;
+                }
+
+                // Отгрузки ГП: сумма в листе всегда положительная, возврат — по виду строки («П/В» = «Возврат»).
+                if (field.Key == DataSourceCatalog.DealerShipments)
+                {
+                    var operation = kind is { } kc ? ReportExtraction.Cell(row, kc) : "";
+                    value = IsReturn(operation) ? -Math.Abs(value.Value) : Math.Abs(value.Value);
                 }
 
                 list.Add(new SalesDealerLedgerEntry

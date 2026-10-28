@@ -32,7 +32,14 @@ export type AktView = {
   hasPayments: boolean;
   hasExpenses: boolean;
   hasBalances: boolean;
+  /** Откуда отгрузки: sheets — таблица ГП («Отгрузки дилерам (ГП)»), linko — первичка Linko. */
+  shipmentsSource?: ShipmentsSource;
 };
+
+export type ShipmentsSource = "linko" | "sheets";
+
+/** Подпись источника отгрузок акта и DSO. */
+export const shipmentsName = (source: ShipmentsSource | undefined, t: (text: string) => string) => (source === "sheets" ? t("ГП («Сотув»)") : "Linko");
 
 export type DsoOpen = {
   date: string;
@@ -94,4 +101,5 @@ export type DsoView = {
   hasPayments: boolean;
   hasTerms: boolean;
   paymentsTo: string | null;
+  shipmentsSource?: ShipmentsSource;
 };

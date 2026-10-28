@@ -45,7 +45,8 @@ public sealed record AktView(
     DateOnly? ExpensesTo,
     bool HasPayments,
     bool HasExpenses,
-    bool HasBalances);
+    bool HasBalances,
+    string ShipmentsSource = SettlementsBase.Linko);
 
 /// <summary>
 /// «Акт сверки» по месяцам — как вкладка «Акт сверки» «Полевого контроля»: остаток на конец = начало + отгрузка − возврат − касса − банк −
@@ -145,13 +146,13 @@ public static class AktCompute
             .Select(r => r.Book.Name).ToList();
         if (noSheet.Count > 0)
         {
-            checks.Add(new AktCheck("unmatched", $"Отгрузки Linko, а в таблицах контрагента с таким именем нет (оплаты и остаток не найдены): {noSheet.Count}.", noSheet));
+            checks.Add(new AktCheck("unmatched", $"Отгрузки {ShipmentsLabel(data)}, а в таблицах контрагента с таким именем нет (оплаты и остаток не найдены): {noSheet.Count}.", noSheet));
         }
 
         var noLinko = rows.Where(r => r.Book.Group == "other" && r.Book.Docs.Count == 0 && (r.Row.Cash != 0 || r.Row.Bank != 0)).Select(r => r.Book.Name).ToList();
         if (noLinko.Count > 0)
         {
-            checks.Add(new AktCheck("nolinko", $"Оплаты есть, а отгрузок Linko под этим именем нет (контрагент таблиц не сопоставлен с дилером региона или клиентом): {noLinko.Count}.", noLinko));
+            checks.Add(new AktCheck("nolinko", $"Оплаты есть, а отгрузок {ShipmentsLabel(data)} под этим именем нет (контрагент таблиц не сопоставлен с дилером региона или клиентом): {noLinko.Count}.", noLinko));
         }
 
         if (outside.Count > 0)
@@ -171,8 +172,11 @@ public static class AktCompute
 
         var anchorDate = data.Books.Where(b => b.AnchorSource == "act").Select(b => b.AnchorDate).Max();
         return new AktView(data.AsOf, months, month, Arts, groups, cards, checks, anchorDate, data.PaymentsTo, data.ExpensesTo, data.HasPayments, data.HasExpenses,
-            data.HasBalances);
+            data.HasBalances, data.ShipmentsSource);
     }
+
+    /// <summary>Откуда отгрузки — для текста проверок: «Linko» или таблица ГП.</summary>
+    private static string ShipmentsLabel(SettlementsBase data) => data.ShipmentsSource == SettlementsBase.Sheets ? "ГП («Сотув маълумотлар Базаси»)" : "Linko";
 
     /// <summary>Движение месяца в колонках акта; кешбэк — по FIFO, ретробонус — 601 за вычетом кешбэка (не меньше нуля).</summary>
     private static (decimal Ship, decimal Return, decimal Cash, decimal Bank, Dictionary<string, decimal> Expenses, decimal Total, decimal Pending) Movement(

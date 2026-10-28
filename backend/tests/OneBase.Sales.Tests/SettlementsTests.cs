@@ -186,4 +186,24 @@ public class SettlementsTests
         Assert.Equal([(D(8, 2, 2025), "Бобур Самарканд", 100_000_000m, true), (D(9, 17), "Хавас", 46_216_660m, false)],
             rows.Select(r => (r.Date, r.Dealer, r.Amount, SettlementMath.IsCash(r.Kind))));
     }
+
+    /// <summary>Отгрузки ГП («Сотув маълумотлар Базаси»): сумма в листе всегда положительная, возврат — по «П/В»; строка «Итого» не берётся.</summary>
+    [Fact]
+    public void Sheet_shipments_take_the_return_sign_from_the_operation_column()
+    {
+        var document = Sheet("Сотув маълумотлар Базаси",
+            ["Дата", "П/В", "Контрагент", "Сумма Диллера", "Коментария"],
+            ["2026-09-01", "Продажа", "Дилер Хоразм", "1000", ""],
+            ["2026-09-02", "Возврат", "Дилер Хоразм", "200", "брак"],
+            ["2026-09-03", "Продажа", "Итого", "999", ""]);
+
+        var rows = DataSourceRegisters.Ledger(DataSourceCatalog.Field(DataSourceCatalog.DealerShipments)!, Guid.NewGuid(), 1,
+            new LedgerFieldMapping("Дата", "Контрагент", "Сумма Диллера", "П/В", null, null, "Коментария"), document, ["Сотув маълумотлар Базаси"]);
+
+        Assert.Equal([(D(9, 1), 1000m), (D(9, 2), -200m)], rows.Select(r => (r.Date, r.Amount)));
+        Assert.True(DataSourceRegisters.IsReturn("возврат товара"));
+        Assert.False(DataSourceRegisters.IsReturn("Продажа"));
+        Assert.Contains(DataSourceCatalog.DealerShipments, DataSourceCatalog.Section("akt")!.Fields);
+        Assert.Contains(DataSourceCatalog.DealerShipments, DataSourceCatalog.Section("dso")!.Fields);
+    }
 }

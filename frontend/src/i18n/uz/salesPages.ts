@@ -842,6 +842,8 @@ const dict: Dict = {
   "оплаты по {date}": "to'lovlar {date} gacha",
   "расходы по {date}": "xarajatlar {date} gacha",
   "отгрузки Linko по {date}": "Linko jo'natmalari {date} gacha",
+  "отгрузки {src} по {date}": "{src} jo'natmalari {date} gacha",
+  "ГП («Сотув»)": "GP («Sotuv»)",
   "долг контрагентов заводу на 1-е число": "kontragentlarning 1-sanaga zavodga qarzi",
   "возврат {sum}": "qaytarma {sum}",
   "касса {cash} · банк {bank}": "kassa {cash} · bank {bank}",
@@ -854,6 +856,7 @@ const dict: Dict = {
   "остаток на начало {open} → на конец {close}": "oy boshiga qoldiq {open} → oxiriga {close}",
   "норма оплаты {n} дн.": "to'lov me'yori {n} kun",
   "Отгрузки и возвраты (Linko)": "Jo'natma va qaytarmalar (Linko)",
+  "Отгрузки и возвраты ({src})": "Jo'natma va qaytarmalar ({src})",
   "Оплаты (Kassa Bank)": "To'lovlar (Kassa Bank)",
   "Расходы (реестр)": "Xarajatlar (reyestr)",
   "Кешбэк 2% по FIFO (норма {n} дн.)": "FIFO bo'yicha 2% keshbek (me'yor {n} kun)",
@@ -867,6 +870,10 @@ const dict: Dict = {
     "Xarajatlar reyestri {date} gacha kiritilgan: bu sanadan keyingi xarajatlar dalolatnomaga hali tushmagan.",
   "Без остатка из акта бухгалтерии — остаток считается от начала реестров (может отличаться): {n}.":
     "Buxgalteriya dalolatnomasidan qoldiqsiz — qoldiq reyestrlar boshidan hisoblanadi (farq qilishi mumkin): {n}.",
+  "Отгрузки {src}, а в таблицах контрагента с таким именем нет (оплаты и остаток не найдены): {n}.":
+    "{src} jo'natmalari bor, jadvallarda esa bunday nomli kontragent yo'q (to'lov va qoldiq topilmadi): {n}.",
+  "Оплаты есть, а отгрузок {src} под этим именем нет (контрагент таблиц не сопоставлен с дилером региона или клиентом): {n}.":
+    "To'lovlar bor, bu nom bilan {src} jo'natmalari yo'q (jadvaldagi kontragent mintaqa dileri yoki mijoz bilan solishtirilmagan): {n}.",
   "Отгрузки Linko, а в таблицах контрагента с таким именем нет (оплаты и остаток не найдены): {n}.":
     "Linko jo'natmalari bor, jadvallarda esa bunday nomli kontragent yo'q (to'lov va qoldiq topilmadi): {n}.",
   "Оплаты есть, а отгрузок Linko под этим именем нет (контрагент таблиц не сопоставлен с дилером региона или клиентом): {n}.":
@@ -882,6 +889,9 @@ const dict: Dict = {
   "Оплат дилеров в OneBase ещё нет — в Linko их нет. Привяжите таблицу оплат: «Настройки → Источники данных → DSO»: «Оплаты дилеров» (Kassa Bank), «Условия оплаты дилеров» (Ostatka), «Расходы по дилерам» (Прочие расходы).":
     "OneBase'da hali dilerlar to'lovlari yo'q — Linko'da ular yo'q. To'lovlar jadvalini bog'lang: «Sozlamalar → Ma'lumot manbalari → DSO»: «Dilerlar to'lovlari» (Kassa Bank), «Dilerlar to'lov me'yorlari» (Ostatka), «Dilerlar bo'yicha xarajatlar» (Boshqa xarajatlar).",
   "отгрузки Linko и оплаты по {date}": "Linko jo'natmalari va to'lovlar {date} gacha",
+  "отгрузки {src} и оплаты по {date}": "{src} jo'natmalari va to'lovlar {date} gacha",
+  "Отгрузки и возвраты — таблица ГП «Сотув маълумотлар Базаси» (сумма дилера, как у бухгалтерии); страница «Первичка» — по Linko.":
+    "Jo'natma va qaytarmalar — GP «Сотув маълумотлар Базаси» jadvali (diler summasi, buxgalteriyadagidek); «Birlamchi savdo» sahifasi — Linko bo'yicha.",
   "последняя оплата в реестре — {date}": "reyestrdagi oxirgi to'lov — {date}",
   "дни считаются от даты данных": "kunlar ma'lumotlar sanasidan hisoblanadi",
   "Дебиторка (ДЗ)": "Debitorlik qarzi (DQ)",
@@ -924,6 +934,8 @@ const dict: Dict = {
   "Поступило − отгружено": "Tushgan − jo'natilgan",
   "Поступило / отгружено": "Tushgan / jo'natilgan",
   "Отгрузки и поступления по каналам": "Kanallar bo'yicha jo'natma va tushumlar",
+  "{month}, 1–{day} число: отгрузки {src} и оплаты Kassa Bank":
+    "{month}, 1–{day}-sana: {src} jo'natmalari va Kassa Bank to'lovlari",
   "{month}, 1–{day} число: отгрузки Linko и оплаты Kassa Bank":
     "{month}, 1–{day}-sana: Linko jo'natmalari va Kassa Bank to'lovlari",
   "По число": "Sanagacha",

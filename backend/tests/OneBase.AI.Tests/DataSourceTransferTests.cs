@@ -85,6 +85,20 @@ public class DataSourceTransferDbTests(DataManagerDb fixture) : IClassFixture<Da
         Assert.Equal(DataSourceTransfer.Updated, again.Items.Single(i => i.Kind == "binding").Status);
         Assert.Equal(1, await db.DataSourceBindings.CountAsync());
 
+        // Привязка в файле — на другой таблице (поле перенесли в другую книгу): прежняя привязка обновляется и переезжает, второй не появляется.
+        var moved = parsed with
+        {
+            Connections = [.. parsed.Connections, parsed.Connections[0] with { Name = "Другая книга", SpreadsheetId = "1OtherBook00000000000000000000000000000000", Url = "1OtherBook00000000000000000000000000000000" }],
+            Bindings = [parsed.Bindings[0] with { SpreadsheetId = "1OtherBook00000000000000000000000000000000" }],
+            Dealers = [],
+        };
+        var move = await transfer.ImportAsync(new DataSourceImportRequest(moved, null, DryRun: false), fixture.AdminId, CancellationToken.None);
+        Assert.Equal(0, move.Errors);
+        Assert.Equal(DataSourceTransfer.Updated, move.Items.Single(i => i.Kind == "binding").Status);
+        var other = await db.DataSourceConnections.AsNoTracking().SingleAsync(c => c.SpreadsheetId == "1OtherBook00000000000000000000000000000000");
+        Assert.Equal(other.Id, (await db.DataSourceBindings.AsNoTracking().SingleAsync()).ConnectionId);
+        binding = await db.DataSourceBindings.AsNoTracking().SingleAsync();
+
         // Синхронизация: Хоразм — сентябрь по дилеру и октябрь по другому имени; Бухоро — по названию региона.
         var run = await sources.RunAsync(binding.Id, "manual", fixture.AdminId, CancellationToken.None);
         Assert.Equal("ok", run.Status);

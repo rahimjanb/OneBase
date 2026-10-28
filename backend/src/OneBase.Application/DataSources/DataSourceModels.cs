@@ -35,6 +35,9 @@ public static class DataSourceCatalog
     public const string Pnl = "pnl";
     public const string DealerPayments = "dealer_payments";
     public const string DealerExpenses = "dealer_expenses";
+
+    /// <summary>Отгрузки и возвраты дилерам из таблицы (ГП «Сотув маълумотлар Базаси») — акт сверки и DSO вместо первички Linko.</summary>
+    public const string DealerShipments = "dealer_shipments";
     public const string DealerTerms = "dealer_terms";
     public const string DealerBalances = "dealer_balances";
 
@@ -47,6 +50,8 @@ public static class DataSourceCatalog
         new(Supervisor, "СВР региона", "profile", "Супервайзер региона во вторичке.", null, RegionProfilePlanner.Supervisor),
         new(Pnl, "P&L дилеров", "pnl", "Продажи, себестоимость и расходы по дилерам за месяц."),
         new(DealerPayments, "Оплаты дилеров", "ledger", "Поступления от дилеров (касса и банк) по дням — акт сверки и DSO. Лист копируется целиком."),
+        new(DealerShipments, "Отгрузки дилерам (ГП)", "ledger",
+            "Отгрузки и возвраты дилерам и прямым клиентам по дням, сумма дилера — акт сверки и DSO берут их вместо первички Linko (страница «Первичка» — Linko). Лист копируется целиком."),
         new(DealerExpenses, "Расходы по дилерам", "ledger", "Бонусы, логистика, акции, кешбэк и прочие расходы по статьям — акт сверки и DSO. Лист копируется целиком."),
         new(DealerTerms, "Нормы оплаты дилеров", "terms", "Срок оплаты дилера в днях (и остаток долга на дату, если он в том же листе) — DSO."),
         new(DealerBalances, "Остатки дилеров на дату", "balance",
@@ -64,10 +69,11 @@ public static class DataSourceCatalog
         new("plans", "Планы", "/sales/plans", "Планы ТП — API планов Linko", [PlanRop, PlanFactory, PlanPrimary]),
         new("problems", "Проблемные агенты", "/sales/problems", "Визиты, заказы и планы ТП — Linko", []),
         new("pnl", "P&L дилеров", "/sales/pnl", "Данные OneBase (Linko не ведёт P&L)", [Pnl]),
-        new("akt", "Акт сверки", "/sales/akt", "Отгрузки и возвраты дилерам — Linko (первичка); оплат и расходов дилеров в Linko нет",
-            [DealerPayments, DealerExpenses, DealerBalances, DealerTerms]),
-        new("dso", "DSO", "/sales/dso", "Отгрузки дилерам — Linko (первичка); оплат и сроков оплаты в Linko нет",
-            [DealerPayments, DealerExpenses, DealerBalances, DealerTerms]),
+        new("akt", "Акт сверки", "/sales/akt",
+            "Отгрузки и возвраты дилерам — таблица ГП, если привязаны «Отгрузки дилерам (ГП)», иначе первичка Linko; оплат и расходов дилеров в Linko нет",
+            [DealerShipments, DealerPayments, DealerExpenses, DealerBalances, DealerTerms]),
+        new("dso", "DSO", "/sales/dso", "Отгрузки дилерам — таблица ГП, если привязаны «Отгрузки дилерам (ГП)», иначе первичка Linko; оплат и сроков оплаты в Linko нет",
+            [DealerShipments, DealerPayments, DealerExpenses, DealerBalances, DealerTerms]),
     ];
 
     public static DataSourceField? Field(string key) => Fields.FirstOrDefault(f => f.Key == key);

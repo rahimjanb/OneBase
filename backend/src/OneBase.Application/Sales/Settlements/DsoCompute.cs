@@ -55,7 +55,8 @@ public sealed record DsoView(
     IReadOnlyList<DsoChannel> Channels,
     bool HasPayments,
     bool HasTerms,
-    DateOnly? PaymentsTo);
+    DateOnly? PaymentsTo,
+    string ShipmentsSource = SettlementsBase.Linko);
 
 /// <summary>
 /// DSO — долги дилеров и прогноз оплат, как вкладка «DSO» «Полевого контроля»: неоплаченные отгрузки по FIFO (оплаты, возвраты и «Прочие
@@ -149,7 +150,8 @@ public static class DsoCompute
             Channels(data),
             data.HasPayments,
             data.HasTerms,
-            data.PaymentsTo);
+            data.PaymentsTo,
+            data.ShipmentsSource);
     }
 
     /// <summary>

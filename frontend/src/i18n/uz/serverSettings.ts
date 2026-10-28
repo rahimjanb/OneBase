@@ -704,6 +704,7 @@ const dict: Dict = {
   "Подключена, читается.": "Ulandi, o'qilmoqda.",
   "Будет создана.": "Yaratiladi.",
   "Будет обновлена.": "Yangilanadi.",
+  "Будет обновлена и перейдёт на таблицу из файла.": "Yangilanadi va fayldagi jadvalga o'tadi.",
   "Таблица привязки не подключена — см. строку таблицы выше.": "Bog'lanish jadvali ulanmagan — yuqoridagi jadval qatoriga qarang.",
   "Уже задан.": "Allaqachon berilgan.",
   "Будет задан.": "Beriladi.",

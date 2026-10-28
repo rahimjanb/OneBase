@@ -161,8 +161,10 @@ public sealed class DataSourceTransfer(OneBaseDbContext db, DataSourceService so
             }
 
             var keys = b.Fields.Select(f => f.Field).Order().ToList();
-            var same = bindings.FirstOrDefault(x => x.ConnectionId == connectionId && x.Section == b.Section
-                                                    && DataSourceRules.ReadFields(x.Fields).Select(f => f.Field).Order().SequenceEqual(keys));
+            // Та же привязка: раздел и набор полей; сначала на той же таблице, иначе на другой — тогда она переезжает на таблицу из файла
+            // (расходы перенесли из таблицы DSO в «План первички» — обновляется прежняя привязка, а не создаётся вторая).
+            bool SameFields(DataSourceBinding x) => x.Section == b.Section && DataSourceRules.ReadFields(x.Fields).Select(f => f.Field).Order().SequenceEqual(keys);
+            var same = bindings.FirstOrDefault(x => x.ConnectionId == connectionId && SameFields(x)) ?? bindings.FirstOrDefault(SameFields);
             var input = new BindingInput(b.Section, connectionId, b.Sheets, b.HeaderRow, b.Fields, b.Schedule, b.IntervalMinutes, b.DailyAt, b.Enabled);
             if (request.DryRun)
             {
@@ -172,7 +174,8 @@ public sealed class DataSourceTransfer(OneBaseDbContext db, DataSourceService so
                     .FirstOrDefault();
                 items.Add(taken is not null
                     ? new("binding", name, Error, $"«{DataSourceCatalog.Field(taken)?.Label ?? taken}» уже обновляется другой привязкой — одно поле, один источник.")
-                    : new("binding", name, same is null ? Created : Updated, same is null ? "Будет создана." : "Будет обновлена."));
+                    : new("binding", name, same is null ? Created : Updated,
+                        same is null ? "Будет создана." : same.ConnectionId == connectionId ? "Будет обновлена." : "Будет обновлена и перейдёт на таблицу из файла."));
                 continue;
             }
 
