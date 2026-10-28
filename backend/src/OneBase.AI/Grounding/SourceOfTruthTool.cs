@@ -15,9 +15,10 @@ public static class SourceOfTruthTool
 
     public static readonly LlmToolDefinition Definition = new(
         ToolName,
-        "Кто источник истины показателя (Linko, Google Sheets, OneBase, расчёт) и есть ли открытые конфликты источников. Вызывай, когда " +
-        "значения из разных источников расходятся или пользователь ссылается на другой источник: передай values — получишь верное по правилу " +
-        "приоритета и конфликт. Без metric — вся карта источников.",
+        "Кто источник истины показателя (Linko, Google Sheets, OneBase, расчёт), когда данные обновлены (freshness: последняя синхронизация Linko " +
+        "или запуск привязки таблицы, ошибка последней попытки) и есть ли открытые конфликты источников. Вызывай, когда значения из разных " +
+        "источников расходятся, пользователь ссылается на другой источник или нужно понять, почему данных нет (не загружалось, ошибка, таблица " +
+        "не привязана): передай values — получишь верное по правилу приоритета и конфликт. Без metric — вся карта источников.",
         JsonSerializer.SerializeToElement(new
         {
             type = "object",
@@ -61,9 +62,20 @@ public static class SourceOfTruthTool
             }
         }
 
+        var freshness = (await service.FreshnessAsync(ct)).Select(f => new
+        {
+            f.Key,
+            f.Label,
+            f.Source,
+            UpdatedAt = Local(f.UpdatedAt),
+            LastRunAt = Local(f.LastRunAt),
+            f.Status,
+            f.Message,
+            NextRunAt = Local(f.NextRunAt),
+        }).ToList();
         if (query.Length == 0)
         {
-            return JsonSerializer.Serialize(new { rules = SourceOfTruth.Rules, metrics = map }, DataTool.Json);
+            return JsonSerializer.Serialize(new { rules = SourceOfTruth.Rules, metrics = map, freshness }, DataTool.Json);
         }
 
         var metric = SourceOfTruthService.Find(map, query);
@@ -85,7 +97,11 @@ public static class SourceOfTruthTool
             found = true,
             metric,
             ownerLabel = TruthOwners.Label(metric.Owner),
+            freshness = freshness.FirstOrDefault(f => f.Key == metric.Key),
             resolution = values.Count > 0 ? SourceOfTruth.Resolve(metric.Owner, values) : null,
         }, DataTool.Json);
     }
+
+    /// <summary>Время по Ташкенту «дд.ММ.гггг ЧЧ:мм».</summary>
+    private static string? Local(DateTimeOffset? at) => at?.ToOffset(TimeSpan.FromHours(5)).ToString("dd.MM.yyyy HH:mm");
 }

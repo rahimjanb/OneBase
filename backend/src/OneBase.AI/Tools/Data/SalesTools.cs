@@ -62,6 +62,26 @@ public abstract class SalesTool(SalesDataLoader loader) : DataTool
                    : $"Направления «{direction}» нет. Направления: {string.Join(", ", cards.Select(c => $"{c.Name}{(c.Subtitle is null ? "" : $" ({c.Subtitle})")}"))}.");
     }
 
+    /// <summary>
+    /// План по категориям подразделения за месяц (как таблица «План по категориям» страниц продаж): план РОП / «Завод» — сумма планов регионов,
+    /// без них — сумма планов ТП из показателей Linko («Могуль + Шоколад» — одной строкой). Категории с продажами, но без плана — списком.
+    /// </summary>
+    internal static object CategoryPlans(IReadOnlyList<CategoryPlanFact> rows) => new
+    {
+        Rows = rows.Where(r => r.PlanKg is not null).OrderByDescending(r => r.PlanKg).Select(r => new
+        {
+            Category = r.Name,
+            PlanKg = R(r.PlanKg),
+            FactKg = R(r.FactKg),
+            ExecutionPct = Pct(r.Execution),
+            RemainingKg = R(r.RemainingKg),
+            ForecastKg = R(r.ForecastKg),
+            ForecastExecutionPct = Pct(r.ForecastExecution),
+            RevenueSum = R(r.Revenue),
+        }),
+        WithoutPlan = rows.Where(r => r.PlanKg is null && r.FactKg != 0).Select(r => r.Name),
+    };
+
     protected static DataSource DirectionSource(PeriodInfo p, UnitRow direction) =>
         new($"OneBase → Продажи → {direction.Name}", PeriodText(p), $"/sales/directions/{direction.Id}?{Query(p.Year, p.Month)}");
 
@@ -127,7 +147,12 @@ internal sealed class GetSalesTool(SalesDataLoader loader) : SalesTool(loader)
     public override string Description =>
         "Итоги вторичных продаж за месяц по республике, направлению РМ (с его регионами) или региону: факт и план в кг, выполнение, прогноз на " +
         "конец месяца, выручка в сумах, АКБ (активные торговые точки), страйк, визиты, число ТП; сравнение с теми же днями прошлого месяца; " +
+        "план по категориям (CategoryPlans: план, факт, выполнение, осталось, прогноз — «план по помадке на республику», «план по бамбуку в Хоразме»); " +
         "экспорт и опт (филиал «Завод») отдельно. За день или отрезок дней — get_sales_days.";
+
+    public override string UsageHint =>
+        "План по категории (помадка, могул, бамбук…) на республику, направление или регион — get_sales: CategoryPlans (план РОП регионов, без него — " +
+        "сумма планов ТП из Linko, PlanSource в Kpi). Не отвечай, что плана по категории нет, пока не посмотрел CategoryPlans.";
 
     public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg, RegionArg, DirectionArg);
 
@@ -148,6 +173,7 @@ internal sealed class GetSalesTool(SalesDataLoader loader) : SalesTool(loader)
                 Direction = view.Name,
                 Manager = view.Subtitle,
                 Kpi = Kpi(view.Kpi),
+                CategoryPlans = CategoryPlans(view.CategoryPlans),
                 SameDaysPreviousMonth = SameDays(view.SameDays),
                 Regions = view.Regions.Select(r => new
                 {
@@ -177,6 +203,7 @@ internal sealed class GetSalesTool(SalesDataLoader loader) : SalesTool(loader)
                 view.Supervisor,
                 view.Dealer,
                 Kpi = Kpi(view.Kpi),
+                CategoryPlans = CategoryPlans(view.CategoryPlans),
                 SameDaysPreviousMonth = SameDays(view.SameDays),
                 Vacancies = view.Team.Count(t => t.IsVacancy),
                 Note = "Вторичка: заказы − возвраты по дате приёмки, без филиала «Завод».",
@@ -189,6 +216,7 @@ internal sealed class GetSalesTool(SalesDataLoader loader) : SalesTool(loader)
             Period = PeriodOf(p),
             Scope = "Республика",
             Kpi = Kpi(overview.Kpi),
+            CategoryPlans = CategoryPlans(republic.CategoryPlans),
             CriticalAgents = overview.Flags.Critical,
             RiskAgents = overview.Flags.Risk,
             overview.Vacancies,

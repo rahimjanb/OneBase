@@ -900,6 +900,16 @@ const dict: Dict = {
     "Verifix xodimlari (bo'linma, lavozim, jadval, holat, ishga qabul va bo'shash), kelish va ketishlar, kechikishlar, erta ketishlar, kelmasliklar, Verifix hujjatlari bo'yicha ta'til va kasallik varaqalari, ishlangan soatlar, bo'linmalar bo'yicha tabellar va hisobotlar. Ish haqi fondi, nomzodlar va baholashlar yo'q.",
   "HR: сотрудники и подразделения (Verifix), посещаемость, опоздания, ранние уходы, отсутствия, отпуска и больничные, рабочее время и табели, приём и увольнения; команда продаж, вакансии, нагрузка и эффективность.":
     "HR: xodimlar va bo'linmalar (Verifix), davomat, kechikishlar, erta ketishlar, kelmasliklar, ta'til va kasallik varaqalari, ish vaqti va tabellar, ishga qabul va bo'shashlar; savdo jamoasi, bo'sh ish o'rinlari, ish yuki va samaradorlik.",
+
+  // ---------- Инструмент «Нет в наличии и дозагрузка по дилерам» ----------
+  "Нет в наличии и дозагрузка по дилерам": "Dilerlarda yo'q tovar va qayta yuklash",
+  "OOS (нет в наличии) и дозагрузка по дилерам: для категории («помадка», «могул»), товара или артикула — каждая пара «склад дилера (регион) × SKU»: остаток кг и коробки, свободный остаток (без брони), продажи кг в день, дни покрытия, дни в нуле за прошлый закрытый месяц, статус (нет в наличии — остатка нет при продажах; дефицит — меньше 15 дней; норма; затоварка; не продаётся), рекомендуемый заказ дилера (кг, коробки, сумма). Расчёт тот же, что страница «Рек. остаток»: скорость за 87 дней с поправкой на дни без товара, заказ — до запаса на 15 дней вверх до коробки. Фильтр filter: order — где нужен заказ (по умолчанию), oos — нет в наличии, deficit — дефицит, all — все пары.":
+    "OOS (mavjud emas) va dilerlarga qayta yuklash: toifa («pomadka», «mogul»), tovar yoki artikul uchun — har bir «diler ombori (mintaqa) × SKU» juftligi: qoldiq kg va qutilarda, bo'sh qoldiq (bronsiz), kuniga kg sotuv, qoplash kunlari, o'tgan yopilgan oydagi nol kunlar, holat (mavjud emas — sotuv bor, qoldiq yo'q; tanqislik — 15 kundan kam; me'yor; ortiqcha; sotilmaydi), dilerga tavsiya etilgan buyurtma (kg, quti, summa). Hisob «Tavsiya etilgan qoldiq» sahifasidagidek: tovarsiz kunlarga tuzatish bilan 87 kunlik tezlik, buyurtma — qutigacha yaxlitlab 15 kunlik zaxiragacha. filter: order — buyurtma kerak joylar (standart), oos — mavjud emas, deficit — tanqislik, all — barcha juftliklar.",
+  "Категория отчёта: «помадка», «могул», «шоколад». Без неё — все категории.": "Hisobot toifasi: «pomadka», «mogul», «shokolad». Usiz — barcha toifalar.",
+  "Товар или артикул: «ARBUZ», «480». Вместе с category — внутри категории.": "Tovar yoki artikul: «ARBUZ», «480». category bilan birga — toifa ichida.",
+  "order — где нужен заказ (по умолчанию), oos — нет в наличии, deficit — меньше 15 дней запаса, all — все пары.":
+    "order — buyurtma kerak joylar (standart), oos — mavjud emas, deficit — 15 kundan kam zaxira, all — barcha juftliklar.",
+  "Сколько пар в списке: по умолчанию 40, до 60.": "Ro'yxatda nechta juftlik: standart 40, 60 tagacha.",
 };
 
 export default dict;

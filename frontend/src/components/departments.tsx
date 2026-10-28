@@ -48,9 +48,10 @@ export async function DepartmentStatusCard({ department: d }: { department: Depa
           <ArrowUpRight className="size-4 text-ink-3 group-hover:text-accent-strong" />
         </div>
         <div className="mt-3 flex items-center gap-3">
-          <span className="text-[1.75rem] font-semibold leading-none tracking-tight">{percent(d.score)}</span>
+          <span className="text-[1.75rem] font-semibold leading-none tracking-tight">{d.score == null ? "—" : percent(d.score)}</span>
           <StatusDot status={d.status} />
         </div>
+        {d.caption && <div className="mt-1 text-xs text-ink-3">{d.caption}</div>}
         <div className="mt-4 text-xs text-ink-2">{t(d.metric.label)}</div>
         <div className="mt-2" title={`${t(d.metric.label)}: ${percent(d.metric.value)}`}>
           <ProgressBar value={d.metric.value} tone={d.status === "attention" ? "warn" : "ok"} />

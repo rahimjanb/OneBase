@@ -786,28 +786,11 @@ function Summary({ details }: { details: ConsultantDetails }) {
 function Details({ details, durationMs }: { details: ConsultantDetails; durationMs: number }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  // Источники ответа в ленте не показываются — только в «Как получен ответ» (данные, период, ссылка на страницу).
   const sources = details.sources;
   const hasMore = details.agents.length > 0 || sources.length > 0;
   return (
     <div className="mt-2">
-      {sources.length > 0 && (
-        <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="text-ink-3">{t("Источники:")}</span>
-          {sources.map((s, i) =>
-            s.href ? (
-              <Link key={i} href={s.href} className="rounded-full border border-line bg-surface px-2.5 py-0.5 text-ink-2 hover:border-accent/40 hover:text-accent-strong">
-                {t(s.title)}
-                {s.period ? ` · ${periodText(s.period, t)}` : ""}
-              </Link>
-            ) : (
-              <span key={i} className="rounded-full border border-line bg-surface px-2.5 py-0.5 text-ink-2">
-                {t(s.title)}
-                {s.period ? ` · ${periodText(s.period, t)}` : ""}
-              </span>
-            ),
-          )}
-        </div>
-      )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-3">
         {details.model && (
           <span>
@@ -818,7 +801,7 @@ function Details({ details, durationMs }: { details: ConsultantDetails; duration
         <span>{t("{s} с", { s: (durationMs / 1000).toFixed(1) })}</span>
         {(details.memoryUsed ?? 0) > 0 && <span>{t("учтены прошлые анализы: {n}", { n: details.memoryUsed ?? 0 })}</span>}
         <Grounding details={details} />
-        {hasMore && details.agents.length > 0 && (
+        {hasMore && (
           <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 font-medium text-accent-strong hover:underline">
             {t("Как получен ответ")}
             <ChevronDown className={`size-3 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -827,6 +810,25 @@ function Details({ details, durationMs }: { details: ConsultantDetails; duration
       </div>
       {open && (
         <div className="mt-3 space-y-3">
+          {sources.length > 0 && (
+            <div className="text-xs">
+              <p className="mb-1 text-ink-3">{t("Данные ответа:")}</p>
+              <ul className="space-y-0.5">
+                {sources.map((s, i) => (
+                  <li key={i} className="text-ink-2">
+                    {s.href ? (
+                      <Link href={s.href} className="hover:text-accent-strong hover:underline">
+                        {t(s.title)}
+                      </Link>
+                    ) : (
+                      t(s.title)
+                    )}
+                    {s.period ? <span className="text-ink-3"> · {periodText(s.period, t)}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {details.routingReason && <p className="text-xs text-ink-2">{t("Почему эти AI-сотрудники: {reason}", { reason: t(details.routingReason) })}</p>}
           {details.correction && <CorrectionCard review={details.correction} />}
           {details.agents.map((a) => (

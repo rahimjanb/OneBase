@@ -118,6 +118,15 @@ const dashboard: Dict = {
   "{n} мин": "{n} daqiqa",
   "{n} ч": "{n} soat",
   "{n} дн": "{n} kun",
+
+  // ---------- Отделы: карточка «Продажи» по данным вторички ----------
+  "нет данных продаж": "savdo ma'lumotlari yo'q",
+  "Факт к плану месяца": "Oylik rejaga nisbatan fakt",
+  "плана на {month} нет": "{month} uchun reja yo'q",
+  "Факт: {fact} т": "Fakt: {fact} t",
+  "выполнение плана · {month}": "rejaning bajarilishi · {month}",
+  "прогноз выполнения плана · {month}": "rejaning bajarilish prognozi · {month}",
+  "Факт к плану: {fact} из {plan} т": "Rejaga nisbatan fakt: {plan} t dan {fact} t",
 };
 
 export default dashboard;

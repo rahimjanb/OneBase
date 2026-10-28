@@ -5,8 +5,10 @@ export type DepartmentStatus = "done" | "ok" | "attention";
 export type Department = {
   code: string;
   name: string;
-  /** Общий показатель выполнения плана, %. */
-  score: number;
+  /** Общий показатель выполнения плана, %; null — данных нет. */
+  score: number | null;
+  /** Что за показатель (под цифрой): «прогноз выполнения плана · октябрь». */
+  caption?: string;
   status: DepartmentStatus;
   metric: { label: string; value: number };
   filesCount: number;

@@ -13,7 +13,9 @@ public sealed record CustomerLapseQuery(IReadOnlySet<long>? Groups, IReadOnlySet
 /// <summary>
 /// Клиент (ТТ) в разрезе категории или товаров: покупки в базовом периоде и в месяце отчёта. Bought — в месяце отчёта чистые кг или
 /// выручка по этим товарам больше нуля. OtherNowRevenue — выручка точки за месяц по остальным товарам (точка жива, но эти не взяла).
-/// Визиты — выполненные визиты к точке в месяце отчёта (любым ТП).
+/// VisitsNow — выполненные визиты к точке в месяце отчёта (любым ТП); VisitsPlanned — визиты в маршруте (плане Linko) по отчётный день, VisitsMissed —
+/// из них не выполнены (отмечены невыполненными или остались «ожидается» в прошедший день): «0 из 4 по маршруту» — не то же, что «в маршруте не было».
+/// VisitsOutsideRoute — выполненные визиты не из плана (ТП пришёл в другой день или не по маршруту), входят в VisitsNow.
 /// </summary>
 public sealed record CustomerLapseRow(
     long MarketId,
@@ -32,7 +34,10 @@ public sealed record CustomerLapseRow(
     bool Bought,
     decimal OtherNowRevenue,
     int VisitsNow,
-    DateOnly? LastVisit);
+    DateOnly? LastVisit,
+    int VisitsPlanned = 0,
+    int VisitsMissed = 0,
+    int VisitsOutsideRoute = 0);
 
 /// <summary>
 /// «Кто не купил»: база — точки с покупкой этих товаров в базовом периоде (BaseFrom–BaseTo), строки — по убыванию кг базы (Rank — место).
@@ -110,7 +115,12 @@ public sealed partial class SalesAnalytics
         var allNow = View("lapse:revenue-now", () => _d.Current.Where(l => l.MarketId != null)
             .GroupBy(l => l.MarketId!.Value).ToDictionary(g => g.Key, g => g.Sum(l => l.Revenue)));
         var visits = View("lapse:visits-now", () => _d.Visits.Where(v => v.Status == VisitStatus.Done)
-            .GroupBy(v => v.MarketId).ToDictionary(g => g.Key, g => (Count: g.Count(), Last: g.Max(v => v.Date))));
+            .GroupBy(v => v.MarketId).ToDictionary(g => g.Key, g => (Count: g.Count(), Last: g.Max(v => v.Date), Outside: g.Count(v => !v.InPlan))));
+        // Маршрут месяца по отчётный день: сколько визитов было в плане и сколько из них не выполнено.
+        var route = View("lapse:route-now", () => _d.Visits.Where(v => v.InPlan && v.Date <= _d.DataThrough)
+            .GroupBy(v => v.MarketId).ToDictionary(g => g.Key, g => (Planned: g.Count(),
+                // Не выполнен: отмечен невыполненным или остался «ожидается» в прошедший день (Linko не закрывает пропущенные визиты).
+                Missed: g.Count(v => v.Status == VisitStatus.Undone || (v.Status == VisitStatus.Pending && v.Date < _d.DataThrough)))));
 
         var rows = baseLines
             .GroupBy(l => l.MarketId!.Value)
@@ -135,6 +145,7 @@ public sealed partial class SalesAnalytics
                 var bought = SalesMath.Positive(nowKg, nowRevenue);
                 var other = allNow.GetValueOrDefault(x.Base.Market) - nowRevenue;
                 var visit = visits.GetValueOrDefault(x.Base.Market);
+                var planned = route.GetValueOrDefault(x.Base.Market);
                 return new CustomerLapseRow(
                     x.Base.Market,
                     MarketName(x.Base.Market),
@@ -152,7 +163,10 @@ public sealed partial class SalesAnalytics
                     bought,
                     Math.Max(0, other),
                     visit.Count,
-                    visit.Count > 0 ? visit.Last : null);
+                    visit.Count > 0 ? visit.Last : null,
+                    planned.Planned,
+                    planned.Missed,
+                    visit.Outside);
             })
             .ToList();
 

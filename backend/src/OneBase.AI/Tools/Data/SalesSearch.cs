@@ -134,7 +134,7 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
 
     public override string Description =>
         "Найти категорию, тип или товар (SKU) по названию, части названия, бренду или артикулу — кириллицей или латиницей («помадка», «POMADKA», «Yamelly», «130»). " +
-        "Возвращает продажи найденного за месяц по республике или региону: у категории — итоги и её SKU со статусами, у товара — факт, ТТ с товаром, дистрибуция, " +
+        "Возвращает продажи найденного за месяц по республике или региону: у категории — итоги, план на месяц (Plan) и её SKU со статусами, у товара — факт, ТТ с товаром, дистрибуция, " +
         "прошлый месяц и разбивка по регионам. Вызывай всегда, когда в вопросе есть название товара, категории или бренда.";
 
     public override string UsageHint =>
@@ -155,6 +155,8 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
         var p = republic.Period;
         var period = Query(p.Year, p.Month) + (region is null ? string.Empty : $"&region={region.Id}");
 
+        // План категории за месяц — из таблицы «План по категориям» охвата (республика или регион).
+        var categoryPlans = region is null ? republic.CategoryPlans : analytics.CachedRegion(Guid.Parse(region.Id), null, null, "kg", null).CategoryPlans;
         var glossary = analytics.CategoryGlossary();
         var categories = glossary
             .Select(g => (Row: g, Score: g.LinkoTypes.Append(g.Name).Concat(Aliases(options, g)).Max(n => NameMatch.Score(n, query))))
@@ -221,6 +223,17 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
                         SilentSku = card.Silent,
                         LostSku = card.Lost,
                     },
+                Plan = categoryPlans.FirstOrDefault(c => c.CategoryId?.ToString() == row.CategoryId) is { PlanKg: not null } plan
+                    ? (object)new
+                    {
+                        PlanKg = R(plan.PlanKg),
+                        FactKg = R(plan.FactKg),
+                        ExecutionPct = Pct(plan.Execution),
+                        RemainingKg = R(plan.RemainingKg),
+                        ForecastKg = R(plan.ForecastKg),
+                        ForecastExecutionPct = Pct(plan.ForecastExecution),
+                    }
+                    : "плана на эту категорию за месяц в OneBase нет (планы по категориям охвата — get_sales, CategoryPlans)",
                 Note = card is null ? "Продаж этой категории в выбранном охвате и месяце нет." : null,
                 Skus = card?.Skus.OrderByDescending(s => s.Revenue).ThenByDescending(s => s.PrevMonthKg).Take(args.Cap(MaxSkus)).Select(s => new
                 {

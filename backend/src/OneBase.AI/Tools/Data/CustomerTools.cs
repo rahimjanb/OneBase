@@ -190,13 +190,53 @@ internal sealed class GetLapsedCustomersTool(SalesDataLoader loader, SalesOption
                 NowRevenueSum = r.Bought ? R(r.NowRevenue) : (decimal?)null,
                 OtherNowRevenueSum = r.OtherNowRevenue > 0 ? R(r.OtherNowRevenue) : (decimal?)null,
                 VisitsNow = r.VisitsNow,
+                VisitsPlanned = r.VisitsPlanned,
+                VisitsMissed = r.VisitsMissed,
+                VisitsOutsideRoute = r.VisitsOutsideRoute,
                 LastVisit = r.LastVisit?.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture),
+                Summary = RowSummary(r, p),
             }),
             Notes = notes,
-            Note = "Rank — место точки в базе по кг (1 — крупнейшая). OtherNowRevenueSum — точка в этом месяце покупает другие товары (жива, но эти не взяла); " +
-                   "VisitsNow — выполненные визиты в этом месяце (0 — к точке не ходили). Агент — ТП, который продал точке больше всех в базе. " +
+            Note = "Summary — строка точки целиком (купил ли, другие товары, визиты месяца): в таблице ответа бери столбцы из неё, пустых ячеек не оставляй. " +
+                   "Rank — место точки в базе по кг (1 — крупнейшая). OtherNowRevenueSum — точка в этом месяце покупает другие товары (жива, но эти не взяла); " +
+                   "VisitsNow — выполненные визиты в этом месяце (любым ТП), VisitsPlanned — визиты в маршруте по отчётный день, VisitsMissed — из них не выполнены, VisitsOutsideRoute — выполненные не по плану (входят в VisitsNow): " +
+                   "«0 из 4 по маршруту» — ТП не дошёл, «в маршруте не было» — точку не планировали. Агент — ТП, который продал точке больше всех в базе. " +
                    "Список — первые Shown из Total; остальные — с бо́льшим limit, по региону или ТП. Точку подробно — get_store со StoreId.",
         }, Sources(p, region, groups, categoryNames));
+    }
+
+    /// <summary>
+    /// Строка точки одной фразой — чтобы в таблице ответа не терялись столбцы: купил ли, что берёт ещё, визиты месяца отчёта
+    /// («не купил; другие товары — 3 430 000 сум; визитов в октябре: 3, последний 22.10»).
+    /// </summary>
+    internal static string RowSummary(CustomerLapseRow r, PeriodInfo p)
+    {
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var parts = new List<string>
+        {
+            r.Bought ? $"купил: {r.NowKg.ToString("N1", ru)} кг на {Math.Round(r.NowRevenue).ToString("N0", ru)} сум" : "не купил",
+        };
+        if (r.OtherNowRevenue > 0)
+        {
+            parts.Add($"другие товары — {Math.Round(r.OtherNowRevenue).ToString("N0", ru)} сум");
+        }
+
+        var route = r.VisitsPlanned > 0
+            ? $" (по маршруту {r.VisitsPlanned}{(r.VisitsMissed > 0 ? $", не выполнено {r.VisitsMissed}" : "")}{Outside(r)})"
+            : $" (в маршруте не было{Outside(r)})";
+        parts.Add(r.VisitsNow > 0
+            ? $"визитов в {MonthIn(p.Month)}: {r.VisitsNow}, последний {r.LastVisit:dd.MM}{route}"
+            : $"визитов в {MonthIn(p.Month)}: 0{route}");
+        return string.Join("; ", parts);
+    }
+
+    private static string Outside(CustomerLapseRow r) => r.VisitsOutsideRoute > 0 ? $"; вне маршрута {r.VisitsOutsideRoute}" : "";
+
+    /// <summary>Месяц в предложном падеже: «в октябре», «в мае», «в марте».</summary>
+    internal static string MonthIn(int month)
+    {
+        var name = MonthName(month);
+        return name.EndsWith('ь') || name.EndsWith('й') ? name[..^1] + "е" : name + "е";
     }
 
     internal static class Statuses

@@ -24,6 +24,13 @@ public static class TruthOwners
 /// <summary>Показатель и его источник истины: Owner — кто ведёт данные, Source — откуда именно (таблица, раздел), Detail — что входит.</summary>
 public sealed record TruthMetric(string Key, string Label, string Owner, string Source, string Detail, int OpenConflicts = 0);
 
+/// <summary>
+/// Свежесть показателя: UpdatedAt — последнее удачное обновление (у группы Linko — самая старая из её сущностей), LastRunAt — последняя попытка;
+/// Status: ok, error (последняя попытка с ошибкой — Message), never (ещё не загружалось), not_bound (поле таблиц не привязано — данных нет).
+/// </summary>
+public sealed record TruthFreshness(string Key, string Label, string Source, DateTimeOffset? UpdatedAt, DateTimeOffset? LastRunAt, string Status, string? Message = null,
+    DateTimeOffset? NextRunAt = null);
+
 /// <summary>Значение показателя из одного источника — кандидат при сверке.</summary>
 public sealed record SourceValue(string Source, decimal Value, string? Note = null);
 
@@ -124,6 +131,46 @@ public sealed class SourceOfTruthService(IAppDbContext db, FieldOwnership owners
         }
 
         rows.AddRange(SourceOfTruth.Calculated);
+        return rows;
+    }
+
+    /// <summary>Когда обновлялись данные каждого показателя карты: синхронизации Linko и запуски привязок Google Sheets.</summary>
+    public async Task<IReadOnlyList<TruthFreshness>> FreshnessAsync(CancellationToken ct = default)
+    {
+        var states = await db.LinkoSyncStates.AsNoTracking().ToListAsync(ct);
+        var rows = new List<TruthFreshness>();
+        foreach (var (key, label, _, entities) in SourceOfTruth.LinkoGroups)
+        {
+            var own = states.Where(s => entities.Contains(s.Entity)).ToList();
+            if (own.Count == 0)
+            {
+                rows.Add(new TruthFreshness(key, label, "Linko", null, null, "never", "ещё не загружалось"));
+                continue;
+            }
+
+            var failed = own.FirstOrDefault(s => s.LastError is not null && s.LastRunAt is not null && (s.LastSuccessAt is null || s.LastRunAt > s.LastSuccessAt));
+            var updated = own.All(s => s.LastSuccessAt is not null) ? own.Min(s => s.LastSuccessAt) : null;
+            rows.Add(new TruthFreshness(key, label, "Linko", updated, own.Max(s => s.LastRunAt), failed is not null ? "error" : updated is null ? "never" : "ok",
+                failed is null ? null : $"{failed.Entity}: {failed.LastError}"));
+        }
+
+        var bindings = await db.DataSourceBindings.AsNoTracking().Include(b => b.Connection).ToListAsync(ct);
+        foreach (var field in DataSourceCatalog.Fields)
+        {
+            var binding = bindings.FirstOrDefault(b => b.Enabled && DataSourceRules.ReadFields(b.Fields).Any(f => f.Field == field.Key));
+            if (binding is null)
+            {
+                rows.Add(new TruthFreshness(field.Key, field.Label, "OneBase", null, null, SourceOfTruth.FieldOwner(field, false) == TruthOwners.GoogleSheets ? "not_bound" : "ok",
+                    SourceOfTruth.FieldOwner(field, false) == TruthOwners.GoogleSheets ? "таблица не привязана — данных нет" : "ведётся в OneBase"));
+                continue;
+            }
+
+            var ok = binding.LastStatus is "ok" or "unchanged";
+            rows.Add(new TruthFreshness(field.Key, field.Label, $"Google Sheets «{binding.Connection?.Name}» ({DataSourceRules.SheetsLabel(DataSourceRules.ReadSheets(binding.Sheets))})",
+                ok ? binding.LastRunAt : null, binding.LastRunAt, binding.LastRunAt is null ? "never" : ok ? "ok" : "error",
+                ok ? null : binding.LastMessage, binding.NextRunAt));
+        }
+
         return rows;
     }
 

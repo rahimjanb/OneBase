@@ -61,7 +61,7 @@ public class CustomerLapseTests
 
     /// <summary>
     /// Август — база: 11 (80 кг бамбука), 15 (40 кг у ТП 1 и 12 кг у ТП 2), 10 (50 кг), 13 (30 кг, Юг), 12 (20 кг и возврат 20 — чистый 0),
-    /// 14 — только кекс. Сентябрь: 10 и 15 (на Юге) купили бамбук, 11 — только кекс, 16 — новая точка; к 13 — два визита.
+    /// 14 — только кекс. Сентябрь: 10 и 15 (на Юге) купили бамбук, 11 — только кекс, 16 — новая точка; к 13 — два визита по маршруту и один вне плана.
     /// </summary>
     private static SalesAnalytics September() => new(Data(9,
         [
@@ -82,6 +82,7 @@ public class CustomerLapseTests
             new VisitRecord(new DateOnly(2026, 9, 3), 3, 13, VisitStatus.Done, true),
             new VisitRecord(new DateOnly(2026, 9, 10), 3, 13, VisitStatus.Done, true),
             new VisitRecord(new DateOnly(2026, 9, 17), 3, 13, VisitStatus.Pending, true),
+            new VisitRecord(new DateOnly(2026, 9, 18), 3, 13, VisitStatus.Done, false), // зашёл не по плану
         ]));
 
     private static IReadOnlySet<long> BambooGroup(SalesAnalytics analytics) =>
@@ -107,7 +108,8 @@ public class CustomerLapseTests
         Assert.Equal((80m, new DateOnly(2026, 8, 25), 300m), (lost.BaseKg, lost.LastPurchase!.Value, lost.OtherNowRevenue));
 
         var south = view.Rows.Single(r => r.MarketId == 13);
-        Assert.Equal(("Юг", 2, new DateOnly(2026, 9, 10)), (south.Region, south.VisitsNow, south.LastVisit!.Value)); // запланированный не считается
+        Assert.Equal(("Юг", 3, new DateOnly(2026, 9, 18)), (south.Region, south.VisitsNow, south.LastVisit!.Value)); // запланированный не считается
+        Assert.Equal((3, 1, 1), (south.VisitsPlanned, south.VisitsMissed, south.VisitsOutsideRoute)); // по маршруту 3, «ожидается» 17.09 при данных по 20.09 — не выполнен; 18.09 — вне плана
 
         var bought = view.Rows.Single(r => r.MarketId == 15);
         Assert.True(bought.Bought); // купил на Юге — тоже купил
