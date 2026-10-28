@@ -20,6 +20,14 @@ public sealed class FilesOptions
     /// <summary>Наибольший файл через подключение Windows, байт (сама Windows по умолчанию пускает до 50 МБ, Cloudflare — до 100 МБ).</summary>
     public long MaxDavFileBytes { get; set; } = 4L * 1024 * 1024 * 1024;
 
+    /// <summary>
+    /// Сколько дней действует адрес без пароля (ссылка отдела и личная ссылка) от выпуска. Ссылка — как пароль: если она утекла, срок
+    /// ограничивает ущерб; продление — «Новая ссылка» (старая перестаёт работать сразу).
+    /// </summary>
+    public int LinkLifetimeDays { get; set; } = 365;
+
+    public DateTimeOffset LinkExpiry(DateTimeOffset from) => from.AddDays(Math.Clamp(LinkLifetimeDays, 1, 3650));
+
     /// <summary>Корень WebDAV в адресе: «https://files.1base.uz»; null — домен не задан.</summary>
     public string? PublicRoot() =>
         string.IsNullOrWhiteSpace(PublicDomain) ? null : $"{PublicScheme.Trim()}://{PublicDomain.Trim().Trim('/')}";
@@ -28,10 +36,12 @@ public sealed class FilesOptions
     /// Адрес без пароля — секретная ссылка отдела: «https://files.1base.uz/k/{код}/production». Word и Excel (Microsoft 365) блокируют
     /// вход по логину и паролю (Basic) на любой сервер, пока это не разрешено на компьютере; по ссылке пароль не спрашивается вовсе.
     /// </summary>
-    public string? LinkUrl(string token, string departmentCode) => PublicRoot() is { } root ? $"{root}/k/{token}/{departmentCode}" : null;
+    /// <remarks>folder — код отдела, имя общей папки («Общие файлы») или пусто: личная ссылка открывает всё доступное сразу.</remarks>
+    public string? LinkUrl(string token, string folder) =>
+        PublicRoot() is { } root ? $"{root}/k/{token}" + (folder.Length > 0 ? "/" + Uri.EscapeDataString(folder) : "") : null;
 
     /// <summary>Тот же адрес путём Windows: «\\files.1base.uz@SSL\k\{код}\production».</summary>
-    public string? LinkUncPath(string token, string departmentCode) => UncPath($@"k\{token}\{departmentCode}");
+    public string? LinkUncPath(string token, string folder) => UncPath(folder.Length > 0 ? $@"k\{token}\{folder}" : $@"k\{token}");
 
     /// <summary>Адрес папки отдела для «Подключить сетевой диск»: «https://files.1base.uz/production».</summary>
     public string? FolderUrl(string departmentCode) => PublicRoot() is { } root ? $"{root}/{departmentCode}" : null;

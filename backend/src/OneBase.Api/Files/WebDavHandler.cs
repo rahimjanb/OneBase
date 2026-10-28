@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Caching.Memory;
 using OneBase.Application.Files;
@@ -11,14 +12,15 @@ namespace OneBase.Api.Files;
 /// <summary>
 /// Подключение папки отдела к Windows: WebDAV (RFC 4918, класс 1 и 2) на /dav. Снаружи — https://{FILE_STORAGE_DOMAIN}/{код отдела}:
 /// Cloudflare → nginx :82 → API /dav (nginx передаёт X-Dav-Root: «/», чтобы адреса в ответах были в пространстве клиента).
-/// Вход — секретная ссылка отдела (/k/{код}/{отдел}, без пароля) или логин и пароль подключения отдела (Basic, только по HTTPS снаружи).
+/// Вход — секретная ссылка (/k/{код}/…, без пароля: ссылка отдела или личная ссылка сотрудника) или логин и пароль подключения отдела
+/// (Basic, только по HTTPS снаружи). Первый сегмент пути — код отдела или имя общей папки («Общие файлы»).
 /// Все операции идут через DepartmentFilesService — те же права, версии, корзина и журнал, что и на сайте; содержимое — в том же MinIO.
+/// Блокировки настоящие: пока файл открыт в Word у одного, второй получает 423 и открывает его только для чтения.
 /// </summary>
-public static class WebDavHandler
+public static partial class WebDavHandler
 {
     private const string Allow = "OPTIONS, PROPFIND, PROPPATCH, GET, HEAD, PUT, DELETE, MKCOL, MOVE, COPY, LOCK, UNLOCK";
     private const int MaxXmlBody = 64 * 1024;
-    private const int LockSeconds = 3600;
 
     public static async Task HandleAsync(HttpContext http)
     {
@@ -50,19 +52,38 @@ public static class WebDavHandler
             return;
         }
 
+        var remote = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (segments.Count > 0 && segments[0].StartsWith('_'))
+        {
+            // Служебные адреса Office, SharePoint и FrontPage (/_api/…, /_vti_bin/…, /_layouts/…): таких папок нет (коды отделов и имена
+            // общих папок с «_» не начинаются). Только 404 — ответ 401 с запросом пароля Microsoft 365 считает «небезопасным входом»
+            // и блокирует файл, даже если сам файл открыт по ссылке без пароля.
+            http.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
         FileActor? actor;
         if (segments.Count > 0 && segments[0].Equals("k", StringComparison.OrdinalIgnoreCase))
         {
-            // Секретная ссылка отдела: /k/{код}/… — без логина и пароля. Никакого 401: на запрос пароля (Basic) Word и Excel из Microsoft 365
-            // отвечают блокировкой файла, а по ссылке открывают и сохраняют сразу. Неверный код — 404, как несуществующий адрес.
-            actor = segments.Count > 1 ? await connections.AuthenticateLinkAsync(segments[1], ct) : null;
-            if (actor is null)
+            // Секретная ссылка: /k/{код}/… — без логина и пароля. Никакого 401: на запрос пароля (Basic) Word и Excel из Microsoft 365
+            // отвечают блокировкой файла, а по ссылке открывают и сохраняют сразу. Неверный, истёкший или отозванный код — 404.
+            var result = segments.Count > 1
+                ? await connections.AuthenticateLinkAsync(segments[1], remote, ct)
+                : new DavAuthResult(DavAuthStatus.Failed, null);
+            if (result.Status == DavAuthStatus.Locked)
+            {
+                http.Response.Headers.RetryAfter = "300";
+                http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                return;
+            }
+
+            if (result.Actor is null)
             {
                 http.Response.StatusCode = StatusCodes.Status404NotFound;
                 return;
             }
 
-            await connections.TouchAsync(actor.ConnectionId!.Value, ct);
+            actor = result.Actor;
             publicBase = $"{publicBase}/k/{segments[1]}";
             segments = segments.Skip(2).ToList();
         }
@@ -73,13 +94,14 @@ public static class WebDavHandler
         }
         else
         {
-            actor = await AuthenticateAsync(http, connections, ct);
+            actor = await AuthenticateAsync(http, connections, remote, ct);
             if (actor is null)
             {
                 return;
             }
         }
 
+        actor = actor with { Ip = remote, LockTokens = SubmittedTokens(http.Request) };
         var dav = new Context(http, files, actor, publicBase, segments, cache, options, ct);
         try
         {
@@ -104,7 +126,16 @@ public static class WebDavHandler
             if (!http.Response.HasStarted)
             {
                 http.Response.StatusCode = e.Status;
-                await http.Response.WriteAsync(e.Message, ct);
+                if (e.Status == StatusCodes.Status423Locked)
+                {
+                    // Файл открыт на запись у другого: правка без его токена не проходит (RFC 4918, 9.10.6).
+                    http.Response.ContentType = "application/xml; charset=utf-8";
+                    await http.Response.WriteAsync(DavXml.Error("lock-token-submitted", DavPath.Href(publicBase, segments, false)), ct);
+                }
+                else
+                {
+                    await http.Response.WriteAsync(e.Message, ct);
+                }
             }
         }
         catch (BadHttpRequestException e) when (e.StatusCode == StatusCodes.Status413PayloadTooLarge)
@@ -116,21 +147,34 @@ public static class WebDavHandler
         }
     }
 
+    /// <summary>Токены блокировок, которые предъявил клиент: заголовок If («(&lt;opaquelocktoken:…&gt;)») и Lock-Token (UNLOCK).</summary>
+    public static IReadOnlySet<string> SubmittedTokens(HttpRequest request)
+    {
+        var tokens = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var header in request.Headers["If"].Concat(request.Headers["Lock-Token"]))
+        {
+            foreach (Match match in TokenPattern().Matches(header ?? ""))
+            {
+                tokens.Add(match.Value);
+            }
+        }
+
+        return tokens;
+    }
+
+    [GeneratedRegex(@"opaquelocktoken:[^>\s)\]]+")]
+    private static partial Regex TokenPattern();
+
     /// <summary>
-    /// Служебные запросы без входа к корню сервера и к адресам FrontPage («/_vti_…»): так Word и Excel выясняют, что за сервер, открывая
-    /// файл по ссылке. Ответ 401 с запросом пароля Microsoft 365 считает «небезопасным входом» и блокирует файл — поэтому здесь 404.
-    /// Проводник (WebClient) у корня по-прежнему получает 401 и входит по логину и паролю.
+    /// Служебные запросы без входа к корню сервера: так Word и Excel выясняют, что за сервер, открывая файл по ссылке. Ответ 401 с
+    /// запросом пароля Microsoft 365 считает «небезопасным входом» и блокирует файл — поэтому здесь 404. Проводник (WebClient) у корня
+    /// по-прежнему получает 401 и входит по логину и паролю. Адреса «/_…» (FrontPage, SharePoint) отвечают 404 ещё раньше, всем.
     /// </summary>
     private static bool OfficeProbe(HttpContext http, IReadOnlyList<string> segments)
     {
-        if (http.Request.Headers.Authorization.Count > 0)
+        if (http.Request.Headers.Authorization.Count > 0 || segments.Count > 0)
         {
             return false;
-        }
-
-        if (segments.Count > 0)
-        {
-            return segments[0].StartsWith("_vti", StringComparison.OrdinalIgnoreCase);
         }
 
         var agent = http.Request.Headers.UserAgent.ToString();
@@ -138,7 +182,7 @@ public static class WebDavHandler
                || agent.Contains("Microsoft.Office", StringComparison.OrdinalIgnoreCase) || agent.Contains("FrontPage", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task<FileActor?> AuthenticateAsync(HttpContext http, FileConnectionsService connections, CancellationToken ct)
+    private static async Task<FileActor?> AuthenticateAsync(HttpContext http, FileConnectionsService connections, string remote, CancellationToken ct)
     {
         var header = http.Request.Headers.Authorization.FirstOrDefault();
         if (header is not null && header.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
@@ -156,8 +200,7 @@ public static class WebDavHandler
             var colon = decoded.IndexOf(':');
             if (colon > 0)
             {
-                var result = await connections.AuthenticateAsync(decoded[..colon], decoded[(colon + 1)..],
-                    http.Connection.RemoteIpAddress?.ToString() ?? "unknown", ct);
+                var result = await connections.AuthenticateAsync(decoded[..colon], decoded[(colon + 1)..], remote, ct);
                 if (result is { Status: DavAuthStatus.Ok, Actor: { } actor })
                 {
                     await connections.TouchAsync(actor.ConnectionId!.Value, ct);
@@ -176,6 +219,20 @@ public static class WebDavHandler
         http.Response.Headers.WWWAuthenticate = "Basic realm=\"OneBase Files\", charset=\"UTF-8\"";
         http.Response.StatusCode = StatusCodes.Status401Unauthorized;
         return null;
+    }
+
+    /// <summary>Timeout из LOCK («Second-600», «Infinite, Second-4100000000»): секунды, не больше часа; нет или Infinite — час.</summary>
+    public static int LockSeconds(string? header)
+    {
+        foreach (var part in (header ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part.StartsWith("Second-", StringComparison.OrdinalIgnoreCase) && long.TryParse(part[7..], NumberStyles.None, CultureInfo.InvariantCulture, out var seconds))
+            {
+                return (int)Math.Clamp(seconds, 60, DepartmentFilesService.MaxLockSeconds);
+            }
+        }
+
+        return DepartmentFilesService.MaxLockSeconds;
     }
 
     private sealed class Context(
@@ -208,6 +265,12 @@ public static class WebDavHandler
                         var root = await files.RootAsync(department, ct);
                         resources.Add(Collection([department.Code], department.Name, root));
                     }
+
+                    // Общие папки — рядом с папками отделов, отдельными папками («Общие файлы»), а не внутри отдела.
+                    foreach (var shared in await files.ReadableSharedAsync(actor, ct))
+                    {
+                        resources.Add(Collection([shared.Name], shared.Name, shared));
+                    }
                 }
             }
             else
@@ -221,17 +284,20 @@ public static class WebDavHandler
 
                 if (node.File is { } file)
                 {
-                    resources.Add(Document(segments, file));
+                    resources.Add(Document(segments, file, await LockOfAsync(file.Id)));
                 }
                 else
                 {
                     var folder = node.Folder!;
-                    resources.Add(Collection(segments, folder.ParentId is null ? node.Department.Name : folder.Name, folder));
+                    resources.Add(Collection(segments, folder.ParentId is null ? node.Space.Name : folder.Name, folder));
                     if (depthOne)
                     {
                         var (folders, children) = await files.ChildrenAsync(folder.Id, ct);
                         resources.AddRange(folders.Select(f => Collection([.. segments, f.Name], f.Name, f)));
-                        resources.AddRange(children.Select(f => Document([.. segments, f.Name], f)));
+                        foreach (var child in children)
+                        {
+                            resources.Add(Document([.. segments, child.Name], child, await LockOfAsync(child.Id)));
+                        }
                     }
                 }
             }
@@ -248,10 +314,15 @@ public static class WebDavHandler
                 return;
             }
 
-            if (!DepartmentFilesService.CanWrite(actor, node.Department.Id))
+            if (!DepartmentFilesService.CanWrite(actor, node.Space))
             {
                 Response.StatusCode = StatusCodes.Status403Forbidden;
                 return;
+            }
+
+            if (node.File is { } file)
+            {
+                await files.EnsureUnlockedAsync(actor, file, ct);
             }
 
             // Windows пишет время создания и изменения файла — принимаем без хранения (время ведёт OneBase).
@@ -296,9 +367,10 @@ public static class WebDavHandler
             }
 
             // Проводник читает файлы и для эскизов — в журнал одна запись на подключение, файл и версию за 10 минут.
-            if (!cache.TryGetValue($"files-dav-download:{actor.ConnectionId}:{file.Id}:{version.Number}", out _))
+            var key = $"files-dav-download:{actor.ConnectionId ?? actor.UserId}:{file.Id}:{version.Number}";
+            if (!cache.TryGetValue(key, out _))
             {
-                cache.Set($"files-dav-download:{actor.ConnectionId}:{file.Id}:{version.Number}", true, TimeSpan.FromMinutes(10));
+                cache.Set(key, true, TimeSpan.FromMinutes(10));
                 await files.AuditDownloadAsync(actor, file, version.Number, ct);
             }
 
@@ -332,7 +404,23 @@ public static class WebDavHandler
                 return;
             }
 
-            await files.UploadAsync(actor, parent.Id, segments[^1], Request.Body, Request.ContentLength, ct);
+            // Условная запись (RFC 9110): If-Match — только если на сервере та же версия, что у клиента; If-None-Match: * — только новый файл.
+            // Так клиент, который следит за версией, не затрёт чужое сохранение, сделанное после его чтения.
+            var ifMatch = Request.Headers.IfMatch.ToString();
+            if (ifMatch.Length > 0 && ifMatch != "*" && (existed?.File is not { } current || !ifMatch.Split(',').Select(v => v.Trim()).Contains(ETag(current))))
+            {
+                Response.StatusCode = StatusCodes.Status412PreconditionFailed;
+                return;
+            }
+
+            if (Request.Headers.IfNoneMatch.ToString() == "*" && existed is not null)
+            {
+                Response.StatusCode = StatusCodes.Status412PreconditionFailed;
+                return;
+            }
+
+            var saved = await files.UploadAsync(actor, parent.Id, segments[^1], Request.Body, Request.ContentLength, ct);
+            Response.Headers.ETag = ETag(saved);
             Response.StatusCode = existed is null ? StatusCodes.Status201Created : StatusCodes.Status204NoContent;
         }
 
@@ -417,6 +505,15 @@ public static class WebDavHandler
             var name = target[^1];
             if (source.File is { } file)
             {
+                if (move && existing?.File is { } replaced && !sameNode)
+                {
+                    // Сохранение «через временный файл» (~WRD0001.tmp → отчёт.docx): содержимое — новой версией того же документа,
+                    // его история и прежнее содержимое не уходят в корзину вместе с ним.
+                    await files.ReplaceContentAsync(actor, file.Id, replaced.Id, ct);
+                    Response.StatusCode = StatusCodes.Status204NoContent;
+                    return;
+                }
+
                 if (existing is { IsCollection: true } && !sameNode)
                 {
                     await files.DeleteFolderAsync(actor, existing.Folder!.Id, ct);
@@ -452,8 +549,10 @@ public static class WebDavHandler
         }
 
         /// <summary>
-        /// Блокировка для Office и Проводника: токен выдаётся, сами записи блокировкой не ограничиваются. LOCK несуществующего файла создаёт
-        /// пустой (RFC 4918, Office так начинает сохранение).
+        /// Блокировка (RFC 4918, 9.10). Файлы — настоящая: хранится в базе, пока действует, менять файл можно только с её токеном
+        /// (заголовок If); чужой LOCK получает 423 — второй Word открывает файл только для чтения и пишет, кем он открыт. Продление —
+        /// LOCK без тела с токеном в If. LOCK несуществующего файла создаёт пустой (Office так начинает сохранение нового файла).
+        /// Папки: токен выдаётся без хранения — Проводник блокирует папки редко, а файлы внутри защищают их собственные блокировки.
         /// </summary>
         public async Task LockAsync()
         {
@@ -474,26 +573,64 @@ public static class WebDavHandler
                 created = true;
             }
 
-            if (node is null || !DepartmentFilesService.CanWrite(actor, node.Department.Id))
+            if (node is null || !DepartmentFilesService.CanWrite(actor, node.Space))
             {
                 Response.StatusCode = StatusCodes.Status403Forbidden;
                 return;
             }
 
-            // Продление: тело пустое, токен — в заголовке If.
-            var token = string.IsNullOrWhiteSpace(body) && Request.Headers["If"].FirstOrDefault() is { } condition && condition.Contains("opaquelocktoken:")
-                ? condition[condition.IndexOf("opaquelocktoken:", StringComparison.Ordinal)..].Split('>')[0]
-                : $"opaquelocktoken:{Guid.NewGuid()}";
+            var seconds = LockSeconds(Request.Headers["Timeout"].FirstOrDefault());
+            var refresh = string.IsNullOrWhiteSpace(body) ? actor.LockTokens.FirstOrDefault() : null;
             var href = DavPath.Href(publicBase, segments, node.IsCollection);
-            Response.Headers["Lock-Token"] = $"<{token}>";
+            if (node.File is not { } file)
+            {
+                var token = refresh ?? $"opaquelocktoken:{Guid.NewGuid()}";
+                Response.Headers["Lock-Token"] = $"<{token}>";
+                await WriteXmlAsync(StatusCodes.Status200OK,
+                    DavXml.LockResponse(token, href, body, seconds, Request.Headers["Depth"].FirstOrDefault() is not "0"));
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(body) && refresh is null)
+            {
+                Response.StatusCode = StatusCodes.Status400BadRequest; // продление без токена
+                return;
+            }
+
+            FileLock fileLock;
+            try
+            {
+                fileLock = await files.LockAsync(actor, file.Id, refresh, DavXml.LockOwner(body), seconds, ct);
+            }
+            catch (FilesException e) when (e.Status == StatusCodes.Status423Locked)
+            {
+                await WriteXmlAsync(StatusCodes.Status423Locked, DavXml.Error("no-conflicting-lock", href));
+                return;
+            }
+
+            var left = (int)Math.Max(1, Math.Ceiling((fileLock.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds));
+            Response.Headers["Lock-Token"] = $"<{fileLock.Token}>";
             await WriteXmlAsync(created ? StatusCodes.Status201Created : StatusCodes.Status200OK,
-                DavXml.LockResponse(token, href, body, LockSeconds, Request.Headers["Depth"].FirstOrDefault() is not "0" && node.IsCollection));
+                DavXml.LockResponse(fileLock.Token, href, body, left, false, fileLock.Owner));
         }
 
-        public Task UnlockAsync()
+        /// <summary>UNLOCK: снимает свою блокировку по Lock-Token. Неизвестный токен (истекла, сняли) — тоже 204: клиент закрывает файл.</summary>
+        public async Task UnlockAsync()
         {
+            var node = segments.Count < 2 ? null : await files.ResolveAsync(actor, segments, ct);
+            if (node is null)
+            {
+                Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            var token = TokenPattern().Match(Request.Headers["Lock-Token"].ToString());
+            if (node.File is { } file && token.Success)
+            {
+                await files.UnlockAsync(actor, file.Id, token.Value, ct);
+            }
+
             Response.StatusCode = StatusCodes.Status204NoContent;
-            return Task.CompletedTask;
         }
 
         public Task NotAllowedAsync()
@@ -530,12 +667,17 @@ public static class WebDavHandler
             return parent is { IsCollection: true } ? parent.Folder : null;
         }
 
+        private async Task<DavActiveLock?> LockOfAsync(Guid fileId) =>
+            await files.ActiveLockAsync(fileId, ct) is { } l
+                ? new DavActiveLock(l.Owner, (int)Math.Max(1, Math.Ceiling((l.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds)))
+                : null;
+
         private DavResource Collection(IReadOnlyList<string> path, string name, Folder folder) =>
             new(DavPath.Href(publicBase, path, true), name, true, 0, "", folder.CreatedAt, folder.UpdatedAt ?? folder.CreatedAt, "");
 
-        private DavResource Document(IReadOnlyList<string> path, FileItem file) =>
+        private DavResource Document(IReadOnlyList<string> path, FileItem file, DavActiveLock? fileLock) =>
             new(DavPath.Href(publicBase, path, false), file.Name, false, file.SizeBytes, FileNames.ContentType(file.Name), file.CreatedAt,
-                file.UpdatedAt ?? file.CreatedAt, ETag(file));
+                file.UpdatedAt ?? file.CreatedAt, ETag(file), fileLock);
 
         private static string ETag(FileItem file) => $"\"{file.Id:N}-{file.CurrentVersion}\"";
 

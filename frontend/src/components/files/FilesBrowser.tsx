@@ -13,6 +13,8 @@ import {
   FolderPlus,
   History,
   Loader2,
+  Lock,
+  LockOpen,
   MoreHorizontal,
   Pencil,
   RotateCcw,
@@ -27,6 +29,8 @@ import {
   downloadUrl,
   filesApi,
   modifiedLabel,
+  sharedAccessLabel,
+  spaceHref,
   typeFilters,
   typeGroup,
   uploadFiles,
@@ -39,7 +43,8 @@ import {
 } from "@/lib/files";
 import { FileIcon, FolderIcon, typeShort } from "./file-meta";
 import { MoveDialog, NameDialog, PreviewDialog, VersionsDialog } from "./FileDialogs";
-import { WindowsConnectButton } from "./WindowsConnect";
+import { SharedAccessButton } from "./SharedAccess";
+import { PersonalLinkButton, WindowsConnectButton } from "./WindowsConnect";
 
 type SortKey = "name" | "type" | "size" | "modified";
 type Dialog =
@@ -54,8 +59,8 @@ type Dialog =
 const REFRESH_MS = 15_000;
 
 /**
- * Папка отдела: те же файлы, что в подключённой папке Windows. Список перечитывается раз в 15 секунд — файлы, положенные через Проводник,
- * появляются сами, без «Обновить».
+ * Папка отдела или общая папка: те же файлы, что в подключённой папке Windows. Список перечитывается раз в 15 секунд — файлы, положенные
+ * через Проводник, появляются сами, без «Обновить». Файл, открытый в Word или Excel, помечен замком: пока он открыт, его не перезапишут.
  */
 export function FilesBrowser({ initial }: { initial: FolderView }) {
   const t = useT();
@@ -72,8 +77,11 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
   const input = useRef<HTMLInputElement>(null);
 
   const code = view.department.code;
+  const shared = !!view.department.shared;
+  const manage = view.department.access === "manage";
   const rootId = view.path[0]?.id ?? view.id;
-  const hrefOf = (folderId: string) => (folderId === rootId ? `/base/${code}` : `/base/${code}/${folderId}`);
+  const hrefOf = (folderId: string) => spaceHref(view.department, folderId === rootId ? undefined : folderId);
+  const loadTrash = () => (shared ? filesApi.sharedTrash(view.department.id) : filesApi.trash(code));
 
   const reload = useCallback(async () => {
     try {
@@ -94,9 +102,12 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) return setFound(null);
-    const timer = window.setTimeout(() => filesApi.search(q, code).then(setFound, (e: Error) => setError(e.message)), 300);
+    const timer = window.setTimeout(
+      () => (shared ? filesApi.search(q, undefined, view.department.id) : filesApi.search(q, code)).then(setFound, (e: Error) => setError(e.message)),
+      300,
+    );
     return () => window.clearTimeout(timer);
-  }, [query, code]);
+  }, [query, code, shared, view.department.id]);
 
   const act = async (action: () => Promise<unknown>) => {
     setError(null);
@@ -163,18 +174,18 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
             {i === view.path.length - 1 ? <span className="font-medium">{p.name}</span> : <Link href={hrefOf(p.id)} className="text-ink-2 hover:text-ink">{p.name}</Link>}
           </span>
         ))}
-        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-ink-2">{t(accessLabel[view.department.access])}</span>
+        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-ink-2">{t((shared ? sharedAccessLabel : accessLabel)[view.department.access])}</span>
       </nav>
 
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput
           className="min-w-[220px] flex-1 sm:max-w-sm"
-          placeholder={t("Поиск в отделе «{name}»", { name: t(view.department.name) })}
+          placeholder={shared ? t("Поиск в папке «{name}»", { name: view.department.name }) : t("Поиск в отделе «{name}»", { name: t(view.department.name) })}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className="ml-auto flex flex-wrap gap-2">
-          <Button onClick={() => (trash ? setTrash(null) : filesApi.trash(code).then(setTrash, (e: Error) => setError(e.message)))}>
+          <Button onClick={() => (trash ? setTrash(null) : loadTrash().then(setTrash, (e: Error) => setError(e.message)))}>
             <Trash2 className="size-4" />
             {trash ? t("К файлам") : t("Корзина")}
           </Button>
@@ -191,7 +202,14 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
               <input ref={input} type="file" multiple hidden onChange={(e) => (startUpload(e.target.files ?? []), (e.target.value = ""))} />
             </>
           )}
-          <WindowsConnectButton department={view.department} />
+          {shared ? (
+            <>
+              {manage && <SharedAccessButton space={view.department} />}
+              <PersonalLinkButton />
+            </>
+          ) : (
+            <WindowsConnectButton department={view.department} />
+          )}
         </div>
       </div>
 
@@ -215,7 +233,7 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
       {trash ? (
         <TrashList rows={trash} canWrite={view.canWrite} onRestore={(row) => act(async () => {
           await (row.isFolder ? filesApi.restoreFolder(row.id) : filesApi.restoreFile(row.id));
-          setTrash(await filesApi.trash(code));
+          setTrash(await loadTrash());
         })} />
       ) : found ? (
         <SearchResults rows={found} onOpen={(file) => setDialog({ kind: "preview", file })} />
@@ -273,6 +291,15 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
                     <FileIcon extension={file.extension} />
                     <span className="truncate">{file.name}</span>
                     {file.version > 1 && <span className="shrink-0 rounded bg-muted px-1.5 text-[10px] text-ink-3">v{file.version}</span>}
+                    {file.lock && (
+                      <span
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warn/15 px-2 py-0.5 text-[11px] text-ink-2"
+                        title={t("Открыт для редактирования до {time} — пока он открыт, другие видят его только для чтения", { time: modifiedLabel(file.lock.until, t) })}
+                      >
+                        <Lock className="size-3" />
+                        {file.lock.owner ? t("открыт: {owner}", { owner: file.lock.owner }) : t("открыт для редактирования")}
+                      </span>
+                    )}
                   </button>
                   <span className="text-xs text-ink-2">{t(typeShort(file.extension))}</span>
                   <span className="text-xs text-ink-2">{fileSize(file.sizeBytes)}</span>
@@ -290,6 +317,17 @@ export function FilesBrowser({ initial }: { initial: FolderView }) {
                             { label: t("Переименовать"), icon: Pencil, onClick: () => setDialog({ kind: "renameFile", file }) },
                             { label: t("Перенести"), icon: FolderInput, onClick: () => setDialog({ kind: "moveFile", file }) },
                             { label: t("В корзину"), icon: Trash2, danger: true, onClick: () => window.confirm(t("«{name}» — в корзину?", { name: file.name })) && act(() => filesApi.deleteFile(file.id)) },
+                          ]
+                        : []),
+                      ...(file.lock && manage
+                        ? [
+                            {
+                              label: t("Снять блокировку"),
+                              icon: LockOpen,
+                              onClick: () =>
+                                window.confirm(t("Снять блокировку «{name}»? Это нужно, если Word или Excel завис и файл не освободился. Если файл ещё открыт, его правки могут не сохраниться.", { name: file.name })) &&
+                                act(() => filesApi.unlock(file.id)),
+                            },
                           ]
                         : []),
                     ]}

@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Files;
@@ -22,9 +24,17 @@ public sealed class FilesException(int status, string message) : Exception(messa
     public static FilesException Conflict(string name) => new(409, $"В папке уже есть «{name}».");
 
     public static FilesException Invalid(string message) => new(400, message);
+
+    /// <summary>Файл открыт на редактирование (WebDAV LOCK) — менять его может только владелец блокировки (423 Locked).</summary>
+    public static FilesException Locked(string name, FileLock fileLock) =>
+        new(423, $"«{name}» сейчас открыт для редактирования{(fileLock.Owner is { Length: > 0 } owner ? $" ({owner})" : "")} — изменить его можно " +
+                 $"после закрытия файла. Блокировка снимется сама не позже {fileLock.ExpiresAt.ToOffset(TimeSpan.FromHours(5)):dd.MM HH:mm}.");
 }
 
 public sealed record FileUserRef(string Name, bool ViaWindows);
+
+/// <summary>Файл открыт на редактирование в Word, Excel или Проводнике (WebDAV LOCK): кем и до какого времени.</summary>
+public sealed record FileLockRef(string? Owner, DateTimeOffset Until);
 
 public sealed record FileRow(
     Guid Id,
@@ -36,13 +46,32 @@ public sealed record FileRow(
     int Version,
     DateTimeOffset UpdatedAt,
     FileUserRef? UpdatedBy,
-    bool Hidden);
+    bool Hidden,
+    FileLockRef? Lock = null);
 
 public sealed record FolderRow(Guid Id, string Name, int Folders, int Files, DateTimeOffset UpdatedAt);
 
 public sealed record FolderCrumb(Guid Id, string Name);
 
-public sealed record DepartmentRef(Guid Id, string Code, string Name, string Access);
+/// <summary>Пространство папки: отдел (Code — код отдела) или общая папка (Shared, Id — корень, Code — её имя).</summary>
+public sealed record DepartmentRef(Guid Id, string Code, string Name, string Access, bool Shared = false);
+
+/// <summary>Пространство файлов: папка отдела или общая папка («Общие файлы»). Id — отдел или корень общей папки.</summary>
+public sealed record FileSpace(Guid Id, bool Shared, string Code, string Name)
+{
+    public Guid? DepartmentId => Shared ? null : Id;
+
+    public Guid? SharedRootId => Shared ? Id : null;
+}
+
+public sealed record SharedSummary(Guid Id, string Name, string Access, int Files, int Folders, long SizeBytes, DateTimeOffset? UpdatedAt, bool CanManage);
+
+public sealed record PrincipalOption(string Id, string Name, string? Detail);
+
+/// <summary>Выдача доступа к общей папке: Type — user | department | role, Access — read | write | manage.</summary>
+public sealed record SharedAccessRow(string Type, string Id, string Name, string? Detail, string Access);
+
+public sealed record SharedAccessView(IReadOnlyList<SharedAccessRow> Grants, IReadOnlyList<PrincipalOption> Users, IReadOnlyList<PrincipalOption> Departments);
 
 public sealed record FolderView(
     DepartmentRef Department,
@@ -76,8 +105,8 @@ public sealed record DepartmentAccessRow(Guid Id, string Code, string Name, stri
 
 public sealed record VersionRow(int Number, long SizeBytes, DateTimeOffset CreatedAt, FileUserRef? By, bool Current);
 
-/// <summary>Узел дерева для WebDAV: папка (у корня отдела — его корневая папка) или файл.</summary>
-public sealed record DavNode(Department Department, Folder? Folder, FileItem? File)
+/// <summary>Узел дерева для WebDAV: папка (у корня отдела или общей папки — её корневая папка) или файл.</summary>
+public sealed record DavNode(FileSpace Space, Folder? Folder, FileItem? File)
 {
     public bool IsCollection => File is null;
 }
@@ -128,9 +157,32 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
                 select new DepartmentGrant(f.DepartmentId!.Value, p.Access))
             .ToListAsync(ct);
 
+        // Общие папки — выдачи на их корне тем же субъектам.
+        var shared = await (
+                from p in db.ResourcePermissions.AsNoTracking()
+                join f in db.Folders.AsNoTracking() on p.FolderId equals f.Id
+                where f.ParentId == null && f.SharedRootId == f.Id && f.DeletedAt == null
+                      && ((p.PrincipalType == PrincipalType.User && p.PrincipalId == userKey)
+                          || (p.PrincipalType == PrincipalType.Role && roleKeys.Contains(p.PrincipalId))
+                          || (p.PrincipalType == PrincipalType.Department && departmentKeys.Contains(p.PrincipalId)))
+                select new SharedGrant(f.Id, p.Access))
+            .ToListAsync(ct);
+
         return new FileActor(user.Id, null, user.FullName,
             permissions.Contains(Permissions.FilesRead), permissions.Contains(Permissions.FilesWrite), permissions.Contains(Permissions.FilesManage),
-            own, grants, CanReadAll: permissions.Contains(Permissions.FilesReadAll));
+            own, grants, CanReadAll: permissions.Contains(Permissions.FilesReadAll), SharedGrants: shared);
+    }
+
+    /// <summary>Общие папки, выданные отделу, — для подключения отдела (ссылка или логин Windows).</summary>
+    public async Task<IReadOnlyList<SharedGrant>> DepartmentSharedGrantsAsync(Guid departmentId, CancellationToken ct)
+    {
+        var key = departmentId.ToString();
+        return await (
+                from p in db.ResourcePermissions.AsNoTracking()
+                join f in db.Folders.AsNoTracking() on p.FolderId equals f.Id
+                where f.ParentId == null && f.SharedRootId == f.Id && f.DeletedAt == null && p.PrincipalType == PrincipalType.Department && p.PrincipalId == key
+                select new SharedGrant(f.Id, p.Access))
+            .ToListAsync(ct);
     }
 
     // ---------- Отделы ----------
@@ -212,8 +264,8 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
     public async Task<FolderView> FolderAsync(FileActor actor, Guid folderId, CancellationToken ct)
     {
         var folder = await ReadableFolderAsync(actor, folderId, ct);
-        var department = await db.Departments.AsNoTracking().FirstAsync(d => d.Id == folder.DepartmentId, ct);
-        var access = FileAccessRules.AccessTo(actor, department.Id);
+        var space = await SpaceOfAsync(folder.DepartmentId, folder.SharedRootId, ct);
+        var access = FileAccessRules.AccessToItem(actor, folder.DepartmentId, folder.SharedRootId);
 
         var children = await db.Folders.AsNoTracking()
             .Where(f => f.ParentId == folder.Id && f.DeletedAt == null)
@@ -230,11 +282,11 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         var files = await db.Files.AsNoTracking().Where(f => f.FolderId == folder.Id && f.DeletedAt == null).OrderBy(f => f.Name).ToListAsync(ct);
 
         return new FolderView(
-            new DepartmentRef(department.Id, department.Code, department.Name, AccessName(access)),
+            new DepartmentRef(space.Id, space.Code, space.Name, AccessName(access), space.Shared),
             folder.Id,
-            folder.ParentId is null ? department.Name : folder.Name,
+            folder.ParentId is null ? space.Name : folder.Name,
             folder.ParentId,
-            await PathAsync(folder, department, ct),
+            await PathAsync(folder, space.Name, ct),
             children.Select(c => new FolderRow(c.Id, c.Name, c.Folders, c.Files, c.Updated)).ToList(),
             await RowsAsync(files, ct),
             access >= AccessLevel.Write);
@@ -246,11 +298,15 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         name = ValidName(name);
         await EnsureFreeAsync(parent.Id, name, null, ct);
 
-        var folder = new Folder { Name = name, ParentId = parent.Id, DepartmentId = parent.DepartmentId, CreatedById = actor.UserId };
+        var folder = new Folder
+        {
+            Name = name, ParentId = parent.Id, DepartmentId = parent.DepartmentId, SharedRootId = parent.SharedRootId, CreatedById = actor.UserId,
+        };
         db.Folders.Add(folder);
         Touch(parent);
         await db.SaveChangesAsync(ct);
-        await AuditAsync(actor, "files.folder.created", "Folder", folder.Id, new { folder.Name, parentId = parent.Id, departmentId = folder.DepartmentId }, ct);
+        await AuditAsync(actor, "files.folder.created", "Folder", folder.Id,
+            new { folder.Name, parentId = parent.Id, departmentId = folder.DepartmentId, sharedRootId = folder.SharedRootId }, ct);
         return folder;
     }
 
@@ -259,7 +315,9 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         var folder = await WritableFolderAsync(actor, folderId, ct);
         if (folder.ParentId is not { } parentId)
         {
-            throw FilesException.Invalid("Корневую папку отдела нельзя переименовать.");
+            throw FilesException.Invalid(folder.SharedRootId is null
+                ? "Корневую папку отдела нельзя переименовать."
+                : "Общую папку переименовывает администратор в «Общих файлах».");
         }
 
         name = ValidName(name);
@@ -269,6 +327,7 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         }
 
         await EnsureFreeAsync(parentId, name, folder.Id, ct);
+        await EnsureSubtreeUnlockedAsync(actor, folder.Id, ct); // Word сохраняет по старому пути — папку с открытым файлом не трогаем
         var old = folder.Name;
         folder.Name = name;
         Touch(folder);
@@ -276,19 +335,19 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         await AuditAsync(actor, "files.folder.renamed", "Folder", folder.Id, new { from = old, to = name }, ct);
     }
 
-    /// <summary>Перенос папки в другую папку того же отдела (не в саму себя и не во вложенную).</summary>
+    /// <summary>Перенос папки в другую папку того же отдела или той же общей папки (не в саму себя и не во вложенную).</summary>
     public async Task MoveFolderAsync(FileActor actor, Guid folderId, Guid targetId, string? newName, CancellationToken ct)
     {
         var folder = await WritableFolderAsync(actor, folderId, ct);
         if (folder.ParentId is null)
         {
-            throw FilesException.Invalid("Корневую папку отдела нельзя перенести.");
+            throw FilesException.Invalid("Корневую папку нельзя перенести.");
         }
 
         var target = await WritableFolderAsync(actor, targetId, ct);
-        if (target.DepartmentId != folder.DepartmentId)
+        if (target.DepartmentId != folder.DepartmentId || target.SharedRootId != folder.SharedRootId)
         {
-            throw FilesException.Invalid("Папку можно перенести только внутри отдела. В другой отдел — скачайте и загрузите заново.");
+            throw FilesException.Invalid("Папку можно перенести только внутри отдела или общей папки. В другое место — скачайте и загрузите заново.");
         }
 
         for (Folder? cursor = target; cursor is not null; cursor = cursor.ParentId is { } up ? await db.Folders.FirstOrDefaultAsync(f => f.Id == up, ct) : null)
@@ -306,6 +365,7 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         }
 
         await EnsureFreeAsync(target.Id, name, folder.Id, ct);
+        await EnsureSubtreeUnlockedAsync(actor, folder.Id, ct);
         var from = folder.ParentId;
         folder.ParentId = target.Id;
         folder.Name = name;
@@ -321,9 +381,10 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         var folder = await WritableFolderAsync(actor, folderId, ct);
         if (folder.ParentId is null)
         {
-            throw FilesException.Invalid("Корневую папку отдела нельзя удалить.");
+            throw FilesException.Invalid("Корневую папку нельзя удалить.");
         }
 
+        await EnsureSubtreeUnlockedAsync(actor, folder.Id, ct);
         var now = DateTimeOffset.UtcNow;
         var (folderIds, _) = await SubtreeAsync(folder.Id, includeDeleted: false, ct);
         await db.Folders.Where(f => folderIds.Contains(f.Id) && f.DeletedAt == null).ExecuteUpdateAsync(s => s.SetProperty(f => f.DeletedAt, now), ct);
@@ -354,7 +415,16 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
 
         var existing = await db.Files.Include(f => f.Versions)
             .FirstOrDefaultAsync(f => f.FolderId == folder.Id && f.DeletedAt == null && f.Name.ToLower() == name.ToLower(), ct);
-        var file = existing ?? new FileItem { Name = name, ContentType = FileNames.ContentType(name), FolderId = folder.Id, DepartmentId = folder.DepartmentId, CreatedById = actor.UserId };
+        if (existing is not null)
+        {
+            await EnsureUnlockedAsync(actor, existing, ct); // открыт в Word у другого — новая версия не перезапишет его правки
+        }
+
+        var file = existing ?? new FileItem
+        {
+            Name = name, ContentType = FileNames.ContentType(name), FolderId = folder.Id, DepartmentId = folder.DepartmentId, SharedRootId = folder.SharedRootId,
+            CreatedById = actor.UserId,
+        };
 
         var (key, size, sha) = await StoreAsync(file.Id, content, length, limit, FileNames.ContentType(name), ct);
         var now = DateTimeOffset.UtcNow;
@@ -441,6 +511,7 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         }
 
         await EnsureFreeAsync(file.FolderId, name, file.Id, ct);
+        await EnsureUnlockedAsync(actor, file, ct);
         var old = file.Name;
         file.Name = name;
         file.ContentType = FileNames.ContentType(name);
@@ -460,6 +531,7 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
             return;
         }
 
+        await EnsureUnlockedAsync(actor, file, ct);
         var clash = await db.Files.FirstOrDefaultAsync(f => f.FolderId == target.Id && f.DeletedAt == null && f.Id != file.Id && f.Name.ToLower() == name.ToLower(), ct);
         if (clash is not null)
         {
@@ -468,6 +540,7 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
                 throw FilesException.Conflict(name);
             }
 
+            await EnsureUnlockedAsync(actor, clash, ct);
             clash.DeletedAt = DateTimeOffset.UtcNow; // заменяемый файл — в корзину, его можно восстановить
         }
 
@@ -479,6 +552,7 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         var from = file.FolderId;
         file.FolderId = target.Id;
         file.DepartmentId = target.DepartmentId;
+        file.SharedRootId = target.SharedRootId;
         file.Name = name;
         file.ContentType = FileNames.ContentType(name);
         file.UpdatedAt = DateTimeOffset.UtcNow;
@@ -499,9 +573,34 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         return copy;
     }
 
+    /// <summary>
+    /// WebDAV MOVE поверх существующего файла (так сохраняют «через временный файл»: ~WRD0001.tmp → отчёт.docx): содержимое источника
+    /// становится новой версией целевого файла — у документа остаются id, история версий и прежнее содержимое версией; источник — в
+    /// корзину. Без этого заменённый документ со всей историей ушёл бы в корзину, а на его месте оказался бы новый файл с версией 1.
+    /// </summary>
+    public async Task ReplaceContentAsync(FileActor actor, Guid sourceId, Guid targetId, CancellationToken ct)
+    {
+        var source = await WritableFileAsync(actor, sourceId, ct);
+        var target = await WritableFileAsync(actor, targetId, ct);
+        await EnsureUnlockedAsync(actor, source, ct);
+        await EnsureUnlockedAsync(actor, target, ct);
+        var version = await db.FileVersions.AsNoTracking().FirstAsync(v => v.FileItemId == source.Id && v.Number == source.CurrentVersion, ct);
+        await using (var buffer = TempStream())
+        {
+            await storage.DownloadAsync(version.ObjectKey, buffer, ct);
+            buffer.Position = 0;
+            await UploadAsync(actor, target.FolderId, target.Name, buffer, buffer.Length, ct);
+        }
+
+        source.DeletedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(actor, "files.replaced", "File", target.Id, new { target.Name, from = source.Name, sourceId = source.Id }, ct);
+    }
+
     public async Task DeleteFileAsync(FileActor actor, Guid fileId, CancellationToken ct)
     {
         var file = await WritableFileAsync(actor, fileId, ct);
+        await EnsureUnlockedAsync(actor, file, ct);
         file.DeletedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         await AuditAsync(actor, "files.deleted", "File", file.Id, new { file.Name, folderId = file.FolderId }, ct);
@@ -520,11 +619,24 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
     public async Task<IReadOnlyList<TrashRow>> TrashAsync(FileActor actor, string departmentCode, CancellationToken ct)
     {
         var department = await DepartmentAsync(actor, departmentCode, ct);
-        var deletedFolders = await db.Folders.AsNoTracking().Where(f => f.DepartmentId == department.Id && f.DeletedAt != null).ToListAsync(ct);
+        return await TrashOfAsync(department.Id, null, ct);
+    }
+
+    public async Task<IReadOnlyList<TrashRow>> SharedTrashAsync(FileActor actor, Guid rootId, CancellationToken ct)
+    {
+        var root = await SharedRootAsync(actor, rootId, ct);
+        return await TrashOfAsync(null, root.Id, ct);
+    }
+
+    private async Task<IReadOnlyList<TrashRow>> TrashOfAsync(Guid? departmentId, Guid? sharedRootId, CancellationToken ct)
+    {
+        var deletedFolders = await db.Folders.AsNoTracking()
+            .Where(f => f.DepartmentId == departmentId && f.SharedRootId == sharedRootId && f.DeletedAt != null).ToListAsync(ct);
         var deletedFolderIds = deletedFolders.Select(f => f.Id).ToHashSet();
         // В списке — то, что удаляли по отдельности: папка, чей родитель не удалён тем же действием, и файлы вне удалённых папок.
         var topFolders = deletedFolders.Where(f => f.ParentId is not { } p || !deletedFolders.Any(x => x.Id == p && x.DeletedAt == f.DeletedAt)).ToList();
-        var files = await db.Files.AsNoTracking().Where(f => f.DepartmentId == department.Id && f.DeletedAt != null).ToListAsync(ct);
+        var files = await db.Files.AsNoTracking()
+            .Where(f => f.DepartmentId == departmentId && f.SharedRootId == sharedRootId && f.DeletedAt != null).ToListAsync(ct);
         var topFiles = files.Where(f => !deletedFolderIds.Contains(f.FolderId) || deletedFolders.First(x => x.Id == f.FolderId).DeletedAt != f.DeletedAt).ToList();
 
         var rows = new List<TrashRow>();
@@ -544,7 +656,7 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
     public async Task RestoreFileAsync(FileActor actor, Guid fileId, CancellationToken ct)
     {
         var file = await db.Files.FirstOrDefaultAsync(f => f.Id == fileId && f.DeletedAt != null, ct) ?? throw FilesException.NotFound();
-        RequireWrite(actor, file.DepartmentId);
+        RequireWrite(actor, file.DepartmentId, file.SharedRootId);
         var folder = await db.Folders.FirstAsync(f => f.Id == file.FolderId, ct);
         if (folder.DeletedAt is not null)
         {
@@ -561,7 +673,7 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
     public async Task RestoreFolderAsync(FileActor actor, Guid folderId, CancellationToken ct)
     {
         var folder = await db.Folders.FirstOrDefaultAsync(f => f.Id == folderId && f.DeletedAt != null, ct) ?? throw FilesException.NotFound();
-        RequireWrite(actor, folder.DepartmentId);
+        RequireWrite(actor, folder.DepartmentId, folder.SharedRootId);
         var parent = await db.Folders.FirstAsync(f => f.Id == folder.ParentId, ct);
         if (parent.DeletedAt is not null)
         {
@@ -580,8 +692,11 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
 
     // ---------- Поиск ----------
 
-    /// <summary>Поиск по имени, расширению, папке, отделу и автору — в отделах, доступных на чтение (по содержимому — нет).</summary>
-    public async Task<IReadOnlyList<SearchRow>> SearchAsync(FileActor actor, string query, string? departmentCode, CancellationToken ct)
+    /// <summary>
+    /// Поиск по имени, расширению, папке, отделу и автору — в отделах и общих папках, доступных на чтение (по содержимому — нет).
+    /// departmentCode — только этот отдел, sharedId — только эта общая папка.
+    /// </summary>
+    public async Task<IReadOnlyList<SearchRow>> SearchAsync(FileActor actor, string query, string? departmentCode, CancellationToken ct, Guid? sharedId = null)
     {
         var q = query.Trim();
         if (q.Length < 2)
@@ -589,21 +704,30 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
             return [];
         }
 
-        var departments = (await db.Departments.AsNoTracking().ToListAsync(ct))
-            .Where(d => FileAccessRules.CanRead(actor, d.Id) && (departmentCode is null || d.Code == departmentCode.ToLower()))
-            .ToDictionary(d => d.Id);
+        var departments = sharedId is not null
+            ? []
+            : (await db.Departments.AsNoTracking().ToListAsync(ct))
+                .Where(d => FileAccessRules.CanRead(actor, d.Id) && (departmentCode is null || d.Code == departmentCode.ToLower()))
+                .ToDictionary(d => d.Id);
+        var shared = departmentCode is not null
+            ? []
+            : (await ReadableSharedAsync(actor, ct)).Where(r => sharedId is null || r.Id == sharedId).ToDictionary(r => r.Id);
         var ids = departments.Keys.ToList();
+        var sharedIds = shared.Keys.ToList();
         var pattern = "%" + q.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
         var matchingPeople = await db.Users.AsNoTracking().Where(u => EF.Functions.ILike(u.FullName, pattern)).Select(u => (Guid?)u.Id).ToListAsync(ct);
         var matchingDepartments = departments.Values.Where(d => d.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).Select(d => (Guid?)d.Id).ToList();
+        var matchingShared = shared.Values.Where(r => r.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).Select(r => (Guid?)r.Id).ToList();
 
         var files = await db.Files.AsNoTracking()
-            .Where(f => f.DepartmentId != null && ids.Contains(f.DepartmentId.Value) && f.DeletedAt == null && f.Folder.DeletedAt == null
+            .Where(f => ((f.DepartmentId != null && ids.Contains(f.DepartmentId.Value)) || (f.SharedRootId != null && sharedIds.Contains(f.SharedRootId.Value)))
+                        && f.DeletedAt == null && f.Folder.DeletedAt == null
                         && (EF.Functions.ILike(f.Name, pattern)
                             || EF.Functions.ILike(f.Folder.Name, pattern)
                             || matchingPeople.Contains(f.UpdatedById)
                             || matchingPeople.Contains(f.CreatedById)
-                            || matchingDepartments.Contains(f.DepartmentId)))
+                            || matchingDepartments.Contains(f.DepartmentId)
+                            || matchingShared.Contains(f.SharedRootId)))
             .OrderByDescending(f => f.UpdatedAt ?? f.CreatedAt)
             .Take(200)
             .ToListAsync(ct);
@@ -613,12 +737,331 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         foreach (var row in rows.Where(r => !r.Hidden))
         {
             var file = files.First(f => f.Id == row.Id);
-            var d = departments[file.DepartmentId!.Value];
-            result.Add(new SearchRow(row, new DepartmentRef(d.Id, d.Code, d.Name, AccessName(FileAccessRules.AccessTo(actor, d.Id))), await PathTextAsync(file.FolderId, ct)));
+            var space = file.DepartmentId is { } dId
+                ? new DepartmentRef(dId, departments[dId].Code, departments[dId].Name, AccessName(FileAccessRules.AccessTo(actor, dId)))
+                : new DepartmentRef(file.SharedRootId!.Value, shared[file.SharedRootId.Value].Name, shared[file.SharedRootId.Value].Name,
+                    AccessName(FileAccessRules.AccessToShared(actor, file.SharedRootId.Value)), Shared: true);
+            result.Add(new SearchRow(row, space, await PathTextAsync(file.FolderId, ct)));
         }
 
         return result;
     }
+
+    // ---------- Общие папки ----------
+
+    /// <summary>Имя, которое нельзя дать общей папке: в адресе WebDAV оно стоит рядом с кодами отделов и служебными путями.</summary>
+    private async Task<string> ValidSharedNameAsync(string name, Guid? except, CancellationToken ct)
+    {
+        var value = ValidName(name);
+        if (value.StartsWith('_') || value.Equals("k", StringComparison.OrdinalIgnoreCase))
+        {
+            throw FilesException.Invalid("Имя общей папки не может начинаться с «_» или быть «k».");
+        }
+
+        var lower = value.ToLower();
+        if (await db.Departments.AnyAsync(d => d.Code == lower, ct))
+        {
+            throw FilesException.Invalid($"«{value}» — код отдела; выберите другое имя общей папки.");
+        }
+
+        if (await db.Folders.AnyAsync(f => f.ParentId == null && f.SharedRootId == f.Id && f.DeletedAt == null && f.Id != except && f.Name.ToLower() == lower, ct))
+        {
+            throw FilesException.Conflict(value);
+        }
+
+        return value;
+    }
+
+    /// <summary>Общие папки, доступные на чтение: выданные сотруднику, его роли или отделу; администратору — все.</summary>
+    public async Task<IReadOnlyList<Folder>> ReadableSharedAsync(FileActor actor, CancellationToken ct) =>
+        (await db.Folders.AsNoTracking().Where(f => f.ParentId == null && f.SharedRootId == f.Id && f.DeletedAt == null).OrderBy(f => f.Name).ToListAsync(ct))
+        .Where(f => FileAccessRules.AccessToShared(actor, f.Id) is not null)
+        .ToList();
+
+    /// <summary>Корень общей папки с проверкой чтения (чужая — 404, как несуществующая).</summary>
+    public async Task<Folder> SharedRootAsync(FileActor actor, Guid rootId, CancellationToken ct)
+    {
+        var root = await db.Folders.AsNoTracking().FirstOrDefaultAsync(f => f.Id == rootId && f.ParentId == null && f.SharedRootId == f.Id && f.DeletedAt == null, ct);
+        return root is not null && FileAccessRules.AccessToShared(actor, root.Id) is not null ? root : throw FilesException.NotFound("Общая папка не найдена.");
+    }
+
+    public async Task<IReadOnlyList<SharedSummary>> SharedFoldersAsync(FileActor actor, CancellationToken ct)
+    {
+        var roots = await ReadableSharedAsync(actor, ct);
+        var ids = roots.Select(r => (Guid?)r.Id).ToList();
+        var files = await db.Files.AsNoTracking()
+            .Where(f => ids.Contains(f.SharedRootId) && f.DeletedAt == null)
+            .GroupBy(f => f.SharedRootId!.Value)
+            .Select(g => new { Id = g.Key, Count = g.Count(), Size = g.Sum(f => f.SizeBytes), Updated = g.Max(f => f.UpdatedAt ?? f.CreatedAt) })
+            .ToDictionaryAsync(x => x.Id, ct);
+        var folders = await db.Folders.AsNoTracking()
+            .Where(f => ids.Contains(f.SharedRootId) && f.ParentId != null && f.DeletedAt == null)
+            .GroupBy(f => f.SharedRootId!.Value)
+            .Select(g => new { Id = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Id, x => x.Count, ct);
+        return roots.Select(r =>
+        {
+            var access = FileAccessRules.AccessToShared(actor, r.Id);
+            var stats = files.GetValueOrDefault(r.Id);
+            return new SharedSummary(r.Id, r.Name, AccessName(access), stats?.Count ?? 0, folders.GetValueOrDefault(r.Id), stats?.Size ?? 0, stats?.Updated,
+                access == AccessLevel.Manage);
+        }).ToList();
+    }
+
+    /// <summary>Новая общая папка (администратор). Видна только администраторам, пока ей не выдали доступ.</summary>
+    public async Task<SharedSummary> CreateSharedAsync(FileActor actor, string name, CancellationToken ct)
+    {
+        RequireAdmin(actor);
+        var value = await ValidSharedNameAsync(name, null, ct);
+        var root = new Folder { Name = value, CreatedById = actor.UserId };
+        root.SharedRootId = root.Id;
+        db.Folders.Add(root);
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(actor, "files.shared.created", "Folder", root.Id, new { root.Name }, ct);
+        return new SharedSummary(root.Id, root.Name, "manage", 0, 0, 0, null, true);
+    }
+
+    /// <summary>Переименование общей папки — администратор или сотрудник с управлением.</summary>
+    public async Task RenameSharedAsync(FileActor actor, Guid rootId, string name, CancellationToken ct)
+    {
+        var root = await ManagedSharedAsync(actor, rootId, ct);
+        var value = await ValidSharedNameAsync(name, root.Id, ct);
+        await EnsureSubtreeUnlockedAsync(actor, root.Id, ct);
+        var old = root.Name;
+        root.Name = value;
+        Touch(root);
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(actor, "files.shared.renamed", "Folder", root.Id, new { from = old, to = value }, ct);
+    }
+
+    /// <summary>Удаление общей папки — только пустой (без файлов и папок, в том числе в корзине): данные так не теряются.</summary>
+    public async Task DeleteSharedAsync(FileActor actor, Guid rootId, CancellationToken ct)
+    {
+        RequireAdmin(actor);
+        var root = await db.Folders.FirstOrDefaultAsync(f => f.Id == rootId && f.ParentId == null && f.SharedRootId == f.Id && f.DeletedAt == null, ct)
+                   ?? throw FilesException.NotFound("Общая папка не найдена.");
+        if (await db.Files.AnyAsync(f => f.SharedRootId == root.Id, ct) || await db.Folders.AnyAsync(f => f.SharedRootId == root.Id && f.Id != root.Id, ct))
+        {
+            throw new FilesException(409, "В общей папке есть файлы или папки (в том числе в корзине) — удалить можно только пустую.");
+        }
+
+        await db.ResourcePermissions.Where(p => p.FolderId == root.Id).ExecuteDeleteAsync(ct);
+        db.Folders.Remove(root);
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(actor, "files.shared.deleted", "Folder", root.Id, new { root.Name }, ct);
+    }
+
+    /// <summary>Кому выдана общая папка и кого можно добавить (активные сотрудники и отделы) — администратору или с управлением.</summary>
+    public async Task<SharedAccessView> SharedAccessAsync(FileActor actor, Guid rootId, CancellationToken ct)
+    {
+        var root = await ManagedSharedAsync(actor, rootId, ct);
+        var grants = await db.ResourcePermissions.AsNoTracking().Where(p => p.FolderId == root.Id).ToListAsync(ct);
+        var users = await db.Users.AsNoTracking().Where(u => u.IsActive).OrderBy(u => u.FullName)
+            .Select(u => new { u.Id, u.FullName, Department = u.Department != null ? u.Department.Name : null }).ToListAsync(ct);
+        var departments = await db.Departments.AsNoTracking().OrderBy(d => d.Name).ToListAsync(ct);
+        var roles = await db.Roles.AsNoTracking().ToDictionaryAsync(r => r.Id.ToString(), r => r.Name, ct);
+        var userNames = await db.Users.AsNoTracking().ToDictionaryAsync(u => u.Id.ToString(), u => (u.FullName, u.IsActive), ct);
+
+        var rows = grants.Select(p => p.PrincipalType switch
+            {
+                PrincipalType.User => new SharedAccessRow("user", p.PrincipalId, userNames.TryGetValue(p.PrincipalId, out var u) ? u.FullName : "удалённый сотрудник",
+                    userNames.TryGetValue(p.PrincipalId, out var v) && !v.IsActive ? "отключён" : null, AccessName(p.Access)),
+                PrincipalType.Department => new SharedAccessRow("department", p.PrincipalId,
+                    departments.FirstOrDefault(d => d.Id.ToString() == p.PrincipalId)?.Name ?? "удалённый отдел", "отдел", AccessName(p.Access)),
+                PrincipalType.Role => new SharedAccessRow("role", p.PrincipalId, roles.GetValueOrDefault(p.PrincipalId) ?? "удалённая роль", "роль", AccessName(p.Access)),
+                _ => null,
+            })
+            .OfType<SharedAccessRow>()
+            .OrderBy(r => r.Type == "department" ? 0 : 1).ThenBy(r => r.Name)
+            .ToList();
+        return new SharedAccessView(rows,
+            users.Select(u => new PrincipalOption(u.Id.ToString(), u.FullName, u.Department)).ToList(),
+            departments.Select(d => new PrincipalOption(d.Id.ToString(), d.Name, null)).ToList());
+    }
+
+    /// <summary>Выдать, изменить или забрать доступ к общей папке (access = null — забрать). Действует сразу: права читаются при каждом запросе.</summary>
+    public async Task SetSharedAccessAsync(FileActor actor, Guid rootId, string type, string principalId, AccessLevel? access, CancellationToken ct)
+    {
+        var root = await ManagedSharedAsync(actor, rootId, ct);
+        var principal = type switch
+        {
+            "user" => PrincipalType.User,
+            "department" => PrincipalType.Department,
+            "role" => PrincipalType.Role,
+            _ => throw FilesException.Invalid("Доступ выдаётся сотруднику, отделу или роли."),
+        };
+        if (!Guid.TryParse(principalId, out var id)
+            || principal == PrincipalType.User && !await db.Users.AnyAsync(u => u.Id == id, ct)
+            || principal == PrincipalType.Department && !await db.Departments.AnyAsync(d => d.Id == id, ct)
+            || principal == PrincipalType.Role && !await db.Roles.AnyAsync(r => r.Id == id, ct))
+        {
+            throw FilesException.Invalid("Сотрудник, отдел или роль не найдены.");
+        }
+
+        var key = id.ToString();
+        var grant = await db.ResourcePermissions.FirstOrDefaultAsync(p => p.FolderId == root.Id && p.PrincipalType == principal && p.PrincipalId == key, ct);
+        var before = grant?.Access;
+        if (access is null)
+        {
+            if (grant is not null)
+            {
+                db.ResourcePermissions.Remove(grant);
+            }
+        }
+        else if (grant is null)
+        {
+            db.ResourcePermissions.Add(new ResourcePermission { FolderId = root.Id, PrincipalType = principal, PrincipalId = key, Access = access.Value });
+        }
+        else
+        {
+            grant.Access = access.Value;
+            grant.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(actor, "files.shared.access.changed", "Folder", root.Id,
+            new { root.Name, principal = type, principalId = key, from = AccessName(before), to = AccessName(access) }, ct);
+    }
+
+    /// <summary>Общая папка, которой сотрудник может управлять (администратор или выдача «управление»).</summary>
+    private async Task<Folder> ManagedSharedAsync(FileActor actor, Guid rootId, CancellationToken ct)
+    {
+        var root = await db.Folders.FirstOrDefaultAsync(f => f.Id == rootId && f.ParentId == null && f.SharedRootId == f.Id && f.DeletedAt == null, ct);
+        var access = root is null ? null : FileAccessRules.AccessToShared(actor, root.Id);
+        if (root is null || access is null)
+        {
+            throw FilesException.NotFound("Общая папка не найдена.");
+        }
+
+        return access == AccessLevel.Manage && !actor.IsConnection
+            ? root
+            : throw new FilesException(403, "Доступ к общей папке настраивает администратор или сотрудник с правом «Управление».");
+    }
+
+    private static void RequireAdmin(FileActor actor)
+    {
+        if (actor.IsConnection || !actor.IsAdmin)
+        {
+            throw new FilesException(403, "Общие папки создаёт и удаляет администратор.");
+        }
+    }
+
+    // ---------- Блокировки (WebDAV LOCK) ----------
+
+    /// <summary>Наибольший срок блокировки, секунд: Office продлевает свою, пока документ открыт; упавший Word держит файл не дольше часа.</summary>
+    public const int MaxLockSeconds = 3600;
+
+    public async Task<FileLock?> ActiveLockAsync(Guid fileId, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return await db.FileLocks.AsNoTracking().Where(l => l.FileItemId == fileId && l.ExpiresAt > now).OrderByDescending(l => l.ExpiresAt).FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
+    /// LOCK файла: новая блокировка (refreshToken = null) или продление своей. Пока у файла есть чужая действующая блокировка — 423:
+    /// второй Word открывает файл только для чтения и пишет, кто его держит. Две одновременные попытки упорядочивает блокировка
+    /// PostgreSQL на файл.
+    /// </summary>
+    public async Task<FileLock> LockAsync(FileActor actor, Guid fileId, string? refreshToken, string? owner, int seconds, CancellationToken ct)
+    {
+        var file = await WritableFileAsync(actor, fileId, ct);
+        seconds = Math.Clamp(seconds, 60, MaxLockSeconds);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({LockKey(file.Id)})", ct);
+        var now = DateTimeOffset.UtcNow;
+        var active = await db.FileLocks.Where(l => l.FileItemId == file.Id && l.ExpiresAt > now).ToListAsync(ct);
+        FileLock result;
+        if (refreshToken is not null)
+        {
+            result = active.FirstOrDefault(l => l.Token == refreshToken)
+                     ?? throw new FilesException(412, "Блокировка файла истекла или снята — откройте файл заново.");
+            result.ExpiresAt = now.AddSeconds(seconds);
+            result.UpdatedAt = now;
+        }
+        else
+        {
+            if (active.FirstOrDefault() is { } other)
+            {
+                throw FilesException.Locked(file.Name, other);
+            }
+
+            await db.FileLocks.Where(l => l.FileItemId == file.Id && l.ExpiresAt <= now).ExecuteDeleteAsync(ct);
+            result = new FileLock
+            {
+                FileItemId = file.Id,
+                Token = $"opaquelocktoken:{Guid.NewGuid()}",
+                OwnerUserId = actor.UserId,
+                OwnerConnectionId = actor.ConnectionId,
+                Owner = owner is { Length: > 0 } o ? o.Trim()[..Math.Min(o.Trim().Length, 300)] : actor.Name,
+                ExpiresAt = now.AddSeconds(seconds),
+            };
+            db.FileLocks.Add(result);
+        }
+
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        if (refreshToken is null)
+        {
+            await AuditAsync(actor, "files.locked", "File", file.Id, new { file.Name, owner = result.Owner, until = result.ExpiresAt }, ct);
+        }
+
+        return result;
+    }
+
+    /// <summary>UNLOCK своей блокировки (по токену). Неизвестный или истёкший токен — ничего не делает: клиент закрывает файл в любом случае.</summary>
+    public async Task UnlockAsync(FileActor actor, Guid fileId, string token, CancellationToken ct)
+    {
+        var file = await ReadableFileAsync(actor, fileId, ct);
+        if (await db.FileLocks.Where(l => l.FileItemId == file.Id && l.Token == token).ExecuteDeleteAsync(ct) > 0)
+        {
+            await AuditAsync(actor, "files.unlocked", "File", file.Id, new { file.Name }, ct);
+        }
+    }
+
+    /// <summary>Снять чужую блокировку на сайте (Word упал и держит файл): администратор или сотрудник с управлением общей папкой.</summary>
+    public async Task ForceUnlockAsync(FileActor actor, Guid fileId, CancellationToken ct)
+    {
+        var file = await ReadableFileAsync(actor, fileId, ct);
+        if (actor.IsConnection || FileAccessRules.AccessToItem(actor, file.DepartmentId, file.SharedRootId) != AccessLevel.Manage)
+        {
+            throw new FilesException(403, "Снять блокировку может администратор или сотрудник с правом «Управление».");
+        }
+
+        var removed = await db.FileLocks.Where(l => l.FileItemId == file.Id).ExecuteDeleteAsync(ct);
+        await AuditAsync(actor, "files.unlocked.forced", "File", file.Id, new { file.Name, removed }, ct);
+    }
+
+    /// <summary>Файл можно менять: у него нет действующей блокировки, кроме той, чей токен предъявлен (заголовок If у WebDAV).</summary>
+    public async Task EnsureUnlockedAsync(FileActor actor, FileItem file, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var tokens = actor.LockTokens.ToList();
+        var other = await db.FileLocks.AsNoTracking().FirstOrDefaultAsync(l => l.FileItemId == file.Id && l.ExpiresAt > now && !tokens.Contains(l.Token), ct);
+        if (other is not null)
+        {
+            throw FilesException.Locked(file.Name, other);
+        }
+    }
+
+    /// <summary>В папке (со вложенными) нет файлов, открытых на редактирование другими.</summary>
+    private async Task EnsureSubtreeUnlockedAsync(FileActor actor, Guid folderId, CancellationToken ct)
+    {
+        var (folderIds, _) = await SubtreeAsync(folderId, includeDeleted: false, ct);
+        var now = DateTimeOffset.UtcNow;
+        var tokens = actor.LockTokens.ToList();
+        var locked = await (
+                from l in db.FileLocks.AsNoTracking()
+                join f in db.Files.AsNoTracking() on l.FileItemId equals f.Id
+                where folderIds.Contains(f.FolderId) && f.DeletedAt == null && l.ExpiresAt > now && !tokens.Contains(l.Token)
+                select new { f.Name, Lock = l })
+            .FirstOrDefaultAsync(ct);
+        if (locked is not null)
+        {
+            throw FilesException.Locked(locked.Name, locked.Lock);
+        }
+    }
+
+    private static long LockKey(Guid fileId) => BitConverter.ToInt64(fileId.ToByteArray(), 8) ^ 0x4F6E6542617365; // «OneBase»
 
     // ---------- Доступ других отделов ----------
 
@@ -686,8 +1129,8 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
     // ---------- WebDAV ----------
 
     /// <summary>
-    /// Узел по пути WebDAV: первый сегмент — код отдела, дальше имена папок и в конце папка или файл (без учёта регистра, как в Windows).
-    /// null — не найден или нет доступа на чтение (для чужого отдела ответ такой же, как для несуществующего).
+    /// Узел по пути WebDAV: первый сегмент — код отдела или имя общей папки, дальше имена папок и в конце папка или файл (без учёта
+    /// регистра, как в Windows). null — не найден или нет доступа на чтение (для чужого ответ такой же, как для несуществующего).
     /// </summary>
     public async Task<DavNode?> ResolveAsync(FileActor actor, IReadOnlyList<string> segments, CancellationToken ct)
     {
@@ -697,13 +1140,31 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         }
 
         var code = segments[0].ToLowerInvariant();
+        FileSpace space;
+        Folder folder;
         var department = await db.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.Code == code, ct);
-        if (department is null || !FileAccessRules.CanRead(actor, department.Id))
+        if (department is not null)
         {
-            return null;
+            if (!FileAccessRules.CanRead(actor, department.Id))
+            {
+                return null;
+            }
+
+            space = new FileSpace(department.Id, false, department.Code, department.Name);
+            folder = await RootAsync(department, ct);
+        }
+        else
+        {
+            var root = await db.Folders.FirstOrDefaultAsync(f => f.ParentId == null && f.SharedRootId == f.Id && f.DeletedAt == null && f.Name.ToLower() == code, ct);
+            if (root is null || FileAccessRules.AccessToShared(actor, root.Id) is null)
+            {
+                return null;
+            }
+
+            space = new FileSpace(root.Id, true, root.Name, root.Name);
+            folder = root;
         }
 
-        var folder = await RootAsync(department, ct);
         for (var i = 1; i < segments.Count; i++)
         {
             var name = segments[i].ToLower();
@@ -717,13 +1178,13 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
             if (i == segments.Count - 1)
             {
                 var file = await db.Files.FirstOrDefaultAsync(f => f.FolderId == folder.Id && f.DeletedAt == null && f.Name.ToLower() == name, ct);
-                return file is null ? null : new DavNode(department, folder, file);
+                return file is null ? null : new DavNode(space, folder, file);
             }
 
             return null;
         }
 
-        return new DavNode(department, folder, null);
+        return new DavNode(space, folder, null);
     }
 
     /// <summary>Отделы, доступные на чтение (корень WebDAV): у подключения — только его отдел.</summary>
@@ -734,7 +1195,26 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         (await db.Folders.AsNoTracking().Where(f => f.ParentId == folderId && f.DeletedAt == null).OrderBy(f => f.Name).ToListAsync(ct),
          await db.Files.AsNoTracking().Where(f => f.FolderId == folderId && f.DeletedAt == null).OrderBy(f => f.Name).ToListAsync(ct));
 
-    public static bool CanWrite(FileActor actor, Guid? departmentId) => departmentId is { } d && FileAccessRules.CanWrite(actor, d);
+    public static bool CanWrite(FileActor actor, FileSpace space) =>
+        FileAccessRules.AccessToItem(actor, space.DepartmentId, space.SharedRootId) >= AccessLevel.Write;
+
+    /// <summary>Пространство папки или файла: отдел или общая папка (имя и код — для адресов и заголовков).</summary>
+    public async Task<FileSpace> SpaceOfAsync(Guid? departmentId, Guid? sharedRootId, CancellationToken ct)
+    {
+        if (departmentId is { } d)
+        {
+            var department = await db.Departments.AsNoTracking().FirstAsync(x => x.Id == d, ct);
+            return new FileSpace(department.Id, false, department.Code, department.Name);
+        }
+
+        if (sharedRootId is { } r)
+        {
+            var root = await db.Folders.AsNoTracking().FirstAsync(x => x.Id == r, ct);
+            return new FileSpace(root.Id, true, root.Name, root.Name);
+        }
+
+        throw FilesException.NotFound();
+    }
 
     // ---------- Внутреннее ----------
 
@@ -811,39 +1291,44 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
     private async Task<Folder> ReadableFolderAsync(FileActor actor, Guid folderId, CancellationToken ct)
     {
         var folder = await db.Folders.FirstOrDefaultAsync(f => f.Id == folderId && f.DeletedAt == null, ct);
-        return folder is { DepartmentId: { } d } && FileAccessRules.CanRead(actor, d) ? folder : throw FilesException.NotFound("Папка не найдена.");
+        return folder is not null && FileAccessRules.AccessToItem(actor, folder.DepartmentId, folder.SharedRootId) is not null
+            ? folder
+            : throw FilesException.NotFound("Папка не найдена.");
     }
 
     private async Task<Folder> WritableFolderAsync(FileActor actor, Guid folderId, CancellationToken ct)
     {
         var folder = await ReadableFolderAsync(actor, folderId, ct);
-        RequireWrite(actor, folder.DepartmentId);
+        RequireWrite(actor, folder.DepartmentId, folder.SharedRootId);
         return folder;
     }
 
     private async Task<FileItem> ReadableFileAsync(FileActor actor, Guid fileId, CancellationToken ct)
     {
         var file = await db.Files.FirstOrDefaultAsync(f => f.Id == fileId && f.DeletedAt == null, ct);
-        return file is { DepartmentId: { } d } && FileAccessRules.CanRead(actor, d) ? file : throw FilesException.NotFound("Файл не найден.");
+        return file is not null && FileAccessRules.AccessToItem(actor, file.DepartmentId, file.SharedRootId) is not null
+            ? file
+            : throw FilesException.NotFound("Файл не найден.");
     }
 
     private async Task<FileItem> WritableFileAsync(FileActor actor, Guid fileId, CancellationToken ct)
     {
         var file = await ReadableFileAsync(actor, fileId, ct);
-        RequireWrite(actor, file.DepartmentId);
+        RequireWrite(actor, file.DepartmentId, file.SharedRootId);
         return file;
     }
 
-    private static void RequireWrite(FileActor actor, Guid? departmentId)
+    private static void RequireWrite(FileActor actor, Guid? departmentId, Guid? sharedRootId)
     {
-        if (departmentId is not { } d || !FileAccessRules.CanRead(actor, d))
+        var access = FileAccessRules.AccessToItem(actor, departmentId, sharedRootId);
+        if (access is null)
         {
             throw FilesException.NotFound();
         }
 
-        if (!FileAccessRules.CanWrite(actor, d))
+        if (access < AccessLevel.Write)
         {
-            throw FilesException.Forbidden();
+            throw sharedRootId is null ? FilesException.Forbidden() : new FilesException(403, "Нет прав на изменение файлов этой общей папки.");
         }
     }
 
@@ -899,12 +1384,12 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         return (all, depth);
     }
 
-    private async Task<IReadOnlyList<FolderCrumb>> PathAsync(Folder folder, Department department, CancellationToken ct)
+    private async Task<IReadOnlyList<FolderCrumb>> PathAsync(Folder folder, string rootName, CancellationToken ct)
     {
         var path = new List<FolderCrumb>();
         for (Folder? cursor = folder; cursor is not null; cursor = cursor.ParentId is { } up ? await db.Folders.AsNoTracking().FirstOrDefaultAsync(f => f.Id == up, ct) : null)
         {
-            path.Add(new FolderCrumb(cursor.Id, cursor.ParentId is null ? department.Name : cursor.Name));
+            path.Add(new FolderCrumb(cursor.Id, cursor.ParentId is null ? rootName : cursor.Name));
         }
 
         path.Reverse();
@@ -933,8 +1418,14 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
     private async Task<IReadOnlyList<FileRow>> RowsAsync(IReadOnlyList<FileItem> files, CancellationToken ct)
     {
         var people = await PeopleAsync(files.Select(f => f.UpdatedById ?? f.CreatedById), files.Select(f => f.UpdatedByConnectionId), ct);
+        var ids = files.Select(f => f.Id).ToList();
+        var now = DateTimeOffset.UtcNow;
+        var locks = (await db.FileLocks.AsNoTracking().Where(l => ids.Contains(l.FileItemId) && l.ExpiresAt > now).ToListAsync(ct))
+            .GroupBy(l => l.FileItemId)
+            .ToDictionary(g => g.Key, g => g.MaxBy(l => l.ExpiresAt)!);
         return files.Select(f => new FileRow(f.Id, f.FolderId, f.Name, FileNames.Extension(f.Name), f.ContentType, f.SizeBytes, f.CurrentVersion,
-                f.UpdatedAt ?? f.CreatedAt, Person(people, f.UpdatedById ?? f.CreatedById, f.UpdatedByConnectionId), FileNames.IsHidden(f.Name)))
+                f.UpdatedAt ?? f.CreatedAt, Person(people, f.UpdatedById ?? f.CreatedById, f.UpdatedByConnectionId), FileNames.IsHidden(f.Name),
+                locks.TryGetValue(f.Id, out var l) ? new FileLockRef(l.Owner, l.ExpiresAt) : null))
             .ToList();
     }
 
@@ -966,10 +1457,29 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
         _ => "none",
     };
 
+    /// <summary>Запись журнала с источником запроса: сайт, ссылка отдела, логин отдела или личная ссылка Windows, и IP.</summary>
     private Task AuditAsync(FileActor actor, string action, string entityType, Guid entityId, object data, CancellationToken ct) =>
         actor.ConnectionId is { } connection
-            ? audit.LogAsync(ActorType.Connection, connection.ToString(), action, entityType, entityId.ToString(), new { connection = actor.Name, details = data }, ct)
-            : audit.LogAsync(ActorType.User, actor.UserId?.ToString() ?? "unknown", action, entityType, entityId.ToString(), data, ct);
+            ? audit.LogAsync(ActorType.Connection, connection.ToString(), action, entityType, entityId.ToString(),
+                new { connection = actor.Name, details = data, source = actor.Source, ip = actor.Ip }, ct)
+            : audit.LogAsync(ActorType.User, actor.UserId?.ToString() ?? "unknown", action, entityType, entityId.ToString(), WithSource(data, actor), ct);
+
+    private static JsonObject WithSource(object data, FileActor actor)
+    {
+        var node = JsonSerializer.SerializeToNode(data) as JsonObject ?? new JsonObject();
+        node["source"] = actor.Source;
+        if (actor.Ip is { } ip)
+        {
+            node["ip"] = ip;
+        }
+
+        if (actor.PersonalLinkId is { } link)
+        {
+            node["personalLink"] = link.ToString();
+        }
+
+        return node;
+    }
 }
 
 /// <summary>Поток чтения, который по пути считает SHA-256 и число прочитанных байт (хэш версии без второго прохода по файлу).</summary>

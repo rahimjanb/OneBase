@@ -14,6 +14,9 @@ public class FileItem : Entity
     /// <summary>Отдел (как у папки) — для поиска и проверки доступа без обхода дерева папок.</summary>
     public Guid? DepartmentId { get; set; }
 
+    /// <summary>Общая папка (как у папки): id её корня. У файла задано одно из DepartmentId / SharedRootId.</summary>
+    public Guid? SharedRootId { get; set; }
+
     /// <summary>Размер текущей версии — для списков без чтения версий.</summary>
     public long SizeBytes { get; set; }
 

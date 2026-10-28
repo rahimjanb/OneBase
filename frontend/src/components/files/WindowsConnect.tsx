@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { Check, Copy, Download, Eye, EyeOff, HardDrive, KeyRound, Link2, Loader2, MonitorUp, ShieldOff, Stethoscope } from "lucide-react";
+import { Check, Copy, Download, Eye, EyeOff, FolderOpen, HardDrive, KeyRound, Link2, Loader2, MonitorUp, ShieldOff, Stethoscope } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useT } from "@/i18n/client";
 import {
@@ -13,6 +13,7 @@ import {
   type ConnectionView,
   type DepartmentAccessRow,
   type DepartmentRef,
+  type PersonalLinkView,
 } from "@/lib/files";
 import { Modal } from "./Modal";
 
@@ -198,8 +199,30 @@ function WindowsConnectDialog({ department, onClose }: { department: DepartmentR
                     )}
                     <p className="text-xs text-ink-3">
                       {t("Диск подключается по этому адресу без логина и пароля, Word и Excel открывают файлы сразу. Адрес работает как пароль — отправляйте его только сотрудникам отдела.")}
+                      {view.linkExpiresAt && <> {t("Действует до {date}.", { date: modifiedLabel(view.linkExpiresAt, t) })}</>}
                     </p>
                   </>
+                )}
+                {view.sharedFolders && view.sharedFolders.length > 0 && (
+                  <div className="space-y-2 rounded-lg border border-line p-3">
+                    <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
+                      <FolderOpen className="size-3.5" />
+                      {t("Общие папки отдела")}
+                    </p>
+                    <p className="text-xs text-ink-3">{t("Открываются по той же ссылке — отдельным сетевым диском по своему адресу.")}</p>
+                    {view.sharedFolders.map((f) => {
+                      const address = link?.shared?.find((x) => x.name === f.name);
+                      return (
+                        <Field
+                          key={f.name}
+                          label={`${f.name} · ${t(f.access === "write" ? "редактирование" : "просмотр")}`}
+                          value={showLink && address ? address.address : (f.maskedAddress ?? "—")}
+                          onCopy={() => copy(`shared-${f.name}`, async () => (await revealLink()).shared?.find((x) => x.name === f.name)?.address ?? "")}
+                          copied={copied === `shared-${f.name}`}
+                        />
+                      );
+                    })}
+                  </div>
                 )}
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button onClick={() => copy("all", allText)}>
@@ -415,5 +438,176 @@ function DepartmentAccess({ department }: { department: DepartmentRef }) {
         ))}
       </div>
     </div>
+  );
+}
+
+const personalTone = { active: "bg-ok/15 text-ok", none: "bg-muted text-ink-2", expired: "bg-bad/10 text-bad" } as const;
+const personalLabel = { active: "Подключено", none: "Не выпущена", expired: "Срок истёк" } as const;
+
+/** «Мой диск Windows»: личная ссылка — папки своих отделов и общие папки, выданные сотруднику или его отделу. */
+export function PersonalLinkButton({ label = "Мой диск Windows" }: { label?: string }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="primary" onClick={() => setOpen(true)}>
+        <MonitorUp className="size-4" />
+        {t(label)}
+      </Button>
+      {open && <PersonalLinkDialog onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+/**
+ * Личная ссылка: адрес без пароля, который даёт ровно права сотрудника (проверяются при каждом обращении). Сам адрес — только по
+ * «Показать»/«Скопировать», отдельным запросом; «Новая ссылка» отменяет прежнюю сразу, «Отключить» — совсем.
+ */
+function PersonalLinkDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
+  const [view, setView] = useState<PersonalLinkView | null>(null);
+  const [link, setLink] = useState<ConnectionLink | null>(null);
+  const [show, setShow] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    filesApi.myLink().then(setView, (e: Error) => setError(e.message));
+  }, []);
+
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reveal = async () => {
+    if (link) return link;
+    const value = await filesApi.revealMyLink();
+    setLink(value);
+    return value;
+  };
+
+  const copy = (key: string, value: () => Promise<string>) =>
+    run(async () => {
+      await navigator.clipboard.writeText(await value());
+      setCopied(key);
+      window.setTimeout(() => setCopied((c) => (c === key ? null : c)), 1800);
+    });
+
+  const issue = () =>
+    run(async () => {
+      setView(await filesApi.issueMyLink());
+      setLink(null);
+      setShow(false);
+    });
+
+  const active = view?.status === "active";
+  return (
+    <Modal title={t("Мой диск Windows")} onClose={onClose} wide>
+      {!view && !error && <Loader2 className="size-5 animate-spin text-ink-3" />}
+      {error && <p className="mb-3 rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad">{t(error)}</p>}
+      {view && (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${personalTone[view.status]}`}>{t(personalLabel[view.status])}</span>
+              {view.expiresAt && <span className="text-xs text-ink-3">{t("действует до {date}", { date: modifiedLabel(view.expiresAt, t) })}</span>}
+              {view.lastUsedAt && <span className="text-xs text-ink-3">{t("последняя активность: {date}", { date: modifiedLabel(view.lastUsedAt, t) })}</span>}
+            </div>
+            <p className="text-sm text-ink-2">
+              {t("Один сетевой диск со всем, что вам доступно: папками ваших отделов и общими папками. Права — ваши, не больше: забрали доступ — диск сразу покажет меньше.")}
+            </p>
+            {!view.domainConfigured && (
+              <p className="rounded-lg bg-warn/15 px-3 py-2 text-sm">{t("Адрес подключения ещё не настроен на сервере. Пока его нет, подключить диск к Windows нельзя — файлы доступны здесь, на сайте.")}</p>
+            )}
+            {active && view.maskedAddress && (
+              <div className="space-y-3">
+                <Field
+                  label={t("Личный адрес")}
+                  value={show && link ? link.address : view.maskedAddress}
+                  onCopy={() => copy("address", async () => (await reveal()).address)}
+                  copied={copied === "address"}
+                  extra={
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-ink-2 hover:bg-muted"
+                      onClick={() => (show ? setShow(false) : run(async () => (await reveal(), setShow(true))))}
+                    >
+                      {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                      {show ? t("Скрыть") : t("Показать")}
+                    </button>
+                  }
+                />
+                {show && link?.uncPath && <Field label={t("Путь Windows")} value={link.uncPath} onCopy={() => copy("unc", async () => link.uncPath!)} copied={copied === "unc"} />}
+                {show && link?.shared?.map((f) => (
+                  <Field key={f.name} label={t("Только папка «{name}»", { name: f.name })} value={f.address} onCopy={() => copy(`shared-${f.name}`, async () => f.address)} copied={copied === `shared-${f.name}`} />
+                ))}
+              </div>
+            )}
+            {view.status === "expired" && <p className="text-sm text-ink-2">{t("Срок ссылки истёк — диск больше не открывается. Выпустите новую и подключите диск по ней.")}</p>}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={active ? undefined : "primary"}
+                disabled={busy || !view.domainConfigured}
+                onClick={() => (!active || window.confirm(t("Выпустить новую ссылку? Прежняя перестанет работать сразу — диск нужно будет подключить по новой."))) && issue()}
+              >
+                <Link2 className="size-4" />
+                {active ? t("Новая ссылка") : t("Выпустить ссылку")}
+              </Button>
+              {active && (
+                <Button
+                  disabled={busy}
+                  onClick={() => window.confirm(t("Отключить личную ссылку? Диск на компьютерах перестанет открываться сразу.")) && run(async () => (setView(await filesApi.revokeMyLink()), setLink(null), setShow(false)))}
+                >
+                  <ShieldOff className="size-4" />
+                  {t("Отключить")}
+                </Button>
+              )}
+            </div>
+            {view.folders.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs text-ink-3">{t("На диске")}</p>
+                <ul className="flex flex-wrap gap-1.5">
+                  {view.folders.map((f) => (
+                    <li key={f} className="rounded-full bg-muted px-2 py-0.5 text-xs text-ink-2">{f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <div className="space-y-4">
+            {view.guide.length > 0 && (
+              <ol className="space-y-2">
+                {view.guide.map((step, i) => (
+                  <li key={i} className="flex gap-3 text-sm">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-semibold text-accent">{i + 1}</span>
+                    <span className="pt-0.5">{t(step)}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <div className="rounded-lg bg-muted/60 p-3">
+              <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
+                <HardDrive className="size-3.5" />
+                {t("Важно")}
+              </p>
+              <ul className="space-y-1.5 text-xs text-ink-2">
+                {view.notes.map((n) => (
+                  <li key={n} className="break-words">{t(n)}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }

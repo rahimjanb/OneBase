@@ -301,6 +301,66 @@ public class FilesRulesTests
         Assert.Equal("Second-3600", xml.Descendants(d + "timeout").Single().Value);
     }
 
+    // ---------- Общие папки ----------
+
+    [Fact]
+    public void Shared_folder_is_open_only_by_grant_and_write_needs_the_files_write_right()
+    {
+        var root = Guid.NewGuid();
+        var stranger = User(Production);
+        Assert.Null(FileAccessRules.AccessToShared(stranger, root));
+        Assert.Null(FileAccessRules.AccessToShared(stranger with { CanReadAll = true }, root)); // «просмотр всех отделов» общих папок не открывает
+        Assert.Equal(AccessLevel.Manage, FileAccessRules.AccessToShared(User(Production, admin: true), root));
+
+        var editor = User(Production) with { SharedGrants = [new SharedGrant(root, AccessLevel.Write)] };
+        Assert.Equal(AccessLevel.Write, FileAccessRules.AccessToShared(editor, root));
+        var readOnly = User(Production, write: false) with { SharedGrants = [new SharedGrant(root, AccessLevel.Manage)] };
+        Assert.Equal(AccessLevel.Read, FileAccessRules.AccessToShared(readOnly, root)); // без files.write — только просмотр
+        var noFiles = User(Production, read: false, write: false) with { SharedGrants = [new SharedGrant(root, AccessLevel.Write)] };
+        Assert.Null(FileAccessRules.AccessToShared(noFiles, root)); // раздел «Файлы» снят — общих папок тоже нет
+
+        // Подключение отдела: выданное отделу, не выше своего уровня и без управления.
+        var connection = FileActor.Connection(Guid.NewGuid(), "production_1", Production, AccessLevel.Write, [new SharedGrant(root, AccessLevel.Manage)]);
+        Assert.Equal(AccessLevel.Write, FileAccessRules.AccessToShared(connection, root));
+        var readConnection = FileActor.Connection(Guid.NewGuid(), "production_2", Production, AccessLevel.Read, [new SharedGrant(root, AccessLevel.Write)]);
+        Assert.Equal(AccessLevel.Read, FileAccessRules.AccessToShared(readConnection, root));
+        Assert.Null(FileAccessRules.AccessToItem(connection, null, Guid.NewGuid()));
+        Assert.Null(FileAccessRules.AccessToItem(editor, null, null)); // старые папки без отдела и общей папки не видны никому
+    }
+
+    [Fact]
+    public void Personal_and_shared_link_addresses_escape_names_and_keep_windows_paths()
+    {
+        var options = new FilesOptions { PublicDomain = "files.1base.uz" };
+        Assert.Equal("https://files.1base.uz/k/abc", options.LinkUrl("abc", ""));
+        Assert.Equal(@"\\files.1base.uz@SSL\k\abc", options.LinkUncPath("abc", ""));
+        Assert.Equal("https://files.1base.uz/k/abc/%D0%9E%D0%B1%D1%89%D0%B8%D0%B5%20%D1%84%D0%B0%D0%B9%D0%BB%D1%8B", options.LinkUrl("abc", "Общие файлы"));
+        Assert.Equal(@"\\files.1base.uz@SSL\k\abc\Общие файлы", options.LinkUncPath("abc", "Общие файлы"));
+        var issued = new DateTimeOffset(2026, 10, 28, 0, 0, 0, TimeSpan.Zero);
+        Assert.Equal(issued.AddDays(365), options.LinkExpiry(issued));
+        Assert.Equal(issued.AddDays(3650), new FilesOptions { LinkLifetimeDays = 100_000 }.LinkExpiry(issued));
+    }
+
+    [Fact]
+    public void Lock_discovery_tells_who_holds_the_file_without_giving_away_the_token()
+    {
+        var d = DavXml.D;
+        var resource = new DavResource("/production/a.docx", "a.docx", false, 10, "application/octet-stream", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "\"1\"",
+            new DavActiveLock(@"PC-A\Иван", 540));
+        var xml = XDocument.Parse(DavXml.MultiStatus([resource], DavXml.ParsePropfind(null)));
+        var active = xml.Descendants(d + "activelock").Single();
+        Assert.Equal(@"PC-A\Иван", active.Element(d + "owner")!.Value);
+        Assert.Equal("Second-540", active.Element(d + "timeout")!.Value);
+        Assert.Null(active.Element(d + "locktoken"));
+
+        var owner = DavXml.LockOwner("""<D:lockinfo xmlns:D="DAV:"><D:owner><D:href>DESKTOP\Admin</D:href></D:owner></D:lockinfo>""");
+        Assert.Equal(@"DESKTOP\Admin", owner);
+        Assert.Null(DavXml.LockOwner(null));
+        Assert.Contains("no-conflicting-lock", DavXml.Error("no-conflicting-lock", "/a"));
+        var refreshed = XDocument.Parse(DavXml.LockResponse("opaquelocktoken:1", "/a", null, 3600, false, "PC-A"));
+        Assert.Equal(("PC-A", "opaquelocktoken:1"), (refreshed.Descendants(d + "owner").Single().Value, refreshed.Descendants(d + "locktoken").Single().Value));
+    }
+
     // ---------- Предпросмотр CSV ----------
 
     [Fact]

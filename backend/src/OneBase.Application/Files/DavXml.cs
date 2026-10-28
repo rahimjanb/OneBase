@@ -4,7 +4,7 @@ using System.Xml.Linq;
 
 namespace OneBase.Application.Files;
 
-/// <summary>Файл или папка в ответе PROPFIND.</summary>
+/// <summary>Файл или папка в ответе PROPFIND; Lock — действующая блокировка (Office показывает по ней, кем открыт файл).</summary>
 public sealed record DavResource(
     string Href,
     string Name,
@@ -13,7 +13,11 @@ public sealed record DavResource(
     string ContentType,
     DateTimeOffset Created,
     DateTimeOffset Modified,
-    string ETag);
+    string ETag,
+    DavActiveLock? Lock = null);
+
+/// <summary>Действующая блокировка: владелец (как прислал LOCK) и сколько секунд ей осталось.</summary>
+public sealed record DavActiveLock(string? Owner, int Seconds);
 
 public enum PropfindMode
 {
@@ -113,21 +117,38 @@ public static class DavXml
             new XElement(D + "response", new XElement(D + "href", href), PropStat(props, "HTTP/1.1 200 OK"))));
     }
 
-    /// <summary>Ответ LOCK: выданная блокировка (владелец — как в запросе).</summary>
-    public static string LockResponse(string token, string href, string? requestBody, int timeoutSeconds, bool depthInfinity)
+    /// <summary>Ответ LOCK: выданная блокировка (владелец — как в запросе; при продлении тела нет — ownerText из сохранённой).</summary>
+    public static string LockResponse(string token, string href, string? requestBody, int timeoutSeconds, bool depthInfinity, string? ownerText = null)
     {
         var owner = string.IsNullOrWhiteSpace(requestBody) ? null : Load(requestBody)?.Root?.Element(D + "owner");
         return Serialize(new XElement(D + "prop", new XAttribute(XNamespace.Xmlns + "D", D),
-            new XElement(D + "lockdiscovery",
-                new XElement(D + "activelock",
-                    new XElement(D + "locktype", new XElement(D + "write")),
-                    new XElement(D + "lockscope", new XElement(D + "exclusive")),
-                    new XElement(D + "depth", depthInfinity ? "infinity" : "0"),
-                    owner is null ? null : new XElement(D + "owner", owner.Nodes()),
-                    new XElement(D + "timeout", $"Second-{timeoutSeconds}"),
-                    new XElement(D + "locktoken", new XElement(D + "href", token)),
-                    new XElement(D + "lockroot", new XElement(D + "href", href))))));
+            new XElement(D + "lockdiscovery", ActiveLock(token, href, timeoutSeconds, depthInfinity,
+                owner is not null ? new XElement(D + "owner", owner.Nodes()) : ownerText is null ? null : new XElement(D + "owner", ownerText)))));
     }
+
+    /// <summary>Владелец из тела LOCK («DESKTOP\Иван» в href или текстом) — для «Файл открыт: …» на сайте и у второго редактора.</summary>
+    public static string? LockOwner(string? requestBody)
+    {
+        var owner = string.IsNullOrWhiteSpace(requestBody) ? null : Load(requestBody)?.Root?.Element(D + "owner");
+        var text = owner?.Value.Trim();
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
+
+    /// <summary>Тело ошибки WebDAV (RFC 4918, 16): например 423 с no-conflicting-lock или lock-token-submitted.</summary>
+    public static string Error(string condition, string? href = null) =>
+        Serialize(new XElement(D + "error", new XAttribute(XNamespace.Xmlns + "D", D),
+            new XElement(D + condition, href is null ? null : new XElement(D + "href", href))));
+
+    /// <remarks>token = null — без токена: PROPFIND показывает, кем открыт файл, но не отдаёт чужой токен (RFC 4918: locktoken необязателен).</remarks>
+    private static XElement ActiveLock(string? token, string href, int timeoutSeconds, bool depthInfinity, XElement? owner) =>
+        new(D + "activelock",
+            new XElement(D + "locktype", new XElement(D + "write")),
+            new XElement(D + "lockscope", new XElement(D + "exclusive")),
+            new XElement(D + "depth", depthInfinity ? "infinity" : "0"),
+            owner,
+            new XElement(D + "timeout", $"Second-{timeoutSeconds}"),
+            token is null ? null : new XElement(D + "locktoken", new XElement(D + "href", token)),
+            new XElement(D + "lockroot", new XElement(D + "href", href)));
 
     private static bool Applies(XName name, DavResource resource) =>
         !resource.IsCollection || (name != D + "getcontentlength" && name != D + "getcontenttype" && name != D + "getetag");
@@ -145,6 +166,9 @@ public static class DavXml
             new XElement(D + "lockentry",
                 new XElement(D + "lockscope", new XElement(D + "exclusive")),
                 new XElement(D + "locktype", new XElement(D + "write")))),
+        "lockdiscovery" => new XElement(name, r.Lock is { } l
+            ? ActiveLock(null, r.Href, l.Seconds, false, l.Owner is null ? null : new XElement(D + "owner", l.Owner))
+            : null),
         _ => new XElement(name),
     };
 

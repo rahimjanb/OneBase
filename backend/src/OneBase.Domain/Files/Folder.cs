@@ -14,6 +14,12 @@ public class Folder : Entity
     public Guid? DepartmentId { get; set; }
     public Department? Department { get; set; }
 
+    /// <summary>
+    /// Общая папка («Общие файлы»): id её корня — у самого корня свой Id, у вложенных папок — Id корня. Задано одно из DepartmentId /
+    /// SharedRootId; папки без того и другого (старые, до папок отделов) не показываются нигде.
+    /// </summary>
+    public Guid? SharedRootId { get; set; }
+
     public Guid? CreatedById { get; set; }
 
     /// <summary>В корзине с этого момента (вместе со всем содержимым).</summary>

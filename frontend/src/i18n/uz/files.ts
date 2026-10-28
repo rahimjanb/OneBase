@@ -167,6 +167,67 @@ const dict: Dict = {
   "Доступ других отделов к папке": "Boshqa bo'limlarning papkaga ruxsati",
   "Только на сайте и с их собственным логином: подключение Windows этого отдела им не выдаётся.":
     "Faqat saytda va o'z loginlari bilan: bu bo'limning Windows ulanishi ularga berilmaydi.",
+  // Общие файлы, блокировки, личный диск Windows
+  "Общие файлы": "Umumiy fayllar",
+  "Новая общая папка": "Yangi umumiy papka",
+  "Папки для нескольких отделов и сотрудников: видны только тем, кому выдан доступ, и не смешиваются с папками отделов.":
+    "Bir nechta bo'lim va xodimlar uchun papkalar: faqat kirish berilganlarga ko'rinadi va bo'lim papkalari bilan aralashmaydi.",
+  "Общих папок пока нет — создайте первую и выдайте доступ": "Hozircha umumiy papkalar yo'q — birinchisini yarating va kirish bering",
+  "Общая папка — для сотрудников и отделов, которым выдан доступ": "Umumiy papka — kirish berilgan xodimlar va bo'limlar uchun",
+  "Папка в общей папке «{name}»": "«{name}» umumiy papkasidagi papka",
+  "Поиск в папке «{name}»": "«{name}» papkasida qidirish",
+  "просмотр": "ko'rish",
+  "редактирование": "tahrirlash",
+  "управление": "boshqarish",
+  "Доступ к папке «{name}»": "«{name}» papkasiga kirish",
+  "Папку видят только те, кому выдан доступ. Права проверяются при каждом обращении — и на сайте, и с диска Windows.":
+    "Papkani faqat kirish berilganlar ko'radi. Huquqlar har bir murojaatda tekshiriladi — saytda ham, Windows diskida ham.",
+  "Доступ пока никому не выдан": "Kirish hali hech kimga berilmagan",
+  "Доступ: {name}": "Kirish: {name}",
+  "убрать доступ": "kirishni olib tashlash",
+  "Выдать доступ": "Kirish berish",
+  "Сотруднику": "Xodimga",
+  "Отделу": "Bo'limga",
+  "Выберите сотрудника": "Xodimni tanlang",
+  "Выдать": "Berish",
+  "Просмотр — открыть и скачать файлы.": "Ko'rish — fayllarni ochish va yuklab olish.",
+  "Редактирование — ещё загружать, менять, переносить и удалять в корзину (нужно право на запись файлов в роли).":
+    "Tahrirlash — bundan tashqari yuklash, o'zgartirish, ko'chirish va savatga o'chirish (rolda fayllarga yozish huquqi kerak).",
+  "Управление — ещё настраивать доступ к этой папке.": "Boshqarish — bundan tashqari ushbu papkaga kirishni sozlash.",
+  "Отдел получает доступ для всех своих сотрудников и для подключения Windows этого отдела.":
+    "Bo'lim kirishni barcha xodimlari va ushbu bo'limning Windows ulanishi uchun oladi.",
+  "Название папки": "Papka nomi",
+  "После переименования диск Windows открывает папку по новому имени.": "Nomi o'zgargach, Windows diski papkani yangi nom bilan ochadi.",
+  "Удалить общую папку «{name}»? Удалить можно только пустую — без файлов и папок, в том числе в корзине.":
+    "«{name}» umumiy papkasi o'chirilsinmi? Faqat bo'sh papkani o'chirish mumkin — fayl va papkalarsiz, savatdagilar ham.",
+  "Удалить пустую папку": "Bo'sh papkani o'chirish",
+  "Действует до {date}.": "{date} gacha amal qiladi.",
+  "Общие папки отдела": "Bo'limning umumiy papkalari",
+  "Открываются по той же ссылке — отдельным сетевым диском по своему адресу.": "Xuddi shu havola orqali ochiladi — o'z manzili bo'yicha alohida tarmoq diski sifatida.",
+  "Не выпущена": "Chiqarilmagan",
+  "Срок истёк": "Muddati tugagan",
+  "Мой диск Windows": "Mening Windows diskim",
+  "действует до {date}": "{date} gacha amal qiladi",
+  "Один сетевой диск со всем, что вам доступно: папками ваших отделов и общими папками. Права — ваши, не больше: забрали доступ — диск сразу покажет меньше.":
+    "Sizga ochiq hamma narsa bitta tarmoq diskida: bo'limlaringiz papkalari va umumiy papkalar. Huquqlar faqat sizniki: kirish olib qo'yilsa, disk darhol kamroq ko'rsatadi.",
+  "Адрес подключения ещё не настроен на сервере. Пока его нет, подключить диск к Windows нельзя — файлы доступны здесь, на сайте.":
+    "Ulanish manzili serverda hali sozlanmagan. U bo'lmaguncha diskni Windowsga ulab bo'lmaydi — fayllar shu yerda, saytda mavjud.",
+  "Личный адрес": "Shaxsiy manzil",
+  "Только папка «{name}»": "Faqat «{name}» papkasi",
+  "Срок ссылки истёк — диск больше не открывается. Выпустите новую и подключите диск по ней.":
+    "Havola muddati tugadi — disk endi ochilmaydi. Yangisini chiqaring va diskni u orqali ulang.",
+  "Выпустить новую ссылку? Прежняя перестанет работать сразу — диск нужно будет подключить по новой.":
+    "Yangi havola chiqarilsinmi? Avvalgisi darhol ishlashdan to'xtaydi — diskni yangisi orqali ulash kerak bo'ladi.",
+  "Выпустить ссылку": "Havola chiqarish",
+  "Отключить личную ссылку? Диск на компьютерах перестанет открываться сразу.": "Shaxsiy havola o'chirilsinmi? Kompyuterlardagi disk darhol ochilmay qoladi.",
+  "На диске": "Diskda",
+  "Важно": "Muhim",
+  "Открыт для редактирования до {time} — пока он открыт, другие видят его только для чтения":
+    "{time} gacha tahrirlash uchun ochiq — ochiq turganida boshqalar uni faqat o'qish uchun ko'radi",
+  "открыт: {owner}": "ochiq: {owner}",
+  "открыт для редактирования": "tahrirlash uchun ochiq",
+  "Снять блокировку «{name}»? Это нужно, если Word или Excel завис и файл не освободился. Если файл ещё открыт, его правки могут не сохраниться.":
+    "«{name}» qulfi olib tashlansinmi? Bu Word yoki Excel qotib qolib, fayl bo'shamaganda kerak. Fayl hali ochiq bo'lsa, undagi o'zgarishlar saqlanmasligi mumkin.",
 };
 
 export default dict;

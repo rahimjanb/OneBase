@@ -55,6 +55,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<FileVersion> FileVersions => Set<FileVersion>();
     public DbSet<ResourcePermission> ResourcePermissions => Set<ResourcePermission>();
     public DbSet<FileConnection> FileConnections => Set<FileConnection>();
+    public DbSet<FileLock> FileLocks => Set<FileLock>();
+    public DbSet<FileUserLink> FileUserLinks => Set<FileUserLink>();
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemLog> SystemLogs => Set<SystemLog>();
@@ -308,6 +310,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             // Корневая папка отдела — одна (создаётся при первом открытии; гонка двух запросов упрётся в индекс).
             e.HasIndex(x => x.DepartmentId).IsUnique().HasFilter("\"ParentId\" IS NULL AND \"DepartmentId\" IS NOT NULL")
                 .HasDatabaseName("IX_Folders_DepartmentRoot");
+            e.HasIndex(x => new { x.SharedRootId, x.ParentId });
         });
 
         b.Entity<FileItem>(e =>
@@ -317,6 +320,25 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.HasOne(x => x.Folder).WithMany(x => x.Files).HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.FolderId, x.Name });
             e.HasIndex(x => new { x.DepartmentId, x.DeletedAt });
+            e.HasIndex(x => new { x.SharedRootId, x.DeletedAt });
+        });
+
+        b.Entity<FileLock>(e =>
+        {
+            e.Property(x => x.Token).HasMaxLength(100);
+            e.Property(x => x.Owner).HasMaxLength(300);
+            e.HasIndex(x => x.Token).IsUnique();
+            e.HasIndex(x => new { x.FileItemId, x.ExpiresAt });
+            e.HasOne<FileItem>().WithMany().HasForeignKey(x => x.FileItemId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<FileUserLink>(e =>
+        {
+            e.Property(x => x.LinkTokenHash).HasMaxLength(64);
+            e.HasIndex(x => x.LinkTokenHash).IsUnique();
+            // У сотрудника одна действующая личная ссылка; отозванные остаются для журнала.
+            e.HasIndex(x => x.UserId).IsUnique().HasFilter("\"RevokedAt\" IS NULL");
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<FileVersion>(e =>

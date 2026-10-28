@@ -27,6 +27,9 @@ public class FileConnection : Entity
     /// <summary>Когда ссылку выпустили последний раз.</summary>
     public DateTimeOffset? LinkChangedAt { get; set; }
 
+    /// <summary>Ссылка действует до этого времени (Files:LinkLifetimeDays от выпуска); null — без срока. Продление — «Новая ссылка».</summary>
+    public DateTimeOffset? LinkExpiresAt { get; set; }
+
     /// <summary>Что даёт подключение в папке своего отдела: чтение или чтение и запись.</summary>
     public AccessLevel Access { get; set; } = AccessLevel.Write;
 

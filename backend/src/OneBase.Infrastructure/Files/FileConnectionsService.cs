@@ -30,10 +30,29 @@ public sealed record ConnectionView(
     IReadOnlyList<string> Guide,
     IReadOnlyList<string> Notes,
     // Адрес без пароля со скрытым кодом («https://files.1base.uz/k/••••••••/production»); сам адрес — по «Показать» (POST …/link).
-    string? LinkAddress = null);
+    string? LinkAddress = null,
+    DateTimeOffset? LinkExpiresAt = null,
+    // Общие папки, выданные отделу: их открывает та же ссылка (адрес — с именем папки вместо кода отдела).
+    IReadOnlyList<SharedLinkRef>? SharedFolders = null);
 
-/// <summary>Секретная ссылка отдела: адрес для «Подключить сетевой диск» и тот же адрес путём Windows.</summary>
-public sealed record ConnectionLink(string Address, string? UncPath);
+public sealed record SharedLinkRef(string Name, string Access, string? MaskedAddress);
+
+/// <summary>Секретная ссылка: адрес для «Подключить сетевой диск», тот же адрес путём Windows и адреса общих папок по той же ссылке.</summary>
+public sealed record ConnectionLink(string Address, string? UncPath, IReadOnlyList<SharedLinkAddress>? Shared = null);
+
+public sealed record SharedLinkAddress(string Name, string Address, string? UncPath);
+
+/// <summary>Личная ссылка Windows сотрудника: Status — none | active | expired. Folders — что видно на диске (папки отделов и общие папки).</summary>
+public sealed record PersonalLinkView(
+    string Status,
+    string? MaskedAddress,
+    DateTimeOffset? CreatedAt,
+    DateTimeOffset? ExpiresAt,
+    DateTimeOffset? LastUsedAt,
+    bool DomainConfigured,
+    IReadOnlyList<string> Folders,
+    IReadOnlyList<string> Guide,
+    IReadOnlyList<string> Notes);
 
 public sealed record ConnectionTestStep(string Name, bool Ok, string Detail);
 
@@ -78,10 +97,16 @@ public sealed class FileConnectionsService(
     private static readonly TimeSpan LinkMissTtl = TimeSpan.FromMinutes(1);
     private const string Masked = "••••••••";
 
+    /// <summary>Неверных кодов ссылки с одного адреса за <see cref="LockWindow"/> до паузы (429): подбор кода (160 бит) и так невозможен.</summary>
+    public const int MaxLinkMisses = 30;
+
     private readonly IDataProtector _protector = protection.CreateProtector("OneBase.Files.ConnectionPassword");
     private readonly IDataProtector _links = protection.CreateProtector("OneBase.Files.ConnectionLink");
 
     private sealed record AuthEntry(Guid ConnectionId, string Username, Guid DepartmentId, AccessLevel Access, string Fingerprint);
+
+    /// <summary>Найденная ссылка: подключение отдела (DepartmentId) или личная ссылка сотрудника (UserId); ExpiresAt — срок.</summary>
+    private sealed record LinkEntry(Guid Id, Guid? DepartmentId, string? Username, AccessLevel Access, Guid? UserId, DateTimeOffset? ExpiresAt);
 
     public async Task<ConnectionView> GetAsync(FileActor actor, Department department, CancellationToken ct)
     {
@@ -116,7 +141,22 @@ public sealed class FileConnectionsService(
             canManage,
             active && address is not null ? Guide(department) : [],
             Notes(department, address, username),
-            active ? options.LinkUrl(Masked, department.Code) : null);
+            active ? options.LinkUrl(Masked, department.Code) : null,
+            active ? connection!.LinkExpiresAt : null,
+            await SharedOfDepartmentAsync(department, active ? Masked : null, ct));
+    }
+
+    /// <summary>Общие папки, выданные отделу (уровень — не выше записи), с адресом по ссылке отдела (token = null — без адреса).</summary>
+    private async Task<IReadOnlyList<SharedLinkRef>> SharedOfDepartmentAsync(Department department, string? token, CancellationToken ct)
+    {
+        var grants = await files.DepartmentSharedGrantsAsync(department.Id, ct);
+        var ids = grants.Select(g => g.RootId).ToList();
+        var names = await db.Folders.AsNoTracking().Where(f => ids.Contains(f.Id)).ToDictionaryAsync(f => f.Id, f => f.Name, ct);
+        return grants.GroupBy(g => g.RootId).Where(g => names.ContainsKey(g.Key))
+            .Select(g => new SharedLinkRef(names[g.Key], g.Max(x => x.Access) >= AccessLevel.Write ? "write" : "read",
+                token is null ? null : options.LinkUrl(token, names[g.Key])))
+            .OrderBy(r => r.Name)
+            .ToList();
     }
 
     public async Task<ConnectionView> CreateAsync(FileActor actor, Department department, CancellationToken ct)
@@ -138,6 +178,7 @@ public sealed class FileConnectionsService(
             LinkTokenHash = ConnectionCredentials.LinkHash(token),
             ProtectedLinkToken = _links.Protect(token),
             LinkChangedAt = DateTimeOffset.UtcNow,
+            LinkExpiresAt = options.LinkExpiry(DateTimeOffset.UtcNow),
             CreatedById = actor.UserId,
         };
         db.FileConnections.Add(connection);
@@ -209,7 +250,9 @@ public sealed class FileConnectionsService(
                       ?? throw new FilesException(409, "Адрес подключения не настроен: администратору нужно задать FILE_STORAGE_DOMAIN.");
         await audit.LogAsync(ActorType.User, actor.UserId?.ToString() ?? "unknown", "files.connection.link.revealed", "FileConnection", connection.Id.ToString(),
             new { department = department.Code, connection.Username }, ct);
-        return new ConnectionLink(address, options.LinkUncPath(token, department.Code));
+        var shared = (await SharedOfDepartmentAsync(department, null, ct))
+            .Select(r => new SharedLinkAddress(r.Name, options.LinkUrl(token, r.Name)!, options.LinkUncPath(token, r.Name))).ToList();
+        return new ConnectionLink(address, options.LinkUncPath(token, department.Code), shared);
     }
 
     /// <summary>Новая ссылка: старая перестаёт работать сразу (кэш входа сбрасывается), компьютеры подключают диск по новой.</summary>
@@ -229,27 +272,61 @@ public sealed class FileConnectionsService(
     /// Вход WebDAV по секретной ссылке: подключение отдела по хэшу кода. Найденное и ненайденное ненадолго кэшируются — Проводник и Office
     /// делают десятки запросов в секунду, а компьютер со старой ссылкой повторяет их без конца. Подобрать код (160 бит) нельзя.
     /// </summary>
-    public async Task<FileActor?> AuthenticateLinkAsync(string token, CancellationToken ct)
+    /// <remarks>
+    /// Ссылка отдела — подключение отдела (его папка и выданные отделу общие папки). Личная ссылка — сам сотрудник: его права читаются
+    /// из базы при каждом запросе (отключили, сменили роль, забрали доступ — действует сразу). Истёкшая или отозванная ссылка — как
+    /// неверная. Неверных кодов с одного адреса больше <see cref="MaxLinkMisses"/> за 5 минут — пауза (Locked → 429).
+    /// </remarks>
+    public async Task<DavAuthResult> AuthenticateLinkAsync(string token, string remote, CancellationToken ct)
     {
-        if (ConnectionCredentials.LinkHash(token) is not { } hash)
+        var missKey = $"files-dav-linkmiss:{remote}";
+        if (cache.TryGetValue(missKey, out int misses) && misses >= MaxLinkMisses)
         {
-            return null;
+            return new DavAuthResult(DavAuthStatus.Locked, null);
         }
 
-        if (cache.TryGetValue(LinkKey(hash), out AuthEntry? entry))
+        var hash = ConnectionCredentials.LinkHash(token);
+        LinkEntry? entry = null;
+        if (hash is not null && !cache.TryGetValue(LinkKey(hash), out entry))
         {
-            return entry is null ? null : FileActor.Connection(entry.ConnectionId, entry.Username, entry.DepartmentId, entry.Access);
+            entry = await FindLinkAsync(hash, ct);
+            cache.Set(LinkKey(hash), entry, entry is null ? LinkMissTtl : AuthCacheTtl);
         }
 
+        if (entry is null || entry.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            cache.Set(missKey, misses + 1, LockWindow);
+            return new DavAuthResult(DavAuthStatus.Failed, null);
+        }
+
+        if (entry.UserId is { } userId)
+        {
+            var user = await files.UserActorAsync(userId, ct);
+            if (user is null || !FileAccessRules.CanHavePersonalLink(user))
+            {
+                return new DavAuthResult(DavAuthStatus.Failed, null);
+            }
+
+            await TouchPersonalAsync(entry.Id, ct);
+            return new DavAuthResult(DavAuthStatus.Ok, user with { Source = FileSources.WindowsPersonal, PersonalLinkId = entry.Id });
+        }
+
+        await TouchAsync(entry.Id, ct);
+        var shared = await files.DepartmentSharedGrantsAsync(entry.DepartmentId!.Value, ct);
+        return new DavAuthResult(DavAuthStatus.Ok,
+            FileActor.Connection(entry.Id, entry.Username!, entry.DepartmentId.Value, entry.Access, shared) with { Source = FileSources.WindowsLink });
+    }
+
+    private async Task<LinkEntry?> FindLinkAsync(string hash, CancellationToken ct)
+    {
         var connection = await db.FileConnections.AsNoTracking().FirstOrDefaultAsync(c => c.LinkTokenHash == hash && c.RevokedAt == null, ct);
-        if (connection is null)
+        if (connection is not null)
         {
-            cache.Set<AuthEntry?>(LinkKey(hash), null, LinkMissTtl);
-            return null;
+            return new LinkEntry(connection.Id, connection.DepartmentId, connection.Username, connection.Access, null, connection.LinkExpiresAt);
         }
 
-        cache.Set<AuthEntry?>(LinkKey(hash), new AuthEntry(connection.Id, connection.Username, connection.DepartmentId, connection.Access, hash), AuthCacheTtl);
-        return FileActor.Connection(connection.Id, connection.Username, connection.DepartmentId, connection.Access);
+        var personal = await db.FileUserLinks.AsNoTracking().FirstOrDefaultAsync(l => l.LinkTokenHash == hash && l.RevokedAt == null, ct);
+        return personal is null ? null : new LinkEntry(personal.Id, null, null, AccessLevel.Write, personal.UserId, personal.ExpiresAt);
     }
 
     /// <summary>Вход WebDAV по логину и паролю (Basic). Неверный пароль — счётчик по адресу и логину; после 10 ошибок — пауза 5 минут.</summary>
@@ -265,7 +342,7 @@ public sealed class FileConnectionsService(
         var fingerprint = ConnectionCredentials.Fingerprint(login, password);
         if (cache.TryGetValue(AuthKey(login), out AuthEntry? entry) && entry is not null && entry.Fingerprint == fingerprint)
         {
-            return new DavAuthResult(DavAuthStatus.Ok, FileActor.Connection(entry.ConnectionId, entry.Username, entry.DepartmentId, entry.Access));
+            return new DavAuthResult(DavAuthStatus.Ok, await LoginActorAsync(entry.ConnectionId, entry.Username, entry.DepartmentId, entry.Access, ct));
         }
 
         var connection = await db.FileConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Username == login && c.RevokedAt == null, ct);
@@ -277,8 +354,134 @@ public sealed class FileConnectionsService(
 
         cache.Remove(failKey);
         cache.Set(AuthKey(login), new AuthEntry(connection.Id, connection.Username, connection.DepartmentId, connection.Access, fingerprint), AuthCacheTtl);
-        return new DavAuthResult(DavAuthStatus.Ok, FileActor.Connection(connection.Id, connection.Username, connection.DepartmentId, connection.Access));
+        return new DavAuthResult(DavAuthStatus.Ok, await LoginActorAsync(connection.Id, connection.Username, connection.DepartmentId, connection.Access, ct));
     }
+
+    /// <summary>Подключение по логину: папка отдела и общие папки, выданные отделу (выдачи читаются при каждом запросе).</summary>
+    private async Task<FileActor> LoginActorAsync(Guid connectionId, string username, Guid departmentId, AccessLevel access, CancellationToken ct) =>
+        FileActor.Connection(connectionId, username, departmentId, access, await files.DepartmentSharedGrantsAsync(departmentId, ct)) with
+        {
+            Source = FileSources.WindowsLogin,
+        };
+
+    /// <summary>«Последняя активность» личной ссылки — не чаще раза в минуту.</summary>
+    private async Task TouchPersonalAsync(Guid linkId, CancellationToken ct)
+    {
+        if (cache.TryGetValue($"files-dav-touch:{linkId}", out _))
+        {
+            return;
+        }
+
+        cache.Set($"files-dav-touch:{linkId}", true, TouchEvery);
+        var now = DateTimeOffset.UtcNow;
+        await db.FileUserLinks.Where(l => l.Id == linkId).ExecuteUpdateAsync(s => s.SetProperty(l => l.LastUsedAt, now), ct);
+    }
+
+    // ---------- Личная ссылка Windows ----------
+
+    public async Task<PersonalLinkView> MyLinkAsync(FileActor actor, CancellationToken ct)
+    {
+        RequirePersonal(actor);
+        var link = await db.FileUserLinks.AsNoTracking().Where(l => l.UserId == actor.UserId && l.RevokedAt == null).FirstOrDefaultAsync(ct);
+        var folders = (await files.ReadableDepartmentsAsync(actor, ct)).Select(d => d.Code)
+            .Concat((await files.ReadableSharedAsync(actor, ct)).Select(r => r.Name)).ToList();
+        var configured = options.PublicRoot() is not null;
+        var status = link is null ? "none" : link.ExpiresAt <= DateTimeOffset.UtcNow ? "expired" : "active";
+        return new PersonalLinkView(status, status == "active" ? options.LinkUrl(Masked, "") : null, link?.CreatedAt, link?.ExpiresAt, link?.LastUsedAt,
+            configured, folders, status == "active" && configured ? PersonalGuide() : [], PersonalNotes(configured));
+    }
+
+    /// <summary>Выпустить личную ссылку (или новую вместо прежней — прежняя перестаёт работать сразу).</summary>
+    public async Task<PersonalLinkView> IssueMyLinkAsync(FileActor actor, CancellationToken ct)
+    {
+        RequirePersonal(actor);
+        var userId = actor.UserId!.Value;
+        var now = DateTimeOffset.UtcNow;
+        var old = await db.FileUserLinks.Where(l => l.UserId == userId && l.RevokedAt == null).ToListAsync(ct);
+        foreach (var link in old)
+        {
+            link.RevokedAt = now;
+            ForgetLink(link.LinkTokenHash);
+        }
+
+        await db.SaveChangesAsync(ct);
+        var token = ConnectionCredentials.NewLinkToken();
+        var created = new FileUserLink
+        {
+            UserId = userId,
+            LinkTokenHash = ConnectionCredentials.LinkHash(token)!,
+            ProtectedLinkToken = _links.Protect(token),
+            ExpiresAt = options.LinkExpiry(now),
+        };
+        db.FileUserLinks.Add(created);
+        await db.SaveChangesAsync(ct);
+        await audit.LogAsync(ActorType.User, userId.ToString(), old.Count > 0 ? "files.personal_link.regenerated" : "files.personal_link.created",
+            "FileUserLink", created.Id.ToString(), new { until = created.ExpiresAt, source = actor.Source, ip = actor.Ip }, ct);
+        return await MyLinkAsync(actor, ct);
+    }
+
+    /// <summary>Личная ссылка для «Показать» и «Скопировать» — только самому сотруднику; факт показа — в журнал (без кода).</summary>
+    public async Task<ConnectionLink> RevealMyLinkAsync(FileActor actor, CancellationToken ct)
+    {
+        RequirePersonal(actor);
+        var link = await db.FileUserLinks.AsNoTracking().FirstOrDefaultAsync(l => l.UserId == actor.UserId && l.RevokedAt == null, ct)
+                   ?? throw FilesException.NotFound("Личной ссылки нет — выпустите её.");
+        if (link.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            throw new FilesException(410, "Срок личной ссылки истёк — выпустите новую.");
+        }
+
+        var token = _links.Unprotect(link.ProtectedLinkToken);
+        var address = options.LinkUrl(token, "")
+                      ?? throw new FilesException(409, "Адрес подключения не настроен: администратору нужно задать FILE_STORAGE_DOMAIN.");
+        await audit.LogAsync(ActorType.User, actor.UserId!.Value.ToString(), "files.personal_link.revealed", "FileUserLink", link.Id.ToString(),
+            new { source = actor.Source, ip = actor.Ip }, ct);
+        var shared = (await files.ReadableSharedAsync(actor, ct))
+            .Select(r => new SharedLinkAddress(r.Name, options.LinkUrl(token, r.Name)!, options.LinkUncPath(token, r.Name))).ToList();
+        return new ConnectionLink(address, options.LinkUncPath(token, ""), shared);
+    }
+
+    public async Task<PersonalLinkView> RevokeMyLinkAsync(FileActor actor, CancellationToken ct)
+    {
+        RequirePersonal(actor);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var link in await db.FileUserLinks.Where(l => l.UserId == actor.UserId && l.RevokedAt == null).ToListAsync(ct))
+        {
+            link.RevokedAt = now;
+            ForgetLink(link.LinkTokenHash);
+            await audit.LogAsync(ActorType.User, actor.UserId!.Value.ToString(), "files.personal_link.revoked", "FileUserLink", link.Id.ToString(),
+                new { source = actor.Source, ip = actor.Ip }, ct);
+        }
+
+        await db.SaveChangesAsync(ct);
+        return await MyLinkAsync(actor, ct);
+    }
+
+    private static void RequirePersonal(FileActor actor)
+    {
+        if (!FileAccessRules.CanHavePersonalLink(actor) || actor.UserId is null)
+        {
+            throw new FilesException(403, "Личная ссылка Windows — для сотрудников с доступом к файлам.");
+        }
+    }
+
+    private static IReadOnlyList<string> PersonalGuide() =>
+    [
+        "Откройте Проводник и выберите «Этот компьютер».",
+        "Нажмите «Подключить сетевой диск» (вверху окна; в Windows 11 — в меню «…»).",
+        "Выберите свободную букву диска, например Y:.",
+        "В поле «Папка» вставьте личный адрес: «Скопировать» у поля «Личный адрес».",
+        "Отметьте «Восстанавливать подключение при входе в систему» и нажмите «Готово» — логин и пароль не нужны.",
+        "На диске — папки ваших отделов и общие папки, к которым вам выдан доступ; Word и Excel открывают и сохраняют файлы прямо с диска.",
+    ];
+
+    private static IReadOnlyList<string> PersonalNotes(bool configured) =>
+    [
+        "Личный адрес работает как пароль и даёт ровно ваши права: не пересылайте его. Попал не туда — нажмите «Новая ссылка», прежняя перестанет работать сразу.",
+        "Права проверяются при каждом обращении: если вас отключат или заберут доступ к папке, диск сразу покажет меньше или перестанет открываться.",
+        "Пока файл открыт в Word или Excel, у других он открывается только для чтения — правки двух людей не перезапишут друг друга.",
+        .. configured ? Array.Empty<string>() : ["Адрес подключения не настроен: администратору нужно задать FILE_STORAGE_DOMAIN."],
+    ];
 
     /// <summary>«Последняя активность» — не чаще раза в минуту на подключение (WebDAV делает десятки запросов в секунду).</summary>
     public async Task TouchAsync(Guid connectionId, CancellationToken ct)
@@ -482,10 +685,12 @@ public sealed class FileConnectionsService(
             query = query.Where(c => c.LinkTokenHash == null);
         }
 
+        var expires = options.LinkExpiry(now);
         await query.ExecuteUpdateAsync(s => s
             .SetProperty(c => c.LinkTokenHash, hash)
             .SetProperty(c => c.ProtectedLinkToken, protectedToken)
-            .SetProperty(c => c.LinkChangedAt, now), ct);
+            .SetProperty(c => c.LinkChangedAt, now)
+            .SetProperty(c => c.LinkExpiresAt, expires), ct);
         return token;
     }
 }

@@ -2317,6 +2317,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("LinkChangedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("LinkExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("LinkTokenHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -2397,6 +2400,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<Guid?>("SharedRootId")
+                        .HasColumnType("uuid");
+
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
 
@@ -2415,7 +2421,97 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("FolderId", "Name");
 
+                    b.HasIndex("SharedRootId", "DeletedAt");
+
                     b.ToTable("Files");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Files.FileLock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FileItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Owner")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid?>("OwnerConnectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("FileItemId", "ExpiresAt");
+
+                    b.ToTable("FileLocks");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Files.FileUserLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LinkTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProtectedLinkToken")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkTokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasFilter("\"RevokedAt\" IS NULL");
+
+                    b.ToTable("FileUserLinks");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Files.FileVersion", b =>
@@ -2489,6 +2585,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ParentId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("SharedRootId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2502,6 +2601,8 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("DepartmentId", "ParentId");
 
                     b.HasIndex("ParentId", "Name");
+
+                    b.HasIndex("SharedRootId", "ParentId");
 
                     b.ToTable("Folders");
                 });
@@ -6744,6 +6845,24 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Folder");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Files.FileLock", b =>
+                {
+                    b.HasOne("OneBase.Domain.Files.FileItem", null)
+                        .WithMany()
+                        .HasForeignKey("FileItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Files.FileUserLink", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("OneBase.Domain.Files.FileVersion", b =>

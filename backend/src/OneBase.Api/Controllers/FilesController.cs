@@ -4,6 +4,7 @@ using Microsoft.Net.Http.Headers;
 using OneBase.Api.Auth;
 using OneBase.Application.Files;
 using OneBase.Application.Security;
+using OneBase.Domain.Files;
 using OneBase.Infrastructure.Files;
 
 namespace OneBase.Api.Controllers;
@@ -174,8 +175,94 @@ public sealed class FilesController(DepartmentFilesService files, FileConnection
     public async Task<IActionResult> Trash(string code, CancellationToken ct) => Ok(await files.TrashAsync(await ActorAsync(ct), code, ct));
 
     [HttpGet("search")]
-    public async Task<IActionResult> Search([FromQuery] string? q, [FromQuery] string? department, CancellationToken ct) =>
-        Ok(await files.SearchAsync(await ActorAsync(ct), q ?? string.Empty, string.IsNullOrWhiteSpace(department) ? null : department, ct));
+    public async Task<IActionResult> Search([FromQuery] string? q, [FromQuery] string? department, [FromQuery] Guid? shared, CancellationToken ct) =>
+        Ok(await files.SearchAsync(await ActorAsync(ct), q ?? string.Empty, string.IsNullOrWhiteSpace(department) ? null : department, ct, shared));
+
+    /// <summary>Снять блокировку файла (Word упал и держит его): администратор или сотрудник с правом «Управление».</summary>
+    [HttpPost("{id:guid}/unlock")]
+    public async Task<IActionResult> Unlock(Guid id, CancellationToken ct)
+    {
+        await files.ForceUnlockAsync(await ActorAsync(ct), id, ct);
+        return NoContent();
+    }
+
+    // ---------- Общие файлы ----------
+
+    public sealed record SharedAccessInput(string? Type, string? Id, string? Access);
+
+    /// <summary>Общие папки, которые видит сотрудник (выданные ему, его роли или отделу; администратору — все).</summary>
+    [HttpGet("shared")]
+    public async Task<IActionResult> SharedFolders(CancellationToken ct) => Ok(await files.SharedFoldersAsync(await ActorAsync(ct), ct));
+
+    [HttpPost("shared")]
+    public async Task<IActionResult> CreateShared(NameInput input, CancellationToken ct) =>
+        Ok(await files.CreateSharedAsync(await ActorAsync(ct), input.Name ?? string.Empty, ct));
+
+    /// <summary>Корень общей папки (как departments/{code} у отдела).</summary>
+    [HttpGet("shared/{id:guid}")]
+    public async Task<IActionResult> Shared(Guid id, CancellationToken ct)
+    {
+        var actor = await ActorAsync(ct);
+        var root = await files.SharedRootAsync(actor, id, ct);
+        return Ok(await files.FolderAsync(actor, root.Id, ct));
+    }
+
+    [HttpPut("shared/{id:guid}")]
+    public async Task<IActionResult> RenameShared(Guid id, NameInput input, CancellationToken ct)
+    {
+        await files.RenameSharedAsync(await ActorAsync(ct), id, input.Name ?? string.Empty, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("shared/{id:guid}")]
+    public async Task<IActionResult> DeleteShared(Guid id, CancellationToken ct)
+    {
+        await files.DeleteSharedAsync(await ActorAsync(ct), id, ct);
+        return NoContent();
+    }
+
+    [HttpGet("shared/{id:guid}/trash")]
+    public async Task<IActionResult> SharedTrash(Guid id, CancellationToken ct) => Ok(await files.SharedTrashAsync(await ActorAsync(ct), id, ct));
+
+    [HttpGet("shared/{id:guid}/access")]
+    public async Task<IActionResult> SharedAccess(Guid id, CancellationToken ct) => Ok(await files.SharedAccessAsync(await ActorAsync(ct), id, ct));
+
+    /// <summary>Доступ к общей папке: type = user | department | role, access = none | read | write | manage.</summary>
+    [HttpPut("shared/{id:guid}/access")]
+    public async Task<IActionResult> SetSharedAccess(Guid id, SharedAccessInput input, CancellationToken ct)
+    {
+        AccessLevel? access = input.Access switch
+        {
+            "read" => AccessLevel.Read,
+            "write" => AccessLevel.Write,
+            "manage" => AccessLevel.Manage,
+            "none" or null => null,
+            _ => throw FilesException.Invalid("Доступ: none, read, write или manage."),
+        };
+        await files.SetSharedAccessAsync(await ActorAsync(ct), id, input.Type ?? string.Empty, input.Id ?? string.Empty, access, ct);
+        return NoContent();
+    }
+
+    // ---------- Личная ссылка Windows ----------
+
+    [HttpGet("me/link")]
+    public async Task<IActionResult> MyLink(CancellationToken ct) => Ok(await connections.MyLinkAsync(await ActorAsync(ct), ct));
+
+    /// <summary>Выпустить личную ссылку или новую вместо прежней (прежняя перестаёт работать сразу).</summary>
+    [HttpPost("me/link")]
+    public async Task<IActionResult> IssueMyLink(CancellationToken ct) => Ok(await connections.IssueMyLinkAsync(await ActorAsync(ct), ct));
+
+    /// <summary>Сам адрес — отдельным POST по «Показать»/«Скопировать» (не кэшируется и не попадает в адрес страницы).</summary>
+    [HttpPost("me/link/reveal")]
+    public async Task<IActionResult> RevealMyLink(CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "no-store";
+        return Ok(await connections.RevealMyLinkAsync(await ActorAsync(ct), ct));
+    }
+
+    [HttpPost("me/link/revoke")]
+    public async Task<IActionResult> RevokeMyLink(CancellationToken ct) => Ok(await connections.RevokeMyLinkAsync(await ActorAsync(ct), ct));
+
 
     // ---------- Подключение к Windows ----------
 
@@ -268,8 +355,12 @@ public sealed class FilesController(DepartmentFilesService files, FileConnection
     public IActionResult Settings() =>
         Ok(new { maxUploadBytes = options.MaxUploadBytes, domainConfigured = options.PublicRoot() is not null });
 
+    /// <summary>Сотрудник с правами из базы на момент запроса; источник — сайт, IP — для журнала действий.</summary>
     private async Task<FileActor> ActorAsync(CancellationToken ct) =>
-        await files.UserActorAsync(User.GetUserId(), ct) ?? throw new FilesException(401, "Сессия закончилась — войдите заново.");
+        (await files.UserActorAsync(User.GetUserId(), ct) ?? throw new FilesException(401, "Сессия закончилась — войдите заново.")) with
+        {
+            Ip = HttpContext.Connection.RemoteIpAddress?.ToString(),
+        };
 
     /// <summary>ASCII-имя для старых клиентов (filename=); настоящее имя — в filename* (UTF-8).</summary>
     private static string Ascii(string name)

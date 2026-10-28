@@ -446,6 +446,50 @@ const dict: Dict = {
     "Papkani faqat bo'lim ichida ko'chirish mumkin. Boshqa bo'limga — yuklab olib, qaytadan yuklang.",
   "Папку нельзя перенести в саму себя или во вложенную папку.": "Papkani o'ziga yoki ichki papkasiga ko'chirib bo'lmaydi.",
   "Корневую папку отдела нельзя удалить.": "Bo'limning asosiy papkasini o'chirib bo'lmaydi.",
+  // Общие папки, блокировки WebDAV, личная ссылка Windows
+  "Нет прав на изменение файлов этой общей папки.": "Ushbu umumiy papka fayllarini o'zgartirishga huquq yo'q.",
+  "Общую папку переименовывает администратор в «Общих файлах».": "Umumiy papka nomini administrator «Umumiy fayllar»da o'zgartiradi.",
+  "Корневую папку нельзя перенести.": "Asosiy papkani ko'chirib bo'lmaydi.",
+  "Корневую папку нельзя удалить.": "Asosiy papkani o'chirib bo'lmaydi.",
+  "Папку можно перенести только внутри отдела или общей папки. В другое место — скачайте и загрузите заново.":
+    "Papkani faqat bo'lim yoki umumiy papka ichida ko'chirish mumkin. Boshqa joyga — yuklab oling va qayta yuklang.",
+  "«{name}» сейчас открыт для редактирования ({owner}) — изменить его можно после закрытия файла. Блокировка снимется сама не позже {date}.":
+    "«{name}» hozir tahrirlash uchun ochiq ({owner}) — uni fayl yopilgandan keyin o'zgartirish mumkin. Qulf {date} dan kechiktirmay o'zi olinadi.",
+  "«{name}» сейчас открыт для редактирования — изменить его можно после закрытия файла. Блокировка снимется сама не позже {date}.":
+    "«{name}» hozir tahrirlash uchun ochiq — uni fayl yopilgandan keyin o'zgartirish mumkin. Qulf {date} dan kechiktirmay o'zi olinadi.",
+  "Блокировка файла истекла или снята — откройте файл заново.": "Fayl qulfi muddati tugagan yoki olib tashlangan — faylni qayta oching.",
+  "Снять блокировку может администратор или сотрудник с правом «Управление».": "Qulfni administrator yoki «Boshqarish» huquqiga ega xodim olib tashlashi mumkin.",
+  "Имя общей папки не может начинаться с «_» или быть «k».": "Umumiy papka nomi «_» bilan boshlanishi yoki «k» bo'lishi mumkin emas.",
+  "«{name}» — код отдела; выберите другое имя общей папки.": "«{name}» — bo'lim kodi; umumiy papka uchun boshqa nom tanlang.",
+  "Общая папка не найдена.": "Umumiy papka topilmadi.",
+  "В общей папке есть файлы или папки (в том числе в корзине) — удалить можно только пустую.":
+    "Umumiy papkada fayllar yoki papkalar bor (savatdagilar ham) — faqat bo'shini o'chirish mumkin.",
+  "Доступ выдаётся сотруднику, отделу или роли.": "Kirish xodimga, bo'limga yoki rolga beriladi.",
+  "Сотрудник, отдел или роль не найдены.": "Xodim, bo'lim yoki rol topilmadi.",
+  "Доступ к общей папке настраивает администратор или сотрудник с правом «Управление».":
+    "Umumiy papkaga kirishni administrator yoki «Boshqarish» huquqiga ega xodim sozlaydi.",
+  "Общие папки создаёт и удаляет администратор.": "Umumiy papkalarni administrator yaratadi va o'chiradi.",
+  "Доступ: none, read, write или manage.": "Kirish: none, read, write yoki manage.",
+  "Личной ссылки нет — выпустите её.": "Shaxsiy havola yo'q — uni chiqaring.",
+  "Срок личной ссылки истёк — выпустите новую.": "Shaxsiy havola muddati tugagan — yangisini chiqaring.",
+  "Личная ссылка Windows — для сотрудников с доступом к файлам.": "Shaxsiy Windows havolasi — fayllarga kirishi bor xodimlar uchun.",
+  "отключён": "o'chirilgan",
+  "отдел": "bo'lim",
+  "роль": "rol",
+  "удалённый сотрудник": "o'chirilgan xodim",
+  "удалённый отдел": "o'chirilgan bo'lim",
+  "удалённая роль": "o'chirilgan rol",
+  "Выберите свободную букву диска, например Y:.": "Bo'sh disk harfini tanlang, masalan Y:.",
+  "В поле «Папка» вставьте личный адрес: «Скопировать» у поля «Личный адрес».":
+    "«Papka» maydoniga shaxsiy manzilni qo'ying: «Shaxsiy manzil» maydonidagi «Nusxalash».",
+  "На диске — папки ваших отделов и общие папки, к которым вам выдан доступ; Word и Excel открывают и сохраняют файлы прямо с диска.":
+    "Diskda — bo'limlaringiz papkalari va sizga kirish berilgan umumiy papkalar; Word va Excel fayllarni to'g'ridan-to'g'ri diskdan ochadi va saqlaydi.",
+  "Личный адрес работает как пароль и даёт ровно ваши права: не пересылайте его. Попал не туда — нажмите «Новая ссылка», прежняя перестанет работать сразу.":
+    "Shaxsiy manzil parol kabi ishlaydi va aynan sizning huquqlaringizni beradi: uni boshqalarga yubormang. Noto'g'ri joyga tushsa — «Yangi havola»ni bosing, avvalgisi darhol ishlamay qoladi.",
+  "Права проверяются при каждом обращении: если вас отключат или заберут доступ к папке, диск сразу покажет меньше или перестанет открываться.":
+    "Huquqlar har bir murojaatda tekshiriladi: sizni o'chirib qo'yishsa yoki papkaga kirishni olib qo'yishsa, disk darhol kamroq ko'rsatadi yoki ochilmay qoladi.",
+  "Пока файл открыт в Word или Excel, у других он открывается только для чтения — правки двух людей не перезапишут друг друга.":
+    "Fayl Word yoki Excelda ochiq turganida, boshqalarda u faqat o'qish uchun ochiladi — ikki kishining o'zgarishlari bir-birini bosib ketmaydi.",
   "Файл больше {n} МБ.": "Fayl {n} MB dan katta.",
   "Версия файла не найдена.": "Fayl versiyasi topilmadi.",
   "Папка «{name}» в корзине — восстановите её.": "«{name}» papkasi savatda — uni tiklang.",

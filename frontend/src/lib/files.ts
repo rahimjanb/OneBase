@@ -20,11 +20,14 @@ export type FileRow = {
   updatedAt: string;
   updatedBy: FileUserRef | null;
   hidden: boolean;
+  /** Открыт на редактирование в Word, Excel или Проводнике (блокировка WebDAV): кем и до какого времени. */
+  lock?: { owner: string | null; until: string } | null;
 };
 
 export type FolderRow = { id: string; name: string; folders: number; files: number; updatedAt: string };
 
-export type DepartmentRef = { id: string; code: string; name: string; access: Access };
+/** Пространство папки: отдел (code — код отдела) или общая папка (shared, id — её корень, code — имя). */
+export type DepartmentRef = { id: string; code: string; name: string; access: Access; shared?: boolean };
 
 export type FolderView = {
   department: DepartmentRef;
@@ -78,9 +81,47 @@ export type ConnectionView = {
   notes: string[];
   /** Адрес без пароля (секретная ссылка отдела) со скрытым кодом; сам адрес — filesApi.link по «Показать»/«Скопировать». */
   linkAddress: string | null;
+  /** До какого времени действует ссылка (продление — «Новая ссылка»). */
+  linkExpiresAt?: string | null;
+  /** Общие папки, выданные отделу: открываются по той же ссылке. */
+  sharedFolders?: { name: string; access: "read" | "write"; maskedAddress: string | null }[] | null;
 };
 
-export type ConnectionLink = { address: string; uncPath: string | null };
+export type ConnectionLink = { address: string; uncPath: string | null; shared?: { name: string; address: string; uncPath: string | null }[] | null };
+
+/** Общая папка («Общие файлы»): видна только тем, кому выдана; canManage — можно настраивать доступ. */
+export type SharedSummary = {
+  id: string;
+  name: string;
+  access: Access;
+  files: number;
+  folders: number;
+  sizeBytes: number;
+  updatedAt: string | null;
+  canManage: boolean;
+};
+
+export type PrincipalType = "user" | "department" | "role";
+
+export type SharedAccessRow = { type: PrincipalType; id: string; name: string; detail: string | null; access: Access };
+
+export type PrincipalOption = { id: string; name: string; detail: string | null };
+
+export type SharedAccessView = { grants: SharedAccessRow[]; users: PrincipalOption[]; departments: PrincipalOption[] };
+
+/** Личная ссылка Windows: диск со всем, что доступно сотруднику (его права проверяются при каждом обращении). */
+export type PersonalLinkView = {
+  status: "none" | "active" | "expired";
+  maskedAddress: string | null;
+  createdAt: string | null;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  domainConfigured: boolean;
+  folders: string[];
+  guide: string[];
+  notes: string[];
+};
+
 
 export type ConnectionTest = { ok: boolean; steps: { name: string; ok: boolean; detail: string }[] };
 
@@ -102,8 +143,11 @@ export const filesApi = {
   versions: (id: string) => bff<VersionRow[]>(`files/${id}/versions`),
   preview: (id: string) => bff<FilePreview>(`files/${id}/preview`),
   trash: (code: string) => bff<TrashRow[]>(`files/departments/${code}/trash`),
-  search: (q: string, department?: string) =>
-    bff<SearchRow[]>(`files/search?q=${encodeURIComponent(q)}${department ? `&department=${encodeURIComponent(department)}` : ""}`),
+  search: (q: string, department?: string, shared?: string) =>
+    bff<SearchRow[]>(
+      `files/search?q=${encodeURIComponent(q)}${department ? `&department=${encodeURIComponent(department)}` : ""}${shared ? `&shared=${shared}` : ""}`,
+    ),
+  unlock: (id: string) => bff<void>(`files/${id}/unlock`, { method: "POST" }),
   departments: () => bff<DepartmentSummary[]>("files/departments"),
   connection: (code: string) => bff<ConnectionView>(`files/departments/${code}/connection`),
   createConnection: (code: string) => bff<ConnectionView>(`files/departments/${code}/connection`, { method: "POST" }),
@@ -116,7 +160,20 @@ export const filesApi = {
   access: (code: string) => bff<DepartmentAccessRow[]>(`files/departments/${code}/access`),
   setAccess: (code: string, departmentId: string, access: "none" | "read" | "write") =>
     bff<void>(`files/departments/${code}/access`, { method: "PUT", ...json({ departmentId, access }) }),
+  shared: () => bff<SharedSummary[]>("files/shared"),
+  createShared: (name: string) => bff<SharedSummary>("files/shared", { method: "POST", ...json({ name }) }),
+  renameShared: (id: string, name: string) => bff<void>(`files/shared/${id}`, { method: "PUT", ...json({ name }) }),
+  deleteShared: (id: string) => bff<void>(`files/shared/${id}`, { method: "DELETE" }),
+  sharedTrash: (id: string) => bff<TrashRow[]>(`files/shared/${id}/trash`),
+  sharedAccess: (id: string) => bff<SharedAccessView>(`files/shared/${id}/access`),
+  setSharedAccess: (id: string, type: PrincipalType, principalId: string, access: Access) =>
+    bff<void>(`files/shared/${id}/access`, { method: "PUT", ...json({ type, id: principalId, access }) }),
+  myLink: () => bff<PersonalLinkView>("files/me/link"),
+  issueMyLink: () => bff<PersonalLinkView>("files/me/link", { method: "POST" }),
+  revealMyLink: () => bff<ConnectionLink>("files/me/link/reveal", { method: "POST" }),
+  revokeMyLink: () => bff<PersonalLinkView>("files/me/link/revoke", { method: "POST" }),
 };
+
 
 /**
  * Ссылка на скачивание (inline — открыть картинку или PDF в браузере). Имя файла — в конце адреса: браузеры и менеджеры загрузок,
@@ -158,6 +215,18 @@ export const accessLabel: Record<Access, string> = {
   write: "чтение и запись",
   manage: "администратор",
 };
+
+/** Уровни доступа к общей папке (так их выбирает администратор). */
+export const sharedAccessLabel: Record<Access, string> = {
+  none: "нет доступа",
+  read: "просмотр",
+  write: "редактирование",
+  manage: "управление",
+};
+
+/** Адрес папки на сайте: отдел — /base/{код}, общая папка — /base/shared/{id}; вложенная — с id папки. */
+export const spaceHref = (space: DepartmentRef, folderId?: string) =>
+  `${space.shared ? `/base/shared/${space.id}` : `/base/${space.code}`}${folderId ? `/${folderId}` : ""}`;
 
 const dateTime = new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Tashkent", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const timeOnly = new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Tashkent", hour: "2-digit", minute: "2-digit" });
