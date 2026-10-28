@@ -19,6 +19,8 @@ type Region = {
   directionId: string | null;
   supervisorName: string | null;
   dealerName: string | null;
+  /** Другие имена дилера — прежние дилеры и второй дилер склада: по ним план и отчёты из таблиц находят регион. */
+  dealerAliases: string[];
   note: string | null;
 };
 type Agent = { linkoUserId: number; name: string; isActive: boolean; job: string | null; hasSales: boolean; isSalesRep: boolean; isVacancy: boolean };
@@ -306,7 +308,13 @@ function RegionsSection({ regions, directions, owners, run }: { regions: Region[
 function RegionRow({ region, directions, owners, run }: { region: Region; directions: Direction[]; owners: Record<string, string>; run: Run }) {
   const t = useT();
   const [r, setR] = useState(region);
-  const dirty = r.directionId !== region.directionId || (r.supervisorName ?? "") !== (region.supervisorName ?? "") || (r.dealerName ?? "") !== (region.dealerName ?? "");
+  const [aliases, setAliases] = useState((region.dealerAliases ?? []).join(", "));
+  const aliasList = aliases.split(/[,;]/).map((a) => a.trim()).filter(Boolean);
+  const dirty =
+    r.directionId !== region.directionId ||
+    (r.supervisorName ?? "") !== (region.supervisorName ?? "") ||
+    (r.dealerName ?? "") !== (region.dealerName ?? "") ||
+    aliasList.join("|") !== (region.dealerAliases ?? []).join("|");
   const inactive = region.note != null;
   return (
     <tr className={`border-b border-line last:border-b-0 ${inactive ? "text-ink-3" : ""}`}>
@@ -346,6 +354,15 @@ function RegionRow({ region, directions, owners, run }: { region: Region; direct
           value={r.dealerName ?? ""}
           onChange={(e) => setR({ ...r, dealerName: e.target.value })}
         />
+        <input
+          className={`${input} mt-1 h-7 text-xs`}
+          aria-label={t("Другие имена дилера")}
+          placeholder={t("другие имена — через запятую")}
+          title={t("Прежние дилеры и второй дилер склада: по ним план и отчёты из таблиц находят регион. При смене дилера прежнее имя добавляется само.")}
+          disabled={inactive}
+          value={aliases}
+          onChange={(e) => setAliases(e.target.value)}
+        />
       </td>
       <td className="py-1.5 text-right">
         {!inactive && (
@@ -354,7 +371,7 @@ function RegionRow({ region, directions, owners, run }: { region: Region; direct
             disabled={!dirty}
             onClick={() =>
               run(
-                () => bff(`setup/regions/${r.id}`, { method: "PUT", body: JSON.stringify({ directionId: r.directionId, supervisorName: r.supervisorName, dealerName: r.dealerName }) }),
+                () => bff(`setup/regions/${r.id}`, { method: "PUT", body: JSON.stringify({ directionId: r.directionId, supervisorName: r.supervisorName, dealerName: r.dealerName, dealerAliases: aliasList }) }),
                 "Регион сохранён",
               )
             }

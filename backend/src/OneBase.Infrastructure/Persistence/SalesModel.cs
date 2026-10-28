@@ -216,6 +216,7 @@ internal static class SalesModel
 
         b.Entity<SalesRegion>(e =>
         {
+            e.Property(x => x.DealerAliases).HasColumnType("text[]");
             e.ToTable("Regions", "sales");
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.SupervisorName).HasMaxLength(200);

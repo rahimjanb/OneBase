@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, Database, FileSpreadsheet, History, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, Database, Download, FileSpreadsheet, History, Loader2, Pencil, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { Modal } from "@/components/files/Modal";
 import { BindingEditor } from "@/components/settings/BindingEditor";
+import { SettingsTransferDialog } from "@/components/settings/SettingsTransferDialog";
 import { useT } from "@/i18n/client";
 import {
   dataSourcesApi,
+  exportHref,
   ownerLabel,
   partsText,
   periodText,
@@ -38,6 +40,7 @@ export function DataSourcesSettings({ initial }: { initial: DataSourcesOverview 
   const [connectionDialog, setConnectionDialog] = useState<ConnectionView | "new" | null>(null);
   const [editing, setEditing] = useState<{ section: SectionView; binding: BindingView | null } | null>(null);
   const [runsOf, setRunsOf] = useState<BindingView | null>(null);
+  const [transfer, setTransfer] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -88,6 +91,16 @@ export function DataSourcesSettings({ initial }: { initial: DataSourcesOverview 
             <h2 className="text-base font-semibold text-ink">{t("Подключения")}</h2>
             <p className="text-sm text-ink-3">{t("Откуда OneBase берёт данные: Linko — факт продаж, Google Sheets — таблицы с планами, дилерами и P&L.")}</p>
           </div>
+          {/* Перенос настроек файлом — с рабочего компьютера на сервер: таблицы без ключей, привязки, дилеры регионов. */}
+          <a href={exportHref} download className={secondary} title={t("Таблицы Google (без ключей), привязки и дилеры регионов — файлом для другого OneBase")}>
+            <Download className="size-3.5" />
+            {t("Экспорт настроек")}
+          </a>
+          <button type="button" onClick={() => setTransfer(true)} disabled={!data.canApply} className={secondary}
+            title={data.canApply ? t("Перенести таблицы, привязки и дилеров из файла") : t("Нужно право «AI Data Manager»")}>
+            <Upload className="size-3.5" />
+            {t("Импорт настроек")}
+          </button>
           <button type="button" onClick={() => setConnectionDialog("new")} className={primary}>
             <Plus className="size-4" />
             {t("Добавить Google Sheets")}
@@ -283,6 +296,15 @@ export function DataSourcesSettings({ initial }: { initial: DataSourcesOverview 
             setEditing(null);
             await reload();
             setNotice({ ok: true, text: t("Привязка сохранена. Нажмите «Синхронизировать сейчас», чтобы обновить данные сразу.") });
+          }}
+        />
+      )}
+      {transfer && (
+        <SettingsTransferDialog
+          onClose={() => setTransfer(false)}
+          onDone={(text, ok) => {
+            setNotice({ ok, text });
+            void reload();
           }}
         />
       )}

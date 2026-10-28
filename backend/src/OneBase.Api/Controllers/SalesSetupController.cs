@@ -26,7 +26,8 @@ public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOpt
 
     public sealed record DirectionInput(string? Name, string? Kind, string? ManagerName, string? Description, int SortOrder);
 
-    public sealed record RegionInput(Guid? DirectionId, string? SupervisorName, string? DealerName);
+    /// <summary>DealerAliases — другие имена дилера (прежние дилеры, второй дилер склада); null — не менять.</summary>
+    public sealed record RegionInput(Guid? DirectionId, string? SupervisorName, string? DealerName, IReadOnlyList<string>? DealerAliases = null);
 
     /// <summary>
     /// Направления, регионы (филиалы Linko) с направлением, СВР и дилером, справочник ТП из Linko (ТП — по должности, вакансия — «вакан»
@@ -65,6 +66,7 @@ public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOpt
                 r.DirectionId,
                 r.SupervisorName,
                 r.DealerName,
+                DealerAliases = r.DealerAliases ?? [],
                 Note = NoteOf(r),
             }),
             Agents = (await db.LinkoUsers.AsNoTracking().ToListAsync(ct))
@@ -187,6 +189,10 @@ public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOpt
 
         if (input.SupervisorName?.Trim().Length > NameLength) return BadRequest(new { error = $"Имя СВР — не длиннее {NameLength} символов." });
         if (input.DealerName?.Trim().Length > NameLength) return BadRequest(new { error = $"Название дилера — не длиннее {NameLength} символов." });
+        if (input.DealerAliases is { } names && (names.Count > 20 || names.Any(n => n?.Trim().Length > NameLength)))
+        {
+            return BadRequest(new { error = $"Других имён дилера — не больше 20, каждое — не длиннее {NameLength} символов." });
+        }
 
         // Дилер и СВР, которые ведёт привязка Google Sheets, здесь не меняются: следующая синхронизация перезаписала бы правку.
         var changed = new List<string>();
@@ -201,11 +207,15 @@ public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOpt
 
         region.DirectionId = input.DirectionId;
         region.SupervisorName = Clean(input.SupervisorName);
-        region.DealerName = Clean(input.DealerName);
+        region.ChangeDealer(Clean(input.DealerName));
+        if (input.DealerAliases is not null)
+        {
+            region.SetDealerAliases(input.DealerAliases);
+        }
         region.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "sales.region.updated", "sales_region", id.ToString(),
-            new { region.Name, region.DirectionId, region.SupervisorName, region.DealerName }, ct);
+            new { region.Name, region.DirectionId, region.SupervisorName, region.DealerName, region.DealerAliases }, ct);
         return NoContent();
     }
 

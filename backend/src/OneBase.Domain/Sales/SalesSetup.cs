@@ -34,6 +34,37 @@ public class SalesRegion : Entity
 
     public string? SupervisorName { get; set; }
     public string? DealerName { get; set; }
+
+    /// <summary>
+    /// Другие имена дилера региона — прежние дилеры и второй дилер того же склада Linko: по ним строки
+    /// плана и отчётов из таблиц находят регион. Подпись строк — по-прежнему DealerName. null — других имён нет.
+    /// </summary>
+    public List<string>? DealerAliases { get; set; }
+
+    /// <summary>Сменить дилера: прежнее имя остаётся в DealerAliases — строки прошлых месяцев таблиц по-прежнему находят регион.</summary>
+    public void ChangeDealer(string? name)
+    {
+        var old = DealerName;
+        DealerName = name;
+        var aliases = (DealerAliases ?? []).Where(a => !string.Equals(a, name, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (old is not null && !string.Equals(old, name, StringComparison.OrdinalIgnoreCase) && !aliases.Contains(old, StringComparer.OrdinalIgnoreCase))
+        {
+            aliases.Add(old);
+        }
+
+        DealerAliases = aliases.Count > 0 ? aliases : null;
+    }
+
+    /// <summary>Задать другие имена дилера: без пустых, повторов и самого DealerName; пусто — null.</summary>
+    public void SetDealerAliases(IEnumerable<string>? aliases)
+    {
+        var list = (aliases ?? [])
+            .Select(a => string.Join(' ', a.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)))
+            .Where(a => a.Length > 0 && !string.Equals(a, DealerName, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        DealerAliases = list.Count > 0 ? list : null;
+    }
 }
 
 /// <summary>Торговый представитель в оргструктуре OneBase.</summary>

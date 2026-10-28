@@ -5,7 +5,15 @@ using OneBase.Domain.Sales;
 namespace OneBase.Application.DataManager;
 
 /// <summary>Регион продаж для сопоставления строк отчёта (без «Завода», «К К Мерч» и старых филиалов).</summary>
-public sealed record DataRegionRef(Guid Id, string Name, string? Dealer, long BranchId, string? Supervisor = null);
+/// <summary>Регион для сопоставления строк отчёта: название, дилер и другие имена дилера (Aliases — прежние дилеры, второй дилер склада).</summary>
+public sealed record DataRegionRef(Guid Id, string Name, string? Dealer, long BranchId, string? Supervisor = null, IReadOnlyList<string>? Aliases = null)
+{
+    /// <summary>Строка — название региона, его дилер или другое имя дилера (после DataValues.Normalize).</summary>
+    public bool IsNamed(string normalized) =>
+        DataValues.Normalize(Name) == normalized
+        || (Dealer is { } d && DataValues.Normalize(d) == normalized)
+        || (Aliases?.Any(a => DataValues.Normalize(a) == normalized) ?? false);
+}
 
 /// <summary>Категория отчёта: тип товара Linko, под которым хранится план, и слова, по которым её узнать.</summary>
 public sealed record DataCategoryRef(long TypeId, string Name, IReadOnlyList<string> Aliases);
@@ -76,7 +84,7 @@ public sealed partial class DataMatcher
     public (DataRegionRef? Region, string? Error) Region(string text)
     {
         var full = DataValues.Normalize(text);
-        var whole = _regions.Where(r => DataValues.Normalize(r.Name) == full || (r.Dealer is { } d && DataValues.Normalize(d) == full)).ToList();
+        var whole = _regions.Where(r => r.IsNamed(full)).ToList();
         if (whole.Count == 1)
         {
             return (whole[0], null);
@@ -93,7 +101,7 @@ public sealed partial class DataMatcher
             return (byId, null);
         }
 
-        var exact = _regions.Where(r => DataValues.Normalize(r.Name) == name || (r.Dealer is { } d && DataValues.Normalize(d) == name)).ToList();
+        var exact = _regions.Where(r => r.IsNamed(name)).ToList();
         if (exact.Count == 1)
         {
             return (exact[0], null);

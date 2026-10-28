@@ -4597,6 +4597,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.PrimitiveCollection<List<string>>("DealerAliases")
+                        .HasColumnType("text[]");
+
                     b.Property<string>("DealerName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");

@@ -39,8 +39,9 @@ public sealed class DataChangeService(
     public async Task<IReadOnlyList<DataRegionRef>> RegionsAsync(bool withPrimaryDealers, CancellationToken ct = default)
     {
         var rows = await db.SalesRegions.AsNoTracking()
-            .Select(r => new { r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName })
+            .Select(r => new { r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName, r.DealerAliases })
             .ToListAsync(ct);
+        var aliases = rows.Where(r => r.DealerAliases is { Count: > 0 }).ToDictionary(r => r.Id, r => (IReadOnlyList<string>)r.DealerAliases!);
         var infos = rows
             .Where(r => !salesOptions.IsExcludedBranch(r.Name) && !salesOptions.IsIgnoredBranch(r.Name))
             .Select(r => new RegionInfo(r.Id, r.LinkoBranchId, r.Name, r.DirectionId, r.SupervisorName, r.DealerName))
@@ -51,7 +52,7 @@ public sealed class DataChangeService(
             : [];
         return current.Concat(primaryOld)
             .OrderBy(r => r.Name)
-            .Select(r => new DataRegionRef(r.Id, r.Name, r.Dealer, r.BranchId, r.Supervisor))
+            .Select(r => new DataRegionRef(r.Id, r.Name, r.Dealer, r.BranchId, r.Supervisor, aliases.GetValueOrDefault(r.Id)))
             .ToList();
     }
 

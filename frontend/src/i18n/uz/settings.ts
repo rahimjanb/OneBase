@@ -483,6 +483,41 @@ const dict: Dict = {
   "Никого не нашли": "Hech kim topilmadi",
   "Удаления нет: отключённый пользователь не может войти, а его история в OneBase сохраняется. Роль задаёт права на управление и настройки и разделы по умолчанию; разделы можно изменить галочками — по ним открываются страницы и отвечают AI-сотрудники. Выдать роль или раздел можно, только если у вас самих есть эти права, — поэтому администраторов меняет только администратор.":
     "O'chirish yo'q: o'chirilgan foydalanuvchi kira olmaydi, uning OneBase'dagi tarixi esa saqlanadi. Rol boshqaruv va sozlamalar huquqlarini hamda standart bo'limlarni belgilaydi; bo'limlarni belgilash orqali o'zgartirish mumkin — ular bo'yicha sahifalar ochiladi va AI-xodimlar javob beradi. Rol yoki bo'limni faqat o'zingizda shu huquqlar bo'lsa bera olasiz — shuning uchun administratorlarni faqat administrator o'zgartiradi.",
+
+  // ---------- Перенос настроек «Источников данных», другие имена дилера ----------
+  "добавится": "qo'shiladi",
+  "обновится": "yangilanadi",
+  "добавлено": "qo'shildi",
+  "обновлено": "yangilandi",
+  "пропущено": "o'tkazib yuborildi",
+  "Таблицы Google": "Google jadvallari",
+  "Дилеры регионов": "Mintaqa dilerlari",
+  "Привязки": "Bog'lanishlar",
+  "Файл не похож на настройки OneBase: это не JSON.": "Fayl OneBase sozlamalariga o'xshamaydi: bu JSON emas.",
+  "Перенесено: {done}, с ошибками: {errors} — см. окно переноса.": "Ko'chirildi: {done}, xatolar bilan: {errors} — ko'chirish oynasiga qarang.",
+  "Настройки перенесены: {done}.": "Sozlamalar ko'chirildi: {done}.",
+  "Перенос настроек из файла": "Sozlamalarni fayldan ko'chirish",
+  "Файл — «Экспорт настроек» с другого OneBase: таблицы Google (без ключей), привязки и дилеры регионов. Уже подключённые таблицы и совпадающие привязки обновятся, остальное добавится. Данные не синхронизируются сразу — привязки пойдут по своему расписанию.":
+    "Fayl — boshqa OneBase'dan «Sozlamalar eksporti»: Google jadvallari (kalitlarsiz), bog'lanishlar va mintaqa dilerlari. Ulangan jadvallar va mos bog'lanishlar yangilanadi, qolgani qo'shiladi. Ma'lumotlar darhol sinxronlanmaydi — bog'lanishlar o'z jadvali bo'yicha ishlaydi.",
+  "Выбрать файл настроек (.json)": "Sozlamalar faylini tanlash (.json)",
+  "onebase-data-sources-ГГГГ-ММ-ДД.json": "onebase-data-sources-YYYY-OO-KK.json",
+  "Ключ JSON сервисного аккаунта — если нужен": "Xizmat akkauntining JSON kaliti — kerak bo'lsa",
+  "Для закрытых таблиц, которых здесь ещё нет. Хранится на сервере зашифрованным.":
+    "Bu yerda hali yo'q yopiq jadvallar uchun. Serverda shifrlangan holda saqlanadi.",
+  "Проверка: ничего не записано": "Tekshiruv: hech narsa yozilmadi",
+  "Перенос выполнен": "Ko'chirish bajarildi",
+  "ошибок: {n}": "xatolar: {n}",
+  "Сначала проверьте файл": "Avval faylni tekshiring",
+  "Таблицы Google (без ключей), привязки и дилеры регионов — файлом для другого OneBase":
+    "Google jadvallari (kalitlarsiz), bog'lanishlar va mintaqa dilerlari — boshqa OneBase uchun fayl",
+  "Экспорт настроек": "Sozlamalar eksporti",
+  "Перенести таблицы, привязки и дилеров из файла": "Jadvallar, bog'lanishlar va dilerlarni fayldan ko'chirish",
+  "Нужно право «AI Data Manager»": "«AI Data Manager» huquqi kerak",
+  "Импорт настроек": "Sozlamalar importi",
+  "Другие имена дилера": "Dilerning boshqa nomlari",
+  "другие имена — через запятую": "boshqa nomlar — vergul bilan",
+  "Прежние дилеры и второй дилер склада: по ним план и отчёты из таблиц находят регион. При смене дилера прежнее имя добавляется само.":
+    "Oldingi dilerlar va omborning ikkinchi dileri: ular orqali jadvallardagi reja va hisobotlar mintaqani topadi. Diler almashganda oldingi nomi o'zi qo'shiladi.",
 };
 
 export default dict;

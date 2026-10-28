@@ -131,6 +131,7 @@ public static class DependencyInjection
         // AI Data Manager: подключённые таблицы Google Sheets — список, свежий лист, синхронизация привязки.
         services.AddScoped<OneBase.Application.DataSources.IDataSourceGateway, DataSources.DataSourceGateway>();
         services.AddScoped<DataSources.DataSourceService>();
+        services.AddScoped<DataSources.DataSourceTransfer>();
         services.AddHostedService<DataSources.DataSourceSyncWorker>();
 
         // Отчёты AI-консультанта: файл Excel из листов отчёта; документы Telegram-агента (письма, планы, разборы) — Word из Markdown.

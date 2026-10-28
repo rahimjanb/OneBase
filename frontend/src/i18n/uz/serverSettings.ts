@@ -692,6 +692,26 @@ const dict: Dict = {
   "Файл «{name}» в хранилище изменился или повреждён — рассылка его не отправит.": "Ombordagi «{name}» fayli o'zgargan yoki shikastlangan — tarqatma uni yubormaydi.",
   "Рассылка завершена — изменить её нельзя. Создайте новую.": "Tarqatma yakunlangan — uni o'zgartirib bo'lmaydi. Yangisini yarating.",
   "Рассылка уже идёт — сначала поставьте на паузу или отмените.": "Tarqatma allaqachon yuborilmoqda — avval pauza qiling yoki bekor qiling.",
+
+  // ---------- Перенос настроек «Источников данных» (DataSourceTransfer), другие имена дилера ----------
+  "Файл настроек пуст.": "Sozlamalar fayli bo'sh.",
+  "Это не файл настроек «Источников данных» OneBase (или он из более новой версии).":
+    "Bu OneBase «Ma'lumot manbalari» sozlamalari fayli emas (yoki yangiroq versiyadan).",
+  "Перенос настроек записывает привязки и дилеров — нужно право «AI Data Manager».":
+    "Sozlamalarni ko'chirish bog'lanishlar va dilerlarni yozadi — «AI Data Manager» huquqi kerak.",
+  "Уже подключена как «{name}».": "Allaqachon «{name}» sifatida ulangan.",
+  "Будет подключена и проверена.": "Ulanadi va tekshiriladi.",
+  "Подключена, читается.": "Ulandi, o'qilmoqda.",
+  "Будет создана.": "Yaratiladi.",
+  "Будет обновлена.": "Yangilanadi.",
+  "Таблица привязки не подключена — см. строку таблицы выше.": "Bog'lanish jadvali ulanmagan — yuqoridagi jadval qatoriga qarang.",
+  "Уже задан.": "Allaqachon berilgan.",
+  "Будет задан.": "Beriladi.",
+  "Задан.": "Berildi.",
+  "Такого региона здесь нет (филиал Linko не найден).": "Bu yerda bunday mintaqa yo'q (Linko filiali topilmadi).",
+  "Дилеров ведёт привязка Google Sheets — меняется там.": "Dilerlarni Google Sheets bog'lanishi yuritadi — o'sha yerda o'zgartiriladi.",
+  "Название дилера — от 1 до 200 символов.": "Diler nomi — 1 dan 200 tagacha belgi.",
+  "Других имён дилера — не больше 20, каждое — не длиннее {n} символов.": "Dilerning boshqa nomlari — 20 tadan ko'p emas, har biri {n} belgidan uzun emas.",
 };
 
 /** «Октябрь 2026» → «Oktabr 2026», «октябрь 2026» → «oktabr 2026»: месяц плана с сервера (точные ключи — работают и внутри шаблонов). */

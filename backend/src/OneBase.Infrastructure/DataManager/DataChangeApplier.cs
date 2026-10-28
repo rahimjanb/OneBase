@@ -372,7 +372,7 @@ internal sealed class DataChangeApplier(
                              ?? throw new DataManagerException("Регион удалён — подготовьте план заново.");
                 if (field == RegionProfilePlanner.Dealer)
                 {
-                    region.DealerName = value;
+                    region.ChangeDealer(value); // прежний дилер остаётся другим именем — строки прошлых месяцев находят регион
                 }
                 else
                 {

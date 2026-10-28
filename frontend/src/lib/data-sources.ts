@@ -292,7 +292,20 @@ export type BindingInput = {
   enabled: boolean;
 };
 
+/** Строка отчёта переноса настроек: что (таблица, дилер, привязка), итог и пояснение сервера. */
+export type ImportItem = {
+  kind: "connection" | "dealer" | "binding";
+  name: string;
+  status: "created" | "updated" | "unchanged" | "skipped" | "error";
+  message: string;
+};
+
+export type ImportResult = { dryRun: boolean; items: ImportItem[]; errors: number };
+
 const base = "settings/data-sources";
+
+/** Файл настроек (таблицы без ключей, привязки, дилеры регионов) — скачивается ссылкой. */
+export const exportHref = `/bff/api/${base}/export`;
 
 export const dataSourcesApi = {
   overview: () => bff<DataSourcesOverview>(base),
@@ -311,6 +324,8 @@ export const dataSourcesApi = {
   confirmAutoMap: (input: AutoMapConfirmInput) =>
     bff<{ fields: FieldBinding[]; binding: BindingView | null }>(`${base}/auto-map/confirm`, { method: "POST", body: JSON.stringify(input) }),
   closeConflict: (id: string) => bff<void>(`${base}/conflicts/${id}/close`, { method: "POST" }),
+  importSettings: (settings: unknown, serviceAccountKey: string | null, dryRun: boolean) =>
+    bff<ImportResult>(`${base}/import`, { method: "POST", body: JSON.stringify({ settings, serviceAccountKey, dryRun }) }),
 };
 
 export const ownerLabel: Record<OwnershipRow["owner"], { label: string; className: string }> = {

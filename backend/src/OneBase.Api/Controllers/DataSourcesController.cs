@@ -14,12 +14,27 @@ namespace OneBase.Api.Controllers;
 [ApiController]
 [Route("api/settings/data-sources")]
 [HasPermission(Permissions.IntegrationsManage)]
-public sealed class DataSourcesController(DataSourceService sources, DataSourceOwnershipService ownership, DataSourceAutoMapService autoMap) : ControllerBase
+public sealed class DataSourcesController(
+    DataSourceService sources, DataSourceOwnershipService ownership, DataSourceAutoMapService autoMap, DataSourceTransfer transfer) : ControllerBase
 {
     public sealed record PreviewRequest(Guid ConnectionId, string Sheet);
 
     [HttpGet]
     public async Task<IActionResult> Overview(CancellationToken ct) => Ok(await sources.OverviewAsync(User.GetUserId(), ct));
+
+    /// <summary>Файл настроек для переноса в другую копию OneBase: таблицы (без ключей), привязки, дилеры регионов.</summary>
+    [HttpGet("export")]
+    public async Task<IActionResult> Export(CancellationToken ct)
+    {
+        var file = await transfer.ExportAsync(ct);
+        var json = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(file, DataSourceRules.Json);
+        return File(json, "application/json", $"onebase-data-sources-{DateTime.UtcNow:yyyy-MM-dd}.json");
+    }
+
+    /// <summary>Перенос настроек из файла; dryRun — только показать, что будет сделано. Привязки сохраняются с правом «AI Data Manager».</summary>
+    [HttpPost("import")]
+    public Task<IActionResult> Import(DataSourceImportRequest request, CancellationToken ct) =>
+        Run(async () => Ok(await transfer.ImportAsync(request, User.GetUserId(), ct)));
 
     [HttpPost("connections")]
     public Task<IActionResult> CreateConnection(ConnectionInput input, CancellationToken ct) =>
