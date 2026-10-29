@@ -72,6 +72,15 @@ public interface IAiProvider
 }
 
 /// <summary>
+/// Провайдер умеет отдавать ответ потоком: onText получает фрагменты текста по мере генерации, результат — тот же ответ целиком, что
+/// у CompleteAsync (текст, вызовы инструментов, токены, причина остановки, блоки для продолжения диалога).
+/// </summary>
+public interface IAiStreamingProvider
+{
+    Task<AiCompletion> StreamAsync(AiCredentials credentials, AiCompletionRequest request, Func<string, Task> onText, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
 /// Ошибка провайдера. Message безопасен для показа пользователю: ключ и похожие на ключи строки вырезаны.
 /// Transient — стоит повторить или переключиться на резервный провайдер.
 /// </summary>

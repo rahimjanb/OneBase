@@ -49,6 +49,7 @@ import {
   type ChatMessage,
   type ConsultantDetails,
   type ConsultantProgress,
+  type DraftEvent,
   type ConversationSummary,
   type ConversationView,
 } from "@/lib/consultant";
@@ -86,6 +87,30 @@ const suggestionIcons: LucideIcon[] = [TrendingUp, Target, TrendingDown, GitComp
 /** Ответ сервера, когда модель вернула пустой текст. */
 const emptyAnswer = "Модель вернула пустой ответ.";
 
+/** Черновик ответа в карточке хода работы: текст по мере генерации и что с ним сейчас (пишется, проверяется, переписывается). */
+type Draft = { text: string; state: "writing" | "checking" | "revising" };
+
+/** Следующее состояние черновика по событию draft. */
+function nextDraft(prev: Draft | null, e: DraftEvent): Draft {
+  const draft = prev ?? { text: "", state: "writing" };
+  switch (e.kind) {
+    case "text":
+      return { text: draft.text + (e.text ?? ""), state: draft.state === "checking" ? "writing" : draft.state };
+    case "reset":
+      return { ...draft, text: "" };
+    case "checking":
+      return { ...draft, state: "checking" };
+    case "revising":
+      return { text: "", state: "revising" };
+  }
+}
+
+const draftLabel: Record<Draft["state"], string> = {
+  writing: "Черновик ответа — числа ещё не проверены",
+  checking: "Сверяю числа ответа с данными OneBase…",
+  revising: "Числа не подтвердились данными — переписываю ответ…",
+};
+
 const stageLabel: Record<string, string> = {
   routing: "Определяю, каких AI-сотрудников привлечь",
   compose: "Формирую ответ",
@@ -105,6 +130,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
   const phone = useMedia(phoneQuery);
   const [pending, setPending] = useState<string | null>(null);
   const [progress, setProgress] = useState<ConsultantProgress[]>([]);
+  const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
@@ -281,7 +307,8 @@ export function Consultant({ status, conversations: initialList, conversation, c
     // Пустой чат не прокручивается: на телефоне подсказки выше экрана, и прокрутка вниз срезала бы заголовок.
     if (messages.length === 0 && pending === null) return;
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, pending, progress.length]);
+    // и пока пишется черновик ответа — примерно каждые 200 символов, чтобы текст оставался на экране
+  }, [messages.length, pending, progress.length, Math.floor((draft?.text.length ?? 0) / 200)]);
 
   useEffect(() => {
     const el = textarea.current;
@@ -298,6 +325,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
     setError(null);
     setPending(question);
     setProgress([]);
+    setDraft(null);
     try {
       await streamChat(activeId, question, (e) => {
         switch (e.type) {
@@ -321,11 +349,17 @@ export function Consultant({ status, conversations: initialList, conversation, c
               return i < 0 ? [...prev, e.data] : prev.map((p, j) => (j === i ? e.data : p));
             });
             break;
+          case "draft":
+            setDraft((prev) => nextDraft(prev, e.data));
+            break;
           case "done":
+            // Проверенный ответ заменяет черновик.
+            setDraft(null);
             setMessages((prev) => [...prev, e.data.message]);
             if (voiceModeRef.current && e.data.message.status === "completed") void speak(e.data.message.id);
             break;
           case "error":
+            setDraft(null);
             if (e.data.message) setMessages((prev) => [...prev, e.data.message!]);
             else setError(e.data.error);
             break;
@@ -337,6 +371,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
     } finally {
       setPending(null);
       setProgress([]);
+      setDraft(null);
     }
   };
 
@@ -568,7 +603,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
                 ),
               )}
               {pending && <UserBubble text={pending} />}
-              {waiting && <ProgressCard steps={progress} />}
+              {waiting && <ProgressCard steps={progress} draft={draft} />}
             </div>
             <div ref={bottom} />
           </div>
@@ -687,7 +722,7 @@ function StepIcon({ status }: { status: ConsultantProgress["status"] }) {
   }
 }
 
-function ProgressCard({ steps }: { steps: ConsultantProgress[] }) {
+function ProgressCard({ steps, draft }: { steps: ConsultantProgress[]; draft: Draft | null }) {
   const t = useT();
   return (
     <div className="flex gap-3">
@@ -711,6 +746,20 @@ function ProgressCard({ steps }: { steps: ConsultantProgress[] }) {
               </li>
             ))}
           </ul>
+        )}
+        {draft && (
+          // Черновик — не ответ: приглушён и подписан; числа в нём ещё не сверены с данными. Ответ (done) заменит его целиком.
+          <div className="mt-3 border-t border-dashed border-line pt-3" aria-live="polite">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-warn">
+              {draft.state === "writing" ? <AlertTriangle className="size-3.5" /> : <Loader2 className="size-3.5 animate-spin" />}
+              {t(draftLabel[draft.state])}
+            </div>
+            {draft.text && (
+              <div className="text-ink-2 opacity-80">
+                <Markdown text={draft.text} />
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

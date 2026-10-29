@@ -176,8 +176,16 @@ public class TaskRoutingTests
         // Выключенный сотрудник из ожиданий убирается.
         var company = RouteEvalCases.All.Single(c => c.Code == "company");
         Assert.True(RouteEvalCases.Correct(company, D("finance", "sales"), new HashSet<string> { "finance", "sales" }));
-        Assert.Equal(28, RouteEvalCases.All.Count);
+        Assert.Equal(34, RouteEvalCases.All.Count);
         Assert.Equal(RouteEvalCases.All.Count, RouteEvalCases.All.Select(c => c.Code).Distinct().Count());
+    }
+
+    [Fact]
+    public void Eval_summary_latency_percentiles_use_the_nearest_rank()
+    {
+        var rows = Enumerable.Range(1, 20).Select(i => (new ComparisonSide("m", null, true, AiTokenUsage.None, i * 100L), true)).Reverse().ToList();
+        Assert.Equal((1000L, 1900L), (RoutingEvaluation.Percentile(rows, 0.5), RoutingEvaluation.Percentile(rows, 0.95)));
+        Assert.Equal(500L, RoutingEvaluation.Percentile([(new ComparisonSide("m", null, true, AiTokenUsage.None, 500), true)], 0.95));
     }
 
     [Fact]
@@ -311,7 +319,7 @@ public class ModelComparisonDbTests(DataManagerDb fixture) : IClassFixture<DataM
             var request = messages[1].Content;
             var c = RouteEvalCases.All.Last(x => request.Contains(x.Question, StringComparison.Ordinal));
             var agents = model == TaskRoutingTests.Haiku && c.Must.Length == 0 && c.AnyOf is null ? ["sales"] : c.Must.Concat(c.AnyOf?.Take(1) ?? []).ToArray();
-            var task = c.TaskMustContain is null ? "задача" : "Продажи за октябрь по Самарканду";
+            var task = c.TaskMustContain is null ? "задача" : $"Уточнение: {string.Join(" ", c.TaskMustContain)}"; // задача сохраняет то, что требует набор
             return System.Text.Json.JsonSerializer.Serialize(new { agents, tasks = agents.ToDictionary(a => a, _ => task), reason = "тест" });
         });
         using (var scope = fixture.Services.CreateScope())

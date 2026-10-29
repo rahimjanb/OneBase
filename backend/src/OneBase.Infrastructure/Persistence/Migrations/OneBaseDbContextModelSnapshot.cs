@@ -299,6 +299,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<string>("Routing")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("Sources")
                         .HasColumnType("jsonb");
 
@@ -307,9 +310,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("Timings")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("Tools")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("TurnId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -318,6 +327,8 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasName("PK_AiAuditLogs");
 
                     b.HasIndex("CreatedAt");
+
+                    b.HasIndex("TurnId");
 
                     b.HasIndex("UserId", "CreatedAt");
 
@@ -840,7 +851,18 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<int>("Id")
                         .HasColumnType("integer");
 
+                    b.Property<string>("AgentModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("AgentProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<int>("BudgetWarnPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ComplexityThreshold")
                         .HasColumnType("integer");
 
                     b.Property<decimal?>("DailyBudgetUsd")
@@ -871,6 +893,11 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("FallbackMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("FallbackModel")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -879,11 +906,37 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("FinalAnswerMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("FinalComplexModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FinalComplexProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("FinalDefaultModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FinalDefaultProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<int>("MaxConcurrentCalls")
                         .HasColumnType("integer");
 
                     b.Property<int>("MaxOutputTokens")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ModelRoutingMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<decimal?>("MonthlyBudgetUsd")
                         .HasPrecision(12, 2)
@@ -897,9 +950,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<decimal?>("QuestionBudgetUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
                     b.Property<string>("ReasoningEffort")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<int>("ReviewMaxAttempts")
+                        .HasColumnType("integer");
 
                     b.Property<string>("RouterMode")
                         .IsRequired()
@@ -941,6 +1001,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<int?>("Attempt")
+                        .HasColumnType("integer");
+
                     b.Property<int>("CacheReadTokens")
                         .HasColumnType("integer");
 
@@ -972,8 +1035,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ModelReason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
                     b.Property<int>("OutputTokens")
                         .HasColumnType("integer");
+
+                    b.Property<string>("PriceBasis")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
 
                     b.Property<string>("Provider")
                         .IsRequired()
@@ -985,7 +1056,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<long?>("QueueWaitMs")
+                        .HasColumnType("bigint");
+
                     b.Property<bool>("Success")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("TurnId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("UsedFallback")
                         .HasColumnType("boolean");
 
                     b.Property<Guid?>("UserId")
@@ -995,6 +1075,8 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasName("PK_AiUsage");
 
                     b.HasIndex("CreatedAt");
+
+                    b.HasIndex("TurnId");
 
                     b.HasIndex("UserId", "CreatedAt");
 

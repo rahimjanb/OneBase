@@ -262,6 +262,31 @@ AI-сотрудников и AI Data Manager (`ConsultantPrompts.GroundingPolicy
 - Проверка: в «Использование» колонки «Кэш-чтение» / «Кэш-запись» — у работающего кэша чтение заметно больше записи; нули при включённом кэше означают, что префикс меняется между запросами.
 - Итоговый ответ консультанта — два системных сообщения: неизменные правила (`ComposeRules`, кэшируются между вопросами) и данные этого вопроса (дата, результаты сотрудников, память, отчёты, ограничения доступа). Хвост переписки у него не кэшируется (`CacheConversation = false`): запись окупилась бы только при перепроверке ответа. Долю перепроверок видно в «По задачам» (`consultant.revise` к `consultant.answer`) — если она высокая, хвост стоит кэшировать.
 
+## Параллельные вызовы инструментов
+
+- Несколько инструментов, которые модель запросила одним шагом (она не видит их результатов друг друга — по данным они независимы), идут
+  параллельно (`ToolBatch`): инструменты данных и источник истины — каждый в своей области DI (свой DbContext; гранты, права и аудит —
+  в `ToolExecutor`, как раньше), не больше `Ai:Agents:MaxParallelTools` (по умолчанию 4; 1 — по очереди, как раньше) сразу; точный расчёт
+  — сразу, без БД; отчёт Excel меняет состояние (один на задачу) — после остальных, по порядку. Результаты (`tool_result`), доказательства,
+  источники и замер — в порядке вызовов. Сбой одного вызова отменяет незаконченные и пробрасывается он сам; отмена запроса — отмена всех.
+  Один вызов данных в шаге — как раньше, в области сотрудника.
+
+## Потоковый ответ и замер времени
+
+- **Черновик итогового ответа.** В чате OneBase итоговый ответ приходит по мере генерации (Anthropic `stream: true`, `AnthropicProvider.StreamAsync`):
+  события `draft` — `{kind: "text", text}` (фрагменты, собранные в куски ~50 символов / 60 мс), `reset` (повтор запроса или резервная модель —
+  текст заново), `checking` (черновик дописан, числа сверяются с данными), `revising` (числа не подтвердились — показанный черновик убирается,
+  ответ переписывается). Черновик — не ответ: в чате он приглушён и подписан «числа ещё не проверены»; ответ — только `done`, его проверенный
+  текст (с пометкой о неподтверждённом, если она нужна) заменяет черновик. Клиенты, которые не знают `draft`, получают прежний поток.
+  Telegram и другие каналы — ответ целиком, как раньше. Провайдер без потока (OpenAI) — ответ целиком, `checking` всё равно приходит.
+- **Замер ответа** (`AiTurnTimings`) — в `ai.AuditLogs.Timings` (jsonb) и строкой «Консультант: ответ … за N мс» в журнале сервера:
+  этапы (`prepare`, `answer.cache`, `context`, `routing`, `agent.memory`, `agents`, `agent` и `agent.setup` по сотрудникам, `compose`,
+  `evidence`, `memory.save`, `save`), каждый вызов модели (зачем, чей, модель, ожидание очереди, время провайдера, запись учёта, попытка,
+  резерв, токены), каждый вызов инструмента (время, размер результата, обрезан ли) и `firstTextMs` — когда первый фрагмент черновика ушёл
+  в чат. Только длительности, имена и размеры — без текста вопроса, ответа и данных. В `ai.Usage` — `QueueWaitMs` (ожидание места
+  под лимитом одновременных вызовов, входит в `DurationMs`) и `Attempt` (номер попытки модели). Миграция `AiTurnTimings` — только
+  добавляет три nullable-колонки.
+
 ## Кэш ответов консультанта
 
 - Тот же **первый** вопрос чата от того же пользователя, пока данные не обновились, — ответ из кэша, без вызовов модели (`ConsultantAnswerCache`, хранение — `ISharedCache`: Redis, без Redis — память процесса). Время жизни — `Ai:AnswerCache:Minutes` (по умолчанию 30; 0 — выключено).
@@ -295,10 +320,10 @@ AI-сотрудников и AI Data Manager (`ConsultantPrompts.GroundingPolicy
   Вернуть прежнее — режим «Выкл» или общий флаг; действует сразу (настройки перечитываются после сохранения).
 - **Миграция `AiTaskModelRouting`** сохраняет поведение: где «Модель маршрутизации» уже была выбрана, флаг включён и режим «Включено»; где нет —
   флаг выключен, режимы «Выкл».
-- **Проверка на эталонном наборе** («Настройки → AI → Модели по задачам → Запустить проверку», `POST /api/ai/routing/evaluate`): 24 обезличенные
-  задачи маршрутизации (`RouteEvalCases`: продажи, поле, финансы, склад, производство, маркетинг, HR, приветствия, уточнение по истории) с
-  ожидаемыми сотрудниками. Каждая — основной моделью и моделью маршрутизации, одинаковые сообщения, без резервной модели и повторов. Итог:
-  верно / JSON корректен / ошибки / токены (вход, кэш, выход) / стоимость / время по каждой модели и совпадение выборов; строки — в
+- **Проверка на эталонном наборе** («Настройки → AI → Модели по задачам → Запустить проверку», `POST /api/ai/routing/evaluate`): 34 обезличенные
+  задачи маршрутизации (`RouteEvalCases`: продажи, поле, финансы, склад, производство, маркетинг, HR, приветствия, вопросы сразу о нескольких
+  отделах, уточнения по истории — другой период, другой показатель того же региона, возражение) с ожидаемыми сотрудниками. Каждая — основной моделью и моделью маршрутизации, одинаковые сообщения, без резервной модели и повторов. Итог:
+  верно / JSON корректен / ошибки / токены (вход, кэш, выход) / стоимость / время (среднее, P50 и P95) по каждой модели и совпадение выборов; строки — в
   `ai.ModelComparisons` (`source = eval`), вызовы — в «Использование» (`eval.route`). Это реальные вызовы API.
 - **Как включать**: «Сравнение» для маршрутизации → проверка на эталонном наборе и несколько дней задач пользователей → «Включено», только если
   модель категории не хуже основной (верно, JSON, расхождения разобраны в «Последние сравнения»). Затем — по той же схеме «Извлечение JSON».
@@ -307,7 +332,7 @@ AI-сотрудников и AI Data Manager (`ConsultantPrompts.GroundingPolicy
 
 | Метод | Путь | Право |
 |---|---|---|
-| POST | `/api/ai/chat` (text/event-stream: start, progress, done, error) | ai.agents.run |
+| POST | `/api/ai/chat` (text/event-stream: start, progress, draft, done, error) | ai.agents.run |
 | GET, PATCH, DELETE | `/api/ai/conversations`, `/api/ai/conversations/{id}` | ai.agents.run |
 | GET | `/api/ai/status`, `/api/ai/agents`, `/api/ai/alerts` | ai.agents.run |
 | POST | `/api/ai/voice/transcribe` (multipart `audio`: webm, mp4, ogg, wav, mp3) → `{ text }` | ai.agents.run |
@@ -325,7 +350,7 @@ AI-сотрудников и AI Data Manager (`ConsultantPrompts.GroundingPolicy
 
 ## Таблицы (схема `ai`)
 
-Providers, Models, Settings, Agents, AgentKnowledgeSources, Conversations, Messages, Reports, KnowledgeDocuments, KnowledgeChunks, Memory, Alerts, Usage, AuditLogs; в `public."AgentToolGrants"` добавлен флаг `Enabled`. Миграции: AiCore, AiChat, AiAgents, AiKnowledge, AiMemory, AiAlerts, AiUsage, AiReports, AiUsageCacheTokensAndPrices (кэш-токены и цены кэша), AiBudgetAndConcurrency (бюджет и лимит вызовов), AiAnswerCacheFlag (`AuditLogs.FromCache`), AiTaskModelRouting (модели по задачам и `ModelComparisons`).
+Providers, Models, Settings, Agents, AgentKnowledgeSources, Conversations, Messages, Reports, KnowledgeDocuments, KnowledgeChunks, Memory, Alerts, Usage, AuditLogs; в `public."AgentToolGrants"` добавлен флаг `Enabled`. Миграции: AiCore, AiChat, AiAgents, AiKnowledge, AiMemory, AiAlerts, AiUsage, AiReports, AiUsageCacheTokensAndPrices (кэш-токены и цены кэша), AiBudgetAndConcurrency (бюджет и лимит вызовов), AiAnswerCacheFlag (`AuditLogs.FromCache`), AiTaskModelRouting (модели по задачам и `ModelComparisons`), AiTurnTimings (`AuditLogs.Timings`, `Usage.QueueWaitMs` и `Usage.Attempt`), AiModelRouting (маршрутизация моделей по назначению: `ai.Settings`; `Usage.TurnId`, `ModelReason`, `UsedFallback`, `PriceBasis`; `AuditLogs.TurnId`, `Routing`) — см. [ai-model-routing.md](ai-model-routing.md).
 
 ## Чего пока нет
 

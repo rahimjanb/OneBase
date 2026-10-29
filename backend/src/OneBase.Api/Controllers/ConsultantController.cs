@@ -126,7 +126,7 @@ public sealed class ConsultantController(
         await chats.ArchiveAsync(User.GetUserId(), id, ct) ? NoContent() : NotFound();
 
     /// <summary>
-    /// Вопрос консультанту. Ответ — поток text/event-stream: start, progress…, done | error.
+    /// Вопрос консультанту. Ответ — поток text/event-stream: start, progress…, draft… (черновик итогового ответа), done | error.
     /// Если браузер закрыли, ответ всё равно дорабатывается и сохраняется в чат.
     /// </summary>
     [HttpPost("chat")]

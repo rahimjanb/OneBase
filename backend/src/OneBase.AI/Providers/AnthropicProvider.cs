@@ -8,10 +8,10 @@ using OneBase.AI.Llm;
 namespace OneBase.AI.Providers;
 
 /// <summary>
-/// Anthropic Messages API (POST {base}/v1/messages) с tool use, список моделей — GET {base}/v1/models.
+/// Anthropic Messages API (POST {base}/v1/messages) с tool use — целиком или потоком (stream), список моделей — GET {base}/v1/models.
 /// Эмбеддингов у Anthropic нет.
 /// </summary>
-public sealed partial class AnthropicProvider(IHttpClientFactory httpFactory) : HttpAiProvider(httpFactory)
+public sealed partial class AnthropicProvider(IHttpClientFactory httpFactory) : HttpAiProvider(httpFactory), IAiStreamingProvider
 {
     public const string ProviderCode = "anthropic";
     public const string ApiVersion = "2023-06-01";
@@ -33,6 +33,149 @@ public sealed partial class AnthropicProvider(IHttpClientFactory httpFactory) : 
     {
         using var doc = await PostAsync(credentials, Endpoint(credentials, "/v1/messages"), BuildBody(request), cancellationToken);
         return ParseCompletion(doc.RootElement, request.Model);
+    }
+
+    /// <summary>Собранный из потока ответ — без экранирования кириллицы (как его присылает API без потока).</summary>
+    private static readonly JsonSerializerOptions RawJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    public async Task<AiCompletion> StreamAsync(AiCredentials credentials, AiCompletionRequest request, Func<string, Task> onText,
+        CancellationToken cancellationToken = default)
+    {
+        var body = BuildBody(request);
+        body["stream"] = true;
+        return await PostStreamAsync(credentials, Endpoint(credentials, "/v1/messages"), body,
+            (stream, ct) => ReadStreamAsync(stream, request.Model, onText, ct), cancellationToken);
+    }
+
+    /// <summary>
+    /// Поток Messages API (text/event-stream): message_start, content_block_start / content_block_delta / content_block_stop, message_delta,
+    /// message_stop; ping пропускается, error — ошибка провайдера. Текст уходит в onText по мере прихода; из блоков (текст, рассуждения с подписью,
+    /// вызовы инструментов) собирается тот же ответ, что приходит без потока, и разбирается ParseCompletion. Поток оборвался до message_stop —
+    /// временная ошибка (повтор или резервная модель).
+    /// </summary>
+    internal static async Task<AiCompletion> ReadStreamAsync(Stream stream, string requestedModel, Func<string, Task> onText, CancellationToken ct)
+    {
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var blocks = new SortedDictionary<int, JsonObject>();
+        var inputs = new Dictionary<int, StringBuilder>();
+        var usage = new JsonObject();
+        string? model = null;
+        string? stopReason = null;
+        var data = new StringBuilder();
+        var finished = false;
+
+        void Usage(JsonElement u)
+        {
+            foreach (var p in u.EnumerateObject().Where(p => p.Value.ValueKind == JsonValueKind.Number))
+            {
+                usage[p.Name] = JsonValue.Create(p.Value.GetInt64());
+            }
+        }
+
+        while (!finished && await reader.ReadLineAsync(ct) is { } line)
+        {
+            if (line.StartsWith("data:", StringComparison.Ordinal))
+            {
+                if (data.Length > 0)
+                {
+                    data.Append('\n');
+                }
+
+                data.Append(line.AsSpan(5).TrimStart());
+                continue;
+            }
+
+            if (line.Length > 0 || data.Length == 0)
+            {
+                continue; // event:, комментарий; пустая строка без data — нечего разбирать
+            }
+
+            using var doc = JsonDocument.Parse(data.ToString());
+            data.Clear();
+            var e = doc.RootElement;
+            switch (Str(e, "type"))
+            {
+                case "message_start" when e.TryGetProperty("message", out var message):
+                    model = Str(message, "model");
+                    if (message.TryGetProperty("usage", out var startUsage) && startUsage.ValueKind == JsonValueKind.Object)
+                    {
+                        Usage(startUsage);
+                    }
+
+                    break;
+
+                case "content_block_start" when e.TryGetProperty("content_block", out var start) && start.ValueKind == JsonValueKind.Object:
+                    blocks[Int(e, "index")] = (JsonObject)JsonNode.Parse(start.GetRawText())!;
+                    break;
+
+                case "content_block_delta" when blocks.TryGetValue(Int(e, "index"), out var block) && e.TryGetProperty("delta", out var delta):
+                    switch (Str(delta, "type"))
+                    {
+                        case "text_delta" when Str(delta, "text") is { Length: > 0 } text:
+                            block["text"] = (string?)block["text"] + text;
+                            await onText(text);
+                            break;
+                        case "thinking_delta":
+                            block["thinking"] = (string?)block["thinking"] + Str(delta, "thinking");
+                            break;
+                        case "signature_delta":
+                            block["signature"] = (string?)block["signature"] + Str(delta, "signature");
+                            break;
+                        case "input_json_delta":
+                            var index = Int(e, "index");
+                            (inputs.TryGetValue(index, out var json) ? json : inputs[index] = new StringBuilder()).Append(Str(delta, "partial_json"));
+                            break;
+                    }
+
+                    break;
+
+                case "content_block_stop":
+                    if (inputs.Remove(Int(e, "index"), out var input) && blocks.TryGetValue(Int(e, "index"), out var toolBlock))
+                    {
+                        toolBlock["input"] = input.Length == 0 ? new JsonObject() : JsonNode.Parse(input.ToString());
+                    }
+
+                    break;
+
+                case "message_delta":
+                    if (e.TryGetProperty("delta", out var messageDelta) && Str(messageDelta, "stop_reason") is { } reason)
+                    {
+                        stopReason = reason;
+                    }
+
+                    if (e.TryGetProperty("usage", out var deltaUsage) && deltaUsage.ValueKind == JsonValueKind.Object)
+                    {
+                        Usage(deltaUsage);
+                    }
+
+                    break;
+
+                case "message_stop":
+                    finished = true;
+                    break;
+
+                case "error":
+                    var error = e.TryGetProperty("error", out var err) ? err : default;
+                    var kind = Str(error, "type");
+                    throw new AiProviderException(ProviderCode, null, $"Anthropic прервал ответ: {Str(error, "message") ?? kind ?? "ошибка"}.",
+                        kind is "overloaded_error" or "api_error");
+            }
+        }
+
+        if (!finished)
+        {
+            throw new AiProviderException(ProviderCode, null, "Anthropic оборвал поток ответа до конца.", true);
+        }
+
+        var root = new JsonObject
+        {
+            ["model"] = model ?? requestedModel,
+            ["stop_reason"] = stopReason,
+            ["usage"] = usage,
+            ["content"] = new JsonArray(blocks.Values.Select(b => (JsonNode?)b).ToArray()),
+        };
+        using var full = JsonDocument.Parse(root.ToJsonString(RawJson));
+        return ParseCompletion(full.RootElement, requestedModel);
     }
 
     public override async Task<IReadOnlyList<AiProviderModel>> ListModelsAsync(AiCredentials credentials, CancellationToken cancellationToken = default)

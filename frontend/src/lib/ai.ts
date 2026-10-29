@@ -63,9 +63,24 @@ export type AiSettingsView = {
   routerMode: string;
   extract: AiModelRef | null;
   extractMode: string;
+  /** Маршрутизация моделей по назначению вызова (сотрудники, итоговый ответ, перепроверка); нет у старого сервера. */
+  modelRouting?: AiModelRoutingView;
   ready: boolean;
   readinessMessage: string | null;
   updatedAt: string | null;
+};
+
+/** mode: off | shadow | on; finalAnswerMode: fixed | dynamic; fallbackMode: standard | review. */
+export type AiModelRoutingView = {
+  mode: string;
+  agent: AiModelRef | null;
+  finalAnswerMode: string;
+  finalDefault: AiModelRef | null;
+  finalComplex: AiModelRef | null;
+  fallbackMode: string;
+  complexityThreshold: number;
+  reviewMaxAttempts: number;
+  questionBudgetUsd: number | null;
 };
 
 export type AiModelTestResult = {
@@ -356,6 +371,9 @@ export type EvalModelSummary = {
   cacheWriteTokens: number;
   outputTokens: number;
   avgMs: number;
+  /** Задержка вызова по задачам набора (нет в проверках до замера перцентилей). */
+  p50Ms?: number;
+  p95Ms?: number;
 };
 
 export type EvalRun = {

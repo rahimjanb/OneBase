@@ -68,13 +68,11 @@ public sealed record SalesMonth(int Year, int Month);
 /// Читает данные месяца из нашей копии Linko (не из Linko) и собирает SalesAnalytics. Результат кэшируется.
 /// Что считается продажей, возвратом и заказом для визита — решает SecondarySales; здесь только выборка строк.
 /// </summary>
-public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMemoryCache cache, SalesCacheSignal signal, ISalesHistoryReader history)
+public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMemoryCache cache, SalesCacheSignal signal, ISalesHistoryReader history,
+    SalesBuilds builds)
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan HistoryCacheTtl = TimeSpan.FromHours(6);
-
-    /// <summary>Один пересчёт за раз: запрос пользователя и прогрев после синхронизации не считают одно и то же дважды.</summary>
-    private static readonly SemaphoreSlim BuildGate = new(1, 1);
 
     /// <summary>Заказ с датой реализации по настройке (по умолчанию — дата приёмки). Вес и сумма — только из строк, шапка заказа не берётся.</summary>
     private sealed class DatedOrder
@@ -147,34 +145,39 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         var kind = SalesPlans.Secondary(plan);
 
         var key = SalesPlans.CacheKey(y, m, kind);
+        var version = signal.Version; // до проверки кэша: запрос после сброса не присоединится к сборке, начатой до него
         if (cache.TryGetValue(key, out SalesAnalytics? cached) && cached is not null)
         {
+            builds.Hit();
             return cached;
         }
 
-        await BuildGate.WaitAsync(ct);
-        try
+        // Тот же месяц уже собирает другой запрос (пользователь, прогрев) — ждём его сборку, а не считаем второй раз.
+        return await builds.RunAsync($"{key}@{version}", async () =>
         {
-            if (cache.TryGetValue(key, out cached) && cached is not null)
+            if (cache.TryGetValue(key, out SalesAnalytics? ready) && ready is not null)
             {
-                return cached; // пока ждали, этот месяц уже посчитал другой запрос
+                return ready; // пока ждали место, этот месяц уже посчитал другой запрос
             }
 
+            var timer = new SalesBuildTimer();
             var token = signal.Token; // до загрузки: если данные обновятся во время расчёта, результат сразу устареет
             // Отчётный день — заново, уже после токена: прочитанный до него мог устареть (синхронизация между чтением и токеном),
             // и отчёт со старым днём держался бы в кэше под новым токеном до конца срока.
-            lastData = await Cached("sales:last-data", () => LastDataDateAsync(ct));
-            var data = await BuildAsync(y, m, kind, lastData, ct);
+            var through = await Cached("sales:last-data", () => LastDataDateAsync(ct));
+            var data = await BuildAsync(y, m, kind, through, timer, ct);
             var analytics = new SalesAnalytics(data);
-            cache.Set(key, analytics, new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(CacheTtl)
-                .AddExpirationToken(token));
+            timer.Lap("отчёт");
+            if (!token.HasChanged) // сброс во время расчёта: запись с истёкшим токеном вытеснила бы свежий отчёт этого месяца
+            {
+                cache.Set(key, analytics, new MemoryCacheEntryOptions()
+                    .SetAbsoluteExpiration(CacheTtl)
+                    .AddExpirationToken(token));
+            }
+
+            builds.Record(key, timer);
             return analytics;
-        }
-        finally
-        {
-            BuildGate.Release();
-        }
+        }, ct);
     }
 
     /// <summary>Отчётный день (последний день с продажами вторички, не позже отчётного — сегодня) — для отчётов за несколько месяцев («Продажи по SKU»).</summary>
@@ -190,7 +193,11 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         var token = signal.Token;
         value = await load();
-        cache.Set(key, value, new MemoryCacheEntryOptions().SetAbsoluteExpiration(CacheTtl).AddExpirationToken(token));
+        if (!token.HasChanged)
+        {
+            cache.Set(key, value, new MemoryCacheEntryOptions().SetAbsoluteExpiration(CacheTtl).AddExpirationToken(token));
+        }
+
         return value;
     }
 
@@ -237,7 +244,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .CountAsync(o => sold.Contains(o.Status) && o.AcceptedDate >= from && o.AcceptedDate <= to, ct);
     }
 
-    private async Task<MonthData> BuildAsync(int year, int month, PlanKind kind, DateOnly? lastData, CancellationToken ct)
+    private async Task<MonthData> BuildAsync(int year, int month, PlanKind kind, DateOnly? lastData, SalesBuildTimer timer, CancellationToken ct)
     {
         var monthStart = new DateOnly(year, month, 1);
         var monthEnd = monthStart.AddMonths(1).AddDays(-1);
@@ -249,8 +256,10 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         // Сырые строки: заказы, реализованные с начала прошлого месяца, и заказы, созданные в месяце (для визитов);
         // возвраты с начала прошлого месяца. Правила применяет SecondarySales.
         var rawOrders = await RawOrdersAsync(previousStart, salesEnd, monthStart, salesEnd, ct);
+        timer.Lap("заказы");
         var (rawReturns, returnHeaders) = await RawReturnsAsync(previousStart, salesEnd, ct);
         var missingAcceptance = await DeliveredWithoutAcceptanceAsync(monthStart.AddDays(-45), salesEnd, ct);
+        timer.Lap("возвраты");
 
         // Точки-каналы (базар, сети) — во вторичке только закрытого месяца; прошлый месяц — в том же режиме, что текущий: иначе
         // «к прошлому месяцу» сравнивал бы вторичку с каналами и без них (а «Экспорт и опт» — без них и с ними).
@@ -260,6 +269,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         current = current with { Quality = current.Quality with { AcceptedInFuture = await AcceptedInFutureAsync(monthStart, dataThrough, ct) } };
         var previous = SecondarySales.Build(rawOrders, rawReturns, returnHeaders, previousStart, monthStart.AddDays(-1), options, channels: channels);
         var historyFrom = new[] { new DateOnly(year, 1, 1), monthStart.AddMonths(-3) }.Min();
+        timer.Lap("вторичка");
 
         var visits = await db.LinkoVisits.AsNoTracking()
             .Where(v => v.Day >= monthStart && v.Day <= monthEnd && v.UserId != null && v.MarketId != null)
@@ -307,6 +317,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
 
         // Справочник ТП — пользователи Linko с должностью ТП (Sales:SalesRepJobs); вакансия — «вакан» в имени («вакант», «Вакан …»;
         // Sales:VacancyMarkers) или ID 0. У Sales Base своё слово — «вакант» (Sales:FieldVacancyMarkers).
+        timer.Lap("визиты и планы ТП");
         var users = await db.LinkoUsers.AsNoTracking().ToListAsync(ct);
 
         // Доставщики и т.п.: их «визиты» — доставки, в работу ТП они не входят.
@@ -331,9 +342,11 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .ToList();
         var yearStart = new DateOnly(year, 1, 1);
         var akbHistoryTo = previousStart.AddDays(-1); // прошлый и текущий месяц считаются из строк продаж
+        timer.Lap("справочники");
         IReadOnlyList<MonthlyAkb> akbHistory = yearStart <= akbHistoryTo
             ? await AkbHistoryAsync(yearStart, akbHistoryTo, categoryMap.Mapping, ct)
             : [];
+        timer.Lap("АКБ прошлых месяцев");
 
         // Регионы — филиалы вторички: исключённые («Завод») в структуре не показываются, у них отдельный блок;
         // пропускаемых («К К Мерч») во вторичке нет совсем — ни региона, ни визитов в их точках.
@@ -360,6 +373,23 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             .Select(x => new MarketInfo(x.Id, x.Name, x.ResponsibleAgentId, x.BranchId))
             .ToDictionaryAsync(x => x.Id, ct);
         var ignoredMarkets = markets.Values.Where(m => m.BranchId is { } b && ignoredBranchIds.Contains(b)).Select(m => m.Id).ToHashSet();
+        timer.Lap("структура и точки");
+
+        // Текущий месяц в истории — по отчётный день, как плитка факта.
+        var monthlyHistory = await HistoryAsync(historyFrom, dataThrough, ct);
+        timer.Lap("факт по месяцам");
+        var kpiRegions = await db.SalesAgentProfiles.AsNoTracking().Where(p => p.RegionId != null)
+            .ToDictionaryAsync(p => p.LinkoUserId, p => p.RegionId!.Value, ct);
+        var products = await db.LinkoProducts.AsNoTracking()
+            .Select(p => new ProductInfo(p.Id, p.Name, p.Code, p.TypeId))
+            .ToDictionaryAsync(p => p.Id, ct);
+        timer.Lap("товары");
+        var activeSkus = await ActiveSkusAsync(AssortmentWindow(monthStart, salesEnd), ct);
+        timer.Lap("ассортимент");
+        var marketAssignments = (await db.LinkoMarketUsers.AsNoTracking().Where(x => !x.IsDelete)
+                .Select(x => new { x.UserId, x.MarketId }).ToListAsync(ct))
+            .Select(x => (x.UserId, x.MarketId)).ToList();
+        timer.Lap("закрепления точек");
 
         return new MonthData
         {
@@ -377,8 +407,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             Quality = current.Quality,
             Visits = visits.Where(v => !nonSales.Contains(v.UserId!.Value) && !ignoredMarkets.Contains(v.MarketId!.Value))
                 .Select(v => new VisitRecord(v.Day, v.UserId!.Value, v.MarketId!.Value, ParseStatus(v.Status), v.IsInPlan)).ToList(),
-            // Текущий месяц в истории — по отчётный день, как плитка факта.
-            History = await HistoryAsync(historyFrom, dataThrough, ct),
+            History = monthlyHistory,
             Plans = plans.Plans,
             YearRegionPlans = plans.YearRegionPlans,
             NextRegionPlans = plans.NextRegionPlans,
@@ -402,8 +431,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
                 .Select(g => new PlanRow(null, g.Key, month, null, g.Sum(s => s.PlanAmount)))
                 .ToList(),
             TeamPlanStaff = teamStaff,
-            KpiRegions = await db.SalesAgentProfiles.AsNoTracking().Where(p => p.RegionId != null)
-                .ToDictionaryAsync(p => p.LinkoUserId, p => p.RegionId!.Value, ct),
+            KpiRegions = kpiRegions,
             Agents = users.ToDictionary(u => u.Id, u => new AgentInfo(
                 u.Id,
                 u.DisplayName,
@@ -419,14 +447,10 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             Categories = linkoTypes,
             CategoryMap = categoryMap,
             AkbHistory = akbHistory,
-            Products = await db.LinkoProducts.AsNoTracking()
-                .Select(p => new ProductInfo(p.Id, p.Name, p.Code, p.TypeId))
-                .ToDictionaryAsync(p => p.Id, ct),
-            ActiveSkus = await ActiveSkusAsync(AssortmentWindow(monthStart, salesEnd), ct),
+            Products = products,
+            ActiveSkus = activeSkus,
             Top = TopProductSet.Of(options),
-            MarketAssignments = (await db.LinkoMarketUsers.AsNoTracking().Where(x => !x.IsDelete)
-                    .Select(x => new { x.UserId, x.MarketId }).ToListAsync(ct))
-                .Select(x => (x.UserId, x.MarketId)).ToList(),
+            MarketAssignments = marketAssignments,
             Targets = new SalesTargets(
                 Target(SalesTargetKeys.VisitConversion),
                 Target(SalesTargetKeys.RevenuePerOutlet),
@@ -519,24 +543,75 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         });
 
     /// <summary>
-    /// АКБ давних месяцев — тяжёлый агрегат по всем строкам. Эти месяцы почти не меняются, поэтому кэш живёт дольше
-    /// и не сбрасывается обычной синхронизацией (только полной загрузкой или очисткой).
+    /// АКБ давних месяцев (from — первое число, to — последний день месяца) — тяжёлый агрегат по всем строкам. Эти месяцы почти
+    /// не меняются, поэтому кэш живёт дольше и не сбрасывается обычной синхронизацией (только полной загрузкой, сверкой или
+    /// изменением давнего месяца). Строки месяца не зависят от остальных месяцев периода — кэш помесячный: соседние месяцы и
+    /// «Динамика продаж» берут уже посчитанные месяцы, а в БД считается только недостающий отрезок. Одновременно агрегат считает
+    /// одна сборка: вторая ждёт и берёт месяцы из кэша.
     /// </summary>
     private async Task<IReadOnlyList<MonthlyAkb>> AkbHistoryAsync(DateOnly from, DateOnly to, IReadOnlyDictionary<long, long> groups, CancellationToken ct)
     {
         var merged = groups.Where(g => g.Key != g.Value).OrderBy(g => g.Key).ToDictionary();
-        var key = $"sales:akb:v4:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}:{options.DateField}:{string.Join(",", options.SoldStatuses)}:" +
-                  $"{string.Join(",", NotSecondaryLower)}:{string.Join(",", merged.Select(g => $"{g.Key}>{g.Value}"))}";
-        if (cache.TryGetValue(key, out IReadOnlyList<MonthlyAkb>? cached) && cached is not null)
+        var rules = $"{options.DateField}:{string.Join(",", options.SoldStatuses)}:{string.Join(",", NotSecondaryLower)}:" +
+                    $"{string.Join(",", merged.Select(g => $"{g.Key}>{g.Value}"))}";
+        var months = new List<DateOnly>();
+        for (var m = new DateOnly(from.Year, from.Month, 1); m <= to; m = m.AddMonths(1))
         {
-            return cached;
+            months.Add(m);
         }
 
-        var rows = await history.AkbByMonthAsync(from, to, merged, ct);
-        cache.Set(key, rows, new MemoryCacheEntryOptions()
-            .SetAbsoluteExpiration(HistoryCacheTtl)
-            .AddExpirationToken(signal.HistoryToken));
-        return rows;
+        string Key(DateOnly month) => $"sales:akb:v5:{month:yyyy-MM}:{rules}";
+
+        // Снимок: месяц, взятый из кэша, остаётся в ответе, даже если запись тем временем вытеснят.
+        var found = new Dictionary<DateOnly, IReadOnlyList<MonthlyAkb>>();
+
+        void Collect()
+        {
+            foreach (var m in months.Where(m => !found.ContainsKey(m)))
+            {
+                if (cache.TryGetValue(Key(m), out IReadOnlyList<MonthlyAkb>? rows) && rows is not null)
+                {
+                    found[m] = rows;
+                }
+            }
+        }
+
+        IReadOnlyList<MonthlyAkb> Result() => months.SelectMany(m => found[m]).ToList();
+
+        Collect();
+        if (found.Count == months.Count)
+        {
+            return Result();
+        }
+
+        await builds.HistoryGate.WaitAsync(ct);
+        try
+        {
+            Collect(); // пока ждали, недостающие месяцы могла посчитать другая сборка
+            var missing = months.Where(m => !found.ContainsKey(m)).ToList();
+            if (missing.Count > 0)
+            {
+                var token = signal.HistoryToken; // до чтения: если давние месяцы сбросят во время расчёта, результат сразу устареет
+                var first = missing[0];
+                var last = missing[^1];
+                var byMonth = (await history.AkbByMonthAsync(first, last.AddMonths(1).AddDays(-1), merged, ct)).ToLookup(r => new DateOnly(r.Year, r.Month, 1));
+                var entry = new MemoryCacheEntryOptions().SetAbsoluteExpiration(HistoryCacheTtl).AddExpirationToken(token);
+                foreach (var m in months.Where(m => m >= first && m <= last))
+                {
+                    found[m] = byMonth[m].ToList();
+                    if (!token.HasChanged)
+                    {
+                        cache.Set(Key(m), found[m], entry);
+                    }
+                }
+            }
+
+            return Result();
+        }
+        finally
+        {
+            builds.HistoryGate.Release();
+        }
     }
 
     /// <summary>

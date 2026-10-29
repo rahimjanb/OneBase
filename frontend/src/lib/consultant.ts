@@ -105,9 +105,17 @@ export type AiStatus = { ready: boolean; message: string | null; voice?: VoiceSt
 export type ProgressStatus = "Pending" | "Running" | "Done" | "Failed" | "Skipped";
 export type ConsultantProgress = { stage: string; agent: string | null; agentName: string | null; status: ProgressStatus; note: string | null };
 
+/**
+ * Черновик итогового ответа, пока он пишется: text — следующий фрагмент, reset — начать текст заново (повтор запроса к модели),
+ * checking — черновик дописан, числа сверяются с данными, revising — числа не подтвердились, ответ переписывается.
+ * Черновик — не ответ: ответ приходит событием done и заменяет черновик.
+ */
+export type DraftEvent = { kind: "text" | "reset" | "checking" | "revising"; text?: string };
+
 export type ChatEvent =
   | { type: "start"; data: { conversationId: string; title: string; userMessage: ChatMessage } }
   | { type: "progress"; data: ConsultantProgress }
+  | { type: "draft"; data: DraftEvent }
   | { type: "done"; data: { message: ChatMessage } }
   | { type: "error"; data: { message?: ChatMessage; error: string } };
 

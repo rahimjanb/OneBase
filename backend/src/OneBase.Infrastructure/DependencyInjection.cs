@@ -96,6 +96,9 @@ public static class DependencyInjection
         services.AddScoped<ISalesHistoryReader, SalesHistoryReader>();
         services.AddMemoryCache();
         services.AddSingleton<SalesCacheSignal>();
+        services.AddSingleton<SalesBuilds>();
+        services.AddSingleton<Sales.SalesCacheWarmer>();
+        services.AddHostedService(sp => sp.GetRequiredService<Sales.SalesCacheWarmer>());
         services.AddScoped<SalesDataLoader>();
         services.AddScoped<OneBase.Application.Sales.Stock.StockService>();
         services.AddScoped<OneBase.Application.Sales.Stock.OutstockService>();

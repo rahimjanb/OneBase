@@ -7,6 +7,7 @@ using OneBase.AI.Gateway;
 using OneBase.AI.Grounding;
 using OneBase.AI.Llm;
 using OneBase.AI.Memory;
+using OneBase.AI.Monitoring;
 using OneBase.AI.Providers;
 using OneBase.AI.Reports;
 using OneBase.AI.Security;
@@ -26,7 +27,9 @@ public sealed partial class OrchestratedConsultantEngine(
     AiMemoryStore memory,
     ReportService reports,
     TimeProvider clock,
-    ILogger<OrchestratedConsultantEngine> logger) : IConsultantEngine
+    ILogger<OrchestratedConsultantEngine> logger,
+    IAiSettingsSource aiSettings,
+    IModelComparisons? comparisons = null) : IConsultantEngine
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -36,6 +39,8 @@ public sealed partial class OrchestratedConsultantEngine(
     public async Task<ConsultantAnswer> AnswerAsync(ConsultantTurn turn, Func<ConsultantProgress, Task> progress, CancellationToken ct)
     {
         var startedAt = clock.GetUtcNow();
+        var turnTimings = AiTurnTimings.Current;
+        var contextStage = turnTimings?.Stage("context");
         // Отчёт Excel — только когда пользователь сам его просит: иначе инструмента отчёта у сотрудников нет. Канал может отчёты запретить.
         var asksReport = ReportIntent.Requested(turn.Question);
         var wantsReport = asksReport && (turn.Channel?.AllowReports ?? true);
@@ -64,8 +69,14 @@ public sealed partial class OrchestratedConsultantEngine(
         // Correction Guard: вопрос оспаривает прошлый ответ — это не доказательство, а повод перепроверить данные заново.
         var correction = CorrectionGuard.Detect(turn.Question, turn.History);
 
+        contextStage?.Dispose();
         await progress(new ConsultantProgress("routing", null, null, ProgressStatus.Running));
-        var routing = Enforce(await router.RouteAsync(turn.Question, turn.History, available, context, ct, rememberedText), turn, correction, available);
+        RoutingDecision routing;
+        using (turnTimings?.Stage("routing"))
+        {
+            routing = Enforce(await router.RouteAsync(turn.Question, turn.History, available, context, ct, rememberedText), turn, correction, available);
+        }
+
         await progress(new ConsultantProgress("routing", null, null, ProgressStatus.Done,
             routing.Agents.Count == 0 ? "без AI-сотрудников" : string.Join(", ", routing.Agents.Select(c => available.First(a => a.Code == c).Name))));
         if (correction is not null)
@@ -80,16 +91,31 @@ public sealed partial class OrchestratedConsultantEngine(
         var chosen = available.Where(a => routing.Agents.Contains(a.Code)).ToList();
         var contexts = new Dictionary<string, string?>();
         var memoryUsed = remembered.Count;
-        foreach (var a in chosen)
+        using (turnTimings?.Stage("agent.memory"))
         {
-            var earlier = await memory.AgentAsync(turn.UserId, a.Code, turn.ConversationId, 3, ct);
-            memoryUsed += earlier.Count;
-            contexts[a.Code] = AgentContext(turn.History, remembered.Where(m => m.AgentCode == a.Code).ToList(), earlier);
+            foreach (var a in chosen)
+            {
+                var earlier = await memory.AgentAsync(turn.UserId, a.Code, turn.ConversationId, 3, ct);
+                memoryUsed += earlier.Count;
+                contexts[a.Code] = AgentContext(turn.History, remembered.Where(m => m.AgentCode == a.Code).ToList(), earlier);
+            }
         }
 
+        // Маршрутизация моделей (сотрудники, итоговый ответ, перепроверка) и общий план перепроверки ответа (review): повторы сотрудников и
+        // исправления итога — из одного счётчика; новая попытка — только пока вызовы ответа стоят меньше 75 % бюджета вопроса.
+        var aiConfig = await aiSettings.GetSettingsAsync(ct);
+        var modelRouting = aiConfig.ModelRouting;
+        var reviewPlan = modelRouting.On && modelRouting.Review
+            ? new ReviewPlan(modelRouting.ReviewMaxAttempts,
+                () => modelRouting.QuestionBudgetUsd is not { } limit || turnTimings is null || turnTimings.CostUsd < limit * 0.75m)
+            : null;
+
+        var agentsStage = turnTimings?.Stage("agents");
         var (runs, agentUsage) = chosen.Count == 0
             ? ([], AiTokenUsage.None)
-            : await orchestrator.RunAsync(chosen, routing.Tasks, turn.Question, contexts, turn.UserId, turn.ConversationId, progress, ct, wantsReport, turn.Channel?.AgentModel);
+            : await orchestrator.RunAsync(chosen, routing.Tasks, turn.Question, contexts, turn.UserId, turn.ConversationId, progress, ct, wantsReport, turn.Channel?.AgentModel,
+                reviewPlan);
+        agentsStage?.Dispose();
         var created = wantsReport ? await reports.CreatedAsync(turn.UserId, turn.ConversationId, startedAt, ct) : [];
 
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Running));
@@ -104,22 +130,37 @@ public sealed partial class OrchestratedConsultantEngine(
             .. turn.History,
             new(LlmRole.User, turn.Question),
         ];
-        // Ответ сверяется с данными: неподтверждённые числа — одна попытка исправить, затем пометка в тексте.
+        // Модель итогового ответа: канала, консультанта в «Агентах», по сложности вопроса (dynamic) или основная. Сложность — правилами по
+        // уже полученным данным, без отдельного вызова модели.
+        var toolErrors = runs.Sum(r => r.ToolErrors?.Count ?? 0);
+        var complexity = AnswerComplexityRules.Assess(turn.Question, turn.History, runs, routing, correction is not null, toolErrors);
+        var finalChoice = AiModelRouting.Final(aiConfig, turn.Channel?.Model, consultant?.Model, complexity);
+        if (reviewPlan is not null)
+        {
+            reviewPlan.Escalation = AiModelRouting.Escalation(modelRouting, finalChoice.Model ?? aiConfig.Primary);
+        }
+
+        // Ответ сверяется с данными: неподтверждённые числа — одна попытка исправить, затем пометка в тексте (review — см. GroundedComposer).
+        var composeStage = turnTimings?.Stage("compose");
         var answer = await new GroundedComposer(gateway).ComposeAsync(messages, new AiCallOptions
         {
-            Model = turn.Channel?.Model ?? consultant?.Model,
+            Model = finalChoice.Model,
+            ModelReason = finalChoice.Reason,
             Temperature = consultant?.Temperature,
             MaxOutputTokens = turn.Channel?.MaxOutputTokens ?? consultant?.MaxOutputTokens,
             // Данные и история — свои у каждого вопроса: кэшируются только правила, запись хвоста в кэш окупилась бы лишь при перепроверке.
             CacheConversation = false,
             Context = context with { Purpose = "consultant.answer" },
-        }, evidence, turn.Question, ct, correction?.PreviousAnswer);
+        }, evidence, turn.Question, ct, correction?.PreviousAnswer, turn.Draft, reviewPlan);
+        composeStage?.Dispose();
+        RecordRouting(turn, turnTimings, modelRouting, complexity, runs, finalChoice, answer);
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Done,
             answer.Grounding.Checked == 0 ? null : $"чисел сверено с данными: {answer.Grounding.Checked}"));
 
         // Память — вспомогательная: её сбой не должен отнимать у пользователя готовый ответ.
         try
         {
+            using var memoryStage = turnTimings?.Stage("memory.save");
             await memory.SaveAsync(turn.UserId, turn.ConversationId, routing.Tasks, turn.Question, results, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -141,6 +182,62 @@ public sealed partial class OrchestratedConsultantEngine(
             new ConsultantDetails(results, sources, answer.Model.ToString(), answer.UsedFallback, routing.Reason.Length > 0 ? routing.Reason : null, memoryUsed,
                 created.Count > 0 ? created : null, answer.Grounding, review),
             routing.Usage.Add(agentUsage).Add(answer.Usage));
+    }
+
+    /// <summary>
+    /// Маршрутизация моделей ответа — в замер (AI-журнал): режим, сложность, модели и причины. «Сравнение»: что выбрали бы правила, и запись в
+    /// журнал сравнения с прогнозом стоимости — те же токены по ценам выбранной правилами модели (оценка: у другой модели токены были бы
+    /// другими). Второго ответа модели нет — сравнение ничего не тратит.
+    /// </summary>
+    private void RecordRouting(ConsultantTurn turn, AiTurnTimings? timings, AiModelRoutingSettings routingSettings, AnswerComplexity complexity,
+        IReadOnlyList<AgentRun> runs, AiModelChoice finalChoice, GroundedAnswer answer)
+    {
+        if (timings is null)
+        {
+            return;
+        }
+
+        var agentModel = runs.Select(r => r.Model).OfType<string>().FirstOrDefault();
+        var plannedAgent = AiModelRouting.PlannedAgent(routingSettings);
+        var plannedFinal = AiModelRouting.PlannedFinal(routingSettings, complexity);
+        timings.Routing = new AiRoutingNote(routingSettings.Mode, complexity, agentModel, runs.Select(r => r.ModelReason).OfType<string>().FirstOrDefault() ?? "сотрудники не привлекались",
+            answer.Model.ToString(), finalChoice.Reason, plannedAgent.Model?.ToString(), plannedFinal.Model?.ToString(), plannedFinal.Reason);
+        if (!routingSettings.Shadow || comparisons is null)
+        {
+            return;
+        }
+
+        var calls = timings.View().Calls.Where(c => c.Success).ToList();
+        AiTokenUsage Sum(Func<AiLlmTiming, bool> which) => calls.Where(which)
+            .Aggregate(AiTokenUsage.None, (sum, c) => sum.Add(new AiTokenUsage(c.InputTokens, c.OutputTokens, c.CacheReadTokens, c.CacheWriteTokens)));
+        var expected = $"сложность {complexity.Score}: {(complexity.Signals.Count == 0 ? "простой вопрос" : string.Join(", ", complexity.Signals))}";
+        _ = Task.Run(async () =>
+        {
+            AiTurnTimings.Detach();
+            try
+            {
+                if (agentModel is not null && plannedAgent.Model is { } planned)
+                {
+                    var usage = Sum(c => c.Purpose == "agent");
+                    await comparisons.RecordAsync(AiTaskCategory.Answer, "shadow", "agent", turn.Question, expected,
+                        new ComparisonSide(agentModel, agentModel, true, usage, calls.Where(c => c.Purpose == "agent").Sum(c => c.ProviderMs)),
+                        new ComparisonSide(planned.ToString(), planned.ToString(), true, usage, 0), agentModel == planned.ToString() ? 1 : 0, null, null);
+                }
+
+                if (plannedFinal.Model is { } final)
+                {
+                    var usage = Sum(c => c.Purpose is "consultant.answer" or "consultant.revise" or "consultant.review");
+                    await comparisons.RecordAsync(AiTaskCategory.Answer, "shadow", "final", turn.Question, expected,
+                        new ComparisonSide(answer.Model.ToString(), answer.Model.ToString(), true, usage,
+                            calls.Where(c => c.Purpose.StartsWith("consultant.", StringComparison.Ordinal) && c.Purpose != "consultant.route").Sum(c => c.ProviderMs)),
+                        new ComparisonSide(final.ToString(), final.ToString(), true, usage, 0), answer.Model == final ? 1 : 0, null, null);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Консультант: сравнение маршрутизации моделей не записано");
+            }
+        });
     }
 
     /// <summary>

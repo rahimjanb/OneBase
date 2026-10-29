@@ -95,6 +95,53 @@ public abstract class HttpAiProvider(IHttpClientFactory httpFactory) : IAiProvid
         }
     }
 
+    /// <summary>
+    /// POST с ответом потоком (text/event-stream): read читает тело по мере прихода. Ошибки — как у обычного запроса: ключ не задан, нет связи,
+    /// нет ответа за Timeout (на весь поток), код ошибки HTTP с текстом провайдера (без ключа).
+    /// </summary>
+    protected async Task<T> PostStreamAsync<T>(AiCredentials credentials, string url, JsonNode body, Func<Stream, CancellationToken, Task<T>> read,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(credentials.ApiKey))
+        {
+            throw new AiProviderException(Code, null, $"Ключ API {Name} не задан — добавьте его в «Настройки → AI → Провайдеры».", false);
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
+        };
+        Authorize(request.Headers, credentials.ApiKey);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+
+        var http = httpFactory.CreateClient(Code);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(Timeout);
+        try
+        {
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw ProviderErrors.FromStatus(Code, (int)response.StatusCode, await response.Content.ReadAsStringAsync(timeout.Token), credentials.ApiKey);
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+            return await read(stream, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new AiProviderException(Code, null, $"{Name} не ответил за {Timeout.TotalSeconds:0} с.", true);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new AiProviderException(Code, null, $"Нет связи с {Name}: {ProviderErrors.Scrub(ex.Message, credentials.ApiKey)}", true);
+        }
+        catch (IOException ex)
+        {
+            throw new AiProviderException(Code, null, $"Связь с {Name} оборвалась: {ProviderErrors.Scrub(ex.Message, credentials.ApiKey)}", true);
+        }
+    }
+
     protected static string? Str(JsonElement e, string name) =>
         e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 

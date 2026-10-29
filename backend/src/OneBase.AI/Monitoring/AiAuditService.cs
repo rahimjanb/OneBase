@@ -26,13 +26,21 @@ public sealed class AiAuditService(IAppDbContext db)
         string? response,
         string? error,
         CancellationToken ct,
-        bool fromCache = false)
+        bool fromCache = false,
+        AiTimingsView? timings = null,
+        AiTurnTimings? turn = null)
     {
-        // Токены и стоимость — по записям учёта вызовов этого запроса (они пишутся AI Gateway). Вход в журнале — весь промпт, включая кэш.
-        var usage = await db.AiUsage.AsNoTracking()
-            .Where(u => u.UserId == userId && u.ConversationId == conversationId && u.CreatedAt >= startedAt)
-            .Select(u => new { InputTokens = u.InputTokens + u.CacheReadTokens + u.CacheWriteTokens, u.OutputTokens, u.CostUsd })
+        // Токены и стоимость — по записям учёта вызовов этого ответа (их пишет AI Gateway): по общему идентификатору ответа, без него (записи
+        // до TurnId) — по пользователю, чату и времени. Вход в журнале — весь промпт, включая кэш.
+        var query = db.AiUsage.AsNoTracking();
+        query = turn is not null
+            ? query.Where(u => u.TurnId == turn.Id)
+            : query.Where(u => u.UserId == userId && u.ConversationId == conversationId && u.CreatedAt >= startedAt);
+        var calls = await query
+            .Select(u => new UsageRow(u.Purpose, u.Provider + "/" + u.Model, u.InputTokens, u.CacheReadTokens, u.CacheWriteTokens, u.OutputTokens, u.CostUsd,
+                u.DurationMs, u.Success, u.UsedFallback))
             .ToListAsync(ct);
+        var usage = calls.Select(u => new { InputTokens = u.Input + u.CacheRead + u.CacheWrite, OutputTokens = u.Output, u.CostUsd }).ToList();
 
         var agents = details?.Agents.Select(a => a.Agent).ToList() ?? [];
         var tools = details?.Agents.SelectMany(a => a.ToolsUsed).Distinct().ToList() ?? [];
@@ -62,8 +70,79 @@ public sealed class AiAuditService(IAppDbContext db)
                 : JsonSerializer.Serialize(new { check = details?.Grounding, correction = details?.Correction }, Json),
             CorrectionVerdict = details?.Correction?.Verdict,
             CorrectionOfMessageId = details?.Correction?.PreviousMessageId,
+            Timings = timings is null ? null : JsonSerializer.Serialize(timings, Json),
+            TurnId = turn?.Id,
+            Routing = turn is null ? null : JsonSerializer.Serialize(RoutingSummary(turn, timings, details, calls), Json),
         });
         await db.SaveChangesAsync(ct);
+    }
+
+    private sealed record UsageRow(string Purpose, string Model, int Input, int CacheRead, int CacheWrite, int Output, decimal? CostUsd, long DurationMs,
+        bool Success, bool UsedFallback);
+
+    /// <summary>
+    /// Итог ответа по вызовам моделей (ai.AuditLogs.Routing): маршрутизация (режим, сложность, модели и причины), перепроверки, вызовы — всего,
+    /// по моделям и назначениям, токены и стоимость (расчётная по ценам моделей; неполная, если у части вызовов нет цены — тогда сумма без них,
+    /// а не ноль), время этапов и первого текста, полнота (статусы сотрудников, неподтверждённые числа) и проверка чисел.
+    /// </summary>
+    private static object RoutingSummary(AiTurnTimings turn, AiTimingsView? timings, ConsultantDetails? details, IReadOnlyList<UsageRow> calls)
+    {
+        object Group(IEnumerable<UsageRow> rows) => new
+        {
+            Calls = rows.Count(),
+            Failed = rows.Count(r => !r.Success),
+            InputTokens = rows.Sum(r => (long)r.Input),
+            CacheReadTokens = rows.Sum(r => (long)r.CacheRead),
+            CacheWriteTokens = rows.Sum(r => (long)r.CacheWrite),
+            OutputTokens = rows.Sum(r => (long)r.Output),
+            CostUsd = rows.Sum(r => r.CostUsd ?? 0),
+            CostIncomplete = rows.Any(r => r.CostUsd is null && (r.Input + r.CacheRead + r.CacheWrite + r.Output) > 0),
+            DurationMs = rows.Sum(r => r.DurationMs),
+        };
+
+        long Stage(string name) => timings?.Stages.Where(s => s.Name == name).Sum(s => s.Ms) ?? 0;
+        var grounding = details?.Grounding;
+        var agents = details?.Agents ?? [];
+        return new
+        {
+            turn.Routing?.Mode,
+            Complexity = turn.Routing?.Complexity,
+            turn.Routing?.AgentModel,
+            turn.Routing?.AgentReason,
+            turn.Routing?.FinalModel,
+            turn.Routing?.FinalReason,
+            Planned = turn.Routing is { } r && (r.PlannedAgentModel is not null || r.PlannedFinalModel is not null)
+                ? new { Agent = r.PlannedAgentModel, Final = r.PlannedFinalModel, FinalReason = r.PlannedFinalReason }
+                : null,
+            Reviews = turn.Reviews,
+            Total = Group(calls),
+            CostEstimated = true,
+            ByModel = calls.GroupBy(c => c.Model).ToDictionary(g => g.Key, g => Group(g)),
+            ByPurpose = calls.GroupBy(c => c.Purpose).ToDictionary(g => g.Key, g => Group(g)),
+            Fallbacks = calls.Count(c => c.UsedFallback),
+            StagesMs = new
+            {
+                Routing = Stage("routing"),
+                Agents = Stage("agents"),
+                Compose = Stage("compose"),
+                Review = calls.Where(c => c.Purpose is "consultant.revise" or "consultant.review").Sum(c => c.DurationMs),
+            },
+            timings?.TotalMs,
+            timings?.FirstTextMs,
+            Revisions = grounding?.Revisions ?? 0,
+            grounding?.EscalatedTo,
+            NumbersChecked = grounding?.Checked ?? 0,
+            NumbersPassed = grounding is null || grounding.Unsupported.Count == 0,
+            Completeness = new
+            {
+                Agents = agents.Count,
+                Completed = agents.Count(a => a.Status == "completed"),
+                Partial = agents.Count(a => a.Status == "partial"),
+                NoData = agents.Count(a => a.Status == "no_data"),
+                Failed = agents.Count(a => a.Status is not ("completed" or "partial" or "no_data")),
+                UnverifiedNumbers = agents.Sum(a => a.Unverified?.Count ?? 0),
+            },
+        };
     }
 
     private static string? Trim(string? text, int max) => text is null ? null : text.Length <= max ? text : text[..max];

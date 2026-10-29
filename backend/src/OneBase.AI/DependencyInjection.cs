@@ -42,6 +42,8 @@ public static class DependencyInjection
         services.AddSingleton<IAiProvider, OpenAiProvider>();
         services.AddSingleton<IAiProvider, AnthropicProvider>();
         services.AddSingleton<AiProviderRegistry>();
+        // Защита от платных вызовов для проверок и стендов (Ai:Safety): эмулятор, блокировка, лимиты процесса.
+        services.AddSingleton(AiSafetyOptions.From(config));
         services.AddSingleton<AiSettingsStore>();
         services.AddSingleton<IAiSettingsSource>(sp => sp.GetRequiredService<AiSettingsStore>());
 
@@ -67,7 +69,9 @@ public static class DependencyInjection
         services.AddScoped<IUserPermissions, UserPermissions>();
         services.AddScoped<AiAgentStore>();
         services.AddScoped<SalesGlossary>();
+        services.AddScoped<OneBase.Application.Sales.ISalesWarmStep, SalesToolsWarmStep>();
         services.AddScoped<AgentRunner>();
+        services.AddSingleton(new AgentRunnerOptions(int.TryParse(config["Ai:Agents:MaxParallelTools"], out var parallelTools) && parallelTools > 0 ? parallelTools : 4));
 
         // Консультант: чаты и движок ответа.
         // Консультант: маршрутизация → AI-сотрудники параллельно → единый ответ.

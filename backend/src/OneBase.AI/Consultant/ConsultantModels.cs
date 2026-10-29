@@ -9,10 +9,24 @@ namespace OneBase.AI.Consultant;
 
 /// <summary>
 /// Вопрос пользователя в контексте чата. Channel — откуда вопрос (null — чат OneBase). LastAnswerId — последний ответ консультанта в чате
-/// (если вопрос его оспаривает — на него ссылается проверка в журнале).
+/// (если вопрос его оспаривает — на него ссылается проверка в журнале). Draft — куда отдавать черновик итогового ответа по мере генерации
+/// (потоковая отдача в чат OneBase); null — ответ только целиком.
 /// </summary>
 public sealed record ConsultantTurn(Guid UserId, Guid ConversationId, string Question, IReadOnlyList<LlmMessage> History, ConsultantChannel? Channel = null,
-    Guid? LastAnswerId = null);
+    Guid? LastAnswerId = null, Func<ConsultantDraft, Task>? Draft = null);
+
+/// <summary>
+/// Черновик итогового ответа, пока он пишется: text — следующий фрагмент; reset — показанный черновик недействителен (повтор запроса,
+/// резервная модель), дальше текст пишется заново; checking — черновик дописан, числа сверяются с данными; revising — числа не подтвердились,
+/// ответ переписывается (показанный черновик убирается). Черновик — не ответ: ответ — только событие done, его текст заменяет черновик.
+/// </summary>
+public sealed record ConsultantDraft(string Kind, string? Text = null)
+{
+    public const string TextKind = "text";
+    public const string Reset = "reset";
+    public const string Checking = "checking";
+    public const string Revising = "revising";
+}
 
 /// <summary>
 /// Канал вопроса вне чата OneBase (Telegram): свои инструкции (стиль, язык, ограничения администратора), модель и длина ответа, можно ли

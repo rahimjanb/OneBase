@@ -130,8 +130,9 @@ public sealed partial class SalesAnalytics
         }
 
         var info = _d.Products.GetValueOrDefault(id);
-        var now = scope.Now.Where(l => l.ProductId == id).ToList();
-        var before = scope.Before.Where(l => l.ProductId == id).ToList();
+        var index = ProductIndexOf(s, scope);
+        var now = index.Now[id].ToList();
+        var before = index.Before[id].ToList();
         if (info is null && now.Count == 0 && before.Count == 0)
         {
             return null;
@@ -141,7 +142,7 @@ public sealed partial class SalesAnalytics
         var kg = now.Sum(l => l.Kg);
         var revenue = now.Sum(l => l.Revenue);
         var tt = SalesMath.SkuTt(now);
-        var outlets = SalesMath.Akb(scope.Now);
+        var outlets = index.Outlets;
         var solo = ScopeSolo(s, scope);
         var own = solo.GetValueOrDefault(id);
 
@@ -162,6 +163,20 @@ public sealed partial class SalesAnalytics
             kg > 0 ? revenue / kg : null, before.Sum(l => l.Kg), breakdown, rows, own, SalesMath.Ratio(own, tt), solo.Values.Sum(),
             _d.Top.Contains(info?.Code));
     }
+
+    /// <summary>
+    /// Строки охвата по товару и АКБ охвата — общие для карточек всех товаров охвата: считаются один раз на отчёт, а не заново для каждого
+    /// товара (поиск товаров открывает до 16 карточек). Порядок строк товара — как в охвате, поэтому суммы те же.
+    /// </summary>
+    private sealed record ProductIndex(int Outlets, ILookup<long?, SaleLine> Now, ILookup<long?, SaleLine> Before);
+
+    private ProductIndex ProductIndexOf(AssortmentScope s, ScopeData scope) =>
+        View($"product-index:{s.Key}", () => new ProductIndex(SalesMath.Akb(scope.Now), scope.Now.ToLookup(l => l.ProductId), scope.Before.ToLookup(l => l.ProductId)));
+
+    /// <summary>То же для региона — разбивка карточки товара по регионам.</summary>
+    private ProductIndex RegionProductIndex(Guid region) =>
+        View($"product-index:region:{region}", () => new ProductIndex(SalesMath.Akb(_currentByRegion[region]), _currentByRegion[region].ToLookup(l => l.ProductId),
+            _previousByRegion[region].ToLookup(l => l.ProductId)));
 
     private ScopeData? ScopeOf(AssortmentScope s)
     {
@@ -252,10 +267,10 @@ public sealed partial class SalesAnalytics
         regions
             .Select(id =>
             {
-                var all = _currentByRegion[id];
-                var outlets = SalesMath.Akb(all);
-                var now = all.Where(l => l.ProductId == product).ToList();
-                var before = _previousByRegion[id].Where(l => l.ProductId == product).ToList();
+                var index = RegionProductIndex(id);
+                var outlets = index.Outlets;
+                var now = index.Now[product].ToList();
+                var before = index.Before[product].ToList();
                 if (outlets == 0)
                 {
                     return new ProductBreakdownRow(id.ToString(), _regions[id].Name, null, SkuStatuses.Silent, now.Sum(l => l.Kg), now.Sum(l => l.Revenue),

@@ -30,7 +30,29 @@ public class AiUsage
     public decimal? CostUsd { get; set; }
 
     public long DurationMs { get; set; }
+
+    /// <summary>Из DurationMs — ожидание свободного места (лимит одновременных вызовов), мс; null — записи до замера очереди.</summary>
+    public long? QueueWaitMs { get; set; }
+
+    /// <summary>Попытка этой модели в вызове (1 — первая, 2 — повтор после сбоя); null — записи до замера попыток.</summary>
+    public int? Attempt { get; set; }
+
     public bool Success { get; set; }
+
+    /// <summary>Ответ консультанта, к которому относится вызов: все вызовы одного ответа (маршрутизация, сотрудники, итог, перепроверка).</summary>
+    public Guid? TurnId { get; set; }
+
+    /// <summary>Почему выбрана эта модель (правило маршрутизации моделей): «сложный вопрос: …», «модель сотрудников», «основная».</summary>
+    public string? ModelReason { get; set; }
+
+    /// <summary>Вызов сделан резервной моделью после сбоя основной.</summary>
+    public bool UsedFallback { get; set; }
+
+    /// <summary>
+    /// Стоимость рассчитана по ценам модели из «Настройки → AI → Модели» (провайдер стоимость не возвращает); PriceBasis — какие цены
+    /// применены (за 1 млн токенов), чтобы расчёт оставался проверяемым после смены цен. null — стоимость не рассчитана (нет цены).
+    /// </summary>
+    public string? PriceBasis { get; set; }
 
     /// <summary>Текст ошибки провайдера — без ключей (очищен в AI Gateway).</summary>
     public string? Error { get; set; }
@@ -87,4 +109,19 @@ public class AiAuditLog
 
     /// <summary>Оспоренный ответ (сообщение чата) — исходный ответ для сравнения.</summary>
     public Guid? CorrectionOfMessageId { get; set; }
+
+    /// <summary>
+    /// Замер ответа (jsonb, AiTimingsView): этапы, вызовы модели с ожиданием очереди и попытками, инструменты с размером результата.
+    /// Только длительности, имена и размеры — без текста и данных.
+    /// </summary>
+    public string? Timings { get; set; }
+
+    /// <summary>Ответ консультанта (общий для его вызовов в ai.Usage.TurnId).</summary>
+    public Guid? TurnId { get; set; }
+
+    /// <summary>
+    /// Маршрутизация моделей ответа (jsonb): режим, сложность вопроса и её признаки, выбранные модели и причины, перепроверки, итог по
+    /// вызовам (число, по моделям и назначениям, токены, стоимость — расчётная, неполная, если у части вызовов нет цены).
+    /// </summary>
+    public string? Routing { get; set; }
 }
