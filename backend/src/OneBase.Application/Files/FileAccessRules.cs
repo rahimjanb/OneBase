@@ -15,6 +15,9 @@ public static class FileSources
     public const string WindowsLink = "windows-link";
     public const string WindowsLogin = "windows-login";
     public const string WindowsPersonal = "windows-personal";
+
+    /// <summary>Проводник по логину и паролю OneBase (личный вход).</summary>
+    public const string WindowsUser = "windows-user";
 }
 
 /// <summary>

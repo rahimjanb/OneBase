@@ -753,9 +753,9 @@ public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage sto
     private async Task<string> ValidSharedNameAsync(string name, Guid? except, CancellationToken ct)
     {
         var value = ValidName(name);
-        if (value.StartsWith('_') || value.Equals("k", StringComparison.OrdinalIgnoreCase))
+        if (value.StartsWith('_') || value.Equals("k", StringComparison.OrdinalIgnoreCase) || value.Equals("my", StringComparison.OrdinalIgnoreCase))
         {
-            throw FilesException.Invalid("Имя общей папки не может начинаться с «_» или быть «k».");
+            throw FilesException.Invalid("Имя общей папки не может начинаться с «_» или быть «k» или «my».");
         }
 
         var lower = value.ToLower();

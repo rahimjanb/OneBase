@@ -107,22 +107,43 @@ public static partial class WebDavHandler
             publicBase = $"{publicBase}/k/{segments[1]}";
             segments = segments.Skip(2).ToList();
         }
+        else if (segments.Count > 0 && segments[0].Equals("my", StringComparison.OrdinalIgnoreCase))
+        {
+            // «Мои файлы» по логину и паролю OneBase: https://files.1base.uz/my — без входа 401 (Windows спросит логин), после входа —
+            // папки отделов сотрудника и общие папки, выданные ему, его роли или отделу. Права — его, из базы при каждом запросе.
+            actor = await AuthenticateAsync(http, connections, remote, ct);
+            if (actor is null)
+            {
+                return;
+            }
+
+            publicBase = $"{publicBase}/my";
+            segments = segments.Skip(1).ToList();
+        }
         else if (OfficeProbe(http, segments))
         {
             http.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
         }
-        else if (segments.Count == 0 && method == "PROPFIND" && http.Request.Headers.Authorization.Count == 0)
+        else if (segments.Count == 0)
         {
-            // Корень без входа. Адрес вида https://files.1base.uz/k/{код}/отдел Windows проверяет через корень сервера (DavWWWRoot):
-            // 401 здесь — окно пароля и «Папка недействительна» для адреса без пароля. Пустая папка без содержимого; логин отдела
-            // Проводник спросит дальше, у папки отдела (/production → 401).
-            var now = DateTimeOffset.UtcNow;
-            http.Response.StatusCode = StatusCodes.Status207MultiStatus;
-            http.Response.ContentType = "application/xml; charset=utf-8";
-            await http.Response.WriteAsync(DavXml.MultiStatus([new DavResource(DavPath.Href(publicBase, [], true), "OneBase", true, 0, "", now, now, "")],
-                DavXml.ParsePropfind(null)), ct);
-            return;
+            // Корень сервера никогда не просит пароль. Адрес вида https://files.1base.uz/k/{код}/отдел Windows проверяет через корень
+            // (DavWWWRoot), а логин отдела, введённый раньше в этом сеансе, Windows шлёт сюда сама: 401 здесь — окно пароля и «Папка
+            // недействительна» для адреса без пароля. С верным логином — папки подключения; без него или с неверным — пустая папка
+            // (PROPFIND) или текст (GET, HEAD). Логин отдела Проводник спрашивает у папки отдела (/production → 401).
+            var login = await LoginAsync(http, connections, remote, ct);
+            if (login.Status == DavAuthStatus.Locked)
+            {
+                return;
+            }
+
+            if (login.Actor is null)
+            {
+                await AnonymousRootAsync(http, method, publicBase, ct);
+                return;
+            }
+
+            actor = login.Actor;
         }
         else
         {
@@ -214,43 +235,84 @@ public static partial class WebDavHandler
                || agent.Contains("Microsoft.Office", StringComparison.OrdinalIgnoreCase) || agent.Contains("FrontPage", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task<FileActor?> AuthenticateAsync(HttpContext http, FileConnectionsService connections, string remote, CancellationToken ct)
+    /// <summary>Вход по логину и паролю отдела (Basic), без ответа 401: Locked — пауза после неверных паролей (ответ 429 уже записан).</summary>
+    private static async Task<DavAuthResult> LoginAsync(HttpContext http, FileConnectionsService connections, string remote, CancellationToken ct)
     {
         var header = http.Request.Headers.Authorization.FirstOrDefault();
-        if (header is not null && header.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
+        if (header is null || !header.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
         {
-            string decoded;
-            try
-            {
-                decoded = Encoding.UTF8.GetString(Convert.FromBase64String(header[6..].Trim()));
-            }
-            catch (FormatException)
-            {
-                decoded = string.Empty;
-            }
+            return new DavAuthResult(DavAuthStatus.Failed, null);
+        }
 
-            var colon = decoded.IndexOf(':');
-            if (colon > 0)
-            {
-                var result = await connections.AuthenticateAsync(decoded[..colon], decoded[(colon + 1)..], remote, ct);
-                if (result is { Status: DavAuthStatus.Ok, Actor: { } actor })
-                {
-                    await connections.TouchAsync(actor.ConnectionId!.Value, ct);
-                    return actor;
-                }
+        string decoded;
+        try
+        {
+            decoded = Encoding.UTF8.GetString(Convert.FromBase64String(header[6..].Trim()));
+        }
+        catch (FormatException)
+        {
+            decoded = string.Empty;
+        }
 
-                if (result.Status == DavAuthStatus.Locked)
-                {
-                    http.Response.Headers.RetryAfter = "300";
-                    http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-                    return null;
-                }
-            }
+        var colon = decoded.IndexOf(':');
+        if (colon <= 0)
+        {
+            return new DavAuthResult(DavAuthStatus.Failed, null);
+        }
+
+        var result = await connections.AuthenticateAsync(decoded[..colon], decoded[(colon + 1)..], remote, ct);
+        if (result is { Status: DavAuthStatus.Ok, Actor: { ConnectionId: { } connectionId } })
+        {
+            await connections.TouchAsync(connectionId, ct); // у личного входа (логин OneBase) подключения нет
+        }
+        else if (result.Status == DavAuthStatus.Locked)
+        {
+            http.Response.Headers.RetryAfter = "300";
+            http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        }
+
+        return result;
+    }
+
+    /// <summary>Вход по логину отдела для папок отделов и общих папок: нет или неверный — 401 с запросом пароля (Проводник его покажет).</summary>
+    private static async Task<FileActor?> AuthenticateAsync(HttpContext http, FileConnectionsService connections, string remote, CancellationToken ct)
+    {
+        var result = await LoginAsync(http, connections, remote, ct);
+        if (result.Actor is not null || result.Status == DavAuthStatus.Locked)
+        {
+            return result.Actor;
         }
 
         http.Response.Headers.WWWAuthenticate = "Basic realm=\"OneBase Files\", charset=\"UTF-8\"";
         http.Response.StatusCode = StatusCodes.Status401Unauthorized;
         return null;
+    }
+
+    /// <summary>Корень без входа: пустая папка (PROPFIND), текст (GET, HEAD), остальное — 405. Ничего не раскрывает.</summary>
+    private static async Task AnonymousRootAsync(HttpContext http, string method, string publicBase, CancellationToken ct)
+    {
+        if (method == "PROPFIND")
+        {
+            var now = DateTimeOffset.UtcNow;
+            http.Response.StatusCode = StatusCodes.Status207MultiStatus;
+            http.Response.ContentType = "application/xml; charset=utf-8";
+            await http.Response.WriteAsync(DavXml.MultiStatus([new DavResource(DavPath.Href(publicBase, [], true), "OneBase", true, 0, "", now, now, "")],
+                DavXml.ParsePropfind(null)), ct);
+        }
+        else if (method is "GET" or "HEAD")
+        {
+            http.Response.StatusCode = StatusCodes.Status200OK;
+            http.Response.ContentType = "text/plain; charset=utf-8";
+            if (method == "GET")
+            {
+                await http.Response.WriteAsync("OneBase — файлы отделов. Подключите папку в Проводнике по адресу из OneBase («Подключить к Windows»).", ct);
+            }
+        }
+        else
+        {
+            http.Response.Headers.Allow = "OPTIONS, PROPFIND, GET, HEAD";
+            http.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+        }
     }
 
     /// <summary>Timeout из LOCK («Second-600», «Infinite, Second-4100000000»): секунды, не больше часа; нет или Infinite — час.</summary>

@@ -228,6 +228,18 @@ const dict: Dict = {
   "открыт для редактирования": "tahrirlash uchun ochiq",
   "Снять блокировку «{name}»? Это нужно, если Word или Excel завис и файл не освободился. Если файл ещё открыт, его правки могут не сохраниться.":
     "«{name}» qulfi olib tashlansinmi? Bu Word yoki Excel qotib qolib, fayl bo'shamaganda kerak. Fayl hali ochiq bo'lsa, undagi o'zgarishlar saqlanmasligi mumkin.",
+  "Вход по логину и паролю OneBase":
+    "OneBase login va paroli bilan kirish",
+  "Без ссылки: Windows спросит ваш логин и пароль от OneBase. Права — ваши, проверяются при каждом обращении.":
+    "Havolasiz: Windows OneBase login va parolingizni so'raydi. Huquqlar — sizniki, har bir murojaatda tekshiriladi.",
+  "Мои файлы":
+    "Mening fayllarim",
+  "Разрешить вход Word и Excel ({host}).reg":
+    "Word va Excelga kirishga ruxsat ({host}).reg",
+  "Разрешить вход Word и Excel (.reg)":
+    "Word va Excelga kirishga ruxsat (.reg)",
+  "Microsoft 365 блокирует вход Word и Excel по паролю на любой сервер, кроме разрешённых. Файл добавляет {host} в разрешённые для вашей учётной записи Windows (политика basichostallowlist); для всех компьютеров сразу это делает администратор групповой политикой.":
+    "Microsoft 365 Word va Excelning parol bilan kirishini ruxsat etilganlardan boshqa har qanday serverga bloklaydi. Fayl {host} ni Windows hisobingiz uchun ruxsat etilganlarga qo'shadi (basichostallowlist siyosati); barcha kompyuterlar uchun birdaniga buni administrator guruh siyosati orqali qiladi.",
 };
 
 export default dict;

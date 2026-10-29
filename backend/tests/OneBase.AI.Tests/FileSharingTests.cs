@@ -92,6 +92,32 @@ public class FileSharingTests(DataManagerDb fixture) : IClassFixture<DataManager
         Assert.Contains("Документы", (await DavAsync(sp, "PROPFIND", $"/k/{setup.Link}/fwk", agent: Explorer, headers: new() { ["Depth"] = "1" })).Body);
         Assert.Equal(405, (await DavAsync(sp, "PUT", "/k", "x", Explorer)).Status);
         Assert.Equal(404, (await DavAsync(sp, "PROPFIND", $"/k/{ConnectionCredentials.NewLinkToken()}", agent: Explorer)).Status);
+
+        // Корень никогда не просит пароль: Windows шлёт туда логин отдела, введённый раньше в этом сеансе, и GET/HEAD — неверный логин
+        // и запрос без входа дают пустую папку или текст. Верный логин — папка отдела; у папки отдела неверный логин — 401, как раньше.
+        var connections = sp.GetRequiredService<FileConnectionsService>();
+        var department = await setup.Db.Departments.AsNoTracking().SingleAsync(d => d.Code == "fwk");
+        var username = (await connections.GetAsync(Admin(), department, default)).Username!;
+        var password = await connections.RevealAsync(Admin(), department, default);
+        string Basic(string user, string pass) => "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{pass}"));
+        var wrong = await DavAsync(sp, "PROPFIND", "/", agent: Explorer, headers: new() { ["Depth"] = "1", ["Authorization"] = Basic(username, "неверный") });
+        Assert.Equal(207, wrong.Status);
+        Assert.False(wrong.Headers.ContainsKey("WWW-Authenticate"));
+        Assert.DoesNotContain("fwk", wrong.Body);
+        foreach (var method in new[] { "GET", "HEAD" })
+        {
+            var plain = await DavAsync(sp, method, "/", agent: Explorer);
+            Assert.Equal(200, plain.Status);
+            Assert.False(plain.Headers.ContainsKey("WWW-Authenticate"));
+        }
+
+        var right = await DavAsync(sp, "PROPFIND", "/", agent: Explorer, headers: new() { ["Depth"] = "1", ["Authorization"] = Basic(username, password) });
+        Assert.Equal(207, right.Status);
+        Assert.Contains("/fwk/", right.Body);
+        var folder = await DavAsync(sp, "PROPFIND", "/fwk/", agent: Explorer, headers: new() { ["Authorization"] = Basic(username, "неверный") });
+        Assert.Equal(401, folder.Status);
+        Assert.StartsWith("Basic", folder.Headers.WWWAuthenticate.ToString());
+        Assert.Equal(207, (await DavAsync(sp, "PROPFIND", "/fwk/", agent: Explorer, headers: new() { ["Authorization"] = Basic(username, password) })).Status);
     }
 
     [PostgresFact]
@@ -331,6 +357,65 @@ public class FileSharingTests(DataManagerDb fixture) : IClassFixture<DataManager
         var stale = (await connections.RevealLinkAsync(admin, department, default)).Address.Split('/')[4];
         Assert.Equal(404, (await DavAsync(sp, "PROPFIND", $"/k/{stale}/fpb/")).Status);
         Assert.NotEqual(Guid.Empty, other.DepartmentId);
+    }
+
+    [PostgresFact]
+    public async Task Own_OneBase_login_opens_my_files_and_shared_folders_with_the_users_rights()
+    {
+        var setup = await SetupAsync("fml");
+        var sp = setup.Scope.ServiceProvider;
+        var files = sp.GetRequiredService<DepartmentFilesService>();
+        var shared = await files.CreateSharedAsync(Admin(), "Общие файлы", default);
+        await files.SetSharedAccessAsync(Admin(), shared.Id, "user", setup.WriterId.ToString(), AccessLevel.Write, default);
+        var hasher = new Microsoft.AspNetCore.Identity.PasswordHasher<User>();
+        var user = await setup.Db.Users.SingleAsync(u => u.Id == setup.WriterId);
+        user.PasswordHash = hasher.HashPassword(user, "Пароль-1");
+        await setup.Db.SaveChangesAsync();
+        string Basic(string login, string pass) => "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{login}:{pass}"));
+        var auth = new Dictionary<string, string> { ["Authorization"] = Basic("files-fml", "Пароль-1") };
+
+        // «Мои файлы» без входа — 401 (Windows спросит логин), с логином OneBase — свой отдел и выданная общая папка.
+        var anonymous = await DavAsync(sp, "PROPFIND", "/my/", agent: Explorer);
+        Assert.Equal(401, anonymous.Status);
+        Assert.StartsWith("Basic", anonymous.Headers.WWWAuthenticate.ToString());
+        var mine = await DavAsync(sp, "PROPFIND", "/my/", agent: Explorer, headers: new(auth) { ["Depth"] = "1" });
+        Assert.Equal(207, mine.Status);
+        Assert.Contains("/my/fml/", mine.Body);
+        Assert.Contains("Общие файлы", mine.Body);
+
+        // Word сохраняет в общую папку и по «Моим файлам», и по прямому адресу папки; в журнале — сотрудник и «windows-user».
+        Assert.Equal(201, (await DavAsync(sp, "PUT", "/my/Общие файлы/План.docx", "v1", Word, new(auth), ip: "10.4.4.4")).Status);
+        var locked = await DavAsync(sp, "LOCK", "/Общие файлы/План.docx", LockBody(@"PC-1\Сотрудник"), Word, new(auth));
+        Assert.Equal(200, locked.Status);
+        var token = locked.Headers["Lock-Token"].ToString().Trim('<', '>');
+        Assert.Equal(204, (await DavAsync(sp, "PUT", "/Общие файлы/План.docx", "v2", Word, new(auth) { ["If"] = $"(<{token}>)" })).Status);
+        Assert.Equal(204, (await DavAsync(sp, "UNLOCK", "/Общие файлы/План.docx", agent: Word, headers: new(auth) { ["Lock-Token"] = $"<{token}>" })).Status);
+        Assert.Equal((200, "v2"), Pick(await DavAsync(sp, "GET", "/my/Общие файлы/План.docx", agent: Word, headers: new(auth))));
+        var entry = await setup.Db.AuditLogs.AsNoTracking().Where(x => x.Action == "files.uploaded" && x.ActorId == setup.WriterId.ToString())
+            .OrderByDescending(x => x.Id).FirstAsync();
+        using (var data = System.Text.Json.JsonDocument.Parse(entry.Data!))
+        {
+            Assert.Equal(("windows-user", "10.4.4.4"), (data.RootElement.GetProperty("source").GetString(), data.RootElement.GetProperty("ip").GetString()));
+        }
+
+        // Служебные запросы Office и с паролем — 404; чужой отдел не виден; неверный пароль — 401.
+        Assert.Equal(404, (await DavAsync(sp, "POST", "/_api/web/GetFileByUrl", agent: Word, headers: new(auth))).Status);
+        Assert.Equal(404, (await DavAsync(sp, "PROPFIND", "/my/fla/", agent: Explorer, headers: new(auth))).Status);
+        Assert.Equal(401, (await DavAsync(sp, "PROPFIND", "/my/", agent: Explorer, headers: new() { ["Authorization"] = Basic("files-fml", "не тот") })).Status);
+
+        // Сменил пароль — старый не работает сразу (без ожидания кэша), новый — работает; отключённый сотрудник не входит.
+        user.PasswordHash = hasher.HashPassword(user, "Пароль-2");
+        await setup.Db.SaveChangesAsync();
+        Assert.Equal(401, (await DavAsync(sp, "PROPFIND", "/my/", agent: Explorer, headers: new(auth))).Status);
+        Assert.Equal(207, (await DavAsync(sp, "PROPFIND", "/my/", agent: Explorer, headers: new() { ["Authorization"] = Basic("files-fml", "Пароль-2") })).Status);
+        await setup.Db.Users.Where(u => u.Id == setup.WriterId).ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, false));
+        Assert.Equal(401, (await DavAsync(sp, "PROPFIND", "/my/", agent: Explorer, headers: new() { ["Authorization"] = Basic("files-fml", "Пароль-2") })).Status);
+
+        // В окне «Мой диск Windows» — адрес «Мои файлы», адрес общей папки и домен для разрешения Office.
+        await setup.Db.Users.Where(u => u.Id == setup.WriterId).ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, true));
+        var view = await sp.GetRequiredService<FileConnectionsService>().MyLinkAsync((await files.UserActorAsync(setup.WriterId, default))!, default);
+        Assert.Equal(("files-fml", "https://files.1base.uz/my", "files.1base.uz"), (view.Login!.Login, view.Login.Address, view.Login.OfficeHost));
+        Assert.Equal("https://files.1base.uz/%D0%9E%D0%B1%D1%89%D0%B8%D0%B5%20%D1%84%D0%B0%D0%B9%D0%BB%D1%8B", Assert.Single(view.Login.Shared).Address);
     }
 
     [PostgresFact]

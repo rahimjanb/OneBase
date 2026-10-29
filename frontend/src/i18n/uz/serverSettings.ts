@@ -462,6 +462,16 @@ const dict: Dict = {
   "Имя общей папки не может начинаться с «_» или быть «k».": "Umumiy papka nomi «_» bilan boshlanishi yoki «k» bo'lishi mumkin emas.",
   "«{name}» — код отдела; выберите другое имя общей папки.": "«{name}» — bo'lim kodi; umumiy papka uchun boshqa nom tanlang.",
   "Общая папка не найдена.": "Umumiy papka topilmadi.",
+  "Имя общей папки не может начинаться с «_» или быть «k» или «my».":
+    "Umumiy papka nomi «_» bilan boshlanishi, «k» yoki «my» bo'lishi mumkin emas.",
+  "Проводник → «Этот компьютер» → «Подключить сетевой диск», выберите букву, например X:.":
+    "Provodnik → «Bu kompyuter» → «Tarmoq diskini ulash», harfni tanlang, masalan X:.",
+  "В поле «Папка» вставьте адрес «Мои файлы» (или адрес одной общей папки) и отметьте «Восстанавливать подключение при входе в систему».":
+    "«Papka» maydoniga «Mening fayllarim» manzilini (yoki bitta umumiy papka manzilini) qo'ying va «Tizimga kirishda ulanishni tiklash»ni belgilang.",
+  "Windows спросит логин и пароль — введите свой логин OneBase и пароль от OneBase, отметьте «Запомнить учётные данные».":
+    "Windows login va parolni so'raydi — OneBase loginingiz va OneBase parolini kiriting, «Hisob ma'lumotlarini eslab qolish»ni belgilang.",
+  "Чтобы Word и Excel открывали и сохраняли файлы с этого диска, один раз на компьютере откройте файл «Разрешить вход Word и Excel» (.reg) и согласитесь внести его в реестр, затем перезапустите Word и Excel.":
+    "Word va Excel bu diskdan fayllarni ochishi va saqlashi uchun kompyuterda bir marta «Word va Excelga kirishga ruxsat» (.reg) faylini oching va uni reestrga kiritishga rozi bo'ling, so'ng Word va Excelni qayta ishga tushiring.",
   "В общей папке есть файлы или папки (в том числе в корзине) — удалить можно только пустую.":
     "Umumiy papkada fayllar yoki papkalar bor (savatdagilar ham) — faqat bo'shini o'chirish mumkin.",
   "Доступ выдаётся сотруднику, отделу или роли.": "Kirish xodimga, bo'limga yoki rolga beriladi.",

@@ -120,7 +120,29 @@ export type PersonalLinkView = {
   folders: string[];
   guide: string[];
   notes: string[];
+  /** Вход Проводника по своему логину и паролю OneBase: «Мои файлы», общие папки, домен для разрешения Word и Excel. */
+  login?: {
+    login: string;
+    address: string;
+    uncPath: string | null;
+    shared: { name: string; address: string; uncPath: string | null }[];
+    officeHost: string;
+    guide: string[];
+  } | null;
 };
+
+/**
+ * Файл реестра, который разрешает Word и Excel (Microsoft 365) вход по логину и паролю на сервер файлов OneBase: без него Office
+ * блокирует такой вход («метод входа, который может быть небезопасным»). Значение политики basichostallowlist — для текущего пользователя.
+ */
+export const officeAllowReg = (host: string) =>
+  [
+    "Windows Registry Editor Version 5.00",
+    "",
+    "[HKEY_CURRENT_USER\\Software\\Policies\\Microsoft\\Office\\16.0\\Common\\Identity]",
+    `"basichostallowlist"="${host}"`,
+    "",
+  ].join("\r\n");
 
 
 export type ConnectionTest = { ok: boolean; steps: { name: string; ok: boolean; detail: string }[] };

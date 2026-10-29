@@ -14,6 +14,7 @@ import {
   type DepartmentAccessRow,
   type DepartmentRef,
   type PersonalLinkView,
+  officeAllowReg,
 } from "@/lib/files";
 import { Modal } from "./Modal";
 
@@ -572,6 +573,47 @@ function PersonalLinkDialog({ onClose }: { onClose: () => void }) {
                 </Button>
               )}
             </div>
+            {view.login && (
+              <div className="space-y-3 rounded-lg border border-line p-3">
+                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
+                  <KeyRound className="size-3.5" />
+                  {t("Вход по логину и паролю OneBase")}
+                </p>
+                <p className="text-xs text-ink-3">
+                  {t("Без ссылки: Windows спросит ваш логин и пароль от OneBase. Права — ваши, проверяются при каждом обращении.")}
+                </p>
+                <Field label={t("Логин")} value={view.login.login} onCopy={() => copy("login", async () => view.login!.login)} copied={copied === "login"} />
+                <Field label={t("Мои файлы")} value={view.login.address} onCopy={() => copy("my", async () => view.login!.address)} copied={copied === "my"} />
+                {view.login.shared.map((f) => (
+                  <Field
+                    key={f.name}
+                    label={t("Только папка «{name}»", { name: f.name })}
+                    value={f.uncPath ?? f.address}
+                    onCopy={() => copy(`login-${f.name}`, async () => f.uncPath ?? f.address)}
+                    copied={copied === `login-${f.name}`}
+                  />
+                ))}
+                <ol className="list-decimal space-y-1 pl-5 text-xs text-ink-2">
+                  {view.login.guide.map((step) => (
+                    <li key={step}>{t(step)}</li>
+                  ))}
+                </ol>
+                <Button
+                  onClick={() => {
+                    const url = URL.createObjectURL(new Blob([officeAllowReg(view.login!.officeHost)], { type: "application/octet-stream" }));
+                    const a = Object.assign(document.createElement("a"), { href: url, download: t("Разрешить вход Word и Excel ({host}).reg", { host: view.login!.officeHost }) });
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  <Download className="size-4" />
+                  {t("Разрешить вход Word и Excel (.reg)")}
+                </Button>
+                <p className="text-xs text-ink-3">
+                  {t("Microsoft 365 блокирует вход Word и Excel по паролю на любой сервер, кроме разрешённых. Файл добавляет {host} в разрешённые для вашей учётной записи Windows (политика basichostallowlist); для всех компьютеров сразу это делает администратор групповой политикой.", { host: view.login.officeHost })}
+                </p>
+              </div>
+            )}
             {view.folders.length > 0 && (
               <div>
                 <p className="mb-1 text-xs text-ink-3">{t("На диске")}</p>

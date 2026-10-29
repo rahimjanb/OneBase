@@ -43,6 +43,9 @@ public sealed class FilesOptions
     /// <summary>Тот же адрес путём Windows: «\\files.1base.uz@SSL\k\{код}\production».</summary>
     public string? LinkUncPath(string token, string folder) => UncPath(folder.Length > 0 ? $@"k\{token}\{folder}" : $@"k\{token}");
 
+    /// <summary>«Мои файлы» по логину и паролю OneBase: «https://files.1base.uz/my» — папки отделов сотрудника и выданные ему общие папки.</summary>
+    public string? MyUrl() => PublicRoot() is { } root ? $"{root}/my" : null;
+
     /// <summary>Адрес папки отдела для «Подключить сетевой диск»: «https://files.1base.uz/production».</summary>
     public string? FolderUrl(string departmentCode) => PublicRoot() is { } root ? $"{root}/{departmentCode}" : null;
 

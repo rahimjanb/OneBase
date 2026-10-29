@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using OneBase.Application.Abstractions;
@@ -52,7 +53,14 @@ public sealed record PersonalLinkView(
     bool DomainConfigured,
     IReadOnlyList<string> Folders,
     IReadOnlyList<string> Guide,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    PersonalLogin? Login = null);
+
+/// <summary>
+/// Вход Проводника по логину и паролю OneBase: Address — «https://files.1base.uz/my» (всё доступное), Shared — адреса отдельных общих
+/// папок, OfficeHost — домен для разрешения входа Word и Excel (basichostallowlist): Microsoft 365 без него вход по паролю блокирует.
+/// </summary>
+public sealed record PersonalLogin(string Login, string Address, string? UncPath, IReadOnlyList<SharedLinkAddress> Shared, string OfficeHost, IReadOnlyList<string> Guide);
 
 public sealed record ConnectionTestStep(string Name, bool Ok, string Detail);
 
@@ -83,7 +91,8 @@ public sealed class FileConnectionsService(
     FilesOptions options,
     IFileStorage storage,
     IHttpClientFactory httpClients,
-    DepartmentFilesService files)
+    DepartmentFilesService files,
+    IPasswordHasher<User> hasher)
 {
     public const string ConnectionType = "WebDAV (HTTPS)";
 
@@ -346,7 +355,21 @@ public sealed class FileConnectionsService(
         }
 
         var connection = await db.FileConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Username == login && c.RevokedAt == null, ct);
-        if (connection is null || !ConnectionCredentials.Verify(connection.PasswordHash, password))
+        if (connection is null)
+        {
+            // Не логин отдела — личный вход: логин (или почта) и пароль OneBase, как на сайте.
+            var personal = await UserLoginAsync(login, password, fingerprint, ct);
+            if (personal is null)
+            {
+                cache.Set(failKey, failures + 1, LockWindow);
+                return new DavAuthResult(DavAuthStatus.Failed, null);
+            }
+
+            cache.Remove(failKey);
+            return new DavAuthResult(DavAuthStatus.Ok, personal);
+        }
+
+        if (!ConnectionCredentials.Verify(connection.PasswordHash, password))
         {
             cache.Set(failKey, failures + 1, LockWindow);
             return new DavAuthResult(DavAuthStatus.Failed, null);
@@ -355,6 +378,47 @@ public sealed class FileConnectionsService(
         cache.Remove(failKey);
         cache.Set(AuthKey(login), new AuthEntry(connection.Id, connection.Username, connection.DepartmentId, connection.Access, fingerprint), AuthCacheTtl);
         return new DavAuthResult(DavAuthStatus.Ok, await LoginActorAsync(connection.Id, connection.Username, connection.DepartmentId, connection.Access, ct));
+    }
+
+    /// <summary>Проверенный личный вход: сотрудник и его хэш пароля на момент проверки (сменил пароль — старый перестаёт работать сразу).</summary>
+    private sealed record UserAuthEntry(Guid UserId, string PasswordHash, string Fingerprint);
+
+    /// <summary>
+    /// Личный вход Windows по логину (или почте) и паролю OneBase. Пароль проверяется тем же хэшем, что вход на сайт (PBKDF2), — Проводник
+    /// шлёт его с каждым запросом, поэтому проверенный ненадолго кэшируется вместе с хэшем пароля из базы. Права — сотрудника, из базы при
+    /// каждом запросе: отключили или забрали доступ — сразу. Сотрудник без прав на файлы не входит.
+    /// </summary>
+    private async Task<FileActor?> UserLoginAsync(string login, string password, string fingerprint, CancellationToken ct)
+    {
+        if (login.Length == 0)
+        {
+            return null;
+        }
+
+        var user = await db.Users.AsNoTracking().Where(u => u.Login == login || u.Email == login)
+            .Select(u => new { u.Id, u.IsActive, u.PasswordHash, u.Login, u.FullName })
+            .FirstOrDefaultAsync(ct);
+        if (user is not { IsActive: true } || string.IsNullOrEmpty(user.PasswordHash))
+        {
+            return null;
+        }
+
+        var key = $"files-dav-user:{login}";
+        var verified = cache.TryGetValue(key, out UserAuthEntry? entry) && entry is not null && entry.UserId == user.Id
+                       && entry.Fingerprint == fingerprint && entry.PasswordHash == user.PasswordHash;
+        if (!verified)
+        {
+            var probe = new User { Id = user.Id, Login = user.Login, FullName = user.FullName };
+            if (hasher.VerifyHashedPassword(probe, user.PasswordHash, password) == PasswordVerificationResult.Failed)
+            {
+                return null;
+            }
+
+            cache.Set(key, new UserAuthEntry(user.Id, user.PasswordHash, fingerprint), AuthCacheTtl);
+        }
+
+        var actor = await files.UserActorAsync(user.Id, ct);
+        return actor is not null && FileAccessRules.CanHavePersonalLink(actor) ? actor with { Source = FileSources.WindowsUser } : null;
     }
 
     /// <summary>Подключение по логину: папка отдела и общие папки, выданные отделу (выдачи читаются при каждом запросе).</summary>
@@ -388,7 +452,28 @@ public sealed class FileConnectionsService(
         var configured = options.PublicRoot() is not null;
         var status = link is null ? "none" : link.ExpiresAt <= DateTimeOffset.UtcNow ? "expired" : "active";
         return new PersonalLinkView(status, status == "active" ? options.LinkUrl(Masked, "") : null, link?.CreatedAt, link?.ExpiresAt, link?.LastUsedAt,
-            configured, folders, status == "active" && configured ? PersonalGuide() : [], PersonalNotes(configured));
+            configured, folders, status == "active" && configured ? PersonalGuide() : [], PersonalNotes(configured), await PersonalLoginAsync(actor, ct));
+    }
+
+    /// <summary>Как войти по своему логину и паролю OneBase: адрес «Мои файлы», адреса общих папок, домен для Office.</summary>
+    private async Task<PersonalLogin?> PersonalLoginAsync(FileActor actor, CancellationToken ct)
+    {
+        if (options.MyUrl() is not { } address || options.PublicRoot() is not { } root)
+        {
+            return null;
+        }
+
+        var login = await db.Users.AsNoTracking().Where(u => u.Id == actor.UserId).Select(u => u.Login).FirstOrDefaultAsync(ct) ?? "";
+        var shared = (await files.ReadableSharedAsync(actor, ct))
+            .Select(r => new SharedLinkAddress(r.Name, $"{root}/{Uri.EscapeDataString(r.Name)}", options.UncPath(r.Name))).ToList();
+        IReadOnlyList<string> guide =
+        [
+            "Проводник → «Этот компьютер» → «Подключить сетевой диск», выберите букву, например X:.",
+            "В поле «Папка» вставьте адрес «Мои файлы» (или адрес одной общей папки) и отметьте «Восстанавливать подключение при входе в систему».",
+            "Windows спросит логин и пароль — введите свой логин OneBase и пароль от OneBase, отметьте «Запомнить учётные данные».",
+            "Чтобы Word и Excel открывали и сохраняли файлы с этого диска, один раз на компьютере откройте файл «Разрешить вход Word и Excel» (.reg) и согласитесь внести его в реестр, затем перезапустите Word и Excel.",
+        ];
+        return new PersonalLogin(login, address, options.UncPath("my"), shared, options.PublicDomain.Trim().Trim('/').Split(':')[0], guide);
     }
 
     /// <summary>Выпустить личную ссылку (или новую вместо прежней — прежняя перестаёт работать сразу).</summary>
