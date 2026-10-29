@@ -36,14 +36,36 @@ public sealed record HrSyncBrief(
     DateOnly? TimesheetFrom,
     DateOnly? TimesheetTo);
 
-public sealed record HrGroupStat(long? Id, string Name, int Active, int Present, int Late, int Absent, int OnLeave, int Unknown, int Events);
+/// <summary>Scheduled — по графику на день: все, кроме выходного и дней без графика (с ними явку не считают).</summary>
+public sealed record HrGroupStat(long? Id, string Name, int Active, int Scheduled, int Present, int Late, int Absent, int OnLeave, int Unknown, int Events);
 
 public sealed record HrLocationStat(long? Id, string Name, int Employees, int Events);
 
+/// <summary>
+/// «Требует внимания»: отсутствует, опоздал или «не ясно». Kind — absent | late | unknown. FirstEvent — первая отметка дня
+/// (для «не ясно»: отметки есть, подтверждённого прихода нет).
+/// </summary>
+public sealed record HrAttentionRow(Guid EmployeeId, string Employee, string? Division, string Kind, DateTime? PlanBegin, DateTime? FirstIn, int? LateMinutes,
+    int Events, DateTime? FirstEvent);
+
+/// <summary>
+/// День для сравнения — предыдущий день, когда по графику работала хотя бы половина от сегодняшнего (после выходных — пятница).
+/// Сегодня — на тот же час (кто пришёл до этого времени), прошлый день — за весь день. PresentPct — на месте от «по графику».
+/// </summary>
+public sealed record HrOverviewCompare(DateOnly Date, double PresentPct, TimeOnly? AvgArrival);
+
+/// <summary>
+/// Обзор HR за день (сегодня или прошлый). Шесть итогов дня — вовремя (Present − Late), опоздали, отсутствуют, по документу, ожидаются,
+/// не ясно — в сумме дают Scheduled. AvgArrival — средний приход в рабочий день по графику; LateWeek и LateLastWeek — опоздания с понедельника
+/// по этот день и за те же дни прошлой недели; PassesByHour — проходы по часам (24 значения).
+/// </summary>
 public sealed record HrOverview(
     DateOnly Date,
     DateTime Now,
+    bool IsToday,
     int Active,
+    int? ActiveDeltaMonth,
+    int Scheduled,
     int Present,
     int Late,
     int Absent,
@@ -54,6 +76,14 @@ public sealed record HrOverview(
     int Unknown,
     int EventsToday,
     int MissingInVerifix,
+    TimeOnly? AvgArrival,
+    int? AvgLateMinutes,
+    HrOverviewCompare? Compare,
+    int LateWeek,
+    int LateLastWeek,
+    IReadOnlyList<int> PassesByHour,
+    IReadOnlyList<HrAttentionRow> Attention,
+    int AttentionTotal,
     IReadOnlyList<HrGroupStat> Divisions,
     IReadOnlyList<HrLocationStat> Locations,
     HrSyncBrief Sync,
@@ -93,6 +123,10 @@ public sealed record HrEventRow(
     DateTimeOffset ImportedAt,
     DateTimeOffset? MissingSince);
 
+/// <summary>
+/// Карточка сотрудника за период. Events — все отметки периода по времени (для раскрытия дня); NoteUpdatedBy — кто последним менял заметку;
+/// VerifixUrl — адрес Verifix из настроек интеграции; Sync — свежесть данных Verifix.
+/// </summary>
 public sealed record HrEmployeeCard(
     HrEmployeeRow Employee,
     string? MiddleName,
@@ -100,6 +134,7 @@ public sealed record HrEmployeeCard(
     string? OrgUnit,
     string? Note,
     DateTimeOffset? NoteUpdatedAt,
+    string? NoteUpdatedBy,
     DateTimeOffset FirstSyncedAt,
     DateTimeOffset LastSyncedAt,
     bool CanEditNote,
@@ -107,7 +142,9 @@ public sealed record HrEmployeeCard(
     DateOnly To,
     IReadOnlyList<HrDayResult> Days,
     IReadOnlyList<HrEventRow> Events,
-    HrSummary Summary);
+    HrSummary Summary,
+    string? VerifixUrl,
+    HrSyncBrief Sync);
 
 /// <summary>Итог периода по сотруднику или группе.</summary>
 public sealed record HrSummary(
@@ -242,39 +279,116 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
     public async Task<bool> HasAccessAsync(Guid userId, IReadOnlySet<string> permissions, CancellationToken ct) =>
         permissions.Contains(Permissions.HrRead) || permissions.Contains(Permissions.IntegrationsManage) || (await ContextAsync(userId, permissions, ct)).HasAccess;
 
+    /// <summary>Отметок в карточке сотрудника — с запасом на 62 дня по нескольку проходов в день.</summary>
+    private const int MaxCardEvents = 5000;
+
     // ---------- Обзор ----------
 
-    public async Task<HrOverview> OverviewAsync(HrContext ctx, CancellationToken ct)
+    /// <summary>Сколько строк «Требует внимания» отдаёт обзор (на экране — сколько помещается; остальные — в «Опозданиях и отсутствиях»).</summary>
+    public const int AttentionTake = 10;
+
+    /// <summary>Обзор за день: date — прошлый день или сегодня (по умолчанию и для будущих дат).</summary>
+    public async Task<HrOverview> OverviewAsync(HrContext ctx, DateOnly? date, CancellationToken ct)
     {
         Require(ctx);
         var rules = await rulesSource.GetRulesAsync(ct);
         var now = Now(rules);
         var today = DateOnly.FromDateTime(now);
-        var period = await EvaluateAsync(ctx, today, today, null, null, null, rules, ct);
-        var names = await NamesAsync(ct);
+        var day = date is { } d && d < today ? d : today;
+        var isToday = day == today;
 
-        var rows = period.Rows.Select(r => (r.Employee, Day: r.Days[0])).Where(r => r.Day.Status != HrDayStatus.NotEmployed).ToList();
-        var events = await VisibleEvents(ctx).Where(e => e.LocalDate == today && e.MissingSince == null)
+        // С понедельника прошлой недели: опоздания этой недели к тем же дням прошлой и день для сравнения — одним расчётом.
+        var monday = day.AddDays(-(((int)day.DayOfWeek + 6) % 7));
+        var from = monday.AddDays(-7);
+        var period = await EvaluateAsync(ctx, from, day, null, null, null, rules, ct);
+        var names = await NamesAsync(ct);
+        int Index(DateOnly x) => x.DayNumber - from.DayNumber;
+
+        var rows = period.Rows.Select(r => (r.Employee, Day: r.Days[Index(day)])).Where(r => r.Day.Status != HrDayStatus.NotEmployed).ToList();
+        var events = await VisibleEvents(ctx).Where(e => e.LocalDate == day && e.MissingSince == null)
             .GroupBy(e => e.LocationId)
             .Select(g => new { LocationId = g.Key, Events = g.Count(), Employees = g.Select(e => e.VerifixEmployeeId).Distinct().Count() })
             .ToListAsync(ct);
+        var hours = await VisibleEvents(ctx).Where(e => e.LocalDate == day && e.MissingSince == null)
+            .GroupBy(e => e.LocalTime.Hour).Select(g => new { Hour = g.Key, Count = g.Count() }).ToListAsync(ct);
+        var passesByHour = new int[24];
+        foreach (var h in hours)
+        {
+            passesByHour[h.Hour] = h.Count;
+        }
 
         var divisions = rows.GroupBy(r => r.Employee.DivisionId)
-            .Select(g => new HrGroupStat(g.Key, Name(names.Divisions, g.Key, "Без подразделения")!, g.Count(),
+            .Select(g => new HrGroupStat(g.Key, Name(names.Divisions, g.Key, "Без подразделения")!, g.Count(), g.Count(r => Scheduled(r.Day)),
                 g.Count(r => r.Day.Status == HrDayStatus.Present), g.Count(r => r.Day.Late), g.Count(r => r.Day.Status == HrDayStatus.Absent),
                 g.Count(r => r.Day.Status == HrDayStatus.OnLeave), g.Count(r => r.Day.Status == HrDayStatus.Unknown), g.Sum(r => r.Day.Events)))
             .OrderByDescending(g => g.Active).ThenBy(g => g.Name).ToList();
         var locations = events
             .Select(e => new HrLocationStat(e.LocationId, Name(names.Locations, e.LocationId, "Локация не указана")!, e.Employees, e.Events))
-            .OrderByDescending(l => l.Employees).ThenBy(l => l.Name).ToList();
+            .OrderByDescending(l => l.Events).ThenBy(l => l.Name).ToList();
         var missing = await Visible(ctx).CountAsync(e => e.MissingSince != null, ct);
 
-        return new HrOverview(today, now, rows.Count,
-            rows.Count(r => r.Day.Status == HrDayStatus.Present), rows.Count(r => r.Day.Late), rows.Count(r => r.Day.Status == HrDayStatus.Absent),
+        // Сравнение: сегодня — на тот же час, прошлый день — целиком.
+        var scheduled = rows.Count(r => Scheduled(r.Day));
+        HrOverviewCompare? compare = null;
+        for (var x = day.AddDays(-1); x >= from && compare is null; x = x.AddDays(-1))
+        {
+            var days = period.Rows.Select(r => r.Days[Index(x)]).Where(Scheduled).ToList();
+            if (days.Count == 0 || days.Count * 2 < scheduled)
+            {
+                continue;
+            }
+
+            var limit = isToday ? x.ToDateTime(TimeOnly.FromDateTime(now)) : (DateTime?)null;
+            var present = days.Where(v => v.Status == HrDayStatus.Present && (limit is null || v.FirstIn <= limit)).ToList();
+            compare = new HrOverviewCompare(x, Math.Round(100.0 * present.Count / days.Count, 1), AvgArrival(present));
+        }
+
+        int LateBetween(DateOnly a, DateOnly b) => period.Rows.Sum(r => r.Days.Count(v => v.Date >= a && v.Date <= b && v.Late));
+        var late = rows.Where(r => r.Day.Late).ToList();
+
+        // Штат месяц назад — по датам приёма и увольнения; без дат приёма в Verifix изменение не посчитать.
+        var staff = await Visible(ctx).Where(e => e.Status != HrEmployeeStatus.NotHired)
+            .Select(e => new { e.Status, e.HiringDate, e.DismissalDate }).ToListAsync(ct);
+        int EmployedOn(DateOnly x) => staff.Count(s => (s.HiringDate is not { } hired || hired <= x)
+                                                        && (s.DismissalDate is { } dismissed ? dismissed >= x : s.Status != HrEmployeeStatus.Dismissed));
+        int? activeDelta = staff.Any(s => s.HiringDate != null) ? EmployedOn(day) - EmployedOn(day.AddMonths(-1)) : null;
+
+        // «Требует внимания»: отсутствующие, затем опоздавшие (сильнее — выше), затем «не ясно».
+        var attention = rows.Where(r => r.Day.Status is HrDayStatus.Absent or HrDayStatus.Unknown || r.Day.Late)
+            .OrderBy(r => r.Day.Status == HrDayStatus.Absent ? 0 : r.Day.Late ? 1 : 2)
+            .ThenByDescending(r => r.Day.LateMinutes ?? 0).ThenBy(r => r.Employee.FullName)
+            .ToList();
+        var top = attention.Take(AttentionTake).ToList();
+        var unclear = top.Where(r => r.Day.Status == HrDayStatus.Unknown && r.Day.Events > 0).Select(r => r.Employee.Id).ToList();
+        var firstEvents = unclear.Count == 0
+            ? new Dictionary<Guid, DateTime>()
+            : await db.HrAttendanceEvents.AsNoTracking()
+                .Where(e => e.EmployeeId != null && unclear.Contains(e.EmployeeId.Value) && e.LocalDate == day && e.MissingSince == null)
+                .GroupBy(e => e.EmployeeId!.Value).Select(g => new { g.Key, First = g.Min(e => e.LocalTime) })
+                .ToDictionaryAsync(g => g.Key, g => g.First, ct);
+        var attentionRows = top.Select(r => new HrAttentionRow(r.Employee.Id, r.Employee.FullName, Name(names.Divisions, r.Employee.DivisionId, null),
+            r.Day.Status == HrDayStatus.Absent ? "absent" : r.Day.Late ? "late" : "unknown", r.Day.PlanBegin, r.Day.FirstIn, r.Day.LateMinutes, r.Day.Events,
+            firstEvents.TryGetValue(r.Employee.Id, out var first) ? first : null)).ToList();
+
+        return new HrOverview(day, now, isToday, rows.Count, activeDelta, scheduled,
+            rows.Count(r => r.Day.Status == HrDayStatus.Present), late.Count, rows.Count(r => r.Day.Status == HrDayStatus.Absent),
             rows.Count(r => r.Day.Status == HrDayStatus.OnLeave), rows.Count(r => r.Day.Status == HrDayStatus.Expected),
             rows.Count(r => r.Day.Status == HrDayStatus.DayOff), rows.Count(r => r.Day.Status == HrDayStatus.NoSchedule),
             rows.Count(r => r.Day.Status == HrDayStatus.Unknown), events.Sum(e => e.Events), missing,
+            AvgArrival(rows.Select(r => r.Day)), late.Count == 0 ? null : (int)Math.Round(late.Average(r => r.Day.LateMinutes ?? 0)), compare,
+            LateBetween(monday, day), LateBetween(monday.AddDays(-7), day.AddDays(-7)), passesByHour, attentionRows, attention.Count,
             divisions, locations, await SyncBriefAsync(rules, ct), ctx.SeesAll);
+    }
+
+    /// <summary>По графику на день: явку считают от них — все, кроме выходного, дней без графика и не работавших в компании.</summary>
+    private static bool Scheduled(HrDayResult d) => d.Status is not (HrDayStatus.DayOff or HrDayStatus.NoSchedule or HrDayStatus.NotEmployed);
+
+    /// <summary>Средний приход в рабочий день по графику (работа в выходной и без графика не в счёт).</summary>
+    private static TimeOnly? AvgArrival(IEnumerable<HrDayResult> days)
+    {
+        var minutes = days.Where(d => d.Status == HrDayStatus.Present && d.DayKind == "W" && d.FirstIn is not null)
+            .Select(d => d.FirstIn!.Value.TimeOfDay.TotalMinutes).ToList();
+        return minutes.Count == 0 ? null : TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(Math.Round(minutes.Average())));
     }
 
     public async Task<HrSyncBrief> SyncBriefAsync(CancellationToken ct) => await SyncBriefAsync(await rulesSource.GetRulesAsync(ct), ct);
@@ -338,14 +452,22 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
         var employee = await Visible(ctx).AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct) ?? throw new FieldNotFoundException("Сотрудник не найден.");
         var rules = await rulesSource.GetRulesAsync(ct);
         var today = DateOnly.FromDateTime(Now(rules));
-        var (start, end) = Period(from ?? today.AddDays(-13), to ?? today);
+        // Уволенный — по умолчанию период заканчивается днём увольнения.
+        var last = employee.DismissalDate is { } dismissed && dismissed < today ? dismissed : today;
+        var (start, end) = Period(from ?? (to ?? last).AddDays(-13), to ?? last);
         var period = await EvaluateAsync(ctx, start, end, null, [id], null, rules, ct, includeAll: true);
         var days = period.Rows.FirstOrDefault()?.Days ?? [];
         var names = await NamesAsync(ct);
-        var events = await EventRowsAsync(VisibleEvents(ctx).Where(e => e.EmployeeId == id && e.LocalDate >= start && e.LocalDate <= end), names, 200, ct);
+        var events = await EventRowsAsync(VisibleEvents(ctx).Where(e => e.EmployeeId == id && e.LocalDate >= start && e.LocalDate <= end)
+            .OrderBy(e => e.LocalTime).ThenBy(e => e.Id), names, MaxCardEvents, ct);
         var row = (await RowsAsync(ctx, [employee], ct))[0];
+        var noteBy = employee.NoteUpdatedById is { } author
+            ? await db.Users.AsNoTracking().Where(u => u.Id == author).Select(u => u.FullName).FirstOrDefaultAsync(ct)
+            : null;
+        var state = await rulesSource.GetStateAsync(ct);
         return new HrEmployeeCard(row, employee.MiddleName, employee.Email, Name(names.Divisions, employee.OrgUnitId, null), employee.Note, employee.NoteUpdatedAt,
-            employee.FirstSyncedAt, employee.LastSyncedAt, ctx.CanEditNotes, start, end, days.OrderByDescending(d => d.Date).ToList(), events, HrSummary.Of(days));
+            noteBy, employee.FirstSyncedAt, employee.LastSyncedAt, ctx.CanEditNotes, start, end, days.OrderByDescending(d => d.Date).ToList(), events,
+            HrSummary.Of(days), state.Configured ? state.BaseUrl : null, await SyncBriefAsync(rules, ct));
     }
 
     /// <summary>Локальная заметка HR: единственное поле сотрудника, которое правится в OneBase. Синхронизация её не трогает.</summary>
@@ -389,7 +511,7 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
 
     // ---------- Посещаемость ----------
 
-    /// <summary>День: каждый видимый сотрудник с итогом дня. status — present | late | absent | leave | expected | unknown | dayoff | noschedule.</summary>
+    /// <summary>День: каждый видимый сотрудник с итогом дня. status — present | ontime | late | absent | leave | expected | unknown | dayoff | noschedule.</summary>
     public async Task<IReadOnlyList<HrDayRow>> DayAsync(HrContext ctx, DateOnly? date, long? divisionId, string? status, string? search, CancellationToken ct)
     {
         Require(ctx);
@@ -431,13 +553,13 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
     }
 
     /// <summary>Опоздания, ранние уходы, отсутствия и дни без ухода за период. kind — late | early | absent | noexit | null (все).</summary>
-    public async Task<IReadOnlyList<HrDeviation>> DeviationsAsync(HrContext ctx, DateOnly? from, DateOnly? to, string? kind, long? divisionId, CancellationToken ct)
+    public async Task<IReadOnlyList<HrDeviation>> DeviationsAsync(HrContext ctx, DateOnly? from, DateOnly? to, string? kind, long? divisionId, Guid? employeeId, CancellationToken ct)
     {
         Require(ctx);
         var rules = await rulesSource.GetRulesAsync(ct);
         var today = DateOnly.FromDateTime(Now(rules));
         var (start, end) = Period(from ?? today.AddDays(-6), to ?? today);
-        var period = await EvaluateAsync(ctx, start, end, divisionId, null, null, rules, ct);
+        var period = await EvaluateAsync(ctx, start, end, divisionId, Only(employeeId), null, rules, ct);
         var names = await NamesAsync(ct);
         var list = new List<HrDeviation>();
         foreach (var row in period.Rows)
@@ -722,6 +844,7 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
     private static bool Matches(HrDayResult d, string? status) => status switch
     {
         "present" => d.Status == HrDayStatus.Present,
+        "ontime" => d.Status == HrDayStatus.Present && !d.Late,
         "late" => d.Late,
         "absent" => d.Status == HrDayStatus.Absent,
         "leave" => d.Status == HrDayStatus.OnLeave,

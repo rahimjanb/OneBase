@@ -76,7 +76,7 @@ export default async function HrEmployeesPage({ searchParams }: { searchParams: 
                 {result.items.map((e) => (
                   <tr key={e.id} className="hover:bg-muted/40">
                     <td className="px-4 py-2.5">
-                      <Link href={`/hr/employees/${e.id}`} className="font-medium text-ink hover:text-accent-strong">
+                      <Link href={`/hr/employees/${e.id}${qs({ back: qs(query).slice(1) })}`} className="font-medium text-ink hover:text-accent-strong">
                         {e.fullName}
                       </Link>
                       {e.phone && <div className="text-xs text-ink-3">{e.phone}</div>}

@@ -1,5 +1,5 @@
 /*
- * Токены страницы «Рабочее время и табели» (редизайн): только для этой страницы — остальное приложение их не видит.
+ * Токены редизайна HR — страниц «Рабочее время и табели» и «Обзор HR»: только для них, остальное приложение их не видит.
  * Светлая тема — по умолчанию; тёмная — когда тёмная тема у OneBase (по умолчанию у бренда OneBase или явный выбор data-theme="dark").
  * Компоненты берут цвета только отсюда: bg-(--ts-surface), text-(--ts-muted) и т. п.
  */
@@ -16,6 +16,7 @@
   --ts-subtle: #8f97a8;
   --ts-accent: #2f6bff;
   --ts-accent-soft: #2f6bff14;
+  --ts-link: #2f6bff;
   --ts-success: #0f9f4f;
   --ts-success-soft: #12a15016;
   --ts-warning: #c26a00;
@@ -71,6 +72,7 @@
   --ts-subtle: #5c6680;
   --ts-accent: #3d7bff;
   --ts-accent-soft: #3d7bff1f;
+  --ts-link: #7fa6ff;
   --ts-success: #2bd47d;
   --ts-success-soft: #2bd47d1c;
   --ts-warning: #f6a93b;

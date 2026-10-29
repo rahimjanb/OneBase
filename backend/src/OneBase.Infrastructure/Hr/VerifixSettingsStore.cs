@@ -135,7 +135,7 @@ public sealed class VerifixSettingsStore(
     public async Task<HrIntegrationState> GetStateAsync(CancellationToken ct = default)
     {
         var c = await GetAsync(ct);
-        return new HrIntegrationState(c.HasCredentials, c.Enabled, c.Data.AutoSync, c.Data.IntervalMinutes);
+        return new HrIntegrationState(c.HasCredentials, c.Enabled, c.Data.AutoSync, c.Data.IntervalMinutes, c.BaseUrl);
     }
 
     /// <summary>Сохраняет настройки. ClientSecret: null — не менять, "" — удалить сохранённый в OneBase.</summary>

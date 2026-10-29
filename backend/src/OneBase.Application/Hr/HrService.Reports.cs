@@ -81,13 +81,13 @@ public sealed partial class HrService
     };
 
     /// <summary>«Рабочее время и табели»: по сотруднику — итоги периода и буква каждого дня.</summary>
-    public async Task<HrTimesheet> TimesheetAsync(HrContext ctx, DateOnly? from, DateOnly? to, long? divisionId, string? search, CancellationToken ct)
+    public async Task<HrTimesheet> TimesheetAsync(HrContext ctx, DateOnly? from, DateOnly? to, long? divisionId, string? search, Guid? employeeId, CancellationToken ct)
     {
         Require(ctx);
         var rules = await rulesSource.GetRulesAsync(ct);
         var today = DateOnly.FromDateTime(Now(rules));
         var (start, end) = Period(from ?? new DateOnly(today.Year, today.Month, 1), to ?? today);
-        var period = await EvaluateAsync(ctx, start, end, divisionId, null, search, rules, ct);
+        var period = await EvaluateAsync(ctx, start, end, divisionId, Only(employeeId), search, rules, ct);
         var names = await NamesAsync(ct);
         var rows = period.Rows
             .Select(r => new HrTimesheetRow(r.Employee.Id, r.Employee.FullName, Name(names.Divisions, r.Employee.DivisionId, null), Name(names.Jobs, r.Employee.JobId, null),
@@ -99,13 +99,13 @@ public sealed partial class HrService
     }
 
     /// <summary>«Отчёты»: итоги по подразделениям, частые опоздания и отсутствия за период.</summary>
-    public async Task<HrReport> ReportAsync(HrContext ctx, DateOnly? from, DateOnly? to, long? divisionId, CancellationToken ct)
+    public async Task<HrReport> ReportAsync(HrContext ctx, DateOnly? from, DateOnly? to, long? divisionId, Guid? employeeId, CancellationToken ct)
     {
         Require(ctx);
         var rules = await rulesSource.GetRulesAsync(ct);
         var today = DateOnly.FromDateTime(Now(rules));
         var (start, end) = Period(from ?? new DateOnly(today.Year, today.Month, 1), to ?? today);
-        var period = await EvaluateAsync(ctx, start, end, divisionId, null, null, rules, ct);
+        var period = await EvaluateAsync(ctx, start, end, divisionId, Only(employeeId), null, rules, ct);
         var names = await NamesAsync(ct);
 
         var people = period.Rows
@@ -125,6 +125,9 @@ public sealed partial class HrService
             people.Where(p => p.Summary.AbsentDays > 0).OrderByDescending(p => p.Summary.AbsentDays).Take(10).ToList(),
             await SyncBriefAsync(rules, ct));
     }
+
+    /// <summary>Один сотрудник (выгрузка из его карточки) или все видимые.</summary>
+    private static IReadOnlyCollection<Guid>? Only(Guid? employeeId) => employeeId is { } id ? [id] : null;
 
     private static double? Attendance(HrSummary s) => s.PresentDays + s.AbsentDays is var n and > 0 ? Math.Round(100.0 * s.PresentDays / n, 1) : null;
 

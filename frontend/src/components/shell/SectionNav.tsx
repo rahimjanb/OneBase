@@ -146,7 +146,14 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
             }`}
           >
             <t.icon className="size-3.5 shrink-0" strokeWidth={1.75} />
-            {tr(t.label)}
+            {t.short ? (
+              <>
+                <span className="lg:hidden">{tr(t.short)}</span>
+                <span className="max-lg:hidden">{tr(t.label)}</span>
+              </>
+            ) : (
+              tr(t.label)
+            )}
             {t.key === "suggestions" && sectionId === "tasks" && (work?.pendingSuggestions ?? 0) > 0 && (
               <span className={`rounded-full px-1.5 text-[11px] font-semibold ${on ? "bg-white/25 text-white" : "bg-violet/20 text-violet-light"}`}>{work?.pendingSuggestions}</span>
             )}

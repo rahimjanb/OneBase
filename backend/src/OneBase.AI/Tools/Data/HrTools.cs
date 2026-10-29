@@ -397,7 +397,7 @@ internal sealed class GetHrDeviationsTool(HrService hr, IUserPermissions permiss
         var kind = WorkFieldText.Pick(args.Str("kind"), "kind", null, Kinds);
         var division = await DivisionAsync(ctx, args.Str("division"), ct);
         var limit = args.Report ? 5000 : args.Int("limit", 1, 300) ?? 50;
-        var list = await Hr.DeviationsAsync(ctx, from, to, kind, division?.Id, ct);
+        var list = await Hr.DeviationsAsync(ctx, from, to, kind, division?.Id, null, ct);
 
         return Data(new
         {
@@ -472,7 +472,7 @@ internal sealed class GetHrTimesheetTool(HrService hr, IUserPermissions permissi
         var division = await DivisionAsync(ctx, args.Str("division"), ct);
         var limit = args.Report ? 5000 : args.Int("limit", 1, 300) ?? 30;
         // Период по умолчанию (с 1-го числа по сегодня) и предел 62 дня проверяет HrService.
-        var sheet = await Hr.TimesheetAsync(ctx, WorkFieldText.Date(args, "from"), WorkFieldText.Date(args, "to"), division?.Id, args.Str("search"), ct);
+        var sheet = await Hr.TimesheetAsync(ctx, WorkFieldText.Date(args, "from"), WorkFieldText.Date(args, "to"), division?.Id, args.Str("search"), null, ct);
 
         var rows = (args.Str("sort") ?? "late") switch
         {

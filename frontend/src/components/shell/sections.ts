@@ -16,8 +16,11 @@ import {
 } from "lucide-react";
 import { activeSalesTab, salesTabs } from "@/components/sales/tabs";
 
-/** Кнопка раздела в верхней панели. permission — видна только с этим правом; headsOnly — только руководителям отделов (Задачи). */
-export type SectionTab = { key: string; label: string; href: string; icon: LucideIcon; permission?: string; headsOnly?: boolean };
+/**
+ * Кнопка раздела в верхней панели. short — подпись на телефоне и планшете, если полная длинная; permission — видна только с этим правом;
+ * headsOnly — только руководителям отделов (Задачи).
+ */
+export type SectionTab = { key: string; label: string; short?: string; href: string; icon: LucideIcon; permission?: string; headsOnly?: boolean };
 
 /**
  * Раздел с кнопками в верхней панели (как в «Продажах»): какие кнопки и какая из них открыта для адреса.
@@ -28,11 +31,11 @@ export type SectionDef = { id: "sales" | "hr" | "tasks"; label: string; tabs: Se
 const under = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
 const hrTabs: SectionTab[] = [
-  { key: "overview", label: "Обзор HR", href: "/hr", icon: LayoutGrid },
+  { key: "overview", label: "Обзор", href: "/hr", icon: LayoutGrid },
   { key: "employees", label: "Сотрудники", href: "/hr/employees", icon: Users },
   { key: "attendance", label: "Посещаемость", href: "/hr/attendance", icon: DoorOpen },
-  { key: "deviations", label: "Опоздания и отсутствия", href: "/hr/deviations", icon: CalendarClock },
-  { key: "timesheets", label: "Рабочее время и табели", href: "/hr/timesheets", icon: Table2 },
+  { key: "deviations", label: "Опоздания и отсутствия", short: "Опоздания", href: "/hr/deviations", icon: CalendarClock },
+  { key: "timesheets", label: "Табели", href: "/hr/timesheets", icon: Table2 },
   { key: "reports", label: "Отчёты", href: "/hr/reports", icon: ChartColumn },
 ];
 

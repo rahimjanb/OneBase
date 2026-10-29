@@ -16,6 +16,7 @@ type Search = Promise<Record<string, string | string[] | undefined>>;
 
 const statuses = [
   { value: "present", label: "Пришли" },
+  { value: "ontime", label: "Пришли вовремя" },
   { value: "late", label: "Опоздали" },
   { value: "absent", label: "Отсутствуют" },
   { value: "leave", label: "По документу" },

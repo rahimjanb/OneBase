@@ -1,0 +1,159 @@
+/*
+ * «Обзор HR»: раскладка блоков. Токены цвета — из timesheet.module.css (.root, --ts-*), здесь только сетка и фон.
+ * Телефон (< 768): одна колонка — явка, KPI, «Требует внимания», проходы по часам, подразделения, филиалы, пояснение.
+ * Планшет (768–1023): так же, но подразделения рядом с проходами и филиалами. Ноутбук (≥ 1024): KPI строкой,
+ * «Явка | Требует внимания», «Подразделения | Проходы и филиалы».
+ */
+.page {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Тёмная тема: синее свечение из правого верхнего угла. */
+:global(:root[data-theme="dark"]) .page::before,
+:global(:root[data-brand="onebase"]:not([data-theme="light"])) .page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse 60% 45% at 100% 0, #1b3fa02e, transparent);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "att"
+    "kpi"
+    "warn"
+    "hours"
+    "div"
+    "branches"
+    "note";
+  gap: 16px;
+}
+
+.att {
+  grid-area: att;
+}
+.kpi {
+  grid-area: kpi;
+}
+.warn {
+  grid-area: warn;
+}
+.div {
+  grid-area: div;
+}
+.note {
+  grid-area: note;
+}
+.hours {
+  grid-area: hours;
+}
+.branches {
+  grid-area: branches;
+}
+
+/* Проходы и филиалы: на телефоне — отдельными строками сетки, шире — колонкой рядом с подразделениями. */
+.side {
+  display: contents;
+}
+
+@media (min-width: 768px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "att att"
+      "kpi kpi"
+      "warn warn"
+      "div side"
+      "note note";
+  }
+  .side {
+    grid-area: side;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .grid {
+    /* Левая колонка ≈ 64 %. */
+    grid-template-columns: minmax(0, 16fr) minmax(0, 9fr);
+    grid-template-areas:
+      "kpi kpi"
+      "att warn"
+      "div side"
+      "note note";
+    column-gap: 16px;
+    row-gap: 20px;
+  }
+  /* «Требует внимания» не растягивает строку: высоту задаёт «Явка», список показывает столько строк, сколько помещается. */
+  .warn {
+    position: relative;
+  }
+  .warnFill {
+    position: absolute;
+    inset: 0;
+  }
+}
+
+/*
+ * Легенда «Явки» (карточка — контейнер @container). Телефон и планшет: 2×3 строками «точка, название, число» через горизонтальные линии.
+ * Ноутбук: колонки через вертикальные линии — шесть в ряд, если карточка шире 760, иначе 3×2 (с боковым меню на 1280–1440 шесть не помещаются).
+ */
+.legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 24px;
+}
+.legend > li {
+  min-width: 0;
+  border-top: 1px solid var(--ts-border);
+}
+.legend > li:nth-child(-n + 2) {
+  border-top: 0;
+}
+
+@media (min-width: 1024px) {
+  .legend {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 0;
+    row-gap: 18px;
+  }
+  .legend > li {
+    border-top: 0;
+    padding: 0 12px 0 16px;
+  }
+  .legend > li:nth-child(3n + 1) {
+    padding-left: 0;
+  }
+  .legend > li:not(:nth-child(3n + 1)) {
+    border-left: 1px solid var(--ts-border);
+  }
+
+  @container (min-width: 760px) {
+    .legend {
+      display: flex;
+    }
+    .legend > li {
+      flex: 1 1 0;
+    }
+    .legend > li:nth-child(3n + 1) {
+      padding-left: 16px;
+    }
+    .legend > li:first-child {
+      padding-left: 0;
+      border-left: 0;
+    }
+    .legend > li:not(:first-child) {
+      border-left: 1px solid var(--ts-border);
+    }
+    .legend > li:last-child {
+      padding-right: 0;
+    }
+  }
+}

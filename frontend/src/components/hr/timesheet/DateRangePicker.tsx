@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatDate } from "@/i18n/core";
 import { useLocale, useT } from "@/i18n/client";
@@ -9,15 +9,15 @@ import { daysBetween, fullDate, MAX_PERIOD_DAYS, shiftDate } from "@/lib/hr-time
 const focus = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ts-accent)";
 const weekdays = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 
-const monthStart = (value: string) => `${value.slice(0, 8)}01`;
-const addMonths = (value: string, n: number) => {
+export const monthStart = (value: string) => `${value.slice(0, 8)}01`;
+export const addMonths = (value: string, n: number) => {
   const d = new Date(`${value.slice(0, 8)}01T12:00:00Z`);
   d.setUTCMonth(d.getUTCMonth() + n);
   return d.toISOString().slice(0, 10);
 };
 
 /** Дни сетки месяца с понедельника; null — пустые клетки до 1-го числа. */
-function monthGrid(first: string): (string | null)[] {
+export function monthGrid(first: string): (string | null)[] {
   const d = new Date(`${first}T12:00:00Z`);
   const offset = (d.getUTCDay() + 6) % 7;
   const days = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
@@ -27,15 +27,55 @@ function monthGrid(first: string): (string | null)[] {
 /**
  * Поле периода «01.10.2026 — 26.10.2026»: по нажатию — календарь, первый щелчок — начало, второй — конец (порядок любой). Будущие дни
  * недоступны, период — не больше 62 дней (предел табеля на сервере): дальше конец подрезается.
+ * label и className — своя подпись и вид кнопки; open и onOpenChange — открыть календарь снаружи (сегмент «Свой период» в карточке сотрудника);
+ * align — к какому краю кнопки прижат календарь.
  */
-export function DateRangePicker({ from, to, today, onChange }: { from: string; to: string; today: string; onChange: (from: string, to: string) => void }) {
+export function DateRangePicker({
+  from,
+  to,
+  today,
+  onChange,
+  label,
+  className,
+  open: openProp,
+  onOpenChange,
+  align = "left",
+}: {
+  from: string;
+  to: string;
+  today: string;
+  onChange: (from: string, to: string) => void;
+  label?: React.ReactNode;
+  className?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  align?: "left" | "right";
+}) {
   const t = useT();
   const locale = useLocale();
-  const [open, setOpen] = useState(false);
+  const [openSelf, setOpenSelf] = useState(false);
+  const open = openProp ?? openSelf;
   const [month, setMonth] = useState(monthStart(to));
   const [start, setStart] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const changeOpen = useRef(onOpenChange);
+  changeOpen.current = onOpenChange;
+  const setOpen = useCallback((next: boolean | ((o: boolean) => boolean)) => {
+    setOpenSelf((o) => {
+      const value = typeof next === "function" ? next(o) : next;
+      changeOpen.current?.(value);
+      return value;
+    });
+  }, []);
+
+  // Открыли снаружи — календарь на месяце конца периода, без чернового начала.
+  useEffect(() => {
+    if (!openProp) return;
+    setMonth(monthStart(to));
+    setStart(null);
+    setHover(null);
+  }, [openProp, to]);
 
   useEffect(() => {
     if (!open) return;
@@ -47,10 +87,10 @@ export function DateRangePicker({ from, to, today, onChange }: { from: string; t
       document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, setOpen]);
 
   const toggle = () => {
-    setOpen((o) => !o);
+    setOpen(!open);
     setMonth(monthStart(to));
     setStart(null);
     setHover(null);
@@ -79,15 +119,19 @@ export function DateRangePicker({ from, to, today, onChange }: { from: string; t
         onClick={toggle}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className={`flex h-[38px] w-[236px] cursor-pointer max-sm:w-full items-center gap-2 rounded-[9px] border border-(--ts-border-strong) bg-(--ts-surface) px-3 text-left text-[13.5px] text-(--ts-text) transition-colors duration-150 hover:border-(--ts-subtle) ${focus}`}
+        className={`${className ?? "flex h-[38px] w-[236px] max-sm:w-full items-center gap-2 rounded-[9px] border border-(--ts-border-strong) bg-(--ts-surface) px-3 text-left text-[13.5px] text-(--ts-text) transition-colors duration-150 hover:border-(--ts-subtle)"} cursor-pointer ${focus}`}
       >
         <Calendar aria-hidden className="size-[15px] shrink-0 text-(--ts-subtle)" />
         <span className="tabular-nums">
-          {fullDate(from)} — {fullDate(to)}
+          {label ?? (
+            <>
+              {fullDate(from)} — {fullDate(to)}
+            </>
+          )}
         </span>
       </button>
       {open && (
-        <div role="dialog" aria-label={t("Выбор периода")} className="absolute left-0 top-[calc(100%+6px)] z-40 w-[292px] rounded-[12px] border border-(--ts-border) bg-(--ts-surface) p-3 shadow-[0_12px_32px_#0e13221f]">
+        <div role="dialog" aria-label={t("Выбор периода")} className={`absolute ${align === "right" ? "right-0" : "left-0"} top-[calc(100%+6px)] z-40 w-[292px] rounded-[12px] border border-(--ts-border) bg-(--ts-surface) p-3 shadow-[0_12px_32px_#0e13221f]`}>
           <div className="mb-2 flex items-center justify-between">
             <button type="button" aria-label={t("Предыдущий месяц")} onClick={() => setMonth(addMonths(month, -1))} className={`grid size-8 cursor-pointer place-items-center rounded-[8px] text-(--ts-muted) hover:bg-(--ts-surface-2) ${focus}`}>
               <ChevronLeft className="size-4" />

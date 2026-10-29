@@ -167,6 +167,20 @@ public class HrSyncDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
             return 0;
         });
 
+        // Карточка: кто менял заметку, адрес Verifix, отметки периода по времени, по умолчанию — 14 дней по сегодня.
+        var card = await WithAsync(async sp => await sp.GetRequiredService<HrService>().EmployeeAsync(await HrContextAsync(sp), bobur.Id, null, null, CancellationToken.None));
+        var admin = await WithAsync(sp => sp.GetRequiredService<OneBaseDbContext>().Users.Where(u => u.Id == fixture.AdminId).Select(u => u.FullName).SingleAsync());
+        Assert.Equal(admin, card.NoteUpdatedBy);
+        Assert.Equal(FakeVerifix.BaseUrl, card.VerifixUrl);
+        Assert.Equal((Today.AddDays(-13), Today), (card.From, card.To));
+        Assert.Equal([5004L, 5005L, 5001L, 5003L], card.Events.Select(e => e.TrackId));
+        Assert.True(card.Sync.Configured);
+
+        // Уволенный 01.10 — период по умолчанию заканчивается днём увольнения.
+        var gone = await WithAsync(sp => sp.GetRequiredService<OneBaseDbContext>().HrEmployees.Where(e => e.VerifixId == 104).Select(e => e.Id).SingleAsync());
+        var goneCard = await WithAsync(async sp => await sp.GetRequiredService<HrService>().EmployeeAsync(await HrContextAsync(sp), gone, null, null, CancellationToken.None));
+        Assert.Equal((new DateOnly(2026, 9, 18), new DateOnly(2026, 10, 1)), (goneCard.From, goneCard.To));
+
         // В Verifix: новый телефон, тип отметки изменился (C → M), появилась новая отметка.
         Verifix.Employees[0]["phone_number"] = "998901112233";
         Verifix.Tracks[2]["track_type"] = "M";
@@ -240,7 +254,7 @@ public class HrSyncDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         await SeedAsync();
         await SyncAsync();
 
-        var overview = await WithAsync(async sp => await sp.GetRequiredService<HrService>().OverviewAsync(await HrContextAsync(sp), CancellationToken.None));
+        var overview = await WithAsync(async sp => await sp.GetRequiredService<HrService>().OverviewAsync(await HrContextAsync(sp), null, CancellationToken.None));
         Assert.Equal(Today, overview.Date);
         Assert.Equal(4, overview.Active); // уволенный 01.10 не считается
         Assert.Equal(2, overview.Present);
@@ -249,8 +263,41 @@ public class HrSyncDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         Assert.Equal(1, overview.OnLeave);
         Assert.Equal(3, overview.EventsToday);
         Assert.True(overview.Sync.Configured);
-        Assert.Contains(overview.Divisions, d => d.Id == 901 && d.Active == 2 && d.Late == 1);
+        Assert.Contains(overview.Divisions, d => d.Id == 901 && d.Active == 2 && d.Scheduled == 2 && d.Late == 1);
         Assert.Contains(overview.Locations, l => l.Name == "Главный офис" && l.Employees == 2);
+
+        // Шесть итогов дня (вовремя = пришли − опоздали) в сумме дают «по графику».
+        Assert.True(overview.IsToday);
+        Assert.Equal(4, overview.Scheduled);
+        Assert.Equal(overview.Scheduled,
+            overview.Present - overview.Late + overview.Late + overview.Absent + overview.OnLeave + overview.Expected + overview.Unknown);
+        // Вчера к 10:30 пришли трое из четырёх по графику (Юсупов — в отпуске); средний приход вчера 09:06, сегодня (08:55 и 09:40) — 09:18.
+        Assert.Equal(new HrOverviewCompare(Yesterday, 75.0, new TimeOnly(9, 6)), overview.Compare);
+        Assert.Equal(new TimeOnly(9, 18), overview.AvgArrival);
+        Assert.Equal(40, overview.AvgLateMinutes);
+        // С понедельника: Алиев опоздал вчера, Расулов — сегодня; на прошлой неделе данных нет.
+        Assert.Equal(2, overview.LateWeek);
+        Assert.Equal(0, overview.LateLastWeek);
+        Assert.Equal(24, overview.PassesByHour.Count);
+        Assert.Equal([1, 1, 1], overview.PassesByHour.Skip(8).Take(3));
+        // Сначала отсутствующие, затем опоздавшие.
+        Assert.Equal(2, overview.AttentionTotal);
+        Assert.Equal(["absent", "late"], overview.Attention.Select(a => a.Kind));
+        Assert.Equal("Расулов Тимур", overview.Attention[1].Employee);
+        Assert.Equal(40, overview.Attention[1].LateMinutes);
+
+        // Прошлый день — за весь день, без «ожидаются»; будущая дата — сегодня.
+        var past = await WithAsync(async sp => await sp.GetRequiredService<HrService>().OverviewAsync(await HrContextAsync(sp), Yesterday, CancellationToken.None));
+        Assert.False(past.IsToday);
+        Assert.Equal(Yesterday, past.Date);
+        Assert.Equal(3, past.Present);
+        Assert.Equal(1, past.Late);
+        Assert.Equal(0, past.Expected);
+        var future = await WithAsync(async sp => await sp.GetRequiredService<HrService>().OverviewAsync(await HrContextAsync(sp), Today.AddDays(3), CancellationToken.None));
+        Assert.Equal(Today, future.Date);
+
+        var onTime = await WithAsync(async sp => await sp.GetRequiredService<HrService>().DayAsync(await HrContextAsync(sp), Today, null, "ontime", null, CancellationToken.None));
+        Assert.Equal("Алиев Бобур", Assert.Single(onTime).Employee);
 
         var day = await WithAsync(async sp => await sp.GetRequiredService<HrService>().DayAsync(await HrContextAsync(sp), Today, null, null, null, CancellationToken.None));
         Assert.Equal(HrDayStatus.Absent, day.Single(r => r.Employee == "Каримова Дилноза").Day.Status);
@@ -258,26 +305,37 @@ public class HrSyncDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         Assert.Equal("ОТ", day.Single(r => r.Employee == "Юсупов Сардор").Day.LeaveCode);
 
         var deviations = await WithAsync(async sp =>
-            await sp.GetRequiredService<HrService>().DeviationsAsync(await HrContextAsync(sp), Yesterday, Today, null, null, CancellationToken.None));
+            await sp.GetRequiredService<HrService>().DeviationsAsync(await HrContextAsync(sp), Yesterday, Today, null, null, null, CancellationToken.None));
         Assert.Contains(deviations, d => d.Kind == "late" && d.Employee == "Алиев Бобур" && d.Date == Yesterday && d.Minutes == 20);
         Assert.Contains(deviations, d => d.Kind == "absent" && d.Employee == "Каримова Дилноза" && d.Date == Today);
         Assert.DoesNotContain(deviations, d => d.Employee == "Юсупов Сардор");
 
         var sheet = await WithAsync(async sp =>
-            await sp.GetRequiredService<HrService>().TimesheetAsync(await HrContextAsync(sp), Yesterday, Today, null, null, CancellationToken.None));
+            await sp.GetRequiredService<HrService>().TimesheetAsync(await HrContextAsync(sp), Yesterday, Today, null, null, null, CancellationToken.None));
         Assert.Equal(new[] { "ОП", "Я" }, sheet.Rows.Single(r => r.Employee == "Алиев Бобур").Codes);
         Assert.Equal(new[] { "ОТ", "ОТ" }, sheet.Rows.Single(r => r.Employee == "Юсупов Сардор").Codes);
 
         // Отметки загружены только до 08:00 — без прихода сотрудник «не ясно», а не «отсутствует».
         await WithAsync(sp => sp.GetRequiredService<OneBaseDbContext>().HrSyncStates.Where(s => s.Entity == HrSyncService.TracksState)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.CoveredThrough, new DateTimeOffset(2026, 10, 21, 3, 0, 0, TimeSpan.Zero))));
-        var stale = await WithAsync(async sp => await sp.GetRequiredService<HrService>().OverviewAsync(await HrContextAsync(sp), CancellationToken.None));
+        var stale = await WithAsync(async sp => await sp.GetRequiredService<HrService>().OverviewAsync(await HrContextAsync(sp), null, CancellationToken.None));
         Assert.Equal(0, stale.Absent);
         Assert.Equal(1, stale.Unknown);
 
-        var report = await WithAsync(async sp => await sp.GetRequiredService<HrService>().ReportAsync(await HrContextAsync(sp), Yesterday, Today, null, CancellationToken.None));
+        var report = await WithAsync(async sp => await sp.GetRequiredService<HrService>().ReportAsync(await HrContextAsync(sp), Yesterday, Today, null, null, CancellationToken.None));
         var bytes = HrReportWorkbook.Build(report, sheet, deviations);
         Assert.True(bytes.Length > 1000);
+
+        // Табель из карточки сотрудника — только он.
+        var bobur = day.Single(r => r.Employee == "Алиев Бобур").EmployeeId;
+        var own = await WithAsync(async sp => await sp.GetRequiredService<HrService>().ReportAsync(await HrContextAsync(sp), Yesterday, Today, null, bobur, CancellationToken.None));
+        Assert.Equal(1, own.Employees);
+        var ownSheet = await WithAsync(async sp =>
+            await sp.GetRequiredService<HrService>().TimesheetAsync(await HrContextAsync(sp), Yesterday, Today, null, null, bobur, CancellationToken.None));
+        Assert.Equal("Алиев Бобур", Assert.Single(ownSheet.Rows).Employee);
+        var ownDeviations = await WithAsync(async sp =>
+            await sp.GetRequiredService<HrService>().DeviationsAsync(await HrContextAsync(sp), Yesterday, Today, null, null, bobur, CancellationToken.None));
+        Assert.All(ownDeviations, d => Assert.Equal(bobur, d.EmployeeId));
     }
 
     [PostgresFact]
@@ -322,14 +380,14 @@ public class HrSyncDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
 
             var events = await hr.EventsAsync(ctx, Yesterday, Today, null, null, 1, 100, CancellationToken.None);
             Assert.All(events.Items, e => Assert.NotEqual("Юсупов Сардор", e.Employee));
-            var overview = await hr.OverviewAsync(ctx, CancellationToken.None);
+            var overview = await hr.OverviewAsync(ctx, null, CancellationToken.None);
             Assert.Equal(3, overview.Active);
             Assert.True(await hr.HasAccessAsync(head, Employee, CancellationToken.None));
 
             var stranger = await HrContextAsync(sp, outsider, Employee);
             Assert.False(stranger.HasAccess);
             Assert.False(await hr.HasAccessAsync(outsider, Employee, CancellationToken.None));
-            await Assert.ThrowsAsync<FieldForbiddenException>(() => hr.OverviewAsync(stranger, CancellationToken.None));
+            await Assert.ThrowsAsync<FieldForbiddenException>(() => hr.OverviewAsync(stranger, null, CancellationToken.None));
             await Assert.ThrowsAsync<FieldForbiddenException>(() => hr.EmployeesAsync(stranger, new HrEmployeeQuery(null, null, null, null), CancellationToken.None));
             return 0;
         });

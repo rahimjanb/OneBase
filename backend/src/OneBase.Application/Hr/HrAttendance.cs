@@ -3,8 +3,8 @@ namespace OneBase.Application.Hr;
 /// <summary>Правила учёта времени из настроек интеграции: часовой пояс организации и допуски.</summary>
 public sealed record HrRules(TimeZoneInfo Zone, int LateGraceMinutes, int EarlyLeaveGraceMinutes);
 
-/// <summary>Состояние подключения к Verifix — без секретов: есть ли ключи, включено ли, расписание.</summary>
-public sealed record HrIntegrationState(bool Configured, bool Enabled, bool AutoSync, int IntervalMinutes);
+/// <summary>Состояние подключения к Verifix — без секретов: есть ли ключи, включено ли, расписание, адрес Verifix (для ссылок «Открыть в Verifix»).</summary>
+public sealed record HrIntegrationState(bool Configured, bool Enabled, bool AutoSync, int IntervalMinutes, string? BaseUrl = null);
 
 /// <summary>Правила и состояние интеграции из настроек Verifix (реализация — в Infrastructure, VerifixSettingsStore).</summary>
 public interface IHrRules

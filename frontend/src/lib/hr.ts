@@ -27,12 +27,33 @@ export type HrContext = {
   sync: HrSyncBrief;
 };
 
-export type HrGroupStat = { id: number | null; name: string; active: number; present: number; late: number; absent: number; onLeave: number; unknown: number; events: number };
+/** scheduled — по графику на день: все, кроме выходного и дней без графика (от них считается явка). */
+export type HrGroupStat = { id: number | null; name: string; active: number; scheduled: number; present: number; late: number; absent: number; onLeave: number; unknown: number; events: number };
 
+/** «Требует внимания»: отсутствует, опоздал или «не ясно»; firstEvent — первая отметка дня (для «не ясно»). */
+export type HrAttention = {
+  employeeId: string;
+  employee: string;
+  division: string | null;
+  kind: "absent" | "late" | "unknown";
+  planBegin: string | null;
+  firstIn: string | null;
+  lateMinutes: number | null;
+  events: number;
+  firstEvent: string | null;
+};
+
+/**
+ * Обзор HR за день (GET /api/hr/overview?date=). Шесть итогов — вовремя (present − late), опоздали, отсутствуют, по документу, ожидаются,
+ * не ясно — в сумме дают scheduled. compare — предыдущий рабочий день (сегодня — на тот же час); avgArrival и compare.avgArrival — «HH:mm:ss».
+ */
 export type HrOverview = {
   date: string;
   now: string;
+  isToday: boolean;
   active: number;
+  activeDeltaMonth: number | null;
+  scheduled: number;
   present: number;
   late: number;
   absent: number;
@@ -43,6 +64,14 @@ export type HrOverview = {
   unknown: number;
   eventsToday: number;
   missingInVerifix: number;
+  avgArrival: string | null;
+  avgLateMinutes: number | null;
+  compare: { date: string; presentPct: number; avgArrival: string | null } | null;
+  lateWeek: number;
+  lateLastWeek: number;
+  passesByHour: number[];
+  attention: HrAttention[];
+  attentionTotal: number;
   divisions: HrGroupStat[];
   locations: { id: number | null; name: string; employees: number; events: number }[];
   sync: HrSyncBrief;
@@ -121,6 +150,7 @@ export type HrEvent = {
   missingSince: string | null;
 };
 
+/** Карточка сотрудника за период: events — все отметки периода по времени; verifixUrl — адрес Verifix из настроек; sync — свежесть данных. */
 export type HrEmployeeCard = {
   employee: HrEmployeeRow;
   middleName: string | null;
@@ -128,6 +158,7 @@ export type HrEmployeeCard = {
   orgUnit: string | null;
   note: string | null;
   noteUpdatedAt: string | null;
+  noteUpdatedBy: string | null;
   firstSyncedAt: string;
   lastSyncedAt: string;
   canEditNote: boolean;
@@ -136,6 +167,8 @@ export type HrEmployeeCard = {
   days: HrDay[];
   events: HrEvent[];
   summary: HrSummary;
+  verifixUrl: string | null;
+  sync: HrSyncBrief;
 };
 
 export type HrDayRow = { employeeId: string; employee: string; division: string | null; job: string | null; day: HrDay };

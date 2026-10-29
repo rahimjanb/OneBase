@@ -44,8 +44,9 @@ public sealed class HrController(HrService hr) : ControllerBase
         });
     }
 
+    /// <summary>Обзор HR за день: date — прошлый день, по умолчанию сегодня.</summary>
     [HttpGet("overview")]
-    public async Task<HrOverview> Overview(CancellationToken ct) => await hr.OverviewAsync(await ContextAsync(ct), ct);
+    public async Task<HrOverview> Overview([FromQuery] DateOnly? date, CancellationToken ct) => await hr.OverviewAsync(await ContextAsync(ct), date, ct);
 
     [HttpGet("employees")]
     public async Task<PageResult<HrEmployeeRow>> Employees([FromQuery] string? search, [FromQuery] long? divisionId, [FromQuery] string? status,
@@ -64,7 +65,7 @@ public sealed class HrController(HrService hr) : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Посещаемость за день: итог каждого сотрудника. status — present | late | absent | leave | expected | unknown | dayoff | noschedule.</summary>
+    /// <summary>Посещаемость за день: итог каждого сотрудника. status — present | ontime | late | absent | leave | expected | unknown | dayoff | noschedule.</summary>
     [HttpGet("attendance")]
     public async Task<IReadOnlyList<HrDayRow>> Attendance([FromQuery] DateOnly? date, [FromQuery] long? divisionId, [FromQuery] string? status,
         [FromQuery] string? search, CancellationToken ct) =>
@@ -80,12 +81,12 @@ public sealed class HrController(HrService hr) : ControllerBase
     [HttpGet("deviations")]
     public async Task<IReadOnlyList<HrDeviation>> Deviations([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? kind,
         [FromQuery] long? divisionId, CancellationToken ct) =>
-        await hr.DeviationsAsync(await ContextAsync(ct), from, to, kind, divisionId, ct);
+        await hr.DeviationsAsync(await ContextAsync(ct), from, to, kind, divisionId, null, ct);
 
     [HttpGet("timesheet")]
     public async Task<HrTimesheet> Timesheet([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] long? divisionId, [FromQuery] string? search,
         CancellationToken ct) =>
-        await hr.TimesheetAsync(await ContextAsync(ct), from, to, divisionId, search, ct);
+        await hr.TimesheetAsync(await ContextAsync(ct), from, to, divisionId, search, null, ct);
 
     /// <summary>«Лидеры месяца» (главная): без единого опоздания за месяц — по отработанным часам.</summary>
     [HttpGet("leaders")]
@@ -94,16 +95,22 @@ public sealed class HrController(HrService hr) : ControllerBase
 
     [HttpGet("reports")]
     public async Task<HrReport> Report([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] long? divisionId, CancellationToken ct) =>
-        await hr.ReportAsync(await ContextAsync(ct), from, to, divisionId, ct);
+        await hr.ReportAsync(await ContextAsync(ct), from, to, divisionId, null, ct);
 
-    /// <summary>Отчёт в Excel: подразделения, табель сотрудников с буквами дней, отклонения.</summary>
+    /// <summary>Отчёт в Excel: подразделения, табель сотрудников с буквами дней, отклонения. employeeId — табель одного сотрудника (из его карточки).</summary>
     [HttpGet("reports/export")]
-    public async Task<IActionResult> Export([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] long? divisionId, CancellationToken ct)
+    public async Task<IActionResult> Export([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] long? divisionId, [FromQuery] Guid? employeeId,
+        CancellationToken ct)
     {
         var ctx = await ContextAsync(ct);
-        var report = await hr.ReportAsync(ctx, from, to, divisionId, ct);
-        var sheet = await hr.TimesheetAsync(ctx, report.From, report.To, divisionId, null, ct);
-        var deviations = await hr.DeviationsAsync(ctx, report.From, report.To, null, divisionId, ct);
+        if (employeeId is { } id)
+        {
+            await hr.EmployeeAsync(ctx, id, from, to, ct); // чужой сотрудник — 404, как в карточке
+        }
+
+        var report = await hr.ReportAsync(ctx, from, to, divisionId, employeeId, ct);
+        var sheet = await hr.TimesheetAsync(ctx, report.From, report.To, divisionId, null, employeeId, ct);
+        var deviations = await hr.DeviationsAsync(ctx, report.From, report.To, null, divisionId, employeeId, ct);
         var bytes = HrReportWorkbook.Build(report, sheet, deviations);
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"hr-{report.From:yyyy-MM-dd}-{report.To:yyyy-MM-dd}.xlsx");
     }

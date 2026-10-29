@@ -1,56 +1,8 @@
 import Link from "next/link";
-import { DayBadges } from "@/components/hr/HrBits";
 import { getT } from "@/i18n/server";
-import { clock, dayLabel, duration, markTypeLabel, trackTypeLabel, weekday, type HrDay, type HrEvent } from "@/lib/hr";
+import { dayLabel, markTypeLabel, trackTypeLabel, type HrEvent } from "@/lib/hr";
 
 const th = "px-3 py-2.5 font-semibold";
-
-/** Дни сотрудника: график, приход и уход, отклонения, отработано, отметки и пояснение расчёта. */
-export async function HrDaysTable({ days }: { days: HrDay[] }) {
-  const t = await getT();
-  return (
-    <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-      <table className="w-full min-w-[860px] text-sm">
-        <thead>
-          <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
-            <th className="px-4 py-2.5 font-semibold">{t("Дата")}</th>
-            <th className={th}>{t("Итог")}</th>
-            <th className={th}>{t("График")}</th>
-            <th className={th}>{t("Приход")}</th>
-            <th className={th}>{t("Уход")}</th>
-            <th className={`${th} text-right`}>{t("Опоздание")}</th>
-            <th className={`${th} text-right`}>{t("Ранний уход")}</th>
-            <th className={`${th} text-right`}>{t("Отработано")}</th>
-            <th className={`${th} text-right`}>{t("Отметок")}</th>
-            <th className="px-4 py-2.5 font-semibold">{t("Пояснение")}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {days
-            .filter((d) => d.status !== "NotEmployed")
-            .map((d) => (
-              <tr key={d.date}>
-                <td className="px-4 py-2 tabular-nums text-ink">
-                  {dayLabel(d.date)} <span className="text-ink-3">{t(weekday(d.date))}</span>
-                </td>
-                <td className="px-3 py-2">
-                  <DayBadges day={d} />
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 tabular-nums text-ink-2">{d.planBegin ? `${clock(d.planBegin)}–${clock(d.planEnd)}` : d.dayKind && d.dayKind !== "W" ? t("нерабочий") : "—"}</td>
-                <td className="px-3 py-2 tabular-nums">{clock(d.firstIn)}</td>
-                <td className="px-3 py-2 tabular-nums">{clock(d.lastOut)}</td>
-                <td className={`px-3 py-2 text-right tabular-nums ${d.late ? "text-warn" : "text-ink-3"}`}>{d.late ? duration(d.lateMinutes, t) : "—"}</td>
-                <td className={`px-3 py-2 text-right tabular-nums ${d.earlyLeave ? "text-warn" : "text-ink-3"}`}>{d.earlyLeave ? duration(d.earlyLeaveMinutes, t) : "—"}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-ink-2">{duration(d.workedMinutes, t)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-ink-3">{d.events}</td>
-                <td className="px-4 py-2 text-xs text-ink-3">{d.reason ? t(d.reason) : ""}</td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 /** Журнал отметок: время как в Verifix (время организации), тип и способ отметки, локация, ID отметки. */
 export async function HrEventsTable({ events, showEmployee = true }: { events: HrEvent[]; showEmployee?: boolean }) {
