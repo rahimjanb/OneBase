@@ -63,6 +63,26 @@ public static partial class WebDavHandler
         }
 
         FileActor? actor;
+        if (segments.Count == 1 && segments[0].Equals("k", StringComparison.OrdinalIgnoreCase))
+        {
+            // «Шара» \\files.1base.uz@SSL\k: Проводник и мастер «Добавить сетевое расположение» проверяют путь от неё, и на 404 Windows
+            // пишет «Папка недействительна». Здесь пустая папка без содержимого и без входа — ничего не раскрывает, дальше вход по коду.
+            if (method == "PROPFIND")
+            {
+                var now = DateTimeOffset.UtcNow;
+                http.Response.StatusCode = StatusCodes.Status207MultiStatus;
+                http.Response.ContentType = "application/xml; charset=utf-8";
+                await http.Response.WriteAsync(DavXml.MultiStatus([new DavResource(DavPath.Href(publicBase, ["k"], true), "k", true, 0, "", now, now, "")],
+                    DavXml.ParsePropfind(null)), ct);
+            }
+            else
+            {
+                http.Response.StatusCode = method is "GET" or "HEAD" ? StatusCodes.Status200OK : StatusCodes.Status405MethodNotAllowed;
+            }
+
+            return;
+        }
+
         if (segments.Count > 0 && segments[0].Equals("k", StringComparison.OrdinalIgnoreCase))
         {
             // Секретная ссылка: /k/{код}/… — без логина и пароля. Никакого 401: на запрос пароля (Basic) Word и Excel из Microsoft 365

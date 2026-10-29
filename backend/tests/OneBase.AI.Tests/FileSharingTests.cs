@@ -68,6 +68,28 @@ public class FileSharingTests(DataManagerDb fixture) : IClassFixture<DataManager
     }
 
     [PostgresFact]
+    public async Task Windows_shell_walks_the_link_path_from_the_k_share_without_a_password()
+    {
+        // Мастер «Добавить сетевое расположение» и адресная строка Проводника проверяют \\files.1base.uz@SSL\k\{код}\отдел от «шары» \k:
+        // на 404 Windows пишет «Папка недействительна». /k — пустая папка без входа и без содержимого, дальше — вход по коду.
+        var setup = await SetupAsync("fwk");
+        var sp = setup.Scope.ServiceProvider;
+        foreach (var depth in new[] { "0", "1" })
+        {
+            var share = await DavAsync(sp, "PROPFIND", "/k", agent: Explorer, headers: new() { ["Depth"] = depth });
+            Assert.Equal(207, share.Status);
+            Assert.False(share.Headers.ContainsKey("WWW-Authenticate"));
+            Assert.Single(System.Xml.Linq.XDocument.Parse(share.Body).Descendants(DavXml.D + "response")); // только сама «шара», ничего внутри
+            Assert.DoesNotContain("fwk", share.Body);
+        }
+
+        Assert.Equal(207, (await DavAsync(sp, "PROPFIND", $"/k/{setup.Link}", agent: Explorer, headers: new() { ["Depth"] = "0" })).Status);
+        Assert.Contains("Документы", (await DavAsync(sp, "PROPFIND", $"/k/{setup.Link}/fwk", agent: Explorer, headers: new() { ["Depth"] = "1" })).Body);
+        Assert.Equal(405, (await DavAsync(sp, "PUT", "/k", "x", Explorer)).Status);
+        Assert.Equal(404, (await DavAsync(sp, "PROPFIND", $"/k/{ConnectionCredentials.NewLinkToken()}", agent: Explorer)).Status);
+    }
+
+    [PostgresFact]
     public async Task Second_editor_is_locked_out_and_cannot_overwrite_the_first()
     {
         var setup = await SetupAsync("fla");
