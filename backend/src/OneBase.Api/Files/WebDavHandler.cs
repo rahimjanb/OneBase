@@ -112,6 +112,18 @@ public static partial class WebDavHandler
             http.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
         }
+        else if (segments.Count == 0 && method == "PROPFIND" && http.Request.Headers.Authorization.Count == 0)
+        {
+            // Корень без входа. Адрес вида https://files.1base.uz/k/{код}/отдел Windows проверяет через корень сервера (DavWWWRoot):
+            // 401 здесь — окно пароля и «Папка недействительна» для адреса без пароля. Пустая папка без содержимого; логин отдела
+            // Проводник спросит дальше, у папки отдела (/production → 401).
+            var now = DateTimeOffset.UtcNow;
+            http.Response.StatusCode = StatusCodes.Status207MultiStatus;
+            http.Response.ContentType = "application/xml; charset=utf-8";
+            await http.Response.WriteAsync(DavXml.MultiStatus([new DavResource(DavPath.Href(publicBase, [], true), "OneBase", true, 0, "", now, now, "")],
+                DavXml.ParsePropfind(null)), ct);
+            return;
+        }
         else
         {
             actor = await AuthenticateAsync(http, connections, remote, ct);
@@ -187,8 +199,8 @@ public static partial class WebDavHandler
 
     /// <summary>
     /// Служебные запросы без входа к корню сервера: так Word и Excel выясняют, что за сервер, открывая файл по ссылке. Ответ 401 с
-    /// запросом пароля Microsoft 365 считает «небезопасным входом» и блокирует файл — поэтому здесь 404. Проводник (WebClient) у корня
-    /// по-прежнему получает 401 и входит по логину и паролю. Адреса «/_…» (FrontPage, SharePoint) отвечают 404 ещё раньше, всем.
+    /// запросом пароля Microsoft 365 считает «небезопасным входом» и блокирует файл — поэтому здесь 404. Проводнику корень без входа
+    /// отвечает пустой папкой, логин отдела он вводит у папки отдела (401 там). Адреса «/_…» (FrontPage, SharePoint) — 404 ещё раньше, всем.
     /// </summary>
     private static bool OfficeProbe(HttpContext http, IReadOnlyList<string> segments)
     {

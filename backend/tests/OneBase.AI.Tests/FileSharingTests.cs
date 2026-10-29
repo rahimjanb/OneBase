@@ -62,9 +62,12 @@ public class FileSharingTests(DataManagerDb fixture) : IClassFixture<DataManager
             }
         }
 
-        // Проводник у корня по-прежнему входит по логину и паролю.
-        var explorer = await DavAsync(scope.ServiceProvider, "PROPFIND", "/", agent: Explorer);
-        Assert.Equal(401, explorer.Status);
+        // Проводник: корень без входа — пустая папка без пароля, папка отдела — 401 и вход по логину отдела.
+        var root = await DavAsync(scope.ServiceProvider, "PROPFIND", "/", agent: Explorer, headers: new() { ["Depth"] = "1" });
+        Assert.Equal(207, root.Status);
+        Assert.False(root.Headers.ContainsKey("WWW-Authenticate"));
+        Assert.Single(System.Xml.Linq.XDocument.Parse(root.Body).Descendants(DavXml.D + "response"));
+        Assert.Equal(401, (await DavAsync(scope.ServiceProvider, "PROPFIND", "/production/", agent: Explorer)).Status);
     }
 
     [PostgresFact]
@@ -72,8 +75,10 @@ public class FileSharingTests(DataManagerDb fixture) : IClassFixture<DataManager
     {
         // Мастер «Добавить сетевое расположение» и адресная строка Проводника проверяют \\files.1base.uz@SSL\k\{код}\отдел от «шары» \k:
         // на 404 Windows пишет «Папка недействительна». /k — пустая папка без входа и без содержимого, дальше — вход по коду.
+        // Адрес https://…/k/{код}/отдел Windows проверяет от корня сервера (DavWWWRoot) — корень без входа тоже пустая папка, не 401.
         var setup = await SetupAsync("fwk");
         var sp = setup.Scope.ServiceProvider;
+        Assert.Equal(207, (await DavAsync(sp, "PROPFIND", "/", agent: Explorer, headers: new() { ["Depth"] = "0" })).Status);
         foreach (var depth in new[] { "0", "1" })
         {
             var share = await DavAsync(sp, "PROPFIND", "/k", agent: Explorer, headers: new() { ["Depth"] = depth });

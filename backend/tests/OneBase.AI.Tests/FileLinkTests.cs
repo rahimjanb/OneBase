@@ -76,7 +76,11 @@ public class FileLinkTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
                 Assert.False(answer.Headers.ContainsKey("WWW-Authenticate"));
             }
 
-            var explorer = await DavAsync(sp, "PROPFIND", "/", agent: "Microsoft-WebDAV-MiniRedir/10.0.26200");
+            // Корень без входа — пустая папка (по нему Windows проверяет адрес https://…/k/{код}/отдел); логин отдела — у папки отдела.
+            var rootAnonymous = await DavAsync(sp, "PROPFIND", "/", agent: "Microsoft-WebDAV-MiniRedir/10.0.26200");
+            Assert.Equal(207, rootAnonymous.Status);
+            Assert.DoesNotContain("supply", rootAnonymous.Body);
+            var explorer = await DavAsync(sp, "PROPFIND", "/supply/", agent: "Microsoft-WebDAV-MiniRedir/10.0.26200");
             Assert.Equal(401, explorer.Status);
             Assert.StartsWith("Basic", explorer.Headers.WWWAuthenticate.ToString());
 
