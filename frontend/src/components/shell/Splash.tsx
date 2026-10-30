@@ -67,10 +67,13 @@ export const splashCss = `
  * Элемент ищется заново при каждом вызове: если React пересоздаст разметку, скрытие всё равно дойдёт до неё.
  * Пока заставка на экране, строка состояния (theme-color: Android, Safari) — её цвета: свой <meta> первым в <head>, браузер берёт
  * первый подходящий. Теги React не трогаем: он узнаёт их при гидратации по content и при чужом значении вставил бы вторые.
+ * У своего тега — property: React ищет уже стоящий <meta> по content, name, property, http-equiv и charset (media не сравнивает) и без
+ * этого мог забрать себе тег заставки, если скрипт темы перекрасил его в цвет React. Заставка потом убирает тег, и при следующем
+ * переходе React падал, удаляя уже вынутый узел, — страница не открывалась.
  */
 const splashScript = `(function(){
 var reduced=matchMedia("(prefers-reduced-motion: reduce)").matches,assembled=reduced,ready=false,timer;
-var tintMeta=document.createElement("meta");tintMeta.name="theme-color";tintMeta.content="#001042";
+var tintMeta=document.createElement("meta");tintMeta.name="theme-color";tintMeta.content="#001042";tintMeta.setAttribute("property","onebase:splash");
 function tint(on){if(on)document.head.insertBefore(tintMeta,document.head.firstChild);else if(tintMeta.parentNode)tintMeta.parentNode.removeChild(tintMeta)}
 function el(){return document.getElementById("splash")}
 function hide(){var s=el();if(!s||s.classList.contains("hide"))return;s.classList.add("hide");tint(false);setTimeout(function(){if(s.classList.contains("hide"))s.classList.add("gone")},500)}

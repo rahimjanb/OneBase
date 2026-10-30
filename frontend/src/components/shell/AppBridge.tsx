@@ -35,9 +35,12 @@ export function AppBridge({ userId, refreshOnFocus = false }: { userId: string |
     const shell = document.querySelector<HTMLElement>("[data-app-shell]");
     if (!shell) return;
     const sync = () => {
-      const color = getComputedStyle(shell).getPropertyValue("--color-sidebar").trim();
+      // Как в ThemeToggle: у стеклянной темы OneBase шапка прозрачная, цвет строки состояния — --color-status-bar. Тег заставки
+      // (с property, Splash.tsx) не трогаем — пока она на экране, строка состояния её цвета.
+      const style = getComputedStyle(shell);
+      const color = style.getPropertyValue("--color-status-bar").trim() || style.getPropertyValue("--color-sidebar").trim();
       if (!color) return;
-      for (const meta of document.querySelectorAll('meta[name="theme-color"]')) if (meta.getAttribute("content") !== color) meta.setAttribute("content", color);
+      for (const meta of document.querySelectorAll('meta[name="theme-color"]:not([property])')) if (meta.getAttribute("content") !== color) meta.setAttribute("content", color);
     };
     sync();
     const scheme = window.matchMedia("(prefers-color-scheme: dark)");

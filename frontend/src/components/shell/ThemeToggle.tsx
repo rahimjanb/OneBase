@@ -9,8 +9,9 @@ const KEY = "onebase-theme";
 /**
  * Скрипт в <head>: применяет сохранённую тему до отрисовки, без мигания. Цвет строки состояния — от оболочки (--color-status-bar,
  * у стеклянной темы OneBase шапка прозрачная; иначе --color-sidebar), а на страницах без неё (вход) — от продукта страницы.
+ * Тег заставки (с property, Splash.tsx) не перекрашивается: пока она на экране, строка состояния — её цвета.
  */
-export const themeInitScript = `try{var t=localStorage.getItem("${KEY}");if(t){document.documentElement.dataset.theme=t;document.addEventListener("DOMContentLoaded",function(){var s=document.querySelector("[data-app-shell]")||document.querySelector("[data-product]");var st=s&&getComputedStyle(s);var c=st&&(st.getPropertyValue("--color-status-bar").trim()||st.getPropertyValue("--color-sidebar").trim())||(t==="dark"?"#050c1c":"#16213a");document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute("content",c)})})}}catch(e){}`;
+export const themeInitScript = `try{var t=localStorage.getItem("${KEY}");if(t){document.documentElement.dataset.theme=t;document.addEventListener("DOMContentLoaded",function(){var s=document.querySelector("[data-app-shell]")||document.querySelector("[data-product]");var st=s&&getComputedStyle(s);var c=st&&(st.getPropertyValue("--color-status-bar").trim()||st.getPropertyValue("--color-sidebar").trim())||(t==="dark"?"#050c1c":"#16213a");document.querySelectorAll('meta[name="theme-color"]:not([property])').forEach(function(m){m.setAttribute("content",c)})})}}catch(e){}`;
 
 /** Тема сейчас: выбранная, иначе у OneBase — тёмная стеклянная (по умолчанию), у Sales Base — как в системе. */
 function currentTheme(): "light" | "dark" {
