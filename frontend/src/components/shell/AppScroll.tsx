@@ -193,7 +193,11 @@ export function PullToRefresh() {
       if (!tracking) return;
       tracking = false;
       // Без связи refresh перезагрузил бы страницу с потерей введённого — тогда не обновляем.
-      if (distance >= 60 && navigator.onLine) startTransition(() => router.refresh());
+      if (distance >= 60 && navigator.onLine) {
+        // Экраны со своими данными на клиенте (уведомления) обновляются по событию; серверные страницы — router.refresh().
+        window.dispatchEvent(new Event("onebase:refresh"));
+        startTransition(() => router.refresh());
+      }
       distance = 0;
       setPull(0);
     };

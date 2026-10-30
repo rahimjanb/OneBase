@@ -966,6 +966,29 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
 
     public static string LinkOf(Guid taskId) => $"/tasks/task/{taskId}";
 
+    /// <summary>Задача по ссылке уведомления (/tasks/task/{id}); другая ссылка — null.</summary>
+    public static Guid? TaskOfLink(string? link) =>
+        link is not null && link.StartsWith("/tasks/task/", StringComparison.Ordinal) && Guid.TryParse(link["/tasks/task/".Length..], out var id) ? id : null;
+
+    /// <summary>Открытые задачи из списка, которым пользователь может менять срок (управляющий): для «Продлить срок» в уведомлениях.</summary>
+    public async Task<HashSet<Guid>> ManageableAsync(WorkContext ctx, IReadOnlyCollection<Guid> ids, CancellationToken ct)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var found = await db.WorkTasks.AsNoTracking().Where(t => ids.Contains(t.Id) && t.ArchivedAt == null && Open.Contains(t.Status)).ToListAsync(ct);
+        return found.Where(t => CanManage(ctx, t)).Select(t => t.Id).ToHashSet();
+    }
+
+    /// <summary>Перенести срок задачи — те же права и проверки, что у правки в карточке (UpdateAsync), остальные поля без изменений.</summary>
+    public async Task ExtendDueAsync(WorkContext ctx, Guid id, DateOnly due, CancellationToken ct)
+    {
+        var (task, _) = await RequireTaskAsync(ctx, id, ct);
+        await UpdateAsync(ctx, id, new WorkTaskInput(task.Title, task.Description, task.AssigneeId, task.Priority, due, task.StartDate, task.ProjectId), ct);
+    }
+
     private static string? DueText(DateOnly? due) => due is { } d ? $"Срок: {d:dd.MM.yyyy}" : null;
 
     /// <summary>Текст уведомления о назначении: кто поставил, отдел, срок — частями через «; » (так их переводит интерфейс).</summary>

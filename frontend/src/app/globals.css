@@ -1056,9 +1056,11 @@ html:has([data-app-shell]) body {
   --color-telegram: #2aabee;
   --color-accent-fill: #2f6bff;
   --color-teal: #0f766e;
+  --color-teal-soft: rgb(13 148 136 / 0.08);
 }
 
-.ai-chat {
+.ai-chat,
+.notif-ui {
   --color-ai-bg: #f5f6f8;
   --color-page: #f5f6f8;
   --color-surface: #ffffff;
@@ -1089,6 +1091,9 @@ html:has([data-app-shell]) body {
   --color-violet-soft: rgb(124 58 237 / 0.07);
   --color-telegram: #2aabee;
   --color-teal: #0f766e;
+  --color-teal-soft: rgb(13 148 136 / 0.08);
+  --notif-unread: rgb(47 107 255 / 0.04);
+  --notif-push-bg: #ffffff;
   --ai-glow: rgb(43 63 168 / 0.1);
   --ai-violet-glow: rgb(91 76 245 / 0.1);
   --ai-summary-bg: linear-gradient(135deg, rgb(47 107 255 / 0.1), rgb(47 107 255 / 0.03));
@@ -1097,13 +1102,17 @@ html:has([data-app-shell]) body {
   --ai-zebra: rgb(14 19 34 / 0.025);
   --ai-sidebar: rgb(255 255 255 / 0.8);
   --ai-shadow: 0 10px 30px rgb(14 19 34 / 0.1);
+}
+
+/* Фон экрана — только у консультанта; .notif-ui задаёт одни токены (панель уведомлений сама на surface). */
+.ai-chat {
   color: var(--color-ink);
   background-color: var(--color-ai-bg);
   background-image: radial-gradient(60% 40% at 50% 0%, var(--ai-glow), transparent 70%);
 }
 
-:root[data-theme="dark"] .ai-chat,
-:root[data-brand="onebase"]:not([data-theme="light"]) .ai-chat {
+:root[data-theme="dark"] :is(.ai-chat, .notif-ui),
+:root[data-brand="onebase"]:not([data-theme="light"]) :is(.ai-chat, .notif-ui) {
   --color-ai-bg: #060a14;
   --color-page: #060a14;
   --color-surface: #0c1221;
@@ -1133,6 +1142,9 @@ html:has([data-app-shell]) body {
   --color-violet-strong: #a78bfa;
   --color-violet-soft: rgb(139 92 246 / 0.12);
   --color-teal: #2dd4bf;
+  --color-teal-soft: rgb(45 212 191 / 0.12);
+  --notif-unread: rgb(61 123 255 / 0.04);
+  --notif-push-bg: #121a3a;
   --ai-glow: rgb(43 63 168 / 0.2);
   --ai-violet-glow: rgb(91 76 245 / 0.18);
   --ai-summary-bg: linear-gradient(135deg, rgb(61 123 255 / 0.15), rgb(61 123 255 / 0.04)), #101a36;
@@ -1144,7 +1156,7 @@ html:has([data-app-shell]) body {
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-brand="onebase"]) .ai-chat {
+  :root:not([data-theme="light"]):not([data-brand="onebase"]) :is(.ai-chat, .notif-ui) {
     --color-ai-bg: #060a14;
     --color-page: #060a14;
     --color-surface: #0c1221;
@@ -1174,6 +1186,9 @@ html:has([data-app-shell]) body {
     --color-violet-strong: #a78bfa;
     --color-violet-soft: rgb(139 92 246 / 0.12);
     --color-teal: #2dd4bf;
+    --color-teal-soft: rgb(45 212 191 / 0.12);
+    --notif-unread: rgb(61 123 255 / 0.04);
+  --notif-push-bg: #121a3a;
     --ai-glow: rgb(43 63 168 / 0.2);
     --ai-violet-glow: rgb(91 76 245 / 0.18);
     --ai-summary-bg: linear-gradient(135deg, rgb(61 123 255 / 0.15), rgb(61 123 255 / 0.04)), #101a36;
@@ -1214,4 +1229,23 @@ html:has([data-app-shell]) body {
   :root[data-ai-print] [data-ai-print-target] * { visibility: visible !important; }
   :root[data-ai-print] [data-ai-print-target] { position: absolute; inset: 0 auto auto 0; width: 100%; }
   :root[data-ai-print] [data-ai-no-print] { display: none !important; }
+}
+
+/* Уведомления (ТЗ notifications): панель на компьютере появляется плавно, новое уведомление сверху мягко подсвечивается. */
+@keyframes notif-panel-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.notif-panel-in {
+  animation: notif-panel-in 150ms ease-out both;
+}
+@keyframes notif-fresh {
+  from { background-color: rgb(61 123 255 / 0.16); }
+  to { background-color: var(--notif-unread); }
+}
+.notif-fresh {
+  animation: notif-fresh 2.4s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .notif-panel-in, .notif-fresh { animation: none; }
 }

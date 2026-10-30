@@ -1,11 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bell, BellOff, CheckCircle2, MapPin, Smartphone } from "lucide-react";
+import { Bell, BellOff, CheckCircle2, MapPin, SlidersHorizontal, Smartphone } from "lucide-react";
 import { Sheet } from "@/components/field/Sheet";
 import { useT } from "@/i18n/client";
 import { geoPermission, locate, type GeoState } from "@/lib/geo";
+import { loadPreferences, savePreferences } from "@/lib/notifications-store";
 import { disablePush, enablePush, isIos, notificationPermission, prefetchPushKey, pushSupport, sendTestPush, type PushSupport } from "@/lib/push";
+
+/** Разделы «Что присылать» (сервер: NotificationCatalog). */
+const sections: [string, string][] = [
+  ["tasks", "Задачи"],
+  ["ai", "AI"],
+  ["hr", "HR"],
+  ["sales", "Продажи"],
+  ["system", "Система"],
+];
 
 const button =
   "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-line bg-surface px-3.5 text-sm font-medium text-ink hover:bg-muted disabled:opacity-50";
@@ -21,7 +31,8 @@ function Status({ ok, children }: { ok: boolean | null; children: React.ReactNod
  * Разрешения этого устройства: уведомления и геолокация. Браузер помнит решение сам — здесь видно, что он запомнил,
  * можно включить (окно разрешения — только по нажатию) и прочитать, как вернуть доступ, если он запрещён.
  */
-export function PermissionsSheet({ open, onClose, appName }: { open: boolean; onClose: () => void; appName: string }) {
+/** preferences — показать «Что присылать» (разделы уведомлений OneBase: нет в колокольчике и push, пока выключены). */
+export function PermissionsSheet({ open, onClose, appName, preferences = false }: { open: boolean; onClose: () => void; appName: string; preferences?: boolean }) {
   const t = useT();
   const [support, setSupport] = useState<PushSupport>("unsupported");
   const [notify, setNotify] = useState<NotificationPermission | "unsupported">("unsupported");
@@ -32,6 +43,7 @@ export function PermissionsSheet({ open, onClose, appName }: { open: boolean; on
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const ios = typeof navigator !== "undefined" && isIos();
+  const [muted, setMuted] = useState<string[] | null>(null);
 
   const refresh = useCallback(async () => {
     setSupport(pushSupport());
@@ -50,8 +62,28 @@ export function PermissionsSheet({ open, onClose, appName }: { open: boolean; on
     setMessage(null);
     setGeoBlocked(false);
     void refresh();
+    if (preferences) {
+      void loadPreferences()
+        .then((p) => setMuted(p.muted))
+        .catch(() => setMuted([]));
+    }
     if (pushSupport() === "supported") void prefetchPushKey().catch(() => undefined);
-  }, [open, refresh]);
+  }, [open, refresh, preferences]);
+
+  const toggle = async (code: string) => {
+    if (muted === null) return;
+    const next = muted.includes(code) ? muted.filter((c) => c !== code) : [...muted, code];
+    setMuted(next);
+    setBusy("prefs");
+    try {
+      setMuted((await savePreferences(next)).muted);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : t("Не удалось сохранить."));
+      setMuted(muted);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const turnOn = async () => {
     setBusy("notify");
@@ -166,6 +198,29 @@ export function PermissionsSheet({ open, onClose, appName }: { open: boolean; on
             </p>
           )}
         </section>
+
+        {preferences && (
+          <section className="space-y-2 border-t border-line pt-4">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="size-4 text-ink-3" />
+              <span className="flex-1 font-medium text-ink">{t("Что присылать")}</span>
+            </div>
+            <p className="text-ink-3">{t("Выключенные разделы не приходят ни в колокольчик, ни push-ом — на всех ваших устройствах.")}</p>
+            <ul className="divide-y divide-line rounded-lg border border-line">
+              {sections.map(([code, label]) => {
+                const on = muted !== null && !muted.includes(code);
+                return (
+                  <li key={code}>
+                    <label className="flex min-h-[44px] cursor-pointer items-center gap-3 px-3 py-2">
+                      <span className="flex-1 text-ink">{t(label)}</span>
+                      <input type="checkbox" role="switch" checked={on} disabled={muted === null || busy === "prefs"} onChange={() => void toggle(code)} className="size-5 accent-[var(--color-accent)]" />
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         {message && <p className="rounded-lg bg-accent-soft px-3 py-2 text-accent-strong">{message}</p>}
       </div>

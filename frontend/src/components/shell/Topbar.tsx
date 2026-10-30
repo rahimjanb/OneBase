@@ -43,7 +43,7 @@ export function Topbar({ me, permissions }: { me: Me | null; permissions: readon
             <ThemeToggle />
             <LanguageToggle />
           </span>
-          {me && <NotificationBell />}
+          {me && <NotificationBell permissions={permissions} />}
           {me && (
             <>
               <span aria-hidden className="mx-1.5 hidden h-6 w-px bg-line lg:block" />

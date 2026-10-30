@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OneBase.Domain.Field;
+using OneBase.Application.Work;
 using OneBase.Domain.Work;
 using OneBase.Infrastructure.Persistence;
 using WebPushSubscription = Lib.Net.Http.WebPush.PushSubscription;
@@ -21,7 +22,8 @@ using WebPushSubscription = Lib.Net.Http.WebPush.PushSubscription;
 namespace OneBase.Infrastructure.Push;
 
 /// <summary>Что отправить: получатель — пользователь OneBase или участник Sales Base (push уйдёт его пользователю).</summary>
-public sealed record PushNotice(Guid? UserId, Guid? FieldMemberId, string Title, string? Body, string? Link, Guid Tag);
+/// <summary>Category — раздел уведомления OneBase (NotificationCatalog): отключённый пользователем раздел в push не уходит.</summary>
+public sealed record PushNotice(Guid? UserId, Guid? FieldMemberId, string Title, string? Body, string? Link, Guid Tag, string? Category = null);
 
 /// <summary>Очередь push-уведомлений: заполняется после сохранения, разбирается фоновой отправкой.</summary>
 public sealed class PushQueue
@@ -133,7 +135,7 @@ public sealed class PushNotificationInterceptor(PushQueue queue) : SaveChangesIn
             .Select(e => e.Entity switch
             {
                 FieldNotification f => new PushNotice(null, f.RecipientId, f.Title, f.Body, f.Link, f.Id),
-                UserNotification u => new PushNotice(u.RecipientId, null, u.Title, u.Body, u.Link, u.Id),
+                UserNotification u => new PushNotice(u.RecipientId, null, u.Title, u.Body, u.Link, u.Id, NotificationCatalog.Of(u.Kind).Category),
                 _ => null,
             })
             .Where(n => n is not null)
@@ -244,8 +246,9 @@ public sealed class PushSender(
         var userId = notice.UserId ?? (notice.FieldMemberId is { } member
             ? await db.FieldMembers.AsNoTracking().Where(m => m.Id == member && m.IsActive).Select(m => m.UserId).FirstOrDefaultAsync(ct)
             : null);
-        // У участника ещё нет входа — уведомление ждёт в колокольчике. Отключённому пользователю push не шлём.
-        if (userId is null || !await db.Users.AsNoTracking().AnyAsync(u => u.Id == userId && u.IsActive, ct))
+        // У участника ещё нет входа — уведомление ждёт в колокольчике. Отключённому пользователю push не шлём, как и раздел, который он отключил.
+        var user = userId is null ? null : await db.Users.AsNoTracking().Where(u => u.Id == userId && u.IsActive).Select(u => new { u.NotificationMutes }).FirstOrDefaultAsync(ct);
+        if (user is null || (notice.Category is { } category && user.NotificationMutes?.Contains(category) == true))
         {
             return;
         }

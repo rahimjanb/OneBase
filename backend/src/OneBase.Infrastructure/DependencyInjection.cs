@@ -196,6 +196,7 @@ public static class DependencyInjection
         // Раздел «Задачи» OneBase: задачи отделов и проектов, уведомления пользователей, напоминания о сроках.
         services.AddScoped<OneBase.Application.Work.UserNotifier>();
         services.AddScoped<OneBase.Application.Work.WorkTaskService>();
+        services.AddScoped<OneBase.Application.Work.NotificationCenter>();
         services.AddHostedService<Work.WorkTaskReminderWorker>();
 
         // HR: Verifix — сотрудники, отметки и табель (только чтение API Verifix). client_secret — в «Настройки → Интеграции → HR → Verifix»

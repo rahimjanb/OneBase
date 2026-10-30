@@ -36,5 +36,11 @@ public class User : Entity
     /// </summary>
     public List<string>? Sections { get; set; }
 
+    /// <summary>
+    /// Разделы уведомлений, которые пользователь отключил (NotificationCatalog: tasks, ai, hr, sales, system): их нет в колокольчике и push.
+    /// null или пусто — присылать всё.
+    /// </summary>
+    public List<string>? NotificationMutes { get; set; }
+
     public static string FullNameOf(string firstName, string lastName) => $"{firstName.Trim()} {lastName.Trim()}".Trim();
 }

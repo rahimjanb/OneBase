@@ -271,46 +271,77 @@ public sealed class WorkController(WorkTaskService tasks, OneBase.AI.Work.TaskSu
     }
 }
 
-/// <summary>Уведомления пользователя OneBase: колокольчик в шапке.</summary>
+/// <summary>
+/// Уведомления пользователя OneBase: колокольчик в шапке, панель и экран «Уведомления». Список с фильтром (all, unread, tasks, ai, hr) и
+/// курсором, счётчики для вкладок, прочитано / не прочитано, удаление, действия без перехода, разделы «Что присылать».
+/// </summary>
 [ApiController]
 [Authorize]
+[FieldErrors]
 [Route("api/notifications")]
-public sealed class NotificationsController(IAppDbContext db) : ControllerBase
+public sealed class NotificationsController(NotificationCenter center, WorkTaskService tasks) : ControllerBase
 {
-    public sealed record Row(Guid Id, Domain.Work.UserNotificationKind Kind, string Title, string? Body, string? Link, DateTimeOffset CreatedAt, bool Read);
+    public sealed record ActionInput(string Action, DateOnly? Due);
 
-    [HttpGet]
-    public async Task<IActionResult> List([FromQuery] bool unread = false, [FromQuery] int take = 30, CancellationToken ct = default)
+    public sealed record PreferencesInput(IReadOnlyList<string>? Muted);
+
+    /// <summary>Контекст задач — только с правом «Задачи»: без него действий с задачами нет.</summary>
+    private async Task<WorkContext?> WorkAsync(CancellationToken ct)
     {
-        var me = User.GetUserId();
-        var q = db.UserNotifications.AsNoTracking().Where(n => n.RecipientId == me);
-        if (unread)
-        {
-            q = q.Where(n => n.ReadAt == null);
-        }
-
-        var items = await q.OrderByDescending(n => n.CreatedAt).Take(Math.Clamp(take, 1, 100))
-            .Select(n => new Row(n.Id, n.Kind, n.Title, n.Body, n.Link, n.CreatedAt, n.ReadAt != null))
-            .ToListAsync(ct);
-        var count = await db.UserNotifications.CountAsync(n => n.RecipientId == me && n.ReadAt == null, ct);
-        return Ok(new { items, unread = count });
+        var permissions = User.FindAll(OneBaseClaims.Permission).Select(c => c.Value).ToHashSet();
+        return permissions.Contains(OneBase.Application.Security.Permissions.WorkTasks) ? await tasks.ContextAsync(User.GetUserId(), permissions, ct) : null;
     }
+
+    /// <summary>filter: all (по умолчанию), unread, tasks, ai, hr; cursor — nextCursor прошлой страницы; take — до 50 (по умолчанию 30).</summary>
+    [HttpGet]
+    public async Task<NotificationPage> List([FromQuery] string? filter, [FromQuery] string? cursor, [FromQuery] bool unread = false, [FromQuery] int take = 30,
+        CancellationToken ct = default) =>
+        await center.ListAsync(User.GetUserId(), unread ? "unread" : filter, cursor, take, await WorkAsync(ct), ct);
+
+    /// <summary>Только счётчики — для колокольчика.</summary>
+    [HttpGet("counts")]
+    public Task<NotificationCounts> Counts(CancellationToken ct) => center.CountsAsync(User.GetUserId(), ct);
 
     [HttpPost("{id:guid}/read")]
     public async Task<IActionResult> Read(Guid id, CancellationToken ct)
     {
-        var me = User.GetUserId();
-        await db.UserNotifications.Where(n => n.Id == id && n.RecipientId == me && n.ReadAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(n => n.ReadAt, DateTimeOffset.UtcNow), ct);
+        await center.ReadAsync(User.GetUserId(), id, ct);
         return NoContent();
     }
 
-    [HttpPost("read-all")]
-    public async Task<IActionResult> ReadAll(CancellationToken ct)
+    [HttpPost("{id:guid}/unread")]
+    public async Task<IActionResult> Unread(Guid id, CancellationToken ct)
     {
-        var me = User.GetUserId();
-        await db.UserNotifications.Where(n => n.RecipientId == me && n.ReadAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(n => n.ReadAt, DateTimeOffset.UtcNow), ct);
+        await center.UnreadAsync(User.GetUserId(), id, ct);
         return NoContent();
     }
+
+    /// <summary>Прочитать все; category — только раздела (tasks, ai, hr…).</summary>
+    [HttpPost("read-all")]
+    public async Task<IActionResult> ReadAll([FromQuery] string? category, CancellationToken ct)
+    {
+        await center.ReadAllAsync(User.GetUserId(), category, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct) =>
+        await center.DeleteAsync(User.GetUserId(), id, ct) > 0 ? NoContent() : NotFound(new { error = "Уведомление не найдено." });
+
+    /// <summary>Действие без перехода: extend_due (due — новый срок задачи, yyyy-MM-dd).</summary>
+    [HttpPost("{id:guid}/action")]
+    public async Task<IActionResult> Act(Guid id, ActionInput input, CancellationToken ct)
+    {
+        await center.ActAsync(User.GetUserId(), id, input.Action, input.Due, await WorkAsync(ct), ct);
+        return NoContent();
+    }
+
+    /// <summary>Что присылать: отключённые разделы (tasks, ai, hr, sales, system) и все разделы.</summary>
+    [HttpGet("preferences")]
+    public async Task<IActionResult> Preferences(CancellationToken ct) =>
+        Ok(new { muted = await center.MutesAsync(User.GetUserId(), ct), categories = NotificationCatalog.Categories });
+
+    [HttpPut("preferences")]
+    public async Task<IActionResult> SavePreferences(PreferencesInput input, CancellationToken ct) =>
+        Ok(new { muted = await center.SetMutesAsync(User.GetUserId(), input.Muted, ct), categories = NotificationCatalog.Categories });
 }
