@@ -44,8 +44,9 @@ public class ConsultantDataTests
     [Fact]
     public void Answer_policy_searches_before_no_data_and_tells_zero_from_missing()
     {
-        var rules = ConsultantPrompts.QualityRules;
-        Assert.Contains("не больше трёх попыток", rules);
+        // Поиск — в правилах AI-сотрудника (набор A): во всех инструментах, до трёх вариантов написания названия — затем другие инструменты.
+        var rules = ConsultantPrompts.AgentRules;
+        Assert.Contains("до трёх вариантов написания", rules);
         Assert.Contains("Не превращай отсутствие значения в ноль", rules);
         Assert.Contains("План не удалось подтвердить", rules);
         Assert.Contains("CategoryPlans", rules);

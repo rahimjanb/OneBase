@@ -102,7 +102,7 @@ internal sealed class GetStockReloadTool(StockService stock, IAppDbContext db, S
             .ThenBy(x => x.Cell.DaysOfCover ?? decimal.MaxValue)
             .ThenByDescending(x => x.Cell.OrderKg)
             .ToList();
-        var shown = picked.Take(args.Cap(limit)).ToList();
+        var shown = picked.TakeTop(args, limit, "rows").ToList();
 
         return Data(new
         {

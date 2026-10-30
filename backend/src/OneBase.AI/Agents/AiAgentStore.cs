@@ -59,14 +59,16 @@ public sealed class AiAgentStore(IAppDbContext db)
             return null;
         }
 
-        var prompt = !string.IsNullOrWhiteSpace(row?.SystemPrompt) ? row!.SystemPrompt! : d?.Prompt ?? string.Empty;
+        // Копия прежнего заводского промпта — как пустой: действует текущий заводской (свой текст администратора не трогаем).
+        var custom = !string.IsNullOrWhiteSpace(row?.SystemPrompt) && !AgentDefaults.IsOutdatedPrompt(code, row!.SystemPrompt);
+        var prompt = custom ? row!.SystemPrompt! : d?.Prompt ?? string.Empty;
         return new AgentConfig(
             code,
             row?.Name ?? d!.Name,
             row is null ? d!.Role : row.Role,
             row is null ? d!.Description : row.Description,
             prompt.Trim(),
-            string.IsNullOrWhiteSpace(row?.SystemPrompt),
+            !custom,
             !string.IsNullOrWhiteSpace(row?.ProviderCode) && !string.IsNullOrWhiteSpace(row.ModelId) ? new AiModelRef(row.ProviderCode, row.ModelId) : null,
             row?.Temperature,
             row?.MaxOutputTokens,

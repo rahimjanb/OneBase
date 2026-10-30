@@ -81,7 +81,7 @@ internal sealed class GetAiAlertsTool(IAppDbContext db, IUserPermissions permiss
         var picked = visible.Where(a => severity is null || a.Severity == severity)
             .OrderBy(a => a.Severity).ThenByDescending(a => a.LastSeenAt)
             .ToList();
-        var shown = picked.Take(args.Cap(limit)).ToList();
+        var shown = picked.TakeTop(args, limit, "alerts").ToList();
 
         return Data(new
         {

@@ -1,4 +1,5 @@
 using System.Text;
+using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
 using OneBase.AI.Providers;
@@ -69,16 +70,17 @@ public sealed class GroundedComposer(IAiGateway gateway)
         Оценки и предложения с числами — только в разделах «Рекомендации» или «Прогноз». Верни только исправленный ответ, без пояснений о правке.
         """;
 
-    /// <summary>Пометка в конце ответа — на языке ответа (узбекский латиницей или русский).</summary>
+    /// <summary>Пометка в конце ответа — на языке ответа: русский, узбекский латиницей или кириллицей.</summary>
     public static string Warning(string answer, IReadOnlyList<string> unsupported)
     {
-        var latin = answer.Count(c => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z');
-        var cyrillic = answer.Count(c => c is >= 'а' and <= 'я' or >= 'А' and <= 'Я' or 'ё' or 'Ё');
         var list = string.Join(", ", unsupported);
         var sb = new StringBuilder("\n\n> ⚠️ ");
-        sb.Append(latin > cyrillic
-            ? $"OneBase ma'lumotlarida tasdiqlanmagan: {list}. Bu qiymatlar vositalar natijalarida topilmadi — ularni fakt sifatida ishlatmang."
-            : $"Не подтверждено данными OneBase: {list}. Этих значений нет в результатах инструментов — не используйте их как факт.");
+        sb.Append(AnswerLanguages.Of(answer) switch
+        {
+            AnswerLanguage.UzLatn => $"OneBase ma'lumotlarida tasdiqlanmagan: {list}. Bu qiymatlar vositalar natijalarida topilmadi — ularni fakt sifatida ishlatmang.",
+            AnswerLanguage.UzCyrl => $"OneBase маълумотларида тасдиқланмаган: {list}. Бу қийматлар воситалар натижаларида топилмади — уларни факт сифатида ишлатманг.",
+            _ => $"Не подтверждено данными OneBase: {list}. Этих значений нет в результатах инструментов — не используйте их как факт.",
+        });
         return sb.ToString();
     }
 }

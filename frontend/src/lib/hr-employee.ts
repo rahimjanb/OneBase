@@ -10,7 +10,7 @@ import type { Tone } from "@/lib/hr-overview";
 // ---------- Имя ----------
 
 /** Узбекские и русские частицы отчества пишутся строчными: «Baxtiyor o'g'li», «Karim qizi». */
-const PARTICLES = new Set(["o'g'li", "og'li", "o'gli", "ogli", "ugli", "qizi", "kizi", "оглы", "кызы", "угли", "ўғли", "қизи"]);
+const PARTICLES = new Set(["o'g'li", "og'li", "o'gli", "ogli", "o'li", "ugli", "qizi", "kizi", "оглы", "кызы", "угли", "ўғли", "қизи"]);
 
 /**
  * Имя в нормальном регистре: «QAXRAMONOV SARDOR BAXTIYOR O'G'LI» → «Qaxramonov Sardor Baxtiyor o'g'li». Только если имя записано целиком

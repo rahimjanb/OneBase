@@ -22,7 +22,8 @@ internal abstract class HrTool(HrService hr, IUserPermissions permissions) : Dat
     public override string? Source => KnowledgeSources.HrAttendance;
     public override string? RequiredPermission => Permissions.HrRead;
 
-    public const int MaxPeriodDays = HrService.MaxPeriodDays;
+    /// <summary>Самый длинный период для AI — год: до квартала — один вызов HrService, длиннее — частями по 92 дня (HrPeriods).</summary>
+    public const int MaxPeriodDays = HrPeriods.MaxDays;
 
     protected static readonly Dictionary<HrDayStatus, string> StatusText = new()
     {
@@ -94,7 +95,7 @@ internal abstract class HrTool(HrService hr, IUserPermissions permissions) : Dat
         };
     }
 
-    /// <summary>Период from–to (yyyy-MM-dd, «сегодня», «вчера»), по умолчанию — последние fallbackDays дней по сегодня; не больше 62 дней.</summary>
+    /// <summary>Период from–to (yyyy-MM-dd, «сегодня», «вчера»), по умолчанию — последние fallbackDays дней по сегодня; не больше года.</summary>
     protected static (DateOnly From, DateOnly To) Period(ToolArgs args, int fallbackDays)
     {
         var to = WorkFieldText.Date(args, "to") ?? FieldClock.Today;
@@ -105,7 +106,7 @@ internal abstract class HrTool(HrService hr, IUserPermissions permissions) : Dat
         }
 
         return to.DayNumber - from.DayNumber + 1 > MaxPeriodDays
-            ? throw new ToolArgumentException($"Период — не больше {MaxPeriodDays} дней: разбейте запрос на части.")
+            ? throw new ToolArgumentException($"Период — не больше {MaxPeriodDays} дней (год): разбейте запрос на части.")
             : (from, to);
     }
 
@@ -190,7 +191,6 @@ internal sealed class GetHrDayTool(HrService hr, IUserPermissions permissions) :
         var date = rows.Count > 0 ? rows[0].Day.Date : asked ?? FieldClock.Today;
         var sync = await Hr.SyncBriefAsync(ct);
         int Count(Func<HrDayRow, bool> f) => rows.Count(f);
-        var cap = args.Cap(40);
 
         return Data(new
         {
@@ -221,13 +221,13 @@ internal sealed class GetHrDayTool(HrService hr, IUserPermissions permissions) :
                     OnLeave = g.Count(r => r.Day.Status == HrDayStatus.OnLeave),
                     Unknown = g.Count(r => r.Day.Status == HrDayStatus.Unknown),
                 })
-                .OrderByDescending(g => g.Active).Take(args.Cap(30)),
-            AbsentList = rows.Where(r => r.Day.Status == HrDayStatus.Absent).Take(cap)
+                .OrderByDescending(g => g.Active).TakeTop(args, 30, "byDivision"),
+            AbsentList = rows.Where(r => r.Day.Status == HrDayStatus.Absent).TakeTop(args, 40, "absentList")
                 .Select(r => new { r.Employee, r.Division, r.Job, PlanBegin = Clock(r.Day.PlanBegin), r.Day.Reason }),
-            LateList = rows.Where(r => r.Day.Late).OrderByDescending(r => r.Day.LateMinutes).Take(cap)
+            LateList = rows.Where(r => r.Day.Late).OrderByDescending(r => r.Day.LateMinutes).TakeTop(args, 40, "lateList")
                 .Select(r => new { r.Employee, r.Division, r.Day.LateMinutes, FirstIn = Clock(r.Day.FirstIn), PlanBegin = Clock(r.Day.PlanBegin) }),
-            OnLeaveList = rows.Where(r => r.Day.Status == HrDayStatus.OnLeave).Take(cap).Select(r => new { r.Employee, r.Division, Document = r.Day.LeaveName }),
-            UnknownList = rows.Where(r => r.Day.Status == HrDayStatus.Unknown).Take(cap).Select(r => new { r.Employee, r.Division, r.Day.Reason }),
+            OnLeaveList = rows.Where(r => r.Day.Status == HrDayStatus.OnLeave).TakeTop(args, 40, "onLeaveList").Select(r => new { r.Employee, r.Division, Document = r.Day.LeaveName }),
+            UnknownList = rows.Where(r => r.Day.Status == HrDayStatus.Unknown).TakeTop(args, 40, "unknownList").Select(r => new { r.Employee, r.Division, r.Day.Reason }),
             Sync = SyncOf(sync),
         }, new DataSource("HR · Посещаемость", WorkFieldText.Ru(date), $"/hr/attendance?date={WorkFieldText.Day(date)}{(division is null ? "" : $"&divisionId={division.Id}")}"));
     });
@@ -272,6 +272,7 @@ internal sealed class GetHrEmployeesTool(HrService hr, IUserPermissions permissi
         var limit = args.Report ? 200 : args.Int("limit", 1, 200) ?? 50;
         var page = await Hr.EmployeesAsync(ctx, new HrEmployeeQuery(args.Str("search"), division?.Id, status == "working" ? null : status, sort, 1, Math.Max(10, limit)), ct);
         var divisions = await Hr.DivisionsAsync(ctx, ct);
+        args.Count("employees", page.Total, Math.Min(limit, page.Items.Count));
 
         return Data(new
         {
@@ -293,7 +294,7 @@ internal sealed class GetHrEmployeesTool(HrService hr, IUserPermissions permissi
                 LastEvent = e.LastEventAt?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
                 Today = e.Today is { } t ? StatusText[t] + (e.TodayLate ? ", опоздал" : "") : null,
             }),
-            WorkingByDivision = divisions.Where(d => d.Employees > 0).OrderByDescending(d => d.Employees).Take(args.Cap(40)).Select(d => new { Division = d.Name, Working = d.Employees }),
+            WorkingByDivision = divisions.Where(d => d.Employees > 0).OrderByDescending(d => d.Employees).TakeTop(args, 40, "workingByDivision").Select(d => new { Division = d.Name, Working = d.Employees }),
         }, new DataSource("HR · Сотрудники", null, "/hr/employees"));
     });
 }
@@ -308,7 +309,7 @@ internal sealed class GetHrEmployeeTool(HrService hr, IUserPermissions permissio
         "Карточка сотрудника по данным Verifix: подразделение, должность, график, статус, приём и увольнение, заметка HR; итоги за период (рабочих " +
         "дней, с приходом, опозданий и минут, ранних уходов, отсутствий, дней по документам, отработано и план в часах) и каждый день — итог, начало и " +
         "конец смены, приход, уход, опоздание, ранний уход, отработано, документ, пояснение. Аргументы: employee — ФИО (часть) или ID Verifix " +
-        "(обязательно); from, to — yyyy-MM-dd, по умолчанию последние 14 дней, не больше 62. " + Rules;
+        "(обязательно); from, to — yyyy-MM-dd, по умолчанию последние 14 дней; квартал и до года — одним вызовом. " + Rules;
 
     public override string? UsageHint => "Для вопросов об одном человеке: как работает, когда опаздывал, сколько отработал за месяц.";
 
@@ -324,8 +325,13 @@ internal sealed class GetHrEmployeeTool(HrService hr, IUserPermissions permissio
         var from = WorkFieldText.Date(args, "from");
         var to = WorkFieldText.Date(args, "to");
         var found = await EmployeeAsync(ctx, query, ct);
-        // Период по умолчанию (14 дней по сегодня) и предел 62 дня проверяет HrService.
-        var card = await Hr.EmployeeAsync(ctx, found.Id, from, to, ct);
+        // Период по умолчанию (14 дней по сегодня) — у HrService; квартал — один вызов, до года — частями по 92 дня.
+        var parts = HrPeriods.Split(from, to ?? (found.DismissalDate is { } dismissed && dismissed < FieldClock.Today ? dismissed : null));
+        var cards = parts is null
+            ? [await Hr.EmployeeAsync(ctx, found.Id, from, to, ct, HrPeriods.ChunkDays)]
+            : await HrPeriods.EachAsync(parts, (a, b) => Hr.EmployeeAsync(ctx, found.Id, a, b, ct, HrPeriods.ChunkDays));
+        var card = cards[^1];
+        var (cardFrom, cardTo) = (cards[0].From, card.To);
         var e = card.Employee;
 
         return Data(new
@@ -339,9 +345,9 @@ internal sealed class GetHrEmployeeTool(HrService hr, IUserPermissions permissio
             Hired = WorkFieldText.Day(e.HiringDate),
             Dismissed = WorkFieldText.Day(e.DismissalDate),
             HrNote = card.Note,
-            Period = new { From = WorkFieldText.Day(card.From), To = WorkFieldText.Day(card.To) },
-            Summary = SummaryOf(card.Summary),
-            Days = card.Days.Where(d => d.Status != HrDayStatus.NotEmployed).OrderBy(d => d.Date).Select(d => new
+            Period = new { From = WorkFieldText.Day(cardFrom), To = WorkFieldText.Day(cardTo) },
+            Summary = SummaryOf(HrPeriods.Sum(cards.Select(c => c.Summary))),
+            Days = cards.SelectMany(c => c.Days).Where(d => d.Status != HrDayStatus.NotEmployed).OrderBy(d => d.Date).Select(d => new
             {
                 Date = WorkFieldText.Day(d.Date),
                 Status = StatusText[d.Status],
@@ -355,8 +361,8 @@ internal sealed class GetHrEmployeeTool(HrService hr, IUserPermissions permissio
                 Document = d.LeaveName,
                 d.Reason,
             }),
-            Events = card.Events.Count,
-        }, new DataSource($"HR · {e.FullName}", WorkFieldText.RuPeriod(card.From, card.To), $"/hr/employees/{e.Id}?from={WorkFieldText.Day(card.From)}&to={WorkFieldText.Day(card.To)}"));
+            Events = cards.Sum(c => c.Events.Count),
+        }, new DataSource($"HR · {e.FullName}", WorkFieldText.RuPeriod(cardFrom, cardTo), $"/hr/employees/{e.Id}?from={WorkFieldText.Day(cardFrom)}&to={WorkFieldText.Day(cardTo)}"));
     });
 }
 
@@ -378,7 +384,7 @@ internal sealed class GetHrDeviationsTool(HrService hr, IUserPermissions permiss
     public override string Description =>
         "Нарушения дисциплины за период по графикам Verifix: опоздания (минуты), ранние уходы, отсутствия, дни без отметки ухода. Возвращает " +
         "сколько каждого вида, по сотрудникам (сколько раз и минут — от самых частых) и список случаев (дата, сотрудник, подразделение, вид, " +
-        "минуты, смена, приход, уход, пояснение). Аргументы: from, to — yyyy-MM-dd (по умолчанию последние 7 дней, не больше 62); kind — late / " +
+        "минуты, смена, приход, уход, пояснение). Аргументы: from, to — yyyy-MM-dd (по умолчанию последние 7 дней; квартал и до года — одним вызовом); kind — late / " +
         "early / absent / noexit / all (по умолчанию); division — подразделение; limit — сколько случаев в списке (50). " + Rules;
 
     public override string? UsageHint => "Для вопросов «кто чаще всего опаздывает», «сколько прогулов за месяц», «опоздания отдела за неделю».";
@@ -396,8 +402,13 @@ internal sealed class GetHrDeviationsTool(HrService hr, IUserPermissions permiss
         var (from, to) = Period(args, 7);
         var kind = WorkFieldText.Pick(args.Str("kind"), "kind", null, Kinds);
         var division = await DivisionAsync(ctx, args.Str("division"), ct);
-        var limit = args.Report ? 5000 : args.Int("limit", 1, 300) ?? 50;
-        var list = await Hr.DeviationsAsync(ctx, from, to, kind, division?.Id, null, ct);
+        var limit = args.Report || args.All ? 5000 : args.Int("limit", 1, 300) ?? 50;
+        var parts = HrPeriods.Split(from, to)!;
+        var list = parts.Count == 1
+            ? await Hr.DeviationsAsync(ctx, from, to, kind, division?.Id, null, ct, HrPeriods.ChunkDays)
+            : HrPeriods.Merge(parts, await HrPeriods.EachAsync(parts, (a, b) => Hr.DeviationsAsync(ctx, a, b, kind, division?.Id, null, ct, HrPeriods.ChunkDays)));
+        var cases = list.Take(limit).ToList();
+        args.Count("cases", list.Count, cases.Count);
 
         return Data(new
         {
@@ -423,8 +434,8 @@ internal sealed class GetHrDeviationsTool(HrService hr, IUserPermissions permiss
                     NoExit = g.Count(d => d.Kind == "noexit"),
                 })
                 .OrderByDescending(x => x.Absent + x.Late + x.EarlyLeave).ThenByDescending(x => x.LateMinutes)
-                .Take(args.Cap(30)),
-            Cases = list.Take(limit).Select(d => new
+                .TakeTop(args, 30, "byEmployee"),
+            Cases = cases.Select(d => new
             {
                 Date = WorkFieldText.Day(d.Date),
                 d.Employee,
@@ -451,7 +462,7 @@ internal sealed class GetHrTimesheetTool(HrService hr, IUserPermissions permissi
         "Табель и отчёт по рабочему времени за период по данным Verifix: итоги (сотрудников, рабочих дней по графику, с приходом, опозданий и " +
         "минут, ранних уходов, отсутствий, дней по документам, «не ясно», отработано и план в часах, явка % — доля дней с приходом среди " +
         "решённых рабочих, без опозданий % — доля приходов без опоздания); по подразделениям — то же; по сотрудникам — итоги периода. " +
-        "Аргументы: from, to — yyyy-MM-dd (по умолчанию текущий месяц, не больше 62 дней); division — подразделение; search — часть ФИО; sort — " +
+        "Аргументы: from, to — yyyy-MM-dd (по умолчанию текущий месяц; квартал и до года — одним вызовом); division — подразделение; search — часть ФИО; sort — " +
         "late / absent / worked / attendance / name (по умолчанию late — больше опозданий сверху); limit — сколько сотрудников (30). " +
         "Для 1–5 сотрудников добавляются буквы дней табеля (Я — явка, ОП — опоздание, РУ — ранний уход, РВ — работа в выходной, ОТС — " +
         "отсутствие, ОТ/Б/К/О/НО — документ, В — выходной, П — праздник, ? — не ясно).";
@@ -470,9 +481,15 @@ internal sealed class GetHrTimesheetTool(HrService hr, IUserPermissions permissi
     {
         var ctx = await ContextAsync(context, ct);
         var division = await DivisionAsync(ctx, args.Str("division"), ct);
-        var limit = args.Report ? 5000 : args.Int("limit", 1, 300) ?? 30;
-        // Период по умолчанию (с 1-го числа по сегодня) и предел 62 дня проверяет HrService.
-        var sheet = await Hr.TimesheetAsync(ctx, WorkFieldText.Date(args, "from"), WorkFieldText.Date(args, "to"), division?.Id, args.Str("search"), null, ct);
+        var limit = args.Report || args.All ? 5000 : args.Int("limit", 1, 300) ?? 30;
+        // Период по умолчанию (с 1-го числа по сегодня) — у HrService; квартал — один вызов, до года — частями по 92 дня, табели объединяются.
+        var to = WorkFieldText.Date(args, "to");
+        var from = WorkFieldText.Date(args, "from") ?? (to is { } end ? new DateOnly(end.Year, end.Month, 1) : null);
+        var search = args.Str("search");
+        var parts = HrPeriods.Split(from, to);
+        var sheet = parts is null or { Count: 1 }
+            ? await Hr.TimesheetAsync(ctx, from, to, division?.Id, search, null, ct, HrPeriods.ChunkDays)
+            : HrPeriods.Merge(await HrPeriods.EachAsync(parts, (a, b) => Hr.TimesheetAsync(ctx, a, b, division?.Id, search, null, ct, HrPeriods.ChunkDays)));
 
         var rows = (args.Str("sort") ?? "late") switch
         {
@@ -483,6 +500,8 @@ internal sealed class GetHrTimesheetTool(HrService hr, IUserPermissions permissi
             _ => sheet.Rows.OrderByDescending(r => r.Summary.LateDays).ThenByDescending(r => r.Summary.LateMinutes),
         };
         var withCodes = sheet.Rows.Count <= 5;
+        var shown = rows.Take(limit).ToList();
+        args.Count("employeesList", sheet.Rows.Count, shown.Count);
 
         return Data(new
         {
@@ -491,8 +510,8 @@ internal sealed class GetHrTimesheetTool(HrService hr, IUserPermissions permissi
             Employees = sheet.Rows.Count,
             Totals = SummaryOf(sheet.Total),
             ByDivision = sheet.Rows.GroupBy(r => r.Division ?? "без подразделения")
-                .Select(g => (Division: g.Key, Employees: g.Count(), Summary: Sum(g.Select(r => r.Summary))))
-                .OrderByDescending(g => g.Employees).Take(args.Cap(40))
+                .Select(g => (Division: g.Key, Employees: g.Count(), Summary: HrPeriods.Sum(g.Select(r => r.Summary))))
+                .OrderByDescending(g => g.Employees).TakeTop(args, 40, "byDivision")
                 .Select(g => new
                 {
                     g.Division,
@@ -508,7 +527,7 @@ internal sealed class GetHrTimesheetTool(HrService hr, IUserPermissions permissi
                     AttendancePercent = Attendance(g.Summary),
                     PunctualityPercent = Punctuality(g.Summary),
                 }),
-            EmployeesList = rows.Take(limit).Select(r => new
+            EmployeesList = shown.Select(r => new
             {
                 r.Employee,
                 r.Division,
@@ -528,9 +547,4 @@ internal sealed class GetHrTimesheetTool(HrService hr, IUserPermissions permissi
             Sync = SyncOf(sheet.Sync),
         }, new DataSource("HR · Рабочее время и табели", WorkFieldText.RuPeriod(sheet.From, sheet.To), $"/hr/timesheets?from={WorkFieldText.Day(sheet.From)}&to={WorkFieldText.Day(sheet.To)}"));
     });
-
-    private static HrSummary Sum(IEnumerable<HrSummary> all) => all.Aggregate(new HrSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), (a, s) => new HrSummary(
-        a.PlanDays + s.PlanDays, a.PresentDays + s.PresentDays, a.LateDays + s.LateDays, a.LateMinutes + s.LateMinutes, a.EarlyDays + s.EarlyDays,
-        a.EarlyMinutes + s.EarlyMinutes, a.AbsentDays + s.AbsentDays, a.LeaveDays + s.LeaveDays, a.UnknownDays + s.UnknownDays, a.NoExitDays + s.NoExitDays,
-        a.WorkedMinutes + s.WorkedMinutes, a.PlanMinutes + s.PlanMinutes));
 }

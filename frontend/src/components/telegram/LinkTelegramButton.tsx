@@ -11,7 +11,7 @@ import { myTelegramApi, type LinkCode, type TelegramLink } from "@/lib/telegram"
  * «Привязать Telegram» в меню пользователя: одноразовый код (15 минут). Пользователь отправляет его аккаунту OneBase в Telegram — так
  * агент узнаёт, что этот Telegram принадлежит ему, и (если администратор разрешил полный доступ) отвечает с его правами.
  */
-export function LinkTelegramButton() {
+export function LinkTelegramButton({ trigger }: { trigger?: (open: () => void) => React.ReactNode } = {}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [links, setLinks] = useState<TelegramLink[] | null>(null);
@@ -63,10 +63,14 @@ export function LinkTelegramButton() {
 
   return (
     <>
-      <button type="button" onClick={show} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-ink hover:bg-muted">
-        <Send className="size-4 text-ink-3" />
-        {t("Привязать Telegram")}
-      </button>
+      {trigger ? (
+        trigger(() => void show())
+      ) : (
+        <button type="button" onClick={show} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-ink hover:bg-muted">
+          <Send className="size-4 text-ink-3" />
+          {t("Привязать Telegram")}
+        </button>
+      )}
       {/* Окно — в body: меню профиля создаёт свой контекст позиционирования, внутри него окно обрезалось бы. */}
       {open &&
         createPortal(

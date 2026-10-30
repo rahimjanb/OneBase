@@ -9,11 +9,18 @@ namespace OneBase.AI.Tools;
 /// </summary>
 public sealed record ToolContext(string AgentCode, Guid? UserId, int Depth, Guid? ConversationId = null, bool Report = false);
 
-/// <summary>Результат инструмента. Sources — откуда данные (показываются пользователю как источники ответа).</summary>
-public sealed record ToolResult(bool Success, string Content, Guid? ApprovalRequestId = null, IReadOnlyList<DataSource>? Sources = null)
+/// <summary>
+/// Результат инструмента. Sources — откуда данные (показываются пользователю как источники ответа). ErrorKind — вид сбоя (ToolFailures):
+/// forbidden, not_connected, not_found, invalid_arguments, tool_error; null — успех или обычная ошибка аргументов, которую модель исправит сама.
+/// </summary>
+public sealed record ToolResult(bool Success, string Content, Guid? ApprovalRequestId = null, IReadOnlyList<DataSource>? Sources = null, string? ErrorKind = null)
 {
     public static ToolResult Ok(string content) => new(true, content);
     public static ToolResult Error(string content) => new(false, content);
+
+    /// <summary>Сбой инструмента для модели — структурно: какой инструмент, вид сбоя, что случилось и что делать дальше.</summary>
+    public static ToolResult Failure(string tool, string kind, string message) =>
+        new(false, JsonSerializer.Serialize(new { error = new { tool, kind, message, next = ToolFailures.Next(kind) } }, ToolFailures.Json), ErrorKind: kind);
     public static ToolResult PendingApproval(Guid requestId) =>
         new(false, $"Действие отправлено на подтверждение человеку (запрос {requestId}). Сообщи пользователю, что нужно одобрение.", requestId);
 }

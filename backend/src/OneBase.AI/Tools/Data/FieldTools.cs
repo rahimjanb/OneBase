@@ -78,7 +78,7 @@ internal sealed class GetFieldTeamTool(FieldAccess access, FieldDashboardService
                 TasksOpen = rows.Sum(r => r.TasksOpen),
                 TasksOverdue = rows.Sum(r => r.TasksOverdue),
             },
-            Agents = rows.OrderBy(r => r.MonthShareKg ?? 9).Take(args.Cap(40)).Select(r => new
+            Agents = rows.OrderBy(r => r.MonthShareKg ?? 9).TakeTop(args, 40, "agents").Select(r => new
             {
                 r.Name,
                 Team = r.TeamName,

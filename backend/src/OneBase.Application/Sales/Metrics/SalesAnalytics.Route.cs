@@ -51,40 +51,22 @@ public sealed partial class SalesAnalytics
     /// </summary>
     public RouteSplitView RouteSplit(DateOnly from, DateOnly to, Guid? region = null, Guid? direction = null, long? agent = null, bool withAgents = false)
     {
-        var monthEnd = _d.MonthStart.AddMonths(1).AddDays(-1);
-        var last = _d.DataThrough < monthEnd ? _d.DataThrough : monthEnd;
-        from = from < _d.MonthStart ? _d.MonthStart : from;
-        to = to > last ? last : to;
-
-        IReadOnlyList<Guid> regions = agent is { } a
-            ? [_agentRegion.GetValueOrDefault(a, NoRegionId)]
-            : region is { } r
-                ? [r]
-                : _regions.Keys.Where(id => id != NoRegionId && (direction is not { } d || _regions[id].DirectionId == d)).ToList();
-
+        (from, to) = ClipToMonth(from, to);
+        var regions = ScopeRegions(region, direction, agent);
         var keep = agent is not null || region is not null || withAgents;
         var rows = new List<RouteSplitRow>();
         var scopeLines = new List<SaleLine>();
         var scopeAgents = new List<long>();
-        // Продажи вне команды — по филиалу в итоге региона, как в «Продажах»: иначе факт дней меньше факта страниц (Самарканд — «Филиал Оператор»,
-        // Термез — «Офис»). ТП команды считаются по себе (в любом филиале), поэтому их строки сюда не попадают. У одного ТП — только его строки.
-        var counted = agent is null ? AgentsIn(null).Where(x => InTeam(x) && _agentRegion.GetValueOrDefault(x, NoRegionId) != NoRegionId).ToHashSet() : null;
+        var counted = CountedAgents(agent);
         var outside = new List<SaleLine>();
         foreach (var id in regions)
         {
-            List<long> team = agent is { } one ? [one] : AgentsIn(new HashSet<Guid> { id }).Where(InTeam).ToList();
+            var (team, lines, extra) = RegionLines(id, from, to, agent, counted);
             var agentRows = team.Select(x => RouteAgent(x, from, to))
                 .Where(x => x.Plan + x.DoneInPlan + x.DoneOffPlan + x.Total.Orders > 0 || x.ReturnsKg != 0)
                 .OrderByDescending(x => x.Total.Revenue)
                 .ToList();
-            var lines = team.SelectMany(x => AgentLines(x, from, to)).ToList();
-            if (counted is not null)
-            {
-                var extra = _currentByRegion[id].Where(l => l.Date >= from && l.Date <= to && (l.AgentId is not { } owner || !counted.Contains(owner))).ToList();
-                lines.AddRange(extra);
-                outside.AddRange(extra);
-            }
-
+            outside.AddRange(extra);
             scopeLines.AddRange(lines);
             scopeAgents.AddRange(team);
             var row = Combine(id.ToString(), _regions.TryGetValue(id, out var info) ? info.Name : "Без региона", null, agentRows, lines, keep);
@@ -111,6 +93,53 @@ public sealed partial class SalesAnalytics
         }
 
         return new RouteSplitView(Period, from, to, total, regionRows, days, counted is null ? null : Part(outside));
+    }
+
+    /// <summary>
+    /// Чистый вес по точкам за дни from–to месяца в той же области, что итог RouteSplit (те же строки). Для АКБ периода через границу месяца:
+    /// веса точек по месяцам складываются, АКБ периода — точки с суммой больше нуля (SalesMath.MarketKg), а не сумма АКБ месяцев.
+    /// </summary>
+    public Dictionary<long, decimal> MarketKg(DateOnly from, DateOnly to, Guid? region = null, Guid? direction = null, long? agent = null)
+    {
+        (from, to) = ClipToMonth(from, to);
+        var counted = CountedAgents(agent);
+        return SalesMath.MarketKg(ScopeRegions(region, direction, agent).SelectMany(id => RegionLines(id, from, to, agent, counted).Lines));
+    }
+
+    /// <summary>Отрезок внутри месяца отчёта: не раньше 1-го числа и не позже последнего дня данных.</summary>
+    private (DateOnly From, DateOnly To) ClipToMonth(DateOnly from, DateOnly to)
+    {
+        var monthEnd = _d.MonthStart.AddMonths(1).AddDays(-1);
+        var last = _d.DataThrough < monthEnd ? _d.DataThrough : monthEnd;
+        return (from < _d.MonthStart ? _d.MonthStart : from, to > last ? last : to);
+    }
+
+    /// <summary>Регионы области: регион ТП, регион или регионы направления, иначе все (без «Без региона»).</summary>
+    private IReadOnlyList<Guid> ScopeRegions(Guid? region, Guid? direction, long? agent) =>
+        agent is { } a
+            ? [_agentRegion.GetValueOrDefault(a, NoRegionId)]
+            : region is { } r
+                ? [r]
+                : _regions.Keys.Where(id => id != NoRegionId && (direction is not { } d || _regions[id].DirectionId == d)).ToList();
+
+    /// <summary>ТП команды с регионом — их продажи считаются по ним самим; null — область одного ТП.</summary>
+    private HashSet<long>? CountedAgents(long? agent) =>
+        agent is null ? AgentsIn(null).Where(x => InTeam(x) && _agentRegion.GetValueOrDefault(x, NoRegionId) != NoRegionId).ToHashSet() : null;
+
+    /// <summary>
+    /// Строки факта региона за дни отрезка: продажи ТП команды (у одного ТП — только его) и продажи вне команды — по филиалу в итоге региона,
+    /// как в «Продажах»: иначе факт дней меньше факта страниц (Самарканд — «Филиал Оператор», Термез — «Офис»). ТП команды считаются по себе
+    /// (в любом филиале), поэтому их строки во «вне команды» не попадают. Outside — эти строки отдельно.
+    /// </summary>
+    private (List<long> Team, List<SaleLine> Lines, List<SaleLine> Outside) RegionLines(Guid id, DateOnly from, DateOnly to, long? agent, HashSet<long>? counted)
+    {
+        List<long> team = agent is { } one ? [one] : AgentsIn(new HashSet<Guid> { id }).Where(InTeam).ToList();
+        var lines = team.SelectMany(x => AgentLines(x, from, to)).ToList();
+        var outside = counted is null
+            ? []
+            : _currentByRegion[id].Where(l => l.Date >= from && l.Date <= to && (l.AgentId is not { } owner || !counted.Contains(owner))).ToList();
+        lines.AddRange(outside);
+        return (team, lines, outside);
     }
 
     /// <summary>Выручка ТП за дни отрезка по правилам вторички (проданное по дате приёмки, без «Завода») — факт месяца к дню для дневного плана.</summary>

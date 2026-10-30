@@ -108,7 +108,7 @@ internal sealed class GetPricesTool(IAppDbContext db, SalesOptions options) : Da
         var prices = items.GroupBy(i => (i.Product, i.List)).ToDictionary(g => g.Key, g => g.MaxBy(i => i.Tm)!);
         var listName = pickedLists.ToDictionary(l => l.Id, l => l.Name);
         var withPrice = products.Where(p => pickedLists.Any(l => prices.ContainsKey((p.Id, l.Id)))).ToList();
-        var shown = withPrice.OrderBy(p => p.Category).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).Take(args.Cap(limit)).ToList();
+        var shown = withPrice.OrderBy(p => p.Category).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).TakeTop(args, limit, "products").ToList();
 
         return Data(new
         {

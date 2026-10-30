@@ -245,9 +245,9 @@ internal sealed class GetSkuSalesTool(SkuSalesService skuSales, SalesDataLoader 
                     .Select(x => new { x.Name, Kg = R(x.Kg), RevenueSum = R(x.Revenue), SharePct = Pct(SalesMath.Ratio(x.Kg, view.RegionMatrix.Kg)) })
                 : null,
             Found = query is null ? (int?)null : rows.Count,
-            Skus = rows.Take(args.Cap(limit)).Select(Sku),
+            Skus = rows.TakeTop(args, limit, "skus").Select(Sku),
             New = dynamics
-                ? rows.Where(r => r.IsNew).OrderByDescending(r => r.LastKgPerDay).Take(args.Cap(MaxListed)).Select(r => new
+                ? rows.Where(r => r.IsNew).OrderByDescending(r => r.LastKgPerDay).TakeTop(args, MaxListed, "new").Select(r => new
                 {
                     r.Name,
                     r.Category,
@@ -257,7 +257,7 @@ internal sealed class GetSkuSalesTool(SkuSalesService skuSales, SalesDataLoader 
                 })
                 : null,
             Falling = dynamics
-                ? rows.Where(r => r.Dynamics <= FallingThreshold).OrderByDescending(r => (r.FirstKgPerDay ?? 0) - (r.LastKgPerDay ?? 0)).Take(args.Cap(MaxListed)).Select(r => new
+                ? rows.Where(r => r.Dynamics <= FallingThreshold).OrderByDescending(r => (r.FirstKgPerDay ?? 0) - (r.LastKgPerDay ?? 0)).TakeTop(args, MaxListed, "falling").Select(r => new
                 {
                     r.Name,
                     r.Abc,
@@ -496,7 +496,7 @@ internal sealed class GetExportSalesTool(SalesDataLoader loader, PrimaryService 
             Countries = countries
                 .Where(r => r.Month.Kg != 0 || r.Month.SumFactory != 0 || PrevOf(r).Kg != 0)
                 .OrderByDescending(r => r.Month.Kg).ThenByDescending(r => PrevOf(r).Kg)
-                .Take(args.Cap(MaxCountries))
+                .TakeTop(args, MaxCountries, "countries")
                 .Select(r =>
                 {
                     var prev = PrevOf(r);
@@ -548,7 +548,7 @@ internal sealed class GetExportSalesTool(SalesDataLoader loader, PrimaryService 
                     PrevMonthKg = R(s.PrevMonthKg),
                     VsPrevMonthPct = Pct(VsPrev(s.PrevMonthKg, s.FactKg, s.VsPrevMonth, p.Closed)),
                     BuyersWithSales = sales.Markets.Count(m => m.Kg != 0),
-                    Buyers = sales.Markets.Take(args.Cap(MaxBuyers)).Select(m => new
+                    Buyers = sales.Markets.TakeTop(args, MaxBuyers, "buyers").Select(m => new
                     {
                         m.Name,
                         Country = countryOfOutlet.GetValueOrDefault(m.Name.Trim()),
@@ -558,7 +558,7 @@ internal sealed class GetExportSalesTool(SalesDataLoader loader, PrimaryService 
                         PrevMonthKg = R(m.PrevMonthKg),
                         VsPrevMonthPct = p.Closed ? Pct(SalesMath.Delta(m.PrevMonthKg, m.Kg)) : null,
                     }),
-                    Agents = sales.Agents.Take(args.Cap(MaxAgents)).Select(a => new { a.Name, Kg = R(a.Kg), RevenueSum = R(a.Revenue), Outlets = a.Markets }),
+                    Agents = sales.Agents.TakeTop(args, MaxAgents, "agents").Select(a => new { a.Name, Kg = R(a.Kg), RevenueSum = R(a.Revenue), Outlets = a.Markets }),
                     Categories = sales.Categories.Where(c => c.FactKg != 0 || c.PrevMonthKg != 0).Select(c => new
                     {
                         c.Name,
@@ -568,7 +568,7 @@ internal sealed class GetExportSalesTool(SalesDataLoader loader, PrimaryService 
                         PrevMonthKg = R(c.PrevMonthKg),
                         VsPrevMonthPct = Pct(VsPrev(c.PrevMonthKg, c.FactKg, c.VsPrevMonth, p.Closed)),
                     }),
-                    TopProducts = sales.Products.OrderByDescending(x => x.Kg).Take(args.Cap(MaxProducts))
+                    TopProducts = sales.Products.OrderByDescending(x => x.Kg).TakeTop(args, MaxProducts, "topProducts")
                         .Select(x => new { x.Name, x.Category, Kg = R(x.Kg), RevenueSum = R(x.Revenue) }),
                     OtherCurrency = sales.OtherCurrency.Count == 0 ? null : sales.OtherCurrency.Select(c => new { c.Currency, Amount = R(c.Amount), c.Orders }),
                 },
@@ -759,13 +759,13 @@ internal sealed class GetDealerPnlTool(PnlService pnl, IUserPermissions permissi
                     g.Manager,
                     Total = Short(g.Total),
                     VsPrevMonth = prevGroups.TryGetValue(g.Id, out var before) ? Change(g.Total, before) : null,
-                    Dealers = g.Dealers.Take(args.Cap(MaxDealers)).Select(d => DealerRow(d.Name, d.Region, null, d.Values, Before(d), false)),
+                    Dealers = g.Dealers.TakeTop(args, MaxDealers, "groups[].dealers").Select(d => DealerRow(d.Name, d.Region, null, d.Values, Before(d), false)),
                 })
                 : null,
             Dealers = dealer is null
                 ? null
                 : shown.OrderByDescending(e => e.Dealer.Values.GetValueOrDefault(PnlMath.Sales) ?? 0)
-                    .Take(args.Cap(MaxDealers))
+                    .TakeTop(args, MaxDealers, "dealers")
                     .Select(e => DealerRow(e.Dealer.Name, e.Dealer.Region, RmOf(e.Group), e.Dealer.Values, Before(e.Dealer), detailed)),
             DealerYear = card is null
                 ? null
@@ -865,7 +865,7 @@ internal sealed class GetDealerPnlTool(PnlService pnl, IUserPermissions permissi
                         Total = Short(PnlMath.Sum(g.Select(x => x.Total))),
                         Dealers = dealers.Where(d => d.Group.Id == g.Key)
                             .OrderByDescending(d => d.Values.GetValueOrDefault(PnlMath.Sales) ?? 0)
-                            .Take(args.Cap(MaxDealers))
+                            .TakeTop(args, MaxDealers, "groups[].dealers")
                             .Select(d => DealerRow(d.Name, d.Region, null, d.Values, null, false, d.Months.Count < inRange.Count ? d.Months.Count : null)),
                     };
                 })
@@ -873,7 +873,7 @@ internal sealed class GetDealerPnlTool(PnlService pnl, IUserPermissions permissi
             Dealers = dealer is null
                 ? null
                 : shown.OrderByDescending(d => d.Values.GetValueOrDefault(PnlMath.Sales) ?? 0)
-                    .Take(args.Cap(MaxDealers))
+                    .TakeTop(args, MaxDealers, "dealers")
                     .Select(d => new
                     {
                         Row = DealerRow(d.Name, d.Region, RmOf(d.Group), d.Values, null, detailed, d.Months.Count),

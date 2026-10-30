@@ -329,9 +329,9 @@ internal sealed class GetSalesByEmployeeTool(SalesDataLoader loader) : SalesTool
             Period = PeriodOf(p),
             SalesReps = everyone.Count,
             WithPlan = withPlan.Count,
-            Worst = withPlan.Take(args.Cap(limit)).Select(x => Row(x.Row, x.Region)),
-            Best = withPlan.AsEnumerable().Reverse().Take(args.Cap(limit)).Select(x => Row(x.Row, x.Region)),
-            WithoutPlanTopByFact = everyone.Where(x => x.Row.PlanKg is not > 0).OrderByDescending(x => x.Row.FactKg).Take(args.Cap(5)).Select(x => Row(x.Row, x.Region)),
+            Worst = withPlan.TakeTop(args, limit, "worst").Select(x => Row(x.Row, x.Region)),
+            Best = withPlan.AsEnumerable().Reverse().TakeTop(args, limit, "best").Select(x => Row(x.Row, x.Region)),
+            WithoutPlanTopByFact = everyone.Where(x => x.Row.PlanKg is not > 0).OrderByDescending(x => x.Row.FactKg).TakeTop(args, 5, "withoutPlanTopByFact").Select(x => Row(x.Row, x.Region)),
         }, RepublicSource(p, "OneBase → Продажи → Регионы → Команда ТП"));
     }
 
@@ -380,7 +380,7 @@ internal sealed class GetProblemAgentsTool(SalesDataLoader loader) : SalesTool(l
             Total = view.Agents.Count,
             view.Vacancies,
             // Сначала критичные; объяснение — только у критичных замечаний, чтобы ответ оставался компактным.
-            Agents = view.Agents.Take(args.Cap(25)).Select(a => new
+            Agents = view.Agents.TakeTop(args, 25, "agents").Select(a => new
             {
                 a.AgentId,
                 a.Name,
@@ -449,8 +449,8 @@ internal sealed class GetProductsTool(SalesDataLoader loader) : SalesTool(loader
                 LostSku = c.Lost,
                 LostNames = c.Skus.Where(s => s.Status == SkuStatuses.Lost).Take(5).Select(s => s.Name),
             }),
-            TopProducts = selling.OrderByDescending(x => x.Revenue).Take(args.Cap(10)).Select(Product),
-            WeakestProducts = selling.OrderBy(x => x.Revenue).Take(args.Cap(10)).Select(Product),
+            TopProducts = selling.OrderByDescending(x => x.Revenue).TakeTop(args, 10, "topProducts").Select(Product),
+            WeakestProducts = selling.OrderBy(x => x.Revenue).TakeTop(args, 10, "weakestProducts").Select(Product),
         }, region is null
             ? new DataSource("OneBase → Продажи → Ассортимент", PeriodText(view.Period), $"/sales/assortment?{Query(view.Period.Year, view.Period.Month)}")
             : new DataSource($"OneBase → Продажи → Ассортимент → {region.Name}", PeriodText(view.Period), $"/sales/assortment?{Query(view.Period.Year, view.Period.Month)}&region={region.Id}"));

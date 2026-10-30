@@ -20,7 +20,7 @@ public sealed record GroundingReport(int Checked, IReadOnlyList<string> Supporte
 /// </summary>
 public static partial class EvidenceCheck
 {
-    [GeneratedRegex(@"не\s+подтвержд|не\s+найден|нет\s+в\s+данных|в\s+данных\s+нет|не\s+совпада|расходит|расхожд|не\s+соответств|отлича|не\s+сход|неверн|ошибочн|ошибк|по\s+ваш|вы\s+указал|вы\s+назвал|ваше\s+значени|вашем\s+отч|tasdiqlanmag|topilmad|mos\s+kelmay|siz\s+aytgan", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"не\s+подтвержд|не\s+найден|нет\s+в\s+данных|в\s+данных\s+нет|не\s+совпада|расходит|расхожд|не\s+соответств|отлича|не\s+сход|неверн|ошибочн|ошибк|по\s+ваш|вы\s+указал|вы\s+назвал|ваше\s+значени|вашем\s+отч|tasdiqlanmag|topilmad|mos\s+kelmay|siz\s+aytgan|тасдиқланмаг|тасдикланмаг|топилмад|мос\s+келмай|сиз\s+айтган", RegexOptions.IgnoreCase)]
     private static partial Regex Reservation();
 
     /// <summary>

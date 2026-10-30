@@ -79,11 +79,16 @@ public static class SalesMath
 
     /// <summary>ТТ с чистым весом больше нуля — те, что входят в АКБ набора.</summary>
     public static HashSet<long> ActiveMarkets(IEnumerable<SaleLine> lines) =>
-        lines.Where(l => l.MarketId != null && !SalesOptions.IsChannelBranch(l.BranchId)) // каналы (базар, сети) в АКБ не входят
+        MarketKg(lines).Where(p => p.Value > 0).Select(p => p.Key).ToHashSet();
+
+    /// <summary>
+    /// Чистый вес по ТТ набора (каналы — базар, сети — в АКБ не входят). Для АКБ отрезка через границу месяца веса точек разных месяцев
+    /// складываются, и АКБ — точки с суммой больше нуля (не сумма АКБ месяцев).
+    /// </summary>
+    public static Dictionary<long, decimal> MarketKg(IEnumerable<SaleLine> lines) =>
+        lines.Where(l => l.MarketId != null && !SalesOptions.IsChannelBranch(l.BranchId))
             .GroupBy(l => l.MarketId!.Value)
-            .Where(g => g.Sum(l => l.Kg) > 0)
-            .Select(g => g.Key)
-            .ToHashSet();
+            .ToDictionary(g => g.Key, g => g.Sum(l => l.Kg));
 
     /// <summary>Строка положительна: чистые кг или чистая выручка больше нуля (возврат больше продажи — не продажа).</summary>
     public static bool Positive(decimal kg, decimal revenue) => kg > 0 || revenue > 0;

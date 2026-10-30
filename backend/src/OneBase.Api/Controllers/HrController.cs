@@ -93,13 +93,17 @@ public sealed class HrController(HrService hr) : ControllerBase
     public async Task<HrLeaders> Leaders([FromQuery] int take = 7, CancellationToken ct = default) =>
         await hr.LeadersAsync(await ContextAsync(ct), take, ct);
 
+    /// <summary>Отчёт за период (до квартала). divisionId можно повторить: ?divisionId=1&amp;divisionId=2 — несколько подразделений с дочерними.</summary>
     [HttpGet("reports")]
-    public async Task<HrReport> Report([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] long? divisionId, CancellationToken ct) =>
+    public async Task<HrReport> Report([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] long[]? divisionId, CancellationToken ct) =>
         await hr.ReportAsync(await ContextAsync(ct), from, to, divisionId, null, ct);
 
-    /// <summary>Отчёт в Excel: подразделения, табель сотрудников с буквами дней, отклонения. employeeId — табель одного сотрудника (из его карточки).</summary>
+    /// <summary>
+    /// Отчёт в Excel: итоги по подразделениям, табель сотрудников по дням, отклонения. divisionId — как у отчёта (можно несколько);
+    /// employeeId — табель одного сотрудника (из его карточки).
+    /// </summary>
     [HttpGet("reports/export")]
-    public async Task<IActionResult> Export([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] long? divisionId, [FromQuery] Guid? employeeId,
+    public async Task<IActionResult> Export([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] long[]? divisionId, [FromQuery] Guid? employeeId,
         CancellationToken ct)
     {
         var ctx = await ContextAsync(ct);
@@ -108,10 +112,8 @@ public sealed class HrController(HrService hr) : ControllerBase
             await hr.EmployeeAsync(ctx, id, from, to, ct); // чужой сотрудник — 404, как в карточке
         }
 
-        var report = await hr.ReportAsync(ctx, from, to, divisionId, employeeId, ct);
-        var sheet = await hr.TimesheetAsync(ctx, report.From, report.To, divisionId, null, employeeId, ct);
-        var deviations = await hr.DeviationsAsync(ctx, report.From, report.To, null, divisionId, employeeId, ct);
-        var bytes = HrReportWorkbook.Build(report, sheet, deviations);
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"hr-{report.From:yyyy-MM-dd}-{report.To:yyyy-MM-dd}.xlsx");
+        var data = await hr.ExportAsync(ctx, from, to, divisionId, employeeId, ct);
+        var bytes = HrReportWorkbook.Build(data.Report, data.Timesheet, data.Deviations);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"hr-{data.Report.From:yyyy-MM-dd}-{data.Report.To:yyyy-MM-dd}.xlsx");
     }
 }

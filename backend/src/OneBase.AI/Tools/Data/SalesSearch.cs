@@ -235,7 +235,7 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
                     }
                     : "плана на эту категорию за месяц в OneBase нет (планы по категориям охвата — get_sales, CategoryPlans)",
                 Note = card is null ? "Продаж этой категории в выбранном охвате и месяце нет." : null,
-                Skus = card?.Skus.OrderByDescending(s => s.Revenue).ThenByDescending(s => s.PrevMonthKg).Take(args.Cap(MaxSkus)).Select(s => new
+                Skus = card?.Skus.OrderByDescending(s => s.Revenue).ThenByDescending(s => s.PrevMonthKg).TakeTop(args, MaxSkus, "skus").Select(s => new
                 {
                     s.ProductId,
                     s.Name,
@@ -248,7 +248,7 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
                     PrevMonthKg = R(s.PrevMonthKg),
                 }),
                 SkusShown = card is null ? 0 : Math.Min(MaxSkus, card.Skus.Count),
-                ByRegion = view?.Regions.Take(args.Cap(MaxRegions)).Select(r => new
+                ByRegion = view?.Regions.TakeTop(args, MaxRegions, "byRegion").Select(r => new
                 {
                     r.Name,
                     Status = RegionStatusName(r),
@@ -291,7 +291,7 @@ internal sealed class FindProductsTool(SalesDataLoader loader, SalesOptions opti
             PrevMonthKg = R(v.PrevMonthKg),
             // Регион без покупок за месяц (NoData) — «нет данных», а не «нет продаж»: счётчиков у него нет.
             ByRegion = i < ProductsWithRegions
-                ? v.Rows.Where(ShowRegion).Take(args.Cap(MaxRegions)).Select(r => new
+                ? v.Rows.Where(ShowRegion).TakeTop(args, MaxRegions, "products[].byRegion").Select(r => new
                 {
                     r.Name,
                     Status = RegionStatusName(r),

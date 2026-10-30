@@ -9,7 +9,10 @@ export async function generateMetadata() {
   return { title: t("Консультант · OneBase") };
 }
 
-type Me = { permissions: string[] };
+type Me = { permissions: string[]; hrAccess?: boolean };
+
+/** Права для экрана: руководителю отдела HR его подразделений открыт без права «HR» (как в меню). */
+const screenPermissions = (me: Me) => (me.hrAccess ? [...me.permissions, "hr.department"] : me.permissions);
 
 export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,5 +24,14 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     apiGet<Me>("/api/auth/me", path),
   ]);
   if (!conversation) notFound();
-  return <Consultant key={conversation.id} status={status} conversations={conversations} conversation={conversation} canConfigure={me.permissions.includes("ai.settings.manage")} />;
+  return (
+    <Consultant
+      key={conversation.id}
+      status={status}
+      conversations={conversations}
+      conversation={conversation}
+      canConfigure={me.permissions.includes("ai.settings.manage")}
+      permissions={screenPermissions(me)}
+    />
+  );
 }

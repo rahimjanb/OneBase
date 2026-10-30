@@ -430,6 +430,7 @@ internal sealed class GetDepartmentTasksTool(WorkTaskService tasks, IUserPermiss
 
         var names = selected.ToDictionary(d => d.Id, d => d.Name);
         var shown = lines.Take(take).ToList();
+        args.Count("tasks", found, shown.Count);
         var noAccess = departmentArg is null ? all.Where(d => !d.HasTasks).Select(d => d.Name).ToList() : [];
         return Data(new
         {
@@ -752,6 +753,7 @@ internal sealed class GetFieldTasksTool(
             .ToList();
         var closedList = status is StatusFilter.Done or StatusFilter.Cancelled;
 
+        args.Count("tasks", found, lines.Count);
         return Data(new
         {
             Date = WorkFieldText.Day(today),
@@ -767,7 +769,7 @@ internal sealed class GetFieldTasksTool(
                 FromAi = open.Count(t => t.CreatedByType == FieldActorType.Ai),
                 Done = done.Values.Sum(),
             },
-            ByAssignee = who is null && !scope.IsAgent ? people.Take(args.Cap(30)) : null,
+            ByAssignee = who is null && !scope.IsAgent ? people.TakeTop(args, 30, "byAssignee") : null,
             Found = found,
             Shown = lines.Count,
             Tasks = lines.Select(l => new
@@ -1127,7 +1129,7 @@ internal sealed class GetFieldRoutesTool(
         var points = summaries.Sum(s => s.Planned);
         var visited = summaries.Sum(s => s.Visited);
         var skippedCount = summaries.Sum(s => s.Skipped);
-        var refusals = teamVisits.Where(v => v.Result is FieldVisitResult.Refusal or FieldVisitResult.Closed or FieldVisitResult.NoDecisionMaker).Take(take)
+        var refusals = args.Top(teamVisits.Where(v => v.Result is FieldVisitResult.Refusal or FieldVisitResult.Closed or FieldVisitResult.NoDecisionMaker), take, "refusals")
             .Select(v => VisitLine(v, withAgent: true)).ToList();
         var period = WorkFieldText.RuPeriod(from, to);
 
@@ -1151,7 +1153,7 @@ internal sealed class GetFieldRoutesTool(
                 LinkoKg = R(rows.Sum(r => r.LinkoKg)),
             },
             Visits = VisitSummary(teamVisits, visitsCut),
-            Agents = withRoute.Take(args.Cap(40)).Select(r => new
+            Agents = withRoute.TakeTop(args, 40, "agents").Select(r => new
             {
                 r.Name,
                 Team = team is null ? r.Team : null,
@@ -1168,10 +1170,10 @@ internal sealed class GetFieldRoutesTool(
                 LinkoSum = R(r.LinkoSum),
                 LinkoKg = R(r.LinkoKg),
             }),
-            AgentsWithoutRoute = rows.Where(r => r.Routes == 0).Select(r => r.Name).Take(args.Cap(40)).ToList() is { Count: > 0 } none ? none : null,
-            SkipReasons = skipped.GroupBy(s => s.Reason ?? "причина не указана").OrderByDescending(g => g.Count()).Take(10)
+            AgentsWithoutRoute = rows.Where(r => r.Routes == 0).Select(r => r.Name).TakeTop(args, 40, "agentsWithoutRoute").ToList() is { Count: > 0 } none ? none : null,
+            SkipReasons = skipped.GroupBy(s => s.Reason ?? "причина не указана").OrderByDescending(g => g.Count()).TakeTop(args, 10, "skipReasons")
                 .Select(g => new { Reason = g.Key, Count = g.Count() }),
-            SkippedPoints = skipped.Take(take).Select(s => new { Date = WorkFieldText.Day(s.Date), s.Agent, s.Market, Reason = s.Reason ?? "причина не указана" }),
+            SkippedPoints = args.Top(skipped, take, "skippedPoints").Select(s => new { Date = WorkFieldText.Day(s.Date), s.Agent, s.Market, Reason = s.Reason ?? "причина не указана" }),
             Refusals = refusals.Count > 0 ? refusals : null,
             Note = "Агенты — от худшего охвата маршрута (посещено / точек плана). Посещена — визит Sales Base или выполненный визит Linko; пропущена — агент отметил " +
                    "пропуск; не посещена — без визита и отметки (за сегодня — ещё впереди). Заказы Linko — принятые агентами за период (без отменённых); " +
@@ -1305,6 +1307,7 @@ internal sealed class GetFieldRecommendationsTool(
             .ToList();
         var today = FieldClock.Today;
 
+        args.Count("recommendations", team is null ? total : rows.Count, ordered.Count);
         return Data(new
         {
             Date = WorkFieldText.Day(today),
@@ -1321,7 +1324,7 @@ internal sealed class GetFieldRecommendationsTool(
             Shown = ordered.Count,
             ByKind = rows.GroupBy(r => r.Kind).OrderByDescending(g => g.Count()).Select(g => new { Kind = WorkFieldText.LabelOf(Kinds, g.Key), Count = g.Count() }),
             ByAgent = agent is null
-                ? rows.Where(r => r.AgentId is not null).GroupBy(r => r.AgentId!.Value).OrderByDescending(g => g.Count()).Take(15)
+                ? rows.Where(r => r.AgentId is not null).GroupBy(r => r.AgentId!.Value).OrderByDescending(g => g.Count()).TakeTop(args, 15, "byAgent")
                     .Select(g => new { Agent = snapshot.NameOf(g.Key), Team = FieldToolScope.TeamName(snapshot, g.Key), Count = g.Count(), Markets = g.Where(r => r.MarketId is not null).Select(r => r.MarketId).Distinct().Count() })
                 : null,
             Items = ordered.Select(r => new

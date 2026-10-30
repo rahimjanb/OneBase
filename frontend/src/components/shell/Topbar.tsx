@@ -5,6 +5,7 @@ import { Tr } from "@/i18n/client";
 import { initials, type Me } from "@/lib/users";
 import { LogoutLink } from "./AppBridge";
 import { LanguageToggle } from "./LanguageToggle";
+import { MobileSearch } from "./MobileSearch";
 import { NotificationBell } from "./NotificationBell";
 import { SectionNav } from "./SectionNav";
 import { Logo } from "./Sidebar";
@@ -15,16 +16,17 @@ import { Breadcrumbs, TopbarSearch } from "./TopbarSearch";
  * Верхняя панель — одна на все страницы (живёт в layout, поэтому не перерисовывается и не пропадает при переходах).
  * На компьютере (ТЗ dashboard): высота 64, крошки «Компания › Раздел», кнопки разделов (в «Продажах», «HR» и «Задачах»), поиск по центру,
  * справа тема, язык, уведомления, разделитель и меню пользователя с градиентным аватаром.
- * На телефоне это тёмная шапка приложения: логотип, тема, уведомления, аватар; кнопки разделов — второй строкой.
+ * На телефоне это тёмная шапка приложения (ТЗ 1base-mobile-home): логотип и справа три круглые кнопки 40×40 — поиск, уведомления, аватар;
+ * тема и язык — в «Профиле» нижней панели; кнопки разделов — второй строкой.
  * Отступ сверху — под вырез экрана и строку состояния в установленном приложении (safe area). Панель стоит над областью прокрутки.
  * Слой выше нижней панели (z-40 против z-30): уведомления и меню аватара, открытые вниз, не прячутся под неё.
  */
-export function Topbar({ me }: { me: Me | null }) {
+export function Topbar({ me, permissions }: { me: Me | null; permissions: readonly string[] | null }) {
   return (
     <div data-topbar className="relative z-40 shrink-0 bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-text lg:border-b lg:border-line lg:bg-transparent lg:pt-0 lg:text-ink-2">
       {/* На компьютере — одна строка: не помещающиеся кнопки разделов прокручиваются, а не уезжают отдельной строкой над меню. */}
-      <div className="flex flex-wrap items-center gap-1 px-4 sm:px-6 lg:h-16 lg:flex-nowrap lg:gap-5 lg:px-8">
-        <div className="flex h-14 items-center lg:hidden">
+      <div className="flex flex-wrap items-center gap-1 pl-[20px] pr-[16px] sm:px-6 lg:h-16 lg:flex-nowrap lg:gap-5 lg:px-8">
+        <div className="flex h-[52px] items-center lg:hidden">
           <Logo />
         </div>
         <div className="hidden shrink-0 lg:block">
@@ -35,16 +37,19 @@ export function Topbar({ me }: { me: Me | null }) {
         </Suspense>
         <TopbarSearch />
         {/* Справа всегда у края: в разделах с кнопками в шапке (Продажи, HR, Задачи) поиска нет, и без ml-auto блок вставал сразу за кнопками. */}
-        <div className="ml-auto flex h-14 shrink-0 items-center gap-1 lg:h-16 lg:gap-1.5">
-          <ThemeToggle />
-          <LanguageToggle />
+        <div className="ml-auto flex h-[52px] shrink-0 items-center gap-[6px] lg:h-16 lg:gap-1.5">
+          <MobileSearch permissions={permissions} />
+          <span className="hidden lg:contents">
+            <ThemeToggle />
+            <LanguageToggle />
+          </span>
           {me && <NotificationBell />}
           {me && (
             <>
               <span aria-hidden className="mx-1.5 hidden h-6 w-px bg-line lg:block" />
-              <details className="relative ml-1 lg:ml-0">
-                <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-lg p-1 text-left transition-colors duration-150 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:rounded-[9px] lg:hover:bg-muted [&::-webkit-details-marker]:hidden">
-                  <span className="grid size-9 place-items-center rounded-full bg-white/10 text-xs font-semibold text-white lg:size-[34px] lg:bg-gradient-to-br lg:from-brand-from lg:to-violet lg:font-bold">
+              <details className="relative lg:ml-0">
+                <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-full text-left lg:rounded-lg lg:p-1 transition-colors duration-150 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:rounded-[9px] lg:hover:bg-muted [&::-webkit-details-marker]:hidden">
+                  <span className="grid size-[40px] place-items-center rounded-full border border-white/10 bg-white/10 text-xs font-semibold text-white lg:size-[34px] lg:border-0 lg:bg-gradient-to-br lg:from-brand-from lg:to-violet lg:font-bold">
                     {initials(me)}
                   </span>
                   {/* Тесно (кнопки разделов продаж не помещаются вместе с именем, data-crowded ставит SectionNav) — только аватар. */}

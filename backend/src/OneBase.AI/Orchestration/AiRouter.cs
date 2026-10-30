@@ -10,8 +10,12 @@ using OneBase.Domain.AI;
 
 namespace OneBase.AI.Orchestration;
 
-/// <summary>Решение маршрутизатора: какие AI-сотрудники и с какими задачами; пустой список — консультант отвечает сам.</summary>
-public sealed record RoutingDecision(IReadOnlyList<string> Agents, IReadOnlyDictionary<string, string> Tasks, string Reason, bool ByKeywords, AiTokenUsage Usage);
+/// <summary>
+/// Решение маршрутизатора: какие AI-сотрудники и с какими задачами; пустой список — консультант отвечает сам. Denied — области вопроса, которые
+/// пользователю не открыть (нет прав или источник не подключён): консультант говорит об этом прямо, а не «данных нет».
+/// </summary>
+public sealed record RoutingDecision(IReadOnlyList<string> Agents, IReadOnlyDictionary<string, string> Tasks, string Reason, bool ByKeywords, AiTokenUsage Usage,
+    IReadOnlyList<DeniedArea>? Denied = null);
 
 /// <summary>
 /// AI Router: по вопросу (и истории чата) определяет нужных AI-сотрудников. Если модель не ответила разборчиво —
@@ -22,18 +26,36 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, Sal
     /// <summary>Основы слов, по которым вопрос относится к отделу (запасной маршрут).</summary>
     internal static readonly IReadOnlyDictionary<string, string[]> Keywords = new Dictionary<string, string[]>
     {
-        ["sales"] = ["продаж", "регион", "филиал", "план", "агент", "тп", "клиент", "акб", "товар", "категор", "ассортимент", "визит", "страйк", "выручк", "менеджер"],
-        ["finance"] = ["финанс", "прибыл", "выручк", "расход", "оплат", "деньг", "бюджет", "долг", "задолж", "затрат", "доход"],
-        ["marketing"] = ["маркет", "реклам", "лид", "канал", "кампан", "бренд", "продвиж"],
+        ["sales"] =
+        [
+            "продаж", "регион", "филиал", "план", "агент", "тп", "клиент", "акб", "товар", "категор", "ассортимент", "визит", "страйк", "выручк", "менеджер",
+            "sku", "артикул",
+            // узбекский: латиница и кириллица
+            "savdo", "sotuv", "sotil", "reja", "mijoz", "mahsulot", "tovar", "kategoriya", "viloyat", "hudud", "agent",
+            "савдо", "сотув", "сотил", "режа", "мижоз", "маҳсулот", "махсулот", "вилоят", "ҳудуд", "худуд",
+        ],
+        ["finance"] =
+        [
+            "финанс", "прибыл", "выручк", "расход", "оплат", "деньг", "бюджет", "долг", "задолж", "затрат", "доход",
+            "moliya", "foyda", "daromad", "xarajat", "to'lov", "byudjet", "молия", "фойда", "даромад", "харажат", "тўлов",
+        ],
+        ["marketing"] = ["маркет", "реклам", "лид", "канал", "кампан", "бренд", "продвиж", "reklama", "marketing", "kampaniya", "brend"],
         ["hr"] =
         [
             "сотрудник", "персонал", "кадр", "ваканс", "нагрузк", "текучест", "hr", "найм", "кандидат", "эффективност",
             // Не «явк» (заявка) и не «отсутств» (товара нет на складе) — это вопросы продаж и снабжения.
-            "опозд", "отсутствовал", "посещаем", "табел", "прогул", "отпуск", "больничн", "командиров", "verifix", "верификс",
+            "опозд", "опаздыв", "отсутствовал", "посещаем", "табел", "прогул", "отпуск", "больничн", "командиров", "verifix", "верификс",
             "турникет", "отработал", "отработан", "уволен", "уволи", "увольн", "рабочее время", "рабочего времени", "на работу", "не пришл",
+            // узбекский: «ходим» без окончания совпало бы с «приходим», «касал» — с «касается»
+            "xodim", "ishchi", "kechik", "kelmad", "davomat", "tabel", "ta'til", "kasal", "ishdan", "ishga",
+            "ходимлар", "ходими", "ишчи", "кечик", "келмад", "давомат", "таътил", "касаллик",
         ],
-        ["production"] = ["производ", "выпуск", "цех", "мощност", "простой", "себестоим", "завод"],
-        ["supply"] = ["остат", "склад", "закуп", "поставщ", "дефицит", "снабж", "запас", "заканч"],
+        ["production"] = ["производ", "выпуск", "цех", "мощност", "простой", "себестоим", "завод", "ishlab chiqar", "zavod", "ишлаб чиқар", "ишлаб чикар"],
+        ["supply"] =
+        [
+            "остат", "склад", "закуп", "поставщ", "дефицит", "снабж", "запас", "заканч", "доставк", "логистик", "перевоз",
+            "ombor", "qoldiq", "zaxira", "ta'minot", "xarid", "yetkazib", "омбор", "қолдиқ", "колдик", "захира", "таъминот", "харид",
+        ],
     };
 
     public async Task<RoutingDecision> RouteAsync(
@@ -84,8 +106,12 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, Sal
                 text => Parse(text, available, AiTokenUsage.None) is { } d ? (RouteResult(d), true) : (null, false), RouteSimilarity);
         }
 
-        return decision ?? ByKeywords(question, available, usage, hasSales && glossary is not null ? await glossary.KeywordsAsync(ct) : null);
+        return decision ?? ByKeywords(question, available, usage, hasSales && glossary is not null ? await glossary.KeywordsAsync(ct) : null, history);
     }
+
+    /// <summary>Названия категорий, товаров и регионов из словаря компании — когда отдел продаж доступен пользователю (для страховки маршрута).</summary>
+    public async Task<IReadOnlyList<string>?> SalesWordsAsync(IReadOnlyList<AgentConfig> available, CancellationToken ct) =>
+        available.Any(a => a.Code == "sales") && glossary is not null ? await glossary.KeywordsAsync(ct) : null;
 
     /// <summary>Сообщения маршрутизатору: правила и список сотрудников (неизменные — кэшируются у провайдера) и вопрос с историей.</summary>
     internal static IReadOnlyList<LlmMessage> Messages(IReadOnlyList<AgentConfig> available, string? glossaryText, string question,
@@ -156,10 +182,26 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, Sal
         return union == 0 ? 1 : (double)x.Intersect(y).Count() / union;
     }
 
-    /// <summary>salesWords — названия категорий, типов и регионов из словаря компании: вопрос про «помадку» — к продажам.</summary>
-    internal static RoutingDecision ByKeywords(string question, IReadOnlyList<AgentConfig> available, AiTokenUsage usage, IReadOnlyList<string>? salesWords = null)
+    /// <summary>
+    /// Запасной выбор, когда ответ маршрутизатора не разобран. salesWords — названия категорий, типов и регионов из словаря компании: вопрос про
+    /// «помадку» — к продажам. Разговор («Спасибо») — без сотрудников; уточнение без своих слов («А по Самарканду?») — по прошлому вопросу;
+    /// не подошло ни одно слово — все доступные.
+    /// </summary>
+    internal static RoutingDecision ByKeywords(string question, IReadOnlyList<AgentConfig> available, AiTokenUsage usage, IReadOnlyList<string>? salesWords = null,
+        IReadOnlyList<LlmMessage>? history = null)
     {
-        var agents = KeywordAgents(question, available, salesWords).ToList();
+        var previous = history?.LastOrDefault(m => m.Role == LlmRole.User)?.Content;
+        if (RouteIntent.IsSmallTalk(question) && !(previous is not null && RouteIntent.IsFollowUp(question)))
+        {
+            return new RoutingDecision([], new Dictionary<string, string>(), "Разговор — без AI-сотрудников (маршрутизатор не ответил разборчиво).", true, usage);
+        }
+
+        var agents = RouteIntent.Agents(question, available, salesWords).ToList();
+        if (agents.Count == 0 && previous is not null)
+        {
+            agents = RouteIntent.Agents(previous, available, salesWords).ToList();
+        }
+
         if (agents.Count == 0)
         {
             agents = available.Select(a => a.Code).ToList();
@@ -171,7 +213,7 @@ public sealed class AiRouter(IAiGateway gateway, IAiSettingsSource settings, Sal
     /// <summary>AI-сотрудники, к области которых относятся слова текста; ни одно не подошло — пусто (без «все доступные»).</summary>
     internal static IReadOnlyList<string> KeywordAgents(string text, IReadOnlyList<AgentConfig> available, IReadOnlyList<string>? salesWords = null)
     {
-        var q = text.ToLowerInvariant();
+        var q = RouteIntent.Normalize(text);
         var tokens = NameMatch.Tokens(text);
         return available
             .Where(a => (Keywords.TryGetValue(a.Code, out var words) && words.Any(q.Contains))

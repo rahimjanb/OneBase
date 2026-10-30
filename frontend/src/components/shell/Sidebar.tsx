@@ -74,13 +74,15 @@ export function isActive(pathname: string, item: NavItem) {
   return item.href === "/" ? pathname === "/" : under(item.href) || (item.also ?? []).some(under);
 }
 
-/** Логотип «1Base»: квадрат с градиентом бренда и белой «1», рядом «Base». В сайдбаре и в шапке на телефоне. */
+/**
+ * Логотип «1Base» — белая надпись с синей единицей (public/brand, 4× для чётких экранов). Сайдбар и шапка на телефоне тёмные в обеих темах,
+ * поэтому вариант для тёмного фона.
+ */
 export function Logo() {
   const t = useT();
   return (
-    <Link href="/" aria-label={t("OneBase — на главную")} className="-m-1 flex items-center gap-2.5 rounded-[10px] p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-      <span className="grid size-[30px] place-items-center rounded-lg bg-gradient-to-br from-brand-from to-brand-to text-[17px] font-extrabold leading-none text-white">1</span>
-      <span className="text-[21px] font-bold tracking-[-0.5px] text-sidebar-ink">Base</span>
+    <Link href="/" aria-label={t("OneBase — на главную")} className="-m-1 flex items-center rounded-[10px] p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+      <img src="/brand/logo-light.png" alt="OneBase" width={399} height={120} className="h-7 w-auto" />
     </Link>
   );
 }

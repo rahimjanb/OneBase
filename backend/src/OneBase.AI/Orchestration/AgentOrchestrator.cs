@@ -10,7 +10,8 @@ namespace OneBase.AI.Orchestration;
 
 /// <summary>
 /// Запускает выбранных AI-сотрудников параллельно — каждого в своей области DI (свой DbContext) —
-/// и собирает их структурированные результаты. Ошибка одного сотрудника не останавливает остальных.
+/// и собирает их структурированные результаты. Ошибка одного сотрудника не останавливает остальных; сбой с уже полученными данными
+/// AgentRunner сам возвращает как partial, сюда доходят только сбои без данных — failed с причиной (модель недоступна или внутренняя ошибка).
 /// </summary>
 public sealed class AgentOrchestrator(IServiceScopeFactory scopes, ILogger<AgentOrchestrator> logger)
 {
@@ -55,21 +56,26 @@ public sealed class AgentOrchestrator(IServiceScopeFactory scopes, ILogger<Agent
                 var runner = scope.ServiceProvider.GetRequiredService<AgentRunner>();
                 var task = tasks.GetValueOrDefault(a.Code) ?? question;
                 var run = await runner.RunAsync(new AgentTask(a.Code, task, userId, conversationId, contexts.GetValueOrDefault(a.Code), report, model), Report, ct);
-                var ok = run.Result.Status is "completed" or "partial" or "no_data";
-                await Report(new ConsultantProgress("agent", a.Code, a.Name, ok ? ProgressStatus.Done : ProgressStatus.Failed,
-                    run.Result.Status == "no_data" ? "нет данных" : null));
+                var (status, note) = run.Result.Status switch
+                {
+                    "completed" or "partial" => (ProgressStatus.Done, null),
+                    "no_data" => (ProgressStatus.Done, run.Result.Reason == "source_not_connected" ? "источник не подключён" : "нет данных"),
+                    "forbidden" => (ProgressStatus.Skipped, "нет доступа"),
+                    _ => (ProgressStatus.Failed, run.Result.Reason == "tool_error" ? "ошибка источника данных" : (string?)null),
+                };
+                await Report(new ConsultantProgress("agent", a.Code, a.Name, status, note));
                 return run;
             }
             catch (Exception ex) when (ex is AiProviderException or LlmNotConfiguredException)
             {
                 await Report(new ConsultantProgress("agent", a.Code, a.Name, ProgressStatus.Failed, "модель недоступна"));
-                return Failed(a, ex.Message);
+                return Failed(a, ex.Message, "model_unavailable");
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogError(ex, "AI-сотрудник {Agent} завершился с ошибкой", a.Code);
                 await Report(new ConsultantProgress("agent", a.Code, a.Name, ProgressStatus.Failed, "ошибка"));
-                return Failed(a, "Внутренняя ошибка OneBase при работе сотрудника.");
+                return Failed(a, "Внутренняя ошибка OneBase при работе сотрудника.", "internal_error");
             }
         }));
 
@@ -77,6 +83,6 @@ public sealed class AgentOrchestrator(IServiceScopeFactory scopes, ILogger<Agent
         return (runs, usage);
     }
 
-    private static AgentRun Failed(AgentConfig a, string message) =>
-        new(new AgentResult(a.Code, a.Name, "failed", message, [], [], [], [], [], [], message), AiTokenUsage.None, null);
+    private static AgentRun Failed(AgentConfig a, string message, string reason) =>
+        new(new AgentResult(a.Code, a.Name, "failed", message, [], [], [], [], [], [], message, Reason: reason), AiTokenUsage.None, null);
 }

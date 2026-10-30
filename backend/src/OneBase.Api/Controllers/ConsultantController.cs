@@ -28,7 +28,10 @@ public sealed class ConsultantController(
     /// <summary>Как часто слать «пульс», пока нет событий: меньше таймаутов nginx (300 с) и Cloudflare (100 с).</summary>
     private static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(15);
 
-    public sealed record ChatRequest(Guid? ConversationId, string Message);
+    /// <summary>Context — контекст экрана (период, отдел): уходит консультанту вместе с вопросом.</summary>
+    public sealed record ChatRequest(Guid? ConversationId, string Message, ChatContext? Context = null);
+
+    public sealed record FeedbackRequest(string Rating, string? Comment);
 
     public sealed record RenameRequest(string Title);
 
@@ -93,8 +96,15 @@ public sealed class ConsultantController(
         }
     }
 
+    /// <summary>История чатов; q — поиск по названию и тексту сообщений.</summary>
     [HttpGet("conversations")]
-    public async Task<IActionResult> Conversations(CancellationToken ct) => Ok(await chats.ListAsync(User.GetUserId(), ct));
+    public async Task<IActionResult> Conversations([FromQuery] string? q, CancellationToken ct) => Ok(await chats.ListAsync(User.GetUserId(), ct, q));
+
+    /// <summary>Оценка ответа: up или down и «что не так» (до 1000 символов). Только по своему ответу.</summary>
+    [HttpPost("messages/{id:guid}/feedback")]
+    public async Task<IActionResult> Feedback(Guid id, FeedbackRequest request, CancellationToken ct) =>
+        request.Rating is not ("up" or "down") ? BadRequest(new { error = "Оценка — up или down." })
+        : await chats.FeedbackAsync(User.GetUserId(), id, request.Rating, request.Comment, ct) ? NoContent() : NotFound(new { error = "Ответ не найден." });
 
     [HttpGet("conversations/{id:guid}")]
     public async Task<IActionResult> Conversation(Guid id, CancellationToken ct) =>
@@ -203,7 +213,7 @@ public sealed class ConsultantController(
 
         try
         {
-            await chats.SendAsync(User.GetUserId(), request.ConversationId, message, Emit, work.Token);
+            await chats.SendAsync(User.GetUserId(), request.ConversationId, message, Emit, work.Token, request.Context);
         }
         catch (KeyNotFoundException ex)
         {

@@ -72,7 +72,7 @@ internal sealed class GetWorkProjectsTool(WorkTaskService tasks, IUserPermission
         var byProject = rows.ToLookup(r => r.Project);
         bool Open(WorkTaskStatus s) => s is not (WorkTaskStatus.Done or WorkTaskStatus.Cancelled);
 
-        var shown = projects.Take(args.Cap(limit)).ToList();
+        var shown = projects.TakeTop(args, limit, "projects").ToList();
         return Data(new
         {
             Total = projects.Count,

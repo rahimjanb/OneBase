@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OneBase.AI.Llm;
@@ -7,12 +8,14 @@ using OneBase.AI.Monitoring;
 using OneBase.AI.Providers;
 using OneBase.Application.Abstractions;
 using OneBase.Domain.AI;
+using OneBase.Domain.Audit;
 
 namespace OneBase.AI.Consultant;
 
 /// <summary>Событие чата для потоковой отдачи в браузер.</summary>
 public sealed record ChatEvent(string Type, object Data);
 
+/// <summary>Сообщение чата. Answer — структура готового ответа консультанта для экрана (блоки отчёта); Content — тот же ответ Markdown-ом.</summary>
 public sealed record ChatMessageView(
     Guid Id,
     string Role,
@@ -21,9 +24,17 @@ public sealed record ChatMessageView(
     JsonElement? Details,
     string? Error,
     DateTimeOffset CreatedAt,
-    long DurationMs);
+    long DurationMs,
+    StructuredAnswer? Answer = null);
 
-public sealed record ConversationSummary(Guid Id, string Title, DateTimeOffset CreatedAt, DateTimeOffset LastMessageAt);
+/// <summary>Чат в истории. Source — web или telegram (вопросы из Telegram-бота идут в чат консультанта пользователя).</summary>
+public sealed record ConversationSummary(Guid Id, string Title, DateTimeOffset CreatedAt, DateTimeOffset LastMessageAt, string Source = "web");
+
+/// <summary>
+/// Контекст вопроса с экрана: период (yyyy-MM) и отдел (код и название). Уходит консультанту строкой к вопросу — в истории чата вопрос
+/// остаётся как написан.
+/// </summary>
+public sealed record ChatContext(string? Period, string? Department, string? DepartmentName);
 
 public sealed record ConversationView(Guid Id, string Title, DateTimeOffset CreatedAt, IReadOnlyList<ChatMessageView> Messages);
 
@@ -36,6 +47,7 @@ public sealed class ConsultantChatService(
     IConsultantEngine engine,
     AiAuditService audit,
     ConsultantAnswerCache answers,
+    IAuditLogger auditLog,
     ILogger<ConsultantChatService> logger)
 {
     public const int MaxQuestionLength = 4000;
@@ -45,13 +57,29 @@ public sealed class ConsultantChatService(
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public async Task<IReadOnlyList<ConversationSummary>> ListAsync(Guid userId, CancellationToken ct) =>
-        await db.AiConversations.AsNoTracking()
-            .Where(c => c.UserId == userId && c.ArchivedAt == null)
+    /// <summary>Начало названия чата, начатого в Telegram (TitleOf при первом вопросе из канала).</summary>
+    public const string TelegramTitlePrefix = "Telegram · ";
+
+    /// <summary>
+    /// История чатов пользователя (последние 200). query — поиск по названию и тексту сообщений. Source — telegram у чатов, начатых в
+    /// Telegram или привязанных к переписке в Telegram, иначе web.
+    /// </summary>
+    public async Task<IReadOnlyList<ConversationSummary>> ListAsync(Guid userId, CancellationToken ct, string? query = null)
+    {
+        var chats = db.AiConversations.AsNoTracking().Where(c => c.UserId == userId && c.ArchivedAt == null);
+        if (query?.Trim().ToLowerInvariant() is { Length: > 0 } text)
+        {
+            text = text.Length > 200 ? text[..200] : text;
+            chats = chats.Where(c => c.Title.ToLower().Contains(text) || db.AiMessages.Any(m => m.ConversationId == c.Id && m.Content.ToLower().Contains(text)));
+        }
+
+        return await chats
             .OrderByDescending(c => c.LastMessageAt)
             .Take(200)
-            .Select(c => new ConversationSummary(c.Id, c.Title, c.CreatedAt, c.LastMessageAt))
+            .Select(c => new ConversationSummary(c.Id, c.Title, c.CreatedAt, c.LastMessageAt,
+                c.Title.StartsWith(TelegramTitlePrefix) || db.TelegramUserPermissions.Any(p => p.ConversationId == c.Id) ? "telegram" : "web"))
             .ToListAsync(ct);
+    }
 
     public async Task<ConversationView?> GetAsync(Guid userId, Guid id, CancellationToken ct)
     {
@@ -69,13 +97,35 @@ public sealed class ConsultantChatService(
         return new ConversationView(conversation.Id, conversation.Title, conversation.CreatedAt, messages.Select(View).ToList());
     }
 
-    /// <summary>Текст ответа консультанта для озвучки — только из своего чата и только готовый ответ.</summary>
-    public async Task<string?> AnswerTextAsync(Guid userId, Guid messageId, CancellationToken ct) =>
-        await db.AiMessages.AsNoTracking()
-            .Where(m => m.Id == messageId && m.Role == AiMessageRole.Assistant && m.Status == AiMessageStatus.Completed
-                        && m.Conversation!.UserId == userId)
-            .Select(m => m.Content)
+    /// <summary>
+    /// Текст ответа консультанта для озвучки — только из своего чата и только готовый ответ. У отчёта — «Главное» и рекомендации, у простого
+    /// ответа — весь текст.
+    /// </summary>
+    public async Task<string?> AnswerTextAsync(Guid userId, Guid messageId, CancellationToken ct)
+    {
+        var message = await db.AiMessages.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == messageId && m.Role == AiMessageRole.Assistant && m.Status == AiMessageStatus.Completed
+                                      && m.Conversation!.UserId == userId, ct);
+        return message is null ? null : Structure(message) is { } answer ? AnswerStructure.SpeechText(answer, message.Content) : message.Content;
+    }
+
+    /// <summary>Оценка ответа (up/down) и «что не так» — в журнал аудита (ai.answer.feedback). Только по своему готовому ответу.</summary>
+    public async Task<bool> FeedbackAsync(Guid userId, Guid messageId, string rating, string? comment, CancellationToken ct)
+    {
+        var conversationId = await db.AiMessages.AsNoTracking()
+            .Where(m => m.Id == messageId && m.Role == AiMessageRole.Assistant && m.Conversation!.UserId == userId)
+            .Select(m => (Guid?)m.ConversationId)
             .FirstOrDefaultAsync(ct);
+        if (conversationId is null)
+        {
+            return false;
+        }
+
+        var text = comment?.Trim();
+        await auditLog.LogAsync(ActorType.User, userId.ToString(), "ai.answer.feedback", "ai_message", messageId.ToString(),
+            new { conversationId, rating, comment = string.IsNullOrEmpty(text) ? null : text.Length > 1000 ? text[..1000] : text }, ct);
+        return true;
+    }
 
     public async Task<bool> RenameAsync(Guid userId, Guid id, string title, CancellationToken ct)
     {
@@ -109,8 +159,8 @@ public sealed class ConsultantChatService(
     /// Вопрос в чат: сохраняет вопрос, получает ответ консультанта и сохраняет его (или ошибку).
     /// События: start → progress… → done | error. KeyNotFoundException — чата нет или он чужой.
     /// </summary>
-    public Task SendAsync(Guid userId, Guid? conversationId, string question, Func<ChatEvent, Task> emit, CancellationToken ct) =>
-        RunAsync(userId, conversationId, question, null, emit, ct);
+    public Task SendAsync(Guid userId, Guid? conversationId, string question, Func<ChatEvent, Task> emit, CancellationToken ct, ChatContext? context = null) =>
+        RunAsync(userId, conversationId, question, null, emit, ct, context);
 
     /// <summary>
     /// Вопрос из другого канала (Telegram) от имени пользователя OneBase — с его правами, в его чате консультанта (виден и в OneBase).
@@ -120,9 +170,11 @@ public sealed class ConsultantChatService(
         await RunAsync(userId, conversationId, question, channel, _ => Task.CompletedTask, ct);
 
     private async Task<ConsultantReply> RunAsync(Guid userId, Guid? conversationId, string question, ConsultantChannel? channel, Func<ChatEvent, Task> emit,
-        CancellationToken ct)
+        CancellationToken ct, ChatContext? context = null)
     {
         question = question.Trim();
+        // Консультанту (маршрутизация, AI-сотрудники, кэш ответов, журнал) — вопрос с контекстом экрана; в чате — как написан.
+        var asked = WithContext(question, context);
         AiConversation conversation;
         if (conversationId is { } id)
         {
@@ -158,7 +210,7 @@ public sealed class ConsultantChatService(
         try
         {
             // Тот же первый вопрос того же пользователя, а данные с тех пор не обновлялись, — ответ из кэша, без вызовов модели.
-            var cacheKey = await answers.KeyAsync(userId, question, history.Count, channel, ct);
+            var cacheKey = await answers.KeyAsync(userId, asked, history.Count, channel, ct);
             if (cacheKey is not null && await answers.GetAsync(cacheKey, ct) is { } cached)
             {
                 reply.Content = cached.Content;
@@ -169,7 +221,7 @@ public sealed class ConsultantChatService(
             else
             {
                 var answer = await engine.AnswerAsync(
-                    new ConsultantTurn(userId, conversation.Id, question, history, channel, lastAnswerId),
+                    new ConsultantTurn(userId, conversation.Id, asked, history, channel, lastAnswerId),
                     p => emit(new ChatEvent("progress", p)),
                     ct);
                 reply.Content = answer.Content.Length > 0 ? answer.Content : "Модель вернула пустой ответ.";
@@ -209,7 +261,7 @@ public sealed class ConsultantChatService(
 
         try
         {
-            await audit.WriteAsync(channel?.Name ?? "consultant", userId, conversation.Id, reply.Id, question, startedAt, reply.DurationMs, details,
+            await audit.WriteAsync(channel?.Name ?? "consultant", userId, conversation.Id, reply.Id, asked, startedAt, reply.DurationMs, details,
                 reply.Status == AiMessageStatus.Completed ? reply.Content : null, reply.Error, CancellationToken.None, fromCache);
         }
         catch (Exception ex)
@@ -241,7 +293,7 @@ public sealed class ConsultantChatService(
             : recent.Skip(start).Select(m => new LlmMessage(m.Role == AiMessageRole.User ? LlmRole.User : LlmRole.Assistant, m.Content)).ToList();
     }
 
-    private static ChatMessageView View(AiMessage m) => new(
+    private ChatMessageView View(AiMessage m) => new(
         m.Id,
         m.Role == AiMessageRole.User ? "user" : "assistant",
         m.Status == AiMessageStatus.Completed ? "completed" : "failed",
@@ -249,7 +301,44 @@ public sealed class ConsultantChatService(
         m.Details is null ? null : JsonDocument.Parse(m.Details).RootElement.Clone(),
         m.Error,
         m.CreatedAt,
-        m.DurationMs);
+        m.DurationMs,
+        m.Role == AiMessageRole.Assistant && m.Status == AiMessageStatus.Completed ? Structure(m) : null);
+
+    /// <summary>Структура ответа для экрана; сбой разбора не мешает показать ответ Markdown-ом.</summary>
+    private StructuredAnswer? Structure(AiMessage m)
+    {
+        try
+        {
+            var details = m.Details is null ? null : JsonSerializer.Deserialize<ConsultantDetails>(m.Details, Json);
+            return AnswerStructure.Build(m.Content, details, m.DurationMs, m.CreatedAt);
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException or RegexMatchTimeoutException or FormatException or OverflowException)
+        {
+            logger.LogWarning(ex, "Консультант: не удалось разобрать ответ {MessageId} на блоки", m.Id);
+            return null;
+        }
+    }
+
+    /// <summary>Вопрос с контекстом экрана: «(Контекст экрана, если в вопросе не сказано иное: период — октябрь 2026; отдел — Продажи.)».</summary>
+    internal static string WithContext(string question, ChatContext? context)
+    {
+        var parts = new List<string>();
+        if (context?.Period is { } period && DateOnly.TryParseExact($"{period}-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var month))
+        {
+            parts.Add($"период — {MonthNames[month.Month - 1]} {month.Year} (01.{month.Month:00}.{month.Year} — {DateTime.DaysInMonth(month.Year, month.Month)}.{month.Month:00}.{month.Year})");
+        }
+
+        if ((context?.DepartmentName ?? context?.Department)?.Trim() is { Length: > 0 and <= 60 } department)
+        {
+            parts.Add($"отдел — {department}");
+        }
+
+        return parts.Count == 0 ? question : $"{question}\n\n(Контекст экрана, если в вопросе не сказано иное: {string.Join("; ", parts)}.)";
+    }
+
+    private static readonly string[] MonthNames =
+        ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
 
     private static string TitleOf(string text)
     {

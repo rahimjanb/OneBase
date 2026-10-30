@@ -191,6 +191,12 @@ export type HrTimesheetRow = { employeeId: string; employee: string; division: s
 
 export type HrTimesheet = { from: string; to: string; dates: string[]; rows: HrTimesheetRow[]; total: HrSummary; sync: HrSyncBrief };
 
+export type HrReportGroup = { divisionId: number | null; division: string; employees: number; summary: HrSummary; attendanceRate: number | null; punctuality: number | null };
+
+/**
+ * Отчёт за период (до квартала): итоги и подразделения, топ-10 опаздывавших по разам (topLate) и по времени (topLateTime), топ-10
+ * отсутствий; absentWholePeriod — сколько сотрудников за период ни разу не пришли и без документа.
+ */
 export type HrReport = {
   from: string;
   to: string;
@@ -198,9 +204,11 @@ export type HrReport = {
   total: HrSummary;
   attendanceRate: number | null;
   punctuality: number | null;
-  divisions: { divisionId: number | null; division: string; employees: number; summary: HrSummary; attendanceRate: number | null; punctuality: number | null }[];
+  divisions: HrReportGroup[];
   topLate: HrTimesheetRow[];
+  topLateTime: HrTimesheetRow[];
   topAbsent: HrTimesheetRow[];
+  absentWholePeriod: number;
   sync: HrSyncBrief;
 };
 

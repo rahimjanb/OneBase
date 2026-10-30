@@ -25,23 +25,21 @@ public sealed class AiMemoryStore(IAppDbContext db)
     internal const int TopicLength = 500;
 
     /// <summary>
-    /// Сохраняет результаты сотрудников, у которых есть что вспомнить (не ошибки и не «нет доступа»).
+    /// Сохраняет результаты сотрудников, у которых есть что вспомнить: найденные данные (completed, partial). «Данных нет» не сохраняется —
+    /// это не установленный факт: следующий вопрос проверяет данные заново, а не повторяет прошлый отказ. Ошибки и «нет доступа» — тоже нет.
     /// Если запись не удалась, добавленные строки снимаются с контекста — иначе они сорвали бы сохранение самого ответа.
     /// </summary>
     public async Task SaveAsync(Guid userId, Guid conversationId, IReadOnlyDictionary<string, string> tasks, string question,
         IReadOnlyList<AgentResult> results, CancellationToken ct)
     {
         var added = new List<AiMemory>();
-        foreach (var r in results.Where(r => r.Status is "completed" or "partial" or "no_data"))
+        foreach (var r in results.Where(r => r.Status is "completed" or "partial"))
         {
             var topic = Trim(tasks.GetValueOrDefault(r.Agent) ?? question, TopicLength);
             var content = Summary(r);
             var data = JsonSerializer.Serialize(r, Json);
             added.Add(new AiMemory { Kind = AiMemoryKind.Analytical, UserId = userId, AgentCode = r.Agent, ConversationId = conversationId, Topic = topic, Content = content, Data = data });
-            if (r.Status != "no_data")
-            {
-                added.Add(new AiMemory { Kind = AiMemoryKind.Agent, UserId = userId, AgentCode = r.Agent, ConversationId = conversationId, Topic = topic, Content = content });
-            }
+            added.Add(new AiMemory { Kind = AiMemoryKind.Agent, UserId = userId, AgentCode = r.Agent, ConversationId = conversationId, Topic = topic, Content = content });
         }
 
         if (added.Count == 0)
@@ -61,17 +59,45 @@ public sealed class AiMemoryStore(IAppDbContext db)
         }
     }
 
-    /// <summary>Что уже проанализировано в этом чате — сотрудниками из списка доступных.</summary>
+    /// <summary>
+    /// Что уже проанализировано в этом чате — сотрудниками из списка доступных. Записи «данных нет», сохранённые раньше, пропускаются: прошлый
+    /// отказ не подсказывает маршрутизатору и сотрудникам, что данных нет (сами записи не удаляются).
+    /// </summary>
     public async Task<IReadOnlyList<MemoryNote>> ConversationAsync(Guid userId, Guid conversationId, IReadOnlyCollection<string> agents, int limit, CancellationToken ct)
     {
         var rows = await db.AiMemories.AsNoTracking()
             .Where(m => m.UserId == userId && m.ConversationId == conversationId && m.Kind == AiMemoryKind.Analytical && agents.Contains(m.AgentCode!))
             .OrderByDescending(m => m.CreatedAt)
+            .Take(limit * 3)
+            .Select(m => new { m.CreatedAt, m.AgentCode, m.Topic, m.Content, m.Data })
+            .ToListAsync(ct);
+        var notes = rows
+            .Where(m => !IsNoData(m.Data))
             .Take(limit)
             .Select(m => new MemoryNote(m.CreatedAt, m.AgentCode!, m.Topic, m.Content))
-            .ToListAsync(ct);
-        rows.Reverse();
-        return rows;
+            .ToList();
+        notes.Reverse();
+        return notes;
+    }
+
+    /// <summary>Сохранённый итог сотрудника — «данных нет» (status no_data в данных записи).</summary>
+    internal static bool IsNoData(string? data)
+    {
+        if (string.IsNullOrEmpty(data))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(data);
+            return doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("status", out var status)
+                   && status.ValueKind == JsonValueKind.String && status.GetString() == "no_data";
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Недавние выводы сотрудника для пользователя в других (не убранных) чатах.</summary>

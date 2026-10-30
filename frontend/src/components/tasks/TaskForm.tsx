@@ -36,6 +36,8 @@ export function TaskForm({
   task,
   defaultDepartment,
   defaultProject,
+  prefill,
+  onCreated,
 }: {
   open: boolean;
   onClose: () => void;
@@ -44,19 +46,24 @@ export function TaskForm({
   task?: WorkTask;
   defaultDepartment?: string;
   defaultProject?: string;
+  /** Новая задача с подставленными полями (например, из рекомендации AI-консультанта). */
+  prefill?: { title: string; description: string; department?: string | null; dueDate?: string | null };
+  /** Задача создана: id новой задачи (вместо обновления страницы). */
+  onCreated?: (id: string) => void;
 }) {
   const t = useT();
   const router = useRouter();
   const creatable = useMemo(() => departments.filter((d) => d.hasTasks || projects.some((p) => p.departmentCode === d.code && !p.archived)), [departments, projects]);
+  const prefillDepartment = prefill?.department && creatable.some((d) => d.code === prefill.department) ? prefill.department : undefined;
   const initial = (): Draft => ({
-    department: task?.departmentCode ?? defaultDepartment ?? creatable.find((d) => d.isMine)?.code ?? creatable[0]?.code ?? "",
+    department: task?.departmentCode ?? prefillDepartment ?? defaultDepartment ?? creatable.find((d) => d.isMine)?.code ?? creatable[0]?.code ?? "",
     projectId: task?.projectId ?? defaultProject ?? "",
-    title: task?.title ?? "",
-    description: task?.description ?? "",
+    title: task?.title ?? prefill?.title ?? "",
+    description: task?.description ?? prefill?.description ?? "",
     assigneeId: task?.assigneeId ?? "",
     priority: task?.priority ?? "Medium",
     startDate: task?.startDate ?? "",
-    dueDate: task?.dueDate ?? "",
+    dueDate: task?.dueDate ?? prefill?.dueDate ?? "",
   });
   const [draft, setDraft] = useState<Draft>(initial);
   const [assignees, setAssignees] = useState<WorkAssignee[]>([]);
@@ -109,13 +116,15 @@ export function TaskForm({
       projectId: draft.projectId || null,
     };
     try {
+      let created: { id: string } | null = null;
       if (task) {
         await bff(`work/tasks/${task.id}`, { method: "PUT", body: JSON.stringify(body) });
       } else {
-        await bff<{ id: string }>("work/tasks", { method: "POST", body: JSON.stringify({ ...body, department: draft.department }) });
+        created = await bff<{ id: string }>("work/tasks", { method: "POST", body: JSON.stringify({ ...body, department: draft.department }) });
       }
       onClose();
-      router.refresh();
+      if (created && onCreated) onCreated(created.id);
+      else router.refresh();
     } catch (e) {
       setError((e as Error).message);
     } finally {

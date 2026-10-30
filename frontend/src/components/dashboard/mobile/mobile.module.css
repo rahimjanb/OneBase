@@ -1,0 +1,134 @@
+/*
+ * Мобильный «Обзор» (< 768, ТЗ 1base-mobile-home). Цвета — токены редизайна (--ts-*, hr/timesheet/timesheet.module.css: те же значения,
+ * что в макете); здесь — фоны акцентных карточек в обеих темах, анимации и затемнение над нижней панелью.
+ * Светлая тема — по умолчанию, тёмная — как у токенов: тёмная тема OneBase (по умолчанию у бренда или явный выбор).
+ */
+.page {
+  --mh-divider: var(--ts-border);
+  --mh-track: var(--ts-surface-2);
+  --mh-row: #7c3aed1a;
+  --mh-tile: #7c3aed14;
+  --mh-arrow-bg: var(--ts-text);
+  --mh-arrow: #ffffff;
+  position: relative;
+  min-height: 100%;
+}
+
+/* Фон — у всего экрана (globals.css, data-mobile-home): страница прозрачная, иначе свечение кончалось бы на краю шапки. */
+:global(html) .page {
+  background: none;
+}
+
+:global(:root[data-theme="dark"]) .page,
+:global(:root[data-brand="onebase"]:not([data-theme="light"])) .page {
+  --mh-divider: #ffffff12;
+  --mh-track: #ffffff14;
+  --mh-row: #ffffff0f;
+  --mh-tile: #ffffff14;
+  --mh-arrow-bg: #ffffff;
+  --mh-arrow: #0c1221;
+}
+
+/* Главная карточка KPI: светлая — белая с лёгким тоном акцента, тёмная — #0F1730 с синим градиентом. */
+.kpi {
+  background: linear-gradient(160deg, #2f6bff14, transparent 65%), var(--ts-surface);
+  border-color: #2f6bff33;
+}
+:global(:root[data-theme="dark"]) .kpi,
+:global(:root[data-brand="onebase"]:not([data-theme="light"])) .kpi {
+  background: linear-gradient(160deg, #2b55d633, transparent 70%), #0f1730;
+  border-color: #3d7bff33;
+}
+
+/* «Фокус дня»: фиолетовый оттенок. */
+.focus {
+  background: linear-gradient(160deg, #7c3aed12, #2f6bff0a 50%, transparent 80%), var(--ts-surface);
+  border-color: #7c3aed33;
+}
+:global(:root[data-theme="dark"]) .focus,
+:global(:root[data-brand="onebase"]:not([data-theme="light"])) .focus {
+  background: linear-gradient(160deg, #6d4cf526, #3d7bff14 50%, transparent 85%), #121335;
+  border-color: #a78bfa40;
+}
+
+/* Баннер «Еженедельный AI-отчёт». */
+.report {
+  background: linear-gradient(120deg, #7c3aed1a, #2f6bff12), var(--ts-surface);
+  border-color: #7c3aed33;
+}
+:global(:root[data-theme="dark"]) .report,
+:global(:root[data-brand="onebase"]:not([data-theme="light"])) .report {
+  background: linear-gradient(120deg, #7c5cff40, #3d7bff26), #16123a;
+  border-color: #a78bfa40;
+}
+
+/* Под нижней панелью: содержимое мягко уходит в фон (липкий низ области прокрутки, нажатия проходят насквозь). */
+.fade {
+  position: sticky;
+  bottom: 0;
+  height: 56px;
+  margin-top: -56px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--ts-bg) 95%, transparent));
+}
+
+/* Появление: кольца — от нуля по кругу, столбики — снизу вверх, полосы — слева направо; 500 мс, ease-out. */
+.ring {
+  animation: ring 500ms ease-out both;
+}
+@keyframes ring {
+  from {
+    stroke-dashoffset: var(--c);
+  }
+}
+
+.arc {
+  animation: arc 500ms ease-out both;
+}
+@keyframes arc {
+  from {
+    stroke-dasharray: 0 var(--c);
+  }
+}
+
+.grow {
+  transform-origin: 50% 100%;
+  animation: grow 500ms ease-out both;
+}
+@keyframes grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+.fill {
+  transform-origin: 0 50%;
+  animation: fill 500ms ease-out both;
+}
+@keyframes fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* Заготовка блока, пока идут данные. */
+.sk {
+  border-radius: 8px;
+  background: var(--ts-surface-2);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring,
+  .arc,
+  .grow,
+  .fill,
+  .sk {
+    animation: none;
+  }
+}

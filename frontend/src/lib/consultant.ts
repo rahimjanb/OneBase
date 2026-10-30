@@ -1,5 +1,6 @@
 import { formatDate } from "@/i18n/core";
 import { makeT, type T } from "@/i18n/core";
+import type { ChatContext, ChatSource, StructuredAnswer } from "./consultant-view";
 import type { VoiceStatus } from "./voice";
 
 /** Тексты по-русски — t по умолчанию; компоненты передают свой t (язык интерфейса). */
@@ -22,6 +23,10 @@ export type AgentResult = {
   error: string | null;
   /** Числа итога, которых нет в результатах инструментов (после попытки исправить). */
   unverified?: string[] | null;
+  /** Почему данных нет или они неполные: no_access, source_not_connected, tool_error, not_found, out_of_range, not_in_onebase, interrupted… */
+  reason?: string | null;
+  /** Источники, которые не дали данных: инструмент, вид сбоя, безопасный текст. */
+  toolErrors?: { tool: string; kind: string; message: string }[] | null;
 };
 
 /** Проверка ответа по данным: сколько чисел сверено, какие не подтверждены, исправлялся ли ответ и помечен ли текст. */
@@ -95,9 +100,12 @@ export type ChatMessage = {
   error: string | null;
   createdAt: string;
   durationMs: number;
+  /** Структура готового ответа для экрана (блоки отчёта); нет — ответ показывается Markdown-ом (content). */
+  answer?: StructuredAnswer | null;
 };
 
-export type ConversationSummary = { id: string; title: string; createdAt: string; lastMessageAt: string };
+/** source — web или telegram (вопросы из Telegram-бота идут в чат консультанта пользователя). */
+export type ConversationSummary = { id: string; title: string; createdAt: string; lastMessageAt: string; source?: ChatSource };
 export type ConversationView = { id: string; title: string; createdAt: string; messages: ChatMessage[] };
 /** voice — голос консультанта на сервере (OpenAI); без него — голос браузера, если он есть. */
 export type AiStatus = { ready: boolean; message: string | null; voice?: VoiceStatus };
@@ -111,12 +119,22 @@ export type ChatEvent =
   | { type: "done"; data: { message: ChatMessage } }
   | { type: "error"; data: { message?: ChatMessage; error: string } };
 
-/** Вопрос консультанту: читает поток text/event-stream и отдаёт события по мере прихода. */
-export async function streamChat(conversationId: string | null, message: string, onEvent: (e: ChatEvent) => void, t: T = ru): Promise<void> {
+/**
+ * Вопрос консультанту: читает поток text/event-stream и отдаёт события по мере прихода. context — период и отдел с экрана (уходят
+ * консультанту вместе с вопросом); signal — «Стоп»: поток закрывается, а сервер дорабатывает ответ и сохраняет его в чат.
+ */
+export async function streamChat(
+  conversationId: string | null,
+  message: string,
+  onEvent: (e: ChatEvent) => void,
+  t: T = ru,
+  options: { context?: ChatContext | null; signal?: AbortSignal } = {},
+): Promise<void> {
   const response = await fetch("/bff/api/ai/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ conversationId, message }),
+    body: JSON.stringify(options.context ? { conversationId, message, context: options.context } : { conversationId, message }),
+    signal: options.signal,
   });
   if (!response.ok || !response.body) {
     let text = await response.text().catch(() => "");

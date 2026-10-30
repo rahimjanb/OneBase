@@ -381,7 +381,7 @@ internal sealed class GetAgentVisitsTool(SalesDataLoader loader, IAppDbContext d
                 OrdersWithoutVisitSumUzs = R(withoutVisit.Sum(o => o.TotalPrice)),
             },
             Days = from == to ? null : days,
-            Visits = visits.Take(args.Cap(from == to ? 120 : 80)).Select(v => new
+            Visits = visits.TakeTop(args, from == to ? 120 : 80, "visits").Select(v => new
             {
                 Time = DrillLookup.Time(v.Date),
                 StoreId = v.MarketId,
@@ -392,7 +392,7 @@ internal sealed class GetAgentVisitsTool(SalesDataLoader loader, IAppDbContext d
                 Order = v.Status == "done" ? OrderOf(v.Day, v.MarketId) : null,
             }),
             VisitsTotal = visits.Count,
-            OrdersWithoutVisit = withoutVisit.Take(args.Cap(30)).Select(o => new
+            OrdersWithoutVisit = withoutVisit.TakeTop(args, 30, "ordersWithoutVisit").Select(o => new
             {
                 o.Id,
                 Date = DrillLookup.Date(o.CreatedDate),
@@ -462,6 +462,9 @@ internal sealed class GetStoreTool(SalesDataLoader loader, IAppDbContext db) : S
         var orders = await db.LinkoOrders.AsNoTracking().Where(o => o.MarketId == market.Id).OrderByDescending(o => o.CreatedAt).Take(args.Cap(20))
             .Select(o => new { o.Id, o.CreatedAt, o.AcceptedDate, o.Status, o.AgentId, o.TotalPrice, o.TotalWeight, o.DiscountPrice })
             .ToListAsync(ct);
+        // Последние визиты и заказы — выборка: сколько их всего у точки, считает база (в «_meta» результата).
+        args.Count("lastVisits", await db.LinkoVisits.AsNoTracking().CountAsync(v => v.MarketId == market.Id, ct), visits.Count);
+        args.Count("lastOrders", await db.LinkoOrders.AsNoTracking().CountAsync(o => o.MarketId == market.Id, ct), orders.Count);
         var names = await DrillLookup.NamesAsync(db, visits.Where(v => v.UserId != null).Select(v => v.UserId!.Value)
             .Concat(orders.Where(o => o.AgentId != null).Select(o => o.AgentId!.Value))
             .Concat(market.ResponsibleAgentId is { } r ? new[] { r } : Array.Empty<long>()), ct);
@@ -591,6 +594,8 @@ internal sealed class GetOrdersTool(SalesDataLoader loader, IAppDbContext db, Ti
         var orders = await q.OrderByDescending(o => o.CreatedAt).Take(args.Cap(50))
             .Select(o => new { o.Id, o.CreatedAt, o.AcceptedDate, o.DeliveryDate, o.Status, o.MarketId, o.AgentId, o.BranchName, o.TotalPrice, o.DiscountPrice, o.TotalWeight, o.IsFullReturn })
             .ToListAsync(ct);
+        // Заказы — последние 50, итоги по статусам (totals) — по всем: сколько заказов всего, видно в «_meta».
+        args.Count("orders", totals.Sum(t => t.Orders), orders.Count);
         if (orders.Count == 0)
         {
             return Data(new { Scope = scope, Orders = Array.Empty<object>(), Note = "Заказов с такими условиями нет." });

@@ -1,4 +1,4 @@
-import { Ellipsis } from "lucide-react";
+import { AlarmClock, Ellipsis } from "lucide-react";
 import type { TaskStatusSlice, Tone } from "@/lib/dashboard.mock";
 import type { T } from "@/i18n/core";
 import { CardHeader, DashCard, toneBg } from "./blocks";
@@ -20,8 +20,11 @@ const WIDTH = 20;
 const C = 2 * Math.PI * R;
 const GAP = (2 / 360) * C; // зазор между сегментами ~2°
 
-/** «Задачи по статусу»: кольцо (SVG) с зазорами между сегментами, доля выполненных в центре и легенда с числами и процентами. */
-export function TasksDonut({ total, done, slices, t }: { total: number; done: number; slices: TaskStatusSlice[]; t: T }) {
+/**
+ * «Задачи по статусу»: кольцо (SVG) с зазорами между сегментами, доля выполненных в центре и легенда с числами и процентами.
+ * overdue — просроченные: часть открытых, поэтому отдельной строкой легенды, без сегмента.
+ */
+export function TasksDonut({ total, done, slices, overdue, t }: { total: number; done: number; slices: TaskStatusSlice[]; overdue?: number; t: T }) {
   const sum = slices.reduce((a, s) => a + s.count, 0) || 1;
   let offset = 0;
   const arcs = slices.map((s) => {
@@ -36,7 +39,7 @@ export function TasksDonut({ total, done, slices, t }: { total: number; done: nu
     <DashCard className="flex min-w-0 flex-col gap-5 p-4 sm:p-5 xl:w-[380px]">
       <CardHeader
         title={t("Задачи по статусу")}
-        subtitle={t("Всего {n} за 30 дней", { n: total })}
+        subtitle={t("Открытые и выполненные за месяц: {n}", { n: total })}
         action={
           <button type="button" aria-label={t("Действия")} className="grid size-7 place-items-center rounded-md text-ink-3 transition-colors duration-150 hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             <Ellipsis className="size-4" />
@@ -75,6 +78,14 @@ export function TasksDonut({ total, done, slices, t }: { total: number; done: nu
             <span className="w-9 text-right text-xs text-ink-4 tabular-nums">{Math.round((s.count / sum) * 100)}%</span>
           </li>
         ))}
+        {overdue != null && (
+          <li className="flex items-center gap-2.5 text-[13px]">
+            <AlarmClock className="size-2.5 text-bad" strokeWidth={2.4} aria-hidden />
+            <span className="flex-1 text-ink-2">{t("из них просрочено")}</span>
+            <span className={`font-semibold tabular-nums ${overdue > 0 ? "text-bad" : "text-ink"}`}>{overdue}</span>
+            <span className="w-9" />
+          </li>
+        )}
       </ul>
     </DashCard>
   );

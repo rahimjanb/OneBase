@@ -631,13 +631,117 @@ public class HrSyncDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         Assert.False(denied.Success);
         Assert.Contains("Нет доступа", denied.Content);
         Assert.DoesNotContain("Каримова", denied.Content);
+        // Для AI — до года (частями по 92 дня, см. следующий тест); длиннее — понятная ошибка.
         var tooLong = await ActivatorUtilities.CreateInstance<GetHrDeviationsTool>(sp)
-            .ExecuteAsync(new ToolContext("hr", hrUser, 0), JsonSerializer.SerializeToElement(new { from = "2026-01-01", to = "2026-10-21" }));
+            .ExecuteAsync(new ToolContext("hr", hrUser, 0), JsonSerializer.SerializeToElement(new { from = "2025-01-01", to = "2026-10-21" }));
         Assert.False(tooLong.Success);
-        Assert.Contains("62", tooLong.Content);
+        Assert.Contains("366", tooLong.Content);
         var unknown = await ActivatorUtilities.CreateInstance<GetHrEmployeeTool>(sp)
             .ExecuteAsync(new ToolContext("hr", hrUser, 0), JsonSerializer.SerializeToElement(new { employee = "Несуществующий" }));
         Assert.False(unknown.Success);
         Assert.Contains("не найден", unknown.Content);
+    }
+
+    /// <summary>
+    /// P1: квартал для AI — одним вызовом HrService (страницы и API — по-прежнему до 62 дней), дольше — частями по 92 дня. Итоги 120 дней
+    /// частями 92 + 28 совпадают с итогами тех же дней, посчитанных независимо другими частями (60 + 60 и 4 × 30): нет ни пересечений, ни пропусков.
+    /// </summary>
+    [PostgresFact]
+    public async Task Ai_hr_tools_cover_a_quarter_in_one_call_and_longer_periods_in_parts_without_gaps_or_overlaps()
+    {
+        await SeedAsync();
+        await SyncAsync();
+        var hrUser = await WithAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<OneBaseDbContext>();
+            var role = new Role { Name = $"HR квартала {Guid.NewGuid():N}"[..24] };
+            role.Permissions.Add(new RolePermission { Code = Permissions.HrRead });
+            var user = new User { Login = $"hr-q-{Guid.NewGuid():N}"[..16], FullName = "HR Квартальный" };
+            user.Roles.Add(new UserRole { Role = role });
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+            return user.Id;
+        });
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var hr = sp.GetRequiredService<HrService>();
+        var ctx = await HrContextAsync(sp);
+        var ct = CancellationToken.None;
+        async Task<JsonElement> Ask<T>(object args) where T : ITool
+        {
+            var result = await ActivatorUtilities.CreateInstance<T>(sp).ExecuteAsync(new ToolContext("hr", hrUser, 0), JsonSerializer.SerializeToElement(args));
+            Assert.True(result.Success, result.Content);
+            return JsonDocument.Parse(result.Content).RootElement.Clone();
+        }
+
+        // Предел страниц и API не расширен.
+        await Assert.ThrowsAsync<FieldValidationException>(() => hr.TimesheetAsync(ctx, new DateOnly(2026, 7, 22), new DateOnly(2026, 10, 21), null, null, null, ct));
+        await Assert.ThrowsAsync<FieldValidationException>(() => hr.DeviationsAsync(ctx, new DateOnly(2026, 7, 22), new DateOnly(2026, 10, 21), null, null, null, ct));
+
+        // Квартал (92 дня) — одним вызовом: совпадает с теми же днями двумя половинами по 46 дней.
+        var quarter = await Ask<GetHrTimesheetTool>(new { from = "2026-07-22", to = "2026-10-21" });
+        Assert.Equal(("2026-07-22", "2026-10-21"), (quarter.GetProperty("period").GetProperty("from").GetString(), quarter.GetProperty("period").GetProperty("to").GetString()));
+        var q1 = await hr.TimesheetAsync(ctx, new DateOnly(2026, 7, 22), new DateOnly(2026, 9, 5), null, null, null, ct);
+        var q2 = await hr.TimesheetAsync(ctx, new DateOnly(2026, 9, 6), new DateOnly(2026, 10, 21), null, null, null, ct);
+        AssertTotals(HrPeriods.Add(q1.Total, q2.Total), quarter.GetProperty("totals"));
+
+        // 120 дней — частями 92 + 28; проверка — 60 + 60 дней напрямую через HrService.
+        var sheet = await Ask<GetHrTimesheetTool>(new { from = "2026-06-24", to = "2026-10-21", sort = "name" });
+        Assert.Equal(("2026-06-24", "2026-10-21"), (sheet.GetProperty("period").GetProperty("from").GetString(), sheet.GetProperty("period").GetProperty("to").GetString()));
+        var a = await hr.TimesheetAsync(ctx, new DateOnly(2026, 6, 24), new DateOnly(2026, 8, 22), null, null, null, ct);
+        var b = await hr.TimesheetAsync(ctx, new DateOnly(2026, 8, 23), new DateOnly(2026, 10, 21), null, null, null, ct);
+        var expected = HrPeriods.Add(a.Total, b.Total);
+        Assert.True(expected.PlanDays > 0);
+        AssertTotals(expected, sheet.GetProperty("totals"));
+        Assert.Equal(a.Rows.Select(r => r.EmployeeId).Union(b.Rows.Select(r => r.EmployeeId)).Count(), sheet.GetProperty("employees").GetInt32());
+        Assert.True(sheet.GetProperty("_meta").GetProperty("complete").GetBoolean());
+
+        // Буквы табеля одного сотрудника — все 120 дней подряд, каждый день один раз.
+        var bobur = Assert.Single((await Ask<GetHrTimesheetTool>(new { from = "2026-06-24", to = "2026-10-21", search = "Алиев" })).GetProperty("employeesList").EnumerateArray());
+        var days = bobur.GetProperty("days").GetString()!.Split(' ');
+        Assert.Equal(120, days.Length);
+        Assert.Equal("24", days[0][..2]);
+        Assert.Equal(["20:ОП", "21:Я"], days[^2..]);
+        var row = HrPeriods.Add(a.Rows.Single(r => r.Employee == "Алиев Бобур").Summary, b.Rows.Single(r => r.Employee == "Алиев Бобур").Summary);
+        Assert.Equal((row.PlanDays, row.LateDays, row.LateMinutes), (bobur.GetProperty("planDays").GetInt32(), bobur.GetProperty("lateDays").GetInt32(), bobur.GetProperty("lateMinutes").GetInt32()));
+
+        // Карточка сотрудника за 120 дней: каждый день один раз, итоги — как в табеле.
+        var card = await Ask<GetHrEmployeeTool>(new { employee = "алиев", from = "2026-06-24", to = "2026-10-21" });
+        var cardDays = card.GetProperty("days").EnumerateArray().Select(d => d.GetProperty("date").GetString()).ToList();
+        Assert.Equal(cardDays.Count, cardDays.Distinct().Count());
+        Assert.Equal(cardDays.Order().ToList(), cardDays);
+        Assert.Equal(("2026-06-24", "2026-10-21"), (card.GetProperty("period").GetProperty("from").GetString(), card.GetProperty("period").GetProperty("to").GetString()));
+        Assert.Equal((row.PlanDays, row.LateMinutes), (card.GetProperty("summary").GetProperty("planDays").GetInt32(), card.GetProperty("summary").GetProperty("lateMinutes").GetInt32()));
+
+        // Отклонения за 120 дней — частями 92 + 28; проверка — 4 × 30 дней напрямую.
+        var dev = await Ask<GetHrDeviationsTool>(new { from = "2026-06-24", to = "2026-10-21", limit = 300 });
+        var direct = new List<HrDeviation>();
+        for (var from = new DateOnly(2026, 6, 24); from <= new DateOnly(2026, 10, 21); from = from.AddDays(30))
+        {
+            direct.AddRange(await hr.DeviationsAsync(ctx, from, from.AddDays(29), null, null, null, ct));
+        }
+
+        Assert.Equal(direct.Count, dev.GetProperty("totalCases").GetInt32());
+        Assert.Equal(direct.Count(d => d.Kind == "late"), dev.GetProperty("counts").GetProperty("late").GetInt32());
+        Assert.Equal(direct.Count(d => d.Kind == "absent"), dev.GetProperty("counts").GetProperty("absent").GetInt32());
+        var cases = dev.GetProperty("cases").EnumerateArray().Select(c => (c.GetProperty("date").GetString(), c.GetProperty("employee").GetString(), c.GetProperty("kind").GetString())).ToList();
+        Assert.Equal(cases.Count, cases.Distinct().Count());
+        var list = Assert.Single(dev.GetProperty("_meta").GetProperty("lists").EnumerateArray(), l => l.GetProperty("name").GetString() == "cases");
+        Assert.Equal(direct.Count, list.GetProperty("total_count").GetInt32());
+        Assert.Equal(cases.Count, list.GetProperty("returned_count").GetInt32());
+    }
+
+    private static void AssertTotals(HrSummary expected, JsonElement totals)
+    {
+        Assert.Equal(expected.PlanDays, totals.GetProperty("planDays").GetInt32());
+        Assert.Equal(expected.PresentDays, totals.GetProperty("presentDays").GetInt32());
+        Assert.Equal(expected.LateDays, totals.GetProperty("lateDays").GetInt32());
+        Assert.Equal(expected.LateMinutes, totals.GetProperty("lateMinutes").GetInt32());
+        Assert.Equal(expected.AbsentDays, totals.GetProperty("absentDays").GetInt32());
+        Assert.Equal(expected.LeaveDays, totals.GetProperty("leaveDays").GetInt32());
+        Assert.Equal(expected.UnknownDays, totals.GetProperty("unknownDays").GetInt32());
+        Assert.Equal(expected.NoExitDays, totals.GetProperty("noExitDays").GetInt32());
+        Assert.Equal(Math.Round(expected.WorkedMinutes / 60m, 1), totals.GetProperty("workedHours").GetDecimal());
+        Assert.Equal(Math.Round(expected.PlanMinutes / 60m, 1), totals.GetProperty("planHours").GetDecimal());
     }
 }

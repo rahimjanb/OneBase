@@ -135,8 +135,8 @@ public sealed partial class ConsultantAnswerCache(
                 var tool = registry.Find(name);
                 if (tool is null)
                 {
-                    // Calculator, источник истины и отчёт — не инструменты реестра: свои данные они не читают.
-                    if (name is Calculator.ToolName or SourceOfTruthTool.ToolName)
+                    // Calculator, источник истины, страницы результата и отчёт — не инструменты реестра: новых данных они не читают.
+                    if (name is Calculator.ToolName or SourceOfTruthTool.ToolName or ToolResultPager.ToolName)
                     {
                         continue;
                     }

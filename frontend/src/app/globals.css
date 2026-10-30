@@ -965,3 +965,253 @@ html:has([data-app-shell]) body {
     }
   }
 }
+
+/*
+ * Отклик на нажатие. Подсветку нажатий iOS/Android мы убрали (html выше) — вместо неё кнопки чуть сжимаются, пока палец или кнопка мыши
+ * на них: видно, что нажатие принято, даже если окно или страница откроются не сразу. На сенсорных экранах так же отвечают ссылки-плитки
+ * и строки списков (строчные ссылки в тексте не сжимаются: transform к строчным элементам не применяется). В слое base: у элемента со
+ * своими transition/scale из классов действуют они. Нижняя панель (.rnav), карта, перетаскиваемые карточки — без этого; отключить
+ * у элемента — data-press="off". iOS включает :active, только если на странице слушают касания, — это делает NavProgress.
+ */
+@layer base {
+  :is(button, [role="button"], [role="tab"], summary):not(:disabled, [aria-disabled="true"], [data-press="off"], [draggable="true"], .rnav *, .leaflet-container *) {
+    transition: scale 0.15s ease;
+  }
+  :is(button, [role="button"], [role="tab"], summary):not(:disabled, [aria-disabled="true"], [data-press="off"], [draggable="true"], .rnav *, .leaflet-container *):active {
+    scale: 0.97;
+  }
+  @media (pointer: coarse) {
+    a[href]:not([data-press="off"], [draggable="true"], .rnav *, .leaflet-container *) {
+      transition: scale 0.15s ease;
+    }
+    a[href]:not([data-press="off"], [draggable="true"], .rnav *, .leaflet-container *):active {
+      scale: 0.98;
+    }
+  }
+}
+
+/*
+ * Переход на другую страницу (NavProgress): полоска загрузки вверху экрана, под строкой состояния, — пока не придёт новая страница
+ * и не уйдут её заготовки (aria-busy). Нажатая ссылка до этого времени приглушена: видно, что именно открывается.
+ */
+.nav-progress {
+  position: fixed;
+  top: env(safe-area-inset-top);
+  left: 0;
+  right: 0;
+  z-index: 70;
+  height: 3px;
+  pointer-events: none;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  opacity: 0;
+  background: linear-gradient(90deg, #3d7bff, #6e9bff 60%, #a78bfa);
+  box-shadow: 0 0 10px rgb(61 123 255 / 0.7);
+  transition: transform 0.25s ease-out, opacity 0.3s ease;
+}
+.nav-progress[data-state="loading"] {
+  opacity: 1;
+}
+.nav-progress[data-state="done"] {
+  opacity: 0;
+  transition: transform 0.2s ease-out, opacity 0.3s ease 0.15s;
+}
+[data-nav-pending]:not(.rnav *) {
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress {
+    transition: opacity 0.2s ease;
+  }
+}
+
+/*
+ * Мобильный «Обзор» (data-mobile-home, < 768): весь экран — один фон из макета, тёмный #060A14 со свечением из правого верхнего угла
+ * (около четверти высоты): шапка, содержимое и место под нижней панелью без швов. Сама панель не меняется. Светлая тема — фон #F5F6F8.
+ */
+@media (width < 48rem) {
+  :root[data-brand="onebase"]:not([data-theme="light"]):has([data-mobile-home]) body {
+    background-color: #060a14;
+    background-image: radial-gradient(130% 28% at 100% 0%, #2347b04d, transparent);
+  }
+  :root[data-brand="onebase"][data-theme="light"]:has([data-mobile-home]) {
+    --color-page: #f5f6f8;
+  }
+}
+
+/*
+ * AI-консультант (ТЗ ai-consultant): свои токены экрана. Внутри .ai-chat общие классы (bg-surface, text-ink-2, border-line…) берут цвета
+ * экрана, новые — bg-ai-bg, bg-surface-2, text-subtle, text-link, text-telegram, bg-accent-fill. Тёмная — как у OneBase по умолчанию
+ * (нет data-theme="light") и при data-theme="dark"; светлая — при data-theme="light".
+ * Отступления от макета ради контраста не ниже 4,5:1 у мелкого текста: subtle тёмной темы #7B86A1 вместо #5C6680 (на surface-2 было 3,0),
+ * светлой — #646C7E вместо #8F97A8; success/warning/danger светлой темы как текст — #0B7A3D, #A35800, #C82333; заливка под белым текстом
+ * (пузырь вопроса, «Отправить») в тёмной теме — #2F6CF5 вместо #3D7BFF (белый на #3D7BFF — 3,8).
+ */
+@theme {
+  --color-ai-bg: #f5f6f8;
+  --color-surface-2: #f1f3f6;
+  --color-subtle: #646c7e;
+  --color-link: #2f6bff;
+  --color-telegram: #2aabee;
+  --color-accent-fill: #2f6bff;
+  --color-teal: #0f766e;
+}
+
+.ai-chat {
+  --color-ai-bg: #f5f6f8;
+  --color-page: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-surface-solid: #ffffff;
+  --color-surface-2: #f1f3f6;
+  --color-muted: #f1f3f6;
+  --color-muted-solid: #f1f3f6;
+  --color-line: #e7e9ee;
+  --color-line-strong: #d6dae2;
+  --color-ink: #0e1322;
+  --color-ink-2: #3a4255;
+  --color-ink-3: #5d667a;
+  --color-ink-4: #646c7e;
+  --color-subtle: #646c7e;
+  --color-accent: #2f6bff;
+  --color-accent-fill: #2f6bff;
+  --color-accent-strong: #2f6bff;
+  --color-accent-soft: rgb(47 107 255 / 0.08);
+  --color-link: #2f6bff;
+  --color-ok: #0b7a3d;
+  --color-ok-soft: rgb(18 161 80 / 0.09);
+  --color-warn: #a35800;
+  --color-warn-soft: rgb(245 158 11 / 0.11);
+  --color-bad: #c82333;
+  --color-bad-soft: rgb(229 72 77 / 0.08);
+  --color-violet: #7c3aed;
+  --color-violet-strong: #7c3aed;
+  --color-violet-soft: rgb(124 58 237 / 0.07);
+  --color-telegram: #2aabee;
+  --color-teal: #0f766e;
+  --ai-glow: rgb(43 63 168 / 0.1);
+  --ai-violet-glow: rgb(91 76 245 / 0.1);
+  --ai-summary-bg: linear-gradient(135deg, rgb(47 107 255 / 0.1), rgb(47 107 255 / 0.03));
+  --ai-summary-line: rgb(47 107 255 / 0.2);
+  --ai-track: rgb(14 19 34 / 0.08);
+  --ai-zebra: rgb(14 19 34 / 0.025);
+  --ai-sidebar: rgb(255 255 255 / 0.8);
+  --ai-shadow: 0 10px 30px rgb(14 19 34 / 0.1);
+  color: var(--color-ink);
+  background-color: var(--color-ai-bg);
+  background-image: radial-gradient(60% 40% at 50% 0%, var(--ai-glow), transparent 70%);
+}
+
+:root[data-theme="dark"] .ai-chat,
+:root[data-brand="onebase"]:not([data-theme="light"]) .ai-chat {
+  --color-ai-bg: #060a14;
+  --color-page: #060a14;
+  --color-surface: #0c1221;
+  --color-surface-solid: #0c1221;
+  --color-surface-2: #121a2d;
+  --color-muted: #121a2d;
+  --color-muted-solid: #121a2d;
+  --color-line: #1a2338;
+  --color-line-strong: #26314d;
+  --color-ink: #eef1f7;
+  --color-ink-2: #c9cfdc;
+  --color-ink-3: #8d97ae;
+  --color-ink-4: #7b86a1;
+  --color-subtle: #7b86a1;
+  --color-accent: #3d7bff;
+  --color-accent-fill: #2f6cf5;
+  --color-accent-strong: #7fa6ff;
+  --color-accent-soft: rgb(61 123 255 / 0.12);
+  --color-link: #7fa6ff;
+  --color-ok: #2bd47d;
+  --color-ok-soft: rgb(43 212 125 / 0.1);
+  --color-warn: #f6a93b;
+  --color-warn-soft: rgb(246 169 59 / 0.1);
+  --color-bad: #ff5a6a;
+  --color-bad-soft: rgb(255 90 106 / 0.1);
+  --color-violet: #a78bfa;
+  --color-violet-strong: #a78bfa;
+  --color-violet-soft: rgb(139 92 246 / 0.12);
+  --color-teal: #2dd4bf;
+  --ai-glow: rgb(43 63 168 / 0.2);
+  --ai-violet-glow: rgb(91 76 245 / 0.18);
+  --ai-summary-bg: linear-gradient(135deg, rgb(61 123 255 / 0.15), rgb(61 123 255 / 0.04)), #101a36;
+  --ai-summary-line: rgb(61 123 255 / 0.2);
+  --ai-track: rgb(255 255 255 / 0.07);
+  --ai-zebra: rgb(255 255 255 / 0.016);
+  --ai-sidebar: rgb(10 15 28 / 0.8);
+  --ai-shadow: 0 10px 30px rgb(0 0 0 / 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-brand="onebase"]) .ai-chat {
+    --color-ai-bg: #060a14;
+    --color-page: #060a14;
+    --color-surface: #0c1221;
+    --color-surface-solid: #0c1221;
+    --color-surface-2: #121a2d;
+    --color-muted: #121a2d;
+    --color-muted-solid: #121a2d;
+    --color-line: #1a2338;
+    --color-line-strong: #26314d;
+    --color-ink: #eef1f7;
+    --color-ink-2: #c9cfdc;
+    --color-ink-3: #8d97ae;
+    --color-ink-4: #7b86a1;
+    --color-subtle: #7b86a1;
+    --color-accent: #3d7bff;
+    --color-accent-fill: #2f6cf5;
+    --color-accent-strong: #7fa6ff;
+    --color-accent-soft: rgb(61 123 255 / 0.12);
+    --color-link: #7fa6ff;
+    --color-ok: #2bd47d;
+    --color-ok-soft: rgb(43 212 125 / 0.1);
+    --color-warn: #f6a93b;
+    --color-warn-soft: rgb(246 169 59 / 0.1);
+    --color-bad: #ff5a6a;
+    --color-bad-soft: rgb(255 90 106 / 0.1);
+    --color-violet: #a78bfa;
+    --color-violet-strong: #a78bfa;
+    --color-violet-soft: rgb(139 92 246 / 0.12);
+    --color-teal: #2dd4bf;
+    --ai-glow: rgb(43 63 168 / 0.2);
+    --ai-violet-glow: rgb(91 76 245 / 0.18);
+    --ai-summary-bg: linear-gradient(135deg, rgb(61 123 255 / 0.15), rgb(61 123 255 / 0.04)), #101a36;
+    --ai-summary-line: rgb(61 123 255 / 0.2);
+    --ai-track: rgb(255 255 255 / 0.07);
+    --ai-zebra: rgb(255 255 255 / 0.016);
+    --ai-sidebar: rgb(10 15 28 / 0.8);
+    --ai-shadow: 0 10px 30px rgb(0 0 0 / 0.4);
+  }
+}
+
+/* Кнопки и пузырь с белым текстом на экране консультанта — без градиента бренда OneBase (его правило выше для .bg-accent): своя заливка. */
+.ai-chat .bg-accent-fill.text-white {
+  background-image: none;
+}
+
+/* Градиент AI: аватар ответа и значок стартового экрана. */
+.ai-gradient {
+  background-image: linear-gradient(225deg, #7c5cff, #3d7bff);
+}
+
+/* Блоки ответа появляются по очереди, как при потоковой отдаче. */
+@keyframes ai-block-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.ai-block-in {
+  animation: ai-block-in 320ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-block-in { animation: none; }
+}
+
+/* Печать ответа или чата в PDF: только выбранное, светлыми цветами. */
+@media print {
+  :root[data-ai-print] body * { visibility: hidden !important; }
+  :root[data-ai-print] [data-ai-print-target],
+  :root[data-ai-print] [data-ai-print-target] * { visibility: visible !important; }
+  :root[data-ai-print] [data-ai-print-target] { position: absolute; inset: 0 auto auto 0; width: 100%; }
+  :root[data-ai-print] [data-ai-no-print] { display: none !important; }
+}

@@ -94,7 +94,7 @@ internal sealed class GetOutstockTool(OutstockService outstock) : DataTool
             },
             AllSkuTotals = view.Scope == OutstockScope.All ? null : new { LostKg = R(everything.Totals.LostKg), LostSum = R(everything.Totals.LostSum), PairsWithLoss = everything.Totals.PairsWithLoss },
             Categories = view.Categories.Select(c => new { c.Name, LostSum = R(c.LostSum), ShareOfLossPct = Pct(c.Share), LostKg = R(c.LostKg), LossSharePct = Pct(c.LossShare), c.Pairs, c.ZeroDays }),
-            ByRegion = view.ByRegion.Take(args.Cap(12)).Select(r => new
+            ByRegion = view.ByRegion.TakeTop(args, 12, "byRegion").Select(r => new
             {
                 r.Name,
                 r.Dealer,
@@ -108,9 +108,9 @@ internal sealed class GetOutstockTool(OutstockService outstock) : DataTool
                 FactoryLossSum = R(r.FactoryLossSum),
                 Top = r.Top.Select(p => new { p.Name, LostSum = R(p.LostSum), ShareOfRegionPct = Pct(p.Share) }),
             }),
-            TopProducts = view.ByProduct.Take(args.Cap(15)).Select(p => new { p.Name, p.Category, p.Top, SoldKg = R(p.SoldKg), ZeroDaysPct = Pct(p.ZeroShare), LostKg = R(p.LostKg), LostSum = R(p.LostSum), p.Regions }),
-            Core = view.Pairs.Where(p => p.Core).Take(args.Cap(15)).Select(Pair),
-            Chronic = view.Pairs.Where(p => p.Chronic).OrderByDescending(p => p.LostSum).Take(args.Cap(10)).Select(Pair),
+            TopProducts = view.ByProduct.TakeTop(args, 15, "topProducts").Select(p => new { p.Name, p.Category, p.Top, SoldKg = R(p.SoldKg), ZeroDaysPct = Pct(p.ZeroShare), LostKg = R(p.LostKg), LostSum = R(p.LostSum), p.Regions }),
+            Core = view.Pairs.Where(p => p.Core).TakeTop(args, 15, "core").Select(Pair),
+            Chronic = view.Pairs.Where(p => p.Chronic).OrderByDescending(p => p.LostSum).TakeTop(args, 10, "chronic").Select(Pair),
             Note = "Остаток по дням восстановлен назад от снимка Linko: утро = вечер + продано − привезено; минус считается нулём. " +
                 "Упущено = дней в нуле × средние продажи в день × средняя цена; «к факту» — упущенные кг к проданным. " +
                 (view.FactoryKnown

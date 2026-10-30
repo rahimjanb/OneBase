@@ -3,14 +3,14 @@ using OneBase.Application.Hr;
 
 namespace OneBase.Infrastructure.Hr;
 
-/// <summary>Отчёт HR в Excel: «Подразделения» (итоги), «Табель» (сотрудник × день буквами), «Отклонения».</summary>
+/// <summary>Отчёт HR в Excel: «Итоги по подразделениям», «Табель по дням» (сотрудник × день буквами), «Отклонения».</summary>
 public static class HrReportWorkbook
 {
     public static byte[] Build(HrReport report, HrTimesheet timesheet, IReadOnlyList<HrDeviation> deviations)
     {
         using var workbook = new XLWorkbook();
 
-        var groups = workbook.Worksheets.Add("Подразделения");
+        var groups = workbook.Worksheets.Add("Итоги по подразделениям");
         groups.Cell(1, 1).Value = $"Посещаемость {report.From:dd.MM.yyyy} — {report.To:dd.MM.yyyy} (данные Verifix)";
         groups.Cell(1, 1).Style.Font.Bold = true;
         string[] head = ["Подразделение", "Сотрудников", "Рабочих дней по графику", "Дней с приходом", "Опозданий", "Минут опозданий", "Ранних уходов",
@@ -26,7 +26,7 @@ public static class HrReportWorkbook
         groups.Row(row).Style.Font.Bold = true;
         groups.Columns().AdjustToContents(1, 60);
 
-        var sheet = workbook.Worksheets.Add("Табель");
+        var sheet = workbook.Worksheets.Add("Табель по дням");
         string[] people = ["Сотрудник", "Подразделение", "Должность"];
         Header(sheet, 1, [.. people, .. timesheet.Dates.Select(d => d.ToString("dd.MM")), "Явка", "Опоздания", "Отсутствия", "Отработано, ч"]);
         row = 2;

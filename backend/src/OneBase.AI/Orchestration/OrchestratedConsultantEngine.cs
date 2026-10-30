@@ -5,17 +5,20 @@ using OneBase.AI.Agents;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.AI.Grounding;
+using OneBase.AI.Knowledge;
 using OneBase.AI.Llm;
 using OneBase.AI.Memory;
 using OneBase.AI.Providers;
 using OneBase.AI.Reports;
 using OneBase.AI.Security;
+using OneBase.AI.Tools;
 
 namespace OneBase.AI.Orchestration;
 
 /// <summary>
 /// Главный AI-консультант: вопрос → маршрутизация → AI-сотрудники параллельно → единый управленческий ответ.
-/// AI-сотрудники без доступа у пользователя не привлекаются; консультант прямо говорит, каких данных не видит.
+/// AI-сотрудники без доступа у пользователя не привлекаются — ни без права на отдел, ни без единого инструмента данных для этого пользователя;
+/// консультант прямо говорит, каких данных не видит («нет доступа», «источник не подключён»), а не «данных нет».
 /// </summary>
 public sealed partial class OrchestratedConsultantEngine(
     AiAgentStore agents,
@@ -25,6 +28,9 @@ public sealed partial class OrchestratedConsultantEngine(
     IAiGateway gateway,
     AiMemoryStore memory,
     ReportService reports,
+    ToolExecutor executor,
+    KnowledgeService knowledge,
+    IToolRegistry tools,
     TimeProvider clock,
     ILogger<OrchestratedConsultantEngine> logger) : IConsultantEngine
 {
@@ -48,8 +54,12 @@ public sealed partial class OrchestratedConsultantEngine(
 
         var own = await permissions.GetAsync(turn.UserId, ct);
         var departments = all.Where(a => !a.IsConsultant && a.Enabled).ToList();
-        var available = departments.Where(a => a.RequiredPermission is null || own.Contains(a.RequiredPermission)).ToList();
-        var forbidden = departments.Except(available).ToList();
+        var permitted = departments.Where(a => a.RequiredPermission is null || own.Contains(a.RequiredPermission)).ToList();
+        // Сотрудник без единого инструмента данных для пользователя не запускается: иначе он ответил бы «данных нет» вместо «нет доступа».
+        var access = await DataAccessAsync(permitted, turn.UserId, ct);
+        var available = permitted.Where(a => access.Sources[a.Code].Count > 0).ToList();
+        var unconnected = permitted.Where(a => access.Granted[a.Code].Count > 0 && access.Sources[a.Code].Count == 0).ToList();
+        var forbidden = departments.Except(available).Except(unconnected).ToList();
         var context = new AiCallContext(turn.UserId, AgentDefaults.Consultant, turn.ConversationId, turn.Channel?.Name ?? "consultant");
 
         // Аналитическая память чата: что сотрудники уже выяснили (только доступные пользователю сейчас).
@@ -65,7 +75,8 @@ public sealed partial class OrchestratedConsultantEngine(
         var correction = CorrectionGuard.Detect(turn.Question, turn.History);
 
         await progress(new ConsultantProgress("routing", null, null, ProgressStatus.Running));
-        var routing = Enforce(await router.RouteAsync(turn.Question, turn.History, available, context, ct, rememberedText), turn, correction, available);
+        var routing = Enforce(await router.RouteAsync(turn.Question, turn.History, available, context, ct, rememberedText), turn, correction, available,
+            await router.SalesWordsAsync(available, ct), access.Sources, [.. forbidden, .. unconnected]);
         await progress(new ConsultantProgress("routing", null, null, ProgressStatus.Done,
             routing.Agents.Count == 0 ? "без AI-сотрудников" : string.Join(", ", routing.Agents.Select(c => available.First(a => a.Code == c).Name))));
         if (correction is not null)
@@ -93,14 +104,15 @@ public sealed partial class OrchestratedConsultantEngine(
         var created = wantsReport ? await reports.CreatedAsync(turn.UserId, turn.ConversationId, startedAt, ct) : [];
 
         await progress(new ConsultantProgress("compose", null, null, ProgressStatus.Running));
-        var results = runs.Select(r => r.Result).ToList();
+        var results = runs.Select(r => r.Result).Concat(Denied(routing.Denied, all, access.Granted, unconnected)).ToList();
         var evidence = Evidence(runs, turn, correction, rememberedText);
         var review = correction is null ? null : CorrectionGuard.Review(correction, evidence, turn.LastAnswerId);
         // Два системных сообщения: неизменные правила ответа (кэшируются у провайдера между вопросами) и данные этого вопроса.
         List<LlmMessage> messages =
         [
             new(LlmRole.System, ComposeRules(consultant)),
-            new(LlmRole.System, ComposePrompt(results, forbidden, rememberedText, wantsReport ? created : null, turn.Channel, asksReport && !wantsReport, review)),
+            new(LlmRole.System, ComposePrompt(results, forbidden, rememberedText, wantsReport ? created : null, turn.Channel, asksReport && !wantsReport, review,
+                AnswerLanguages.Of(turn.Question))),
             .. turn.History,
             new(LlmRole.User, turn.Question),
         ];
@@ -144,21 +156,31 @@ public sealed partial class OrchestratedConsultantEngine(
     }
 
     /// <summary>
-    /// Data Retrieval: ответ о фактах — только по данным. Маршрутизатор не привлёк сотрудников, а вопрос — о данных компании (вопрос со словами
-    /// отделов) — сотрудники по ключевым словам. Возражение к ответу — перепроверяют сотрудники той же области (по прошлому вопросу и ответу),
-    /// а если область не определить, но в ответе были числа, — все доступные.
+    /// Data Retrieval: ответ о фактах — только по данным. Без AI-сотрудников остаётся только разговор: приветствие, благодарность, прощание,
+    /// вопрос о возможностях консультанта. Вопрос о данных, по которому маршрутизатор не привлёк сотрудников, получает их по словам вопроса
+    /// (русский и узбекский), словарю продаж (salesWords) и источникам инструментов, доступным пользователю (sources); уточнение без своих слов
+    /// («А по Самарканду?») — по прошлому вопросу, с его условиями в задаче. Область, которую пользователю не открыть (unavailable — сотрудники
+    /// без прав или без подключённых источников), попадает в Denied: консультант скажет «нет доступа», а не ответит другим отделом. Область не
+    /// определилась — один сотрудник с наибольшим доступом к данным; вопрос о компании в целом — все доступные. Возражение к ответу —
+    /// перепроверяют сотрудники той же области (по прошлому вопросу и ответу), а если область не определить, но в ответе были числа, — все.
     /// </summary>
-    internal static RoutingDecision Enforce(RoutingDecision routing, ConsultantTurn turn, CorrectionRequest? correction, IReadOnlyList<AgentConfig> available)
+    internal static RoutingDecision Enforce(RoutingDecision routing, ConsultantTurn turn, CorrectionRequest? correction, IReadOnlyList<AgentConfig> available,
+        IReadOnlyList<string>? salesWords = null, IReadOnlyDictionary<string, IReadOnlySet<string>>? sources = null, IReadOnlyList<AgentConfig>? unavailable = null)
     {
-        if (routing.Agents.Count > 0 || available.Count == 0)
+        if (routing.Agents.Count > 0 || (available.Count == 0 && unavailable is not { Count: > 0 }))
         {
             return routing;
         }
 
+        var previous = turn.History.LastOrDefault(m => m.Role == LlmRole.User)?.Content;
         if (correction is not null)
         {
-            var previousQuestion = turn.History.LastOrDefault(m => m.Role == LlmRole.User)?.Content ?? string.Empty;
-            var agents = AiRouter.KeywordAgents($"{previousQuestion}\n{correction.PreviousAnswer}\n{turn.Question}", available).ToList();
+            if (available.Count == 0)
+            {
+                return routing;
+            }
+
+            var agents = AiRouter.KeywordAgents($"{previous}\n{correction.PreviousAnswer}\n{turn.Question}", available, salesWords).ToList();
             if (agents.Count == 0 && NumberClaims.Checkable(correction.PreviousAnswer).Count > 0)
             {
                 agents = available.Select(a => a.Code).ToList();
@@ -167,12 +189,83 @@ public sealed partial class OrchestratedConsultantEngine(
             return agents.Count == 0 ? routing : routing with { Agents = agents, Reason = "Пользователь оспаривает прошлый ответ — AI-сотрудники перепроверяют данные." };
         }
 
-        if (AsksForData().IsMatch(turn.Question) && AiRouter.KeywordAgents(turn.Question, available) is { Count: > 0 } byWords)
+        var followUp = previous is not null && RouteIntent.IsFollowUp(turn.Question);
+        if (!followUp && RouteIntent.IsSmallTalk(turn.Question))
         {
-            return routing with { Agents = byWords, Reason = "Вопрос о данных компании — ответ только по данным OneBase." };
+            return routing;
         }
 
-        return routing;
+        // Область — по вопросу; уточнение без своих слов — по прошлому вопросу.
+        var text = turn.Question;
+        var (chosen, denied) = RouteIntent.Resolve(text, available, salesWords, sources);
+        var inherited = false;
+        if (chosen.Count == 0 && denied.Count == 0 && previous is not null)
+        {
+            (chosen, denied) = RouteIntent.Resolve(previous, available, salesWords, sources);
+            inherited = chosen.Count > 0 || denied.Count > 0;
+            text = inherited ? previous : text;
+        }
+
+        // Отдел вопроса пользователю недоступен целиком — «нет доступа», а не ответ другого отдела.
+        var deniedAgents = chosen.Count == 0 && unavailable is { Count: > 0 }
+            ? AiRouter.KeywordAgents(text, unavailable, salesWords).Select(code => new DeniedArea(code, null, [])).ToList()
+            : [];
+        List<DeniedArea> allDenied = [.. denied, .. deniedAgents];
+        if (chosen.Count == 0 && allDenied.Count == 0)
+        {
+            chosen = RouteIntent.IsCompanyWide(text) ? available.Select(a => a.Code).ToList()
+                : RouteIntent.DefaultAgent(available, sources) is { } fallback ? [fallback]
+                : [];
+        }
+
+        if (chosen.Count == 0 && allDenied.Count == 0)
+        {
+            return routing;
+        }
+
+        var tasks = followUp || inherited
+            ? chosen.ToDictionary(code => code, _ => $"{previous}\nУточнение: {turn.Question}")
+            : new Dictionary<string, string>();
+        var reason = chosen.Count == 0 ? "Данные вопроса пользователю недоступны — AI-сотрудники не привлекаются."
+            : followUp || inherited ? "Уточнение к прошлому вопросу — AI-сотрудники той же области."
+            : "Вопрос о данных компании — ответ только по данным OneBase.";
+        return routing with { Agents = chosen, Tasks = tasks, Reason = reason, Denied = allDenied.Count > 0 ? allDenied : null };
+    }
+
+    /// <summary>
+    /// Доступ пользователя к данным сотрудников: Granted — источники инструментов, на которые у него есть права; Sources — из них те, где есть
+    /// данные (база знаний — только при доступных ему документах, как в AgentRunner).
+    /// </summary>
+    private async Task<(IReadOnlyDictionary<string, IReadOnlySet<string>> Granted, IReadOnlyDictionary<string, IReadOnlySet<string>> Sources)> DataAccessAsync(
+        IReadOnlyList<AgentConfig> agents, Guid userId, CancellationToken ct)
+    {
+        var granted = await executor.DataSourcesAsync(agents.Select(a => a.Code).ToList(), userId, ct);
+        var documents = !granted.Values.Any(s => s.Contains(KnowledgeSources.Documents)) || (await knowledge.AllowedDocumentsAsync(userId, ct)).Count > 0;
+        var sources = granted.ToDictionary(p => p.Key, IReadOnlySet<string> (p) => documents
+            ? p.Value
+            : p.Value.Where(s => s != KnowledgeSources.Documents).ToHashSet(StringComparer.Ordinal));
+        return (granted, sources);
+    }
+
+    /// <summary>
+    /// Итоги по областям, которые пользователю не открыть: forbidden (нет прав) или no_data «источник не подключён» (права есть, а данных в
+    /// источнике нет — например, ни одного доступного документа). Модель для них не вызывается.
+    /// </summary>
+    internal static IEnumerable<AgentResult> Denied(IReadOnlyList<DeniedArea>? denied, IReadOnlyList<AgentConfig> all,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> granted, IReadOnlyList<AgentConfig> unconnected)
+    {
+        foreach (var d in denied ?? [])
+        {
+            var name = all.FirstOrDefault(a => a.Code == d.Agent)?.Name ?? d.Agent;
+            var notConnected = d.Title is null
+                ? unconnected.Any(a => a.Code == d.Agent)
+                : d.Sources.Any(source => granted.Values.Any(g => g.Contains(source)));
+            var what = d.Title ?? "данные отдела";
+            var (status, reason, message) = notConnected
+                ? ("no_data", "source_not_connected", $"Источник не подключён: {what} — в нём нет данных, доступных пользователю.")
+                : ("forbidden", "no_access", $"Нет доступа: у пользователя нет прав на {(d.Title is null ? "данные этого отдела" : $"данные «{d.Title}»")}.");
+            yield return new AgentResult(d.Agent, d.Title is null ? name : $"{name} · {d.Title}", status, message, [], [], [], [], [], [], message, Reason: reason);
+        }
     }
 
     /// <summary>
@@ -210,10 +303,6 @@ public sealed partial class OrchestratedConsultantEngine(
 
         return evidence;
     }
-
-    /// <summary>Вопрос, а не реплика: вопросительный знак или слово запроса данных.</summary>
-    [System.Text.RegularExpressions.GeneratedRegex(@"\?|сколько|какой|какая|какие|каков|почему|где|кто|когда|покажи|дай|сравни|посчитай|выведи|назови|nechta|qancha|qaysi|nima|qanday|ko['ʻ’‘]?rsat", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
-    private static partial System.Text.RegularExpressions.Regex AsksForData();
 
     /// <summary>
     /// Контекст сотрудника: о чём шла речь в чате, что он уже выяснил в этом чате и его недавние выводы в других чатах
@@ -255,20 +344,55 @@ public sealed partial class OrchestratedConsultantEngine(
         sb.AppendLine();
         sb.AppendLine("Суммы — в сумах, вес — в кг.");
         sb.AppendLine();
-        sb.AppendLine(ConsultantPrompts.QualityRules);
+        sb.AppendLine(ConsultantPrompts.GroundingPolicy);
         sb.AppendLine();
         sb.AppendLine("Каждое число ответа сверяется кодом с данными AI-сотрудников: число, которого нет в их результатах, будет помечено как не подтверждённое.");
         sb.AppendLine("Числа, которые сотрудник отметил как unverified, — не факт: не приводи их или скажи, что они не подтверждены данными.");
+        sb.AppendLine();
+        // Правила консультанта — последними: они важнее промпта выше, даже если администратор задал свой.
+        sb.AppendLine(ConsultantPrompts.ConsultantRules);
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Итоги сотрудников для итогового ответа: у каждого — outcome (одно из восьми состояний AnswerOutcome), готовая фраза для пользователя на
+    /// языке вопроса (message), безопасное пояснение (note) и ограничения (limitations). Факты и цифры — только у completed и partial; у сбоя,
+    /// «нет прав», «не подключено» и «период» текст модели сотрудника не передаётся (он мог сказать «данных нет»), как и текст ошибки
+    /// (исключения, адреса, SQL). title — название инструмента для ограничений (по коду; нет — «источник данных»).
+    /// </summary>
+    internal static string ComposeData(IReadOnlyList<AgentResult> results, Func<string, string?>? title = null, AnswerLanguage language = AnswerLanguage.Ru) =>
+        JsonSerializer.Serialize(results.Select(r =>
+        {
+            var outcome = AnswerOutcome.Of(r);
+            var data = outcome is AnswerOutcome.Completed or AnswerOutcome.Partial;
+            var limitations = AnswerOutcome.Limitations(r, title);
+            return new
+            {
+                r.Agent,
+                r.AgentName,
+                Outcome = outcome,
+                Message = AnswerOutcome.Phrase(outcome, language),
+                Summary = data || outcome is AnswerOutcome.NotFound or AnswerOutcome.NotInOneBase ? r.Summary : null,
+                Note = AnswerOutcome.Note(r, outcome),
+                Findings = data ? r.Findings : [],
+                Metrics = data ? r.Metrics : [],
+                Problems = data ? r.Problems : [],
+                Recommendations = data ? r.Recommendations : [],
+                DataSources = r.DataSources.Select(s => s.Period is null ? s.Title : $"{s.Title} ({s.Period})"),
+                Limitations = limitations.Count > 0 ? limitations : null,
+                r.Unverified,
+            };
+        }), Json);
+
     /// <summary>Данные этого вопроса для итогового ответа: дата, результаты сотрудников, память чата, отчёты, ограничения доступа.</summary>
     private string ComposePrompt(IReadOnlyList<AgentResult> results, IReadOnlyList<AgentConfig> forbidden, string? remembered,
-        IReadOnlyList<ReportRef>? reportsCreated, ConsultantChannel? channel = null, bool reportsForbidden = false, CorrectionReview? review = null)
+        IReadOnlyList<ReportRef>? reportsCreated, ConsultantChannel? channel = null, bool reportsForbidden = false, CorrectionReview? review = null,
+        AnswerLanguage language = AnswerLanguage.Ru)
     {
         var today = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(5));
         var sb = new StringBuilder();
         sb.AppendLine($"Сегодня {today:dd.MM.yyyy} (Ташкент).");
+        sb.AppendLine($"Язык вопроса — {AnswerLanguages.Label(language)}: отвечай на нём.");
         sb.AppendLine();
         if (review is not null)
         {
@@ -290,26 +414,14 @@ public sealed partial class OrchestratedConsultantEngine(
 
         if (results.Count == 0)
         {
-            sb.AppendLine("К этому вопросу AI-сотрудники не привлекались: данных OneBase в этом ответе нет. Отвечай по истории чата и общим знаниям;");
+            sb.AppendLine("К этому вопросу AI-сотрудники не привлекались: данные OneBase не запрашивались. Отвечай по истории чата и общим знаниям;");
             sb.AppendLine("если вопрос о показателях компании — скажи, что для ответа нужно уточнить вопрос (период, отдел), и не называй цифр компании.");
+            sb.AppendLine("Не утверждай, что данных нет: поиск не выполнялся.");
         }
         else
         {
-            sb.AppendLine("Результаты AI-сотрудников (единственный источник данных компании для этого ответа):");
-            sb.AppendLine(JsonSerializer.Serialize(results.Select(r => new
-            {
-                r.Agent,
-                r.AgentName,
-                r.Status,
-                r.Summary,
-                r.Findings,
-                r.Metrics,
-                r.Problems,
-                r.Recommendations,
-                DataSources = r.DataSources.Select(s => s.Period is null ? s.Title : $"{s.Title} ({s.Period})"),
-                r.Error,
-                r.Unverified,
-            }), Json));
+            sb.AppendLine("Результаты AI-сотрудников (единственный источник данных компании для этого ответа; состояние каждого — в поле outcome):");
+            sb.AppendLine(ComposeData(results, name => tools.Find(name)?.Title, language));
             sb.AppendLine();
             sb.AppendLine("""
                 Сформируй единый ответ:
@@ -317,7 +429,7 @@ public sealed partial class OrchestratedConsultantEngine(
                 2. По отделам — только привлечённые; факты с цифрами и периодом, со ссылкой на источник.
                 3. Взаимосвязи и основные причины (анализ), если данных достаточно.
                 4. Рекомендации — приоритетные действия, основанные на фактах; отметь, что это рекомендации.
-                Если сотрудник вернул no_data или ошибку — прямо скажи, каких данных нет. Не пересказывай JSON дословно.
+                Сотрудников без данных называй по их outcome — по правилам итогового ответа (note — готовое пояснение). Не пересказывай JSON дословно.
                 """);
         }
 
@@ -337,7 +449,7 @@ public sealed partial class OrchestratedConsultantEngine(
                       ? "Они показаны под ответом: предпросмотр и кнопка «Скачать Excel». "
                       : "Файлы Excel будут отправлены следом за ответом. ") +
                   "Коротко скажи, что в отчёте, и назови главные цифры; таблицы целиком не повторяй."
-                : "Пользователь просил отчёт Excel, но он не сформирован. Прямо скажи об этом и почему (нет данных, нет доступа или ошибка — по результатам сотрудников), " +
+                : "Пользователь просил отчёт Excel, но он не сформирован. Прямо скажи об этом и почему — по outcome сотрудников (нет прав, источник не подключён, сбой, не найдено), " +
                   "и предложи уточнить запрос: какие показатели, период, регион.");
         }
 

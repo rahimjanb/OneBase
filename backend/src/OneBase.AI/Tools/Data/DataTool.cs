@@ -1,11 +1,22 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using OneBase.AI.Consultant;
 using OneBase.Application.Sales.Metrics;
 using OneBase.Application.Security;
 
 namespace OneBase.AI.Tools.Data;
+
+/// <summary>Первые N строк списка с учётом полного числа строк (ToolArgs.Top) — для «_meta» результата.</summary>
+public static class ToolLists
+{
+    /// <summary>Первые args.Cap(n) строк; в «_meta» результата — сколько их всего. Только для списков в памяти, не для запросов к базе.</summary>
+    public static IEnumerable<T> TakeTop<T>(this IEnumerable<T> source, ToolArgs args, int n, string name) => args.Top(source, n, name);
+}
+
+/// <summary>Список результата: имя, сколько строк всего и сколько отдано модели.</summary>
+public sealed record ListCount(string Name, int TotalCount, int ReturnedCount);
 
 /// <summary>Неверные аргументы инструмента — текст уходит модели, чтобы она исправила вызов.</summary>
 public sealed class ToolArgumentException(string message) : Exception(message);
@@ -39,16 +50,81 @@ public abstract class DataTool : ITool
     /// <summary>Подсказка сотруднику, когда и как вызывать инструмент; попадает в его системный промпт. null — без подсказки.</summary>
     public virtual string? UsageHint => null;
 
+    /// <summary>Единицы полей результатов инструментов данных — в «_meta» каждого результата.</summary>
+    public const string Units = "Kg и …Kg — кг; RevenueSum и …Sum — сумы (UZS); …Pct, …Percent — проценты; …Hours — часы; …Minutes — минуты.";
+
     public async Task<ToolResult> ExecuteAsync(ToolContext context, JsonElement arguments, CancellationToken cancellationToken = default)
     {
         try
         {
-            return await RunAsync(context, new ToolArgs(arguments) { Report = context.Report }, cancellationToken);
+            var args = new ToolArgs(arguments) { Report = context.Report, All = new ToolArgs(arguments).Bool(AllRowsArg) == true };
+            return WithMeta(await RunAsync(context, args, cancellationToken), args, arguments);
         }
         catch (ToolArgumentException ex)
         {
             return ToolResult.Error(ex.Message);
         }
+    }
+
+    /// <summary>Аргумент любого инструмента данных: списки целиком (дальше — страницами get_more_rows), а не первые N.</summary>
+    public const string AllRowsArg = "all_rows";
+
+    /// <summary>
+    /// «_meta» результата: инструмент, фильтры (аргументы), источники с периодом, единицы, урезанные списки (total_count, returned_count,
+    /// truncated, has_more) и полнота. complete = false — показана выборка (первые N), а не весь список: модель не выдаёт Top-N за всё.
+    /// </summary>
+    internal ToolResult WithMeta(ToolResult result, ToolArgs args, JsonElement arguments)
+    {
+        if (!result.Success || result.Content.Length == 0 || result.Content[0] != '{')
+        {
+            return result;
+        }
+
+        JsonObject root;
+        try
+        {
+            if (JsonNode.Parse(result.Content) is not JsonObject parsed)
+            {
+                return result;
+            }
+
+            root = parsed;
+        }
+        catch (JsonException)
+        {
+            return result;
+        }
+
+        var lists = args.Lists.Select(l => (JsonNode)new JsonObject
+        {
+            ["name"] = l.Name,
+            ["total_count"] = l.TotalCount,
+            ["returned_count"] = l.ReturnedCount,
+            ["truncated"] = l.ReturnedCount < l.TotalCount,
+            ["has_more"] = l.ReturnedCount < l.TotalCount,
+        }).ToArray();
+        var complete = args.Lists.All(l => l.ReturnedCount >= l.TotalCount);
+        var meta = new JsonObject
+        {
+            ["tool"] = Name,
+            ["filters"] = arguments.ValueKind == JsonValueKind.Object ? JsonNode.Parse(arguments.GetRawText()) : new JsonObject(),
+            ["sources"] = new JsonArray((result.Sources ?? []).Select(s => (JsonNode)new JsonObject { ["title"] = s.Title, ["period"] = s.Period }).ToArray()),
+            ["units"] = Units,
+            ["complete"] = complete,
+        };
+        if (lists.Length > 0)
+        {
+            meta["lists"] = new JsonArray(lists);
+        }
+
+        if (!complete)
+        {
+            meta["note"] = "Показана выборка — первые строки списков (lists: total_count — сколько всего). Это не весь список: для всех строк вызови тот же " +
+                           $"инструмент с {AllRowsArg} = true (строки придут страницами), для сумм и количества — бери итоги результата.";
+        }
+
+        root["_meta"] = meta;
+        return result with { Content = root.ToJsonString(Json) };
     }
 
     /// <summary>Инструменты, которым важен пользователь (доступ к документам), переопределяют эту перегрузку.</summary>
@@ -108,8 +184,27 @@ public sealed class ToolArgs(JsonElement root)
     /// <summary>Вызов для отчёта Excel (ToolContext.Report): списки — целиком.</summary>
     public bool Report { get; init; }
 
-    /// <summary>Сколько строк списка отдать: модели — n (компактно), в отчёт — все.</summary>
-    public int Cap(int n) => Report ? int.MaxValue : n;
+    /// <summary>Модель попросила списки целиком (all_rows = true): большие придут страницами (ToolResultPager).</summary>
+    public bool All { get; init; }
+
+    /// <summary>Сколько строк списка отдать: модели — n (компактно), в отчёт или по all_rows — все.</summary>
+    public int Cap(int n) => Report || All ? int.MaxValue : n;
+
+    /// <summary>Списки результата, урезанные до первых N: сколько строк всего и сколько отдано (в «_meta» результата).</summary>
+    public List<ListCount> Lists { get; } = [];
+
+    /// <summary>Первые Cap(n) строк списка с учётом: в «_meta» попадёт, сколько их всего. name — имя списка в результате.</summary>
+    public IEnumerable<T> Top<T>(IEnumerable<T> source, int n, string name)
+    {
+        var all = source as IReadOnlyList<T> ?? source.ToList();
+        var cap = Cap(n);
+        var shown = all.Count <= cap ? all : all.Take(cap).ToList();
+        Lists.Add(new ListCount(name, all.Count, shown.Count));
+        return shown;
+    }
+
+    /// <summary>Учесть список, урезанный запросом к базе: total — сколько строк всего (отдельный подсчёт), returned — сколько отдано.</summary>
+    public void Count(string name, int total, int returned) => Lists.Add(new ListCount(name, total, returned));
 
     public int? Int(string name, int min, int max)
     {

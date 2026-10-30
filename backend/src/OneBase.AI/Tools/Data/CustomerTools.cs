@@ -119,7 +119,7 @@ internal sealed class GetLapsedCustomersTool(SalesDataLoader loader, SalesOption
         var view = analytics.CustomerLapse(query, earlier, baseMonths - 1);
         var considered = largest is { } n ? view.Rows.Take(n).ToList() : view.Rows;
         var picked = considered.Where(r => status switch { Statuses.Bought => r.Bought, Statuses.All => true, _ => !r.Bought }).ToList();
-        var shown = picked.Take(args.Cap(limit)).ToList();
+        var shown = picked.TakeTop(args, limit, "customers").ToList();
         var notBought = considered.Where(r => !r.Bought).ToList();
 
         var complete = p.DataThrough >= new DateOnly(p.Year, p.Month, 1).AddMonths(1).AddDays(-1);
