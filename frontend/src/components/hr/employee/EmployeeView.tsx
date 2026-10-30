@@ -12,6 +12,7 @@ import { card, focus } from "../overview/bits";
 import { DayStrip } from "./DayStrip";
 import { DaysTable } from "./DaysTable";
 import { InsightCard } from "./InsightCard";
+import { MarksJournal } from "./MarksJournal";
 import { PeriodBar } from "./PeriodBar";
 import { ProfileHeader, ReportButton } from "./ProfileHeader";
 import { NoteCard, VerifixCard } from "./SideCards";
@@ -22,7 +23,7 @@ const moment = (iso: string) =>
   new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Tashkent", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)).replace(",", " в");
 
 /**
- * Карточка сотрудника HR. Две колонки (данные Verifix и заметка слева, период справа) — когда содержимому хватает ширины (от 1100 px: с боковым
+ * Карточка сотрудника HR: профиль, период, итоги, подсказка, полоса дней, посещаемость по дням и все отметки периода. Две колонки (данные Verifix и заметка слева, период справа) — когда содержимому хватает ширины (от 1100 px: с боковым
  * меню приложения — экран от ~1400); уже — одна колонка, данные и заметка уходят вниз. Период — в адресе (?from=&to=), смена сразу загружает
  * данные (на это время — скелетоны). Фильтр таблицы и подсветка дня — только в браузере.
  */
@@ -119,6 +120,7 @@ export function EmployeeView({ data, today, manages, backHref, demo }: { data: H
               {insight && <InsightCard insight={insight} storageKey={`hr-insight:${data.employee.id}:${data.from}:${data.to}:${insight.type}`} verifixUrl={data.verifixUrl} />}
               <DayStrip days={data.days} today={today} onPick={pickDay} />
               <DaysTable days={data.days} marks={marks} stats={stats} filter={filter} onFilter={setFilter} highlight={highlight} />
+              <MarksJournal events={data.events} />
             </>
           )}
         </div>

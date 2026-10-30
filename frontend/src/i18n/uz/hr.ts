@@ -644,6 +644,16 @@ const dict: Dict = {
   "Изменено {date} {time}": "O'zgartirildi {date} {time}",
   "Ctrl+Enter — сохранить": "Ctrl+Enter — saqlash",
   "Заметка сохранена": "Qayd saqlandi",
+
+  // ---------- Карточка сотрудника: все отметки ----------
+  "Все отметки": "Barcha belgilar",
+  "Тип отметок": "Belgilar turi",
+  "Приходы": "Kelishlar",
+  "Уходы": "Ketishlar",
+  "Прочие": "Boshqalar",
+  "Локация / терминал": "Joylashuv / terminal",
+  "Нет в Verifix — в расчёте не участвует": "Verifix'da yo'q — hisobda qatnashmaydi",
+  "Показать ещё {n} из {left}": "Yana {n} tasini ko'rsatish ({left} dan)",
 };
 
 export default dict;
