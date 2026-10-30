@@ -109,13 +109,17 @@ public sealed class LinkoMirrorSalesProvider(IAppDbContext db, SalesOptions opti
         var ids = agents.ToArray();
         var rows = await db.SalesStaffPlans.AsNoTracking()
             .Where(p => p.Year == year && p.Month == month && ids.Contains(p.LinkoUserId))
-            .Select(p => new { p.LinkoUserId, p.PlanType, p.PlanAmount, p.FactAmount })
+            .Select(p => new { p.LinkoUserId, p.PlanType, p.IndicatorName, p.PlanAmount, p.FactAmount })
             .ToListAsync(ct);
         return rows.GroupBy(r => r.LinkoUserId)
             .Select(g =>
             {
-                decimal? Plan(string type) => g.Where(r => r.PlanType == type).Select(r => (decimal?)r.PlanAmount).DefaultIfEmpty(null).Sum() is { } v && v > 0 ? v : null;
-                decimal? Fact(string type) => g.Any(r => r.PlanType == type) ? g.Where(r => r.PlanType == type).Sum(r => r.FactAmount) : null;
+                // План вида — «Тотал», если он есть (Twizos и Могуль — его части), иначе сумма показателей (KpiMath.PlanParts).
+                decimal? Plan(string type) => Sales.Metrics.KpiMath.PlanParts(g.Where(r => r.PlanType == type), r => r.IndicatorName)
+                    .Select(r => (decimal?)r.PlanAmount).DefaultIfEmpty(null).Sum() is { } v && v > 0 ? v : null;
+                decimal? Fact(string type) => g.Any(r => r.PlanType == type)
+                    ? Sales.Metrics.KpiMath.PlanParts(g.Where(r => r.PlanType == type), r => r.IndicatorName).Sum(r => r.FactAmount)
+                    : null;
                 return new AgentMonthPlan(g.Key, Plan(StaffPlanTypes.SalesWeight), Plan(StaffPlanTypes.SalesSum), Plan(StaffPlanTypes.ActiveClients),
                     Fact(StaffPlanTypes.SalesWeight), Fact(StaffPlanTypes.SalesSum), Fact(StaffPlanTypes.ActiveClients));
             })

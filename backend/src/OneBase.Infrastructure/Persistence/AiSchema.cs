@@ -52,6 +52,16 @@ internal static class AiSchema
             e.Property(x => x.ExtractProvider).HasMaxLength(32);
             e.Property(x => x.ExtractModel).HasMaxLength(200);
             e.Property(x => x.ExtractMode).HasMaxLength(16);
+            e.Property(x => x.ModelRoutingMode).HasMaxLength(16);
+            e.Property(x => x.AgentProvider).HasMaxLength(32);
+            e.Property(x => x.AgentModel).HasMaxLength(200);
+            e.Property(x => x.FinalAnswerMode).HasMaxLength(16);
+            e.Property(x => x.FinalDefaultProvider).HasMaxLength(32);
+            e.Property(x => x.FinalDefaultModel).HasMaxLength(200);
+            e.Property(x => x.FinalComplexProvider).HasMaxLength(32);
+            e.Property(x => x.FinalComplexModel).HasMaxLength(200);
+            e.Property(x => x.FallbackMode).HasMaxLength(16);
+            e.Property(x => x.QuestionBudgetUsd).HasPrecision(12, 2);
         });
 
         b.Entity<AiModelComparison>(e =>
@@ -184,6 +194,9 @@ internal static class AiSchema
             e.Property(x => x.Model).HasMaxLength(200);
             e.Property(x => x.CostUsd).HasPrecision(14, 6);
             e.Property(x => x.Error).HasMaxLength(1000);
+            e.Property(x => x.ModelReason).HasMaxLength(300);
+            e.Property(x => x.PriceBasis).HasMaxLength(160);
+            e.HasIndex(x => x.TurnId);
             e.HasIndex(x => x.CreatedAt);
             e.HasIndex(x => new { x.UserId, x.CreatedAt });
         });
@@ -203,6 +216,9 @@ internal static class AiSchema
             e.Property(x => x.ResponsePreview).HasMaxLength(1000);
             e.Property(x => x.Error).HasMaxLength(1000);
             e.Property(x => x.Grounding).HasColumnType("jsonb");
+            e.Property(x => x.Timings).HasColumnType("jsonb");
+            e.Property(x => x.Routing).HasColumnType("jsonb");
+            e.HasIndex(x => x.TurnId);
             e.Property(x => x.CorrectionVerdict).HasMaxLength(16);
             e.HasIndex(x => x.CreatedAt);
             e.HasIndex(x => new { x.UserId, x.CreatedAt });

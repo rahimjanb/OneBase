@@ -11,6 +11,7 @@ namespace OneBase.Infrastructure.Linko;
 public sealed class LinkoSyncCoordinator(
     IServiceScopeFactory scopes,
     SalesCacheSignal cacheSignal,
+    OneBase.Infrastructure.Sales.SalesCacheWarmer warmer,
     LinkoSyncProgress progress,
     TimeProvider time,
     ILogger<LinkoSyncCoordinator> logger)
@@ -55,7 +56,8 @@ public sealed class LinkoSyncCoordinator(
             }
 
             progress.Step("Пересчёт отчётов", null);
-            await WarmUpAsync(run.Token);
+            // Синхронизация ждёт только месяцы; общие части остатков, первички и SKU досчитает фоновый прогрев от этого же сброса.
+            await warmer.WarmAsync(run.Token, steps: false);
             return LastReport;
         }
         catch (OperationCanceledException) when (run.IsCancellationRequested && !ct.IsCancellationRequested)
@@ -87,28 +89,6 @@ public sealed class LinkoSyncCoordinator(
         progress.Step("Отмена…", null);
         run.Cancel();
         return true;
-    }
-
-    /// <summary>
-    /// После обновления данных заранее считает текущий месяц и частые страницы, чтобы первый переход пользователя
-    /// не ждал пересчёта. Ошибка прогрева не ломает синхронизацию — страница просто посчитается по запросу.
-    /// </summary>
-    private async Task WarmUpAsync(CancellationToken ct)
-    {
-        try
-        {
-            using var scope = scopes.CreateScope();
-            var analytics = await scope.ServiceProvider.GetRequiredService<SalesDataLoader>().LoadAsync(null, null, ct);
-            analytics.CachedOverview();
-            analytics.CachedRepublic(null, null);
-            analytics.CachedProblems(null, null, false);
-            analytics.CachedPlans();
-            analytics.CachedAssortment(null, null); // «Товары и категории» — частый инструмент AI-консультанта
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Не удалось заранее пересчитать отчёты продаж");
-        }
     }
 
     /// <summary>Запускает синхронизацию в фоне. false — если она уже идёт.</summary>

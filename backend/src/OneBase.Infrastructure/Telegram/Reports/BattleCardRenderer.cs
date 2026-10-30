@@ -177,9 +177,10 @@ internal static class BattleCardRenderer
             if (first)
             {
                 Counters(c, countersTop,
-                    (T("Твизос — взято"), $"{day.TwizosTaken} / {day.TwizosTotal}", C.Orange),
-                    (T("Могул — взято"), $"{day.MogulTaken} / {day.MogulTotal}", C.Pink),
-                    (T("Точек пройдено"), $"{day.StoresPassed} / {day.Stores.Count}", C.Ink));
+                    (T("Твизос — взято"), $"{day.TwizosTaken} / {day.TwizosTotal}", C.Orange, null),
+                    (T("Могул — взято"), $"{day.MogulTaken} / {day.MogulTotal}", C.Pink, null),
+                    (T("Магазины с целями"), $"{day.StoresPassed} / {day.Stores.Count}", C.Ink,
+                        day.RoutePoints > day.Stores.Count ? F("из {0} точек маршрута", day.RoutePoints) : null));
                 var weekLabel = slot switch
                 {
                     "morning" => day.Date.DayOfWeek == DayOfWeek.Monday ? T("старт") : F("после {0}", Weekday(day.Date.AddDays(-1)).ToLowerInvariant()),
@@ -243,9 +244,9 @@ internal static class BattleCardRenderer
                 week.Rank is { } r ? F("{0}-е место", r) : null, week.Participants > 0 ? F("из {0}", week.Participants) : null);
             var best = week.BestDay;
             Counters(c, countersTop,
-                (T("Твизос — взято"), $"{week.TwizosTaken} / {week.TwizosTotal}", C.Orange),
-                (T("Могул — взято"), $"{week.MogulTaken} / {week.MogulTotal}", C.Pink),
-                (T("Лучший день"), best is null ? "—" : $"{Weekday(best.Date)} · {ReportFormat.Percent(best.Share)}", C.Green));
+                (T("Твизос — взято"), $"{week.TwizosTaken} / {week.TwizosTotal}", C.Orange, null),
+                (T("Могул — взято"), $"{week.MogulTaken} / {week.MogulTotal}", C.Pink, null),
+                (T("Лучший день"), best is null ? "—" : $"{Weekday(best.Date)} · {ReportFormat.Percent(best.Share)}", C.Green, null));
 
             // 6 полян.
             CardBox(c, Pad, panelTop, Inner, panelHeight);
@@ -400,17 +401,24 @@ internal static class BattleCardRenderer
             }
         }
 
-        private void Counters(SKCanvas c, float top, params (string Label, string Value, SKColor Color)[] items)
+        /// <summary>Три счётчика; Sub — мелкая строка под значением справа (у «Магазины с целями» — сколько точек в маршруте).</summary>
+        private void Counters(SKCanvas c, float top, params (string Label, string Value, SKColor Color, string? Sub)[] items)
         {
             var w = (Inner - 2 * 16) / 3;
             for (var i = 0; i < items.Length; i++)
             {
                 var x = Pad + i * (w + 16);
                 CardBox(c, x, top, w, 108);
-                Text(c, items[i].Label, x + 22, top + 18, 20, faces.Medium, C.Ink2);
+                TextFit(c, items[i].Label, x + 22, top + 18, w - 44, 20, faces.Medium, C.Ink2);
                 using var font = Font(faces.Bold, 44);
                 using var paint = Fill(items[i].Color);
-                c.DrawText(Clean(items[i].Value), x + 22, TopBaseline(font, top + 46), SKTextAlign.Left, font, paint);
+                var value = Clean(items[i].Value);
+                c.DrawText(value, x + 22, TopBaseline(font, top + 46), SKTextAlign.Left, font, paint);
+                if (items[i].Sub is { } sub)
+                {
+                    var left = x + 22 + font.MeasureText(value) + 14;
+                    TextFit(c, sub, left, top + 66, x + w - 18 - left, 16, faces.Medium, C.Ink3);
+                }
             }
         }
 
@@ -458,8 +466,10 @@ internal static class BattleCardRenderer
                 using var bg = Fill(SKColor.Parse("#FFF4E3"));
                 c.DrawRoundRect(new SKRoundRect(new SKRect(x, top + 14, x + w, top + 86), 14), bg);
                 PrizeIcon(c, x + 36, top + 50, prize.Level);
-                TextFit(c, F("Твизос {0} тыс", prize.Level), x + 68, top + 22, w - 76, 22, faces.Bold, C.Ink);
-                TextFit(c, $"{prize.Contents} → {T(prize.Prize)}", x + 68, top + 52, w - 76, 16, faces.Medium, C.Ink3);
+                TextFit(c, F("Твизос {0} тыс", prize.Level), x + 68, top + 18, w - 76, 22, faces.Bold, C.Ink);
+                // Набор «300 тыс» по ТЗ — закуп 288 600 сум: приз — за накладную Твизос (до скидки) от суммы набора, показываем её.
+                TextFit(c, prize.Contents, x + 68, top + 45, w - 76, 15, faces.Medium, C.Ink3);
+                TextFit(c, $"{F("от {0} сум", Money(prize.Sum))} → {T(prize.Prize)}", x + 68, top + 64, w - 76, 15, faces.SemiBold, C.Ink2);
             }
 
             TextFit(c, mogulActive ? cards.MogulLine : T("Сетка Могул в Linko сегодня не действует — целей Могул нет"), Pad + 20, top + 98, Inner - 40, 17, faces.Medium, mogulActive ? C.Ink3 : C.Red);
@@ -720,7 +730,11 @@ internal static class BattleCardRenderer
                     ? g.Sub == BattleGoalSub.Connect ? T("Твизос · подключить") : F("Твизос · набор {0}", g.Level)
                     : g.Sub == BattleGoalSub.Connect ? F("Могул {0} · подкл.", g.Level) : F("Могул {0} · объём", g.Level);
                 TextFit(c, label, tx, gy, w - 66, 16, faces.SemiBold, color);
-                var sum = g.Kind == BattleGoalKind.Twizos ? $"{Money(g.TargetSum)} {T("сум")}" : $"{Money(g.TargetSum)} → {g.Percent}%";
+                var sum = g.Kind == BattleGoalKind.Twizos
+                    ? cards.Prizes.FirstOrDefault(p => p.Level == g.Level) is { } prize
+                        ? $"{F("от {0} сум", Money(g.TargetSum))} → {T(prize.Prize)}"
+                        : F("от {0} сум", Money(g.TargetSum))
+                    : $"{Money(g.TargetSum)} → {g.Percent}%";
                 TextFit(c, sum, tx, gy + 20, w - 66, 16, faces.Bold, C.Ink);
                 if (evaluated)
                 {

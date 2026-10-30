@@ -37,6 +37,7 @@ public sealed class ModelComparisons(IAiGateway gateway, IAiLimits limits, IServ
         ComparisonSide baseline, Func<string?, (string? Result, bool Valid)> evaluate, Func<string?, string?, double> similarity) =>
         Task.Run(async () =>
         {
+            AiTurnTimings.Detach(); // фоновое сравнение — не вызов ответа пользователя: не в его стоимость и бюджет вопроса
             try
             {
                 var budget = await limits.StatusAsync();

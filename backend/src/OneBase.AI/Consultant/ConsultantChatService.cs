@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
@@ -172,6 +173,8 @@ public sealed class ConsultantChatService(
     private async Task<ConsultantReply> RunAsync(Guid userId, Guid? conversationId, string question, ConsultantChannel? channel, Func<ChatEvent, Task> emit,
         CancellationToken ct, ChatContext? context = null)
     {
+        var timings = AiTurnTimings.Start();
+        var prepare = timings.Stage("prepare");
         question = question.Trim();
         // Консультанту (маршрутизация, AI-сотрудники, кэш ответов, журнал) — вопрос с контекстом экрана; в чате — как написан.
         var asked = WithContext(question, context);
@@ -200,6 +203,7 @@ public sealed class ConsultantChatService(
         conversation.LastMessageAt = userMessage.CreatedAt;
         await db.SaveChangesAsync(ct);
 
+        prepare.Dispose();
         await emit(new ChatEvent("start", new { conversationId = conversation.Id, title = conversation.Title, userMessage = View(userMessage) }));
 
         var watch = Stopwatch.StartNew();
@@ -210,8 +214,18 @@ public sealed class ConsultantChatService(
         try
         {
             // Тот же первый вопрос того же пользователя, а данные с тех пор не обновлялись, — ответ из кэша, без вызовов модели.
-            var cacheKey = await answers.KeyAsync(userId, asked, history.Count, channel, ct);
-            if (cacheKey is not null && await answers.GetAsync(cacheKey, ct) is { } cached)
+            string? cacheKey;
+            CachedConsultantAnswer? cached = null;
+            using (timings.Stage("answer.cache"))
+            {
+                cacheKey = await answers.KeyAsync(userId, asked, history.Count, channel, ct);
+                if (cacheKey is not null)
+                {
+                    cached = await answers.GetAsync(cacheKey, ct);
+                }
+            }
+
+            if (cached is not null)
             {
                 reply.Content = cached.Content;
                 reply.Details = cached.Details;
@@ -220,8 +234,10 @@ public sealed class ConsultantChatService(
             }
             else
             {
+                // Черновик итогового ответа — потоком только в чат OneBase (событие draft); другие каналы получают ответ целиком.
+                var draft = channel is null ? new DraftEvents(emit, timings) : null;
                 var answer = await engine.AnswerAsync(
-                    new ConsultantTurn(userId, conversation.Id, asked, history, channel, lastAnswerId),
+                    new ConsultantTurn(userId, conversation.Id, asked, history, channel, lastAnswerId, draft is null ? null : draft.OnDraftAsync),
                     p => emit(new ChatEvent("progress", p)),
                     ct);
                 reply.Content = answer.Content.Length > 0 ? answer.Content : "Модель вернула пустой ответ.";
@@ -255,25 +271,85 @@ public sealed class ConsultantChatService(
 
         reply.DurationMs = watch.ElapsedMilliseconds;
         reply.CreatedAt = DateTimeOffset.UtcNow;
-        db.AiMessages.Add(reply);
-        conversation.LastMessageAt = reply.CreatedAt;
-        await db.SaveChangesAsync(CancellationToken.None);
+        using (timings.Stage("save"))
+        {
+            db.AiMessages.Add(reply);
+            conversation.LastMessageAt = reply.CreatedAt;
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
 
+        var view = timings.View();
+        var auditWatch = Stopwatch.StartNew();
         try
         {
             await audit.WriteAsync(channel?.Name ?? "consultant", userId, conversation.Id, reply.Id, asked, startedAt, reply.DurationMs, details,
-                reply.Status == AiMessageStatus.Completed ? reply.Content : null, reply.Error, CancellationToken.None, fromCache);
+                reply.Status == AiMessageStatus.Completed ? reply.Content : null, reply.Error, CancellationToken.None, fromCache, view, timings);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Консультант: не удалось записать AI-журнал для чата {ConversationId}", conversation.Id);
         }
 
+        logger.LogInformation("Консультант: ответ {MessageId} за {Ms} мс ({Stages}; запись журнала {AuditMs} мс)", reply.Id, view.TotalMs,
+            AiTimingsText.Summary(view), auditWatch.ElapsedMilliseconds);
+
         await emit(reply.Status == AiMessageStatus.Completed
             ? new ChatEvent("done", new { message = View(reply) })
             : new ChatEvent("error", new { message = View(reply), error = reply.Error }));
         return new ConsultantReply(conversation.Id, reply.Status == AiMessageStatus.Completed, reply.Content, reply.Error, details,
             new AiTokenUsage(reply.InputTokens, reply.OutputTokens), reply.DurationMs);
+    }
+
+    /// <summary>
+    /// Черновик ответа в поток чата: мелкие фрагменты модели собираются в куски (не чаще DraftInterval или от DraftChars символов), служебные
+    /// события черновика (сброс, проверка, исправление) уходят сразу, перед ними — накопленный текст (при сбросе — выбрасывается).
+    /// </summary>
+    private sealed class DraftEvents(Func<ChatEvent, Task> emit, AiTurnTimings timings)
+    {
+        private const int DraftChars = 48;
+        private static readonly TimeSpan DraftInterval = TimeSpan.FromMilliseconds(60);
+
+        private readonly StringBuilder _pending = new();
+        private readonly Stopwatch _sinceSent = new();
+
+        public async Task OnDraftAsync(ConsultantDraft draft)
+        {
+            if (draft.Kind == ConsultantDraft.TextKind)
+            {
+                _pending.Append(draft.Text);
+                if (_pending.Length >= DraftChars || !_sinceSent.IsRunning || _sinceSent.Elapsed >= DraftInterval)
+                {
+                    await FlushAsync();
+                }
+
+                return;
+            }
+
+            if (draft.Kind is ConsultantDraft.Reset or ConsultantDraft.Revising)
+            {
+                _pending.Clear();
+            }
+            else
+            {
+                await FlushAsync();
+            }
+
+            await emit(new ChatEvent("draft", new { kind = draft.Kind }));
+        }
+
+        private async Task FlushAsync()
+        {
+            if (_pending.Length == 0)
+            {
+                return;
+            }
+
+            timings.Text();
+            var text = _pending.ToString();
+            _pending.Clear();
+            _sinceSent.Restart();
+            await emit(new ChatEvent("draft", new { kind = ConsultantDraft.TextKind, text }));
+        }
     }
 
     private async Task<IReadOnlyList<LlmMessage>> HistoryAsync(Guid conversationId, CancellationToken ct)

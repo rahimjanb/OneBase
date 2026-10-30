@@ -52,6 +52,23 @@ public sealed record AiCallOptions
     public bool CacheConversation { get; init; } = true;
 
     public AiCallContext Context { get; init; } = new();
+
+    /// <summary>
+    /// Отдавать текст ответа потоком, по мере генерации (если провайдер умеет). Повтор после сбоя или переход на резервную модель начинают
+    /// текст заново: перед ними — Reset. null — ответ только целиком.
+    /// </summary>
+    public IAiTextStream? Stream { get; init; }
+
+    /// <summary>Почему выбрана модель (AiModelRouting / AiTaskRouting) — в учёт вызова и AI-журнал. null — модель по умолчанию.</summary>
+    public string? ModelReason { get; init; }
+}
+
+/// <summary>Приёмник текста ответа модели по мере генерации: фрагменты; Reset — показанный текст недействителен, дальше он пишется заново.</summary>
+public interface IAiTextStream
+{
+    Task TextAsync(string text);
+
+    Task ResetAsync();
 }
 
 public sealed record AiCallResult(
@@ -68,14 +85,22 @@ public sealed record AiCallResult(
     public LlmMessage Reply => new LlmResponse(Text, ToolCalls, Raw).Reply;
 }
 
-/// <summary>Одна попытка вызова провайдера — для учёта использования и стоимости.</summary>
+/// <summary>
+/// Одна попытка вызова провайдера — для учёта использования и стоимости. ElapsedMs — вместе с ожиданием очереди; QueueMs — из них
+/// ожидание свободного места (лимит одновременных вызовов); Attempt — номер попытки этой модели.
+/// </summary>
 public sealed record AiCallRecord(
     AiCallContext Context,
     AiModelRef Model,
     AiTokenUsage Usage,
     long ElapsedMs,
     bool Success,
-    string? Error);
+    string? Error,
+    long? QueueMs = null,
+    int? Attempt = null,
+    Guid? TurnId = null,
+    string? ModelReason = null,
+    bool UsedFallback = false);
 
 /// <summary>Учёт вызовов моделей (реализация — Monitoring.DbUsageRecorder).</summary>
 public interface IAiUsageRecorder
@@ -174,6 +199,14 @@ internal sealed class AiGateway(
         // Бюджет на AI исчерпан — новые вызовы не выполняются (пользователь видит понятную причину, администратор получил уведомление).
         await limits.EnsureBudgetAsync(cancellationToken);
 
+        // Бюджет одного вопроса: вызовы этого ответа уже стоят столько — новых нет (перепроверки до этого предела не доходят — их пропускает Review).
+        var turn = OneBase.AI.Monitoring.AiTurnTimings.Current;
+        if (turn is not null && settings.ModelRouting.QuestionBudgetUsd is { } questionBudget && turn.CostUsd >= questionBudget)
+        {
+            turn.Review(OneBase.AI.Monitoring.AiReviewCauses.Budget, $"бюджет вопроса исчерпан (${turn.CostUsd:0.###} из ${questionBudget:0.##}) — вызов не выполнен");
+            throw new LlmNotConfiguredException($"Бюджет одного вопроса исчерпан (${turn.CostUsd:0.##} из ${questionBudget:0.##}): новые вызовы модели для этого ответа не выполняются.");
+        }
+
         var primary = options.Model ?? settings.Primary!;
         var fallback = options.AllowFallback ? options.Fallback ?? settings.Fallback : null;
         if (fallback == primary)
@@ -184,6 +217,9 @@ internal sealed class AiGateway(
         var temperature = options.Temperature ?? settings.Temperature;
         var maxTokens = options.MaxOutputTokens ?? settings.MaxOutputTokens;
         var reasoning = options.ReasoningEffort ?? settings.ReasoningEffort;
+
+        // Текст уже ушёл в поток: следующая попытка (повтор, резервная модель) начинает его заново.
+        var shown = false;
 
         try
         {
@@ -224,23 +260,52 @@ internal sealed class AiGateway(
                 options.CacheConversation);
             for (var attempt = 1; ; attempt++)
             {
+                var startMs = turn?.Now ?? 0;
+                var reason = usedFallback ? $"резервная модель после сбоя {primary}" : options.ModelReason;
                 var watch = Stopwatch.StartNew();
+                long queueMs = 0;
                 AiCompletion completion;
                 try
                 {
                     // Одновременных вызовов не больше лимита из настроек: остальные ждут очереди (а не получают 429 от провайдера).
                     using (await limits.EnterAsync(cancellationToken))
                     {
-                        completion = await provider.CompleteAsync(state.Credentials, request, cancellationToken);
+                        queueMs = watch.ElapsedMilliseconds;
+                        if (options.Stream is { } stream && provider is IAiStreamingProvider streaming)
+                        {
+                            if (shown)
+                            {
+                                await stream.ResetAsync();
+                                shown = false;
+                            }
+
+                            completion = await streaming.StreamAsync(state.Credentials, request, async text =>
+                            {
+                                shown = true;
+                                await stream.TextAsync(text);
+                            }, cancellationToken);
+                        }
+                        else
+                        {
+                            completion = await provider.CompleteAsync(state.Credentials, request, cancellationToken);
+                        }
                     }
 
                     watch.Stop();
-                    await RecordAsync(new AiCallRecord(options.Context, model, completion.Usage, watch.ElapsedMilliseconds, true, null));
+                    var recordWatch = Stopwatch.StartNew();
+                    await RecordAsync(new AiCallRecord(options.Context, model, completion.Usage, watch.ElapsedMilliseconds, true, null, queueMs, attempt,
+                        turn?.Id, reason, usedFallback));
+                    turn?.Llm(new OneBase.AI.Monitoring.AiLlmTiming(options.Context.Purpose, options.Context.AgentCode, key, startMs, queueMs,
+                        watch.ElapsedMilliseconds - queueMs, recordWatch.ElapsedMilliseconds, attempt, usedFallback, true, completion.Usage.InputTokens,
+                        completion.Usage.OutputTokens, completion.Usage.CacheReadTokens, reason, completion.Usage.CacheWriteTokens));
                 }
                 catch (AiProviderException ex)
                 {
                     watch.Stop();
-                    await RecordAsync(new AiCallRecord(options.Context, model, AiTokenUsage.None, watch.ElapsedMilliseconds, false, ex.Message));
+                    await RecordAsync(new AiCallRecord(options.Context, model, AiTokenUsage.None, watch.ElapsedMilliseconds, false, ex.Message, queueMs, attempt,
+                        turn?.Id, reason, usedFallback));
+                    turn?.Llm(new OneBase.AI.Monitoring.AiLlmTiming(options.Context.Purpose, options.Context.AgentCode, key, startMs, queueMs,
+                        watch.ElapsedMilliseconds - queueMs, 0, attempt, usedFallback, false, 0, 0, 0, reason));
 
                     // Модель не принимает temperature — повторяем без неё (это не попытка из-за сбоя) и запоминаем.
                     if (request.Temperature is not null && ex.StatusCode == 400 && ex.Message.Contains("temperature", StringComparison.OrdinalIgnoreCase))

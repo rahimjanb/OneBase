@@ -67,6 +67,22 @@ public static class RouteEvalCases
         new("follow-up", "А по Самарканду?", [Sales],
             History: [("Как продажи за октябрь?", "Продажи за октябрь по республике выполнены на 92% плана; отстают Самарканд и Бухара.")],
             TaskMustContain: ["самарканд", "октябр"]),
+
+        // Несколько отделов в одном вопросе: нужен каждый, чьи данные названы.
+        new("sales-and-debts", "Как продажи и задолженность дилеров по Хорезму в этом месяце?", [Sales, Finance], Allowed: [Marketing]),
+        new("stock-vs-plan", "Хватит ли остатков помадки на складах регионов под план продаж месяца?", [Sales, Supply], Allowed: [Production]),
+        new("late-and-sales", "Какие торговые представители чаще опаздывают и как это сказывается на их продажах?", [Hr, Sales]),
+
+        // Уточнения по истории: тема и место — из прошлого вопроса, меняется только названное.
+        new("follow-up-period", "А что было в сентябре?", [Sales],
+            History: [("Какие регионы не выполняют план продаж?", "В октябре план не выполняют Самарканд (81%) и Бухара (85%).")],
+            TaskMustContain: ["сентябр"]),
+        new("follow-up-metric", "А задолженность там какая?", [Finance], Allowed: [Sales],
+            History: [("Как продажи помадки в Ташкенте за октябрь?", "Продажи помадки в Ташкенте за октябрь — 96% плана.")],
+            TaskMustContain: ["ташкент"]),
+        new("follow-up-dispute", "Это неправильно, проверь ещё раз", [Sales],
+            History: [("Сколько продали в октябре?", "За октябрь продано 1 200 тонн при плане 1 300 тонн.")],
+            TaskMustContain: ["октябр"]),
     ];
 
     /// <summary>Верен ли выбор для задачи с учётом сотрудников, которые сейчас доступны (выключенные из ожиданий убираются).</summary>
@@ -97,8 +113,9 @@ public static class RouteEvalCases
 }
 
 /// <summary>Итог модели на эталонном наборе.</summary>
+/// <summary>Итог модели на эталонном наборе. P50Ms / P95Ms — задержка вызова маршрутизатора по задачам набора.</summary>
 public sealed record EvalModelSummary(string Model, int Cases, int Valid, int Correct, int Errors, long InputTokens, long CacheReadTokens,
-    long CacheWriteTokens, long OutputTokens, decimal? CostUsd, long AvgMs);
+    long CacheWriteTokens, long OutputTokens, decimal? CostUsd, long AvgMs, long P50Ms = 0, long P95Ms = 0);
 
 public sealed record EvalCaseResult(string Code, string Question, string Expected, string? Baseline, bool BaselineCorrect, string? Candidate,
     bool CandidateCorrect, string? CandidateError);
@@ -189,7 +206,14 @@ public sealed class RoutingEvaluation(
         rows.Count == 0 ? null : new EvalModelSummary(model.ToString(), rows.Count, rows.Count(r => r.Side.Valid), rows.Count(r => r.Correct),
             rows.Count(r => r.Side.Error is not null && !r.Side.Valid && r.Side.Usage.OutputTokens == 0),
             rows.Sum(r => (long)r.Side.Usage.InputTokens), rows.Sum(r => (long)r.Side.Usage.CacheReadTokens), rows.Sum(r => (long)r.Side.Usage.CacheWriteTokens),
-            rows.Sum(r => (long)r.Side.Usage.OutputTokens), null, (long)rows.Average(r => r.Side.Ms));
+            rows.Sum(r => (long)r.Side.Usage.OutputTokens), null, (long)rows.Average(r => r.Side.Ms), Percentile(rows, 0.5), Percentile(rows, 0.95));
+
+    /// <summary>Перцентиль задержки (ближайший ранг): P95 из 34 задач — 33-я по возрастанию.</summary>
+    internal static long Percentile(IReadOnlyList<(ComparisonSide Side, bool Correct)> rows, double p)
+    {
+        var sorted = rows.Select(r => r.Side.Ms).Order().ToList();
+        return sorted[Math.Clamp((int)Math.Ceiling(p * sorted.Count) - 1, 0, sorted.Count - 1)];
+    }
 }
 
 /// <summary>

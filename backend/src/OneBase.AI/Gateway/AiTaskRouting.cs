@@ -13,6 +13,12 @@ public enum AiTaskCategory
 
     /// <summary>Извлечение структурированных полей в JSON: подбор колонок листа Google Sheets к полям OneBase.</summary>
     Extract,
+
+    /// <summary>
+    /// Модели ответа консультанта по правилам (AiModelRouting) — только для журнала сравнения в режиме «Сравнение»: фактическая модель
+    /// сотрудников и итогового ответа против выбора правил и прогноз стоимости на тех же токенах. Своей модели категории нет.
+    /// </summary>
+    Answer,
 }
 
 /// <summary>
@@ -31,6 +37,7 @@ public static class AiTaskRouting
     public static string Code(AiTaskCategory category) => category switch
     {
         AiTaskCategory.Route => "route",
+        AiTaskCategory.Answer => "answer",
         _ => "extract",
     };
 

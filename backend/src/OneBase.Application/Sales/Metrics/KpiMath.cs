@@ -88,6 +88,21 @@ public static partial class KpiMath
     /// <summary>СВР — у человека есть показатель «… Супер» (по должности Linko не определить: бывают СВР с должностью «Агент»).</summary>
     public static bool IsSupervisorIndicator(string name) => name.Contains("супер", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Итоговый показатель плана Linko: «Октябрь Тотал Ташкент», «Октябрь Тотал Вес 6 млн».</summary>
+    public static bool IsTotalIndicator(string? name) => name is { Length: > 0 } && Label(name) == "Тотал";
+
+    /// <summary>
+    /// Показатели, из которых складывается план человека за месяц одного вида (кг или сум): есть «Тотал» — только он (Twizos, Могуль и
+    /// категории — его части, их сумма с «Тоталом» завышала план: 100 + 12 + 30 млн вместо 100); «Тотала» нет —
+    /// все показатели (категории без итога, как в Термезе и Денове).
+    /// </summary>
+    public static IEnumerable<T> PlanParts<T>(IEnumerable<T> rows, Func<T, string?> indicatorName)
+    {
+        var list = rows as IReadOnlyList<T> ?? rows.ToList();
+        var totals = list.Where(r => IsTotalIndicator(indicatorName(r))).ToList();
+        return totals.Count > 0 ? totals : list;
+    }
+
     public static IReadOnlyList<KpiLevel> ParseLevels(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))

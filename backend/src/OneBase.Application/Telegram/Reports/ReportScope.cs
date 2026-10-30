@@ -35,7 +35,8 @@ public sealed record ReportScope(string Role, Guid? DirectionId = null, Guid? Re
 }
 
 /// <summary>Регион области: супервайзер на картинке, РМ и ТП (у ТП — только он сам).</summary>
-public sealed record ScopeRegion(Guid Id, string Name, string? Supervisor, string? Manager, IReadOnlyList<ReportPerson> Agents);
+public sealed record ScopeRegion(Guid Id, string Name, string? Supervisor, string? Manager, IReadOnlyList<ReportPerson> Agents,
+    IReadOnlyList<ReportVacancy>? Vacancies = null);
 
 /// <summary>
 /// Область, найденная в данных «Продаж» месяца: подпись («Ташкент · СВ Азиз Каримов»), регионы с ТП. В отчёт попадают только эти ТП —
@@ -44,6 +45,9 @@ public sealed record ScopeRegion(Guid Id, string Name, string? Supervisor, strin
 public sealed record ResolvedScope(ReportScope Scope, string Title, string? Manager, IReadOnlyList<ScopeRegion> Regions, ReportPerson? Agent)
 {
     public IReadOnlyList<ReportPerson> Agents => Regions.SelectMany(r => r.Agents).DistinctBy(a => a.Id).ToList();
+
+    /// <summary>Вакансии регионов области (у ТП — нет: его отчёт только о нём).</summary>
+    public IReadOnlyList<ReportVacancy> Vacancies => Agent is null ? Regions.SelectMany(r => r.Vacancies ?? []).DistinctBy(v => v.Id).ToList() : [];
 }
 
 public static class ReportScopes
@@ -94,6 +98,6 @@ public static class ReportScopes
             }
         }
 
-        static ScopeRegion Region(ReportRegionTeam r) => new(r.Id, r.Name, r.SupervisorName, r.Manager, r.Agents);
+        static ScopeRegion Region(ReportRegionTeam r) => new(r.Id, r.Name, r.SupervisorName, r.Manager, r.Agents, r.Vacancies);
     }
 }

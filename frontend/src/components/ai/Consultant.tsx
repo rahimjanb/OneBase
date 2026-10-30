@@ -37,7 +37,7 @@ import { Sheet } from "@/components/field/Sheet";
 import { TaskForm } from "@/components/tasks/TaskForm";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { streamChat, type AiStatus, type ChatMessage, type ConsultantProgress, type ConversationSummary, type ConversationView } from "@/lib/consultant";
+import { streamChat, type AiStatus, type ChatMessage, type ConsultantProgress, type ConversationSummary, type ConversationView, type DraftEvent } from "@/lib/consultant";
 import {
   answerText,
   chatTitle,
@@ -84,6 +84,30 @@ const feedbackKey = "onebase-ai-feedback";
 
 /** Ответ сервера, когда модель вернула пустой текст. */
 const emptyAnswer = "Модель вернула пустой ответ.";
+
+/** Черновик ответа, пока он пишется: текст по мере генерации и что с ним сейчас (пишется, проверяется, переписывается). */
+type Draft = { text: string; state: "writing" | "checking" | "revising" };
+
+/** Следующее состояние черновика по событию draft. */
+function nextDraft(prev: Draft | null, e: DraftEvent): Draft {
+  const draft = prev ?? { text: "", state: "writing" };
+  switch (e.kind) {
+    case "text":
+      return { text: draft.text + (e.text ?? ""), state: draft.state === "checking" ? "writing" : draft.state };
+    case "reset":
+      return { ...draft, text: "" };
+    case "checking":
+      return { ...draft, state: "checking" };
+    case "revising":
+      return { text: "", state: "revising" };
+  }
+}
+
+const draftLabel: Record<Draft["state"], string> = {
+  writing: "Черновик ответа — числа ещё не проверены",
+  checking: "Сверяю числа ответа с данными OneBase…",
+  revising: "Числа не подтвердились данными — переписываю ответ…",
+};
 
 type Props = {
   status: AiStatus;
@@ -149,6 +173,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
   const [input, setInput] = useState(initialQuestion ?? "");
   const [pending, setPending] = useState<string | null>(null);
   const [progress, setProgress] = useState<ConsultantProgress[]>([]);
+  const [draft, setDraft] = useState<Draft | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [failure, setFailure] = useState<{ question: string; error: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -361,7 +386,8 @@ export function Consultant({ status, conversations: initialList, conversation, c
     const box = scroller.current;
     if (!box || (!streaming && pending === null)) return;
     box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
-  }, [pending, streaming, progress.length, lastId]);
+    // и пока пишется черновик ответа — примерно каждые 200 символов, чтобы текст оставался на экране
+  }, [pending, streaming, progress.length, lastId, Math.floor((draft?.text.length ?? 0) / 200)]);
 
   // Заметка внизу (скопировано, оценка, задачи) исчезает сама.
   useEffect(() => {
@@ -379,6 +405,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
     setNotice(null);
     setPending(question);
     setProgress([]);
+    setDraft(null);
     setStreaming(true);
     const controller = new AbortController();
     abort.current = controller;
@@ -410,11 +437,17 @@ export function Consultant({ status, conversations: initialList, conversation, c
                 return i < 0 ? [...prev, e.data] : prev.map((p, j) => (j === i ? e.data : p));
               });
               break;
+            case "draft":
+              setDraft((prev) => nextDraft(prev, e.data));
+              break;
             case "done":
+              // Проверенный ответ (отчёт из блоков) заменяет черновик.
+              setDraft(null);
               setMessages((prev) => [...prev, e.data.message]);
               if (voiceModeRef.current && e.data.message.status === "completed") void speak(e.data.message.id);
               break;
             case "error":
+              setDraft(null);
               if (e.data.message) setMessages((prev) => [...prev, e.data.message!]);
               else setFailure({ question, error: e.data.error });
               break;
@@ -435,6 +468,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
       setStreaming(false);
       setPending(null);
       setProgress([]);
+      setDraft(null);
     }
   };
 
@@ -798,7 +832,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
               ),
             )}
             {pending && <UserBubble text={pending} />}
-            {waiting && <PendingAnswer steps={progress} />}
+            {waiting && <PendingAnswer steps={progress} draft={draft} />}
             {failure && (
               <ErrorCard
                 text={failure.error}
@@ -922,8 +956,11 @@ function Avatar({ small, danger }: { small?: boolean; danger?: boolean }) {
   );
 }
 
-/** Пока ответ готовится: строка статуса (какой шаг идёт) и скелетон карточки отчёта; шаги AI-сотрудников — списком. */
-function PendingAnswer({ steps }: { steps: ConsultantProgress[] }) {
+/**
+ * Пока ответ готовится: строка статуса (какой шаг идёт), шаги AI-сотрудников и скелетон карточки отчёта; когда консультант пишет ответ —
+ * его черновик потоком (приглушён и подписан: числа ещё не сверены с данными). Ответ (done) заменяет черновик карточкой отчёта.
+ */
+function PendingAnswer({ steps, draft }: { steps: ConsultantProgress[]; draft: Draft | null }) {
   const t = useT();
   const step = currentStep(steps);
   const agents = steps.filter((s) => s.agentName);
@@ -950,6 +987,19 @@ function PendingAnswer({ steps }: { steps: ConsultantProgress[] }) {
             ))}
           </ul>
         )}
+        {draft ? (
+          <div className="rounded-[18px] border border-dashed border-line-strong bg-surface p-5 max-lg:p-4">
+            <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-warn">
+              {draft.state === "writing" ? <AlertTriangle className="size-3.5" aria-hidden /> : <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+              {t(draftLabel[draft.state])}
+            </div>
+            {draft.text && (
+              <div className="text-ink-2 opacity-80">
+                <Markdown text={draft.text} />
+              </div>
+            )}
+          </div>
+        ) : (
         <div className="space-y-4 rounded-[18px] border border-line bg-surface p-6 max-lg:p-4">
           <div className="h-24 animate-pulse rounded-[14px] bg-surface-2" />
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -963,6 +1013,7 @@ function PendingAnswer({ steps }: { steps: ConsultantProgress[] }) {
             ))}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

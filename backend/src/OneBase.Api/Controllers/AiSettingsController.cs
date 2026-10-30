@@ -51,7 +51,20 @@ public sealed class AiSettingsController(
         bool? TaskRoutingEnabled = null,
         string? RouterMode = null,
         ModelRefInput? Extract = null,
-        string? ExtractMode = null);
+        string? ExtractMode = null,
+        ModelRoutingInput? ModelRouting = null);
+
+    /// <summary>Маршрутизация моделей по назначению вызова; null (старый клиент) — без изменений.</summary>
+    public sealed record ModelRoutingInput(
+        string Mode,
+        ModelRefInput? Agent,
+        string FinalAnswerMode,
+        ModelRefInput? FinalDefault,
+        ModelRefInput? FinalComplex,
+        string FallbackMode,
+        int ComplexityThreshold,
+        int ReviewMaxAttempts,
+        decimal? QuestionBudgetUsd);
 
     [HttpGet("providers")]
     public async Task<IActionResult> Providers(CancellationToken ct) => Ok(await ProvidersViewAsync(ct));
@@ -193,6 +206,11 @@ public sealed class AiSettingsController(
             }
         }
 
+        if (input.ModelRouting is { } mr && ValidateRouting(mr) is { } routingError)
+        {
+            return BadRequest(new { error = routingError });
+        }
+
         if (input.MaxConcurrentCalls is < 0 or > 100)
         {
             return BadRequest(new { error = "Одновременных вызовов — от 1 до 100; 0 — без ограничения." });
@@ -202,6 +220,7 @@ public sealed class AiSettingsController(
         {
             ("основной", input.Primary), ("резервной", input.Fallback), ("маршрутизации", input.Router), ("эмбеддингов", input.Embedding),
             ("извлечения JSON", input.Extract),
+            ("сотрудников", input.ModelRouting?.Agent), ("стандартных ответов", input.ModelRouting?.FinalDefault), ("сложных ответов", input.ModelRouting?.FinalComplex),
         };
         foreach (var (slot, value) in refs)
         {
@@ -253,6 +272,19 @@ public sealed class AiSettingsController(
         {
             (row.ExtractProvider, row.ExtractModel) = Split(input.Extract);
         }
+
+        if (input.ModelRouting is { } routing)
+        {
+            row.ModelRoutingMode = routing.Mode;
+            (row.AgentProvider, row.AgentModel) = Split(routing.Agent);
+            row.FinalAnswerMode = routing.FinalAnswerMode;
+            (row.FinalDefaultProvider, row.FinalDefaultModel) = Split(routing.FinalDefault);
+            (row.FinalComplexProvider, row.FinalComplexModel) = Split(routing.FinalComplex);
+            row.FallbackMode = routing.FallbackMode;
+            row.ComplexityThreshold = routing.ComplexityThreshold;
+            row.ReviewMaxAttempts = routing.ReviewMaxAttempts;
+            row.QuestionBudgetUsd = routing.QuestionBudgetUsd;
+        }
         row.UpdatedAt = DateTimeOffset.UtcNow;
         row.UpdatedById = User.GetUserId();
         await db.SaveChangesAsync(ct);
@@ -273,6 +305,14 @@ public sealed class AiSettingsController(
                 input.MonthlyBudgetUsd,
                 row.BudgetWarnPercent,
                 row.MaxConcurrentCalls,
+                modelRouting = input.ModelRouting is { } mrLog
+                    ? new
+                    {
+                        mrLog.Mode, agent = Normalize(mrLog.Agent)?.ToString(), mrLog.FinalAnswerMode, finalDefault = Normalize(mrLog.FinalDefault)?.ToString(),
+                        finalComplex = Normalize(mrLog.FinalComplex)?.ToString(), mrLog.FallbackMode, mrLog.ComplexityThreshold, mrLog.ReviewMaxAttempts,
+                        mrLog.QuestionBudgetUsd,
+                    }
+                    : null,
                 row.TaskRoutingEnabled,
                 row.RouterMode,
                 extract = Normalize(input.Extract)?.ToString(),
@@ -358,6 +398,63 @@ public sealed class AiSettingsController(
         });
     }
 
+    /// <summary>
+    /// Проверка маршрутизации моделей: режимы и пределы; во «Включено» и «Сравнении» модель сотрудников и модель стандартных ответов
+    /// обязательны, при dynamic — и модель сложных ответов: пустое поле не должно молча означать основную (обычно самую дорогую) модель.
+    /// </summary>
+    public static string? ValidateRouting(ModelRoutingInput r)
+    {
+        if (!AiTaskMode.All.Contains(r.Mode))
+        {
+            return "Режим маршрутизации моделей — off, shadow или on.";
+        }
+
+        if (!AiFinalMode.All.Contains(r.FinalAnswerMode))
+        {
+            return "Модель итогового ответа — fixed или dynamic.";
+        }
+
+        if (!AiFallbackMode.All.Contains(r.FallbackMode))
+        {
+            return "Проблемный результат — standard или review.";
+        }
+
+        if (r.ComplexityThreshold is < AiModelRoutingSettings.MinThreshold or > AiModelRoutingSettings.MaxThreshold)
+        {
+            return $"Порог сложности — от {AiModelRoutingSettings.MinThreshold} до {AiModelRoutingSettings.MaxThreshold}.";
+        }
+
+        if (r.ReviewMaxAttempts is < 0 or > AiModelRoutingSettings.MaxReviewAttempts)
+        {
+            return $"Попыток перепроверки — от 0 до {AiModelRoutingSettings.MaxReviewAttempts}.";
+        }
+
+        if (r.QuestionBudgetUsd is <= 0)
+        {
+            return "Бюджет вопроса — положительная сумма в долларах; пусто — без ограничения.";
+        }
+
+        if (r.Mode != AiTaskMode.Off)
+        {
+            if (Normalize(r.Agent) is null)
+            {
+                return "Выберите модель сотрудников: без неё сотрудники работали бы основной моделью.";
+            }
+
+            if (Normalize(r.FinalDefault) is null)
+            {
+                return "Выберите модель стандартных ответов.";
+            }
+
+            if (r.FinalAnswerMode == AiFinalMode.Dynamic && Normalize(r.FinalComplex) is null)
+            {
+                return "Для выбора по сложности выберите модель сложных ответов.";
+            }
+        }
+
+        return null;
+    }
+
     private async Task<object> SettingsViewAsync(CancellationToken ct)
     {
         var settings = await store.GetSettingsAsync(ct);
@@ -382,6 +479,18 @@ public sealed class AiSettingsController(
             settings.RouterMode,
             Extract = settings.Extract,
             settings.ExtractMode,
+            ModelRouting = new
+            {
+                settings.ModelRouting.Mode,
+                settings.ModelRouting.Agent,
+                FinalAnswerMode = settings.ModelRouting.FinalMode,
+                settings.ModelRouting.FinalDefault,
+                settings.ModelRouting.FinalComplex,
+                settings.ModelRouting.FallbackMode,
+                settings.ModelRouting.ComplexityThreshold,
+                settings.ModelRouting.ReviewMaxAttempts,
+                settings.ModelRouting.QuestionBudgetUsd,
+            },
             Ready = readiness.Ready,
             ReadinessMessage = readiness.Message,
             UpdatedAt = row?.UpdatedAt,

@@ -160,4 +160,8 @@ public static partial class BattleRules
 
     public static bool Mentions(string? text, IEnumerable<string> words) =>
         text is { Length: > 0 } && words.Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Исключение ТП: слово из цифр — ID ТП в Linko («534»; «1534» не совпадает), остальные — слова в полном имени Linko.</summary>
+    public static bool MentionsAgent(long agentId, string? linkoName, IEnumerable<string> words) =>
+        words.Any(w => w.Length > 0 && w.All(char.IsDigit) ? long.TryParse(w, out var id) && id == agentId : Mentions(linkoName, [w]));
 }

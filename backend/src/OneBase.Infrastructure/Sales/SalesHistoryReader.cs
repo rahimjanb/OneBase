@@ -64,24 +64,30 @@ public sealed class SalesHistoryReader(OneBaseDbContext db, SalesOptions options
                 where r."Status" = any({6}) and r."CreatedDate" between {1} and {2} and r."MarketId" is not null
                   and (lower(coalesce(r."BranchName", '')) <> all({5}) or ch.vb is not null)
             ),
+            -- Свёртка строк до «месяц × филиал × агент × ТТ × категория»: разрезы ниже собираются из неё, а не из сотен тысяч строк
+            -- заказов (суммы numeric складываются точно, признак канала — bool_or, как в разрезах).
+            a as (
+                select m, branch, market, grp, agent, bool_or(chan) chan, sum(kg) kg, sum(rev) rev
+                from s group by m, branch, market, grp, agent
+            ),
             res as (
                 select m, false by_branch, null::bigint branch, false total, grp, count(*) filter (where kg > 0 and not chan) akb, null::bigint agent, sum(kg) kg, sum(rev) rev
-                from (select m, market, grp, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from s group by m, market, grp) x group by m, grp
+                from (select m, market, grp, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from a group by m, market, grp) x group by m, grp
                 union all
                 select m, false, null, true, null, count(*) filter (where kg > 0 and not chan), null, sum(kg), sum(rev)
-                from (select m, market, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from s group by m, market) x group by m
+                from (select m, market, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from a group by m, market) x group by m
                 union all
                 select m, true, branch, false, grp, count(*) filter (where kg > 0 and not chan), null, sum(kg), sum(rev)
-                from (select m, branch, market, grp, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from s group by m, branch, market, grp) x group by m, branch, grp
+                from (select m, branch, market, grp, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from a group by m, branch, market, grp) x group by m, branch, grp
                 union all
                 select m, true, branch, true, null, count(*) filter (where kg > 0 and not chan), null, sum(kg), sum(rev)
-                from (select m, branch, market, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from s group by m, branch, market) x group by m, branch
+                from (select m, branch, market, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from a group by m, branch, market) x group by m, branch
                 union all
                 select m, false, null, false, grp, count(*) filter (where kg > 0 and not chan), agent, sum(kg), sum(rev)
-                from (select m, agent, market, grp, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from s where agent is not null group by m, agent, market, grp) x group by m, agent, grp
+                from (select m, agent, market, grp, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from a where agent is not null group by m, agent, market, grp) x group by m, agent, grp
                 union all
                 select m, false, null, true, null, count(*) filter (where kg > 0 and not chan), agent, sum(kg), sum(rev)
-                from (select m, agent, market, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from s where agent is not null group by m, agent, market) x group by m, agent
+                from (select m, agent, market, sum(kg) kg, sum(rev) rev, bool_or(chan) chan from a where agent is not null group by m, agent, market) x group by m, agent
             )
             select extract(year from m)::int "Year", extract(month from m)::int "Month", by_branch "ByBranch", branch "BranchId",
                    total "IsTotal", grp "CategoryId", akb::int "Akb", agent "AgentId", kg "Kg", rev "Revenue"

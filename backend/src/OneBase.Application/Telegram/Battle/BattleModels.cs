@@ -39,7 +39,7 @@ public sealed record BattleWeekProgress(int Taken, int Total, int NewTaken, int 
     public decimal Share => Total == 0 ? 0 : (decimal)Taken / Total;
 }
 
-/// <summary>Карточка дня ТП: маршрут с целями, счётчики, ход недели, свежесть данных.</summary>
+/// <summary>Карточка дня ТП: маршрут с целями, счётчики, ход недели, свежесть данных; RoutePoints — точек в плане визитов Linko на день (0 — неизвестно).</summary>
 public sealed record BattleDay(
     long AgentId,
     string AgentName,
@@ -49,7 +49,8 @@ public sealed record BattleDay(
     IReadOnlyList<BattleStore> Stores,
     bool MogulActive,
     BattleWeekProgress Week,
-    DateTimeOffset? OrdersAsOf)
+    DateTimeOffset? OrdersAsOf,
+    int RoutePoints = 0)
 {
     public IEnumerable<BattleGoalView> Goals => Stores.SelectMany(s => s.Goals);
     public int TwizosTotal => Goals.Count(g => g.Kind == Domain.Battle.BattleGoalKind.Twizos);

@@ -62,6 +62,26 @@ public class GatewayTests
     }
 
     [Fact]
+    public async Task Turn_timings_record_each_attempt_queue_wait_and_tokens_without_text()
+    {
+        var (gateway, openAi, _, recorder) = Build(limits: new SlowLimits(TimeSpan.FromMilliseconds(80)));
+        openAi.Fail(new AiProviderException("openai", 503, "Провайдер временно недоступен (HTTP 503).", true), times: 1);
+        var timings = OneBase.AI.Monitoring.AiTurnTimings.Start();
+
+        await gateway.CompleteAsync(Question, [], new AiCallOptions { Context = new AiCallContext(Purpose: "consultant.answer", AgentCode: "director") });
+
+        var calls = timings.View().Calls;
+        Assert.Equal([1, 2], calls.Select(c => c.Attempt));
+        Assert.Equal([false, true], calls.Select(c => c.Success));
+        Assert.All(calls, c => Assert.True(c.QueueMs >= 70, $"очередь {c.QueueMs} мс"));
+        Assert.All(calls, c => Assert.Equal(("consultant.answer", "director", "openai/main-model", false), (c.Purpose, c.Agent, c.Model, c.Fallback)));
+        Assert.Equal((10, 5), (calls[1].InputTokens, calls[1].OutputTokens));
+        Assert.Equal([1, 2], recorder.Records.Select(r => r.Attempt));
+        Assert.All(recorder.Records, r => Assert.True(r.QueueMs >= 70 && r.ElapsedMs >= r.QueueMs));
+        Assert.DoesNotContain("продажи", System.Text.Json.JsonSerializer.Serialize(timings.View()), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Rate_limit_goes_straight_to_reserve()
     {
         var (gateway, openAi, anthropic, _) = Build();
@@ -232,6 +252,22 @@ public class GatewayTests
 
         public Task<AiProviderState?> GetProviderAsync(string code, CancellationToken ct = default) =>
             Task.FromResult(providers.GetValueOrDefault(code));
+    }
+
+    /// <summary>Лимит одновременных вызовов, который всякий раз заставляет ждать места.</summary>
+    private sealed class SlowLimits(TimeSpan wait) : OneBase.AI.Monitoring.IAiLimits
+    {
+        public Task EnsureBudgetAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+        public async Task<IDisposable> EnterAsync(CancellationToken ct = default)
+        {
+            await Task.Delay(wait, ct);
+            return await OneBase.AI.Monitoring.NoAiLimits.Instance.EnterAsync(ct);
+        }
+
+        public Task SpentAsync(decimal costUsd, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<OneBase.AI.Monitoring.AiBudgetStatus> StatusAsync(CancellationToken ct = default) => OneBase.AI.Monitoring.NoAiLimits.Instance.StatusAsync(ct);
     }
 
     private sealed class Recorder : IAiUsageRecorder

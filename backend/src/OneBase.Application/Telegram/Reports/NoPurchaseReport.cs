@@ -28,7 +28,7 @@ public static class NoPurchaseReport
 
         var kpis = new List<ReportKpi>
         {
-            new(c.T("Активная база, точек"), Number(total.Base)),
+            new(c.T("База: закуп за 12 мес., точек"), Number(total.Base)),
             new(c.F("Без закупа ≥{0} дн.", days), Number(total.Silent), Percent(ReportFormat.Share(total.Silent, total.Base)), total.Silent > 0 ? ReportTone.Warn : ReportTone.Good),
             new(c.T("На маршруте сегодня"), Number(total.OnRoute)),
             new(c.T("Из них без закупа"), Number(total.SilentOnRoute), c.T("зайти обязательно"), total.SilentOnRoute > 0 ? ReportTone.Bad : ReportTone.Good),
@@ -41,7 +41,7 @@ public static class NoPurchaseReport
         {
             var me = all[0];
             var route = me.Markets.Where(m => m.OnRoute).ToList();
-            tables.Add(List(c, c.T("Список: клиенты без закупа на сегодняшнем маршруте"), route, c.T("Сортировка по сумме последнего закупа")));
+            tables.Add(List(c, c.T("Список: клиенты без закупа на сегодняшнем маршруте"), route, c.T("Сортировка по среднему закупу, кг/мес")));
             tables.Add(List(c, c.T("Все мои клиенты без закупа (крупнейшие)"), me.Markets.Take(ListLimit).ToList(),
                 me.Markets.Count > ListLimit ? c.F("показаны {0} из {1}", ListLimit, me.Markets.Count) : null));
             caption = c.F("Сегодня на маршруте {0} клиент(ов) без закупа больше {1} дней (всего у вас: {2}). Зайдите к ним первыми и возьмите заказ.",
@@ -57,7 +57,7 @@ public static class NoPurchaseReport
             // Третья колонка — «ТП, чел.» у РМ; у СВ её нет (доля базы без закупа — в своей колонке).
             var byUnit = new ReportTable(rm ? c.T("1. Клиенты без закупа по регионам") : c.T("1. Клиенты без закупа по ТП"),
                 [new("№", false, 0.4f), new(ReportKit.UnitTitle(c), false, 2.6f), new(rm ? c.T("ТП, чел.") : c.T("Без закупа, %"), Weight: 0.8f),
-                    new(c.T("Активная база, точек")), new(c.F("Без закупа ≥{0} дн., точек", days)), new(c.T("% базы без закупа"), Weight: 0.8f),
+                    new(c.T("База: закуп за 12 мес., точек")), new(c.F("Без закупа ≥{0} дн., точек", days)), new(c.T("% базы без закупа"), Weight: 0.8f),
                     new(c.T("Точек на маршруте сегодня")), new(c.T("Из них без закупа (в списке)")), new(c.T("Сумма последних закупов по списку, сум"), Weight: 1.3f)],
                 units.Select((u, i) =>
                 {
@@ -73,8 +73,8 @@ public static class NoPurchaseReport
             tables.Add(rm ? byUnit : ReportKit.WithoutColumn(byUnit, 2));
             if (!rm)
             {
-                // СВ видит точки своего региона: крупнейшие молчащие — с ТП.
-                var biggest = all.SelectMany(a => a.Markets).OrderByDescending(m => m.LastSum).Take(ListLimit).ToList();
+                // СВ видит точки своего региона: крупнейшие молчащие (по среднему закупу, кг/мес — не по одному последнему заказу) — с ТП.
+                var biggest = all.SelectMany(a => a.Markets).OrderByDescending(m => m.KgPerMonth).ThenByDescending(m => m.LastSum).Take(ListLimit).ToList();
                 if (biggest.Count > 0)
                 {
                     tables.Add(List(c, c.T("2. Крупнейшие клиенты без закупа в регионе"), biggest, null, withAgent: true));
@@ -99,6 +99,11 @@ public static class NoPurchaseReport
         }
 
         notes.Add(c.F("База — точки, где ТП ответственный в Linko, с подтверждённой покупкой за год; без закупа — последняя доставленная покупка {0}+ дней назад", days));
+        notes.Add(c.T("Покупка — доставленный заказ за вычетом возвратов; заказ, возвращённый целиком, покупкой не считается. Дата — дата приёмки в Linko"));
+        if (ReportKit.VacancyNote(c) is { } vacancies)
+        {
+            notes.Add(vacancies);
+        }
         var summary = c.F("Без закупа {0} из {1} точек, на маршруте {2}", total.Silent, total.Base, total.SilentOnRoute);
         return ReportKit.Document(c, ReportKit.Title(c), Date(c.Date), kpis, tables, problems, notes, caption, summary, incomplete: false);
     }
@@ -118,7 +123,7 @@ public static class NoPurchaseReport
         }
 
         columns.AddRange([new(c.T("Категории (история)"), false, 2f), new(c.T("Ср. закуп, кг/мес"), Weight: 0.8f), new(c.T("Дата посл. закупа"), Weight: 0.9f),
-            new(c.T("Сумма посл. закупа, сум"), Weight: 1.1f), new(c.T("Дней без закупа"), Weight: 0.7f)]);
+            new(c.T("Посл. закуп, сум"), Weight: 1.1f), new(c.T("Дней без закупа"), Weight: 0.7f)]);
         var rows = markets.Select((m, i) =>
         {
             var row = new List<ReportCell> { $"{i + 1}", m.Name, $"{m.Id}" };

@@ -59,7 +59,12 @@ public sealed record AiSettingsSnapshot(
     bool TaskRoutingEnabled = false,
     string RouterMode = AiTaskMode.Off,
     AiModelRef? Extract = null,
-    string ExtractMode = AiTaskMode.Off);
+    string ExtractMode = AiTaskMode.Off,
+    AiModelRoutingSettings? Routing = null)
+{
+    /// <summary>Маршрутизация моделей по назначению вызова; не задана — выключена (как раньше).</summary>
+    public AiModelRoutingSettings ModelRouting => Routing ?? AiModelRoutingSettings.Off;
+}
 
 /// <summary>Запасные значения из окружения сервера (.env / docker-compose).</summary>
 public sealed class AiEnvironment
@@ -126,8 +131,11 @@ public sealed class AiSettingsStore(
     AiProviderRegistry registry,
     AiEnvironment environment,
     IDataProtectionProvider dataProtection,
-    ILogger<AiSettingsStore> logger) : IAiSettingsSource
+    ILogger<AiSettingsStore> logger,
+    AiSafetyOptions? safetyOptions = null) : IAiSettingsSource
 {
+    private readonly AiSafetyOptions _safety = safetyOptions ?? AiSafetyOptions.None;
+
     private volatile IReadOnlyDictionary<string, AiProviderState>? _providers;
     private volatile AiSettingsSnapshot? _settings;
 
@@ -148,10 +156,12 @@ public sealed class AiSettingsStore(
         foreach (var provider in registry.All)
         {
             rows.TryGetValue(provider.Code, out var row);
-            var key = Unprotect(provider.Code, row?.ProtectedApiKey);
+            // Эмулятор или блокировка платных вызовов: настоящий ключ не читается вовсе — ни из OneBase, ни из окружения.
+            var guarded = _safety.Emulator || _safety.BlockPaidCalls;
+            var key = guarded ? string.Empty : Unprotect(provider.Code, row?.ProtectedApiKey);
             var source = AiKeySource.OneBase;
             var hint = row?.ApiKeyHint;
-            if (string.IsNullOrEmpty(key))
+            if (string.IsNullOrEmpty(key) && !guarded)
             {
                 key = environment.KeyFor(provider.Code) ?? string.Empty;
                 source = key.Length == 0 ? AiKeySource.None : AiKeySource.Environment;
@@ -159,7 +169,7 @@ public sealed class AiSettingsStore(
             }
 
             var custom = !string.IsNullOrWhiteSpace(row?.BaseUrl);
-            result[provider.Code] = new AiProviderState(
+            result[provider.Code] = _safety.Apply(new AiProviderState(
                 provider.Code,
                 provider.Name,
                 custom ? NormalizeUrl(row!.BaseUrl) : provider.DefaultBaseUrl,
@@ -167,7 +177,7 @@ public sealed class AiSettingsStore(
                 row?.Enabled ?? true,
                 key,
                 source,
-                hint);
+                hint));
         }
 
         _providers = result;
@@ -220,7 +230,12 @@ public sealed class AiSettingsStore(
             row?.TaskRoutingEnabled ?? false,
             row?.RouterMode ?? AiTaskMode.Off,
             Ref(row?.ExtractProvider, row?.ExtractModel),
-            row?.ExtractMode ?? AiTaskMode.Off);
+            row?.ExtractMode ?? AiTaskMode.Off,
+            row is null
+                ? AiModelRoutingSettings.Off
+                : AiModelRoutingSettings.From(row.ModelRoutingMode, Ref(row.AgentProvider, row.AgentModel), row.FinalAnswerMode,
+                    Ref(row.FinalDefaultProvider, row.FinalDefaultModel), Ref(row.FinalComplexProvider, row.FinalComplexModel), row.FallbackMode,
+                    row.ComplexityThreshold, row.ReviewMaxAttempts, row.QuestionBudgetUsd));
         _settings = settings;
         return settings;
     }

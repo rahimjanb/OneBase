@@ -236,7 +236,9 @@ public sealed class ReportDataService(IAppDbContext db, SalesDataLoader loader, 
 
     /// <summary>
     /// «Клиенты без закупа» ТП на день: база — точки, где ТП ответственный в Linko, с подтверждённой покупкой за год (доставленный заказ, дата
-    /// приёмки), без тестовых; без закупа — последняя покупка days и более дней назад; на маршруте — визит в плане на этот день.
+    /// приёмки, за вычетом возвратов по нему; целиком возвращённый заказ — не покупка), без тестовых; без закупа — последняя покупка days и
+    /// более дней назад; на маршруте — визит в плане на этот день. Сумма последнего закупа и средний закуп — за вычетом возвратов; порядок —
+    /// по среднему закупу, кг/мес (крупнейшие клиенты), затем по сумме последнего закупа.
     /// </summary>
     public async Task<IReadOnlyDictionary<long, NoPurchaseAgent>> NoPurchaseAsync(IReadOnlyCollection<long> agents, DateOnly day, int days,
         IReadOnlyList<FactVisit> visits, CancellationToken ct)
@@ -250,23 +252,40 @@ public sealed class ReportDataService(IAppDbContext db, SalesDataLoader loader, 
             .ToList();
         var marketIds = markets.Select(m => m.Id).ToArray();
         var sold = options.FieldSoldStatuses;
+        var returned = options.ReturnStatuses;
         var yearAgo = day.AddDays(-365);
-        var last = await db.LinkoOrders.AsNoTracking()
+        // Покупки — доставленные заказы по дате приёмки за вычетом возвратов по ним (строка возврата Linko ссылается на заказ). Заказ, который
+        // вернули целиком (99 % веса и больше), — не покупка: иначе «последний закуп» был бы заказом, который магазин вернул.
+        var delivered = await db.LinkoOrders.AsNoTracking()
             .Where(o => o.MarketId != null && marketIds.Contains(o.MarketId.Value) && sold.Contains(o.Status) && o.AcceptedDate != null
-                        && o.AcceptedDate >= yearAgo && o.AcceptedDate <= day)
-            .GroupBy(o => o.MarketId!.Value)
-            .Select(g => new { MarketId = g.Key, Last = g.Max(o => o.AcceptedDate!.Value) })
-            .ToDictionaryAsync(x => x.MarketId, x => x.Last, ct);
+                        && o.AcceptedDate >= yearAgo.AddDays(-90) && o.AcceptedDate <= day)
+            .Select(o => new { o.Id, MarketId = o.MarketId!.Value, Accepted = o.AcceptedDate!.Value, o.TotalPrice, o.TotalWeight })
+            .ToListAsync(ct);
+        var orderIds = delivered.Select(o => o.Id).ToArray();
+        var returns = orderIds.Length == 0
+            ? []
+            : await (from l in db.LinkoOrderReturnLines
+                    join r in db.LinkoOrderReturns on l.ReturnId equals r.Id
+                    where l.OrderId != null && orderIds.Contains(l.OrderId.Value) && returned.Contains(r.Status) && r.CreatedDate <= day
+                    group l by l.OrderId into g
+                    select new { OrderId = g.Key!.Value, Sum = g.Sum(x => x.Price * x.Amount), Kg = g.Sum(x => x.TotalWeight) })
+                .ToDictionaryAsync(x => x.OrderId, ct);
+        var history = delivered
+            .Select(o =>
+            {
+                var back = returns.GetValueOrDefault(o.Id);
+                var kg = o.TotalWeight - (back?.Kg ?? 0);
+                var sum = Math.Max(0, o.TotalPrice - (back?.Sum ?? 0));
+                var whollyReturned = back is not null && (o.TotalWeight > 0 ? kg <= o.TotalWeight * 0.01m : sum <= o.TotalPrice * 0.01m);
+                return new { o.Id, o.MarketId, o.Accepted, TotalPrice = sum, TotalWeight = Math.Max(0, kg), WhollyReturned = whollyReturned };
+            })
+            .Where(o => !o.WhollyReturned)
+            .ToList();
+        var last = history.Where(o => o.Accepted >= yearAgo).GroupBy(o => o.MarketId).ToDictionary(g => g.Key, g => g.Max(o => o.Accepted));
 
         var silent = markets.Where(m => last.TryGetValue(m.Id, out var d) && day.DayNumber - d.DayNumber >= days).ToList();
-        var silentIds = silent.Select(m => m.Id).ToArray();
-        var historyFrom = silent.Count == 0 ? day : silent.Min(m => last[m.Id]).AddDays(-90);
-        var history = silentIds.Length == 0
-            ? []
-            : await db.LinkoOrders.AsNoTracking()
-                .Where(o => o.MarketId != null && silentIds.Contains(o.MarketId.Value) && sold.Contains(o.Status) && o.AcceptedDate != null && o.AcceptedDate >= historyFrom)
-                .Select(o => new { o.Id, MarketId = o.MarketId!.Value, Accepted = o.AcceptedDate!.Value, o.TotalPrice, o.TotalWeight })
-                .ToListAsync(ct);
+        var silentIds = silent.Select(m => m.Id).ToHashSet();
+        history = history.Where(o => silentIds.Contains(o.MarketId)).ToList();
         var analytics = await loader.LoadAsync(day.Year, day.Month, ct);
         var historyIds = history.Select(o => o.Id).ToArray();
         var historyTypes = (await db.LinkoOrderLines.AsNoTracking().Where(l => historyIds.Contains(l.OrderId) && l.ProductId != null)
@@ -287,7 +306,7 @@ public sealed class ReportDataService(IAppDbContext db, SalesDataLoader loader, 
                 var cats = orders.SelectMany(o => historyTypes[o.Id]).OfType<string>().Distinct().OrderBy(c => order.IndexOf(c)).ToList();
                 return new SilentMarket(m.Id, m.Name, agent, lastDay, orders.Where(o => o.Accepted == lastDay).Sum(o => o.TotalPrice), day.DayNumber - lastDay.DayNumber,
                     Math.Round(orders.Where(o => o.Accepted > lastDay.AddDays(-90)).Sum(o => o.TotalWeight) / 3, 1), cats, onRoute.Contains(m.Id));
-            }).OrderByDescending(m => m.LastSum).ToList();
+            }).OrderByDescending(m => m.KgPerMonth).ThenByDescending(m => m.LastSum).ToList(); // крупнейшие — по среднему закупу, а не по последнему заказу
             return new NoPurchaseAgent(agent, own.Count, list.Count, onRoute.Count, list.Count(m => m.OnRoute),
                 list.Where(m => m.OnRoute).Sum(m => m.LastSum), list);
         });

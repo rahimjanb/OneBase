@@ -68,11 +68,19 @@ public static class NoOrdersReport
                 Row("4", c.T("% дневного плана"), share13, share),
                 Row("5", c.T("Визиты факт / план"), $"{me.M.Visits13} / {Number(me.M.VisitPlan)}", $"{me.M.Visits} / {Number(me.M.VisitPlan)}"),
             ]));
+            // План дня здесь — в сумах (ТЗ); у ТП с планом Linko только в кг — план дня в кг, как в «Дневном плане», без «— сум».
+            var sumPlan = me.Plan?.DailyPlan is not null;
             caption = c.Job.Slot switch
             {
-                "midday" => c.F("⚠ {0}, на {1} у вас нет ни одного заказа. План на день: {2} сум. Визитов: {3} / {4}. Возьмите первый заказ как можно скорее!",
+                "midday" when sumPlan => c.F("⚠ {0}, на {1} у вас нет ни одного заказа. План на день: {2} сум. Визитов: {3} / {4}. Возьмите первый заказ как можно скорее!",
                     me.Name, c.MiddayText, DailyPlanMath.PlanCell(me.Plan).Text, me.M.Visits13, Number(me.M.VisitPlan)),
+                "midday" when me.M.ByKg => c.F("⚠ {0}, на {1} у вас нет ни одного заказа. План на день: {2} кг. Визитов: {3} / {4}. Возьмите первый заказ как можно скорее!",
+                    me.Name, c.MiddayText, Kg(me.M.PlanKg), me.M.Visits13, Number(me.M.VisitPlan)),
+                "midday" => c.F("⚠ {0}, на {1} у вас нет ни одного заказа. Визитов: {2} / {3}. Возьмите первый заказ как можно скорее!",
+                    me.Name, c.MiddayText, me.M.Visits13, Number(me.M.VisitPlan)),
                 "reminder" => c.F("⏰ Напоминание: до конца дня {0}, заказов пока нет. Зайдите в оставшиеся точки маршрута и возьмите заказ.", HoursLeft(c)),
+                _ when !sumPlan && me.M.ByKg => c.F("Итог дня: заказов {0} на {1} сум, {2} кг ({3} плана дня по кг).", me.M.Orders, Number(me.M.FactSum), Kg(me.M.FactKg),
+                    Percent(me.M.ShareKg)),
                 _ => c.F("Итог дня: заказов {0} на {1} сум, план дня {2}.", me.M.Orders, Number(me.M.FactSum), share.Text),
             };
         }
@@ -169,7 +177,18 @@ public static class NoOrdersReport
     /// </summary>
     private static void PlanNotes(ReportContext c, IReadOnlyList<Row> agents, List<string> notes)
     {
-        var noPlan = agents.Where(a => a.Plan is null || a.Plan.Status == DailyPlanMath.NoPlan).Select(a => a.Name).ToList();
+        // План дня здесь — в сумах (ТЗ «Расчёт дневного плана»); у кого план Linko только в кг, это не «нет плана», а другая мера.
+        var withoutSum = agents.Where(a => a.Plan is null || a.Plan.Status == DailyPlanMath.NoPlan).ToList();
+        var kgOnly = withoutSum.Where(a => a.M.ByKg).Select(a => a.Name).ToList();
+        var noPlan = withoutSum.Where(a => !a.M.ByKg).Select(a => a.Name).ToList();
+        if (kgOnly.Count > 0)
+        {
+            notes.Add(c.Role == TelegramReportRoles.Tp
+                ? c.T("План месяца в Linko только в кг — план дня в сумах не считается")
+                : c.F("План месяца в Linko только в кг: {0} — план дня в сумах «—», в % плана региона не входят",
+                    string.Join(", ", kgOnly.Take(10)) + (kgOnly.Count > 10 ? $" +{kgOnly.Count - 10}" : "")));
+        }
+
         if (noPlan.Count > 0)
         {
             notes.Add(c.Role == TelegramReportRoles.Tp

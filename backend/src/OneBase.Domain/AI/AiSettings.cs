@@ -24,6 +24,26 @@ public static class AiTaskMode
     public static readonly IReadOnlyList<string> All = [Off, Shadow, On];
 }
 
+/// <summary>Итоговый ответ консультанта: fixed — всегда модель FinalDefault; dynamic — по сложности вопроса FinalDefault или FinalComplex.</summary>
+public static class AiFinalMode
+{
+    public const string Fixed = "fixed";
+    public const string Dynamic = "dynamic";
+    public static readonly IReadOnlyList<string> All = [Fixed, Dynamic];
+}
+
+/// <summary>
+/// Что делать с проблемным результатом. standard — как раньше: неподтверждённые числа — одно исправление той же моделью. review — разбор
+/// причины: повтор упавшего инструмента без модели, повтор сотрудника с исправленной задачей, исправление ответа и ограниченный переход
+/// на модель сложных ответов; число попыток и бюджет вопроса ограничены.
+/// </summary>
+public static class AiFallbackMode
+{
+    public const string Standard = "standard";
+    public const string Review = "review";
+    public static readonly IReadOnlyList<string> All = [Standard, Review];
+}
+
 /// <summary>Общие настройки AI: основной и резервный провайдер, модели для задач, параметры генерации. Одна строка.</summary>
 public class AiSettings
 {
@@ -88,6 +108,39 @@ public class AiSettings
 
     /// <summary>Сколько вызовов моделей идёт одновременно (остальные ждут очереди); 0 — без ограничения.</summary>
     public int MaxConcurrentCalls { get; set; } = 8;
+
+    /// <summary>
+    /// Маршрутизация моделей по назначению вызова (сотрудники, итоговый ответ, перепроверка): off — как раньше, основной моделью; shadow —
+    /// ответ как раньше, выбор по правилам и прогноз стоимости — только в журнал сравнения; on — модели по правилам ниже.
+    /// </summary>
+    public string ModelRoutingMode { get; set; } = AiTaskMode.Off;
+
+    /// <summary>Модель AI-сотрудников отделов, у которых своя модель не задана.</summary>
+    public string? AgentProvider { get; set; }
+    public string? AgentModel { get; set; }
+
+    /// <summary>Выбор модели итогового ответа: fixed | dynamic — см. <see cref="AiFinalMode"/>.</summary>
+    public string FinalAnswerMode { get; set; } = AiFinalMode.Fixed;
+
+    /// <summary>Модель итогового ответа на стандартные вопросы.</summary>
+    public string? FinalDefaultProvider { get; set; }
+    public string? FinalDefaultModel { get; set; }
+
+    /// <summary>Модель итогового ответа на сложные вопросы (межотдельный синтез, причины, сложная интерпретация) и перехода при перепроверке.</summary>
+    public string? FinalComplexProvider { get; set; }
+    public string? FinalComplexModel { get; set; }
+
+    /// <summary>Проблемный результат: standard | review — см. <see cref="AiFallbackMode"/>.</summary>
+    public string FallbackMode { get; set; } = AiFallbackMode.Standard;
+
+    /// <summary>С какого балла сложности итоговый ответ идёт моделью сложных ответов (1–10).</summary>
+    public int ComplexityThreshold { get; set; } = 3;
+
+    /// <summary>Сколько дополнительных попыток перепроверки на один ответ (0–3).</summary>
+    public int ReviewMaxAttempts { get; set; } = 2;
+
+    /// <summary>Бюджет одного вопроса, USD: дошли — новые вызовы моделей этого ответа не выполняются. Пусто — без ограничения.</summary>
+    public decimal? QuestionBudgetUsd { get; set; }
 
     public DateTimeOffset? UpdatedAt { get; set; }
     public Guid? UpdatedById { get; set; }

@@ -1,11 +1,14 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OneBase.AI.Consultant;
 using OneBase.AI.Gateway;
 using OneBase.AI.Grounding;
 using OneBase.AI.Knowledge;
 using OneBase.AI.Llm;
+using OneBase.AI.Monitoring;
 using OneBase.AI.Providers;
 using OneBase.AI.Reports;
 using OneBase.AI.Security;
@@ -22,8 +25,30 @@ namespace OneBase.AI.Agents;
 /// <summary>Model — модель для этого запуска вместо модели сотрудника (канал попросил другую, например Claude для генерации отчёта).</summary>
 public sealed record AgentTask(string AgentCode, string Task, Guid UserId, Guid? ConversationId = null, string? Context = null, bool Report = false, AiModelRef? Model = null);
 
+/// <summary>
+/// Ai:Agents:MaxParallelTools — сколько вызовов инструментов одного шага сотрудника идут одновременно (каждый в своей области DI);
+/// 1 — по очереди, как раньше.
+/// </summary>
+public sealed record AgentRunnerOptions(int MaxParallelTools = 4);
+
 /// <summary>Evidence — числа из результатов инструментов и точных расчётов сотрудника: доказательства для проверки ответа консультанта.</summary>
-public sealed record AgentRun(AgentResult Result, AiTokenUsage Usage, string? Model, EvidenceSet? Evidence = null);
+/// <summary>
+/// ToolCalls — вызовов инструментов данных (без точного расчёта), Calculations — точных расчётов, ToolErrors — инструменты, вернувшие ошибку
+/// (для разбора причин перепроверки и сложности ответа). ModelReason — почему сотрудник работал этой моделью.
+/// </summary>
+public sealed record AgentRun(AgentResult Result, AiTokenUsage Usage, string? Model, EvidenceSet? Evidence = null, int ToolCalls = 0, int Calculations = 0,
+    IReadOnlyList<AgentToolError>? ToolErrors = null, string? ModelReason = null);
+
+/// <summary>
+/// Ошибка инструмента в работе сотрудника: Kind — failed (инструмент упал и после повтора), denied (нет такого инструмента, гранта или доступа
+/// — модель выбрала неподходящий), error (инструмент отказал: аргументы, нет данных под фильтр).
+/// </summary>
+public sealed record AgentToolError(string Tool, string Kind, string Message)
+{
+    public const string Failed = "failed";
+    public const string Denied = "denied";
+    public const string Error = "error";
+}
 
 /// <summary>
 /// Выполняет задачу одного AI-сотрудника: цикл вызова инструментов (данные OneBase) и структурированный итог
@@ -42,7 +67,10 @@ public sealed class AgentRunner(
     ReportService reports,
     SourceOfTruthService truth,
     TimeProvider clock,
-    ILogger<AgentRunner> logger)
+    IServiceScopeFactory scopes,
+    AgentRunnerOptions runnerOptions,
+    IAiSettingsSource aiSettings,
+    ILogger<AgentRunner>? logger = null)
 {
     private const int MaxSteps = 8;
 
@@ -66,6 +94,8 @@ public sealed class AgentRunner(
 
     public async Task<AgentRun> RunAsync(AgentTask task, Func<ConsultantProgress, Task>? progress, CancellationToken ct)
     {
+        var turn = AiTurnTimings.Current;
+        var setup = turn?.Stage("agent.setup", task.AgentCode);
         var agent = await agents.GetAsync(task.AgentCode, ct);
         if (agent is null)
         {
@@ -128,6 +158,7 @@ public sealed class AgentRunner(
         };
 
         var context = new ToolContext(agent.Code, task.UserId, 0, task.ConversationId);
+        setup?.Dispose();
         var usage = AiTokenUsage.None;
         var toolsUsed = new List<string>();
         var sources = new List<DataSource>();
@@ -143,9 +174,18 @@ public sealed class AgentRunner(
         var revised = false;
         var reported = false;
         string? model = null;
+        var settings = await aiSettings.GetSettingsAsync(ct);
+        // Модель: канала, заданная сотруднику в «Агентах», по правилам маршрутизации моделей (модель сотрудников) или основная.
+        var choice = AiModelRouting.Agent(settings, task.Model, agent.Model);
+        // Review: упавший инструмент — один повтор без вызова модели, в новой области DI (сбой мог оставить DbContext в плохом состоянии).
+        var review = settings.ModelRouting.On && settings.ModelRouting.Review;
+        var toolCalls = 0;
+        var calculations = 0;
+        var toolErrors = new List<AgentToolError>();
         var options = new AiCallOptions
         {
-            Model = task.Model ?? agent.Model,
+            Model = choice.Model,
+            ModelReason = choice.Reason,
             Temperature = agent.Temperature,
             MaxOutputTokens = agent.MaxOutputTokens,
             JsonOutput = true,
@@ -181,103 +221,167 @@ public sealed class AgentRunner(
                     }
 
                     var final = check.Grounded ? result : result with { Unverified = check.Unsupported };
-                    return new AgentRun(Classify(final, collected.Count, issues, attempts), usage, model, evidence);
+                    return new AgentRun(Classify(final, collected.Count, issues, attempts), usage, model, evidence, toolCalls, calculations, toolErrors, choice.Reason);
                 }
 
                 messages.Add(response.Reply);
-                foreach (var call in response.ToolCalls)
+                var calls = response.ToolCalls;
+                var titles = new string[calls.Count];
+                for (var i = 0; i < calls.Count; i++)
                 {
-                    var isReport = call.Name == ReportSpec.ToolName;
-                    var title = isReport ? ReportSpec.ToolTitle
+                    var call = calls[i];
+                    titles[i] = call.Name == ReportSpec.ToolName ? ReportSpec.ToolTitle
                         : call.Name == Calculator.ToolName ? "Точный расчёт"
                         : call.Name == SourceOfTruthTool.ToolName ? "Источник истины"
                         : call.Name == ToolResultPager.ToolName ? "Следующие строки результата"
                         : tools.FirstOrDefault(t => t.Name == call.Name)?.Title ?? call.Name;
                     if (progress is not null)
                     {
-                        await progress(new ConsultantProgress("agent", agent.Code, agent.Name, ProgressStatus.Running, title));
+                        await progress(new ConsultantProgress("agent", agent.Code, agent.Name, ProgressStatus.Running, titles[i]));
+                    }
+                }
+
+                // Вызовы одного шага модель запросила, не видя результатов друг друга, — по данным они независимы. Расчёт, следующие строки
+                // сохранённого результата (get_more_rows) и повтор уже выполненного вызова — сразу, без БД и без нового запроса к данным; инструменты
+                // данных и источник истины — параллельно, каждый в своей области DI (свой DbContext, права, гранты и аудит в ToolExecutor); отчёт
+                // Excel меняет состояние (один на задачу) — после остальных, по порядку. Один такой вызов — как раньше, в области сотрудника.
+                var outcomes = new ToolOutcome[calls.Count];
+                var io = new List<int>();
+                var keys = new HashSet<string>(StringComparer.Ordinal);
+                for (var i = 0; i < calls.Count; i++)
+                {
+                    var call = calls[i];
+                    var start = turn?.Now ?? 0;
+                    if (call.Name == ReportSpec.ToolName)
+                    {
+                        continue;
                     }
 
-                    ToolResult result;
-                    var isData = false;
+                    if (call.Name == Calculator.ToolName && tools.Count > 0)
+                    {
+                        var (calculated, value) = Calculator.Run(call.Arguments);
+                        outcomes[i] = new ToolOutcome(value is null ? ToolResult.Error(calculated) : ToolResult.Ok(calculated), value, start, 0);
+                    }
+                    else if (call.Name == ToolResultPager.ToolName && tools.Count > 0)
+                    {
+                        outcomes[i] = new ToolOutcome(pager.Page(call.Arguments, Budget(used)), null, start, 0);
+                    }
+                    else if (call.Name != SourceOfTruthTool.ToolName && ToolResultPager.CallKey(call.Name, call.Arguments) is var key
+                             && (pager.TryRepeat(key, out _, out var earlier) || !keys.Add(key)))
+                    {
+                        // Тот же вызов с теми же аргументами уже был (в этом анализе или в этом же шаге): данные не запрашиваются заново.
+                        outcomes[i] = new ToolOutcome(Repeated(earlier), null, start, 0);
+                    }
+                    else
+                    {
+                        io.Add(i);
+                    }
+                }
+
+                if (io.Count > 1 && runnerOptions.MaxParallelTools > 1)
+                {
+                    var parallel = await ToolBatch.RunAsync(io.Count, runnerOptions.MaxParallelTools, async (k, token) =>
+                    {
+                        using var scope = scopes.CreateScope();
+                        return await RunToolAsync(calls[io[k]], context, tools.Count > 0, scope.ServiceProvider.GetRequiredService<ToolExecutor>(),
+                            scope.ServiceProvider.GetRequiredService<SourceOfTruthService>(), turn, review, token);
+                    }, ct);
+                    for (var k = 0; k < io.Count; k++)
+                    {
+                        outcomes[io[k]] = parallel[k];
+                    }
+                }
+                else
+                {
+                    foreach (var i in io)
+                    {
+                        outcomes[i] = await RunToolAsync(calls[i], context, tools.Count > 0, executor, truth, turn, review, ct);
+                    }
+                }
+
+                for (var i = 0; i < calls.Count; i++)
+                {
+                    if (calls[i].Name != ReportSpec.ToolName)
+                    {
+                        continue;
+                    }
+
+                    var start = turn?.Now ?? 0;
+                    var watch = Stopwatch.StartNew();
+                    ToolResult report;
                     try
                     {
-                        if (call.Name == Calculator.ToolName && tools.Count > 0)
+                        if (reportTool is null || reported)
                         {
-                            var (calculated, value) = Calculator.Run(call.Arguments);
-                            if (value is { } v)
-                            {
-                                evidence.Add(v);
-                            }
-
-                            result = value is null ? ToolResult.Error(calculated) : ToolResult.Ok(calculated);
-                        }
-                        else if (call.Name == SourceOfTruthTool.ToolName && tools.Count > 0)
-                        {
-                            var map = await SourceOfTruthTool.RunAsync(call.Arguments, truth, ct);
-                            evidence.AddContent(map);
-                            result = ToolResult.Ok(map);
-                            // Источник истины нашёл, что таблица не привязана или не загружалась: это «источник не подключён», а не «не искали».
-                            if (SourceIssue(map) is { } sourceIssue)
-                            {
-                                issues.Add(sourceIssue);
-                            }
-                        }
-                        else if (call.Name == ToolResultPager.ToolName && tools.Count > 0)
-                        {
-                            result = pager.Page(call.Arguments, Budget(used));
-                        }
-                        else if (!isReport && pager.TryRepeat(ToolResultPager.CallKey(call.Name, call.Arguments), out _, out var earlier))
-                        {
-                            // Тот же вызов с теми же аргументами уже был: данные не запрашиваются заново — модель берёт их из прошлого результата.
-                            result = ToolResult.Ok(JsonSerializer.Serialize(new
-                            {
-                                repeat = true,
-                                result_id = earlier,
-                                message = "Этот вызов с теми же аргументами уже выполнен в этом анализе — его результат выше. Используй его" +
-                                          (earlier is null ? "." : $"; следующие строки — {ToolResultPager.ToolName}(result_id = {earlier})."),
-                            }));
-                        }
-                        else if (!isReport)
-                        {
-                            isData = true;
-                            attempts++;
-                            result = await executor.ExecuteAsync(context, call.Name, call.Arguments, ct);
-                            if (result.Success)
-                            {
-                                evidence.AddContent(result.Content);
-                            }
-                        }
-                        else if (reportTool is null || reported)
-                        {
-                            result = ToolResult.Error(reportTool is null
+                            report = ToolResult.Error(reportTool is null
                                 ? "Отчёт Excel формируется только по просьбе пользователя — ответь текстом."
                                 : "Отчёт уже сформирован — второй не нужен. Подведи итог.");
                         }
                         else
                         {
-                            (result, _) = await reports.CreateAsync(context, call.Arguments, ct);
-                            reported = result.Success;
+                            (report, _) = await reports.CreateAsync(context, calls[i].Arguments, ct);
+                            reported = report.Success;
                         }
                     }
                     catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
                     {
-                        // Расчёт, источник истины и отчёт — не через ToolExecutor: их сбой тоже не должен останавливать сотрудника.
-                        logger.LogError(ex, "AI: {Tool} сотрудника {Agent} завершился ошибкой", call.Name, agent.Code);
-                        result = ToolResult.Failure(call.Name, ToolFailures.KindOf(ex), ToolFailures.SafeMessage(ex));
+                        // Отчёт — не через ToolExecutor: его сбой тоже не должен останавливать сотрудника.
+                        logger?.LogError(ex, "AI: {Tool} сотрудника {Agent} завершился ошибкой", calls[i].Name, agent.Code);
+                        report = ToolResult.Failure(calls[i].Name, ToolFailures.KindOf(ex), ToolFailures.SafeMessage(ex));
                     }
 
-                    if (isData && result.Success)
+                    outcomes[i] = new ToolOutcome(report, null, start, watch.ElapsedMilliseconds);
+                }
+
+                var executed = io.ToHashSet();
+                for (var i = 0; i < calls.Count; i++)
+                {
+                    var call = calls[i];
+                    var (result, value, toolStart, toolMs) = outcomes[i];
+                    var isData = executed.Contains(i) && call.Name != SourceOfTruthTool.ToolName;
+                    if (call.Name == Calculator.ToolName && tools.Count > 0)
                     {
-                        collected.Add((title, result.Content));
+                        calculations++;
+                        if (value is { } v)
+                        {
+                            evidence.Add(v);
+                        }
                     }
-                    else if (isData && (result.ErrorKind ?? (ToolFailures.IsOutOfRange(result.Content) ? ToolFailures.OutOfRange : null)) is { } kind
-                             && kind != ToolFailures.InvalidArguments)
+                    else if (executed.Contains(i))
                     {
-                        // Ошибка аргументов об ограничении периода («Период — не больше 62 дней») — тоже итог: период вне доступного.
-                        issues.Add(new ToolIssue(call.Name, kind, ToolMessage(result.Content)));
+                        toolCalls++;
+                        if (result.Success)
+                        {
+                            evidence.AddContent(result.Content); // данные инструмента и карта источника истины
+                            // Источник истины нашёл, что таблица не привязана или не загружалась: это «источник не подключён», а не «не искали».
+                            if (call.Name == SourceOfTruthTool.ToolName && SourceIssue(result.Content) is { } sourceIssue)
+                            {
+                                issues.Add(sourceIssue);
+                            }
+                        }
+                        else
+                        {
+                            toolErrors.Add(new AgentToolError(call.Name, ErrorKindOf(result), result.Content.Length > 200 ? result.Content[..200] : result.Content));
+                        }
                     }
 
+                    if (isData)
+                    {
+                        attempts++;
+                        if (result.Success)
+                        {
+                            collected.Add((titles[i], result.Content));
+                        }
+                        else if ((result.ErrorKind ?? (ToolFailures.IsOutOfRange(result.Content) ? ToolFailures.OutOfRange : null)) is { } kind
+                                 && kind != ToolFailures.InvalidArguments)
+                        {
+                            // Ошибка аргументов об ограничении периода («Период — не больше 62 дней») — тоже итог: период вне доступного.
+                            issues.Add(new ToolIssue(call.Name, kind, ToolMessage(result.Content)));
+                        }
+                    }
+
+                    turn?.Tool(new AiToolTiming(agent.Code, call.Name, toolStart, toolMs, result.Content.Length, result.Success,
+                        result.Content.Length > MaxToolResultChars));
                     if (!toolsUsed.Contains(call.Name))
                     {
                         toolsUsed.Add(call.Name);
@@ -307,15 +411,92 @@ public sealed class AgentRunner(
         catch (Exception ex) when (collected.Count > 0 && !(ex is OperationCanceledException && ct.IsCancellationRequested))
         {
             // Модель или служба упали после того, как инструменты уже дали данные: итог partial с этими данными, а не пустая ошибка.
-            logger.LogWarning(ex, "AI: сотрудник {Agent} прерван после {Count} результатов инструментов — итог по полученным данным", agent.Code, collected.Count);
+            logger?.LogWarning(ex, "AI: сотрудник {Agent} прерван после {Count} результатов инструментов — итог по полученным данным", agent.Code, collected.Count);
             var reason = ex is AiProviderException or LlmNotConfiguredException ? ex.Message : "внутренняя ошибка OneBase";
-            return new AgentRun(Salvage(agent, $"Анализ прерван: {reason}", collected, sources, toolsUsed, issues), usage, model, evidence);
+            return new AgentRun(Salvage(agent, $"Анализ прерван: {reason}", collected, sources, toolsUsed, issues), usage, model, evidence, toolCalls, calculations,
+                toolErrors, choice.Reason);
         }
 
         return collected.Count > 0
-            ? new AgentRun(Salvage(agent, "Агент не завершил анализ за отведённое число шагов.", collected, sources, toolsUsed, issues), usage, model, evidence)
+            ? new AgentRun(Salvage(agent, "Агент не завершил анализ за отведённое число шагов.", collected, sources, toolsUsed, issues), usage, model, evidence,
+                toolCalls, calculations, toolErrors, choice.Reason)
             : new AgentRun(new AgentResult(agent.Code, agent.Name, "failed", "Превышен лимит шагов агента.", [], [], [], [], sources, toolsUsed,
-                "Агент не завершил анализ за отведённое число шагов.", Reason: "interrupted", ToolErrors: issues.Count > 0 ? issues : null), usage, model, evidence);
+                "Агент не завершил анализ за отведённое число шагов.", Reason: "interrupted", ToolErrors: issues.Count > 0 ? issues : null), usage, model, evidence,
+                toolCalls, calculations, toolErrors, choice.Reason);
+    }
+
+    /// <summary>Повтор вызова: результат уже есть выше (earlier — его result_id, если он сохранён страницами).</summary>
+    private static ToolResult Repeated(string? earlier) => ToolResult.Ok(JsonSerializer.Serialize(new
+    {
+        repeat = true,
+        result_id = earlier,
+        message = "Этот вызов с теми же аргументами уже выполнен в этом анализе — его результат выше. Используй его" +
+                  (earlier is null ? "." : $"; следующие строки — {ToolResultPager.ToolName}(result_id = {earlier})."),
+    }));
+
+    /// <summary>Что за ошибка инструмента: упал (после повтора), выбран неподходящий (нет инструмента, гранта, доступа) или отказ инструмента.</summary>
+    internal static string ErrorKind(string message) =>
+        message.StartsWith(ToolFailurePrefix, StringComparison.Ordinal) ? AgentToolError.Failed
+        : message.Contains("не найден", StringComparison.Ordinal) && message.StartsWith("Инструмент", StringComparison.Ordinal)
+          || message.Contains("нет доступа к инструменту", StringComparison.Ordinal)
+          || message.Contains("закрыт для агента", StringComparison.Ordinal) ? AgentToolError.Denied
+        : AgentToolError.Error;
+
+    /// <summary>
+    /// Вид ошибки инструмента для разбора перепроверки — по структурному виду сбоя (ToolFailures): сбой источника — failed; инструмента нет
+    /// или он не подключён, нет доступа — denied (модель выбрала неподходящий); остальное (аргументы, период, «не найдено») — error.
+    /// </summary>
+    internal static string ErrorKindOf(ToolResult result) => result.ErrorKind switch
+    {
+        ToolFailures.ToolError => AgentToolError.Failed,
+        ToolFailures.NotConnected or ToolFailures.Forbidden => AgentToolError.Denied,
+        null => ErrorKind(result.Content),
+        _ => AgentToolError.Error,
+    };
+
+    private const string ToolFailurePrefix = "Инструмент завершился ошибкой";
+
+    /// <summary>Результат вызова инструмента шага: Value — число точного расчёта (доказательство), начало и длительность — для замера.</summary>
+    private sealed record ToolOutcome(ToolResult Result, decimal? Value, long StartMs, long Ms);
+
+    /// <summary>
+    /// Вызов инструмента данных или источника истины — через переданные сервисы (области сотрудника или своей области вызова). Сбой — структурный
+    /// результат (ToolFailures), а не исключение: сотрудник продолжает с другими инструментами. review: сбой источника (tool_error) — один повтор
+    /// без вызова модели в новой области DI; не удался и он — сбой инструмента для модели (данные этого инструмента недоступны).
+    /// </summary>
+    private async Task<ToolOutcome> RunToolAsync(LlmToolCall call, ToolContext context, bool hasData, ToolExecutor executor, SourceOfTruthService truth,
+        AiTurnTimings? turn, bool review, CancellationToken ct)
+    {
+        var start = turn?.Now ?? 0;
+        var watch = Stopwatch.StartNew();
+        async Task<ToolResult> Run(ToolExecutor ex, SourceOfTruthService tr)
+        {
+            try
+            {
+                return call.Name == SourceOfTruthTool.ToolName && hasData
+                    ? ToolResult.Ok(await SourceOfTruthTool.RunAsync(call.Arguments, tr, ct))
+                    : await ex.ExecuteAsync(context, call.Name, call.Arguments, ct);
+            }
+            catch (Exception e) when (!(e is OperationCanceledException && ct.IsCancellationRequested))
+            {
+                // Источник истины — не через ToolExecutor (тот сам превращает сбой инструмента в структурный): его сбой тоже не останавливает сотрудника.
+                logger?.LogError(e, "AI: {Tool} сотрудника {Agent} завершился ошибкой", call.Name, context.AgentCode);
+                return ToolResult.Failure(call.Name, ToolFailures.KindOf(e), ToolFailures.SafeMessage(e));
+            }
+        }
+
+        var result = await Run(executor, truth);
+        if (!review || result.ErrorKind != ToolFailures.ToolError)
+        {
+            return new ToolOutcome(result, null, start, watch.ElapsedMilliseconds);
+        }
+
+        logger?.LogWarning("AI: инструмент {Tool} сотрудника {Agent} упал — повтор без вызова модели", call.Name, context.AgentCode);
+        using var scope = scopes.CreateScope();
+        var again = await Run(scope.ServiceProvider.GetRequiredService<ToolExecutor>(), scope.ServiceProvider.GetRequiredService<SourceOfTruthService>());
+        turn?.Review(AiReviewCauses.ToolFailed,
+            again.Success ? $"{call.Name}: повтор без вызова модели — удался" : $"{call.Name}: упал и при повторе — данные инструмента недоступны", null, context.AgentCode);
+        return new ToolOutcome(again, null, start, watch.ElapsedMilliseconds);
     }
 
     /// <summary>Бюджет следующего результата инструмента: остаток контекста анализа, от MinToolResultChars до MaxToolResultChars.</summary>

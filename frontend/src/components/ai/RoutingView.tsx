@@ -14,7 +14,7 @@ const usd = (v: number) => `$${v < 1 ? v.toFixed(5) : num(v, 2)}`;
 const pct = (v: number) => `${num(v * 100, 1)}%`;
 const sec = (ms: number) => (ms < 1000 ? `${num(ms)} мс` : `${num(ms / 1000, 1)} с`);
 
-const categoryNames: Record<string, string> = { route: "Маршрутизация", extract: "Извлечение JSON" };
+const categoryNames: Record<string, string> = { route: "Маршрутизация", extract: "Извлечение JSON", answer: "Модели ответа (прогноз)" };
 const sourceNames: Record<string, string> = { shadow: "задачи пользователей (фон)", eval: "эталонный набор" };
 const modeNames: Record<string, string> = { off: "Выкл", shadow: "Сравнение", on: "Включено" };
 
@@ -127,7 +127,7 @@ export function RoutingView({ initial }: { initial: AiRoutingView }) {
         {run && run.baseline && run.candidate && (
           <div className="mt-4">
             <Table
-              head={[t("Модель"), t("Роль"), t("Верно"), t("JSON корректен"), t("Ошибки"), t("Вход"), t("Кэш-чтение"), t("Выход"), t("Среднее время")]}
+              head={[t("Модель"), t("Роль"), t("Верно"), t("JSON корректен"), t("Ошибки"), t("Вход"), t("Кэш-чтение"), t("Выход"), t("Среднее время"), t("P50 / P95")]}
               rows={[run.baseline, run.candidate].map((m, i) => [
                 m.model,
                 i === 0 ? t("исходная") : t("кандидат"),
@@ -138,6 +138,7 @@ export function RoutingView({ initial }: { initial: AiRoutingView }) {
                 num(m.cacheReadTokens),
                 num(m.outputTokens),
                 sec(m.avgMs),
+                m.p95Ms ? `${sec(m.p50Ms ?? 0)} / ${sec(m.p95Ms)}` : "—",
               ])}
               empty=""
             />

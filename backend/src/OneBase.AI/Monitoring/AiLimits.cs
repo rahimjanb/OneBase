@@ -38,10 +38,20 @@ public interface IAiLimits
     Task SpentAsync(decimal costUsd, CancellationToken ct = default);
 
     Task<AiBudgetStatus> StatusAsync(CancellationToken ct = default);
+
+    /// <summary>Записан вызов модели (успешный или нет) со стоимостью (null — нет цены): для лимитов процесса Ai:Safety:MaxCalls / MaxCostUsd.</summary>
+    void Recorded(decimal? costUsd)
+    {
+    }
 }
 
-public sealed class AiLimits(IServiceScopeFactory scopes, IAiSettingsSource settings, TimeProvider time, ILogger<AiLimits> logger) : IAiLimits
+public sealed class AiLimits(IServiceScopeFactory scopes, IAiSettingsSource settings, TimeProvider time, ILogger<AiLimits> logger,
+    OneBase.AI.Gateway.AiSafetyOptions? safety = null) : IAiLimits
 {
+    private readonly OneBase.AI.Gateway.AiSafetyOptions _safety = safety ?? OneBase.AI.Gateway.AiSafetyOptions.None;
+    private long _processCalls;
+    private decimal _processCost;
+
     /// <summary>Узбекистан — UTC+5: день и месяц бюджета — по Ташкенту.</summary>
     private static readonly TimeSpan Offset = TimeSpan.FromHours(5);
 
@@ -57,6 +67,17 @@ public sealed class AiLimits(IServiceScopeFactory scopes, IAiSettingsSource sett
 
     public async Task EnsureBudgetAsync(CancellationToken ct = default)
     {
+        // Лимиты процесса (разрешённые платные проверки): дошли — новых вызовов нет, как при исчерпанном бюджете.
+        if (_safety.MaxCalls is { } maxCalls && Interlocked.Read(ref _processCalls) >= maxCalls)
+        {
+            throw new LlmNotConfiguredException($"Лимит вызовов моделей этого запуска исчерпан ({maxCalls}, Ai:Safety:MaxCalls).");
+        }
+
+        if (_safety.MaxCostUsd is { } maxCost && ProcessCost >= maxCost)
+        {
+            throw new LlmNotConfiguredException($"Лимит расходов на модели этого запуска исчерпан (${maxCost:0.##}, Ai:Safety:MaxCostUsd).");
+        }
+
         var status = await StatusAsync(ct);
         if (status.BlockMessage is { } message)
         {
@@ -93,6 +114,30 @@ public sealed class AiLimits(IServiceScopeFactory scopes, IAiSettingsSource sett
         var s = await settings.GetSettingsAsync(ct);
         var spent = await SpentNowAsync(ct);
         return new AiBudgetStatus(spent.Today, spent.ThisMonth, s.DailyBudgetUsd, s.MonthlyBudgetUsd, s.BudgetWarnPercent);
+    }
+
+    /// <summary>Потрачено процессом с запуска (по рассчитанной стоимости записанных вызовов).</summary>
+    public decimal ProcessCost
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _processCost;
+            }
+        }
+    }
+
+    public void Recorded(decimal? costUsd)
+    {
+        Interlocked.Increment(ref _processCalls);
+        if (costUsd is > 0)
+        {
+            lock (_gate)
+            {
+                _processCost += costUsd.Value;
+            }
+        }
     }
 
     public async Task SpentAsync(decimal costUsd, CancellationToken ct = default)

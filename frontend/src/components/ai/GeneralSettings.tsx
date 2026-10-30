@@ -10,7 +10,7 @@ import { bff } from "@/lib/bff";
 import { dateTime, num } from "@/lib/sales/format";
 import { button, field, primary } from "./form";
 
-type Slot = "primary" | "fallback" | "router" | "embedding" | "extract";
+type Slot = "primary" | "fallback" | "router" | "embedding" | "extract" | "agent" | "finalDefault" | "finalComplex";
 type SlotDef = { key: Slot; label: string; hint: string; embeddings?: boolean; test?: boolean };
 
 const slots: SlotDef[] = [
@@ -23,6 +23,19 @@ const slots: SlotDef[] = [
 const taskSlots: (SlotDef & { mode: "routerMode" | "extractMode" })[] = [
   { key: "router", mode: "routerMode", label: "Модель маршрутизации", hint: "Выбор AI-сотрудников и задач им по вопросу (классификация по отделам). Пусто — основная.", test: true },
   { key: "extract", mode: "extractMode", label: "Модель извлечения JSON", hint: "Подбор колонок Google Sheets к полям OneBase (ответ — JSON). Пусто — основная.", test: true },
+];
+
+/** Модели по назначению вызова: сотрудники отделов, итоговый ответ — стандартный и сложный (и переход при перепроверке). */
+const routingSlots: SlotDef[] = [
+  { key: "agent", label: "Модель сотрудников", hint: "AI-сотрудники отделов, у которых своя модель в «Агентах» не задана." },
+  { key: "finalDefault", label: "Модель стандартных ответов", hint: "Итоговый ответ на обычные вопросы и типовой анализ." },
+  { key: "finalComplex", label: "Модель сложных ответов", hint: "Межотдельный синтез, поиск причин, сложная интерпретация; переход при перепроверке." },
+];
+
+const routingModes: { value: string; label: string }[] = [
+  { value: "off", label: "Выкл — как раньше, основной моделью" },
+  { value: "shadow", label: "Сравнение — ответ как раньше, выбор правил и прогноз стоимости в журнал" },
+  { value: "on", label: "Включено — модели по правилам" },
 ];
 
 const modes: { value: string; label: string }[] = [
@@ -47,6 +60,17 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
     router: encode(initial.router),
     embedding: encode(initial.embedding),
     extract: encode(initial.extract),
+    agent: encode(initial.modelRouting?.agent ?? null),
+    finalDefault: encode(initial.modelRouting?.finalDefault ?? null),
+    finalComplex: encode(initial.modelRouting?.finalComplex ?? null),
+  });
+  const [routing, setRouting] = useState({
+    mode: initial.modelRouting?.mode ?? "off",
+    finalAnswerMode: initial.modelRouting?.finalAnswerMode ?? "fixed",
+    fallbackMode: initial.modelRouting?.fallbackMode ?? "standard",
+    threshold: (initial.modelRouting?.complexityThreshold ?? 3).toString(),
+    attempts: (initial.modelRouting?.reviewMaxAttempts ?? 2).toString(),
+    budget: initial.modelRouting?.questionBudgetUsd?.toString() ?? "",
   });
   const [routingEnabled, setRoutingEnabled] = useState(initial.taskRoutingEnabled);
   const [taskModes, setTaskModes] = useState({ routerMode: initial.routerMode, extractMode: initial.extractMode });
@@ -88,7 +112,29 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
       monthlyBudgetUsd: money(monthlyBudget),
       budgetWarnPercent: Number(warnPercent),
       maxConcurrentCalls: Number(concurrent),
+      // Старый сервер поля не знает и пропускает; новый без него ничего не меняет в маршрутизации моделей.
+      modelRouting: data.modelRouting
+        ? {
+            mode: routing.mode,
+            agent: decode(values.agent),
+            finalAnswerMode: routing.finalAnswerMode,
+            finalDefault: decode(values.finalDefault),
+            finalComplex: decode(values.finalComplex),
+            fallbackMode: routing.fallbackMode,
+            complexityThreshold: Number(routing.threshold),
+            reviewMaxAttempts: Number(routing.attempts),
+            questionBudgetUsd: money(routing.budget),
+          }
+        : undefined,
     };
+    if (body.modelRouting && (!Number.isInteger(body.modelRouting.complexityThreshold) || !Number.isInteger(body.modelRouting.reviewMaxAttempts))) {
+      setMessage({ tone: "bad", text: t("Порог сложности и число попыток — целые числа.") });
+      return;
+    }
+    if (body.modelRouting && body.modelRouting.questionBudgetUsd !== null && !(Number.isFinite(body.modelRouting.questionBudgetUsd) && body.modelRouting.questionBudgetUsd > 0)) {
+      setMessage({ tone: "bad", text: t("Бюджет — положительная сумма в долларах; пусто — без ограничения.") });
+      return;
+    }
     if (body.temperature !== null && !Number.isFinite(body.temperature)) {
       setMessage({ tone: "bad", text: t("Температура — число от 0 до 1.") });
       return;
@@ -256,6 +302,62 @@ export function GeneralSettings({ initial, models, providers }: { initial: AiSet
           .
         </p>
       </Section>
+
+      {data.modelRouting && (
+        <Section title={t("Модели по назначению")}>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-ink">{t("Режим")}</span>
+              <select className={field} value={routing.mode} onChange={(e) => setRouting((p) => ({ ...p, mode: e.target.value }))}>
+                {routingModes.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {t(m.label)}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-ink-3">
+                {t("Маршрутизатор — «Модель маршрутизации» выше. Модель канала (Telegram) и модель, заданная сотруднику в «Агентах», важнее этих правил.")}
+              </span>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-ink">{t("Модель итогового ответа")}</span>
+              <select className={field} value={routing.finalAnswerMode} onChange={(e) => setRouting((p) => ({ ...p, finalAnswerMode: e.target.value }))}>
+                <option value="fixed">{t("Всегда модель стандартных ответов")}</option>
+                <option value="dynamic">{t("По сложности вопроса")}</option>
+              </select>
+              <span className="mt-1 block text-xs text-ink-3">
+                {t("Сложность считают правила по уже полученным данным, без отдельного вызова модели: поиск причин, межотдельный синтез, ошибки и нехватка данных у сотрудников. Длина вопроса и число отделов сами по себе не в счёт.")}
+              </span>
+            </label>
+            {routingSlots.map(slotField)}
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-ink">{t("Порог сложности")}</span>
+              <input className={field} value={routing.threshold} onChange={(e) => setRouting((p) => ({ ...p, threshold: e.target.value }))} inputMode="numeric" />
+              <span className="mt-1 block text-xs text-ink-3">{t("С этого балла (1–10) — модель сложных ответов. 3: поиск причин по данным — сразу, межотдельные рекомендации — да, просто два отдела — нет.")}</span>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-ink">{t("Проблемный результат")}</span>
+              <select className={field} value={routing.fallbackMode} onChange={(e) => setRouting((p) => ({ ...p, fallbackMode: e.target.value }))}>
+                <option value="standard">{t("Как раньше — одно исправление той же моделью")}</option>
+                <option value="review">{t("Перепроверка — по причине проблемы")}</option>
+              </select>
+              <span className="mt-1 block text-xs text-ink-3">
+                {t("Перепроверка: упавший инструмент — повтор без модели; сотрудник не справился — повтор с исправленной задачей; ответ не прошёл проверку чисел — исправление, затем один переход на модель сложных ответов. Проверка чисел остаётся всегда.")}
+              </span>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-ink">{t("Попыток перепроверки на ответ")}</span>
+              <input className={field} value={routing.attempts} onChange={(e) => setRouting((p) => ({ ...p, attempts: e.target.value }))} inputMode="numeric" />
+              <span className="mt-1 block text-xs text-ink-3">{t("0–3, вместе для повторов сотрудников и исправлений ответа.")}</span>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-ink">{t("Бюджет одного вопроса, $")}</span>
+              <input className={field} value={routing.budget} onChange={(e) => setRouting((p) => ({ ...p, budget: e.target.value }))} placeholder={t("без ограничения")} inputMode="decimal" />
+              <span className="mt-1 block text-xs text-ink-3">{t("Вызовы ответа стоят столько — новых нет; перепроверка не начинается после 75 % бюджета. Стоимость — расчётная, по ценам в «Модели».")}</span>
+            </label>
+          </div>
+        </Section>
+      )}
 
       <Section title={t("Параметры ответа")}>
         <div className="grid gap-5 lg:grid-cols-2">

@@ -19,6 +19,9 @@ internal sealed class DbUsageRecorder(IServiceScopeFactory scopes, IAiLimits lim
             .FirstOrDefaultAsync(cancellationToken);
 
         var cost = AiPricing.Cost(record.Usage, prices, record.Model.Model);
+        var basis = cost is null || prices is null
+            ? null
+            : FormattableString.Invariant($"ai.Models за 1 млн: вход {prices.Input}, выход {prices.Output}, кэш-чтение {prices.CacheRead}, кэш-запись {prices.CacheWrite}");
         db.AiUsage.Add(new AiUsage
         {
             UserId = record.Context.UserId,
@@ -33,10 +36,24 @@ internal sealed class DbUsageRecorder(IServiceScopeFactory scopes, IAiLimits lim
             CacheWriteTokens = record.Usage.CacheWriteTokens,
             CostUsd = cost,
             DurationMs = record.ElapsedMs,
+            QueueWaitMs = record.QueueMs,
+            Attempt = record.Attempt,
+            TurnId = record.TurnId,
+            ModelReason = record.ModelReason is { Length: > 300 } r ? r[..300] : record.ModelReason,
+            UsedFallback = record.UsedFallback,
+            PriceBasis = basis is { Length: > 160 } b ? b[..160] : basis,
             Success = record.Success,
             Error = record.Error is { Length: > 1000 } e ? e[..1000] : record.Error,
         });
         await db.SaveChangesAsync(cancellationToken);
+
+        // Стоимость — в бюджет вопроса (вызов этого ответа) и в лимиты процесса (Ai:Safety).
+        if (record.TurnId is { } turnId && AiTurnTimings.Current is { } turn && turn.Id == turnId)
+        {
+            turn.AddCost(cost);
+        }
+
+        limits.Recorded(cost);
 
         // Траты против бюджета: обновить и при переходе порога уведомить администраторов AI.
         if (cost is > 0)
