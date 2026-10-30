@@ -1,10 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Inter, Manrope, Onest } from "next/font/google";
+import { Suspense } from "react";
 import { PwaRegister } from "@/components/shell/PwaRegister";
+import { Splash, splashCss } from "@/components/shell/Splash";
+import { SplashReady } from "@/components/shell/SplashReady";
+import splashScreens from "@/components/shell/splashScreens.json";
 import { themeInitScript } from "@/components/shell/ThemeToggle";
 import { I18nProvider } from "@/i18n/client";
-import { getLang } from "@/i18n/server";
+import { getLang, getT } from "@/i18n/server";
 import { isFieldHost, requestHost } from "@/lib/field/host";
 import "./globals.css";
 
@@ -43,8 +47,25 @@ const baseMetadata: Metadata = {
     ],
     apple: "/icons/apple-touch-icon.png",
   },
-  // Установленное на iOS приложение: без адресной строки, строка состояния поверх тёмной шапки.
-  appleWebApp: { capable: true, title: "OneBase", statusBarStyle: "black-translucent" },
+  // Установленное на iOS приложение: без адресной строки, строка состояния поверх тёмной шапки. Пока оно запускается — картинка
+  // цвета заставки 1Base под размер экрана (scripts/splash-screens.mjs), а не белый экран.
+  appleWebApp: {
+    capable: true,
+    title: "OneBase",
+    statusBarStyle: "black-translucent",
+    startupImage: splashScreens.flatMap(({ width, height, ratio }) =>
+      (["portrait", "landscape"] as const).map((orientation) => {
+        const [w, h] = orientation === "portrait" ? [width * ratio, height * ratio] : [height * ratio, width * ratio];
+        return {
+          url: `/splash/startup/${w}x${h}.png`,
+          media: `(device-width: ${width}px) and (device-height: ${height}px) and (-webkit-device-pixel-ratio: ${ratio}) and (orientation: ${orientation})`,
+        };
+      }),
+    ),
+  },
+  // Next.js выводит только mobile-web-app-capable; iOS до 16.4 открывает приложение без адресной строки и показывает картинки запуска
+  // только по прежнему apple-mobile-web-app-capable.
+  other: { "apple-mobile-web-app-capable": "yes" },
   formatDetection: { telephone: false },
 };
 
@@ -80,19 +101,33 @@ export async function generateViewport(): Promise<Viewport> {
 /**
  * data-brand="onebase" — стеклянная тёмная тема OneBase (globals.css): по умолчанию, пока пользователь не выбрал светлую. На домене
  * Sales Base её нет — там своя тема по системной.
+ *
+ * OneBase открывается заставкой 1Base (Splash). Страница — за <Suspense>: без него сервер молчит, пока не получит данные из API
+ * (/api/auth/me, данные страницы), и всё это время виден белый экран; с ним заставка уходит первыми байтами ответа. Цена: ответ
+ * начинается с 200, и redirect()/notFound() на странице срабатывают уже в браузере (вход без сессии по-прежнему решает proxy).
  */
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const field = isFieldHost(requestHost(await headers()));
   // Язык интерфейса (кнопка RU/UZ): атрибут lang — для озвучки и переносов, провайдер — для клиентских компонентов.
   const lang = await getLang();
+  const t = await getT();
   return (
     <html lang={lang} className={`${inter.variable} ${manrope.variable} ${onest.variable}`} data-brand={field ? undefined : "onebase"} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {!field && <style dangerouslySetInnerHTML={{ __html: splashCss }} />}
       </head>
       <body className="font-sans">
+        {!field && <Splash label={t("Загрузка")} />}
         <I18nProvider lang={lang}>
-          {children}
+          {field ? (
+            children
+          ) : (
+            <Suspense>
+              {children}
+              <SplashReady />
+            </Suspense>
+          )}
           <PwaRegister />
         </I18nProvider>
       </body>

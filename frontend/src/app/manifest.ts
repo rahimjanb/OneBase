@@ -44,8 +44,11 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     scope: "/",
     display: "standalone",
     orientation: "any",
-    background_color: "#f6f8fb",
-    theme_color: "#16213a",
+    // Экран запуска установленного приложения (Android, Chrome на компьютере) — цвета заставки 1Base, которая идёт следом (Splash):
+    // без белой вспышки между нажатием на значок и анимацией. Значок на нём — тот же тёмно-синий квадрат, он сливается с фоном.
+    // theme_color — строка состояния на этом экране; когда страница загрузилась, цвет задаёт её <meta name="theme-color">.
+    background_color: "#001042",
+    theme_color: "#001042",
     categories: ["business", "productivity"],
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
