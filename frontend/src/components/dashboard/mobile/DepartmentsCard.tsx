@@ -12,7 +12,8 @@ const icons: Record<string, LucideIcon> = { finance: Wallet, sales: ShoppingCart
 
 /**
  * «Отделы»: одна карточка со списком — ключевая метрика, изменение за неделю, полоса выполнения и статус словами (не только цветом).
- * Сначала отделы, которым нужно внимание, затем остальные; внутри — от слабого показателя к сильному. Тап — страница отдела.
+ * Пока — отделы с данными: «Продажи» (план месяца) и HR (явка). Сначала те, кому нужно внимание, затем остальные; внутри — от слабого
+ * показателя к сильному. Тап — раздел отдела.
  */
 export function DepartmentsCard({ departments }: { departments: MobileDepartment[] }) {
   const t = useT();
@@ -50,7 +51,7 @@ export function DepartmentsCard({ departments }: { departments: MobileDepartment
           {rows.map((d, i) => {
             const Icon = icons[d.code] ?? Factory;
             const warn = d.status === "attention";
-            const Trend = d.trendWeek >= 0 ? TrendingUp : TrendingDown;
+            const Trend = (d.trendWeek ?? 0) >= 0 ? TrendingUp : TrendingDown;
             return (
               <li key={d.code} className={i > 0 ? "border-t border-(--ts-border)" : ""}>
                 <Link href={d.href} className={`block px-[16px] py-[14px] ${press} ${focusRing}`}>
@@ -66,10 +67,12 @@ export function DepartmentsCard({ departments }: { departments: MobileDepartment
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-[3px]">
                       <span className="text-[16px] font-bold leading-none text-(--ts-text)">{fmt(d.value)}%</span>
-                      <span className={`inline-flex items-center gap-[3px] text-[11px] font-semibold ${d.trendWeek >= 0 ? "text-(--ts-success)" : "text-(--ts-danger)"}`}>
-                        <Trend aria-hidden className="size-[12px]" strokeWidth={2.4} />
-                        {t("{n} нед.", { n: signed(d.trendWeek) })}
-                      </span>
+                      {d.trendWeek != null && (
+                        <span className={`inline-flex items-center gap-[3px] text-[11px] font-semibold ${d.trendWeek >= 0 ? "text-(--ts-success)" : "text-(--ts-danger)"}`}>
+                          <Trend aria-hidden className="size-[12px]" strokeWidth={2.4} />
+                          {t("{n} нед.", { n: signed(d.trendWeek, Math.abs(d.trendWeek) < 10 ? 1 : 0) })}
+                        </span>
+                      )}
                     </span>
                   </span>
                   <span className="mt-[10px] flex items-center gap-[12px]">

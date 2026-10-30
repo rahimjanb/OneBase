@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { Building2, ChevronRight, ClipboardList, Loader2, Search, UserRound, X, type LucideIcon } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { departmentRows } from "@/lib/dashboard.mock";
+import { DEPARTMENTS } from "@/lib/dashboard-mobile";
 import type { HrEmployeeRow } from "@/lib/hr";
 import { canOpen } from "@/lib/navigation";
 import type { PageResult } from "@/lib/tasks";
@@ -92,7 +92,7 @@ function SearchPanel({ permissions, onClose }: { permissions: readonly string[] 
     .filter((i) => match(t(i.label)))
     .map((i) => ({ key: i.href, href: i.href, title: t(i.label), icon: i.icon }));
   const departments: Hit[] = q
-    ? departmentRows.filter((d) => match(t(d.name))).map((d) => ({ key: d.code, href: d.href, title: t(d.name), hint: t(d.metric), icon: Building2 }))
+    ? DEPARTMENTS.filter((d) => match(t(d.name))).map((d) => ({ key: d.code, href: d.href, title: t(d.name), icon: Building2 }))
     : [];
   const groups = [
     { title: t("Разделы"), hits: sections },

@@ -8,11 +8,17 @@ import { FileChartColumn, FileDown, FileSpreadsheet, FileText, Loader2, Plus, Sp
 import { Sheet } from "@/components/field/Sheet";
 import { startNavProgress } from "@/components/shell/NavProgress";
 import { useT } from "@/i18n/client";
+import type { T } from "@/i18n/core";
 import { bff } from "@/lib/bff";
-import { fmt, PERIODS, type HomeFilters, type MobileDepartment, type MobileKpi, type MobileTasks } from "@/lib/dashboard-mobile";
+import type { HomeHero, HomeStat } from "@/lib/dashboard-home";
+import { DEPARTMENTS, fmt, PERIODS, type HomeFilters, type MobileDepartment, type MobileTasks } from "@/lib/dashboard-mobile";
 import type { DepartmentTasks, WorkProject } from "@/lib/tasks";
 import { useHomeFilters } from "./Filters";
+import { formatStat } from "./KpiHero";
 import { focusRing, press } from "./ui";
+
+/** Что уходит в таблицу «Экспорт»: те же показатели, что на странице. */
+export type HomeExport = { hero: HomeHero | null; stats: HomeStat[]; tasks: MobileTasks | null; departments: MobileDepartment[] };
 
 // Форма задачи — тяжёлая, грузится по первому нажатию «Задача» (вместе со списком отделов).
 const loadTaskForm = () => import("@/components/tasks/TaskForm").then((mod) => mod.TaskForm);
@@ -33,7 +39,7 @@ export function periodText(f: HomeFilters, t: (s: string) => string) {
  * фильтрам), «Экспорт» (PDF или таблица) и «Отчёт AI» (находки консультанта). Нажатие видно сразу: кнопка сжимается, а «Задача», пока
  * грузит отделы для формы, показывает вращающийся значок.
  */
-export function QuickActions({ kpi, tasks, departments }: { kpi: MobileKpi; tasks: MobileTasks; departments: MobileDepartment[] }) {
+export function QuickActions({ data }: { data: Promise<HomeExport> }) {
   const t = useT();
   const router = useRouter();
   const [filters] = useHomeFilters();
@@ -68,8 +74,9 @@ export function QuickActions({ kpi, tasks, departments }: { kpi: MobileKpi; task
     }
   };
 
+  const [exporting, setExporting] = useState(false);
   const scope = filters.departments.length
-    ? ` (${filters.departments.map((code) => t(departments.find((d) => d.code === code)?.name ?? code)).join(", ")})`
+    ? ` (${filters.departments.map((code) => t(DEPARTMENTS.find((d) => d.code === code)?.name ?? code)).join(", ")})`
     : "";
   const question = t("Разбери показатели компании за период «{period}»{scope}: что сейчас требует внимания и что сделать в первую очередь?", {
     period: periodText(filters, t),
@@ -120,12 +127,19 @@ export function QuickActions({ kpi, tasks, departments }: { kpi: MobileKpi; task
             }}
           />
           <ExportOption
-            icon={FileSpreadsheet}
+            icon={exporting ? Loader2 : FileSpreadsheet}
+            busy={exporting}
             title={t("Excel (CSV)")}
             hint={t("Показатели, задачи и отделы таблицей")}
-            onClick={() => {
-              download(csvOf(kpi, tasks, departments, periodText(filters, t), t));
-              setExportOpen(false);
+            onClick={async () => {
+              // Данные страницы могут ещё идти с сервера — ждём их, значок крутится.
+              setExporting(true);
+              try {
+                download(csvOf(await data, periodText(filters, t), t));
+                setExportOpen(false);
+              } finally {
+                setExporting(false);
+              }
             }}
           />
         </div>
@@ -134,11 +148,11 @@ export function QuickActions({ kpi, tasks, departments }: { kpi: MobileKpi; task
   );
 }
 
-function ExportOption({ icon: Icon, title, hint, onClick }: { icon: LucideIcon; title: string; hint: string; onClick: () => void }) {
+function ExportOption({ icon: Icon, title, hint, onClick, busy = false }: { icon: LucideIcon; title: string; hint: string; onClick: () => void; busy?: boolean }) {
   return (
-    <button type="button" onClick={onClick} className={`flex min-h-[56px] w-full items-center gap-3 rounded-[14px] border border-line px-3 py-2.5 text-left ${press} hover:bg-muted`}>
+    <button type="button" onClick={onClick} disabled={busy} aria-busy={busy} className={`flex min-h-[56px] w-full items-center gap-3 rounded-[14px] border border-line px-3 py-2.5 text-left ${press} hover:bg-muted`}>
       <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
-        <Icon aria-hidden className="size-5" />
+        <Icon aria-hidden className={`size-5 ${busy ? "animate-spin" : ""}`} />
       </span>
       <span className="min-w-0">
         <span className="block text-[15px] font-semibold text-ink">{title}</span>
@@ -149,27 +163,21 @@ function ExportOption({ icon: Icon, title, hint, onClick }: { icon: LucideIcon; 
 }
 
 /** Таблица для Excel: разделитель «;» и запятая в дробях — как ждёт русский Excel; BOM — чтобы кириллица открылась без настроек. */
-function csvOf(kpi: MobileKpi, tasks: MobileTasks, departments: MobileDepartment[], period: string, t: (s: string, v?: Record<string, string | number>) => string) {
+function csvOf(data: HomeExport, period: string, t: T) {
   const cell = (v: string | number) => {
     const s = typeof v === "number" ? fmt(v, Number.isInteger(v) ? 0 : 1) : v;
     return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const rows: (string | number)[][] = [
-    [t("Обзор OneBase"), period],
-    [],
-    [t("Показатель"), t("Значение")],
-    [t("Выполнение планов, %"), kpi.plan.value],
-    [t("Цель, %"), kpi.plan.target],
-    [t("Общий KPI, %"), kpi.kpi.value],
-    [t("Активные задачи"), kpi.tasks.active],
-    [t("Просрочено"), kpi.tasks.overdue],
-    [],
-    [t("Задачи"), t("Количество")],
-    ...tasks.slices.map((s) => [t(s.label), s.count]),
-    [],
-    [t("Отдел"), t("Ключевая метрика"), t("Значение, %"), t("За неделю"), t("Статус")],
-    ...departments.map((d) => [t(d.name), t(d.metric), d.value, d.trendWeek, d.status === "attention" ? t("Внимание") : t("В норме")]),
-  ];
+  const rows: (string | number)[][] = [[t("Обзор OneBase"), period], [], [t("Показатель"), t("Значение")]];
+  if (data.hero) rows.push([data.hero.label, `${fmt(data.hero.value, 1)}%`]);
+  for (const s of data.stats) rows.push([s.label, formatStat(s.value, s.format, t)]);
+  if (data.tasks) {
+    rows.push([], [t("Задачи"), t("Количество")], ...data.tasks.slices.map((s) => [t(s.label), s.count]), [t("Просрочено"), data.tasks.overdue]);
+  }
+  if (data.departments.length) {
+    rows.push([], [t("Отдел"), t("Ключевая метрика"), t("Значение, %"), t("За неделю, п.п."), t("Статус")]);
+    for (const d of data.departments) rows.push([d.name, d.metric, Math.round(d.value * 10) / 10, d.trendWeek == null ? "—" : Math.round(d.trendWeek * 10) / 10, d.status === "attention" ? t("Внимание") : t("В норме")]);
+  }
   return rows.map((r) => r.map(cell).join(";")).join("\r\n");
 }
 

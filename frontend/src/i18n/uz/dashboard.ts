@@ -200,6 +200,30 @@ const dashboard: Dict = {
   "потяните, чтобы обновить": "yangilash uchun pastga torting",
   "Очистить": "Tozalash",
   "Тема": "Mavzu",
+
+  // ---------- Главная: настоящие показатели (продажи, HR, задачи) ----------
+  "Выполнение плана продаж": "Savdo rejasining bajarilishi",
+  "к тем же дням прошлого месяца": "o'tgan oyning shu kunlariga nisbatan",
+  "к прошлому рабочему дню": "oldingi ish kuniga nisbatan",
+  "к концу месяца": "oy oxiriga",
+  "{n} просрочено": "{n} ta muddati o'tgan",
+  "{n} срок на неделе": "{n} ta muddati shu haftada",
+  "Явка за месяц": "Oylik davomat",
+  "за месяц": "oy davomida",
+  "Выполнение плана месяца": "Oylik reja bajarilishi",
+  "Явка с начала месяца": "Oy boshidan davomat",
+  "Н{n}": "{n}-h",
+  "нет данных прошлого месяца": "o'tgan oy ma'lumotlari yo'q",
+  "сравнить не с чем": "solishtirish uchun ma'lumot yo'q",
+  "срок на этой неделе": "muddati shu haftada",
+  "заблокировано": "bloklangan",
+  "За {n} нед.": "{n} haftada",
+  "Находки AI-консультанта": "AI-maslahatchi topilmalari",
+  "Показатели": "Ko'rsatkichlar",
+  "За неделю, п.п.": "Hafta davomida, f.p.",
+  "По неделям": "Haftalar bo'yicha",
+  "Открытые и выполненные за месяц: {n}": "Ochiq va oy davomida bajarilgan: {n}",
+  "из них просрочено": "shundan muddati o'tgan",
 };
 
 export default dashboard;

@@ -20,7 +20,8 @@ export function DashboardHeader({
   locale,
 }: {
   name: string;
-  planShare: number;
+  /** Выполнение плана продаж, %; нет доступа к продажам — null, строка только об отделах. */
+  planShare: number | null;
   attention: number;
   initial: HeaderClock;
   locale: string;
@@ -36,7 +37,7 @@ export function DashboardHeader({
   }, [locale]);
 
   const Icon = clock.night ? Moon : Sun;
-  const share = planShare.toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const share = planShare?.toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
@@ -50,8 +51,12 @@ export function DashboardHeader({
           {name ? `, ${name}` : ""}
         </h1>
         <p className="text-sm text-ink-3">
-          {t("Компания выполняет план на")} <span className="font-semibold text-ok">{share}%</span> · {attention}{" "}
-          {t(plural(attention, ["отдел требует внимания", "отдела требуют внимания", "отделов требуют внимания"]))}
+          {share != null && (
+            <>
+              {t("Компания выполняет план на")} <span className="font-semibold text-ok">{share}%</span> ·{" "}
+            </>
+          )}
+          {attention} {t(plural(attention, ["отдел требует внимания", "отдела требуют внимания", "отделов требуют внимания"]))}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2.5">

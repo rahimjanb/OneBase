@@ -3,24 +3,28 @@
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useT } from "@/i18n/client";
+import type { HomeHeadline } from "@/lib/dashboard-home";
 import { fmt } from "@/lib/dashboard-mobile";
 import { homeClock, type HomeClock } from "@/lib/dashboardClock";
 import { plural } from "@/lib/format";
 import { useHomeFilters } from "./Filters";
 
+const toneText = { success: "text-(--ts-success)", warning: "text-(--ts-warning)", danger: "text-(--ts-danger)" };
+
 /**
- * Приветствие: «ПЯТНИЦА · 30 ОКТЯБРЯ» с солнцем или луной, «Добрый день, {имя}» по времени суток и итог — выполнение плана и сколько
- * отделов (из выбранных в фильтре) требуют внимания. Время идёт: первая отрисовка — с сервера, дальше раз в минуту.
+ * Приветствие: «ПЯТНИЦА · 30 ОКТЯБРЯ» с солнцем или луной, «Добрый день, {имя}» по времени суток и итог — выполнение плана продаж
+ * (нет доступа — явка сегодня) и сколько отделов (из выбранных в фильтре) требуют внимания. Время идёт: первая отрисовка — с сервера,
+ * дальше раз в минуту.
  */
 export function Greeting({
   name,
-  planShare,
+  headline,
   departments,
   initial,
   locale,
 }: {
   name: string;
-  planShare: number;
+  headline: HomeHeadline | null;
   departments: { code: string; status: "ok" | "attention" }[];
   initial: HomeClock;
   locale: string;
@@ -50,17 +54,23 @@ export function Greeting({
         <span suppressHydrationWarning>{t(clock.greeting)}</span>
         {name ? `, ${name}` : ""}
       </h1>
-      <p className="text-[14px] leading-[1.4] text-(--ts-muted)">
-        {t("План выполнен на")} <span className="font-bold text-(--ts-success)">{fmt(planShare, 1)}%</span>
-        {" · "}
-        {attention > 0 ? (
-          <span className="font-medium text-(--ts-warning)">
-            {attention} {t(plural(attention, ["отдел — внимание", "отдела — внимание", "отделов — внимание"]))}
-          </span>
-        ) : (
-          <span className="font-medium text-(--ts-success)">{t("все отделы в норме")}</span>
-        )}
-      </p>
+      {(headline || scope.length > 0) && (
+        <p className="text-[14px] leading-[1.4] text-(--ts-muted)">
+          {headline && (
+            <>
+              {headline.label} <span className={`font-bold ${toneText[headline.tone]}`}>{fmt(headline.value, 1)}%</span>
+            </>
+          )}
+          {headline && scope.length > 0 && " · "}
+          {scope.length === 0 ? null : attention > 0 ? (
+            <span className="font-medium text-(--ts-warning)">
+              {attention} {t(plural(attention, ["отдел — внимание", "отдела — внимание", "отделов — внимание"]))}
+            </span>
+          ) : (
+            <span className="font-medium text-(--ts-success)">{t("все отделы в норме")}</span>
+          )}
+        </p>
+      )}
     </header>
   );
 }

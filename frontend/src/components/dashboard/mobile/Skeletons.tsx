@@ -85,32 +85,64 @@ export function DepartmentsSkeleton({ label }: { label: string }) {
   );
 }
 
+export function GreetingSkeleton({ label }: { label: string }) {
+  return (
+    <Busy label={label} className="flex flex-col gap-[10px] px-[4px]">
+      <Sk className="h-[12px] w-[150px]" />
+      <Sk className="h-[28px] w-[230px]" />
+      <Sk className="h-[14px] w-[260px]" />
+    </Busy>
+  );
+}
+
+export function KpiSkeleton({ label }: { label: string }) {
+  return (
+    <Busy label={label} className={`${card} ${m.kpi} rounded-[22px] p-[20px]`}>
+      <div className="flex justify-between gap-[12px]">
+        <div className="flex flex-col gap-[10px]">
+          <Sk className="h-[13px] w-[130px]" />
+          <Sk className="h-[44px] w-[150px]" />
+          <Sk className="h-[20px] w-[180px]" />
+        </div>
+        <Sk className="size-[72px] rounded-full" />
+      </div>
+      <Sk className="mt-[36px] h-[48px] w-full" />
+    </Busy>
+  );
+}
+
+export function DynamicsSkeleton({ label }: { label: string }) {
+  return (
+    <section className="flex flex-col gap-[12px]">
+      <div className="flex items-center justify-between px-[4px]">
+        <Sk className="h-[18px] w-[110px]" />
+        <Sk className="h-[14px] w-[80px]" />
+      </div>
+      <Busy label={label} className={`${card} flex flex-col gap-[16px] p-[18px]`}>
+        <Sk className="h-[40px] w-full rounded-[12px]" />
+        <Sk className="h-[40px] w-full" />
+        <div className="flex h-[130px] items-end gap-[5px]">
+          {[45, 60, 52, 70, 64, 80, 72, 86, 66, 90, 84, 76].map((v, i) => (
+            <Sk key={i} className="flex-1 rounded-b-none rounded-t-[5px]" style={{ height: `${v}%` }} />
+          ))}
+        </div>
+      </Busy>
+    </section>
+  );
+}
+
 /** Вся страница целиком — пока открывается «Обзор» (loading.tsx): шапка и нижняя панель уже на месте. */
 export function MobileOverviewSkeleton({ label }: { label: string }) {
   return (
     <div data-mobile-home className={`${ts.root} ${m.page} md:hidden`}>
       <div className="flex flex-col gap-[20px] px-[16px] pb-[40px] pt-[8px]">
-        <Busy label={label} className="flex flex-col gap-[10px] px-[4px]">
-          <Sk className="h-[12px] w-[150px]" />
-          <Sk className="h-[28px] w-[230px]" />
-          <Sk className="h-[14px] w-[260px]" />
-        </Busy>
+        <GreetingSkeleton label={label} />
         <div className="flex gap-[8px] overflow-hidden">
           {[96, 128, 150].map((w) => (
             <Sk key={w} className="h-[34px] shrink-0 rounded-[20px]" style={{ width: w }} />
           ))}
         </div>
-        <div className={`${card} ${m.kpi} rounded-[22px] p-[20px]`}>
-          <div className="flex justify-between gap-[12px]">
-            <div className="flex flex-col gap-[10px]">
-              <Sk className="h-[13px] w-[130px]" />
-              <Sk className="h-[44px] w-[150px]" />
-              <Sk className="h-[20px] w-[180px]" />
-            </div>
-            <Sk className="size-[72px] rounded-full" />
-          </div>
-          <Sk className="mt-[36px] h-[48px] w-full" />
-        </div>
+        <KpiSkeleton label={label} />
         <div className="grid grid-cols-4 gap-[8px]">
           {[0, 1, 2, 3].map((i) => (
             <Sk key={i} className="h-[86px] rounded-[16px]" />

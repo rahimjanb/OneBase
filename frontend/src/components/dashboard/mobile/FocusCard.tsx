@@ -22,7 +22,7 @@ const SHOW = 3;
  * Слева — ключевая цифра находки, тап открывает связанный раздел. items = null — находки недоступны (нет права или сервис не ответил),
  * блока нет; находок нет — «Сегодня всё спокойно».
  */
-export function FocusCard({ items, departments, activeTasks }: { items: FocusItem[] | null; departments: number; activeTasks: number }) {
+export function FocusCard({ items, departments, activeTasks }: { items: FocusItem[] | null; departments: number; activeTasks: number | null }) {
   const t = useT();
   const [filters] = useHomeFilters();
   if (!items) return null;
@@ -47,8 +47,12 @@ export function FocusCard({ items, departments, activeTasks }: { items: FocusIte
             {list.length > 0 && <span className="rounded-[6px] bg-(--ts-violet-soft) px-[6px] py-[2px] text-[11px] font-semibold text-(--ts-violet)">AI · {list.length}</span>}
           </div>
           <p className="mt-[3px] truncate text-[12px] text-(--ts-muted)">
-            {departments} {t(plural(departments, ["отдел", "отдела", "отделов"]))} · {activeTasks}{" "}
-            {t(plural(activeTasks, ["активная задача", "активные задачи", "активных задач"]))}
+            {[
+              departments > 0 ? `${departments} ${t(plural(departments, ["отдел", "отдела", "отделов"]))}` : null,
+              activeTasks != null ? `${activeTasks} ${t(plural(activeTasks, ["активная задача", "активные задачи", "активных задач"]))}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || t("Находки AI-консультанта")}
           </p>
         </div>
         <Link

@@ -1,13 +1,11 @@
 import type { T } from "@/i18n/core";
 import { alertText, categoryNames, type AiAlertsView } from "@/lib/ai";
-import { departmentRows, kpis, summary, taskStatuses, trendSeries, type DepartmentRow, type TaskStatusSlice, type TrendSeries } from "@/lib/dashboard.mock";
+import type { TaskStatusSlice } from "@/lib/dashboard.mock";
 import { TIME_ZONE } from "@/lib/format";
-import type { DepartmentTasks } from "@/lib/tasks";
 
 /**
- * Мобильный «Обзор» (ТЗ 1base-mobile-home): те же источники, что у десктопа, — показатели из lib/dashboard.mock до подключения API,
- * «Фокус дня» и AI-отчёт — из находок консультанта (/api/ai/alerts), задачи отделов — из /api/work/departments. Здесь только
- * преобразование в вид блоков телефона и форматирование чисел (ru-RU, минус — «−»).
+ * Мобильный «Обзор» (ТЗ 1base-mobile-home): форматирование чисел (ru-RU, минус — «−»), «Фокус дня» и AI-отчёт из находок консультанта
+ * (/api/ai/alerts), фильтры главной в адресе. Показатели продаж, HR и задач — lib/dashboard-data и lib/dashboard-home.
  */
 
 export type Severity = "critical" | "warning" | "info";
@@ -27,28 +25,25 @@ export type FocusItem = {
 export type MobileDepartment = {
   code: string;
   name: string;
-  icon: DepartmentRow["icon"];
   metric: string;
   value: number;
-  /** Изменение за последнюю неделю, п. п. */
-  trendWeek: number;
+  /** Изменение за последнюю неделю, п. п.; недель с данными меньше двух — null. */
+  trendWeek: number | null;
   status: "ok" | "attention";
   overdue: number;
   href: string;
 };
 
-export type MobileKpi = {
-  plan: { value: number; delta: number; target: number };
-  kpi: { value: number; delta: number };
-  tasks: { active: number; createdToday: number; overdue: number; overdueDeltaWeek: number };
+/** Задачи: кольцо — выполненные за месяц и открытые (в работе, на проверке); просроченные — часть открытых, отдельной строкой. */
+export type MobileTasks = {
+  total: number;
+  done: number;
+  overdue: number;
+  slices: TaskStatusSlice[];
+  departments: { code: string; name: string; overdue: number }[];
 };
 
-export type MobileTasks = { total: number; done: number; slices: TaskStatusSlice[] };
-
 export type WeeklyReport = { id: string; risks: number; recommendations: number };
-
-/** «+4,2%» → 4.2, «−3» → −3, «07» → 7: числа макета хранятся строками для десктопных карточек. */
-const parseNum = (text: string) => Number(text.replace(/[−–]/g, "-").replace(/[^\d.,-]/g, "").replace(",", "."));
 
 /** 92.1 → «92,1»; знак минуса — «−». */
 export const fmt = (value: number, digits = 0) =>
@@ -56,43 +51,6 @@ export const fmt = (value: number, digits = 0) =>
 
 /** Со знаком: «+4,2», «−3», «0». */
 export const signed = (value: number, digits = 0) => `${value > 0 ? "+" : value < 0 ? "−" : ""}${fmt(Math.abs(value), digits)}`;
-
-export function mobileKpi(): MobileKpi {
-  const byId = Object.fromEntries(kpis.map((k) => [k.id, k]));
-  return {
-    plan: { value: summary.planShare, delta: parseNum(byId.plans.change.text), target: trendSeries[0]?.target ?? 90 },
-    kpi: { value: parseNum(byId.kpi.value), delta: parseNum(byId.kpi.change.text) },
-    tasks: {
-      active: summary.activeTasks,
-      createdToday: parseNum(byId.tasks.change.text),
-      overdue: parseNum(byId.overdue.value),
-      overdueDeltaWeek: parseNum(byId.overdue.change.text),
-    },
-  };
-}
-
-export const mobileTasks = (): MobileTasks => ({ total: taskStatuses.total, done: taskStatuses.done, slices: taskStatuses.slices });
-
-export const mobileTrends = (): TrendSeries[] => trendSeries;
-
-/** Отделы как на десктопе: показатели макета, задачи и просрочки — из /api/work/departments, если раздел «Задачи» доступен. */
-export function mobileDepartments(real: DepartmentTasks[] | null): MobileDepartment[] {
-  return departmentRows.map((r) => {
-    const tasks = real?.find((d) => d.code === r.code);
-    const n = r.trend.length;
-    return {
-      code: r.code,
-      name: r.name,
-      icon: r.icon,
-      metric: r.metric,
-      value: r.value,
-      trendWeek: n > 1 ? r.trend[n - 1] - r.trend[n - 2] : 0,
-      status: r.status === "attention" ? "attention" : "ok",
-      overdue: tasks?.overdueTasks ?? r.overdue,
-      href: r.href,
-    };
-  });
-}
 
 const NUMBER = String.raw`\d[\d\s  ]*(?:[.,]\d+)?`;
 // «… — прогноз 44%»: цифра с подписью в конце после тире уходит в плашку, текст — без неё.
@@ -150,11 +108,12 @@ export function weeklyReportOf(alerts: AiAlertsView | null, now: Date): WeeklyRe
   return problems + recommendations > 0 ? { id: weekId(now), risks: problems, recommendations } : null;
 }
 
-/** Сколько дней текущей недели прошло (пн = 1 … вс = 7) — подпись под графиком динамики. */
-export function daysIntoWeek(date: Date): number {
-  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: TIME_ZONE }).format(date);
-  return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(weekday) + 1;
-}
+/** Отделы компании — для фильтра и поиска; показатели есть пока у «Продаж» и HR. */
+export const DEPARTMENTS: { code: string; name: string; href: string }[] = Object.entries(categoryNames).map(([code, name]) => ({
+  code,
+  name,
+  href: code === "sales" ? "/sales" : code === "hr" ? "/hr" : "/departments",
+}));
 
 /** Фильтры главной в адресе: ?period=7d&dept=finance,sales&emp=…; по умолчанию — 30 дней, все отделы и сотрудники. */
 export type PeriodKey = "7d" | "30d" | "quarter" | "year" | "custom";
