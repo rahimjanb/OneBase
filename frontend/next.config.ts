@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
     // После синхронизации панель продаж сама вызывает router.refresh(), и кэш сбрасывается.
     staleTimes: { dynamic: 30 },
   },
+  // Nginx по умолчанию копит ответ и отдаёт его целиком — тогда заставка (Splash), которую страница шлёт первыми байтами, ждала бы
+  // данных из API, и снова был бы белый экран. Страницы — потоком; статика (_next) и /bff (там заголовок передаётся от API) — как были.
+  async headers() {
+    return [{ source: "/:path((?!_next/|bff/).*)", headers: [{ key: "X-Accel-Buffering", value: "no" }] }];
+  },
   // В разработке проксируем /api на backend. В Docker /api перехватывает Nginx.
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${apiUrl}/api/:path*` }];
