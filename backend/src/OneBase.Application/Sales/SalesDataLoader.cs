@@ -303,16 +303,17 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         bool TeamPlan(SalesStaffPlan s) => excludedStaff.Contains(s.LinkoUserId) || supervisorMonths.Contains((s.LinkoUserId, s.Year, s.Month));
         var teamStaff = excludedStaff.Concat(supervisorMonths.Where(x => x.Year == year && x.Month == month).Select(x => x.LinkoUserId)).ToHashSet();
         var weight = staff.Where(s => s.PlanType == StaffPlanTypes.SalesWeight && !TeamPlan(s)).ToList();
+        // План ТП за месяц — «Тотал», если он есть (Twizos и Могуль — его части), иначе сумма показателей (KpiMath.PlanParts).
         var yearAgentPlans = weight
             .Where(s => s.Year == year)
             .GroupBy(s => (AgentId: (long?)s.LinkoUserId, s.Month))
-            .Select(g => new PlanRow(null, g.Key.AgentId, g.Key.Month, null, g.Sum(s => s.PlanAmount)))
+            .Select(g => new PlanRow(null, g.Key.AgentId, g.Key.Month, null, KpiMath.PlanParts(g, s => s.IndicatorName).Sum(s => s.PlanAmount)))
             .ToList();
         var agentPlans = yearAgentPlans.Where(p => p.Month == month).ToList();
         var nextPlans = weight
             .Where(s => s.Year == next.Year && s.Month == next.Month)
             .GroupBy(s => s.LinkoUserId)
-            .Select(g => new PlanRow(null, g.Key, next.Month, null, g.Sum(s => s.PlanAmount)))
+            .Select(g => new PlanRow(null, g.Key, next.Month, null, KpiMath.PlanParts(g, s => s.IndicatorName).Sum(s => s.PlanAmount)))
             .ToList();
 
         // Справочник ТП — пользователи Linko с должностью ТП (Sales:SalesRepJobs); вакансия — «вакан» в имени («вакант», «Вакан …»;
@@ -428,7 +429,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             RevenuePlans = staff
                 .Where(s => s.Year == year && s.Month == month && s.PlanType == StaffPlanTypes.SalesSum && !TeamPlan(s))
                 .GroupBy(s => s.LinkoUserId)
-                .Select(g => new PlanRow(null, g.Key, month, null, g.Sum(s => s.PlanAmount)))
+                .Select(g => new PlanRow(null, g.Key, month, null, KpiMath.PlanParts(g, s => s.IndicatorName).Sum(s => s.PlanAmount)))
                 .ToList(),
             TeamPlanStaff = teamStaff,
             KpiRegions = kpiRegions,

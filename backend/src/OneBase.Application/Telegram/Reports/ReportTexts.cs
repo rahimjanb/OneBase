@@ -64,6 +64,52 @@ public static class ReportTexts
         ["АКБ факт"] = "AKB fakt",
         ["АКБ цель"] = "AKB maqsad",
         ["Активная база, точек"] = "Faol baza, nuqta",
+        ["База: закуп за 12 мес., точек"] = "Baza: 12 oyda xarid, nuqta",
+        ["Сортировка по среднему закупу, кг/мес"] = "O'rtacha xarid bo'yicha saralangan, kg/oy",
+        ["Покупка — доставленный заказ за вычетом возвратов; заказ, возвращённый целиком, покупкой не считается. Дата — дата приёмки в Linko"] =
+            "Xarid — qaytarilganlari ayirilgan yetkazilgan buyurtma; to'liq qaytarilgan buyurtma xarid hisoblanmaydi. Sana — Linko'da qabul qilingan sana",
+        ["Вакансии без ТП (не входят в план, базу и маршрут): {0}"] = "TPsiz vakansiyalar (reja, baza va marshrutga kirmaydi): {0}",
+        ["{0} — {1} точек"] = "{0} — {1} ta nuqta",
+        ["В Linko у ТП нет плана в кг — план только в сумах"] = "Linko'da TPlarda kg rejasi yo'q — reja faqat so'mda",
+        ["1. Общий план продаж на день — сум"] = "1. Kunlik umumiy savdo rejasi — so'm",
+        ["1. Общий план продаж на день — кг"] = "1. Kunlik umumiy savdo rejasi — kg",
+        ["Факт недели, кг"] = "Hafta fakti, kg",
+        ["план {0} кг"] = "reja {0} kg",
+        ["Обновлённые итоги прошлой недели (с учётом заказов после субботней рассылки): {0} кг ({1} плана)."] =
+            "O'tgan hafta yangilangan yakunlari (shanbadagi yuborishdan keyingi buyurtmalar bilan): {0} kg (rejaning {1}).",
+        ["Итоги недели: {0} кг ({1} плана), {2} сум, визитов {3} из {4}, АКБ {5} из {6}. Место в регионе: {7} из {8}."] =
+            "Hafta yakunlari: {0} kg (rejaning {1}), {2} so'm, tashriflar {4} tadan {3}, AKB {6} tadan {5}. Hududdagi o'rin: {8} tadan {7}.",
+        ["Место — по % выполнения плана (кг)"] = "O'rin — reja bajarilishi % bo'yicha (kg)",
+        ["Отсортировано по % выполнения плана (кг)"] = "Reja bajarilishi % bo'yicha saralangan (kg)",
+        ["Факт {0} кг ({1} плана), {2} сум, визитов {3} из {4}, АКБ {5} из {6}."] = "Fakt {0} kg (rejaning {1}), {2} so'm, tashriflar {4} tadan {3}, AKB {6} tadan {5}.",
+        ["Продажи по дням недели, кг"] = "Hafta kunlari bo'yicha savdo, kg",
+        ["Доброе утро! Плана на этот месяц в Linko нет. Визитов по маршруту: {0}."] = "Xayrli tong! Linko'da bu oy uchun reja yo'q. Marshrut bo'yicha tashriflar: {0}.",
+        ["Промежуточный итог: {0} сум, {1} кг (плана в Linko нет). Визитов: {2} из {3}."] = "Oraliq yakun: {0} so'm, {1} kg (Linko'da reja yo'q). Tashriflar: {3} tadan {2}.",
+        ["Итог дня: {0} сум, {1} кг (плана в Linko нет), заказов: {2}, визитов: {3} из {4}."] = "Kun yakuni: {0} so'm, {1} kg (Linko'da reja yo'q), buyurtmalar: {2}, tashriflar: {4} tadan {3}.",
+        ["Плана на день в Linko нет, визитов по маршруту: {0}."] = "Linko'da kunlik reja yo'q, marshrut bo'yicha tashriflar: {0}.",
+        ["К {0}: {1} сум, {2} кг (плана в Linko нет)."] = "{0} gacha: {1} so'm, {2} kg (Linko'da reja yo'q).",
+        ["Итог дня: {0} сум, {1} кг (плана в Linko нет), заказов {2}, визитов {3} из {4}."] = "Kun yakuni: {0} so'm, {1} kg (Linko'da reja yo'q), buyurtmalar {2}, tashriflar {4} tadan {3}.",
+        ["План месяца в Linko только в кг — план дня в сумах не считается"] = "Linko'da oylik reja faqat kg da — kunlik reja so'mda hisoblanmaydi",
+        ["План месяца в Linko только в кг: {0} — план дня в сумах «—», в % плана региона не входят"] =
+            "Linko'da oylik reja faqat kg da: {0} — so'mdagi kunlik reja «—», hudud rejasi foiziga kirmaydi",
+        ["Категории за день: {0} заказов на {1} сум, {2} кг ({3} плана по кг)."] = "Kunlik toifalar: {0} ta buyurtma, {1} so'm, {2} kg (kg bo'yicha rejaning {3}).",
+        ["В Linko план только в кг — выполнение считается по кг"] = "Linko'da reja faqat kg da — bajarilish kg bo'yicha hisoblanadi",
+        ["План дня, кг"] = "Kunlik reja, kg",
+        ["осталось {0} кг"] = "{0} kg qoldi",
+        ["% — выполнение дневного плана по кг; красным — ниже 80%"] = "% — kunlik reja bajarilishi (kg); qizil — 80% dan past",
+        ["Средний заказ для плана: {0} кг на визит по маршруту"] = "Reja uchun o'rtacha buyurtma: marshrutdagi har tashrifga {0} kg",
+        ["До плана осталось {0} сум — по {1} сум в час до 18:00"] = "Rejagacha {0} so'm qoldi — 18:00 gacha soatiga {1} so'm",
+        ["До плана осталось {0} кг — по {1} кг в час до 18:00"] = "Rejagacha {0} kg qoldi — 18:00 gacha soatiga {1} kg",
+        ["Не хватило {0} кг до плана — завтра начните с крупных точек маршрута"] = "Rejagacha {0} kg yetmadi — ertaga marshrutning yirik nuqtalaridan boshlang",
+        ["Доброе утро! План на сегодня: {0} кг, визитов по маршруту: {1}."] = "Xayrli tong! Bugungi reja: {0} kg, marshrut bo'yicha tashriflar: {1}.",
+        ["Промежуточный итог: {0} кг ({1}), {2} сум. До плана осталось {3} кг. Визитов: {4} из {5}."] =
+            "Oraliq yakun: {0} kg ({1}), {2} so'm. Rejagacha {3} kg qoldi. Tashriflar: {5} tadan {4}.",
+        ["Итог дня: {0} кг ({1}), {2} сум, заказов: {3}, визитов: {4} из {5}."] = "Kun yakuni: {0} kg ({1}), {2} so'm, buyurtmalar: {3}, tashriflar: {5} tadan {4}.",
+        ["План дня: {0} кг, визитов по маршруту: {1}."] = "Kunlik reja: {0} kg, marshrut bo'yicha tashriflar: {1}.",
+        ["К {0}: {1} кг ({2}), {3} сум. До плана {4} кг."] = "{0} gacha: {1} kg ({2}), {3} so'm. Rejagacha {4} kg.",
+        ["Итог дня: {0} кг ({1}), {2} сум, заказов {3}, визитов {4} из {5}."] = "Kun yakuni: {0} kg ({1}), {2} so'm, buyurtmalar {3}, tashriflar {5} tadan {4}.",
+        ["Доброе утро! План на сегодня: {0} сум, визитов по маршруту: {1}."] = "Xayrli tong! Bugungi reja: {0} so'm, marshrut bo'yicha tashriflar: {1}.",
+        ["План дня: {0} сум, визитов по маршруту: {1}."] = "Kunlik reja: {0} so'm, marshrut bo'yicha tashriflar: {1}.",
         ["Акции за день: {0} заказ(ов) с акцией из {1} ({2}), на сумму {3} сум."] = "Kunlik aksiyalar: {1} tadan {0} ta aksiyali buyurtma ({2}), {3} so'mlik.",
         ["Акция"] = "Aksiya",
         ["База — точки, где ТП ответственный в Linko, с подтверждённой покупкой за год; без закупа — последняя доставленная покупка {0}+ дней назад"] =
@@ -193,6 +239,8 @@ public static class ReportTexts
         ["Промежуточный итог — сум и кг"] = "Oraliq yakun — so'm va kg",
         ["Промежуточный итог: {0} сум ({1}), {2} кг. До плана осталось {3} сум / {4} кг. Визитов: {5} из {6}."] =
             "Oraliq yakun: {0} so'm ({1}), {2} kg. Rejagacha {3} so'm / {4} kg qoldi. Tashriflar: {6} tadan {5}.",
+        ["Промежуточный итог: {0} сум ({1}), {2} кг. До плана осталось {3} сум. Визитов: {4} из {5}."] =
+            "Oraliq yakun: {0} so'm ({1}), {2} kg. Rejagacha {3} so'm qoldi. Tashriflar: {5} tadan {4}.",
         ["РМ"] = "RM",
         ["Регион"] = "Hudud",
         ["С акцией"] = "Aksiyali",
@@ -216,6 +264,7 @@ public static class ReportTexts
         ["Сумма акционных заказов"] = "Aksiyali buyurtmalar summasi",
         ["Сумма акционных заказов, сум"] = "Aksiyali buyurtmalar summasi, so'm",
         ["Сумма посл. закупа, сум"] = "Oxirgi xarid summasi, so'm",
+        ["Посл. закуп, сум"] = "Oxirgi xarid, so'm",
         ["Сумма последних закупов по списку, сум"] = "Ro'yxat bo'yicha oxirgi xaridlar summasi, so'm",
         ["Сумма, сум"] = "Summa, so'm",
         ["ТП"] = "TP",
@@ -254,6 +303,11 @@ public static class ReportTexts
         ["факт / план"] = "fakt / reja",
         ["⏰ Напоминание: до конца дня {0}, заказов пока нет. Зайдите в оставшиеся точки маршрута и возьмите заказ."] =
             "⏰ Eslatma: kun oxirigacha {0} qoldi, hali buyurtma yo'q. Marshrutning qolgan nuqtalariga kiring va buyurtma oling.",
+        ["⚠ {0}, на {1} у вас нет ни одного заказа. План на день: {2} кг. Визитов: {3} / {4}. Возьмите первый заказ как можно скорее!"] =
+            "⚠ {0}, {1} holatiga sizda birorta ham buyurtma yo'q. Kunlik reja: {2} kg. Tashriflar: {3} / {4}. Birinchi buyurtmani imkon qadar tezroq oling!",
+        ["⚠ {0}, на {1} у вас нет ни одного заказа. Визитов: {2} / {3}. Возьмите первый заказ как можно скорее!"] =
+            "⚠ {0}, {1} holatiga sizda birorta ham buyurtma yo'q. Tashriflar: {2} / {3}. Birinchi buyurtmani imkon qadar tezroq oling!",
+        ["Итог дня: заказов {0} на {1} сум, {2} кг ({3} плана дня по кг)."] = "Kun yakuni: {0} ta buyurtma {1} so'mga, {2} kg (kunlik rejaning kg bo'yicha {3}).",
         ["⚠ {0}, на {1} у вас нет ни одного заказа. План на день: {2} сум. Визитов: {3} / {4}. Возьмите первый заказ как можно скорее!"] =
             "⚠ {0}, {1} holatiga sizda birorta ham buyurtma yo'q. Kunlik reja: {2} so'm. Tashriflar: {3} / {4}. Birinchi buyurtmani imkon qadar tezroq oling!",
 
@@ -271,6 +325,15 @@ public static class ReportTexts
         ["Твизос — взято"] = "Twizos — olindi",
         ["Могул — взято"] = "Mogul — olindi",
         ["Точек пройдено"] = "O‘tilgan nuqtalar",
+        ["Магазины с целями"] = "Maqsadli do‘konlar",
+        ["Магазины с целями — пройдено"] = "Maqsadli do‘konlar — o‘tildi",
+        ["в маршруте {0} точек"] = "marshrutda {0} ta nuqta",
+        ["из {0} точек маршрута"] = "marshrutdagi {0} ta nuqtadan",
+        ["от {0} сум"] = "{0} so‘mdan",
+        ["{0}: в маршруте Linko {1} точек, цели — в {2} (активная база от 50 000 сум/мес, не больше 10 целей Твизос и 10 Могул)"] =
+            "{0}: Linko marshrutida {1} ta nuqta, maqsadlar — {2} tasida (faol baza oyiga 50 000 so‘mdan, Twizos va Mogul bo‘yicha 10 tadan ko‘p emas)",
+        ["Доброе утро! В маршруте {0} точек, цели — в {1} магазинах: {2} целей. Твизос — призовые наборы 300/400/600, Могул — скидка по категории. Бонус недели — до {3} сум."] =
+            "Xayrli tong! Marshrutda {0} ta nuqta, maqsadlar — {1} ta do‘konda: {2} ta maqsad. Twizos — 300/400/600 ming so‘mlik sovg‘ali to‘plamlar, Mogul — toifa bo‘yicha chegirma. Haftalik bonus — {3} so‘mgacha.",
         ["{0}: плана визитов в Linko на этот день нет — маршрут построен OneBase по истории визитов и заказов"] = "{0}: bu kunga Linko'da tashriflar rejasi yo‘q — marshrutni OneBase tashriflar va buyurtmalar tarixi bo‘yicha tuzdi",
         ["Сетка Могул A–H в Linko на этот день не действует — целей Могул нет"] = "Bu kunga Linko'da Mogul A–H to‘ri amal qilmaydi — Mogul maqsadlari yo‘q",
         ["«Поле боя» · {0} ТП: {1} магазинов, {2} целей, взято {3}."] = "«Jang maydoni» · {0} TP: {1} ta do‘kon, {2} ta maqsad, {3} ta olindi.",

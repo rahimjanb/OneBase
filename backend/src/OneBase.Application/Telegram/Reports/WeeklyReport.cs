@@ -17,6 +17,10 @@ public static class WeeklyReport
         public decimal? ShareKg => ReportFormat.Share(FactKg, PlanKg);
         public decimal? VisitShare => VisitPlan is > 0 ? (decimal)Visits / VisitPlan.Value : null;
         public decimal? AkbShare => ReportFormat.Share(Akb, AkbTarget);
+
+        /// <summary>План в Linko только в кг (так у большинства регионов): выполнение и место — по кг.</summary>
+        public bool ByKg => PlanSum is null && PlanKg is not null;
+        public decimal? Main => ByKg ? ShareKg : Share;
     }
 
     public static (DateOnly From, DateOnly To) Period(ReportJobInfo job, DateOnly date) => ReportSchedules.Week(date, previous: job.Slot == "monday");
@@ -55,8 +59,12 @@ public static class WeeklyReport
         var categories = DailyPlanReport.Categories(c, from, to);
         var kpis = new List<ReportKpi>
         {
-            new(c.T("Факт недели, сум"), Number(total.FactSum), c.F("план {0}", Number(total.PlanSum)), Tone(total.Share)),
-            new(c.T("Выполнение"), Percent(total.Share), $"{Kg(total.FactKg)} / {Kg(total.PlanKg)} {c.T("кг")}", Tone(total.Share)),
+            total.ByKg
+                ? new ReportKpi(c.T("Факт недели, кг"), Kg(total.FactKg), c.F("план {0} кг", Kg(total.PlanKg)), Tone(total.ShareKg))
+                : new ReportKpi(c.T("Факт недели, сум"), Number(total.FactSum), c.F("план {0}", Number(total.PlanSum)), Tone(total.Share)),
+            total.ByKg
+                ? new ReportKpi(c.T("Выполнение"), Percent(total.ShareKg), $"{Number(total.FactSum)} {c.T("сум")}", Tone(total.ShareKg))
+                : new ReportKpi(c.T("Выполнение"), Percent(total.Share), $"{Kg(total.FactKg)} / {Kg(total.PlanKg)} {c.T("кг")}", Tone(total.Share)),
             new(c.T("Визиты"), total.VisitPlan is null ? Number(total.Visits) : $"{total.Visits} / {total.VisitPlan}", Percent(total.VisitShare)),
             new(c.T("АКБ"), total.AkbTarget is null ? Number(total.Akb) : $"{total.Akb} / {Number(total.AkbTarget)}", Percent(total.AkbShare), Tone(total.AkbShare)),
             new(c.T("Заказов с акцией"), Number(total.PromoOrders)),
@@ -67,7 +75,7 @@ public static class WeeklyReport
         if (c.Role == TelegramReportRoles.Tp)
         {
             var me = c.Scope.Agent!;
-            var peers = (c.Peers ?? [me]).Select(p => (p.Id, M: Of(c, [p], from, to, visitKnown))).OrderByDescending(p => p.M.Share ?? -1).ToList();
+            var peers = (c.Peers ?? [me]).Select(p => (p.Id, M: Of(c, [p], from, to, visitKnown))).OrderByDescending(p => p.M.Main ?? -1).ToList();
             var place = peers.FindIndex(p => p.Id == me.Id) + 1;
             tables.Add(new ReportTable(c.T("1. Мои итоги недели"), [new("№", false, 0.4f), new(c.T("Показатель"), false, 2.4f), new(c.T("План")), new(c.T("Факт")), new("%", Weight: 0.6f)],
             [
@@ -80,15 +88,20 @@ public static class WeeklyReport
             ]));
             tables.Add(CategoryTable(c, c.Scope.Agents, categories, from, to));
             tables.Add(DaysTable(c, c.Scope.Agents, from, to));
-            caption = c.Job.Slot == "monday"
-                ? c.F("Обновлённые итоги прошлой недели (с учётом заказов после субботней рассылки): {0} сум ({1} плана).", Number(total.FactSum), Percent(total.Share))
-                : c.F("Итоги недели: {0} сум ({1} плана), {2} кг, визитов {3} из {4}, АКБ {5} из {6}. Место в регионе: {7} из {8}.", Number(total.FactSum),
-                    Percent(total.Share), Kg(total.FactKg), total.Visits, Number(total.VisitPlan), total.Akb, Number(total.AkbTarget), place, peers.Count);
+            caption = total.ByKg
+                ? c.Job.Slot == "monday"
+                    ? c.F("Обновлённые итоги прошлой недели (с учётом заказов после субботней рассылки): {0} кг ({1} плана).", Kg(total.FactKg), Percent(total.ShareKg))
+                    : c.F("Итоги недели: {0} кг ({1} плана), {2} сум, визитов {3} из {4}, АКБ {5} из {6}. Место в регионе: {7} из {8}.", Kg(total.FactKg),
+                        Percent(total.ShareKg), Number(total.FactSum), total.Visits, Number(total.VisitPlan), total.Akb, Number(total.AkbTarget), place, peers.Count)
+                : c.Job.Slot == "monday"
+                    ? c.F("Обновлённые итоги прошлой недели (с учётом заказов после субботней рассылки): {0} сум ({1} плана).", Number(total.FactSum), Percent(total.Share))
+                    : c.F("Итоги недели: {0} сум ({1} плана), {2} кг, визитов {3} из {4}, АКБ {5} из {6}. Место в регионе: {7} из {8}.", Number(total.FactSum),
+                        Percent(total.Share), Kg(total.FactKg), total.Visits, Number(total.VisitPlan), total.Akb, Number(total.AkbTarget), place, peers.Count);
         }
         else
         {
             var rm = c.Role == TelegramReportRoles.Rm;
-            var ranked = units.OrderByDescending(u => u.M.Share ?? -1).Select((u, i) => (u.Name, u.M, Place: i + 1)).ToList();
+            var ranked = units.OrderByDescending(u => u.M.Main ?? -1).Select((u, i) => (u.Name, u.M, Place: i + 1)).ToList();
             var ordered = rm ? units.Select(u => ranked.First(r => r.Name == u.Name)).ToList() : ranked;
             tables.Add(new ReportTable(rm ? c.T("1. План и факт недели по регионам") : c.T("1. Рейтинг ТП за неделю"),
                 [new("№", false, 0.35f), new(ReportKit.UnitTitle(c), false, 2.2f), new(c.T("План, сум"), Weight: 1.15f), new(c.T("Факт, сум"), Weight: 1.15f), new(c.T("% (сум)"), Weight: 0.6f),
@@ -101,19 +114,24 @@ public static class WeeklyReport
                 ["", new(ReportKit.TotalTitle(c), Bold: true), new(Number(total.PlanSum), Bold: true), new(Number(total.FactSum), Bold: true), PercentCell(total.Share, true),
                     Kg(total.PlanKg), Kg(total.FactKg), PercentCell(total.ShareKg, true), Number(total.VisitPlan), Number(total.Visits), Percent(total.VisitShare),
                     Number(total.PromoOrders), Number(total.AkbTarget), Number(total.Akb), PercentCell(total.AkbShare, true), ""],
-                rm ? c.T("Место — по % выполнения плана (сум)") : c.T("Отсортировано по % выполнения плана (сум)")));
+                total.ByKg
+                    ? rm ? c.T("Место — по % выполнения плана (кг)") : c.T("Отсортировано по % выполнения плана (кг)")
+                    : rm ? c.T("Место — по % выполнения плана (сум)") : c.T("Отсортировано по % выполнения плана (сум)")));
             tables.Add(CategoryTable(c, c.Scope.Agents, categories, from, to));
             tables.Add(DaysTable(c, c.Scope.Agents, from, to));
             caption = $"{c.T(ReportCatalog.Title(c.Job.Report))} · {c.Scope.Title} · {period}\n" +
                       (c.Job.Slot == "monday" ? c.T("Обновлённые итоги с учётом заказов после субботней рассылки.") + " " : "") +
-                      c.F("Факт {0} сум ({1} плана), {2} кг, визитов {3} из {4}, АКБ {5} из {6}.", Number(total.FactSum), Percent(total.Share), Kg(total.FactKg), total.Visits,
-                          Number(total.VisitPlan), total.Akb, Number(total.AkbTarget));
+                      (total.ByKg
+                          ? c.F("Факт {0} кг ({1} плана), {2} сум, визитов {3} из {4}, АКБ {5} из {6}.", Kg(total.FactKg), Percent(total.ShareKg), Number(total.FactSum), total.Visits,
+                              Number(total.VisitPlan), total.Akb, Number(total.AkbTarget))
+                          : c.F("Факт {0} сум ({1} плана), {2} кг, визитов {3} из {4}, АКБ {5} из {6}.", Number(total.FactSum), Percent(total.Share), Kg(total.FactKg), total.Visits,
+                              Number(total.VisitPlan), total.Akb, Number(total.AkbTarget)));
         }
 
         var problems = new List<string>();
         if (c.Role != TelegramReportRoles.Tp)
         {
-            var low = units.Where(u => u.M.Share is < ReportFormat.RedBelow).OrderBy(u => u.M.Share).Select(u => $"{u.Name} {Percent(u.M.Share)}").ToList();
+            var low = units.Where(u => u.M.Main is < ReportFormat.RedBelow).OrderBy(u => u.M.Main).Select(u => $"{u.Name} {Percent(u.M.Main)}").ToList();
             if (low.Count > 0)
             {
                 problems.Add(c.F("Ниже 80% плана недели: {0}", string.Join(", ", low.Take(8))));
@@ -125,7 +143,9 @@ public static class WeeklyReport
             notes.Add(c.T("Пересчитано заново за пн–сб: заказы, проведённые после субботней рассылки, учтены один раз"));
         }
 
-        var summary = c.F("Неделя {0}: {1} ({2})", period, Short(total.FactSum, c.Language), Percent(total.Share));
+        var summary = total.ByKg
+            ? c.F("Неделя {0}: {1} ({2})", period, $"{Kg(total.FactKg)} {c.T("кг")}", Percent(total.ShareKg))
+            : c.F("Неделя {0}: {1} ({2})", period, Short(total.FactSum, c.Language), Percent(total.Share));
         var title = ReportKit.Title(c); // период недели — справа в шапке
         return ReportKit.Document(c, title, period, kpis, tables, problems, notes, caption, summary, incomplete);
     }
@@ -155,19 +175,24 @@ public static class WeeklyReport
         decimal planTotal = 0, factTotal = 0;
         var known = false;
         var i = 0;
-        foreach (var day in ReportSchedules.WorkingDays(from, to))
+        var workDays = ReportSchedules.WorkingDays(from, to).ToList();
+        // Плана в сумах ни у кого нет, а в кг есть — дни по кг (иначе в таблице одни «—»).
+        var byKg = !workDays.Any(d => agents.Any(a => c.Facts.DayPlanSum(a.Id, d) is not null)) && workDays.Any(d => agents.Any(a => c.Facts.DayPlanKg(a.Id, d) is not null));
+        string Cell(decimal? v) => byKg ? Kg(v) : Number(v);
+        foreach (var day in workDays)
         {
-            var plans = agents.Select(a => ReportKit.Whole(c.Facts.DayPlanSum(a.Id, day))).Where(v => v is not null).ToList();
+            var plans = agents.Select(a => ReportKit.Whole(byKg ? c.Facts.DayPlanKg(a.Id, day) : c.Facts.DayPlanSum(a.Id, day))).Where(v => v is not null).ToList();
             decimal? plan = plans.Count == 0 ? null : plans.Sum(v => v!.Value);
-            var fact = agents.Sum(a => c.Facts.OrdersOf(a.Id, day, day).Sum(o => o.Sum));
+            var fact = agents.Sum(a => c.Facts.OrdersOf(a.Id, day, day).Sum(o => byKg ? o.Kg : o.Sum));
             known |= plan is not null;
             planTotal += plan ?? 0;
             factTotal += fact;
-            rows.Add([$"{++i}", $"{names[((int)day.DayOfWeek + 6) % 7]} {day.ToString("dd.MM", CultureInfo.InvariantCulture)}", Number(plan), Number(fact), PercentCell(ReportFormat.Share(fact, plan))]);
+            rows.Add([$"{++i}", $"{names[((int)day.DayOfWeek + 6) % 7]} {day.ToString("dd.MM", CultureInfo.InvariantCulture)}", Cell(plan), Cell(fact), PercentCell(ReportFormat.Share(fact, plan))]);
         }
 
-        return new ReportTable(c.T("Продажи по дням недели, сум"), [new("№", false, 0.4f), new(c.T("День"), false, 1.4f), new(c.T("План, сум")), new(c.T("Факт, сум")), new(c.T("% плана"), Weight: 0.7f)],
-            rows, ["", new(c.T("Итого неделя"), Bold: true), new(Number(known ? planTotal : null), Bold: true), new(Number(factTotal), Bold: true),
+        return new ReportTable(byKg ? c.T("Продажи по дням недели, кг") : c.T("Продажи по дням недели, сум"),
+            [new("№", false, 0.4f), new(c.T("День"), false, 1.4f), new(byKg ? c.T("План, кг") : c.T("План, сум")), new(byKg ? c.T("Факт, кг") : c.T("Факт, сум")), new(c.T("% плана"), Weight: 0.7f)],
+            rows, ["", new(c.T("Итого неделя"), Bold: true), new(Cell(known ? planTotal : null), Bold: true), new(Cell(factTotal), Bold: true),
                 PercentCell(ReportFormat.Share(factTotal, known ? planTotal : null), true)]);
     }
 }

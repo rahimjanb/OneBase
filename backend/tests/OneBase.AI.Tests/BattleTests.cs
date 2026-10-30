@@ -165,7 +165,7 @@ public class BattleTests
         Assert.Contains("Xayrli tong! Marshrut: 16 ta do‘kon, 20 ta maqsad.", morning.Caption);
         Assert.Equal("7. Поле боя · 08:30 — маршрут дня", morning.Title);
         Assert.Contains(morning.Kpis, k => k.Label == "Твизос — взято" && k.Value == "0 / 10");
-        Assert.Contains(morning.Kpis, k => k.Label == "Точек пройдено" && k.Value == "0 / 16");
+        Assert.Contains(morning.Kpis, k => k.Label == "Магазины с целями — пройдено" && k.Value == "0 / 16");
         Assert.NotNull(morning.Battle);
         Assert.True(morning.Applies);
         Assert.Contains("Твизос · подключить", morning.Plain());

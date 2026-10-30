@@ -77,7 +77,8 @@ public static class BattleReport
                 var name = days.Count == 1 ? "" : d.AgentName + ": ";
                 kpis.Add(new(name + c.T("Твизос — взято"), $"{d.TwizosTaken} / {d.TwizosTotal}"));
                 kpis.Add(new(name + c.T("Могул — взято"), $"{d.MogulTaken} / {d.MogulTotal}"));
-                kpis.Add(new(name + c.T("Точек пройдено"), $"{d.StoresPassed} / {d.Stores.Count}"));
+                kpis.Add(new(name + c.T("Магазины с целями — пройдено"), $"{d.StoresPassed} / {d.Stores.Count}",
+                    d.RoutePoints > 0 ? c.F("в маршруте {0} точек", d.RoutePoints) : null));
                 tables.Add(DayTable(c, d));
                 if (d.RouteSource == BattleRouteSource.Own)
                 {
@@ -87,6 +88,12 @@ public static class BattleReport
                 if (!d.MogulActive)
                 {
                     notes.Add(c.T("Сетка Могул A–H в Linko на этот день не действует — целей Могул нет"));
+                }
+
+                if (d.RoutePoints > d.Stores.Count && d.Stores.Count > 0)
+                {
+                    notes.Add(c.F("{0}: в маршруте Linko {1} точек, цели — в {2} (активная база от 50 000 сум/мес, не больше 10 целей Твизос и 10 Могул)",
+                        d.AgentName, d.RoutePoints, d.Stores.Count));
                 }
             }
 
@@ -106,8 +113,11 @@ public static class BattleReport
                 (caption, summary) = c.Job.Slot switch
                 {
                     "morning" => (
-                        $"{c.F("Доброе утро! Маршрут: {0} магазинов, {1} целей. Твизос — призовые наборы 300/400/600, Могул — скидка по категории. Бонус недели — до {2} сум.", me.Stores.Count, total, bonusMax)}\n" +
-                        $"Xayrli tong! Marshrut: {me.Stores.Count} ta do‘kon, {total} ta maqsad. Twizos — 300/400/600 ming so‘mlik sovg‘ali to‘plamlar, Mogul — toifa bo‘yicha chegirma. Haftalik bonus — {bonusMax} so‘mgacha.",
+                        (me.RoutePoints > me.Stores.Count
+                            ? $"{c.F("Доброе утро! В маршруте {0} точек, цели — в {1} магазинах: {2} целей. Твизос — призовые наборы 300/400/600, Могул — скидка по категории. Бонус недели — до {3} сум.", me.RoutePoints, me.Stores.Count, total, bonusMax)}\n" +
+                              $"Xayrli tong! Marshrutda {me.RoutePoints} ta nuqta, maqsadlar — {me.Stores.Count} ta do‘konda: {total} ta maqsad. Twizos — 300/400/600 ming so‘mlik sovg‘ali to‘plamlar, Mogul — toifa bo‘yicha chegirma. Haftalik bonus — {bonusMax} so‘mgacha."
+                            : $"{c.F("Доброе утро! Маршрут: {0} магазинов, {1} целей. Твизос — призовые наборы 300/400/600, Могул — скидка по категории. Бонус недели — до {2} сум.", me.Stores.Count, total, bonusMax)}\n" +
+                              $"Xayrli tong! Marshrut: {me.Stores.Count} ta do‘kon, {total} ta maqsad. Twizos — 300/400/600 ming so‘mlik sovg‘ali to‘plamlar, Mogul — toifa bo‘yicha chegirma. Haftalik bonus — {bonusMax} so‘mgacha."),
                         c.F("Маршрут: {0} магазинов, {1} целей", me.Stores.Count, total)),
                     "midday" => (
                         $"{c.F("Полдень: взято {0} из {1}. Впереди {2} магазинов — начните с оранжевых.", taken, total, ahead)}\n" +

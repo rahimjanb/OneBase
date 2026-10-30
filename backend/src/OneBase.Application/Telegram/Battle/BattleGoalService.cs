@@ -15,23 +15,28 @@ public sealed class BattleGoalService(IAppDbContext db, SalesOptions sales, Batt
 {
     private static readonly string[] NotTaken = LinkoMirrorSalesProvider.NotTaken;
 
-    /// <summary>Карточка дня: цели на date (при необходимости — постановка целей на всю неделю), оценка по заказам до cutoff (null — весь день).</summary>
+    /// <summary>
+    /// Карточка дня: цели на date (при необходимости — постановка целей с date до субботы), оценка по заказам до cutoff (null — весь день).
+    /// RoutePoints — точек в плане визитов Linko на день (целей ставится только части: активная база и лимиты ТЗ).
+    /// </summary>
     public async Task<BattleDay> DayAsync(long agentId, string agentName, string? region, DateOnly date, TimeOnly? cutoff, bool final, CancellationToken ct)
     {
         var monday = BattleRules.Monday(date);
-        var mogulActive = await EnsureWeekAsync(agentId, agentName, monday, ct);
+        var mogulActive = await EnsureWeekAsync(agentId, monday, date, ct);
         var goals = await EvaluateAsync(agentId, monday, date, cutoff, final, ct);
         var ordersAsOf = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "orders").Select(s => s.LastSuccessAt).FirstOrDefaultAsync(ct);
+        var routePoints = await db.LinkoVisits.AsNoTracking()
+            .Where(v => v.UserId == agentId && v.MarketId != null && v.IsInPlan && v.Day == date).Select(v => v.MarketId).Distinct().CountAsync(ct);
         var today = goals.Where(g => g.Date == date).ToList();
         var source = today.FirstOrDefault()?.RouteSource ?? BattleRouteSource.Linko;
-        return new BattleDay(agentId, agentName, region, date, source, Stores(today), mogulActive.Contains(date), Progress(goals), ordersAsOf);
+        return new BattleDay(agentId, agentName, region, date, source, Stores(today), mogulActive.Contains(date), Progress(goals), ordersAsOf, routePoints);
     }
 
     /// <summary>Карточка недели: дни пн–сб со статусами, ход недели, место среди ТП региона (peers), у кого есть цели этой недели.</summary>
     public async Task<BattleWeek> WeekAsync(long agentId, string agentName, string? region, DateOnly monday, DateOnly through, TimeOnly? cutoff, bool final,
         IReadOnlyCollection<long>? peers, CancellationToken ct)
     {
-        await EnsureWeekAsync(agentId, agentName, monday, ct);
+        await EnsureWeekAsync(agentId, monday, through, ct);
         var goals = await EvaluateAsync(agentId, monday, through, cutoff, final, ct);
         var ordersAsOf = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "orders").Select(s => s.LastSuccessAt).FirstOrDefaultAsync(ct);
         var days = Enumerable.Range(0, 6).Select(monday.AddDays).Select(d =>
@@ -59,10 +64,17 @@ public sealed class BattleGoalService(IAppDbContext db, SalesOptions sales, Batt
     }
 
     /// <summary>ТП вне программы: оптовые рынки (по словам в имени Linko).</summary>
-    public async Task<bool> IsExcludedAgentAsync(long agentId, CancellationToken ct)
+    public async Task<bool> IsExcludedAgentAsync(long agentId, CancellationToken ct) =>
+        BattleRules.MentionsAgent(agentId, await LinkoNameAsync(agentId, ct), options.ExcludedAgentWords);
+
+    /// <summary>
+    /// Полное имя ТП в Linko — с номером («534 ТП1 …»), именем и логином. Исключения ТЗ («534 …», OPTOM, BOZOR) проверяются по
+    /// нему, а не по имени из отчёта: там номер срезан («ТП1 …»), и исключение по «534» не срабатывало.
+    /// </summary>
+    private async Task<string> LinkoNameAsync(long agentId, CancellationToken ct)
     {
         var user = await db.LinkoUsers.AsNoTracking().Where(u => u.Id == agentId).Select(u => new { u.FirstName, u.SecondName, u.Username }).FirstOrDefaultAsync(ct);
-        return user is not null && BattleRules.Mentions($"{user.FirstName} {user.SecondName} {user.Username}", options.ExcludedAgentWords);
+        return user is null ? "" : $"{user.FirstName} {user.SecondName} {user.Username}";
     }
 
     // ---------- Постановка целей ----------
@@ -73,15 +85,22 @@ public sealed class BattleGoalService(IAppDbContext db, SalesOptions sales, Batt
     private sealed record MarketStats(decimal Avg, decimal AvgTwizos, decimal AvgMogul, bool TwizosEver, bool MogulEver, bool MogulThisMonth, decimal MaxTwizosInvoice, decimal MaxMogulInvoice);
 
     /// <summary>
-    /// Цели на дни недели, которых ещё нет. Возвращает дни недели, в которые действует сетка Могул (акция в Linko), — у дней без неё целей Могул нет.
+    /// Цели на дни недели с from до субботы, которых ещё нет. Прошедшие дни задним числом не ставятся: ТП их не видел, а в долю бонуса недели
+    /// они легли бы невзятыми. Возвращает дни недели, в которые действует сетка Могул (акция в Linko), — у дней без неё целей Могул нет.
     /// </summary>
-    private async Task<HashSet<DateOnly>> EnsureWeekAsync(long agentId, string agentName, DateOnly monday, CancellationToken ct)
+    private async Task<HashSet<DateOnly>> EnsureWeekAsync(long agentId, DateOnly monday, DateOnly from, CancellationToken ct)
     {
         var days = Enumerable.Range(0, 6).Select(monday.AddDays).ToList();
         var mogulDays = await MogulDaysAsync(days, ct);
         var existing = await db.BattleGoals.AsNoTracking().Where(g => g.AgentId == agentId && g.Week == monday).Select(g => g.Date).Distinct().ToListAsync(ct);
-        var missing = days.Where(d => !existing.Contains(d)).ToList();
-        if (missing.Count == 0 || BattleRules.Mentions(agentName, options.ExcludedAgentWords))
+        var missing = days.Where(d => d >= from && !existing.Contains(d)).ToList();
+        if (missing.Count == 0)
+        {
+            return mogulDays;
+        }
+
+        var linkoName = await LinkoNameAsync(agentId, ct);
+        if (BattleRules.MentionsAgent(agentId, linkoName, options.ExcludedAgentWords))
         {
             return mogulDays;
         }
@@ -121,7 +140,7 @@ public sealed class BattleGoalService(IAppDbContext db, SalesOptions sales, Batt
             .Select(m => new MarketInfo(m.Id, m.Name, m.MarketTypeName, m.BranchName, m.ResponsibleAgentId, m.Lat, m.Lon)).ToDictionaryAsync(m => m.Id, ct);
         var stats = await StatsAsync(marketIds, monday, ct);
         var previous = await db.BattleGoals.AsNoTracking().Where(g => g.AgentId == agentId && g.Week == monday.AddDays(-7)).ToListAsync(ct);
-        var mogulAllowedAgent = !BattleRules.Mentions(agentName, options.MogulExcludedAgentWords);
+        var mogulAllowedAgent = !BattleRules.MentionsAgent(agentId, linkoName, options.MogulExcludedAgentWords);
         var now = time.GetUtcNow();
 
         foreach (var (day, route) in routes.OrderBy(r => r.Key))

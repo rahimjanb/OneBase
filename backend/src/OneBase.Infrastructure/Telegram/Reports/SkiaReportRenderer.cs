@@ -293,8 +293,14 @@ public sealed class SkiaReportRenderer : IReportRenderer
         /// <summary>Текстовая колонка сразу после числовой — с отступом: иначе «1» и «ОК» слипаются в «1 ОК».</summary>
         private static float Inset(ReportTable table, int i) => i > 0 && !table.Columns[i].Right && table.Columns[i - 1].Right ? 10 : 0;
 
+        /// <summary>Шапка — до трёх строк: в узкой колонке единица («кг/мес», «сум») не уходит в многоточие.</summary>
         private float HeaderHeight(ReportTable table, float[] widths) =>
-            table.Columns.Select((col, i) => HeaderLines(col.Title, widths[i] - 6).Count).Max() > 1 ? compact ? 26 : 30 : 19;
+            table.Columns.Select((col, i) => HeaderLines(col.Title, widths[i] - 6).Count).Max() switch
+            {
+                1 => 19,
+                2 => compact ? 26 : 30,
+                _ => compact ? 37 : 41,
+            };
 
         private void Header(SKCanvas c, ReportTable table, float[] widths, float top, float height)
         {
@@ -560,7 +566,7 @@ public sealed class SkiaReportRenderer : IReportRenderer
 
         // ---------- Текст ----------
 
-        private List<string> HeaderLines(string title, float width) => Wrap(title.ToUpperInvariant(), faces.SemiBold, HeaderFont, width, 2);
+        private List<string> HeaderLines(string title, float width) => Wrap(title.ToUpperInvariant(), faces.SemiBold, HeaderFont, width, 3);
 
         /// <summary>Ширина заголовка колонки, если разбить его на две строки поровну по словам.</summary>
         private float WrapMeasure(string text, SKTypeface face, float size)

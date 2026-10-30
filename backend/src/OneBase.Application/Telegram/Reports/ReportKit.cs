@@ -58,6 +58,13 @@ public sealed record DayMetrics(
     public decimal? ShareKg13 => ReportFormat.Share(FactKg13, PlanKg);
     public decimal? ShareKg => ReportFormat.Share(FactKg, PlanKg);
 
+    /// <summary>План в Linko только в кг (так у большинства регионов): выполнение считается по кг, а не «—» от плана в сумах.</summary>
+    public bool ByKg => PlanSum is null && PlanKg is not null;
+
+    /// <summary>Выполнение по основной мере плана: сумы, а без плана в сумах — кг.</summary>
+    public decimal? Main13 => ByKg ? ShareKg13 : Share13;
+    public decimal? Main => ByKg ? ShareKg : Share;
+
     /// <summary>Средняя цена плана, сум/кг.</summary>
     public decimal? PricePerKg => PlanSum is { } s && PlanKg is > 0 ? s / PlanKg.Value : null;
 
@@ -73,6 +80,18 @@ public sealed record DayMetrics(
 /// <summary>Общие расчёты построителей: показатели дня, строки областей, замечания о данных, подписи.</summary>
 public static class ReportKit
 {
+    /// <summary>
+    /// Вакансии области (СВ, РМ): точки, закреплённые в Linko за вакансией («ТП3 вакант …»), не входят ни в план, ни в базу, ни в маршрут —
+    /// отчёт говорит об этом, а не молчит. null — вакансий нет.
+    /// </summary>
+    public static string? VacancyNote(ReportContext c)
+    {
+        var vacancies = c.Scope.Vacancies;
+        return vacancies.Count == 0
+            ? null
+            : c.F("Вакансии без ТП (не входят в план, базу и маршрут): {0}", string.Join(", ", vacancies.Select(v => c.F("{0} — {1} точек", v.Name, v.Markets))));
+    }
+
     /// <summary>Показатели ТП за день. План визитов — визиты Linko в плане на день; известен, если на день загружен хоть один визит области.</summary>
     public static DayMetrics Day(ReportContext c, long agent, DateOnly day, bool visitPlanKnown)
     {
@@ -160,10 +179,10 @@ public static class ReportKit
         }
     }
 
-    /// <summary>Кто без плана в Linko — отдельной строкой замечаний.</summary>
+    /// <summary>Кто без плана в Linko (ни в сумах, ни в кг) — отдельной строкой замечаний.</summary>
     public static void WithoutPlan(ReportContext c, List<string> notes, IEnumerable<(string Name, DayMetrics M)> rows)
     {
-        var names = rows.Where(r => r.M.PlanSum is null).Select(r => r.Name).ToList();
+        var names = rows.Where(r => r.M.PlanSum is null && r.M.PlanKg is null).Select(r => r.Name).ToList();
         if (names.Count > 0)
         {
             notes.Add(c.F("Нет плана на день в Linko: {0}", string.Join(", ", names.Take(10)) + (names.Count > 10 ? $" +{names.Count - 10}" : "")));

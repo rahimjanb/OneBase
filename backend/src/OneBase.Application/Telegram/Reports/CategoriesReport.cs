@@ -54,7 +54,10 @@ public static class CategoriesReport
                     new(Kg(all.Sum(o => o.Kg)), Bold: true), Number(ps), Kg(pk), PercentCell(ReportFormat.Share(all.Sum(o => o.Sum), ps), true),
                     PercentCell(ReportFormat.Share(all.Sum(o => o.Kg), pk), true)]));
             var weak = categories.Select(cat => (cat, S: ReportFormat.Share(ReportFacts.Amount(all, cat).Sum, Plan([me], cat).Sum))).Where(x => x.S is < ReportFormat.RedBelow).Select(x => x.cat).ToList();
-            caption = c.F("Категории за день: {0} заказов на {1} сум ({2} плана).", all.Count, Number(all.Sum(o => o.Sum)), Percent(ReportFormat.Share(all.Sum(o => o.Sum), ps))) +
+            caption = (ps is null && pk is not null
+                          ? c.F("Категории за день: {0} заказов на {1} сум, {2} кг ({3} плана по кг).", all.Count, Number(all.Sum(o => o.Sum)), Kg(all.Sum(o => o.Kg)),
+                              Percent(ReportFormat.Share(all.Sum(o => o.Kg), pk)))
+                          : c.F("Категории за день: {0} заказов на {1} сум ({2} плана).", all.Count, Number(all.Sum(o => o.Sum)), Percent(ReportFormat.Share(all.Sum(o => o.Sum), ps)))) +
                       (weak.Count > 0 ? " " + c.F("Ниже 80%: {0}.", string.Join(", ", weak)) : "");
         }
         else
@@ -73,8 +76,12 @@ public static class CategoriesReport
             {
                 var row = new List<ReportCell> { n, new(name, Bold: bold) };
                 row.AddRange(categories.Select(cat => PercentCell(ReportFormat.Share(ReportFacts.Amount(orders, cat).Sum, Plan(agents, cat).Sum), bold)));
+                // Итог — от плана дня в сумах; плана в сумах нет, а в кг есть (большинство регионов) — по кг.
                 var plans = agents.Select(a => ReportKit.Whole(c.Facts.DayPlanSum(a.Id, day))).Where(p => p is not null).ToList();
-                row.Add(PercentCell(ReportFormat.Share(orders.Sum(o => o.Sum), plans.Count == 0 ? null : plans.Sum(p => p!.Value)), true));
+                var kgPlans = agents.Select(a => ReportKit.Whole(c.Facts.DayPlanKg(a.Id, day))).Where(p => p is not null).ToList();
+                row.Add(PercentCell(plans.Count == 0 && kgPlans.Count > 0
+                    ? ReportFormat.Share(orders.Sum(o => o.Kg), kgPlans.Sum(p => p!.Value))
+                    : ReportFormat.Share(orders.Sum(o => o.Sum), plans.Count == 0 ? null : plans.Sum(p => p!.Value)), true));
                 return row;
             }
 
