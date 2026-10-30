@@ -14,11 +14,26 @@ const KEY = "onebase-theme";
 export const themeInitScript = `try{var t=localStorage.getItem("${KEY}");if(t){document.documentElement.dataset.theme=t;document.addEventListener("DOMContentLoaded",function(){var s=document.querySelector("[data-app-shell]")||document.querySelector("[data-product]");var st=s&&getComputedStyle(s);var c=st&&(st.getPropertyValue("--color-status-bar").trim()||st.getPropertyValue("--color-sidebar").trim())||(t==="dark"?"#050c1c":"#16213a");document.querySelectorAll('meta[name="theme-color"]:not([property])').forEach(function(m){m.setAttribute("content",c)})})}}catch(e){}`;
 
 /** Тема сейчас: выбранная, иначе у OneBase — тёмная стеклянная (по умолчанию), у Sales Base — как в системе. */
-function currentTheme(): "light" | "dark" {
+export function currentTheme(): "light" | "dark" {
   const explicit = document.documentElement.dataset.theme;
   if (explicit === "light" || explicit === "dark") return explicit;
   if (document.documentElement.dataset.brand === "onebase") return "dark";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+/** Включить тему и запомнить выбор; цвет строки состояния установленного приложения — как у шапки выбранной темы (у Sales Base — свой). */
+export function applyTheme(next: "light" | "dark") {
+  document.documentElement.dataset.theme = next;
+  try {
+    localStorage.setItem(KEY, next);
+  } catch {
+    // хранилище недоступно — тема действует до перезагрузки
+  }
+  const shell = document.querySelector<HTMLElement>("[data-app-shell]");
+  const style = shell && getComputedStyle(shell);
+  const color =
+    (style && (style.getPropertyValue("--color-status-bar").trim() || style.getPropertyValue("--color-sidebar").trim())) || (next === "dark" ? "#050c1c" : "#16213a");
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.setAttribute("content", color);
 }
 
 /** Кнопка темы в шапке: цвет берёт от шапки (на телефоне она тёмная, на больших экранах — светлая). */
@@ -30,18 +45,7 @@ export function ThemeToggle() {
 
   function toggle() {
     const next = currentTheme() === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    try {
-      localStorage.setItem(KEY, next);
-    } catch {
-      // хранилище недоступно — тема действует до перезагрузки
-    }
-    // Цвет строки состояния установленного приложения — как у шапки выбранной темы (у Sales Base — свой, зелёный).
-    const shell = document.querySelector<HTMLElement>("[data-app-shell]");
-    const style = shell && getComputedStyle(shell);
-    const color =
-      (style && (style.getPropertyValue("--color-status-bar").trim() || style.getPropertyValue("--color-sidebar").trim())) || (next === "dark" ? "#050c1c" : "#16213a");
-    for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.setAttribute("content", color);
+    applyTheme(next);
     setTheme(next);
   }
 

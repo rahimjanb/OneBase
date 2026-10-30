@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { AiFocusPanel } from "@/components/dashboard/AiFocusPanel";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
@@ -7,8 +8,10 @@ import { FilterBar } from "@/components/dashboard/FilterBar";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { KpiTrendChart } from "@/components/dashboard/KpiTrendChart";
 import { LeadersCard } from "@/components/dashboard/LeadersCard";
+import { MobileOverview } from "@/components/dashboard/mobile/MobileOverview";
 import { TasksDonut } from "@/components/dashboard/TasksDonut";
 import { UpcomingTasks } from "@/components/dashboard/UpcomingTasks";
+import { DesktopOverviewSkeleton } from "@/components/shell/RouteSkeleton";
 import { getLocale, getT } from "@/i18n/server";
 import type { AiAlertsView } from "@/lib/ai";
 import type { HrLeaders } from "@/lib/hr";
@@ -29,23 +32,56 @@ export async function generateMetadata() {
  * Главная «Обзор» (ТЗ dashboard): приветствие и дата, фильтры, «Фокус дня» (находки консультанта), четыре KPI, динамика KPI и задачи по
  * статусу, состояние отделов, дедлайны, лидеры и лента. Люди и события — только из реальных данных (задачи отделов, уведомления,
  * консультант); где их нет — пустое состояние. Показатели в числах — из lib/dashboard.mock до подключения API.
+ * На телефоне (< 768) — своя раскладка (MobileOverview, ТЗ 1base-mobile-home) из тех же данных; находки консультанта и задачи отделов
+ * запрашиваются один раз на обе. Каждая раскладка грузится сама по себе: пока идут данные — заготовки, а не пустой экран.
  */
 export default async function DashboardPage() {
-  const [me, alerts, departments, notifications, leaders] = await Promise.all([
-    apiSession<Me>("/api/auth/me"),
-    apiTry<AiAlertsView>("/api/ai/alerts"),
-    apiTry<DepartmentTasks[]>("/api/work/departments"),
+  // Запросы данных — сразу, параллельно с проверкой пользователя (apiTry не бросает ошибок: нет ответа — null).
+  const alerts = apiTry<AiAlertsView>("/api/ai/alerts");
+  const departments = apiTry<DepartmentTasks[]>("/api/work/departments");
+  const [me, locale] = await Promise.all([apiSession<Me>("/api/auth/me"), getLocale()]);
+  // Роль без общих разделов (например, «Админ 2») начинает со своего первого раздела.
+  if (me && !canOpen("/", me.permissions)) redirect(homeFor(me.permissions));
+  const now = new Date();
+  const name = me?.firstName || me?.name || me?.login || "";
+
+  return (
+    <>
+      <div className="max-md:hidden">
+        <Suspense fallback={<DesktopOverviewSkeleton />}>
+          <DesktopOverview me={me} name={name} now={now} locale={locale} alerts={alerts} departments={departments} />
+        </Suspense>
+      </div>
+      <MobileOverview name={name} now={now} locale={locale} apiOk={me !== null} alerts={alerts} departments={departments} />
+    </>
+  );
+}
+
+async function DesktopOverview({
+  me,
+  name,
+  now,
+  locale,
+  alerts: alertsRequest,
+  departments: departmentsRequest,
+}: {
+  me: Me | null;
+  name: string;
+  now: Date;
+  locale: string;
+  alerts: Promise<AiAlertsView | null>;
+  departments: Promise<DepartmentTasks[] | null>;
+}) {
+  const [alerts, departments, notifications, leaders, t] = await Promise.all([
+    alertsRequest,
+    departmentsRequest,
     apiTry<{ items: NotificationRow[] }>("/api/notifications?take=8"),
     // Без доступа к HR сервер ответит 403 — блок покажет, кому виден рейтинг.
     apiTry<HrLeaders>("/api/hr/leaders?take=7"),
+    getT(),
   ]);
-  // Роль без общих разделов (например, «Админ 2») начинает со своего первого раздела.
-  if (me && !canOpen("/", me.permissions)) redirect(homeFor(me.permissions));
-  const [t, locale] = await Promise.all([getT(), getLocale()]);
-  const now = new Date();
   // Месяц рейтинга словом («октябрь»): в первые дни месяца сервер берёт прошлый месяц.
   const leadersMonth = (leaders ? new Date(`${leaders.from}T12:00:00Z`) : now).toLocaleDateString(locale, { month: "long", timeZone: leaders ? "UTC" : "Asia/Tashkent" });
-  const name = me?.firstName || me?.name || me?.login || "";
 
   // Открытые задачи отделов, где они видны пользователю, — для дедлайнов недели.
   const withTasks = (departments ?? []).filter((d) => d.hasTasks).slice(0, 8);

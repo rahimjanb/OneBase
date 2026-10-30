@@ -965,3 +965,77 @@ html:has([data-app-shell]) body {
     }
   }
 }
+
+/*
+ * Отклик на нажатие. Подсветку нажатий iOS/Android мы убрали (html выше) — вместо неё кнопки чуть сжимаются, пока палец или кнопка мыши
+ * на них: видно, что нажатие принято, даже если окно или страница откроются не сразу. На сенсорных экранах так же отвечают ссылки-плитки
+ * и строки списков (строчные ссылки в тексте не сжимаются: transform к строчным элементам не применяется). В слое base: у элемента со
+ * своими transition/scale из классов действуют они. Нижняя панель (.rnav), карта, перетаскиваемые карточки — без этого; отключить
+ * у элемента — data-press="off". iOS включает :active, только если на странице слушают касания, — это делает NavProgress.
+ */
+@layer base {
+  :is(button, [role="button"], [role="tab"], summary):not(:disabled, [aria-disabled="true"], [data-press="off"], [draggable="true"], .rnav *, .leaflet-container *) {
+    transition: scale 0.15s ease;
+  }
+  :is(button, [role="button"], [role="tab"], summary):not(:disabled, [aria-disabled="true"], [data-press="off"], [draggable="true"], .rnav *, .leaflet-container *):active {
+    scale: 0.97;
+  }
+  @media (pointer: coarse) {
+    a[href]:not([data-press="off"], [draggable="true"], .rnav *, .leaflet-container *) {
+      transition: scale 0.15s ease;
+    }
+    a[href]:not([data-press="off"], [draggable="true"], .rnav *, .leaflet-container *):active {
+      scale: 0.98;
+    }
+  }
+}
+
+/*
+ * Переход на другую страницу (NavProgress): полоска загрузки вверху экрана, под строкой состояния, — пока не придёт новая страница
+ * и не уйдут её заготовки (aria-busy). Нажатая ссылка до этого времени приглушена: видно, что именно открывается.
+ */
+.nav-progress {
+  position: fixed;
+  top: env(safe-area-inset-top);
+  left: 0;
+  right: 0;
+  z-index: 70;
+  height: 3px;
+  pointer-events: none;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  opacity: 0;
+  background: linear-gradient(90deg, #3d7bff, #6e9bff 60%, #a78bfa);
+  box-shadow: 0 0 10px rgb(61 123 255 / 0.7);
+  transition: transform 0.25s ease-out, opacity 0.3s ease;
+}
+.nav-progress[data-state="loading"] {
+  opacity: 1;
+}
+.nav-progress[data-state="done"] {
+  opacity: 0;
+  transition: transform 0.2s ease-out, opacity 0.3s ease 0.15s;
+}
+[data-nav-pending]:not(.rnav *) {
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress {
+    transition: opacity 0.2s ease;
+  }
+}
+
+/*
+ * Мобильный «Обзор» (data-mobile-home, < 768): весь экран — один фон из макета, тёмный #060A14 со свечением из правого верхнего угла
+ * (около четверти высоты): шапка, содержимое и место под нижней панелью без швов. Сама панель не меняется. Светлая тема — фон #F5F6F8.
+ */
+@media (width < 48rem) {
+  :root[data-brand="onebase"]:not([data-theme="light"]):has([data-mobile-home]) body {
+    background-color: #060a14;
+    background-image: radial-gradient(130% 28% at 100% 0%, #2347b04d, transparent);
+  }
+  :root[data-brand="onebase"][data-theme="light"]:has([data-mobile-home]) {
+    --color-page: #f5f6f8;
+  }
+}

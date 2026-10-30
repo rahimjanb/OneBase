@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { AppBridge } from "@/components/shell/AppBridge";
 import { PullToRefresh, ScrollManager } from "@/components/shell/AppScroll";
 import { MobileNav } from "@/components/shell/MobileNav";
+import { NavProgress } from "@/components/shell/NavProgress";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { apiSession } from "@/lib/server-api";
@@ -20,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div data-app-shell className="fixed inset-0 flex overflow-hidden bg-page">
       <Sidebar canOpenSettings={canOpenSettings} permissions={permissions} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar me={me} />
+        <Topbar me={me} permissions={permissions} />
         <div className="relative min-h-0 flex-1">
           <PullToRefresh />
           <main data-app-scroll className="h-full">
@@ -30,6 +32,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <MobileNav me={me} canOpenSettings={canOpenSettings} permissions={permissions} />
       </div>
       <ScrollManager />
+      {/* Полоска загрузки при переходах; useSearchParams — внутри Suspense. */}
+      <Suspense fallback={null}>
+        <NavProgress />
+      </Suspense>
       <AppBridge userId={me?.id ?? null} />
     </div>
   );

@@ -149,11 +149,13 @@ export function NotificationBell() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={unread > 0 ? t("Уведомления: {n} новых", { n: unread }) : t("Уведомления")}
-        className="relative grid size-10 place-items-center rounded-full text-current transition-colors duration-150 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:size-9 lg:rounded-[9px] lg:text-ink-3 lg:hover:bg-muted lg:hover:text-ink"
+        className="relative grid size-[40px] place-items-center rounded-full border border-white/10 bg-white/[0.05] text-current transition-colors duration-150 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:size-9 lg:rounded-[9px] lg:border-0 lg:bg-transparent lg:text-ink-3 lg:hover:bg-muted lg:hover:text-ink"
       >
-        <Bell className="size-4" strokeWidth={1.75} />
+        <Bell className="size-[18px] lg:size-4" strokeWidth={1.75} />
+        {/* Телефон — красная точка с обводкой цветом шапки; компьютер — число непрочитанных. */}
+        {unread > 0 && <span aria-hidden className="absolute right-[9px] top-[9px] size-[8px] rounded-full bg-bad ring-2 ring-[#060a14] lg:hidden" />}
         {unread > 0 && (
-          <span className="absolute right-0.5 top-0.5 grid min-w-[18px] place-items-center rounded-full bg-bad px-1 text-[10px] font-semibold leading-[18px] text-white">
+          <span className="absolute right-0.5 top-0.5 hidden min-w-[18px] place-items-center rounded-full bg-bad px-1 text-[10px] font-semibold leading-[18px] text-white lg:grid">
             {unread > 99 ? "99+" : unread}
           </span>
         )}

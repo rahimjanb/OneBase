@@ -29,6 +29,7 @@ import { initials, type Me } from "@/lib/users";
 import { LogoutLink } from "./AppBridge";
 import { useKeyboardOpen } from "./AppScroll";
 import { fanLayout, type FanLayout } from "./fan";
+import { ProfileSettings } from "./ProfileSettings";
 
 /** short — подпись вкладки на узком экране (уже 375px), где полная не помещается. */
 type Section = { href: string; label: string; short?: string; icon: LucideIcon; exact?: boolean; also?: string[] };
@@ -59,7 +60,8 @@ const isCurrent = (pathname: string, s: Section) => {
 /**
  * Нижняя панель на телефоне, как в нативном приложении: стеклянная панель со скруглённым верхом, четыре вкладки и синяя кнопка меню
  * (четыре квадрата) по центру. Кнопка раскрывает веер круглых кнопок над панелью — остальные разделы (по правам) и «Новая рассылка»; фон затемняется
- * и размывается. Закрывается повторным нажатием, тапом по фону, Esc или выбором пункта. «Профиль» — шторка с привязкой Telegram и выходом.
+ * и размывается. Закрывается повторным нажатием, тапом по фону, Esc или выбором пункта. «Профиль» — шторка с темой и языком, привязкой Telegram
+ * и выходом.
  * Вкладки: «Главная», «Консультант» (AI-консультант), «Продажи»; без доступа к какой-то из них — первый доступный раздел из веера
  * («Задачи», «Отделы» …). Панель в потоке под областью
  * прокрутки — не двигается при прокрутке; при открытой клавиатуре прячется. Отступ снизу — под полоску «домой» (safe area).
@@ -231,6 +233,8 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
             </span>
           </div>
         )}
+        {/* Тема и язык — здесь: в шапке телефона их нет. */}
+        <ProfileSettings />
         <div className="mt-3 rounded-xl border border-line p-1.5 text-ink">
           {me && <LinkTelegramButton />}
           {/* Обычная ссылка: /logout при загрузке закрывает сеанс, заранее его загружать нельзя. */}
