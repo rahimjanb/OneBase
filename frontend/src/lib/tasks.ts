@@ -65,6 +65,8 @@ export type WorkTaskDetail = {
   canRestore: boolean;
   canComment: boolean;
   canAttach: boolean;
+  /** Когда задача последний раз пришла в статус и кто её перевёл (полоса этапов, «сдал результат»). */
+  stages: { status: WorkTaskStatus; at: string; actorName: string }[];
 };
 
 export type WorkOverview = {
@@ -165,26 +167,11 @@ export function statusActionLabel(from: WorkTaskStatus, to: WorkTaskStatus): str
 /** Переход, для которого нужен комментарий: возврат на доработку (обязательно) и отмена (желательно). */
 export const needsComment = (from: WorkTaskStatus, to: WorkTaskStatus) => (from === "Review" && to === "InProgress") || to === "Cancelled";
 
-export const workStatusTone: Record<WorkTaskStatus, string> = {
-  New: "bg-accent-soft text-accent-strong",
-  InProgress: "bg-warn-soft text-warn",
-  Review: "bg-violet/15 text-violet-light",
-  Done: "bg-ok-soft text-ok",
-  Cancelled: "bg-muted text-ink-3",
-};
-
 export const workPriorityLabel: Record<WorkTaskPriority, string> = {
   Low: "Низкий",
   Medium: "Обычный",
   High: "Высокий",
   Urgent: "Критический",
-};
-
-export const workPriorityTone: Record<WorkTaskPriority, string> = {
-  Low: "text-ink-3",
-  Medium: "text-ink-2",
-  High: "text-warn",
-  Urgent: "text-bad",
 };
 
 export const suggestionSourceLabel: Record<string, string> = {
@@ -208,7 +195,7 @@ export const qs = (params: Record<string, string | number | boolean | undefined 
 };
 
 /** Параметры списка задач из адреса страницы (фильтры таблицы) — то же, что принимает /api/work/tasks. */
-export const taskFilterKeys = ["search", "status", "priority", "department", "assigneeId", "projectId", "from", "to", "dateField", "sort", "desc", "page", "createdByMe"] as const;
+export const taskFilterKeys = ["search", "status", "priority", "department", "assigneeId", "projectId", "from", "to", "dateField", "sort", "desc", "page", "createdByMe", "mine"] as const;
 
 export type TaskFilters = Partial<Record<(typeof taskFilterKeys)[number], string>>;
 

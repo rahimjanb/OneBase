@@ -44,7 +44,8 @@ public sealed class WorkController(WorkTaskService tasks, OneBase.AI.Work.TaskSu
 
     /// <summary>
     /// Список задач. С department без scope — прежний список отдела (страница отдела, AI). Иначе — поиск по всем доступным задачам:
-    /// scope (all, my, department, archive, board), фильтры, сортировка и страницы.
+    /// scope (all, my, department, archive, board), фильтры, сортировка и страницы. department, priority, status и assigneeId — одно значение
+    /// или несколько через запятую (фильтры канбана и таблицы).
     /// </summary>
     [HttpGet("tasks")]
     public async Task<PageResult<WorkTaskRow>> List(
@@ -53,7 +54,7 @@ public sealed class WorkController(WorkTaskService tasks, OneBase.AI.Work.TaskSu
         [FromQuery] string? scope = null,
         [FromQuery] bool mine = false,
         [FromQuery] bool createdByMe = false,
-        [FromQuery] Guid? assigneeId = null,
+        [FromQuery] string? assigneeId = null,
         [FromQuery] Guid? projectId = null,
         [FromQuery] string? priority = null,
         [FromQuery] DateOnly? from = null,
@@ -67,17 +68,23 @@ public sealed class WorkController(WorkTaskService tasks, OneBase.AI.Work.TaskSu
         CancellationToken ct = default)
     {
         var ctx = await ContextAsync(ct);
+        var assignees = (assigneeId ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(v => Guid.TryParse(v, out var g) ? g : (Guid?)null).OfType<Guid>().Distinct().ToList();
         if (scope is null && department is not null)
         {
-            return await tasks.ListAsync(ctx, department, new WorkTaskQuery(status, mine, createdByMe, assigneeId, search, page, pageSize), ct);
+            return await tasks.ListAsync(ctx, department, new WorkTaskQuery(status, mine, createdByMe, assignees.Count > 0 ? assignees[0] : null, search, page, pageSize), ct);
         }
 
-        return await tasks.SearchAsync(ctx, new WorkTaskSearch(scope ?? "all", department, projectId, status, priority, mine ? ctx.UserId : assigneeId, createdByMe,
-            from, to, dateField, search, sort, desc, page, pageSize), ct);
+        return await tasks.SearchAsync(ctx, new WorkTaskSearch(scope ?? "all", department, projectId, status, priority, mine ? ctx.UserId : null, createdByMe,
+            from, to, dateField, search, sort, desc, page, pageSize, assignees), ct);
     }
 
     [HttpGet("tasks/{id:guid}")]
     public async Task<WorkTaskDetail> Get(Guid id, CancellationToken ct) => await tasks.GetAsync(await ContextAsync(ct), id, ct);
+
+    /// <summary>Кого можно упомянуть в комментарии через @: те, кто видит задачу.</summary>
+    [HttpGet("tasks/{id:guid}/people")]
+    public async Task<List<WorkAssignee>> People(Guid id, CancellationToken ct) => await tasks.PeopleAsync(await ContextAsync(ct), id, ct);
 
     [HttpGet("assignees")]
     public async Task<List<WorkAssignee>> Assignees([FromQuery] string department, [FromQuery] Guid? projectId, CancellationToken ct) =>
@@ -149,6 +156,8 @@ public sealed class WorkController(WorkTaskService tasks, OneBase.AI.Work.TaskSu
 
     public sealed record ChecklistInput(string? Title, bool? Done);
 
+    public sealed record ChecklistOrderInput(IReadOnlyList<Guid>? Ids);
+
     [HttpPost("tasks/{id:guid}/checklist")]
     public async Task<IActionResult> AddChecklist(Guid id, ChecklistInput input, CancellationToken ct) =>
         Ok(new { id = await tasks.AddChecklistItemAsync(await ContextAsync(ct), id, input.Title, ct) });
@@ -160,6 +169,14 @@ public sealed class WorkController(WorkTaskService tasks, OneBase.AI.Work.TaskSu
         return NoContent();
     }
 
+    /// <summary>Порядок пунктов чек-листа (перетаскивание): все пункты задачи в новом порядке.</summary>
+    [HttpPost("tasks/{id:guid}/checklist/order")]
+    public async Task<IActionResult> OrderChecklist(Guid id, ChecklistOrderInput input, CancellationToken ct)
+    {
+        await tasks.OrderChecklistAsync(await ContextAsync(ct), id, input.Ids ?? [], ct);
+        return NoContent();
+    }
+
     [HttpDelete("tasks/{id:guid}/checklist/{itemId:guid}")]
     public async Task<IActionResult> DeleteChecklist(Guid id, Guid itemId, CancellationToken ct)
     {
@@ -167,11 +184,12 @@ public sealed class WorkController(WorkTaskService tasks, OneBase.AI.Work.TaskSu
         return NoContent();
     }
 
-    public sealed record CommentInput(string? Text);
+    /// <summary>Комментарий; Mentions — кого упомянули через @ (получат уведомление, если видят задачу).</summary>
+    public sealed record CommentInput(string? Text, IReadOnlyList<Guid>? Mentions = null);
 
     [HttpPost("tasks/{id:guid}/comments")]
     public async Task<IActionResult> Comment(Guid id, CommentInput input, CancellationToken ct) =>
-        Ok(new { id = await tasks.AddCommentAsync(await ContextAsync(ct), id, input.Text, ct) });
+        Ok(new { id = await tasks.AddCommentAsync(await ContextAsync(ct), id, input.Text, ct, input.Mentions) });
 
     [HttpPost("tasks/{id:guid}/attachments")]
     [RequestSizeLimit(WorkTaskService.MaxAttachmentBytes + 1024 * 1024)]

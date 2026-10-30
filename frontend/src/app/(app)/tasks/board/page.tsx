@@ -1,10 +1,7 @@
-import Link from "next/link";
-import { Table2 } from "lucide-react";
-import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { TaskBoard } from "@/components/tasks/TaskBoard";
-import { NewTaskButton } from "@/components/tasks/TaskForm";
+import { TaskFilters } from "@/components/tasks/TaskFilterBar";
 import { one, taskOptions, type SearchParams } from "@/components/tasks/TaskListPage";
-import { TaskFilters } from "@/components/tasks/TaskTable";
+import { BoardHeader } from "@/components/tasks/TaskScreenHeader";
 import { getT } from "@/i18n/server";
 import { apiGet } from "@/lib/server-api";
 import { qs, type PageResult, type WorkTask } from "@/lib/tasks";
@@ -14,52 +11,49 @@ export async function generateMetadata() {
   return { title: t("Канбан задач · OneBase") };
 }
 
-/** Канбан-доска: те же задачи и фильтры, что у таблицы (без архива и отменённых). */
+/** Фильтры, общие у канбана и таблицы: переключение вида их сохраняет. */
+const shared = ["search", "priority", "department", "assigneeId", "from", "to", "dateField", "mine"] as const;
+
+/**
+ * Канбан (ТЗ tasks-kanban-detail): те же задачи и фильтры, что у таблицы (без архива и отменённых). Компьютер — на всю высоту окна,
+ * колонки прокручиваются внутри; телефон — своя шапка раздела и группы по статусам.
+ */
 export default async function TaskBoardPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const t = await getT();
   const sp = await searchParams;
   const { departments, projects } = await taskOptions("/tasks/board");
-  const mine = one(sp, "mine") === "true";
+  const filters = Object.fromEntries(shared.map((k) => [k, one(sp, k)]));
   const data = await apiGet<PageResult<WorkTask>>(
     `/api/work/tasks${qs({
       scope: "board",
-      department: one(sp, "department"),
+      department: filters.department,
       projectId: one(sp, "projectId"),
-      priority: one(sp, "priority"),
-      assigneeId: one(sp, "assigneeId"),
-      search: one(sp, "search"),
-      status: one(sp, "status"),
-      mine: mine || undefined,
+      priority: filters.priority,
+      assigneeId: filters.assigneeId,
+      search: filters.search,
+      from: filters.from,
+      to: filters.to,
+      dateField: filters.dateField,
+      mine: filters.mine === "true" || undefined,
       pageSize: 500,
     })}`,
     "/tasks/board",
   );
+  const filtered = Object.values(filters).some(Boolean);
 
   return (
-    <>
-      <PageHeader
-        title={t("Канбан")}
-        subtitle={mine ? t("Мои задачи по статусам") : t("Задачи по статусам: перетащите карточку, чтобы сменить статус")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Задачи"), href: "/tasks" }, { label: t("Канбан") }]}
-        actions={
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/tasks/all${qs({ department: one(sp, "department"), priority: one(sp, "priority"), search: one(sp, "search") })}`}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink hover:bg-muted"
-            >
-              <Table2 className="size-4" /> {t("Таблица")}
-            </Link>
-            <NewTaskButton departments={departments} projects={projects} defaultDepartment={one(sp, "department")} />
-          </div>
-        }
+    <div className="tasks-ui flex min-h-full flex-col gap-4 text-ink max-lg:bg-ai-bg lg:h-full lg:px-8 lg:py-6">
+      <BoardHeader
+        total={data.total}
+        tableHref={`/tasks/all${qs(filters)}`}
+        boardHref={`/tasks/board${qs(filters)}`}
+        departments={departments}
+        projects={projects}
+        defaultDepartment={filters.department?.split(",")[0]}
       />
-      <PageBody>
-        <TaskFilters departments={departments} show={{ department: true, assignee: true, status: "all" }} />
-        {data.total > data.items.length && (
-          <p className="mb-2 text-xs text-ink-3">{t("Показаны первые {n} из {total} задач — уточните фильтр.", { n: data.items.length, total: data.total })}</p>
-        )}
-        <TaskBoard items={data.items} />
-      </PageBody>
-    </>
+      <div className="px-4 lg:px-0">
+        <TaskFilters departments={departments} show={{ department: true, assignee: true, mine: true }} />
+      </div>
+      <TaskBoard items={data.items} total={data.total} departments={departments} projects={projects} filtered={filtered} />
+    </div>
   );
 }

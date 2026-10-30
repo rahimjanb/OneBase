@@ -27,6 +27,7 @@ public static class NotificationCatalog
         UserNotificationKind.TaskDueSoon or UserNotificationKind.FieldTaskPostponed => ("task_due", Tasks),
         UserNotificationKind.TaskDone or UserNotificationKind.FieldTaskDone or UserNotificationKind.TaskAccepted => ("task_done", Tasks),
         UserNotificationKind.TaskComment => ("task_comment", Tasks),
+        UserNotificationKind.TaskMention => ("mention", Tasks),
         UserNotificationKind.TaskAssigned or UserNotificationKind.TaskChanged or UserNotificationKind.TaskReview or UserNotificationKind.TaskReturned
             or UserNotificationKind.TaskDeadlineChanged => ("task_assigned", Tasks),
         UserNotificationKind.TaskSuggestion => ("ai_insight", Ai),

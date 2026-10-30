@@ -5,8 +5,8 @@ import { Fragment } from "react";
  * Небольшой рендер Markdown для ответов консультанта: заголовки, абзацы, списки, таблицы, цитаты,
  * **жирный**, *курсив*, `код`, ссылки. Строит React-элементы — HTML из ответа модели не вставляется.
  */
-export function Markdown({ text }: { text: string }) {
-  return <div className="space-y-3 text-sm leading-relaxed text-ink">{blocks(text)}</div>;
+export function Markdown({ text, className = "space-y-3 text-sm leading-relaxed text-ink" }: { text: string; className?: string }) {
+  return <div className={className}>{blocks(text)}</div>;
 }
 
 type Block =

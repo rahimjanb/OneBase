@@ -263,7 +263,7 @@ async function OfficeTab({ code, sp, returnTo }: { code: string; sp: SearchParam
         </Link>
         <NewTaskButton departments={departments} projects={projects} defaultDepartment={code} />
       </div>
-      <TaskFilters departments={departments} show={{ assignee: true, status: "all" }} fixedDepartment={code} />
+      <TaskFilters departments={departments} show={{ assignee: true, status: "all", dateField: true }} fixedDepartment={code} />
       <TaskTable data={data} empty="Задач отдела по этому фильтру нет." />
     </div>
   );

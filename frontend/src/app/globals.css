@@ -1041,7 +1041,8 @@ html:has([data-app-shell]) body {
 }
 
 /*
- * AI-консультант (ТЗ ai-consultant): свои токены экрана. Внутри .ai-chat общие классы (bg-surface, text-ink-2, border-line…) берут цвета
+ * AI-консультант (ТЗ ai-consultant), уведомления (notifications), канбан и карточка задачи (tasks-kanban-detail, .tasks-ui — ещё фон
+ * карточки и колонки канбана): свои токены экрана. Внутри .ai-chat общие классы (bg-surface, text-ink-2, border-line…) берут цвета
  * экрана, новые — bg-ai-bg, bg-surface-2, text-subtle, text-link, text-telegram, bg-accent-fill. Тёмная — как у OneBase по умолчанию
  * (нет data-theme="light") и при data-theme="dark"; светлая — при data-theme="light".
  * Отступления от макета ради контраста не ниже 4,5:1 у мелкого текста: subtle тёмной темы #7B86A1 вместо #5C6680 (на surface-2 было 3,0),
@@ -1060,7 +1061,8 @@ html:has([data-app-shell]) body {
 }
 
 .ai-chat,
-.notif-ui {
+.notif-ui,
+.tasks-ui {
   --color-ai-bg: #f5f6f8;
   --color-page: #f5f6f8;
   --color-surface: #ffffff;
@@ -1094,6 +1096,9 @@ html:has([data-app-shell]) body {
   --color-teal-soft: rgb(13 148 136 / 0.08);
   --notif-unread: rgb(47 107 255 / 0.04);
   --notif-push-bg: #ffffff;
+  --tasks-card: #ffffff;
+  --tasks-column: #eef0f4;
+  --tasks-ghost: rgb(14 19 34 / 0.015);
   --ai-glow: rgb(43 63 168 / 0.1);
   --ai-violet-glow: rgb(91 76 245 / 0.1);
   --ai-summary-bg: linear-gradient(135deg, rgb(47 107 255 / 0.1), rgb(47 107 255 / 0.03));
@@ -1111,8 +1116,8 @@ html:has([data-app-shell]) body {
   background-image: radial-gradient(60% 40% at 50% 0%, var(--ai-glow), transparent 70%);
 }
 
-:root[data-theme="dark"] :is(.ai-chat, .notif-ui),
-:root[data-brand="onebase"]:not([data-theme="light"]) :is(.ai-chat, .notif-ui) {
+:root[data-theme="dark"] :is(.ai-chat, .notif-ui, .tasks-ui),
+:root[data-brand="onebase"]:not([data-theme="light"]) :is(.ai-chat, .notif-ui, .tasks-ui) {
   --color-ai-bg: #060a14;
   --color-page: #060a14;
   --color-surface: #0c1221;
@@ -1145,6 +1150,9 @@ html:has([data-app-shell]) body {
   --color-teal-soft: rgb(45 212 191 / 0.12);
   --notif-unread: rgb(61 123 255 / 0.04);
   --notif-push-bg: #121a3a;
+  --tasks-card: #111a2e;
+  --tasks-column: rgb(10 15 28 / 0.8);
+  --tasks-ghost: rgb(255 255 255 / 0.016);
   --ai-glow: rgb(43 63 168 / 0.2);
   --ai-violet-glow: rgb(91 76 245 / 0.18);
   --ai-summary-bg: linear-gradient(135deg, rgb(61 123 255 / 0.15), rgb(61 123 255 / 0.04)), #101a36;
@@ -1156,7 +1164,7 @@ html:has([data-app-shell]) body {
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-brand="onebase"]) :is(.ai-chat, .notif-ui) {
+  :root:not([data-theme="light"]):not([data-brand="onebase"]) :is(.ai-chat, .notif-ui, .tasks-ui) {
     --color-ai-bg: #060a14;
     --color-page: #060a14;
     --color-surface: #0c1221;
@@ -1189,6 +1197,9 @@ html:has([data-app-shell]) body {
     --color-teal-soft: rgb(45 212 191 / 0.12);
     --notif-unread: rgb(61 123 255 / 0.04);
   --notif-push-bg: #121a3a;
+    --tasks-card: #111a2e;
+    --tasks-column: rgb(10 15 28 / 0.8);
+    --tasks-ghost: rgb(255 255 255 / 0.016);
     --ai-glow: rgb(43 63 168 / 0.2);
     --ai-violet-glow: rgb(91 76 245 / 0.18);
     --ai-summary-bg: linear-gradient(135deg, rgb(61 123 255 / 0.15), rgb(61 123 255 / 0.04)), #101a36;

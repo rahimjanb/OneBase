@@ -39,14 +39,14 @@ const hrTabs: SectionTab[] = [
   { key: "reports", label: "Отчёты", href: "/hr/reports", icon: ChartColumn },
 ];
 
-const taskTabs: SectionTab[] = [
+export const taskTabs: SectionTab[] = [
   { key: "overview", label: "Обзор", href: "/tasks", icon: LayoutGrid },
-  { key: "all", label: "Все задачи", href: "/tasks/all", icon: ListChecks },
+  { key: "all", label: "Все задачи", short: "Все", href: "/tasks/all", icon: ListChecks },
   { key: "board", label: "Канбан", href: "/tasks/board", icon: KanbanSquare },
-  { key: "my", label: "Мои задачи", href: "/tasks/my", icon: UserRound },
-  { key: "department", label: "Задачи отдела", href: "/tasks/department", icon: UsersRound },
+  { key: "my", label: "Мои задачи", short: "Мои", href: "/tasks/my", icon: UserRound },
+  { key: "department", label: "Задачи отдела", short: "Отдел", href: "/tasks/department", icon: UsersRound },
   { key: "archive", label: "Архив", href: "/tasks/archive", icon: Archive },
-  { key: "suggestions", label: "Предложения AI", href: "/tasks/suggestions", icon: Sparkles, headsOnly: true },
+  { key: "suggestions", label: "Предложения AI", short: "AI", href: "/tasks/suggestions", icon: Sparkles, headsOnly: true },
   { key: "projects", label: "Проекты", href: "/tasks/projects", icon: FolderKanban },
 ];
 
@@ -63,7 +63,7 @@ export const sections: SectionDef[] = [
     id: "tasks",
     label: "Разделы задач",
     tabs: taskTabs,
-    // Карточка задачи — «Все задачи»; страница отдела (/tasks/{код}) — «Задачи отдела».
+    // Карточка задачи — «Все задачи» (SectionNav подсвечивает список, откуда её открыли); страница отдела (/tasks/{код}) — «Задачи отдела».
     active: (pathname) => {
       if (pathname === "/tasks") return "overview";
       if (pathname.startsWith("/tasks/task/")) return "all";

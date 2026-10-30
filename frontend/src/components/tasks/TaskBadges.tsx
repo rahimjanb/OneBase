@@ -2,21 +2,16 @@
 
 import { AlertTriangle, Ban, CalendarClock, FolderKanban } from "lucide-react";
 import { useT } from "@/i18n/client";
-import { shortDate, workPriorityLabel, workPriorityTone, workStatusLabel, workStatusTone, type WorkTask, type WorkTaskPriority, type WorkTaskStatus } from "@/lib/tasks";
+import { shortDate, type WorkTask, type WorkTaskPriority, type WorkTaskStatus } from "@/lib/tasks";
+import { PriorityPill, StatusPill } from "./TaskKit";
 
+/** Статус и приоритет — из общего справочника вида задач (TaskKit): те же цвета и значки, что на канбане и в карточке. */
 export function StatusBadge({ status }: { status: WorkTaskStatus }) {
-  const t = useT();
-  return <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${workStatusTone[status]}`}>{t(workStatusLabel[status])}</span>;
+  return <StatusPill status={status} />;
 }
 
 export function PriorityBadge({ priority }: { priority: WorkTaskPriority }) {
-  const t = useT();
-  return (
-    <span className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs font-semibold ${workPriorityTone[priority]}`}>
-      <span aria-hidden className="size-1.5 rounded-full bg-current" />
-      {t(workPriorityLabel[priority])}
-    </span>
-  );
+  return <PriorityPill priority={priority} />;
 }
 
 /** Процент выполнения: полоса и число. */

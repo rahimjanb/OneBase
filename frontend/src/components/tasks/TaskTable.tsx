@@ -1,172 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
-import { field } from "@/components/ai/form";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
+import { markOpenedFromList, rememberTaskList } from "@/lib/task-list";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react";
 import { useT } from "@/i18n/client";
-import { bff } from "@/lib/bff";
-import {
-  shortDate,
-  workPriorities,
-  workPriorityLabel,
-  workStatuses,
-  workStatusLabel,
-  type DepartmentTasks,
-  type PageResult,
-  type WorkAssignee,
-  type WorkTask,
-} from "@/lib/tasks";
+import { shortDate, type PageResult, type WorkTask } from "@/lib/tasks";
 import { PriorityBadge, ProgressBar, StatusBadge, TaskFlags } from "./TaskBadges";
 
-/** Компактные поля фильтра: в один ряд на компьютере, переносятся на телефоне (у общего класса field — ширина 100%). */
-const control =
-  "h-10 rounded-lg border border-line bg-surface px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
-const select = `${control} max-w-full pr-8`;
-
-/** Поля фильтра, которые показывает страница (у «Моих задач» нет фильтра по исполнителю, у отдела — по отделу). */
-export type FilterSet = { department?: boolean; assignee?: boolean; status?: "all" | "archive" };
-
-/**
- * Фильтры таблицы: поиск, статус, приоритет, отдел, исполнитель (сотрудники выбранного отдела), период по дате создания или сроку.
- * Состояние — в адресе страницы: ссылкой можно поделиться, «назад» возвращает прежний фильтр. Поиск применяется с задержкой.
- */
-export function TaskFilters({ departments, show, fixedDepartment }: { departments: DepartmentTasks[]; show: FilterSet; fixedDepartment?: string }) {
-  const t = useT();
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const [search, setSearch] = useState(params.get("search") ?? "");
-  const [assignees, setAssignees] = useState<WorkAssignee[]>([]);
-  const department = fixedDepartment ?? params.get("department") ?? "";
-
-  const apply = (patch: Record<string, string | null>) => {
-    const next = new URLSearchParams(params.toString());
-    for (const [k, v] of Object.entries(patch)) {
-      if (v) next.set(k, v);
-      else next.delete(k);
-    }
-    next.delete("page");
-    router.push(`${pathname}${next.size ? `?${next}` : ""}`);
-  };
-  // Сброс фильтров сохраняет вкладку страницы (у страницы отдела — tab).
-  const reset = () => {
-    const tab = params.get("tab");
-    router.push(`${pathname}${tab ? `?tab=${tab}` : ""}`);
-  };
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if ((params.get("search") ?? "") !== search.trim()) apply({ search: search.trim() || null });
-    }, 400);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
-
-  useEffect(() => {
-    if (!show.assignee || !department) {
-      setAssignees([]);
-      return;
-    }
-    let alive = true;
-    bff<WorkAssignee[]>(`work/assignees?department=${encodeURIComponent(department)}`)
-      .then((list) => alive && setAssignees(list))
-      .catch(() => alive && setAssignees([]));
-    return () => {
-      alive = false;
-    };
-  }, [department, show.assignee]);
-
-  const statusOptions =
-    show.status === "archive"
-      ? [
-          { value: "", label: "Все в архиве и завершённые" },
-          { value: "Done", label: workStatusLabel.Done },
-          { value: "Cancelled", label: workStatusLabel.Cancelled },
-        ]
-      : [
-          { value: "", label: "Все статусы" },
-          { value: "open", label: "Открытые" },
-          { value: "overdue", label: "Просроченные" },
-          { value: "blocked", label: "Заблокированные" },
-          ...workStatuses.map((s) => ({ value: s, label: workStatusLabel[s] })),
-        ];
-  const hasFilters = ["search", "status", "priority", "department", "assigneeId", "from", "to"].some((k) => params.get(k));
-
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <label className="relative block min-w-56 flex-1 sm:max-w-80">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
-        <input className={`${field} pl-9`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("Поиск: название, описание, исполнитель")} aria-label={t("Поиск задач")} />
-      </label>
-      <select className={select} value={params.get("status") ?? ""} onChange={(e) => apply({ status: e.target.value || null })} aria-label={t("Статус")}>
-        {statusOptions.map((o) => (
-          <option key={o.value} value={o.value}>
-            {t(o.label)}
-          </option>
-        ))}
-      </select>
-      <select className={select} value={params.get("priority") ?? ""} onChange={(e) => apply({ priority: e.target.value || null })} aria-label={t("Приоритет")}>
-        <option value="">{t("Любой приоритет")}</option>
-        {workPriorities.map((p) => (
-          <option key={p} value={p}>
-            {t(workPriorityLabel[p])}
-          </option>
-        ))}
-      </select>
-      {show.department && (
-        <select className={select} value={department} onChange={(e) => apply({ department: e.target.value || null, assigneeId: null })} aria-label={t("Отдел")}>
-          <option value="">{t("Все отделы")}</option>
-          {departments
-            .filter((d) => d.hasTasks)
-            .map((d) => (
-              <option key={d.code} value={d.code}>
-                {d.name}
-              </option>
-            ))}
-        </select>
-      )}
-      {show.assignee && department && (
-        <select className={select} value={params.get("assigneeId") ?? ""} onChange={(e) => apply({ assigneeId: e.target.value || null })} aria-label={t("Исполнитель")}>
-          <option value="">{t("Любой исполнитель")}</option>
-          {[
-            { label: "Сотрудники отдела", list: assignees.filter((a) => a.inDepartment) },
-            { label: "Другие пользователи OneBase", list: assignees.filter((a) => !a.inDepartment) },
-          ]
-            .filter((g) => g.list.length > 0)
-            .map((g) => (
-              <optgroup key={g.label} label={t(g.label)}>
-                {g.list.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-        </select>
-      )}
-      <select className={select} value={params.get("dateField") ?? "created"} onChange={(e) => apply({ dateField: e.target.value === "due" ? "due" : null })} aria-label={t("Период по")}>
-        <option value="created">{t("Создана")}</option>
-        <option value="due">{t("Срок")}</option>
-      </select>
-      <input type="date" className={control} value={params.get("from") ?? ""} onChange={(e) => apply({ from: e.target.value || null })} aria-label={t("С даты")} />
-      <input type="date" className={control} value={params.get("to") ?? ""} onChange={(e) => apply({ to: e.target.value || null })} aria-label={t("По дату")} />
-      {hasFilters && (
-        <button
-          type="button"
-          onClick={() => {
-            setSearch("");
-            reset();
-          }}
-          className="inline-flex h-10 items-center gap-1 rounded-lg px-2 text-sm text-ink-3 hover:text-ink"
-        >
-          <X className="size-4" /> {t("Сбросить")}
-        </button>
-      )}
-    </div>
-  );
-}
+/** Фильтры таблицы и канбана — общие (TaskFilterBar); старый импорт отсюда работает. */
+export { TaskFilters, type FilterSet } from "./TaskFilterBar";
 
 const columns: { key: string; label: string; sort?: string; className?: string }[] = [
   { key: "title", label: "Задача", sort: "title" },
@@ -199,6 +43,10 @@ export function TaskTable({ data, empty }: { data: PageResult<WorkTask>; empty: 
     return `${pathname}${next.size ? `?${next}` : ""}`;
   };
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
+  // Порядок строк — для «1 из N» и листания в карточке задачи; «Назад» из карточки вернёт на эту страницу с фильтрами.
+  const query = params.toString();
+  const ids = data.items.map((x) => x.id).join(",");
+  useEffect(() => rememberTaskList(`${pathname}${query ? `?${query}` : ""}`, ids ? ids.split(",") : []), [pathname, query, ids]);
 
   if (data.items.length === 0) {
     return <p className="rounded-xl border border-dashed border-line bg-surface px-4 py-10 text-center text-sm text-ink-3">{t(empty)}</p>;
@@ -232,7 +80,7 @@ export function TaskTable({ data, empty }: { data: PageResult<WorkTask>; empty: 
             {data.items.map((task) => (
               <tr key={task.id} className="border-b border-line align-top last:border-0 hover:bg-muted/50">
                 <td className="max-w-80 px-3 py-2.5">
-                  <Link href={`/tasks/task/${task.id}`} className="font-medium text-ink hover:text-accent-strong">
+                  <Link href={`/tasks/task/${task.id}`} onClick={() => markOpenedFromList(task.id)} className="font-medium text-ink hover:text-accent-strong">
                     {task.title}
                   </Link>
                   <div className="mt-1">
@@ -265,7 +113,7 @@ export function TaskTable({ data, empty }: { data: PageResult<WorkTask>; empty: 
       <ul className="space-y-2 lg:hidden">
         {data.items.map((task) => (
           <li key={task.id}>
-            <Link href={`/tasks/task/${task.id}`} className="block rounded-xl border border-line bg-surface p-3.5 hover:border-accent/40">
+            <Link href={`/tasks/task/${task.id}`} onClick={() => markOpenedFromList(task.id)} className="block rounded-xl border border-line bg-surface p-3.5 hover:border-accent/40">
               <div className="flex items-start justify-between gap-2">
                 <span className="font-medium text-ink">{task.title}</span>
                 <StatusBadge status={task.status} />

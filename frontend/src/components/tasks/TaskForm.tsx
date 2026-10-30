@@ -7,7 +7,18 @@ import { field, primary, button } from "@/components/ai/form";
 import { Sheet } from "@/components/field/Sheet";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { todayInTashkent, workPriorities, workPriorityLabel, type DepartmentTasks, type WorkAssignee, type WorkProject, type WorkTask, type WorkTaskPriority } from "@/lib/tasks";
+import {
+  todayInTashkent,
+  workPriorities,
+  workPriorityLabel,
+  workStatusLabel,
+  type DepartmentTasks,
+  type WorkAssignee,
+  type WorkProject,
+  type WorkTask,
+  type WorkTaskPriority,
+  type WorkTaskStatus,
+} from "@/lib/tasks";
 import { AssigneePicker } from "./AssigneePicker";
 import { ErrorNote } from "./TaskBadges";
 
@@ -38,6 +49,8 @@ export function TaskForm({
   defaultProject,
   prefill,
   onCreated,
+  status,
+  onStatusError,
 }: {
   open: boolean;
   onClose: () => void;
@@ -50,6 +63,10 @@ export function TaskForm({
   prefill?: { title: string; description: string; department?: string | null; dueDate?: string | null };
   /** Задача создана: id новой задачи (вместо обновления страницы). */
   onCreated?: (id: string) => void;
+  /** Новая задача сразу в этом статусе («+» в колонке канбана): после создания — переход по обычным правилам статусов. */
+  status?: WorkTaskStatus;
+  /** Задача создана, а перевести её в статус не вышло (нет прав на такой переход). */
+  onStatusError?: (message: string) => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -117,12 +134,20 @@ export function TaskForm({
     };
     try {
       let created: { id: string } | null = null;
+      let statusError: string | null = null;
       if (task) {
         await bff(`work/tasks/${task.id}`, { method: "PUT", body: JSON.stringify(body) });
       } else {
         created = await bff<{ id: string }>("work/tasks", { method: "POST", body: JSON.stringify({ ...body, department: draft.department }) });
+        // Задача уже создана: ошибка перехода не держит форму открытой (повторное нажатие создало бы вторую задачу).
+        if (status && status !== "New") {
+          await bff(`work/tasks/${created.id}/status`, { method: "POST", body: JSON.stringify({ status, comment: null }) }).catch((e: Error) => {
+            statusError = e.message;
+          });
+        }
       }
       onClose();
+      if (statusError) onStatusError?.(statusError);
       if (created && onCreated) onCreated(created.id);
       else router.refresh();
     } catch (e) {
@@ -137,6 +162,7 @@ export function TaskForm({
       open={open}
       onClose={onClose}
       title={task ? t("Изменить задачу") : t("Новая задача")}
+      subtitle={!task && status && status !== "New" ? t("Сразу в колонке «{status}»", { status: t(workStatusLabel[status]) }) : undefined}
       footer={
         <div className="flex justify-end gap-2">
           <button type="button" className={button} onClick={onClose} disabled={busy}>

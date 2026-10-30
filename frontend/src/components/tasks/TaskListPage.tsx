@@ -55,7 +55,17 @@ export async function TaskListPage({
     `/api/work/tasks${qs({ ...filters, scope, department: department?.code ?? filters.department, mine: scope === "my" ? true : undefined, pageSize: 25 })}`,
     returnTo,
   );
-  const boardHref = `/tasks/board${qs({ department: department?.code ?? filters.department, mine: scope === "my" ? true : undefined })}`;
+  // Канбан — с теми же фильтрами (общие у таблицы и канбана).
+  const boardHref = `/tasks/board${qs({
+    search: filters.search,
+    priority: filters.priority,
+    department: department?.code ?? filters.department,
+    assigneeId: filters.assigneeId,
+    from: filters.from,
+    to: filters.to,
+    dateField: filters.dateField,
+    mine: scope === "my" || filters.mine === "true" ? true : undefined,
+  })}`;
 
   return (
     <>
@@ -75,7 +85,7 @@ export async function TaskListPage({
         }
       />
       <PageBody>
-        <TaskFilters departments={departments} show={show} />
+        <TaskFilters departments={departments} show={{ ...show, dateField: true, mine: show.mine ?? scope === "all" }} />
         <TaskTable data={data} empty={empty} />
       </PageBody>
     </>

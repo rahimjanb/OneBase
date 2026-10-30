@@ -88,7 +88,8 @@ public sealed record WorkTaskQuery(string? Status, bool Mine, bool CreatedByMe, 
 /// <summary>
 /// Поиск по всем доступным задачам. Scope: all — все доступные (без архива); my — назначенные мне; department — один отдел; archive —
 /// архив и завершённые (выполненные, отменённые); board — для канбана (без архива и отменённых). Status — группа (open, overdue, review,
-/// blocked, closed) или статусы через запятую; Priority — через запятую. From/To — по дате создания или сроку (DateField = due).
+/// blocked, closed) или статусы через запятую; Priority и Department (кроме scope department) — через запятую; AssigneeIds — любой из
+/// исполнителей (вместе с AssigneeId). From/To — по дате создания или сроку (DateField = due).
 /// </summary>
 public sealed record WorkTaskSearch(
     string Scope = "all",
@@ -105,7 +106,8 @@ public sealed record WorkTaskSearch(
     string? Sort = null,
     bool Desc = false,
     int Page = 1,
-    int PageSize = 25);
+    int PageSize = 25,
+    IReadOnlyList<Guid>? AssigneeIds = null);
 
 public sealed record WorkTaskInput(
     string? Title,
@@ -130,6 +132,9 @@ public sealed record WorkAttachmentView(Guid Id, string FileName, string Content
 
 public sealed record WorkEventView(Guid Id, string Kind, string Text, string ActorName, DateTimeOffset CreatedAt);
 
+/// <summary>Когда задача последний раз пришла в статус и кто её перевёл — для полосы этапов карточки («с 29.10 16:23», «сдал результат»).</summary>
+public sealed record WorkStageView(WorkTaskStatus Status, DateTimeOffset At, string ActorName);
+
 public sealed record WorkTaskDetail(
     WorkTaskRow Task,
     IReadOnlyList<WorkChecklistView> Checklist,
@@ -139,7 +144,8 @@ public sealed record WorkTaskDetail(
     bool CanArchive,
     bool CanRestore,
     bool CanComment,
-    bool CanAttach);
+    bool CanAttach,
+    IReadOnlyList<WorkStageView> Stages);
 
 /// <summary>
 /// Раздел «Задачи» OneBase: задачи отделов и проектов. Права проверяются здесь, на сервере, — никогда по параметрам запроса.
@@ -308,9 +314,14 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
 
         if (s.Scope != "department" && !string.IsNullOrWhiteSpace(s.Department))
         {
-            var d = await RequireDepartmentAsync(ctx, s.Department, ct);
-            q = q.Where(t => t.DepartmentId == d.Id);
-            department ??= d;
+            // Несколько отделов (фильтр канбана и таблицы) — через запятую; каждый проверяется на доступ.
+            var ids = new List<Guid>();
+            foreach (var code in s.Department.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct())
+            {
+                ids.Add((await RequireDepartmentAsync(ctx, code, ct)).Id);
+            }
+
+            q = q.Where(t => ids.Contains(t.DepartmentId));
         }
 
         if (s.ProjectId is { } project)
@@ -328,6 +339,12 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
         if (s.AssigneeId is { } assignee)
         {
             q = q.Where(t => t.AssigneeId == assignee);
+        }
+
+        if (s.AssigneeIds is { Count: > 0 } assignees)
+        {
+            var list = assignees.Distinct().ToList();
+            q = q.Where(t => t.AssigneeId != null && list.Contains(t.AssigneeId.Value));
         }
 
         if (s.CreatedByMe)
@@ -458,8 +475,41 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
             row.CanManage && task.ArchivedAt is null && Closed.Contains(task.Status),
             row.CanManage && task.ArchivedAt is not null,
             true,
-            row.CanWork || row.CanManage);
+            row.CanWork || row.CanManage,
+            StagesOf(history));
     }
+
+    /// <summary>
+    /// Этапы по истории: для каждого статуса — последнее событие, которым задача в него пришла (история — новые сверху). События пишет
+    /// ChangeStatusAsync: created, review, accepted, returned; status — «Статус: A → B», «Возвращена в работу», «Задача отменена…».
+    /// </summary>
+    public static List<WorkStageView> StagesOf(IEnumerable<WorkEventView> history)
+    {
+        var stages = new Dictionary<WorkTaskStatus, WorkStageView>();
+        foreach (var e in history.OrderByDescending(e => e.CreatedAt))
+        {
+            WorkTaskStatus? status = e.Kind switch
+            {
+                "created" => WorkTaskStatus.New,
+                "review" => WorkTaskStatus.Review,
+                "accepted" => WorkTaskStatus.Done,
+                "returned" => WorkTaskStatus.InProgress,
+                "status" when e.Text.StartsWith("Возвращена в работу", StringComparison.Ordinal) => WorkTaskStatus.InProgress,
+                "status" when e.Text.StartsWith("Задача отменена", StringComparison.Ordinal) => WorkTaskStatus.Cancelled,
+                "status" when e.Text.LastIndexOf('→') is var arrow and > 0 => StatusOfText(e.Text[(arrow + 1)..].Trim()),
+                _ => null,
+            };
+            if (status is { } s && !stages.ContainsKey(s))
+            {
+                stages[s] = new WorkStageView(s, e.CreatedAt, e.ActorName);
+            }
+        }
+
+        return stages.Values.OrderBy(s => s.At).ToList();
+    }
+
+    private static WorkTaskStatus? StatusOfText(string text) =>
+        AllStatuses.Cast<WorkTaskStatus?>().FirstOrDefault(s => StatusText(s!.Value) == text);
 
     private async Task<(WorkTask Task, Department Department)> RequireTaskAsync(WorkContext ctx, Guid id, CancellationToken ct)
     {

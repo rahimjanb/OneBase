@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { periodQuery } from "@/lib/sales/query";
+import { readTaskList } from "@/lib/task-list";
 import { sectionOf } from "./sections";
 import { useT } from "@/i18n/client";
 
@@ -29,7 +30,10 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
 
   const section = sectionOf(pathname);
   const sectionId = section?.id ?? null;
-  const current = section?.active(pathname) ?? null;
+  // Карточка задачи — подсвечена вкладка списка, из которого её открыли (канбан, мои…); известна только в браузере.
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => setOrigin(pathname.startsWith("/tasks/task/") ? (readTaskList()?.tab ?? null) : null), [pathname]);
+  const current = origin ?? section?.active(pathname) ?? null;
   // «Задачи»: вкладка «Предложения AI» — руководителям, со счётчиком ожидающих решения (обновляется при переходах внутри раздела).
   const [work, setWork] = useState<{ heads: boolean; pendingSuggestions: number } | null>(null);
   useEffect(() => {

@@ -52,6 +52,9 @@ public enum UserNotificationKind
 
     /// <summary>AI-диспетчер предложил задачи — руководителям отделов (ждут подтверждения).</summary>
     TaskSuggestion,
+
+    /// <summary>Пользователя упомянули через @ в комментарии к задаче, которую он видит.</summary>
+    TaskMention,
 }
 
 /// <summary>

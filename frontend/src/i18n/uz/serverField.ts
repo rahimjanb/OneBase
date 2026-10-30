@@ -186,6 +186,7 @@ const dict: Dict = {
 
   // ── Уведомления: задачи (Sales Base и отделы) ──
   "Новая задача: {title}": "Yangi vazifa: {title}",
+  "Упоминание: {title}": "Sizni tilga olishdi: {title}",
   "Вам передана задача: {title}": "Sizga vazifa topshirildi: {title}",
   "Задача «{title}» передана другому исполнителю": "«{title}» vazifasi boshqa ijrochiga topshirildi",
   "Изменена задача: {title}": "Vazifa o'zgartirildi: {title}",

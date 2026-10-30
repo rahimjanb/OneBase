@@ -111,6 +111,30 @@ public sealed partial class WorkTaskService
         await RecountAsync(task, ct);
     }
 
+    /// <summary>Новый порядок пунктов (перетаскивание): список — все пункты задачи, каждый один раз.</summary>
+    public async Task OrderChecklistAsync(WorkContext ctx, Guid taskId, IReadOnlyList<Guid> ids, CancellationToken ct)
+    {
+        var (task, _) = await RequireTaskAsync(ctx, taskId, ct);
+        RequireWork(ctx, task);
+        var items = await db.WorkTaskChecklist.Where(c => c.TaskId == taskId).ToListAsync(ct);
+        if (ids.Count != items.Count || ids.Distinct().Count() != ids.Count || items.Any(i => !ids.Contains(i.Id)))
+        {
+            throw new FieldValidationException("Чек-лист изменился — обновите страницу и повторите.");
+        }
+
+        for (var i = 0; i < ids.Count; i++)
+        {
+            var item = items.First(x => x.Id == ids[i]);
+            if (item.SortOrder != i)
+            {
+                item.SortOrder = i;
+                item.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task DeleteChecklistItemAsync(WorkContext ctx, Guid taskId, Guid itemId, CancellationToken ct)
     {
         var (task, _) = await RequireTaskAsync(ctx, taskId, ct);
@@ -148,7 +172,11 @@ public sealed partial class WorkTaskService
 
     // ---------- Комментарии ----------
 
-    public async Task<Guid> AddCommentAsync(WorkContext ctx, Guid taskId, string? text, CancellationToken ct)
+    /// <summary>
+    /// Комментарий. Упомянутые через @ (mentions) получают уведомление «Упоминание» — только те, кто видит задачу (PeopleAsync): по @ не
+    /// узнать о чужой задаче. Исполнитель и постановщик получают «Комментарий», если их не упомянули (одно уведомление на человека).
+    /// </summary>
+    public async Task<Guid> AddCommentAsync(WorkContext ctx, Guid taskId, string? text, CancellationToken ct, IReadOnlyList<Guid>? mentions = null)
     {
         var (task, _) = await RequireTaskAsync(ctx, taskId, ct);
         var body = (text ?? string.Empty).Trim();
@@ -160,13 +188,64 @@ public sealed partial class WorkTaskService
         var comment = new WorkTaskComment { TaskId = taskId, AuthorId = ctx.UserId, Text = body };
         db.WorkTaskComments.Add(comment);
         var preview = body.Length <= 300 ? body : body[..300] + "…";
-        foreach (var recipient in new[] { task.AssigneeId, task.CreatedById }.OfType<Guid>().Distinct().Where(r => r != ctx.UserId))
+        var mentioned = new HashSet<Guid>();
+        if (mentions is { Count: > 0 })
+        {
+            var wanted = mentions.Where(m => m != ctx.UserId).Distinct().Take(20).ToHashSet();
+            if (wanted.Count > 0)
+            {
+                var author = await db.Users.AsNoTracking().Where(u => u.Id == ctx.UserId).Select(u => u.FullName).FirstOrDefaultAsync(ct);
+                foreach (var person in (await PeopleOfAsync(task, ct)).Where(p => wanted.Contains(p.Id)))
+                {
+                    mentioned.Add(person.Id);
+                    notifier.Notify(person.Id, UserNotificationKind.TaskMention, $"Упоминание: {task.Title}",
+                        string.IsNullOrWhiteSpace(author) ? preview : $"{author}: {preview}", LinkOf(taskId));
+                }
+            }
+        }
+
+        foreach (var recipient in new[] { task.AssigneeId, task.CreatedById }.OfType<Guid>().Distinct().Where(r => r != ctx.UserId && !mentioned.Contains(r)))
         {
             notifier.Notify(recipient, UserNotificationKind.TaskComment, $"Комментарий: {task.Title}", preview, LinkOf(taskId));
         }
 
         await db.SaveChangesAsync(ct);
         return comment.Id;
+    }
+
+    /// <summary>Кого можно упомянуть в комментарии к задаче: те, кто её видит (для подсказки после @).</summary>
+    public async Task<List<WorkAssignee>> PeopleAsync(WorkContext ctx, Guid taskId, CancellationToken ct)
+    {
+        var (task, _) = await RequireTaskAsync(ctx, taskId, ct);
+        return (await PeopleOfAsync(task, ct)).Where(p => p.Id != ctx.UserId).ToList();
+    }
+
+    /// <summary>
+    /// Действующие пользователи с разделом «Задачи», которые видят задачу (те же правила, что CanView): руководство, сотрудники и
+    /// руководители отдела задачи, участники её проекта, исполнитель и постановщик. InDepartment — сотрудник отдела задачи.
+    /// </summary>
+    private async Task<List<WorkAssignee>> PeopleOfAsync(WorkTask task, CancellationToken ct)
+    {
+        var heads = await db.WorkDepartmentHeads.AsNoTracking().Where(h => h.DepartmentId == task.DepartmentId).Select(h => h.UserId).ToListAsync(ct);
+        var members = task.ProjectId is { } project
+            ? await db.WorkProjectMembers.AsNoTracking().Where(m => m.ProjectId == project && m.Project!.ArchivedAt == null).Select(m => m.UserId).ToListAsync(ct)
+            : [];
+        var users = await db.Users.AsNoTracking()
+            .Where(u => u.IsActive)
+            .Select(u => new
+            {
+                u.Id, u.FullName, u.Login, u.Position, u.DepartmentId, Department = u.Department != null ? u.Department.Name : null, u.Sections,
+                Permissions = u.Roles.SelectMany(r => r.Role.Permissions.Select(p => p.Code)).ToList(),
+            })
+            .ToListAsync(ct);
+        return users
+            .Where(u => OneBase.Application.Security.UserSections.Effective(u.Permissions, u.Sections).Contains(OneBase.Application.Security.Permissions.WorkTasks))
+            .Where(u => u.Permissions.Contains(OneBase.Application.Security.Permissions.UsersManage) || u.DepartmentId == task.DepartmentId || heads.Contains(u.Id)
+                        || members.Contains(u.Id) || u.Id == task.AssigneeId || u.Id == task.CreatedById)
+            .Select(u => new WorkAssignee(u.Id, string.IsNullOrWhiteSpace(u.FullName) ? u.Login : u.FullName, u.Position, u.Department, u.DepartmentId == task.DepartmentId))
+            .OrderByDescending(a => a.InDepartment)
+            .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
     }
 
     // ---------- Вложения ----------
