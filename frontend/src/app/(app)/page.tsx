@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { AiFocusPanel } from "@/components/dashboard/AiFocusPanel";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
@@ -11,7 +10,6 @@ import { LeadersCard } from "@/components/dashboard/LeadersCard";
 import { MobileOverview } from "@/components/dashboard/mobile/MobileOverview";
 import { TasksDonut } from "@/components/dashboard/TasksDonut";
 import { UpcomingTasks } from "@/components/dashboard/UpcomingTasks";
-import { DesktopOverviewSkeleton } from "@/components/shell/RouteSkeleton";
 import { getLocale, getT } from "@/i18n/server";
 import type { AiAlertsView } from "@/lib/ai";
 import type { HrLeaders } from "@/lib/hr";
@@ -35,8 +33,9 @@ export async function generateMetadata() {
  * статусу, состояние отделов, дедлайны, лидеры и лента. Люди и события — только из реальных данных (задачи отделов, уведомления,
  * консультант); где их нет — пустое состояние. Показатели — из разделов, где данные уже есть (lib/dashboard-data): продажи (план месяца,
  * недели), HR (явка) и задачи; отделы — те, по которым есть показатели.
- * На телефоне (< 768) — своя раскладка (MobileOverview, ТЗ 1base-mobile-home) из тех же данных; все запросы — один раз на обе.
- * Каждая раскладка грузится сама по себе: пока идут данные — заготовки, а не пустой экран.
+ * На телефоне (< 768) — своя раскладка (MobileOverview, ТЗ 1base-mobile-home) из тех же данных; все запросы — один раз на обе, параллельно.
+ * Страница открывается целиком, без заготовок загрузки: пока идут данные, на экране прежняя страница и полоска перехода (NavProgress),
+ * при первом открытии — заставка 1Base.
  */
 export default async function DashboardPage() {
   // Запросы данных — сразу, параллельно с проверкой пользователя (apiTry не бросает ошибок: нет ответа — null).
@@ -52,9 +51,7 @@ export default async function DashboardPage() {
   return (
     <>
       <div className="max-md:hidden">
-        <Suspense fallback={<DesktopOverviewSkeleton />}>
-          <DesktopOverview me={me} name={name} now={now} locale={locale} alerts={alerts} departments={departments} home={home} />
-        </Suspense>
+        <DesktopOverview me={me} name={name} now={now} locale={locale} alerts={alerts} departments={departments} home={home} />
       </div>
       <MobileOverview name={name} now={now} locale={locale} apiOk={me !== null} alerts={alerts} home={home} />
     </>

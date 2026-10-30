@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import ts from "@/components/hr/timesheet/timesheet.module.css";
 import { getT } from "@/i18n/server";
 import type { AiAlertsView } from "@/lib/ai";
@@ -17,7 +16,6 @@ import { KpiHero } from "./KpiHero";
 import m from "./mobile.module.css";
 import { QuickActions, type HomeExport } from "./QuickActions";
 import { ReportBanner } from "./ReportBanner";
-import { DepartmentsSkeleton, DynamicsSkeleton, FocusSkeleton, GreetingSkeleton, KpiSkeleton, TasksSkeleton } from "./Skeletons";
 import { TasksCard } from "./TasksCard";
 
 type Home = { fast: Promise<HomeFast>; trends: Promise<HomeTrends>; tasks: Promise<WorkOverview | null> };
@@ -34,12 +32,11 @@ type Props = {
 
 /**
  * Мобильный «Обзор» (< 768): приветствие, фильтры, KPI, быстрые действия, «Фокус дня», динамика, задачи, отделы, AI-отчёт и свежесть
- * данных. Цифры — настоящие (lib/dashboard-data): продажи, HR и задачи. Каждый блок ждёт только свои данные и до тех пор показывает
- * заготовку: медленная динамика (прошлые месяцы продаж) не держит остальную страницу.
+ * данных. Цифры — настоящие (lib/dashboard-data): продажи, HR и задачи. Запросы блоков идут параллельно, страница открывается целиком —
+ * без заготовок загрузки (прошлые месяцы продаж для динамики держит в кэше прогрев продаж).
  */
 export async function MobileOverview({ name, now, locale, apiOk, alerts, home }: Props) {
   const t = await getT();
-  const loading = t("Загрузка");
   const at = now.toISOString();
   // Таблица «Экспорт» — из тех же данных; кнопка ждёт их только при нажатии.
   const exportData: Promise<HomeExport> = Promise.all([home.fast, home.trends]).then(([fast, trends]) => {
@@ -51,29 +48,15 @@ export async function MobileOverview({ name, now, locale, apiOk, alerts, home }:
     <div data-mobile-home className={`${ts.root} ${m.page} md:hidden`}>
       <div className="flex flex-col gap-[20px] px-[16px] pb-[40px] pt-[8px]">
         <OfflineNote at={at} />
-        <Suspense fallback={<GreetingSkeleton label={loading} />}>
-          <Head name={name} now={now} locale={locale} fast={home.fast} />
-        </Suspense>
+        <Head name={name} now={now} locale={locale} fast={home.fast} />
         <Filters departments={DEPARTMENTS.map((d) => ({ code: d.code, name: d.name }))} />
-        <Suspense fallback={<KpiSkeleton label={loading} />}>
-          <Kpi fast={home.fast} />
-        </Suspense>
+        <Kpi fast={home.fast} />
         <QuickActions data={exportData} />
-        <Suspense fallback={<FocusSkeleton label={loading} />}>
-          <Focus alerts={alerts} tasks={home.tasks} />
-        </Suspense>
-        <Suspense fallback={<DynamicsSkeleton label={loading} />}>
-          <Trends trends={home.trends} />
-        </Suspense>
-        <Suspense fallback={<TasksSkeleton label={loading} />}>
-          <Tasks tasks={home.tasks} />
-        </Suspense>
-        <Suspense fallback={<DepartmentsSkeleton label={loading} />}>
-          <Departments home={home} />
-        </Suspense>
-        <Suspense fallback={null}>
-          <Report alerts={alerts} now={now} />
-        </Suspense>
+        <Focus alerts={alerts} tasks={home.tasks} />
+        <Trends trends={home.trends} />
+        <Tasks tasks={home.tasks} />
+        <Departments home={home} />
+        <Report alerts={alerts} now={now} />
         <DataStatus at={at} ok={apiOk} />
       </div>
       <div aria-hidden className={m.fade} />
