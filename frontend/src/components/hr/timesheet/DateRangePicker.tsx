@@ -28,7 +28,7 @@ export function monthGrid(first: string): (string | null)[] {
  * Поле периода «01.10.2026 — 26.10.2026»: по нажатию — календарь, первый щелчок — начало, второй — конец (порядок любой). Будущие дни
  * недоступны, период — не больше 62 дней (предел табеля на сервере): дальше конец подрезается.
  * label и className — своя подпись и вид кнопки; open и onOpenChange — открыть календарь снаружи (сегмент «Свой период» в карточке сотрудника);
- * align — к какому краю кнопки прижат календарь.
+ * align — к какому краю кнопки прижат календарь; maxDays — свой предел периода («Отчёты» — квартал).
  */
 export function DateRangePicker({
   from,
@@ -40,6 +40,7 @@ export function DateRangePicker({
   open: openProp,
   onOpenChange,
   align = "left",
+  maxDays = MAX_PERIOD_DAYS,
 }: {
   from: string;
   to: string;
@@ -50,6 +51,7 @@ export function DateRangePicker({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   align?: "left" | "right";
+  maxDays?: number;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -61,12 +63,14 @@ export function DateRangePicker({
   const box = useRef<HTMLDivElement>(null);
   const changeOpen = useRef(onOpenChange);
   changeOpen.current = onOpenChange;
+  const openNow = useRef(open);
+  openNow.current = open;
+  // Родителю сообщаем вне функции-обновления состояния: она выполняется во время рендера, а там менять чужое состояние нельзя.
   const setOpen = useCallback((next: boolean | ((o: boolean) => boolean)) => {
-    setOpenSelf((o) => {
-      const value = typeof next === "function" ? next(o) : next;
-      changeOpen.current?.(value);
-      return value;
-    });
+    const value = typeof next === "function" ? next(openNow.current) : next;
+    openNow.current = value;
+    setOpenSelf(value);
+    changeOpen.current?.(value);
   }, []);
 
   // Открыли снаружи — календарь на месяце конца периода, без чернового начала.
@@ -102,7 +106,7 @@ export function DateRangePicker({
       return;
     }
     let [a, b] = start <= day ? [start, day] : [day, start];
-    if (daysBetween(a, b) > MAX_PERIOD_DAYS) b = shiftDate(a, MAX_PERIOD_DAYS - 1);
+    if (daysBetween(a, b) > maxDays) b = shiftDate(a, maxDays - 1);
     setStart(null);
     setOpen(false);
     onChange(a, b);
@@ -180,7 +184,7 @@ export function DateRangePicker({
               );
             })}
           </div>
-          <p className="mt-2 text-[11.5px] text-(--ts-subtle)">{start ? t("Выберите конец периода") : t("Выберите начало периода · не больше {n} дней", { n: MAX_PERIOD_DAYS })}</p>
+          <p className="mt-2 text-[11.5px] text-(--ts-subtle)">{start ? t("Выберите конец периода") : t("Выберите начало периода · не больше {n} дней", { n: maxDays })}</p>
         </div>
       )}
     </div>

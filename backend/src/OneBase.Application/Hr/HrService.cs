@@ -242,6 +242,9 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
 {
     public const int MaxPeriodDays = 62;
 
+    /// <summary>Предел периода «Отчётов» и выгрузки в Excel — квартал.</summary>
+    public const int MaxReportDays = 92;
+
     public async Task<HrContext> ContextAsync(Guid userId, IReadOnlySet<string> permissions, CancellationToken ct)
     {
         var manages = permissions.Contains(Permissions.IntegrationsManage);
@@ -517,7 +520,7 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
         Require(ctx);
         var rules = await rulesSource.GetRulesAsync(ct);
         var day = date ?? DateOnly.FromDateTime(Now(rules));
-        var period = await EvaluateAsync(ctx, day, day, divisionId, null, search, rules, ct);
+        var period = await EvaluateAsync(ctx, day, day, Divisions(divisionId), null, search, rules, ct);
         var names = await NamesAsync(ct);
         return period.Rows
             .Select(r => new HrDayRow(r.Employee.Id, r.Employee.FullName, Name(names.Divisions, r.Employee.DivisionId, null), Name(names.Jobs, r.Employee.JobId, null), r.Days[0]))
@@ -559,8 +562,12 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
         var rules = await rulesSource.GetRulesAsync(ct);
         var today = DateOnly.FromDateTime(Now(rules));
         var (start, end) = Period(from ?? today.AddDays(-6), to ?? today);
-        var period = await EvaluateAsync(ctx, start, end, divisionId, Only(employeeId), null, rules, ct);
-        var names = await NamesAsync(ct);
+        var period = await EvaluateAsync(ctx, start, end, Divisions(divisionId), Only(employeeId), null, rules, ct);
+        return DeviationsOf(period, await NamesAsync(ct), kind);
+    }
+
+    private static List<HrDeviation> DeviationsOf(PeriodResult period, Names names, string? kind)
+    {
         var list = new List<HrDeviation>();
         foreach (var row in period.Rows)
         {
@@ -610,6 +617,9 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
         IReadOnlyDictionary<long, string> Locations,
         IReadOnlyDictionary<long, (string Name, string? Code)> TimeKinds);
 
+    /// <summary>Одно подразделение (с дочерними) или все.</summary>
+    private static IReadOnlyCollection<long>? Divisions(long? divisionId) => divisionId is { } id ? [id] : null;
+
     private static void Require(HrContext ctx)
     {
         if (!ctx.HasAccess)
@@ -620,16 +630,16 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
 
     private DateTime Now(HrRules rules) => DateTime.SpecifyKind(TimeZoneInfo.ConvertTime(time.GetUtcNow(), rules.Zone).DateTime, DateTimeKind.Unspecified);
 
-    private static (DateOnly From, DateOnly To) Period(DateOnly from, DateOnly to)
+    private static (DateOnly From, DateOnly To) Period(DateOnly from, DateOnly to, int maxDays = MaxPeriodDays)
     {
         if (to < from)
         {
             (from, to) = (to, from);
         }
 
-        if (to.DayNumber - from.DayNumber + 1 > MaxPeriodDays)
+        if (to.DayNumber - from.DayNumber + 1 > maxDays)
         {
-            throw new FieldValidationException($"Период — не больше {MaxPeriodDays} дней.");
+            throw new FieldValidationException($"Период — не больше {maxDays} дней.");
         }
 
         return (from, to);
@@ -660,13 +670,16 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
     }
 
     /// <summary>Подразделение с дочерними.</summary>
-    private async Task<List<long>> SubtreeAsync(long division, CancellationToken ct)
+    private Task<List<long>> SubtreeAsync(long division, CancellationToken ct) => SubtreeAsync([division], ct);
+
+    /// <summary>Несколько подразделений с дочерними (без повторов).</summary>
+    private async Task<List<long>> SubtreeAsync(IEnumerable<long> divisions, CancellationToken ct)
     {
         var all = await db.HrReferences.AsNoTracking().Where(r => r.Kind == HrReferenceKinds.Division).Select(r => new { r.VerifixId, r.ParentId }).ToListAsync(ct);
         var children = all.Where(d => d.ParentId != null).ToLookup(d => d.ParentId!.Value, d => d.VerifixId);
         var result = new List<long>();
         var seen = new HashSet<long>();
-        var queue = new Queue<long>([division]);
+        var queue = new Queue<long>(divisions);
         while (queue.TryDequeue(out var id))
         {
             if (seen.Add(id))
@@ -708,8 +721,8 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
     /// Итоги дней за период по видимым сотрудникам: табель Verifix + сводка отметок → HrAttendance. includeAll — и уволенные, и не принятые
     /// (для карточки); иначе — только те, кто работал в периоде.
     /// </summary>
-    private async Task<PeriodResult> EvaluateAsync(HrContext ctx, DateOnly from, DateOnly to, long? divisionId, IReadOnlyCollection<Guid>? only, string? search, HrRules rules,
-        CancellationToken ct, bool includeAll = false)
+    private async Task<PeriodResult> EvaluateAsync(HrContext ctx, DateOnly from, DateOnly to, IReadOnlyCollection<long>? divisions, IReadOnlyCollection<Guid>? only, string? search,
+        HrRules rules, CancellationToken ct, bool includeAll = false)
     {
         var query = Visible(ctx);
         if (only is not null)
@@ -718,9 +731,9 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
             query = query.Where(e => onlyIds.Contains(e.Id));
         }
 
-        if (divisionId is { } division)
+        if (divisions is { Count: > 0 })
         {
-            var ids = await SubtreeAsync(division, ct);
+            var ids = await SubtreeAsync(divisions, ct);
             query = query.Where(e => e.DivisionId != null && ids.Contains(e.DivisionId.Value));
         }
 

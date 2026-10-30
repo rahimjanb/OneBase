@@ -9,6 +9,10 @@ public sealed record HrTimesheet(DateOnly From, DateOnly To, IReadOnlyList<DateO
 /// <summary>Итог подразделения. AttendanceRate — доля дней с приходом среди решённых рабочих (пришёл или отсутствовал); Punctuality — доля приходов без опоздания.</summary>
 public sealed record HrReportGroup(long? DivisionId, string Division, int Employees, HrSummary Summary, double? AttendanceRate, double? Punctuality);
 
+/// <summary>
+/// Отчёт за период. TopLate — 10 чаще всех опаздывавших (по разам), TopLateTime — 10 с наибольшим временем опозданий; TopAbsent — 10 с наибольшим
+/// числом отсутствий. AbsentWholePeriod — сколько сотрудников, работавших весь период, ни в один рабочий день не пришли (см. <see cref="HrService.AbsentWholePeriod"/>).
+/// </summary>
 public sealed record HrReport(
     DateOnly From,
     DateOnly To,
@@ -18,8 +22,13 @@ public sealed record HrReport(
     double? Punctuality,
     IReadOnlyList<HrReportGroup> Divisions,
     IReadOnlyList<HrTimesheetRow> TopLate,
+    IReadOnlyList<HrTimesheetRow> TopLateTime,
     IReadOnlyList<HrTimesheetRow> TopAbsent,
+    int AbsentWholePeriod,
     HrSyncBrief Sync);
+
+/// <summary>Выгрузка в Excel: итоги, табель по дням и отклонения — из одного расчёта периода.</summary>
+public sealed record HrReportExport(HrReport Report, HrTimesheet Timesheet, IReadOnlyList<HrDeviation> Deviations);
 
 /// <summary>Сотрудник рейтинга «Лидеры месяца»: место, отработано и план за период, дней с приходом (все — без опоздания).</summary>
 public sealed record HrLeader(int Place, Guid EmployeeId, string Employee, string? Division, string? Job, int WorkedMinutes, int PlanMinutes, int PresentDays, int PlanDays);
@@ -87,31 +96,48 @@ public sealed partial class HrService
         var rules = await rulesSource.GetRulesAsync(ct);
         var today = DateOnly.FromDateTime(Now(rules));
         var (start, end) = Period(from ?? new DateOnly(today.Year, today.Month, 1), to ?? today);
-        var period = await EvaluateAsync(ctx, start, end, divisionId, Only(employeeId), search, rules, ct);
-        var names = await NamesAsync(ct);
-        var rows = period.Rows
-            .Select(r => new HrTimesheetRow(r.Employee.Id, r.Employee.FullName, Name(names.Divisions, r.Employee.DivisionId, null), Name(names.Jobs, r.Employee.JobId, null),
-                HrSummary.Of(r.Days), r.Days.Select(DayCode).ToList()))
-            .OrderBy(r => r.Division).ThenBy(r => r.Employee)
-            .ToList();
-        var dates = Enumerable.Range(0, end.DayNumber - start.DayNumber + 1).Select(start.AddDays).ToList();
-        return new HrTimesheet(start, end, dates, rows, HrSummary.Of(period.Rows.SelectMany(r => r.Days)), await SyncBriefAsync(rules, ct));
+        var period = await EvaluateAsync(ctx, start, end, Divisions(divisionId), Only(employeeId), search, rules, ct);
+        return TimesheetOf(period, await NamesAsync(ct), await SyncBriefAsync(rules, ct));
     }
 
-    /// <summary>«Отчёты»: итоги по подразделениям, частые опоздания и отсутствия за период.</summary>
-    public async Task<HrReport> ReportAsync(HrContext ctx, DateOnly? from, DateOnly? to, long? divisionId, Guid? employeeId, CancellationToken ct)
+    /// <summary>«Отчёты»: итоги по подразделениям, частые опоздания и отсутствия за период (до квартала). divisions — несколько подразделений с дочерними.</summary>
+    public async Task<HrReport> ReportAsync(HrContext ctx, DateOnly? from, DateOnly? to, IReadOnlyCollection<long>? divisions, Guid? employeeId, CancellationToken ct)
     {
         Require(ctx);
         var rules = await rulesSource.GetRulesAsync(ct);
         var today = DateOnly.FromDateTime(Now(rules));
-        var (start, end) = Period(from ?? new DateOnly(today.Year, today.Month, 1), to ?? today);
-        var period = await EvaluateAsync(ctx, start, end, divisionId, Only(employeeId), null, rules, ct);
-        var names = await NamesAsync(ct);
+        var (start, end) = Period(from ?? new DateOnly(today.Year, today.Month, 1), to ?? today, MaxReportDays);
+        var period = await EvaluateAsync(ctx, start, end, divisions, Only(employeeId), null, rules, ct);
+        return ReportOf(period, await NamesAsync(ct), await SyncBriefAsync(rules, ct));
+    }
 
-        var people = period.Rows
-            .Select(r => new HrTimesheetRow(r.Employee.Id, r.Employee.FullName, Name(names.Divisions, r.Employee.DivisionId, null), Name(names.Jobs, r.Employee.JobId, null),
-                HrSummary.Of(r.Days), r.Days.Select(DayCode).ToList()))
-            .ToList();
+    /// <summary>Выгрузка в Excel за период (до квартала): отчёт, табель и отклонения считаются один раз.</summary>
+    public async Task<HrReportExport> ExportAsync(HrContext ctx, DateOnly? from, DateOnly? to, IReadOnlyCollection<long>? divisions, Guid? employeeId, CancellationToken ct)
+    {
+        Require(ctx);
+        var rules = await rulesSource.GetRulesAsync(ct);
+        var today = DateOnly.FromDateTime(Now(rules));
+        var (start, end) = Period(from ?? new DateOnly(today.Year, today.Month, 1), to ?? today, MaxReportDays);
+        var period = await EvaluateAsync(ctx, start, end, divisions, Only(employeeId), null, rules, ct);
+        var names = await NamesAsync(ct);
+        var sync = await SyncBriefAsync(rules, ct);
+        return new HrReportExport(ReportOf(period, names, sync), TimesheetOf(period, names, sync), DeviationsOf(period, names, null));
+    }
+
+    private static HrTimesheetRow PersonOf(PeriodRow r, Names names) =>
+        new(r.Employee.Id, r.Employee.FullName, Name(names.Divisions, r.Employee.DivisionId, null), Name(names.Jobs, r.Employee.JobId, null),
+            HrSummary.Of(r.Days), r.Days.Select(DayCode).ToList());
+
+    private static HrTimesheet TimesheetOf(PeriodResult period, Names names, HrSyncBrief sync)
+    {
+        var rows = period.Rows.Select(r => PersonOf(r, names)).OrderBy(r => r.Division).ThenBy(r => r.Employee).ToList();
+        var dates = Enumerable.Range(0, period.To.DayNumber - period.From.DayNumber + 1).Select(period.From.AddDays).ToList();
+        return new HrTimesheet(period.From, period.To, dates, rows, HrSummary.Of(period.Rows.SelectMany(r => r.Days)), sync);
+    }
+
+    private static HrReport ReportOf(PeriodResult period, Names names, HrSyncBrief sync)
+    {
+        var people = period.Rows.Select(r => PersonOf(r, names)).ToList();
         var groups = period.Rows.GroupBy(r => r.Employee.DivisionId)
             .Select(g =>
             {
@@ -120,11 +146,22 @@ public sealed partial class HrService
             })
             .OrderBy(g => g.Division).ToList();
         var total = HrSummary.Of(period.Rows.SelectMany(r => r.Days));
-        return new HrReport(start, end, period.Rows.Count, total, Attendance(total), Punctuality(total), groups,
-            people.Where(p => p.Summary.LateDays > 0).OrderByDescending(p => p.Summary.LateDays).ThenByDescending(p => p.Summary.LateMinutes).Take(10).ToList(),
+        var late = people.Where(p => p.Summary.LateDays > 0).ToList();
+        return new HrReport(period.From, period.To, period.Rows.Count, total, Attendance(total), Punctuality(total), groups,
+            late.OrderByDescending(p => p.Summary.LateDays).ThenByDescending(p => p.Summary.LateMinutes).Take(10).ToList(),
+            late.OrderByDescending(p => p.Summary.LateMinutes).ThenByDescending(p => p.Summary.LateDays).Take(10).ToList(),
             people.Where(p => p.Summary.AbsentDays > 0).OrderByDescending(p => p.Summary.AbsentDays).Take(10).ToList(),
-            await SyncBriefAsync(rules, ct));
+            period.Rows.Count(r => AbsentWholePeriod(r.Days)),
+            sync);
     }
+
+    /// <summary>
+    /// Не приходил весь период: работал в компании все дни периода и ни в один свой рабочий день не пришёл — только отсутствия (день,
+    /// который ещё не начался, не мешает), без документов и без «не ясно». Кто принят или уволен внутри периода — не в счёт.
+    /// </summary>
+    public static bool AbsentWholePeriod(IReadOnlyList<HrDayResult> days) =>
+        days.Any(d => d.Status == HrDayStatus.Absent)
+        && days.All(d => d.Status is HrDayStatus.Absent or HrDayStatus.Expected or HrDayStatus.DayOff or HrDayStatus.NoSchedule);
 
     /// <summary>Один сотрудник (выгрузка из его карточки) или все видимые.</summary>
     private static IReadOnlyCollection<Guid>? Only(Guid? employeeId) => employeeId is { } id ? [id] : null;
