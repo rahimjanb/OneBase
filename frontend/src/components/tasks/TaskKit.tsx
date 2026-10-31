@@ -16,7 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useT } from "@/i18n/client";
-import { dayMonth, dueState, initialsOf } from "@/lib/task-board";
+import { dueState, dueText, initialsOf } from "@/lib/task-board";
 import { todayInTashkent, workPriorityLabel, workStatusLabel, type WorkTask, type WorkTaskPriority, type WorkTaskStatus } from "@/lib/tasks";
 
 /**
@@ -90,14 +90,14 @@ export function UserAvatar({ name, size = 24, tone = "soft" }: { name: string | 
 }
 
 /** Срок карточки: «📅 12.11»; просрочен — красный, сегодня или завтра — жёлтый; нет срока — «без срока». prefix — «до 12.11» на телефоне. */
-export function DueLabel({ task, prefix = false, icon = true }: { task: Pick<WorkTask, "dueDate" | "status" | "overdue">; prefix?: boolean; icon?: boolean }) {
+export function DueLabel({ task, prefix = false, icon = true }: { task: Pick<WorkTask, "dueDate" | "dueTime" | "status" | "overdue">; prefix?: boolean; icon?: boolean }) {
   const t = useT();
   const state = dueState(task, todayInTashkent());
   const tone = state === "overdue" ? "font-semibold text-bad" : state === "soon" ? "font-semibold text-warn" : state === "none" ? "text-subtle" : "text-ink-3";
   return (
     <span className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap tabular-nums ${tone}`}>
       {icon && <CalendarDays className="size-3.5" aria-hidden />}
-      {state === "none" ? t("без срока") : prefix ? t("до {date}", { date: dayMonth(task.dueDate) }) : dayMonth(task.dueDate)}
+      {state === "none" ? t("без срока") : prefix ? t("до {date}", { date: dueText(task) }) : dueText(task)}
     </span>
   );
 }

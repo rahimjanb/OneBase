@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { AppBridge } from "@/components/shell/AppBridge";
+import { HomeKindProvider } from "@/components/shell/HomeKind";
 import { PullToRefresh, ScrollManager } from "@/components/shell/AppScroll";
 import { MobileNav } from "@/components/shell/MobileNav";
 import { NavPending } from "@/components/shell/NavPending";
@@ -18,28 +19,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Руководителю отдела раздел HR открыт без права «HR» — признаком из /api/auth/me (данные backend отдаёт только по его подразделениям).
   const permissions = me ? (me.hrAccess ? [...me.permissions, "hr.department"] : me.permissions) : null;
   // Оболочка как у приложения: закреплена на весь экран, верхняя и нижняя панели не двигаются,
-  // прокручивается только <main data-app-scroll>.
+  // прокручивается только <main data-app-scroll>. Вид главной (HomeKind) — меню, шапке и макету перехода на «/».
   return (
-    <div data-app-shell className="fixed inset-0 flex overflow-hidden bg-page">
-      <Sidebar canOpenSettings={canOpenSettings} permissions={permissions} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopbarFrame>
-          <Topbar me={me} permissions={permissions} />
-        </TopbarFrame>
-        <div className="relative min-h-0 flex-1">
-          <PullToRefresh />
-          <main data-app-scroll className="h-full">
-            {children}
-          </main>
+    <HomeKindProvider home={me?.home ?? "overview"}>
+      <div data-app-shell className="fixed inset-0 flex overflow-hidden bg-page">
+        <Sidebar canOpenSettings={canOpenSettings} permissions={permissions} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopbarFrame>
+            <Topbar me={me} permissions={permissions} />
+          </TopbarFrame>
+          <div className="relative min-h-0 flex-1">
+            <PullToRefresh />
+            <main data-app-scroll className="h-full">
+              {children}
+            </main>
+          </div>
+          <MobileNav me={me} canOpenSettings={canOpenSettings} permissions={permissions} />
         </div>
-        <MobileNav me={me} canOpenSettings={canOpenSettings} permissions={permissions} />
+        <ScrollManager />
+        {/* Отклик на переходы без макета; useSearchParams — внутри Suspense. */}
+        <Suspense fallback={null}>
+          <NavPending />
+        </Suspense>
+        <AppBridge userId={me?.id ?? null} />
       </div>
-      <ScrollManager />
-      {/* Отклик на переходы без макета; useSearchParams — внутри Suspense. */}
-      <Suspense fallback={null}>
-        <NavPending />
-      </Suspense>
-      <AppBridge userId={me?.id ?? null} />
-    </div>
+    </HomeKindProvider>
   );
 }

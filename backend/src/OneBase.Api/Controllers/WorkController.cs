@@ -98,14 +98,15 @@ public sealed class WorkController(WorkTaskService tasks, OneBase.AI.Work.TaskSu
         Domain.Work.WorkTaskPriority Priority = Domain.Work.WorkTaskPriority.Medium,
         DateOnly? DueDate = null,
         DateOnly? StartDate = null,
-        Guid? ProjectId = null);
+        Guid? ProjectId = null,
+        TimeOnly? DueTime = null);
 
     [HttpPost("tasks")]
     public async Task<IActionResult> Create(CreateInput input, CancellationToken ct) =>
         Ok(new
         {
             id = await tasks.CreateAsync(await ContextAsync(ct), input.Department,
-                new WorkTaskInput(input.Title, input.Description, input.AssigneeId, input.Priority, input.DueDate, input.StartDate, input.ProjectId), ct),
+                new WorkTaskInput(input.Title, input.Description, input.AssigneeId, input.Priority, input.DueDate, input.StartDate, input.ProjectId, input.DueTime), ct),
         });
 
     [HttpPut("tasks/{id:guid}")]

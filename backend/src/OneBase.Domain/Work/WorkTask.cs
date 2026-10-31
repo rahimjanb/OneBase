@@ -55,6 +55,10 @@ public class WorkTask : Entity
     public WorkTaskStatus Status { get; set; } = WorkTaskStatus.New;
     public DateOnly? StartDate { get; set; }
     public DateOnly? DueDate { get; set; }
+
+    /// <summary>Время срока (местное, Ташкент); null — до конца дня DueDate. Без DueDate не задаётся.</summary>
+    public TimeOnly? DueTime { get; set; }
+
     public DateTimeOffset? CompletedAt { get; set; }
 
     /// <summary>Процент выполнения 0–100: с чек-листом — доля выполненных пунктов, без него — как указал исполнитель.</summary>

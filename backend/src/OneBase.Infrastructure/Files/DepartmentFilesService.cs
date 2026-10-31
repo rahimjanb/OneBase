@@ -116,7 +116,7 @@ public sealed record DavNode(FileSpace Space, Folder? Folder, FileItem? File)
 /// Один сервис для сайта и для подключения Windows (WebDAV): права (FileAccessRules), версии, корзина и аудит одинаковые.
 /// Удаление — в корзину (DeletedAt): содержимое остаётся, файл или папку можно восстановить.
 /// </summary>
-public sealed class DepartmentFilesService(OneBaseDbContext db, IFileStorage storage, IAuditLogger audit, FilesOptions options)
+public sealed partial class DepartmentFilesService(OneBaseDbContext db, IFileStorage storage, IAuditLogger audit, FilesOptions options)
 {
     /// <summary>Папки нового отдела: создаются вместе с корнем при первом открытии.</summary>
     public static readonly string[] DefaultFolders = ["Документы", "Отчёты", "Архив"];

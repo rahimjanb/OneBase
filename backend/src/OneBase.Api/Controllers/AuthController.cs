@@ -108,6 +108,10 @@ public sealed class AuthController(
         }
 
         var permissions = User.FindAll(OneBaseClaims.Permission).Select(c => c.Value).ToList();
+        var roles = User.FindAll(OneBaseClaims.Role).Select(c => c.Value).OrderBy(SystemRoles.OrderOf).ToList();
+        var department = user.DepartmentId is { } departmentId
+            ? await db.Departments.AsNoTracking().Where(d => d.Id == departmentId).Select(d => d.Name).FirstOrDefaultAsync(ct)
+            : null;
         return Ok(new
         {
             user.Id,
@@ -117,7 +121,10 @@ public sealed class AuthController(
             user.FirstName,
             user.LastName,
             user.Position,
-            Roles = User.FindAll(OneBaseClaims.Role).Select(c => c.Value).OrderBy(SystemRoles.OrderOf),
+            DepartmentName = department,
+            Roles = roles,
+            // Главная: у роли «Сотрудник» — «Мой день», у остальных — «Обзор» компании.
+            Home = roles.Contains(SystemRoles.EmployeeRole) ? "my_day" : "overview",
             Permissions = permissions,
             CanOpenSettings = SystemRoles.SettingsPermissions.Any(permissions.Contains),
             // Раздел HR: право «HR», интеграции или руководитель отдела, к которому привязаны подразделения Verifix.

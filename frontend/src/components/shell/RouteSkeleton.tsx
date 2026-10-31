@@ -3,6 +3,7 @@
 import { ChevronLeft, Plus, Sparkles } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { MobileOverviewSkeleton } from "@/components/dashboard/mobile/Skeletons";
+import { MyDaySkeleton } from "@/components/me/Skeletons";
 import { EmployeeSkeleton } from "@/components/hr/employee/EmployeeView";
 import { OverviewSkeleton } from "@/components/hr/overview/OverviewStates";
 import layout from "@/components/hr/overview/overview.module.css";
@@ -10,6 +11,7 @@ import { ReportSkeleton } from "@/components/hr/reports/ReportSkeleton";
 import ts from "@/components/hr/timesheet/timesheet.module.css";
 import { salesTabs } from "@/components/sales/tabs";
 import { useT } from "@/i18n/client";
+import { useHomeKind } from "./HomeKind";
 import { PageBody, PageHeader, type Crumb } from "./PageHeader";
 import { taskTabs } from "./sections";
 
@@ -52,6 +54,7 @@ const titles: Record<string, string> = {
   "/base": "Файлы",
   "/departments": "Отделы",
   "/campaigns": "Рассылки",
+  "/calendar": "Календарь",
   "/reports": "Отчёты",
   "/ai": "AI Dashboard",
   ...Object.fromEntries(salesTabs.map((tab) => [tab.href, tab.label])),
@@ -74,7 +77,7 @@ function crumbsOf(pathname: string, title: string | undefined): Crumb[] | undefi
   if (pathname === "/settings") return [ONEBASE, { label: "Настройки" }];
   if (pathname.startsWith("/settings")) return [ONEBASE, { label: "Настройки", href: "/settings" }, ...last];
   if (pathname.startsWith("/base")) return [ONEBASE, { label: "Файлы", href: "/base" }];
-  if (pathname.startsWith("/campaigns")) return [ONEBASE, ...last];
+  if (pathname.startsWith("/campaigns") || pathname === "/calendar") return [ONEBASE, ...last];
   return undefined;
 }
 
@@ -544,6 +547,32 @@ function PageSkeleton({ pathname }: { pathname: string }) {
   );
 }
 
+/** Календарь: шапка, переключатель недели и семь дней (на телефоне — список). */
+function CalendarSkeleton() {
+  return (
+    <Busy>
+      <div className="me-ui min-h-full">
+        <Header pathname="/calendar" />
+        <PageBody>
+          <div className="flex items-center gap-2">
+            <Sk className="h-9 w-9" />
+            <Sk className="h-9 w-9" />
+            <Sk className="ml-1 h-6 w-48" />
+          </div>
+          <div className="mt-5 grid gap-3 lg:grid-cols-7 lg:gap-2.5">
+            {Array.from({ length: 7 }, (_, i) => (
+              <div key={i} className={`${card} p-3 lg:min-h-[340px]`}>
+                <Sk className="h-3.5 w-24" />
+                <Sk className="mt-3 h-14 w-full" />
+              </div>
+            ))}
+          </div>
+        </PageBody>
+      </div>
+    </Busy>
+  );
+}
+
 /**
  * Макет страницы на время перехода (loading.tsx): по нажатию сразу открывается новая страница — её шапка с настоящим названием,
  * рамки карточек и таблиц, на месте данных мягкие плашки; данные приходят следом и встают на те же места. Макет выбирается по адресу.
@@ -552,6 +581,9 @@ function PageSkeleton({ pathname }: { pathname: string }) {
 export function RouteSkeleton({ inSales = false }: { inSales?: boolean }) {
   const t = useT();
   const pathname = usePathname();
+  const home = useHomeKind();
+  // Главная сотрудника и прямая ссылка — «Мой день».
+  if ((pathname === "/" && home === "my_day") || pathname === "/me") return <MyDaySkeleton label={t("Загрузка")} />;
   if (pathname === "/") {
     return (
       <>
@@ -568,6 +600,7 @@ export function RouteSkeleton({ inSales = false }: { inSales?: boolean }) {
   if (pathname === "/tasks/board") return <BoardSkeleton />;
   if (pathname.startsWith("/tasks/task/")) return <TaskSkeleton />;
   if (pathname === "/notifications") return <NotificationsSkeleton />;
+  if (pathname === "/calendar") return <CalendarSkeleton />;
   if (pathname === "/consultant" || pathname.startsWith("/consultant/")) return <ConsultantSkeleton chat={pathname !== "/consultant"} />;
   return <PageSkeleton pathname={pathname} />;
 }

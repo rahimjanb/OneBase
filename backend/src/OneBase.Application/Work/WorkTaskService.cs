@@ -80,7 +80,8 @@ public sealed record WorkTaskRow(
     int ChecklistDone,
     int ChecklistTotal,
     bool CanManage,
-    bool CanWork);
+    bool CanWork,
+    TimeOnly? DueTime = null);
 
 /// <summary>Прежний запрос списка задач одного отдела (страница отдела и инструмент AI).</summary>
 public sealed record WorkTaskQuery(string? Status, bool Mine, bool CreatedByMe, Guid? AssigneeId, string? Search, int Page = 1, int PageSize = 50);
@@ -116,7 +117,8 @@ public sealed record WorkTaskInput(
     WorkTaskPriority Priority = WorkTaskPriority.Medium,
     DateOnly? DueDate = null,
     DateOnly? StartDate = null,
-    Guid? ProjectId = null);
+    Guid? ProjectId = null,
+    TimeOnly? DueTime = null);
 
 /// <summary>Смена статуса; Comment — итог, причина возврата на доработку или отмены (для возврата обязателен).</summary>
 public sealed record WorkTaskStatusInput(WorkTaskStatus Status, string? Result, string? Comment = null);
@@ -233,6 +235,12 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
 
     private static DateOnly Today => FieldClock.Today;
 
+    private static TimeOnly NowTime => FieldClock.TimeOfDay;
+
+    /// <summary>Срок прошёл: дата раньше сегодняшней или сегодня, но время срока уже наступило. Только для открытых задач.</summary>
+    public static bool IsOverdue(WorkTaskStatus status, DateOnly? due, TimeOnly? time, DateOnly today, TimeOnly now) =>
+        Open.Contains(status) && due is { } d && (d < today || (d == today && time is { } t && t <= now));
+
     // ---------- Отделы ----------
 
     /// <summary>Все отделы (кнопки раздела) с доступом и счётчиками задач отдела.</summary>
@@ -241,6 +249,7 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
         var departments = await db.Departments.AsNoTracking().ToListAsync(ct);
         var visibleIds = departments.Where(d => CanSeeDepartment(ctx, d.Id)).Select(d => d.Id).ToArray();
         var today = Today;
+        var now = NowTime;
         var counts = await db.WorkTasks.AsNoTracking()
             .Where(t => visibleIds.Contains(t.DepartmentId) && Open.Contains(t.Status) && t.ArchivedAt == null)
             .GroupBy(t => t.DepartmentId)
@@ -249,7 +258,7 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
                 g.Key,
                 Open = g.Count(),
                 Mine = g.Count(t => t.AssigneeId == ctx.UserId),
-                Overdue = g.Count(t => t.DueDate != null && t.DueDate < today),
+                Overdue = g.Count(t => t.DueDate != null && (t.DueDate < today || (t.DueDate == today && t.DueTime != null && t.DueTime <= now))),
             })
             .ToDictionaryAsync(x => x.Key, ct);
         return departments
@@ -329,7 +338,8 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
             q = q.Where(t => t.ProjectId == project);
         }
 
-        q = StatusFilter(q, s.Status, today);
+        var now = NowTime;
+        q = StatusFilter(q, s.Status, today, now);
         var priorities = Parse<WorkTaskPriority>(s.Priority);
         if (priorities.Count > 0)
         {
@@ -395,16 +405,16 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
             .Select(t => new RowData(t, t.Assignee == null ? null : t.Assignee.FullName, t.CreatedBy == null ? null : t.CreatedBy.FullName, t.Department!.Code,
                 t.Department.Name, t.Project == null ? null : t.Project.Name, t.Checklist.Count(c => c.IsDone), t.Checklist.Count))
             .ToListAsync(ct);
-        return new PageResult<WorkTaskRow>(rows.Select(r => Row(ctx, r, today)).ToList(), total, page, pageSize);
+        return new PageResult<WorkTaskRow>(rows.Select(r => Row(ctx, r, today, now)).ToList(), total, page, pageSize);
     }
 
     private sealed record RowData(WorkTask Task, string? Assignee, string? Author, string DepartmentCode, string DepartmentName, string? Project, int Done, int Total);
 
-    private static IQueryable<WorkTask> StatusFilter(IQueryable<WorkTask> q, string? status, DateOnly today) => status switch
+    private static IQueryable<WorkTask> StatusFilter(IQueryable<WorkTask> q, string? status, DateOnly today, TimeOnly now) => status switch
     {
         null or "" or "any" => q,
         "open" => q.Where(t => Open.Contains(t.Status)),
-        "overdue" => q.Where(t => Open.Contains(t.Status) && t.DueDate != null && t.DueDate < today),
+        "overdue" => q.Where(t => Open.Contains(t.Status) && t.DueDate != null && (t.DueDate < today || (t.DueDate == today && t.DueTime != null && t.DueTime <= now))),
         "blocked" => q.Where(t => Open.Contains(t.Status) && t.IsBlocked),
         "closed" => q.Where(t => Closed.Contains(t.Status)),
         _ => Parse<WorkTaskStatus>(status) is { Count: > 0 } list ? q.Where(t => list.Contains(t.Status)) : q,
@@ -421,7 +431,9 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
         {
             "title" => desc ? q.OrderByDescending(t => t.Title) : q.OrderBy(t => t.Title),
             "created" => desc ? q.OrderByDescending(t => t.CreatedAt) : q.OrderBy(t => t.CreatedAt),
-            "due" => desc ? q.OrderBy(t => t.DueDate == null).ThenByDescending(t => t.DueDate) : q.OrderBy(t => t.DueDate == null).ThenBy(t => t.DueDate),
+            "due" => desc
+                ? q.OrderBy(t => t.DueDate == null).ThenByDescending(t => t.DueDate).ThenByDescending(t => t.DueTime)
+                : q.OrderBy(t => t.DueDate == null).ThenBy(t => t.DueDate).ThenBy(t => t.DueTime == null).ThenBy(t => t.DueTime),
             "progress" => desc ? q.OrderByDescending(t => t.Progress) : q.OrderBy(t => t.Progress),
             "status" => desc ? q.OrderByDescending(t => t.Status) : q.OrderBy(t => t.Status),
             "priority" => desc
@@ -434,20 +446,22 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
                 .ThenByDescending(t => t.Priority == WorkTaskPriority.Urgent ? 3 : t.Priority == WorkTaskPriority.High ? 2 : t.Priority == WorkTaskPriority.Medium ? 1 : 0)
                 .ThenBy(t => t.DueDate == null)
                 .ThenBy(t => t.DueDate)
+                .ThenBy(t => t.DueTime == null)
+                .ThenBy(t => t.DueTime)
                 .ThenByDescending(t => t.CreatedAt),
         };
     }
 
-    private static WorkTaskRow Row(WorkContext ctx, RowData r, DateOnly today)
+    private static WorkTaskRow Row(WorkContext ctx, RowData r, DateOnly today, TimeOnly now)
     {
         var t = r.Task;
         var manage = CanManage(ctx, t);
         var work = CanWork(ctx, t);
-        return new WorkTaskRow(t.Id, t.Title, t.Description, t.Priority, t.Status, t.DueDate, Open.Contains(t.Status) && t.DueDate < today,
+        return new WorkTaskRow(t.Id, t.Title, t.Description, t.Priority, t.Status, t.DueDate, IsOverdue(t.Status, t.DueDate, t.DueTime, today, now),
             t.AssigneeId, r.Assignee, t.CreatedById, r.Author, t.CreatedAt, t.CompletedAt, t.Result, manage,
             t.ArchivedAt is null ? AllStatuses.Where(s => CanTransition(t.Status, s, work, manage)).ToList() : [],
             t.DepartmentId, r.DepartmentCode, r.DepartmentName, t.ProjectId, r.Project, t.StartDate, t.Progress, t.IsBlocked, t.BlockedReason, t.ArchivedAt,
-            r.Done, r.Total, manage, work);
+            r.Done, r.Total, manage, work, t.DueTime);
     }
 
     // ---------- Карточка ----------
@@ -458,7 +472,7 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
             .Select(t => new RowData(t, t.Assignee == null ? null : t.Assignee.FullName, t.CreatedBy == null ? null : t.CreatedBy.FullName, t.Department!.Code,
                 t.Department.Name, t.Project == null ? null : t.Project.Name, t.Checklist.Count(c => c.IsDone), t.Checklist.Count))
             .FirstOrDefaultAsync(ct) ?? throw new FieldNotFoundException("Задача не найдена.");
-        var row = Row(ctx, data, Today);
+        var row = Row(ctx, data, Today, NowTime);
         var checklist = await db.WorkTaskChecklist.AsNoTracking().Where(c => c.TaskId == id).OrderBy(c => c.SortOrder).ThenBy(c => c.CreatedAt)
             .Select(c => new WorkChecklistView(c.Id, c.Title, c.IsDone, c.SortOrder, c.DoneAt)).ToListAsync(ct);
         var comments = await db.WorkTaskComments.AsNoTracking().Where(c => c.TaskId == id).OrderBy(c => c.CreatedAt)
@@ -605,7 +619,7 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
         return project;
     }
 
-    private static (string Title, string? Description) Validate(WorkTaskInput input, DateOnly? currentDue = null)
+    private static (string Title, string? Description) Validate(WorkTaskInput input, DateOnly? currentDue = null, TimeOnly? currentTime = null)
     {
         var title = (input.Title ?? string.Empty).Trim();
         if (title.Length is 0 or > 300)
@@ -622,6 +636,16 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
         if (input.DueDate is { } due && due != currentDue && due < Today)
         {
             throw new FieldValidationException("Срок не может быть в прошлом.");
+        }
+
+        if (input.DueTime is not null && input.DueDate is null)
+        {
+            throw new FieldValidationException("Время срока задаётся вместе с датой.");
+        }
+
+        if (input.DueDate is { } day && input.DueTime is { } time && (day != currentDue || time != currentTime) && day == Today && time <= NowTime)
+        {
+            throw new FieldValidationException("Время срока уже прошло — укажите более позднее.");
         }
 
         if (input.StartDate is { } start && input.DueDate is { } end && end < start)
@@ -665,18 +689,19 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
             Priority = input.Priority,
             StartDate = input.StartDate,
             DueDate = input.DueDate,
+            DueTime = input.DueDate is null ? null : input.DueTime,
             SuggestionId = suggestionId,
         };
         db.WorkTasks.Add(task);
         Event(task.Id, ctx.UserId, "created", suggestionId is null ? "Задача создана" : "Задача создана из предложения AI-диспетчера");
         if (assignee is { } a && a != ctx.UserId)
         {
-            notifier.Notify(a, UserNotificationKind.TaskAssigned, $"Новая задача: {title}", await AssignedTextAsync(ctx.UserId, department.Name, task.DueDate, ct), LinkOf(task.Id));
+            notifier.Notify(a, UserNotificationKind.TaskAssigned, $"Новая задача: {title}", await AssignedTextAsync(ctx.UserId, department.Name, task.DueDate, ct, task.DueTime), LinkOf(task.Id));
         }
 
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "work.task.created", "work_task", task.Id.ToString(),
-            new { department = department.Code, project = project?.Id, assignee, priority = task.Priority.ToString(), task.DueDate, suggestionId }, ct);
+            new { department = department.Code, project = project?.Id, assignee, priority = task.Priority.ToString(), task.DueDate, task.DueTime, suggestionId }, ct);
         return task.Id;
     }
 
@@ -693,12 +718,13 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
             throw new FieldValidationException("Задача в архиве — сначала верните её из архива.");
         }
 
-        var (title, description) = Validate(input, task.DueDate);
+        var (title, description) = Validate(input, task.DueDate, task.DueTime);
         var project = input.ProjectId == task.ProjectId ? task.ProjectId : (await ValidProjectAsync(department.Id, input.ProjectId, ct))?.Id;
         // Прежнего исполнителя можно оставить, даже если он уже отключён; новый — действующий пользователь OneBase.
         var assignee = input.AssigneeId == task.AssigneeId ? task.AssigneeId : await ValidAssigneeAsync(input.AssigneeId, ct);
         var reassigned = assignee != task.AssigneeId;
-        var dueChanged = input.DueDate != task.DueDate;
+        var dueTime = input.DueDate is null ? null : input.DueTime;
+        var dueChanged = input.DueDate != task.DueDate || dueTime != task.DueTime;
         var changes = new List<string>();
         if (title != task.Title)
         {
@@ -727,11 +753,13 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
 
         var previousAssignee = task.AssigneeId;
         var previousDue = task.DueDate;
+        var previousTime = task.DueTime;
         task.Title = title;
         task.Description = description;
         task.Priority = input.Priority;
         task.StartDate = input.StartDate;
         task.DueDate = input.DueDate;
+        task.DueTime = dueTime;
         task.ProjectId = project;
         task.AssigneeId = assignee;
         task.UpdatedAt = DateTimeOffset.UtcNow;
@@ -743,7 +771,7 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
 
         if (dueChanged)
         {
-            Event(task.Id, ctx.UserId, "due", $"Срок: {DateText(previousDue)} → {DateText(task.DueDate)}");
+            Event(task.Id, ctx.UserId, "due", $"Срок: {DateText(previousDue, previousTime)} → {DateText(task.DueDate, task.DueTime)}");
         }
 
         if (reassigned)
@@ -758,21 +786,22 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
         {
             if (reassigned)
             {
-                notifier.Notify(a, UserNotificationKind.TaskAssigned, $"Новая задача: {title}", await AssignedTextAsync(ctx.UserId, department.Name, task.DueDate, ct), LinkOf(task.Id));
+                notifier.Notify(a, UserNotificationKind.TaskAssigned, $"Новая задача: {title}", await AssignedTextAsync(ctx.UserId, department.Name, task.DueDate, ct, task.DueTime), LinkOf(task.Id));
             }
             else if (dueChanged)
             {
-                notifier.Notify(a, UserNotificationKind.TaskDeadlineChanged, $"Перенесён срок: {title}", $"Срок: {DateText(previousDue)} → {DateText(task.DueDate)}", LinkOf(task.Id));
+                notifier.Notify(a, UserNotificationKind.TaskDeadlineChanged, $"Перенесён срок: {title}",
+                    $"Срок: {DateText(previousDue, previousTime)} → {DateText(task.DueDate, task.DueTime)}", LinkOf(task.Id));
             }
             else if (changes.Count > 0 && await IsValidAssigneeAsync(a, ct))
             {
-                notifier.Notify(a, UserNotificationKind.TaskChanged, $"Задача изменена: {title}", DueText(task.DueDate), LinkOf(task.Id));
+                notifier.Notify(a, UserNotificationKind.TaskChanged, $"Задача изменена: {title}", DueText(task.DueDate, task.DueTime), LinkOf(task.Id));
             }
         }
 
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "work.task.updated", "work_task", task.Id.ToString(),
-            new { assignee, priority = task.Priority.ToString(), task.DueDate, task.StartDate, project }, ct);
+            new { assignee, priority = task.Priority.ToString(), task.DueDate, task.DueTime, task.StartDate, project }, ct);
     }
 
     // ---------- Статусы ----------
@@ -1036,13 +1065,15 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
     public async Task ExtendDueAsync(WorkContext ctx, Guid id, DateOnly due, CancellationToken ct)
     {
         var (task, _) = await RequireTaskAsync(ctx, id, ct);
-        await UpdateAsync(ctx, id, new WorkTaskInput(task.Title, task.Description, task.AssigneeId, task.Priority, due, task.StartDate, task.ProjectId), ct);
+        // Время срока сохраняется; на сегодня с прошедшим временем — до конца дня.
+        var time = due == Today && task.DueTime is { } t && t <= NowTime ? null : task.DueTime;
+        await UpdateAsync(ctx, id, new WorkTaskInput(task.Title, task.Description, task.AssigneeId, task.Priority, due, task.StartDate, task.ProjectId, time), ct);
     }
 
-    private static string? DueText(DateOnly? due) => due is { } d ? $"Срок: {d:dd.MM.yyyy}" : null;
+    private static string? DueText(DateOnly? due, TimeOnly? time = null) => due is { } d ? $"Срок: {DateText(d, time)}" : null;
 
     /// <summary>Текст уведомления о назначении: кто поставил, отдел, срок — частями через «; » (так их переводит интерфейс).</summary>
-    private async Task<string> AssignedTextAsync(Guid authorId, string department, DateOnly? due, CancellationToken ct)
+    private async Task<string> AssignedTextAsync(Guid authorId, string department, DateOnly? due, CancellationToken ct, TimeOnly? time = null)
     {
         var author = await db.Users.AsNoTracking().Where(u => u.Id == authorId).Select(u => string.IsNullOrWhiteSpace(u.FullName) ? u.Login : u.FullName).FirstOrDefaultAsync(ct);
         var parts = new List<string>();
@@ -1052,7 +1083,7 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
         }
 
         parts.Add($"Отдел: {department}");
-        if (DueText(due) is { } dueText)
+        if (DueText(due, time) is { } dueText)
         {
             parts.Add(dueText);
         }
@@ -1060,7 +1091,8 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
         return string.Join("; ", parts);
     }
 
-    private static string DateText(DateOnly? date) => date is { } d ? d.ToString("dd.MM.yyyy") : "без даты";
+    private static string DateText(DateOnly? date, TimeOnly? time = null) =>
+        date is { } d ? time is { } t ? $"{d:dd.MM.yyyy} {t:HH\\:mm}" : d.ToString("dd.MM.yyyy") : "без даты";
 
     public static string StatusText(WorkTaskStatus status) => status switch
     {

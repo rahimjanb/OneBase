@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useT } from "@/i18n/client";
+import { useHomeKind, type HomeKind } from "./HomeKind";
 import { canOpen } from "@/lib/navigation";
 
 /**
@@ -36,7 +37,7 @@ export const navGroups: NavGroup[] = [
   {
     title: "Рабочее пространство",
     items: [
-      { href: "/", label: "Обзор", icon: LayoutGrid },
+      { href: "/", label: "Обзор", icon: LayoutGrid, also: ["/me"] },
       { href: "/departments", label: "Отделы", icon: Building2, also: ["/sales"] },
       { href: "/tasks", label: "Задачи", icon: ListChecks },
       { href: "/hr", label: "HR", icon: UsersRound },
@@ -55,8 +56,7 @@ export const navGroups: NavGroup[] = [
     title: "Коммуникации",
     items: [
       { href: "/campaigns", label: "Рассылки", icon: Send },
-      // Календаря в OneBase пока нет: пункт виден по макету, но не кликается (без ссылки на несуществующий раздел).
-      { href: "/calendar", label: "Календарь", icon: CalendarDays, soon: true },
+      { href: "/calendar", label: "Календарь", icon: CalendarDays },
     ],
   },
 ];
@@ -71,7 +71,7 @@ export const visibleWorkspace = (permissions: readonly string[] | null) =>
 
 export function isActive(pathname: string, item: NavItem) {
   const under = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  return item.href === "/" ? pathname === "/" : under(item.href) || (item.also ?? []).some(under);
+  return item.href === "/" ? pathname === "/" || (item.also ?? []).some(under) : under(item.href) || (item.also ?? []).some(under);
 }
 
 /**
@@ -99,8 +99,12 @@ function Badge({ text, tone }: { text: string; tone?: "default" | "new" }) {
   );
 }
 
+/** Подпись пункта: главная сотрудника («Сотрудник») — «Мой день». */
+export const navLabel = (item: NavItem, home: HomeKind) => (item.href === "/" && home === "my_day" ? "Мой день" : item.label);
+
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const t = useT();
+  const home = useHomeKind();
   const Icon = item.icon;
   if (item.soon) {
     return (
@@ -118,7 +122,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       className={`${itemBase} ${active ? "bg-sidebar-active font-semibold text-sidebar-ink ring-1 ring-inset ring-accent/25" : "font-medium text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-ink"}`}
     >
       <Icon className={`size-[17px] shrink-0 ${active ? "text-accent-strong" : "text-sidebar-text"}`} strokeWidth={1.75} />
-      {t(item.label)}
+      {t(navLabel(item, home))}
       {item.badge && <Badge text={item.badge} tone={item.badgeTone} />}
     </Link>
   );

@@ -39,7 +39,10 @@ public sealed partial class UsersController(
         Guid? RoleId,
         string? Password,
         bool IsActive = true,
-        IReadOnlyList<string>? Sections = null);
+        IReadOnlyList<string>? Sections = null,
+        Guid? DepartmentId = null,
+        Guid? HrEmployeeId = null,
+        bool NoVerifix = false);
 
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
@@ -51,6 +54,9 @@ public sealed partial class UsersController(
             .AsSplitQuery()
             .OrderBy(u => u.LastName).ThenBy(u => u.FirstName).ThenBy(u => u.Login)
             .ToListAsync(ct);
+        var links = await db.HrEmployees.AsNoTracking().Where(e => e.UserId != null)
+            .Select(e => new { UserId = e.UserId!.Value, e.Id, e.FullName }).ToDictionaryAsync(e => e.UserId, ct);
+        var departments = await db.Departments.AsNoTracking().OrderBy(d => d.Name).Select(d => new { d.Id, d.Code, d.Name }).ToListAsync(ct);
 
         return Ok(new
         {
@@ -76,6 +82,8 @@ public sealed partial class UsersController(
                     CanEdit = userRoles.All(r => r.Permissions.All(mine.Contains)) && effective.All(mine.Contains),
                     Sections = UserSections.Of(effective),
                     SectionsCustom = u.Sections is not null,
+                    u.DepartmentId,
+                    HrEmployee = links.TryGetValue(u.Id, out var link) ? new { link.Id, Name = link.FullName } : null,
                 };
             }),
             Roles = roles.Select(r => new
@@ -84,6 +92,8 @@ public sealed partial class UsersController(
                 r.Name,
                 r.Description,
                 Department = r.DepartmentName,
+                r.DepartmentId,
+                IsEmployee = r.Name == SystemRoles.EmployeeRole,
                 Permissions = r.Permissions.Select(p => new { Code = p, Label = SystemRoles.PermissionLabels.GetValueOrDefault(p, p) }),
                 Users = users.Count(u => u.Roles.Any(ur => ur.RoleId == r.Id)),
                 Assignable = r.Permissions.All(mine.Contains),
@@ -92,6 +102,9 @@ public sealed partial class UsersController(
             }),
             // Каталог разделов; Grantable — можете ли вы выдать раздел (его права есть у вас).
             Sections = UserSections.All.Select(x => new { x.Key, x.Title, x.Description, Grantable = x.Grant.All(mine.Contains) }),
+            Departments = departments,
+            // Verifix подключён (сотрудники загружены) — при создании пользователя выбирается его сотрудник или «Без привязки к Verifix».
+            VerifixAvailable = await db.HrEmployees.AnyAsync(ct),
         });
     }
 
@@ -109,17 +122,23 @@ public sealed partial class UsersController(
             return BadRequest(new { error = $"Пароль — не короче {MinPasswordLength} символов." });
         }
 
+        if (values.HrEmployee is null && !input.NoVerifix && await db.HrEmployees.AnyAsync(ct))
+        {
+            return BadRequest(new { error = "Выберите сотрудника в Verifix или отметьте «Без привязки к Verifix»." });
+        }
+
         var user = new User { Login = values.Login, FullName = string.Empty };
         Apply(user, values);
         user.Sections = values.Sections;
         user.PasswordHash = hasher.HashPassword(user, input.Password);
         user.Roles.Add(new UserRole { RoleId = values.Role.Id });
         db.Users.Add(user);
+        await LinkAsync(user.Id, values.HrEmployee, input.NoVerifix, ct);
         await db.SaveChangesAsync(ct);
 
         // В журнал — только идентификаторы и роль, без имени, телефона и почты.
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "users.created", "user", user.Id.ToString(),
-            new { role = values.Role.Name, sections = values.Sections }, ct);
+            new { role = values.Role.Name, sections = values.Sections, verifix = values.HrEmployee }, ct);
         return Ok(new { user.Id });
     }
 
@@ -189,6 +208,7 @@ public sealed partial class UsersController(
             user.Roles.Add(new UserRole { UserId = user.Id, RoleId = values.Role.Id });
         }
 
+        var verifixChanged = await LinkAsync(user.Id, values.HrEmployee, input.NoVerifix, ct);
         await db.SaveChangesAsync(ct);
         access.Invalidate(user.Id); // новая роль, разделы или отключение действуют сразу
         if (passwordChanged)
@@ -209,12 +229,14 @@ public sealed partial class UsersController(
                 sections = sectionsChanged ? UserSections.Of(UserSections.Effective(values.Role.Permissions, values.Sections)) : null,
                 active = wasActive != user.IsActive ? user.IsActive : (bool?)null,
                 passwordChanged,
+                verifix = verifixChanged ? values.HrEmployee : null,
             }, ct);
         return Ok(new { user.Id });
     }
 
-    /// <summary>Sections — что сохранить: null — как у роли.</summary>
-    private sealed record Values(string Login, string FirstName, string LastName, string? Email, string? Phone, string Position, RoleInfo Role, List<string>? Sections);
+    /// <summary>Sections — что сохранить: null — как у роли. DepartmentId — отдел роли, а у роли без отдела — выбранный. HrEmployee — сотрудник Verifix.</summary>
+    private sealed record Values(string Login, string FirstName, string LastName, string? Email, string? Phone, string Position, RoleInfo Role, List<string>? Sections,
+        Guid? DepartmentId, Guid? HrEmployee);
 
     private sealed record RoleInfo(Guid Id, string Name, string? Description, Guid? DepartmentId, string? DepartmentName, IReadOnlyList<string> Permissions);
 
@@ -294,7 +316,54 @@ public sealed partial class UsersController(
             return (null, "Эта почта уже указана у другого пользователя.");
         }
 
-        return (new Values(login, firstName, lastName, email, phone, position, role, sections), null);
+        // Отдел — по роли; у роли без отдела (директор, «Сотрудник») — выбранный в карточке. «Сотруднику» отдел обязателен: по нему видны задачи и файлы отдела.
+        var department = role.DepartmentId;
+        if (department is null && input.DepartmentId is { } picked)
+        {
+            if (!await db.Departments.AnyAsync(d => d.Id == picked, ct))
+            {
+                return (null, "Такого отдела нет.");
+            }
+
+            department = picked;
+        }
+
+        if (department is null && role.Name == SystemRoles.EmployeeRole)
+        {
+            return (null, "Выберите отдел сотрудника.");
+        }
+
+        // Сотрудник Verifix: работающий и не привязанный к другому пользователю (свою прежнюю привязку можно оставить).
+        Guid? hrEmployee = null;
+        if (!input.NoVerifix && input.HrEmployeeId is { } employeeId)
+        {
+            var employee = await db.HrEmployees.AsNoTracking().Where(e => e.Id == employeeId).Select(e => new { e.Status, e.UserId }).FirstOrDefaultAsync(ct);
+            if (employee is null)
+            {
+                return (null, "Сотрудник Verifix не найден.");
+            }
+
+            var mineLink = existing is not null && employee.UserId == existing.Id;
+            if (employee.UserId is { } other && !mineLink)
+            {
+                var name = await db.Users.AsNoTracking().Where(u => u.Id == other).Select(u => u.FullName).FirstOrDefaultAsync(ct);
+                return (null, $"Этот сотрудник Verifix уже привязан к пользователю «{name}».");
+            }
+
+            if (!mineLink && employee.Status != Domain.Hr.HrEmployeeStatus.Working)
+            {
+                return (null, "Привязать можно только работающего сотрудника Verifix.");
+            }
+
+            hrEmployee = employeeId;
+        }
+        else if (!input.NoVerifix && existing is not null)
+        {
+            // Без выбора и без галочки — прежняя привязка остаётся.
+            hrEmployee = await db.HrEmployees.AsNoTracking().Where(e => e.UserId == existing.Id).Select(e => (Guid?)e.Id).FirstOrDefaultAsync(ct);
+        }
+
+        return (new Values(login, firstName, lastName, email, phone, position, role, sections, department, hrEmployee), null);
     }
 
     private static void Apply(User user, Values values)
@@ -306,7 +375,79 @@ public sealed partial class UsersController(
         user.Email = values.Email;
         user.Phone = values.Phone;
         user.Position = values.Position;
-        user.DepartmentId = values.Role.DepartmentId; // отдел — по роли
+        user.DepartmentId = values.DepartmentId; // отдел — по роли, у роли без отдела — выбранный
+    }
+
+    /// <summary>Привязка к сотруднику Verifix: один пользователь — один сотрудник. Возвращает, изменилась ли привязка.</summary>
+    private async Task<bool> LinkAsync(Guid userId, Guid? employeeId, bool noVerifix, CancellationToken ct)
+    {
+        var current = await db.HrEmployees.Where(e => e.UserId == userId).ToListAsync(ct);
+        var target = noVerifix ? null : employeeId;
+        if (current.Count == 1 && current[0].Id == target || current.Count == 0 && target is null)
+        {
+            return false;
+        }
+
+        foreach (var e in current)
+        {
+            e.UserId = null;
+        }
+
+        if (target is { } id && await db.HrEmployees.FirstOrDefaultAsync(e => e.Id == id, ct) is { } employee)
+        {
+            employee.UserId = userId;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Сотрудники Verifix для привязки: работающие, по ФИО или телефону (до 20). Для подстановки в форму — имя, фамилия, телефон, должность и
+    /// отдел OneBase, к которому привязано подразделение Verifix; LinkedTo — уже привязан к другому пользователю.
+    /// </summary>
+    [HttpGet("hr-employees")]
+    public async Task<IActionResult> HrEmployees([FromQuery] string? q, CancellationToken ct)
+    {
+        var query = db.HrEmployees.AsNoTracking().Where(e => e.Status == Domain.Hr.HrEmployeeStatus.Working);
+        var text = (q ?? string.Empty).Trim();
+        if (text.Length > 0)
+        {
+            var digits = new string(text.Where(char.IsDigit).ToArray());
+            var lower = text.ToLower();
+            var tail = digits.Length > 9 ? digits[^9..] : digits;
+            query = digits.Length >= 4
+                ? query.Where(e => e.Phone != null && e.Phone.Contains(tail))
+                : query.Where(e => e.FullName.ToLower().Contains(lower));
+        }
+
+        var employees = await query.OrderBy(e => e.FullName).Take(20)
+            .Select(e => new { e.Id, e.FullName, e.FirstName, e.LastName, e.Phone, e.JobId, e.DivisionId, e.UserId })
+            .ToListAsync(ct);
+        var refIds = employees.SelectMany(e => new[] { e.JobId, e.DivisionId }).OfType<long>().Distinct().ToList();
+        var refs = await db.HrReferences.AsNoTracking()
+            .Where(r => refIds.Contains(r.VerifixId) && (r.Kind == Domain.Hr.HrReferenceKinds.Job || r.Kind == Domain.Hr.HrReferenceKinds.Division))
+            .Select(r => new { r.Kind, r.VerifixId, r.Name, r.DepartmentCode }).ToListAsync(ct);
+        var departments = await db.Departments.AsNoTracking().ToDictionaryAsync(d => d.Code, d => d.Id, ct);
+        var userIds = employees.Select(e => e.UserId).OfType<Guid>().ToList();
+        var users = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        return Ok(employees.Select(e =>
+        {
+            var job = refs.FirstOrDefault(r => r.Kind == Domain.Hr.HrReferenceKinds.Job && r.VerifixId == e.JobId);
+            var division = refs.FirstOrDefault(r => r.Kind == Domain.Hr.HrReferenceKinds.Division && r.VerifixId == e.DivisionId);
+            return new
+            {
+                e.Id,
+                Name = e.FullName,
+                e.FirstName,
+                e.LastName,
+                e.Phone,
+                Job = job?.Name,
+                Division = division?.Name,
+                DepartmentId = division?.DepartmentCode is { } code && departments.TryGetValue(code, out var dep) ? dep : (Guid?)null,
+                LinkedUserId = e.UserId,
+                LinkedTo = e.UserId is { } u ? users.GetValueOrDefault(u) : null,
+            };
+        }));
     }
 
     private async Task<List<RoleInfo>> RolesAsync(CancellationToken ct) =>

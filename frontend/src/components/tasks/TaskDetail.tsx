@@ -243,6 +243,7 @@ export function TaskDetail({
           priority: view.priority,
           startDate: view.startDate,
           dueDate: view.dueDate && view.dueDate >= today ? view.dueDate : null,
+          dueTime: view.dueDate && view.dueDate > today ? (view.dueTime ?? null) : null,
           projectId: view.projectId,
         }),
       });

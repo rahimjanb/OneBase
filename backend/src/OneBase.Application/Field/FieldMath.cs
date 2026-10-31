@@ -10,6 +10,9 @@ public static class FieldClock
     public static DateTimeOffset Now => DateTimeOffset.UtcNow.ToOffset(Offset);
     public static DateOnly Today => DateOnly.FromDateTime(Now.DateTime);
 
+    /// <summary>Местное время суток — для сроков задач со временем («сегодня до 15:00»).</summary>
+    public static TimeOnly TimeOfDay => TimeOnly.FromDateTime(Now.DateTime);
+
     /// <summary>Начало местного дня в UTC — для сравнения с timestamptz (Npgsql пишет только UTC).</summary>
     public static DateTimeOffset DayStartUtc(DateOnly day) => new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), Offset).ToUniversalTime();
 

@@ -63,6 +63,8 @@ export type TaskInput = {
   priority: WorkTaskPriority;
   startDate: string | null;
   dueDate: string | null;
+  /** «15:00:00»; без даты срока не задаётся. */
+  dueTime: string | null;
   projectId: string | null;
 };
 
@@ -73,6 +75,7 @@ export const inputOf = (task: WorkTask): TaskInput => ({
   priority: task.priority,
   startDate: task.startDate,
   dueDate: task.dueDate,
+  dueTime: task.dueTime ?? null,
   projectId: task.projectId,
 });
 
@@ -782,8 +785,23 @@ export function DetailsCard({
               className="h-11 w-full rounded-xl border border-line bg-ai-bg px-3 text-sm text-ink focus:border-accent focus:outline-none"
               aria-label={field === "start" ? t("Начало") : t("Срок")}
             />
+            {field === "due" && task.dueDate && (
+              <label className="flex items-center gap-2 text-sm text-ink-3">
+                {t("до")}
+                <input
+                  type="time"
+                  defaultValue={task.dueTime?.slice(0, 5) ?? ""}
+                  onBlur={(e) => {
+                    const time = e.target.value ? `${e.target.value}:00` : null;
+                    if (time !== (task.dueTime ?? null)) void save({ dueTime: time }, field);
+                  }}
+                  className="h-11 flex-1 rounded-xl border border-line bg-ai-bg px-3 text-sm text-ink focus:border-accent focus:outline-none"
+                  aria-label={t("Время срока")}
+                />
+              </label>
+            )}
             {value && (
-              <button type="button" onClick={() => void save({ [key]: null }, field)} className="h-10 w-full rounded-xl text-sm font-medium text-ink-3 hover:bg-surface-2 hover:text-ink">
+              <button type="button" onClick={() => void save(field === "due" ? { dueDate: null, dueTime: null } : { [key]: null }, field)} className="h-10 w-full rounded-xl text-sm font-medium text-ink-3 hover:bg-surface-2 hover:text-ink">
                 {field === "start" ? t("Убрать дату начала") : t("Убрать срок")}
               </button>
             )}
@@ -821,7 +839,9 @@ export function DetailsCard({
       icon: CalendarCheck,
       label: t("Срок"),
       value: task.dueDate ? (
-        <span className={`tabular-nums ${task.overdue ? "font-semibold text-bad" : ""}`}>{shortDate(task.dueDate)}</span>
+        <span className={`tabular-nums ${task.overdue ? "font-semibold text-bad" : ""}`}>
+          {task.dueTime ? t("{date}, до {time}", { date: shortDate(task.dueDate), time: task.dueTime.slice(0, 5) }) : shortDate(task.dueDate)}
+        </span>
       ) : (
         <span className="font-semibold text-warn">{t("Не задан")}</span>
       ),

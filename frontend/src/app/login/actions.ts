@@ -48,13 +48,15 @@ export async function login(_: LoginState, form: FormData): Promise<LoginState> 
     maxAge: SESSION_MAX_AGE,
   });
 
-  // По умолчанию — «Продажи»; кому они недоступны (HR, «Админ 2»), — первый доступный раздел вместо «нет доступа».
+  // По умолчанию — «Продажи»; роли «Сотрудник» — «Мой день» (главная); кому продажи недоступны (HR, «Админ 2»), — первый доступный
+  // раздел вместо «нет доступа».
   let target = safePath(next, fallback);
   if (target === "/sales") {
     const me = await fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ permissions: string[] }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<{ permissions: string[]; home?: string }>) : null))
       .catch(() => null);
-    if (me && !me.permissions.includes("sales.read")) target = homeFor(me.permissions);
+    if (me?.home === "my_day") target = "/";
+    else if (me && !me.permissions.includes("sales.read")) target = homeFor(me.permissions);
   }
 
   redirect(target);

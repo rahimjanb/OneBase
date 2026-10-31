@@ -55,6 +55,9 @@ public enum UserNotificationKind
 
     /// <summary>Пользователя упомянули через @ в комментарии к задаче, которую он видит.</summary>
     TaskMention,
+
+    /// <summary>Пользователя добавили в событие календаря (встречу, срок отчёта, событие) или событие перенесли.</summary>
+    CalendarInvite,
 }
 
 /// <summary>

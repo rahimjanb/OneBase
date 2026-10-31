@@ -1,7 +1,7 @@
 namespace OneBase.Application.Security;
 
 /// <summary>
-/// Роли OneBase: администратор, директор и по роли на каждый отдел. Создаются при запуске, если их нет.
+/// Роли OneBase: администратор, директор, рядовой сотрудник и по роли на каждый отдел. Создаются при запуске, если их нет.
 /// Назначить роль может только тот, у кого есть все её права, — так директор не выдаст себе права администратора.
 /// </summary>
 public static class SystemRoles
@@ -18,6 +18,12 @@ public static class SystemRoles
     /// Без пользователей, интеграций, настроек AI и разделов аналитики.
     /// </summary>
     public const string DataAdmin = "Админ 2";
+
+    /// <summary>
+    /// Рядовой сотрудник: главная — «Мой день» (рабочее время из Verifix, свои задачи, календарь, документы, AI-план). Отдел у роли не задан —
+    /// выбирается в карточке пользователя.
+    /// </summary>
+    public const string EmployeeRole = "Сотрудник";
 
     /// <summary>Роли Sales Base (sales.1base.uz).</summary>
     public const string FieldRm = "РМ (Sales Base)";
@@ -42,6 +48,8 @@ public static class SystemRoles
         new(DataAdmin, "Файлы отдела продаж и AI Data Manager: загрузка отчётов, изменение планов, целей и дилеров регионов с подтверждением. "
                        + "В «Настройках» — только AI Data Manager.", "sales",
             [Permissions.FilesRead, Permissions.FilesWrite, Permissions.DataManage]),
+        new(EmployeeRole, "Рядовой сотрудник: «Мой день», свои задачи, календарь, файлы своего отдела, консультант. Отдел — в карточке пользователя.", null,
+            Employee),
         new("Продажи", "Сотрудник отдела продаж: раздел «Продажи», консультант, файлы.", "sales", [Permissions.SalesRead, .. Employee]),
         new("Финансы", "Сотрудник финансового отдела: оплаты и продажи, консультант, файлы.", "finance", [Permissions.FinanceRead, Permissions.SalesRead, .. Employee]),
         new("HR", "Сотрудник HR: кадровые данные, консультант, файлы.", "hr", [Permissions.HrRead, .. Employee]),

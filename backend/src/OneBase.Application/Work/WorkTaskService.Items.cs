@@ -335,6 +335,7 @@ public sealed partial class WorkTaskService
     public async Task<WorkOverview> OverviewAsync(WorkContext ctx, int pendingSuggestions, CancellationToken ct)
     {
         var today = Today;
+        var now = NowTime;
         var weekEnd = today.AddDays(7);
         var monthStart = new DateOnly(today.Year, today.Month, 1);
         var monthStartUtc = new DateTimeOffset(monthStart.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(5)).ToUniversalTime();
@@ -343,7 +344,8 @@ public sealed partial class WorkTaskService
         var me = ctx.UserId;
         var byDepartment = await open
             .GroupBy(t => new { t.Department!.Code, t.Department.Name })
-            .Select(g => new WorkOverviewDepartment(g.Key.Code, g.Key.Name, g.Count(), g.Count(t => t.DueDate != null && t.DueDate < today),
+            .Select(g => new WorkOverviewDepartment(g.Key.Code, g.Key.Name, g.Count(),
+                g.Count(t => t.DueDate != null && (t.DueDate < today || (t.DueDate == today && t.DueTime != null && t.DueTime <= now))),
                 g.Count(t => t.Status == WorkTaskStatus.Review), g.Count(t => t.IsBlocked)))
             .ToListAsync(ct);
         var reviews = await open.Where(t => t.Status == WorkTaskStatus.Review).Select(t => new { t.DepartmentId, t.ProjectId, t.CreatedById }).ToListAsync(ct);
@@ -352,12 +354,12 @@ public sealed partial class WorkTaskService
             await open.CountAsync(ct),
             await open.CountAsync(t => t.Status == WorkTaskStatus.InProgress, ct),
             reviews.Count,
-            await open.CountAsync(t => t.DueDate != null && t.DueDate < today, ct),
+            await open.CountAsync(t => t.DueDate != null && (t.DueDate < today || (t.DueDate == today && t.DueTime != null && t.DueTime <= now)), ct),
             await open.CountAsync(t => t.IsBlocked, ct),
             await open.CountAsync(t => t.DueDate != null && t.DueDate >= today && t.DueDate <= weekEnd, ct),
             await Visible(ctx).CountAsync(t => t.Status == WorkTaskStatus.Done && t.CompletedAt >= monthStartUtc, ct),
             await open.CountAsync(t => t.AssigneeId == me, ct),
-            await open.CountAsync(t => t.AssigneeId == me && t.DueDate != null && t.DueDate < today, ct),
+            await open.CountAsync(t => t.AssigneeId == me && t.DueDate != null && (t.DueDate < today || (t.DueDate == today && t.DueTime != null && t.DueTime <= now)), ct),
             reviews.Count(r => r.CreatedById == me || ctx.Heads(r.DepartmentId) || ctx.ManagesProject(r.ProjectId)),
             pendingSuggestions,
             byDepartment.OrderBy(d => Array.IndexOf(Order, d.Code) is var i and >= 0 ? i : Order.Length).ToList(),
@@ -533,15 +535,17 @@ public sealed partial class WorkTaskService
     /// <summary>
     /// Напоминания: срок завтра — исполнителю; срок прошёл — исполнителю и постановщику. Одно уведомление на срок: отметка
     /// (DueSoonNotifiedFor, OverdueNotifiedFor) ставится условным обновлением в базе, поэтому повторный запуск, второй экземпляр API
-    /// или обновление страницы второго уведомления не дают. Перенос срока — новое напоминание к новому сроку.
+    /// или обновление страницы второго уведомления не дают. Перенос срока — новое напоминание к новому сроку. now — местное время: срок со
+    /// временем просрочен, как только оно наступило (без now — только по дате).
     /// </summary>
-    public async Task<WorkReminderResult> RemindAsync(DateOnly today, CancellationToken ct)
+    public async Task<WorkReminderResult> RemindAsync(DateOnly today, CancellationToken ct, TimeOnly? now = null)
     {
+        var time = now ?? TimeOnly.MinValue;
         var tomorrow = today.AddDays(1);
         var dueSoon = await db.WorkTasks.AsNoTracking()
             .Where(t => t.ArchivedAt == null && (t.Status == WorkTaskStatus.New || t.Status == WorkTaskStatus.InProgress) && t.AssigneeId != null
                         && t.DueDate == tomorrow && (t.DueSoonNotifiedFor == null || t.DueSoonNotifiedFor != t.DueDate))
-            .Select(t => new { t.Id, t.Title, t.AssigneeId, t.DueDate })
+            .Select(t => new { t.Id, t.Title, t.AssigneeId, t.DueDate, t.DueTime })
             .Take(500)
             .ToListAsync(ct);
         var sentSoon = 0;
@@ -551,15 +555,16 @@ public sealed partial class WorkTaskService
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.DueSoonNotifiedFor, t.DueDate), ct);
             if (claimed == 1)
             {
-                notifier.Notify(t.AssigneeId, UserNotificationKind.TaskDueSoon, $"Срок завтра: {t.Title}", DueText(t.DueDate), LinkOf(t.Id));
+                notifier.Notify(t.AssigneeId, UserNotificationKind.TaskDueSoon, $"Срок завтра: {t.Title}", DueText(t.DueDate, t.DueTime), LinkOf(t.Id));
                 sentSoon++;
             }
         }
 
         var overdue = await db.WorkTasks.AsNoTracking()
-            .Where(t => t.ArchivedAt == null && Open.Contains(t.Status) && t.DueDate != null && t.DueDate < today
+            .Where(t => t.ArchivedAt == null && Open.Contains(t.Status) && t.DueDate != null
+                        && (t.DueDate < today || (now != null && t.DueDate == today && t.DueTime != null && t.DueTime <= time))
                         && (t.OverdueNotifiedFor == null || t.OverdueNotifiedFor != t.DueDate))
-            .Select(t => new { t.Id, t.Title, t.AssigneeId, t.CreatedById, t.DueDate })
+            .Select(t => new { t.Id, t.Title, t.AssigneeId, t.CreatedById, t.DueDate, t.DueTime })
             .Take(500)
             .ToListAsync(ct);
         var sentOverdue = 0;
@@ -574,10 +579,10 @@ public sealed partial class WorkTaskService
 
             foreach (var recipient in new[] { t.AssigneeId, t.CreatedById }.OfType<Guid>().Distinct())
             {
-                notifier.Notify(recipient, UserNotificationKind.TaskOverdue, $"Просрочена задача: {t.Title}", DueText(t.DueDate), LinkOf(t.Id));
+                notifier.Notify(recipient, UserNotificationKind.TaskOverdue, $"Просрочена задача: {t.Title}", DueText(t.DueDate, t.DueTime), LinkOf(t.Id));
             }
 
-            db.WorkTaskEvents.Add(new WorkTaskEvent { TaskId = t.Id, Kind = "overdue", Text = $"Срок {t.DueDate:dd.MM.yyyy} прошёл" });
+            db.WorkTaskEvents.Add(new WorkTaskEvent { TaskId = t.Id, Kind = "overdue", Text = $"Срок {DateText(t.DueDate, t.DueTime)} прошёл" });
             sentOverdue++;
         }
 

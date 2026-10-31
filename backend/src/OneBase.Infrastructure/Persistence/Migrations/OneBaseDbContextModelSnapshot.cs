@@ -368,6 +368,57 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("Conversations", "ai");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.AI.AiDailyPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Generations")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("InputHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ItemsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("DailyPlans", "ai");
+                });
+
             modelBuilder.Entity("OneBase.Domain.AI.AiKnowledgeChunk", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2899,11 +2950,19 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(4)
                         .HasColumnType("character varying(4)");
 
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
                     b.Property<long>("VerifixId")
                         .HasColumnType("bigint");
 
                     b.HasKey("Id")
                         .HasName("PK_HrEmployees");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_HrEmployees_UserId")
+                        .HasFilter("\"UserId\" IS NOT NULL");
 
                     b.HasIndex("VerifixId")
                         .IsUnique()
@@ -6240,6 +6299,86 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("WeeklyPdfSettings", "telegram");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Work.CalendarEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AllDay")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTimeOffset?>("EndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ForEveryone")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_CalendarEvents");
+
+                    b.HasIndex("CreatedById")
+                        .HasDatabaseName("IX_CalendarEvents_CreatedById");
+
+                    b.HasIndex("StartsAt")
+                        .HasDatabaseName("IX_CalendarEvents_StartsAt");
+
+                    b.HasIndex("DepartmentId", "StartsAt")
+                        .HasDatabaseName("IX_CalendarEvents_DepartmentId_StartsAt");
+
+                    b.ToTable("CalendarEvents", "work");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.CalendarEventParticipant", b =>
+                {
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("EventId", "UserId")
+                        .HasName("PK_CalendarEventParticipants");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_CalendarEventParticipants_UserId");
+
+                    b.ToTable("CalendarEventParticipants", "work");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Work.PushKeys", b =>
                 {
                     b.Property<int>("Id")
@@ -6490,6 +6629,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly?>("DueSoonNotifiedFor")
                         .HasColumnType("date");
+
+                    b.Property<TimeOnly?>("DueTime")
+                        .HasColumnType("time without time zone");
 
                     b.Property<bool>("IsBlocked")
                         .HasColumnType("boolean");
@@ -7068,6 +7210,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasConstraintName("FK_HrAttendanceEvents_HrEmployees_EmployeeId");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Hr.HrEmployee", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_HrEmployees_Users_UserId");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Hr.HrTimesheetDay", b =>
                 {
                     b.HasOne("OneBase.Domain.Hr.HrEmployee", null)
@@ -7345,6 +7496,46 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.CalendarEvent", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_CalendarEvents_Users_CreatedById");
+
+                    b.HasOne("OneBase.Domain.Identity.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("FK_CalendarEvents_Departments_DepartmentId");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.CalendarEventParticipant", b =>
+                {
+                    b.HasOne("OneBase.Domain.Work.CalendarEvent", "Event")
+                        .WithMany("Participants")
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_CalendarEventParticipants_CalendarEvents_EventId");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_CalendarEventParticipants_Users_UserId");
+
+                    b.Navigation("Event");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Work.PushSubscription", b =>
@@ -7651,6 +7842,11 @@ namespace OneBase.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("OneBase.Domain.Telegram.TelegramReportSubscription", b =>
                 {
                     b.Navigation("Chats");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Work.CalendarEvent", b =>
+                {
+                    b.Navigation("Participants");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Work.WorkProject", b =>

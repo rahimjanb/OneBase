@@ -5,7 +5,8 @@ import { Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useT } from "@/i18n/client";
 import { sectionOf } from "./sections";
-import { isActive, settings, workspace } from "./Sidebar";
+import { useHomeKind } from "./HomeKind";
+import { isActive, navLabel, settings, workspace } from "./Sidebar";
 
 /**
  * Поиск в шапке (ТЗ dashboard): 420×38, подсказка «⌘K»; Ctrl/⌘+K ставит курсор в поле, Esc убирает. Сам поиск по данным — следующий шаг.
@@ -53,6 +54,7 @@ export function TopbarSearch() {
 export function Breadcrumbs() {
   const t = useT();
   const pathname = usePathname();
+  const home = useHomeKind();
   const item =
     workspace.find((i) => isActive(pathname, i)) ??
     (isActive(pathname, settings) ? settings : null);
@@ -61,7 +63,7 @@ export function Breadcrumbs() {
       aria-label={t("Навигация")}
       className="flex items-center gap-1.5 whitespace-nowrap text-[13px]"
     >
-      <span className="font-medium text-ink">{t(item?.label ?? "Обзор")}</span>
+      <span className="font-medium text-ink">{t(pathname === "/me" ? "Мой день" : item ? navLabel(item, home) : "Обзор")}</span>
     </nav>
   );
 }

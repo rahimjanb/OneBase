@@ -72,6 +72,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<AiConversation> AiConversations => Set<AiConversation>();
     public DbSet<AiMessage> AiMessages => Set<AiMessage>();
     public DbSet<AiReport> AiReports => Set<AiReport>();
+    public DbSet<AiDailyPlan> AiDailyPlans => Set<AiDailyPlan>();
     public DbSet<AiAgent> AiAgents => Set<AiAgent>();
     public DbSet<AiAgentKnowledgeSource> AiAgentKnowledgeSources => Set<AiAgentKnowledgeSource>();
     public DbSet<AiKnowledgeDocument> AiKnowledgeDocuments => Set<AiKnowledgeDocument>();
@@ -155,6 +156,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<WorkDepartmentHead> WorkDepartmentHeads => Set<WorkDepartmentHead>();
     public DbSet<WorkTaskSuggestion> WorkTaskSuggestions => Set<WorkTaskSuggestion>();
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
+    public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
+    public DbSet<CalendarEventParticipant> CalendarEventParticipants => Set<CalendarEventParticipant>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<PushKeys> PushKeys => Set<PushKeys>();
 

@@ -29,6 +29,8 @@ export type WorkTask = {
   priority: WorkTaskPriority;
   status: WorkTaskStatus;
   dueDate: string | null;
+  /** Время срока «15:00:00» (Ташкент); null — до конца дня. */
+  dueTime?: string | null;
   overdue: boolean;
   assigneeId: string | null;
   assigneeName: string | null;

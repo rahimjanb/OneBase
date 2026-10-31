@@ -29,6 +29,10 @@ internal static class HrModel
             e.Property(x => x.State).HasMaxLength(4);
             e.Property(x => x.SourceHash).HasMaxLength(64);
             e.Property(x => x.Note).HasMaxLength(2000);
+            // Связь с пользователем OneBase («Мой день»): один пользователь — один сотрудник; удалили пользователя — связь снимается.
+            e.HasIndex(x => x.UserId).IsUnique().HasFilter("\"UserId\" IS NOT NULL").HasDatabaseName("IX_HrEmployees_UserId");
+            e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_HrEmployees_Users_UserId");
         });
 
         b.Entity<HrReference>(e =>

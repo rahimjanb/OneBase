@@ -7,6 +7,7 @@ import {
   Bell,
   BellOff,
   BellRing,
+  CalendarDays,
   Check,
   CheckCheck,
   ChevronRight,
@@ -60,6 +61,7 @@ const icons: Record<string, LucideIcon> = {
   "trending-down": TrendingDown,
   "trending-up": TrendingUp,
   "refresh-cw": RefreshCw,
+  "calendar-days": CalendarDays,
 };
 
 /** Цвет типа: значок и подпись раздела — цветом, плитка — его «-soft». */

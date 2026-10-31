@@ -100,7 +100,7 @@ export function TaskTable({ data, empty }: { data: PageResult<WorkTask>; empty: 
                   <StatusBadge status={task.status} />
                 </td>
                 <td className="px-3 py-2.5 tabular-nums text-ink-2">{shortDate(task.createdAt)}</td>
-                <td className={`px-3 py-2.5 tabular-nums ${task.overdue ? "font-semibold text-bad" : "text-ink-2"}`}>{task.dueDate ? shortDate(task.dueDate) : "—"}</td>
+                <td className={`px-3 py-2.5 tabular-nums ${task.overdue ? "font-semibold text-bad" : "text-ink-2"}`}>{task.dueDate ? `${shortDate(task.dueDate)}${task.dueTime ? ` ${task.dueTime.slice(0, 5)}` : ""}` : "—"}</td>
                 <td className="px-3 py-2.5">
                   <ProgressBar value={task.progress} compact />
                 </td>

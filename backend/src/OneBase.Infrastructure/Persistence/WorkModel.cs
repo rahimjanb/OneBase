@@ -141,6 +141,31 @@ internal static class WorkModel
             e.HasOne(x => x.Recipient).WithMany().HasForeignKey(x => x.RecipientId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_UserNotifications_Users_RecipientId");
         });
 
+        // Календарь: события (встречи, сроки отчётов, важные события) и участники. Сроки задач — из самих задач.
+        b.Entity<CalendarEvent>(e =>
+        {
+            e.ToTable("CalendarEvents", Schema);
+            e.HasKey(x => x.Id).HasName("PK_CalendarEvents");
+            e.Property(x => x.Title).HasMaxLength(300);
+            e.Property(x => x.Description).HasMaxLength(4000);
+            e.Property(x => x.Location).HasMaxLength(300);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            e.HasIndex(x => x.StartsAt).HasDatabaseName("IX_CalendarEvents_StartsAt");
+            e.HasIndex(x => new { x.DepartmentId, x.StartsAt }).HasDatabaseName("IX_CalendarEvents_DepartmentId_StartsAt");
+            e.HasIndex(x => x.CreatedById).HasDatabaseName("IX_CalendarEvents_CreatedById");
+            e.HasOne(x => x.Department).WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_CalendarEvents_Departments_DepartmentId");
+            e.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.SetNull).HasConstraintName("FK_CalendarEvents_Users_CreatedById");
+            e.HasMany(x => x.Participants).WithOne(x => x.Event).HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_CalendarEventParticipants_CalendarEvents_EventId");
+        });
+
+        b.Entity<CalendarEventParticipant>(e =>
+        {
+            e.ToTable("CalendarEventParticipants", Schema);
+            e.HasKey(x => new { x.EventId, x.UserId }).HasName("PK_CalendarEventParticipants");
+            e.HasIndex(x => x.UserId).HasDatabaseName("IX_CalendarEventParticipants_UserId");
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_CalendarEventParticipants_Users_UserId");
+        });
+
         b.Entity<PushSubscription>(e =>
         {
             e.ToTable("PushSubscriptions", Schema);

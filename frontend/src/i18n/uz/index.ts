@@ -10,6 +10,7 @@ import files from "./files";
 import home from "./home";
 import hr from "./hr";
 import lib from "./lib";
+import myDay from "./myDay";
 import sales from "./sales";
 import salesPages from "./salesPages";
 import serverAi from "./serverAi";
@@ -25,6 +26,8 @@ import telegramReports from "./telegramReports";
  * термины «Полевого контроля» — база, разделы перекрывают её. Одинаковый русский текст в разных разделах переводится одинаково.
  */
 export const uz: Dict = {
+  // «Мой день» и календарь — первыми: тот же текст в словарях разделов перекрывает перевод отсюда.
+  ...myDay,
   ...fieldControl,
   // Тексты сервера (ошибки, пояснения, подписи) — переводятся по ключу или шаблону; словари интерфейса ниже перекрывают их.
   ...serverSales,

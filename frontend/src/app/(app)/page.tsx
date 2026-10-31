@@ -9,6 +9,7 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { KpiTrendChart } from "@/components/dashboard/KpiTrendChart";
 import { LeadersCard } from "@/components/dashboard/LeadersCard";
 import { MobileOverview } from "@/components/dashboard/mobile/MobileOverview";
+import { MyDay } from "@/components/me/MyDay";
 import { TasksDonut } from "@/components/dashboard/TasksDonut";
 import { UpcomingTasks } from "@/components/dashboard/UpcomingTasks";
 import { DesktopOverviewSkeleton } from "@/components/shell/RouteSkeleton";
@@ -26,8 +27,8 @@ import type { DepartmentTasks, PageResult, WorkTask } from "@/lib/tasks";
 import type { Me } from "@/lib/users";
 
 export async function generateMetadata() {
-  const t = await getT();
-  return { title: t("Обзор · OneBase") };
+  const [t, me] = await Promise.all([getT(), apiSession<Me>("/api/auth/me")]);
+  return { title: t(me?.home === "my_day" ? "Мой день · OneBase" : "Обзор · OneBase") };
 }
 
 /**
@@ -37,13 +38,17 @@ export async function generateMetadata() {
  * недели), HR (явка) и задачи; отделы — те, по которым есть показатели.
  * На телефоне (< 768) — своя раскладка (MobileOverview, ТЗ 1base-mobile-home) из тех же данных; все запросы — один раз на обе.
  * Каждая раскладка грузится сама по себе: пока идут данные — заготовки, а не пустой экран.
+ * Роль «Сотрудник» (me.home = my_day) видит здесь «Мой день» (components/me) — свои рабочее время, задачи, календарь, документы и AI-план.
  */
 export default async function DashboardPage() {
-  // Запросы данных — сразу, параллельно с проверкой пользователя (apiTry не бросает ошибок: нет ответа — null).
+  // Кто вошёл — тот же ответ, что уже получил layout (apiSession кэширует его на запрос): у роли «Сотрудник» главная — «Мой день»,
+  // сводку компании для неё не запрашиваем.
+  const [me, locale] = await Promise.all([apiSession<Me>("/api/auth/me"), getLocale()]);
+  if (me?.home === "my_day") return <MyDay me={me} now={new Date()} locale={locale} />;
+  // Запросы данных «Обзора» (apiTry не бросает ошибок: нет ответа — null).
   const alerts = apiTry<AiAlertsView>("/api/ai/alerts");
   const departments = apiTry<DepartmentTasks[]>("/api/work/departments");
   const home = loadHome();
-  const [me, locale] = await Promise.all([apiSession<Me>("/api/auth/me"), getLocale()]);
   // Роль без общих разделов (например, «Админ 2») начинает со своего первого раздела.
   if (me && !canOpen("/", me.permissions)) redirect(homeFor(me.permissions));
   const now = new Date();

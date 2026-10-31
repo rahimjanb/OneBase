@@ -33,6 +33,7 @@ public interface IAppDbContext
     DbSet<AiConversation> AiConversations { get; }
     DbSet<AiMessage> AiMessages { get; }
     DbSet<AiReport> AiReports { get; }
+    DbSet<AiDailyPlan> AiDailyPlans { get; }
     DbSet<AiAgent> AiAgents { get; }
     DbSet<AiAgentKnowledgeSource> AiAgentKnowledgeSources { get; }
     DbSet<AiKnowledgeDocument> AiKnowledgeDocuments { get; }
@@ -113,6 +114,8 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Work.WorkDepartmentHead> WorkDepartmentHeads { get; }
     DbSet<OneBase.Domain.Work.WorkTaskSuggestion> WorkTaskSuggestions { get; }
     DbSet<OneBase.Domain.Work.UserNotification> UserNotifications { get; }
+    DbSet<OneBase.Domain.Work.CalendarEvent> CalendarEvents { get; }
+    DbSet<OneBase.Domain.Work.CalendarEventParticipant> CalendarEventParticipants { get; }
     DbSet<OneBase.Domain.Work.PushSubscription> PushSubscriptions { get; }
     DbSet<OneBase.Domain.Work.PushKeys> PushKeys { get; }
 

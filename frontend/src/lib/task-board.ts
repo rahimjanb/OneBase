@@ -31,6 +31,9 @@ export function dueState(task: Pick<WorkTask, "dueDate" | "status" | "overdue">,
 /** «12.11» из «2026-11-12». */
 export const dayMonth = (iso: string | null | undefined) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}` : "");
 
+/** Срок с временем: «12.11 15:00»; без времени — «12.11». */
+export const dueText = (task: Pick<WorkTask, "dueDate" | "dueTime">) => (task.dueDate ? `${dayMonth(task.dueDate)}${task.dueTime ? ` ${task.dueTime.slice(0, 5)}` : ""}` : "");
+
 /** Полоса выполнения на карточке — только между 0 и 100: у выполненных её роль играет галочка. */
 export const showProgress = (progress: number) => progress > 0 && progress < 100;
 

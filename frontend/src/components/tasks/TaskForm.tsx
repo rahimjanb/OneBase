@@ -31,6 +31,8 @@ type Draft = {
   priority: WorkTaskPriority;
   startDate: string;
   dueDate: string;
+  /** «15:00»; пусто — до конца дня. */
+  dueTime: string;
 };
 
 const label = "mb-1.5 block text-sm font-medium text-ink";
@@ -81,6 +83,7 @@ export function TaskForm({
     priority: task?.priority ?? "Medium",
     startDate: task?.startDate ?? "",
     dueDate: task?.dueDate ?? prefill?.dueDate ?? "",
+    dueTime: task?.dueTime?.slice(0, 5) ?? "",
   });
   const [draft, setDraft] = useState<Draft>(initial);
   const [assignees, setAssignees] = useState<WorkAssignee[]>([]);
@@ -130,6 +133,7 @@ export function TaskForm({
       priority: draft.priority,
       startDate: draft.startDate || null,
       dueDate: draft.dueDate || null,
+      dueTime: draft.dueDate && draft.dueTime ? `${draft.dueTime}:00` : null,
       projectId: draft.projectId || null,
     };
     try {
@@ -238,10 +242,28 @@ export function TaskForm({
             <span className={label}>{t("Дата начала")}</span>
             <input type="date" className={field} value={draft.startDate} onChange={(e) => set("startDate", e.target.value)} />
           </label>
-          <label className="block">
+          <div className="block">
             <span className={label}>{t("Срок")}</span>
-            <input type="date" className={field} value={draft.dueDate} min={task?.dueDate && task.dueDate < today ? undefined : today} onChange={(e) => set("dueDate", e.target.value)} />
-          </label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                aria-label={t("Дата срока")}
+                className={`${field} min-w-0 flex-1`}
+                value={draft.dueDate}
+                min={task?.dueDate && task.dueDate < today ? undefined : today}
+                onChange={(e) => set("dueDate", e.target.value)}
+              />
+              {/* Время срока — необязательно: без него задача просрочена со следующего дня. */}
+              <input
+                type="time"
+                aria-label={t("Время срока")}
+                className={`${field} w-[7.5rem] shrink-0`}
+                value={draft.dueTime}
+                disabled={!draft.dueDate}
+                onChange={(e) => set("dueTime", e.target.value)}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </Sheet>

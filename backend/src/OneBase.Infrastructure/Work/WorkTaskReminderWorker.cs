@@ -39,7 +39,7 @@ internal sealed class WorkTaskReminderWorker(IServiceScopeFactory scopes, IConfi
                 try
                 {
                     using var scope = scopes.CreateScope();
-                    var result = await scope.ServiceProvider.GetRequiredService<WorkTaskService>().RemindAsync(FieldClock.Today, stoppingToken);
+                    var result = await scope.ServiceProvider.GetRequiredService<WorkTaskService>().RemindAsync(FieldClock.Today, stoppingToken, FieldClock.TimeOfDay);
                     if (result.DueSoon + result.Overdue > 0)
                     {
                         logger.LogInformation("Задачи: напоминаний «срок завтра» {DueSoon}, «просрочена» {Overdue}", result.DueSoon, result.Overdue);

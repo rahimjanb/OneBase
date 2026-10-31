@@ -59,6 +59,12 @@ public class HrEmployee
     public DateTimeOffset? NoteUpdatedAt { get; set; }
     public Guid? NoteUpdatedById { get; set; }
 
+    /// <summary>
+    /// Пользователь OneBase этого сотрудника (задаётся в «Настройки → Пользователи»): по ней «Мой день» показывает сотруднику его рабочее время.
+    /// Один пользователь — один сотрудник.
+    /// </summary>
+    public Guid? UserId { get; set; }
+
     // ---------- Синхронизация ----------
 
     public DateTimeOffset FirstSyncedAt { get; set; } = DateTimeOffset.UtcNow;

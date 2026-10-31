@@ -56,6 +56,8 @@ public static class DependencyInjection
         services.AddScoped<OneBase.AI.Monitoring.RoutingEvaluation>();
         // AI-диспетчер задач: предложения по данным OneBase, создаются задачами только после подтверждения руководителем.
         services.AddScoped<OneBase.AI.Work.TaskSuggestionService>();
+        services.AddSingleton<OneBase.AI.Work.DailyPlanQueue>();
+        services.AddScoped<OneBase.AI.Work.DailyPlanService>();
         services.AddSingleton<OneBase.AI.Monitoring.RoutingEvaluationRunner>();
         services.AddSingleton<AiGateway>();
         services.AddSingleton<IAiGateway>(sp => sp.GetRequiredService<AiGateway>());
@@ -83,6 +85,7 @@ public static class DependencyInjection
         services.AddSingleton<OneBase.AI.Proactive.ProactiveStatus>();
         services.AddScoped<OneBase.AI.Proactive.ProactiveAnalyzer>();
         services.AddHostedService<OneBase.AI.Proactive.ProactiveAnalysisWorker>();
+        services.AddHostedService<OneBase.AI.Work.DailyPlanWorker>();
 
         services.AddScoped<OneBase.AI.Memory.AiMemoryStore>();
         services.AddScoped<OneBase.AI.Orchestration.AiRouter>();

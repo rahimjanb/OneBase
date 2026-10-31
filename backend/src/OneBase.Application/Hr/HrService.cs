@@ -727,7 +727,7 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
     /// (для карточки); иначе — только те, кто работал в периоде.
     /// </summary>
     private async Task<PeriodResult> EvaluateAsync(HrContext ctx, DateOnly from, DateOnly to, IReadOnlyCollection<long>? divisions, IReadOnlyCollection<Guid>? only, string? search,
-        HrRules rules, CancellationToken ct, bool includeAll = false)
+        HrRules rules, CancellationToken ct, bool includeAll = false, Func<HrTimesheetFacts, DateOnly, HrTimesheetFacts>? adjust = null)
     {
         var query = Visible(ctx);
         if (only is not null)
@@ -792,6 +792,11 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
             for (var date = from; date <= to; date = date.AddDays(1))
             {
                 var sheet = sheetIndex.TryGetValue((e.Id, date), out var s) ? ToFacts(s, kinds) : null;
+                if (sheet is not null && adjust is not null)
+                {
+                    sheet = adjust(sheet, date);
+                }
+
                 var summary = eventIndex.TryGetValue((e.Id, date), out var ev) ? ev : HrEventSummary.None;
                 days.Add(HrAttendance.Evaluate(date, facts, sheet, summary, coverage, now, rules));
             }

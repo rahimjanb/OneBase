@@ -112,6 +112,17 @@ internal static class AiSchema
             e.HasIndex(x => new { x.ConversationId, x.CreatedAt });
         });
 
+        // «План на день от AI» сотрудника: одна строка на пользователя и день — повторное открытие «Моего дня» модель не вызывает.
+        b.Entity<AiDailyPlan>(e =>
+        {
+            e.ToTable("DailyPlans", Schema);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.ItemsJson).HasColumnType("jsonb");
+            e.Property(x => x.InputHash).HasMaxLength(64);
+            e.Property(x => x.Error).HasMaxLength(1000);
+            e.HasIndex(x => new { x.UserId, x.Date }).IsUnique();
+        });
+
         b.Entity<AiAgent>(e =>
         {
             e.ToTable("Agents", Schema);

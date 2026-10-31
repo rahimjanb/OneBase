@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Copy,
   DatabaseZap,
+  Fingerprint,
   FolderOpen,
   KeyRound,
   Landmark,
@@ -19,13 +20,14 @@ import {
   TrendingUp,
   UserRound,
   UsersRound,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Sheet } from "@/components/field/Sheet";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { sectionPermissions, type UserRow, type UsersView } from "@/lib/users";
+import { sectionPermissions, titleCase, type HrCandidate, type UserRow, type UsersView } from "@/lib/users";
 
 type Form = {
   lastName: string;
@@ -38,6 +40,12 @@ type Form = {
   password: string;
   isActive: boolean;
   sections: string[];
+  /** Отдел для роли без своего отдела («Сотрудник», директор). */
+  departmentId: string;
+  /** Сотрудник Verifix: по нему «Мой день» показывает рабочее время. */
+  hrEmployee: { id: string; name: string } | null;
+  /** «Без привязки к Verifix» — пользователь не связан с сотрудником (подрядчик, служебная учётная запись). */
+  noVerifix: boolean;
 };
 
 const icons: Record<string, LucideIcon> = {
@@ -102,7 +110,21 @@ export function UserDialog({
     setCopied(false);
     setForm(
       target === "new"
-        ? { lastName: "", firstName: "", login: "", position: "", roleId: "", email: "", phone: "", password: "", isActive: true, sections: [] }
+        ? {
+            lastName: "",
+            firstName: "",
+            login: "",
+            position: "",
+            roleId: "",
+            email: "",
+            phone: "",
+            password: "",
+            isActive: true,
+            sections: [],
+            departmentId: "",
+            hrEmployee: null,
+            noVerifix: false,
+          }
         : {
             lastName: target.lastName,
             firstName: target.firstName,
@@ -114,6 +136,9 @@ export function UserDialog({
             password: "",
             isActive: target.isActive,
             sections: target.sections,
+            departmentId: target.departmentId ?? "",
+            hrEmployee: target.hrEmployee ?? null,
+            noVerifix: !target.hrEmployee,
           },
     );
   }, [target]);
@@ -159,10 +184,24 @@ export function UserDialog({
       setError(t("Пароль — не короче 8 символов."));
       return;
     }
+    if (isNew && data.verifixAvailable && !form.hrEmployee && !form.noVerifix) {
+      setError(t("Выберите сотрудника в Verifix или отметьте «Без привязки к Verifix»."));
+      return;
+    }
+    if (role?.isEmployee && !form.departmentId) {
+      setError(t("Выберите отдел сотрудника."));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const body = JSON.stringify({ ...form, password: form.password || null });
+      const { hrEmployee, departmentId, ...rest } = form;
+      const body = JSON.stringify({
+        ...rest,
+        password: form.password || null,
+        departmentId: role?.departmentId ? null : departmentId || null,
+        hrEmployeeId: form.noVerifix ? null : (hrEmployee?.id ?? null),
+      });
       if (isNew) await bff("users", { method: "POST", body });
       else if (user) await bff(`users/${user.id}`, { method: "PUT", body });
       const view = await bff<UsersView>("users");
@@ -212,6 +251,34 @@ export function UserDialog({
       >
         <section aria-labelledby="user-profile" className="space-y-4">
           <Heading id="user-profile" icon={UserRound} title={t("Профиль")} />
+          {data.verifixAvailable && (
+            <VerifixLink
+              value={form.hrEmployee}
+              off={form.noVerifix}
+              userId={user?.id ?? null}
+              onPick={(c) =>
+                setForm((f) =>
+                  f
+                    ? {
+                        ...f,
+                        hrEmployee: c ? { id: c.id, name: c.name } : null,
+                        // Пустые поля профиля — из Verifix: имя, фамилия, телефон, должность и отдел подразделения.
+                        ...(c
+                          ? {
+                              lastName: f.lastName || titleCase(c.lastName),
+                              firstName: f.firstName || titleCase(c.firstName),
+                              phone: f.phone || (c.phone ?? ""),
+                              position: f.position || (c.job ?? ""),
+                              departmentId: f.departmentId || (c.departmentId ?? ""),
+                            }
+                          : {}),
+                      }
+                    : f,
+                )
+              }
+              onOff={(off) => setForm((f) => (f ? { ...f, noVerifix: off, hrEmployee: off ? null : f.hrEmployee } : f))}
+            />
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t("Фамилия")} required>
               <input className={field} value={form.lastName} onChange={(e) => set("lastName", e.target.value)} maxLength={100} autoComplete="off" autoFocus={isNew} />
@@ -275,6 +342,18 @@ export function UserDialog({
               ))}
             </select>
           </Field>
+          {role && !role.departmentId && (data.departments?.length ?? 0) > 0 && (
+            <Field label={t("Отдел")} required={role.isEmployee} hint={role.isEmployee ? t("По отделу сотрудник видит задачи и файлы отдела") : undefined}>
+              <select className={field} value={form.departmentId} onChange={(e) => set("departmentId", e.target.value)} disabled={isMe}>
+                <option value="">{role.isEmployee ? t("— выберите отдел —") : t("Без отдела")}</option>
+                {data.departments!.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {t(d.name)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           {role && (
             <div className="rounded-xl bg-muted/60 px-3 py-2.5 text-xs text-ink-2">
               {role.description && <p>{t(role.description)}</p>}
@@ -389,5 +468,99 @@ function Field({ label, required, hint, children }: { label: string; required?: 
       {children}
       {hint && <span className="mt-1 block text-xs text-ink-3">{hint}</span>}
     </label>
+  );
+}
+
+/**
+ * Сотрудник Verifix: поиск по ФИО или телефону среди работающих; выбор подставляет пустые поля профиля. Ниже — «Без привязки к Verifix»
+ * (подрядчик, служебная учётная запись): тогда «Мой день» не показывает рабочее время.
+ */
+function VerifixLink({
+  value,
+  off,
+  userId,
+  onPick,
+  onOff,
+}: {
+  value: { id: string; name: string } | null;
+  off: boolean;
+  userId: string | null;
+  onPick: (c: HrCandidate | null) => void;
+  onOff: (off: boolean) => void;
+}) {
+  const t = useT();
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState<HrCandidate[] | null>(null);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const timer = window.setTimeout(() => {
+      bff<HrCandidate[]>(`users/hr-employees?q=${encodeURIComponent(q)}`).then(setFound, () => setFound([]));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const results = query.trim().length < 2 ? null : found;
+  return (
+    <div className="space-y-2 rounded-xl border border-line p-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-ink">
+        <Fingerprint aria-hidden className="size-4 text-ink-3" />
+        {t("Сотрудник в Verifix")}
+        {!off && <span className="text-bad">*</span>}
+      </div>
+      {value && !off ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg bg-accent/10 px-3 py-2">
+          <span className="min-w-0 truncate text-sm font-medium text-ink">{value.name}</span>
+          <button type="button" onClick={() => onPick(null)} aria-label={t("Убрать привязку")} className="grid size-8 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-muted hover:text-ink">
+            <X className="size-4" />
+          </button>
+        </div>
+      ) : (
+        !off && (
+          <div>
+            <input
+              className={field}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("ФИО или телефон")}
+              aria-label={t("Сотрудник в Verifix")}
+              autoComplete="off"
+            />
+            {results && (
+              <ul className="mt-1 max-h-56 overflow-y-auto rounded-lg border border-line bg-surface-solid">
+                {results.length === 0 && <li className="px-3 py-2 text-xs text-ink-3">{t("Работающих сотрудников с таким именем нет")}</li>}
+                {results.map((c) => {
+                  const taken = c.linkedUserId !== null && c.linkedUserId !== userId;
+                  return (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        disabled={taken}
+                        onClick={() => {
+                          onPick(c);
+                          setQuery("");
+                        }}
+                        className="flex min-h-[44px] w-full flex-col justify-center px-3 py-1.5 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-55"
+                      >
+                        <span className="text-sm text-ink">{c.name}</span>
+                        <span className="text-xs text-ink-3">
+                          {[c.job, c.division, c.phone].filter(Boolean).join(" · ")}
+                          {taken && ` · ${t("привязан к {name}", { name: c.linkedTo ?? "" })}`}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )
+      )}
+      <label className="flex cursor-pointer items-center gap-2 pt-1 text-sm text-ink-2">
+        <input type="checkbox" checked={off} onChange={(e) => onOff(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
+        {t("Без привязки к Verifix")}
+      </label>
+    </div>
   );
 }
