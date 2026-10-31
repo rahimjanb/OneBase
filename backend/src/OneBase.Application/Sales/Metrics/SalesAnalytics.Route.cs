@@ -152,21 +152,8 @@ public sealed partial class SalesAnalytics
     /// </summary>
     public IReadOnlyList<SaleLine> ScopeLines(DateOnly from, DateOnly to, Guid? region = null, long? agent = null)
     {
-        if (agent is { } one)
-        {
-            return AgentLines(one, from, to).ToList();
-        }
-
-        IReadOnlyList<Guid> regions = region is { } r ? [r] : _regions.Keys.Where(id => id != NoRegionId).ToList();
-        var counted = AgentsIn(null).Where(x => InTeam(x) && _agentRegion.GetValueOrDefault(x, NoRegionId) != NoRegionId).ToHashSet();
-        var lines = new List<SaleLine>();
-        foreach (var id in regions)
-        {
-            lines.AddRange(AgentsIn(new HashSet<Guid> { id }).Where(InTeam).SelectMany(x => AgentLines(x, from, to)));
-            lines.AddRange(_currentByRegion[id].Where(l => l.Date >= from && l.Date <= to && (l.AgentId is not { } owner || !counted.Contains(owner))));
-        }
-
-        return lines;
+        var counted = CountedAgents(agent);
+        return ScopeRegions(region, null, agent).SelectMany(id => RegionLines(id, from, to, agent, counted).Lines).ToList();
     }
 
     /// <summary>Строки факта ТП за дни отрезка (по дате реализации — как в «Продажах»).</summary>
