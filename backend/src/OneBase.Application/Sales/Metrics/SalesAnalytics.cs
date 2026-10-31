@@ -156,20 +156,22 @@ public sealed partial class SalesAnalytics
 
     /// <summary>
     /// Республика: карточки РМ/направлений (если они заведены и в них есть регионы), дальше — категории. Карточек регионов нет:
-    /// регионы — в таблице «Все регионы». Служебная группа «Без направления» не показывается.
+    /// регионы — в таблице «Все регионы». Служебная группа «Без направления» не показывается. Направления-каналы («Базар», «КА») —
+    /// с признаком IsChannel: экран их среди РМ не показывает, а поиск направления (инструменты AI) их находит.
     /// </summary>
     public GroupView Republic(DateOnly visitsFrom, DateOnly visitsTo, string calendarMetric = "kg", long? calendarCategory = null)
     {
         var directionCards = DirectionGroups()
             .Where(g => g.Id != NoDirectionId && g.Regions.Count > 0)
-            .Select(g => Unit(g.Id, g.Name, g.Subtitle, g.Regions, UnitKinds.Direction))
+            .Select(g => Unit(g.Id, g.Name, g.Subtitle, g.Regions, UnitKinds.Direction) with { IsChannel = g.IsChannel })
             .ToList();
 
         var regions = RegionIds(null).Count(r => r != NoRegionId);
         var parts = new List<string>();
-        if (directionCards.Count > 0)
+        var managers = directionCards.Count(c => !c.IsChannel);
+        if (managers > 0)
         {
-            parts.Add($"{directionCards.Count} {SalesFormat.Plural(directionCards.Count, "направление", "направления", "направлений")}");
+            parts.Add($"{managers} {SalesFormat.Plural(managers, "направление", "направления", "направлений")}");
         }
 
         parts.Add($"{regions} {SalesFormat.Plural(regions, "регион", "региона", "регионов")}");
@@ -1302,14 +1304,14 @@ public sealed partial class SalesAnalytics
 
     // ================= Справочники и области =================
 
-    private sealed record DirectionGroup(string Id, string Name, string? Subtitle, IReadOnlyList<Guid> Regions);
+    private sealed record DirectionGroup(string Id, string Name, string? Subtitle, IReadOnlyList<Guid> Regions, bool IsChannel = false);
 
     private List<DirectionGroup> DirectionGroups()
     {
         var groups = _d.Directions
             .OrderBy(x => x.IsChannel).ThenBy(x => x.SortOrder).ThenBy(x => x.Name)
             .Select(x => new DirectionGroup(x.Id.ToString(), x.Name, x.Description ?? x.ManagerName,
-                _d.Regions.Where(r => r.DirectionId == x.Id).Select(r => r.Id).ToList()))
+                _d.Regions.Where(r => r.DirectionId == x.Id).Select(r => r.Id).ToList(), x.IsChannel))
             .ToList();
 
         var orphan = RegionIds(null).Where(r => _regions[r].DirectionId is not { } dirId || !_directions.ContainsKey(dirId)).ToList();

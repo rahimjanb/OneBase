@@ -27,7 +27,7 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
 
   const options = [
     { value: "", label: t("Вся республика") },
-    ...republic.cards.filter((c) => c.kind === "direction").map((c) => ({ value: `direction:${c.id}`, label: t("{name} — целиком", { name: c.name }), group: t("Региональные менеджеры") })),
+    ...republic.cards.filter((c) => c.kind === "direction" && !c.isChannel).map((c) => ({ value: `direction:${c.id}`, label: t("{name} — целиком", { name: c.name }), group: t("Региональные менеджеры") })),
     ...republic.regions
       .filter((r) => r.factKg !== 0 || r.akb > 0)
       .map((r) => ({ value: `region:${r.id}`, label: r.name, group: t("Регионы") })),

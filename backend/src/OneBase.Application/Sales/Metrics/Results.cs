@@ -101,7 +101,8 @@ public sealed record UnitRow(
     decimal? PlanFactKg = null,
     string Kind = UnitKinds.Region,
     TargetLevel? ExecutionLevel = null,
-    TargetLevel? ForecastExecutionLevel = null);
+    TargetLevel? ForecastExecutionLevel = null,
+    bool IsChannel = false); // направление-канал (Sales:ChannelRegions — «Базар», «КА»): не РМ, в блоке «Региональные менеджеры» не показывается
 
 public static class UnitKinds
 {

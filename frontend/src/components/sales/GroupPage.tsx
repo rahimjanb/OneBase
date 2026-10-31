@@ -59,7 +59,8 @@ export async function GroupPage({
   const prevMonth = period.month === 1 ? 12 : period.month - 1;
   const cutoffDay = Number(period.previousCutoff.slice(8, 10));
 
-  const directions = data.cards.filter((c) => c.kind === "direction");
+  // Каналы («Базар», «КА») — не региональные менеджеры: в этом блоке их нет, их регионы — в таблицах ниже.
+  const directions = data.cards.filter((c) => c.kind === "direction" && !c.isChannel);
   const regions = data.cards.filter((c) => c.kind !== "direction");
 
   return (

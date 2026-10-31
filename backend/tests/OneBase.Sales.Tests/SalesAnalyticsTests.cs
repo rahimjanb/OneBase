@@ -116,6 +116,21 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
+    public void Channel_directions_are_marked_and_not_counted_as_regional_managers()
+    {
+        // «Базар» — канал (Sales:ChannelRegions): карточка остаётся в данных (её находят инструменты AI), но помечена — экран не показывает её
+        // среди региональных менеджеров, и в «N направлений» она не входит.
+        var bazaar = Guid.NewGuid();
+        var republic = new SalesAnalytics(Data(
+            directions: [new DirectionInfo(Rm1, "РМ 1", false, null, null, 1), new DirectionInfo(bazaar, "Базар", true, null, "Прямое подчинение РОП", 2)],
+            regions: [new RegionInfo(North, 101, "Север", Rm1, null, null), new RegionInfo(South, 102, "Юг", bazaar, null, null)]))
+            .Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
+
+        Assert.Equal([("РМ 1", false), ("Базар", true)], republic.Cards.Select(c => (c.Name, c.IsChannel)));
+        Assert.StartsWith("1 направление", republic.Subtitle);
+    }
+
+    [Fact]
     public void Sum_of_agents_plus_unassigned_equals_region_total()
     {
         var region = new SalesAnalytics(Data()).Region(North, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10), "kg", null);

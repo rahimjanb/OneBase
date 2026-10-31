@@ -152,6 +152,8 @@ export type UnitRow = {
   kind: "republic" | "direction" | "region";
   executionLevel: TargetLevel | null;
   forecastExecutionLevel: TargetLevel | null;
+  /** Направление-канал (Sales:ChannelRegions — «Базар», «КА»): не региональный менеджер. */
+  isChannel?: boolean;
 };
 
 /**
