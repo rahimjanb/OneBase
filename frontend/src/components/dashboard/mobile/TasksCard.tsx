@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlarmClock } from "lucide-react";
-import { startNavProgress } from "@/components/shell/NavProgress";
+import { startNavPending } from "@/components/shell/NavPending";
 import { useT } from "@/i18n/client";
 import type { Tone } from "@/lib/dashboard.mock";
 import { fmt, type MobileTasks } from "@/lib/dashboard-mobile";
@@ -53,7 +53,7 @@ export function TasksCard({ tasks }: { tasks: MobileTasks | null }) {
   });
 
   const open = (href: string) => {
-    startNavProgress();
+    startNavPending();
     router.push(href);
   };
 

@@ -971,7 +971,7 @@ html:has([data-app-shell]) body {
  * на них: видно, что нажатие принято, даже если окно или страница откроются не сразу. На сенсорных экранах так же отвечают ссылки-плитки
  * и строки списков (строчные ссылки в тексте не сжимаются: transform к строчным элементам не применяется). В слое base: у элемента со
  * своими transition/scale из классов действуют они. Нижняя панель (.rnav), карта, перетаскиваемые карточки — без этого; отключить
- * у элемента — data-press="off". iOS включает :active, только если на странице слушают касания, — это делает NavProgress.
+ * у элемента — data-press="off". iOS включает :active, только если на странице слушают касания, — это делает NavPending.
  */
 @layer base {
   :is(button, [role="button"], [role="tab"], summary):not(:disabled, [aria-disabled="true"], [data-press="off"], [draggable="true"], .rnav *, .leaflet-container *) {
@@ -991,38 +991,37 @@ html:has([data-app-shell]) body {
 }
 
 /*
- * Переход на другую страницу (NavProgress): полоска загрузки вверху экрана, под строкой состояния, — пока не придёт новая страница
- * и не уйдут её заготовки (aria-busy). Нажатая ссылка до этого времени приглушена: видно, что именно открывается.
+ * Макет страницы на время перехода (RouteSkeleton): настоящие заголовки и рамки карточек сразу после нажатия, на месте данных — мягко
+ * мерцающие плашки, пока сервер собирает страницу. Полоски загрузки, как у браузера, нет.
  */
-.nav-progress {
-  position: fixed;
-  top: env(safe-area-inset-top);
-  left: 0;
-  right: 0;
-  z-index: 70;
-  height: 3px;
-  pointer-events: none;
-  transform-origin: 0 50%;
-  transform: scaleX(0);
-  opacity: 0;
-  background: linear-gradient(90deg, #3d7bff, #6e9bff 60%, #a78bfa);
-  box-shadow: 0 0 10px rgb(61 123 255 / 0.7);
-  transition: transform 0.25s ease-out, opacity 0.3s ease;
+.skel {
+  display: block;
+  border-radius: 6px;
+  /* Safari до 16.2 не знает color-mix() — сплошная плашка вместо мерцания. */
+  background: var(--color-muted);
+  background: linear-gradient(90deg, var(--color-muted) 0%, color-mix(in srgb, var(--color-muted) 45%, var(--color-surface)) 50%, var(--color-muted) 100%);
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
 }
-.nav-progress[data-state="loading"] {
-  opacity: 1;
+@keyframes skel-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
 }
-.nav-progress[data-state="done"] {
-  opacity: 0;
-  transition: transform 0.2s ease-out, opacity 0.3s ease 0.15s;
-}
-[data-nav-pending]:not(.rnav *) {
-  opacity: 0.6;
+/*
+ * Новая страница ещё не пришла, а макета у перехода нет (смена фильтра или месяца на той же странице, переход между чатами): прежнее
+ * содержимое приглушается — видно, что нажатие принято и данные обновляются (NavPending). Шапка и нижняя панель не меняются.
+ */
+[data-app-scroll][data-nav-pending] > * {
+  opacity: 0.55;
   transition: opacity 0.2s ease;
 }
 @media (prefers-reduced-motion: reduce) {
-  .nav-progress {
-    transition: opacity 0.2s ease;
+  .skel {
+    animation: none;
   }
 }
 

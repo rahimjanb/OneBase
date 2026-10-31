@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FileChartColumn, FileDown, FileSpreadsheet, FileText, Loader2, Plus, Sparkles, type LucideIcon } from "lucide-react";
 import { Sheet } from "@/components/field/Sheet";
-import { startNavProgress } from "@/components/shell/NavProgress";
+import { startNavPending } from "@/components/shell/NavPending";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
 import { bff } from "@/lib/bff";
@@ -49,7 +49,7 @@ export function QuickActions({ data }: { data: Promise<HomeExport> }) {
   const [exportOpen, setExportOpen] = useState(false);
 
   const openTasks = () => {
-    startNavProgress();
+    startNavPending();
     router.push("/tasks");
   };
 

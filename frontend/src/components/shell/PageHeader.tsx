@@ -10,6 +10,7 @@ export type Crumb = { label: string; href?: string };
  * Заголовок страницы: «← Назад» и крошки слева, название, подзаголовок и действия справа.
  * Пользователь и тема — в общем Topbar. Заголовок, подзаголовок и крошки проходят через перевод: страница может передать уже
  * переведённый текст (тогда он не меняется) или русский — он переведётся по словарю; имена из данных остаются как есть.
+ * Не текст (плашка-заготовка в макете страницы, RouteSkeleton) выводится как есть.
  */
 export function PageHeader({
   title,
@@ -18,8 +19,8 @@ export function PageHeader({
   actions,
   back,
 }: {
-  title: string;
-  subtitle?: string;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
   breadcrumbs?: Crumb[];
   actions?: React.ReactNode;
   /** Куда ведёт «← Назад» — кнопка стоит слева, перед крошками. */
@@ -59,8 +60,8 @@ export function PageHeader({
               )}
             </div>
           )}
-          <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ink sm:text-[1.625rem] lg:text-[1.75rem]">{t(title)}</h1>
-          {subtitle && <p className="mt-1.5 text-sm text-ink-2">{t(subtitle)}</p>}
+          <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ink sm:text-[1.625rem] lg:text-[1.75rem]">{typeof title === "string" ? t(title) : title}</h1>
+          {subtitle && <p className="mt-1.5 text-sm text-ink-2">{typeof subtitle === "string" ? t(subtitle) : subtitle}</p>}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>

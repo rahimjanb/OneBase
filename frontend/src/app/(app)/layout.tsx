@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { AppBridge } from "@/components/shell/AppBridge";
 import { PullToRefresh, ScrollManager } from "@/components/shell/AppScroll";
 import { MobileNav } from "@/components/shell/MobileNav";
-import { NavProgress } from "@/components/shell/NavProgress";
+import { NavPending } from "@/components/shell/NavPending";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { TopbarFrame } from "@/components/shell/TopbarFrame";
@@ -35,9 +35,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <MobileNav me={me} canOpenSettings={canOpenSettings} permissions={permissions} />
       </div>
       <ScrollManager />
-      {/* Полоска загрузки при переходах; useSearchParams — внутри Suspense. */}
+      {/* Отклик на переходы без макета; useSearchParams — внутри Suspense. */}
       <Suspense fallback={null}>
-        <NavProgress />
+        <NavPending />
       </Suspense>
       <AppBridge userId={me?.id ?? null} />
     </div>
