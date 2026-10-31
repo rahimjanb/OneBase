@@ -160,14 +160,15 @@ public static class ReportFormat
             return "—";
         }
 
-        var uz = language == "uz";
+        var uz = language is "uz" or "uz-Cyrl";
+        string U(string latin, string ru) => uz ? ReportTexts.Uzbek(language, latin) : ru;
         var abs = Math.Abs(v);
-        var (div, unit) = abs >= 1_000_000_000m ? (1_000_000_000m, uz ? "mlrd" : "млрд")
-            : abs >= 1_000_000m ? (1_000_000m, uz ? "mln" : "млн")
-            : abs >= 1_000m ? (1_000m, uz ? "ming" : "тыс.")
+        var (div, unit) = abs >= 1_000_000_000m ? (1_000_000_000m, U("mlrd", "млрд"))
+            : abs >= 1_000_000m ? (1_000_000m, U("mln", "млн"))
+            : abs >= 1_000m ? (1_000m, U("ming", "тыс."))
             : (1m, "");
         var number = Math.Round(v / div, div == 1 ? 0 : 1, MidpointRounding.AwayFromZero).ToString(div == 1 ? "0" : "0.#", CultureInfo.InvariantCulture).Replace('.', ',');
-        return unit.Length == 0 ? number + (uz ? " so'm" : " сум") : $"{number} {unit} {(uz ? "so'm" : "сум")}";
+        return unit.Length == 0 ? number + " " + U("so'm", "сум") : $"{number} {unit} {U("so'm", "сум")}";
     }
 
     /// <summary>Дата «23.10.2026», отрезок «19.10–24.10».</summary>

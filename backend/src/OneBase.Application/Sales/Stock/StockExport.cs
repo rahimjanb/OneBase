@@ -18,7 +18,7 @@ public sealed record StockExportColumn(
     Func<StockItem, StockCell, object?>? Cell = null,
     bool Sum = true)
 {
-    public string Header => UiLanguage.IsUzbek ? Uz : Ru;
+    public string Header => UiLanguage.IsUzbek ? UiLanguage.Uzbek(Uz) : Ru;
 }
 
 /// <summary>
@@ -90,12 +90,12 @@ public static class StockExport
         (StockStatuses.Ok, false) => "норма",
         (StockStatuses.Empty, false) => "нет остатка",
         (StockStatuses.Unknown, false) => "нет веса",
-        (StockStatuses.Deficit, true) => "taqchil",
-        (StockStatuses.Overstock, true) => "ortiqcha",
-        (StockStatuses.Dead, true) => "sotilmaydi",
-        (StockStatuses.Ok, true) => "me'yor",
-        (StockStatuses.Empty, true) => "qoldiq yo'q",
-        (StockStatuses.Unknown, true) => "vazn yo'q",
+        (StockStatuses.Deficit, true) => UiLanguage.Uzbek("taqchil"),
+        (StockStatuses.Overstock, true) => UiLanguage.Uzbek("ortiqcha"),
+        (StockStatuses.Dead, true) => UiLanguage.Uzbek("sotilmaydi"),
+        (StockStatuses.Ok, true) => UiLanguage.Uzbek("me'yor"),
+        (StockStatuses.Empty, true) => UiLanguage.Uzbek("qoldiq yo'q"),
+        (StockStatuses.Unknown, true) => UiLanguage.Uzbek("vazn yo'q"),
         _ => "",
     };
 
@@ -107,7 +107,7 @@ public static class StockExport
         var summary = columns.Where(c => c.Key != "zeroDays").ToList();
         var sheets = new List<AiReportSheet>
         {
-            new(uz ? "Jamlama" : "Сводка",
+            new(uz ? UiLanguage.Uzbek("Jamlama") : "Сводка",
                 summary.Select(c => new AiReportColumn(c.Header, c.Format, c.Sum)).ToList(),
                 view.Items.Select(i => (IReadOnlyList<JsonElement>)summary.Select(c => Json(c.Item(i))).ToList()).ToList(),
                 Total: true,
@@ -122,7 +122,7 @@ public static class StockExport
             var identity = columns.Where(c => c.Cell is null && c.Key is not ("factoryKg" or "factoryOrder")).ToList();
             var metrics = columns.Where(c => c.Cell is not null).ToList();
             var header = identity.Select(c => new AiReportColumn(c.Header, c.Format, c.Sum))
-                .Append(new AiReportColumn(uz ? "Ombor" : "Склад", ReportFormats.Text))
+                .Append(new AiReportColumn(uz ? UiLanguage.Uzbek("Ombor") : "Склад", ReportFormats.Text))
                 .Concat(metrics.Select(c => new AiReportColumn(c.Header, c.Format, c.Sum)))
                 .ToList();
             var rows = new List<IReadOnlyList<JsonElement>>();
@@ -145,22 +145,22 @@ public static class StockExport
                     .ToList()));
             }
 
-            sheets.Add(new AiReportSheet(uz ? "Omborlar bo'yicha" : "По складам", header, rows, Total: false,
-                Note: uz ? "Har bir tovar — zavod va qamrovdagi diler omborlari bo'yicha (qoldig'i yoki savdosi bor joylar). Zavod qatorida: tezlik — butun mamlakat savdosi, buyurtma — barcha dilerlarga jo'natish uchun yetishmaydigan miqdor."
+            sheets.Add(new AiReportSheet(uz ? UiLanguage.Uzbek("Omborlar bo'yicha") : "По складам", header, rows, Total: false,
+                Note: uz ? UiLanguage.Uzbek("Har bir tovar — zavod va qamrovdagi diler omborlari bo'yicha (qoldig'i yoki savdosi bor joylar). Zavod qatorida: tezlik — butun mamlakat savdosi, buyurtma — barcha dilerlarga jo'natish uchun yetishmaydigan miqdor.")
                          : "Каждый товар — по заводу и складам дилеров охвата, где есть остаток или продажи. В строке завода скорость — продажи всей страны, заказ — сколько не хватает, чтобы отгрузить всем дилерам."));
         }
 
-        var scopeName = uz ? view.ScopeName switch { "Вся страна" => "Butun mamlakat", "Завод" => "Zavod", "Экспорт" => "Eksport", var n => n } : view.ScopeName;
-        var title = uz ? $"Tavsiya etilgan qoldiq — {scopeName}" : $"Рекомендуемый остаток — {view.ScopeName}";
+        var scopeName = uz ? view.ScopeName switch { "Вся страна" => UiLanguage.Uzbek("Butun mamlakat"), "Завод" => UiLanguage.Uzbek("Zavod"), "Экспорт" => UiLanguage.Uzbek("Eksport"), var n => n } : view.ScopeName;
+        var title = uz ? UiLanguage.Uzbek($"Tavsiya etilgan qoldiq — {scopeName}") : $"Рекомендуемый остаток — {view.ScopeName}";
         var sources = new List<string>
         {
-            uz ? $"Linko qoldiqlari {view.SnapshotDate:dd.MM.yyyy}" : $"остатки Linko на {view.SnapshotDate:dd.MM.yyyy}",
-            uz ? $"savdo tezligi — ikkilamchi {view.VelocityFrom:dd.MM}–{view.VelocityTo:dd.MM.yyyy} ({view.VelocityDays} kun), autstokka tuzatilgan"
+            uz ? UiLanguage.Uzbek($"Linko qoldiqlari {view.SnapshotDate:dd.MM.yyyy}") : $"остатки Linko на {view.SnapshotDate:dd.MM.yyyy}",
+            uz ? UiLanguage.Uzbek($"savdo tezligi — ikkilamchi {view.VelocityFrom:dd.MM}–{view.VelocityTo:dd.MM.yyyy} ({view.VelocityDays} kun), autstokka tuzatilgan")
                : $"скорость — вторичка {view.VelocityFrom:dd.MM}–{view.VelocityTo:dd.MM.yyyy} ({view.VelocityDays} дн.) с поправкой на аутсток",
         };
         if (view.PriceList is { Length: > 0 } priceList)
         {
-            sources.Add(uz ? $"narx — «{priceList}» {view.PriceAsOf:dd.MM.yyyy}" : $"цена — прайс «{priceList}» на {view.PriceAsOf:dd.MM.yyyy}");
+            sources.Add(uz ? UiLanguage.Uzbek($"narx — «{priceList}» {view.PriceAsOf:dd.MM.yyyy}") : $"цена — прайс «{priceList}» на {view.PriceAsOf:dd.MM.yyyy}");
         }
 
         return new AiReportContent(title, sheets, sources);
@@ -173,30 +173,30 @@ public static class StockExport
         var parts = new List<string>();
         if (!string.IsNullOrWhiteSpace(view.Query))
         {
-            parts.Add(uz ? $"qidiruv «{view.Query}»" : $"поиск «{view.Query}»");
+            parts.Add(uz ? UiLanguage.Uzbek($"qidiruv «{view.Query}»") : $"поиск «{view.Query}»");
         }
 
         if (view.SelectedCategories.Count > 0)
         {
-            parts.Add((uz ? "kategoriyalar: " : "категории: ") + string.Join(", ", view.SelectedCategories));
+            parts.Add((uz ? UiLanguage.Uzbek("kategoriyalar: ") : "категории: ") + string.Join(", ", view.SelectedCategories));
         }
 
         if (view.SelectedPacks.Count > 0)
         {
-            parts.Add((uz ? "qadoq: " : "фасовка: ") + string.Join(", ", view.SelectedPacks.Select(p => F(p) + (uz ? " kg" : " кг"))));
+            parts.Add((uz ? UiLanguage.Uzbek("qadoq: ") : "фасовка: ") + string.Join(", ", view.SelectedPacks.Select(p => F(p) + (uz ? UiLanguage.Uzbek(" kg") : " кг"))));
         }
 
         if (view.Top is "only" or "not")
         {
-            parts.Add(view.Top == "only" ? (uz ? "faqat TOP" : "только ТОП") : (uz ? "TOPdan tashqari" : "кроме ТОПа"));
+            parts.Add(view.Top == "only" ? (uz ? UiLanguage.Uzbek("faqat TOP") : "только ТОП") : (uz ? UiLanguage.Uzbek("TOPdan tashqari") : "кроме ТОПа"));
         }
 
         if (view.Status != "all")
         {
-            parts.Add((uz ? "holat: " : "статус: ") + StatusLabel(view.Status));
+            parts.Add((uz ? UiLanguage.Uzbek("holat: ") : "статус: ") + StatusLabel(view.Status));
         }
 
-        return parts.Count == 0 ? null : (uz ? "Filtrlar: " : "Фильтры: ") + string.Join("; ", parts) + ".";
+        return parts.Count == 0 ? null : (uz ? UiLanguage.Uzbek("Filtrlar: ") : "Фильтры: ") + string.Join("; ", parts) + ".";
     }
 
     private static JsonElement Json(object? value) => JsonSerializer.SerializeToElement(value);

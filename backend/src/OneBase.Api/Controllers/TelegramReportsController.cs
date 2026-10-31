@@ -138,7 +138,7 @@ public sealed class TelegramReportsController(TelegramReportService reports) : C
                 throw new ReportValidationException("Выберите ТП.");
             }
 
-            var lang = language is "uz" ? "uz" : "ru";
+            var lang = OneBase.Application.Abstractions.UiLanguage.Normalize(language) ?? "ru";
             var scope = new OneBase.Application.Telegram.Reports.ReportScope(role, DirectionId: input.DirectionId, RegionId: input.RegionId, AgentId: input.AgentId);
             var report = await builder.BuildAsync(scope, input.Date, User.FindAll(OneBaseClaims.Permission).Any(c => c.Value == Permissions.FinanceRead), ct);
             var cards = role == OneBase.Domain.Telegram.TelegramReportRoles.Tp || kind == OneBase.Application.Telegram.Weekly.WeeklyPdfKinds.Cards;

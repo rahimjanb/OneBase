@@ -132,7 +132,7 @@ public sealed class TelegramAccountService(
     ILogger<TelegramAccountService> logger)
 {
     private static readonly string[] Styles = ["short", "normal", "detailed"];
-    private static readonly string[] Languages = ["auto", "ru", "uz", "en"];
+    private static readonly string[] Languages = ["auto", "ru", "uz", "uz-Cyrl", "en"];
 
     private readonly IDataProtector _phoneProtector = protection.CreateProtector("OneBase.Telegram.Phone");
 
@@ -429,7 +429,7 @@ public sealed class TelegramAccountService(
         settings.SystemPrompt = Trim(input.SystemPrompt, 8000);
         settings.Restrictions = Trim(input.Restrictions, 8000);
         settings.ResponseStyle = Styles.Contains(style) ? style : "normal";
-        settings.Language = Languages.Contains(language) ? language : "auto";
+        settings.Language = Languages.FirstOrDefault(l => string.Equals(l, language, StringComparison.OrdinalIgnoreCase)) ?? "auto";
         settings.MaxMessagesPerHour = Math.Clamp(input.MaxMessagesPerHour, 1, 500);
         settings.MaxOutputTokens = Math.Clamp(input.MaxOutputTokens, 200, 8000);
         settings.ReplyDelaySeconds = Math.Clamp(input.ReplyDelaySeconds, 0, 60);

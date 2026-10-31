@@ -28,7 +28,7 @@ public sealed class TelegramReportService(
     WeeklyReportOptions weeklyDefaults,
     WeeklyPdfService weeklyPdf)
 {
-    private static readonly string[] Languages = ["ru", "uz"];
+    private static readonly string[] Languages = ["ru", "uz", "uz-Cyrl"];
     private const int PageSize = 50;
 
     private const string NoSales = "Нет права на данные продаж (sales.read) — отчёты на реальных данных недоступны.";
@@ -189,11 +189,7 @@ public sealed class TelegramReportService(
 
     public async Task<ReportSettingsView> SaveSettingsAsync(ReportSettingsInput input, Guid userId, CancellationToken ct)
     {
-        var language = input.Language?.Trim().ToLowerInvariant() ?? "ru";
-        if (!Languages.Contains(language))
-        {
-            throw new ReportValidationException("Язык подписей — ru или uz.");
-        }
+        var language = UiLanguage.Normalize(input.Language ?? "ru") ?? throw new ReportValidationException("Язык подписей — ru, uz или uz-Cyrl.");
 
         if (input.NoPurchaseDays is < 1 or > 365)
         {
@@ -407,11 +403,9 @@ public sealed class TelegramReportService(
             throw new ReportValidationException("Выберите личный чат получателя или группу.");
         }
 
-        var pdfLanguage = string.IsNullOrWhiteSpace(input.PdfLanguage) ? null : input.PdfLanguage.Trim().ToLowerInvariant();
-        if (pdfLanguage is not null && !Languages.Contains(pdfLanguage))
-        {
-            throw new ReportValidationException("Язык PDF — ru или uz.");
-        }
+        var pdfLanguage = string.IsNullOrWhiteSpace(input.PdfLanguage)
+            ? null
+            : UiLanguage.Normalize(input.PdfLanguage) ?? throw new ReportValidationException("Язык PDF — ru, uz или uz-Cyrl.");
 
         var settings = await SettingsAsync(ct);
         var account = settings.AccountId ?? throw new ReportValidationException("Сначала выберите аккаунт Telegram для автоотчётов.");
@@ -678,11 +672,9 @@ public sealed class TelegramReportService(
             throw new ReportValidationException(problem);
         }
 
-        var language = input.Language?.Trim().ToLowerInvariant();
-        if (language is not null && !Languages.Contains(language))
-        {
-            throw new ReportValidationException("Язык PDF — ru или uz.");
-        }
+        var language = string.IsNullOrWhiteSpace(input.Language)
+            ? null
+            : UiLanguage.Normalize(input.Language) ?? throw new ReportValidationException("Язык PDF — ru, uz или uz-Cyrl.");
 
         var scope = WeeklyScope(input.Role, input.DirectionId, input.RegionId, input.AgentId);
         var delivery = new TelegramReportDelivery
@@ -773,7 +765,7 @@ public sealed class TelegramReportService(
             at = ReportSchedules.At(d, job.Time, job.TimeZone); // прошлый день — на время запуска
         }
 
-        var language = input.Language?.Trim().ToLowerInvariant() is "uz" or "ru" ? input.Language.Trim().ToLowerInvariant() : null;
+        var language = UiLanguage.Normalize(input.Language);
         return (info.Code, scope, date, at, language);
     }
 

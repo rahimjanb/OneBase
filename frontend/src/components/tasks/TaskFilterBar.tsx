@@ -6,7 +6,7 @@ import { Building2, CalendarDays, Check, ChevronDown, CircleDot, Flag, RotateCcw
 import { Sheet } from "@/components/field/Sheet";
 import { useLang, useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { monthsRu, monthsUz } from "@/lib/notifications";
+import { monthsRu, monthsUz, monthsUzCyrl } from "@/lib/notifications";
 import { activeFilterCount, listOf, presetOf, presetRange, toggleIn, type DatePreset } from "@/lib/task-board";
 import { todayInTashkent, workPriorityLabel, workStatuses, workStatusLabel, type DepartmentTasks, type WorkAssignee, type WorkTaskPriority } from "@/lib/tasks";
 import { PriorityPill } from "./TaskKit";
@@ -35,7 +35,7 @@ export function TaskFilters({ departments, show, fixedDepartment }: { department
   const [assignees, setAssignees] = useState<WorkAssignee[]>([]);
   const [sheet, setSheet] = useState(false);
   const today = todayInTashkent();
-  const months = lang === "uz" ? monthsUz : monthsRu;
+  const months = lang === "uz-Cyrl" ? monthsUzCyrl : lang === "uz" ? monthsUz : monthsRu;
 
   const priority = listOf(params.get("priority"));
   const department = fixedDepartment ? [] : listOf(params.get("department"));

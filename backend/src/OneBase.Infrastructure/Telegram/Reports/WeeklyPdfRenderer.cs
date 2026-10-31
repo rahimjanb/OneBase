@@ -24,14 +24,20 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
     public byte[] Render(WeeklySupervisorReport report, string language)
     {
         EnsureReady();
-        return new Doc(report, language == "uz" ? "uz" : "ru").Create().GeneratePdf();
+        return new Doc(report, Lang(language)).Create().GeneratePdf();
     }
 
     public IReadOnlyList<byte[]> RenderImages(WeeklySupervisorReport report, string language, int dpi = 110)
     {
         EnsureReady();
-        return new Doc(report, language == "uz" ? "uz" : "ru").Create().GenerateImages(new ImageGenerationSettings { RasterDpi = dpi }).ToList();
+        return new Doc(report, Lang(language)).Create().GenerateImages(new ImageGenerationSettings { RasterDpi = dpi }).ToList();
     }
+
+    /// <summary>Язык PDF: «ru», «uz» (латиница) или «uz-Cyrl» (кириллица).</summary>
+    private static string Lang(string? language) => OneBase.Application.Abstractions.UiLanguage.Normalize(language) ?? "ru";
+
+    /// <summary>Подпись из словаря рисовальщика (латиница) на языке PDF: «uz-Cyrl» — переведённая в кириллицу.</summary>
+    private static string FromUz(string lang, string latin) => lang == "uz-Cyrl" ? ReportTexts.Uzbek(lang, latin) : latin;
 
     private static void EnsureReady()
     {
@@ -83,7 +89,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
     {
         private readonly bool _group = r.Role is "rop" or "rm";
 
-        private string T(string ru) => lang == "uz" && Uz.TryGetValue(ru, out var uz) ? uz : WeeklyTexts.T(lang, ru);
+        private string T(string ru) => lang != "ru" && Uz.TryGetValue(ru, out var uz) ? FromUz(lang, uz) : WeeklyTexts.T(lang, ru);
 
         private string F(string ru, params object?[] args) => string.Format(CultureInfo.InvariantCulture, T(ru), args.Select(a => a ?? "").ToArray());
 
@@ -570,13 +576,19 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
 
         private static string Esc(string s) => System.Security.SecurityElement.Escape(s) ?? "";
 
-        private string DayName(DateOnly d) => lang == "uz"
-            ? new[] { "Ya", "Du", "Se", "Ch", "Pa", "Ju", "Sh" }[(int)d.DayOfWeek]
-            : new[] { "Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб" }[(int)d.DayOfWeek];
+        private string DayName(DateOnly d) => (lang switch
+        {
+            "uz" => new[] { "Ya", "Du", "Se", "Ch", "Pa", "Ju", "Sh" },
+            "uz-Cyrl" => ["Як", "Ду", "Се", "Чо", "Па", "Жу", "Ша"],
+            _ => ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"],
+        })[(int)d.DayOfWeek];
 
-        private string MonthName(int m) => lang == "uz"
-            ? new[] { "Yan", "Fev", "Mar", "Apr", "May", "Iyn", "Iyl", "Avg", "Sen", "Okt", "Noy", "Dek" }[m - 1]
-            : new[] { "Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек" }[m - 1];
+        private string MonthName(int m) => (lang switch
+        {
+            "uz" => new[] { "Yan", "Fev", "Mar", "Apr", "May", "Iyn", "Iyl", "Avg", "Sen", "Okt", "Noy", "Dek" },
+            "uz-Cyrl" => ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"],
+            _ => ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"],
+        })[m - 1];
 
         // ---------- 3. Рейтинг ТП ----------
 

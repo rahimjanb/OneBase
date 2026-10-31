@@ -126,6 +126,7 @@ export function timeText(iso: string, now: Date, months: readonly string[]): { t
 
 export const monthsRu = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 export const monthsUz = ["yan", "fev", "mar", "apr", "may", "iyn", "iyl", "avg", "sen", "okt", "noy", "dek"];
+export const monthsUzCyrl = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 
 /** Колокольчик: без непрочитанных — ничего, до 9 — красная точка, больше 9 — «9+». */
 export const bellBadge = (unread: number): "none" | "dot" | "9+" => (unread <= 0 ? "none" : unread > 9 ? "9+" : "dot");

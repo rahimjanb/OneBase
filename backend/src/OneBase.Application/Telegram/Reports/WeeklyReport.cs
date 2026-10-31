@@ -170,7 +170,12 @@ public static class WeeklyReport
 
     private static ReportTable DaysTable(ReportContext c, IReadOnlyList<Sales.Metrics.ReportPerson> agents, DateOnly from, DateOnly to)
     {
-        var names = c.Language == "uz" ? new[] { "Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya" } : new[] { "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс" };
+        var names = c.Language switch
+        {
+            "uz" => new[] { "Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya" },
+            "uz-Cyrl" => ["Ду", "Се", "Чо", "Па", "Жу", "Ша", "Як"],
+            _ => ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+        };
         var rows = new List<IReadOnlyList<ReportCell>>();
         decimal planTotal = 0, factTotal = 0;
         var known = false;

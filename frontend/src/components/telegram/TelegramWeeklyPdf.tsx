@@ -8,9 +8,11 @@ import { useT } from "@/i18n/client";
 import { chatTypeLabel } from "@/lib/telegram";
 import {
   deliveryStatus,
+  reportLanguages,
   sourceState,
   weeklyPdfApi,
   weeklySources,
+  type ReportLanguage,
   type ReportOverview,
   type ReportSendResult,
   type WeeklyPdfFormulas,
@@ -182,7 +184,7 @@ function WeeklyPdfPreviewPanel({ data }: { data: ReportOverview }) {
     date: null,
   }));
   const [kind, setKind] = useState<WeeklyPdfKind>("team");
-  const [language, setLanguage] = useState<"ru" | "uz">(data.settings.language);
+  const [language, setLanguage] = useState<ReportLanguage>(data.settings.language);
   const [chatId, setChatId] = useState("");
   const [preview, setPreview] = useState<WeeklyPdfPreview | null>(null);
   const [result, setResult] = useState<ReportSendResult | null>(null);
@@ -304,9 +306,12 @@ function WeeklyPdfPreviewPanel({ data }: { data: ReportOverview }) {
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-ink-2">{t("Язык")}</span>
-            <select className={field} value={language} onChange={(e) => (setLanguage(e.target.value as "ru" | "uz"), setPreview(null))}>
-              <option value="ru">{t("Русский")}</option>
-              <option value="uz">{t("Узбекский (латиница)")}</option>
+            <select className={field} value={language} onChange={(e) => (setLanguage(e.target.value as ReportLanguage), setPreview(null))}>
+              {reportLanguages.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {t(l.label)}
+                </option>
+              ))}
             </select>
           </label>
         </div>

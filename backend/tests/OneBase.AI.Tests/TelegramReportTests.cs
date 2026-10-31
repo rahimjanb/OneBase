@@ -469,6 +469,32 @@ public class TelegramReportTests
         Assert.True(missing.Count == 0, string.Join(Environment.NewLine, missing.Distinct().Take(80)));
     }
 
+    [Fact]
+    public void Uzbek_cyrillic_reports_have_no_latin_except_brands()
+    {
+        // Кириллица — из латинского словаря по правилам: латиницей остаются только бренды и технические сокращения.
+        string[] keep = ["OneBase", "Linko", "Telegram", "PDF", "KPI", "SKU", "AI", "Twizos", "TWIZOS"];
+        var latin = new List<string>();
+        foreach (var job in ReportCatalog.Jobs.Where(j => j.Report is not (ReportType.WeeklyPdf or ReportType.Battle)))
+        {
+            foreach (var scope in new[] { Rm, Sv, Tp(61), Tp(63) }.Where(s => job.Roles.Contains(s.Role)))
+            {
+                var report = Build(job.Code, scope, At(Day, job.Time.Hour, job.Time.Minute), language: "uz-Cyrl",
+                    noPurchase: job.Report == ReportType.NoPurchase ? new Dictionary<long, NoPurchaseAgent>() : null);
+                var texts = new[] { report.Title, report.Caption, report.Summary, report.Scope }
+                    .Concat(report.Kpis.SelectMany(k => new[] { k.Label, k.Value, k.Hint ?? "" }))
+                    .Concat(report.Tables.SelectMany(t => new[] { t.Title, t.Hint ?? "" }.Concat(t.Columns.Select(col => col.Title))
+                        .Concat(t.Rows.SelectMany(r => r.Select(cell => cell.Text))).Concat(t.Total?.Select(cell => cell.Text) ?? [])))
+                    .Concat(report.Problems).Concat(report.Notes);
+                latin.AddRange(texts.Select(t => keep.Aggregate(t, (acc, k) => acc.Replace(k, ""))).Where(t => System.Text.RegularExpressions.Regex.IsMatch(t, "[A-Za-z]{2,}"))
+                    .Select(t => $"{job.Code}/{scope.Role}: {t}"));
+                Assert.NotEmpty(Renderer.Render(report));
+            }
+        }
+
+        Assert.True(latin.Count == 0, string.Join(Environment.NewLine, latin.Distinct().Take(60)));
+    }
+
     // ---------- Картинки ----------
 
     private static readonly SkiaReportRenderer Renderer = new();

@@ -1,3 +1,4 @@
+using OneBase.Application.Abstractions;
 using System.Globalization;
 
 namespace OneBase.Application.Telegram.Reports;
@@ -425,7 +426,18 @@ public static class ReportTexts
         ["стр."] = "bet",
     };
 
-    public static string Get(string language, string ru) => language == "uz" && Uz.TryGetValue(ru, out var uz) ? uz : ru;
+    /// <summary>Подпись на языке отчёта: «uz» — латиница из словаря, «uz-Cyrl» — та же, переведённая в кириллицу; нет перевода — русский.</summary>
+    public static string Get(string language, string ru) => language switch
+    {
+        UiLanguage.UzbekLatin => Uz.TryGetValue(ru, out var uz) ? uz : ru,
+        UiLanguage.UzbekCyrillicCode => Uz.TryGetValue(ru, out var latin) ? Cyrillic.GetOrAdd(latin, UzbekCyrillic.Convert) : ru,
+        _ => ru,
+    };
+
+    /// <summary>Узбекский текст отчёта, написанный латиницей, на языке отчёта (кириллица — переведённый).</summary>
+    public static string Uzbek(string language, string latin) => language == UiLanguage.UzbekCyrillicCode ? Cyrillic.GetOrAdd(latin, UzbekCyrillic.Convert) : latin;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Cyrillic = new();
 
     public static string Format(string language, string ru, params object[] args) => string.Format(CultureInfo.InvariantCulture, Get(language, ru), args);
 

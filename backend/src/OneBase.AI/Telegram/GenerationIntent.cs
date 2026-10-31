@@ -20,21 +20,25 @@ public static partial class GenerationIntent
     /// </summary>
     public static string Ack(string? language, string question, int seed)
     {
-        string[] phrases = (language is "ru" or "uz" or "en" ? language : LanguageOf(question)) switch
+        string[] phrases = (language is "ru" or "uz" or "uz-Cyrl" or "en" ? language : LanguageOf(question)) switch
         {
             "uz" => ["Bir daqiqa, hozir tayyorlayman.", "Hozir tayyorlab beraman, bir daqiqa.", "Tayyorlayapman, bir daqiqa kuting."],
+            "uz-Cyrl" => ["Бир дақиқа, ҳозир тайёрлайман.", "Ҳозир тайёрлаб бераман, бир дақиқа.", "Тайёрлаяпман, бир дақиқа кутинг."],
             "en" => ["One moment, working on it.", "On it, just a minute.", "Give me a minute, preparing it now."],
             _ => ["Минутку, уже делаю.", "Секунду, уже готовлю.", "Уже делаю, минутку."],
         };
         return phrases[(int)((uint)seed % (uint)phrases.Length)];
     }
 
-    /// <summary>Язык сообщения: кириллица — русский (узбекская кириллица — узбекский), латиница с узбекскими словами — узбекский, иначе английский.</summary>
+    /// <summary>
+    /// Язык сообщения: узбекская кириллица (ў, қ, ғ, ҳ) — «uz-Cyrl», остальная кириллица — русский, латиница с узбекскими словами — «uz»,
+    /// иначе английский.
+    /// </summary>
     public static string LanguageOf(string text)
     {
         if (UzbekCyrillic().IsMatch(text))
         {
-            return "uz";
+            return "uz-Cyrl";
         }
 
         if (Cyrillic().IsMatch(text))

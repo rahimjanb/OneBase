@@ -18,13 +18,13 @@ public sealed partial class WeeklyPdfRenderer
     public byte[] RenderCards(WeeklySupervisorReport report, string language)
     {
         EnsureReady();
-        return new Cards(report, language == "uz" ? "uz" : "ru").Create().GeneratePdf();
+        return new Cards(report, Lang(language)).Create().GeneratePdf();
     }
 
     public IReadOnlyList<byte[]> RenderCardImages(WeeklySupervisorReport report, string language, int dpi = 110)
     {
         EnsureReady();
-        return new Cards(report, language == "uz" ? "uz" : "ru").Create().GenerateImages(new ImageGenerationSettings { RasterDpi = dpi }).ToList();
+        return new Cards(report, Lang(language)).Create().GenerateImages(new ImageGenerationSettings { RasterDpi = dpi }).ToList();
     }
 
     /// <summary>Порог «конверсия визит → заказ», как в рейтинге ТП.</summary>
@@ -34,7 +34,7 @@ public sealed partial class WeeklyPdfRenderer
     {
         private static readonly NumberFormatInfo Ru = new() { NumberGroupSeparator = " ", NumberDecimalSeparator = ",", NumberGroupSizes = [3] };
 
-        private string T(string ru) => lang == "uz" && Uz.TryGetValue(ru, out var uz) ? uz : WeeklyTexts.T(lang, ru);
+        private string T(string ru) => lang != "ru" && Uz.TryGetValue(ru, out var uz) ? FromUz(lang, uz) : WeeklyTexts.T(lang, ru);
 
         private string F(string ru, params object?[] args) => string.Format(CultureInfo.InvariantCulture, T(ru), args.Select(a => a ?? "").ToArray());
 

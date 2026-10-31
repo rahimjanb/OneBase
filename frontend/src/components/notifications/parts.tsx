@@ -36,6 +36,7 @@ import { geoPermission, type GeoState } from "@/lib/geo";
 import {
   monthsRu,
   monthsUz,
+  monthsUzCyrl,
   pushStateOf,
   showPushPrompt,
   timeText,
@@ -95,7 +96,7 @@ export function TypeTile({ n, size }: { n: Pick<NotificationItem, "type" | "seve
 export function useTimeText(grouped = false) {
   const t = useT();
   const locale = useLocale();
-  const months = locale.startsWith("uz") ? monthsUz : monthsRu;
+  const months = locale.startsWith("uz-Cyrl") ? monthsUzCyrl : locale.startsWith("uz") ? monthsUz : monthsRu;
   return (iso: string) => {
     const r = timeText(iso, new Date(), months);
     return r.yesterday && !grouped ? t("вчера {time}", { time: r.text }) : r.text;

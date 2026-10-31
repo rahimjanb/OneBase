@@ -965,7 +965,8 @@ public class TelegramRulesTests
     [Theory]
     [InlineData("auto", "Составь письмо дилеру", "Минутку")]
     [InlineData("auto", "Viloyatlar bo'yicha jadval tuzib ber", "daqiqa")]
-    [InlineData("auto", "Ҳисобот тайёрла", "daqiqa")]
+    [InlineData("auto", "Ҳисобот тайёрла", "дақиқа")] // узбекская кириллица — ответ кириллицей
+    [InlineData("uz-Cyrl", "Сделай отчёт", "дақиқа")]
     [InlineData("auto", "Please prepare a sales report", "One moment")]
     [InlineData("ru", "Prepare a report", "Минутку")]
     [InlineData("uz", "Сделай отчёт", "daqiqa")]

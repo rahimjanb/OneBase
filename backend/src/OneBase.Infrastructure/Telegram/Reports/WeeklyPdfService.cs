@@ -86,7 +86,7 @@ public sealed partial class WeeklyPdfService(
         }
 
         language ??= await db.TelegramReportSettings.AsNoTracking().Select(s => s.Language).FirstOrDefaultAsync(ct) ?? "ru";
-        return (pdf, language == "uz" ? "uz" : "ru");
+        return (pdf, OneBase.Application.Abstractions.UiLanguage.Normalize(language) ?? "ru");
     }
 
     /// <summary>

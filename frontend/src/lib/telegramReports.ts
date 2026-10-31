@@ -29,7 +29,16 @@ export const reportTypes: { key: ReportType; title: string; hint: string }[] = [
 /** Запуск рисуется PDF-документом, а не картинками: у него своя вкладка, в предпросмотре картинок и «Отправить» его нет. */
 export const isPdfJob = (job: Pick<ReportJob, "report">) => job.report === "weekly-pdf";
 
-export type ReportSettings = { accountId: string | null; language: "ru" | "uz"; noPurchaseDays: number; refreshBeforeSend: boolean; updatedAt: string | null };
+/** Язык подписей отчётов и PDF: русский, узбекский латиницей, узбекский кириллицей. */
+export type ReportLanguage = "ru" | "uz" | "uz-Cyrl";
+
+export const reportLanguages: { code: ReportLanguage; label: string }[] = [
+  { code: "ru", label: "Русский" },
+  { code: "uz", label: "Узбекский (латиница)" },
+  { code: "uz-Cyrl", label: "Узбекский (кириллица)" },
+];
+
+export type ReportSettings = { accountId: string | null; language: ReportLanguage; noPurchaseDays: number; refreshBeforeSend: boolean; updatedAt: string | null };
 
 export type ReportAccount = { id: string; name: string; status: string; username: string | null };
 
@@ -99,7 +108,7 @@ export type ReportRecipient = {
   problem: string | null;
   last: ReportDeliveryBrief[];
   /** Язык еженедельного PDF; null — язык отчётов из общих настроек. */
-  pdfLanguage: "ru" | "uz" | null;
+  pdfLanguage: ReportLanguage | null;
 };
 
 export type ReportRecipientInput = {
@@ -112,7 +121,7 @@ export type ReportRecipientInput = {
   chatIds: string[];
   reports: string[];
   enabled: boolean;
-  pdfLanguage?: "ru" | "uz" | null;
+  pdfLanguage?: ReportLanguage | null;
 };
 
 export type ReportPerson = { id: number; name: string };
@@ -245,7 +254,7 @@ export type ReportPreviewInput = {
   date: string | null;
   /** «13:00» — момент формирования; null — сейчас (прошлый день — время запуска). */
   time: string | null;
-  language: "ru" | "uz" | null;
+  language: ReportLanguage | null;
 };
 
 export type ReportPreview = {
@@ -486,13 +495,13 @@ export const weeklyPdfApi = {
   saveSettings: (s: Pick<WeeklyPdfSettings, "requireCompleteData" | "svTpCards" | "includeMoney" | "formulas">) =>
     bff<WeeklyPdfSettings>(`${base}/weekly-pdf`, { method: "PUT", body: json(s) }),
   /** Страницы картинками и состояние данных — без отправки. */
-  preview: (i: WeeklyPdfInput, language: "ru" | "uz", kind: WeeklyPdfKind) =>
+  preview: (i: WeeklyPdfInput, language: ReportLanguage, kind: WeeklyPdfKind) =>
     bff<WeeklyPdfPreview>(`${base}/weekly/pdf?images=1&language=${language}&kind=${kind}`, { method: "POST", body: weeklyBody(i) }),
   /** Скачать PDF файлом (тот же отчёт, что в предпросмотре). */
-  download: (i: WeeklyPdfInput, language: "ru" | "uz", kind: WeeklyPdfKind, fileName: string) =>
+  download: (i: WeeklyPdfInput, language: ReportLanguage, kind: WeeklyPdfKind, fileName: string) =>
     saveFile(`weekly/pdf?language=${language}&kind=${kind}`, fileName, { method: "POST", body: weeklyBody(i) }),
   /** Тест — только в выбранный чат, с пометкой «ТЕСТОВАЯ ОТПРАВКА». */
-  test: (i: WeeklyPdfInput, language: "ru" | "uz", chatId: string) =>
+  test: (i: WeeklyPdfInput, language: ReportLanguage, chatId: string) =>
     sendOnce<ReportSendResult>("weekly/test", {
       role: i.role,
       directionId: i.role === "rm" ? i.directionId : null,

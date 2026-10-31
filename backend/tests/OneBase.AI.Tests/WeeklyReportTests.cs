@@ -234,6 +234,7 @@ public class WeeklyReportDbTests(DataManagerDb fixture) : IClassFixture<DataMana
         Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
         Assert.Equal(10, renderer.RenderImages(report, "ru", 40).Count);
         Assert.Equal(10, renderer.RenderImages(report, "uz", 40).Count);
+        Assert.Equal(10, renderer.RenderImages(report, "uz-Cyrl", 40).Count); // узбекская кириллица
 
         // РОП (rm без направления): строки регионов + сводка; PDF — 3 страницы (главное, ДМП, дилеры).
         WeeklySupervisorReport rop;

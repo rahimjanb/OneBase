@@ -24,8 +24,8 @@ public sealed class ReportWorkbookWriter : IReportWorkbookWriter
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // Шапка — на языке интерфейса того, кто скачивает (UiLanguage из Accept-Language запроса).
         var uz = OneBase.Application.Abstractions.UiLanguage.IsUzbek;
-        var stamp = (uz ? $"OneBase'da tuzilgan {createdAt.ToOffset(CompanyOffset):dd.MM.yyyy HH:mm} (Toshkent)" : $"Сформировано в OneBase {createdAt.ToOffset(CompanyOffset):dd.MM.yyyy HH:mm} (Ташкент)")
-                    + (report.Sources.Count > 0 ? (uz ? " · manbalar: " : " · источники: ") + string.Join("; ", report.Sources) : "");
+        var stamp = (uz ? OneBase.Application.Abstractions.UiLanguage.Uzbek($"OneBase'da tuzilgan {createdAt.ToOffset(CompanyOffset):dd.MM.yyyy HH:mm} (Toshkent)") : $"Сформировано в OneBase {createdAt.ToOffset(CompanyOffset):dd.MM.yyyy HH:mm} (Ташкент)")
+                    + (report.Sources.Count > 0 ? (uz ? OneBase.Application.Abstractions.UiLanguage.Uzbek(" · manbalar: ") : " · источники: ") + string.Join("; ", report.Sources) : "");
         foreach (var sheet in report.Sheets)
         {
             var ws = workbook.Worksheets.Add(SheetName(sheet.Name, names));
@@ -91,7 +91,7 @@ public sealed class ReportWorkbookWriter : IReportWorkbookWriter
                 }
                 else if (!labelled)
                 {
-                    cell.Value = OneBase.Application.Abstractions.UiLanguage.IsUzbek ? "Jami" : "Итого";
+                    cell.Value = OneBase.Application.Abstractions.UiLanguage.IsUzbek ? OneBase.Application.Abstractions.UiLanguage.Uzbek("Jami") : "Итого";
                     labelled = true;
                 }
 

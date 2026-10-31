@@ -10,7 +10,13 @@ namespace OneBase.Application.Telegram.Weekly;
 /// </summary>
 public static class WeeklyTexts
 {
-    public static string T(string language, string ru) => language == "uz" && Uz.TryGetValue(ru, out var uz) ? uz : ru;
+    /// <summary>Подпись на языке отчёта: «uz» — словарь Uz, иначе — общий словарь автоотчётов; «uz-Cyrl» — то же кириллицей.</summary>
+    public static string T(string language, string ru) => language switch
+    {
+        "uz" => Uz.TryGetValue(ru, out var uz) ? uz : ReportTexts.Get("uz", ru),
+        "uz-Cyrl" => Uz.TryGetValue(ru, out var latin) ? ReportTexts.Uzbek(language, latin) : ReportTexts.Get(language, ru),
+        _ => ru,
+    };
 
     public static string F(string language, string ru, params object?[] args) =>
         string.Format(CultureInfo.InvariantCulture, T(language, ru), args.Select(a => a ?? "").ToArray());

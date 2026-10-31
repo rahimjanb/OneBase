@@ -80,6 +80,7 @@ const telegramReports: Dict = {
   "Язык картинок": "Rasmlar tili",
   "Русский": "Rus tili",
   "Узбекский (латиница)": "O'zbek tili (lotin)",
+  "Узбекский (кириллица)": "O'zbek tili (kirill)",
   "Без закупа, дней": "Xaridsiz, kun",
   "Обновлять данные Linko перед отправкой": "Yuborishdan oldin Linko ma'lumotlarini yangilash",
   "Чаты другого аккаунта уберутся у получателей. Сменить аккаунт?": "Boshqa akkaunt chatlari qabul qiluvchilardan olib tashlanadi. Akkauntni almashtirasizmi?",

@@ -1,8 +1,12 @@
 "use client";
 
 import { createContext, useContext, useMemo } from "react";
-import { LANG_COOKIE, localeOf, makeT, type Lang, type T, type Vars } from "./core";
+import { LANG_COOKIE, localeOf, makeT, parseLang, type Dict, type Lang, type T, type Vars } from "./core";
 import { uz } from "./uz";
+import { uzCyrl } from "./uzCyrl";
+
+/** Словарь языка; русский — без словаря (ключи и есть русский текст). */
+export const dictOf = (lang: Lang): Dict | null => (lang === "uz" ? uz : lang === "uz-Cyrl" ? uzCyrl : null);
 
 const LangContext = createContext<Lang>("ru");
 
@@ -16,7 +20,7 @@ export const useLang = () => useContext(LangContext);
 /** Перевод в клиентских компонентах: const t = useT(); t("Задачи"). */
 export function useT(): T {
   const lang = useLang();
-  return useMemo(() => makeT(lang === "uz" ? uz : null), [lang]);
+  return useMemo(() => makeT(dictOf(lang)), [lang]);
 }
 
 /** Локаль для дат и чисел (месяцы — на языке интерфейса). */
@@ -35,8 +39,7 @@ export function Tr({ children, vars }: { children: string; vars?: Vars }) {
  * В компонентах — useT.
  */
 export function tNow(text: string, vars?: Vars): string {
-  const uzbek = typeof document !== "undefined" && document.documentElement.lang === "uz";
-  return makeT(uzbek ? uz : null)(text, vars);
+  return makeT(dictOf(parseLang(typeof document !== "undefined" ? document.documentElement.lang : null)))(text, vars);
 }
 
 /** Сменить язык: cookie на год и перезагрузка — сервер и браузер сразу рисуют страницу на новом языке. */

@@ -91,7 +91,8 @@ export function TelegramAgentForm({ account, onSaved }: { account: TelegramAccou
           <select className={field} value={s.language} onChange={(e) => set("language", e.target.value as TelegramAgentSettings["language"])}>
             <option value="auto">{t("На языке вопроса")}</option>
             <option value="ru">{t("Русский")}</option>
-            <option value="uz">{t("Узбекский")}</option>
+            <option value="uz">{t("Узбекский (латиница)")}</option>
+            <option value="uz-Cyrl">{t("Узбекский (кириллица)")}</option>
             <option value="en">{t("Английский")}</option>
           </select>
         </Field>

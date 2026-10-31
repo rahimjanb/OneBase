@@ -9,6 +9,7 @@ import { chatTypeLabel } from "@/lib/telegram";
 import {
   deliveryStatus,
   pdfStage,
+  reportLanguages,
   weeklyPdfApi,
   reportRoles,
   reportTypes,
@@ -18,6 +19,7 @@ import {
   triggerLabel,
   type ReportHistory,
   type ReportHistoryQuery,
+  type ReportLanguage,
   type ReportOverview,
   type ReportPreview,
   type ReportPreviewInput,
@@ -182,7 +184,7 @@ export function ReportPreviewPanel({ data }: { data: ReportOverview }) {
   const [scope, setScope] = useState<Scope>(() => defaultScope(data));
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [language, setLanguage] = useState<"ru" | "uz">(data.settings.language);
+  const [language, setLanguage] = useState<ReportLanguage>(data.settings.language);
   const [chatId, setChatId] = useState("");
   const [preview, setPreview] = useState<ReportPreview | null>(null);
   const [result, setResult] = useState<ReportSendResult | null>(null);
@@ -272,9 +274,12 @@ export function ReportPreviewPanel({ data }: { data: ReportOverview }) {
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-ink-2">{t("Язык")}</span>
-            <select className={field} value={language} onChange={(e) => setLanguage(e.target.value as "ru" | "uz")}>
-              <option value="ru">{t("Русский")}</option>
-              <option value="uz">{t("Узбекский")}</option>
+            <select className={field} value={language} onChange={(e) => setLanguage(e.target.value as ReportLanguage)}>
+              {reportLanguages.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {t(l.label)}
+                </option>
+              ))}
             </select>
           </label>
         </div>

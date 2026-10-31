@@ -9,6 +9,7 @@ import { chatTypeLabel } from "@/lib/telegram";
 import {
   deliveryStatus,
   isPdfJob,
+  reportLanguages,
   reportRoles,
   reportTypes,
   reportsApi,
@@ -17,6 +18,7 @@ import {
   timeZones,
   weekDays,
   type ReportJob,
+  type ReportLanguage,
   type ReportOverview,
   type ReportRecipient,
   type ReportRecipientInput,
@@ -146,9 +148,12 @@ function GeneralSettings({ data, onSaved }: { data: ReportOverview; onSaved: () 
         </label>
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">{t("Язык картинок")}</span>
-          <select className={field} value={form.language} onChange={(e) => edit({ language: e.target.value as "ru" | "uz" })}>
-            <option value="ru">{t("Русский")}</option>
-            <option value="uz">{t("Узбекский (латиница)")}</option>
+          <select className={field} value={form.language} onChange={(e) => edit({ language: e.target.value as ReportLanguage })}>
+            {reportLanguages.map((l) => (
+              <option key={l.code} value={l.code}>
+                {t(l.label)}
+              </option>
+            ))}
           </select>
         </label>
         <label className="block">
@@ -749,10 +754,15 @@ function RecipientEditor({
           {jobs.some((j) => isPdfJob(j) && input.reports.includes(j.code)) && (
             <label className="mt-4 block">
               <span className="mb-1 block text-xs font-medium text-ink-2">{t("Язык PDF")}</span>
-              <select className={field} value={input.pdfLanguage ?? ""} onChange={(e) => setInput((i) => ({ ...i, pdfLanguage: (e.target.value || null) as "ru" | "uz" | null }))}>
-                <option value="">{t("Как в общих настройках ({lang})", { lang: data.settings.language === "uz" ? t("узбекский") : t("русский") })}</option>
-                <option value="ru">{t("Русский")}</option>
-                <option value="uz">{t("Узбекский (латиница)")}</option>
+              <select className={field} value={input.pdfLanguage ?? ""} onChange={(e) => setInput((i) => ({ ...i, pdfLanguage: (e.target.value || null) as ReportLanguage | null }))}>
+                <option value="">
+                  {t("Как в общих настройках ({lang})", { lang: t(reportLanguages.find((l) => l.code === data.settings.language)?.label ?? "Русский").toLowerCase() })}
+                </option>
+                {reportLanguages.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {t(l.label)}
+                  </option>
+                ))}
               </select>
             </label>
           )}

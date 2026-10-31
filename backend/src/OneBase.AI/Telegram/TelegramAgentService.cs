@@ -1030,8 +1030,9 @@ public sealed class TelegramAgentService(
     {
         "ru" => "Отвечай на русском.",
         "uz" => "Отвечай на узбекском (латиница).",
+        "uz-Cyrl" => "Отвечай на узбекском (кириллица).",
         "en" => "Answer in English.",
-        _ => "Отвечай на языке вопроса (русский, узбекский или английский).",
+        _ => "Отвечай на языке вопроса: русский, узбекский (латиницей или кириллицей — как в вопросе) или английский.",
     };
 
     private static string? Short(string? value, int max) => value is null ? null : value.Length <= max ? value : value[..max];

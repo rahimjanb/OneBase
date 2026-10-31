@@ -12,11 +12,11 @@ import { getLang, getT } from "@/i18n/server";
 import { isFieldHost, requestHost } from "@/lib/field/host";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-inter" });
+const inter = Inter({ subsets: ["latin", "cyrillic", "cyrillic-ext"], variable: "--font-inter" });
 // Заголовки — Manrope (кириллица есть).
-const manrope = Manrope({ subsets: ["latin", "cyrillic"], variable: "--font-manrope" });
+const manrope = Manrope({ subsets: ["latin", "cyrillic", "cyrillic-ext"], variable: "--font-manrope" });
 // OneBase (главная и весь интерфейс вне Sales Base) — Onest: один шрифт для текста и заголовков, веса 400–800 (переменный).
-const onest = Onest({ subsets: ["latin", "cyrillic"], variable: "--font-onest" });
+const onest = Onest({ subsets: ["latin", "cyrillic", "cyrillic-ext"], variable: "--font-onest" });
 
 /** На домене Sales Base — своё имя приложения (вкладка, установленное приложение на iOS). */
 export async function generateMetadata(): Promise<Metadata> {

@@ -45,7 +45,7 @@ export type TelegramAgentSettings = {
   systemPrompt: string | null;
   restrictions: string | null;
   responseStyle: "short" | "normal" | "detailed";
-  language: "auto" | "ru" | "uz" | "en";
+  language: "auto" | "ru" | "uz" | "uz-Cyrl" | "en";
   maxMessagesPerHour: number;
   maxOutputTokens: number;
   replyDelaySeconds: number;
