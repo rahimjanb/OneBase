@@ -407,8 +407,9 @@ internal sealed class GetProductsTool(SalesDataLoader loader) : SalesTool(loader
     public override string Source => KnowledgeSources.SalesSecondary;
 
     public override string Description =>
-        "Ассортимент за месяц по республике или региону: все категории (кг, выручка, доля, АКБ, дистрибуция, изменение к прошлому месяцу, «молчащие» и пропавшие SKU), " +
-        "лучшие и худшие товары по выручке, пропавшие SKU. Конкретный товар, категорию или бренд по названию — find_products.";
+        "Ассортимент за месяц по республике или региону: все категории (кг, выручка, доля, АКБ, дистрибуция, изменение к прошлому месяцу — кг и " +
+        "выручка прошлого месяца, разница и % посчитаны кодом, «молчащие» и пропавшие SKU), лучшие и худшие товары по выручке, пропавшие SKU. " +
+        "Конкретный товар, категорию или бренд по названию — find_products.";
 
     public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg, RegionArg);
 
@@ -419,6 +420,8 @@ internal sealed class GetProductsTool(SalesDataLoader loader) : SalesTool(loader
         var region = FindRegion(republic, args.Str("region"));
         var view = analytics.CachedAssortment(null, region is null ? null : Guid.Parse(region.Id));
         var selling = view.Products.Where(x => x.Kg > 0).ToList();
+        // Категории прошлого месяца — для разницы кодом (модель иначе считала её по каждой категории инструментом calculate).
+        var previous = await PreviousCategoriesAsync(view.Period.Year, view.Period.Month, region?.Id, ct);
         return Data(new
         {
             Period = PeriodOf(view.Period),
@@ -443,6 +446,11 @@ internal sealed class GetProductsTool(SalesDataLoader loader) : SalesTool(loader
                 DistributionPct = Pct(c.Distribution),
                 ForecastKg = R(c.ForecastKg),
                 VsPrevMonthPct = Pct(c.VsPrevMonth),
+                PrevMonthKg = previous?.GetValueOrDefault(c.Name).Kg is { } pk ? R(pk) : (decimal?)null,
+                PrevMonthRevenueSum = previous?.GetValueOrDefault(c.Name).Revenue is { } pr ? R(pr) : (decimal?)null,
+                KgDelta = previous?.GetValueOrDefault(c.Name).Kg is { } dk ? R(c.FactKg - dk) : (decimal?)null,
+                RevenueDeltaSum = previous?.GetValueOrDefault(c.Name).Revenue is { } dr ? R(c.Revenue - dr) : (decimal?)null,
+                RevenueDeltaPct = previous?.GetValueOrDefault(c.Name).Revenue is { } br && br != 0 ? Math.Round((c.Revenue - br) / Math.Abs(br) * 100, 1) : (decimal?)null,
                 c.SkuSold,
                 c.SkuTotal,
                 SilentSku = c.Silent,
@@ -454,6 +462,19 @@ internal sealed class GetProductsTool(SalesDataLoader loader) : SalesTool(loader
         }, region is null
             ? new DataSource("OneBase → Продажи → Ассортимент", PeriodText(view.Period), $"/sales/assortment?{Query(view.Period.Year, view.Period.Month)}")
             : new DataSource($"OneBase → Продажи → Ассортимент → {region.Name}", PeriodText(view.Period), $"/sales/assortment?{Query(view.Period.Year, view.Period.Month)}&region={region.Id}"));
+    }
+
+    /// <summary>Кг и выручка категорий прошлого месяца (той же области); месяца нет в данных — null.</summary>
+    private async Task<Dictionary<string, (decimal? Kg, decimal? Revenue)>?> PreviousCategoriesAsync(int year, int month, string? regionId, CancellationToken ct)
+    {
+        var prev = new DateOnly(year, month, 1).AddMonths(-1);
+        if (!(await Loader.MonthsAsync(ct)).Any(m => m.Year == prev.Year && m.Month == prev.Month))
+        {
+            return null;
+        }
+
+        var before = (await Loader.LoadAsync(prev.Year, prev.Month, ct)).CachedAssortment(null, regionId is null ? null : Guid.Parse(regionId));
+        return before.Categories.GroupBy(c => c.Name).ToDictionary(g => g.Key, g => ((decimal?)g.First().FactKg, (decimal?)g.First().Revenue));
     }
 
     private static object Product(ProductRow x) => new

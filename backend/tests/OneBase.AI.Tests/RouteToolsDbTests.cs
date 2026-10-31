@@ -231,6 +231,16 @@ public class RouteToolsDbTests(DataManagerDb fixture) : IClassFixture<DataManage
             delta.GetProperty("revenueSum").GetDecimal(), delta.GetProperty("revenueSumPct").GetDecimal(), delta.GetProperty("akb").GetInt32()));
         Assert.Equal(2, cmp.GetProperty("_meta").GetProperty("sources").GetArrayLength());
 
+        // Средний чек (выручка ÷ заказы) и строки ТП обоих периодов с разницей — кодом, а не расчётом модели по одной строке.
+        Assert.Equal(300_000m, cmp.GetProperty("total").GetProperty("avgCheckSum").GetDecimal());
+        Assert.Equal((50_000m, 20m), (delta.GetProperty("avgCheckSum").GetDecimal(), delta.GetProperty("avgCheckSumPct").GetDecimal()));
+        var row = Assert.Single(cmp.GetProperty("compare").GetProperty("agents").EnumerateArray());
+        Assert.Equal((600_000m, 250_000m, 350_000m, 140m), (row.GetProperty("revenueSum").GetDecimal(), row.GetProperty("compareRevenueSum").GetDecimal(),
+            row.GetProperty("revenueDeltaSum").GetDecimal(), row.GetProperty("revenueDeltaPct").GetDecimal()));
+        Assert.Equal((300_000m, 250_000m, 20m), (row.GetProperty("avgCheckSum").GetDecimal(), row.GetProperty("compareAvgCheckSum").GetDecimal(),
+            row.GetProperty("avgCheckDeltaPct").GetDecimal()));
+        Assert.Equal((2, 1), (row.GetProperty("orders").GetInt32(), row.GetProperty("compareOrders").GetInt32()));
+
         // Год назад данных нет: сравнение помечено неполным, а не «ноль продаж».
         var ago = await RunAsync("get_sales_period", new { period = "2026-09", agent, compare = "year_ago" });
         var coverage = ago.GetProperty("compare").GetProperty("coverage");

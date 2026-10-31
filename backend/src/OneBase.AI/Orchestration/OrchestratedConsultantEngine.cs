@@ -159,7 +159,9 @@ public sealed partial class OrchestratedConsultantEngine(
             Model = finalChoice.Model,
             ModelReason = finalChoice.Reason,
             Temperature = consultant?.Temperature,
-            MaxOutputTokens = turn.Channel?.MaxOutputTokens ?? consultant?.MaxOutputTokens,
+            // Лимит канала или консультанта из «Агентов»; не задан — не меньше, чем у сотрудников: подробный ответ по нескольким разрезам
+            // (регионы, ассортимент, визиты) занимает 3,5 тыс. токенов и упирался в общий лимит 4096.
+            MaxOutputTokens = turn.Channel?.MaxOutputTokens ?? consultant?.MaxOutputTokens ?? Math.Max(aiConfig.MaxOutputTokens, AgentRunner.AgentOutputTokens),
             // Данные и история — свои у каждого вопроса: кэшируются только правила, запись хвоста в кэш окупилась бы лишь при перепроверке.
             CacheConversation = false,
             Context = context with { Purpose = "consultant.answer" },

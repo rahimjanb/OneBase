@@ -74,6 +74,33 @@ public sealed class AgentRunner(
 {
     private const int MaxSteps = 8;
 
+    /// <summary>
+    /// Лимит длины ответа сотрудника, если в «Агентах» он не задан. Итог сотрудника — JSON с выводом, находками, показателями, проблемами и
+    /// рекомендациями: на широкий вопрос («сравни октябрь с сентябрём по регионам, ассортименту и визитам») он занимает 3,5 тыс. токенов,
+    /// а у reasoning-моделей в лимит входят и рассуждения. Общий лимит ответа (по умолчанию 4096) обрезал такой JSON — итог не разбирался,
+    /// и сотрудник выходил «частично, без выводов». Платится только написанное, поэтому запас лимита ничего не стоит.
+    /// </summary>
+    internal const int AgentOutputTokens = 8192;
+
+    /// <summary>Потолок лимита для повтора обрезанного итога («то же, короче»).</summary>
+    internal const int MaxAgentOutputTokens = 32_000;
+
+    /// <summary>Итог обрезан лимитом длины ответа: JSON недописан.</summary>
+    internal static bool Truncated(string? stopReason) => stopReason is "max_tokens" or "length";
+
+    private const string ShorterFinal =
+        "Итог не поместился в лимит длины ответа и обрезан. Верни итоговый JSON заново и компактнее: summary — 2–3 предложения, findings — до 10 " +
+        "главных фактов с цифрами, metrics — до 12, problems и recommendations — до 5, без повторов. Инструменты не вызывай — только данные, " +
+        "уже полученные выше.";
+
+    private const string AsJson =
+        "Итог должен быть одним JSON-объектом по схеме из инструкции (agent, status, summary, findings, metrics, problems, recommendations, " +
+        "data_sources) без текста вокруг. Верни его по уже полученным данным; инструменты не вызывай.";
+
+    private const string FinishAfterFailure =
+        "Связь с моделью на прошлом шаге прервалась. Новых инструментов не вызывай: подведи итог по данным, уже полученным выше, и верни итоговый " +
+        "JSON. Что не успел получить — перечисли в summary как «не получено» (а не «данных нет») и верни status partial.";
+
     /// <summary>Сколько символов одного результата инструмента попадает в итог partial после сбоя, и сколько всего.</summary>
     private const int SalvageItemChars = 3_000;
     private const int SalvageTotalChars = 12_000;
@@ -172,6 +199,8 @@ public sealed class AgentRunner(
         var pager = new ToolResultPager();
         var used = 0;
         var revised = false;
+        var shortened = false;
+        var reformatted = false;
         var reported = false;
         string? model = null;
         var settings = await aiSettings.GetSettingsAsync(ct);
@@ -187,30 +216,67 @@ public sealed class AgentRunner(
             Model = choice.Model,
             ModelReason = choice.Reason,
             Temperature = agent.Temperature,
-            MaxOutputTokens = agent.MaxOutputTokens,
+            // Лимит сотрудника из «Агентов»; не задан — не меньше AgentOutputTokens (общий лимит ответа обрезал итоговый JSON).
+            MaxOutputTokens = agent.MaxOutputTokens ?? Math.Max(settings.MaxOutputTokens, AgentOutputTokens),
             JsonOutput = true,
             Context = new AiCallContext(task.UserId, agent.Code, task.ConversationId, "agent"),
         };
 
+        // Шагов — MaxSteps; проверка итога по данным, пришедшая поздно, получает ещё до двух шагов (расчёт и итог), а не теряет числа.
+        var steps = MaxSteps;
         try
         {
-            for (var step = 0; step < MaxSteps; step++)
+            for (var step = 0; step < steps; step++)
             {
                 // На последнем шаге инструменты вызывать нельзя — агент должен подвести итог по тому, что уже получил. Сам список инструментов
                 // не меняется: они есть в истории диалога, а у Claude смена набора инструментов посреди диалога сбрасывает его рассуждения.
-                var last = step == MaxSteps - 1;
+                var last = step == steps - 1;
                 var response = await gateway.CompleteAsync(messages, definitions, last ? options with { AllowToolCalls = false } : options, ct);
                 usage = usage.Add(response.Usage);
                 model = response.Model.ToString();
+
+                if (response.ToolCalls.Count == 0 && Truncated(response.StopReason) && !shortened)
+                {
+                    // Итог обрезан лимитом длины: JSON не разобрать — «частично, без выводов». Одна попытка: тот же итог короче и с запасом по длине
+                    // (вне счёта шагов: инструменты уже не нужны).
+                    shortened = true;
+                    logger?.LogWarning("AI: итог сотрудника {Agent} обрезан лимитом длины ответа ({Limit}) — прошу короче", agent.Code, options.MaxOutputTokens);
+                    turn?.Review(AiReviewCauses.Incomplete, "итог сотрудника обрезан лимитом длины ответа — повтор короче", response.Model.ToString(), agent.Code);
+                    messages.Add(response.Reply);
+                    messages.Add(new LlmMessage(LlmRole.User, ShorterFinal));
+                    response = await gateway.CompleteAsync(messages, definitions, options with
+                    {
+                        AllowToolCalls = false,
+                        MaxOutputTokens = Math.Min((options.MaxOutputTokens ?? AgentOutputTokens) * 2, MaxAgentOutputTokens),
+                    }, ct);
+                    usage = usage.Add(response.Usage);
+                    model = response.Model.ToString();
+                }
+
+                if (response.ToolCalls.Count == 0 && !reformatted && tools.Count > 0 && JsonText.ExtractObject(response.Text) is null
+                    && JsonText.CloseTruncated(response.Text) is null)
+                {
+                    // Итог текстом, а не JSON: разобрать его нельзя — вышел бы «частично, без выводов». Одна просьба вернуть JSON по уже полученным данным.
+                    reformatted = true;
+                    logger?.LogWarning("AI: итог сотрудника {Agent} — не JSON, прошу вернуть JSON", agent.Code);
+                    turn?.Review(AiReviewCauses.Incomplete, "итог сотрудника не в JSON — повтор в нужном виде", response.Model.ToString(), agent.Code);
+                    messages.Add(response.Reply);
+                    messages.Add(new LlmMessage(LlmRole.User, AsJson));
+                    response = await gateway.CompleteAsync(messages, definitions, options with { AllowToolCalls = false }, ct);
+                    usage = usage.Add(response.Usage);
+                    model = response.Model.ToString();
+                }
 
                 if (response.ToolCalls.Count == 0)
                 {
                     var result = Parse(agent, response.Text, toolsUsed, sources);
                     var check = EvidenceCheck.Run(ResultText(result), evidence, task.Task);
-                    if (!check.Grounded && !revised && !last && tools.Count > 0)
+                    if (!check.Grounded && !revised && tools.Count > 0)
                     {
                         // Evidence Check сотрудника: числа, которых нет в результатах инструментов, — пересчитать (calculate), получить или убрать.
+                        // Итог пришёл на последних шагах — ещё шаг на расчёт и шаг на итог (один раз: revised).
                         revised = true;
+                        steps = Math.Max(steps, step + 3);
                         messages.Add(response.Reply);
                         messages.Add(new LlmMessage(LlmRole.User, $"""
                             Проверка итога по данным: эти числа не найдены в результатах инструментов: {string.Join("; ", check.Unsupported)}.
@@ -220,7 +286,7 @@ public sealed class AgentRunner(
                         continue;
                     }
 
-                    var final = check.Grounded ? result : result with { Unverified = check.Unsupported };
+                    var final = Settle(check.Grounded ? result : result with { Unverified = check.Unsupported }, issues);
                     return new AgentRun(Classify(final, collected.Count, issues, attempts), usage, model, evidence, toolCalls, calculations, toolErrors, choice.Reason);
                 }
 
@@ -413,6 +479,33 @@ public sealed class AgentRunner(
             // Модель или служба упали после того, как инструменты уже дали данные: итог partial с этими данными, а не пустая ошибка.
             logger?.LogWarning(ex, "AI: сотрудник {Agent} прерван после {Count} результатов инструментов — итог по полученным данным", agent.Code, collected.Count);
             var reason = ex is AiProviderException or LlmNotConfiguredException ? ex.Message : "внутренняя ошибка OneBase";
+
+            // Сбой модели (перегрузка, таймаут) — ещё одна попытка подвести итог по уже полученным данным, без инструментов и без повтора внутри
+            // шлюза: иначе вместо выводов — сырые куски результатов. Бюджет вопроса исчерпан или модель не настроена (LlmNotConfiguredException) —
+            // новый вызов бессмыслен.
+            if (ex is AiProviderException)
+            {
+                try
+                {
+                    var finish = await gateway.CompleteAsync([.. messages, new LlmMessage(LlmRole.User, FinishAfterFailure)], definitions,
+                        options with { AllowToolCalls = false, RetrySameModel = false }, ct);
+                    usage = usage.Add(finish.Usage);
+                    model = finish.Model.ToString();
+                    if (finish.ToolCalls.Count == 0 && (JsonText.ExtractObject(finish.Text) is not null || JsonText.CloseTruncated(finish.Text) is not null))
+                    {
+                        var result = Parse(agent, finish.Text, toolsUsed, sources);
+                        var check = EvidenceCheck.Run(ResultText(result), evidence, task.Task);
+                        var final = check.Grounded ? result : result with { Unverified = check.Unsupported };
+                        turn?.Review(AiReviewCauses.Incomplete, "сбой модели — итог подведён по уже полученным данным", model, agent.Code);
+                        return new AgentRun(Classify(final, collected.Count, issues, attempts), usage, model, evidence, toolCalls, calculations, toolErrors,
+                            choice.Reason);
+                    }
+                }
+                catch (Exception again) when (!(again is OperationCanceledException && ct.IsCancellationRequested))
+                {
+                    logger?.LogWarning(again, "AI: сотрудник {Agent} — итог после сбоя тоже не получен", agent.Code);
+                }
+            }
             return new AgentRun(Salvage(agent, $"Анализ прерван: {reason}", collected, sources, toolsUsed, issues), usage, model, evidence, toolCalls, calculations,
                 toolErrors, choice.Reason);
         }
@@ -596,8 +689,11 @@ public sealed class AgentRunner(
              "findings":["факт с цифрой, единицей и периодом"],"metrics":[{"name":"...","value":"...","unit":"..."}],
              "problems":["проблема и её масштаб"],"recommendations":["конкретное действие на основе фактов"],
              "data_sources":[{"title":"источник","period":"период"}]}
-            status: "completed" — данные найдены; "partial" — часть данных или часть источников не ответила; "no_data" — поиск инструментами
-            выполнен, а нужного в данных нет (в summary — что и где проверено). Сбой инструмента и «нет доступа» — не no_data: напиши о них в summary.
+            status: "completed" — данные найдены; "partial" — часть нужных данных получить не удалось (инструмент не ответил, нет доступа к части
+            источников); "no_data" — поиск инструментами выполнен, а нужного в данных нет (в summary — что и где проверено). Сбой инструмента и «нет
+            доступа» — не no_data: напиши о них в summary. Идущий месяц или сегодняшний день с данными по дату последней синхронизации — не partial,
+            а completed: дату данных («по 30.10») укажи в summary. Разницы, доли и рост по регионам, ТП и категориям бери из результатов
+            инструментов, где сравнение уже посчитано кодом, а не считай по одной.
             """);
         return sb.ToString();
     }
@@ -605,13 +701,21 @@ public sealed class AgentRunner(
     internal static AgentResult Parse(AgentConfig agent, string? text, IReadOnlyList<string> toolsUsed, IReadOnlyList<DataSource> toolSources)
     {
         var json = JsonText.ExtractObject(text);
+        // JSON обрезан (лимит длины ответа): целые поля — summary, дописанные находки и показатели — сохраняются, итог — partial (truncated).
+        var truncated = false;
+        if (json is null && JsonText.CloseTruncated(text) is { } closed)
+        {
+            json = JsonText.ExtractObject(closed);
+            truncated = json is not null;
+        }
+
         if (json is null)
         {
-            return new AgentResult(agent.Code, agent.Name, "partial", text?.Trim() ?? string.Empty, [], [], [], [], toolSources, toolsUsed);
+            return new AgentResult(agent.Code, agent.Name, "partial", text?.Trim() ?? string.Empty, [], [], [], [], toolSources, toolsUsed, Reason: "unparsed");
         }
 
         var root = json.Value;
-        var status = Str(root, "status")?.Trim().ToLowerInvariant() switch
+        var status = truncated ? "partial" : Str(root, "status")?.Trim().ToLowerInvariant() switch
         {
             "no_data" => "no_data",
             "partial" => "partial",
@@ -645,8 +749,17 @@ public sealed class AgentRunner(
             Strings(root, "problems"),
             Strings(root, "recommendations"),
             sources,
-            toolsUsed);
+            toolsUsed,
+            Reason: truncated ? "truncated" : null);
     }
+
+    /// <summary>
+    /// Статус итога — по тому, что на самом деле произошло, а не по осторожности модели. partial без сбоев инструментов, неподтверждённых чисел,
+    /// обрезки, прерывания и текста вне JSON — completed: идущий месяц или день с данными по дату последней синхронизации Linko — обычное
+    /// состояние, а не «ответ неполный» (с ним каждый ответ о текущем месяце начинался с «Ответ неполный»). Дата данных остаётся в summary.
+    /// </summary>
+    internal static AgentResult Settle(AgentResult r, IReadOnlyList<ToolIssue> issues) =>
+        r.Status == "partial" && r.Reason is null && issues.Count == 0 && r.Unverified is not { Count: > 0 } ? r with { Status = "completed" } : r;
 
     private static string? Str(JsonElement e, string name) =>
         e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;

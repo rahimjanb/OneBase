@@ -215,12 +215,16 @@ public sealed class ScriptedConsultantModel : IAiGateway
 
     public List<IReadOnlyList<LlmMessage>> Calls { get; } = [];
 
+    /// <summary>Параметры каждого вызова (лимит длины ответа, разрешены ли инструменты).</summary>
+    public List<AiCallOptions> Options { get; } = [];
+
     public ScriptedConsultantModel Reset()
     {
         lock (_gate)
         {
             _steps.Clear();
             Calls.Clear();
+            Options.Clear();
         }
 
         return this;
@@ -231,6 +235,10 @@ public sealed class ScriptedConsultantModel : IAiGateway
     public ScriptedConsultantModel Then(IReadOnlyList<LlmToolCall> calls) => Add(() => Result(null, calls));
 
     public ScriptedConsultantModel Fail(Exception error) => Add(() => throw error);
+
+    /// <summary>Ответ, обрезанный лимитом длины (stop_reason max_tokens): текст недописан.</summary>
+    public ScriptedConsultantModel ThenTruncated(string text) =>
+        Add(() => new AiCallResult(text, [], new AiTokenUsage(100, 50), new AiModelRef("fake", "scripted"), false, 1, "max_tokens"));
 
     /// <summary>Шаг по сообщениям вызова (например, следующая страница по прошлому результату): вызовы инструментов, а null — текст final.</summary>
     public ScriptedConsultantModel Then(Func<IReadOnlyList<LlmMessage>, IReadOnlyList<LlmToolCall>?> next, string final) =>
@@ -261,6 +269,7 @@ public sealed class ScriptedConsultantModel : IAiGateway
         lock (_gate)
         {
             Calls.Add(copy);
+            Options.Add(options);
             if (_steps.Count == 0)
             {
                 throw new LlmNotConfiguredException("AI не настроен (тест): сценарий модели закончился.");

@@ -25,9 +25,10 @@ internal sealed class GetSalesPeriodTool(SalesDataLoader loader, IAppDbContext d
         "периодов (к прошлому, к году назад) — get_sales_period: один вызов вместо вызова по каждому месяцу.";
 
     public override string Description =>
-        "Вторичные продажи за период до 366 дней — по республике, направлению РМ, региону или ТП: итог (кг, выручка в сумах, заказы, возвраты, " +
+        "Вторичные продажи за период до 366 дней — по республике, направлению РМ, региону или ТП: итог (кг, выручка в сумах, заказы, средний чек, возвраты, " +
         "АКБ — точки с чистой покупкой за весь период, не сумма АКБ месяцев), по месяцам, неделям или дням (group), регионы, ТП (agents=true) и " +
-        "сравнение с другим периодом (compare: previous — предыдущий той же длины, year_ago — тот же год назад, или период) с разницей и % — " +
+        "сравнение с другим периодом (compare: previous — предыдущий той же длины, year_ago — тот же год назад, или период) с разницей и % — у итога, " +
+        "каждого региона и ТП (Compare.Regions, Compare.Agents: выручка, кг, заказы, АКБ, средний чек — оба периода, разница и %) — " +
         "посчитаны кодом. period: «2026-09» месяц, «2026-Q3» квартал, «2026-H1» полугодие, «2026» год; или from и to (ГГГГ-ММ-ДД, включительно, " +
         "по Ташкенту). Coverage — полнота: месяцы без данных и по какой день данные. Правила — как в «Продажах»: заказы − возвраты по дате " +
         "приёмки, без «Завода».";
@@ -72,7 +73,7 @@ internal sealed class GetSalesPeriodTool(SalesDataLoader loader, IAppDbContext d
         Task<ISalesMonth?> Month(int year, int month, CancellationToken token) => MonthAsync(available, year, month, token);
         var main = await SalesPeriodEngine.AggregateAsync(range, scope, Month, regions: true, agents, ct);
         var compareRange = CompareOf(args.Str("compare"), range);
-        var other = compareRange is null ? null : await SalesPeriodEngine.AggregateAsync(compareRange, scope, Month, regions: false, agents: false, ct);
+        var other = compareRange is null ? null : await SalesPeriodEngine.AggregateAsync(compareRange, scope, Month, regions: true, agents, ct);
 
         var group = args.Str("group")?.ToLowerInvariant();
         var monthsShown = group == "month" || (group is null && main.Months.Count > 1);
@@ -103,10 +104,14 @@ internal sealed class GetSalesPeriodTool(SalesDataLoader loader, IAppDbContext d
                     Coverage = Coverage(other),
                     Total = Figures(other.Total, other.Akb),
                     Delta = Delta(main, other),
+                    // Регионы и ТП обоих периодов с разницей и % — кодом: модели не нужно считать их по одному инструментом calculate.
+                    Regions = main.Regions.Count == 0 ? null : args.Top(CompareRows(main.Regions, other.Regions), 30, "compareRegions"),
+                    Agents = main.Agents.Count == 0 ? null : args.Top(CompareRows(main.Agents, other.Agents), 40, "compareAgents"),
                 },
             Note = "Границы периода — включительно, даты — по Ташкенту. Факт — заказы − возвраты по дате приёмки, без «Завода» (как в «Продажах»). " +
                    "АКБ периода и недели — точки с чистой покупкой за весь период или неделю (не сумма АКБ месяцев). Delta — период минус сравнение, " +
-                   "% — к сравнению; посчитаны кодом. Coverage.Complete = false — часть периода без данных: итог только за дни с данными.",
+                   "% — к сравнению; посчитаны кодом, и у регионов и ТП (Compare.Regions, Compare.Agents — не считай их сам). AvgCheckSum — средний чек: выручка ÷ заказы, сумы (посчитан кодом). Coverage.Complete = false — " +
+                   "часть периода без данных: итог только за дни с данными.",
         }, [.. sources]);
     }
 
@@ -168,7 +173,14 @@ internal sealed class GetSalesPeriodTool(SalesDataLoader loader, IAppDbContext d
         Missing = p.Missing.Count == 0 ? null : p.Missing.Select(m => m.Label).ToList(),
     };
 
-    private static object Figures(SalesFigures f, int akb) => new { FactKg = R(f.Kg, 1), RevenueSum = R(f.Revenue), f.Orders, Akb = akb, ReturnsKg = R(f.ReturnsKg, 1) };
+    private static object Figures(SalesFigures f, int akb) =>
+        new { FactKg = R(f.Kg, 1), RevenueSum = R(f.Revenue), f.Orders, AvgCheckSum = AvgCheck(f), Akb = akb, ReturnsKg = R(f.ReturnsKg, 1) };
+
+    /// <summary>
+    /// Средний чек — выручка ÷ заказы, сумы. Посчитан кодом: в ответе консультанта он сверяется с данными, а посчитанный моделью «в уме»
+    /// (и пересчитанный в тыс. сум) не подтверждался и уходил в «неподтверждённое».
+    /// </summary>
+    internal static decimal? AvgCheck(SalesFigures f) => f.Orders > 0 ? Math.Round(f.Revenue / f.Orders) : null;
 
     private static IReadOnlyList<object> Parts(IReadOnlyList<PeriodPart> parts) =>
         parts.Select((p, i) => (object)new
@@ -179,6 +191,7 @@ internal sealed class GetSalesPeriodTool(SalesDataLoader loader, IAppDbContext d
             FactKg = R(p.Figures.Kg, 1),
             RevenueSum = R(p.Figures.Revenue),
             p.Figures.Orders,
+            AvgCheckSum = AvgCheck(p.Figures),
             p.Akb,
             Partial = p.Partial ? true : (bool?)null,
             Missing = p.Missing ? true : (bool?)null,
@@ -187,7 +200,44 @@ internal sealed class GetSalesPeriodTool(SalesDataLoader loader, IAppDbContext d
             VsPreviousRevenuePct = i > 0 && !p.Missing && !parts[i - 1].Missing ? Change(p.Figures.Revenue, parts[i - 1].Figures.Revenue) : null,
         }).ToList();
 
-    private static object Row(PeriodRow r) => new { r.Name, r.Region, FactKg = R(r.Figures.Kg, 1), RevenueSum = R(r.Figures.Revenue), r.Figures.Orders, r.Akb };
+    private static object Row(PeriodRow r) =>
+        new { r.Name, r.Region, FactKg = R(r.Figures.Kg, 1), RevenueSum = R(r.Figures.Revenue), r.Figures.Orders, AvgCheckSum = AvgCheck(r.Figures), r.Akb };
+
+    /// <summary>
+    /// Строки регионов (ТП) обоих периодов: значения периода, сравнения, разница и % к сравнению — по каждой строке периода и тем, кто был
+    /// только в сравнении (у них период — нули). Порядок — по разнице выручки, от роста к падению.
+    /// </summary>
+    internal static IReadOnlyList<object> CompareRows(IReadOnlyList<PeriodRow> rows, IReadOnlyList<PeriodRow> before)
+    {
+        var old = before.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First());
+        var empty = new SalesFigures(0, 0, 0, 0);
+        return rows.Select(r => (Row: r, Before: old.GetValueOrDefault(r.Id)))
+            .Concat(before.Where(b => !rows.Any(r => r.Id == b.Id)).Select(b => (Row: b with { Figures = empty, Akb = 0 }, Before: (PeriodRow?)b)))
+            .OrderByDescending(x => x.Row.Figures.Revenue - (x.Before?.Figures.Revenue ?? 0))
+            .Select(x => (object)new
+            {
+                x.Row.Name,
+                x.Row.Region,
+                RevenueSum = R(x.Row.Figures.Revenue),
+                CompareRevenueSum = R(x.Before?.Figures.Revenue ?? 0),
+                RevenueDeltaSum = R(x.Row.Figures.Revenue - (x.Before?.Figures.Revenue ?? 0)),
+                RevenueDeltaPct = Change(x.Row.Figures.Revenue, x.Before?.Figures.Revenue ?? 0),
+                FactKg = R(x.Row.Figures.Kg, 1),
+                CompareFactKg = R(x.Before?.Figures.Kg ?? 0, 1),
+                FactKgDelta = R(x.Row.Figures.Kg - (x.Before?.Figures.Kg ?? 0), 1),
+                FactKgDeltaPct = Change(x.Row.Figures.Kg, x.Before?.Figures.Kg ?? 0),
+                x.Row.Figures.Orders,
+                CompareOrders = x.Before?.Figures.Orders ?? 0,
+                OrdersDeltaPct = Change(x.Row.Figures.Orders, x.Before?.Figures.Orders ?? 0),
+                x.Row.Akb,
+                CompareAkb = x.Before?.Akb ?? 0,
+                AkbDeltaPct = Change(x.Row.Akb, x.Before?.Akb ?? 0),
+                AvgCheckSum = AvgCheck(x.Row.Figures),
+                CompareAvgCheckSum = x.Before is null ? null : AvgCheck(x.Before.Figures),
+                AvgCheckDeltaPct = AvgCheck(x.Row.Figures) is { } a && x.Before is not null && AvgCheck(x.Before.Figures) is { } b ? Change(a, b) : null,
+            })
+            .ToList();
+    }
 
     /// <summary>Разница периода и сравнения: абсолютная и в % к сравнению.</summary>
     internal static object Delta(PeriodSales main, PeriodSales other) => new
@@ -198,6 +248,8 @@ internal sealed class GetSalesPeriodTool(SalesDataLoader loader, IAppDbContext d
         RevenueSumPct = Change(main.Total.Revenue, other.Total.Revenue),
         Orders = main.Total.Orders - other.Total.Orders,
         OrdersPct = Change(main.Total.Orders, other.Total.Orders),
+        AvgCheckSum = AvgCheck(main.Total) is { } a && AvgCheck(other.Total) is { } b ? a - b : (decimal?)null,
+        AvgCheckSumPct = AvgCheck(main.Total) is { } a2 && AvgCheck(other.Total) is { } b2 ? Change(a2, b2) : null,
         Akb = main.Akb - other.Akb,
         AkbPct = Change(main.Akb, other.Akb),
     };

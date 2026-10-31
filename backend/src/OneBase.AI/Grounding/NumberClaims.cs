@@ -7,8 +7,10 @@ namespace OneBase.AI.Grounding;
 /// <summary>
 /// Число в тексте ответа. Value — в единицах данных (с учётом «тыс», «млн», «млрд», «т»), Tolerance — половина последнего показанного разряда
 /// (как округлил автор: «1,2 млрд» покрывает 1 150–1 250 млн), Percent — со знаком «%», Marked — у числа есть масштаб, «%» или единица.
+/// ContextScale — масштаб из подписи, а не у самого числа: строка таблицы «| Выручка, млн сум | 13 457,8 |», заголовок столбца «Выручка,
+/// тыс. сум» или подпись «Выручка (млн сум): 13 457,8». У числа со своим масштабом или «%» — нет.
 /// </summary>
-public sealed record NumberClaim(string Text, decimal Value, decimal Tolerance, bool Percent, int Index, int Length, bool Marked);
+public sealed record NumberClaim(string Text, decimal Value, decimal Tolerance, bool Percent, int Index, int Length, bool Marked, decimal? ContextScale = null);
 
 /// <summary>
 /// Числа в тексте для проверки по данным. Не считаются утверждениями: даты, время, годы, номера пунктов списка, «15-е», ссылки, малые целые
@@ -39,6 +41,14 @@ public static partial class NumberClaims
 
     [GeneratedRegex(@"рекомендац|прогноз|tavsiya|prognoz|совет|что делать|план действий", RegexOptions.IgnoreCase)]
     private static partial Regex OpinionHeading();
+
+    /// <summary>Масштаб в подписи: «млн сум», «тыс. сум», «млрд» (без «т» — в подписи это может быть и тонна, и сокращение).</summary>
+    [GeneratedRegex(@"(?<![\p{L}])(?<scale>трлн|млрд|миллиард\p{L}*|млн|миллион\p{L}*|тыс(?:\.|\p{L}*)|mlrd|mln|ming)(?![\p{L}])", RegexOptions.IgnoreCase)]
+    private static partial Regex ScaleWord();
+
+    /// <summary>Подпись перед числом в строке: «Выручка, млн сум: », «Выручка (тыс. сум) — » — масштаб, затем только «сум», скобка и знак.</summary>
+    [GeneratedRegex(@"(?<scale>трлн|млрд|миллиард\p{L}*|млн|миллион\p{L}*|тыс(?:\.|\p{L}*)|mlrd|mln|ming)[\s ]*(?:сум\p{L}*|so['ʻ’‘]?m)?[\s ]*\)?[\s ]*[:—–-][\s ]*$", RegexOptions.IgnoreCase)]
+    private static partial Regex LabelScale();
 
     /// <summary>Все числа-утверждения текста (вне разделов рекомендаций и прогноза — см. <see cref="Checkable"/>).</summary>
     public static IReadOnlyList<NumberClaim> Find(string? text, bool keepSmall = false)
@@ -74,7 +84,8 @@ public static partial class NumberClaims
             }
 
             var tolerance = 0.5m * Pow10(-decimals) * scale;
-            list.Add(new NumberClaim(text.Substring(m.Index, m.Length).Trim(), value * scale, tolerance, percent, m.Index, m.Length, marked));
+            var context = m.Groups["scale"].Success || percent ? null : ContextScale(text, m.Index);
+            list.Add(new NumberClaim(text.Substring(m.Index, m.Length).Trim(), value * scale, tolerance, percent, m.Index, m.Length, marked, context));
         }
 
         return list;
@@ -184,6 +195,93 @@ public static partial class NumberClaims
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Масштаб из подписи числа: строка таблицы — подпись строки (первая ячейка) или заголовок столбца; иначе — подпись перед числом в той же
+    /// строке («Выручка, млн сум: 13 457,8»). Нет подписи с масштабом — null.
+    /// </summary>
+    internal static decimal? ContextScale(string text, int index)
+    {
+        var lineStart = text.LastIndexOf('\n', Math.Max(0, index - 1)) + 1;
+        if (index == 0)
+        {
+            lineStart = 0;
+        }
+
+        var lineEnd = text.IndexOf('\n', index);
+        var line = text[lineStart..(lineEnd < 0 ? text.Length : lineEnd)];
+        var at = index - lineStart;
+        if (line.TrimStart().StartsWith('|'))
+        {
+            var cells = Cells(line);
+            var column = cells.FindIndex(c => at >= c.Start && at < c.End);
+            if (column > 0 && WordScale(cells[0].Text) is { } rowScale)
+            {
+                return rowScale;
+            }
+
+            if (column >= 0 && HeaderOf(text, lineStart) is { } header)
+            {
+                var headerCells = Cells(header);
+                if (column < headerCells.Count && WordScale(headerCells[column].Text) is { } columnScale)
+                {
+                    return columnScale;
+                }
+            }
+
+            return null;
+        }
+
+        var label = LabelScale().Match(line[..at]);
+        return label.Success ? Scale(label.Groups["scale"].Value) : null;
+    }
+
+    private static decimal? WordScale(string cell) => ScaleWord().Match(cell) is { Success: true } m ? Scale(m.Groups["scale"].Value) : null;
+
+    /// <summary>Ячейки строки таблицы Markdown с позициями внутри строки (без внешних «|»).</summary>
+    private static List<(string Text, int Start, int End)> Cells(string line)
+    {
+        var cells = new List<(string, int, int)>();
+        var bars = new List<int>();
+        for (var i = 0; i < line.Length; i++)
+        {
+            if (line[i] == '|')
+            {
+                bars.Add(i);
+            }
+        }
+
+        for (var k = 0; k + 1 < bars.Count; k++)
+        {
+            cells.Add((line[(bars[k] + 1)..bars[k + 1]], bars[k] + 1, bars[k + 1]));
+        }
+
+        return cells;
+    }
+
+    /// <summary>Заголовок таблицы: первая строка непрерывного блока строк с «|» над этой строкой (у заголовка под ним — строка «|---|»).</summary>
+    private static string? HeaderOf(string text, int lineStart)
+    {
+        var lines = text[..lineStart].Split('\n');
+        string? header = null;
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            var l = lines[i].Trim();
+            if (l.Length == 0 && i == lines.Length - 1)
+            {
+                continue;
+            }
+
+            if (!l.StartsWith('|'))
+            {
+                break;
+            }
+
+            header = lines[i];
+        }
+
+        return header is not null && !header.Replace("|", "").Replace("-", "").Replace(":", "").Trim().Equals(string.Empty) ? header : null;
     }
 
     private static decimal Scale(string word)

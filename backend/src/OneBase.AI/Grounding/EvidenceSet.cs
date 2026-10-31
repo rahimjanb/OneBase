@@ -105,7 +105,20 @@ public sealed class EvidenceSet
         var value = Math.Abs(claim.Value);
         // Округление автора плюс тысячная доля — на копейки и хвосты деления.
         var tolerance = claim.Tolerance + value * 0.001m;
-        return Within(claim.Percent ? _percents : _values, value - tolerance, value + tolerance);
+        if (Within(claim.Percent ? _percents : _values, value - tolerance, value + tolerance))
+        {
+            return true;
+        }
+
+        // Масштаб в подписи строки или столбца («| Выручка, млн сум | 13 457,8 |»): то же число в единицах данных, округление — в масштабе подписи.
+        if (claim.ContextScale is { } scale && !claim.Percent)
+        {
+            var scaled = value * scale;
+            var scaledTolerance = claim.Tolerance * scale + scaled * 0.001m;
+            return Within(_values, scaled - scaledTolerance, scaled + scaledTolerance);
+        }
+
+        return false;
     }
 
     private static bool Within(List<decimal> sorted, decimal from, decimal to)
