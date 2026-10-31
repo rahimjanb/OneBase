@@ -55,18 +55,9 @@ public sealed class TelegramReportSender(
     /// Одна попытка: отчёт → картинки → Telegram. Строка журнала обновляется в любом исходе. retry — временная ошибка ставит повтор (по
     /// расписанию и вручную); без него (тест) — сразу ошибка.
     /// </summary>
-    public async Task<ReportSendResult> AttemptAsync(TelegramReportDelivery delivery, TelegramChat chat, Func<CancellationToken, Task<ReportDocument>> build, bool retry,
-        CancellationToken ct, bool test = false)
-    {
-        var watch = Stopwatch.StartNew();
-        delivery.Status = Sending;
-        delivery.Attempts++;
-        delivery.LastAttemptAt = clock.GetUtcNow();
-        delivery.ChatId = chat.Id;
-        delivery.PeerId = chat.PeerId;
-        await db.SaveChangesAsync(ct);
-
-        try
+    public Task<ReportSendResult> AttemptAsync(TelegramReportDelivery delivery, TelegramChat chat, Func<CancellationToken, Task<ReportDocument>> build, bool retry,
+        CancellationToken ct, bool test = false) =>
+        GuardAsync(delivery, chat, retry, ct, async watch =>
         {
             var report = await build(ct) with { Test = test };
             delivery.ScopeTitle = Trim(report.Scope, 255);
@@ -103,20 +94,71 @@ public sealed class TelegramReportSender(
             delivery.MessageIds = Trim(string.Join(',', sent.MessageIds), 500);
             delivery.DurationMs = (int)watch.ElapsedMilliseconds;
             await db.SaveChangesAsync(CancellationToken.None);
-
-            // Реальный отчёт — материал чата: Telegram-агент ответит на «что в отчёте?» по тому, что ушло.
-            try
-            {
-                await materials.RecordTextAsync(delivery.AccountId, chat.PeerId, "report", $"{report.Title} · {report.Scope} · {report.Period}", report.Plain(), null,
-                    delivery.CreatedById, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Автоотчёт {Delivery}: материал для чата не записан", delivery.Id);
-            }
-
+            await RecordAsync(delivery, chat, $"{report.Title} · {report.Scope} · {report.Period}", report.Plain());
             logger.LogInformation("Автоотчёт {Job} за {Period} отправлен: {Recipient}, страниц {Pages}", delivery.Report, delivery.Period, delivery.RecipientTitle, pages.Count);
             return Result(delivery);
+        });
+
+    /// <summary>
+    /// Одна попытка отправки файлов (еженедельный PDF): build готовит подпись и документы или причину пропуска; дальше — тот же путь, что у
+    /// картинок: те же повторы, FLOOD_WAIT и «неизвестно, дошёл ли». onSent — отметить этап и лог до сохранения итога.
+    /// </summary>
+    public Task<ReportSendResult> AttemptFilesAsync(TelegramReportDelivery delivery, TelegramChat chat, bool retry, CancellationToken ct,
+        Func<CancellationToken, Task<ReportFilesOutgoing>> build, Action<TelegramReportDelivery>? onSent = null) =>
+        GuardAsync(delivery, chat, retry, ct, async watch =>
+        {
+            var outgoing = await build(ct);
+            delivery.ScopeTitle = Trim(outgoing.ScopeTitle, 255);
+            delivery.Summary = Trim(outgoing.Summary, 500);
+            delivery.DataAsOf = outgoing.DataAsOf?.ToUniversalTime();
+            if (outgoing.SkipReason is { } reason)
+            {
+                return await SkipAsync(delivery, reason, watch);
+            }
+
+            var sent = await gateway.SendAsync(delivery.AccountId, new TelegramPeerRef(chat.PeerId, chat.Type, chat.IsChannelPeer, chat.AccessHash),
+                new TelegramOutgoing(Trim(outgoing.Caption, TelegramRules.MaxCaptionLength), false, outgoing.Files), ct);
+            delivery.Status = Sent;
+            delivery.SentAt = clock.GetUtcNow();
+            delivery.Error = null;
+            delivery.NextAttemptAt = null;
+            delivery.MessageIds = Trim(string.Join(',', sent.MessageIds), 500);
+            delivery.DurationMs = (int)watch.ElapsedMilliseconds;
+            onSent?.Invoke(delivery);
+            await db.SaveChangesAsync(CancellationToken.None);
+            await RecordAsync(delivery, chat, outgoing.MaterialTitle, outgoing.Material);
+            logger.LogInformation("Автоотчёт {Job} за {Period} отправлен: {Recipient}, файлов {Files}", delivery.Report, delivery.Period, delivery.RecipientTitle, outgoing.Files.Count);
+            return Result(delivery);
+        });
+
+    /// <summary>Реальный отчёт — материал чата: Telegram-агент ответит на «что в отчёте?» по тому, что ушло.</summary>
+    private async Task RecordAsync(TelegramReportDelivery delivery, TelegramChat chat, string title, string text)
+    {
+        try
+        {
+            await materials.RecordTextAsync(delivery.AccountId, chat.PeerId, "report", title, text, null, delivery.CreatedById, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Автоотчёт {Delivery}: материал для чата не записан", delivery.Id);
+        }
+    }
+
+    /// <summary>Попытка с учётом ошибок Telegram: строка — «отправляется», дальше body; исход любой ошибки записывается в строку.</summary>
+    private async Task<ReportSendResult> GuardAsync(TelegramReportDelivery delivery, TelegramChat chat, bool retry, CancellationToken ct,
+        Func<Stopwatch, Task<ReportSendResult>> body)
+    {
+        var watch = Stopwatch.StartNew();
+        delivery.Status = Sending;
+        delivery.Attempts++;
+        delivery.LastAttemptAt = clock.GetUtcNow();
+        delivery.ChatId = chat.Id;
+        delivery.PeerId = chat.PeerId;
+        await db.SaveChangesAsync(ct);
+
+        try
+        {
+            return await body(watch);
         }
         catch (TelegramException ex) when (ex.Kind == TelegramErrorKind.Flood)
         {
@@ -189,4 +231,14 @@ public sealed class TelegramReportSender(
         new(d.Id, d.Status, d.RecipientTitle, d.ScopeTitle, d.Error, d.Pages, d.SentAt, d.NextAttemptAt);
 
     public static string Trim(string text, int max) => text.Length > max ? text[..(max - 1)] + "…" : text;
+}
+
+/// <summary>
+/// Что отправить файлами: подпись и документы — или причина пропуска (SkipReason). Material — текст для материала чата (Telegram-агент отвечает
+/// по тому, что ушло).
+/// </summary>
+public sealed record ReportFilesOutgoing(string? SkipReason, string ScopeTitle, string Summary, string Caption, IReadOnlyList<TelegramFile> Files, DateTimeOffset? DataAsOf,
+    string Material, string MaterialTitle)
+{
+    public static ReportFilesOutgoing Skip(string reason, string scope, string summary) => new(reason, scope, summary, "", [], null, "", "");
 }

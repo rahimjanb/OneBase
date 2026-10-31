@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarClock, CalendarDays, Eye, History, Link2, Loader2, Pencil, Plus, Search, Send, Trash2, Users } from "lucide-react";
+import { CalendarClock, CalendarDays, Eye, FileText, History, LayoutDashboard, Link2, Loader2, Pencil, Plus, Search, Send, Trash2, Users } from "lucide-react";
 import { button, danger, field, primary } from "@/components/ai/form";
 import { Alert, Note, Section } from "@/components/sales/bits";
 import { useT } from "@/i18n/client";
 import { chatTypeLabel } from "@/lib/telegram";
 import {
   deliveryStatus,
+  isPdfJob,
   reportRoles,
   reportTypes,
   reportsApi,
@@ -22,14 +23,18 @@ import {
   type ReportRole,
 } from "@/lib/telegramReports";
 import { TelegramDailyPlans } from "./TelegramDailyPlans";
+import { ReportsOverviewPanel, type ReportsTab } from "./TelegramReportsOverview";
 import { ReportHistoryPanel, ReportPreviewPanel, RoleChip, ScopePicker, defaultScope, when, type Scope } from "./TelegramReportsPreview";
+import { WeeklyPdfPanel } from "./TelegramWeeklyPdf";
 
-type Tab = "schedule" | "recipients" | "preview" | "dailyplan" | "history";
+type Tab = ReportsTab;
 
 const tabs: { key: Tab; label: string; icon: typeof Users }[] = [
+  { key: "overview", label: "Обзор", icon: LayoutDashboard },
   { key: "schedule", label: "Расписание", icon: CalendarClock },
   { key: "recipients", label: "Получатели", icon: Users },
   { key: "preview", label: "Предпросмотр и тест", icon: Eye },
+  { key: "pdf", label: "Отчёты PDF", icon: FileText },
   { key: "dailyplan", label: "Дневной план", icon: CalendarDays },
   { key: "history", label: "История", icon: History },
 ];
@@ -39,10 +44,10 @@ const tabs: { key: Tab; label: string; icon: typeof Users }[] = [
  * отдельно, сохранение ничего не отправляет); получатели «роль → область → чаты → отчёты»; предпросмотр и тест; история отправок и запусков.
  * Права и области проверяет сервер.
  */
-export function TelegramReports({ initial }: { initial: ReportOverview }) {
+export function TelegramReports({ initial, initialTab }: { initial: ReportOverview; initialTab?: string }) {
   const t = useT();
   const [data, setData] = useState(initial);
-  const [tab, setTab] = useState<Tab>("schedule");
+  const [tab, setTab] = useState<Tab>(() => tabs.find((x) => x.key === initialTab)?.key ?? "overview");
   const reload = async () => setData(await reportsApi.overview());
   const problems = data.recipients.filter((r) => r.enabled && r.problem).length;
 
@@ -81,9 +86,11 @@ export function TelegramReports({ initial }: { initial: ReportOverview }) {
           ))}
         </div>
         <div className="p-4 sm:p-5">
+          {tab === "overview" && <ReportsOverviewPanel data={data} onTab={setTab} />}
           {tab === "schedule" && <Schedule data={data} onSaved={(job) => setData((d) => ({ ...d, jobs: d.jobs.map((j) => (j.code === job.code ? job : j)) }))} />}
           {tab === "recipients" && <Recipients data={data} onChanged={reload} />}
           {tab === "preview" && <ReportPreviewPanel data={data} />}
+          {tab === "pdf" && <WeeklyPdfPanel data={data} onSaved={(weeklyPdf) => setData((d) => ({ ...d, weeklyPdf }))} />}
           {tab === "dailyplan" && <TelegramDailyPlans canUseSales={data.canUseSales} />}
           {tab === "history" && <ReportHistoryPanel data={data} onChanged={reload} />}
         </div>
@@ -341,6 +348,7 @@ function JobRow({ job, onSaved }: { job: ReportJob; onSaved: (job: ReportJob) =>
           </span>
         )}
         {form.enabled && !job.enabled && <span className="text-warn">{t("После сохранения отчёт уйдёт в ближайшее время по расписанию, а не сразу.")}</span>}
+        {isPdfJob(job) && <span className="text-ink-3">{t("PDF за последнюю полную неделю пн–сб; предпросмотр, формулы и тест — на вкладке «Отчёты PDF».")}</span>}
       </div>
       {error && <p className="mt-2 rounded-lg bg-bad-soft px-3 py-2 text-xs text-bad">{error}</p>}
     </div>
@@ -376,11 +384,12 @@ const inputOf = (r: ReportRecipient): ReportRecipientInput => ({
   chatIds: r.chats.map((c) => c.id),
   reports: r.reports,
   enabled: r.enabled,
+  pdfLanguage: r.pdfLanguage,
 });
 
-/** Отчёты роли по умолчанию: всё, что роли положено, кроме недели в понедельник (её включают отдельно). */
+/** Отчёты роли по умолчанию: всё, что роли положено, кроме недели в понедельник и еженедельного PDF (их включают отдельно). */
 const defaultReports = (data: ReportOverview, role: ReportRole) =>
-  data.jobs.filter((j) => j.roles.includes(role) && j.code !== "weekly.monday" && (role === "tp" || j.code !== "no-orders.reminder")).map((j) => j.code);
+  data.jobs.filter((j) => j.roles.includes(role) && j.code !== "weekly.monday" && !isPdfJob(j) && (role === "tp" || j.code !== "no-orders.reminder")).map((j) => j.code);
 
 const emptyInput = (data: ReportOverview, role: ReportRole = "sv"): ReportRecipientInput => {
   const scope = defaultScope(data, role);
@@ -607,7 +616,7 @@ function Recipients({ data, onChanged }: { data: ReportOverview; onChanged: () =
 function SendNow({ data, recipient, disabled, busy, onSend }: { data: ReportOverview; recipient: ReportRecipient; disabled: boolean; busy: boolean; onSend: (job: string) => void }) {
   const t = useT();
   const jobs = data.jobs.filter((j) => j.roles.includes(recipient.role));
-  const [job, setJob] = useState(recipient.reports[0] ?? jobs[0]?.code ?? "");
+  const [job, setJob] = useState(recipient.reports.find((code) => jobs.some((j) => j.code === code)) ?? jobs[0]?.code ?? "");
   return (
     <span className="inline-flex">
       <select className={`${field.replace("w-full", "w-auto")} h-9 max-w-[240px] rounded-r-none border-r-0 text-xs`} value={job} onChange={(e) => setJob(e.target.value)} aria-label={t("Какой отчёт")}>
@@ -737,6 +746,16 @@ function RecipientEditor({
               );
             })}
           </div>
+          {jobs.some((j) => isPdfJob(j) && input.reports.includes(j.code)) && (
+            <label className="mt-4 block">
+              <span className="mb-1 block text-xs font-medium text-ink-2">{t("Язык PDF")}</span>
+              <select className={field} value={input.pdfLanguage ?? ""} onChange={(e) => setInput((i) => ({ ...i, pdfLanguage: (e.target.value || null) as "ru" | "uz" | null }))}>
+                <option value="">{t("Как в общих настройках ({lang})", { lang: data.settings.language === "uz" ? t("узбекский") : t("русский") })}</option>
+                <option value="ru">{t("Русский")}</option>
+                <option value="uz">{t("Узбекский (латиница)")}</option>
+              </select>
+            </label>
+          )}
           <label className="mt-4 flex items-center gap-2 text-sm text-ink">
             <Switch checked={input.enabled} onChange={(v) => setInput((i) => ({ ...i, enabled: v }))} label={t("Включён")} />
             {t("Включён")}

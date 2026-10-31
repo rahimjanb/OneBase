@@ -193,6 +193,9 @@ public class TelegramReportSubscription : Entity
     /// <summary>Коды запусков через запятую: «daily.morning,daily.evening,weekly.saturday».</summary>
     public string Reports { get; set; } = "";
 
+    /// <summary>Язык еженедельного PDF (ru или uz); пусто — язык отчётов из общих настроек.</summary>
+    public string? PdfLanguage { get; set; }
+
     /// <summary>Прежние флаги дневного отчёта — перенесены в Reports.</summary>
     public bool Morning { get; set; }
     public bool Midday { get; set; }
@@ -204,6 +207,38 @@ public class TelegramReportSubscription : Entity
     public Guid? UpdatedById { get; set; }
 
     public List<TelegramReportSubscriptionChat> Chats { get; set; } = [];
+}
+
+/// <summary>
+/// Настройки еженедельного PDF (одна строка): отправлять ли только при полных данных (заказы и визиты Linko после конца недели, KPI Linko
+/// загружены), получает ли СВ карточки своих ТП, формулы целей недели. Пустая формула — значение по умолчанию (appsettings «WeeklyReport»,
+/// формулы образцов «Полевого контроля», утверждены 31.10.2026).
+/// </summary>
+public class TelegramWeeklyPdfSettings
+{
+    /// <summary>Всегда 1: строка одна.</summary>
+    public int Id { get; set; } = 1;
+
+    /// <summary>Неполные данные — PDF не уходит (запуск помечает отправку «пропущена» с причиной), иначе уходит с пометкой в подвале.</summary>
+    public bool RequireCompleteData { get; set; } = true;
+
+    /// <summary>СВ получает вместе с командным PDF карточки своих ТП.</summary>
+    public bool SvTpCards { get; set; } = true;
+
+    /// <summary>Суммы КПУ (премии) и DSO в отправляемых PDF (как в образцах); выключено — «—».</summary>
+    public bool IncludeMoney { get; set; } = true;
+
+    public decimal? GoalAkbFactor { get; set; }
+    public decimal? GoalPromoFactor { get; set; }
+    public int? GoalPromoMin { get; set; }
+    public decimal? ReturnShare15To30 { get; set; }
+    public decimal? ReturnShare30Plus { get; set; }
+    public int? SleepFromDays { get; set; }
+    public int? SleepDays { get; set; }
+    public decimal? DeficitDays { get; set; }
+
+    public DateTimeOffset? UpdatedAt { get; set; }
+    public Guid? UpdatedById { get; set; }
 }
 
 /// <summary>Чат или группа получателя (один чат — один раз в строке).</summary>
@@ -279,6 +314,15 @@ public class TelegramReportDelivery : Entity
 
     /// <summary>Свежесть данных Linko на момент формирования.</summary>
     public DateTimeOffset? DataAsOf { get; set; }
+
+    /// <summary>Еженедельный PDF: файлы в хранилище (JSON: вид, имя, ключ, страниц, байт) — для «скачать» и «повторить».</summary>
+    public string? Files { get; set; }
+
+    /// <summary>Еженедельный PDF: этап — collecting (сбор данных), generating (PDF), ready (отправка), sent.</summary>
+    public string? Stage { get; set; }
+
+    /// <summary>Еженедельный PDF: подробный лог формирования и отправки (время — Ташкент).</summary>
+    public string? Log { get; set; }
 
     public Guid? CreatedById { get; set; }
 }

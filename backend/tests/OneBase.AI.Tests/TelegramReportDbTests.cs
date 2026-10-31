@@ -4,6 +4,7 @@ using OneBase.Application.Field;
 using OneBase.Application.Sales;
 using OneBase.Application.Telegram;
 using OneBase.Application.Telegram.Reports;
+using OneBase.Application.Telegram.Weekly;
 using OneBase.Domain.Identity;
 using OneBase.Domain.Sales;
 using OneBase.Domain.Telegram;
@@ -284,6 +285,109 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
     }
 
     [PostgresFact]
+    public async Task Weekly_pdf_goes_as_documents_once_with_stored_files_stage_log_and_retries()
+    {
+        var s = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var service = sp.GetRequiredService<TelegramReportService>();
+        var weekly = sp.GetRequiredService<WeeklyPdfService>();
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        await db.TelegramWeeklyPdfSettings.ExecuteDeleteAsync();
+
+        // Запуск в каталоге: понедельник 09:00, выключен (по умолчанию ничего не уходит).
+        var overview = await service.OverviewAsync(true, default);
+        var job = Assert.Single(overview.Jobs, j => j.Code == "weekly-pdf.monday");
+        Assert.Equal(("weekly-pdf", "09:00", false), (job.Report, job.Time, job.Enabled));
+
+        // Получатели: СВ — в группу, PDF на узбекском; ТП 63 — личный чат. Неверный язык — ошибка; картинками PDF-запуск не смотрят.
+        await Assert.ThrowsAsync<ReportValidationException>(() =>
+            service.SaveRecipientAsync(null, Sv(s, [s.GroupChatId], "weekly-pdf.monday") with { PdfLanguage = "en" }, true, s.AdminId, default));
+        var sv = await service.SaveRecipientAsync(null, Sv(s, [s.GroupChatId], "weekly-pdf.monday") with { PdfLanguage = "UZ" }, true, s.AdminId, default);
+        Assert.Equal("uz", sv.PdfLanguage);
+        var tp = await service.SaveRecipientAsync(null, Tp(63, s.AgentChatId, "weekly-pdf.monday"), true, s.AdminId, default);
+        await Assert.ThrowsAsync<ReportValidationException>(() =>
+            service.PreviewAsync(new ReportPreviewInput("weekly-pdf.monday", "sv", null, s.RegionId, SupervisorId, null, null, s.Today, null, null), true, default));
+
+        // Формулы «Отчётов PDF»: по умолчанию — образцы; неверные — ошибка; равные значению по умолчанию хранятся пустыми.
+        var pdf = overview.WeeklyPdf;
+        Assert.Equal((true, true, true, 1.1m, 1.2m, 25), (pdf.RequireCompleteData, pdf.SvTpCards, pdf.IncludeMoney, pdf.Formulas.GoalAkbFactor, pdf.Formulas.GoalPromoFactor,
+            pdf.Formulas.GoalPromoMin));
+        await Assert.ThrowsAsync<ReportValidationException>(() => service.SaveWeeklyPdfAsync(new WeeklyPdfSettingsInput(true, true, pdf.Defaults with { GoalAkbFactor = 9 }), s.AdminId, default));
+        await Assert.ThrowsAsync<ReportValidationException>(() => service.SaveWeeklyPdfAsync(new WeeklyPdfSettingsInput(true, true, pdf.Defaults with { SleepDays = 10 }), s.AdminId, default));
+        var saved = await service.SaveWeeklyPdfAsync(new WeeklyPdfSettingsInput(false, true, pdf.Defaults with { GoalAkbFactor = 1.5m }), s.AdminId, default);
+        Assert.Equal((false, 1.5m), (saved.RequireCompleteData, saved.Formulas.GoalAkbFactor));
+        var stored = await db.TelegramWeeklyPdfSettings.AsNoTracking().SingleAsync();
+        Assert.Equal((1.5m, (decimal?)null), (stored.GoalAkbFactor, stored.GoalPromoFactor));
+        Assert.Equal(1.1m, sp.GetRequiredService<WeeklyReportOptions>().GoalAkbFactor); // appsettings не меняются
+
+        // Включён в 08:00 на каждый день, 09:00 — время запуска. ТП: первая попытка — сбой связи (повтор позже), СВ — сразу.
+        fixture.Clock.Now = Utc(s.Today, 8);
+        Assert.True((await service.SaveJobAsync("weekly-pdf.monday", new ReportJobInput(true, "09:00", "Asia/Tashkent", EveryDay, null), s.AdminId, default)).Enabled);
+        fixture.Telegram.Fail = (peer, attempt) => peer.PeerId == AgentPeer && attempt == 1 ? new TelegramException("Нет связи с Telegram: IOException", TelegramErrorKind.Transient) : null;
+        var runner = Runner(sp);
+        fixture.Clock.Now = Utc(s.Today, 9, 1);
+        Assert.Equal(1, await runner.TickAsync(default));
+        var pending = await db.TelegramReportDeliveries.AsNoTracking().SingleAsync(d => d.Report == "weekly-pdf.monday" && d.SubscriptionId == tp.Id);
+        Assert.Equal(("pending", 1), (pending.Status, pending.Attempts));
+        fixture.Clock.Now = Utc(s.Today, 9, 20);
+        Assert.Equal(1, await runner.TickAsync(default));
+        Assert.Equal(0, await runner.TickAsync(default)); // второй круг и повтор не дают дубля
+        fixture.Telegram.Fail = null;
+
+        // СВ: подпись, отчёт команды и карточки ТП — документами (не картинками), на узбекском. ТП: одна карточка с подписью — только он.
+        var pdfs = fixture.Telegram.Sent.Where(m => m.Message.Files.Any(f => f.ContentType == "application/pdf")).ToList();
+        Assert.Equal(2, pdfs.Count);
+        var group = pdfs.Single(m => m.Peer.PeerId == GroupPeer).Message;
+        Assert.Equal(2, group.Files.Count);
+        Assert.All(group.Files, f => Assert.Equal(("%PDF", false), (System.Text.Encoding.ASCII.GetString(f.Content, 0, 4), f.Photo)));
+        Assert.Contains("Hafta", group.Text);
+        Assert.Contains(group.Files, f => f.FileName.StartsWith("weekly-cards-", StringComparison.Ordinal));
+        var agent = pdfs.Single(m => m.Peer.PeerId == AgentPeer).Message;
+        Assert.Equal("weekly-cards-Отабек-Назаров", Assert.Single(agent.Files).FileName[..27]);
+        Assert.Contains("Отабек Назаров", agent.Text);
+        Assert.DoesNotContain("Бахтиёр", agent.Text);
+        Assert.DoesNotContain("Дилшод", agent.Text);
+
+        // Журнал: отправлено, этап «sent», лог по шагам, файлы в хранилище — скачиваются; запуск — «выполнен».
+        var rows = await db.TelegramReportDeliveries.AsNoTracking().Where(d => d.Report == "weekly-pdf.monday").ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, d => Assert.Equal(("sent", WeeklyPdfService.StageSent), (d.Status, d.Stage)));
+        var svRow = rows.Single(d => d.SubscriptionId == sv.Id);
+        Assert.Contains("Сбор данных", svRow.Log);
+        Assert.Contains("карточки ТП", svRow.Log);
+        Assert.Contains("Отправлено", svRow.Log);
+        Assert.Equal(2, WeeklyPdfService.FilesOf(svRow).Count);
+        Assert.Equal(svRow.Pages, WeeklyPdfService.FilesOf(svRow).Sum(f => f.Pages));
+        var (cards, cardsName) = await weekly.DownloadAsync(svRow.Id, 1, default);
+        Assert.Equal(("%PDF", true), (System.Text.Encoding.ASCII.GetString(cards, 0, 4), cardsName.StartsWith("weekly-cards-", StringComparison.Ordinal)));
+        Assert.Equal(6, WeeklyPdfService.Pages(cards)); // три ТП региона × 2 страницы
+        Assert.Contains(rows.Single(d => d.SubscriptionId == tp.Id).Log!.Split('\n'), l => l.Contains("Отправлено"));
+        Assert.Equal("done", (await db.TelegramReportRuns.AsNoTracking().SingleAsync(r => r.Job == "weekly-pdf.monday")).Status);
+
+        // История: файлы и лог видны; «сформировать заново» — новые файлы без отправки.
+        var history = await service.HistoryAsync(new ReportHistoryQuery(null, null, "weekly-pdf", null, null), default);
+        Assert.Equal(2, history.Items.Single(i => i.Id == svRow.Id).Files!.Count);
+        var sentBefore = fixture.Telegram.Sent.Count;
+        Assert.Equal(2, (await weekly.RebuildAsync(svRow.Id, default)).Count);
+        Assert.Equal(sentBefore, fixture.Telegram.Sent.Count);
+        Assert.Contains("Сформировать заново", (await db.TelegramReportDeliveries.AsNoTracking().SingleAsync(d => d.Id == svRow.Id)).Log);
+
+        // «Только при полных данных»: заказов Linko нет — ручная отправка «пропущена» с причиной; тест в чат уходит с пометкой.
+        await service.SaveWeeklyPdfAsync(new WeeklyPdfSettingsInput(true, true, pdf.Defaults), s.AdminId, default);
+        await db.LinkoSyncStates.Where(x => x.Entity == "orders").ExecuteDeleteAsync();
+        var manual = Assert.Single(await service.SendNowAsync(tp.Id, new ReportSendInput("weekly-pdf.monday", true), true, s.AdminId, default));
+        Assert.Equal("skipped", manual.Status);
+        Assert.Contains("неполные", manual.Error);
+        var test = await service.WeeklyTestAsync(new WeeklyPdfTestInput("tp", null, null, 61, null, "ru", s.PrivateChatId), true, s.AdminId, default);
+        Assert.Equal("sent", test.Status);
+        var testMessage = fixture.Telegram.Sent[^1].Message;
+        Assert.StartsWith("ТЕСТОВАЯ ОТПРАВКА", testMessage.Text);
+        Assert.Contains("неполные", testMessage.Text);
+        await db.TelegramWeeklyPdfSettings.ExecuteDeleteAsync();
+    }
+
+    [PostgresFact]
     public async Task Test_goes_only_to_the_selected_chat_and_uncertain_or_failed_sends_are_retried_explicitly()
     {
         var s = await SeedAsync();
@@ -547,7 +651,7 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         fixture.Clock.Now = Utc(s.Today, 18, 5);
         var output = Environment.GetEnvironmentVariable("ONEBASE_REPORT_PNG"); // папка для просмотра картинок; в CI не задана
 
-        foreach (var job in ReportCatalog.Jobs)
+        foreach (var job in ReportCatalog.Jobs.Where(j => j.Report != ReportType.WeeklyPdf))
         {
             foreach (var (role, region, agent) in new[] { ("rm", (Guid?)null, (long?)null), ("sv", s.RegionId, null), ("tp", null, 61L) })
             {

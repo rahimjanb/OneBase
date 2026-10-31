@@ -164,6 +164,18 @@ internal static class TelegramModel
             e.HasOne<TelegramAccount>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.SetNull);
         });
 
+        b.Entity<TelegramWeeklyPdfSettings>(e =>
+        {
+            e.ToTable("WeeklyPdfSettings", Schema);
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.GoalAkbFactor).HasPrecision(6, 3);
+            e.Property(x => x.GoalPromoFactor).HasPrecision(6, 3);
+            e.Property(x => x.ReturnShare15To30).HasPrecision(6, 3);
+            e.Property(x => x.ReturnShare30Plus).HasPrecision(6, 3);
+            e.Property(x => x.DeficitDays).HasPrecision(6, 2);
+        });
+
         b.Entity<TelegramReportSchedule>(e =>
         {
             e.ToTable("ReportSchedules", Schema);
@@ -212,6 +224,7 @@ internal static class TelegramModel
             e.Property(x => x.SupervisorName).HasMaxLength(200);
             e.Property(x => x.AgentName).HasMaxLength(200);
             e.Property(x => x.Reports).HasMaxLength(1000);
+            e.Property(x => x.PdfLanguage).HasMaxLength(8);
             // Регион и направление — без внешнего ключа: схема sales своя (как у остальных ссылок Telegram на данные продаж).
             e.HasIndex(x => x.RegionId);
             e.HasMany(x => x.Chats).WithOne().HasForeignKey(x => x.SubscriptionId).OnDelete(DeleteBehavior.Cascade);
@@ -240,6 +253,9 @@ internal static class TelegramModel
             e.Property(x => x.Error).HasMaxLength(1000);
             e.Property(x => x.MessageIds).HasMaxLength(500);
             e.Property(x => x.Summary).HasMaxLength(500);
+            e.Property(x => x.Files).HasMaxLength(2000);
+            e.Property(x => x.Stage).HasMaxLength(16);
+            e.Property(x => x.Log).HasMaxLength(4000);
             // Прежние строки дневного отчёта: один отчёт автоотправки за день в один чат.
             e.HasIndex(x => new { x.SubscriptionId, x.ChatId, x.Kind, x.Period }).IsUnique()
                 .HasFilter("\"Trigger\" = 'schedule' AND \"SubscriptionId\" IS NOT NULL AND \"ChatId\" IS NOT NULL");

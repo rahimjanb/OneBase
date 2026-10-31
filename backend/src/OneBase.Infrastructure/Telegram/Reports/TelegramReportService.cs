@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Sales.Metrics;
 using OneBase.Application.Telegram.Reports;
+using OneBase.Application.Telegram.Weekly;
 using OneBase.Domain.Audit;
 using OneBase.Domain.Sales;
 using OneBase.Domain.Telegram;
@@ -23,7 +24,9 @@ public sealed class TelegramReportService(
     IAuditLogger audit,
     IConfiguration config,
     TimeProvider clock,
-    DailyPlanService dailyPlans)
+    DailyPlanService dailyPlans,
+    WeeklyReportOptions weeklyDefaults,
+    WeeklyPdfService weeklyPdf)
 {
     private static readonly string[] Languages = ["ru", "uz"];
     private const int PageSize = 50;
@@ -50,9 +53,18 @@ public sealed class TelegramReportService(
         var metrics = new ReportMetrics(statuses.GetValueOrDefault(TelegramReportSender.Sent), statuses.GetValueOrDefault(TelegramReportSender.Failed),
             statuses.GetValueOrDefault(TelegramReportSender.Skipped), statuses.GetValueOrDefault(TelegramReportSender.Unknown),
             statuses.GetValueOrDefault(TelegramReportSender.Pending) + statuses.GetValueOrDefault(TelegramReportSender.Sending));
+        var sync = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "orders" || s.Entity == "visits").Select(s => new { s.Entity, s.LastSuccessAt })
+            .ToListAsync(ct);
         return new ReportOverview(SettingsView(settings), accounts, await JobsAsync(recipients, ct), recipients, directionOptions, regions, chats, canUseSales,
-            config.GetValue("Telegram:Enabled", true), metrics);
+            config.GetValue("Telegram:Enabled", true), metrics, WeeklyPdfView(await db.TelegramWeeklyPdfSettings.AsNoTracking().FirstOrDefaultAsync(ct)),
+            new ReportFreshness(sync.FirstOrDefault(s => s.Entity == "orders")?.LastSuccessAt, sync.FirstOrDefault(s => s.Entity == "visits")?.LastSuccessAt));
     }
+
+    private WeeklyPdfSettingsView WeeklyPdfView(TelegramWeeklyPdfSettings? s) =>
+        new(s?.RequireCompleteData ?? true, s?.SvTpCards ?? true, Formulas(weeklyDefaults.With(s)), Formulas(weeklyDefaults), s?.UpdatedAt, s?.IncludeMoney ?? true);
+
+    private static WeeklyPdfFormulas Formulas(WeeklyReportOptions o) =>
+        new(o.GoalAkbFactor, o.GoalPromoFactor, o.GoalPromoMin, o.ReturnShare15To30, o.ReturnShare30Plus, o.SleepFromDays, o.SleepDays, o.DeficitDays);
 
     private async Task<TelegramReportSettings> SettingsAsync(CancellationToken ct) =>
         await db.TelegramReportSettings.AsNoTracking().FirstOrDefaultAsync(ct) ?? new TelegramReportSettings();
@@ -148,7 +160,7 @@ public sealed class TelegramReportService(
             var recent = last.Where(d => d.SubscriptionId == s.Id).GroupBy(d => (d.Report, d.RecipientTitle)).Select(g => g.First()).Take(6)
                 .Select(d => new ReportDeliveryBrief(d.Report!, d.RecipientTitle, d.Status, d.SentAt ?? d.CreatedAt, d.Error)).ToList();
             views.Add(new ReportRecipientView(s.Id, s.Role, s.Title ?? scopeTitle, scopeTitle, s.DirectionId, s.RegionId, s.RegionId is { } rid ? regionNames.GetValueOrDefault(rid) : null,
-                s.SupervisorId, s.AgentId, agents, chatRefs, status, reports, s.Enabled, problem, recent));
+                s.SupervisorId, s.AgentId, agents, chatRefs, status, reports, s.Enabled, problem, recent, s.PdfLanguage));
         }
 
         return views;
@@ -218,6 +230,72 @@ public sealed class TelegramReportService(
         await audit.LogAsync(ActorType.User, userId.ToString(), "telegram.reports.settings", nameof(TelegramReportSettings), "1",
             new { settings.AccountId, settings.Language, settings.NoPurchaseDays, settings.RefreshBeforeSend }, ct);
         return SettingsView(settings);
+    }
+
+    /// <summary>
+    /// «Отчёты PDF»: только при полных данных, карточки ТП для СВ, формулы целей недели. Формула, равная значению по умолчанию (appsettings),
+    /// хранится пустой — дальше следует за appsettings. Сохранение ничего не отправляет.
+    /// </summary>
+    public async Task<WeeklyPdfSettingsView> SaveWeeklyPdfAsync(WeeklyPdfSettingsInput input, Guid userId, CancellationToken ct)
+    {
+        if (input.Formulas is { } f)
+        {
+            if (f.GoalAkbFactor is < 0.5m or > 5m || f.GoalPromoFactor is < 0.5m or > 5m)
+            {
+                throw new ReportValidationException("Коэффициенты АКБ и акций — от 0,5 до 5.");
+            }
+
+            if (f.GoalPromoMin is < 0 or > 1000)
+            {
+                throw new ReportValidationException("Минимум ТТ по акциям — от 0 до 1000.");
+            }
+
+            if (f.ReturnShare15To30 is < 0 or > 1 || f.ReturnShare30Plus is < 0 or > 1)
+            {
+                throw new ReportValidationException("Доля спящих, которых вернуть, — от 0 до 100%.");
+            }
+
+            if (f.SleepFromDays is < 1 or > 90 || f.SleepDays <= f.SleepFromDays || f.SleepDays > 180)
+            {
+                throw new ReportValidationException("Спящие: «от» — 1–90 дней, граница «30+» — больше «от» и не больше 180.");
+            }
+
+            if (f.DeficitDays is < 1 or > 60)
+            {
+                throw new ReportValidationException("Дефицит у дилера — от 1 до 60 дней продаж.");
+            }
+        }
+
+        var row = await db.TelegramWeeklyPdfSettings.FirstOrDefaultAsync(ct);
+        if (row is null)
+        {
+            row = new TelegramWeeklyPdfSettings();
+            db.TelegramWeeklyPdfSettings.Add(row);
+        }
+
+        row.RequireCompleteData = input.RequireCompleteData;
+        row.SvTpCards = input.SvTpCards;
+        row.IncludeMoney = input.IncludeMoney;
+        if (input.Formulas is { } v)
+        {
+            var d = weeklyDefaults;
+            row.GoalAkbFactor = v.GoalAkbFactor == d.GoalAkbFactor ? null : v.GoalAkbFactor;
+            row.GoalPromoFactor = v.GoalPromoFactor == d.GoalPromoFactor ? null : v.GoalPromoFactor;
+            row.GoalPromoMin = v.GoalPromoMin == d.GoalPromoMin ? null : v.GoalPromoMin;
+            row.ReturnShare15To30 = v.ReturnShare15To30 == d.ReturnShare15To30 ? null : v.ReturnShare15To30;
+            row.ReturnShare30Plus = v.ReturnShare30Plus == d.ReturnShare30Plus ? null : v.ReturnShare30Plus;
+            row.SleepFromDays = v.SleepFromDays == d.SleepFromDays ? null : v.SleepFromDays;
+            row.SleepDays = v.SleepDays == d.SleepDays ? null : v.SleepDays;
+            row.DeficitDays = v.DeficitDays == d.DeficitDays ? null : v.DeficitDays;
+        }
+
+        row.UpdatedAt = clock.GetUtcNow();
+        row.UpdatedById = userId;
+        await db.SaveChangesAsync(ct);
+        var view = WeeklyPdfView(row);
+        await audit.LogAsync(ActorType.User, userId.ToString(), "telegram.reports.weekly_pdf", nameof(TelegramWeeklyPdfSettings), "1",
+            new { view.RequireCompleteData, view.SvTpCards, view.IncludeMoney, view.Formulas }, ct);
+        return view;
     }
 
     /// <summary>
@@ -329,6 +407,12 @@ public sealed class TelegramReportService(
             throw new ReportValidationException("Выберите личный чат получателя или группу.");
         }
 
+        var pdfLanguage = string.IsNullOrWhiteSpace(input.PdfLanguage) ? null : input.PdfLanguage.Trim().ToLowerInvariant();
+        if (pdfLanguage is not null && !Languages.Contains(pdfLanguage))
+        {
+            throw new ReportValidationException("Язык PDF — ru или uz.");
+        }
+
         var settings = await SettingsAsync(ct);
         var account = settings.AccountId ?? throw new ReportValidationException("Сначала выберите аккаунт Telegram для автоотчётов.");
         var chats = await db.TelegramChats.AsNoTracking().Where(c => chatIds.Contains(c.Id)).ToListAsync(ct);
@@ -355,6 +439,7 @@ public sealed class TelegramReportService(
         row.AgentId = role == TelegramReportRoles.Tp ? input.AgentId : null;
         row.AgentName = resolved.Agent?.Name;
         row.Reports = string.Join(',', reports);
+        row.PdfLanguage = pdfLanguage;
         row.Enabled = input.Enabled;
         row.Chats.RemoveAll(c => !chatIds.Contains(c.ChatId));
         foreach (var chatId in chatIds.Where(c => row.Chats.All(x => x.ChatId != c)))
@@ -375,7 +460,7 @@ public sealed class TelegramReportService(
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, userId.ToString(), id is null ? "telegram.reports.recipient_created" : "telegram.reports.recipient_updated",
             nameof(TelegramReportSubscription), row.Id.ToString(),
-            new { row.Role, row.DirectionId, row.RegionId, row.SupervisorId, row.AgentId, Chats = chatIds, row.Reports, row.Enabled }, ct);
+            new { row.Role, row.DirectionId, row.RegionId, row.SupervisorId, row.AgentId, Chats = chatIds, row.Reports, row.PdfLanguage, row.Enabled }, ct);
         return (await RecipientsAsync(account, teams, directions, await ChatsAsync(account, ct), ct)).First(s => s.Id == row.Id);
     }
 
@@ -512,7 +597,9 @@ public sealed class TelegramReportService(
                 continue;
             }
 
-            results.Add(await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, null, token), retry: true, ct));
+            results.Add(ReportCatalog.IsPdf(job)
+                ? await weeklyPdf.AttemptAsync(delivery, chat!, scope, retry: true, ct)
+                : await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, null, token), retry: true, ct));
         }
 
         return results;
@@ -567,8 +654,69 @@ public sealed class TelegramReportService(
         delivery.Error = null;
         var job = delivery.Report;
         var period = delivery.Period;
-        return await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, null, token), retry: true, ct);
+        return ReportCatalog.IsPdf(job)
+            ? await weeklyPdf.AttemptAsync(delivery, chat!, scope, retry: true, ct)
+            : await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, null, token), retry: true, ct);
     }
+
+    /// <summary>
+    /// Тест еженедельного PDF — только в выбранный чат (не получателям), с пометкой «ТЕСТОВАЯ ОТПРАВКА»; неполные данные не мешают (пометка в
+    /// подписи). Повторов нет: результат сразу; в истории — с этапами, логом и файлом.
+    /// </summary>
+    public async Task<ReportSendResult> WeeklyTestAsync(WeeklyPdfTestInput input, bool canUseSales, Guid userId, CancellationToken ct)
+    {
+        if (!canUseSales)
+        {
+            throw new ReportForbiddenException(NoSales);
+        }
+
+        var settings = await SettingsAsync(ct);
+        var account = settings.AccountId ?? throw new ReportValidationException("Сначала выберите аккаунт Telegram для автоотчётов.");
+        var chat = await db.TelegramChats.AsNoTracking().FirstOrDefaultAsync(c => c.Id == input.ChatId, ct);
+        if (TelegramReportSender.ChatProblem(chat, account) is { } problem)
+        {
+            throw new ReportValidationException(problem);
+        }
+
+        var language = input.Language?.Trim().ToLowerInvariant();
+        if (language is not null && !Languages.Contains(language))
+        {
+            throw new ReportValidationException("Язык PDF — ru или uz.");
+        }
+
+        var scope = WeeklyScope(input.Role, input.DirectionId, input.RegionId, input.AgentId);
+        var delivery = new TelegramReportDelivery
+        {
+            Report = ReportCatalog.Jobs.First(j => j.Report == ReportType.WeeklyPdf).Code,
+            Period = input.Date ?? Today(),
+            Trigger = "test",
+            DataMode = "real",
+            Role = scope.Role,
+            ScopeKey = scope.Key,
+            AccountId = account,
+            ChatId = chat!.Id,
+            PeerId = chat.PeerId,
+            RecipientTitle = TelegramReportSender.Trim(chat.Title, 255),
+            ScopeTitle = "…",
+            RegionId = scope.RegionId,
+            CreatedById = userId,
+        };
+        db.TelegramReportDeliveries.Add(delivery);
+        await db.SaveChangesAsync(ct);
+        await audit.LogAsync(ActorType.User, userId.ToString(), "telegram.reports.weekly_test", nameof(TelegramReportDelivery), delivery.Id.ToString(),
+            new { Scope = scope.Key, delivery.Period, language, chat.Title }, ct);
+        return await weeklyPdf.AttemptAsync(delivery, chat, scope, retry: false, ct, test: true, language: language ?? settings.Language);
+    }
+
+    /// <summary>Область еженедельного PDF: rop — вся страна (РМ без направления), rm — направление, sv — регион, tp — ТП.</summary>
+    public static ReportScope WeeklyScope(string? role, Guid? directionId, Guid? regionId, long? agentId) => (role?.Trim().ToLowerInvariant() ?? TelegramReportRoles.Sv) switch
+    {
+        "rop" => new ReportScope(TelegramReportRoles.Rm),
+        TelegramReportRoles.Rm => new ReportScope(TelegramReportRoles.Rm, DirectionId: directionId),
+        TelegramReportRoles.Sv => new ReportScope(TelegramReportRoles.Sv, RegionId: regionId ?? throw new ReportValidationException("Выберите регион.")),
+        TelegramReportRoles.Tp => new ReportScope(TelegramReportRoles.Tp, AgentId: agentId ?? throw new ReportValidationException("Выберите ТП.")),
+        _ => throw new ReportValidationException("Роль — РОП, РМ, СВ или ТП."),
+    };
 
     /// <summary>Запуск, область, день, момент формирования и язык предпросмотра или теста: явно или по получателю.</summary>
     private async Task<(string Job, ReportScope Scope, DateOnly Date, DateTimeOffset? At, string? Language)> TargetAsync(ReportPreviewInput input, bool canUseSales,
@@ -580,6 +728,11 @@ public sealed class TelegramReportService(
         }
 
         var info = ReportCatalog.Find(input.Job) ?? throw new ReportValidationException("Выберите отчёт.");
+        if (info.Report == ReportType.WeeklyPdf)
+        {
+            throw new ReportValidationException("Еженедельный PDF — на вкладке «Отчёты PDF»: предпросмотр и скачивание.");
+        }
+
         ReportScope scope;
         if (input.RecipientId is { } recipientId)
         {
@@ -756,7 +909,8 @@ public sealed class TelegramReportService(
         var items = rows.Select(d => new ReportDeliveryView(d.Id, d.CreatedAt, d.Report!, ReportCatalog.Find(d.Report) is { } info ? ReportCatalog.Title(info.Report) : d.Report!,
             d.Period, d.Trigger, d.Role, d.RecipientTitle, d.ScopeTitle, d.RegionId, d.Status, d.Attempts, d.SentAt, d.NextAttemptAt, d.Error, d.Pages, d.Bytes, d.Summary,
             d.DataAsOf, d.DurationMs, d.Trigger != "schedule" && d.CreatedById is { } u ? names.GetValueOrDefault(u) : null,
-            d.Trigger != "test" && d.Status is TelegramReportSender.Failed or TelegramReportSender.Unknown && ReportScope.Parse(d.ScopeKey) is not null)).ToList();
+            d.Trigger != "test" && d.Status is TelegramReportSender.Failed or TelegramReportSender.Unknown && ReportScope.Parse(d.ScopeKey) is not null,
+            WeeklyPdfService.FilesOf(d).Select((f, i) => new WeeklyPdfFileView(i, f.Kind, f.Name, f.Pages, f.Bytes)).ToList(), d.Stage, d.Log)).ToList();
 
         var runs = db.TelegramReportRuns.AsNoTracking();
         if (query.From is { } rf)

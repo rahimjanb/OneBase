@@ -66,7 +66,8 @@ public sealed record ReportRecipientView(
     IReadOnlyList<string> Reports,
     bool Enabled,
     string? Problem,
-    IReadOnlyList<ReportDeliveryBrief> Last);
+    IReadOnlyList<ReportDeliveryBrief> Last,
+    string? PdfLanguage);
 
 public sealed record ReportRecipientInput(
     string? Role,
@@ -77,7 +78,8 @@ public sealed record ReportRecipientInput(
     long? AgentId,
     IReadOnlyList<Guid>? ChatIds,
     IReadOnlyList<string>? Reports,
-    bool Enabled);
+    bool Enabled,
+    string? PdfLanguage = null);
 
 public sealed record ReportPersonOption(long Id, string Name);
 
@@ -103,7 +105,22 @@ public sealed record ReportOverview(
     IReadOnlyList<ReportChatOption> Chats,
     bool CanUseSales,
     bool TelegramEnabled,
-    ReportMetrics Metrics);
+    ReportMetrics Metrics,
+    WeeklyPdfSettingsView WeeklyPdf,
+    ReportFreshness Freshness);
+
+/// <summary>Формулы целей недели и пороги еженедельного PDF (доли — 0,3 = 30%).</summary>
+public sealed record WeeklyPdfFormulas(decimal GoalAkbFactor, decimal GoalPromoFactor, int GoalPromoMin, decimal ReturnShare15To30, decimal ReturnShare30Plus,
+    int SleepFromDays, int SleepDays, decimal DeficitDays);
+
+/// <summary>«Отчёты PDF»: только при полных данных, карточки ТП для СВ, действующие формулы и значения по умолчанию (appsettings) — для «сбросить».</summary>
+public sealed record WeeklyPdfSettingsView(bool RequireCompleteData, bool SvTpCards, WeeklyPdfFormulas Formulas, WeeklyPdfFormulas Defaults, DateTimeOffset? UpdatedAt,
+    bool IncludeMoney = true);
+
+public sealed record WeeklyPdfSettingsInput(bool RequireCompleteData, bool SvTpCards, WeeklyPdfFormulas? Formulas, bool IncludeMoney = true);
+
+/// <summary>Когда последний раз обновлялись заказы и визиты Linko.</summary>
+public sealed record ReportFreshness(DateTimeOffset? Orders, DateTimeOffset? Visits);
 
 /// <summary>
 /// Предпросмотр и тест: запуск, роль и область (или получатель), день и время формирования (по умолчанию — сейчас), язык (по умолчанию — из
@@ -154,7 +171,16 @@ public sealed record ReportDeliveryView(
     DateTimeOffset? DataAsOf,
     int? DurationMs,
     string? By,
-    bool CanRetry);
+    bool CanRetry,
+    IReadOnlyList<WeeklyPdfFileView>? Files = null,
+    string? Stage = null,
+    string? Log = null);
+
+/// <summary>PDF отправки в хранилище: номер (для скачивания), вид (team — страницы области, cards — карточки ТП), имя, страниц, байт.</summary>
+public sealed record WeeklyPdfFileView(int Index, string Kind, string Name, int Pages, long Bytes);
+
+/// <summary>Тест еженедельного PDF в выбранный чат: роль (rop, rm, sv, tp), область, любой день недели, язык.</summary>
+public sealed record WeeklyPdfTestInput(string? Role, Guid? DirectionId, Guid? RegionId, long? AgentId, DateOnly? Date, string? Language, Guid ChatId);
 
 public sealed record ReportRunView(Guid Id, string Job, string Title, DateOnly Period, DateTimeOffset ScheduledAt, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt,
     string Status, int Planned, int Sent, int Failed, int Skipped, string? Error, DateTimeOffset? DataAsOf);

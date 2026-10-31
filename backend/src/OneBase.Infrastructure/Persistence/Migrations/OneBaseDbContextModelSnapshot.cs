@@ -5750,12 +5750,20 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<string>("Files")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<string>("Kind")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
                     b.Property<DateTimeOffset?>("LastAttemptAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Log")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<string>("MessageIds")
                         .HasMaxLength(500)
@@ -5803,6 +5811,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("SentAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Stage")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -6055,6 +6067,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Morning")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("PdfLanguage")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
                     b.Property<Guid?>("RegionId")
                         .HasColumnType("uuid");
 
@@ -6168,6 +6184,60 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasFilter("\"TelegramUserId\" IS NOT NULL");
 
                     b.ToTable("UserPermissions", "telegram");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Telegram.TelegramWeeklyPdfSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("DeficitDays")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
+                    b.Property<decimal?>("GoalAkbFactor")
+                        .HasPrecision(6, 3)
+                        .HasColumnType("numeric(6,3)");
+
+                    b.Property<decimal?>("GoalPromoFactor")
+                        .HasPrecision(6, 3)
+                        .HasColumnType("numeric(6,3)");
+
+                    b.Property<int?>("GoalPromoMin")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IncludeMoney")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RequireCompleteData")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("ReturnShare15To30")
+                        .HasPrecision(6, 3)
+                        .HasColumnType("numeric(6,3)");
+
+                    b.Property<decimal?>("ReturnShare30Plus")
+                        .HasPrecision(6, 3)
+                        .HasColumnType("numeric(6,3)");
+
+                    b.Property<int?>("SleepDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SleepFromDays")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("SvTpCards")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("WeeklyPdfSettings", "telegram");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Work.PushKeys", b =>

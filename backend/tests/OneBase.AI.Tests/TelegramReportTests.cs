@@ -116,9 +116,14 @@ public class TelegramReportTests
     [Fact]
     public void Catalog_has_thirteen_runs_of_six_reports_at_the_specified_times()
     {
-        Assert.Equal(17, ReportCatalog.Jobs.Count); // 13 запусков шести отчётов + 4 запуска «Поля боя»
+        Assert.Equal(18, ReportCatalog.Jobs.Count); // 13 запусков шести отчётов + 4 запуска «Поля боя» + еженедельный PDF
         Assert.Equal(ReportCatalog.Jobs.Count, ReportCatalog.Jobs.Select(j => j.Code).Distinct().Count());
-        Assert.Equal(7, ReportCatalog.Jobs.Select(j => j.Report).Distinct().Count());
+        Assert.Equal(8, ReportCatalog.Jobs.Select(j => j.Report).Distinct().Count());
+        var pdf = Assert.Single(ReportCatalog.Jobs, j => j.Report == ReportType.WeeklyPdf);
+        Assert.Equal(("weekly-pdf.monday", "09:00", ReportSchedules.Monday, "weekly-pdf"), (pdf.Code, pdf.Time.ToString("HH:mm"), pdf.Days, ReportCatalog.Key(pdf.Report)));
+        Assert.Equal(TelegramReportRoles.All, pdf.Roles);
+        Assert.True(ReportCatalog.IsPdf("weekly-pdf.monday"));
+        Assert.False(ReportCatalog.IsPdf("weekly.monday"));
         Assert.Equal("08:30 13:00 18:00 18:00", string.Join(" ", ReportCatalog.Jobs.Where(j => j.Report == ReportType.Battle).Select(j => j.Time.ToString("HH:mm"))));
         string Times(ReportType t) => string.Join(" ", ReportCatalog.Jobs.Where(j => j.Report == t).Select(j => j.Time.ToString("HH:mm")));
         Assert.Equal("08:30 13:00 18:00", Times(ReportType.Daily));
@@ -133,7 +138,7 @@ public class TelegramReportTests
         Assert.Equal(ReportSchedules.Saturday, ReportCatalog.Find("weekly.saturday")!.Days);
         Assert.Equal(ReportSchedules.Monday, ReportCatalog.Find("weekly.monday")!.Days);
         Assert.Equal(ReportSchedules.Saturday, ReportCatalog.Find("battle.saturday")!.Days);
-        Assert.All(ReportCatalog.Jobs.Where(j => j.Report != ReportType.Weekly && j.Slot != "saturday"), j => Assert.Equal(ReportSchedules.WorkDays, j.Days));
+        Assert.All(ReportCatalog.Jobs.Where(j => j.Report is not (ReportType.Weekly or ReportType.WeeklyPdf) && j.Slot != "saturday"), j => Assert.Equal(ReportSchedules.WorkDays, j.Days));
 
         // Отчёты получателя: неизвестные коды и чужие роли отбрасываются.
         var codes = ReportCatalog.Parse("daily.morning, no-orders.reminder,unknown,daily.morning");
@@ -399,7 +404,7 @@ public class TelegramReportTests
     [Fact]
     public void Every_report_builds_for_every_role_on_empty_data_and_in_uzbek()
     {
-        foreach (var job in ReportCatalog.Jobs)
+        foreach (var job in ReportCatalog.Jobs.Where(j => j.Report != ReportType.WeeklyPdf))
         {
             foreach (var scope in new[] { Rm, Sv, Tp(63) }.Where(s => job.Roles.Contains(s.Role)))
             {
@@ -446,7 +451,7 @@ public class TelegramReportTests
         ];
         static bool Cyrillic(string s) => s.Any(ch => ch is >= 'А' and <= 'я' or 'Ё' or 'ё');
         var missing = new List<string>();
-        foreach (var job in ReportCatalog.Jobs)
+        foreach (var job in ReportCatalog.Jobs.Where(j => j.Report != ReportType.WeeklyPdf))
         {
             foreach (var scope in new[] { Rm, Sv, Tp(61), Tp(63) }.Where(s => job.Roles.Contains(s.Role)))
             {
@@ -471,7 +476,7 @@ public class TelegramReportTests
     [Fact]
     public void Every_report_renders_as_16_by_9_png_pages_within_telegram_limits()
     {
-        foreach (var job in ReportCatalog.Jobs.Where(j => j.Report != ReportType.Battle))
+        foreach (var job in ReportCatalog.Jobs.Where(j => j.Report is not (ReportType.Battle or ReportType.WeeklyPdf)))
         {
             foreach (var scope in new[] { Rm, Sv, Tp(61) }.Where(s => job.Roles.Contains(s.Role)))
             {

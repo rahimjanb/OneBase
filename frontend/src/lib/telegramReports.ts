@@ -12,8 +12,8 @@ export const reportRoles: { key: ReportRole; label: string; hint: string; classN
 
 export const roleOf = (role: string) => reportRoles.find((r) => r.key === role) ?? reportRoles[1];
 
-/** Шесть отчётов (листы ТЗ «ИИ ассистент в ТГ 2»). */
-export type ReportType = "daily" | "no-purchase" | "no-orders" | "promo" | "categories" | "weekly" | "battle";
+/** Шесть отчётов (листы ТЗ «ИИ ассистент в ТГ 2»), «Поле боя» и еженедельный PDF. */
+export type ReportType = "daily" | "no-purchase" | "no-orders" | "promo" | "categories" | "weekly" | "battle" | "weekly-pdf";
 
 export const reportTypes: { key: ReportType; title: string; hint: string }[] = [
   { key: "daily", title: "1. Дневной план", hint: "8:30 — план дня в сумах и кг, по категориям и визитам; 13:00 — промежуточный итог; 18:00 — итог дня" },
@@ -23,7 +23,11 @@ export const reportTypes: { key: ReportType; title: string; hint: string }[] = [
   { key: "categories", title: "5. Заказы по категориям", hint: "13:00 и 18:00 — заказы, сумма и вес по категориям, выполнение плана категорий" },
   { key: "weekly", title: "6. Итоги недели", hint: "Суббота 18:00 — итоги недели пн–сб; понедельник 8:30 — пересчитанные итоги прошлой недели" },
   { key: "battle", title: "7. Поле боя", hint: "Карточки целей ТП по магазинам маршрута: 8:30 — маршрут дня, 13:00 — полдень, 18:00 — итог дня, суббота 18:00 — итог недели; СВ — копии карточек своих ТП" },
+  { key: "weekly-pdf", title: "8. Еженедельный PDF", hint: "Понедельник 9:00 — PDF за прошлую неделю пн–сб: РОП — страна, РМ — направление, СВ — регион и команда, ТП — личная карточка. Предпросмотр и формулы — на вкладке «Отчёты PDF»" },
 ];
+
+/** Запуск рисуется PDF-документом, а не картинками: у него своя вкладка, в предпросмотре картинок и «Отправить» его нет. */
+export const isPdfJob = (job: Pick<ReportJob, "report">) => job.report === "weekly-pdf";
 
 export type ReportSettings = { accountId: string | null; language: "ru" | "uz"; noPurchaseDays: number; refreshBeforeSend: boolean; updatedAt: string | null };
 
@@ -94,6 +98,8 @@ export type ReportRecipient = {
   /** Почему сейчас отчёт не уйдёт: область пропала из данных «Продаж», нет чатов, в чат писать нельзя. */
   problem: string | null;
   last: ReportDeliveryBrief[];
+  /** Язык еженедельного PDF; null — язык отчётов из общих настроек. */
+  pdfLanguage: "ru" | "uz" | null;
 };
 
 export type ReportRecipientInput = {
@@ -106,6 +112,7 @@ export type ReportRecipientInput = {
   chatIds: string[];
   reports: string[];
   enabled: boolean;
+  pdfLanguage?: "ru" | "uz" | null;
 };
 
 export type ReportPerson = { id: number; name: string };
@@ -151,6 +158,79 @@ export type ReportOverview = {
   telegramEnabled: boolean;
   /** Отправки за 7 дней. */
   metrics: ReportMetrics;
+  weeklyPdf: WeeklyPdfSettings;
+  /** Когда последний раз обновлялись заказы и визиты Linko. */
+  freshness: ReportFreshness;
+};
+
+/** Формулы целей недели и пороги еженедельного PDF (доли: 0.3 = 30%). */
+export type WeeklyPdfFormulas = {
+  goalAkbFactor: number;
+  goalPromoFactor: number;
+  goalPromoMin: number;
+  returnShare15To30: number;
+  returnShare30Plus: number;
+  sleepFromDays: number;
+  sleepDays: number;
+  deficitDays: number;
+};
+
+/** «Отчёты PDF»: только при полных данных, карточки ТП для СВ, действующие формулы и значения по умолчанию (appsettings). */
+export type WeeklyPdfSettings = {
+  requireCompleteData: boolean;
+  svTpCards: boolean;
+  /** Суммы КПУ и DSO в отправляемых PDF. */
+  includeMoney: boolean;
+  formulas: WeeklyPdfFormulas;
+  defaults: WeeklyPdfFormulas;
+  updatedAt: string | null;
+};
+
+export type ReportFreshness = { orders: string | null; visits: string | null };
+
+/** Область PDF: РОП — вся страна (на сервере РМ без направления), РМ — направление, СВ — регион и команда, ТП — личная карточка. */
+export type WeeklyPdfRole = "rop" | "rm" | "sv" | "tp";
+
+export type WeeklyPdfInput = { role: WeeklyPdfRole; directionId: string | null; regionId: string | null; agentId: number | null; date: string | null };
+
+/** Что показать: страницы РОП / РМ / СВ или карточки ТП (у ТП — всегда карточка). */
+export type WeeklyPdfKind = "team" | "cards";
+
+export type WeeklySourceState = "ok" | "stale" | "missing";
+
+export type WeeklySourceStatus = { key: string; state: WeeklySourceState; asOf: string | null; note: string | null };
+
+/** Предпросмотр PDF: страницы картинками, неделя, источники и их свежесть, чего не хватает для «полных данных», замечания. */
+export type WeeklyPdfPreview = {
+  pages: string[];
+  role: string;
+  scopeName: string;
+  supervisorName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  dataThrough: string;
+  dataAsOf: string | null;
+  sourceStatuses: WeeklySourceStatus[];
+  incomplete: string[];
+  warnings: string[];
+  fileName: string;
+};
+
+export const weeklySources: Record<string, string> = {
+  "linko-orders": "Заказы Linko",
+  "linko-visits": "Визиты Linko",
+  "linko-plans": "Планы Linko",
+  "linko-kpi": "KPI Linko",
+  promo: "Акции",
+  "linko-stock": "Остатки дилеров",
+  dso: "DSO (оплаты дилеров)",
+  dmp: "ДМП (стеллажи)",
+};
+
+export const sourceState: Record<WeeklySourceState, { label: string; className: string }> = {
+  ok: { label: "есть", className: "text-ok" },
+  stale: { label: "устарели", className: "text-warn" },
+  missing: { label: "нет данных", className: "text-bad" },
 };
 
 export type ReportPreviewInput = {
@@ -217,6 +297,22 @@ export type ReportDelivery = {
   durationMs: number | null;
   by: string | null;
   canRetry: boolean;
+  /** Еженедельный PDF: файлы в хранилище, этап и подробный лог. */
+  files?: WeeklyPdfFile[] | null;
+  stage?: WeeklyPdfStage | null;
+  log?: string | null;
+};
+
+/** PDF отправки: team — страницы РОП / РМ / СВ, cards — карточки ТП. */
+export type WeeklyPdfFile = { index: number; kind: "team" | "cards"; name: string; pages: number; bytes: number };
+
+export type WeeklyPdfStage = "collecting" | "generating" | "ready" | "sent";
+
+export const pdfStage: Record<WeeklyPdfStage, string> = {
+  collecting: "сбор данных",
+  generating: "формирование PDF",
+  ready: "отправка",
+  sent: "отправлен",
 };
 
 export type ReportRun = {
@@ -354,6 +450,62 @@ export const dailyPlansApi = {
   holidays: (year?: number) => bff<ReportHoliday[]>(`${base}/holidays${year ? `?year=${year}` : ""}`),
   addHoliday: (input: { date: string; name: string }) => bff<ReportHoliday>(`${base}/holidays`, { method: "POST", body: json(input) }),
   deleteHoliday: (id: string) => bff<void>(`${base}/holidays/${id}`, { method: "DELETE" }),
+};
+
+/** Тело запроса PDF: РОП — РМ без направления; ТП — агент. */
+const weeklyBody = (i: WeeklyPdfInput) =>
+  json({
+    role: i.role === "rop" ? "rm" : i.role,
+    directionId: i.role === "rm" ? i.directionId : null,
+    regionId: i.role === "sv" ? i.regionId : null,
+    agentId: i.role === "tp" ? i.agentId : null,
+    date: i.date,
+  });
+
+/** Скачать файл ответа сервера (PDF): ошибка — текст сервера. */
+async function saveFile(path: string, fileName: string, init?: RequestInit) {
+  const response = await fetch(`/bff/api/${base}/${path}`, { ...init, headers: { "Content-Type": "application/json", ...init?.headers } }).catch(() => null);
+  if (!response) {
+    throw new Error(tNow("Нет связи с сервером OneBase — ответ не пришёл. Обновите страницу и проверьте, не выполнилось ли действие, затем повторите."));
+  }
+
+  if (!response.ok) {
+    const result = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(response.status === 403 ? tNow("Недостаточно прав.") : tNow(result?.error ?? "Ошибка {status}", { status: response.status }));
+  }
+
+  const url = URL.createObjectURL(await response.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: fileName });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+export const weeklyPdfApi = {
+  saveSettings: (s: Pick<WeeklyPdfSettings, "requireCompleteData" | "svTpCards" | "includeMoney" | "formulas">) =>
+    bff<WeeklyPdfSettings>(`${base}/weekly-pdf`, { method: "PUT", body: json(s) }),
+  /** Страницы картинками и состояние данных — без отправки. */
+  preview: (i: WeeklyPdfInput, language: "ru" | "uz", kind: WeeklyPdfKind) =>
+    bff<WeeklyPdfPreview>(`${base}/weekly/pdf?images=1&language=${language}&kind=${kind}`, { method: "POST", body: weeklyBody(i) }),
+  /** Скачать PDF файлом (тот же отчёт, что в предпросмотре). */
+  download: (i: WeeklyPdfInput, language: "ru" | "uz", kind: WeeklyPdfKind, fileName: string) =>
+    saveFile(`weekly/pdf?language=${language}&kind=${kind}`, fileName, { method: "POST", body: weeklyBody(i) }),
+  /** Тест — только в выбранный чат, с пометкой «ТЕСТОВАЯ ОТПРАВКА». */
+  test: (i: WeeklyPdfInput, language: "ru" | "uz", chatId: string) =>
+    sendOnce<ReportSendResult>("weekly/test", {
+      role: i.role,
+      directionId: i.role === "rm" ? i.directionId : null,
+      regionId: i.role === "sv" ? i.regionId : null,
+      agentId: i.role === "tp" ? i.agentId : null,
+      date: i.date,
+      language,
+      chatId,
+    }),
+  /** PDF отправки из истории. */
+  file: (deliveryId: string, file: WeeklyPdfFile) => saveFile(`deliveries/${deliveryId}/files/${file.index}`, file.name),
+  /** Сформировать заново — новые PDF той же отправки, без отправки. */
+  rebuild: (deliveryId: string) => bff<WeeklyPdfFile[]>(`${base}/deliveries/${deliveryId}/rebuild`, { method: "POST" }),
 };
 
 export const reportsApi = {

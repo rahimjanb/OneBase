@@ -1,13 +1,15 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Eye, Loader2, RefreshCw, RotateCcw, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Eye, FileCog, Loader2, RefreshCw, RotateCcw, Send } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Note } from "@/components/sales/bits";
 import { useT } from "@/i18n/client";
 import { chatTypeLabel } from "@/lib/telegram";
 import {
   deliveryStatus,
+  pdfStage,
+  weeklyPdfApi,
   reportRoles,
   reportTypes,
   reportsApi,
@@ -21,6 +23,7 @@ import {
   type ReportPreviewInput,
   type ReportRole,
   type ReportSendResult,
+  type WeeklyPdfFile,
 } from "@/lib/telegramReports";
 
 export const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "—");
@@ -152,7 +155,7 @@ function JobSelect({ data, value, role, onChange }: { data: ReportOverview; valu
   const t = useT();
   return (
     <select className={field} value={value} onChange={(e) => onChange(e.target.value)}>
-      {reportTypes.map((type) => (
+      {reportTypes.filter((type) => type.key !== "weekly-pdf").map((type) => (
         <optgroup key={type.key} label={t(type.title)}>
           {data.jobs
             .filter((j) => j.report === type.key)
@@ -397,6 +400,30 @@ export function ReportHistoryPanel({ data, onChanged }: { data: ReportOverview; 
     }
   };
 
+  const download = async (id: string, file: WeeklyPdfFile) => {
+    setError(null);
+    try {
+      await weeklyPdfApi.file(id, file);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const rebuild = async (id: string) => {
+    setBusyId(id);
+    setError(null);
+    setMessage(null);
+    try {
+      const files = await weeklyPdfApi.rebuild(id);
+      setMessage(t("PDF сформирован заново: {list}. Отправки не было.", { list: files.map((f) => f.name).join(", ") }));
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const pages = history ? Math.max(1, Math.ceil(history.total / history.pageSize)) : 1;
   const narrow = field.replace("w-full", "w-auto");
   const reportOptions = useMemo(
@@ -491,9 +518,16 @@ export function ReportHistoryPanel({ data, onChanged }: { data: ReportOverview; 
                       <td className="py-2 pr-3 text-ink-2">{r.scopeTitle}</td>
                       <td className="py-2 pr-3">
                         <span className={deliveryStatus[r.status].className}>{t(deliveryStatus[r.status].label)}</span>
+                        {r.stage && r.status !== "sent" && <span className="block text-xs text-ink-3">{t("этап: {stage}", { stage: t(pdfStage[r.stage]) })}</span>}
                         {r.error && <span className="block max-w-[320px] truncate text-xs text-ink-3">{t(r.error)}</span>}
                       </td>
-                      <td className="py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                      <td className="space-x-1 whitespace-nowrap py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                        {r.files?.map((f) => (
+                          <button key={f.index} className={button} onClick={() => download(r.id, f)} title={f.name}>
+                            <Download className="size-4" />
+                            {f.kind === "cards" ? t("Карточки") : "PDF"}
+                          </button>
+                        ))}
                         {r.canRetry && (
                           <button className={button} onClick={() => retry(r.id, r.status === "unknown")} disabled={busyId === r.id} title={t("Повторить отправку")}>
                             {busyId === r.id ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
@@ -509,12 +543,28 @@ export function ReportHistoryPanel({ data, onChanged }: { data: ReportOverview; 
                           {r.error && <p className="mt-1 text-bad">{t(r.error)}</p>}
                           <p className="mt-1 text-xs text-ink-3">
                             {t("Попыток: {n}", { n: r.attempts })}
-                            {r.pages > 0 && ` · ${t("картинок: {n}, {kb} КБ", { n: r.pages, kb: Math.round(r.bytes / 1024) })}`}
+                            {r.pages > 0 &&
+                              ` · ${r.files?.length ? t("страниц PDF: {n}, {kb} КБ", { n: r.pages, kb: Math.round(r.bytes / 1024) }) : t("картинок: {n}, {kb} КБ", { n: r.pages, kb: Math.round(r.bytes / 1024) })}`}
                             {r.durationMs != null && ` · ${t("{s} с", { s: (r.durationMs / 1000).toFixed(1) })}`}
                             {r.dataAsOf && ` · ${t("данные Linko на {time}", { time: when(r.dataAsOf) })}`}
                             {r.nextAttemptAt && r.status === "pending" && ` · ${t("повтор в {time}", { time: when(r.nextAttemptAt) })}`}
                             {r.by && ` · ${t("отправил {name}", { name: r.by })}`}
                           </p>
+                          {r.report.startsWith("weekly-pdf") && (
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              {r.files?.map((f) => (
+                                <button key={f.index} className={button} onClick={() => download(r.id, f)}>
+                                  <Download className="size-4" />
+                                  {f.name} · {t("{n} стр.", { n: f.pages })}
+                                </button>
+                              ))}
+                              <button className={button} onClick={() => rebuild(r.id)} disabled={busyId === r.id || r.status === "pending" || r.status === "sending"}>
+                                {busyId === r.id ? <Loader2 className="size-4 animate-spin" /> : <FileCog className="size-4" />}
+                                {t("Сформировать заново")}
+                              </button>
+                            </div>
+                          )}
+                          {r.log && <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-surface p-2 text-xs text-ink-2">{r.log}</pre>}
                         </td>
                       </tr>
                     )}

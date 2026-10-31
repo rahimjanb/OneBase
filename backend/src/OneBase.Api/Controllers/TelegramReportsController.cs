@@ -23,6 +23,11 @@ public sealed class TelegramReportsController(TelegramReportService reports) : C
     public Task<IActionResult> SaveSettings(ReportSettingsInput input, CancellationToken ct) =>
         Run(async () => Ok(await reports.SaveSettingsAsync(input, User.GetUserId(), ct)));
 
+    /// <summary>«Отчёты PDF»: только при полных данных, карточки ТП для СВ, формулы целей недели.</summary>
+    [HttpPut("weekly-pdf")]
+    public Task<IActionResult> SaveWeeklyPdf(WeeklyPdfSettingsInput input, CancellationToken ct) =>
+        Run(async () => Ok(await reports.SaveWeeklyPdfAsync(input, User.GetUserId(), ct)));
+
     /// <summary>Расписание запуска (code — «daily.midday», «weekly.saturday» …): включение, время, дни, пояс, догон пропущенного.</summary>
     [HttpPut("jobs/{code}")]
     public Task<IActionResult> SaveJob(string code, ReportJobInput input, CancellationToken ct) =>
@@ -94,6 +99,107 @@ public sealed class TelegramReportsController(TelegramReportService reports) : C
             return NoContent();
         });
 
+    /// <summary>
+    /// Еженедельный отчёт — данные без PDF и без отправки (проверка цифр): роль (rm без направления — РОП, rm, sv, tp), область, по какой
+    /// день (пусто — по отчётный день «Продаж»). Нужно право sales.read; деньги КПУ и DSO — только с finance.read.
+    /// </summary>
+    [HttpPost("weekly/data")]
+    public Task<IActionResult> WeeklyData(WeeklyDataInput input, [FromServices] OneBase.Application.Telegram.Weekly.WeeklyReportBuilder builder, CancellationToken ct) =>
+        Run(async () =>
+        {
+            if (!CanUseSales)
+            {
+                throw new ReportForbiddenException("Нет права на данные продаж (sales.read).");
+            }
+
+            var role = input.Role ?? OneBase.Domain.Telegram.TelegramReportRoles.Sv;
+            var scope = new OneBase.Application.Telegram.Reports.ReportScope(role, DirectionId: input.DirectionId, RegionId: input.RegionId, AgentId: input.AgentId);
+            return Ok(await builder.BuildAsync(scope, input.Date, User.FindAll(OneBaseClaims.Permission).Any(c => c.Value == Permissions.FinanceRead), ct));
+        });
+
+    /// <summary>
+    /// Еженедельный отчёт PDF — предпросмотр и скачивание без отправки: та же область и день, язык (ru/uz). kind=cards — карточки ТП (у ТП —
+    /// всегда карточка, у СВ — карточки команды); иначе — страницы РОП / РМ / СВ.
+    /// </summary>
+    [HttpPost("weekly/pdf")]
+    public Task<IActionResult> WeeklyPdf(WeeklyDataInput input, [FromQuery] string? language, [FromQuery] string? kind,
+        [FromServices] OneBase.Application.Telegram.Weekly.WeeklyReportBuilder builder, [FromServices] OneBase.Application.Telegram.Weekly.IWeeklyPdfRenderer renderer,
+        CancellationToken ct) =>
+        Run(async () =>
+        {
+            if (!CanUseSales)
+            {
+                throw new ReportForbiddenException("Нет права на данные продаж (sales.read).");
+            }
+
+            var role = input.Role ?? OneBase.Domain.Telegram.TelegramReportRoles.Sv;
+            if (role == OneBase.Domain.Telegram.TelegramReportRoles.Tp && input.AgentId is null)
+            {
+                throw new ReportValidationException("Выберите ТП.");
+            }
+
+            var lang = language is "uz" ? "uz" : "ru";
+            var scope = new OneBase.Application.Telegram.Reports.ReportScope(role, DirectionId: input.DirectionId, RegionId: input.RegionId, AgentId: input.AgentId);
+            var report = await builder.BuildAsync(scope, input.Date, User.FindAll(OneBaseClaims.Permission).Any(c => c.Value == Permissions.FinanceRead), ct);
+            var cards = role == OneBase.Domain.Telegram.TelegramReportRoles.Tp || kind == OneBase.Application.Telegram.Weekly.WeeklyPdfKinds.Cards;
+            var fileName = string.Concat($"weekly-{(cards ? "cards" : report.Role)}-{report.ScopeName}-{report.PeriodStart:yyyy-MM-dd}.pdf"
+                .Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '-' : ch));
+            if (Request.Query.ContainsKey("images"))
+            {
+                // Предпросмотр: страницы картинками (data URI), как у предпросмотра автоотчётов, и что с данными.
+                return Ok(new
+                {
+                    pages = (cards ? renderer.RenderCardImages(report, lang) : renderer.RenderImages(report, lang)).Select(p => "data:image/png;base64," + Convert.ToBase64String(p)).ToList(),
+                    report.Role,
+                    report.ScopeName,
+                    report.SupervisorName,
+                    report.PeriodStart,
+                    report.PeriodEnd,
+                    report.DataThrough,
+                    report.DataAsOf,
+                    report.SourceStatuses,
+                    report.Incomplete,
+                    warnings = report.DataWarnings.Select(w => OneBase.Application.Telegram.Weekly.WeeklyTexts.Note(w, lang)).Where(w => w is not null).ToList(),
+                    fileName,
+                });
+            }
+
+            return File(cards ? renderer.RenderCards(report, lang) : renderer.Render(report, lang), "application/pdf", fileName);
+        });
+
+    /// <summary>Тест еженедельного PDF — только в выбранный чат, с пометкой «ТЕСТОВАЯ ОТПРАВКА».</summary>
+    [HttpPost("weekly/test")]
+    public Task<IActionResult> WeeklyTest(WeeklyPdfTestInput input, CancellationToken ct) =>
+        Run(async () => Ok(await reports.WeeklyTestAsync(input, CanUseSales, User.GetUserId(), ct)));
+
+    /// <summary>PDF отправки из хранилища — «скачать» в истории.</summary>
+    [HttpGet("deliveries/{id:guid}/files/{index:int}")]
+    public Task<IActionResult> DeliveryFile(Guid id, int index, [FromServices] WeeklyPdfService weekly, CancellationToken ct) =>
+        Run(async () =>
+        {
+            if (!CanUseSales)
+            {
+                throw new ReportForbiddenException("Нет права на данные продаж (sales.read).");
+            }
+
+            var (content, name) = await weekly.DownloadAsync(id, index, ct);
+            return File(content, "application/pdf", name);
+        });
+
+    /// <summary>«Сформировать заново»: те же область, неделя и язык — новые PDF в хранилище, без отправки.</summary>
+    [HttpPost("deliveries/{id:guid}/rebuild")]
+    public Task<IActionResult> Rebuild(Guid id, [FromServices] WeeklyPdfService weekly, CancellationToken ct) =>
+        Run(async () =>
+        {
+            if (!CanUseSales)
+            {
+                throw new ReportForbiddenException("Нет права на данные продаж (sales.read).");
+            }
+
+            var files = await weekly.RebuildAsync(id, ct);
+            return Ok(files.Select((f, i) => new WeeklyPdfFileView(i, f.Kind, f.Name, f.Pages, f.Bytes)).ToList());
+        });
+
     /// <summary>Право на данные продаж — из токена.</summary>
     private bool CanUseSales => User.FindAll(OneBaseClaims.Permission).Any(c => c.Value == Permissions.SalesRead);
 
@@ -130,3 +236,6 @@ public sealed class TelegramReportsController(TelegramReportService reports) : C
         }
     }
 }
+
+/// <summary>Запрос данных еженедельного отчёта: роль (rm/sv/tp), направление (rm; пусто — вся страна), регион (sv), ТП (tp), по какой день.</summary>
+public sealed record WeeklyDataInput(string? Role, Guid? DirectionId, Guid? RegionId, long? AgentId, DateOnly? Date);

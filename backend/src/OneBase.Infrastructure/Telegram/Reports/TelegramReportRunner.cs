@@ -366,6 +366,12 @@ public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvid
 
         var job = delivery.Report!;
         var period = delivery.Period;
+        if (ReportCatalog.IsPdf(job))
+        {
+            // Еженедельный PDF: отчёт за последнюю полную неделю дня запуска, документом с подписью; файлы — в хранилище.
+            return await sp.GetRequiredService<WeeklyPdfService>().AttemptAsync(delivery, chat!, scope, retry: true, ct);
+        }
+
         return await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, null, token), retry: true, ct);
     }
 

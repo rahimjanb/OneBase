@@ -29,6 +29,11 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
         CancellationToken ct)
     {
         var info = ReportCatalog.Find(job) ?? throw new ArgumentException($"Неизвестный отчёт «{job}».");
+        if (info.Report == ReportType.WeeklyPdf)
+        {
+            throw new ArgumentException("Еженедельный PDF строит WeeklyReportBuilder, а не конвейер картинок.");
+        }
+
         if (!info.Roles.Contains(scope.Role))
         {
             throw new ArgumentException("Этот запуск — не для роли получателя (напоминание 17:00 — только ТП).");

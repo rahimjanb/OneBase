@@ -25,6 +25,12 @@ public enum ReportType
 
     /// <summary>7. «Поле боя»: карточки целей ТП — маршрут дня 08:30, полдень 13:00, итог дня 18:00, итог недели в субботу (ТЗ v2).</summary>
     Battle,
+
+    /// <summary>
+    /// 8. Еженедельный PDF (понедельник, за прошлую неделю пн–сб): РОП (РМ без направления) — страна, РМ — направление, СВ — регион и команда,
+    /// ТП — личная карточка. Строится WeeklyReportBuilder и рисуется WeeklyPdfRenderer — не картинками ReportEngine.
+    /// </summary>
+    WeeklyPdf,
 }
 
 /// <summary>
@@ -52,6 +58,7 @@ public static class ReportCatalog
     public const string Categories = "categories";
     public const string Weekly = "weekly";
     public const string Battle = "battle";
+    public const string WeeklyPdf = "weekly-pdf";
 
     private static readonly IReadOnlyList<string> Everyone = TelegramReportRoles.All;
 
@@ -77,7 +84,11 @@ public static class ReportCatalog
         new("battle.midday", ReportType.Battle, "midday", new(13, 0), ReportSchedules.WorkDays, Field, 120),
         new("battle.evening", ReportType.Battle, "evening", new(18, 0), ReportSchedules.WorkDays, Field, 180),
         new("battle.saturday", ReportType.Battle, "saturday", new(18, 0), ReportSchedules.Saturday, Field, 240),
+        new("weekly-pdf.monday", ReportType.WeeklyPdf, "monday", new(9, 0), ReportSchedules.Monday, Everyone, 360),
     ];
+
+    /// <summary>Запуск рисуется PDF-документом (еженедельный PDF), а не картинками.</summary>
+    public static bool IsPdf(string? code) => Find(code)?.Report == ReportType.WeeklyPdf;
 
     public static ReportJobInfo? Find(string? code) => Jobs.FirstOrDefault(j => j.Code == code);
 
@@ -89,6 +100,7 @@ public static class ReportCatalog
         ReportType.Promo => Promo,
         ReportType.Categories => Categories,
         ReportType.Battle => Battle,
+        ReportType.WeeklyPdf => WeeklyPdf,
         _ => Weekly,
     };
 
@@ -101,6 +113,7 @@ public static class ReportCatalog
         ReportType.Promo => "4. Заказы с акцией",
         ReportType.Categories => "5. Заказы по категориям",
         ReportType.Battle => "7. Поле боя",
+        ReportType.WeeklyPdf => "8. Еженедельный PDF",
         _ => "6. Итоги недели",
     };
 
@@ -115,6 +128,7 @@ public static class ReportCatalog
         (ReportType.Battle, "midday") => "полдень",
         (ReportType.Battle, "evening") => "итог дня",
         (ReportType.Battle, "saturday") => "итог недели",
+        (ReportType.WeeklyPdf, "monday") => "PDF за прошлую неделю",
         _ => SlotTitle(slot),
     };
 

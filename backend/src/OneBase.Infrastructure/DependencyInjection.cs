@@ -188,7 +188,13 @@ public static class DependencyInjection
         // «Поле боя»: правила (раздел Battle, по умолчанию — ТЗ v2) и цели ТП.
         services.AddSingleton(config.GetSection("Battle").Get<OneBase.Application.Telegram.Battle.BattleOptions>() ?? new OneBase.Application.Telegram.Battle.BattleOptions());
         services.AddScoped<OneBase.Application.Telegram.Battle.BattleGoalService>();
+        // Еженедельный отчёт (PDF РОП / РМ / СВ / ТП): модель из расчётов «Продаж», KPI, «Акций», «Остатков», DSO; формулы целей — раздел WeeklyReport.
+        services.AddSingleton(config.GetSection("WeeklyReport").Get<OneBase.Application.Telegram.Weekly.WeeklyReportOptions>()
+                              ?? new OneBase.Application.Telegram.Weekly.WeeklyReportOptions());
+        services.AddScoped<OneBase.Application.Telegram.Weekly.WeeklyReportBuilder>();
+        services.AddSingleton<OneBase.Application.Telegram.Weekly.IWeeklyPdfRenderer, OneBase.Infrastructure.Telegram.Reports.WeeklyPdfRenderer>();
         services.AddScoped<Telegram.Reports.TelegramReportSender>();
+        services.AddScoped<Telegram.Reports.WeeklyPdfService>();
         services.AddScoped<Telegram.Reports.TelegramReportService>();
         services.AddSingleton<Telegram.Reports.TelegramReportRunner>();
         services.AddHostedService<Telegram.Reports.TelegramReportWorker>();

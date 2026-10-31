@@ -145,6 +145,30 @@ public sealed partial class SalesAnalytics
     /// <summary>Выручка ТП за дни отрезка по правилам вторички (проданное по дате приёмки, без «Завода») — факт месяца к дню для дневного плана.</summary>
     public decimal AgentRevenue(long agent, DateOnly from, DateOnly to) => AgentLines(agent, from, to).Sum(l => l.Revenue);
 
+    /// <summary>
+    /// Строки факта области за дни отрезка месяца — те же, что дают итог RouteSplit: ТП команды региона (в любом филиале) и продажи вне
+    /// команды по филиалу региона; у ТП — только его строки; без региона и ТП — вся республика. Для еженедельных отчётов: неделя на стыке
+    /// месяцев собирается из строк двух месяцев (АКБ и категории двух частей не складываются).
+    /// </summary>
+    public IReadOnlyList<SaleLine> ScopeLines(DateOnly from, DateOnly to, Guid? region = null, long? agent = null)
+    {
+        if (agent is { } one)
+        {
+            return AgentLines(one, from, to).ToList();
+        }
+
+        IReadOnlyList<Guid> regions = region is { } r ? [r] : _regions.Keys.Where(id => id != NoRegionId).ToList();
+        var counted = AgentsIn(null).Where(x => InTeam(x) && _agentRegion.GetValueOrDefault(x, NoRegionId) != NoRegionId).ToHashSet();
+        var lines = new List<SaleLine>();
+        foreach (var id in regions)
+        {
+            lines.AddRange(AgentsIn(new HashSet<Guid> { id }).Where(InTeam).SelectMany(x => AgentLines(x, from, to)));
+            lines.AddRange(_currentByRegion[id].Where(l => l.Date >= from && l.Date <= to && (l.AgentId is not { } owner || !counted.Contains(owner))));
+        }
+
+        return lines;
+    }
+
     /// <summary>Строки факта ТП за дни отрезка (по дате реализации — как в «Продажах»).</summary>
     private IEnumerable<SaleLine> AgentLines(long agent, DateOnly from, DateOnly to) =>
         _currentByAgent[agent].Where(l => l.Date >= from && l.Date <= to);

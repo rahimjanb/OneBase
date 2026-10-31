@@ -151,6 +151,7 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Telegram.TelegramReportSubscriptionChat> TelegramReportSubscriptionChats { get; }
     DbSet<OneBase.Domain.Telegram.TelegramReportDelivery> TelegramReportDeliveries { get; }
     DbSet<OneBase.Domain.Telegram.TelegramReportJob> TelegramReportJobs { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramWeeklyPdfSettings> TelegramWeeklyPdfSettings { get; }
     DbSet<OneBase.Domain.Telegram.TelegramReportRun> TelegramReportRuns { get; }
     DbSet<OneBase.Domain.Telegram.TelegramReportDailyPlan> TelegramReportDailyPlans { get; }
 

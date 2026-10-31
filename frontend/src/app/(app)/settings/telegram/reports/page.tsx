@@ -9,14 +9,15 @@ export async function generateMetadata() {
   return { title: t("Автоматические отчёты · Telegram · OneBase") };
 }
 
-export default async function TelegramReportsPage() {
+export default async function TelegramReportsPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
+  const { tab } = await searchParams;
   const overview = await apiGet<ReportOverview>("/api/settings/telegram/reports", "/settings/telegram/reports");
   const t = await getT();
   return (
     <>
       <PageHeader
         title={t("Автоматические отчёты")}
-        subtitle={t("Семь отчётов по расписанию картинками в Telegram — для РМ, СВ и ТП, по оргструктуре «Продаж»; седьмой — карточки «Поля боя» для ТП и СВ")}
+        subtitle={t("Отчёты по расписанию в Telegram для РМ, СВ и ТП по оргструктуре «Продаж»: семь — картинками (седьмой — карточки «Поля боя»), восьмой — еженедельный PDF документом")}
         back="/settings/telegram"
         breadcrumbs={[
           { label: "OneBase", href: "/" },
@@ -26,7 +27,7 @@ export default async function TelegramReportsPage() {
         ]}
       />
       <PageBody>
-        <TelegramReports initial={overview} />
+        <TelegramReports initial={overview} initialTab={typeof tab === "string" ? tab : undefined} />
       </PageBody>
     </>
   );

@@ -92,23 +92,32 @@ public class TelegramReportsMigrationTests
                 var settings = await db.TelegramReportSettings.SingleAsync();
                 Assert.Equal(("uz", 30, true), (settings.Language, settings.NoPurchaseDays, settings.RefreshBeforeSend));
 
-                var recipient = await db.TelegramReportSubscriptions.Include(s => s.Chats).SingleAsync();
+                // Проекция: колонки, добавленные после этой миграции (язык PDF), в схеме ещё нет.
+                var recipient = await db.TelegramReportSubscriptions
+                    .Select(s => new { s.Id, s.Role, s.Reports, s.RegionId, s.SupervisorId, s.CreatedById, Chats = s.Chats.Select(c => new { c.ChatId }).ToList() })
+                    .SingleAsync();
                 Assert.Equal(("sv", "daily.morning,daily.evening", region, 71L), (recipient.Role, recipient.Reports, recipient.RegionId!.Value, recipient.SupervisorId!.Value));
                 Assert.Equal(chatId, Assert.Single(recipient.Chats).ChatId);
 
-                var deliveries = await db.TelegramReportDeliveries.OrderBy(d => d.Kind).ToListAsync();
+                // Проекция: колонки PDF-отправок (файлы, этап, лог) добавлены после этой миграции.
+                var deliveries = await db.TelegramReportDeliveries.OrderBy(d => d.Kind).Select(d => new { d.Report, d.Status, d.ScopeKey, d.Role }).ToListAsync();
                 var key = $"sv:{region:N}:71";
                 Assert.Equal([("daily.evening", "skipped", key), ("daily.morning", "sent", key)], deliveries.Select(d => (d.Report!, d.Status, d.ScopeKey!)));
                 Assert.All(deliveries, d => Assert.Equal("sv", d.Role));
 
                 // Новое после обновления: РМ и отправка нового отчёта — в прежней схеме их нет, откат их убирает.
                 job.Time = new TimeOnly(13, 15);
-                db.TelegramReportSubscriptions.Add(new TelegramReportSubscription { Role = "rm", Reports = "daily.evening", CreatedById = recipient.CreatedById });
-                db.TelegramReportDeliveries.Add(new TelegramReportDelivery
-                {
-                    Report = "no-orders.midday", Period = new DateOnly(2026, 10, 23), Trigger = "schedule", DataMode = "real", SubscriptionId = recipient.Id, Role = "sv",
-                    ScopeKey = key, AccountId = settings.AccountId!.Value, ChatId = chatId, RecipientTitle = "Хоразм — продажи", ScopeTitle = "Хоразм", Status = "sent",
-                });
+                // SQL, а не Add: модель знает колонки, добавленные после этой миграции (язык PDF, файлы PDF-отправок).
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO telegram."ReportSubscriptions" ("Id", "Role", "Reports", "Morning", "Midday", "Evening", "Enabled", "CreatedById", "CreatedAt")
+                    VALUES ({Guid.NewGuid()}, 'rm', 'daily.evening', false, false, false, true, {recipient.CreatedById}, now())
+                    """);
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO telegram."ReportDeliveries" ("Id", "Report", "Period", "Trigger", "DataMode", "SubscriptionId", "Role", "ScopeKey", "AccountId", "ChatId",
+                        "RecipientTitle", "ScopeTitle", "Status", "Attempts", "Pages", "Bytes", "CreatedAt")
+                    VALUES ({Guid.NewGuid()}, 'no-orders.midday', {new DateOnly(2026, 10, 23)}, 'schedule', 'real', {recipient.Id}, 'sv', {key}, {settings.AccountId!.Value}, {chatId},
+                            'Хоразм — продажи', 'Хоразм', 'sent', 0, 0, 0, now())
+                    """);
                 await db.SaveChangesAsync();
 
                 await db.GetService<IMigrator>().MigrateAsync(Before);

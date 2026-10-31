@@ -42,6 +42,9 @@ public sealed class PromoService(
     private static readonly StringComparer Russian = StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), true);
     private const int HistoryMonths = 6;
 
+    /// <summary>База «Акций» (строки по дням × акция × ТП × точка, акции, имена) — для еженедельных отчётов: те же строки и правила, что на странице.</summary>
+    public Task<PromoBase> BaseAsync(CancellationToken ct = default) => SalesViewCache.GetAsync(cache, signal, "sales:promo:base", () => BuildBaseAsync(ct));
+
     public async Task<PromoView?> GetAsync(string? month, string? rm, IReadOnlyCollection<long>? promos, CancellationToken ct = default)
     {
         var data = await SalesViewCache.GetAsync(cache, signal, "sales:promo:base", () => BuildBaseAsync(ct));
