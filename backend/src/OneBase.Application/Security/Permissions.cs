@@ -56,6 +56,24 @@ public static class Permissions
     /// <summary>«Задачи»: задачи отделов и проекты (что из них видно — решает WorkTaskService по отделу и руководству), и в ответах AI.</summary>
     public const string WorkTasks = "work.tasks";
 
+    /// <summary>«Заявки»: создавать заявки на закупку и видеть свои (руководитель отдела — и заявки своего отдела). Не раздел пользователя — есть у всех ролей отделов.</summary>
+    public const string ProcurementRequest = "procurement.request";
+
+    /// <summary>«Заявки»: все отправленные заявки компании (снабжение, директор). Черновики видит только инициатор.</summary>
+    public const string ProcurementRead = "procurement.read";
+
+    /// <summary>Снабжение: обработка заявок — передать директору на согласование, вернуть на доработку.</summary>
+    public const string ProcurementManage = "procurement.manage";
+
+    /// <summary>Настройки снабжения: категории закупок, допуск без повторного согласования.</summary>
+    public const string ProcurementSettings = "procurement.settings";
+
+    /// <summary>
+    /// Склад снабжения (кладовщик): каталог, приход, выдача отделам и по заявкам, списание, инвентаризация; видит заявки, в которых есть
+    /// часть «со склада». Утверждать закупки и менять цены не может.
+    /// </summary>
+    public const string ProcurementWarehouse = "procurement.warehouse";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
@@ -80,5 +98,10 @@ public static class Permissions
         TelegramManage,
         TelegramCampaigns,
         WorkTasks,
+        ProcurementRequest,
+        ProcurementRead,
+        ProcurementManage,
+        ProcurementSettings,
+        ProcurementWarehouse,
     ];
 }

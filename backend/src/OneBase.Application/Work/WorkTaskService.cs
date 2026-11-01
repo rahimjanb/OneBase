@@ -81,7 +81,8 @@ public sealed record WorkTaskRow(
     int ChecklistTotal,
     bool CanManage,
     bool CanWork,
-    TimeOnly? DueTime = null);
+    TimeOnly? DueTime = null,
+    string? Link = null);
 
 /// <summary>Прежний запрос списка задач одного отдела (страница отдела и инструмент AI).</summary>
 public sealed record WorkTaskQuery(string? Status, bool Mine, bool CreatedByMe, Guid? AssigneeId, string? Search, int Page = 1, int PageSize = 50);
@@ -461,7 +462,7 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
             t.AssigneeId, r.Assignee, t.CreatedById, r.Author, t.CreatedAt, t.CompletedAt, t.Result, manage,
             t.ArchivedAt is null ? AllStatuses.Where(s => CanTransition(t.Status, s, work, manage)).ToList() : [],
             t.DepartmentId, r.DepartmentCode, r.DepartmentName, t.ProjectId, r.Project, t.StartDate, t.Progress, t.IsBlocked, t.BlockedReason, t.ArchivedAt,
-            r.Done, r.Total, manage, work, t.DueTime);
+            r.Done, r.Total, manage, work, t.DueTime, t.Link);
     }
 
     // ---------- Карточка ----------

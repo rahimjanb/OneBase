@@ -13,7 +13,7 @@ import { salesTabs } from "@/components/sales/tabs";
 import { useT } from "@/i18n/client";
 import { useHomeKind } from "./HomeKind";
 import { PageBody, PageHeader, type Crumb } from "./PageHeader";
-import { taskTabs } from "./sections";
+import { requestTabs, taskTabs } from "./sections";
 
 /** Плашка на месте данных: мягкое мерцание (globals.css, .skel). */
 function Sk({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
@@ -55,10 +55,26 @@ const titles: Record<string, string> = {
   "/departments": "Отделы",
   "/campaigns": "Рассылки",
   "/calendar": "Календарь",
+  "/requests": "Заявки",
+  "/requests/new": "Новая заявка",
+  "/requests/categories": "Настройки заявок",
+  "/requests/approvals": "Согласования",
+  "/procurement/stock": "Склад",
+  "/procurement/orders": "Заказы поставщикам",
+  "/procurement/orders/new": "Новый заказ поставщику",
+  "/procurement/suppliers": "Поставщики",
+  "/procurement/movements": "Движения",
+  "/procurement/issue": "К выдаче",
+  "/procurement": "Снабжение",
+  "/procurement/reports": "Отчёты",
+  "/procurement/digests": "Ежедневные сводки",
+  "/procurement/receipts": "Приёмка",
+  "/procurement/receipts/new": "Приёмка по заказу",
   "/reports": "Отчёты",
   "/ai": "AI Dashboard",
   ...Object.fromEntries(salesTabs.map((tab) => [tab.href, tab.label])),
   ...Object.fromEntries(taskTabs.filter((tab) => tab.key !== "overview" && tab.key !== "archive").map((tab) => [tab.href, tab.label])),
+  ...Object.fromEntries(requestTabs.filter((tab) => tab.key !== "overview" && tab.key !== "categories").map((tab) => [tab.href, tab.label])),
 };
 
 function titleOf(pathname: string): string | undefined {
@@ -74,6 +90,8 @@ function crumbsOf(pathname: string, title: string | undefined): Crumb[] | undefi
   if (pathname.startsWith("/sales")) return [ONEBASE, { label: "Продажи", href: "/sales" }, ...(pathname === "/sales" ? [] : last)];
   if (pathname.startsWith("/hr")) return [ONEBASE, { label: "HR", href: "/hr" }, ...last];
   if (pathname.startsWith("/tasks/")) return [ONEBASE, { label: "Задачи", href: "/tasks" }, ...last];
+  if (pathname.startsWith("/requests/")) return [ONEBASE, { label: "Заявки", href: "/requests" }, ...last];
+  if (pathname.startsWith("/procurement")) return [ONEBASE, { label: "Снабжение", href: "/procurement" }, ...last];
   if (pathname === "/settings") return [ONEBASE, { label: "Настройки" }];
   if (pathname.startsWith("/settings")) return [ONEBASE, { label: "Настройки", href: "/settings" }, ...last];
   if (pathname.startsWith("/base")) return [ONEBASE, { label: "Файлы", href: "/base" }];
@@ -521,9 +539,40 @@ function ConsultantSkeleton({ chat }: { chat: boolean }) {
   );
 }
 
+/** «Заявки»: обзор — плитки и блоки; новая заявка и правка — форма и итог справа; карточка — этапы, позиции и сведения. */
+function RequestsSkeleton({ pathname }: { pathname: string }) {
+  const form = pathname.endsWith("/new") || pathname.endsWith("/edit");
+  return (
+    <Busy>
+      <Header pathname={pathname} />
+      <PageBody>
+        {pathname === "/requests" ? (
+          <>
+            <Tiles count={6} className="grid-cols-2 sm:grid-cols-3 xl:grid-cols-6" />
+            <div className="mt-4 grid gap-4 xl:grid-cols-[3fr_2fr]">
+              <Block rows={5} />
+              <Block rows={5} />
+            </div>
+          </>
+        ) : (
+          <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="flex flex-col gap-4">
+              {!form && <Sk className="h-16 w-full rounded-2xl" />}
+              <Block rows={form ? 4 : 6} />
+              <Block rows={form ? 5 : 3} />
+            </div>
+            <Block rows={form ? 3 : 7} />
+          </div>
+        )}
+      </PageBody>
+    </Busy>
+  );
+}
+
 /** Любая другая страница: шапка с названием, плитки и блоки. */
 function PageSkeleton({ pathname }: { pathname: string }) {
-  const list = pathname.startsWith("/tasks/") || pathname.startsWith("/settings/") || pathname.startsWith("/campaigns");
+  const list =
+    pathname.startsWith("/tasks/") || pathname.startsWith("/settings/") || pathname.startsWith("/campaigns") || pathname.startsWith("/requests/") || pathname.startsWith("/procurement");
   return (
     <Busy>
       <Header pathname={pathname} />
@@ -601,6 +650,15 @@ export function RouteSkeleton({ inSales = false }: { inSales?: boolean }) {
   if (pathname.startsWith("/tasks/task/")) return <TaskSkeleton />;
   if (pathname === "/notifications") return <NotificationsSkeleton />;
   if (pathname === "/calendar") return <CalendarSkeleton />;
+  if (
+    pathname === "/requests" ||
+    pathname === "/requests/new" ||
+    pathname === "/procurement/orders/new" ||
+    /^\/requests\/[0-9a-f-]{36}(\/edit|\/offers)?$/.test(pathname) ||
+    pathname === "/procurement/receipts/new" ||
+    /^\/procurement\/(orders|suppliers|receipts)\/[0-9a-f-]{36}(\/edit)?$/.test(pathname)
+  )
+    return <RequestsSkeleton pathname={pathname} />;
   if (pathname === "/consultant" || pathname.startsWith("/consultant/")) return <ConsultantSkeleton chat={pathname !== "/consultant"} />;
   return <PageSkeleton pathname={pathname} />;
 }

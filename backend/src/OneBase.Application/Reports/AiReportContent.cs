@@ -45,3 +45,9 @@ public interface IReportWorkbookWriter
 {
     byte[] Write(AiReportContent report, DateTimeOffset createdAt);
 }
+
+/// <summary>Файл PDF из отчёта: те же листы, что в Excel, — таблицами на A4 (альбомная), с шапкой, итогами и пояснениями.</summary>
+public interface IReportPdfWriter
+{
+    byte[] Write(AiReportContent report, DateTimeOffset createdAt);
+}

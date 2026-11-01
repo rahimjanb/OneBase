@@ -116,6 +116,32 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Work.UserNotification> UserNotifications { get; }
     DbSet<OneBase.Domain.Work.CalendarEvent> CalendarEvents { get; }
     DbSet<OneBase.Domain.Work.CalendarEventParticipant> CalendarEventParticipants { get; }
+
+    // Снабжение: заявки на закупку, позиции, категории, единицы, история, вложения.
+    DbSet<OneBase.Domain.Procurement.ProcurementRequest> ProcurementRequests { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementRequestItem> ProcurementRequestItems { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementCategory> ProcurementCategories { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementUnit> ProcurementUnits { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementAuditLog> ProcurementAuditLogs { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementDocument> ProcurementDocuments { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementItem> ProcurementItems { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementWarehouse> ProcurementWarehouses { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementStockBalance> ProcurementStockBalances { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementStockDocument> ProcurementStockDocuments { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementReceiptLine> ProcurementReceiptLines { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementDigest> ProcurementDigests { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementEscalation> ProcurementEscalations { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementStockMovement> ProcurementStockMovements { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementStockReservation> ProcurementStockReservations { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementApproval> ProcurementApprovals { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementSettings> ProcurementSettings { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementSupplier> ProcurementSuppliers { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementSupplierCategory> ProcurementSupplierCategories { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementOffer> ProcurementOffers { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementOfferItem> ProcurementOfferItems { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrder> ProcurementPurchaseOrders { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrderItem> ProcurementPurchaseOrderItems { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementOrderApproval> ProcurementOrderApprovals { get; }
     DbSet<OneBase.Domain.Work.PushSubscription> PushSubscriptions { get; }
     DbSet<OneBase.Domain.Work.PushKeys> PushKeys { get; }
 

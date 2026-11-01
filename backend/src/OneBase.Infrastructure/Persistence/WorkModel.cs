@@ -29,6 +29,7 @@ internal static class WorkModel
             e.HasOne(x => x.Assignee).WithMany().HasForeignKey(x => x.AssigneeId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("FK_WorkTasks_Users_AssigneeId");
             e.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.SetNull).HasConstraintName("FK_WorkTasks_Users_CreatedById");
             e.Property(x => x.BlockedReason).HasMaxLength(500);
+            e.Property(x => x.Link).HasMaxLength(300);
             e.HasIndex(x => x.ProjectId).HasDatabaseName("IX_WorkTasks_ProjectId");
             e.HasIndex(x => new { x.Status, x.DueDate }).HasDatabaseName("IX_WorkTasks_Status_DueDate");
             e.HasIndex(x => x.ArchivedAt).HasDatabaseName("IX_WorkTasks_ArchivedAt");

@@ -15,7 +15,7 @@ public class NotificationCatalogTests
     [Fact]
     public void Every_kind_has_a_type_and_one_category()
     {
-        string[] types = ["task_overdue", "task_due", "task_done", "task_comment", "task_assigned", "mention", "ai_insight", "ai_budget", "sales_alert", "calendar", "system"];
+        string[] types = ["task_overdue", "task_due", "task_done", "task_comment", "task_assigned", "mention", "ai_insight", "ai_budget", "sales_alert", "calendar", "procurement", "system"];
         foreach (var kind in Enum.GetValues<UserNotificationKind>())
         {
             var (type, category) = NotificationCatalog.Of(kind);

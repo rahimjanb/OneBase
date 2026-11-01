@@ -18,9 +18,6 @@ namespace OneBase.Infrastructure.Telegram.Reports;
 /// </summary>
 public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
 {
-    private static readonly object Init = new();
-    private static bool _ready;
-
     public byte[] Render(WeeklySupervisorReport report, string language)
     {
         EnsureReady();
@@ -39,27 +36,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
     /// <summary>Подпись из словаря рисовальщика (латиница) на языке PDF: «uz-Cyrl» — переведённая в кириллицу.</summary>
     private static string FromUz(string lang, string latin, string? ru = null) => lang == "uz-Cyrl" ? ReportTexts.Uzbek(lang, latin, ru) : latin;
 
-    private static void EnsureReady()
-    {
-        lock (Init)
-        {
-            if (_ready)
-            {
-                return;
-            }
-
-            QuestPDF.Settings.License = LicenseType.Community;
-            var assembly = typeof(WeeklyPdfRenderer).Assembly;
-            foreach (var name in new[] { "Regular", "Medium", "SemiBold", "Bold" })
-            {
-                using var stream = assembly.GetManifestResourceStream($"OneBase.Fonts.Inter-{name}.ttf")
-                                   ?? throw new InvalidOperationException($"Нет шрифта Inter-{name} в сборке");
-                FontManager.RegisterFontFromStream(stream);
-            }
-
-            _ready = true;
-        }
-    }
+    private static void EnsureReady() => OneBase.Infrastructure.Reports.QuestPdfSetup.EnsureReady();
 
     private static class C
     {

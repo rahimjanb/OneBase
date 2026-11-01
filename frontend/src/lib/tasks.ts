@@ -56,6 +56,8 @@ export type WorkTask = {
   checklistTotal: number;
   canManage: boolean;
   canWork: boolean;
+  /** Откуда задача: путь в OneBase (заказ поставщику) — кнопка «Открыть» в карточке. */
+  link?: string | null;
 };
 
 export type WorkTaskDetail = {

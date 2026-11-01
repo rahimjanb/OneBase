@@ -17,7 +17,7 @@ export type FilterSet = { department?: boolean; assignee?: boolean; status?: "al
 const priorities: WorkTaskPriority[] = ["Urgent", "High", "Medium", "Low"];
 const norm = (s: string) => s.toLocaleLowerCase("ru").replace(/ё/g, "е");
 
-type Option = { value: string; label: string; hint?: string | null };
+export type Option = { value: string; label: string; hint?: string | null };
 
 /**
  * Фильтры задач (ТЗ tasks-kanban-detail) — общие для канбана и таблицы, в адресе страницы: ссылкой можно поделиться, переключение
@@ -305,7 +305,7 @@ export function TaskFilters({ departments, show, fixedDepartment }: { department
   );
 }
 
-function SheetSection({ title, children }: { title: string; children: React.ReactNode }) {
+export function SheetSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
       <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.8px] text-subtle">{title}</h3>
@@ -315,7 +315,7 @@ function SheetSection({ title, children }: { title: string; children: React.Reac
 }
 
 /** Кнопка-фильтр с поповером: выключен — «Приоритет ▾», включён — «Приоритет: Высокий ×» на мягком акценте. Esc и нажатие мимо закрывают. */
-function FilterPopover({
+export function FilterPopover({
   icon: Icon,
   name,
   value,
@@ -378,7 +378,7 @@ function FilterPopover({
   );
 }
 
-function MultiFilter({
+export function MultiFilter({
   icon,
   name,
   value,
@@ -409,7 +409,7 @@ function MultiFilter({
 }
 
 /** Список вариантов с галочками и поиском; single — один вариант (статус). */
-function ChoiceList({
+export function ChoiceList({
   options,
   selected,
   searchable = false,

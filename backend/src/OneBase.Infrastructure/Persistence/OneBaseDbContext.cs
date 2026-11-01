@@ -158,6 +158,31 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
     public DbSet<CalendarEventParticipant> CalendarEventParticipants => Set<CalendarEventParticipant>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementRequest> ProcurementRequests => Set<OneBase.Domain.Procurement.ProcurementRequest>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementRequestItem> ProcurementRequestItems => Set<OneBase.Domain.Procurement.ProcurementRequestItem>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementCategory> ProcurementCategories => Set<OneBase.Domain.Procurement.ProcurementCategory>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementUnit> ProcurementUnits => Set<OneBase.Domain.Procurement.ProcurementUnit>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementCounter> ProcurementCounters => Set<OneBase.Domain.Procurement.ProcurementCounter>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementAuditLog> ProcurementAuditLogs => Set<OneBase.Domain.Procurement.ProcurementAuditLog>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementDocument> ProcurementDocuments => Set<OneBase.Domain.Procurement.ProcurementDocument>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementItem> ProcurementItems => Set<OneBase.Domain.Procurement.ProcurementItem>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementWarehouse> ProcurementWarehouses => Set<OneBase.Domain.Procurement.ProcurementWarehouse>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementStockBalance> ProcurementStockBalances => Set<OneBase.Domain.Procurement.ProcurementStockBalance>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementStockDocument> ProcurementStockDocuments => Set<OneBase.Domain.Procurement.ProcurementStockDocument>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementReceiptLine> ProcurementReceiptLines => Set<OneBase.Domain.Procurement.ProcurementReceiptLine>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementDigest> ProcurementDigests => Set<OneBase.Domain.Procurement.ProcurementDigest>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementEscalation> ProcurementEscalations => Set<OneBase.Domain.Procurement.ProcurementEscalation>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementStockMovement> ProcurementStockMovements => Set<OneBase.Domain.Procurement.ProcurementStockMovement>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementStockReservation> ProcurementStockReservations => Set<OneBase.Domain.Procurement.ProcurementStockReservation>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementApproval> ProcurementApprovals => Set<OneBase.Domain.Procurement.ProcurementApproval>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementSettings> ProcurementSettings => Set<OneBase.Domain.Procurement.ProcurementSettings>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementSupplier> ProcurementSuppliers => Set<OneBase.Domain.Procurement.ProcurementSupplier>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementSupplierCategory> ProcurementSupplierCategories => Set<OneBase.Domain.Procurement.ProcurementSupplierCategory>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementOffer> ProcurementOffers => Set<OneBase.Domain.Procurement.ProcurementOffer>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementOfferItem> ProcurementOfferItems => Set<OneBase.Domain.Procurement.ProcurementOfferItem>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrder> ProcurementPurchaseOrders => Set<OneBase.Domain.Procurement.ProcurementPurchaseOrder>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrderItem> ProcurementPurchaseOrderItems => Set<OneBase.Domain.Procurement.ProcurementPurchaseOrderItem>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementOrderApproval> ProcurementOrderApprovals => Set<OneBase.Domain.Procurement.ProcurementOrderApproval>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<PushKeys> PushKeys => Set<PushKeys>();
 
@@ -180,6 +205,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         HrModel.Configure(b);
         BattleModel.Configure(b);
         TelegramModel.Configure(b);
+        ProcurementModel.Configure(b);
 
         // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.
         b.Entity<DataSourceConnection>(e =>

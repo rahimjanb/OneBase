@@ -34,12 +34,14 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
   const [origin, setOrigin] = useState<string | null>(null);
   useEffect(() => setOrigin(pathname.startsWith("/tasks/task/") ? (readTaskList()?.tab ?? null) : null), [pathname]);
   const current = origin ?? section?.active(pathname) ?? null;
-  // «Задачи»: вкладка «Предложения AI» — руководителям, со счётчиком ожидающих решения (обновляется при переходах внутри раздела).
-  const [work, setWork] = useState<{ heads: boolean; pendingSuggestions: number } | null>(null);
+  // «Задачи»: вкладка «Предложения AI» — руководителям, со счётчиком ожидающих решения; «Заявки»: «Заявки отдела» — руководителям отделов,
+  // у «Мои заявки» — сколько ждут действия (возвраты на доработку, очередь снабжения). Обновляется при переходах внутри раздела.
+  const [work, setWork] = useState<{ heads: boolean; pendingSuggestions?: number; needsAction?: number; isDirector?: boolean; awaitingApproval?: number; toIssue?: number; toReceive?: number } | null>(null);
   useEffect(() => {
-    if (sectionId !== "tasks") return;
+    const url = sectionId === "tasks" ? "/bff/api/work/nav" : sectionId === "requests" || sectionId === "procurement" ? "/bff/api/procurement/nav" : null;
+    if (!url) return;
     let live = true;
-    fetch("/bff/api/work/nav")
+    fetch(url)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => live && data && setWork(data))
       .catch(() => undefined);
@@ -47,7 +49,9 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
       live = false;
     };
   }, [sectionId, pathname]);
-  const tabs = (section?.tabs ?? []).filter((t) => (!t.permission || permissions?.includes(t.permission)) && (!t.headsOnly || work?.heads));
+  const tabs = (section?.tabs ?? []).filter(
+    (t) => (!t.permission || permissions?.includes(t.permission)) && (!t.headsOnly || work?.heads) && (!t.approverOnly || work?.isDirector),
+  );
   // Подписи (язык, права) задают ширину ряда — по ним пересчёт.
   const labels = tabs.map((t) => tr(t.label)).join("|");
 
@@ -160,6 +164,18 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
             )}
             {t.key === "suggestions" && sectionId === "tasks" && (work?.pendingSuggestions ?? 0) > 0 && (
               <span className={`rounded-full px-1.5 text-[11px] font-semibold ${on ? "bg-white/25 text-white" : "bg-violet/20 text-violet-light"}`}>{work?.pendingSuggestions}</span>
+            )}
+            {t.key === "approvals" && sectionId === "requests" && (work?.awaitingApproval ?? 0) > 0 && (
+              <span className={`rounded-full px-1.5 text-[11px] font-semibold ${on ? "bg-white/25 text-white" : "bg-violet/20 text-violet-light"}`}>{work?.awaitingApproval}</span>
+            )}
+            {t.key === "receipts" && sectionId === "procurement" && (work?.toReceive ?? 0) > 0 && (
+              <span className={`rounded-full px-1.5 text-[11px] font-semibold ${on ? "bg-white/25 text-white" : "bg-accent-soft text-accent-strong"}`}>{work?.toReceive}</span>
+            )}
+            {t.key === "issue" && sectionId === "procurement" && (work?.toIssue ?? 0) > 0 && (
+              <span className={`rounded-full px-1.5 text-[11px] font-semibold ${on ? "bg-white/25 text-white" : "bg-accent-soft text-accent-strong"}`}>{work?.toIssue}</span>
+            )}
+            {t.key === "overview" && sectionId === "requests" && (work?.needsAction ?? 0) > 0 && (
+              <span className={`rounded-full px-1.5 text-[11px] font-semibold ${on ? "bg-white/25 text-white" : "bg-accent-soft text-accent-strong"}`}>{work?.needsAction}</span>
             )}
           </Link>
         );

@@ -81,6 +81,9 @@ public class WorkTask : Entity
     /// <summary>Создана из предложения AI-диспетчера (после подтверждения руководителем).</summary>
     public Guid? SuggestionId { get; set; }
 
+    /// <summary>Откуда задача: путь в OneBase (заказ поставщику /procurement/orders/{id}) — кнопка «Открыть» в карточке задачи.</summary>
+    public string? Link { get; set; }
+
     /// <summary>Срок, о приближении которого уже напомнили (новый срок — новое напоминание).</summary>
     public DateOnly? DueSoonNotifiedFor { get; set; }
 

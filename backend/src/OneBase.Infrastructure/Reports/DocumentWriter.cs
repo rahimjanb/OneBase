@@ -236,17 +236,23 @@ public sealed partial class DocumentWriter : IDocumentWriter
                 new TableCellLeftMargin { Width = 85, Type = TableWidthValues.Dxa },
                 new BottomMargin { Width = "40", Type = TableWidthUnitValues.Dxa },
                 new TableCellRightMargin { Width = 85, Type = TableWidthValues.Dxa })));
+        // Ширина колонки — по самому длинному тексту в ней (от 4 до 40 знаков): номер и количество узкие, наименование широкое.
+        var weights = Enumerable.Range(0, columns)
+            .Select(c => Math.Clamp(rows.Append(header).Max(r => c < r.Count ? r[c].Length : 0), 4, 40))
+            .ToList();
+        var total = weights.Sum();
+        var widths = weights.Select(w => Math.Max(1, 5000 * w / total)).ToList();
         var grid = new TableGrid();
-        for (var c = 0; c < columns; c++)
+        foreach (var width in widths)
         {
-            grid.Append(new GridColumn { Width = (9638 / columns).ToString() });
+            grid.Append(new GridColumn { Width = (9638 * width / 5000).ToString() });
         }
 
         table.Append(grid);
-        table.Append(Row(header, columns, true));
+        table.Append(Row(header, widths, true));
         foreach (var row in rows)
         {
-            table.Append(Row(row, columns, false));
+            table.Append(Row(row, widths, false));
         }
 
         return table;
@@ -254,8 +260,9 @@ public sealed partial class DocumentWriter : IDocumentWriter
 
     private static T Border<T>() where T : BorderType, new() => new() { Val = BorderValues.Single, Size = 4U, Color = "BFBFBF" };
 
-    private static TableRow Row(IReadOnlyList<string> cells, int columns, bool header)
+    private static TableRow Row(IReadOnlyList<string> cells, IReadOnlyList<int> widths, bool header)
     {
+        var columns = widths.Count;
         var row = new TableRow();
         if (header)
         {
@@ -265,7 +272,7 @@ public sealed partial class DocumentWriter : IDocumentWriter
         for (var c = 0; c < columns; c++)
         {
             var text = c < cells.Count ? cells[c] : string.Empty;
-            var properties = new TableCellProperties(new TableCellWidth { Type = TableWidthUnitValues.Pct, Width = (5000 / columns).ToString() });
+            var properties = new TableCellProperties(new TableCellWidth { Type = TableWidthUnitValues.Pct, Width = widths[c].ToString() });
             if (header)
             {
                 properties.Append(new Shading { Val = ShadingPatternValues.Clear, Color = "auto", Fill = "E8EEF8" });

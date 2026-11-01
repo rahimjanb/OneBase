@@ -40,6 +40,7 @@ import {
   UserRound,
   UserRoundPen,
   type LucideIcon,
+  ExternalLink,
 } from "lucide-react";
 import { Markdown } from "@/components/ai/Markdown";
 import { Sheet } from "@/components/field/Sheet";
@@ -146,6 +147,12 @@ export function DescriptionCard({ task, canEdit, onSave, className = "" }: { tas
         <p className="mt-3 text-sm text-subtle">{t("Без описания")}</p>
       )}
       {task.result && <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-sm text-ink-2">{t("Итог: {text}", { text: task.result })}</p>}
+      {task.link && (
+        <a href={task.link} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-accent-soft px-3 py-2 text-sm font-semibold text-link hover:underline">
+          <ExternalLink className="size-4" aria-hidden />
+          {task.link.startsWith("/procurement/orders/") ? t("Открыть заказ поставщику") : t("Открыть источник")}
+        </a>
+      )}
     </section>
   );
 }

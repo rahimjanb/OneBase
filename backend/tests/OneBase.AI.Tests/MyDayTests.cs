@@ -149,7 +149,10 @@ public class MyDayTests
     {
         var role = SystemRoles.All.Single(r => r.Name == SystemRoles.EmployeeRole);
         Assert.Null(role.DepartmentCode);
-        Assert.Equal(new[] { Permissions.AgentsRun, Permissions.FilesRead, Permissions.FilesWrite, Permissions.WorkTasks }.Order(), role.Permissions.Order());
+        // Свои заявки на закупку (раздел «Заявки») — у всех сотрудников; все заявки компании — нет.
+        Assert.Equal(new[] { Permissions.AgentsRun, Permissions.FilesRead, Permissions.FilesWrite, Permissions.WorkTasks, Permissions.ProcurementRequest }.Order(),
+            role.Permissions.Order());
+        Assert.DoesNotContain(Permissions.ProcurementRead, role.Permissions);
         Assert.DoesNotContain(Permissions.UsersManage, role.Permissions);
         Assert.DoesNotContain(Permissions.HrRead, role.Permissions);
     }

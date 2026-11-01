@@ -31,6 +31,7 @@ public static class NotificationCatalog
         UserNotificationKind.TaskAssigned or UserNotificationKind.TaskChanged or UserNotificationKind.TaskReview or UserNotificationKind.TaskReturned
             or UserNotificationKind.TaskDeadlineChanged => ("task_assigned", Tasks),
         UserNotificationKind.CalendarInvite => ("calendar", Tasks),
+        UserNotificationKind.ProcurementRequest or UserNotificationKind.ProcurementStatus => ("procurement", Tasks),
         UserNotificationKind.TaskSuggestion => ("ai_insight", Ai),
         UserNotificationKind.AiBudget => ("ai_budget", Ai),
         UserNotificationKind.MonthPlanMissing => ("sales_alert", Sales),

@@ -17,6 +17,7 @@ export type NotificationType =
   | "hr_event"
   | "sales_alert"
   | "calendar"
+  | "procurement"
   | "system";
 
 export type NotificationCategory = "tasks" | "ai" | "hr" | "sales" | "system";
@@ -59,6 +60,7 @@ export const TYPES: Record<NotificationType, { icon: string; tone: Tone; section
   hr_event: { icon: "users", tone: "teal", section: "HR" },
   sales_alert: { icon: "trending-down", tone: "warning", section: "Продажи" },
   calendar: { icon: "calendar-days", tone: "accent", section: "Календарь" },
+  procurement: { icon: "clipboard-pen", tone: "warning", section: "Заявки" },
   system: { icon: "refresh-cw", tone: "success", section: "Система" },
 };
 

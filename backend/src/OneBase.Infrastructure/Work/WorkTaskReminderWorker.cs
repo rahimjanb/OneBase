@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OneBase.Application.Field;
+using OneBase.Application.Procurement;
 using OneBase.Application.Work;
 
 namespace OneBase.Infrastructure.Work;
@@ -10,6 +11,8 @@ namespace OneBase.Infrastructure.Work;
 /// <summary>
 /// Напоминания раздела «Задачи»: раз в 15 минут после 09:00 по Ташкенту — «срок завтра» и «просрочена». Одно уведомление на срок
 /// (отметка ставится условным обновлением в базе — см. WorkTaskService.RemindAsync), поэтому перезапуск и частые проверки не дублируют.
+/// Тем же проходом — снабжение (ProcurementReminderService): поставка завтра, поставка просрочена, остаток ниже минимума, ежедневная сводка
+/// руководству, эскалация просроченных задач снабжения.
 /// Выключается Work:Reminders:Enabled = false.
 /// </summary>
 internal sealed class WorkTaskReminderWorker(IServiceScopeFactory scopes, IConfiguration config, ILogger<WorkTaskReminderWorker> logger) : BackgroundService
@@ -48,6 +51,21 @@ internal sealed class WorkTaskReminderWorker(IServiceScopeFactory scopes, IConfi
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     logger.LogWarning(ex, "Задачи: напоминания о сроках не отправлены");
+                }
+
+                try
+                {
+                    using var scope = scopes.CreateScope();
+                    var result = await scope.ServiceProvider.GetRequiredService<ProcurementReminderService>().RemindAsync(FieldClock.Today, stoppingToken);
+                    if (result.DueSoon + result.Overdue + result.LowStock + result.Escalated > 0 || result.Digest)
+                    {
+                        logger.LogInformation("Снабжение: «поставка завтра» {DueSoon}, «поставка просрочена» {Overdue}, «ниже минимума» {LowStock}, сводка {Digest}, эскалаций {Escalated}",
+                            result.DueSoon, result.Overdue, result.LowStock, result.Digest, result.Escalated);
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning(ex, "Снабжение: напоминания о поставках и остатках не отправлены");
                 }
             }
             while (await timer.WaitForNextTickAsync(stoppingToken));

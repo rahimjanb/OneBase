@@ -3742,6 +3742,1459 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("Integrations", (string)null);
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DeciderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal>("PurchaseTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Round")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Snapshot")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementApprovals");
+
+                    b.HasIndex("DeciderId")
+                        .HasDatabaseName("IX_ProcurementApprovals_DeciderId");
+
+                    b.HasIndex("RequestId", "Round")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementApprovals_RequestId_Round");
+
+                    b.ToTable("Approvals", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Changes")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DocId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ToStatus")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementAuditLog");
+
+                    b.HasIndex("ActorId")
+                        .HasDatabaseName("IX_ProcurementAuditLog_ActorId");
+
+                    b.HasIndex("DocType", "DocId", "CreatedAt")
+                        .HasDatabaseName("IX_ProcurementAuditLog_DocType_DocId_CreatedAt");
+
+                    b.HasIndex("DocType", "ToStatus", "CreatedAt")
+                        .HasDatabaseName("IX_ProcurementAuditLog_DocType_ToStatus_CreatedAt");
+
+                    b.ToTable("AuditLog", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementCategories");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementCategories_Code")
+                        .HasFilter("\"Code\" IS NOT NULL");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementCategories_Name");
+
+                    b.ToTable("Categories", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementCounter", b =>
+                {
+                    b.Property<string>("Prefix")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Last")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Prefix", "Year")
+                        .HasName("PK_ProcurementCounters");
+
+                    b.ToTable("Counters", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementDigest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Recipients")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Sections")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementDigests");
+
+                    b.HasIndex("Day")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementDigests_Day");
+
+                    b.ToTable("Digests", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OwnerType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UploadedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementDocuments");
+
+                    b.HasIndex("UploadedById")
+                        .HasDatabaseName("IX_ProcurementDocuments_UploadedById");
+
+                    b.HasIndex("OwnerType", "OwnerId")
+                        .HasDatabaseName("IX_ProcurementDocuments_OwnerType_OwnerId");
+
+                    b.ToTable("Documents", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementEscalation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementEscalations");
+
+                    b.HasIndex("TaskId", "Level", "DueDate")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementEscalations_TaskId_Level_DueDate");
+
+                    b.ToTable("Escalations", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Barcode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LowStockNotifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("MinQty")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("UnitCode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementItems");
+
+                    b.HasIndex("Barcode")
+                        .HasDatabaseName("IX_ProcurementItems_Barcode");
+
+                    b.HasIndex("CategoryId")
+                        .HasDatabaseName("IX_ProcurementItems_CategoryId");
+
+                    b.HasIndex("Sku")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementItems_Sku");
+
+                    b.HasIndex("UnitCode")
+                        .HasDatabaseName("IX_ProcurementItems_UnitCode");
+
+                    b.ToTable("Items", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementOffer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("DeliveryCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int?>("DeliveryDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PaymentTerms")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("PricesIncludeVat")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("Quality")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("ValidUntil")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("VatRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("Warranty")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementOffers");
+
+                    b.HasIndex("RequestId")
+                        .HasDatabaseName("IX_ProcurementOffers_RequestId");
+
+                    b.HasIndex("SupplierId")
+                        .HasDatabaseName("IX_ProcurementOffers_SupplierId");
+
+                    b.ToTable("Offers", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementOfferItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("OfferId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("RequestItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementOfferItems");
+
+                    b.HasIndex("OfferId")
+                        .HasDatabaseName("IX_ProcurementOfferItems_OfferId");
+
+                    b.HasIndex("RequestItemId")
+                        .HasDatabaseName("IX_ProcurementOfferItems_RequestItemId");
+
+                    b.ToTable("OfferItems", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementOrderApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DeciderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Round")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Snapshot")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementOrderApprovals");
+
+                    b.HasIndex("DeciderId")
+                        .HasDatabaseName("IX_ProcurementOrderApprovals_DeciderId");
+
+                    b.HasIndex("OrderId", "Round")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementOrderApprovals_OrderId_Round");
+
+                    b.ToTable("OrderApprovals", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementPurchaseOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ApprovalRound")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApprovedSnapshot")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClientKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("DeliveryCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("Discount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateOnly?>("DueSoonNotifiedFor")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("ExpectedDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("OfferId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("OrderDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("OrderedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("OverdueNotifiedFor")
+                        .HasColumnType("date");
+
+                    b.Property<string>("PaymentTerms")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("PricesIncludeVat")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ResponsibleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("VatAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("VatRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementPurchaseOrders");
+
+                    b.HasIndex("ApprovedAt")
+                        .HasDatabaseName("IX_ProcurementPurchaseOrders_ApprovedAt");
+
+                    b.HasIndex("DeliveredAt")
+                        .HasDatabaseName("IX_ProcurementPurchaseOrders_DeliveredAt");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementPurchaseOrders_Number");
+
+                    b.HasIndex("OfferId")
+                        .HasDatabaseName("IX_ProcurementPurchaseOrders_OfferId");
+
+                    b.HasIndex("OrderedAt")
+                        .HasDatabaseName("IX_ProcurementPurchaseOrders_OrderedAt");
+
+                    b.HasIndex("CreatedById", "ClientKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementPurchaseOrders_CreatedById_ClientKey")
+                        .HasFilter("\"ClientKey\" IS NOT NULL");
+
+                    b.HasIndex("ResponsibleId", "Status")
+                        .HasDatabaseName("IX_ProcurementPurchaseOrders_ResponsibleId_Status");
+
+                    b.HasIndex("Status", "ExpectedDate")
+                        .HasDatabaseName("IX_ProcurementPurchaseOrders_Status_ExpectedDate");
+
+                    b.HasIndex("SupplierId", "Status")
+                        .HasDatabaseName("IX_ProcurementPurchaseOrders_SupplierId_Status");
+
+                    b.ToTable("PurchaseOrders", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementPurchaseOrderItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ClosedQty")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("LineNo")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("ReceivedQty")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("RequestItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UnitCode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementPurchaseOrderItems");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("IX_ProcurementPurchaseOrderItems_OrderId");
+
+                    b.HasIndex("RequestItemId")
+                        .HasDatabaseName("IX_ProcurementPurchaseOrderItems_RequestItemId");
+
+                    b.ToTable("PurchaseOrderItems", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementReceiptLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Accepted")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("ClaimResolution")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("ClaimResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClaimResolvedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClaimStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("Defective")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LineNo")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OrderItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Received")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("Shortage")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementReceiptLines");
+
+                    b.HasIndex("ClaimResolvedById");
+
+                    b.HasIndex("ClaimStatus")
+                        .HasDatabaseName("IX_ProcurementReceiptLines_ClaimStatus");
+
+                    b.HasIndex("ItemId")
+                        .HasDatabaseName("IX_ProcurementReceiptLines_ItemId");
+
+                    b.HasIndex("OrderItemId")
+                        .HasDatabaseName("IX_ProcurementReceiptLines_OrderItemId");
+
+                    b.HasIndex("DocumentId", "LineNo")
+                        .HasDatabaseName("IX_ProcurementReceiptLines_DocumentId_LineNo");
+
+                    b.ToTable("ReceiptLines", "procurement", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProcurementReceiptLines_Quantities", "\"Received\" >= 0 AND \"Defective\" >= 0 AND \"Defective\" <= \"Received\" AND \"Shortage\" >= 0 AND \"Accepted\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ApprovalRound")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApprovedSnapshot")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClientKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("DesiredDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("EstimatedTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("ForwardedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InitiatorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal>("PurchaseTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTimeOffset?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("UsesStock")
+                        .HasColumnType("boolean");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementRequests");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementRequests_Number");
+
+                    b.HasIndex("DepartmentId", "CreatedAt")
+                        .HasDatabaseName("IX_ProcurementRequests_DepartmentId_CreatedAt");
+
+                    b.HasIndex("InitiatorId", "ClientKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementRequests_InitiatorId_ClientKey")
+                        .HasFilter("\"ClientKey\" IS NOT NULL");
+
+                    b.HasIndex("InitiatorId", "Status")
+                        .HasDatabaseName("IX_ProcurementRequests_InitiatorId_Status");
+
+                    b.HasIndex("Status", "DepartmentId")
+                        .HasDatabaseName("IX_ProcurementRequests_Status_DepartmentId");
+
+                    b.ToTable("Requests", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementRequestItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("EstimatedPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("FromStock")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("IssuedQty")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid?>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LineNo")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<decimal>("OrderedQty")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("PurchaseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("ReceivedQty")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("UnitCode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementRequestItems");
+
+                    b.HasIndex("CategoryId")
+                        .HasDatabaseName("IX_ProcurementRequestItems_CategoryId");
+
+                    b.HasIndex("ItemId")
+                        .HasDatabaseName("IX_ProcurementRequestItems_ItemId");
+
+                    b.HasIndex("UnitCode")
+                        .HasDatabaseName("IX_ProcurementRequestItems_UnitCode");
+
+                    b.HasIndex("RequestId", "LineNo")
+                        .HasDatabaseName("IX_ProcurementRequestItems_RequestId_LineNo");
+
+                    b.ToTable("RequestItems", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EscalateDirectorDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EscalateHeadDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ReapprovalTolerancePercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementSettings");
+
+                    b.ToTable("Settings", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockBalance", b =>
+                {
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("OnHand")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("Reserved")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("WarehouseId", "ItemId")
+                        .HasName("PK_ProcurementStockBalances");
+
+                    b.HasIndex("ItemId")
+                        .HasDatabaseName("IX_ProcurementStockBalances_ItemId");
+
+                    b.ToTable("StockBalances", "procurement", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProcurementStockBalances_OnHand", "\"OnHand\" >= 0");
+
+                            t.HasCheckConstraint("CK_ProcurementStockBalances_Reserved", "\"Reserved\" >= 0 AND \"Reserved\" <= \"OnHand\"");
+                        });
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ClientKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("PostedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Receiver")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementStockDocuments");
+
+                    b.HasIndex("ActorId")
+                        .HasDatabaseName("IX_ProcurementStockDocuments_ActorId");
+
+                    b.HasIndex("DepartmentId")
+                        .HasDatabaseName("IX_ProcurementStockDocuments_DepartmentId");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementStockDocuments_Number");
+
+                    b.HasIndex("RequestId")
+                        .HasDatabaseName("IX_ProcurementStockDocuments_RequestId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("ActorId", "ClientKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementStockDocuments_ActorId_ClientKey")
+                        .HasFilter("\"ClientKey\" IS NOT NULL");
+
+                    b.HasIndex("Kind", "CreatedAt")
+                        .HasDatabaseName("IX_ProcurementStockDocuments_Kind_CreatedAt");
+
+                    b.HasIndex("OrderId", "Status")
+                        .HasDatabaseName("IX_ProcurementStockDocuments_OrderId_Status");
+
+                    b.HasIndex("Status", "PostedAt")
+                        .HasDatabaseName("IX_ProcurementStockDocuments_Status_PostedAt");
+
+                    b.ToTable("StockDocuments", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockMovement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("BalanceAfter")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("BalanceBefore")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid?>("RequestItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("UnitCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementStockMovements");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_ProcurementStockMovements_CreatedAt");
+
+                    b.HasIndex("DocumentId")
+                        .HasDatabaseName("IX_ProcurementStockMovements_DocumentId");
+
+                    b.HasIndex("ItemId", "CreatedAt")
+                        .HasDatabaseName("IX_ProcurementStockMovements_ItemId_CreatedAt");
+
+                    b.ToTable("StockMovements", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockReservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Issued")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RequestItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementStockReservations");
+
+                    b.HasIndex("RequestItemId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementStockReservations_RequestItemId_Active")
+                        .HasFilter("\"Status\" = 'Active'");
+
+                    b.HasIndex("ItemId", "Status")
+                        .HasDatabaseName("IX_ProcurementStockReservations_ItemId_Status");
+
+                    b.HasIndex("RequestId", "Status")
+                        .HasDatabaseName("IX_ProcurementStockReservations_RequestId_Status");
+
+                    b.ToTable("StockReservations", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementSupplier", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("BankAccount")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("BankMfo")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("BankName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ContactPerson")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Inn")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("LeadTimeDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("PaymentTerms")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementSuppliers");
+
+                    b.HasIndex("Inn")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementSuppliers_Inn")
+                        .HasFilter("\"Inn\" IS NOT NULL");
+
+                    b.HasIndex("Name")
+                        .HasDatabaseName("IX_ProcurementSuppliers_Name");
+
+                    b.ToTable("Suppliers", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementSupplierCategory", b =>
+                {
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("SupplierId", "CategoryId")
+                        .HasName("PK_ProcurementSupplierCategories");
+
+                    b.HasIndex("CategoryId")
+                        .HasDatabaseName("IX_ProcurementSupplierCategories_CategoryId");
+
+                    b.ToTable("SupplierCategories", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementUnit", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Code")
+                        .HasName("PK_ProcurementUnits");
+
+                    b.ToTable("Units", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementWarehouse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementWarehouses");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementWarehouses_Code");
+
+                    b.ToTable("Warehouses", "procurement");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Sales.LinkoBorder", b =>
                 {
                     b.Property<long>("Id")
@@ -6636,6 +8089,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsBlocked")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Link")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
                     b.Property<DateOnly?>("OverdueNotifiedFor")
                         .HasColumnType("date");
 
@@ -7319,6 +8776,364 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Binding");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementApproval", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "Decider")
+                        .WithMany()
+                        .HasForeignKey("DeciderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementApprovals_Users_DeciderId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementRequest", null)
+                        .WithMany()
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementApprovals_Requests_RequestId");
+
+                    b.Navigation("Decider");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementAuditLog", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProcurementAuditLog_Users_ActorId");
+
+                    b.Navigation("Actor");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementDocument", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "UploadedBy")
+                        .WithMany()
+                        .HasForeignKey("UploadedById")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProcurementDocuments_Users_UploadedById");
+
+                    b.Navigation("UploadedBy");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementEscalation", b =>
+                {
+                    b.HasOne("OneBase.Domain.Work.WorkTask", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementEscalations_Tasks_TaskId");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementItem", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementCategory", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementItems_Categories_CategoryId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementUnit", null)
+                        .WithMany()
+                        .HasForeignKey("UnitCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementItems_Units_UnitCode");
+
+                    b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementOffer", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementRequest", "Request")
+                        .WithMany()
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementOffers_Requests_RequestId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementSupplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementOffers_Suppliers_SupplierId");
+
+                    b.Navigation("Request");
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementOfferItem", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementOffer", "Offer")
+                        .WithMany("Items")
+                        .HasForeignKey("OfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementOfferItems_Offers_OfferId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementRequestItem", null)
+                        .WithMany()
+                        .HasForeignKey("RequestItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementOfferItems_RequestItems_RequestItemId");
+
+                    b.Navigation("Offer");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementOrderApproval", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "Decider")
+                        .WithMany()
+                        .HasForeignKey("DeciderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementOrderApprovals_Users_DeciderId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementPurchaseOrder", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementOrderApprovals_PurchaseOrders_OrderId");
+
+                    b.Navigation("Decider");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementPurchaseOrder", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "Responsible")
+                        .WithMany()
+                        .HasForeignKey("ResponsibleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementPurchaseOrders_Users_ResponsibleId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementSupplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementPurchaseOrders_Suppliers_SupplierId");
+
+                    b.Navigation("Responsible");
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementPurchaseOrderItem", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementPurchaseOrder", "Order")
+                        .WithMany("Items")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementPurchaseOrderItems_PurchaseOrders_OrderId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementRequestItem", "RequestItem")
+                        .WithMany()
+                        .HasForeignKey("RequestItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementPurchaseOrderItems_RequestItems_RequestItemId");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("RequestItem");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementReceiptLine", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ClaimResolvedById")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProcurementReceiptLines_Users_ClaimResolvedById");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementStockDocument", "Document")
+                        .WithMany("ReceiptLines")
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementReceiptLines_StockDocuments_DocumentId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementReceiptLines_Items_ItemId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementPurchaseOrderItem", "OrderItem")
+                        .WithMany()
+                        .HasForeignKey("OrderItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementReceiptLines_PurchaseOrderItems_OrderItemId");
+
+                    b.Navigation("Document");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("OrderItem");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementRequest", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementRequests_Departments_DepartmentId");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "Initiator")
+                        .WithMany()
+                        .HasForeignKey("InitiatorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementRequests_Users_InitiatorId");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Initiator");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementRequestItem", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementCategory", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementRequestItems_Categories_CategoryId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementRequestItems_Items_ItemId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementRequest", "Request")
+                        .WithMany("Items")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementRequestItems_Requests_RequestId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementUnit", null)
+                        .WithMany()
+                        .HasForeignKey("UnitCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementRequestItems_Units_UnitCode");
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("Request");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockBalance", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementStockBalances_Items_ItemId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementWarehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementStockBalances_Warehouses_WarehouseId");
+
+                    b.Navigation("Item");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockDocument", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProcurementStockDocuments_Users_ActorId");
+
+                    b.HasOne("OneBase.Domain.Identity.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementStockDocuments_Departments_DepartmentId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementPurchaseOrder", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementStockDocuments_PurchaseOrders_OrderId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementWarehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementStockDocuments_Warehouses_WarehouseId");
+
+                    b.Navigation("Actor");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockMovement", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementStockDocument", "Document")
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementStockMovements_StockDocuments_DocumentId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementStockMovements_Items_ItemId");
+
+                    b.Navigation("Document");
+
+                    b.Navigation("Item");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementSupplierCategory", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementCategory", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementSupplierCategories_Categories_CategoryId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementSupplier", "Supplier")
+                        .WithMany("Categories")
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementSupplierCategories_Suppliers_SupplierId");
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Supplier");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Sales.LinkoOrderLine", b =>
                 {
                     b.HasOne("OneBase.Domain.Sales.LinkoOrder", null)
@@ -7810,6 +9625,31 @@ namespace OneBase.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceBinding", b =>
                 {
                     b.Navigation("Runs");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementOffer", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementPurchaseOrder", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementRequest", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockDocument", b =>
+                {
+                    b.Navigation("ReceiptLines");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementSupplier", b =>
+                {
+                    b.Navigation("Categories");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Sales.LinkoOrder", b =>

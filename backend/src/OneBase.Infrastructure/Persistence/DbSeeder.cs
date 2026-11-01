@@ -116,6 +116,8 @@ public static class DbSeeder
             }
         }
 
+        await SeedProcurementAsync(db, cancellationToken);
+
         var targetKeys = await db.SalesTargets.Select(t => t.Key).ToListAsync(cancellationToken);
         foreach (var (key, value) in SalesTargetKeys.Defaults.Where(t => !targetKeys.Contains(t.Key)))
         {
@@ -143,5 +145,74 @@ public static class DbSeeder
         }
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Категории закупок из ТЗ снабжения (дальше настраиваются в разделе «Заявки»).</summary>
+    private static readonly (string Code, string Name)[] ProcurementCategories =
+    [
+        ("raw_materials", "Сырьё"),
+        ("production_materials", "Производственные материалы"),
+        ("components", "Комплектующие"),
+        ("equipment", "Оборудование"),
+        ("spare_parts", "Запасные части"),
+        ("tools", "Инструменты"),
+        ("office_equipment", "Офисная техника"),
+        ("furniture", "Мебель"),
+        ("stationery", "Канцелярия"),
+        ("it_equipment", "IT-оборудование"),
+        ("household", "Хозяйственные товары"),
+        ("logistics", "Транспорт и логистика"),
+        ("services", "Услуги"),
+        ("marketing", "Маркетинговые материалы"),
+        ("other", "Прочие расходы"),
+    ];
+
+    private static readonly (string Code, string Name)[] ProcurementUnits =
+    [
+        ("шт", "штука"), ("кг", "килограмм"), ("г", "грамм"), ("т", "тонна"), ("л", "литр"), ("м", "метр"), ("м²", "квадратный метр"),
+        ("м³", "кубический метр"), ("упак", "упаковка"), ("пачка", "пачка"), ("коробка", "коробка"), ("рулон", "рулон"), ("компл", "комплект"),
+        ("услуга", "услуга"),
+    ];
+
+    /// <summary>
+    /// Справочники снабжения: центральный склад, настройки, недостающие категории (по коду; категория с таким же названием, добавленная вручную, не дублируется)
+    /// и единицы измерения. Переименованные и отключённые категории не трогаются.
+    /// </summary>
+    public static async Task SeedProcurementAsync(OneBaseDbContext db, CancellationToken ct)
+    {
+        var categories = await db.ProcurementCategories.Select(c => new { c.Code, c.Name }).ToListAsync(ct);
+        var codes = categories.Select(c => c.Code).OfType<string>().ToHashSet();
+        var names = categories.Select(c => c.Name.ToLowerInvariant()).ToHashSet();
+        for (var i = 0; i < ProcurementCategories.Length; i++)
+        {
+            var (code, name) = ProcurementCategories[i];
+            if (!codes.Contains(code) && !names.Contains(name.ToLowerInvariant()))
+            {
+                db.ProcurementCategories.Add(new OneBase.Domain.Procurement.ProcurementCategory { Code = code, Name = name, SortOrder = (i + 1) * 10 });
+            }
+        }
+
+        // Центральный склад и настройки (допуск без повторного согласования — 0 %): создаются один раз, дальше настраиваются.
+        if (!await db.ProcurementWarehouses.AnyAsync(ct))
+        {
+            db.ProcurementWarehouses.Add(new OneBase.Domain.Procurement.ProcurementWarehouse { Code = "central", Name = "Центральный склад", IsDefault = true });
+        }
+
+        if (!await db.ProcurementSettings.AnyAsync(ct))
+        {
+            db.ProcurementSettings.Add(new OneBase.Domain.Procurement.ProcurementSettings());
+        }
+
+        var units = await db.ProcurementUnits.Select(u => u.Code).ToListAsync(ct);
+        for (var i = 0; i < ProcurementUnits.Length; i++)
+        {
+            var (code, name) = ProcurementUnits[i];
+            if (!units.Contains(code))
+            {
+                db.ProcurementUnits.Add(new OneBase.Domain.Procurement.ProcurementUnit { Code = code, Name = name, SortOrder = i + 1 });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 }

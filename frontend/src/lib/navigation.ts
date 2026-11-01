@@ -11,6 +11,10 @@ export const navPermissions: Record<string, string[]> = {
   "/departments": workspacePermissions,
   // Задачи — раздел пользователя (галочка «Задачи» в «Пользователях»); что из задач видно, решает backend.
   "/tasks": ["work.tasks"],
+  // Заявки на закупку: свои — у всех ролей отделов; все — снабжению и директору; что видно, решает backend.
+  "/requests": ["procurement.request", "procurement.read", "procurement.manage", "procurement.settings", "procurement.warehouse"],
+  // Склад снабжения: кладовщик, снабжение, директор.
+  "/procurement": ["procurement.warehouse", "procurement.read", "procurement.manage"],
   // HR: право «HR», администратор интеграций или руководитель отдела с привязанными подразделениями Verifix (hr.department — не право,
   // а признак из /api/auth/me; доступ к данным всё равно проверяет backend).
   "/hr": ["hr.read", "integrations.manage", "hr.department"],
@@ -22,7 +26,7 @@ export const navPermissions: Record<string, string[]> = {
 };
 
 /** Порядок разделов в меню — по нему выбирается стартовая страница, если «Обзор» недоступен. */
-const order = ["/", "/departments", "/tasks", "/hr", "/base", "/consultant", "/data-manager", "/campaigns"];
+const order = ["/", "/departments", "/tasks", "/hr", "/base", "/consultant", "/data-manager", "/campaigns", "/requests", "/procurement"];
 
 export function canOpen(href: string, permissions: readonly string[]): boolean {
   const need = navPermissions[href];
@@ -30,10 +34,10 @@ export function canOpen(href: string, permissions: readonly string[]): boolean {
 }
 
 /** Свой раздел отдела в OneBase; у остальных отделов рабочий раздел — их задачи. */
-const departmentSections: Record<string, string> = { sales: "/sales", hr: "/hr" };
+const departmentSections: Record<string, string> = { sales: "/sales", hr: "/hr", supply: "/procurement" };
 
 /**
- * Куда ведёт кнопка отдела: свой раздел («Продажи», HR), иначе задачи отдела; нет доступа — следующий доступный, и только в крайнем случае —
+ * Куда ведёт кнопка отдела: свой раздел («Продажи», HR, «Снабжение»), иначе задачи отдела; нет доступа — следующий доступный, и только в крайнем случае —
  * файлы отдела в «Общей базе».
  */
 export function departmentHref(code: string, permissions: readonly string[]): string {

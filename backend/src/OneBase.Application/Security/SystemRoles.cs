@@ -25,6 +25,12 @@ public static class SystemRoles
     /// </summary>
     public const string EmployeeRole = "Сотрудник";
 
+    /// <summary>
+    /// Кладовщик склада снабжения: каталог, остатки, приход, выдача, списание, инвентаризация; свои заявки. Отдел у роли не задан —
+    /// выбирается в карточке пользователя. Утверждать закупки и менять утверждённые цены не может.
+    /// </summary>
+    public const string WarehouseRole = "Кладовщик";
+
     /// <summary>Роли Sales Base (sales.1base.uz).</summary>
     public const string FieldRm = "РМ (Sales Base)";
 
@@ -33,8 +39,12 @@ public static class SystemRoles
 
     public sealed record Definition(string Name, string Description, string? DepartmentCode, IReadOnlyList<string> Permissions);
 
-    /// <summary>Общее для сотрудников отделов: консультант, файлы и задачи.</summary>
-    private static readonly string[] Employee = [Permissions.AgentsRun, Permissions.FilesRead, Permissions.FilesWrite, Permissions.WorkTasks];
+    /// <summary>Общее для сотрудников отделов: консультант, файлы, задачи и свои заявки на закупку.</summary>
+    private static readonly string[] Employee =
+        [Permissions.AgentsRun, Permissions.FilesRead, Permissions.FilesWrite, Permissions.WorkTasks, Permissions.ProcurementRequest];
+
+    /// <summary>Роли, у которых есть свои заявки на закупку (Employee) — для прав существующих баз.</summary>
+    private static readonly string[] RequestRoles = [EmployeeRole, "Продажи", "Финансы", "HR", "Производство", "Снабжение", "Маркетинг"];
 
     public static readonly IReadOnlyList<Definition> All =
     [
@@ -44,6 +54,7 @@ public static class SystemRoles
             Permissions.UsersManage, Permissions.SalesRead, Permissions.FinanceRead, Permissions.HrRead, Permissions.FilesRead, Permissions.FilesWrite,
             Permissions.FilesReadAll,
             Permissions.AgentsRun, Permissions.ApprovalsDecide, Permissions.AuditRead, Permissions.FieldPlan, Permissions.WorkTasks,
+            Permissions.ProcurementRequest, Permissions.ProcurementRead, Permissions.ProcurementSettings,
         ]),
         new(DataAdmin, "Файлы отдела продаж и AI Data Manager: загрузка отчётов, изменение планов, целей и дилеров регионов с подтверждением. "
                        + "В «Настройках» — только AI Data Manager.", "sales",
@@ -54,8 +65,11 @@ public static class SystemRoles
         new("Финансы", "Сотрудник финансового отдела: оплаты и продажи, консультант, файлы.", "finance", [Permissions.FinanceRead, Permissions.SalesRead, .. Employee]),
         new("HR", "Сотрудник HR: кадровые данные, консультант, файлы.", "hr", [Permissions.HrRead, .. Employee]),
         new("Производство", "Сотрудник производства: остатки и продажи товаров (раздел «Продажи»), консультант, файлы.", "production", [Permissions.SalesRead, .. Employee]),
-        new("Снабжение", "Сотрудник снабжения: остатки, поставщики и продажи товаров (раздел «Продажи»), консультант, файлы.", "supply", [Permissions.SalesRead, .. Employee]),
+        new("Снабжение", "Сотрудник снабжения: все заявки на закупку и их обработка, остатки и продажи товаров (раздел «Продажи»), консультант, файлы.", "supply",
+            [Permissions.SalesRead, Permissions.ProcurementRead, Permissions.ProcurementManage, .. Employee]),
         new("Маркетинг", "Сотрудник маркетинга: продажи, ассортимент и клиенты (раздел «Продажи»), консультант, файлы.", "marketing", [Permissions.SalesRead, .. Employee]),
+        new(WarehouseRole, "Склад снабжения: каталог, остатки, приход, выдача отделам и по заявкам, списание, инвентаризация; консультант, файлы.", null,
+            [Permissions.ProcurementWarehouse, .. Employee]),
         new(FieldRm, "Sales Base: вся структура полевых продаж — команды, точки, маршруты, задачи, KPI, решения по рекомендациям AI; аналитика продаж и консультант.", null,
             [Permissions.FieldUse, Permissions.FieldManage, Permissions.SalesRead, Permissions.AgentsRun, Permissions.WorkTasks]),
         new(FieldSupervisor, "Sales Base: своя команда — агенты, точки, маршруты, визиты, задачи и KPI команды.", null, [Permissions.FieldUse]),
@@ -79,6 +93,13 @@ public static class SystemRoles
         ("Снабжение", Permissions.WorkTasks),
         ("Маркетинг", Permissions.WorkTasks),
         (FieldRm, Permissions.WorkTasks),
+        // «Заявки» (снабжение): свои заявки — всем ролям отделов, все заявки и обработка — снабжению, категории — директору.
+        .. RequestRoles.Select(r => (r, Permissions.ProcurementRequest)),
+        (Director, Permissions.ProcurementRequest),
+        (Director, Permissions.ProcurementRead),
+        (Director, Permissions.ProcurementSettings),
+        ("Снабжение", Permissions.ProcurementRead),
+        ("Снабжение", Permissions.ProcurementManage),
     ];
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
@@ -123,5 +144,10 @@ public static class SystemRoles
         [Permissions.TelegramManage] = "Telegram: аккаунты и AI-агент",
         [Permissions.TelegramCampaigns] = "Рассылки в Telegram",
         [Permissions.WorkTasks] = "Задачи отделов",
+        [Permissions.ProcurementRequest] = "Заявки: свои заявки на закупку",
+        [Permissions.ProcurementRead] = "Заявки: все заявки компании",
+        [Permissions.ProcurementManage] = "Снабжение: обработка заявок",
+        [Permissions.ProcurementSettings] = "Заявки: категории и правила закупок",
+        [Permissions.ProcurementWarehouse] = "Склад снабжения: остатки, приход, выдача, списание",
     };
 }

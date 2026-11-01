@@ -140,6 +140,7 @@ public static class DependencyInjection
         // Отчёты AI-консультанта: файл Excel из листов отчёта; документы Telegram-агента (письма, планы, разборы) — Word из Markdown.
         services.AddSingleton<OneBase.Application.Reports.IReportWorkbookWriter, Reports.ReportWorkbookWriter>();
         services.AddSingleton<OneBase.Application.Reports.IDocumentWriter, Reports.DocumentWriter>();
+        services.AddSingleton<OneBase.Application.Reports.IReportPdfWriter, Reports.ReportPdfWriter>();
         services.AddSingleton<OneBase.Application.Sales.Stock.ITransferActWriter, Reports.TransferActWorkbookWriter>();
         services.AddScoped<OneBase.Application.DataManager.DataFileService>();
         services.AddScoped<OneBase.Application.DataSources.FieldOwnership>();
@@ -204,6 +205,19 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Work.WorkTaskService>();
         services.AddScoped<OneBase.Application.Work.CalendarService>();
         services.AddScoped<OneBase.Application.Work.NotificationCenter>();
+
+        // Раздел «Заявки» (снабжение): заявки на закупку, номера документов без повторов.
+        services.AddScoped<OneBase.Application.Procurement.IProcurementNumbers, Persistence.ProcurementNumbers>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementStockLedger>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementRequestService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementStockService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementDocumentService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementSupplierService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementOrderService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementReceiptService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementReminderService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementAnalyticsService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementReportService>();
         services.AddHostedService<Work.WorkTaskReminderWorker>();
 
         // HR: Verifix — сотрудники, отметки и табель (только чтение API Verifix). client_secret — в «Настройки → Интеграции → HR → Verifix»
