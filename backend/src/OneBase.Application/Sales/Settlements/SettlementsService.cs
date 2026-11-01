@@ -80,6 +80,14 @@ public sealed class SettlementsService(IAppDbContext db, PrimaryService primary,
             // Строки ГП → документ дня: контрагент × дата × отгрузка или возврат (номеров документов в таблице нет). Группа — как у первички
             // (дилер региона или прямой клиент Linko с тем же именем), иначе прямой клиент.
             var groupByKey = parties.Values.GroupBy(p => PnlMath.DealerKey(p.Name)).ToDictionary(g => g.Key, g => g.First().Group);
+            // Другие имена дилеров регионов («Настройки продаж»): прежний и второй дилер склада — тоже дилер, а не прямой клиент. Иначе новый
+            // дилер после смены (Ташкент, 14.10.2026) с отгрузками без оплат выпадал из DSO вместе с долгом.
+            foreach (var alias in (await db.SalesRegions.AsNoTracking().Where(r => r.DealerAliases != null).Select(r => r.DealerAliases).ToListAsync(ct))
+                         .SelectMany(a => a ?? []).Where(a => !string.IsNullOrWhiteSpace(a)))
+            {
+                groupByKey.TryAdd(PnlMath.DealerKey(alias), PrimaryGroups.Dealer);
+            }
+
             foreach (var g in sheetShipments.Where(e => e.Date <= asOf).GroupBy(e => (e.DealerKey, e.Date, Return: e.Amount < 0)))
             {
                 var amount = Math.Abs(g.Sum(e => e.Amount));

@@ -51,6 +51,29 @@ public class WeeklyReportMathTests
         Assert.Null(WeeklyReportMath.Forecast(100, 0, 27));
         Assert.Equal(0.25m, Math.Round(WeeklyReportMath.Change(1_500m, 1_200m)!.Value, 2));
         Assert.Null(WeeklyReportMath.Change(10, 0));
+        // От базы меньше 50 кг и у ушедшей в возвраты недели процента нет: «+185%» с 15 кг и «−200%» ничего не значат.
+        Assert.Null(WeeklyReportMath.Change(43, 15));
+        Assert.Null(WeeklyReportMath.Change(-67, 67));
+        Assert.Equal(3.88m, Math.Round(WeeklyReportMath.Change(6_236m, 1_278m)!.Value, 2)); // +388% от 1 278 кг — честный рост
+    }
+
+    [Fact]
+    public void Dealer_money_adds_up_the_dealer_and_its_previous_names()
+    {
+        // Сменился дилер склада: у прежнего долг закрыт возвратом, у нового — отгрузки без оплат. Деньги региона — по обоим.
+        static OneBase.Application.Sales.Settlements.DsoDealer Dealer(string name, decimal debt, decimal overdue, decimal paid, decimal shipped, DateOnly? lastPay,
+            params (DateOnly Date, decimal Remaining)[] open) =>
+            new(name.ToLowerInvariant(), name, "noterm", null, false, 20m, null, debt, overdue, paid, shipped, 0, lastPay, null, 0,
+                open.Select(o => new OneBase.Application.Sales.Settlements.DsoOpen(o.Date, o.Remaining, o.Remaining, 0, null, o.Date, 0, 0, "ГП")).ToList());
+
+        var old = Dealer("Прежний", 0, 0, -70m, 0, new DateOnly(2026, 9, 25));
+        var current = Dealer("Новый", 550m, 0, 0, 550m, null, (new DateOnly(2026, 10, 20), 550m));
+        var money = WeeklyReportBuilder.DealerMoney([old, current])!;
+
+        Assert.Equal(("Новый + Прежний", 550m, -70m, 550m), (money.Name, money.Debt, money.PaidMonth, money.ShippedMonth));
+        Assert.Equal(new DateOnly(2026, 9, 25), money.LastPay);
+        Assert.Single(money.Open);
+        Assert.Null(WeeklyReportBuilder.DealerMoney([]));
     }
 
     [Fact]
@@ -189,10 +212,10 @@ public class WeeklyReportDbTests(DataManagerDb fixture) : IClassFixture<DataMana
         Assert.Equal((42m, 200m, 0.21m, 10m), (first.MonthKg, first.PlanKg, first.Execution, first.AkbPlan));
         Assert.Equal((200m, 42m, "кг"), (first.LinkoPlan, first.LinkoFact, first.LinkoUnit));
 
-        // Второй: 8 кг против 6 в те же дни прошлой недели; плана в Linko нет — null, а не 0.
+        // Второй: 8 кг против 6 в те же дни прошлой недели — база меньше 50 кг, процент («+33%») ничего не значит: null; плана в Linko нет — null, а не 0.
         var second = report.EmployeeMetrics.Single(e => e.AgentId == Second);
         Assert.Equal((8m, 6m), (second.WeekKg, second.PrevWeekKg));
-        Assert.Equal(0.333m, Math.Round(second.WeekVsPrev!.Value, 3));
+        Assert.Null(second.WeekVsPrev);
         Assert.Null(second.PlanKg);
         Assert.Null(second.Execution);
 

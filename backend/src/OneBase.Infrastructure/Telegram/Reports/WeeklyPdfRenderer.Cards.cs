@@ -49,7 +49,7 @@ public sealed partial class WeeklyPdfRenderer
             foreach (var e in r.EmployeeMetrics)
             {
                 var goal = r.WeeklyGoals.Agents.FirstOrDefault(g => g.AgentId == e.AgentId);
-                doc.Page(p => Page(p, F("1 · Итоги недели {0}", Range(r.PeriodStart, r.PeriodEnd)), e.Name, c => Week(c, e)));
+                doc.Page(p => Page(p, F("1 · Итоги недели {0}", Range(r.PeriodStart, r.DataThrough < r.PeriodEnd ? r.DataThrough : r.PeriodEnd)), e.Name, c => Week(c, e)));
                 doc.Page(p => Page(p, F("2 · Цели на неделю {0}", Range(r.WeeklyGoals.WeekFrom, r.WeeklyGoals.WeekTo)), e.Name, c => Goals(c, goal)));
             }
         });
@@ -222,7 +222,9 @@ public sealed partial class WeeklyPdfRenderer
                     });
                 });
 
-                Goal(T("Продажи"), g.SalesKg is { } kg ? F("{0} кг", Number(kg)) : T("плана в Linko нет"));
+                Goal(T("Продажи"), g.SalesKg is { } kg ? F("{0} кг", Number(kg))
+                    : g.SalesSum is { } sum ? $"{Amount(sum, KpiMath.Sum)} {Unit(KpiMath.Sum)}"
+                    : T("плана в Linko нет"));
                 Goal(T("АКБ недели"), F("{0} ТТ", Number(g.Akb)), F("было {0}", Number(g.AkbWas)));
                 Goal(T("ТТ с заказом по акции"), Number(g.Promo), F("было {0}", Number(g.PromoWas)));
                 Goal(T("Вернуть спящих ТТ"), Number(g.Return15To30 + g.Return30Plus), $"{Number(g.Return15To30)} + {Number(g.Return30Plus)}");

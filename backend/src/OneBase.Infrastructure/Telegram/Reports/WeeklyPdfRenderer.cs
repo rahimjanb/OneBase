@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using OneBase.Application.Sales.Metrics;
 using OneBase.Application.Telegram.Reports;
 using OneBase.Application.Telegram.Weekly;
 using QuestPDF.Drawing;
@@ -134,7 +135,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
                 "tp" => $"{T("ТП")} · {r.ScopeName}",
                 _ => $"{T("СВР")} {r.ScopeName}" + (r.SupervisorName is { Length: > 0 } sv ? $" · {sv}" : ""),
             };
-            return $"{who} · {T("НЕДЕЛЯ")} {Range(r.PeriodStart, r.PeriodEnd)}".ToUpper(lang == "uz" ? CultureInfo.InvariantCulture : CultureInfo.GetCultureInfo("ru-RU"));
+            return $"{who} · {T("НЕДЕЛЯ")} {Range(r.PeriodStart, r.DataThrough < r.PeriodEnd ? r.DataThrough : r.PeriodEnd)}".ToUpper(lang == "uz" ? CultureInfo.InvariantCulture : CultureInfo.GetCultureInfo("ru-RU"));
         }
 
         private string SourceLine() =>
@@ -419,7 +420,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
         {
             var rows = r.Regions.Select(g => (IReadOnlyList<Cell>)
             [
-                new(g.Name, Bold: true), new(g.SupervisorName ?? T("вакансия"), Color: g.SupervisorName is null ? Tone.None : Tone.None), Plain(Number(g.Sales.WeekKg)),
+                new(g.Name, Bold: true), new(g.SupervisorName ?? T("не указан"), Color: Tone.None), Plain(Number(g.Sales.WeekKg)),
                 new(WeeklyTexts.Delta(g.Sales.WeekVsPrev), Color: DeltaTone(g.Sales.WeekVsPrev)), Plain(Number(g.Sales.MonthKg)), Plain(Number(g.Sales.PlanKg)),
                 new(Percent(g.Sales.Execution), Dot: PlanTone(g.Sales.Execution)), Plain(Percent(g.Sales.ForecastExecution)),
                 new(WeeklyTexts.Delta(g.Sales.VsPrevMonth), Color: DeltaTone(g.Sales.VsPrevMonth)), Plain($"{Number(g.Sales.MonthAkb)} / {Number(g.Sales.AkbPlan)}"),
@@ -713,20 +714,23 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
                                 : Plain("—")),
                         ]), null, 7.5f);
                     }));
-                    row.RelativeItem().Element(x => Box(x, T("Приоритетные линии (Linko), кг"), b => b.Column(cc =>
+                    row.RelativeItem().Element(x => Box(x, T("Приоритетные линии (Linko)"), b => b.Column(cc =>
                     {
                         cc.Item().Element(t => Table(t, [new(T("ТП"), 1.8f, false), new(T("Могул")), new(T("Twizos"))], p.Agents.Select(a => (IReadOnlyList<Cell>)
                         [
                             Plain(a.Name), Prio(a.Priority.FirstOrDefault(l => l.Label == "Могуль")), Prio(a.Priority.FirstOrDefault(l => l.Label == "Twizos")),
                         ]), null, 8));
-                        cc.Item().Element(n => Note(n, T("Порог 80%. План и факт — из KPI Linko.")));
+                        cc.Item().Element(n => Note(n, T("Порог 80%. План и факт — из KPI Linko: в кг или в млн сум, как заведён показатель.")));
                     })));
                 });
             });
 
             Cell Prio(WeeklyPriorityLine? line) => line is null
                 ? Plain("—")
-                : new Cell($"{Number(Math.Round(line.Fact))} / {Number(line.Plan)}", Dot: TargetTone(line.Execution, 0.8m, 0.8m));
+                : line.Unit == KpiMath.Sum
+                    ? new Cell($"{Million(line.Fact)} / {Million(line.Plan)} {T("млн")}", Dot: TargetTone(line.Execution, 0.8m, 0.8m))
+                    : new Cell($"{Number(Math.Round(line.Fact))} / {Number(line.Plan)} {T("кг")}", Dot: TargetTone(line.Execution, 0.8m, 0.8m));
+            static string Million(decimal sum) => (sum / 1_000_000).ToString("#,0.0", CultureInfo.GetCultureInfo("ru-RU"));
         }
 
         // ---------- 6. Клиенты ----------
@@ -930,7 +934,9 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
                             new(T("Вернуть спящих 30+"))],
                         g.Agents.Select(a => (IReadOnlyList<Cell>)
                         [
-                            new(a.Name, Bold: true), Plain(Number(a.SalesKg)), new(Number(a.Akb), Muted: F("было {0}", a.AkbWas)), new(Number(a.Promo), Muted: F("было {0}", a.PromoWas)),
+                            new(a.Name, Bold: true),
+                            Plain(a.SalesKg is null && a.SalesSum is { } goalSum ? $"{(goalSum / 1_000_000).ToString("#,0.0", CultureInfo.GetCultureInfo("ru-RU"))} {T("млн сум")}" : Number(a.SalesKg)),
+                            new(Number(a.Akb), Muted: F("было {0}", a.AkbWas)), new(Number(a.Promo), Muted: F("было {0}", a.PromoWas)),
                             new(Number(a.Return15To30), Muted: F("из {0}", a.Sleeping15To30)), new(Number(a.Return30Plus), Muted: F("из {0}", a.Sleeping30Plus)),
                         ])));
                     cc.Item().Element(n => Note(n, F("* План месяца ÷ {0} рабочих дней × {1}. АКБ недели = уникальные ТТ прошлой полной недели × 1,1; ТТ по акциям × 1,2 (не меньше 25); вернуть 30% спящих 15–30 дней и 20% спящих 30+. Списки ТТ — в карточке каждого ТП.",
@@ -1034,7 +1040,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
         ["неделя"] = "hafta",
         [" · месяц {0} плана"] = " · oy rejaning {0}",
         [" · КПУ {0} тыс."] = " · KPU {0} ming",
-        ["вакансия"] = "vakansiya",
+        ["не указан"] = "ko'rsatilmagan",
         ["Регион"] = "Hudud",
         ["Неделя, кг"] = "Hafta, kg",
         ["к пр. нед."] = "o'tg. haftaga",
@@ -1084,9 +1090,10 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
         ["Регион: план и факт по линиям, кг"] = "Hudud: liniyalar bo'yicha reja va fakt, kg",
         ["ТП × линия: кг за месяц · сколько ТТ купили"] = "TP × liniya: oy uchun kg · nechta SN oldi",
         ["· {0} ТТ"] = "· {0} SN",
-        ["Приоритетные линии (Linko), кг"] = "Ustuvor liniyalar (Linko), kg",
+        ["Приоритетные линии (Linko)"] = "Ustuvor liniyalar (Linko)",
+        ["млн"] = "mln",
         ["Могул"] = "Mogul",
-        ["Порог 80%. План и факт — из KPI Linko."] = "Chegara 80%. Reja va fakt — Linko KPI dan.",
+        ["Порог 80%. План и факт — из KPI Linko: в кг или в млн сум, как заведён показатель."] = "Chegara 80%. Reja va fakt — Linko KPI dan: ko'rsatkich qanday kiritilgan bo'lsa, kg yoki mln so'mda.",
         ["База прошлого месяца"] = "O'tgan oy bazasi",
         ["ТТ брали в прошлом месяце"] = "SN o'tgan oyda olgan",
         ["Спят 15–30 дней"] = "15–30 kun uxlayapti",

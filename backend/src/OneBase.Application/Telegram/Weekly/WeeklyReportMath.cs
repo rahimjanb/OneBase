@@ -69,8 +69,14 @@ public static class WeeklyReportMath
 
     public static decimal? Ratio(decimal? value, decimal? basis) => value is { } v && basis is { } b && b != 0 ? v / b : null;
 
-    /// <summary>Изменение к базе: 1,22 → +22%; базы нет или она не больше нуля — null.</summary>
-    public static decimal? Change(decimal value, decimal? basis) => basis is { } b && b > 0 ? value / b - 1 : null;
+    /// <summary>Наименьшая база «к прошлой неделе / месяцу», кг: от меньшей процент ничего не значит (15 кг → 43 кг = «+185%»).</summary>
+    public const decimal MinChangeBaseKg = 50;
+
+    /// <summary>
+    /// Изменение к базе: 1,22 → +22%. Базы нет, она меньше MinChangeBaseKg или значение меньше нуля (неделя ушла в возвраты) — null:
+    /// такой процент ничего не значит («−1496% к прошлой неделе»).
+    /// </summary>
+    public static decimal? Change(decimal value, decimal? basis) => basis is { } b && b >= MinChangeBaseKg && value >= 0 ? value / b - 1 : null;
 
     /// <summary>Нужный темп до доли плана: осталось (не меньше нуля) и в день по оставшимся рабочим дням; плана нет — null.</summary>
     public static WeeklyPace? Pace(decimal? plan, decimal share, decimal fact, int daysLeft)

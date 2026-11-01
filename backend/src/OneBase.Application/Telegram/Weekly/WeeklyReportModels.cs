@@ -194,7 +194,8 @@ public sealed record WeeklyCategoryRow(long? CategoryId, string Name, decimal? P
 public sealed record WeeklyAgentCategory(string Name, decimal Kg, int Outlets);
 
 /// <summary>Приоритетная линия ТП из KPI Linko (Могуль, Twizos): план и факт (кг), выполнение.</summary>
-public sealed record WeeklyPriorityLine(string Label, decimal Plan, decimal Fact, decimal? Execution);
+/// <summary>Приоритетная линия (показатель KPI Linko «Могуль» / «Twizos»): план и факт в единице показателя — кг или сумы (Unit).</summary>
+public sealed record WeeklyPriorityLine(string Label, decimal Plan, decimal Fact, decimal? Execution, string Unit = "кг");
 
 public sealed record WeeklyAgentProducts(long AgentId, string Name, IReadOnlyList<WeeklyAgentCategory> Categories, IReadOnlyList<WeeklyPriorityLine> Priority);
 
@@ -272,7 +273,8 @@ public sealed record WeeklyKpiPerson(long Id, string Name, string Role, decimal?
 public sealed record WeeklyKpiMetrics(bool Available, bool Money, DateTimeOffset? LoadedAt, IReadOnlyList<WeeklyKpiPerson> People);
 
 /// <summary>
-/// Цели ТП на следующую неделю (формулы — WeeklyReportOptions): продажи = план месяца ÷ рабочие дни месяца × рабочие дни недели; АКБ = ТТ
+/// Цели ТП на следующую неделю (формулы — WeeklyReportOptions): продажи = план месяца ÷ рабочие дни месяца × рабочие дни недели (весового плана
+/// нет — «Тотал» KPI Linko: в кг — SalesKg, в сумах — SalesSum); АКБ = ТТ
 /// прошлой полной недели × коэффициент; ТТ по акциям = ТТ прошлой полной недели × коэффициент (не меньше минимума); вернуть спящих —
 /// доля от 15–30 и от 30+; списки ТТ — крупные первыми.
 /// </summary>
@@ -289,7 +291,8 @@ public sealed record WeeklyAgentGoal(
     int Return30Plus,
     int Sleeping30Plus,
     IReadOnlyList<WeeklySleepingMarket> ReturnList15To30,
-    IReadOnlyList<WeeklySleepingMarket> ReturnList30Plus);
+    IReadOnlyList<WeeklySleepingMarket> ReturnList30Plus,
+    decimal? SalesSum = null);
 
 public sealed record WeeklyGoals(
     DateOnly WeekFrom,

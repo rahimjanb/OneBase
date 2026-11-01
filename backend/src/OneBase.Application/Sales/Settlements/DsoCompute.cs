@@ -80,9 +80,10 @@ public static class DsoCompute
 
         var dealers = new List<DsoDealer>();
         // Дилеры DSO — контрагенты с условиями оплаты («Ostatka»): как лист DSO таблицы; без условий (сети, разовые клиенты) — только в «Акте сверки».
-        // Нет условий ни у кого (лист не привязан) — дилеры складов регионов.
+        // Дилер склада региона, которого в листе ещё нет (сменился дилер), — тоже: с долгом и статусом «без нормы», иначе его долг пропадал
+        // (Ташкент с 14.10.2026: новый дилер с отгрузками в DSO не попадал). Нет условий ни у кого (лист не привязан) — дилеры складов регионов.
         var withTerms = data.Books.Any(b => b.InTerms);
-        foreach (var book in data.Books.Where(b => withTerms ? b.InTerms : b.Group == "dealer"))
+        foreach (var book in data.Books.Where(b => b.Group == "dealer" || (withTerms && b.InTerms)))
         {
             var fifo = SettlementMath.Fifo(book, t.AddDays(-240), t);
             var open = fifo.Where(i => i.Remaining > 0.5m).ToList();
@@ -93,7 +94,7 @@ public static class DsoCompute
                 continue; // долга нет и в месяце не платил — в DSO не показываем
             }
 
-            var noTerm = book.InTerms && book.Norm is null;
+            var noTerm = withTerms && book.Norm is null;
             var gone = lastShip is null || lastShip < t.AddDays(-GoneDays);
             var status = gone && debt > 0.5m ? "gone" : noTerm ? "noterm" : "active";
             var norm = status == "active" ? book.Norm ?? SettlementMath.DefaultNorm : (int?)null;

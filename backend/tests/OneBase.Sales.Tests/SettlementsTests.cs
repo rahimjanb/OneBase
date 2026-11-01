@@ -19,8 +19,9 @@ public class SettlementsTests
         SettlementExpense[]? expenses = null,
         int? norm = 20,
         bool inTerms = true,
-        string? actGroup = null) =>
-        new(name.ToLowerInvariant(), name, "dealer", norm, inTerms, anchorDate, anchor, anchor is null ? null : "act", docs ?? [], payments ?? [], expenses ?? [], actGroup);
+        string? actGroup = null,
+        string group = "dealer") =>
+        new(name.ToLowerInvariant(), name, group, norm, inTerms, anchorDate, anchor, anchor is null ? null : "act", docs ?? [], payments ?? [], expenses ?? [], actGroup);
 
     private static SettlementExpense Expense(DateOnly date, decimal amount, string code) => new(date, amount, code, SettlementMath.ArtOf(code), null);
 
@@ -127,10 +128,11 @@ public class SettlementsTests
             Book("Сирдарё", docs: [new(D(9, 1), 100_000, "t:1")]),
             Book("Бахтиёр", docs: [new(D(10, 1), 50_000, "t:2")], norm: null),
             Book("Билолиддин", docs: [new(D(7, 1), 80_000, "t:3")]),
-            Book("Макро", docs: [new(D(9, 1), 30_000, "t:4")], inTerms: false));
+            Book("Макро", docs: [new(D(9, 1), 30_000, "t:4")], inTerms: false, group: "direct"));
 
         var view = DsoCompute.Build(data);
 
+        // Сеть без условий оплаты — только в «Акте сверки», не в DSO.
         Assert.Equal([("Сирдарё", "active"), ("Бахтиёр", "noterm"), ("Билолиддин", "gone")], view.Dealers.Select(d => (d.Name, d.Status)));
         var active = view.Dealers[0];
         var open = Assert.Single(active.Open);
@@ -138,6 +140,23 @@ public class SettlementsTests
         Assert.Equal(100_000, active.Overdue);
         Assert.Equal((230_000m, 100_000m), (view.Debt, view.Overdue));
         Assert.Null(view.Dealers[2].Weeks); // ушедшие в прогноз не входят
+    }
+
+    /// <summary>
+    /// Сменился дилер склада: нового ещё нет в листе норм оплаты, но его отгрузки без оплат — долг региона. Он в DSO «без нормы» (просрочка не
+    /// считается), а не пропадает вместе с долгом.
+    /// </summary>
+    [Fact]
+    public void New_warehouse_dealer_without_payment_terms_is_in_dso_without_norm()
+    {
+        var data = Base(D(10, 31),
+            Book("Сирдарё", docs: [new(D(10, 1), 100_000, "t:1")]),
+            Book("Новый дилер", docs: [new(D(10, 20), 550_000, "t:2")], norm: null, inTerms: false));
+
+        var view = DsoCompute.Build(data);
+
+        var dealer = Assert.Single(view.Dealers, d => d.Name == "Новый дилер");
+        Assert.Equal(("noterm", 550_000m, 0m, 550_000m), (dealer.Status, dealer.Debt, dealer.Overdue, dealer.ShippedMonth));
     }
 
     private static ReportDocument Sheet(string name, params string[][] rows) =>
