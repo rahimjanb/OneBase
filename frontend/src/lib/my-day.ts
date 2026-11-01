@@ -4,6 +4,8 @@
  * перевода интерфейса. Время рабочего дня приходит местным (Ташкент) без пояса: «2026-10-31T08:52:00».
  */
 
+import { formatDate } from "../i18n/core.ts";
+
 type T = (text: string, vars?: Record<string, string | number>) => string;
 
 export const TIME_ZONE = "Asia/Tashkent";
@@ -194,27 +196,27 @@ const asDate = (iso: string) => new Date(Date.UTC(+iso.slice(0, 4), +iso.slice(5
 /** «пн, 2 ноября» на языке интерфейса. */
 export function dayLabel(iso: string, locale: string): string {
   const d = asDate(iso);
-  const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(d).replace(".", "");
-  const day = new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", timeZone: "UTC" }).format(d);
+  const weekday = formatDate(d, locale, { weekday: "short", timeZone: "UTC" }).replace(".", "");
+  const day = formatDate(d, locale, { day: "numeric", month: "long", timeZone: "UTC" });
   return `${weekday}, ${day}`;
 }
 
 /** «Пн 26» — ячейка недели. */
 export function weekdayCell(iso: string, locale: string): { weekday: string; day: number } {
-  const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(asDate(iso)).replace(".", "");
+  const weekday = formatDate(asDate(iso), locale, { weekday: "short", timeZone: "UTC" }).replace(".", "");
   return { weekday: weekday.charAt(0).toUpperCase() + weekday.slice(1, 2), day: +iso.slice(8, 10) };
 }
 
 /** «сб · 31 октября» — строка даты «Моего дня» на телефоне (заглавными — стилем). */
 export function shortDayLabel(date: Date, locale: string): string {
-  const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: TIME_ZONE }).format(date).replace(".", "");
-  const day = new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", timeZone: TIME_ZONE }).format(date);
+  const weekday = formatDate(date, locale, { weekday: "short", timeZone: TIME_ZONE }).replace(".", "");
+  const day = formatDate(date, locale, { day: "numeric", month: "long", timeZone: TIME_ZONE });
   return `${weekday} · ${day}`;
 }
 
 /** «30 окт» — дата документа и уведомления. */
 export function shortDate(iso: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: TIME_ZONE }).format(new Date(iso)).replace(".", "");
+  return formatDate(new Date(iso), locale, { day: "numeric", month: "short", timeZone: TIME_ZONE }).replace(".", "");
 }
 
 // ---------- Статусы ----------

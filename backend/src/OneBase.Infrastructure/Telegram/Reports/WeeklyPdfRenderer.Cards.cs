@@ -34,7 +34,7 @@ public sealed partial class WeeklyPdfRenderer
     {
         private static readonly NumberFormatInfo Ru = new() { NumberGroupSeparator = " ", NumberDecimalSeparator = ",", NumberGroupSizes = [3] };
 
-        private string T(string ru) => lang != "ru" && Uz.TryGetValue(ru, out var uz) ? FromUz(lang, uz) : WeeklyTexts.T(lang, ru);
+        private string T(string ru) => lang != "ru" && Uz.TryGetValue(ru, out var uz) ? FromUz(lang, uz, ru) : WeeklyTexts.T(lang, ru);
 
         private string F(string ru, params object?[] args) => string.Format(CultureInfo.InvariantCulture, T(ru), args.Select(a => a ?? "").ToArray());
 

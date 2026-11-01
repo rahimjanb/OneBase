@@ -1088,7 +1088,7 @@ export function AttachmentsCard({
                 <a href={href} className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-ink group-hover:text-link">{a.fileName}</span>
                   <span className="block truncate text-[11px] text-subtle">
-                    {fileSize(a.sizeBytes)}
+                    {fileSize(a.sizeBytes, t)}
                     {a.uploadedByName ? ` · ${a.uploadedByName}` : ""} · {stamp(a.createdAt, false)}
                   </span>
                 </a>

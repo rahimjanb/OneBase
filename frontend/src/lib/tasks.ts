@@ -1,3 +1,4 @@
+import { translate } from "@/i18n/core";
 /** Раздел «Задачи» OneBase: отделы, задачи отделов и проектов, проекты, предложения AI-диспетчера (API /api/work/*). Задачи полевой команды — типы Sales Base (lib/field/types). */
 
 export type DepartmentTasks = {
@@ -201,5 +202,6 @@ export const taskFilterKeys = ["search", "status", "priority", "department", "as
 
 export type TaskFilters = Partial<Record<(typeof taskFilterKeys)[number], string>>;
 
-export const fileSize = (bytes: number) =>
-  bytes < 1024 ? `${bytes} Б` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} КБ` : `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+/** Размер файла на языке интерфейса: «12 КБ» / «12 KB». t — перевод страницы (useT / getT); без него — русский. */
+export const fileSize = (bytes: number, t: (text: string, vars?: Record<string, string | number>) => string = (text, vars) => translate(null, text, vars)) =>
+  bytes < 1024 ? t("{n} Б", { n: bytes }) : bytes < 1024 * 1024 ? t("{n} КБ", { n: (bytes / 1024).toFixed(0) }) : t("{n} МБ", { n: (bytes / 1024 / 1024).toFixed(1) });

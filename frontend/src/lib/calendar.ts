@@ -3,6 +3,8 @@
  * Даты — «YYYY-MM-DD» по Ташкенту, время — «HH:mm» (сервер отдаёт «HH:mm:ss»).
  */
 
+import { formatDate } from "../i18n/core.ts";
+
 export type CalendarKind = "Meeting" | "ReportDue" | "Event";
 
 export type CalendarPerson = { id: string; name: string; position: string | null; department: string | null };
@@ -66,7 +68,7 @@ export function weekOf(date: string): string[] {
 export function weekTitle(monday: string, locale: string): string {
   const sunday = addDays(monday, 6);
   const day = (d: string, month: boolean) =>
-    new Intl.DateTimeFormat(locale, month ? { day: "numeric", month: "long", timeZone: "UTC" } : { day: "numeric", timeZone: "UTC" }).format(new Date(utc(d) + 43_200_000));
+    formatDate(new Date(utc(d) + 43_200_000), locale, month ? { day: "numeric", month: "long", timeZone: "UTC" } : { day: "numeric", timeZone: "UTC" });
   const sameMonth = monday.slice(5, 7) === sunday.slice(5, 7);
   return `${day(monday, !sameMonth)} – ${day(sunday, true)}`;
 }

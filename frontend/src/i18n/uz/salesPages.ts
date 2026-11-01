@@ -950,6 +950,8 @@ const dict: Dict = {
   "Неоплаченные отгрузки": "To'lanmagan jo'natmalar",
   "дилеры со сроком, по сроку оплаты; красным — срок по норме прошёл":
     "muddatli dilerlar, to'lov muddati bo'yicha; qizil — me'yor bo'yicha muddat o'tgan",
+  "плана «Завод» на этот месяц нет": "bu oy uchun «Zavod» rejasi yo'q",
+  "плана РОП на этот месяц нет": "bu oy uchun ROP rejasi yo'q",
 };
 
 export default dict;

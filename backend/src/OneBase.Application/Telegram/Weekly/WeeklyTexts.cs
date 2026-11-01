@@ -14,7 +14,7 @@ public static class WeeklyTexts
     public static string T(string language, string ru) => language switch
     {
         "uz" => Uz.TryGetValue(ru, out var uz) ? uz : ReportTexts.Get("uz", ru),
-        "uz-Cyrl" => Uz.TryGetValue(ru, out var latin) ? ReportTexts.Uzbek(language, latin) : ReportTexts.Get(language, ru),
+        "uz-Cyrl" => Uz.TryGetValue(ru, out var latin) ? ReportTexts.Uzbek(language, latin, ru) : ReportTexts.Get(language, ru),
         _ => ru,
     };
 

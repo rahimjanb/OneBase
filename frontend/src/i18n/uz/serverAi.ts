@@ -910,6 +910,10 @@ const dict: Dict = {
   "order — где нужен заказ (по умолчанию), oos — нет в наличии, deficit — меньше 15 дней запаса, all — все пары.":
     "order — buyurtma kerak joylar (standart), oos — mavjud emas, deficit — 15 kundan kam zaxira, all — barcha juftliklar.",
   "Сколько пар в списке: по умолчанию 40, до 60.": "Ro'yxatda nechta juftlik: standart 40, 60 tagacha.",
+  "Продажи за период": "Davr bo'yicha savdo",
+  "Ничего не найдено. Попробуйте часть слова, другое написание (кириллица или латиница) или артикул.": "Hech narsa topilmadi. So'zning bir qismini, boshqacha yozilishini (kirill yoki lotin) yoki artikulni sinab ko'ring.",
+  "Передать подзадачу другому AI-сотруднику и получить его ответ.": "Kichik vazifani boshqa AI xodimga topshirish va uning javobini olish.",
+  "{n} мс": "{n} ms",
 };
 
 export default dict;

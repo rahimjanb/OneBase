@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, RefreshCw, RotateCcw } from "lucide-react";
 import { SyncStatusBadge } from "@/components/hr/HrBits";
-import { useT } from "@/i18n/client";
+import { tNow, useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { dayLabel, momentLabel, triggerLabel, type HrSyncRun, type PageResult } from "@/lib/hr";
 
@@ -12,7 +12,7 @@ const button = "inline-flex h-9 items-center gap-2 rounded-lg border border-line
 const seconds = (run: HrSyncRun) => {
   const end = run.finishedAt ? Date.parse(run.finishedAt) : Date.now();
   const s = Math.max(0, Math.round((end - Date.parse(run.startedAt)) / 1000));
-  return s >= 60 ? `${Math.floor(s / 60)} мин ${s % 60} с` : `${s} с`;
+  return s >= 60 ? tNow("{m} мин {s} с", { m: Math.floor(s / 60), s: s % 60 }) : tNow("{n} с", { n: s });
 };
 
 /**

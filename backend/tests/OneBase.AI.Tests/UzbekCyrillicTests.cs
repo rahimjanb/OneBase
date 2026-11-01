@@ -24,7 +24,13 @@ public class UzbekCyrillicTests
     [InlineData("AI Data Manager", "AI Data Manager")]
     [InlineData("F.I.Sh. bo'yicha", "Ф.И.Ш. бўйича")]
     [InlineData("Tekshiring, eng yaxshi", "Текширинг, энг яхши")]
-    [InlineData("Aksiyalar sentabr, iyun", "Акциялар сентябр, июн")]
+    [InlineData("Aksiyalar sentabr, iyun", "Акциялар сентябрь, июнь")]
+    [InlineData("1-sentabrdan, iyunda", "1-сентябрдан, июнда")] // перед окончанием мягкий знак опускается
+    [InlineData("Parolni kiriting, yangi parol", "Паролни киритинг, янги пароль")]
+    [InlineData("Javob modeli, modellar, filtrlar", "Жавоб модели, моделлар, фильтрлар")]
+    [InlineData("Menejerlar kompyuterda, kuryer va klient", "Менеджерлар компьютерда, курьер ва клиент")]
+    [InlineData("Matritsa, protsent, obyekt, kesh", "Матрица, процент, объект, кэш")]
+    [InlineData("EBIT operatsion foyda", "EBIT операцион фойда")]
     [InlineData("U yerda yo'q", "У ерда йўқ")]
     [InlineData("XATO: SINOV JO'NATMASI", "ХАТО: СИНОВ ЖЎНАТМАСИ")]
     [InlineData("JShShIR va QQS", "ЖШШИР ва ҚҚС")]
@@ -41,6 +47,14 @@ public class UzbekCyrillicTests
     [InlineData("PEER_FLOOD xatosi, Telegram:Enabled=false", "PEER_FLOOD хатоси, Telegram:Enabled=false")]
     [InlineData("EXPORT, ARBUZ, YYYY-MM-DD, OK", "EXPORT, АРБУЗ, YYYY-MM-DD, ОК")]
     public void Latin_becomes_cyrillic_by_the_rules(string latin, string cyrillic) => Assert.Equal(cyrillic, UzbekCyrillic.Convert(latin));
+
+    [Fact]
+    public void Words_from_the_russian_original_stay_latin()
+    {
+        // Имена параметров инструментов («open», «days») есть и в русском оригинале — это не узбекские слова.
+        const string ru = "open — открытые (по умолчанию), done — выполненные за days дней";
+        Assert.Equal("open — очиқ (стандарт), done — days кунда бажарилган", UzbekCyrillic.Convert("open — ochiq (standart), done — days kunda bajarilgan", ru));
+    }
 
     [Theory]
     [InlineData("uz-Cyrl", "uz-Cyrl")]
@@ -82,7 +96,7 @@ public class UzbekCyrillicTests
     }
 
     /// <summary>
-    /// Сверка с frontend: JSON «латиница → кириллица» по всему словарю интерфейса (собирает frontend/src/i18n/cyrillic.ts). Без переменной
+    /// Сверка с frontend: JSON [русский, латиница, кириллица] по всему словарю интерфейса (собирает frontend/src/i18n/cyrillic.ts). Без переменной
     /// ONEBASE_CYRILLIC_PARITY — пропуск (в CI фронтенда нет).
     /// </summary>
     [Fact]
@@ -94,9 +108,10 @@ public class UzbekCyrillicTests
             return;
         }
 
-        var pairs = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))!;
-        var different = pairs.Where(p => UzbekCyrillic.Convert(p.Key) != p.Value).Select(p => $"{p.Key}\n  ts: {p.Value}\n  cs: {UzbekCyrillic.Convert(p.Key)}").Take(20).ToList();
-        Assert.True(pairs.Count > 5000, $"словарь: {pairs.Count}");
+        // [русский, латиница, кириллица frontend]
+        var rows = JsonSerializer.Deserialize<List<string[]>>(File.ReadAllText(path))!;
+        var different = rows.Where(r => UzbekCyrillic.Convert(r[1], r[0]) != r[2]).Select(r => $"{r[1]}\n  ts: {r[2]}\n  cs: {UzbekCyrillic.Convert(r[1], r[0])}").Take(20).ToList();
+        Assert.True(rows.Count > 5000, $"словарь: {rows.Count}");
         Assert.True(different.Count == 0, string.Join("\n", different));
     }
 }

@@ -746,6 +746,9 @@ const dict: Dict = {
     "Kelish — natijasi aniq kunlar (keldi yoki kelmadi) orasida kelgan ish kunlari ulushi. Excel'da: bo'linmalar yakunlari, xodimlarning kunlik tabeli va chetlanishlar ro'yxati.",
   "Явка — доля рабочих дней с приходом среди дней с ясным итогом. В Excel: итоги подразделений, табель по дням и отклонения.":
     "Kelish — natijasi aniq kunlar orasida kelgan ish kunlari ulushi. Excel'da: bo'linmalar yakunlari, kunlik tabel va chetlanishlar.",
+  "С нарушениями": "Qoidabuzarlik bilan",
+  "Нужна проверка": "Tekshirish kerak",
+  "{m} мин {s} с": "{m} daq. {s} s",
 };
 
 export default dict;

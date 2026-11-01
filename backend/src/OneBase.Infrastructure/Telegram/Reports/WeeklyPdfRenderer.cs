@@ -37,7 +37,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
     private static string Lang(string? language) => OneBase.Application.Abstractions.UiLanguage.Normalize(language) ?? "ru";
 
     /// <summary>Подпись из словаря рисовальщика (латиница) на языке PDF: «uz-Cyrl» — переведённая в кириллицу.</summary>
-    private static string FromUz(string lang, string latin) => lang == "uz-Cyrl" ? ReportTexts.Uzbek(lang, latin) : latin;
+    private static string FromUz(string lang, string latin, string? ru = null) => lang == "uz-Cyrl" ? ReportTexts.Uzbek(lang, latin, ru) : latin;
 
     private static void EnsureReady()
     {
@@ -89,7 +89,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
     {
         private readonly bool _group = r.Role is "rop" or "rm";
 
-        private string T(string ru) => lang != "ru" && Uz.TryGetValue(ru, out var uz) ? FromUz(lang, uz) : WeeklyTexts.T(lang, ru);
+        private string T(string ru) => lang != "ru" && Uz.TryGetValue(ru, out var uz) ? FromUz(lang, uz, ru) : WeeklyTexts.T(lang, ru);
 
         private string F(string ru, params object?[] args) => string.Format(CultureInfo.InvariantCulture, T(ru), args.Select(a => a ?? "").ToArray());
 

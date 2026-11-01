@@ -45,7 +45,10 @@ const patterns = new WeakMap<Dict, Pattern[]>();
  * ищется ключ-шаблон («данные по {date}»), значения переносятся в перевод; значение, которое само есть в словаре, тоже переводится.
  * Шаблон без длинного постоянного куска («{n} {unit}») не используется — иначе он узнавал бы что угодно, в том числе данные.
  */
-function byPattern(dict: Dict, text: string): string | null {
+/** Подстановки, на месте которых всегда число. */
+const NUMERIC = /^(n|count|total|num|pages|kb|mb|sent|planned|days|hours|minutes|seconds|sec|min|done|pct|percent|attempt|max|status|code|year|month|day)$/;
+
+function byPattern(dict: Dict, text: string, depth = 0): string | null {
   if (text.length > 600 || !/[А-Яа-яЁё]/.test(text)) return null;
   let list = patterns.get(dict);
   if (!list) {
@@ -75,7 +78,9 @@ function byPattern(dict: Dict, text: string): string | null {
     const match = p.re.exec(text);
     if (!match) continue;
     const found: Record<string, string> = {};
-    p.names.forEach((name, i) => (found[name] = dict[match[i + 1]] ?? match[i + 1]));
+    // Числовая подстановка ({n}, {count}, {status}…) — только число: иначе «Инженерно-технический отдел» узнавался бы как «{n} отдел».
+    if (p.names.some((name, i) => NUMERIC.test(name) && !/\d/.test(match[i + 1]))) continue;
+    p.names.forEach((name, i) => (found[name] = dict[match[i + 1]] ?? (depth < 2 ? byPattern(dict, match[i + 1], depth + 1) : null) ?? match[i + 1]));
     return p.value.replace(/\{(\w+)\}/g, (all, key: string) => found[key] ?? all);
   }
   return null;
@@ -87,7 +92,7 @@ const uzMonths = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "a
 const uzMonthsShort = ["yan", "fev", "mar", "apr", "may", "iyn", "iyl", "avg", "sen", "okt", "noy", "dek"];
 const uzWeekdays = ["yakshanba", "dushanba", "seshanba", "chorshanba", "payshanba", "juma", "shanba"];
 const uzWeekdaysShort = ["Ya", "Du", "Se", "Ch", "Pa", "Ju", "Sh"];
-const cyrMonths = ["январ", "феврал", "март", "апрел", "май", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр"];
+const cyrMonths = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
 const cyrMonthsShort = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 const cyrWeekdays = ["якшанба", "душанба", "сешанба", "чоршанба", "пайшанба", "жума", "шанба"];
 const cyrWeekdaysShort = ["Як", "Ду", "Се", "Чо", "Па", "Жу", "Ша"];
@@ -129,7 +134,8 @@ export function formatDate(date: Date, locale: string, options?: Intl.DateTimeFo
     const core = o.day ? `${Number(parts.day)}-${name}` : name;
     text.push(o.year ? `${core}, ${parts.year}` : core);
   } else if (o.day || o.month || o.year) {
-    text.push([o.day && pad(parts.day), o.month && pad(parts.month), o.year && parts.year].filter(Boolean).join("."));
+    const num = (v: string, style?: string) => (style === "2-digit" ? pad(v) : String(Number(v)));
+    text.push([o.day && num(parts.day, o.day), o.month && num(parts.month, o.month as string), o.year && parts.year].filter(Boolean).join("."));
   }
   const date_ = text.join(", ");
   const time = o.hour || o.minute ? `${pad(parts.hour === "24" ? "00" : parts.hour)}:${pad(parts.minute)}` : "";

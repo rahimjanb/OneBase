@@ -13,13 +13,13 @@ const KEEP = new Set([
   "onebase", "linko", "telegram", "excel", "word", "pdf", "png", "jpg", "jpeg", "csv", "xlsx", "docx", "kpi", "dso", "sku", "id", "api", "url",
   "ai", "gpt", "openai", "claude", "anthropic", "google", "gmail", "verifix", "windows", "android", "ios", "iphone", "bitrix", "bitrix24", "qr",
   "sms", "pin", "ip", "http", "https", "pwa", "json", "sql", "markdown", "twizos", "email", "vpn", "usb", "docker", "chrome", "safari",
-  "edge", "yandex", "cloudflare", "webdav", "smb", "nas", "mp3", "mp4", "zip", "html", "ssl", "dns", "utc", "gmt", "wi", "fi", "mb", "kb", "gb",
+  "edge", "yandex", "cloudflare", "webdav", "smb", "nas", "mp3", "mp4", "zip", "html", "ssl", "dns", "utc", "gmt", "wi", "fi",
   "fcm", "apns", "macos", "linux", "nginx", "minio", "postgres", "postgresql", "sheets", "drive", "outlook", "whatsapp", "instagram",
   "facebook", "youtube", "skype", "zoom", "teams", "slack", "notion", "jira", "trello", "asana", "github", "gitlab", "hr", "crm", "erp", "sfa",
   "b2b", "b2c", "ceo", "cfo", "okr", "faq", "mvp", "ux", "ui", "abc", "xyz", "ebit", "ebitda", "roi", "enter", "esc", "tab", "shift", "ctrl",
   "alt", "cmd", "true", "false", "null", "env", "localhost", "oauth", "tools", "about", "reasoning", "sync", "month", "months", "bought", "year",
   "dealer", "assignee", "team", "reassign", "employee", "early", "read", "you", "appear", "data", "manager", "docs", "shoubox", "gps", "usd",
-  "search", "oos", "spreadsheet", "spreadsheets", "yyyy", "system", "hklm", "vapid", "iana", "fifo", "peer", "flood", "export",
+  "search", "oos", "spreadsheet", "spreadsheets", "yyyy", "system", "hklm", "vapid", "iana", "fifo", "peer", "flood", "export", "sales", "base", "username",
 ]);
 
 /** Узбекские сокращения со строчными буквами внутри (диграфы) — целиком. */
@@ -34,29 +34,19 @@ const UZ_ABBR: [string, string][] = [
  * («HAFTA», «ARBUZ») — кириллицей, кроме английских и технических (KEEP).
  */
 const UZ_CAPS = new Set([
-  "TP", "RM", "AKB", "ROP", "SVR", "SV", "SN", "KPU", "DMP", "TT", "TOP", "QQS", "STIR", "XATO", "SINOV", "JO'NATMASI", "DIQQAT", "OGOHLANTIRISH", "OK",
+  "TP", "RM", "AKB", "ROP", "SVR", "SV", "SN", "KPU", "DMP", "TT", "TOP", "QQS", "STIR", "XATO", "SINOV", "JO'NATMASI", "DIQQAT", "OGOHLANTIRISH", "OK", "KB", "MB", "GB",
 ]);
 
-/** Русские заимствования: латинский корень → кириллический (дальше — по правилам). Длинные — первыми. */
-const STEMS: [string, string][] = [
-  ["kompaniya", "компания"],
-  ["sentabr", "сентябр"],
-  ["oktabr", "октябр"],
-  ["noyabr", "ноябр"],
-  ["dekabr", "декабр"],
-  ["yanvar", "январ"],
-  ["fevral", "феврал"],
-  ["aksiya", "акция"],
-  ["reestr", "реестр"],
-  ["iyun", "июн"],
-  ["iyul", "июл"],
-  ["iyn", "июн"],
-  ["iyl", "июл"],
-];
+/**
+ * Русские заимствования: латинская основа → кириллическая, как в русском (модель, фильтр, менеджер, процент, сентябрь); дальше — по правилам.
+ * «ь» в конце основы — только когда окончания нет: «пароль», но «паролни»; «сентябрь», но «сентябрдан». Длинные — первыми.
+ */
+const STEMS: [string, string][] = [["sinxronizatsiya","синхронизация"],["spetsifikatsiya","спецификация"],["konsentratsiya","концентрация"],["koeffitsiyent","коэффициент"],["konferensiya","конференция"],["litsenziya","лицензия"],["konsultant","консультант"],["kompaniya","компания"],["kompyuter","компьютер"],["menejment","менеджмент"],["stansiya","станция"],["kalendar","календарь"],["matritsa","матрица"],["protsent","процент"],["premyera","премьера"],["menejer","менеджер"],["keshbek","кешбэк"],["sentabr","сентябрь"],["pechene","печенье"],["subyekt","субъект"],["sotsial","социал"],["oktabr","октябрь"],["noyabr","ноябрь"],["dekabr","декабрь"],["yanvar","январь"],["fevral","февраль"],["obyekt","объект"],["kuryer","курьер"],["klient","клиент"],["profil","профиль"],["aksiya","акция"],["reestr","реестр"],["tsentr","центр"],["aprel","апрель"],["obyom","объём"],["filtr","фильтр"],["parol","пароль"],["tabel","табель"],["model","модель"],["mogul","могуль"],["spets","спец"],["sentr","центр"],["tsikl","цикл"],["sikl","цикл"],["tsex","цех"],["film","фильм"],["stil","стиль"],["bron","бронь"],["kesh","кэш"],["iyun","июнь"],["iyul","июль"],["iyn","июн"],["iyl","июл"],["rol","роль"]];
 
-/** Сочетания внутри слова: «-ksiya» → «-кция» (редакция, коллекция), «-tsiya» → «-ция» (операция, интеграция). */
+/** Сочетания внутри слова: «-ksiya» → «-кция» (редакция, коллекция), «-tsiya» → «-ция» (операция), «-tsion» → «-цион» (операцион). */
 const INFIXES: [string, string][] = [
   ["tsiya", "ция"],
+  ["tsion", "цион"],
   ["ksiya", "кция"],
 ];
 
@@ -75,7 +65,9 @@ const ENGLISH = /c(?!h)|w|ph|ck|^th/i;
 /** Одно слово в нижнем регистре (буквы и апострофы внутри) → кириллица. */
 function wordToCyrillic(lower: string): string {
   for (const [latin, cyr] of STEMS) {
-    if (lower.startsWith(latin)) return cyr + wordToCyrillic(lower.slice(latin.length)).replace(/^э/, "е");
+    if (!lower.startsWith(latin)) continue;
+    const rest = lower.slice(latin.length);
+    return rest === "" ? cyr : cyr.replace(/ь$/, "") + wordToCyrillic(rest).replace(/^э/, "е");
   }
 
   let out = "";
@@ -145,14 +137,14 @@ function wordToCyrillic(lower: string): string {
 const upper = (latin: string) => wordToCyrillic(latin.toLowerCase()).toUpperCase();
 const tail = (latin: string) => (latin ? wordToCyrillic(latin.toLowerCase()) : "");
 
-/** Слово латиницей → кириллица или как есть (бренд, сокращение, английское слово, ВерблюжийРегистр). */
-function convertWord(word: string): string {
+/** Слово латиницей → кириллица или как есть (бренд, сокращение, английское слово, слово из оригинала, ВерблюжийРегистр). */
+function convertWord(word: string, keep: Set<string>): string {
   const lower = word.toLowerCase();
   // «Linko'da», «OneBase'da»: бренд остаётся, узбекское окончание — кириллицей.
   const apostrophe = word.search(/['ʻʼ’‘`]/);
   if (apostrophe > 0) {
     const head = word.slice(0, apostrophe);
-    if (KEEP.has(head.toLowerCase()) || /[a-z][A-Z]/.test(head) || ENGLISH.test(head)) return head + "'" + tail(word.slice(apostrophe + 1));
+    if (KEEP.has(head.toLowerCase()) || keep.has(head) || /[a-z][A-Z]/.test(head) || ENGLISH.test(head)) return head + "'" + tail(word.slice(apostrophe + 1));
   }
 
   if (KEEP.has(lower)) return word;
@@ -184,21 +176,25 @@ const PROTECTED =
 /** Слово: латинские буквы с апострофами внутри (oʻ, gʻ, maʼlumot). */
 const WORD = /[A-Za-z](?:[A-Za-z]|['ʻʼ’‘`](?=[A-Za-z]))*/g;
 
-/** Кусок без защищённых мест: слова переводятся, слово рядом с цифрой («P50», «1Base», «y2») — как есть. */
-const convertFree = (part: string) =>
+/** Кусок без защищённых мест: слова переводятся; слово рядом с цифрой («P50», «1Base», «y2») и слово из оригинала (keep) — как есть. */
+const convertFree = (part: string, keep: Set<string>) =>
   part.replace(WORD, (w: string, offset: number, whole: string) =>
-    (offset > 0 && /\d/.test(whole[offset - 1])) || /\d/.test(whole[offset + w.length] ?? "") ? w : convertWord(w),
+    (offset > 0 && /\d/.test(whole[offset - 1])) || /\d/.test(whole[offset + w.length] ?? "") || keep.has(w) ? w : convertWord(w, keep),
   );
 
-/** Текст узбекской латиницей → узбекская кириллица; русский текст, цифры и защищённые куски не меняются. */
-export function toCyrillic(text: string): string {
+/**
+ * Текст узбекской латиницей → узбекская кириллица; русский текст, цифры и защищённые куски не меняются. source — оригинал (русский текст
+ * перевода): латинские слова, которые есть в нём («open», «days», «Sales Base»), — имена параметров и термины, остаются латиницей.
+ */
+export function toCyrillic(text: string, source?: string): string {
   if (!/[A-Za-z]/.test(text)) return text;
+  const keep = new Set<string>(source?.match(/[A-Za-z][A-Za-z0-9]*/g) ?? []);
   let out = "";
   let last = 0;
   for (const m of text.matchAll(PROTECTED)) {
-    out += convertFree(text.slice(last, m.index)) + m[0];
+    out += convertFree(text.slice(last, m.index), keep) + m[0];
     last = m.index! + m[0].length;
   }
 
-  return out + convertFree(text.slice(last));
+  return out + convertFree(text.slice(last), keep);
 }

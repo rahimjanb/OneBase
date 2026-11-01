@@ -463,6 +463,11 @@ const dict: Dict = {
   "сдано {day} в {time}": "{day} kuni {time} da topshirildi",
   "сдано на проверку": "tekshiruvga topshirildi",
   "Чек-лист изменился — обновите страницу и повторите.": "Chek-list o'zgardi — sahifani yangilang va qaytadan urinib ko'ring.",
+  "Не указан": "Ko'rsatilmagan",
+  "Не задано": "Belgilanmagan",
+  "{n} Б": "{n} B",
+  "{n} КБ": "{n} KB",
+  "{n} МБ": "{n} MB",
 };
 
 export default dict;

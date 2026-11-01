@@ -19,13 +19,13 @@ public static partial class UzbekCyrillic
         "onebase", "linko", "telegram", "excel", "word", "pdf", "png", "jpg", "jpeg", "csv", "xlsx", "docx", "kpi", "dso", "sku", "id", "api", "url",
         "ai", "gpt", "openai", "claude", "anthropic", "google", "gmail", "verifix", "windows", "android", "ios", "iphone", "bitrix", "bitrix24", "qr",
         "sms", "pin", "ip", "http", "https", "pwa", "json", "sql", "markdown", "twizos", "email", "vpn", "usb", "docker", "chrome", "safari",
-        "edge", "yandex", "cloudflare", "webdav", "smb", "nas", "mp3", "mp4", "zip", "html", "ssl", "dns", "utc", "gmt", "wi", "fi", "mb", "kb", "gb",
+        "edge", "yandex", "cloudflare", "webdav", "smb", "nas", "mp3", "mp4", "zip", "html", "ssl", "dns", "utc", "gmt", "wi", "fi",
         "fcm", "apns", "macos", "linux", "nginx", "minio", "postgres", "postgresql", "sheets", "drive", "outlook", "whatsapp", "instagram",
         "facebook", "youtube", "skype", "zoom", "teams", "slack", "notion", "jira", "trello", "asana", "github", "gitlab", "hr", "crm", "erp", "sfa",
         "b2b", "b2c", "ceo", "cfo", "okr", "faq", "mvp", "ux", "ui", "abc", "xyz", "ebit", "ebitda", "roi", "enter", "esc", "tab", "shift", "ctrl",
         "alt", "cmd", "true", "false", "null", "env", "localhost", "oauth", "tools", "about", "reasoning", "sync", "month", "months", "bought", "year",
         "dealer", "assignee", "team", "reassign", "employee", "early", "read", "you", "appear", "data", "manager", "docs", "shoubox", "gps", "usd",
-        "search", "oos", "spreadsheet", "spreadsheets", "yyyy", "system", "hklm", "vapid", "iana", "fifo", "peer", "flood", "export",
+        "search", "oos", "spreadsheet", "spreadsheets", "yyyy", "system", "hklm", "vapid", "iana", "fifo", "peer", "flood", "export", "sales", "base", "username",
     };
 
     /// <summary>Узбекские сокращения со строчными буквами внутри (диграфы) — целиком.</summary>
@@ -37,18 +37,20 @@ public static partial class UzbekCyrillic
     /// </summary>
     private static readonly HashSet<string> UzbekCaps =
     [
-        "TP", "RM", "AKB", "ROP", "SVR", "SV", "SN", "KPU", "DMP", "TT", "TOP", "QQS", "STIR", "XATO", "SINOV", "JO'NATMASI", "DIQQAT", "OGOHLANTIRISH", "OK",
+        "TP", "RM", "AKB", "ROP", "SVR", "SV", "SN", "KPU", "DMP", "TT", "TOP", "QQS", "STIR", "XATO", "SINOV", "JO'NATMASI", "DIQQAT", "OGOHLANTIRISH", "OK", "KB", "MB", "GB",
     ];
 
-    /// <summary>Русские заимствования: латинский корень → кириллический (дальше — по правилам). Длинные — первыми.</summary>
+    /// <summary>
+    /// Русские заимствования: латинская основа → кириллическая, как в русском (модель, фильтр, менеджер, процент, сентябрь); дальше — по
+    /// правилам. «ь» в конце основы — только когда окончания нет: «пароль», но «паролни». Длинные — первыми.
+    /// </summary>
     private static readonly (string Latin, string Cyrillic)[] Stems =
     [
-        ("kompaniya", "компания"), ("sentabr", "сентябр"), ("oktabr", "октябр"), ("noyabr", "ноябр"), ("dekabr", "декабр"), ("yanvar", "январ"),
-        ("fevral", "феврал"), ("aksiya", "акция"), ("reestr", "реестр"), ("iyun", "июн"), ("iyul", "июл"), ("iyn", "июн"), ("iyl", "июл"),
+        ("sinxronizatsiya", "синхронизация"), ("spetsifikatsiya", "спецификация"), ("konsentratsiya", "концентрация"), ("koeffitsiyent", "коэффициент"), ("konferensiya", "конференция"), ("litsenziya", "лицензия"), ("konsultant", "консультант"), ("kompaniya", "компания"), ("kompyuter", "компьютер"), ("menejment", "менеджмент"), ("stansiya", "станция"), ("kalendar", "календарь"), ("matritsa", "матрица"), ("protsent", "процент"), ("premyera", "премьера"), ("menejer", "менеджер"), ("keshbek", "кешбэк"), ("sentabr", "сентябрь"), ("pechene", "печенье"), ("subyekt", "субъект"), ("sotsial", "социал"), ("oktabr", "октябрь"), ("noyabr", "ноябрь"), ("dekabr", "декабрь"), ("yanvar", "январь"), ("fevral", "февраль"), ("obyekt", "объект"), ("kuryer", "курьер"), ("klient", "клиент"), ("profil", "профиль"), ("aksiya", "акция"), ("reestr", "реестр"), ("tsentr", "центр"), ("aprel", "апрель"), ("obyom", "объём"), ("filtr", "фильтр"), ("parol", "пароль"), ("tabel", "табель"), ("model", "модель"), ("mogul", "могуль"), ("spets", "спец"), ("sentr", "центр"), ("tsikl", "цикл"), ("sikl", "цикл"), ("tsex", "цех"), ("film", "фильм"), ("stil", "стиль"), ("bron", "бронь"), ("kesh", "кэш"), ("iyun", "июнь"), ("iyul", "июль"), ("iyn", "июн"), ("iyl", "июл"), ("rol", "роль"),
     ];
 
-    /// <summary>Сочетания внутри слова: «-ksiya» → «-кция», «-tsiya» → «-ция».</summary>
-    private static readonly (string Latin, string Cyrillic)[] Infixes = [("tsiya", "ция"), ("ksiya", "кция")];
+    /// <summary>Сочетания внутри слова: «-ksiya» → «-кция», «-tsiya» → «-ция», «-tsion» → «-цион».</summary>
+    private static readonly (string Latin, string Cyrillic)[] Infixes = [("tsiya", "ция"), ("tsion", "цион"), ("ksiya", "кция")];
 
     private static readonly Dictionary<char, string> Letters = new()
     {
@@ -61,33 +63,40 @@ public static partial class UzbekCyrillic
 
     private static bool IsApostrophe(char c) => Apostrophes.Contains(c);
 
-    /// <summary>Текст узбекской латиницей → узбекская кириллица; русский текст, цифры и защищённые куски не меняются.</summary>
-    public static string Convert(string text)
+    /// <summary>
+    /// Текст узбекской латиницей → узбекская кириллица; русский текст, цифры и защищённые куски не меняются. source — оригинал (русский текст
+    /// перевода): латинские слова, которые есть в нём («open», «days»), — имена параметров и термины, остаются латиницей.
+    /// </summary>
+    public static string Convert(string text, string? source = null)
     {
         if (string.IsNullOrEmpty(text) || !AnyLatin().IsMatch(text))
         {
             return text;
         }
 
+        var keep = source is null ? [] : SourceWord().Matches(source).Select(m => m.Value).ToHashSet(StringComparer.Ordinal);
         var result = new StringBuilder(text.Length);
         var last = 0;
         foreach (Match m in Protected().Matches(text))
         {
-            result.Append(ConvertFree(text[last..m.Index])).Append(m.Value);
+            result.Append(ConvertFree(text[last..m.Index], keep)).Append(m.Value);
             last = m.Index + m.Length;
         }
 
-        return result.Append(ConvertFree(text[last..])).ToString();
+        return result.Append(ConvertFree(text[last..], keep)).ToString();
     }
 
-    /// <summary>Кусок без защищённых мест: слова переводятся, слово рядом с цифрой («P50», «1Base») — как есть.</summary>
-    private static string ConvertFree(string part) =>
+    /// <summary>Кусок без защищённых мест: слова переводятся; слово рядом с цифрой («P50», «1Base») и слово из оригинала — как есть.</summary>
+    private static string ConvertFree(string part, HashSet<string> keep) =>
         Word().Replace(part, m =>
-            (m.Index > 0 && char.IsDigit(part[m.Index - 1])) || (m.Index + m.Length < part.Length && char.IsDigit(part[m.Index + m.Length]))
+            (m.Index > 0 && char.IsDigit(part[m.Index - 1])) || (m.Index + m.Length < part.Length && char.IsDigit(part[m.Index + m.Length])) || keep.Contains(m.Value)
                 ? m.Value
-                : ConvertWord(m.Value));
+                : ConvertWord(m.Value, keep));
 
-    private static string ConvertWord(string word)
+    [GeneratedRegex("[A-Za-z][A-Za-z0-9]*")]
+    private static partial Regex SourceWord();
+
+    private static string ConvertWord(string word, HashSet<string> keep)
     {
         var lower = word.ToLowerInvariant();
         // «Linko'da», «OneBase'da»: бренд остаётся, узбекское окончание — кириллицей.
@@ -95,7 +104,7 @@ public static partial class UzbekCyrillic
         if (apostrophe > 0)
         {
             var head = word[..apostrophe];
-            if (Keep.Contains(head) || Camel().IsMatch(head) || English().IsMatch(head))
+            if (Keep.Contains(head) || keep.Contains(head) || Camel().IsMatch(head) || English().IsMatch(head))
             {
                 return head + "'" + Tail(word[(apostrophe + 1)..]);
             }
@@ -148,8 +157,13 @@ public static partial class UzbekCyrillic
         {
             if (lower.StartsWith(latin, StringComparison.Ordinal))
             {
+                if (lower.Length == latin.Length)
+                {
+                    return cyrillic;
+                }
+
                 var rest = ToCyrillic(lower[latin.Length..]);
-                return cyrillic + (rest.StartsWith('э') ? "е" + rest[1..] : rest);
+                return cyrillic.TrimEnd('ь') + (rest.StartsWith('э') ? "е" + rest[1..] : rest);
             }
         }
 

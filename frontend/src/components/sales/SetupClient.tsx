@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Trash2 } from "lucide-react";
-import { useT } from "@/i18n/client";
+import { useT, tNow } from "@/i18n/client";
 import { CancelSyncButton } from "./CancelSyncButton";
 import { SyncProgressBar } from "./SyncProgressBar";
 import { Note, Section } from "./bits";
@@ -46,7 +46,7 @@ async function bff<T = unknown>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // не JSON
     }
-    throw new Error(response.status === 403 ? "Недостаточно прав (нужно sales.manage)" : message || `Ошибка ${response.status}`);
+    throw new Error(response.status === 403 ? tNow("Недостаточно прав (нужно sales.manage)") : message || tNow("Ошибка {status}", { status: response.status }));
   }
   return (response.status === 204 || response.status === 202 ? undefined : await response.json()) as T;
 }

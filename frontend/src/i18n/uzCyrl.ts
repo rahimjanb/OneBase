@@ -9,4 +9,4 @@ import { uz } from "./uz";
 const overrides: Dict = {};
 
 /** Узбекский (кириллица): латинский словарь, переведённый в кириллицу по правилам орфографии, с исправлениями поверх. */
-export const uzCyrl: Dict = { ...Object.fromEntries(Object.entries(uz).map(([key, value]) => [key, toCyrillic(value)])), ...overrides };
+export const uzCyrl: Dict = { ...Object.fromEntries(Object.entries(uz).map(([key, value]) => [key, toCyrillic(value, key)])), ...overrides };

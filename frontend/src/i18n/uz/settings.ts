@@ -529,6 +529,14 @@ const dict: Dict = {
     "Dilerlarga jo'natmalar — «Dilerlarga jo'natmalar (GP)» bog'langan bo'lsa GP jadvali, aks holda Linko birlamchi savdosi; to'lovlar va to'lov muddatlari Linko'da yo'q",
   "отгрузки и возвраты — таблица ГП («Отгрузки дилерам (ГП)»), без привязки — Linko; оплаты, расходы, сроки и остатки акта — реестры Google Sheets; остаток и долг считаются, не хранятся":
     "jo'natma va qaytarmalar — GP jadvali («Dilerlarga jo'natmalar (GP)»), bog'lanmasa — Linko; to'lovlar, xarajatlar, muddatlar va dalolatnoma qoldiqlari — Google Sheets reyestrlari; qoldiq va qarz hisoblanadi, saqlanmaydi",
+  "Сервер Linko не принял токен (HTTP {status}).": "Linko serveri tokenni qabul qilmadi (HTTP {status}).",
+  "Сервер Linko не принял токен планов (HTTP {status}).": "Linko serveri rejalar tokenini qabul qilmadi (HTTP {status}).",
+  "Linko {path}: сервер не принял токен (HTTP {status})": "Linko {path}: server tokenni qabul qilmadi (HTTP {status})",
+  "Verifix: токен не выдан (HTTP {status})": "Verifix: token berilmadi (HTTP {status})",
+  "Verifix: токен не выдан (HTTP {status}), попытка {attempt} из {max}": "Verifix: token berilmadi (HTTP {status}), {attempt}/{max} urinish",
+  "План первички": "Birlamchi rejasi",
+  "Дилер (регион) × категория × месяц, кг. Первичка: план, выполнение, остаток.": "Diler (hudud) × kategoriya × oy, kg. Birlamchi: reja, bajarilishi, qoldiq.",
+  "Недостаточно прав (нужно sales.manage)": "Huquq yetarli emas (sales.manage kerak)",
 };
 
 export default dict;

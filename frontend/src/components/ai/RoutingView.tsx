@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Loader2, Play } from "lucide-react";
 import { Note, Section } from "@/components/sales/bits";
-import { useT } from "@/i18n/client";
+import { useT, tNow } from "@/i18n/client";
 import type { AiRoutingView } from "@/lib/ai";
 import { bff } from "@/lib/bff";
 import { dateTime, num } from "@/lib/sales/format";
@@ -12,7 +12,7 @@ import { primary } from "./form";
 
 const usd = (v: number) => `$${v < 1 ? v.toFixed(5) : num(v, 2)}`;
 const pct = (v: number) => `${num(v * 100, 1)}%`;
-const sec = (ms: number) => (ms < 1000 ? `${num(ms)} мс` : `${num(ms / 1000, 1)} с`);
+const sec = (ms: number) => (ms < 1000 ? tNow("{n} мс", { n: num(ms) }) : tNow("{n} с", { n: num(ms / 1000, 1) }));
 
 const categoryNames: Record<string, string> = { route: "Маршрутизация", extract: "Извлечение JSON", answer: "Модели ответа (прогноз)" };
 const sourceNames: Record<string, string> = { shadow: "задачи пользователей (фон)", eval: "эталонный набор" };

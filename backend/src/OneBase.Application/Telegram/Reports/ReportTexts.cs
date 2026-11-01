@@ -430,12 +430,13 @@ public static class ReportTexts
     public static string Get(string language, string ru) => language switch
     {
         UiLanguage.UzbekLatin => Uz.TryGetValue(ru, out var uz) ? uz : ru,
-        UiLanguage.UzbekCyrillicCode => Uz.TryGetValue(ru, out var latin) ? Cyrillic.GetOrAdd(latin, UzbekCyrillic.Convert) : ru,
+        UiLanguage.UzbekCyrillicCode => Uz.TryGetValue(ru, out var latin) ? Cyrillic.GetOrAdd(ru, _ => UzbekCyrillic.Convert(latin, ru)) : ru,
         _ => ru,
     };
 
-    /// <summary>Узбекский текст отчёта, написанный латиницей, на языке отчёта (кириллица — переведённый).</summary>
-    public static string Uzbek(string language, string latin) => language == UiLanguage.UzbekCyrillicCode ? Cyrillic.GetOrAdd(latin, UzbekCyrillic.Convert) : latin;
+    /// <summary>Узбекский текст отчёта, написанный латиницей, на языке отчёта (кириллица — переведённый; ru — русский оригинал, если есть).</summary>
+    public static string Uzbek(string language, string latin, string? ru = null) =>
+        language == UiLanguage.UzbekCyrillicCode ? Cyrillic.GetOrAdd(ru ?? latin, _ => UzbekCyrillic.Convert(latin, ru)) : latin;
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Cyrillic = new();
 
