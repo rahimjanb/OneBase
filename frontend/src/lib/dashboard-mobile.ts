@@ -112,7 +112,7 @@ export function weeklyReportOf(alerts: AiAlertsView | null, now: Date): WeeklyRe
 export const DEPARTMENTS: { code: string; name: string; href: string }[] = Object.entries(categoryNames).map(([code, name]) => ({
   code,
   name,
-  href: code === "sales" ? "/sales" : code === "hr" ? "/hr" : "/departments",
+  href: code === "sales" ? "/sales" : code === "hr" ? "/hr" : `/tasks/${code}`,
 }));
 
 /** Фильтры главной в адресе: ?period=7d&dept=finance,sales&emp=…; по умолчанию — 30 дней, все отделы и сотрудники. */

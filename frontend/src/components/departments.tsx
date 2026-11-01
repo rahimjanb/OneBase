@@ -32,16 +32,11 @@ export function DepartmentIcon({ code }: { code: string }) {
   );
 }
 
-/** Отделы со своим разделом в OneBase: карточка ведёт туда, а не в файлы отдела в «Общей базе». */
-const sections: Record<string, string> = {
-  sales: "/sales",
-};
-
-/** Карточка показателей отдела (Dashboard, «Отделы»): открывает раздел отдела, а если его нет — файлы в «Общей базе». Только с сервера. */
-export async function DepartmentStatusCard({ department: d }: { department: Department }) {
+/** Карточка показателей отдела («Отделы»): открывает раздел отдела — href из departmentHref (свой раздел или задачи отдела). Только с сервера. */
+export async function DepartmentStatusCard({ department: d, href }: { department: Department; href: string }) {
   const t = await getT();
   return (
-    <Link href={sections[d.code] ?? `/base/${d.code}`} className="group block max-lg:active:opacity-75">
+    <Link href={href} className="group block max-lg:active:opacity-75">
       <Card className="h-full p-5 transition-colors group-hover:border-accent/40">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-ink">{t(d.name)}</span>

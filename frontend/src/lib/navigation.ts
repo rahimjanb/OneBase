@@ -29,6 +29,20 @@ export function canOpen(href: string, permissions: readonly string[]): boolean {
   return !need || need.some((p) => permissions.includes(p));
 }
 
+/** Свой раздел отдела в OneBase; у остальных отделов рабочий раздел — их задачи. */
+const departmentSections: Record<string, string> = { sales: "/sales", hr: "/hr" };
+
+/**
+ * Куда ведёт кнопка отдела: свой раздел («Продажи», HR), иначе задачи отдела; нет доступа — следующий доступный, и только в крайнем случае —
+ * файлы отдела в «Общей базе».
+ */
+export function departmentHref(code: string, permissions: readonly string[]): string {
+  const own = departmentSections[code];
+  if (own && canOpen(own, permissions)) return own;
+  if (canOpen("/tasks", permissions)) return `/tasks/${code}`;
+  return canOpen("/base", permissions) ? `/base/${code}` : (own ?? "/departments");
+}
+
 /** Первый доступный раздел — куда вести с главной у ролей без общих разделов (например, «Админ 2» → «Файлы»). */
 export function homeFor(permissions: readonly string[]): string {
   return order.find((href) => canOpen(href, permissions)) ?? (permissions.length > 0 ? "/settings" : "/no-access");

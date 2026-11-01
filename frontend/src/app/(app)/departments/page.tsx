@@ -3,7 +3,7 @@ import { DepartmentStatusCard } from "@/components/departments";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
 import { departments } from "@/lib/demo-data";
-import { canOpen, homeFor } from "@/lib/navigation";
+import { canOpen, departmentHref, homeFor } from "@/lib/navigation";
 import { apiSession, apiTry } from "@/lib/server-api";
 import type { OverviewView } from "@/lib/sales/types";
 import type { Me } from "@/lib/users";
@@ -24,7 +24,7 @@ export default async function DepartmentsPage() {
       <PageBody>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {list.map((d) => (
-            <DepartmentStatusCard key={d.code} department={d} />
+            <DepartmentStatusCard key={d.code} department={d} href={departmentHref(d.code, me?.permissions ?? [])} />
           ))}
         </div>
       </PageBody>
