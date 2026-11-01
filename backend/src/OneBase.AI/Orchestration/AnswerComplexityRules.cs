@@ -104,7 +104,7 @@ public static partial class AnswerComplexityRules
     [GeneratedRegex(@"почему|причин|из-за чего|из за чего|за сч[её]т чего|что повлиял|как повлиял|в ч[её]м дело|объясни|отчего|nega|sabab", RegexOptions.IgnoreCase)]
     private static partial Regex Causal();
 
-    [GeneratedRegex(@"что (нужно |надо |стоит )?(сделать|делать|улучшить|изменить)|как (увеличить|улучшить|поднять|исправить|снизить|сократить)|рекоменд|стратег|приоритет|план действий", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"что (нужно |надо |стоит )?(сделать|делать|улучшить|изменить)|как (увеличить|улучшить|поднять|исправить|снизить|сократить)|рекоменд|стратег|приоритет|план действий|переплат|сэконом|объедин", RegexOptions.IgnoreCase)]
     private static partial Regex Recommendations();
 
     [GeneratedRegex(@"^(а|и|только|тогда|ещё|еще|теперь|без|кроме)\b|^(за|по|в|во|на)\s+\S+\??$", RegexOptions.IgnoreCase)]

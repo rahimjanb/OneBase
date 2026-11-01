@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Field;
+using OneBase.Domain.Audit;
 using OneBase.Domain.Identity;
 using OneBase.Domain.Procurement;
 
@@ -101,7 +102,7 @@ public sealed record ProcurementToIssueLine(Guid RequestItemId, Guid ItemId, str
 /// кладовщик, снабжение и директор; проводит операции кладовщик; каталог ведут кладовщик и снабжение. Остаток меняется только документом
 /// со строкой журнала (ProcurementStockLedger) — без отрицательного остатка и ниже резерва, при одновременном изменении — заново.
 /// </summary>
-public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLedger ledger)
+public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLedger ledger, IAuditLogger audit)
 {
     private static DateTimeOffset Now => DateTimeOffset.UtcNow;
 
@@ -269,6 +270,7 @@ public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLe
         db.ProcurementItems.Add(item);
         db.ProcurementStockBalances.Add(new ProcurementStockBalance { WarehouseId = await ledger.DefaultWarehouseIdAsync(ct), ItemId = item.Id });
         await db.SaveChangesAsync(ct);
+        await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.item.created", "procurement_item", item.Id.ToString(), Card(item), ct);
         return item.Id;
     }
 
@@ -278,6 +280,7 @@ public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLe
         RequireCatalog(ctx);
         var item = await db.ProcurementItems.FirstOrDefaultAsync(i => i.Id == id, ct) ?? throw new FieldNotFoundException("Позиция каталога не найдена.");
         var unit = item.UnitCode;
+        var before = Card(item);
         await ApplyAsync(item, input, ct);
         if (unit != item.UnitCode && await db.ProcurementStockMovements.AnyAsync(m => m.ItemId == id, ct))
         {
@@ -286,7 +289,11 @@ public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLe
 
         item.UpdatedAt = Now;
         await db.SaveChangesAsync(ct);
+        // Карточка склада (в том числе минимальный остаток) — в журнал аудита: было и стало.
+        await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.item.updated", "procurement_item", item.Id.ToString(), new { before, after = Card(item) }, ct);
     }
+
+    private static object Card(ProcurementItem item) => new { item.Sku, item.Name, item.CategoryId, item.UnitCode, item.MinQty, item.IsActive };
 
     private static void RequireCatalog(ProcurementContext ctx)
     {

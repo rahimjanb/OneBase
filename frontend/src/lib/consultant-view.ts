@@ -94,7 +94,14 @@ const questions: (QuickQuestion & { needs: string | null })[] = [
   { text: "Кто чаще всех опаздывает?", icon: "user-x", tone: "teal", needs: "hr.read" },
   { text: "Какая дебиторка просрочена?", icon: "wallet", tone: "warning", needs: "finance.read" },
   { text: "Что сделать, чтобы увеличить продажи?", icon: "lightbulb", tone: "accent", needs: "sales.read" },
+  { text: "Какие поставки поставщиков просрочены?", icon: "package", tone: "warning", needs: "procurement.read" },
+  { text: "Где мы переплачиваем поставщикам?", icon: "wallet", tone: "danger", needs: "procurement.read" },
+  { text: "Какие закупочные цены выросли за 3 месяца?", icon: "trending-up", tone: "accent", needs: "procurement.read" },
+  { text: "Что с моими заявками на закупку?", icon: "target", tone: "teal", needs: "procurement.request" },
 ];
+
+/** Права снабжения: любое из них открывает данные «Снабжения» (что именно видно — решает backend). */
+const procurement = ["procurement.request", "procurement.read", "procurement.manage", "procurement.warehouse", "procurement.settings"];
 
 /** Вопросы, доступные по правам: первые 6 — на экране, остальные — по «Ещё». Руководитель отдела видит HR своего отдела (hr.department). */
 export function quickQuestions(permissions: readonly string[]): QuickQuestion[] {
@@ -109,6 +116,7 @@ export function sourceLabels(permissions: readonly string[]): string[] {
   if (permissions.includes("finance.read")) out.push("финансы");
   if (permissions.includes("sales.read")) out.push("склад");
   if (permissions.includes("hr.read") || permissions.includes("hr.department")) out.push("HR");
+  if (procurement.some((p) => permissions.includes(p))) out.push("снабжение");
   return out;
 }
 

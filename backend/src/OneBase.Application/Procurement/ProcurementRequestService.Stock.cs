@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Field;
+using OneBase.Domain.Audit;
 using OneBase.Domain.Procurement;
 using OneBase.Domain.Work;
 
@@ -153,11 +154,15 @@ public sealed partial class ProcurementRequestService
             db.ProcurementSettings.Add(settings);
         }
 
+        var before = new { settings.ReapprovalTolerancePercent, settings.EscalateHeadDays, settings.EscalateDirectorDays };
         settings.ReapprovalTolerancePercent = tolerance;
         settings.EscalateHeadDays = input.EscalateHeadDays;
         settings.EscalateDirectorDays = input.EscalateDirectorDays;
         settings.UpdatedAt = Now;
         settings.UpdatedById = ctx.UserId;
         await db.SaveChangesAsync(ct);
+        // Правила согласования и эскалации — в журнал аудита: было и стало.
+        await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.settings.updated", "procurement_settings", settings.Id.ToString(),
+            new { before, after = new { settings.ReapprovalTolerancePercent, settings.EscalateHeadDays, settings.EscalateDirectorDays } }, ct);
     }
 }

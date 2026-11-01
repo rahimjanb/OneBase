@@ -218,6 +218,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Procurement.ProcurementReminderService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementAnalyticsService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementReportService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementInsightService>();
         services.AddHostedService<Work.WorkTaskReminderWorker>();
 
         // HR: Verifix — сотрудники, отметки и табель (только чтение API Verifix). client_secret — в «Настройки → Интеграции → HR → Verifix»

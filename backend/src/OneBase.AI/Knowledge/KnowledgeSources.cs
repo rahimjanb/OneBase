@@ -34,6 +34,12 @@ public static class KnowledgeSources
     /// <summary>HR (Verifix): сотрудники, посещаемость, опоздания, отсутствия, рабочее время и табели.</summary>
     public const string HrAttendance = "hr.attendance";
     public const string SupplyProviders = "supply.providers";
+
+    /// <summary>
+    /// Снабжение OneBase: заявки на закупку, согласования, заказы поставщикам, приёмка, склад снабжения, поставщики, цены и KPI. Меняется при
+    /// каждой операции, а не синхронизацией (не «supply.»): ответы по нему не берутся из кэша консультанта.
+    /// </summary>
+    public const string Procurement = "procurement.purchasing";
     public const string Documents = "knowledge.documents";
 
     /// <summary>Telegram: автоотчёты (расписание, получатели, отправки) и рассылки — права проверяет инструмент по разделу.</summary>
@@ -64,8 +70,14 @@ public static class KnowledgeSources
         new(FinancePayments, "Оплаты",
             "Оплаты торговых точек из Linko: наличные и банк, принятые и нет. Расходов, прибыли и бюджетов в OneBase нет.",
             "linko.Payments", "—", Permissions.FinanceRead),
-        new(SupplyProviders, "Поставщики", "Справочник поставщиков Linko (только названия; закупок и цен закупки в OneBase нет).",
+        new(SupplyProviders, "Поставщики Linko", "Справочник поставщиков Linko (только названия). Поставщики снабжения с заказами и ценами — источник «Снабжение».",
             "linko.Providers", "—", Permissions.SalesRead),
+        new(Procurement, "Снабжение: закупки и склад",
+            "Заявки на закупку и их согласование, заказы поставщикам, сроки и просрочки поставок, приёмка и претензии, склад снабжения (остатки, " +
+            "минимальный остаток), поставщики и их рейтинг, коммерческие предложения, закупочные цены и их история, расходы на закупки, KPI сотрудников " +
+            "снабжения. Оплаты поставщикам появятся с модулем «Финансы».",
+            "procurement.Requests, RequestItems, Approvals, PurchaseOrders, PurchaseOrderItems, Offers, Suppliers, StockBalances, StockDocuments, ReceiptLines",
+            "Заявки; Снабжение: обзор, заказы, поставщики, приёмка, склад, отчёты", Permissions.ProcurementRequest),
         new(SalesSku, "Продажи по SKU", "Продажи товаров за любой период: кг и выручка, ABC, динамика, сколько регионов и точек берут товар.",
             "linko.Orders, OrderLines, OrderReturns, OrderReturnLines, Products, ProductTypes, sales.Regions", "Продажи: продажи по SKU", Permissions.SalesRead),
         new(SalesExport, "Экспорт", "Экспорт по странам (кг, сумма, точки, динамика, с начала года) и продажи филиала «Завод» (экспорт и опт) по покупателям, агентам и товарам. Плана экспорта в OneBase нет.",

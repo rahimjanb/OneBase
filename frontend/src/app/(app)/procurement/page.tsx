@@ -22,7 +22,10 @@ export default async function ProcurementPage({ searchParams }: { searchParams: 
   const { from, to } = await searchParams;
   const nav = await apiGet<RequestNav>("/api/procurement/nav", "/procurement");
   if (!nav.seesStock && !nav.isDirector) redirect("/requests");
-  const data = await apiGet<Dashboard>(`/api/procurement/dashboard${qs({ from, to })}`, "/procurement");
+  const [data, me] = await Promise.all([
+    apiGet<Dashboard>(`/api/procurement/dashboard${qs({ from, to })}`, "/procurement"),
+    apiGet<{ permissions: string[] }>("/api/auth/me", "/procurement"),
+  ]);
   return (
     <>
       <PageHeader
@@ -31,7 +34,7 @@ export default async function ProcurementPage({ searchParams }: { searchParams: 
         breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение") }]}
       />
       <PageBody>
-        <DashboardView data={data} />
+        <DashboardView data={data} ask={me.permissions.includes("ai.agents.run")} />
       </PageBody>
     </>
   );

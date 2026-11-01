@@ -213,7 +213,7 @@ public sealed record ProcurementNav(
 /// директор — все отправленные, кладовщик — те, где есть часть «со склада». Черновик видит только инициатор. Доступ решается здесь по
 /// правам, отделу и роли «Директор» из базы — никогда по параметрам запроса. Каждое изменение пишется в историю в той же записи.
 /// </summary>
-public sealed partial class ProcurementRequestService(IAppDbContext db, IProcurementNumbers numbers, UserNotifier notifier, ProcurementStockLedger ledger)
+public sealed partial class ProcurementRequestService(IAppDbContext db, IProcurementNumbers numbers, UserNotifier notifier, ProcurementStockLedger ledger, IAuditLogger audit)
 {
     private const string NotVisible = "Эту заявку видят её инициатор, руководитель отдела и снабжение.";
 

@@ -138,6 +138,36 @@ public class ProcurementPerformanceTests(DataManagerDb fixture, ITestOutputHelpe
             var report = await sp.GetRequiredService<ProcurementReportService>().BuildAsync(c, "orders", year, default);
             sp.GetRequiredService<IReportPdfWriter>().Write(report, DateTimeOffset.UtcNow);
         }));
+
+        // AI снабжения на той же базе — от имени пользователя со всеми правами снабжения: каждый инструмент быстрый, а в модель уходит выборка
+        // (первые строки и итоги), а не год закупок. Размер результата — символы JSON; ≈ токены — символы / 3 (кириллица и JSON).
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
+            var role = new Role { Name = "Нагрузка: снабжение" };
+            foreach (var code in new[] { Permissions.ProcurementRequest, Permissions.ProcurementRead, Permissions.ProcurementManage, Permissions.ProcurementWarehouse, Permissions.ProcurementSettings })
+            {
+                role.Permissions.Add(new RolePermission { Code = code });
+            }
+
+            db.Roles.Add(role);
+            (await db.Users.Include(u => u.Roles).SingleAsync(u => u.Id == user)).Roles.Add(new UserRole { Role = role });
+            await db.SaveChangesAsync();
+        }
+
+        foreach (var name in ProcurementAiDbTests.ToolNames.Where(n => n != "compare_supplier_offers"))
+        {
+            using var scope = fixture.Services.CreateScope();
+            var tool = scope.ServiceProvider.GetRequiredService<OneBase.AI.Tools.IToolRegistry>().Find(name)!;
+            var sw = Stopwatch.StartNew();
+            var result = await tool.ExecuteAsync(new OneBase.AI.Tools.ToolContext("supply", user, 0), System.Text.Json.JsonSerializer.SerializeToElement(new { }));
+            sw.Stop();
+            Assert.True(result.Success, $"{name}: {result.Content}");
+            output.WriteLine($"AI {name}: {sw.Elapsed.TotalMilliseconds:0} мс, {result.Content.Length} символов (≈ {result.Content.Length / 3} токенов)");
+            Assert.True(result.Content.Length < 16_000, $"{name}: {result.Content.Length} символов — в модель ушла бы не выборка");
+            times.Add(sw.Elapsed);
+        }
+
         Assert.All(times.Skip(1), t => Assert.True(t < Limit, $"{t.TotalSeconds:0.0} с — дольше {Limit.TotalSeconds} с"));
     }
 }

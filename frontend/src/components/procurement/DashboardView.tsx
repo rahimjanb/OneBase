@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { AlertTriangle, CalendarClock, ChevronRight, ClipboardList, FileBarChart, Newspaper, PackageCheck, ShieldAlert, Timer, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, CalendarClock, ChevronRight, ClipboardList, FileBarChart, Newspaper, PackageCheck, ShieldAlert, Sparkles, Timer, TrendingDown, TrendingUp } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { compactMoney, dateRu, periodOf, quantity, stampRu, type Dashboard, type Kpis } from "@/lib/procurement";
 import { todayInTashkent } from "@/lib/tasks";
@@ -51,6 +51,41 @@ function Section({ title, children, action }: { title: string; children: React.R
   );
 }
 
+/**
+ * Вопросы Supply AI по роли: директору и снабжению — цены, переплаты, поставщики, объединение заказов; кладовщику — минимальные остатки;
+ * всем — просроченные поставки. Ссылка только открывает консультанта с готовым вопросом — отправляет его сам пользователь.
+ */
+function AskAi({ data }: { data: Dashboard }) {
+  const t = useT();
+  const questions = [
+    data.kpis ? "Какие закупочные цены выросли больше чем на 10% за 3 месяца и почему?" : null,
+    data.kpis ? "Где мы переплачиваем поставщикам?" : null,
+    data.director || data.head ? "Какие поставщики работают хуже всего?" : null,
+    data.kpis ? "Какие заявки можно объединить в один заказ?" : null,
+    "Какие поставки просрочены?",
+    data.warehouse ? "Что на складе ниже минимума и уже ли это в закупке?" : null,
+  ].filter((q): q is string => q !== null);
+  // На телефоне — одна строка с прокруткой (показатели не уезжают вниз), шире — с переносом.
+  return (
+    <div className="space-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:space-y-0">
+      <span className="flex items-center gap-1.5 text-sm font-medium text-ink-2">
+        <Sparkles className="size-4 text-accent" aria-hidden /> {t("Спросить Supply AI")}
+      </span>
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:contents">
+        {questions.map((q) => (
+          <Link
+            key={q}
+            href={`/consultant?ask=${encodeURIComponent(t(q))}&dept=supply`}
+            className="shrink-0 whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-ink hover:border-accent/40 hover:bg-muted sm:whitespace-normal"
+          >
+            {t(q)}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const noData = (n: number | null, render: (v: number) => string, t: ReturnType<typeof useT>) => (n === null ? t("нет данных") : render(n));
 
 function KpiRow({ k }: { k: Kpis }) {
@@ -90,7 +125,8 @@ function KpiRow({ k }: { k: Kpis }) {
  * по месяцам, отделам и категориям, лучшие и худшие поставщики), руководитель снабжения (нагрузка и сроки сотрудников), сотрудник
  * снабжения (мои заказы, задачи, ближайшие сроки), кладовщик (поступления, приёмки, остатки, выдачи), последние сводки.
  */
-export function DashboardView({ data }: { data: Dashboard }) {
+/** ask — пользователю открыт AI-консультант: показать быстрые вопросы Supply AI. */
+export function DashboardView({ data, ask = false }: { data: Dashboard; ask?: boolean }) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
@@ -150,6 +186,8 @@ export function DashboardView({ data }: { data: Dashboard }) {
           )}
         </span>
       </div>
+
+      {ask && <AskAi data={data} />}
 
       {data.kpis && (
         <Section title="Показатели" action={<span className="text-xs text-ink-3">{t("{a} — {b}", { a: dateRu(data.from), b: dateRu(data.to) })}</span>}>

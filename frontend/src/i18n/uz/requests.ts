@@ -940,6 +940,19 @@ const dict: Dict = {
   "Сводки снабжения видят директор и руководитель снабжения.": "Ta'minot hisobotlarini direktor va ta'minot rahbari ko'radi.",
   "Сводка не найдена.": "Hisobot topilmadi.",
   "Акт формируется по подтверждённой приёмке.": "Dalolatnoma tasdiqlangan qabul bo'yicha tuziladi.",
+
+  // Этап 6: вопросы Supply AI («Снабжение → Обзор», стартовый экран консультанта)
+  "Спросить Supply AI": "Supply AI'dan so'rash",
+  "Какие закупочные цены выросли больше чем на 10% за 3 месяца и почему?": "3 oyda qaysi xarid narxlari 10% dan ko'proq oshdi va nega?",
+  "Где мы переплачиваем поставщикам?": "Yetkazib beruvchilarga qayerda ortiqcha to'layapmiz?",
+  "Какие поставщики работают хуже всего?": "Qaysi yetkazib beruvchilar eng yomon ishlayapti?",
+  "Какие заявки можно объединить в один заказ?": "Qaysi arizalarni bitta buyurtmaga birlashtirish mumkin?",
+  "Какие поставки просрочены?": "Qaysi yetkazib berishlar kechikdi?",
+  "Что на складе ниже минимума и уже ли это в закупке?": "Omborda nima minimaldan kam va u allaqachon xaridda bormi?",
+  "Какие поставки поставщиков просрочены?": "Yetkazib beruvchilarning qaysi yetkazib berishlari kechikdi?",
+  "Какие закупочные цены выросли за 3 месяца?": "3 oyda qaysi xarid narxlari oshdi?",
+  "Что с моими заявками на закупку?": "Xarid arizalarim qanday holatda?",
+  "снабжение": "ta'minot",
 };
 
 export default dict;

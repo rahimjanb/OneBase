@@ -76,6 +76,11 @@ test("быстрые вопросы и источники — по правам:
   assert.deepEqual(quickQuestions([]), []);
   assert.deepEqual(sourceLabels(["sales.read", "finance.read", "hr.read"]), ["продажи", "финансы", "склад", "HR"]);
   assert.deepEqual(sourceLabels(["hr.department"]), ["HR"]);
+  // Снабжение: снабженцу — вопросы о поставках, переплатах и ценах; сотруднику — о своих заявках.
+  const buyer = quickQuestions(["procurement.read", "procurement.request"]).map((q) => q.text);
+  assert.ok(buyer.includes("Где мы переплачиваем поставщикам?") && buyer.includes("Какие поставки поставщиков просрочены?"));
+  assert.deepEqual(quickQuestions(["procurement.request"]).map((q) => q.text), ["Что с моими заявками на закупку?"]);
+  assert.deepEqual(sourceLabels(["procurement.warehouse"]), ["снабжение"]);
 });
 
 test("контекст: месяц по Ташкенту, отдел из адреса, неверное не подставляется", () => {

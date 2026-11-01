@@ -20,21 +20,30 @@ public static partial class RouteIntent
     /// <summary>
     /// Область данных: источники инструментов (KnowledgeSources), слова (см. Mentions) и сотрудники, которые ведут
     /// её в первую очередь. Сотрудник подходит, только если у него для пользователя есть инструмент одного из источников области.
+    /// Unless — слова, при которых область не та: «заказ поставщику» — не заказы продаж.
     /// </summary>
-    internal sealed record Domain(string Title, string[] Sources, string[] Words, string[] Owners);
+    internal sealed record Domain(string Title, string[] Sources, string[] Words, string[] Owners, string[]? Unless = null);
+
+    /// <summary>Слова снабжения OneBase: с ними «заказ» и «цена» — закупки, а не продажи.</summary>
+    private static readonly string[] ProcurementWords =
+    [
+        "закуп", "поставщ", "поставк", "снабж", "приемк", "претензи", "переплат", "переплач", "коммерческ", "кладовщ", "накладн", "сырь",
+        "xarid", "ta'minot", "yetkazib", "xom ashyo", "харид", "таъминот", "етказиб", "хом ашё",
+    ];
 
     internal static readonly IReadOnlyList<Domain> Domains =
     [
+        new("Закупки и снабжение", [KnowledgeSources.Procurement], ProcurementWords, ["supply"]),
         new("Задачи и проекты отделов", [KnowledgeSources.WorkTasks],
             ["задач", "проект", "просроч", "поручен", "дедлайн", "vazifa", "loyiha", "topshiriq", "вазифа", "лойиҳа", "лойиха", "топшириқ", "топширик"],
-            ["hr", "sales"]),
+            ["hr", "sales"], ProcurementWords),
         new("Визиты, маршруты и полевая команда", [KnowledgeSources.SalesVisits, KnowledgeSources.FieldSales],
             ["визит", "маршрут", "посещени", "торговых точ", "торговые точ", "торговой точ", "tashrif", "marshrut", "ташриф"],
             ["sales"]),
         new("Заказы, цены и акции", [KnowledgeSources.SalesSecondary, KnowledgeSources.SalesPrimary],
             ["заказ", "прайс", "цена", "цены", "цену", "ценам", "ценой", "скидк", "акци", "narx", "buyurtma", "chegirma", "aksiya", "нарх", "буюртма"],
-            ["sales"]),
-        new("Остатки и склады", [KnowledgeSources.SalesStock, KnowledgeSources.SupplyProviders],
+            ["sales"], ProcurementWords),
+        new("Остатки и склады", [KnowledgeSources.SalesStock, KnowledgeSources.SupplyProviders, KnowledgeSources.Procurement],
             ["остат", "склад", "наличи", "дозагруз", "аутсток", "хватит", "хватает", "заканчива", "ombor", "qoldiq", "zaxira", "омбор", "қолдиқ", "колдик", "захира"],
             ["supply", "sales"]),
         new("Долги и оплаты", [KnowledgeSources.FinancePayments],
@@ -121,7 +130,7 @@ public static partial class RouteIntent
         var tokens = Words(normalized);
         bool Covers(string code, Domain d) => sources is null || (sources.TryGetValue(code, out var s) && d.Sources.Any(s.Contains));
 
-        foreach (var domain in Domains.Where(d => d.Words.Any(w => Mentions(normalized, tokens, w))))
+        foreach (var domain in Domains.Where(d => d.Words.Any(w => Mentions(normalized, tokens, w)) && !(d.Unless ?? []).Any(w => Mentions(normalized, tokens, w))))
         {
             if (selected.Any(code => Covers(code, domain)))
             {

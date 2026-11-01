@@ -136,6 +136,19 @@ public static class DependencyInjection
         services.AddScoped<ITool, GetExportSalesTool>();
         services.AddScoped<ITool, GetDealerPnlTool>();
         services.AddScoped<ITool, GetInventoryTool>();
+        // Снабжение: 12 инструментов только для чтения с правами и областью видимости пользователя.
+        services.AddScoped<ITool, GetProcurementOverviewTool>();
+        services.AddScoped<ITool, GetPurchaseRequestsTool>();
+        services.AddScoped<ITool, GetPendingApprovalsTool>();
+        services.AddScoped<ITool, GetPurchaseOrdersTool>();
+        services.AddScoped<ITool, GetOverdueDeliveriesTool>();
+        services.AddScoped<ITool, GetWarehouseStockTool>();
+        services.AddScoped<ITool, GetSupplierHistoryTool>();
+        services.AddScoped<ITool, CompareSupplierOffersTool>();
+        services.AddScoped<ITool, GetProcurementExpensesTool>();
+        services.AddScoped<ITool, GetProcurementEmployeeKpiTool>();
+        services.AddScoped<ITool, GetLowStockItemsTool>();
+        services.AddScoped<ITool, GetPurchasePriceHistoryTool>();
         services.AddScoped<ITool, GetStockReloadTool>();
         services.AddScoped<ITool, GetOutstockTool>();
         services.AddScoped<ITool, GetFieldTeamTool>();

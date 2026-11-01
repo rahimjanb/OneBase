@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Field;
 using OneBase.Application.Work;
+using OneBase.Domain.Audit;
 using OneBase.Domain.Identity;
 using OneBase.Domain.Procurement;
 
@@ -543,6 +544,8 @@ public sealed partial class ProcurementRequestService
         var category = new ProcurementCategory { Name = name, SortOrder = order, IsActive = input.IsActive };
         db.ProcurementCategories.Add(category);
         await db.SaveChangesAsync(ct);
+        await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.category.created", "procurement_category", category.Id.ToString(),
+            new { category.Name, category.SortOrder, category.IsActive }, ct);
         return category.Id;
     }
 
@@ -551,11 +554,14 @@ public sealed partial class ProcurementRequestService
     {
         RequireConfigures(ctx);
         var category = await db.ProcurementCategories.FirstOrDefaultAsync(c => c.Id == id, ct) ?? throw new FieldNotFoundException("Категория не найдена.");
+        var before = new { category.Name, category.SortOrder, category.IsActive };
         category.Name = await CategoryNameAsync(input.Name, id, ct);
         category.SortOrder = input.SortOrder ?? category.SortOrder;
         category.IsActive = input.IsActive;
         category.UpdatedAt = Now;
         await db.SaveChangesAsync(ct);
+        await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.category.updated", "procurement_category", category.Id.ToString(),
+            new { before, after = new { category.Name, category.SortOrder, category.IsActive } }, ct);
     }
 
     private static void RequireConfigures(ProcurementContext ctx)
