@@ -53,7 +53,7 @@ async function bff<T = unknown>(path: string, init?: RequestInit): Promise<T> {
 
 // Подписи целей — русские ключи словаря, переводятся при выводе (TargetsSection).
 const targetLabels: Record<string, { label: string; hint: string; percent?: boolean }> = {
-  visit_conversion: { label: "Конверсия визита", hint: "заказы ТП ÷ выполненные визиты", percent: true },
+  visit_conversion: { label: "Конверсия визита", hint: "визиты ТП с заказом ÷ выполненные визиты", percent: true },
   revenue_per_outlet: { label: "Выручка на ТТ, сум", hint: "выручка / АКБ" },
   akb_per_agent: { label: "АКБ на агента", hint: "АКБ / ТП месяца без вакансий" },
   categories_per_outlet: { label: "Категорий на ТТ", hint: "порог «узкого ассортимента»" },

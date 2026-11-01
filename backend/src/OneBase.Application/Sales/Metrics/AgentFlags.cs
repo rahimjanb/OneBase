@@ -9,7 +9,6 @@ public enum FlagKind
     SmallCheck,
     NarrowAssortment,
     TempoDrop,
-    DataMismatch,
     LowData,
 }
 
@@ -23,20 +22,20 @@ public enum FlagSeverity
 public sealed record AgentFlag(FlagKind Kind, FlagSeverity Severity, string Label, string Title, string Explanation);
 
 /// <summary>
-/// Визиты агента за месяц и его заказы. Orders — заказы агента, принятые в месяце: те же, что дали факт (статусы вторички,
-/// приёмка не позже отчётного дня, без «Завода» и пропускаемых филиалов). WithOrder — для справки: выполненные визиты, в день
-/// которых агент ввёл заказ в этой ТТ (по дню ввода, created_date).
+/// Визиты агента за месяц и его заказы. WithOrder — выполненные визиты, в день которых агент ввёл заказ в этой ТТ (по дню ввода,
+/// created_date): из них конверсия. Orders — заказы агента, принятые в месяце: те же, что дали факт (статусы вторички, приёмка не позже
+/// отчётного дня, без «Завода» и пропускаемых филиалов) — для среднего чека и счётчиков.
 /// </summary>
 public sealed record VisitSummary(int Done, int WithOrder, int Orders)
 {
-    /// <summary>Визиты без заказа = выполненные визиты − заказы (как в «Полевом контроле»); у агента бывает и меньше нуля.</summary>
-    public int WithoutOrder => Done - Orders;
+    /// <summary>Визиты без заказа = выполненные визиты − визиты с заказом (не меньше нуля).</summary>
+    public int WithoutOrder => Done - WithOrder;
 
-    /// <summary>Конверсия визита («Страйк») = заказы, принятые в месяце ÷ выполненные визиты; может быть больше 100%.</summary>
-    public decimal? Conversion => SalesMath.Ratio(Orders, Done);
-
-    /// <summary>Заказов больше, чем визитов (конверсия больше 100%) — данные не сходятся.</summary>
-    public bool DataMismatch => Orders > Done;
+    /// <summary>
+    /// Конверсия визита («Страйк») = визиты с заказом ÷ выполненные визиты, от 0 до 100%. Не «заказы, принятые в месяце ÷ визиты»:
+    /// приёмка и визит — разные дни, 1-го числа принимаются заказы с визитов 31-го, и конверсия выходила за 1000%.
+    /// </summary>
+    public decimal? Conversion => SalesMath.Ratio(WithOrder, Done);
 
     /// <summary>visitLines — заказы по дню ввода (сшивка визит ↔ заказ); orders — строки факта месяца агента (заказы по приёмке).</summary>
     public static VisitSummary Of(IEnumerable<VisitRecord> visits, IEnumerable<SaleLine> visitLines, IEnumerable<SaleLine> orders)
@@ -73,15 +72,12 @@ public sealed record AgentStats(
     public decimal? AvgCheck => SalesMath.Ratio(Revenue, Orders);
 }
 
-/// <summary>
-/// Медианы региона — по агентам, с которыми честно сравнивать: не вакансии, не меньше MinVisits визитов и без флага
-/// «данные не сходятся» (заказов больше, чем визитов).
-/// </summary>
+/// <summary>Медианы региона — по агентам, с которыми честно сравнивать: не вакансии и не меньше MinVisits визитов.</summary>
 public sealed record RegionMedians(decimal? Conversion, decimal? SumPerVisit, decimal? AvgCheck)
 {
     public static RegionMedians Of(IEnumerable<AgentStats> agents, int minVisits)
     {
-        var eligible = agents.Where(a => !a.IsVacancy && a.Visits.Done >= minVisits && !a.Visits.DataMismatch).ToList();
+        var eligible = agents.Where(a => !a.IsVacancy && a.Visits.Done >= minVisits).ToList();
         return new RegionMedians(
             SalesMath.Median(eligible.Where(a => a.Conversion != null).Select(a => a.Conversion!.Value)),
             SalesMath.Median(eligible.Where(a => a.SumPerVisit != null).Select(a => a.SumPerVisit!.Value)),
@@ -114,13 +110,7 @@ public static class AgentFlags
 
         var flags = new List<AgentFlag>();
 
-        // Заказов больше, чем визитов (конверсия больше 100%) — вопрос к данным, а не к работе агента: риск, без оценки конверсии.
-        if (v.DataMismatch)
-        {
-            flags.Add(new AgentFlag(FlagKind.DataMismatch, FlagSeverity.Risk, "Данные", "Данные не сходятся",
-                $"Заказов ({v.Orders}) больше, чем визитов ({v.Done}) — конверсия больше 100%. Конверсия не оценивается, агент исключён из медиан региона."));
-        }
-        else if (a.Conversion is { } conv)
+        if (a.Conversion is { } conv)
         {
             var severity =
                 conv < t.ConversionCritical || Below(conv, m.Conversion, t.ConversionCriticalOfMedian) ? FlagSeverity.Critical
@@ -130,7 +120,7 @@ public static class AgentFlags
             {
                 flags.Add(new AgentFlag(FlagKind.LowConversion, s, "Конверсия", "Низкая конверсия",
                     $"Конверсия {SalesFormat.Pct(conv)}{VersusMedian(m.Conversion, SalesFormat.Pct)}: " +
-                    $"{v.Orders} {SalesFormat.Plural(v.Orders, "заказ", "заказа", "заказов")} на {v.Done} {SalesFormat.Plural(v.Done, "визит", "визита", "визитов")}."));
+                    $"заказ на {v.WithOrder} из {v.Done} {SalesFormat.Plural(v.Done, "визита", "визитов", "визитов")}."));
             }
         }
 

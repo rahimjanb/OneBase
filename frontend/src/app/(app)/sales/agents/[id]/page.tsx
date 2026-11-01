@@ -104,7 +104,7 @@ export default async function AgentPage({
         <KpiTile label={t("Визиты")} value={num(data.visits)} title={t("{n} визитов, в день которых в этой точке введён заказ", { n: num(data.visitsWithOrder) })}>
           {t("{orders} за месяц", { orders: `${num(data.orders)} ${t(plural(data.orders, ["заказ", "заказа", "заказов"]))}` })}
         </KpiTile>
-        <KpiTile label={t("Конверсия")} value={pct(data.conversion.value, 1)} title={t("Заказы, принятые в месяце ÷ выполненные визиты; бывает больше 100%")}>
+        <KpiTile label={t("Конверсия")} value={pct(data.conversion.value, 1)} title={t("Визиты с заказом ÷ выполненные визиты (заказ этого ТП в этой точке в день визита)")}>
           {t("медиана региона {value}", { value: pct(data.conversion.regionMedian) })}
         </KpiTile>
         <KpiTile label={t("Сум с визита")} value={money(data.sumPerVisit.value, t)}>

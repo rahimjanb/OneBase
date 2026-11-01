@@ -488,7 +488,7 @@ internal sealed class GetExportSalesTool(SalesDataLoader loader, PrimaryService 
                 PrevMonthKg = R(prevTotal.Kg),
                 PrevMonthSum = R(prevTotal.SumFactory),
                 VsPrevMonthPct = running ? null : Pct(SalesMath.Delta(prevTotal.Kg, ship.MonthTotal.Kg)),
-                ForecastVsPrevMonthPct = running ? Pct(SalesMath.Delta(prevTotal.Kg, ship.ForecastKg ?? ship.MonthTotal.Kg)) : null,
+                ForecastVsPrevMonthPct = running && ship.ForecastKg is { } forecastKg ? Pct(SalesMath.Delta(prevTotal.Kg, forecastKg)) : null,
                 Orders = ship.MonthTransfers,
                 Countries = ship.MonthCounterparties,
                 PlanKg = (decimal?)null,

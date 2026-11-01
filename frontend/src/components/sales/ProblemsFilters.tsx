@@ -10,7 +10,6 @@ const criteria: { key: FlagKind; label: string }[] = [
   { key: "SmallCheck", label: "Мелкий чек" },
   { key: "NarrowAssortment", label: "Узкий ассортимент" },
   { key: "TempoDrop", label: "Падение темпа" },
-  { key: "DataMismatch", label: "Данные не сходятся" },
   { key: "LowData", label: "Мало данных (< 20 визитов)" },
 ];
 

@@ -23,10 +23,20 @@ public sealed record PeriodInfo(
     public bool Closed => WorkedDays >= DaysInMonth && (Today is not { } today || new DateOnly(Year, Month, 1).AddMonths(1) <= today);
 }
 
-public sealed record TargetValue(decimal? Value, decimal Target, decimal? Ratio, TargetLevel? Level)
+/// <summary>
+/// Показатель против цели. Forecast — прогноз на конец идущего месяца у накопительных показателей (АКБ на агента, выручка на ТТ): тогда
+/// Ratio и Level — по прогнозу, а не по значению на сегодня (1-го числа «3% от цели» — не отставание, а начало месяца).
+/// </summary>
+public sealed record TargetValue(decimal? Value, decimal Target, decimal? Ratio, TargetLevel? Level, decimal? Forecast = null)
 {
     public static TargetValue Of(decimal? value, decimal target) =>
         new(value, target, value is null ? null : SalesMath.Ratio(value.Value, target), SalesMath.TargetLevelOf(value, target));
+
+    /// <summary>Накопительный показатель: в идущем месяце с целью сравнивается прогноз (прогноза нет — нет и сравнения), в закрытом — значение.</summary>
+    public static TargetValue Projected(decimal? value, decimal? forecast, decimal target, bool running) =>
+        running
+            ? new(value, target, forecast is { } f ? SalesMath.Ratio(f, target) : null, SalesMath.TargetLevelOf(forecast, target), forecast)
+            : Of(value, target);
 }
 
 /// <summary>
@@ -43,7 +53,8 @@ public static class PlanSources
 
 /// <summary>
 /// Плитки KPI. Прогнозы — null на закрытом месяце. Визиты, визиты без заказа и конверсия — по ТП подразделения (команда с вакансиями):
-/// конверсия = заказы ТП, принятые в месяце ÷ их выполненные визиты, без заказа = визиты − заказы. VisitsOutsideTeam — выполненные
+/// конверсия = визиты ТП с заказом ÷ их выполненные визиты, без заказа = визиты − визиты с заказом. Выручка на ТТ и АКБ на агента в идущем
+/// месяце сравниваются с целью по прогнозу на конец месяца (TargetValue.Projected). VisitsOutsideTeam — выполненные
 /// визиты остальных (операторы, супервайзеры, пользователи вне справочника): в конверсию не входят, но и не теряются.
 /// ActiveAgents — ТП месяца без вакансий (продажи, визиты или план) — знаменатель «АКБ на агента». PlanSource — откуда план (PlanSources):
 /// у плана РОП и «Завод» выполнение = весь факт подразделения (регион без своего плана добавляет факт, но не план) ÷ сумма планов регионов,

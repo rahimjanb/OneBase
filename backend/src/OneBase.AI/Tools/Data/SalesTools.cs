@@ -108,7 +108,9 @@ public abstract class SalesTool(SalesDataLoader loader) : DataTool
         StrikeTargetPct = Pct(k.Conversion.Target),
         AkbPerAgent = R(k.AkbPerAgent.Value, 1),
         AkbPerAgentTarget = R(k.AkbPerAgent.Target, 1),
+        AkbPerAgentForecast = R(k.AkbPerAgent.Forecast, 1), // идущий месяц — прогноз на конец месяца (с целью сравнивается он)
         RevenuePerOutletSum = R(k.RevenuePerOutlet.Value),
+        RevenuePerOutletForecastSum = R(k.RevenuePerOutlet.Forecast),
         k.VisitsDone,
         k.VisitsWithoutOrder,
         k.VisitsOutsideTeam,

@@ -446,7 +446,7 @@ public sealed partial class SalesAnalytics
             forecast,
             ForecastOf(revenue),
             prevKg,
-            _d.Closed ? null : SalesMath.Delta(prevKg, forecast ?? fact),
+            SalesMath.VsPreviousMonth(prevKg, fact, forecast, _d.Closed),
             universe.Count - soldNow.Count,
             soldBefore.Count(p => !soldNow.Contains(p)),
             skus);

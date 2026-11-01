@@ -73,37 +73,61 @@ export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
             : t("АКБ {akb} · плана по выручке в Linko нет", { akb: num(kpi.akb) })
         }
       >
-        {kpi.revenuePlan ? t("сум · {pct} плана", { pct: pct(kpi.revenuePlan.execution) }) : t("сум · АКБ {akb}", { akb: num(kpi.akb) })}
+        {/* План по выручке в Linko есть не у всех ТП: процент — только их, и подпись это говорит (иначе «51% плана» читалось как вся выручка). */}
+        {kpi.revenuePlan
+          ? kpi.revenuePlan.agents < kpi.activeAgents
+            ? t("сум · план у {n} ТП: {pct}", { n: num(kpi.revenuePlan.agents), pct: pct(kpi.revenuePlan.execution) })
+            : t("сум · {pct} плана", { pct: pct(kpi.revenuePlan.execution) })
+          : t("сум · АКБ {akb}", { akb: num(kpi.akb) })}
       </KpiTile>
       <KpiTile
         label={t("Конверсия визита")}
         value={pct(kpi.conversion.value)}
         tone={targetTone(kpi.conversion)}
-        title={t("{pct} от цели · заказы ТП, принятые в месяце ÷ их выполненные визиты", { pct: pct(kpi.conversion.ratio) })}
+        title={t("{pct} от цели · визиты ТП с заказом ÷ их выполненные визиты", { pct: pct(kpi.conversion.ratio) })}
       >
         {t("цель {value}", { value: pct(kpi.conversion.target) })}
       </KpiTile>
+      {/* Выручка на ТТ и АКБ на агента копятся весь месяц: в идущем месяце с целью сравнивается прогноз на конец месяца (сервер), а не значение на сегодня. */}
       <KpiTile
         label={t("Выручка на ТТ")}
         value={money(kpi.revenuePerOutlet.value, t)}
         tone={targetTone(kpi.revenuePerOutlet)}
-        title={t("цель {value} сум", { value: money(kpi.revenuePerOutlet.target, t) })}
+        title={
+          period.closed
+            ? t("цель {value} сум", { value: money(kpi.revenuePerOutlet.target, t) })
+            : kpi.revenuePerOutlet.forecast != null
+              ? t("прогноз на конец месяца: выручка по темпу ÷ прогноз АКБ · цель {value} сум", { value: money(kpi.revenuePerOutlet.target, t) })
+              : t("в начале месяца прогноза ещё нет · цель {value} сум", { value: money(kpi.revenuePerOutlet.target, t) })
+        }
       >
-        {t("сум · {pct} от цели", { pct: pct(kpi.revenuePerOutlet.ratio) })}
+        {period.closed
+          ? t("сум · {pct} от цели", { pct: pct(kpi.revenuePerOutlet.ratio) })
+          : kpi.revenuePerOutlet.forecast != null
+            ? t("сум · прогноз {value} — {pct} от цели", { value: money(kpi.revenuePerOutlet.forecast, t), pct: pct(kpi.revenuePerOutlet.ratio) })
+            : t("сум · цель {value}", { value: money(kpi.revenuePerOutlet.target, t) })}
       </KpiTile>
       <KpiTile
         label={t("АКБ на агента")}
         value={num(kpi.akbPerAgent.value, 1)}
         tone={targetTone(kpi.akbPerAgent)}
-        title={t("{pct} от цели", { pct: pct(kpi.akbPerAgent.ratio) })}
+        title={
+          period.closed
+            ? t("{pct} от цели", { pct: pct(kpi.akbPerAgent.ratio) })
+            : kpi.akbPerAgent.forecast != null
+              ? t("прогноз на конец месяца — {pct} от цели: АКБ растёт так же, как в прошлом месяце от тех же дней до конца", { pct: pct(kpi.akbPerAgent.ratio) })
+              : t("в начале месяца прогноза ещё нет")
+        }
       >
-        {t("цель {value}", { value: num(kpi.akbPerAgent.target) })}
+        {!period.closed && kpi.akbPerAgent.forecast != null
+          ? t("прогноз {value} · цель {target}", { value: num(kpi.akbPerAgent.forecast, 1), target: num(kpi.akbPerAgent.target) })
+          : t("цель {value}", { value: num(kpi.akbPerAgent.target) })}
       </KpiTile>
       <KpiTile
         label={t("Визиты без заказа")}
         value={num(kpi.visitsWithoutOrder)}
         title={
-          t("Визиты ТП минус их заказы · {agents} ТП в месяце", { agents: num(kpi.activeAgents) }) +
+          t("Визиты ТП, в день которых в этой точке не было их заказа · {agents} ТП в месяце", { agents: num(kpi.activeAgents) }) +
           (kpi.visitsOutsideTeam > 0
             ? t(" · ещё {n} визитов не ТП (операторы, супервайзеры, вне справочника) — в конверсию не входят", { n: num(kpi.visitsOutsideTeam) })
             : "")

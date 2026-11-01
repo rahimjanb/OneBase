@@ -227,7 +227,7 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
-    public void Visit_tiles_count_team_visits_and_accepted_orders_other_visits_are_reported_separately()
+    public void Visit_tiles_count_team_visits_with_order_other_visits_are_reported_separately()
     {
         // ТП 1: 4 визита и заказ 1; ТП 2: 2 визита и заказ 2; ТП 4 без региона: заказ 5 без визитов;
         // оператор 3 (не ТП, «Юг»): 3 визита и заказ 4.
@@ -243,8 +243,9 @@ public class SalesAnalyticsTests
 
         var republic = analytics.Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
         Assert.Equal(6, republic.Kpi.VisitsDone); // только ТП
-        Assert.Equal(3m / 6m, republic.Kpi.Conversion.Value); // заказы ТП, принятые в месяце (1, 2 и 5) ÷ их визиты
-        Assert.Equal(3, republic.Kpi.VisitsWithoutOrder); // визиты − заказы
+        // Визиты с заказом: ТП 1 — в ТТ 10 1-го, ТП 2 — в ТТ 11 2-го; заказ 5 у ТП 4 — без визита, конверсию не поднимает.
+        Assert.Equal(2m / 6m, republic.Kpi.Conversion.Value);
+        Assert.Equal(4, republic.Kpi.VisitsWithoutOrder); // визиты − визиты с заказом
         Assert.Equal(3, republic.Kpi.VisitsOutsideTeam); // визиты оператора — отдельно, не теряются
 
         var north = analytics.Region(North, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10), "kg", null);
@@ -422,7 +423,7 @@ public class SalesAnalyticsTests
     }
 
     [Fact]
-    public void Conversion_counts_accepted_orders_while_visit_with_order_is_matched_by_creation_date()
+    public void Conversion_matches_visit_with_order_by_creation_date()
     {
         // Агент был в ТТ 10-го и ввёл заказ; магазин принял товар 11-го — продажа 11-го, а визит «с заказом» — 10-го.
         var accepted = new SaleLine(new DateOnly(2026, 9, 11), 1, 10, 101, 1, 100, 50, 500, 7);
@@ -433,8 +434,8 @@ public class SalesAnalyticsTests
         var byAcceptance = new SalesAnalytics(Data(current: [accepted], visits: visits)).Agent(1);
 
         Assert.Equal((1, 1, 1m), (byCreation.Orders, byCreation.VisitsWithOrder, byCreation.Conversion.Value!.Value));
-        // Сшивка по дате приёмки теряет «визит с заказом», но конверсия — заказы месяца ÷ визиты — от неё не зависит.
-        Assert.Equal((1, 0, 1m), (byAcceptance.Orders, byAcceptance.VisitsWithOrder, byAcceptance.Conversion.Value!.Value));
+        // Сшивка по дате приёмки теряет «визит с заказом» — поэтому заказы для конверсии берутся по дню ввода.
+        Assert.Equal((1, 0, 0m), (byAcceptance.Orders, byAcceptance.VisitsWithOrder, byAcceptance.Conversion.Value!.Value));
         Assert.Equal(50m, byCreation.FactKg);
     }
 
@@ -467,9 +468,13 @@ public class SalesAnalyticsTests
         Assert.Null(republic.Kpi.RevenuePlan.ForecastExecution);
         Assert.All(republic.Regions, r => Assert.True(r.ForecastKg is null && r.ForecastExecution is null));
         var card = Assert.Single(republic.CategoryCards);
-        Assert.True(card.ForecastKg is null && card.ForecastRevenue is null && card.VsPrevMonth is null);
-        // «Экспорт и опт» — по тому же правилу, что карточки категорий: ни прогноза, ни сравнения с прошлым месяцем по нему.
-        Assert.True(republic.Excluded!.ForecastKg is null && republic.Excluded.VsPrevMonth is null);
+        Assert.True(card.ForecastKg is null && card.ForecastRevenue is null);
+        Assert.Equal(1.625m, card.VsPrevMonth); // закрытый месяц — факт 210 кг к 80 кг августа
+        // «Экспорт и опт» — по тому же правилу, что карточки категорий: прогноза нет, «к прошлому месяцу» — факт к факту.
+        Assert.Null(republic.Excluded!.ForecastKg);
+        Assert.Equal(-0.5m, republic.Excluded.VsPrevMonth); // 300 кг к 600 кг августа
+        Assert.Equal(republic.Kpi.AkbPerAgent.Value / 125m, republic.Kpi.AkbPerAgent.Ratio); // закрытый месяц — к цели само значение
+        Assert.Null(republic.Kpi.AkbPerAgent.Forecast);
         Assert.Equal((300m, 600m), (republic.Excluded.FactKg, republic.Excluded.PrevMonthKg));
 
         // Отчётный день — сегодня, последний день месяца: данные есть за все дни, но день ещё идёт — месяц не закрыт, прогноз есть.
@@ -484,6 +489,45 @@ public class SalesAnalyticsTests
         Assert.All(closed.Region(North, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), "kg", null).Team,
             t => Assert.True(t.ForecastKg is null && t.ForecastExecution is null));
         Assert.Null(closed.CachedOverview().Republic.ForecastKg);
+    }
+
+    [Fact]
+    public void First_day_of_the_month_has_no_forecast_and_no_comparisons_with_a_whole_month()
+    {
+        // 1-е число, день идёт: полных дней нет — прогноза нет, и неполный день не сравнивается ни с целым прошлым месяцем («−99%»),
+        // ни с месячной целью «АКБ на агента» и «Выручки на ТТ» («3% от цели»).
+        var previous = new[] { Line(1, 1, 10, branch: 101, kg: 80, revenue: 800, order: 90, month: 8), Line(20, 1, 11, branch: 101, kg: 80, revenue: 800, order: 91, month: 8) };
+        var republic = new SalesAnalytics(Data(previous, current: [Line(1, 1, 10, branch: 101, kg: 5, revenue: 50, order: 1)],
+            dataThrough: new DateOnly(2026, 9, 1), today: new DateOnly(2026, 9, 1))).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 1));
+
+        Assert.False(republic.Period.Closed);
+        Assert.Null(republic.Kpi.ForecastKg);
+        Assert.Null(Assert.Single(republic.CategoryCards).VsPrevMonth);
+        Assert.True(republic.Kpi.AkbPerAgent is { Forecast: null, Ratio: null, Level: null });
+        Assert.True(republic.Kpi.RevenuePerOutlet is { Forecast: null, Ratio: null, Level: null });
+        Assert.Equal(50m, republic.Kpi.RevenuePerOutlet.Value); // значение на сегодня остаётся
+        // «Те же дни»: начатый сегодняшний день не сравнивается с целым 1 августа — ни кг, ни АКБ (было «−100%» у регионов без продаж утром).
+        Assert.All(republic.SameDays, r => Assert.True(r.KgDelta is null && r.AkbDelta is null));
+    }
+
+    [Fact]
+    public void Running_month_compares_akb_per_agent_and_revenue_per_outlet_with_target_by_forecast()
+    {
+        // Август: к 10-му купили 5 ТТ (10–14), за месяц — 10 (ещё 15–19 после 10-го): АКБ к концу месяца вырос вдвое.
+        var previous = Enumerable.Range(0, 10)
+            .Select(i => Line(i < 5 ? 2 : 20, 1, 10 + i, branch: 101, kg: 10, revenue: 100, order: 900 + i, month: 8)).ToArray();
+        var republic = new SalesAnalytics(Data(previous)).Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
+        var kpi = republic.Kpi;
+
+        Assert.Equal(5, kpi.Akb); // сентябрь по 10-е: ТТ 10–14
+        var active = kpi.ActiveAgents;
+        Assert.Equal(5m / active, kpi.AkbPerAgent.Value);
+        Assert.Equal(10m / active, kpi.AkbPerAgent.Forecast); // 5 × 10 ÷ 5
+        Assert.Equal(10m / active / 125m, kpi.AkbPerAgent.Ratio);
+        // Выручка 2100 за 10 дней → 6300 за месяц, прогноз АКБ 10 → 630 сум на ТТ.
+        Assert.Equal(2100m / 5m, kpi.RevenuePerOutlet.Value);
+        Assert.Equal(630m, kpi.RevenuePerOutlet.Forecast);
+        Assert.Equal(630m / 1_439_000m, kpi.RevenuePerOutlet.Ratio);
     }
 
     [Fact]
@@ -1298,12 +1342,13 @@ public class SalesAnalyticsTests
     [Fact]
     public void Problem_agents_are_ordered_by_score_and_numbered_by_their_position()
     {
-        // ТП 1 (Север): 20 визитов, 4 заказа (20% — риск), 3 категории (риск при цели 4): 4 + 4 + (1 − 0,2) × 3 = 10,4.
-        // ТП 2 (Юг): 20 визитов, 20 заказов (100%), 2 категории (критично): 10 + 0 = 10. По числу критичных ТП 2 был бы первым — по тяжести первый ТП 1.
+        // ТП 1 (Север): 20 визитов, заказ на 4 из них (20% — риск), 3 категории (риск при цели 4): 4 + 4 + (1 − 0,2) × 3 = 10,4.
+        // ТП 2 (Юг): 20 визитов, заказ на каждом (100%), 2 категории (критично): 10 + 0 = 10. По числу критичных ТП 2 был бы первым — по тяжести первый ТП 1.
         var agents = new Dictionary<long, AgentInfo> { [1] = new(1, "А", true, North, false, true), [2] = new(2, "Б", true, South, false, true) };
         var visits = Enumerable.Range(1, 20).SelectMany(i => new[] { Visit(1, 100 + i, 1 + i % 10), Visit(2, 200 + i, 1 + i % 10) }).ToList();
-        var current = Enumerable.Range(1, 4).Select(i => new SaleLine(new DateOnly(2026, 9, 2), 1, 100 + i, 101, i % 3 + 1, 100, 10, 100, i))
-            .Concat(Enumerable.Range(1, 20).Select(i => new SaleLine(new DateOnly(2026, 9, 2), 2, 200 + i, 102, i % 2 + 1, 100, 10, 100, 100 + i)))
+        // Заказ — в день визита в эту ТТ: визит «с заказом» (из них конверсия).
+        var current = Enumerable.Range(1, 4).Select(i => new SaleLine(new DateOnly(2026, 9, 1 + i % 10), 1, 100 + i, 101, i % 3 + 1, 100, 10, 100, i))
+            .Concat(Enumerable.Range(1, 20).Select(i => new SaleLine(new DateOnly(2026, 9, 1 + i % 10), 2, 200 + i, 102, i % 2 + 1, 100, 10, 100, 100 + i)))
             .Concat([new SaleLine(new DateOnly(2026, 9, 3), null, 300, 101, 1, 100, 60, 600, 999)]) // факт без агента
             .ToList();
         var categories = new Dictionary<long, string> { [1] = "Бамбук", [2] = "Кекс", [3] = "Печенье" };

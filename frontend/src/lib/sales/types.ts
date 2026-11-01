@@ -9,7 +9,6 @@ export type FlagKind =
   | "SmallCheck"
   | "NarrowAssortment"
   | "TempoDrop"
-  | "DataMismatch"
   | "LowData";
 
 /** Вид плана вторички: «План РОП» (по умолчанию) или «План «Завод»» — параметр plan в адресе и в API. */
@@ -35,7 +34,8 @@ export type Period = {
   availablePlans: PlanKind[];
 };
 
-export type TargetValue = { value: number | null; target: number; ratio: number | null; level: TargetLevel | null };
+/** forecast — прогноз на конец идущего месяца (АКБ на агента, выручка на ТТ): тогда ratio и level — по нему. */
+export type TargetValue = { value: number | null; target: number; ratio: number | null; level: TargetLevel | null; forecast?: number | null };
 
 /**
  * Откуда план подразделений: rop — «План РОП», factory — «План «Завод»» (планы регионов × категорий, переключатель plan=rop|factory);
@@ -54,7 +54,7 @@ export type KpiTiles = {
   conversion: TargetValue;
   revenuePerOutlet: TargetValue;
   akbPerAgent: TargetValue;
-  /** Визиты ТП − их заказы, принятые в месяце (может быть меньше нуля). */
+  /** Визиты ТП без заказа: визиты − визиты с заказом (заказ этого ТП в этой точке в день визита). */
   visitsWithoutOrder: number;
   /** Выполненные визиты ТП подразделения. */
   visitsDone: number;

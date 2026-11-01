@@ -53,7 +53,7 @@ public class SalesMathTests
     }
 
     [Fact]
-    public void Conversion_is_orders_accepted_in_the_month_over_done_visits()
+    public void Conversion_is_visits_with_order_over_done_visits()
     {
         var visits = new[]
         {
@@ -62,14 +62,14 @@ public class SalesMathTests
             new VisitRecord(new DateOnly(2026, 9, 2), 1, 12, VisitStatus.Done, false),
             new VisitRecord(new DateOnly(2026, 9, 3), 1, 13, VisitStatus.Pending, true), // не выполнен — не считается
         };
-        // Заказы по дню ввода — только для справки «визитов с заказом».
+        // Заказы по дню ввода — сшивка «визит с заказом»: из неё конверсия.
         var created = new[]
         {
             Sale(agent: 1, market: 10, revenue: 100, day: 1, order: 1),
             Sale(agent: 1, market: 12, revenue: 100, day: 2, order: 2),
             Sale(agent: 1, market: 11, revenue: 100, day: 5, order: 3), // заказ в другой день — визит 1.09 без заказа
         };
-        // Заказы месяца по дате приёмки (факт): два заказа и возврат — возврат заказом не считается.
+        // Заказы месяца по дате приёмки (факт, средний чек): два заказа и возврат — возврат заказом не считается.
         var accepted = new[]
         {
             Sale(agent: 1, market: 10, revenue: 100, day: 2, order: 1),
@@ -83,20 +83,20 @@ public class SalesMathTests
         Assert.Equal(3, summary.Done);
         Assert.Equal(2, summary.WithOrder);
         Assert.Equal(2, summary.Orders);
-        Assert.Equal(1, summary.WithoutOrder); // визиты − заказы
+        Assert.Equal(1, summary.WithoutOrder); // визиты − визиты с заказом
         Assert.Equal(2m / 3m, summary.Conversion);
-        Assert.False(summary.DataMismatch);
     }
 
     [Fact]
-    public void More_orders_than_visits_is_data_mismatch()
+    public void Orders_beyond_visits_do_not_push_conversion_over_100_percent()
     {
         var visits = new[] { new VisitRecord(new DateOnly(2026, 9, 1), 1, 10, VisitStatus.Done, true) };
-        var lines = new[] { Sale(1, 10, 100, order: 1), Sale(1, 11, 100, order: 2) };
+        var lines = new[] { Sale(1, 10, 100, order: 1), Sale(1, 11, 100, order: 2) }; // второй заказ — в точке без визита
 
         var summary = VisitSummary.Of(visits, lines, lines);
-        Assert.True(summary.DataMismatch);
-        Assert.Equal(2m, summary.Conversion); // 2 заказа на 1 визит — 200%, не обрезается
+        Assert.Equal(2, summary.Orders);
+        Assert.Equal(1m, summary.Conversion); // визит один, и заказ на нём был — 100%, а не 200%
+        Assert.Equal(0, summary.WithoutOrder);
     }
 
     [Fact]

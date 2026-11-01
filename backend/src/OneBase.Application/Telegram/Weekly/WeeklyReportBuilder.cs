@@ -242,7 +242,7 @@ public sealed class WeeklyReportBuilder(
 
     // ---------- ТП ----------
 
-    private sealed record RouteAgentWeek(int Plan, int DoneInPlan, int Done);
+    private sealed record RouteAgentWeek(int Plan, int DoneInPlan, int Done, int WithOrder);
 
     private async Task<Dictionary<long, RouteAgentWeek>> RouteRowsAsync(DateOnly from, DateOnly to, IReadOnlyList<Guid> regions, CancellationToken ct)
     {
@@ -259,8 +259,9 @@ public sealed class WeeklyReportBuilder(
                         continue;
                     }
 
-                    var was = result.GetValueOrDefault(id) ?? new RouteAgentWeek(0, 0, 0);
-                    result[id] = new RouteAgentWeek(was.Plan + row.Plan, was.DoneInPlan + row.DoneInPlan, was.Done + row.DoneInPlan + row.DoneOffPlan);
+                    var was = result.GetValueOrDefault(id) ?? new RouteAgentWeek(0, 0, 0, 0);
+                    result[id] = new RouteAgentWeek(was.Plan + row.Plan, was.DoneInPlan + row.DoneInPlan, was.Done + row.DoneInPlan + row.DoneOffPlan,
+                        was.WithOrder + row.VisitsWithOrderInPlan + row.VisitsWithOrderOffPlan);
                 }
             }
         }
@@ -285,7 +286,7 @@ public sealed class WeeklyReportBuilder(
         var total = kpi?.Cells.FirstOrDefault(c => c.Label == "Тотал") ?? kpi?.Cells.FirstOrDefault(c => c.Label == "Тотал (сумма)");
         var forecast = total is null ? null : WeeklyReportMath.Forecast(total.Fact, calendar.MonthWorkDaysDone, calendar.MonthWorkDays);
         return new WeeklyEmployeeMetrics(agent.Id, agent.Name, weekKg, own.Sum(l => l.Revenue), prevKg, WeeklyReportMath.Change(weekKg, prevKg), orders, SalesMath.Akb(own),
-            visits, visits > 0 ? (decimal)orders / visits : null, route?.Plan ?? 0, route?.DoneInPlan ?? 0,
+            visits, visits > 0 ? (decimal)route!.WithOrder / visits : null, route?.Plan ?? 0, route?.DoneInPlan ?? 0,
             route is { Plan: > 0 } r ? (decimal)r.DoneInPlan / r.Plan : null, monthKg, planKg, total?.Pct,
             total is { Plan: > 0 } ? WeeklyReportMath.Ratio(forecast, total.Plan) : null, SalesMath.Akb(ownMonth), plan?.PlanAkb, kpi?.PremiumNow, kpi?.PremiumMax,
             total?.Plan, total?.Fact, total?.Unit);

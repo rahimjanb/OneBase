@@ -423,6 +423,9 @@ public sealed partial class SalesAnalytics
         var outsideTeam = agents.Where(a => !InTeam(a)).Sum(a => StatsOf(a).Visits.Done);
         var active = ActiveReps(scope);
         var execution = plan is null ? null : SalesMath.Ratio(coverage.Fact, plan);
+        // Выручка на ТТ и АКБ на агента копятся весь месяц: в идущем месяце к цели — их прогноз на конец месяца.
+        var akbForecast = AkbForecast(akb, PreviousLines(scope).ToList());
+        var revenueForecast = ForecastOf(revenue);
 
         return new KpiTiles(
             fact,
@@ -433,8 +436,9 @@ public sealed partial class SalesAnalytics
             revenue,
             akb,
             TargetValue.Of(visits.Conversion, _d.Targets.Conversion),
-            TargetValue.Of(SalesMath.Ratio(revenue, akb), _d.Targets.RevenuePerOutlet),
-            TargetValue.Of(SalesMath.Ratio(akb, active), _d.Targets.AkbPerAgent),
+            TargetValue.Projected(SalesMath.Ratio(revenue, akb), revenueForecast is { } rf && akbForecast is { } af ? SalesMath.Ratio(rf, af) : null,
+                _d.Targets.RevenuePerOutlet, !_d.Closed),
+            TargetValue.Projected(SalesMath.Ratio(akb, active), akbForecast is { } a ? SalesMath.Ratio(a, active) : null, _d.Targets.AkbPerAgent, !_d.Closed),
             visits.WithoutOrder,
             visits.Done,
             active,
@@ -449,6 +453,39 @@ public sealed partial class SalesAnalytics
 
     /// <summary>Прогноз на конец месяца (факт по текущему темпу) — только у идущего месяца; у закрытого прогноза нет.</summary>
     private decimal? ForecastOf(decimal fact) => _d.Closed ? null : SalesMath.Forecast(fact, _elapsed, _d.DaysInMonth);
+
+    /// <summary>
+    /// Прогноз АКБ на конец идущего месяца. АКБ растёт не по дням (новых точек к концу месяца всё меньше), поэтому не по темпу, а по
+    /// прошлому месяцу: АКБ сейчас × АКБ всего прошлого месяца ÷ его АКБ за те же дни. Последний из тех же дней, пока сегодня идёт, — той
+    /// же долей, что прошла у сегодняшнего. 1-го числа (полных дней нет) и без продаж в те же дни прошлого месяца прогноза нет.
+    /// </summary>
+    private decimal? AkbForecast(int akb, IReadOnlyList<SaleLine> previousMonth)
+    {
+        if (_d.Closed || _elapsed <= 0)
+        {
+            return null;
+        }
+
+        var sameDays = SameDaysAkb(previousMonth);
+        return sameDays > 0 ? akb * SalesMath.Akb(previousMonth) / sameDays : null;
+    }
+
+    /// <summary>
+    /// АКБ прошлого месяца за те же дни. Пока сегодня идёт, последний из тех же дней — той же долей, что прошла у сегодняшнего: между АКБ
+    /// без этого дня и с ним (АКБ по долям строк не делится). 1-го числа — 0: утром целый день прошлого месяца против начатого давал «−100%».
+    /// </summary>
+    private decimal SameDaysAkb(IEnumerable<SaleLine> previousMonth)
+    {
+        var lines = previousMonth.Where(l => l.Date <= _previousCutoff).ToList();
+        var withLastDay = SalesMath.Akb(lines);
+        if (_previousLastDayShare >= 1)
+        {
+            return withLastDay;
+        }
+
+        var withoutLastDay = SalesMath.Akb(lines.Where(l => l.Date < _previousCutoff));
+        return withoutLastDay + (withLastDay - withoutLastDay) * _previousLastDayShare;
+    }
 
     /// <summary>План по выручке подразделения: агенты с планом sales_sum и их же выручка (без агентов без плана).</summary>
     private RevenuePlanTile? RevenuePlanOf(IReadOnlySet<Guid>? scope, IReadOnlyList<SaleLine> scopeLines)
@@ -659,13 +696,13 @@ public sealed partial class SalesAnalytics
     {
         var nowList = now.ToList();
         var before = previousMonth.Where(l => l.Date <= _previousCutoff).ToList();
-        // Сегодня идёт — последний из «тех же дней» прошлого месяца берётся той же долей, что прошла у сегодняшнего (кг и деньги; АКБ — целиком).
+        // Сегодня идёт — последний из «тех же дней» прошлого месяца берётся той же долей, что прошла у сегодняшнего (кг, деньги и АКБ).
         decimal Share(SaleLine l) => l.Date == _previousCutoff ? _previousLastDayShare : 1;
         var kgBefore = before.Sum(l => l.Kg * Share(l));
         var kgNow = nowList.Sum(l => l.Kg);
         var sumBefore = before.Sum(l => l.Revenue * Share(l));
         var sumNow = nowList.Sum(l => l.Revenue);
-        var akbBefore = SalesMath.Akb(before);
+        var akbBefore = SameDaysAkb(before);
         var akbNow = SalesMath.Akb(nowList);
 
         return new SameDaysRow(id, name, subtitle, kgBefore, kgNow, SalesMath.Delta(kgBefore, kgNow),
@@ -820,15 +857,15 @@ public sealed partial class SalesAnalytics
         var fact = now.Sum(l => l.Kg);
         var forecast = ForecastOf(fact);
         var prevKg = _d.ExcludedPrevious.Sum(l => l.Kg);
-        // «К прошлому месяцу» — прогноз к факту прошлого месяца, как у карточек категорий: у закрытого месяца прогноза нет — и сравнения нет.
+        // «К прошлому месяцу» — как у карточек категорий: идущий месяц — прогноз к факту прошлого, закрытый — факт к факту.
         return new ExcludedSummary(fact, now.Sum(l => l.Revenue), SalesMath.OrderCount(now), SalesMath.Akb(now), forecast, prevKg,
-            _d.Closed ? null : SalesMath.Delta(prevKg, forecast ?? fact));
+            SalesMath.VsPreviousMonth(prevKg, fact, forecast, _d.Closed));
     }
 
     /// <summary>
     /// Карточки категорий отчёта (клик — артикулы): категории из настройки (фасовки помадки — одна категория).
-    /// Доля по весу и дистрибуция — от итога подразделения; «к прошлому месяцу» — прогноз месяца к факту всего прошлого месяца
-    /// (прогноз и «к прошлому месяцу» — только у идущего месяца). Типы вне настройки (импорт, бонус) сюда не входят — они в диагностике (QualityOf).
+    /// Доля по весу и дистрибуция — от итога подразделения; «к прошлому месяцу» — прогноз месяца (у закрытого — факт) к факту всего
+    /// прошлого месяца; прогноз — только у идущего месяца. Типы вне настройки (импорт, бонус) сюда не входят — они в диагностике (QualityOf).
     /// </summary>
     private List<CategoryCard> CategoryCardsOf(IReadOnlySet<Guid>? scope) =>
         CategoryCardsFor(Lines(scope).ToList(), scope is null ? _d.Previous : scope.SelectMany(r => _previousByRegion[r]).ToList(), republic: scope is null);
@@ -901,7 +938,7 @@ public sealed partial class SalesAnalytics
                     forecast,
                     ForecastOf(revenue),
                     prevKg,
-                    _d.Closed ? null : SalesMath.Delta(prevKg, forecast ?? fact),
+                    SalesMath.VsPreviousMonth(prevKg, fact, forecast, _d.Closed),
                     universe.Count - soldNow.Count,
                     soldBefore.Count(p => !soldNow.Contains(p)),
                     skus);
@@ -1340,6 +1377,10 @@ public sealed partial class SalesAnalytics
 
     private IEnumerable<SaleLine> Lines(IReadOnlySet<Guid>? scope) =>
         scope is null ? _d.Current : scope.SelectMany(r => _currentByRegion[r]);
+
+    /// <summary>Строки прошлого месяца подразделения (тот же режим, что текущий: без регионов-каналов в идущем месяце).</summary>
+    private IEnumerable<SaleLine> PreviousLines(IReadOnlySet<Guid>? scope) =>
+        scope is null ? _d.Previous : scope.SelectMany(r => _previousByRegion[r]);
 
     private IEnumerable<long> AgentsIn(IReadOnlySet<Guid>? scope) =>
         _roster.Where(a => scope is null || scope.Contains(_agentRegion.GetValueOrDefault(a, NoRegionId)));

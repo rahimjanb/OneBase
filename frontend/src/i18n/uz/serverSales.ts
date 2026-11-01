@@ -26,11 +26,8 @@ const dict: Dict = {
   "Мало данных": "Ma'lumot kam",
   "Мало с визита": "Tashrifdan kam",
   "{n} {visits} за месяц — меньше {min}, агент не оценивается.": "Oy davomida {n} {visits} — {min} tadan kam, agent baholanmaydi.",
-  "Заказов ({orders}) больше, чем визитов ({visits}) — конверсия больше 100%. Конверсия не оценивается, агент исключён из медиан региона.":
-    "Buyurtmalar ({orders}) tashriflardan ({visits}) ko'p — konversiya 100% dan yuqori. Konversiya baholanmaydi, agent mintaqa medianalaridan chiqarilgan.",
-  "Конверсия {pct} против {median} у медианного агента региона: {orders} {ordersWord} на {visits} {visitsWord}.":
-    "Konversiya {pct}, mintaqaning median agentida — {median}: {visits} {visitsWord}ga {orders} {ordersWord}.",
-  "Конверсия {pct}: {orders} {ordersWord} на {visits} {visitsWord}.": "Konversiya {pct}: {visits} {visitsWord}ga {orders} {ordersWord}.",
+  "Конверсия {pct} против {median} у медианного агента региона: заказ на {withOrder} из {visits} {visitsWord}.": "Konversiya {pct}, mintaqaning median agentida — {median}: {visits} ta tashrifdan {withOrder} tasida buyurtma.",
+  "Конверсия {pct}: заказ на {withOrder} из {visits} {visitsWord}.": "Konversiya {pct}: {visits} ta tashrifdan {withOrder} tasida buyurtma.",
   "{n} {visits} за месяц и ни одной продажи.": "Oy davomida {n} {visits} va birorta ham savdo yo'q.",
   // Суммы приходят как «229 тыс»: число и единица — отдельными подстановками, чтобы единица тоже перевелась.
   "{a} {aUnit} сум с визита против {b} {bUnit} у медианного агента региона.": "Tashrifdan {a} {aUnit} so'm, mintaqaning median agentida — {b} {bUnit}.",

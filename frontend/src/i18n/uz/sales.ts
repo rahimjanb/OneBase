@@ -253,8 +253,7 @@ const dict: Dict = {
   " Нажмите на строку, чтобы увидеть магазины.": " Do'konlarni ko'rish uchun qatorni bosing.",
   "не ТП: в численность ТП, медианы и рейтинг не входит": "TP emas: TP soni, medianalar va reytingga kirmaydi",
   "не ТП": "TP emas",
-  "Факт ТП — продажи агента в этом регионе. Заказы — принятые в месяце, страйк — заказы ÷ выполненные визиты (бывает больше 100%). Флаги считаются, только если у агента за месяц не меньше 20 визитов; сравнение — с медианой региона по ТП без вакансий, с 20+ визитами и без «данные не сходятся». Прогноз — только у идущего месяца.":
-    "TP fakti — agentning shu mintaqadagi sotuvi. Buyurtmalar — oy ichida qabul qilinganlar, strayk — buyurtmalar ÷ bajarilgan tashriflar (100% dan oshishi mumkin). Belgilar agentda oyiga kamida 20 ta tashrif bo'lsagina hisoblanadi; solishtirish — bo'sh o'rinsiz, 20+ tashrifli va «ma'lumotlar mos kelmaydi»siz TP lar bo'yicha mintaqa medianasi bilan. Prognoz — faqat joriy oyda.",
+  "Факт ТП — продажи агента в этом регионе. Заказы — принятые в месяце, страйк — визиты с заказом ÷ выполненные визиты. Флаги считаются, только если у агента за месяц не меньше 20 визитов; сравнение — с медианой региона по ТП без вакансий, с 20+ визитами. Прогноз — только у идущего месяца.": "TP fakti — agentning shu mintaqadagi sotuvi. Buyurtmalar — oy ichida qabul qilinganlar, strayk — buyurtmali tashriflar ÷ bajarilgan tashriflar. Belgilar agentda oyiga kamida 20 ta tashrif bo'lsagina hisoblanadi; solishtirish — bo'sh o'rinsiz, 20+ tashrifli TP lar bo'yicha mintaqa medianasi bilan. Prognoz — faqat joriy oyda.",
   "Магазин № {id}": "Do'kon № {id}",
   "база — прошлый месяц, кто пока молчит": "baza — o'tgan oy, hozircha jim turganlar",
   "Все точки прошлого месяца уже купили": "O'tgan oydagi barcha nuqtalar allaqachon xarid qildi",
@@ -402,12 +401,12 @@ const dict: Dict = {
   "АКБ {akb} · плана по выручке в Linko нет": "AKB {akb} · Linko'da tushum rejasi yo'q",
   "сум · {pct} плана": "so'm · rejaning {pct}",
   "сум · АКБ {akb}": "so'm · AKB {akb}",
-  "{pct} от цели · заказы ТП, принятые в месяце ÷ их выполненные визиты": "maqsadning {pct} · oy ichida qabul qilingan TP buyurtmalari ÷ ularning bajarilgan tashriflari",
+  "{pct} от цели · визиты ТП с заказом ÷ их выполненные визиты": "maqsadning {pct} · TP ning buyurtmali tashriflari ÷ ularning bajarilgan tashriflari",
   "цель {value}": "maqsad {value}",
   "цель {value} сум": "maqsad {value} so'm",
   "сум · {pct} от цели": "so'm · maqsadning {pct}",
   "{pct} от цели": "maqsadning {pct}",
-  "Визиты ТП минус их заказы · {agents} ТП в месяце": "TP tashriflari minus ularning buyurtmalari · oyda {agents} TP",
+  "Визиты ТП, в день которых в этой точке не было их заказа · {agents} ТП в месяце": "TP ning shu nuqtada buyurtmasi bo'lmagan kunlardagi tashriflari · oyda {agents} TP",
   " · ещё {n} визитов не ТП (операторы, супервайзеры, вне справочника) — в конверсию не входят":
     " · yana {n} ta TP bo'lmaganlar tashrifi (operatorlar, supervayzerlar, ma'lumotnomadan tashqari) — konversiyaga kirmaydi",
   "из {n} визитов ТП": "{n} ta TP tashrifidan",
@@ -626,7 +625,7 @@ const dict: Dict = {
 
   // ---------- Настройка продаж (SetupClient) ----------
   "Недостаточно прав (нужно sales.manage)": "Huquq yetarli emas (sales.manage kerak)",
-  "заказы ТП ÷ выполненные визиты": "TP buyurtmalari ÷ bajarilgan tashriflar",
+  "визиты ТП с заказом ÷ выполненные визиты": "TP ning buyurtmali tashriflari ÷ bajarilgan tashriflar",
   "Выручка на ТТ, сум": "Nuqtaga tushum, so'm",
   "выручка / АКБ": "tushum / AKB",
   "АКБ / ТП месяца без вакансий": "AKB / oyning bo'sh o'rinsiz TP lari",
@@ -692,6 +691,14 @@ const dict: Dict = {
   "Цели": "Maqsadlar",
   "Цели сохранены": "Maqsadlar saqlandi",
   "в процентах": "foizda",
+  "сум · план у {n} ТП: {pct}": "so'm · {n} TP rejasi: {pct}",
+  "прогноз на конец месяца: выручка по темпу ÷ прогноз АКБ · цель {value} сум": "oy oxiriga prognoz: sur'at bo'yicha tushum ÷ AKB prognozi · maqsad {value} so'm",
+  "в начале месяца прогноза ещё нет · цель {value} сум": "oy boshida prognoz hali yo'q · maqsad {value} so'm",
+  "сум · прогноз {value} — {pct} от цели": "so'm · prognoz {value} — maqsadning {pct}",
+  "сум · цель {value}": "so'm · maqsad {value}",
+  "прогноз на конец месяца — {pct} от цели: АКБ растёт так же, как в прошлом месяце от тех же дней до конца": "oy oxiriga prognoz — maqsadning {pct}: AKB o'tgan oydagi kabi shu kunlardan oy oxirigacha o'sadi",
+  "в начале месяца прогноза ещё нет": "oy boshida prognoz hali yo'q",
+  "прогноз {value} · цель {target}": "prognoz {value} · maqsad {target}",
 };
 
 export default dict;

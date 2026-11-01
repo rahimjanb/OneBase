@@ -177,6 +177,13 @@ public static class SalesMath
     public static decimal? Delta(decimal before, decimal now) => before == 0 ? null : (now - before) / before;
 
     /// <summary>
+    /// «К прошлому месяцу»: закрытый месяц — факт к факту прошлого месяца, идущий — прогноз к факту прошлого. Прогноза нет (1-го числа
+    /// полных дней ещё нет) — сравнения нет: неполный месяц к полному давал «−99%».
+    /// </summary>
+    public static decimal? VsPreviousMonth(decimal previous, decimal fact, decimal? forecast, bool closed) =>
+        closed ? Delta(previous, fact) : forecast is { } f ? Delta(previous, f) : null;
+
+    /// <summary>
     /// Темп к своему среднему = прогноз месяца / средний факт прошлых месяцев.
     /// Учитываются только месяцы, где у агента были продажи.
     /// </summary>

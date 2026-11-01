@@ -97,7 +97,7 @@ internal sealed class GetVisitsTool(SalesDataLoader loader, IAppDbContext db) : 
         "Маршрут и визиты за день, отрезок дней или месяц — по республике (регионы), направлению РМ (регионы), региону (каждый ТП) или одному ТП. " +
         "У каждой строки: визиты — план (в маршруте), выполнено по маршруту, вне маршрута, не посещено, % выполнения плана; визиты с заказом — " +
         "по маршруту и вне маршрута; продажи — заказы, выручка (сум), кг и АКБ (точки с чистой покупкой) отдельно с визитов по маршруту, с визитов " +
-        "вне маршрута и без визита, возвраты и итог (= факт «Продаж» за эти дни), доля выручки с маршрута, страйк (заказы ÷ выполненные визиты). " +
+        "вне маршрута и без визита, возвраты и итог (= факт «Продаж» за эти дни), доля выручки с маршрута, страйк (визиты с заказом ÷ выполненные визиты). " +
         "agents=true — строки ТП и у республики и направления. Отрезок — в пределах одного месяца; без дат — месяц по отчётный день.";
 
     public override JsonElement InputSchema { get; } = Schema(YearArg, MonthArg, RegionArg, DirectionArg, DrillLookup.AgentArg,
@@ -148,7 +148,7 @@ internal sealed class GetVisitsTool(SalesDataLoader loader, IAppDbContext db) : 
         Returns = new { RevenueSum = R(r.ReturnsRevenue), Kg = R(r.ReturnsKg, 1) },
         Total = Part(r.Total),
         ByRouteRevenuePct = Pct(r.ByRouteRevenueShare),
-        StrikePct = Pct(SalesMath.Ratio(r.Total.Orders, r.DoneInPlan + r.DoneOffPlan)),
+        StrikePct = Pct(SalesMath.Ratio(r.VisitsWithOrderInPlan + r.VisitsWithOrderOffPlan, r.DoneInPlan + r.DoneOffPlan)),
         Agents = agentsCap > 0 && r.Agents.Count > 0 ? r.Agents.Take(agentsCap).Select(a => Row(a)).ToList() : null,
         AgentsTotal = agentsCap > 0 && r.Agents.Count > agentsCap ? r.Agents.Count : (int?)null,
     };

@@ -103,41 +103,40 @@ public class AgentFlagsTests
         Assert.Equal(expected, SeverityOf(Flags(Agent(tempo: (decimal)tempo)), FlagKind.TempoDrop));
 
     [Fact]
-    public void More_orders_than_visits_is_a_data_quality_risk_and_conversion_is_not_judged()
+    public void Orders_without_visits_do_not_lift_conversion()
     {
-        // 60 заказов на 50 визитов — конверсия 120%: это вопрос к данным, а не к агенту; низкую конверсию не оцениваем,
-        // даже если медиана региона выше.
-        var flags = Flags(Agent(visits: 50, withOrder: 50, orders: 60), new RegionMedians(3m, null, null));
+        // 60 заказов, но заказ был только на 10 из 50 визитов: конверсия 20% — риск (< 25%), а не «120%, данные не сходятся».
+        var flags = Flags(Agent(visits: 50, withOrder: 10, orders: 60));
 
-        Assert.Equal(FlagSeverity.Risk, SeverityOf(flags, FlagKind.DataMismatch));
-        Assert.Null(SeverityOf(flags, FlagKind.LowConversion));
-        Assert.Equal(FlagSeverity.Risk, AgentFlags.Worst(flags));
+        Assert.Equal(FlagSeverity.Risk, SeverityOf(flags, FlagKind.LowConversion));
+        Assert.Contains("заказ на 10 из 50 визитов", flags.Single(f => f.Kind == FlagKind.LowConversion).Explanation);
     }
 
     [Fact]
-    public void Conversion_is_orders_over_done_visits_and_visits_without_order_may_be_negative()
+    public void Conversion_is_visits_with_order_over_done_visits()
     {
         var summary = new VisitSummary(Done: 100, WithOrder: 30, Orders: 45);
-        Assert.Equal(0.45m, summary.Conversion); // заказы ÷ визиты, а не визиты с заказом
-        Assert.Equal(55, summary.WithoutOrder);
+        Assert.Equal(0.30m, summary.Conversion); // визиты с заказом ÷ визиты, а не заказы ÷ визиты
+        Assert.Equal(70, summary.WithoutOrder);
 
-        var busy = new VisitSummary(Done: 10, WithOrder: 9, Orders: 12);
-        Assert.Equal(-2, busy.WithoutOrder); // заказов больше, чем визитов — не обрезаем
-        Assert.True(busy.DataMismatch);
+        // 1-е число: 30 визитов, а принято 300 заказов с визитов 31-го — было 1000% и «−270 визитов без заказа».
+        var firstDay = new VisitSummary(Done: 30, WithOrder: 9, Orders: 300);
+        Assert.Equal(0.3m, firstDay.Conversion);
+        Assert.Equal(21, firstDay.WithoutOrder);
     }
 
     [Fact]
-    public void Region_median_peers_are_evaluated_agents_without_vacancies_and_mismatches()
+    public void Region_median_peers_are_evaluated_agents_without_vacancies()
     {
         var agents = new[]
         {
             Agent(withOrder: 20, orders: 20, id: 1), // 20%
             Agent(withOrder: 50, orders: 50, id: 2), // 50%
             Agent(withOrder: 90, orders: 90, vacancy: true, id: 3), // вакансия
-            Agent(visits: 50, withOrder: 50, orders: 70, id: 4), // данные не сходятся
+            Agent(visits: 50, withOrder: 35, orders: 70, id: 4), // 70%: заказов больше, чем визитов, — в медиане, по визитам с заказом
             Agent(visits: 19, withOrder: 19, orders: 19, id: 5), // меньше 20 визитов — не оценивается
         };
 
-        Assert.Equal(0.35m, RegionMedians.Of(agents, T.MinVisits).Conversion);
+        Assert.Equal(0.50m, RegionMedians.Of(agents, T.MinVisits).Conversion);
     }
 }
