@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, Loader2, PlugZap, RefreshCw, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Loader2, PlugZap, RefreshCw, Square, XCircle } from "lucide-react";
 import { Note, Section } from "@/components/sales/bits";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
@@ -30,6 +30,7 @@ export function VerifixSettings({ initial }: { initial: VerifixDetails }) {
     enabled: initial.enabled,
     autoSync: initial.autoSync,
     intervalMinutes: String(initial.intervalMinutes),
+    tracksIntervalMinutes: String(initial.tracksIntervalMinutes),
     historyDays: String(initial.historyDays),
     overlapDays: String(initial.overlapDays),
     lateGraceMinutes: String(initial.lateGraceMinutes),
@@ -37,7 +38,7 @@ export function VerifixSettings({ initial }: { initial: VerifixDetails }) {
   });
   const [secret, setSecret] = useState("");
   const [showSecret, setShowSecret] = useState(false);
-  const [busy, setBusy] = useState<"test" | "save" | "sync" | "clear" | null>(null);
+  const [busy, setBusy] = useState<"test" | "save" | "sync" | "cancel" | "clear" | null>(null);
   const [test, setTest] = useState<VerifixTestResult | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
 
@@ -76,7 +77,8 @@ export function VerifixSettings({ initial }: { initial: VerifixDetails }) {
           filialId: form.filialId.trim() ? num(form.filialId, 0) : null,
           enabled: form.enabled,
           autoSync: form.autoSync,
-          intervalMinutes: num(form.intervalMinutes, 60),
+          intervalMinutes: num(form.intervalMinutes, 10),
+          tracksIntervalMinutes: num(form.tracksIntervalMinutes, 2),
           historyDays: num(form.historyDays, 31),
           overlapDays: num(form.overlapDays, 3),
           lateGraceMinutes: num(form.lateGraceMinutes, 0),
@@ -111,6 +113,14 @@ export function VerifixSettings({ initial }: { initial: VerifixDetails }) {
       await reload();
     });
 
+  /** «Отменить»: идущая синхронизация останавливается, загруженное сохраняется; зависшая строка «идёт» закрывается. */
+  const cancel = () =>
+    run("cancel", async () => {
+      await bff("integrations/verifix/sync/cancel", { method: "POST" });
+      setMessage({ tone: "ok", text: t("Синхронизация отменена — загруженное сохранено.") });
+      await reload();
+    });
+
   const mapDivision = (id: number, departmentCode: string) =>
     run("save", async () => {
       await bff(`integrations/verifix/divisions/${id}/department`, { method: "PUT", body: JSON.stringify({ departmentCode: departmentCode || null }) });
@@ -125,6 +135,7 @@ export function VerifixSettings({ initial }: { initial: VerifixDetails }) {
     form.enabled !== data.enabled ||
     form.autoSync !== data.autoSync ||
     num(form.intervalMinutes, 0) !== data.intervalMinutes ||
+    num(form.tracksIntervalMinutes, 0) !== data.tracksIntervalMinutes ||
     num(form.historyDays, 0) !== data.historyDays ||
     num(form.overlapDays, 0) !== data.overlapDays ||
     num(form.lateGraceMinutes, -1) !== data.lateGraceMinutes ||
@@ -187,7 +198,8 @@ export function VerifixSettings({ initial }: { initial: VerifixDetails }) {
           </label>
           {(
             [
-              ["intervalMinutes", "Интервал, минут", "от 15 до 1440"],
+              ["tracksIntervalMinutes", "Проходы — каждые, минут", "1–60; только отметки, по умолчанию 2"],
+              ["intervalMinutes", "Остальные данные — каждые, минут", "5–1440; сотрудники, справочники, табель, по умолчанию 10"],
               ["historyDays", "Глубина первой загрузки, дней", "до 92"],
               ["overlapDays", "Перечитывать последние дни", "1–14"],
               ["lateGraceMinutes", "Допуск опоздания, минут", "0 — без допуска"],
@@ -219,6 +231,11 @@ export function VerifixSettings({ initial }: { initial: VerifixDetails }) {
           {busy === "sync" || data.sync.running ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}{" "}
           {t(data.sync.running ? "Синхронизация идёт…" : "Синхронизировать сейчас")}
         </button>
+        {data.sync.running && (
+          <button type="button" className={button} disabled={busy !== null} onClick={cancel}>
+            {busy === "cancel" ? <Loader2 className="size-4 animate-spin" /> : <Square className="size-4" />} {t("Отменить")}
+          </button>
+        )}
         {data.secretSource === "OneBase" && (
           <button
             type="button"

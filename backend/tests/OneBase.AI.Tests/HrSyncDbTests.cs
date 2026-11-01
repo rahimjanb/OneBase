@@ -417,13 +417,109 @@ public class HrSyncDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         });
         Assert.Equal(HrSyncStartResult.AlreadyRunning, (await coordinator.RunAsync(HrSyncTrigger.Manual, fixture.AdminId, null, CancellationToken.None)).Result);
 
-        // Перестал отмечаться больше 15 минут — закрывается как прерванный, новый запуск идёт.
+        // Перестал отмечаться больше 15 минут — проверка расписания (каждую минуту) закрывает его как прерванный и без нового старта:
+        // раньше закрывал только старт, а старт ждал окончания — «идёт» висело часами.
         fixture.Clock.Now = Now.AddMinutes(20);
-        var run = await SyncAsync();
-        Assert.Equal(HrSyncStatus.Succeeded, run.Status);
+        await coordinator.CloseStaleAsync(CancellationToken.None);
         var closed = await WithAsync(sp => sp.GetRequiredService<OneBaseDbContext>().HrSyncRuns.AsNoTracking().SingleAsync(r => r.Id == other.Id));
         Assert.Equal(HrSyncStatus.Failed, closed.Status);
         Assert.Contains("Прервана", closed.Message);
+
+        var run = await SyncAsync();
+        Assert.Equal(HrSyncStatus.Succeeded, run.Status);
+    }
+
+    [PostgresFact]
+    public async Task Quick_run_loads_only_tracks_from_the_last_loaded_day()
+    {
+        await SeedAsync();
+        var coordinator = fixture.Services.GetRequiredService<HrSyncCoordinator>();
+
+        // До первой полной загрузки отметок быстрый запуск ничего не делает.
+        var (_, earlyId) = await coordinator.RunAsync(HrSyncTrigger.Tracks, null, null, CancellationToken.None);
+        var early = await WithAsync(sp => sp.GetRequiredService<OneBaseDbContext>().HrSyncRuns.AsNoTracking().SingleAsync(r => r.Id == earlyId));
+        Assert.Equal(HrSyncStatus.Succeeded, early.Status);
+        Assert.Contains("полная синхронизация", early.Message);
+        Assert.Empty(Verifix.CallsTo("core/track$list"));
+
+        Assert.Equal(HrSyncStatus.Succeeded, (await SyncAsync()).Status);
+        Verifix.Calls.Clear();
+        fixture.Clock.Now = Now.AddMinutes(3);
+        var (result, runId) = await coordinator.RunAsync(HrSyncTrigger.Tracks, null, null, CancellationToken.None);
+        Assert.Equal(HrSyncStartResult.Started, result);
+        var run = await WithAsync(sp => sp.GetRequiredService<OneBaseDbContext>().HrSyncRuns.AsNoTracking().SingleAsync(r => r.Id == runId));
+        Assert.Equal(HrSyncStatus.Succeeded, run.Status);
+        Assert.Equal(HrSyncTrigger.Tracks, run.Trigger);
+        // Только отметки и только за сегодня: справочники, сотрудники и табель — полной синхронизацией.
+        Assert.All(Verifix.Calls, c => Assert.EndsWith("core/track$list", c.Path));
+        Assert.Single(Verifix.CallsTo("core/track$list"));
+        Assert.Equal(run.PeriodTo, run.PeriodFrom);
+    }
+
+    [PostgresFact]
+    public async Task Cancel_stops_the_running_sync_and_closes_a_hung_row()
+    {
+        await SeedAsync();
+        var coordinator = fixture.Services.GetRequiredService<HrSyncCoordinator>();
+        Verifix.Delay = TimeSpan.FromSeconds(5);
+        try
+        {
+            var running = coordinator.RunAsync(HrSyncTrigger.Manual, fixture.AdminId, null, CancellationToken.None);
+            await Task.Delay(300);
+            Assert.True(await coordinator.CancelAsync(CancellationToken.None));
+            var (_, runId) = await running;
+
+            var run = await WithAsync(sp => sp.GetRequiredService<OneBaseDbContext>().HrSyncRuns.AsNoTracking().SingleAsync(r => r.Id == runId));
+            Assert.Equal(HrSyncStatus.Cancelled, run.Status);
+            Assert.Contains("Отменена пользователем", run.Message);
+            Assert.False(coordinator.IsRunning);
+        }
+        finally
+        {
+            Verifix.Delay = TimeSpan.Zero;
+        }
+
+        // Отменять нечего.
+        Assert.False(await coordinator.CancelAsync(CancellationToken.None));
+
+        // Строка «идёт» без запуска на этом сервере (зависла после перезапуска) — «Отменить» закрывает её сразу, не дожидаясь 15 минут.
+        var hung = new HrSyncRun { Trigger = HrSyncTrigger.Auto, StartedAt = Now, HeartbeatAt = Now };
+        await WithAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<OneBaseDbContext>();
+            db.HrSyncRuns.Add(hung);
+            await db.SaveChangesAsync();
+            return 0;
+        });
+        Assert.True(await coordinator.CancelAsync(CancellationToken.None));
+        var closed = await WithAsync(sp => sp.GetRequiredService<OneBaseDbContext>().HrSyncRuns.AsNoTracking().SingleAsync(r => r.Id == hung.Id));
+        Assert.Equal(HrSyncStatus.Cancelled, closed.Status);
+    }
+
+    [PostgresFact]
+    public async Task A_run_of_this_server_that_stopped_reporting_is_cancelled_and_closed()
+    {
+        await SeedAsync();
+        var coordinator = fixture.Services.GetRequiredService<HrSyncCoordinator>();
+        Verifix.Delay = TimeSpan.FromSeconds(5);
+        try
+        {
+            var running = coordinator.RunAsync(HrSyncTrigger.Manual, fixture.AdminId, null, CancellationToken.None);
+            await Task.Delay(300); // первый запрос ещё ждёт ответа — отметок нет
+
+            fixture.Clock.Now = Now.AddMinutes(20);
+            await coordinator.CloseStaleAsync(CancellationToken.None);
+            var (_, runId) = await running;
+
+            Assert.False(coordinator.IsRunning);
+            var run = await WithAsync(sp => sp.GetRequiredService<OneBaseDbContext>().HrSyncRuns.AsNoTracking().SingleAsync(r => r.Id == runId));
+            Assert.Equal(HrSyncStatus.Failed, run.Status);
+            Assert.Contains("не отвечал", run.Message);
+        }
+        finally
+        {
+            Verifix.Delay = TimeSpan.Zero;
+        }
     }
 
     [PostgresFact]

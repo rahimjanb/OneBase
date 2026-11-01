@@ -30,7 +30,15 @@ public sealed class VerifixSettingsData
     public long? FilialId { get; set; }
 
     public bool AutoSync { get; set; } = true;
-    public int IntervalMinutes { get; set; } = 60;
+
+    /// <summary>Полная синхронизация (справочники, сотрудники, отметки, табель), минут.</summary>
+    public int IntervalMinutes { get; set; } = VerifixSettingsStore.DefaultInterval;
+
+    /// <summary>
+    /// Быстрая синхронизация проходов (только отметки), минут. null — настройки сохранены до разделения расписания (01.11.2026): при чтении
+    /// проходы — 2 минуты, полная — 10 (VerifixSettingsStore.Read).
+    /// </summary>
+    public int? TracksIntervalMinutes { get; set; }
 
     /// <summary>Глубина первой загрузки отметок и табеля, дней.</summary>
     public int HistoryDays { get; set; } = 31;
@@ -73,7 +81,8 @@ public sealed record VerifixSettingsInput(
     int HistoryDays,
     int OverlapDays,
     int LateGraceMinutes,
-    int EarlyLeaveGraceMinutes);
+    int EarlyLeaveGraceMinutes,
+    int? TracksIntervalMinutes = null);
 
 /// <summary>
 /// Настройки подключения к Verifix: строка Integrations с кодом "verifix" (отдел HR). client_secret — только зашифрованный (Data Protection)
@@ -89,8 +98,12 @@ public sealed class VerifixSettingsStore(
     public const string Code = "verifix";
     public const string Department = "hr";
 
-    public const int MinInterval = 15;
+    public const int MinInterval = 5;
     public const int MaxInterval = 1440;
+    public const int DefaultInterval = 10;
+    public const int MinTracksInterval = 1;
+    public const int MaxTracksInterval = 60;
+    public const int DefaultTracksInterval = 2;
     public const int MaxHistoryDays = 92;
 
     private readonly IDataProtector _protector = dataProtection.CreateProtector("OneBase.Integrations.Verifix.ClientSecret");
@@ -153,6 +166,7 @@ public sealed class VerifixSettingsStore(
         data.FilialId = input.FilialId is > 0 ? input.FilialId : null;
         data.AutoSync = input.AutoSync;
         data.IntervalMinutes = Math.Clamp(input.IntervalMinutes, MinInterval, MaxInterval);
+        data.TracksIntervalMinutes = Math.Clamp(input.TracksIntervalMinutes ?? data.TracksIntervalMinutes ?? DefaultTracksInterval, MinTracksInterval, MaxTracksInterval);
         data.HistoryDays = Math.Clamp(input.HistoryDays, 1, MaxHistoryDays);
         data.OverlapDays = Math.Clamp(input.OverlapDays, 1, 14);
         data.LateGraceMinutes = Math.Clamp(input.LateGraceMinutes, 0, 120);
@@ -201,19 +215,24 @@ public sealed class VerifixSettingsStore(
 
     private static VerifixSettingsData Read(string? json)
     {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return new VerifixSettingsData();
-        }
-
+        VerifixSettingsData data;
         try
         {
-            return JsonSerializer.Deserialize<VerifixSettingsData>(json) ?? new VerifixSettingsData();
+            data = string.IsNullOrWhiteSpace(json) ? new VerifixSettingsData() : JsonSerializer.Deserialize<VerifixSettingsData>(json) ?? new VerifixSettingsData();
         }
         catch (JsonException)
         {
-            return new VerifixSettingsData();
+            data = new VerifixSettingsData();
         }
+
+        // Сохранены до разделения расписания (одна синхронизация раз в час): проходы — каждые 2 минуты, остальное — каждые 10.
+        if (data.TracksIntervalMinutes is null)
+        {
+            data.TracksIntervalMinutes = DefaultTracksInterval;
+            data.IntervalMinutes = DefaultInterval;
+        }
+
+        return data;
     }
 
     private static async Task<IntegrationConnection> GetOrCreateAsync(OneBaseDbContext db, CancellationToken ct)

@@ -1,11 +1,11 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, RefreshCw, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, RefreshCw, RotateCcw, Square } from "lucide-react";
 import { SyncStatusBadge } from "@/components/hr/HrBits";
 import { tNow, useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { dayLabel, momentLabel, triggerLabel, type HrSyncRun, type PageResult } from "@/lib/hr";
+import { dayLabel, momentLabel, triggerLabel, type HrSyncRun, type SyncRunsPage } from "@/lib/hr";
 
 const button = "inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-muted disabled:opacity-50";
 
@@ -17,19 +17,21 @@ const seconds = (run: HrSyncRun) => {
 
 /**
  * Журнал синхронизации Verifix: начало, конец, длительность, загружено (новых и изменённых), пропущено (без изменений), ошибки, шаги;
- * «Повторить» — для неудачных и частичных. Пока идёт запуск — обновляется сам.
+ * «Повторить» — для неудачных и частичных, «Отменить» — пока идёт запуск (тогда журнал обновляется сам). Успешные быстрые запуски
+ * проходов (раз в пару минут) скрыты — флажок «Показать быстрые запуски проходов».
  */
-export function SyncJournal({ initial, configured }: { initial: PageResult<HrSyncRun>; configured: boolean }) {
+export function SyncJournal({ initial, configured }: { initial: SyncRunsPage; configured: boolean }) {
   const t = useT();
   const [data, setData] = useState(initial);
   const [page, setPage] = useState(initial.page);
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [quick, setQuick] = useState(false);
   const running = data.items.some((r) => r.status === "Running");
 
-  const load = async (p = page) => {
-    setData(await bff<PageResult<HrSyncRun>>(`integrations/verifix/runs?page=${p}&pageSize=30`));
+  const load = async (p = page, showQuick = quick) => {
+    setData(await bff<SyncRunsPage>(`integrations/verifix/runs?page=${p}&pageSize=30${showQuick ? "&quick=true" : ""}`));
     setPage(p);
   };
 
@@ -60,10 +62,28 @@ export function SyncJournal({ initial, configured }: { initial: PageResult<HrSyn
         <button type="button" className={button} disabled={!configured || running || busy !== null} onClick={() => void act("sync", "integrations/verifix/sync")}>
           {busy === "sync" || running ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} {t(running ? "Синхронизация идёт…" : "Синхронизировать сейчас")}
         </button>
+        {running && (
+          <button type="button" className={button} disabled={busy !== null} onClick={() => void act("cancel", "integrations/verifix/sync/cancel")}>
+            {busy === "cancel" ? <Loader2 className="size-4 animate-spin" /> : <Square className="size-4" />} {t("Отменить")}
+          </button>
+        )}
         <button type="button" className={button} onClick={() => void load().catch((e) => setError((e as Error).message))}>
           {t("Обновить журнал")}
         </button>
-        {error && <span className="text-sm text-bad">{error}</span>}
+        <label className="ml-auto flex items-center gap-2 text-sm text-ink-2">
+          <input
+            type="checkbox"
+            checked={quick}
+            onChange={(e) => {
+              setQuick(e.target.checked);
+              void load(1, e.target.checked).catch((err) => setError((err as Error).message));
+            }}
+            className="size-4 accent-[var(--color-accent)]"
+          />
+          {t("Показать быстрые запуски проходов")}
+        </label>
+        {error && <span className="w-full text-sm text-bad">{error}</span>}
+        {data.quickLastAt && <span className="w-full text-xs text-ink-3">{t("Проходы последний раз загружены {time}", { time: momentLabel(data.quickLastAt) })}</span>}
       </div>
 
       {data.items.length === 0 ? (

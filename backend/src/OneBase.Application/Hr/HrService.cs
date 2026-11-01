@@ -399,11 +399,12 @@ public sealed partial class HrService(IAppDbContext db, IHrRules rulesSource, Ti
     private async Task<HrSyncBrief> SyncBriefAsync(HrRules rules, CancellationToken ct)
     {
         var state = await rulesSource.GetStateAsync(ct);
-        var last = await db.HrSyncRuns.AsNoTracking().OrderByDescending(r => r.StartedAt).FirstOrDefaultAsync(ct);
+        // Итог и «идёт» — по полной синхронизации: быстрые запуски проходов идут секунды раз в пару минут, баннер «идёт» мигал бы.
+        var last = await db.HrSyncRuns.AsNoTracking().Where(r => r.Trigger != HrSyncTrigger.Tracks).OrderByDescending(r => r.StartedAt).FirstOrDefaultAsync(ct);
         var lastOk = await db.HrSyncRuns.AsNoTracking().Where(r => r.Status == HrSyncStatus.Succeeded || r.Status == HrSyncStatus.Partial)
             .OrderByDescending(r => r.StartedAt).Select(r => r.FinishedAt).FirstOrDefaultAsync(ct);
         var coverage = await CoverageAsync(rules, ct);
-        return new HrSyncBrief(state.Configured, state.Enabled, last?.Status == HrSyncStatus.Running, lastOk, last?.StartedAt, last?.Status, last?.Message,
+        return new HrSyncBrief(state.Configured, state.Enabled, last?.IsAlive(time.GetUtcNow()) == true, lastOk, last?.StartedAt, last?.Status, last?.Message,
             coverage.TracksThrough, coverage.TimesheetFrom, coverage.TimesheetTo);
     }
 

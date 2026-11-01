@@ -219,7 +219,10 @@ export type HrLeaders = { from: string; to: string; employees: number; onTime: n
 
 export type PageResult<T> = { items: T[]; total: number; page: number; pageSize: number };
 
-export type HrSyncStatus = "Running" | "Succeeded" | "Partial" | "Failed";
+/** Журнал синхронизации: успешные быстрые запуски проходов скрыты (quick=true — показать); quickLastAt — когда проходы последний раз загружены. */
+export type SyncRunsPage = PageResult<HrSyncRun> & { quickLastAt?: string | null };
+
+export type HrSyncStatus = "Running" | "Succeeded" | "Partial" | "Failed" | "Cancelled";
 
 export type HrSyncStep = {
   step: string;
@@ -236,7 +239,7 @@ export type HrSyncStep = {
 
 export type HrSyncRun = {
   id: string;
-  trigger: "auto" | "manual" | "retry";
+  trigger: "auto" | "manual" | "retry" | "tracks";
   startedBy: string | null;
   retryOfId: string | null;
   startedAt: string;
@@ -269,7 +272,10 @@ export type VerifixDetails = {
   filialId: number | null;
   enabled: boolean;
   autoSync: boolean;
+  /** Полная синхронизация (справочники, сотрудники, отметки, табель), минут. */
   intervalMinutes: number;
+  /** Быстрая синхронизация проходов (только отметки), минут. */
+  tracksIntervalMinutes: number;
   historyDays: number;
   overlapDays: number;
   lateGraceMinutes: number;
@@ -340,16 +346,17 @@ export const markTypeLabel: Record<string, string> = {
 
 export const deviationLabel: Record<HrDeviation["kind"], string> = { late: "Опоздание", early: "Ранний уход", absent: "Отсутствие", noexit: "Нет ухода" };
 
-export const syncStatusLabel: Record<HrSyncStatus, string> = { Running: "Идёт", Succeeded: "Успешно", Partial: "Частично", Failed: "Ошибка" };
+export const syncStatusLabel: Record<HrSyncStatus, string> = { Running: "Идёт", Succeeded: "Успешно", Partial: "Частично", Failed: "Ошибка", Cancelled: "Отменена" };
 
 export const syncStatusTone: Record<HrSyncStatus, string> = {
   Running: "bg-accent/10 text-accent-strong",
   Succeeded: "bg-ok-soft text-ok",
   Partial: "bg-warn-soft text-warn",
   Failed: "bg-bad-soft text-bad",
+  Cancelled: "bg-muted text-ink-2",
 };
 
-export const triggerLabel: Record<HrSyncRun["trigger"], string> = { auto: "по расписанию", manual: "вручную", retry: "повтор" };
+export const triggerLabel: Record<HrSyncRun["trigger"], string> = { auto: "по расписанию", manual: "вручную", retry: "повтор", tracks: "проходы" };
 
 /** Буквы табеля: как в HrService.DayCode. */
 export const dayCodeLegend: [code: string, label: string][] = [

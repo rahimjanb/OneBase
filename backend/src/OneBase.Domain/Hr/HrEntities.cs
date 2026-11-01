@@ -210,14 +210,18 @@ public static class HrSyncStatus
     public const string Partial = "Partial";
 
     public const string Failed = "Failed";
+
+    /// <summary>Остановлена кнопкой «Отменить» — загруженное сохранено; не неудача: повтора не будет, следующая — по расписанию.</summary>
+    public const string Cancelled = "Cancelled";
 }
 
-/// <summary>Кто запустил: расписание, кнопка, повтор неудачного запуска.</summary>
+/// <summary>Кто запустил: расписание, кнопка, повтор неудачного запуска; tracks — быстрый запуск по расписанию, только проходы (отметки).</summary>
 public static class HrSyncTrigger
 {
     public const string Auto = "auto";
     public const string Manual = "manual";
     public const string Retry = "retry";
+    public const string Tracks = "tracks";
 }
 
 /// <summary>
@@ -226,6 +230,9 @@ public static class HrSyncTrigger
 /// </summary>
 public class HrSyncRun
 {
+    /// <summary>Запуск отмечается (HeartbeatAt) после каждого дня отметок и страницы; молчит дольше — завис или сервер перезапустили.</summary>
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(15);
+
     public Guid Id { get; set; } = Guid.CreateVersion7();
     public required string Trigger { get; set; }
     public Guid? StartedById { get; set; }
@@ -249,6 +256,9 @@ public class HrSyncRun
 
     /// <summary>Шаги: JSON [{step, status, created, updated, skipped, errors, pages, message}].</summary>
     public string StepsJson { get; set; } = "[]";
+
+    /// <summary>Идёт и отмечался недавно — синхронизация действительно идёт (а не строка, оставшаяся после перезапуска сервера).</summary>
+    public bool IsAlive(DateTimeOffset now) => Status == HrSyncStatus.Running && HeartbeatAt >= now - StaleAfter;
 }
 
 /// <summary>

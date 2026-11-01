@@ -43,7 +43,8 @@ public sealed class VerifixController(
         int HistoryDays,
         int OverlapDays,
         int LateGraceMinutes,
-        int EarlyLeaveGraceMinutes);
+        int EarlyLeaveGraceMinutes,
+        int? TracksIntervalMinutes = null);
 
     public sealed record TestInput(string? BaseUrl, string? ClientId, string? ClientSecret, long? FilialId);
 
@@ -66,16 +67,23 @@ public sealed class VerifixController(
 
         if (input.IntervalMinutes is < VerifixSettingsStore.MinInterval or > VerifixSettingsStore.MaxInterval)
         {
-            return BadRequest(new { error = $"Интервал синхронизации — от {VerifixSettingsStore.MinInterval} минут до суток." });
+            return BadRequest(new { error = $"Полная синхронизация — от {VerifixSettingsStore.MinInterval} минут до суток." });
+        }
+
+        if (input.TracksIntervalMinutes is < VerifixSettingsStore.MinTracksInterval or > VerifixSettingsStore.MaxTracksInterval)
+        {
+            return BadRequest(new { error = $"Синхронизация проходов — от {VerifixSettingsStore.MinTracksInterval} до {VerifixSettingsStore.MaxTracksInterval} минут." });
         }
 
         await settings.SaveAsync(new VerifixSettingsInput(baseUrl, input.ClientId, input.ClientSecret, input.FilialId, input.Enabled, input.AutoSync,
-            input.IntervalMinutes, input.HistoryDays, input.OverlapDays, input.LateGraceMinutes, input.EarlyLeaveGraceMinutes), User.GetUserId(), ct);
+            input.IntervalMinutes, input.HistoryDays, input.OverlapDays, input.LateGraceMinutes, input.EarlyLeaveGraceMinutes, input.TracksIntervalMinutes),
+            User.GetUserId(), ct);
         client.Forget();
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "integration.verifix.updated", "integration", VerifixSettingsStore.Code,
             new
             {
-                baseUrl, input.Enabled, input.AutoSync, input.IntervalMinutes, input.HistoryDays, input.OverlapDays, input.LateGraceMinutes, input.EarlyLeaveGraceMinutes,
+                baseUrl, input.Enabled, input.AutoSync, input.IntervalMinutes, input.TracksIntervalMinutes, input.HistoryDays, input.OverlapDays, input.LateGraceMinutes,
+                input.EarlyLeaveGraceMinutes,
                 input.FilialId, clientIdChanged = input.ClientId is not null, secretChanged = input.ClientSecret is not null,
             }, ct);
         return Ok(await DetailsAsync(ct));
@@ -106,20 +114,44 @@ public sealed class VerifixController(
         return result;
     }
 
-    /// <summary>Синхронизировать сейчас (в фоне). 409 — уже идёт.</summary>
+    /// <summary>Синхронизировать сейчас (в фоне, полная). 409 — уже идёт.</summary>
     [HttpPost("sync")]
     public Task<IActionResult> Sync(CancellationToken ct) => StartAsync(HrSyncTrigger.Manual, null, ct);
 
-    /// <summary>Журнал синхронизации, новые сверху.</summary>
+    /// <summary>
+    /// «Отменить»: останавливает идущую синхронизацию — загруженное сохраняется, итог «Отменена»; строку «идёт» без живого запуска
+    /// закрывает сразу. 409 — отменять нечего.
+    /// </summary>
+    [HttpPost("sync/cancel")]
+    public async Task<IActionResult> Cancel(CancellationToken ct)
+    {
+        if (!await coordinator.CancelAsync(ct))
+        {
+            return Conflict(new { error = "Синхронизация не идёт." });
+        }
+
+        await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "integration.verifix.sync.cancelled", "integration", VerifixSettingsStore.Code,
+            new { }, ct);
+        return Accepted();
+    }
+
+    /// <summary>
+    /// Журнал синхронизации, новые сверху. Успешные быстрые запуски проходов (раз в пару минут) скрыты, пока не попросить quick=true;
+    /// их неудачи и отмены видны всегда. QuickLastAt — когда проходы последний раз загружены быстрым запуском.
+    /// </summary>
     [HttpGet("runs")]
-    public async Task<IActionResult> Runs([FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default)
+    public async Task<IActionResult> Runs([FromQuery] int page = 1, [FromQuery] int pageSize = 30, [FromQuery] bool quick = false, CancellationToken ct = default)
     {
         var size = Math.Clamp(pageSize, 10, 100);
         var number = Math.Max(1, page);
-        var total = await db.HrSyncRuns.CountAsync(ct);
-        var runs = await db.HrSyncRuns.AsNoTracking().OrderByDescending(r => r.StartedAt).Skip((number - 1) * size).Take(size).ToListAsync(ct);
+        var query = db.HrSyncRuns.AsNoTracking()
+            .Where(r => quick || r.Trigger != HrSyncTrigger.Tracks || r.Status != HrSyncStatus.Succeeded);
+        var total = await query.CountAsync(ct);
+        var runs = await query.OrderByDescending(r => r.StartedAt).Skip((number - 1) * size).Take(size).ToListAsync(ct);
         var users = await UserNamesAsync(runs.Select(r => r.StartedById), ct);
-        return Ok(new { Items = runs.Select(r => RunView(r, users)), Total = total, Page = number, PageSize = size });
+        var quickLastAt = await db.HrSyncRuns.AsNoTracking().Where(r => r.Trigger == HrSyncTrigger.Tracks && r.Status == HrSyncStatus.Succeeded)
+            .OrderByDescending(r => r.StartedAt).Select(r => r.FinishedAt).FirstOrDefaultAsync(ct);
+        return Ok(new { Items = runs.Select(r => RunView(r, users)), Total = total, Page = number, PageSize = size, QuickLastAt = quickLastAt });
     }
 
     [HttpGet("runs/{id:guid}")]
@@ -226,6 +258,7 @@ public sealed class VerifixController(
             connection.Enabled,
             data.AutoSync,
             data.IntervalMinutes,
+            TracksIntervalMinutes = data.TracksIntervalMinutes ?? VerifixSettingsStore.DefaultTracksInterval,
             data.HistoryDays,
             data.OverlapDays,
             data.LateGraceMinutes,
@@ -235,7 +268,8 @@ public sealed class VerifixController(
             LastTest = row?.LastTestAt is null ? null : new { At = row.LastTestAt, Ok = row.LastTestOk, Message = row.LastTestMessage },
             Sync = new
             {
-                Running = coordinator.IsRunning || await db.HrSyncRuns.AnyAsync(r => r.Status == HrSyncStatus.Running, ct),
+                Running = coordinator.IsRunning
+                    || await db.HrSyncRuns.AnyAsync(r => r.Status == HrSyncStatus.Running && r.HeartbeatAt >= time.GetUtcNow() - HrSyncCoordinator.StaleAfter, ct),
                 DataAsOf = dataAsOf,
                 Entities = states.Select(s => new { s.Entity, Title = HrSyncCoordinator.StepTitle(s.Entity), s.LastSuccessAt, s.LastRows, s.LastError, s.CoveredFrom, s.CoveredThrough }),
             },

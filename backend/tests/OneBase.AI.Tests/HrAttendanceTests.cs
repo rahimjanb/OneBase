@@ -208,7 +208,13 @@ public class HrAttendanceTests
         Assert.True(HrSyncSchedule.Due([], 60, now).Due);
         Assert.False(HrSyncSchedule.Due([Run(HrSyncStatus.Succeeded, 30)], 60, now).Due);
         Assert.True(HrSyncSchedule.Due([Run(HrSyncStatus.Succeeded, 61)], 60, now).Due);
-        Assert.False(HrSyncSchedule.Due([Run(HrSyncStatus.Running, 120)], 60, now).Due);
+        // Идёт и отмечается — ждём; «идёт» 383 минуты без отметок — зависшая строка (сервер перезапустили): пора, старт её закроет.
+        var alive = Run(HrSyncStatus.Running, 120);
+        alive.HeartbeatAt = now.AddMinutes(-2);
+        Assert.False(HrSyncSchedule.Due([alive], 60, now).Due);
+        var hung = Run(HrSyncStatus.Running, 383);
+        hung.HeartbeatAt = now.AddMinutes(-380);
+        Assert.True(HrSyncSchedule.Due([hung], 60, now).Due);
 
         // Неудача — повтор через 5 минут с отметкой «повтор».
         var failed = Run(HrSyncStatus.Failed, 7);
@@ -221,5 +227,32 @@ public class HrAttendanceTests
         List<HrSyncRun> many = [Run(HrSyncStatus.Failed, 10), Run(HrSyncStatus.Failed, 20), Run(HrSyncStatus.Failed, 30), Run(HrSyncStatus.Failed, 40)];
         Assert.False(HrSyncSchedule.Due(many, 60, now).Due);
         Assert.Null(HrSyncSchedule.Due(many, 60, now).RetryOf);
+
+        // Отменённая пользователем — не неудача: повтора через 5 минут нет, следующая — по интервалу.
+        Assert.False(HrSyncSchedule.Due([Run(HrSyncStatus.Cancelled, 7)], 10, now).Due);
+        Assert.True(HrSyncSchedule.Due([Run(HrSyncStatus.Cancelled, 11)], 10, now).Due);
+    }
+
+    [Fact]
+    public void Schedule_runs_tracks_every_few_minutes_and_everything_else_on_its_own_interval()
+    {
+        var now = new DateTimeOffset(2026, 11, 1, 10, 0, 0, TimeSpan.Zero);
+        HrSyncRun Full(string status, int minutesAgo) =>
+            new() { Trigger = HrSyncTrigger.Auto, Status = status, StartedAt = now.AddMinutes(-minutesAgo), FinishedAt = now.AddMinutes(-minutesAgo), HeartbeatAt = now.AddMinutes(-minutesAgo) };
+
+        // Полная 6 минут назад (каждые 10), проходы — каждые 2: последний запуск 3 минуты назад — проходы.
+        Assert.Equal(HrSyncPlan.Tracks, HrSyncSchedule.Next([Full(HrSyncStatus.Succeeded, 6)], now.AddMinutes(-3), 10, 2, true, now).Plan);
+        // Минуту назад — рано.
+        Assert.Equal(HrSyncPlan.None, HrSyncSchedule.Next([Full(HrSyncStatus.Succeeded, 6)], now.AddMinutes(-1), 10, 2, true, now).Plan);
+        // Полной 11 минут — она важнее проходов.
+        Assert.Equal(HrSyncPlan.Full, HrSyncSchedule.Next([Full(HrSyncStatus.Succeeded, 11)], now.AddMinutes(-3), 10, 2, true, now).Plan);
+        // Отметки ещё не загружались — проходы не запускаются: историю загружает полная.
+        Assert.Equal(HrSyncPlan.None, HrSyncSchedule.Next([Full(HrSyncStatus.Succeeded, 6)], now.AddMinutes(-3), 10, 2, false, now).Plan);
+        // Полная идёт (отмечается) — ни проходов, ни полной.
+        var running = Full(HrSyncStatus.Running, 1);
+        running.FinishedAt = null;
+        Assert.Equal(HrSyncPlan.None, HrSyncSchedule.Next([running], now.AddMinutes(-1), 10, 2, true, now).Plan);
+        // Ничего ещё не было — полная.
+        Assert.Equal(HrSyncPlan.Full, HrSyncSchedule.Next([], null, 10, 2, true, now).Plan);
     }
 }

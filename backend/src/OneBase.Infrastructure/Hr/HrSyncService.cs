@@ -46,48 +46,55 @@ public sealed class HrSyncService(OneBaseDbContext db, VerifixClient client, Ver
     private Guid _runId;
     private DateTimeOffset _started;
     private Dictionary<long, Guid> _employees = [];
+    private readonly List<HrSyncStep> _steps = [];
+    private bool _authFailed;
+
+    /// <summary>Шаг запуска: ошибка Verifix не останавливает остальные шаги (кроме отказа в авторизации) — итог шага в журнал.</summary>
+    private async Task StepAsync(string name, Func<HrSyncStep, Task> body, CancellationToken ct)
+    {
+        var step = new HrSyncStep { Step = name };
+        _steps.Add(step);
+        if (_authFailed)
+        {
+            step.Status = "skipped";
+            step.Message = "пропущено: Verifix не принял авторизацию";
+            return;
+        }
+
+        try
+        {
+            await body(step);
+        }
+        catch (VerifixApiException ex)
+        {
+            step.Status = "failed";
+            step.Errors++;
+            step.Message = VerifixClient.Human(ex);
+            _authFailed |= ex.Kind is VerifixErrorKind.Auth or VerifixErrorKind.NotConfigured;
+            logger.LogWarning("Verifix: шаг {Step} не выполнен — {Message}", name, VerifixLog.Safe(ex.Message));
+            await SaveStateErrorAsync(name, step.Message, ct);
+        }
+
+        await HeartbeatAsync(ct);
+    }
+
+    /// <summary>Окно запуска: часовой пояс организации, сейчас по нему, сегодня и начало истории (HistoryDays).</summary>
+    private (TimeZoneInfo Zone, DateTime NowLocal, DateOnly Today, DateOnly HistoryStart) Window(VerifixConnection connection)
+    {
+        var zone = VerifixFormats.Zone(connection.Data.TimeZone);
+        _started = time.GetUtcNow();
+        var nowLocal = VerifixFormats.ToLocal(_started, zone);
+        var today = DateOnly.FromDateTime(nowLocal);
+        return (zone, nowLocal, today, today.AddDays(-(Math.Clamp(connection.Data.HistoryDays, 1, VerifixSettingsStore.MaxHistoryDays) - 1)));
+    }
 
     public async Task<HrSyncOutcome> RunAsync(Guid runId, CancellationToken ct)
     {
         _runId = runId;
         var connection = await settings.GetAsync(ct);
-        var zone = VerifixFormats.Zone(connection.Data.TimeZone);
-        _started = time.GetUtcNow();
-        var nowLocal = VerifixFormats.ToLocal(_started, zone);
-        var today = DateOnly.FromDateTime(nowLocal);
-        var historyStart = today.AddDays(-(Math.Clamp(connection.Data.HistoryDays, 1, VerifixSettingsStore.MaxHistoryDays) - 1));
+        var (zone, nowLocal, today, historyStart) = Window(connection);
         var overlap = Math.Clamp(connection.Data.OverlapDays, 1, 14);
-
-        var steps = new List<HrSyncStep>();
-        var authFailed = false;
-
-        async Task Run(string name, Func<HrSyncStep, Task> body)
-        {
-            var step = new HrSyncStep { Step = name };
-            steps.Add(step);
-            if (authFailed)
-            {
-                step.Status = "skipped";
-                step.Message = "пропущено: Verifix не принял авторизацию";
-                return;
-            }
-
-            try
-            {
-                await body(step);
-            }
-            catch (VerifixApiException ex)
-            {
-                step.Status = "failed";
-                step.Errors++;
-                step.Message = VerifixClient.Human(ex);
-                authFailed |= ex.Kind is VerifixErrorKind.Auth or VerifixErrorKind.NotConfigured;
-                logger.LogWarning("Verifix: шаг {Step} не выполнен — {Message}", name, VerifixLog.Safe(ex.Message));
-                await SaveStateErrorAsync(name, step.Message, ct);
-            }
-
-            await HeartbeatAsync(ct);
-        }
+        Task Run(string name, Func<HrSyncStep, Task> body) => StepAsync(name, body, ct);
 
         foreach (var kind in HrReferenceKinds.All)
         {
@@ -101,10 +108,32 @@ public sealed class HrSyncService(OneBaseDbContext db, VerifixClient client, Ver
         await Run(TracksState, step => TracksAsync(connection, tracksFrom, today, nowLocal, historyStart, zone, step, ct));
 
         var sheetFrom = await WindowStartAsync(TimesheetState, historyStart, Math.Max(overlap, 7), zone, ct);
-        await Run(TimesheetState, step => TimesheetAsync(connection, sheetFrom, today, historyStart, step, ct));
+        await Run(TimesheetState, step => TimesheetAsync(connection, sheetFrom, today, historyStart, zone, step, ct));
 
         await Run("links", step => LinkAsync(step, ct));
-        return new HrSyncOutcome(steps, tracksFrom < sheetFrom ? tracksFrom : sheetFrom, today, authFailed);
+        return new HrSyncOutcome(_steps, tracksFrom < sheetFrom ? tracksFrom : sheetFrom, today, _authFailed);
+    }
+
+    /// <summary>
+    /// Быстрый запуск — только проходы (отметки): с начала последнего загруженного дня по сейчас (после полуночи — и вчерашний день до конца).
+    /// Справочники, сотрудники, табель и привязка — полной синхронизацией; отметка нового сотрудника привяжется к нему при ней. Отметки ещё
+    /// не загружались — быстрый запуск ничего не делает: историю загружает полная синхронизация.
+    /// </summary>
+    public async Task<HrSyncOutcome> RunTracksAsync(Guid runId, CancellationToken ct)
+    {
+        _runId = runId;
+        var connection = await settings.GetAsync(ct);
+        var (zone, nowLocal, today, historyStart) = Window(connection);
+        if (!await db.HrSyncStates.AsNoTracking().AnyAsync(s => s.Entity == TracksState && s.CoveredThrough != null, ct))
+        {
+            _steps.Add(new HrSyncStep { Step = TracksState, Status = "skipped", Message = "пропущено: отметки ещё не загружались — их загрузит полная синхронизация" });
+            return new HrSyncOutcome(_steps, today, today, false);
+        }
+
+        _employees = await db.HrEmployees.AsNoTracking().ToDictionaryAsync(e => e.VerifixId, e => e.Id, ct);
+        var from = await WindowStartAsync(TracksState, historyStart, 1, zone, ct);
+        await StepAsync(TracksState, step => TracksAsync(connection, from, today, nowLocal, historyStart, zone, step, ct), ct);
+        return new HrSyncOutcome(_steps, from, today, _authFailed);
     }
 
     // ---------- Справочники ----------
@@ -409,7 +438,8 @@ public sealed class HrSyncService(OneBaseDbContext db, VerifixClient client, Ver
 
     // ---------- Табель ----------
 
-    private async Task TimesheetAsync(VerifixConnection connection, DateOnly from, DateOnly today, DateOnly historyStart, HrSyncStep step, CancellationToken ct)
+    private async Task TimesheetAsync(VerifixConnection connection, DateOnly from, DateOnly today, DateOnly historyStart, TimeZoneInfo zone, HrSyncStep step,
+        CancellationToken ct)
     {
         for (var start = from; start <= today; start = start.AddDays(7))
         {
@@ -424,7 +454,9 @@ public sealed class HrSyncService(OneBaseDbContext db, VerifixClient client, Ver
             // Период перечитан целиком: дни, которых больше нет в табеле (сняли график), помечаются.
             await db.HrTimesheetDays.Where(d => d.Date >= start && d.Date <= end && d.SyncedAt < _started && d.MissingSince == null)
                 .ExecuteUpdateAsync(s => s.SetProperty(d => d.MissingSince, _started), ct);
-            await SaveStateAsync(TimesheetState, step.Rows, end == today ? _started : null, start == from ? from : null, ct, historyStart);
+            // Неделя загружена целиком — покрытие до её конца: прерванная загрузка (предел времени, перезапуск) продолжится с этой недели.
+            var covered = end == today ? _started : VerifixFormats.ToUtc(end.AddDays(1).ToDateTime(TimeOnly.MinValue), zone);
+            await SaveStateAsync(TimesheetState, step.Rows, covered, start == from ? from : null, ct, historyStart);
         }
     }
 
