@@ -613,6 +613,30 @@ html:has([data-app-shell]) body {
 }
 .field-sheet { animation: field-sheet-in 180ms ease-out; }
 
+/* Форма «Новая задача»: окно на компьютере — появление с лёгким масштабом, шторка на телефоне — снизу, вложенный выбор — сбоку. */
+@keyframes task-form-pop {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes task-form-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes task-form-inner {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+.task-form-pop { animation: task-form-pop 150ms ease-out; }
+.task-form-fade { animation: task-form-fade 150ms ease-out; }
+.task-form-sheet { animation: field-sheet-in 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+.task-form-inner { animation: task-form-inner 180ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .task-form-pop,
+  .task-form-fade,
+  .task-form-sheet,
+  .task-form-inner { animation: none; }
+}
+
 /* Карта Leaflet в тёмной теме: плитки чуть темнее, чтобы не слепили. */
 :root[data-theme="dark"] .field-map .leaflet-tile-pane { filter: brightness(0.75) contrast(1.1) saturate(0.8); }
 @media (prefers-color-scheme: dark) {

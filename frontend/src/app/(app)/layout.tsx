@@ -7,6 +7,7 @@ import { NavPending } from "@/components/shell/NavPending";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { TopbarFrame } from "@/components/shell/TopbarFrame";
+import { TaskToastHost } from "@/components/tasks/TaskToast";
 import { apiSession } from "@/lib/server-api";
 import type { Me } from "@/lib/users";
 
@@ -42,6 +43,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavPending />
         </Suspense>
         <AppBridge userId={me?.id ?? null} />
+        {/* «Задача создана · Открыть» — после закрытия формы задачи. */}
+        <TaskToastHost />
       </div>
     </HomeKindProvider>
   );
