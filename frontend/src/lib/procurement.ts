@@ -997,6 +997,29 @@ export function reportCell(value: string | number | boolean | null, format: Repo
   return format === "date" ? dateRu(value) : value;
 }
 
+/** Обзор снабжения (GET /api/procurement/board): действия, путь закупки, показатели, аналитика, сотрудники — по правам роли; null — не видно. */
+export type Board = {
+  from: string;
+  to: string;
+  access: { canApprove: boolean; canCreateRequest: boolean; canCreateOrder: boolean; canManageSuppliers: boolean; canSeeTeam: boolean; seesRequests: boolean; seesMetrics: boolean };
+  summary: { pendingApprovalCount: number | null; pendingApprovalAmount: number | null; overdueDeliveries: number | null; overdueTasks: number | null };
+  pipeline: { requestsAwaitingOrder: number | null; onApprovalCount: number | null; onApprovalAmount: number | null; ordersInProgress: number; inTransit: number; awaitingReceipt: number };
+  approvals: { id: string; number: string; title: string; amount: number; department: string; initiator: string; submittedAt: string | null }[] | null;
+  ordersOnApproval: number;
+  upcoming: { id: string; number: string; supplierName: string; expectedDate: string }[] | null;
+  metrics: { purchasedAmount: number; ordersCount: number; receivedAmount: number; kpis: Kpis } | null;
+  analytics: {
+    monthly: Amount[];
+    byDepartment: Amount[];
+    byCategory: Amount[];
+    suppliers: { id: string; name: string; orders: number; total: number; onTime: number | null; claims: number; rating: number | null }[];
+  } | null;
+  team: { userId: string; name: string; role: string; tasks: number; orders: number; overdue: number; load: number; loadLevel: "free" | "low" | "high" }[] | null;
+  digests: DigestRow[] | null;
+  empty: boolean;
+  errors: string[];
+};
+
 /** Период обзора: этот месяц, прошлый месяц, 3 месяца, год — даты «гггг-мм-дд» (Ташкент). */
 export function periodOf(preset: "month" | "prev" | "quarter" | "year", today: string): { from: string; to: string } {
   const [y, m] = today.split("-").map(Number);

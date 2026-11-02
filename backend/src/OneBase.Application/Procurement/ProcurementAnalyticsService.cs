@@ -145,11 +145,12 @@ public sealed record ProcurementDashboard(
 /// Аналитика снабжения: обзор по ролям и KPI. Расходы — по закупкам (утверждённые заказы, дата — утверждение заказа) и по принятому на
 /// склад; оплаты придут с модулем «Финансы». Суммы по отделам и категориям — по позициям заказов с НДС, без скидки и доставки.
 /// </summary>
-public sealed class ProcurementAnalyticsService(
+public sealed partial class ProcurementAnalyticsService(
     IAppDbContext db,
     ProcurementSupplierService suppliers,
     ProcurementReceiptService receipts,
-    ProcurementStockService stock)
+    ProcurementStockService stock,
+    Microsoft.Extensions.Logging.ILogger<ProcurementAnalyticsService> logger)
 {
     /// <summary>Руководство закупок: директор (роль), руководитель снабжения, кто настраивает снабжение.</summary>
     public async Task<bool> LeaderAsync(ProcurementContext ctx, CancellationToken ct) =>

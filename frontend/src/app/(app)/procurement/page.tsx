@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { DashboardView } from "@/components/procurement/DashboardView";
+import { OverviewView } from "@/components/procurement/OverviewView";
 import { requireRequests } from "@/components/requests/RequestListPage";
-import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
-import type { Dashboard, RequestNav } from "@/lib/procurement";
+import type { AiStatus } from "@/lib/consultant";
+import type { Board, RequestNav } from "@/lib/procurement";
 import { apiGet } from "@/lib/server-api";
 import { qs } from "@/lib/tasks";
 
@@ -13,29 +13,19 @@ export async function generateMetadata() {
 }
 
 /**
- * «Снабжение → Обзор»: показатели и блоки по роли — директору закупки и расходы, руководителю снабжения работа сотрудников, снабжению
- * свои заказы и сроки, кладовщику поступления и остатки. Период — в адресе (from, to); без него — текущий месяц.
+ * «Снабжение → Обзор»: что требует действия, путь закупки, показатели и аналитика периода, сотрудники — по правам роли (GET /api/procurement/board).
+ * Период — в адресе (from, to); без него — текущий месяц. Supply AI — тем, кому открыт AI-консультант; не настроен — поле неактивно.
  */
 export default async function ProcurementPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
   await requireRequests();
-  const t = await getT();
   const { from, to } = await searchParams;
   const nav = await apiGet<RequestNav>("/api/procurement/nav", "/procurement");
   if (!nav.seesStock && !nav.isDirector) redirect("/requests");
-  const [data, me] = await Promise.all([
-    apiGet<Dashboard>(`/api/procurement/dashboard${qs({ from, to })}`, "/procurement"),
+  const [board, me] = await Promise.all([
+    apiGet<Board>(`/api/procurement/board${qs({ from, to })}`, "/procurement"),
     apiGet<{ permissions: string[] }>("/api/auth/me", "/procurement"),
   ]);
-  return (
-    <>
-      <PageHeader
-        title={t("Снабжение")}
-        subtitle={t("Обзор закупок, поставок и склада — по вашей роли")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение") }]}
-      />
-      <PageBody>
-        <DashboardView data={data} ask={me.permissions.includes("ai.agents.run")} />
-      </PageBody>
-    </>
-  );
+  const ask = me.permissions.includes("ai.agents.run");
+  const ai = ask ? await apiGet<AiStatus>("/api/ai/status", "/procurement").catch(() => null) : null;
+  return <OverviewView board={board} ask={ask} aiReady={ai?.ready ?? false} />;
 }

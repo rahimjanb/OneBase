@@ -137,6 +137,8 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
     {
         var org = await SeedAsync();
         var today = FieldClock.Today;
+        // Тесты класса делят одну временную базу — обзор и KPI сравниваются с состоянием до сценария.
+        var start = await As(org.Director, (sp, c) => Get<ProcurementAnalyticsService>(sp).DashboardAsync(c, ProcurementFilter.Of(today, today), default));
 
         // Склад: гранулы — 30 кг на складе, краска — карточка без остатка.
         var granules = await As(org.Keeper, (sp, c) => S(sp).CreateItemAsync(c, new ProcurementCatalogInput($"G-{org.Tag}", $"Гранулы {org.Tag}", org.Raw, "кг", null, null, 0), default));
@@ -274,8 +276,9 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
 
         // 21–22. Обзор и KPI директора — из этой закупки: заказано 70 × 16 500 + 10 × 48 000, одна претензия, заявка выполнена, поставки в срок.
         var dashboard = await As(org.Director, (sp, c) => Get<ProcurementAnalyticsService>(sp).DashboardAsync(c, ProcurementFilter.Of(today, today), default));
-        Assert.Equal(70 * 16_500m + 10 * 48_000m, dashboard.Director!.OrderedTotal);
-        Assert.Equal((1, 1, 100m), (dashboard.Kpis!.Claims, dashboard.Kpis.FulfilledRequests, dashboard.Kpis.OnTimePercent));
+        Assert.Equal(start.Director!.OrderedTotal + 70 * 16_500m + 10 * 48_000m, dashboard.Director!.OrderedTotal);
+        Assert.Equal((start.Kpis!.Claims + 1, start.Kpis.FulfilledRequests + 1), (dashboard.Kpis!.Claims, dashboard.Kpis.FulfilledRequests));
+        Assert.Equal(100m, dashboard.Kpis.OnTimePercent);
         await Assert.ThrowsAsync<FieldForbiddenException>(() => As(org.Employee, (sp, c) => Get<ProcurementAnalyticsService>(sp).DashboardAsync(c, ProcurementFilter.Of(today, today), default)));
 
         // 24. AI видит ту же закупку с правами пользователя: директору — цена гранул выросла к прошлой покупке, сотруднику — только своё.
@@ -315,5 +318,74 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
         Assert.Equal(7m, settings.GetProperty("after").GetProperty("ReapprovalTolerancePercent").GetDecimal());
         var card = JsonDocument.Parse(logs.Single(a => a.Action == "procurement.item.updated").Data!).RootElement;
         Assert.Equal((5m, 20m), (card.GetProperty("before").GetProperty("MinQty").GetDecimal(), card.GetProperty("after").GetProperty("MinQty").GetDecimal()));
+    }
+
+    [PostgresFact]
+    public async Task Overview_board_shows_actions_and_pipeline_by_role()
+    {
+        var org = await SeedAsync();
+        var today = FieldClock.Today;
+        async Task<ProcurementBoard> Board(User user) =>
+            await As(user, (sp, c) => Get<ProcurementAnalyticsService>(sp).BoardAsync(c, ProcurementFilter.Of(today, today), default));
+
+        var before = await Board(org.Director);
+        var request = await As(org.Employee, (sp, c) => R(sp).CreateAsync(c, new ProcurementRequestInput($"Плёнка {org.Tag}", null, ProcurementPriority.Normal,
+            null, "Упаковка", null, [new(null, $"Плёнка {org.Tag}", org.Raw, "кг", 10, 20_000)], Submit: true), default));
+        await As(org.Supply, (sp, c) => R(sp).ForwardAsync(c, request, default));
+
+        // Директор: заявка ждёт его решения — в итоге, на этапе «Согласование» и в карточке с суммой к закупке.
+        var director = await Board(org.Director);
+        Assert.True(director.Access.CanApprove);
+        Assert.Equal(before.Pipeline.OnApprovalCount + 1, director.Pipeline.OnApprovalCount);
+        Assert.Equal(before.Summary.PendingApprovalAmount + 200_000m, director.Summary.PendingApprovalAmount);
+        var card = Assert.Single(director.Approvals!, a => a.Id == request);
+        Assert.Equal((200_000m, $"Технолог {org.Tag}"), (card.Amount, card.Initiator));
+        Assert.NotNull(director.Metrics);
+        Assert.NotNull(director.Analytics);
+        Assert.Empty(director.Errors);
+
+        // Снабженец: без права согласования, команда — только он сам; руководитель снабжения видит всех с ролями.
+        var buyer = await Board(org.Supply);
+        Assert.False(buyer.Access.CanApprove);
+        Assert.Null(buyer.Approvals);
+        Assert.All(buyer.Team!, t => Assert.Equal(org.Supply.Id, t.UserId));
+        var lead = await Board(org.SupplyHead);
+        Assert.Contains(lead.Team!, t => t.UserId == org.SupplyHead.Id && t.Role == "Руководитель снабжения");
+        Assert.Contains(lead.Team!, t => t.UserId == org.Supply.Id && t.Role == "Закупщик");
+
+        // Кладовщик: этапы заказов и просрочки — да; заявки, показатели, аналитика и команда — нет. Сотруднику обзор закрыт.
+        var keeper = await Board(org.Keeper);
+        Assert.Null(keeper.Pipeline.RequestsAwaitingOrder);
+        Assert.Null(keeper.Pipeline.OnApprovalCount);
+        Assert.Null(keeper.Metrics);
+        Assert.Null(keeper.Analytics);
+        Assert.Null(keeper.Team);
+        Assert.NotNull(keeper.Summary.OverdueDeliveries);
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => Board(org.Employee));
+
+        // Путь: утверждена — ждёт заказа; заказ в работе; оформлен — в пути; срок наступил — ждёт приёмки (этапы не пересекаются).
+        await As(org.Director, (sp, c) => R(sp).ApproveAsync(c, request, null, default));
+        var approved = await Board(org.Director);
+        Assert.Equal(director.Pipeline.RequestsAwaitingOrder + 1, approved.Pipeline.RequestsAwaitingOrder);
+        var supplier = await As(org.Supply, (sp, c) => Get<ProcurementSupplierService>(sp).CreateAsync(c,
+            new ProcurementSupplierInput($"ООО Плёнка {org.Tag}", null, null, null, null, null, null, null, null, null, 3, null, [org.Raw]), default));
+        var line = (await As(org.Supply, (sp, c) => R(sp).GetAsync(c, request, default))).Items[0].Id;
+        var order = await As(org.Supply, (sp, c) => O(sp).CreateAsync(c, new ProcurementOrderInput(supplier, null, org.Supply.Id, today.AddDays(3), null, 0, 12, true, 0, null,
+            [new ProcurementOrderLineInput(line, 10, 19_000)], Submit: true), default));
+        var ordered = await Board(org.Director);
+        Assert.Equal((approved.Pipeline.OrdersInProgress + 1, approved.Pipeline.RequestsAwaitingOrder - 1), (ordered.Pipeline.OrdersInProgress, ordered.Pipeline.RequestsAwaitingOrder));
+        await As(org.Supply, (sp, c) => O(sp).MarkOrderedAsync(c, order, null, default));
+        var sent = await Board(org.Director);
+        Assert.Equal((ordered.Pipeline.OrdersInProgress - 1, ordered.Pipeline.InTransit + 1, ordered.Pipeline.AwaitingReceipt), (sent.Pipeline.OrdersInProgress, sent.Pipeline.InTransit, sent.Pipeline.AwaitingReceipt));
+        Assert.Contains(sent.Upcoming!, u => u.Id == order);
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = Get<OneBaseDbContext>(scope.ServiceProvider);
+            (await db.ProcurementPurchaseOrders.SingleAsync(o => o.Id == order)).ExpectedDate = today;
+            await db.SaveChangesAsync();
+        }
+
+        var due = await Board(org.Keeper);
+        Assert.Equal((sent.Pipeline.InTransit - 1, sent.Pipeline.AwaitingReceipt + 1), (due.Pipeline.InTransit, due.Pipeline.AwaitingReceipt));
     }
 }

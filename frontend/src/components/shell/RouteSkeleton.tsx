@@ -569,8 +569,39 @@ function RequestsSkeleton({ pathname }: { pathname: string }) {
   );
 }
 
+/** «Снабжение → Обзор»: Supply AI, путь закупки из пяти этапов, согласование и показатели, аналитика. */
+function ProcurementOverviewSkeleton({ pathname }: { pathname: string }) {
+  return (
+    <Busy>
+      <Header pathname={pathname} />
+      <PageBody>
+        <div className="flex flex-col gap-4">
+          <div className={`${card} p-4`}>
+            <Sk className="h-11 w-full" />
+            <Sk className="mt-3 h-7 w-2/3 max-lg:hidden" />
+          </div>
+          <div className={`${card} p-5`}>
+            <Sk className="h-4 w-40" />
+            <div className="mt-4 grid gap-2 lg:grid-cols-5">
+              {Array.from({ length: 5 }, (_, i) => (
+                <Sk key={i} className="h-16" />
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-[440px_minmax(0,1fr)]">
+            <Block rows={4} />
+            <Block rows={4} />
+          </div>
+          <Block rows={6} />
+        </div>
+      </PageBody>
+    </Busy>
+  );
+}
+
 /** Любая другая страница: шапка с названием, плитки и блоки. */
 function PageSkeleton({ pathname }: { pathname: string }) {
+  if (pathname === "/procurement") return <ProcurementOverviewSkeleton pathname={pathname} />;
   const list =
     pathname.startsWith("/tasks/") || pathname.startsWith("/settings/") || pathname.startsWith("/campaigns") || pathname.startsWith("/requests/") || pathname.startsWith("/procurement");
   return (

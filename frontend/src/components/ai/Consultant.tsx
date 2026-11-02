@@ -116,6 +116,8 @@ type Props = {
   canConfigure: boolean;
   /** Вопрос, подставленный в поле ввода (например, из находки AI Dashboard). */
   initialQuestion?: string;
+  /** Сразу отправить initialQuestion (пользователь уже нажал «Спросить» в другом разделе). */
+  autoSend?: boolean;
   /** Права пользователя: быстрые вопросы, источники под названием чата, кнопки задач. */
   permissions: string[];
   /** Контекст из адреса: ?period=2026-10&dept=sales. */
@@ -163,7 +165,7 @@ function printElement(el: HTMLElement | null) {
  * AI-консультант (ТЗ ai-consultant): слева — чаты (на телефоне — шторка «История»), справа — шапка чата, лента и поле вопроса снизу.
  * Ответ — карточка отчёта из блоков с сервера (answer), простой ответ — Markdown. Пока ответ готовится — скелетон, строка статуса и «Стоп».
  */
-export function Consultant({ status, conversations: initialList, conversation, canConfigure, initialQuestion, permissions, period, department }: Props) {
+export function Consultant({ status, conversations: initialList, conversation, canConfigure, initialQuestion, autoSend = false, permissions, period, department }: Props) {
   const t = useT();
   const router = useRouter();
   const [list, setList] = useState(initialList);
@@ -471,6 +473,20 @@ export function Consultant({ status, conversations: initialList, conversation, c
       setDraft(null);
     }
   };
+
+  // Вопрос из другого раздела с ?send=1 (например, «Спросить Supply AI» в «Снабжении») — сразу отправляется, один раз.
+  const autoSent = useRef(false);
+  useEffect(() => {
+    if (!autoSend || autoSent.current || !initialQuestion?.trim() || !status.ready) return;
+    autoSent.current = true;
+    // Без send в адресе: обновление страницы не отправит вопрос второй раз.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("send");
+    url.searchParams.delete("ask");
+    window.history.replaceState(window.history.state, "", url);
+    void send(initialQuestion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSend, initialQuestion, status.ready]);
 
   const stop = () => abort.current?.abort();
   const waiting = streaming && (messages.length === 0 || messages[messages.length - 1].role === "user");

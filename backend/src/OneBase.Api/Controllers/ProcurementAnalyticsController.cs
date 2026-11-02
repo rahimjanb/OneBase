@@ -36,6 +36,11 @@ public sealed class ProcurementAnalyticsController(
     public async Task<ProcurementDashboard> Dashboard([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct) =>
         await analytics.DashboardAsync(await ContextAsync(ct), ProcurementFilter.Of(from, to), ct);
 
+    /// <summary>Обзор снабжения: что требует действия, путь закупки, показатели и аналитика периода, сотрудники — по правам роли.</summary>
+    [HttpGet("board")]
+    public async Task<ProcurementBoard> Board([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct) =>
+        await analytics.BoardAsync(await ContextAsync(ct), ProcurementFilter.Of(from, to), ct);
+
     [HttpGet("reports")]
     public IReadOnlyList<ProcurementReportInfo> ReportKinds() => ProcurementReportService.Kinds;
 

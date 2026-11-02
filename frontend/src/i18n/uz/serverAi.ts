@@ -58,6 +58,8 @@ const dict: Dict = {
   "Производство: план и факт выпуска, простои, загрузка; отгрузки завода и остатки как косвенные данные.":
     "Ishlab chiqarish: ishlab chiqarish rejasi va fakti, to'xtab qolishlar, yuklama; bilvosita ma'lumot sifatida zavod jo'natmalari va qoldiqlar.",
   "Директор по снабжению": "Ta'minot direktori",
+  "Снабжение: заявки и согласования, заказы поставщикам и сроки поставок, склад и минимальные остатки, поставщики, закупочные цены и расходы.":
+    "Ta'minot: arizalar va tasdiqlash, yetkazib beruvchilarga buyurtmalar va yetkazib berish muddatlari, ombor va minimal qoldiqlar, yetkazib beruvchilar, xarid narxlari va xarajatlar.",
   "Снабжение: остатки, дефицит и затоварка, поставщики, закупки и цены закупки.":
     "Ta'minot: qoldiqlar, taqchillik va ortiqcha zaxira, yetkazib beruvchilar, xaridlar va xarid narxlari.",
 
