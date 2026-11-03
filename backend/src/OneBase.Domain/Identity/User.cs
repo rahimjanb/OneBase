@@ -25,6 +25,12 @@ public class User : Entity
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// Был в сети: последний запрос пользователя с действующим входом (пишется не чаще раза в минуту — UserActivity). null — не заходил с
+    /// тех пор, как это начали отмечать.
+    /// </summary>
+    public DateTimeOffset? LastSeenAt { get; set; }
+
     public Guid? DepartmentId { get; set; }
     public Department? Department { get; set; }
 

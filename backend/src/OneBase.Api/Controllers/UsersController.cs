@@ -57,6 +57,10 @@ public sealed partial class UsersController(
         var links = await db.HrEmployees.AsNoTracking().Where(e => e.UserId != null)
             .Select(e => new { UserId = e.UserId!.Value, e.Id, e.FullName }).ToDictionaryAsync(e => e.UserId, ct);
         var departments = await db.Departments.AsNoTracking().OrderBy(d => d.Name).Select(d => new { d.Id, d.Code, d.Name }).ToListAsync(ct);
+        // Последний вход — самый поздний сеанс входа (на любом устройстве); «в сети» — запрос за последние минуты (UserActivity).
+        var logins = await db.UserSessions.AsNoTracking().GroupBy(s => s.UserId).Select(g => new { g.Key, Last = g.Max(s => s.CreatedAt) })
+            .ToDictionaryAsync(x => x.Key, x => x.Last, ct);
+        var onlineSince = DateTimeOffset.UtcNow - UserActivity.Online;
 
         return Ok(new
         {
@@ -76,6 +80,9 @@ public sealed partial class UsersController(
                     u.Position,
                     u.IsActive,
                     u.CreatedAt,
+                    u.LastSeenAt,
+                    Online = u.IsActive && u.LastSeenAt >= onlineSince,
+                    LastLoginAt = logins.TryGetValue(u.Id, out var login) ? login : (DateTimeOffset?)null,
                     RoleId = userRoles.FirstOrDefault()?.Id,
                     RoleName = userRoles.Count == 0 ? null : string.Join(", ", userRoles.Select(r => r.Name)),
                     IsMe = u.Id == User.GetUserId(),

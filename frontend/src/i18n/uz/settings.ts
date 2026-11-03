@@ -588,6 +588,18 @@ const dict: Dict = {
   "Финансист и директор — действующие пользователи OneBase.": "Moliyachi va direktor — OneBase'ning faol foydalanuvchilari.",
   "Настройки отделов — у администратора пользователей и того, кто настраивает снабжение.": "Bo'limlar sozlamalari — foydalanuvchilar administratori va ta'minotni sozlovchida.",
   "Руководителей отделов назначает администратор пользователей.": "Bo'lim rahbarlarini foydalanuvchilar administratori tayinlaydi.",
+  "Был в сети": "Tarmoqda bo'lgan",
+  "Недавно в сети": "Yaqinda tarmoqda",
+  "По имени": "Ism bo'yicha",
+  "в сети {n}": "tarmoqda {n}",
+  "в сети": "tarmoqda",
+  "Был в сети: {date}": "Tarmoqda bo'lgan: {date}",
+  "Входов не было": "Kirishlar bo'lmagan",
+  "Последний вход: {date}": "Oxirgi kirish: {date}",
+  "входил {date}": "{date} kirgan",
+  "вчера в {time}": "kecha {time} da",
+  "сегодня в {time}": "bugun {time} da",
+  "не заходил": "kirmagan",
 };
 
 export default dict;

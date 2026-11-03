@@ -36,6 +36,7 @@ public static class AuthSetup
 
         services.AddSingleton<UserAccessCache>();
         services.AddSingleton<UserSessionCache>();
+        services.AddSingleton<UserActivity>();
         services.AddAuthorization();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 
@@ -45,7 +46,8 @@ public static class AuthSetup
     /// <summary>
     /// Роли и права берутся из БД, а не из токена: иначе новые права (или отзыв доступа)
     /// действовали бы только после повторного входа. Удалённый или отключённый пользователь получает 401, закрытый сеанс (выход,
-    /// смена пароля) — тоже. Токен без сеанса выдан до сеансов: действует до своего срока (12 часов).
+    /// смена пароля) — тоже. Токен без сеанса выдан до сеансов: действует до своего срока (12 часов). Принятый запрос отмечает, что
+    /// пользователь в сети (UserActivity).
     /// </summary>
     private static async Task RefreshAccessAsync(TokenValidatedContext context)
     {
@@ -80,5 +82,8 @@ public static class AuthSetup
 
         identity.AddClaims(access.Roles.Select(r => new Claim(OneBaseClaims.Role, r)));
         identity.AddClaims(access.Permissions.Select(p => new Claim(OneBaseClaims.Permission, p)));
+
+        // «Был в сети» — для «Настройки → Пользователи и роли» (не чаще раза в минуту на пользователя).
+        await context.HttpContext.RequestServices.GetRequiredService<UserActivity>().TouchAsync(userId, context.HttpContext.RequestAborted);
     }
 }

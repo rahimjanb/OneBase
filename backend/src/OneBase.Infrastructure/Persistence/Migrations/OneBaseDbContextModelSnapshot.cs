@@ -3327,6 +3327,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTimeOffset?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Login")
                         .IsRequired()
                         .HasMaxLength(64)

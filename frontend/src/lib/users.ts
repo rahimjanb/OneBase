@@ -30,6 +30,12 @@ export type UserRow = {
   position: string | null;
   isActive: boolean;
   createdAt: string;
+  /** Был в сети: последний запрос с действующим входом (отмечается не чаще раза в минуту); null — не заходил с начала отметок. */
+  lastSeenAt?: string | null;
+  /** В сети: OneBase открыт у пользователя (запрос за последние минуты). */
+  online?: boolean;
+  /** Последний вход (самый поздний сеанс на любом устройстве). */
+  lastLoginAt?: string | null;
   roleId: string | null;
   roleName: string | null;
   /** Открытые разделы (коды каталога) — по роли или отмеченные вручную. */
@@ -105,6 +111,33 @@ export const sectionPermissions = new Set([
 ]);
 
 export const has = (me: Me | null, permission: string) => !!me?.permissions.includes(permission);
+
+type T = (text: string, vars?: Record<string, string | number>) => string;
+
+const tashkent = (d: Date, opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Tashkent", ...opts }).format(d);
+const dayOf = (d: Date) => tashkent(d, { year: "numeric", month: "2-digit", day: "2-digit" });
+
+/** «03.11.2026 17:20» по Ташкенту. */
+export const seenStamp = (iso: string) => tashkent(new Date(iso), { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", "");
+
+/**
+ * «Был в сети» для списка пользователей: «в сети» (OneBase открыт сейчас), «12 мин назад», «сегодня в 14:20», «вчера в 09:05», дата; без
+ * отметок, но со входом — «входил …»; ни того ни другого — «не заходил». title — точное время и последний вход.
+ */
+export function seenOf(u: Pick<UserRow, "online" | "lastSeenAt" | "lastLoginAt">, t: T, now = new Date()): { text: string; tone: "online" | "recent" | "muted"; title: string } {
+  const login = u.lastLoginAt ? t("Последний вход: {date}", { date: seenStamp(u.lastLoginAt) }) : t("Входов не было");
+  if (u.online) return { text: t("в сети"), tone: "online", title: login };
+  const iso = u.lastSeenAt ?? null;
+  if (!iso) return u.lastLoginAt ? { text: t("входил {date}", { date: dayOf(new Date(u.lastLoginAt)) }), tone: "muted", title: login } : { text: t("не заходил"), tone: "muted", title: login };
+  const at = new Date(iso);
+  const title = `${t("Был в сети: {date}", { date: seenStamp(iso) })} · ${login}`;
+  const minutes = Math.max(1, Math.round((now.getTime() - at.getTime()) / 60_000));
+  if (minutes < 60) return { text: t("{n} мин назад", { n: minutes }), tone: "recent", title };
+  const time = tashkent(at, { hour: "2-digit", minute: "2-digit" });
+  if (dayOf(at) === dayOf(now)) return { text: t("сегодня в {time}", { time }), tone: "recent", title };
+  if (dayOf(at) === dayOf(new Date(now.getTime() - 86_400_000))) return { text: t("вчера в {time}", { time }), tone: "muted", title };
+  return { text: dayOf(at), tone: "muted", title };
+}
 
 export function initials(me: Pick<Me, "firstName" | "lastName" | "login">) {
   const letters = [me.firstName, me.lastName].map((x) => x.trim()[0] ?? "").join("");
