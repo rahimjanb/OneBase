@@ -294,8 +294,9 @@ internal static class ProcurementModel
             e.Property(x => x.Comment).HasMaxLength(2000);
             e.Property(x => x.PurchaseTotal).HasPrecision(18, 2);
             e.Property(x => x.Snapshot).HasColumnType("jsonb");
-            // Одно решение на раунд: повторное нажатие директора не создаёт второе.
-            e.HasIndex(x => new { x.RequestId, x.Round }).IsUnique().HasDatabaseName("IX_ProcurementApprovals_RequestId_Round");
+            e.Property(x => x.Stage).HasMaxLength(16);
+            // Одно решение на шаг раунда: повторное нажатие согласующего не создаёт второе.
+            e.HasIndex(x => new { x.RequestId, x.Round, x.Stage }).IsUnique().HasDatabaseName("IX_ProcurementApprovals_RequestId_Round_Stage");
             e.HasIndex(x => x.DeciderId).HasDatabaseName("IX_ProcurementApprovals_DeciderId");
             e.HasOne(x => x.Decider).WithMany().HasForeignKey(x => x.DeciderId).OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_ProcurementApprovals_Users_DeciderId");
@@ -309,6 +310,10 @@ internal static class ProcurementModel
             e.HasKey(x => x.Id).HasName("PK_ProcurementSettings");
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.ReapprovalTolerancePercent).HasPrecision(5, 2);
+            e.Property(x => x.DirectorLimit).HasPrecision(18, 2);
+            // Согласующие — пользователи OneBase; удалённый пользователь снимается с маршрута, а не ломает настройки.
+            e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.FinanceApproverId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.DirectorApproverId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<ProcurementSupplier>(e =>
@@ -426,6 +431,49 @@ internal static class ProcurementModel
             e.HasIndex(x => x.RequestItemId).HasDatabaseName("IX_ProcurementPurchaseOrderItems_RequestItemId");
             e.HasOne(x => x.RequestItem).WithMany().HasForeignKey(x => x.RequestItemId).OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_ProcurementPurchaseOrderItems_RequestItems_RequestItemId");
+        });
+
+        // Журнал тендерных закупок: записи снабжения (сырьё для производства), на склад не приходуются.
+        b.Entity<ProcurementTender>(e =>
+        {
+            e.ToTable("Tenders", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProcurementTenders");
+            e.Property(x => x.Number).HasMaxLength(32);
+            e.Property(x => x.Title).HasMaxLength(300);
+            e.Property(x => x.TenderNo).HasMaxLength(100);
+            e.Property(x => x.ContractNo).HasMaxLength(100);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Total).HasPrecision(18, 2);
+            e.Property(x => x.Comment).HasMaxLength(2000);
+            e.Property(x => x.Version).IsRowVersion();
+            e.HasIndex(x => x.Number).IsUnique().HasDatabaseName("IX_ProcurementTenders_Number");
+            e.HasIndex(x => x.TenderDate).HasDatabaseName("IX_ProcurementTenders_TenderDate");
+            e.HasIndex(x => new { x.Status, x.DeliveryDate }).HasDatabaseName("IX_ProcurementTenders_Status_DeliveryDate");
+            e.HasIndex(x => new { x.SupplierId, x.TenderDate }).HasDatabaseName("IX_ProcurementTenders_SupplierId_TenderDate");
+            e.HasIndex(x => x.CategoryId).HasDatabaseName("IX_ProcurementTenders_CategoryId");
+            e.HasIndex(x => x.ResponsibleId).HasDatabaseName("IX_ProcurementTenders_ResponsibleId");
+            e.HasIndex(x => new { x.ResponsibleId, x.ClientKey }).IsUnique().HasFilter("\"ClientKey\" IS NOT NULL")
+                .HasDatabaseName("IX_ProcurementTenders_ResponsibleId_ClientKey");
+            e.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementTenders_Suppliers_SupplierId");
+            e.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementTenders_Categories_CategoryId");
+            e.HasOne(x => x.Responsible).WithMany().HasForeignKey(x => x.ResponsibleId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementTenders_Users_ResponsibleId");
+            e.HasMany(x => x.Items).WithOne(x => x.Tender).HasForeignKey(x => x.TenderId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProcurementTenderItems_Tenders_TenderId");
+        });
+
+        b.Entity<ProcurementTenderItem>(e =>
+        {
+            e.ToTable("TenderItems", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProcurementTenderItems");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(300);
+            e.Property(x => x.UnitCode).HasMaxLength(16);
+            e.Property(x => x.Quantity).HasPrecision(18, 3);
+            e.Property(x => x.Price).HasPrecision(18, 2);
+            e.HasIndex(x => x.TenderId).HasDatabaseName("IX_ProcurementTenderItems_TenderId");
         });
 
         b.Entity<ProcurementOrderApproval>(e =>

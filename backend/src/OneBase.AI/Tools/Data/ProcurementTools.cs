@@ -256,6 +256,8 @@ internal sealed class GetPurchaseRequestsTool(ProcurementRequestService requests
         ["closed"] = "closed",
         ["draft"] = "draft",
         ["submitted"] = nameof(ProcurementRequestStatus.Submitted),
+        ["head_approval"] = nameof(ProcurementRequestStatus.HeadApproval),
+        ["finance_approval"] = nameof(ProcurementRequestStatus.FinanceApproval),
         ["director_approval"] = nameof(ProcurementRequestStatus.DirectorApproval),
         ["approved"] = nameof(ProcurementRequestStatus.Approved),
         ["rejected"] = nameof(ProcurementRequestStatus.Rejected),
@@ -368,6 +370,8 @@ internal sealed class GetPendingApprovalsTool(ProcurementRequestService requests
             };
         }
 
+        var head = await Queue(nameof(ProcurementRequestStatus.HeadApproval), "headApproval", r => r.ForwardedAt ?? r.SubmittedAt);
+        var finance = await Queue(nameof(ProcurementRequestStatus.FinanceApproval), "financeApproval", r => r.ForwardedAt ?? r.SubmittedAt);
         var director = await Queue(nameof(ProcurementRequestStatus.DirectorApproval), "directorApproval", r => r.ForwardedAt ?? r.SubmittedAt);
         var supply = await Queue(nameof(ProcurementRequestStatus.Submitted), "submitted", r => r.SubmittedAt);
         var revision = await Queue(nameof(ProcurementRequestStatus.RevisionRequired), "revisionRequired", r => r.SubmittedAt);
@@ -397,13 +401,16 @@ internal sealed class GetPendingApprovalsTool(ProcurementRequestService requests
 
         return Data(new
         {
+            HeadApprovalRequests = head,
+            FinanceApprovalRequests = finance,
             DirectorApprovalRequests = director,
             SubmittedWaitingForSupply = supply,
             RevisionRequired = revision,
             OrdersAwaitingDirector = ordersAwaiting,
             ApprovedNotOrdered = needs,
             CanOrderTogether = consolidation,
-            Note = "WaitingDays — дней с отправки директору (или с отправки заявки). Утверждает только директор; AI решений не принимает.",
+            Note = "Маршрут: руководитель отдела → финансист → директор (если сумма к закупке больше лимита) → снабжение. WaitingDays — дней на текущем шаге. "
+                   + "SubmittedWaitingForSupply — заявки, отправленные до нового маршрута. Решают согласующие; AI решений не принимает.",
         }, new DataSource("OneBase → Заявки → Согласование", null, "/requests/approvals"));
     }
 }

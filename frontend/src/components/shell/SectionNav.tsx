@@ -36,7 +36,16 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
   const current = origin ?? section?.active(pathname) ?? null;
   // «Задачи»: вкладка «Предложения AI» — руководителям, со счётчиком ожидающих решения; «Заявки»: «Заявки отдела» — руководителям отделов,
   // у «Мои заявки» — сколько ждут действия (возвраты на доработку, очередь снабжения). Обновляется при переходах внутри раздела.
-  const [work, setWork] = useState<{ heads: boolean; pendingSuggestions?: number; needsAction?: number; isDirector?: boolean; awaitingApproval?: number; toIssue?: number; toReceive?: number } | null>(null);
+  const [work, setWork] = useState<{
+    heads: boolean;
+    pendingSuggestions?: number;
+    needsAction?: number;
+    isDirector?: boolean;
+    decides?: boolean;
+    awaitingApproval?: number;
+    toIssue?: number;
+    toReceive?: number;
+  } | null>(null);
   useEffect(() => {
     const url = sectionId === "tasks" ? "/bff/api/work/nav" : sectionId === "requests" || sectionId === "procurement" ? "/bff/api/procurement/nav" : null;
     if (!url) return;
@@ -50,7 +59,8 @@ export function SectionNav({ permissions }: { permissions: string[] | null }) {
     };
   }, [sectionId, pathname]);
   const tabs = (section?.tabs ?? []).filter(
-    (t) => (!t.permission || permissions?.includes(t.permission)) && (!t.headsOnly || work?.heads) && (!t.approverOnly || work?.isDirector),
+    // «Согласования» — тем, кто решает шаг маршрута заявок (руководитель отдела, финансист, директор), и директору (заказы поставщикам).
+    (t) => (!t.permission || permissions?.includes(t.permission)) && (!t.headsOnly || work?.heads) && (!t.approverOnly || work?.decides || work?.isDirector),
   );
   // Подписи (язык, права) задают ширину ряда — по ним пересчёт.
   const labels = tabs.map((t) => tr(t.label)).join("|");

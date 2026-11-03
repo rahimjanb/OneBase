@@ -537,6 +537,57 @@ const dict: Dict = {
   "План первички": "Birlamchi rejasi",
   "Дилер (регион) × категория × месяц, кг. Первичка: план, выполнение, остаток.": "Diler (hudud) × kategoriya × oy, kg. Birlamchi: reja, bajarilishi, qoldiq.",
   "Недостаточно прав (нужно sales.manage)": "Huquq yetarli emas (sales.manage kerak)",
+  // «Настройки → Отделы»: руководители и настройки отделов, маршрут заявок снабжения.
+  "Отделы · Настройки · OneBase": "Bo'limlar · Sozlamalar · OneBase",
+  "Руководители и настройки каждого отдела": "Har bir bo'lim rahbarlari va sozlamalari",
+  "Шесть отделов компании: руководители и настройки каждого отдела — у снабжения маршрут согласования заявок и лимит без директора.":
+    "Kompaniyaning olti bo'limi: har bir bo'lim rahbarlari va sozlamalari — ta'minotda arizalarni tasdiqlash yo'li va direktorsiz limit.",
+  "Пользователей: {n}": "Foydalanuvchilar: {n}",
+  "Руководитель:": "Rahbar:",
+  "Руководители отдела": "Bo'lim rahbarlari",
+  "Руководители отдела.": "Bo'lim rahbarlari.",
+  "Руководители отдела: согласуют заявки сотрудников и управляют задачами отдела.": "Bo'lim rahbarlari: xodimlar arizalarini tasdiqlaydi va bo'lim vazifalarini boshqaradi.",
+  "Маршрут согласования заявок на закупку: руководитель отдела, финансист, директор и лимит покупки без директора.":
+    "Xarid arizalarini tasdiqlash yo'li: bo'lim rahbari, moliyachi, direktor va direktorsiz xarid limiti.",
+  "Оргструктура продаж, СВР, дилеры и цели — в разделе «Продажи: оргструктура и цели».": "Savdo tuzilmasi, SVR, dilerlar va maqsadlar — «Savdo: tuzilma va maqsadlar» bo'limida.",
+  "Заявки: руководитель отдела → {finance} → {director} (больше {limit} сум) → снабжение": "Arizalar: bo'lim rahbari → {finance} → {director} ({limit} so'mdan ortiq) → ta'minot",
+  "финансист не выбран": "moliyachi tanlanmagan",
+  "директор не выбран": "direktor tanlanmagan",
+  "Других настроек у отдела пока нет.": "Bo'limda hozircha boshqa sozlamalar yo'q.",
+  "Направления, СВР и дилеры регионов, справочник ТП и цели настраиваются в разделе продаж.": "Yo'nalishlar, hududlar SVR va dilerlari, SA ma'lumotnomasi va maqsadlar savdo bo'limida sozlanadi.",
+  "Открыть настройки продаж": "Savdo sozlamalarini ochish",
+  "Руководитель первым согласует заявки на закупку сотрудников отдела и управляет задачами отдела. Если руководителей несколько, согласовать может любой.":
+    "Rahbar bo'lim xodimlarining xarid arizalarini birinchi bo'lib tasdiqlaydi va bo'lim vazifalarini boshqaradi. Rahbarlar bir nechta bo'lsa, istalgani tasdiqlay oladi.",
+  "Руководитель не назначен — заявки сотрудников отдела сразу идут финансисту.": "Rahbar tayinlanmagan — bo'lim xodimlarining arizalari darhol moliyachiga boradi.",
+  "Маршрут заявок на закупку": "Xarid arizalari yo'li",
+  "Кто согласует заявку, прежде чем она попадёт в снабжение. Цена в заявке обязательна — по сумме решается, нужен ли директор.":
+    "Ariza ta'minotga tushishidan oldin uni kim tasdiqlaydi. Arizada narx majburiy — direktor kerakmi, summaga qarab hal qilinadi.",
+  "Руководитель отдела": "Bo'lim rahbari",
+  "Заявку сотрудника сначала согласует руководитель его отдела. Заявку самого руководителя — сразу финансист.":
+    "Xodimning arizasini avval uning bo'lim rahbari tasdiqlaydi. Rahbarning o'z arizasini — darhol moliyachi.",
+  "Руководители назначаются на странице каждого отдела.": "Rahbarlar har bir bo'lim sahifasida tayinlanadi.",
+  "Финансист": "Moliyachi",
+  "Не выбран: заявки после руководителя будут ждать финансиста.": "Tanlanmagan: rahbardan keyin arizalar moliyachini kutadi.",
+  "Директор — если сумма больше лимита": "Direktor — summa limitdan oshsa",
+  "Лимит покупки без директора": "Direktorsiz xarid limiti",
+  "Лимит покупки без директора, сум": "Direktorsiz xarid limiti, so'm",
+  "Заявка на сумму до лимита включительно после финансиста идёт сразу в снабжение.": "Limitgacha (shu jumladan) summadagi ariza moliyachidan keyin darhol ta'minotga boradi.",
+  "Директор не выбран: крупные заявки будут ждать директора.": "Direktor tanlanmagan: yirik arizalar direktorni kutadi.",
+  "Снабженцы покупают по согласованной заявке, купленное приходуется на склад и выдаётся сотруднику.":
+    "Ta'minotchilar tasdiqlangan ariza bo'yicha xarid qiladi, xarid qilingani omborga kirim qilinadi va xodimga beriladi.",
+  "Правила снабжения": "Ta'minot qoidalari",
+  "Утверждённую заявку снабжение может уточнить. Новые и удалённые позиции, рост количества к закупке — всегда на согласование снова; рост цены или суммы — если больше допуска.":
+    "Tasdiqlangan arizani ta'minot aniqlashtirishi mumkin. Yangi va o'chirilgan pozitsiyalar, xarid miqdorining oshishi — har doim qayta tasdiqlashga; narx yoki summaning oshishi — ruxsatdan oshsa.",
+  "Сохранить настройки снабжения": "Ta'minot sozlamalarini saqlash",
+  "Менять маршрут и правила может тот, у кого есть право «Настройки снабжения».": "Yo'l va qoidalarni «Ta'minot sozlamalari» huquqi borlar o'zgartira oladi.",
+  "Маршрут согласования и правила": "Tasdiqlash yo'li va qoidalar",
+  "Финансист, директор, лимит покупки без директора, допуск и эскалация — в «Настройки → Отделы → Снабжение».":
+    "Moliyachi, direktor, direktorsiz xarid limiti, ruxsat va eskalatsiya — «Sozlamalar → Bo'limlar → Ta'minot»da.",
+  "Категории закупок; маршрут согласования и правила — в «Настройки → Отделы → Снабжение»": "Xarid toifalari; tasdiqlash yo'li va qoidalar — «Sozlamalar → Bo'limlar → Ta'minot»da",
+  "Лимит без директора — целая сумма больше нуля, до 1 трлн сум.": "Direktorsiz limit — noldan katta butun summa, 1 trln so'mgacha.",
+  "Финансист и директор — действующие пользователи OneBase.": "Moliyachi va direktor — OneBase'ning faol foydalanuvchilari.",
+  "Настройки отделов — у администратора пользователей и того, кто настраивает снабжение.": "Bo'limlar sozlamalari — foydalanuvchilar administratori va ta'minotni sozlovchida.",
+  "Руководителей отделов назначает администратор пользователей.": "Bo'lim rahbarlarini foydalanuvchilar administratori tayinlaydi.",
 };
 
 export default dict;

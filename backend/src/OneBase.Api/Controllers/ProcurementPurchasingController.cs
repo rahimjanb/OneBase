@@ -8,7 +8,9 @@ using OneBase.Application.Procurement;
 namespace OneBase.Api.Controllers;
 
 /// <summary>
-/// Снабжение — закупки: поставщики (реестр, карточка, рейтинг, импорт из Excel), коммерческие предложения и их сравнение, заказы
+/// Снабжение — закупки: поставщики (реестр, карточка, рейтинг, импорт из Excel), заявки к закупке и «Куплено» (покупка сразу на склад),
+/// журнал тендерных закупок,
+/// коммерческие предложения и их сравнение, заказы
 /// поставщикам (только из утверждённой потребности, согласование директором, статусы, история), приёмка товара (черновик →
 /// подтверждение, брак, недостача, претензии), документы. Доступ решают сервисы по
 /// правам из токена и роли «Директор» из базы — никогда по параметрам запроса.
@@ -22,6 +24,8 @@ public sealed class ProcurementPurchasingController(
     ProcurementSupplierService suppliers,
     ProcurementOrderService orders,
     ProcurementReceiptService receipts,
+    ProcurementPurchaseService purchases,
+    ProcurementTenderService tenders,
     ProcurementDocumentService documents,
     IFileStorage storage) : ControllerBase
 {
@@ -122,6 +126,62 @@ public sealed class ProcurementPurchasingController(
     public async Task<IActionResult> RestoreOffer(Guid id, CancellationToken ct)
     {
         await orders.SetOfferStatusAsync(await ContextAsync(ct), id, false, ct);
+        return NoContent();
+    }
+
+    // ---------- К закупке и «Куплено» ----------
+
+    /// <summary>Утверждённые заявки, по которым снабжению осталось что-то купить (снабжение, директор).</summary>
+    [HttpGet("to-buy")]
+    public async Task<ProcurementToBuyView> ToBuy(CancellationToken ct) => await purchases.ToBuyAsync(await ContextAsync(ct), ct);
+
+    /// <summary>«Куплено» по заявке (снабжение): покупка сразу приходуется на склад и резервируется под заявку — к выдаче.</summary>
+    [HttpPost("requests/{id:guid}/purchase")]
+    public async Task<ProcurementPurchaseResult> Purchase(Guid id, ProcurementPurchaseInput input, CancellationToken ct) =>
+        await purchases.PurchaseAsync(await ContextAsync(ct), id, input, ct);
+
+    // ---------- Тендерные закупки ----------
+
+    /// <summary>Журнал тендерных закупок: q, status (waiting, overdue, delivered, cancelled), from/to (дата тендера), supplier, страница.</summary>
+    [HttpGet("tenders")]
+    public async Task<ProcurementTenderList> Tenders(
+        [FromQuery] string? q = null,
+        [FromQuery] string? status = null,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] Guid? supplier = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default) =>
+        await tenders.SearchAsync(await ContextAsync(ct), new ProcurementTenderSearch(q, status, from, to, supplier, page, pageSize), ct);
+
+    [HttpGet("tenders/{id:guid}")]
+    public async Task<ProcurementTenderDetail> Tender(Guid id, CancellationToken ct) => await tenders.GetAsync(await ContextAsync(ct), id, ct);
+
+    [HttpPost("tenders")]
+    public async Task<IActionResult> CreateTender(ProcurementTenderInput input, CancellationToken ct) =>
+        Ok(new { id = await tenders.CreateAsync(await ContextAsync(ct), input, ct) });
+
+    [HttpPut("tenders/{id:guid}")]
+    public async Task<IActionResult> UpdateTender(Guid id, ProcurementTenderInput input, CancellationToken ct)
+    {
+        await tenders.UpdateAsync(await ContextAsync(ct), id, input, ct);
+        return NoContent();
+    }
+
+    /// <summary>Поставлено: дата (по умолчанию — сегодня).</summary>
+    [HttpPost("tenders/{id:guid}/delivered")]
+    public async Task<IActionResult> TenderDelivered(Guid id, DeliveredBody body, CancellationToken ct)
+    {
+        await tenders.DeliveredAsync(await ContextAsync(ct), id, body.Date, ct);
+        return NoContent();
+    }
+
+    /// <summary>Отменить запись — причина обязательна; запись остаётся в журнале.</summary>
+    [HttpPost("tenders/{id:guid}/cancel")]
+    public async Task<IActionResult> CancelTender(Guid id, ProcurementController.CommentBody body, CancellationToken ct)
+    {
+        await tenders.CancelAsync(await ContextAsync(ct), id, body.Comment, ct);
         return NoContent();
     }
 
@@ -285,6 +345,8 @@ public sealed class ProcurementPurchasingController(
     }
 
     public sealed record OrderedBody(DateOnly? OrderDate);
+
+    public sealed record DeliveredBody(DateOnly? Date);
 
     public sealed record VersionBody(uint? Version);
 }

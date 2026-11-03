@@ -95,15 +95,21 @@ public sealed class ProcurementController(ProcurementRequestService requests, Pr
         return NoContent();
     }
 
-    /// <summary>Утвердить — только директор (роль проверяется по базе, администратор не утверждает).</summary>
+    /// <summary>Согласующий текущего шага (руководитель отдела, финансист, директор маршрута).</summary>
+    public sealed record ApproveBody(string? Comment, IReadOnlyList<ProcurementPriceInput>? Prices = null);
+
+    /// <summary>
+    /// Согласовать текущий шаг — его согласующий (руководитель отдела, финансист, директор маршрута; администратор не согласует). Финансист
+    /// может уточнить цены позиций (Prices).
+    /// </summary>
     [HttpPost("requests/{id:guid}/approve")]
-    public async Task<IActionResult> Approve(Guid id, CommentBody body, CancellationToken ct)
+    public async Task<IActionResult> Approve(Guid id, ApproveBody body, CancellationToken ct)
     {
-        await requests.ApproveAsync(await ContextAsync(ct), id, body.Comment, ct);
+        await requests.ApproveAsync(await ContextAsync(ct), id, body.Comment, ct, body.Prices);
         return NoContent();
     }
 
-    /// <summary>Отклонить — только директор, комментарий обязателен.</summary>
+    /// <summary>Отклонить — согласующий текущего шага, комментарий обязателен.</summary>
     [HttpPost("requests/{id:guid}/reject")]
     public async Task<IActionResult> Reject(Guid id, CommentBody body, CancellationToken ct)
     {

@@ -178,7 +178,8 @@ public sealed partial class ProcurementOrderService(
     /// <summary>Заявки, по которым можно собирать предложения: отправленные и дальше, до выполнения.</summary>
     internal static readonly ProcurementRequestStatus[] Offerable =
     [
-        ProcurementRequestStatus.Submitted, ProcurementRequestStatus.DirectorApproval, ProcurementRequestStatus.Approved, ProcurementRequestStatus.PartiallyFulfilled,
+        ProcurementRequestStatus.Submitted, ProcurementRequestStatus.HeadApproval, ProcurementRequestStatus.FinanceApproval, ProcurementRequestStatus.DirectorApproval,
+        ProcurementRequestStatus.Approved, ProcurementRequestStatus.PartiallyFulfilled,
     ];
 
     /// <summary>Заявки, по которым можно заказывать: утверждённые директором (или сами — всё со склада) и частично выполненные.</summary>

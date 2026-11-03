@@ -637,46 +637,8 @@ public sealed class ProcurementReceiptService(
         doc.ActorId = ctx.UserId;
         foreach (var (line, orderItem, requestItem, quantity) in takes)
         {
-            var itemId = line.ItemId!.Value;
-            var balance = balances[itemId];
-            ledger.Move(doc, balance, ProcurementMovementKind.Receipt, quantity, orderItem.Name, orderItem.UnitPrice, requestItem.Id);
             orderItem.ReceivedQty += quantity;
-            requestItem.ReceivedQty += quantity;
-            requestItem.ItemId ??= itemId;
-            requestItem.UpdatedAt = Now;
-            var request = requestItem.Request!;
-            if (ProcurementRules.Issuable(request.Status) && requestItem.Status != ProcurementItemStatus.Cancelled)
-            {
-                // Поступившее — под заявку: на складе, но занято до выдачи инициатору.
-                if (activeReservations.GetValueOrDefault(requestItem.Id) is { } reservation)
-                {
-                    if (reservation.ItemId != itemId)
-                    {
-                        throw new FieldConflictException($"«{orderItem.Name}»: под заявку уже зарезервирована другая карточка склада — примите на неё.");
-                    }
-
-                    reservation.Quantity += quantity;
-                }
-                else
-                {
-                    var created = new ProcurementStockReservation
-                    {
-                        WarehouseId = doc.WarehouseId, ItemId = itemId, RequestId = request.Id, RequestItemId = requestItem.Id, Quantity = quantity,
-                    };
-                    db.ProcurementStockReservations.Add(created);
-                    activeReservations[requestItem.Id] = created;
-                }
-
-                balance.Reserved += quantity;
-                request.UsesStock = true;
-            }
-
-            if (requestItem.Status != ProcurementItemStatus.Cancelled)
-            {
-                requestItem.Status = ProcurementRules.ItemStatus(requestItem, submitted: true);
-            }
-
-            request.UpdatedAt = Now;
+            ledger.ReceiveForRequest(doc, balances[line.ItemId!.Value], requestItem, quantity, orderItem.UnitPrice, orderItem.Name, activeReservations);
         }
 
         doc.Status = ProcurementStockDocumentStatus.Posted;

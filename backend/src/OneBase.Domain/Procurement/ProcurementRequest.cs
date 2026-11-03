@@ -5,8 +5,10 @@ namespace OneBase.Domain.Procurement;
 
 /// <summary>
 /// Статус заявки на закупку. Хранится строкой — новые значения добавляются без миграции данных.
-/// Draft → Submitted → DirectorApproval → Approved → PartiallyFulfilled → Fulfilled; RevisionRequired — возвращена на доработку (снова
-/// отправляется после правки), Rejected — отклонена директором, Cancelled — отменена инициатором.
+/// Маршрут: Draft → HeadApproval (руководитель отдела; заявку руководителя — пропуск) → FinanceApproval (финансист) → DirectorApproval
+/// (директор, если сумма к закупке больше лимита) → Approved (к закупке) → PartiallyFulfilled → Fulfilled. RevisionRequired — возвращена на
+/// доработку (снова отправляется после правки), Rejected — отклонена согласующим, Cancelled — отменена инициатором. Submitted — прежний
+/// шаг «у снабжения» до нового маршрута: такие заявки доводятся по-старому (снабжение передаёт директору).
 /// </summary>
 public enum ProcurementRequestStatus
 {
@@ -19,6 +21,8 @@ public enum ProcurementRequestStatus
     PartiallyFulfilled,
     Fulfilled,
     Cancelled,
+    HeadApproval,
+    FinanceApproval,
 }
 
 /// <summary>Приоритет заявки: низкий, обычный, высокий, срочный.</summary>

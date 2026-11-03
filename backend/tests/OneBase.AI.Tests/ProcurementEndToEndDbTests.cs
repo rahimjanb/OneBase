@@ -129,6 +129,10 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
         db.Users.AddRange(org.Employee, org.Other, org.Supply, org.SupplyHead, org.Director, org.Keeper, org.Admin);
         db.WorkDepartmentHeads.Add(new WorkDepartmentHead { Department = supplyDept, UserId = org.SupplyHead.Id });
         await db.SaveChangesAsync();
+        // Маршрут: у отдела заявителя нет руководителя — заявка сразу к финансисту (здесь им назначен директор), директор маршрута — роль, лимит 5 млн.
+        var route = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
+        (route.FinanceApproverId, route.DirectorApproverId, route.DirectorLimit) = (org.Director.Id, null, ProcurementSettings.DefaultDirectorLimit);
+        await db.SaveChangesAsync();
         return org with { Raw = await db.ProcurementCategories.Where(c => c.Code == "raw_materials").Select(c => c.Id).SingleAsync() };
     }
 
@@ -160,14 +164,14 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
         var hidden = await Record.ExceptionAsync(() => As(org.Other, (sp, c) => R(sp).GetAsync(c, request, default)));
         Assert.True(hidden is FieldNotFoundException or FieldForbiddenException, hidden?.GetType().Name);
 
-        // 5–6. Снабжение передаёт директору. Утверждает только директор: не инициатор, не снабжение, не администратор со всеми правами.
-        await As(org.Supply, (sp, c) => R(sp).ForwardAsync(c, request, default));
+        // 5–6. Заявка у финансиста (здесь им назначен директор). Согласует только он: не инициатор, не снабжение, не администратор со всеми правами.
+        Assert.Equal(ProcurementRequestStatus.FinanceApproval, submitted.Status);
         foreach (var user in new[] { org.Employee, org.Supply, org.Admin })
         {
             await Assert.ThrowsAsync<FieldForbiddenException>(() => As(user, (sp, c) => R(sp).ApproveAsync(c, request, null, default)));
         }
 
-        // Пока директор не утвердил — заказать нельзя.
+        // Пока заявку не согласовали — заказать нельзя.
         var supplierA = await As(org.Supply, (sp, c) => Get<ProcurementSupplierService>(sp).CreateAsync(c,
             new ProcurementSupplierInput($"ООО Полимер {org.Tag}", null, null, null, null, null, null, null, null, null, 3, null, [org.Raw]), default));
         var supplierB = await As(org.Supply, (sp, c) => Get<ProcurementSupplierService>(sp).CreateAsync(c,
@@ -249,7 +253,7 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
         var done = await As(org.Director, (sp, c) => R(sp).GetAsync(c, request, default));
         Assert.Equal(ProcurementRequestStatus.Fulfilled, done.Status);
         var actions = done.History.Select(h => h.Action).ToList();
-        Assert.Equal(["created", "submitted", "forwarded", "approved"], actions.Take(4));
+        Assert.Equal(["created", "submitted", "approved"], actions.Take(3)); // отправлена финансисту, согласована им — в снабжение
         Assert.Contains("issued", actions);
         o1 = await As(org.Supply, (sp, c) => O(sp).GetAsync(c, order1, default));
         Assert.True(o1.History.Count >= 5, string.Join(", ", o1.History.Select(h => h.Action)));
@@ -331,9 +335,8 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
         var before = await Board(org.Director);
         var request = await As(org.Employee, (sp, c) => R(sp).CreateAsync(c, new ProcurementRequestInput($"Плёнка {org.Tag}", null, ProcurementPriority.Normal,
             null, "Упаковка", null, [new(null, $"Плёнка {org.Tag}", org.Raw, "кг", 10, 20_000)], Submit: true), default));
-        await As(org.Supply, (sp, c) => R(sp).ForwardAsync(c, request, default));
 
-        // Директор: заявка ждёт его решения — в итоге, на этапе «Согласование» и в карточке с суммой к закупке.
+        // Директор (здесь — и финансист маршрута): заявка ждёт его решения — в итоге, на этапе «Согласование» и в карточке с суммой к закупке.
         var director = await Board(org.Director);
         Assert.True(director.Access.CanApprove);
         Assert.Equal(before.Pipeline.OnApprovalCount + 1, director.Pipeline.OnApprovalCount);

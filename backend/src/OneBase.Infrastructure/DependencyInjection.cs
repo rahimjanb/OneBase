@@ -203,6 +203,7 @@ public static class DependencyInjection
         // Раздел «Задачи» OneBase: задачи отделов и проектов, уведомления пользователей, напоминания о сроках.
         services.AddScoped<OneBase.Application.Work.UserNotifier>();
         services.AddScoped<OneBase.Application.Work.WorkTaskService>();
+        services.AddScoped<OneBase.Application.Work.DepartmentSettingsService>();
         services.AddScoped<OneBase.Application.Work.CalendarService>();
         services.AddScoped<OneBase.Application.Work.NotificationCenter>();
 
@@ -215,6 +216,8 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Procurement.ProcurementSupplierService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementOrderService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementReceiptService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementPurchaseService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementTenderService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementReminderService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementAnalyticsService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementReportService>();

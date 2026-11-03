@@ -9,13 +9,13 @@ import {
   ArrowUpRight,
   Building,
   Calendar,
+  CalendarClock,
   ChartColumn,
   Check,
   ChevronDown,
   ChevronRight,
   CircleDollarSign,
   ExternalLink,
-  FilePlus,
   Gauge,
   GitMerge,
   Newspaper,
@@ -24,7 +24,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
-  ShoppingCart,
+  ShoppingBag,
   Sparkles,
   Stamp,
   Star,
@@ -58,7 +58,7 @@ const presets: { key: Preset; label: string }[] = [
 const questions = [
   { icon: TrendingUp, text: "Где цены выросли >10% за 3 месяца?" },
   { icon: CircleDollarSign, text: "Где мы переплачиваем?" },
-  { icon: Truck, text: "Какие поставки просрочены?" },
+  { icon: CalendarClock, text: "Какие заявки дольше всего ждут закупки?" },
   { icon: Package, text: "Что ниже минимума на складе?" },
   { icon: GitMerge, text: "Какие заявки объединить?" },
 ];
@@ -116,17 +116,8 @@ export function OverviewView({ board: initial, ask, aiReady }: { board: Board; a
     setError(null);
     try {
       await bff(`procurement/requests/${id}/approve`, { method: "POST", body: JSON.stringify({ comment: null }) });
-      setBoard((b) => ({
-        ...b,
-        approvals: (b.approvals ?? []).filter((x) => x.id !== id),
-        summary: { ...b.summary, pendingApprovalCount: Math.max(0, (b.summary.pendingApprovalCount ?? 1) - 1), pendingApprovalAmount: Math.max(0, (b.summary.pendingApprovalAmount ?? 0) - a.amount) },
-        pipeline: {
-          ...b.pipeline,
-          onApprovalCount: Math.max(0, (b.pipeline.onApprovalCount ?? 1) - 1),
-          onApprovalAmount: Math.max(0, (b.pipeline.onApprovalAmount ?? 0) - a.amount),
-          requestsAwaitingOrder: (b.pipeline.requestsAwaitingOrder ?? 0) + 1,
-        },
-      }));
+      // Согласованная заявка уходит со «Ждёт согласования» сразу; куда она пошла дальше (следующий шаг или к закупке) — покажет обновление.
+      setBoard((b) => ({ ...b, approvals: (b.approvals ?? []).filter((x) => x.id !== id), myApprovalCount: Math.max(0, b.myApprovalCount - 1) }));
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -143,7 +134,8 @@ export function OverviewView({ board: initial, ask, aiReady }: { board: Board; a
 
   const showApprovals = board.access.canApprove && (board.approvals?.length ?? 0) > 0;
   const showUpcoming = !showApprovals && (board.upcoming?.length ?? 0) > 0;
-  const overdue = board.summary.overdueDeliveries;
+  // Просрочки: заявки к закупке с прошедшей желаемой датой (кто видит заявки), иначе — поставки по прежним заказам.
+  const overdue = board.pipeline.overdueToBuy ?? board.summary.overdueDeliveries;
 
   return (
     <>
@@ -214,7 +206,7 @@ export function OverviewView({ board: initial, ask, aiReady }: { board: Board; a
           <div className={`${card} flex flex-wrap items-center justify-between gap-4 p-5 max-lg:order-1`}>
             <div>
               <h2 className="text-base font-bold text-ink">{t("Начните с первой заявки")}</h2>
-              <p className="mt-1 text-sm text-ink-3">{t("Заявки, заказы и поставки появятся здесь, как только начнётся работа.")}</p>
+              <p className="mt-1 text-sm text-ink-3">{t("Заявки и покупки появятся здесь, как только начнётся работа.")}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {board.access.canCreateRequest && (
@@ -313,14 +305,22 @@ function SummaryLine({ board, sum, full }: { board: Board; sum: (v: number) => s
       );
   }
 
-  const overdue = board.summary.overdueDeliveries;
-  if (overdue !== null)
+  const late = board.pipeline.overdueToBuy;
+  if (late !== null)
     parts.push(
-      <span key="od" className={`font-semibold ${overdue > 0 ? "text-bad" : "text-ok"}`}>
-        {overdue > 0 ? pl(t, overdue, ["{n} поставка просрочена", "{n} поставки просрочены", "{n} поставок просрочено"]) : t("просроченных поставок нет")}
+      <span key="late" className={`font-semibold ${late > 0 ? "text-bad" : "text-ok"}`}>
+        {late > 0 ? pl(t, late, ["{n} заявка просрочена к закупке", "{n} заявки просрочены к закупке", "{n} заявок просрочено к закупке"]) : t("просроченных закупок нет")}
       </span>,
     );
-  if (parts.length === 0) return <span className="max-lg:hidden">{t("Обзор закупок, поставок и склада — по вашей роли")}</span>;
+  // Поставки по прежним заказам поставщикам — только если какая-то просрочена.
+  const overdue = board.summary.overdueDeliveries;
+  if (overdue)
+    parts.push(
+      <span key="od" className="font-semibold text-bad">
+        {pl(t, overdue, ["{n} поставка просрочена", "{n} поставки просрочены", "{n} поставок просрочено"])}
+      </span>,
+    );
+  if (parts.length === 0) return <span className="max-lg:hidden">{t("Обзор закупок и склада — по вашей роли")}</span>;
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm max-lg:hidden">
       {parts.map((p, i) => (
@@ -531,31 +531,39 @@ type Stage = { key: string; icon: typeof Stamp; count: number; title: string; hi
 
 const Icon = ({ icon: I }: { icon: typeof Truck }) => <I className="size-3.5" aria-hidden />;
 
-/** Путь закупки: пять этапов (кладовщику — три этапа заказов) и пилюли рисков. */
+/** Путь закупки: на согласовании → к закупке → на складе (кладовщику — только склад) и пилюли рисков. */
 function Pipeline({ board, sum }: { board: Board; sum: (v: number) => string }) {
   const t = useT();
   const p = board.pipeline;
+  // Три этапа: заявки на согласовании → к закупке (снабжение покупает) → на складе (ждут выдачи сотруднику).
   const stages: Stage[] = [
-    ...(p.requestsAwaitingOrder !== null
-      ? [{ key: "req", icon: FilePlus, count: p.requestsAwaitingOrder, title: "Заявки", hint: "ждут заказа", href: "/requests/all?status=Approved,PartiallyFulfilled", action: false }]
-      : []),
     ...(p.onApprovalCount !== null
       ? [{
           key: "appr",
           icon: Stamp,
           count: p.onApprovalCount,
-          title: "Согласование",
+          title: "Заявки",
           hint: "на согласовании",
-          href: board.access.canApprove ? "/requests/approvals" : "/requests/all?status=DirectorApproval",
+          href: board.access.canApprove ? "/requests/approvals" : "/requests/all?status=HeadApproval,FinanceApproval,DirectorApproval,Submitted",
           action: board.access.canApprove,
           amount: p.onApprovalAmount,
         }]
       : []),
-    { key: "ord", icon: ShoppingCart, count: p.ordersInProgress, title: "Заказы", hint: "в работе", href: "/procurement/orders?status=Draft,AwaitingApproval,Approved", action: false },
-    { key: "way", icon: Truck, count: p.inTransit, title: "В пути", hint: "активные поставки", href: "/procurement/orders?status=Ordered,PartiallyDelivered", action: false },
-    { key: "rcv", icon: PackageCheck, count: p.awaitingReceipt, title: "Приёмка", hint: "ждут приёмки", href: "/procurement/receipts", action: true },
+    ...(p.requestsAwaitingOrder !== null
+      ? [{
+          key: "buy",
+          icon: ShoppingBag,
+          count: p.requestsAwaitingOrder,
+          title: "К закупке",
+          hint: "снабжение покупает",
+          href: "/procurement/buy",
+          action: board.access.canCreateOrder,
+          amount: p.toBuyAmount,
+        }]
+      : []),
+    { key: "stock", icon: PackageCheck, count: p.toIssue, title: "На складе", hint: "ждут выдачи", href: "/procurement/issue", action: false },
   ];
-  const mobileTitle: Record<string, string> = { req: "Заявки ждут заказа", appr: "На согласовании", ord: "Заказы в работе", way: "В пути", rcv: "Ждут приёмки" };
+  const mobileTitle: Record<string, string> = { appr: "На согласовании", buy: "К закупке", stock: "На складе, ждут выдачи" };
   const risk = (n: number | null, icon: typeof Truck, label: string, href: string) =>
     n === null ? null : (
       <Link href={href} className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold ${n > 0 ? "bg-bad-soft text-bad" : "bg-ok-soft text-ok"}`}>
@@ -572,7 +580,8 @@ function Pipeline({ board, sum }: { board: Board; sum: (v: number) => string }) 
           <Workflow className="size-4 text-ink-3" aria-hidden /> {t("Путь закупки")} <span className="text-sm font-normal text-subtle">{t("сейчас в работе")}</span>
         </h2>
         <div className="flex flex-wrap gap-2">
-          {risk(board.summary.overdueDeliveries, Truck, "Просрочено поставок", "/procurement/orders?status=overdue")}
+          {risk(p.overdueToBuy, CalendarClock, "Просрочено к закупке", "/procurement/buy")}
+          {board.summary.overdueDeliveries ? risk(board.summary.overdueDeliveries, Truck, "Просрочено поставок", "/procurement/orders?status=overdue") : null}
           {risk(board.summary.overdueTasks, AlarmClock, "Просрочено задач", "/tasks/supply")}
         </div>
       </div>
@@ -635,9 +644,9 @@ function Pipeline({ board, sum }: { board: Board; sum: (v: number) => string }) 
 function ApprovalCard({ board, sum, full, busy, error, onApprove }: { board: Board; sum: (v: number) => string; full: (v: number) => string; busy: string | null; error: string | null; onApprove: (id: string) => void }) {
   const t = useT();
   const list = board.approvals ?? [];
-  const total = board.summary.pendingApprovalCount ?? list.length;
+  const total = Math.max(board.myApprovalCount, list.length);
   const one = total === 1 && list.length === 1 ? list[0] : null;
-  const orders = board.ordersOnApproval > 0 ? pl(t, board.ordersOnApproval, ["{n} заказ на согласовании", "{n} заказа на согласовании", "{n} заказов на согласовании"]) : t("заказов на согласовании нет");
+  const orders = board.ordersOnApproval > 0 ? pl(t, board.ordersOnApproval, ["{n} заказ на согласовании", "{n} заказа на согласовании", "{n} заказов на согласовании"]) : null;
   return (
     <section className="flex h-full flex-col gap-4 rounded-2xl border border-warn/25 bg-[linear-gradient(160deg,var(--color-warn-soft),transparent_70%)] bg-surface p-5 max-lg:rounded-[20px] max-lg:p-4">
       <div className="flex items-center gap-3">
@@ -647,7 +656,8 @@ function ApprovalCard({ board, sum, full, busy, error, onApprove }: { board: Boa
         <div className="min-w-0 flex-1">
           <h2 className="text-[15px] font-bold text-ink">{t("Ждёт согласования")}</h2>
           <p className="text-xs text-ink-3">
-            {pl(t, total, ["{n} заявка", "{n} заявки", "{n} заявок"])} · {orders}
+            {pl(t, total, ["{n} заявка", "{n} заявки", "{n} заявок"])}
+            {orders && ` · ${orders}`}
           </p>
         </div>
         {one && (
@@ -748,8 +758,8 @@ function Metrics({ board, sum, full, range }: { board: Board; sum: (v: number) =
   const k = m.kpis;
   const days = (v: number) => `${v.toString().replace(".", ",")} ${t("дн.")}`;
   const cells: Cell[] = [
-    { label: "Закуплено", value: sum(m.purchasedAmount), title: full(m.purchasedAmount), hint: t("заказов: {n}", { n: m.ordersCount }) },
-    { label: "Поступило на склад", value: sum(m.receivedAmount), title: full(m.receivedAmount), hint: t("по ценам заказов") },
+    { label: "Закуплено", value: sum(m.purchasedAmount), title: full(m.purchasedAmount), hint: t("покупок: {n}", { n: m.ordersCount }) },
+    { label: "Поступило на склад", value: sum(m.receivedAmount), title: full(m.receivedAmount), hint: t("по ценам покупки") },
     k.savingsLines > 0
       ? { label: "Экономия", value: sum(k.savings), title: full(k.savings), hint: k.savingsPercent !== null ? t("{p}% к ценам заявок", { p: k.savingsPercent.toString().replace(".", ",") }) : t("к ценам заявок") }
       : { label: "Экономия", value: null, hint: t("в заявках не было цен") },
@@ -757,7 +767,7 @@ function Metrics({ board, sum, full, range }: { board: Board; sum: (v: number) =
     k.onTimePercent !== null
       ? { label: "Поставки в срок", value: `${k.onTimePercent.toString().replace(".", ",")}%`, hint: t("поставок со сроком: {n}", { n: k.deliveriesMeasured }) }
       : { label: "Поставки в срок", value: null, hint: t("нет заказов со сроком") },
-    { label: "Среднее время закупки", value: k.avgPurchaseDays !== null ? days(k.avgPurchaseDays) : null, hint: t("от утверждения до поставки") },
+    { label: "Среднее время закупки", value: k.avgPurchaseDays !== null ? days(k.avgPurchaseDays) : null, hint: t("от утверждения до покупки") },
     k.supplierQuality !== null
       ? { label: "Качество поставщиков", value: `${Math.round(k.supplierQuality)} / 100`, hint: t("поставщиков: {n}", { n: k.suppliersRated }) }
       : { label: "Качество поставщиков", value: null, hint: t("нет оценок") },
@@ -793,7 +803,7 @@ function Metrics({ board, sum, full, range }: { board: Board; sum: (v: number) =
           </div>
         ))}
       </div>
-      {allEmpty && <p className="mt-3 text-xs text-ink-3 lg:hidden">{t("Значения появятся после первых заказов и поставок")}</p>}
+      {allEmpty && <p className="mt-3 text-xs text-ink-3 lg:hidden">{t("Значения появятся после первых покупок")}</p>}
     </section>
   );
 }
@@ -843,7 +853,7 @@ function Analytics({ board, sum, full }: { board: Board; sum: (v: number) => str
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
           <div className="relative rounded-xl border border-line bg-page p-5 max-lg:p-3">
             <p className="mb-4 flex items-center justify-center gap-2 text-sm font-medium text-ink-2 max-lg:hidden">
-              <ChartColumn className="size-4 text-subtle" aria-hidden /> {t("За последние 12 месяцев утверждённых заказов нет")}
+              <ChartColumn className="size-4 text-subtle" aria-hidden /> {t("За последние 12 месяцев покупок нет")}
             </p>
             <div className="flex h-32 items-end gap-2 opacity-35 max-lg:h-16" aria-hidden>
               {ghost.map((h, i) => (
@@ -859,13 +869,13 @@ function Analytics({ board, sum, full }: { board: Board; sum: (v: number) => str
             </div>
           </div>
           <div className="flex flex-col">
-            <h3 className="text-sm font-bold text-ink max-lg:hidden">{t("Появится после первых заказов")}</h3>
-            <p className="text-sm text-ink-2 lg:hidden">{t("Динамика по месяцам, расходы по отделам и категориям, рейтинг поставщиков появятся после первых заказов")}</p>
+            <h3 className="text-sm font-bold text-ink max-lg:hidden">{t("Появится после первых покупок")}</h3>
+            <p className="text-sm text-ink-2 lg:hidden">{t("Динамика по месяцам, расходы по отделам и категориям, рейтинг поставщиков появятся после первых покупок")}</p>
             <ul className="mt-3 grid gap-3 max-lg:hidden">
               {[
-                { icon: ChartColumn, title: "Динамика закупок по месяцам", hint: "утверждённые заказы, сум" },
-                { icon: Building, title: "Расходы по отделам", hint: "по позициям заказов, с НДС" },
-                { icon: Tags, title: "Расходы по категориям", hint: "по позициям заказов, с НДС" },
+                { icon: ChartColumn, title: "Динамика закупок по месяцам", hint: "покупки по заявкам, сум" },
+                { icon: Building, title: "Расходы по отделам", hint: "по купленным позициям" },
+                { icon: Tags, title: "Расходы по категориям", hint: "по купленным позициям" },
                 { icon: Star, title: "Рейтинг поставщиков", hint: "сроки, качество, претензии" },
               ].map((x) => (
                 <li key={x.title} className="flex items-start gap-3">
@@ -881,8 +891,8 @@ function Analytics({ board, sum, full }: { board: Board; sum: (v: number) => str
             </ul>
             <div className="mt-4 grid grid-cols-2 gap-2 lg:mt-auto lg:pt-4">
               {board.access.canCreateOrder && (
-                <Link href="/procurement/orders/new" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-accent/30 bg-accent-soft text-sm font-semibold text-link">
-                  <ShoppingCart className="size-4" aria-hidden /> {t("Создать заказ")}
+                <Link href="/procurement/buy" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-accent/30 bg-accent-soft text-sm font-semibold text-link">
+                  <ShoppingBag className="size-4" aria-hidden /> {t("К закупке")}
                 </Link>
               )}
               {board.access.canManageSuppliers && (
@@ -920,7 +930,7 @@ function MonthBars({ data, sum, full, monthName, table }: { data: Amount[]; sum:
   const last = data.length - 1;
   if (table)
     return (
-      <AmountTable rows={data.map((d) => ({ key: d.key, label: monthName(d.key) + " " + d.key.slice(0, 4), amount: d.amount, count: d.count }))} full={full} countLabel="заказов" />
+      <AmountTable rows={data.map((d) => ({ key: d.key, label: monthName(d.key) + " " + d.key.slice(0, 4), amount: d.amount, count: d.count }))} full={full} countLabel="покупок" />
     );
   return (
     <div className="relative">
@@ -955,7 +965,7 @@ function MonthBars({ data, sum, full, monthName, table }: { data: Amount[]; sum:
         >
           <b className="block tabular-nums text-ink">{sum(data[hover].amount)}</b>
           <span className="text-ink-3">
-            {monthName(data[hover].key)} · {t("заказов: {n}", { n: data[hover].count })}
+            {monthName(data[hover].key)} · {t("покупок: {n}", { n: data[hover].count })}
           </span>
         </div>
       )}
@@ -1059,7 +1069,7 @@ function SupplierTable({ rows, sum, full }: { rows: NonNullable<Board["analytics
 const avatarTones = ["bg-violet", "bg-teal", "bg-pink", "bg-accent", "bg-cyan"];
 const toneOf = (id: string) => avatarTones[[...id].reduce((s, c) => s + c.charCodeAt(0), 0) % avatarTones.length];
 
-/** Сотрудники снабжения: задачи, заказы в работе, просрочки и нагрузка. */
+/** Сотрудники снабжения: задачи, куплено за период, просрочки и нагрузка. */
 function Team({ board }: { board: Board }) {
   const t = useT();
   const rows = board.team ?? [];
@@ -1086,7 +1096,9 @@ function Team({ board }: { board: Board }) {
             <th className="px-5 py-2.5 font-semibold">{t("Сотрудник")}</th>
             <th className="px-3 py-2.5 font-semibold">{t("Роль")}</th>
             <th className="px-3 py-2.5 text-right font-semibold">{t("Задачи")}</th>
-            <th className="px-3 py-2.5 text-right font-semibold">{t("Заказы")}</th>
+            <th className="px-3 py-2.5 text-right font-semibold" title={t("Покупки за выбранный период")}>
+              {t("Куплено")}
+            </th>
             <th className="px-3 py-2.5 text-right font-semibold">{t("Просрочено")}</th>
             <th className="w-64 px-5 py-2.5 font-semibold">{t("Нагрузка")}</th>
           </tr>
@@ -1102,7 +1114,7 @@ function Team({ board }: { board: Board }) {
               </td>
               <td className="px-3 py-3 text-ink-2">{t(r.role)}</td>
               <td className={`px-3 py-3 text-right tabular-nums ${r.tasks > 0 ? "font-semibold text-ink" : "text-subtle"}`}>{r.tasks}</td>
-              <td className={`px-3 py-3 text-right tabular-nums ${r.orders > 0 ? "font-semibold text-ink" : "text-subtle"}`}>{r.orders}</td>
+              <td className={`px-3 py-3 text-right tabular-nums ${r.bought > 0 ? "font-semibold text-ink" : "text-subtle"}`}>{r.bought}</td>
               <td className={`px-3 py-3 text-right tabular-nums ${r.overdue > 0 ? "font-semibold text-bad" : "text-subtle"}`}>{r.overdue}</td>
               <td className="px-5 py-3">
                 <span className="flex items-center gap-3">

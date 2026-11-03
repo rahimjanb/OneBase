@@ -322,7 +322,9 @@ public sealed partial class ProcurementAnalyticsService(
         var received = await db.ProcurementReceiptLines.AsNoTracking()
             .Where(l => l.Accepted > 0 && l.Document!.PostedAt >= from && l.Document.PostedAt < to)
             .SumAsync(l => (decimal?)(l.Accepted * (l.OrderItem!.Order!.PricesIncludeVat ? l.OrderItem.UnitPrice : l.OrderItem.UnitPrice * (1 + l.OrderItem.Order.VatRate / 100))), ct) ?? 0m;
-        var awaitingRequests = await db.ProcurementRequests.AsNoTracking().Where(r => r.Status == ProcurementRequestStatus.DirectorApproval)
+        // Ждут согласования — на любом шаге маршрута (руководитель отдела, финансист, директор).
+        var approval = ProcurementRules.Approval;
+        var awaitingRequests = await db.ProcurementRequests.AsNoTracking().Where(r => approval.Contains(r.Status))
             .GroupBy(_ => 1).Select(g => new { Count = g.Count(), Total = g.Sum(r => r.PurchaseTotal) }).FirstOrDefaultAsync(ct);
         var awaitingOrders = await db.ProcurementPurchaseOrders.AsNoTracking().Where(o => o.Status == ProcurementOrderStatus.AwaitingApproval)
             .GroupBy(_ => 1).Select(g => new { Count = g.Count(), Total = g.Sum(o => o.Total) }).FirstOrDefaultAsync(ct);
@@ -393,7 +395,7 @@ public sealed partial class ProcurementAnalyticsService(
         var ordered = await db.ProcurementPurchaseOrders.AsNoTracking().Where(o => o.OrderedAt >= from && o.OrderedAt < to)
             .Select(o => new { o.ResponsibleId, o.OrderedAt, Approved = o.Items.Min(i => i.RequestItem!.Request!.ApprovedAt) }).ToListAsync(ct);
         var delivered = await db.ProcurementPurchaseOrders.AsNoTracking().Where(o => o.DeliveredAt >= from && o.DeliveredAt < to && o.OrderedAt != null)
-            .Select(o => new { o.ResponsibleId, o.DeliveredAt, o.OrderedAt }).ToListAsync(ct);
+            .Select(o => new { o.ResponsibleId, o.DeliveredAt, o.OrderedAt, o.Direct }).ToListAsync(ct);
         var tasks = supplyDept is { } dept
             ? await db.WorkTasks.AsNoTracking().Where(t => t.DepartmentId == dept && t.ArchivedAt == null && open.Contains(t.Status))
                 .Select(t => new { t.AssigneeId, Overdue = t.DueDate != null && t.DueDate < today }).ToListAsync(ct)
@@ -402,7 +404,8 @@ public sealed partial class ProcurementAnalyticsService(
         var names = await db.Users.AsNoTracking().Where(u => ids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
         decimal? Avg(IEnumerable<double> days) => days.ToList() is { Count: > 0 } list ? Math.Round((decimal)list.Average(), 1) : null;
         var toOrder = ordered.Where(o => o.Approved != null).Select(o => (o.ResponsibleId, Days: (o.OrderedAt!.Value - o.Approved!.Value).TotalDays)).ToList();
-        var toDeliver = delivered.Select(o => (o.ResponsibleId, Days: (o.DeliveredAt!.Value - o.OrderedAt!.Value).TotalDays)).ToList();
+        // Срок поставки — только у заказов поставщикам: «Куплено» оприходовано сразу, ждать поставки не было.
+        var toDeliver = delivered.Where(o => !o.Direct).Select(o => (o.ResponsibleId, Days: (o.DeliveredAt!.Value - o.OrderedAt!.Value).TotalDays)).ToList();
         var staff = ids.Where(names.ContainsKey).Select(id =>
             {
                 var openTasks = tasks.Count(t => t.AssigneeId == id);

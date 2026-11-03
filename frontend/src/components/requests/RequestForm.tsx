@@ -328,7 +328,7 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
             <h2 id="rq-items" className="text-base font-semibold text-ink">
               {t("Позиции")}
             </h2>
-            <span className="text-xs text-ink-3">{t("Цена — за единицу, если известна")}</span>
+            <span className="text-xs text-ink-3">{t("Цена за единицу обязательна для закупки — по сумме решается, нужен ли директор")}</span>
           </div>
 
           <div className="hidden grid-cols-[24px_minmax(0,2fr)_minmax(0,1.6fr)_84px_92px_116px_104px_32px] gap-2 border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3 @3xl:grid">
@@ -419,7 +419,7 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
                       value={item.price}
                       onChange={(e) => patch(item.key, { price: e.target.value })}
                       inputMode="decimal"
-                      placeholder={t("не знаю")}
+                      placeholder={t("примерно")}
                       aria-label={t("Цена за единицу, позиция {n}", { n: index + 1 })}
                       className={`${field} tabular-nums`}
                     />

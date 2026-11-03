@@ -58,6 +58,10 @@ public class ProcurementOrderDbTests(DataManagerDb fixture) : IClassFixture<Data
             Person("po-dir", "Директор", directorRole), Person("po-adm", "Админ Все Права"), Guid.Empty);
         db.Users.AddRange(org.Employee, org.Supply, org.Supply2, org.Director, org.Admin);
         await db.SaveChangesAsync();
+        // Маршрут: у отдела заявителя нет руководителя — заявка сразу к финансисту (здесь им назначен директор), директор маршрута — роль, лимит 5 млн.
+        var route = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
+        (route.FinanceApproverId, route.DirectorApproverId, route.DirectorLimit) = (org.Director.Id, null, ProcurementSettings.DefaultDirectorLimit);
+        await db.SaveChangesAsync();
         return org with { Category = await db.ProcurementCategories.Where(c => c.Code == "stationery").Select(c => c.Id).SingleAsync() };
     }
 
@@ -79,14 +83,13 @@ public class ProcurementOrderDbTests(DataManagerDb fixture) : IClassFixture<Data
     private static ProcurementOrderService O(IServiceProvider sp) => sp.GetRequiredService<ProcurementOrderService>();
     private static ProcurementSupplierService S(IServiceProvider sp) => sp.GetRequiredService<ProcurementSupplierService>();
 
-    /// <summary>Заявка 100 пачек по 45 000 (без склада), отправлена и (approve) передана и утверждена директором.</summary>
+    /// <summary>Заявка 100 пачек по 45 000 (без склада), отправлена и (approve) согласована финансистом (здесь — директор): 4,5 млн — не больше лимита.</summary>
     private async Task<(Guid Request, Guid Item)> RequestAsync(Org org, bool approve = true, decimal quantity = 100, decimal? price = 45_000)
     {
         var id = await As(org.Employee, Employee, (sp, c) => R(sp).CreateAsync(c, new ProcurementRequestInput("Бумага на квартал", null, ProcurementPriority.Normal, null,
             "Отчётность", null, [new(null, "Бумага А4", org.Category, "пачка", quantity, price)], Submit: true), default));
         if (approve)
         {
-            await As(org.Supply, Supply, (sp, c) => R(sp).ForwardAsync(c, id, default));
             await As(org.Director, Director, (sp, c) => R(sp).ApproveAsync(c, id, null, default));
         }
 

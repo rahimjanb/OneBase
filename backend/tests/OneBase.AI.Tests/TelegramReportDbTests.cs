@@ -295,6 +295,25 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         var db = sp.GetRequiredService<OneBaseDbContext>();
         await db.TelegramWeeklyPdfSettings.ExecuteDeleteAsync();
 
+        // Плановый PDF — по субботу последней полной недели, команды — месяца этой субботы. В первые дни месяца это ещё прошлый месяц, а заказы
+        // сева («вчера», «сегодня») — уже в новом: без заказа в отчётном месяце ТП нет в команде, и тест зависел от дня запуска. Заказ каждого
+        // ТП в отчётную субботу (номера из диапазона, который сев чистит) держит команду из трёх ТП в любой день.
+        var through = WeeklyReportMath.ScheduledThrough(s.Today);
+        var orderId = 800_000_008L;
+        foreach (var rep in new long[] { 61, 62, 63 })
+        {
+            db.LinkoOrders.Add(new LinkoOrder
+            {
+                Id = orderId, CreatedAt = through.ToDateTime(new TimeOnly(11, 0)), CreatedDate = through, AcceptedAt = through.ToDateTime(new TimeOnly(11, 0)),
+                AcceptedDate = through, Status = "delivered", MarketId = 1101, BranchId = 5, BranchName = "Хоразм", AgentId = rep, TotalPrice = 1_000_000, TotalWeight = 30,
+            });
+            db.LinkoOrderLines.Add(new LinkoOrderLine { Id = orderId, OrderId = orderId, ProductId = 100, Amount = 30, Price = 1_000_000m / 30, TotalPrice = 1_000_000, TotalWeight = 30 });
+            orderId++;
+        }
+
+        await db.SaveChangesAsync();
+        sp.GetRequiredService<SalesCacheSignal>().InvalidateHistory();
+
         // Запуск в каталоге: понедельник 09:00, выключен (по умолчанию ничего не уходит).
         var overview = await service.OverviewAsync(true, default);
         var job = Assert.Single(overview.Jobs, j => j.Code == "weekly-pdf.monday");

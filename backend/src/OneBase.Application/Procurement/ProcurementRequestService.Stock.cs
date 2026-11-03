@@ -12,10 +12,19 @@ public sealed record ProcurementIssueLineInput(Guid RequestItemId, decimal Quant
 public sealed record ProcurementRequestIssueInput(IReadOnlyList<ProcurementIssueLineInput>? Lines, string? Receiver, string? Comment, Guid? ClientKey = null);
 
 /// <summary>
-/// Настройки снабжения для экрана: допуск роста цены или суммы без повторного согласования, %; через сколько дней просрочки задача
-/// снабжения уходит руководителю снабжения и директору.
+/// Настройки снабжения для экрана («Настройки → Отделы → Снабжение»): маршрут согласования заявок — финансист, директор и лимит покупки без
+/// директора (сум); допуск роста цены или суммы без повторного согласования, %; через сколько дней просрочки задача снабжения уходит
+/// руководителю снабжения и директору. Имена согласующих — только для показа (при сохранении не читаются).
 /// </summary>
-public sealed record ProcurementSettingsView(decimal ReapprovalTolerancePercent, int EscalateHeadDays = 1, int EscalateDirectorDays = 3);
+public sealed record ProcurementSettingsView(
+    decimal ReapprovalTolerancePercent,
+    int EscalateHeadDays = 1,
+    int EscalateDirectorDays = 3,
+    Guid? FinanceApproverId = null,
+    Guid? DirectorApproverId = null,
+    decimal DirectorLimit = ProcurementSettings.DefaultDirectorLimit,
+    string? FinanceApproverName = null,
+    string? DirectorApproverName = null);
 
 public sealed partial class ProcurementRequestService
 {
@@ -124,10 +133,22 @@ public sealed partial class ProcurementRequestService
     {
         RequireOpen(ctx);
         var settings = await db.ProcurementSettings.AsNoTracking().FirstOrDefaultAsync(ct);
-        return new ProcurementSettingsView(settings?.ReapprovalTolerancePercent ?? 0m, settings?.EscalateHeadDays ?? 1, settings?.EscalateDirectorDays ?? 3);
+        var ids = new[] { settings?.FinanceApproverId, settings?.DirectorApproverId }.OfType<Guid>().ToList();
+        var names = await db.Users.AsNoTracking().Where(u => ids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        string? Name(Guid? id) => id is { } x ? names.GetValueOrDefault(x) : null;
+        return new ProcurementSettingsView(settings?.ReapprovalTolerancePercent ?? 0m, settings?.EscalateHeadDays ?? 1, settings?.EscalateDirectorDays ?? 3,
+            settings?.FinanceApproverId, settings?.DirectorApproverId, settings?.DirectorLimit ?? ProcurementSettings.DefaultDirectorLimit,
+            Name(settings?.FinanceApproverId), Name(settings?.DirectorApproverId));
     }
 
-    /// <summary>Допуск роста цены или суммы без повторного согласования: 0–100 %, до двух знаков. Настраивают директор и администратор.</summary>
+    /// <summary>Наибольший лимит покупки без директора: 1 трлн сум.</summary>
+    public const decimal MaxDirectorLimit = 1_000_000_000_000m;
+
+    /// <summary>
+    /// Настройки снабжения (директор и администратор — право «Настройки снабжения»): допуск роста цены или суммы без повторного согласования
+    /// 0–100 %, до двух знаков; дни эскалации; маршрут согласования — финансист и директор (действующие пользователи OneBase, можно не
+    /// выбирать) и лимит покупки без директора (больше нуля, до 1 трлн сум, целые сумы).
+    /// </summary>
     public async Task UpdateSettingsAsync(ProcurementContext ctx, ProcurementSettingsView input, CancellationToken ct)
     {
         RequireConfigures(ctx);
@@ -147,6 +168,17 @@ public sealed partial class ProcurementRequestService
             throw new FieldValidationException("Директору — не раньше, чем руководителю снабжения, и не позже 60 дней просрочки.");
         }
 
+        if (input.DirectorLimit <= 0 || input.DirectorLimit > MaxDirectorLimit || decimal.Truncate(input.DirectorLimit) != input.DirectorLimit)
+        {
+            throw new FieldValidationException("Лимит без директора — целая сумма больше нуля, до 1 трлн сум.");
+        }
+
+        var approvers = new[] { input.FinanceApproverId, input.DirectorApproverId }.OfType<Guid>().Distinct().ToList();
+        if (await db.Users.CountAsync(u => approvers.Contains(u.Id) && u.IsActive, ct) != approvers.Count)
+        {
+            throw new FieldValidationException("Финансист и директор — действующие пользователи OneBase.");
+        }
+
         var settings = await db.ProcurementSettings.FirstOrDefaultAsync(ct);
         if (settings is null)
         {
@@ -154,15 +186,23 @@ public sealed partial class ProcurementRequestService
             db.ProcurementSettings.Add(settings);
         }
 
-        var before = new { settings.ReapprovalTolerancePercent, settings.EscalateHeadDays, settings.EscalateDirectorDays };
+        object Snapshot() => new
+        {
+            settings.ReapprovalTolerancePercent, settings.EscalateHeadDays, settings.EscalateDirectorDays, settings.FinanceApproverId, settings.DirectorApproverId,
+            settings.DirectorLimit,
+        };
+        var before = Snapshot();
         settings.ReapprovalTolerancePercent = tolerance;
         settings.EscalateHeadDays = input.EscalateHeadDays;
         settings.EscalateDirectorDays = input.EscalateDirectorDays;
+        settings.FinanceApproverId = input.FinanceApproverId;
+        settings.DirectorApproverId = input.DirectorApproverId;
+        settings.DirectorLimit = input.DirectorLimit;
         settings.UpdatedAt = Now;
         settings.UpdatedById = ctx.UserId;
         await db.SaveChangesAsync(ct);
-        // Правила согласования и эскалации — в журнал аудита: было и стало.
+        // Маршрут согласования, правила и эскалация — в журнал аудита: было и стало.
         await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.settings.updated", "procurement_settings", settings.Id.ToString(),
-            new { before, after = new { settings.ReapprovalTolerancePercent, settings.EscalateHeadDays, settings.EscalateDirectorDays } }, ct);
+            new { before, after = Snapshot() }, ct);
     }
 }

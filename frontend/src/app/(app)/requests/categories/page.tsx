@@ -4,8 +4,6 @@ import { requireRequests } from "@/components/requests/RequestListPage";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
 import type { RequestCategory, RequestNav } from "@/lib/procurement";
-
-type Settings = { reapprovalTolerancePercent: number; escalateHeadDays: number; escalateDirectorDays: number };
 import { apiGet } from "@/lib/server-api";
 
 export async function generateMetadata() {
@@ -19,19 +17,16 @@ export default async function RequestCategoriesPage() {
   const t = await getT();
   const nav = await apiGet<RequestNav>("/api/procurement/nav", "/requests/categories");
   if (!nav.configures) redirect("/requests");
-  const [categories, settings] = await Promise.all([
-    apiGet<RequestCategory[]>("/api/procurement/categories?all=true", "/requests/categories"),
-    apiGet<Settings>("/api/procurement/settings", "/requests/categories"),
-  ]);
+  const categories = await apiGet<RequestCategory[]>("/api/procurement/categories?all=true", "/requests/categories");
   return (
     <>
       <PageHeader
         title={t("Настройки заявок")}
-        subtitle={t("Правила повторного согласования и категории закупок")}
+        subtitle={t("Категории закупок; маршрут согласования и правила — в «Настройки → Отделы → Снабжение»")}
         breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Заявки"), href: "/requests" }, { label: t("Настройки") }]}
       />
       <PageBody>
-        <CategoriesView categories={categories} settings={settings} />
+        <CategoriesView categories={categories} />
       </PageBody>
     </>
   );

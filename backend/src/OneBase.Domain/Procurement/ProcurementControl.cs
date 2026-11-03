@@ -12,7 +12,7 @@ public class ProcurementDigest : Entity
 
     public required string Title { get; set; }
 
-    /// <summary>Итог одной строкой: «Ждут директора: 2 · просрочено поставок: 1 · …».</summary>
+    /// <summary>Итог одной строкой: «Ждут согласования: 2 · новых заявок: 1 · ждут закупки: 3 · …».</summary>
     public required string Summary { get; set; }
 
     /// <summary>Разделы (JSON): [{ "title", "count", "items": [{ "text", "link" }] }].</summary>

@@ -7,7 +7,8 @@ using OneBase.Domain.Procurement;
 namespace OneBase.Application.Procurement;
 
 /// <summary>
-/// Документы поставщиков, коммерческих предложений, заказов и приёмок (договор, КП, счёт, накладная, акт, платёжное поручение): файл в
+/// Документы поставщиков, коммерческих предложений, заказов, приёмок и тендерных закупок (договор, КП, счёт, накладная, акт, платёжное
+/// поручение, протокол тендера): файл в
 /// MinIO (procurement/{тип}/{владелец}/{файл}), описание — в базе. Видят: поставщика, заказ и приёмку — снабжение, директор, кладовщик;
 /// предложение — снабжение и директор. Прикрепляет снабжение (к заказу и приёмке — и кладовщик: накладные, акты). Удаляет загрузивший
 /// или снабжение.
@@ -15,8 +16,11 @@ namespace OneBase.Application.Procurement;
 /// </summary>
 public sealed class ProcurementDocumentService(IAppDbContext db)
 {
-    /// <summary>Виды: договор, коммерческое предложение, счёт, накладная, акт (приёмки), платёжное поручение (пока только файл — оплаты придут с финансами), прочее.</summary>
-    private static readonly HashSet<string> Kinds = ["contract", "offer", "invoice", "waybill", "act", "payment", "other"];
+    /// <summary>
+    /// Виды: договор, коммерческое предложение, счёт, накладная, акт (приёмки), платёжное поручение (пока только файл — оплаты придут с
+    /// финансами), протокол итогов тендера, прочее.
+    /// </summary>
+    private static readonly HashSet<string> Kinds = ["contract", "offer", "invoice", "waybill", "act", "payment", "protocol", "other"];
 
     public async Task<List<ProcurementDocumentView>> ListAsync(ProcurementContext ctx, string ownerType, Guid ownerId, CancellationToken ct)
     {
@@ -174,6 +178,18 @@ public sealed class ProcurementDocumentService(IAppDbContext db)
                 if (!buyer && !ctx.Warehouse)
                 {
                     throw new FieldForbiddenException("Приёмку видят кладовщик, снабжение и директор.");
+                }
+
+                break;
+            case ProcurementTenderService.Doc:
+                if (!await db.ProcurementTenders.AnyAsync(t => t.Id == ownerId, ct))
+                {
+                    throw new FieldNotFoundException("Тендерная закупка не найдена.");
+                }
+
+                if (!buyer)
+                {
+                    throw new FieldForbiddenException("Тендерные закупки видят снабжение и директор.");
                 }
 
                 break;

@@ -124,6 +124,10 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
             db.Users.AddRange(org.Employee, org.Other, org.Supply, org.Director, org.Keeper);
             await db.SaveChangesAsync();
             org = org with { Raw = await db.ProcurementCategories.Where(c => c.Code == "raw_materials").Select(c => c.Id).SingleAsync() };
+            // Маршрут: у отдела заявителя нет руководителя — заявка сразу к финансисту (здесь им назначен директор), директор маршрута — роль, лимит 5 млн.
+            var route = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
+            (route.FinanceApproverId, route.DirectorApproverId, route.DirectorLimit) = (org.Director.Id, null, ProcurementSettings.DefaultDirectorLimit);
+            await db.SaveChangesAsync();
         }
 
         ProcurementSupplierInput Supplier(string name) => new(name, null, null, null, null, null, null, null, null, null, 2, null, [org.Raw]);
@@ -132,13 +136,12 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
         return org with { SupplierA = a, SupplierB = b };
     }
 
-    /// <summary>Заявка от технолога → снабжение передаёт директору → директор утверждает. Возвращает заявку, её номер и позицию.</summary>
+    /// <summary>Заявка от технолога → финансист (здесь — директор) согласует. Возвращает заявку, её номер и позицию.</summary>
     private async Task<(Guid Request, string Number, Guid Item)> ApprovedAsync(Org org, string name, decimal quantity, decimal estimate,
         ProcurementPriority priority = ProcurementPriority.Normal, Guid? itemId = null)
     {
         var request = await As(org.Employee, (sp, c) => Get<ProcurementRequestService>(sp).CreateAsync(c, new ProcurementRequestInput($"Закупка: {name}", null, priority,
             FieldClock.Today.AddDays(10), "Производство", null, [new(null, name, org.Raw, "пачка", quantity, estimate, ItemId: itemId)], Submit: true), default));
-        await As(org.Supply, (sp, c) => Get<ProcurementRequestService>(sp).ForwardAsync(c, request, default));
         await As(org.Director, (sp, c) => Get<ProcurementRequestService>(sp).ApproveAsync(c, request, "Согласовано", default));
         var detail = await As(org.Supply, (sp, c) => Get<ProcurementRequestService>(sp).GetAsync(c, request, default));
         return (request, detail.Number, detail.Items[0].Id);
@@ -313,11 +316,11 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
         Assert.Equal(org.NameA, card.GetProperty("name").GetString());
         Assert.False(card.TryGetProperty("bankAccount", out _));
 
-        // Директор видит заявку на согласовании не дольше дня; без прав снабжения — ни одного инструмента.
+        // Директор (здесь — и финансист маршрута) видит заявку у финансиста; без прав снабжения — ни одного инструмента.
         await As(org.Employee, (sp, c) => Get<ProcurementRequestService>(sp).CreateAsync(c, new ProcurementRequestInput($"На согласование {org.Tag}", null, ProcurementPriority.Normal,
             null, "Производство", null, [new(null, $"Клей {org.Tag}", org.Raw, "пачка", 1, 100)], Submit: true), default));
         var pending = await Data(org.Director, "get_pending_approvals", new { limit = 50 });
-        Assert.True(pending.GetProperty("submittedWaitingForSupply").GetProperty("total").GetInt32() >= 1);
+        Assert.True(pending.GetProperty("financeApprovalRequests").GetProperty("total").GetInt32() >= 1);
         using (var scope = fixture.Services.CreateScope())
         {
             var none = await Get<ToolExecutor>(scope.ServiceProvider).ExecuteAsync(new ToolContext("supply", fixture.NoAccessId, 0), "get_procurement_overview", Args());

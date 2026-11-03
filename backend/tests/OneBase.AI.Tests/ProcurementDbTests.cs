@@ -59,6 +59,10 @@ public class ProcurementDbTests(DataManagerDb fixture) : IClassFixture<DataManag
         db.Users.AddRange(employee, colleague, other, head, supply, director);
         db.WorkDepartmentHeads.Add(new WorkDepartmentHead { Department = deptA, UserId = head.Id });
         await db.SaveChangesAsync();
+        // Маршрут: заявку сотрудника — руководителю отдела, затем финансисту (здесь им назначен директор), лимит 5 млн.
+        var settings = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
+        (settings.FinanceApproverId, settings.DirectorApproverId, settings.DirectorLimit) = (director.Id, null, ProcurementSettings.DefaultDirectorLimit);
+        await db.SaveChangesAsync();
 
         var category = await db.ProcurementCategories.Where(c => c.Code == "stationery").Select(c => c.Id).SingleAsync();
         return new Org(deptA, deptB, employee, colleague, other, head, supply, director, category, "пачка");
@@ -81,7 +85,7 @@ public class ProcurementDbTests(DataManagerDb fixture) : IClassFixture<DataManag
 
     private static ProcurementRequestInput Input(Org org, bool submit = false, Guid? key = null, params ProcurementItemInput[] items) => new(
         "Канцелярия на ноябрь", null, ProcurementPriority.High, FieldClock.Today.AddDays(7), "Закончилась бумага для отчётов", null,
-        items.Length > 0 ? items : [new(null, "Бумага А4", org.Category, org.Unit, 20, 45_000), new(null, "Папки", org.Category, "шт", 30, null)], submit, key);
+        items.Length > 0 ? items : [new(null, "Бумага А4", org.Category, org.Unit, 20, 45_000), new(null, "Папки", org.Category, "шт", 30, 12_000)], submit, key);
 
     private async Task<List<UserNotification>> NotificationsAsync(User user, Guid requestId)
     {
@@ -104,7 +108,7 @@ public class ProcurementDbTests(DataManagerDb fixture) : IClassFixture<DataManag
         Assert.Equal(ProcurementRequestStatus.Draft, draft.Status);
         Assert.Matches(new Regex(@"^PR-\d{4}-\d{5}$"), draft.Number);
         Assert.Equal(org.A.Id, draft.DepartmentId); // отдел — из карточки пользователя
-        Assert.Equal(900_000m, draft.EstimatedTotal); // 20 × 45 000, у папок цены нет
+        Assert.Equal(1_260_000m, draft.EstimatedTotal); // 20 × 45 000 + 30 × 12 000
         Assert.True(draft.Can.Edit && draft.Can.Submit && draft.Can.Cancel && !draft.Can.Forward);
 
         // Черновик не видит никто, кроме инициатора.
@@ -133,26 +137,32 @@ public class ProcurementDbTests(DataManagerDb fixture) : IClassFixture<DataManag
             await Assert.ThrowsAsync<FieldForbiddenException>(() => AsAsync(sp, user, EmployeePermissions, (s, c) => s.GetAsync(c, id, default)));
         }
 
-        // Передать директору может только снабжение — прямой вызов API инициатором или руководителем отклоняется.
-        await Assert.ThrowsAsync<FieldForbiddenException>(() => AsAsync(sp, org.Employee, EmployeePermissions, (s, c) => s.ForwardAsync(c, id, default)));
-        await Assert.ThrowsAsync<FieldForbiddenException>(() => AsAsync(sp, org.Head, EmployeePermissions, (s, c) => s.ForwardAsync(c, id, default)));
-        await Assert.ThrowsAsync<FieldForbiddenException>(() => AsAsync(sp, org.Other, SupplyPermissions[..1], (s, c) => s.ForwardAsync(c, id, default)));
-        await AsAsync(sp, org.Supply, SupplyPermissions, (s, c) => s.ForwardAsync(c, id, default));
+        // Заявка сотрудника — у руководителя отдела. Его шаг решает только он: инициатор, снабжение и директор — нет (прямые вызовы API).
+        Assert.Equal(ProcurementRequestStatus.HeadApproval, (await AsAsync(sp, org.Employee, EmployeePermissions, (s, c) => s.GetAsync(c, id, default))).Status);
+        Assert.Contains((await AsAsync(sp, org.Head, EmployeePermissions, (s, c) => s.SearchAsync(c, new ProcurementRequestSearch("approvals"), default))).Items, r => r.Id == id);
+        foreach (var (user, perms) in new[] { (org.Employee, EmployeePermissions), (org.Supply, SupplyPermissions), (org.Director, DirectorPermissions) })
+        {
+            await Assert.ThrowsAsync<FieldForbiddenException>(() => AsAsync(sp, user, perms, (s, c) => s.ApproveAsync(c, id, null, default)));
+        }
 
-        // Заявку на согласовании у директора инициатор не правит.
+        await AsAsync(sp, org.Head, EmployeePermissions, (s, c) => s.ApproveAsync(c, id, null, default));
+
+        // Заявку на согласовании инициатор не правит.
         await Assert.ThrowsAsync<FieldConflictException>(() => AsAsync(sp, org.Employee, EmployeePermissions, (s, c) => s.UpdateAsync(c, id, Input(org), default)));
 
         var detail = await AsAsync(sp, org.Director, DirectorPermissions, (s, c) => s.GetAsync(c, id, default));
-        Assert.Equal(ProcurementRequestStatus.DirectorApproval, detail.Status);
-        Assert.Equal(["created", "submitted", "forwarded"], detail.History.Select(h => h.Action));
-        Assert.Equal(nameof(ProcurementRequestStatus.Submitted), detail.History[2].FromStatus);
-        Assert.Equal("Ташкентов Улугбек", detail.History[2].ActorName);
-        Assert.True(detail.Can.Approve && detail.Can.Return); // директор решает
+        Assert.Equal(ProcurementRequestStatus.FinanceApproval, detail.Status);
+        Assert.Equal(["created", "submitted", "step_approved"], detail.History.Select(h => h.Action));
+        Assert.Equal(nameof(ProcurementRequestStatus.HeadApproval), detail.History[2].FromStatus);
+        Assert.Equal("Рахимов Шерзод", detail.History[2].ActorName);
+        Assert.True(detail.Can.Approve && detail.Can.Return && detail.Can.Price); // финансист (здесь — директор) решает и может уточнить цены
+        Assert.Equal([("head", "done"), ("finance", "current"), ("director", "skipped"), ("supply", "pending")], detail.Route!.Select(x => (x.Key, x.State)));
         Assert.False(detail.Can.Forward || detail.Can.Edit || detail.Can.Issue);
 
         // Обзор: у директора — заявка у него на согласовании; у сотрудника другого отдела её нет ни в одном числе.
         var overview = await AsAsync(sp, org.Director, DirectorPermissions, (s, c) => s.OverviewAsync(c, default));
-        Assert.True(overview.ByStatus[nameof(ProcurementRequestStatus.DirectorApproval)] >= 1);
+        Assert.True(overview.ByStatus[nameof(ProcurementRequestStatus.FinanceApproval)] >= 1);
+        Assert.Contains(overview.NeedsAction, r => r.Id == id);
         Assert.Contains(overview.Recent, r => r.Id == id);
         Assert.Contains(overview.MonthCategories, c => c.Name == "Канцелярия" && c.Total >= 900_000m);
         var otherOverview = await AsAsync(sp, org.Other, EmployeePermissions, (s, c) => s.OverviewAsync(c, default));
@@ -161,11 +171,87 @@ public class ProcurementDbTests(DataManagerDb fixture) : IClassFixture<DataManag
         var supplyNav = await AsAsync(sp, org.Supply, SupplyPermissions, (s, c) => s.NavAsync(c, default));
         Assert.True(supplyNav.Manages && supplyNav.ReadsAll && !supplyNav.Configures);
 
-        Assert.Contains(await NotificationsAsync(org.Head, id), n => n.Kind == UserNotificationKind.ProcurementRequest);
-        Assert.Contains(await NotificationsAsync(org.Supply, id), n => n.Kind == UserNotificationKind.ProcurementRequest);
-        Assert.Contains(await NotificationsAsync(org.Director, id), n => n.Kind == UserNotificationKind.ProcurementRequest && n.Title.Contains("согласования"));
+        Assert.Contains(await NotificationsAsync(org.Head, id), n => n.Kind == UserNotificationKind.ProcurementRequest && n.Title.Contains("ждёт вашего согласования"));
+        Assert.Empty(await NotificationsAsync(org.Supply, id)); // снабжение узнаёт о заявке, когда её согласуют
+        Assert.Contains(await NotificationsAsync(org.Director, id), n => n.Kind == UserNotificationKind.ProcurementRequest && n.Title.Contains("ждёт вашего согласования"));
         Assert.Contains(await NotificationsAsync(org.Employee, id), n => n.Kind == UserNotificationKind.ProcurementStatus);
         Assert.Empty(await NotificationsAsync(org.Colleague, id));
+    }
+
+    [PostgresFact]
+    public async Task Route_goes_from_the_head_to_the_financier_and_above_the_limit_to_the_chosen_director()
+    {
+        var org = await SeedAsync();
+        var sp = fixture.Services;
+        var s = Guid.NewGuid().ToString("N")[..6];
+        var financier = new User { Login = $"pr-fin-{s}", FullName = "Финансист Маршрута" };
+        var chosen = new User { Login = $"pr-chd-{s}", FullName = "Директор Маршрута" };
+        async Task Route(Guid? finance, Guid? director)
+        {
+            using var scope = sp.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
+            var settings = await db.ProcurementSettings.FirstAsync();
+            (settings.FinanceApproverId, settings.DirectorApproverId, settings.DirectorLimit) = (finance, director, 5_000_000);
+            await db.SaveChangesAsync();
+        }
+
+        using (var scope = sp.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
+            db.Users.AddRange(financier, chosen);
+            await db.SaveChangesAsync();
+        }
+
+        // Финансист ещё не выбран, директор маршрута — выбранный пользователь (роль «Директор» больше не решает).
+        await Route(null, chosen.Id);
+        ProcurementRequestInput Machine(decimal price) =>
+            Input(org, submit: true, items: new ProcurementItemInput(null, "Станок упаковочный", org.Category, "шт", 1, price)) with { Title = "Станок" };
+
+        // 1. Заявка сотрудника на 6 млн: руководитель отдела согласует — дальше финансист; он не выбран — заявка ждёт его.
+        var id = await AsAsync(sp, org.Employee, EmployeePermissions, (x, c) => x.CreateAsync(c, Machine(6_000_000), default));
+        await AsAsync(sp, org.Head, EmployeePermissions, (x, c) => x.ApproveAsync(c, id, "Нужен для новой линии", default));
+        var waiting = await AsAsync(sp, org.Employee, EmployeePermissions, (x, c) => x.GetAsync(c, id, default));
+        Assert.Equal(ProcurementRequestStatus.FinanceApproval, waiting.Status);
+        Assert.Empty(waiting.Route![1].Who); // финансист не выбран
+        Assert.Equal(("done", "Рахимов Шерзод", "Нужен для новой линии"), (waiting.Route[0].State, waiting.Route[0].Who.Single(), waiting.Route[0].Comment));
+
+        // 2. Выбрали финансиста: он видит заявку в «Ждут моего согласования», снижает цену до 4,8 млн — директор не нужен.
+        await Route(financier.Id, chosen.Id);
+        var queue = await AsAsync(sp, financier, EmployeePermissions, (x, c) => x.SearchAsync(c, new ProcurementRequestSearch("approvals"), default));
+        Assert.Contains(queue.Items, r => r.Id == id);
+        var item = waiting.Items[0].Id;
+        await Assert.ThrowsAsync<FieldValidationException>(() =>
+            AsAsync(sp, financier, EmployeePermissions, (x, c) => x.ApproveAsync(c, id, null, default, [new ProcurementPriceInput(item, 0)])));
+        await AsAsync(sp, financier, EmployeePermissions, (x, c) => x.ApproveAsync(c, id, null, default, [new ProcurementPriceInput(item, 4_800_000)]));
+        var approved = await AsAsync(sp, org.Supply, SupplyPermissions, (x, c) => x.GetAsync(c, id, default));
+        Assert.Equal((ProcurementRequestStatus.Approved, 4_800_000m), (approved.Status, approved.PurchaseTotal));
+        Assert.Contains(approved.History, h => h.Action == "prices" && h.Text.Contains($"{ProcurementRules.Money(6_000_000)} → {ProcurementRules.Money(4_800_000)}"));
+        Assert.Equal([("head", "done"), ("finance", "done"), ("director", "skipped"), ("supply", "current")], approved.Route!.Select(x => (x.Key, x.State)));
+        Assert.Equal([ProcurementApprovalStages.Head, ProcurementApprovalStages.Finance], approved.Approvals!.Select(a => a.Stage));
+        Assert.Contains(await NotificationsAsync(org.Supply, id), n => n.Title.StartsWith("Согласована к закупке"));
+        Assert.Contains(await NotificationsAsync(org.Employee, id), n => n.Title.Contains("согласована — передана в снабжение"));
+
+        // 3. Заявка самого руководителя на 7 млн: без шага руководителя — сразу финансисту, затем директору маршрута (больше лимита).
+        var own = await AsAsync(sp, org.Head, EmployeePermissions, (x, c) => x.CreateAsync(c, Machine(7_000_000), default));
+        var atFinance = await AsAsync(sp, financier, EmployeePermissions, (x, c) => x.GetAsync(c, own, default));
+        Assert.Equal(ProcurementRequestStatus.FinanceApproval, atFinance.Status);
+        Assert.Equal(("skipped", "initiatorHead"), (atFinance.Route![0].State, atFinance.Route[0].Reason));
+        Assert.Equal("pending", atFinance.Route[2].State); // 7 млн больше лимита — директор впереди
+        await AsAsync(sp, financier, EmployeePermissions, (x, c) => x.ApproveAsync(c, own, null, default));
+        Assert.Equal(ProcurementRequestStatus.DirectorApproval, (await AsAsync(sp, org.Head, EmployeePermissions, (x, c) => x.GetAsync(c, own, default))).Status);
+        // Директор по роли не решает — решает выбранный в настройках; администратор со всеми правами — тоже нет.
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => AsAsync(sp, org.Director, DirectorPermissions, (x, c) => x.ApproveAsync(c, own, null, default)));
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => AsAsync(sp, org.Supply, [.. Permissions.All], (x, c) => x.ApproveAsync(c, own, null, default)));
+        Assert.Contains(await NotificationsAsync(chosen, own), n => n.Title.Contains("ждёт вашего согласования"));
+        Assert.DoesNotContain(await NotificationsAsync(org.Director, own), n => n.Title.Contains("ждёт вашего согласования"));
+        await AsAsync(sp, chosen, [], (x, c) => x.ApproveAsync(c, own, "Согласовано", default));
+        var done = await AsAsync(sp, org.Head, EmployeePermissions, (x, c) => x.GetAsync(c, own, default));
+        Assert.Equal(ProcurementRequestStatus.Approved, done.Status);
+        Assert.Equal([ProcurementApprovalStages.Finance, ProcurementApprovalStages.Director], done.Approvals!.Select(a => a.Stage));
+        Assert.Contains(done.History, h => h.Text.Contains($"больше лимита {ProcurementRules.Money(5_000_000)} сум, передана директору"));
+        Assert.Equal($"Утверждена директором: к закупке ≈ {ProcurementRules.Money(7_000_000)} сум — передана в снабжение", done.History[^1].Text);
+
+        await Route(org.Director.Id, null); // общие настройки класса
     }
 
     [PostgresFact]
@@ -202,8 +288,9 @@ public class ProcurementDbTests(DataManagerDb fixture) : IClassFixture<DataManag
         var sp = fixture.Services;
         var id = await AsAsync(sp, org.Employee, EmployeePermissions, (s, c) => s.CreateAsync(c, Input(org, submit: true), default));
 
-        await Assert.ThrowsAsync<FieldValidationException>(() => AsAsync(sp, org.Supply, SupplyPermissions, (s, c) => s.ReturnAsync(c, id, "  ", default)));
-        await AsAsync(sp, org.Supply, SupplyPermissions, (s, c) => s.ReturnAsync(c, id, "Уточните формат бумаги", default));
+        await Assert.ThrowsAsync<FieldValidationException>(() => AsAsync(sp, org.Head, EmployeePermissions, (s, c) => s.ReturnAsync(c, id, "  ", default)));
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => AsAsync(sp, org.Supply, SupplyPermissions, (s, c) => s.ReturnAsync(c, id, "Не их шаг", default)));
+        await AsAsync(sp, org.Head, EmployeePermissions, (s, c) => s.ReturnAsync(c, id, "Уточните формат бумаги", default));
 
         var returned = await AsAsync(sp, org.Employee, EmployeePermissions, (s, c) => s.GetAsync(c, id, default));
         Assert.Equal(ProcurementRequestStatus.RevisionRequired, returned.Status);
@@ -219,7 +306,7 @@ public class ProcurementDbTests(DataManagerDb fixture) : IClassFixture<DataManag
         await AsAsync(sp, org.Employee, EmployeePermissions, (s, c) => s.UpdateAsync(c, id, edited, default));
 
         var after = await AsAsync(sp, org.Supply, SupplyPermissions, (s, c) => s.GetAsync(c, id, default));
-        Assert.Equal(ProcurementRequestStatus.Submitted, after.Status);
+        Assert.Equal(ProcurementRequestStatus.HeadApproval, after.Status);
         Assert.Equal(["Бумага А4", "Картриджи"], after.Items.Select(i => i.Name));
         Assert.Equal(25 * 45_000m + 5 * 300_000m, after.EstimatedTotal);
         Assert.Equal(["created", "submitted", "returned", "updated", "resubmitted"], after.History.Select(h => h.Action));
@@ -256,6 +343,11 @@ public class ProcurementDbTests(DataManagerDb fixture) : IClassFixture<DataManag
         await Assert.ThrowsAsync<FieldValidationException>(() => Create(Input(org, items: new ProcurementItemInput(null, "Бумага", org.Category, "ящик", 1, null, null))));
         await Assert.ThrowsAsync<FieldValidationException>(() => Create(Input(org) with { Title = " " }));
         await Assert.ThrowsAsync<FieldValidationException>(() => Create(Input(org, submit: true) with { Reason = null }));
+        // Цена у позиции к закупке обязательна при отправке (черновик без неё сохраняется).
+        var noPrice = new ProcurementItemInput(null, "Папки", org.Category, "шт", 30, null);
+        var priceError = await Assert.ThrowsAsync<FieldValidationException>(() => Create(Input(org, submit: true, items: noPrice)));
+        Assert.Contains("укажите примерную цену", priceError.Message);
+        await Create(Input(org, items: noPrice));
         await Assert.ThrowsAsync<FieldValidationException>(() => Create(Input(org) with { DesiredDate = FieldClock.Today.AddDays(-1) }));
         await Assert.ThrowsAsync<FieldForbiddenException>(() => Create(Input(org) with { DepartmentId = org.B.Id })); // чужой отдел
 

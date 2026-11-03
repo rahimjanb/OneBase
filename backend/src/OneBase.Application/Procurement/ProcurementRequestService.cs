@@ -116,11 +116,24 @@ public sealed record ProcurementDocumentView(Guid Id, string FileName, string Co
 
 public sealed record ProcurementEventView(Guid Id, string Action, string Text, string ActorName, string? FromStatus, string? ToStatus, string? Comment, DateTimeOffset CreatedAt);
 
-public sealed record ProcurementApprovalView(Guid Id, int Round, ProcurementApprovalDecision Decision, string? Comment, string DeciderName, decimal PurchaseTotal, DateTimeOffset CreatedAt);
+public sealed record ProcurementApprovalView(Guid Id, int Round, ProcurementApprovalDecision Decision, string? Comment, string DeciderName, decimal PurchaseTotal, DateTimeOffset CreatedAt,
+    string Stage = ProcurementApprovalStages.Director);
+
+/// <summary>
+/// Шаг маршрута в карточке заявки: head — руководитель отдела, finance — финансист, director — директор, supply — снабжение. State: done
+/// (согласовал), current (решает сейчас), pending (впереди), skipped (не нужен — Reason: initiatorHead, noHeads, noPurchase, underLimit),
+/// rejected, returned. Who — кто решил или кто решает (имена); пусто у финансиста и директора — не выбран в настройках.
+/// </summary>
+public sealed record ProcurementRouteStep(string Key, string State, IReadOnlyList<string> Who, DateTimeOffset? At = null, string? Comment = null, string? Reason = null);
+
+/// <summary>Цена позиции, уточнённая финансистом при согласовании (UZS за единицу).</summary>
+public sealed record ProcurementPriceInput(Guid ItemId, decimal Price);
 
 /// <summary>
 /// Что пользователь может сделать с заявкой — кнопки карточки (сервер проверяет то же самое при каждом действии). ApprovedEdit — правка
-/// утверждённой заявки снабжением (существенное изменение уйдёт директору повторно); Approve — решение директора; Issue — выдача со склада.
+/// утверждённой заявки снабжением (существенное изменение уйдёт на повторное согласование); Approve — решение согласующего текущего шага
+/// (согласовать, отклонить, вернуть); Price — финансист уточняет цены при согласовании; Issue — выдача со склада; Purchase — «Куплено»
+/// (снабжение, по утверждённой заявке, пока есть что купить).
 /// </summary>
 public sealed record ProcurementAbilities(
     bool Edit,
@@ -133,10 +146,21 @@ public sealed record ProcurementAbilities(
     bool Issue = false,
     bool ApprovedEdit = false,
     bool Offer = false,
-    bool Order = false);
+    bool Order = false,
+    bool Price = false,
+    bool Purchase = false);
 
-/// <summary>Заказ поставщику по заявке (в карточке заявки).</summary>
-public sealed record ProcurementRequestOrder(Guid Id, string Number, ProcurementOrderStatus Status, string SupplierName, decimal Total, DateOnly? ExpectedDate);
+/// <summary>Заказ поставщику по заявке (в карточке заявки); Direct — покупка «Куплено»: кто купил, когда и на какую сумму по этой заявке.</summary>
+public sealed record ProcurementRequestOrder(
+    Guid Id,
+    string Number,
+    ProcurementOrderStatus Status,
+    string SupplierName,
+    decimal Total,
+    DateOnly? ExpectedDate,
+    bool Direct = false,
+    DateTimeOffset? DeliveredAt = null,
+    string? ResponsibleName = null);
 
 public sealed record ProcurementRequestDetail(
     Guid Id,
@@ -171,7 +195,9 @@ public sealed record ProcurementRequestDetail(
     string? ApprovedByName = null,
     IReadOnlyList<ProcurementApprovalView>? Approvals = null,
     int OffersCount = 0,
-    IReadOnlyList<ProcurementRequestOrder>? Orders = null);
+    IReadOnlyList<ProcurementRequestOrder>? Orders = null,
+    IReadOnlyList<ProcurementRouteStep>? Route = null,
+    decimal DirectorLimit = ProcurementSettings.DefaultDirectorLimit);
 
 public sealed record ProcurementCategoryStat(string Name, int Requests, decimal Total);
 
@@ -205,7 +231,8 @@ public sealed record ProcurementNav(
     bool SeesStock = false,
     int AwaitingApproval = 0,
     int ToIssue = 0,
-    int ToReceive = 0);
+    int ToReceive = 0,
+    bool Decides = false);
 
 /// <summary>
 /// Раздел «Заявки» (снабжение): заявки на закупку с позициями, категориями, приоритетом, вложениями и историей; проверка склада, резерв,
@@ -222,10 +249,33 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
     public async Task<ProcurementContext> ContextAsync(Guid userId, IReadOnlySet<string> permissions, CancellationToken ct)
     {
         var user = await db.Users.AsNoTracking().Where(u => u.Id == userId)
-            .Select(u => new { u.DepartmentId, Director = u.IsActive && u.Roles.Any(r => r.Role.Name == SystemRoles.Director) })
+            .Select(u => new { u.DepartmentId, u.IsActive, Director = u.IsActive && u.Roles.Any(r => r.Role.Name == SystemRoles.Director) })
             .FirstOrDefaultAsync(ct);
         var heads = await db.WorkDepartmentHeads.AsNoTracking().Where(h => h.UserId == userId).Select(h => h.DepartmentId).ToListAsync(ct);
-        return new ProcurementContext(userId, permissions, user?.DepartmentId, heads.ToHashSet(), user?.Director ?? false);
+        var route = await RouteSettingsAsync(ct);
+        var active = user?.IsActive ?? false;
+        var director = user?.Director ?? false;
+        // Директор маршрута — выбранный в настройках; пока не выбран — любой с ролью «Директор».
+        return new ProcurementContext(userId, permissions, user?.DepartmentId, heads.ToHashSet(), director,
+            active && route.Finance == userId, route.Director is { } d ? active && d == userId : director);
+    }
+
+    /// <summary>Маршрут согласования из «Настройки → Отделы → Снабжение»: финансист и директор (отключённые — как не выбранные), лимит без директора.</summary>
+    private sealed record RouteSettings(Guid? Finance, Guid? Director, decimal Limit);
+
+    private async Task<RouteSettings> RouteSettingsAsync(CancellationToken ct)
+    {
+        var s = await db.ProcurementSettings.AsNoTracking()
+            .Select(x => new
+            {
+                x.FinanceApproverId, x.DirectorApproverId, x.DirectorLimit,
+                FinanceActive = db.Users.Any(u => u.Id == x.FinanceApproverId && u.IsActive),
+                DirectorActive = db.Users.Any(u => u.Id == x.DirectorApproverId && u.IsActive),
+            })
+            .FirstOrDefaultAsync(ct);
+        return s is null
+            ? new RouteSettings(null, null, ProcurementSettings.DefaultDirectorLimit)
+            : new RouteSettings(s.FinanceActive ? s.FinanceApproverId : null, s.DirectorActive ? s.DirectorApproverId : null, s.DirectorLimit);
     }
 
     private static void RequireOpen(ProcurementContext ctx)
@@ -241,7 +291,7 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
     {
         var q = db.ProcurementRequests.AsNoTracking();
         var me = ctx.UserId;
-        if (ctx.ReadsAll || ctx.IsDirector)
+        if (ctx.ReadsAll || ctx.IsDirector || ctx.Approves)
         {
             return q.Where(r => r.InitiatorId == me || r.Status != ProcurementRequestStatus.Draft);
         }
@@ -261,17 +311,15 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
         var me = ctx.UserId;
         var revisions = await db.ProcurementRequests.CountAsync(r => r.InitiatorId == me && r.Status == ProcurementRequestStatus.RevisionRequired, ct);
         var queue = ctx.Manages ? await Visible(ctx).CountAsync(r => r.Status == ProcurementRequestStatus.Submitted, ct) : 0;
-        var awaiting = ctx.IsDirector
-            ? await db.ProcurementRequests.CountAsync(r => r.Status == ProcurementRequestStatus.DirectorApproval, ct)
-              + await db.ProcurementPurchaseOrders.CountAsync(o => o.Status == ProcurementOrderStatus.AwaitingApproval, ct)
-            : 0;
+        var awaiting = await db.ProcurementRequests.AwaitingDecision(ctx).CountAsync(ct)
+                       + (ctx.IsDirector ? await db.ProcurementPurchaseOrders.CountAsync(o => o.Status == ProcurementOrderStatus.AwaitingApproval, ct) : 0);
         var toIssue = ctx.Warehouse
             ? await db.ProcurementStockReservations.Where(x => x.Status == ProcurementReservationStatus.Active).Select(x => x.RequestId).Distinct().CountAsync(ct)
             : 0;
         var receivable = ProcurementOrderRules.Receivable;
         var toReceive = ctx.Warehouse ? await db.ProcurementPurchaseOrders.CountAsync(o => receivable.Contains(o.Status), ct) : 0;
         return new ProcurementNav(ctx.CanCreate, ctx.ReadsAll, ctx.Manages, ctx.Configures, ctx.HeadOf.Count > 0, revisions + queue + awaiting, ctx.IsDirector,
-            ctx.Warehouse, ctx.SeesStock, awaiting, toIssue, toReceive);
+            ctx.Warehouse, ctx.SeesStock, awaiting, toIssue, toReceive, ProcurementRules.DecidesAny(ctx));
     }
 
     public async Task<ProcurementOverview> OverviewAsync(ProcurementContext ctx, CancellationToken ct)
@@ -300,12 +348,17 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
         var urgent = await visible.CountAsync(r => open.Contains(r.Status) && r.Priority == ProcurementPriority.Urgent, ct);
 
         var manages = ctx.Manages;
-        var director = ctx.IsDirector;
+        var heads = ctx.HeadOf.ToArray();
+        var finance = ctx.IsFinancier;
+        var director = ctx.ApprovesAsDirector;
         var action = visible.Where(r => (r.InitiatorId == me && (r.Status == ProcurementRequestStatus.Draft || r.Status == ProcurementRequestStatus.RevisionRequired))
                                         || (manages && r.Status == ProcurementRequestStatus.Submitted)
+                                        || (r.Status == ProcurementRequestStatus.HeadApproval && heads.Contains(r.DepartmentId))
+                                        || (finance && r.Status == ProcurementRequestStatus.FinanceApproval)
                                         || (director && r.Status == ProcurementRequestStatus.DirectorApproval));
         var needs = await RowsAsync(ctx, action
-            .OrderBy(r => r.Status == ProcurementRequestStatus.DirectorApproval ? 0 : r.Status == ProcurementRequestStatus.RevisionRequired ? 1 : r.Status == ProcurementRequestStatus.Submitted ? 2 : 3)
+            .OrderBy(r => r.Status == ProcurementRequestStatus.HeadApproval || r.Status == ProcurementRequestStatus.FinanceApproval || r.Status == ProcurementRequestStatus.DirectorApproval ? 0
+                : r.Status == ProcurementRequestStatus.RevisionRequired ? 1 : r.Status == ProcurementRequestStatus.Submitted ? 2 : 3)
             .ThenByDescending(r => r.Priority == ProcurementPriority.Urgent)
             .ThenBy(r => r.SubmittedAt ?? r.CreatedAt)
             .Take(6), ct);
@@ -337,7 +390,7 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
                 q = q.Where(r => ids.Contains(r.DepartmentId));
                 break;
             case "approvals":
-                q = q.Where(r => r.Status == ProcurementRequestStatus.DirectorApproval);
+                q = q.AwaitingDecision(ctx);
                 break;
         }
 
@@ -392,7 +445,7 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
         var total = await q.CountAsync(ct);
         var pageSize = Math.Clamp(s.PageSize, 5, 200);
         var page = Math.Max(s.Page, 1);
-        // Очередь директора — сначала давно ждущие.
+        // Очередь согласования — сначала давно ждущие (с момента прихода на шаг).
         var sorted = s.Scope == "approvals" && s.Sort is null ? q.OrderBy(r => r.ForwardedAt) : Sorted(q, s.Sort, s.Desc);
         var rows = await RowsAsync(ctx, sorted.Skip((page - 1) * pageSize).Take(pageSize), ct);
         return new PageResult<ProcurementRequestRow>(rows, total, page, pageSize);
@@ -475,22 +528,25 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
             .OrderBy(e => e.CreatedAt).ThenBy(e => e.Id)
             .Select(e => new { Event = e, Actor = e.Actor == null ? null : e.Actor.FullName })
             .ToListAsync(ct);
-        var approvals = await db.ProcurementApprovals.AsNoTracking().Where(a => a.RequestId == id).OrderBy(a => a.Round)
-            .Select(a => new ProcurementApprovalView(a.Id, a.Round, a.Decision, a.Comment, a.Decider!.FullName, a.PurchaseTotal, a.CreatedAt))
+        var approvals = await db.ProcurementApprovals.AsNoTracking().Where(a => a.RequestId == id).OrderBy(a => a.Round).ThenBy(a => a.CreatedAt)
+            .Select(a => new ProcurementApprovalView(a.Id, a.Round, a.Decision, a.Comment, a.Decider!.FullName, a.PurchaseTotal, a.CreatedAt, a.Stage))
             .ToListAsync(ct);
         var approvedBy = r.ApprovedById is { } by ? await db.Users.AsNoTracking().Where(u => u.Id == by).Select(u => u.FullName).FirstOrDefaultAsync(ct) : null;
+        var route = await RouteSettingsAsync(ct);
         var buyer = ctx.ReadsAll || ctx.IsDirector;
         var offers = buyer ? await db.ProcurementOffers.CountAsync(o => o.RequestId == id, ct) : 0;
         var orders = buyer
             ? await db.ProcurementPurchaseOrders.AsNoTracking().Where(o => o.Items.Any(i => i.RequestItem!.RequestId == id)).OrderBy(o => o.CreatedAt)
-                .Select(o => new ProcurementRequestOrder(o.Id, o.Number, o.Status, o.Supplier!.Name, o.Total, o.ExpectedDate)).ToListAsync(ct)
+                .Select(o => new ProcurementRequestOrder(o.Id, o.Number, o.Status, o.Supplier!.Name, o.Total, o.ExpectedDate, o.Direct, o.DeliveredAt, o.Responsible!.FullName))
+                .ToListAsync(ct)
             : [];
         var toOrder = items.Any(x => x.Item.Status != ProcurementItemStatus.Cancelled && x.Item.ToPurchase > x.Item.OrderedQty);
 
         var owner = ProcurementRules.IsOwner(ctx, r);
         var approvedEdit = ctx.Manages && ProcurementRules.ApprovedEditable(r.Status);
         var hasPurchase = items.Any(x => x.Item.Status != ProcurementItemStatus.Cancelled && x.Item.ToPurchase > 0);
-        bool Can(ProcurementRequestStatus to) => ProcurementRules.CanTransition(r.Status, to, owner, ctx.Manages, ctx.IsDirector);
+        var decides = ProcurementRules.Decides(ctx, r);
+        bool Can(ProcurementRequestStatus to) => ProcurementRules.CanTransition(r.Status, to, owner, ctx.Manages, decides);
         var can = new ProcurementAbilities(
             (owner && ProcurementRules.Editable(r.Status)) || approvedEdit,
             Can(ProcurementRequestStatus.Submitted),
@@ -502,6 +558,8 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
             ctx.Warehouse && ProcurementRules.Issuable(r.Status) && reserved.Values.Any(v => v > 0),
             approvedEdit && !(owner && ProcurementRules.Editable(r.Status)),
             ctx.Manages && hasPurchase && ProcurementOrderService.Offerable.Contains(r.Status),
+            ctx.Manages && toOrder && ProcurementOrderService.Orderable.Contains(r.Status),
+            decides && r.Status == ProcurementRequestStatus.FinanceApproval && hasPurchase,
             ctx.Manages && toOrder && ProcurementOrderService.Orderable.Contains(r.Status));
         var revision = r.Status == ProcurementRequestStatus.RevisionRequired
             ? history.LastOrDefault(h => h.Event.ToStatus == nameof(ProcurementRequestStatus.RevisionRequired))?.Event.Comment
@@ -519,7 +577,74 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
                 CanDeleteDocument(ctx, r, x.Doc))).ToList(),
             history.Select(x => new ProcurementEventView(x.Event.Id, x.Event.Action, x.Event.Text, x.Actor ?? "Система", x.Event.FromStatus, x.Event.ToStatus,
                 x.Event.Comment, x.Event.CreatedAt)).ToList(),
-            can, r.PurchaseTotal, r.ApprovalRound, r.ApprovedAt, approvedBy, approvals, offers, orders);
+            can, r.PurchaseTotal, r.ApprovalRound, r.ApprovedAt, approvedBy, approvals, offers, orders,
+            await RouteAsync(r, approvals, hasPurchase, route, ct), route.Limit);
+    }
+
+    /// <summary>
+    /// Маршрут заявки для карточки (текущий раунд): руководитель отдела, финансист, директор, снабжение — кто решил, кто решает, какие шаги не
+    /// нужны и почему. Заявки прежнего маршрута (у снабжения, переданные директору снабжением) и отменённые — без маршрута (null).
+    /// </summary>
+    private async Task<List<ProcurementRouteStep>?> RouteAsync(ProcurementRequest r, IReadOnlyList<ProcurementApprovalView> approvals, bool hasPurchase, RouteSettings route,
+        CancellationToken ct)
+    {
+        var round = approvals.Where(a => a.Round == Math.Max(r.ApprovalRound, 1)).ToList();
+        var newFlow = round.Any(a => a.Stage != ProcurementApprovalStages.Director)
+                      || r.Status is ProcurementRequestStatus.Draft or ProcurementRequestStatus.RevisionRequired or ProcurementRequestStatus.HeadApproval
+                          or ProcurementRequestStatus.FinanceApproval
+                      || (r.ApprovalRound > 0 && round.Count == 0 && r.Status is not (ProcurementRequestStatus.Submitted or ProcurementRequestStatus.DirectorApproval));
+        if (!newFlow || r.Status == ProcurementRequestStatus.Cancelled)
+        {
+            return null;
+        }
+
+        var heads = await db.WorkDepartmentHeads.AsNoTracking().Where(h => h.DepartmentId == r.DepartmentId && h.User!.IsActive)
+            .Select(h => new { h.UserId, h.User!.FullName }).ToListAsync(ct);
+        var ids = new[] { route.Finance, route.Director }.OfType<Guid>().ToList();
+        var names = await db.Users.AsNoTracking().Where(u => ids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        var directors = route.Director is { } d
+            ? [names.GetValueOrDefault(d, "—")]
+            : await db.Users.AsNoTracking().Where(u => u.IsActive && u.Roles.Any(x => x.Role.Name == SystemRoles.Director)).Select(u => u.FullName).ToListAsync(ct);
+        var finance = route.Finance is { } f ? new List<string> { names.GetValueOrDefault(f, "—") } : [];
+        var closed = r.Status is ProcurementRequestStatus.Rejected;
+
+        ProcurementRouteStep Step(string key, ProcurementRequestStatus step, bool needed, string? reason, IReadOnlyList<string> who)
+        {
+            if (round.LastOrDefault(a => a.Stage == key) is { } decision)
+            {
+                var state = decision.Decision switch
+                {
+                    ProcurementApprovalDecision.Approved => "done",
+                    ProcurementApprovalDecision.Rejected => "rejected",
+                    _ => "returned",
+                };
+                return new ProcurementRouteStep(key, state, [decision.DeciderName], decision.CreatedAt, decision.Comment);
+            }
+
+            if (!needed)
+            {
+                return new ProcurementRouteStep(key, "skipped", [], Reason: reason);
+            }
+
+            return new ProcurementRouteStep(key, r.Status == step ? "current" : closed ? "skipped" : "pending", who);
+        }
+
+        var initiatorHeads = heads.Any(h => h.UserId == r.InitiatorId);
+        var needsDirector = hasPurchase && r.PurchaseTotal > route.Limit;
+        var supplyState = r.Status switch
+        {
+            ProcurementRequestStatus.Fulfilled => "done",
+            ProcurementRequestStatus.Approved or ProcurementRequestStatus.PartiallyFulfilled => "current",
+            _ => closed ? "skipped" : "pending",
+        };
+        return
+        [
+            Step(ProcurementApprovalStages.Head, ProcurementRequestStatus.HeadApproval, heads.Count > 0 && !initiatorHeads, initiatorHeads ? "initiatorHead" : "noHeads",
+                heads.Select(h => h.FullName).ToList()),
+            Step(ProcurementApprovalStages.Finance, ProcurementRequestStatus.FinanceApproval, hasPurchase, "noPurchase", finance),
+            Step(ProcurementApprovalStages.Director, ProcurementRequestStatus.DirectorApproval, needsDirector, hasPurchase ? "underLimit" : "noPurchase", directors),
+            new ProcurementRouteStep("supply", supplyState, []),
+        ];
     }
 
     // ---------- Создание и правка ----------
@@ -599,7 +724,7 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
     /// <summary>
     /// Правка: черновик или заявка на доработке — инициатором; утверждённая — снабжением (позиции, количества, цены, желаемая дата, приоритет,
     /// комментарий): существенное изменение (рост к закупке, цены сверх допуска, новые или удалённые позиции, другой товар) отправляет её
-    /// директору на повторное согласование, остальное — только в историю. Submit — отправить после правки (инициатор).
+    /// финансисту на повторное согласование, остальное — только в историю. Submit — отправить после правки (инициатор).
     /// </summary>
     public Task UpdateAsync(ProcurementContext ctx, Guid id, ProcurementRequestInput input, CancellationToken ct) => ledger.RetryAsync(async () =>
     {
@@ -693,13 +818,14 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
             var reasons = ProcurementRules.MaterialChanges(approved, Lines(r), settings?.ReapprovalTolerancePercent ?? 0m);
             if (reasons.Count > 0)
             {
+                // Существенное изменение — снова к финансисту (новый раунд): он решит по новой сумме, нужен ли директор.
                 var from = r.Status;
-                r.Status = ProcurementRequestStatus.DirectorApproval;
+                r.Status = ProcurementRequestStatus.FinanceApproval;
                 r.ApprovalRound++;
                 r.ForwardedAt = Now;
                 Log(r, ctx.UserId, "reapproval", from, r.Status,
-                    $"Существенное изменение после утверждения — повторное согласование директором: {string.Join("; ", reasons)}", null, diff.Value.Json);
-                await NotifyAsync(ctx, r, from, r.Status, null, department.Name, ct);
+                    $"Существенное изменение после утверждения — повторное согласование финансистом: {string.Join("; ", reasons)}", null, diff.Value.Json);
+                await NotifyAsync(ctx, r, from, r.Status, null, department.Name, await RouteSettingsAsync(ct), ct);
             }
             else
             {
@@ -722,13 +848,16 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
 
     // ---------- Статусы ----------
 
-    /// <summary>Отправить черновик или исправленную заявку (инициатор): часть «со склада» резервируется. Повторная отправка — ничего не меняет.</summary>
+    /// <summary>
+    /// Отправить черновик или исправленную заявку (инициатор): часть «со склада» резервируется, заявка идёт на первый шаг маршрута —
+    /// руководителю отдела или (заявка руководителя) финансисту. Повторная отправка — ничего не меняет.
+    /// </summary>
     public Task SubmitAsync(ProcurementContext ctx, Guid id, CancellationToken ct) => ChangeAsync(ctx, id, ProcurementRequestStatus.Submitted, null, ct);
 
-    /// <summary>Передать отправленную заявку директору на согласование (снабжение).</summary>
+    /// <summary>Передать директору заявку прежнего шага «у снабжения» (снабжение) — для заявок, отправленных до нового маршрута.</summary>
     public Task ForwardAsync(ProcurementContext ctx, Guid id, CancellationToken ct) => ChangeAsync(ctx, id, ProcurementRequestStatus.DirectorApproval, null, ct);
 
-    /// <summary>Вернуть на доработку с обязательным комментарием: отправленную — снабжение, на согласовании — директор. Резерв снимается.</summary>
+    /// <summary>Вернуть на доработку с обязательным комментарием — согласующий текущего шага (заявку прежнего шага — снабжение). Резерв снимается.</summary>
     public Task ReturnAsync(ProcurementContext ctx, Guid id, string? comment, CancellationToken ct) =>
         ChangeAsync(ctx, id, ProcurementRequestStatus.RevisionRequired, comment, ct);
 
@@ -736,15 +865,19 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
     public Task CancelAsync(ProcurementContext ctx, Guid id, string? comment, CancellationToken ct) =>
         ChangeAsync(ctx, id, ProcurementRequestStatus.Cancelled, comment, ct);
 
-    /// <summary>Утвердить заявку на согласовании — только директор (роль проверяется по базе); комментарий — по желанию.</summary>
-    public Task ApproveAsync(ProcurementContext ctx, Guid id, string? comment, CancellationToken ct) =>
-        ChangeAsync(ctx, id, ProcurementRequestStatus.Approved, comment, ct);
+    /// <summary>
+    /// Согласовать текущий шаг — его согласующий (руководитель отдела, финансист, директор маршрута); комментарий — по желанию. Финансист может
+    /// уточнить цены позиций (prices) — по новой сумме решается, нужен ли директор. Дальше — следующий шаг или снабжение.
+    /// </summary>
+    public Task ApproveAsync(ProcurementContext ctx, Guid id, string? comment, CancellationToken ct, IReadOnlyList<ProcurementPriceInput>? prices = null) =>
+        ChangeAsync(ctx, id, ProcurementRequestStatus.Approved, comment, ct, prices);
 
-    /// <summary>Отклонить заявку на согласовании — только директор, с обязательным комментарием. Резерв снимается.</summary>
+    /// <summary>Отклонить заявку — согласующий текущего шага, с обязательным комментарием. Резерв снимается.</summary>
     public Task RejectAsync(ProcurementContext ctx, Guid id, string? comment, CancellationToken ct) =>
         ChangeAsync(ctx, id, ProcurementRequestStatus.Rejected, comment, ct);
 
-    private Task ChangeAsync(ProcurementContext ctx, Guid id, ProcurementRequestStatus to, string? comment, CancellationToken ct) => ledger.RetryAsync(async () =>
+    private Task ChangeAsync(ProcurementContext ctx, Guid id, ProcurementRequestStatus to, string? comment, CancellationToken ct,
+        IReadOnlyList<ProcurementPriceInput>? prices = null) => ledger.RetryAsync(async () =>
     {
         var r = await RequireTrackedAsync(ctx, id, ct);
         if (r.Status == to)
@@ -752,31 +885,48 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
             return true; // двойное нажатие: заявка уже в этом статусе
         }
 
-        await MoveAsync(ctx, r, to, comment, r.Department!.Name, ct);
+        // Двойное нажатие «Отправить»: заявка уже ушла по маршруту (на согласовании или утверждена) — второй отправки нет.
+        if (to == ProcurementRequestStatus.Submitted && ProcurementRules.IsOwner(ctx, r) && r.Status is ProcurementRequestStatus.HeadApproval
+                or ProcurementRequestStatus.FinanceApproval or ProcurementRequestStatus.DirectorApproval or ProcurementRequestStatus.Approved)
+        {
+            return true;
+        }
+
+        // Двойное нажатие «Согласовать»: шаг уже согласован этим же человеком и заявка ушла дальше — второго решения нет.
+        if (to == ProcurementRequestStatus.Approved && !ProcurementRules.Decides(ctx, r)
+            && await db.ProcurementApprovals.AnyAsync(a => a.RequestId == r.Id && a.Round == r.ApprovalRound && a.DeciderId == ctx.UserId
+                                                          && a.Decision == ProcurementApprovalDecision.Approved, ct))
+        {
+            return true;
+        }
+
+        await MoveAsync(ctx, r, to, comment, r.Department!.Name, ct, prices);
         await db.SaveChangesAsync(ct);
         return true;
     });
 
     /// <summary>
-    /// Переход статуса с проверкой прав и комментария, резервом или его снятием, решением директора, историей и уведомлениями — сохраняет
-    /// вызывающий вместе с остальными изменениями. Заявка, где всё берётся со склада, после отправки утверждается сама: закупки нет —
-    /// согласовывать директору нечего.
+    /// Переход статуса с проверкой прав и комментария, резервом или его снятием, решением согласующего, историей и уведомлениями — сохраняет
+    /// вызывающий вместе с остальными изменениями. Submitted — «отправить»: шаг выбирает маршрут (FirstStep), а заявка, где всё со склада и
+    /// руководитель не нужен, утверждается сама. Approved — «согласовать шаг»: дальше — следующий шаг (NextStep) или снабжение.
     /// </summary>
-    private async Task MoveAsync(ProcurementContext ctx, ProcurementRequest r, ProcurementRequestStatus to, string? comment, string departmentName, CancellationToken ct)
+    private async Task MoveAsync(ProcurementContext ctx, ProcurementRequest r, ProcurementRequestStatus to, string? comment, string departmentName, CancellationToken ct,
+        IReadOnlyList<ProcurementPriceInput>? prices = null)
     {
         var from = r.Status;
         var owner = ProcurementRules.IsOwner(ctx, r);
-        if (!ProcurementRules.CanTransition(from, to, owner, ctx.Manages, ctx.IsDirector))
+        if (!ProcurementRules.CanTransition(from, to, owner, ctx.Manages, ProcurementRules.Decides(ctx, r)))
         {
             if (ProcurementRules.CanTransition(from, to, true, true, true))
             {
                 throw new FieldForbiddenException((from, to) switch
                 {
-                    (ProcurementRequestStatus.DirectorApproval, _) or (_, ProcurementRequestStatus.Approved or ProcurementRequestStatus.Rejected) =>
-                        "Утвердить, отклонить или вернуть заявку на согласовании может только директор.",
+                    (_, ProcurementRequestStatus.Cancelled) or (_, ProcurementRequestStatus.Submitted) => "Это может сделать только инициатор заявки.",
+                    (ProcurementRequestStatus.HeadApproval, _) => $"Согласовать, отклонить или вернуть заявку на этом шаге может руководитель отдела «{departmentName}».",
+                    (ProcurementRequestStatus.FinanceApproval, _) => "Согласовать, отклонить или вернуть заявку на этом шаге может финансист — его выбирают в «Настройки → Отделы → Снабжение».",
+                    (ProcurementRequestStatus.DirectorApproval, _) => "Согласовать, отклонить или вернуть заявку на этом шаге может директор.",
                     (_, ProcurementRequestStatus.DirectorApproval) => "Передать заявку директору может снабжение.",
-                    (_, ProcurementRequestStatus.RevisionRequired) => "Вернуть заявку на доработку может снабжение.",
-                    _ => "Это может сделать только инициатор заявки.",
+                    _ => "Вернуть заявку на доработку может снабжение.",
                 });
             }
 
@@ -810,46 +960,86 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
             throw new FieldConflictException("В заявке нет позиций к закупке — всё выдаётся со склада, согласование директора не нужно.");
         }
 
+        if (to == ProcurementRequestStatus.Approved && from == ProcurementRequestStatus.FinanceApproval && prices is { Count: > 0 })
+        {
+            ApplyPrices(ctx, r, prices);
+        }
+
         var now = Now;
+        var target = to;
+        var stage = ProcurementRules.Stage(from);
+        var route = await RouteSettingsAsync(ct);
         string action, text;
         switch (to)
         {
             case ProcurementRequestStatus.Submitted:
                 var reservedText = await ReserveAsync(r, ct);
+                // Цена обязательна у части к закупке — после резерва: позиции без каталога резерв переводит целиком в закупку.
+                if (ProcurementRules.MissingPrice(active) is { } missing)
+                {
+                    throw new FieldValidationException(missing);
+                }
+
+                Totals(r);
                 r.SubmittedAt = now;
-                (action, text) = from == ProcurementRequestStatus.RevisionRequired ? ("resubmitted", "Исправленная заявка отправлена") : ("submitted", "Заявка отправлена");
+                r.ApprovalRound++;
+                var heads = await HeadsAsync(r.DepartmentId, ct);
+                target = ProcurementRules.FirstStep(heads.Contains(r.InitiatorId), heads.Count > 0, active.Any(i => i.ToPurchase > 0));
+                action = from == ProcurementRequestStatus.RevisionRequired ? "resubmitted" : "submitted";
+                text = (from == ProcurementRequestStatus.RevisionRequired ? "Исправленная заявка отправлена" : "Заявка отправлена") + target switch
+                {
+                    ProcurementRequestStatus.HeadApproval => " на согласование руководителю отдела",
+                    ProcurementRequestStatus.FinanceApproval => " на согласование финансисту",
+                    _ => "",
+                };
+                if (target == ProcurementRequestStatus.Approved)
+                {
+                    Approve(ctx, r, now, byUser: false);
+                }
+                else
+                {
+                    r.ForwardedAt = now;
+                }
+
                 if (reservedText is not null)
                 {
                     text += $"; зарезервировано на складе: {reservedText}";
                 }
 
                 break;
-            case ProcurementRequestStatus.DirectorApproval:
-                r.ForwardedAt = now;
-                r.ApprovalRound++;
-                (action, text) = ("forwarded", r.ApprovalRound > 1 ? $"Передана директору на согласование (раунд {r.ApprovalRound})" : "Передана директору на согласование");
-                break;
             case ProcurementRequestStatus.Approved:
-                r.ApprovedAt = now;
-                r.ApprovedById = ctx.UserId;
-                r.ApprovedSnapshot = JsonSerializer.Serialize(Lines(r), Json);
-                Decide(ctx, r, ProcurementApprovalDecision.Approved, note);
-                (action, text) = ("approved", $"Утверждена директором: к закупке ≈ {ProcurementRules.Money(r.PurchaseTotal)} сум");
+                Decide(ctx, r, stage!, ProcurementApprovalDecision.Approved, note);
+                target = ProcurementRules.NextStep(from, active.Any(i => i.ToPurchase > 0), r.PurchaseTotal, route.Limit);
+                action = target == ProcurementRequestStatus.Approved ? "approved" : "step_approved";
+                var who = By(stage!);
+                if (target == ProcurementRequestStatus.Approved)
+                {
+                    Approve(ctx, r, now, byUser: true);
+                    text = $"{(stage == ProcurementApprovalStages.Director ? "Утверждена" : "Согласована")} {who}: к закупке ≈ {ProcurementRules.Money(r.PurchaseTotal)} сум — передана в снабжение";
+                }
+                else
+                {
+                    r.ForwardedAt = now;
+                    text = target == ProcurementRequestStatus.DirectorApproval
+                        ? $"Согласована {who}: к закупке ≈ {ProcurementRules.Money(r.PurchaseTotal)} сум — больше лимита {ProcurementRules.Money(route.Limit)} сум, передана директору"
+                        : $"Согласована {who} — передана финансисту";
+                }
+
                 break;
             case ProcurementRequestStatus.Rejected:
                 await ReleaseAsync(r, ct);
                 CancelOpenItems(r);
-                Decide(ctx, r, ProcurementApprovalDecision.Rejected, note);
-                (action, text) = ("rejected", "Отклонена директором");
+                Decide(ctx, r, stage!, ProcurementApprovalDecision.Rejected, note);
+                (action, text) = ("rejected", $"Отклонена {By(stage!)}");
                 break;
             case ProcurementRequestStatus.RevisionRequired:
                 await ReleaseAsync(r, ct);
-                if (from == ProcurementRequestStatus.DirectorApproval)
+                if (stage is not null)
                 {
-                    Decide(ctx, r, ProcurementApprovalDecision.Revision, note);
+                    Decide(ctx, r, stage, ProcurementApprovalDecision.Revision, note);
                 }
 
-                (action, text) = ("returned", from == ProcurementRequestStatus.DirectorApproval ? "Директор вернул на доработку" : "Возвращена на доработку");
+                (action, text) = ("returned", stage is null ? "Возвращена на доработку" : $"Возвращена на доработку {By(stage)}");
                 break;
             case ProcurementRequestStatus.Cancelled:
                 await ReleaseAsync(r, ct);
@@ -857,37 +1047,92 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
                 CancelOpenItems(r);
                 (action, text) = ("cancelled", "Заявка отменена");
                 break;
+            case ProcurementRequestStatus.DirectorApproval:
+                // Заявка прежнего шага «у снабжения»: снабжение передаёт её директору.
+                r.ForwardedAt = now;
+                r.ApprovalRound++;
+                (action, text) = ("forwarded", r.ApprovalRound > 1 ? $"Передана директору на согласование (раунд {r.ApprovalRound})" : "Передана директору на согласование");
+                break;
             default:
                 (action, text) = ("status", $"Статус: {ProcurementRules.Label(from)} → {ProcurementRules.Label(to)}");
                 break;
         }
 
-        r.Status = to;
+        r.Status = target;
         r.UpdatedAt = now;
         Refresh(r);
-        Log(r, ctx.UserId, action, from, to, text, note, null);
-        await NotifyAsync(ctx, r, from, to, note, departmentName, ct);
-
-        // Всё со склада — закупать нечего: утверждается сама, без директора.
-        if (to == ProcurementRequestStatus.Submitted && r.Items.Where(i => i.Status != ProcurementItemStatus.Cancelled).All(i => i.ToPurchase <= 0))
+        // Всё со склада и руководитель не нужен: в истории — отправка и отдельно «утверждена сама».
+        var auto = to == ProcurementRequestStatus.Submitted && target == ProcurementRequestStatus.Approved;
+        Log(r, ctx.UserId, action, from, auto ? ProcurementRequestStatus.Submitted : target, text, note, null);
+        if (auto)
         {
-            r.Status = ProcurementRequestStatus.Approved;
-            r.ApprovedAt = now;
-            r.ApprovedById = null;
-            r.ApprovedSnapshot = JsonSerializer.Serialize(Lines(r), Json);
             Log(r, ctx.UserId, "auto_approved", ProcurementRequestStatus.Submitted, ProcurementRequestStatus.Approved,
-                "Всё есть на складе — закупка не нужна, заявка утверждена без согласования директора", null, null);
-            notifier.Notify(r.InitiatorId == ctx.UserId ? null : r.InitiatorId, UserNotificationKind.ProcurementStatus,
-                $"Заявка {r.Number} утверждена: всё есть на складе", r.Title, $"/requests/{r.Id}");
+                "Всё есть на складе — закупка не нужна, заявка утверждена без согласования", null, null);
         }
+
+        await NotifyAsync(ctx, r, from, target, note, departmentName, route, ct);
     }
 
-    /// <summary>Решение директора: запись раунда со снимком позиций и суммой к закупке.</summary>
-    private void Decide(ProcurementContext ctx, ProcurementRequest r, ProcurementApprovalDecision decision, string? comment) =>
+    /// <summary>Заявка утверждена — передана в снабжение: кто и когда (null — утверждена сама: всё со склада), снимок утверждённых позиций.</summary>
+    private static void Approve(ProcurementContext ctx, ProcurementRequest r, DateTimeOffset now, bool byUser)
+    {
+        r.ApprovedAt = now;
+        r.ApprovedById = byUser ? ctx.UserId : null;
+        r.ApprovedSnapshot = JsonSerializer.Serialize(Lines(r), Json);
+    }
+
+    /// <summary>«руководителем отдела», «финансистом», «директором» — кто решил на шаге.</summary>
+    private static string By(string stage) => stage switch
+    {
+        ProcurementApprovalStages.Head => "руководителем отдела",
+        ProcurementApprovalStages.Finance => "финансистом",
+        _ => "директором",
+    };
+
+    /// <summary>
+    /// Финансист уточняет цены позиций к закупке при согласовании: цена больше нуля, до 100 млрд, два знака; позиция — этой заявки. Изменения —
+    /// в историю; суммы пересчитываются (по ним решается, нужен ли директор).
+    /// </summary>
+    private void ApplyPrices(ProcurementContext ctx, ProcurementRequest r, IReadOnlyList<ProcurementPriceInput> prices)
+    {
+        var changes = new List<string>();
+        foreach (var input in prices)
+        {
+            var item = r.Items.FirstOrDefault(i => i.Id == input.ItemId && i.Status != ProcurementItemStatus.Cancelled)
+                       ?? throw new FieldValidationException("Позиция не найдена в заявке — обновите страницу.");
+            if (input.Price <= 0 || ProcurementRules.CheckNumbers(item.Quantity, input.Price) is not null)
+            {
+                throw new FieldValidationException($"Позиция {item.LineNo} «{item.Name}»: цена — больше нуля, до 100 млрд, не больше двух знаков после запятой.");
+            }
+
+            if (item.EstimatedPrice == input.Price)
+            {
+                continue;
+            }
+
+            changes.Add($"«{item.Name}»: {(item.EstimatedPrice is { } p ? ProcurementRules.Money(p) : "—")} → {ProcurementRules.Money(input.Price)}");
+            item.EstimatedPrice = input.Price;
+            item.UpdatedAt = Now;
+        }
+
+        if (changes.Count == 0)
+        {
+            return;
+        }
+
+        var before = r.PurchaseTotal;
+        Totals(r);
+        Log(r, ctx.UserId, "prices", null, null,
+            $"Финансист уточнил цены: {string.Join("; ", changes)}; к закупке {ProcurementRules.Money(before)} → {ProcurementRules.Money(r.PurchaseTotal)} сум", null, null);
+    }
+
+    /// <summary>Решение согласующего: запись шага раунда со снимком позиций и суммой к закупке.</summary>
+    private void Decide(ProcurementContext ctx, ProcurementRequest r, string stage, ProcurementApprovalDecision decision, string? comment) =>
         db.ProcurementApprovals.Add(new ProcurementApproval
         {
             RequestId = r.Id,
             Round = Math.Max(r.ApprovalRound, 1),
+            Stage = stage,
             Decision = decision,
             Comment = comment,
             DeciderId = ctx.UserId,
@@ -1016,8 +1261,13 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
 
     // ---------- Уведомления ----------
 
+    /// <summary>
+    /// Уведомления по переходу: согласующему нового шага — «ждёт вашего согласования», инициатору — где заявка сейчас; утверждённая — снабжению;
+    /// отклонённая, возвращённая — инициатору; отменённая — согласующим шага, где она была. Финансист не выбран — тем, кто настраивает
+    /// снабжение. Часть «со склада» стала к выдаче — кладовщику.
+    /// </summary>
     private async Task NotifyAsync(ProcurementContext ctx, ProcurementRequest r, ProcurementRequestStatus from, ProcurementRequestStatus to, string? comment,
-        string departmentName, CancellationToken ct)
+        string departmentName, RouteSettings route, CancellationToken ct)
     {
         var link = $"/requests/{r.Id}";
         var initiator = r.Initiator?.FullName
@@ -1036,49 +1286,59 @@ public sealed partial class ProcurementRequestService(IAppDbContext db, IProcure
 
         switch (to)
         {
-            case ProcurementRequestStatus.Submitted:
-                var heads = await HeadsAsync(r.DepartmentId, ct);
-                var processors = await RoleUsersAsync(Permissions.ProcurementManage, ct);
-                var title = from == ProcurementRequestStatus.RevisionRequired ? $"Заявка исправлена: {r.Number}" : $"Новая заявка {r.Number}";
-                Send(heads.Concat(processors), UserNotificationKind.ProcurementRequest, $"{title} — {r.Title}", summary);
-                if (r.Items.Any(i => i.Status != ProcurementItemStatus.Cancelled && i.ToPurchase > 0))
+            case ProcurementRequestStatus.HeadApproval or ProcurementRequestStatus.FinanceApproval or ProcurementRequestStatus.DirectorApproval:
+                var approvers = await ApproversAsync(r, to, route, ct);
+                var again = from is ProcurementRequestStatus.Approved or ProcurementRequestStatus.PartiallyFulfilled;
+                Send(approvers, UserNotificationKind.ProcurementRequest,
+                    again ? $"Повторное согласование: {r.Number} — {r.Title}" : $"Заявка ждёт вашего согласования: {r.Number} — {r.Title}", summary);
+                if (to == ProcurementRequestStatus.FinanceApproval && approvers.Count == 0)
                 {
-                    // Директору — сразу, для сведения: решать он будет, когда снабжение передаст заявку на согласование.
-                    Send((await DirectorsAsync(ct)).Except(heads).Except(processors), UserNotificationKind.ProcurementStatus, $"{title} — {r.Title}",
-                        $"{summary} · сейчас у снабжения");
+                    Send(await RoleUsersAsync(Permissions.ProcurementSettings, ct), UserNotificationKind.ProcurementStatus,
+                        $"Заявка {r.Number} ждёт финансиста, а он не выбран", "Выберите финансиста в «Настройки → Отделы → Снабжение».");
                 }
 
-                if (r.UsesStock)
+                Send([r.InitiatorId], UserNotificationKind.ProcurementStatus, to switch
                 {
-                    Send(await RoleUsersAsync(Permissions.ProcurementWarehouse, ct), UserNotificationKind.ProcurementRequest, $"К выдаче со склада: {r.Number} — {r.Title}", summary);
-                }
-
+                    ProcurementRequestStatus.HeadApproval => $"Заявка {r.Number} на согласовании у руководителя отдела",
+                    ProcurementRequestStatus.FinanceApproval => $"Заявка {r.Number} на согласовании у финансиста",
+                    _ => again ? $"Заявка {r.Number} изменена и снова на согласовании" : $"Заявка {r.Number} на согласовании у директора",
+                }, r.Title);
                 break;
-            case ProcurementRequestStatus.DirectorApproval:
-                var again = from != ProcurementRequestStatus.Submitted;
-                Send(await DirectorsAsync(ct), UserNotificationKind.ProcurementRequest,
-                    again ? $"Повторное согласование: {r.Number} — {r.Title}" : $"Заявка ждёт согласования: {r.Number} — {r.Title}", summary);
-                Send([r.InitiatorId], UserNotificationKind.ProcurementStatus,
-                    again ? $"Заявка {r.Number} изменена и снова на согласовании у директора" : $"Заявка {r.Number} передана директору на согласование", r.Title);
+            case ProcurementRequestStatus.Approved when from != ProcurementRequestStatus.Draft && from != ProcurementRequestStatus.RevisionRequired:
+                Send([r.InitiatorId], UserNotificationKind.ProcurementStatus, $"Заявка {r.Number} согласована — передана в снабжение", comment ?? r.Title);
+                Send(await RoleUsersAsync(Permissions.ProcurementManage, ct), UserNotificationKind.ProcurementRequest, $"Согласована к закупке: {r.Number} — {r.Title}", summary);
                 break;
             case ProcurementRequestStatus.Approved:
-                Send([r.InitiatorId], UserNotificationKind.ProcurementStatus, $"Заявка {r.Number} утверждена директором", comment ?? r.Title);
-                Send(await RoleUsersAsync(Permissions.ProcurementManage, ct), UserNotificationKind.ProcurementRequest, $"Утверждена к закупке: {r.Number} — {r.Title}", summary);
+                notifier.Notify(r.InitiatorId == ctx.UserId ? null : r.InitiatorId, UserNotificationKind.ProcurementStatus,
+                    $"Заявка {r.Number} утверждена: всё есть на складе", r.Title, link);
                 break;
             case ProcurementRequestStatus.Rejected:
-                Send([r.InitiatorId, .. await RoleUsersAsync(Permissions.ProcurementManage, ct)], UserNotificationKind.ProcurementStatus,
-                    $"Заявка {r.Number} отклонена директором", comment);
+                Send([r.InitiatorId], UserNotificationKind.ProcurementStatus, $"Заявка {r.Number} отклонена", comment);
                 break;
             case ProcurementRequestStatus.RevisionRequired:
-                var recipients = from == ProcurementRequestStatus.DirectorApproval ? [r.InitiatorId, .. await RoleUsersAsync(Permissions.ProcurementManage, ct)] : new List<Guid> { r.InitiatorId };
-                Send(recipients, UserNotificationKind.ProcurementStatus, $"Заявка {r.Number} возвращена на доработку", comment);
+                Send([r.InitiatorId], UserNotificationKind.ProcurementStatus, $"Заявка {r.Number} возвращена на доработку", comment);
                 break;
             case ProcurementRequestStatus.Cancelled when from != ProcurementRequestStatus.Draft:
-                var notify = (await RoleUsersAsync(Permissions.ProcurementManage, ct)).Concat(from == ProcurementRequestStatus.DirectorApproval ? await DirectorsAsync(ct) : []);
+                var notify = from == ProcurementRequestStatus.Submitted ? await RoleUsersAsync(Permissions.ProcurementManage, ct) : await ApproversAsync(r, from, route, ct);
                 Send(notify, UserNotificationKind.ProcurementStatus, $"Заявка {r.Number} отменена инициатором", comment ?? r.Title);
                 break;
         }
+
+        // Часть «со склада» стала к выдаче (руководитель согласовал или заявка утверждена) — кладовщику.
+        if (r.UsesStock && ProcurementRules.Issuable(to) && !ProcurementRules.Issuable(from))
+        {
+            Send(await RoleUsersAsync(Permissions.ProcurementWarehouse, ct), UserNotificationKind.ProcurementRequest, $"К выдаче со склада: {r.Number} — {r.Title}", summary);
+        }
     }
+
+    /// <summary>Кто решает шаг: руководители отдела заявки; финансист маршрута; директор маршрута (не выбран — все с ролью «Директор»).</summary>
+    private async Task<List<Guid>> ApproversAsync(ProcurementRequest r, ProcurementRequestStatus step, RouteSettings route, CancellationToken ct) => step switch
+    {
+        ProcurementRequestStatus.HeadApproval => await HeadsAsync(r.DepartmentId, ct),
+        ProcurementRequestStatus.FinanceApproval => route.Finance is { } f ? [f] : [],
+        ProcurementRequestStatus.DirectorApproval => route.Director is { } d ? [d] : await DirectorsAsync(ct),
+        _ => [],
+    };
 
     private Task<List<Guid>> HeadsAsync(Guid departmentId, CancellationToken ct) =>
         db.WorkDepartmentHeads.AsNoTracking().Where(h => h.DepartmentId == departmentId && h.User!.IsActive).Select(h => h.UserId).ToListAsync(ct);

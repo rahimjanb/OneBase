@@ -13,8 +13,8 @@ import {
   LayoutGrid,
   ListChecks,
   PackageCheck,
-  PackageOpen,
-  ShoppingCart,
+  ScrollText,
+  ShoppingBag,
   Sparkles,
   Table2,
   Tags,
@@ -84,14 +84,16 @@ export const requestTabs: SectionTab[] = [
 ];
 
 /**
- * «Снабжение»: заказы поставщикам и поставщики (снабжение, директор — procurement.read; кладовщику — склад), склад (остатки и каталог),
- * заявки к выдаче, журнал движений.
+ * «Снабжение»: к закупке (согласованные заявки — снабжение покупает и отмечает «Куплено»), тендеры (журнал закупок сырья через тендер) и
+ * поставщики (снабжение, директор —
+ * procurement.read), склад (остатки и каталог), заявки к выдаче, журнал движений, отчёты. Заказы поставщикам и приёмка — прежний путь:
+ * в навигации их нет, старые заказы открываются по ссылкам.
  */
 export const procurementTabs: SectionTab[] = [
   { key: "overview", label: "Обзор", href: "/procurement", icon: LayoutDashboard },
-  { key: "orders", label: "Заказы", href: "/procurement/orders", icon: ShoppingCart, permission: "procurement.read" },
+  { key: "buy", label: "К закупке", href: "/procurement/buy", icon: ShoppingBag, permission: "procurement.read" },
+  { key: "tenders", label: "Тендеры", href: "/procurement/tenders", icon: ScrollText, permission: "procurement.read" },
   { key: "suppliers", label: "Поставщики", href: "/procurement/suppliers", icon: Building, permission: "procurement.read" },
-  { key: "receipts", label: "Приёмка", href: "/procurement/receipts", icon: PackageOpen },
   { key: "stock", label: "Склад", href: "/procurement/stock", icon: Warehouse },
   { key: "issue", label: "К выдаче", href: "/procurement/issue", icon: PackageCheck },
   { key: "movements", label: "Движения", href: "/procurement/movements", icon: ArrowLeftRight },

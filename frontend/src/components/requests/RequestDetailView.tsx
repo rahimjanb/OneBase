@@ -19,19 +19,35 @@ import {
   Pencil,
   Scale,
   Send,
+  ShoppingBag,
   ShoppingCart,
   Trash2,
   Undo2,
   UserCheck,
 } from "lucide-react";
 import { OrderStatusPill } from "@/components/procurement/ProcKit";
+import { PurchaseSheet } from "@/components/procurement/PurchaseSheet";
 import { Sheet } from "@/components/field/Sheet";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { fileSize } from "@/lib/format";
-import { approvalDecisionLabel, dateRu, itemStatusLabel, money, parseNumber, quantity, requestStages, requestStatusLabel, stageIndex, stampRu, type RequestDetail } from "@/lib/procurement";
+import {
+  approvalDecisionLabel,
+  approvalStatuses,
+  dateRu,
+  itemStatusLabel,
+  money,
+  parseNumber,
+  quantity,
+  requestStages,
+  requestStatusLabel,
+  stageIndex,
+  stampRu,
+  type RequestDetail,
+} from "@/lib/procurement";
+import { RequestRoute } from "./RequestRoute";
 import { RequestPriorityPill, RequestStatusPill, requestStatusLook } from "./RequestKit";
 import { allowedFiles, fileProblem, uploadRequestFile } from "./RequestForm";
 
@@ -44,11 +60,22 @@ type Dialog = { kind: "return" | "cancel" | "approve" | "reject" | "issue" } | n
 const dialogText: Record<"return" | "cancel" | "approve" | "reject", { title: string; button: string; label: string; required: boolean; hint?: string }> = {
   return: { title: "Вернуть на доработку", button: "Вернуть", label: "Что нужно исправить", required: true, hint: "Комментарий увидит инициатор — заявка вернётся к нему на правку." },
   cancel: { title: "Отменить заявку", button: "Отменить заявку", label: "Причина отмены", required: false },
-  approve: { title: "Утвердить заявку", button: "Утвердить", label: "Комментарий", required: false, hint: "После утверждения снабжение закупит позиции «к закупке»." },
-  reject: { title: "Отклонить заявку", button: "Отклонить", label: "Почему отклонена", required: true, hint: "Комментарий увидят инициатор и снабжение. Резерв на складе снимется." },
+  approve: { title: "Согласовать заявку", button: "Согласовать", label: "Комментарий", required: false },
+  reject: { title: "Отклонить заявку", button: "Отклонить", label: "Почему отклонена", required: true, hint: "Комментарий увидит инициатор. Резерв на складе снимется." },
 };
 
-/** Полоса этапов: черновик → отправлена → у директора → утверждена → выполнена; отклонённая и отменённая — плашкой вместо полосы. */
+/** Что будет после согласования — по шагу маршрута и (у финансиста) сумме к закупке. */
+function approveHint(detail: RequestDetail, purchase: number, t: (text: string, vars?: Record<string, string | number>) => string): string {
+  if (detail.status === "HeadApproval") return t("Дальше заявку согласует финансист.");
+  if (detail.status === "FinanceApproval") {
+    return purchase > detail.directorLimit
+      ? t("К закупке больше {limit} сум — дальше заявку согласует директор.", { limit: money(detail.directorLimit) })
+      : t("К закупке не больше {limit} сум — после согласования заявка уйдёт в снабжение.", { limit: money(detail.directorLimit) });
+  }
+  return t("После утверждения заявка уйдёт в снабжение — снабженцы купят позиции «к закупке».");
+}
+
+/** Полоса этапов: черновик → согласование → утверждена → выполнена; отклонённая и отменённая — плашкой вместо полосы. */
 function Stages({ detail }: { detail: RequestDetail }) {
   const t = useT();
   const current = stageIndex(detail.status);
@@ -63,17 +90,31 @@ function Stages({ detail }: { detail: RequestDetail }) {
     );
   }
   return (
-    <ol className="grid grid-cols-5 gap-1.5" aria-label={t("Этапы заявки")}>
+    <ol className="grid grid-cols-4 gap-1.5" aria-label={t("Этапы заявки")}>
       {requestStages.map((stage, i) => {
         const done = i < current;
         const on = i === current;
-        const label = on && detail.status === "RevisionRequired" ? "На доработке" : on && detail.status === "PartiallyFulfilled" ? "Частично выполнена" : requestStatusLabel[stage];
+        const label =
+          on && detail.status === "RevisionRequired"
+            ? "На доработке"
+            : on && detail.status === "PartiallyFulfilled"
+              ? "Частично выполнена"
+              : on && approvalStatuses.includes(detail.status)
+                ? requestStatusLabel[detail.status]
+                : stage;
         return (
           <li key={stage} className="min-w-0" aria-current={on ? "step" : undefined}>
             <div className={`h-1.5 rounded-full ${done ? "bg-ok" : on ? (detail.status === "RevisionRequired" ? "bg-warn" : "bg-accent") : "bg-muted"}`} />
             <div className={`mt-1.5 flex items-center gap-1 truncate text-[11px] sm:text-xs ${on ? "font-semibold text-ink" : done ? "text-ink-2" : "text-ink-3"}`}>
               {done && <Check className="size-3 shrink-0 text-ok" aria-hidden />}
-              <span className="truncate">{t(label)}</span>
+              {label === stage ? (
+                <span className="truncate">{t(label)}</span>
+              ) : (
+                <>
+                  <span className="truncate sm:hidden">{t(on && approvalStatuses.includes(detail.status) ? stage : label)}</span>
+                  <span className="hidden truncate sm:inline">{t(label)}</span>
+                </>
+              )}
             </div>
           </li>
         );
@@ -94,8 +135,8 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 /**
  * Карточка заявки: этапы, позиции со статусами, сумма, причина и комментарий, вложения, история (кто, когда, что изменилось, комментарий).
- * Кнопки — только те, что разрешены пользователю (их же проверяет сервер): изменить и отправить — инициатор; передать директору и вернуть
- * на доработку (с комментарием) — снабжение; отменить — инициатор до утверждения.
+ * Кнопки — только те, что разрешены пользователю (их же проверяет сервер): изменить и отправить — инициатор; согласовать, вернуть и
+ * отклонить — согласующий текущего шага; «Куплено» — снабжение по утверждённой заявке; выдать — кладовщик; отменить — инициатор до утверждения.
  */
 export function RequestDetailView({ detail, filesFailed, backHref }: { detail: RequestDetail; filesFailed: boolean; backHref: string }) {
   const t = useT();
@@ -103,9 +144,15 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [buying, setBuying] = useState(false);
   const [note, setNote] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const can = detail.can;
+  // Финансист уточняет цены позиций к закупке при согласовании: по новой сумме решается, нужен ли директор.
+  const purchaseItems = detail.items.filter((i) => i.status !== "Cancelled" && i.toPurchase > 0);
+  const [prices, setPrices] = useState<Record<string, string>>({});
+  const priceOf = (id: string, fallback: number | null) => (prices[id] !== undefined ? parseNumber(prices[id]) : fallback);
+  const purchaseNow = Math.round(purchaseItems.reduce((sum, i) => sum + i.toPurchase * (priceOf(i.id, i.estimatedPrice) ?? 0), 0) * 100) / 100;
 
   const run = async (name: string, action: () => Promise<unknown>) => {
     setBusy(name);
@@ -166,10 +213,23 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
       setError(t(dialog.kind === "reject" ? "Напишите комментарий: почему заявка отклонена." : "Напишите комментарий: что нужно исправить в заявке."));
       return;
     }
-    const ok = await run(dialog.kind, () => post(dialog.kind, { comment: note.trim() || null }));
+    let changed: { itemId: string; price: number }[] = [];
+    if (dialog.kind === "approve" && can.price) {
+      for (const i of purchaseItems) {
+        if (prices[i.id] === undefined) continue;
+        const p = parseNumber(prices[i.id]);
+        if (p === null || p <= 0 || Math.round(p * 100) / 100 !== p) {
+          setError(t("«{name}»: цена — больше нуля, не больше двух знаков после запятой.", { name: i.name }));
+          return;
+        }
+        if (p !== i.estimatedPrice) changed = [...changed, { itemId: i.id, price: p }];
+      }
+    }
+    const ok = await run(dialog.kind, () => post(dialog.kind, dialog.kind === "approve" ? { comment: note.trim() || null, prices: changed } : { comment: note.trim() || null }));
     if (ok) {
       setDialog(null);
       setNote("");
+      setPrices({});
     }
   };
 
@@ -193,16 +253,16 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
           <Undo2 className="size-4" aria-hidden /> {t("Вернуть на доработку")}
         </button>
       )}
-      {(can.offer || detail.offersCount > 0) && (
+      {detail.offersCount > 0 && (
         <Link href={`/requests/${detail.id}/offers`} className={secondary}>
           <Scale className="size-4" aria-hidden /> {t("Предложения")}
-          {detail.offersCount > 0 && <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums">{detail.offersCount}</span>}
+          <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums">{detail.offersCount}</span>
         </Link>
       )}
-      {can.order && (
-        <Link href={`/procurement/orders/new?request=${detail.id}`} className={primary}>
-          <ShoppingCart className="size-4" aria-hidden /> {t("Заказать")}
-        </Link>
+      {can.purchase && (
+        <button type="button" onClick={() => setBuying(true)} disabled={busy !== null} className={primary}>
+          <ShoppingBag className="size-4" aria-hidden /> {t("Куплено")}
+        </button>
       )}
       {can.approve && (
         <button type="button" onClick={() => setDialog({ kind: "reject" })} disabled={busy !== null} className={`${secondary} text-bad`}>
@@ -211,7 +271,7 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
       )}
       {can.approve && (
         <button type="button" onClick={() => setDialog({ kind: "approve" })} disabled={busy !== null} className={primary}>
-          <BadgeCheck className="size-4" aria-hidden /> {t("Утвердить")}
+          <BadgeCheck className="size-4" aria-hidden /> {detail.status === "DirectorApproval" ? t("Утвердить") : t("Согласовать")}
         </button>
       )}
       {can.issue && (
@@ -234,6 +294,12 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
   );
 
   const activeItems = detail.items.filter((i) => i.status !== "Cancelled").length;
+  // «Куплено» — покупки снабжения; заказы поставщикам — прежний путь (у старых заявок).
+  const bought = detail.orders.filter((o) => o.direct);
+  const ordered = detail.orders.filter((o) => !o.direct);
+  const toBuy = detail.items
+    .filter((i) => i.status !== "Cancelled" && i.toPurchase > i.orderedQty)
+    .map((i) => ({ requestItemId: i.id, name: i.name, unitCode: i.unitCode, left: Math.round((i.toPurchase - i.orderedQty) * 1000) / 1000, price: i.estimatedPrice }));
 
   return (
     <>
@@ -272,6 +338,7 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
           <section className={card}>
             <Stages detail={detail} />
           </section>
+          <RequestRoute detail={detail} />
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-4">
@@ -475,23 +542,51 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
                   <Fact label="Сумма">{detail.estimatedTotal > 0 ? `≈ ${money(detail.estimatedTotal)} ${t("сум")}` : "—"}</Fact>
                   <Fact label="Создана">{stampRu(detail.createdAt)}</Fact>
                   {detail.submittedAt && <Fact label="Отправлена">{stampRu(detail.submittedAt)}</Fact>}
-                  {detail.forwardedAt && <Fact label="Передана директору">{stampRu(detail.forwardedAt)}</Fact>}
+                  {detail.forwardedAt && approvalStatuses.includes(detail.status) && (
+                    <Fact label={detail.route ? "На текущем шаге с" : "Передана директору"}>{stampRu(detail.forwardedAt)}</Fact>
+                  )}
                   {detail.approvedAt && (
                     <Fact label="Утверждена">
                       {stampRu(detail.approvedAt)}
-                      <span className="block text-xs text-ink-3">{detail.approvedByName ?? t("без директора: всё со склада")}</span>
+                      <span className="block text-xs text-ink-3">{detail.approvedByName ?? t("без согласования: всё со склада")}</span>
                     </Fact>
                   )}
                 </dl>
               </section>
 
-              {detail.orders.length > 0 && (
+              {bought.length > 0 && (
+                <section className={card} aria-labelledby="rq-bought">
+                  <h2 id="rq-bought" className="mb-2 flex items-center gap-2 text-base font-semibold text-ink">
+                    <ShoppingBag className="size-4 text-ink-3" aria-hidden /> {t("Покупки")}
+                    <span className="ml-auto text-sm font-normal tabular-nums text-ink-3">
+                      {money(bought.reduce((sum, o) => sum + o.total, 0))} {t("сум")}
+                    </span>
+                  </h2>
+                  <ul className="divide-y divide-line">
+                    {bought.map((o) => (
+                      <li key={o.id} className="py-2.5 text-sm">
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate font-medium text-ink">{o.supplierName}</span>
+                          <span className="shrink-0 font-medium tabular-nums text-ink">
+                            {money(o.total)} {t("сум")}
+                          </span>
+                        </span>
+                        <span className="mt-0.5 block text-xs text-ink-3">
+                          {[o.responsibleName, o.deliveredAt && stampRu(o.deliveredAt), o.number].filter(Boolean).join(" · ")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {ordered.length > 0 && (
                 <section className={card} aria-labelledby="rq-orders">
                   <h2 id="rq-orders" className="mb-2 flex items-center gap-2 text-base font-semibold text-ink">
                     <ShoppingCart className="size-4 text-ink-3" aria-hidden /> {t("Заказы поставщикам")}
                   </h2>
                   <ul className="divide-y divide-line">
-                    {detail.orders.map((o) => (
+                    {ordered.map((o) => (
                       <li key={o.id}>
                         <Link href={`/procurement/orders/${o.id}`} className="block py-2.5 text-sm hover:text-accent-strong">
                           <span className="flex items-center justify-between gap-2">
@@ -509,7 +604,7 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
                 </section>
               )}
 
-              {(detail.approvals.length > 0 || detail.status === "DirectorApproval") && (
+              {!detail.route && (detail.approvals.length > 0 || detail.status === "DirectorApproval") && (
                 <section className={card} aria-labelledby="rq-approval">
                   <h2 id="rq-approval" className="mb-3 flex items-center gap-2 text-base font-semibold text-ink">
                     <Gavel className="size-4 text-ink-3" aria-hidden /> {t("Согласование директора")}
@@ -623,6 +718,39 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
             </label>
           </div>
         )}
+        {dialog?.kind === "approve" && can.price && purchaseItems.length > 0 && (
+          <div className="mb-4">
+            <p className="mb-2 text-sm font-medium text-ink">
+              {t("Цены к закупке")} <span className="font-normal text-ink-3">{t("можно уточнить")}</span>
+            </p>
+            <div className="space-y-2">
+              {purchaseItems.map((i) => {
+                const price = priceOf(i.id, i.estimatedPrice);
+                return (
+                  <label key={i.id} className="flex items-center gap-3 rounded-xl border border-line px-3 py-2">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-ink">{i.name}</span>
+                      <span className="text-xs text-ink-3">
+                        {quantity(i.toPurchase)} {i.unitCode} · {price !== null ? `${money(i.toPurchase * price)} ${t("сум")}` : "—"}
+                      </span>
+                    </span>
+                    <input
+                      value={prices[i.id] ?? (i.estimatedPrice !== null ? String(i.estimatedPrice).replace(".", ",") : "")}
+                      onChange={(e) => setPrices((p) => ({ ...p, [i.id]: e.target.value }))}
+                      inputMode="decimal"
+                      aria-label={t("Цена за единицу: {name}", { name: i.name })}
+                      className="h-9 w-32 rounded-md border border-line bg-surface px-2 text-right text-sm tabular-nums text-ink focus:border-accent focus:outline-none"
+                    />
+                    <span className="w-8 text-xs text-ink-3">{t("сум")}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-right text-sm text-ink-2">
+              {t("к закупке")} ≈ <span className="font-semibold tabular-nums text-ink">{money(purchaseNow)}</span> {t("сум")}
+            </p>
+          </div>
+        )}
         <label htmlFor="rq-note" className="mb-1.5 block text-sm font-medium text-ink">
           {dialog?.kind === "issue" ? t("Комментарий") : dialog ? t(dialogText[dialog.kind].label) : ""}
           {dialog && (dialog.kind === "issue" || !dialogText[dialog.kind].required) && (
@@ -639,10 +767,21 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
           className="w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
         {dialog && dialog.kind !== "issue" && dialogText[dialog.kind].hint && <p className="mt-2 text-xs text-ink-3">{t(dialogText[dialog.kind].hint!)}</p>}
+        {dialog?.kind === "approve" && <p className="mt-2 text-xs text-ink-3">{approveHint(detail, purchaseNow, t)}</p>}
         <div className="mt-3">
           <ErrorNote text={error} />
         </div>
       </Sheet>
+      <PurchaseSheet
+        open={buying}
+        onClose={() => setBuying(false)}
+        request={{ id: detail.id, number: detail.number, title: detail.title }}
+        lines={toBuy}
+        onDone={() => {
+          setBuying(false);
+          router.refresh();
+        }}
+      />
     </>
   );
 }

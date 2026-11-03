@@ -13,11 +13,12 @@ public class SystemRolesTests
     }
 
     [Fact]
-    public void Director_sees_only_users_and_roles_in_settings_but_all_department_data()
+    public void Director_sees_only_users_and_departments_in_settings_but_all_department_data()
     {
         var director = Role(SystemRoles.Director).Permissions;
 
-        Assert.Equal([Permissions.UsersManage], SystemRoles.SettingsPermissions.Where(director.Contains));
+        // В «Настройках» директору — «Пользователи и роли» и «Отделы» (маршрут заявок снабжения: финансист, директор, лимит).
+        Assert.Equal([Permissions.UsersManage, Permissions.ProcurementSettings], SystemRoles.SettingsPermissions.Where(director.Contains));
         Assert.Contains(Permissions.SalesRead, director);
         Assert.Contains(Permissions.FinanceRead, director);
         Assert.Contains(Permissions.HrRead, director);

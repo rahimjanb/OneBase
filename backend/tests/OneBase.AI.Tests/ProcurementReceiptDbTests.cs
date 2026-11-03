@@ -67,6 +67,10 @@ public class ProcurementReceiptDbTests(DataManagerDb fixture) : IClassFixture<Da
         db.Users.AddRange(org.Employee, org.Supply, org.Director, org.Keeper, org.Keeper2, org.SupplyHead);
         db.WorkDepartmentHeads.Add(new WorkDepartmentHead { Department = supplyDept, UserId = org.SupplyHead.Id });
         await db.SaveChangesAsync();
+        // Маршрут: у отдела заявителя нет руководителя — заявка сразу к финансисту (здесь им назначен директор), директор маршрута — роль, лимит 5 млн.
+        var route = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
+        (route.FinanceApproverId, route.DirectorApproverId, route.DirectorLimit) = (org.Director.Id, null, ProcurementSettings.DefaultDirectorLimit);
+        await db.SaveChangesAsync();
         return org with { Category = await db.ProcurementCategories.Where(c => c.Code == "stationery").Select(c => c.Id).SingleAsync() };
     }
 
@@ -93,7 +97,6 @@ public class ProcurementReceiptDbTests(DataManagerDb fixture) : IClassFixture<Da
     {
         var request = await As(org.Employee, Employee, (sp, c) => R(sp).CreateAsync(c, new ProcurementRequestInput("Бумага для отчётов", null, ProcurementPriority.Normal, null,
             "Квартальная отчётность", null, [new(null, "Бумага А4", org.Category, "пачка", 100, 45_000)], Submit: true), default));
-        await As(org.Supply, Supply, (sp, c) => R(sp).ForwardAsync(c, request, default));
         await As(org.Director, Director, (sp, c) => R(sp).ApproveAsync(c, request, null, default));
         var requestItem = (await As(org.Supply, Supply, (sp, c) => R(sp).GetAsync(c, request, default))).Items[0].Id;
         var supplier = await As(org.Supply, Supply, (sp, c) => sp.GetRequiredService<ProcurementSupplierService>().CreateAsync(c,

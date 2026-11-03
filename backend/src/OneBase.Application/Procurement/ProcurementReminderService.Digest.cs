@@ -31,7 +31,8 @@ public sealed partial class ProcurementReminderService
 
         var sections = await DigestSectionsAsync(today, ct);
         int CountOf(int index) => sections[index].Count;
-        var summary = $"Ждут директора: {CountOf(0)} · новых заявок: {CountOf(1)} · просрочено поставок: {CountOf(3)} · претензий: {CountOf(6)} · ниже минимума: {CountOf(7)} · просрочено задач: {CountOf(8)}";
+        var summary =
+            $"Ждут согласования: {CountOf(0)} · новых заявок: {CountOf(1)} · ждут закупки: {CountOf(2)} · просрочено поставок: {CountOf(4)} · претензий: {CountOf(7)} · ниже минимума: {CountOf(8)} · просрочено задач: {CountOf(9)}";
         var leaders = await ProcurementPeople.LeadersAsync(db, ct);
         var digest = new ProcurementDigest
         {
@@ -70,11 +71,13 @@ public sealed partial class ProcurementReminderService
 
         ProcurementDigestSection Section(string title, int count, IEnumerable<ProcurementDigestItem> items) => new(title, count, items.Take(DigestItems).ToList());
 
-        var awaitingRequests = await db.ProcurementRequests.AsNoTracking().Where(r => r.Status == ProcurementRequestStatus.DirectorApproval).OrderBy(r => r.ForwardedAt)
+        // Ждут согласования — на любом шаге маршрута (руководитель отдела, финансист, директор).
+        var approval = ProcurementRules.Approval;
+        var awaitingRequests = await db.ProcurementRequests.AsNoTracking().Where(r => approval.Contains(r.Status)).OrderBy(r => r.ForwardedAt)
             .Select(r => new { r.Id, r.Number, r.Title, r.PurchaseTotal }).ToListAsync(ct);
         var awaitingOrders = await db.ProcurementPurchaseOrders.AsNoTracking().Where(o => o.Status == ProcurementOrderStatus.AwaitingApproval).OrderBy(o => o.UpdatedAt)
             .Select(o => new { o.Id, o.Number, Supplier = o.Supplier!.Name, o.Total }).ToListAsync(ct);
-        var awaiting = Section("Ждут решения директора", awaitingRequests.Count + awaitingOrders.Count,
+        var awaiting = Section("Ждут согласования", awaitingRequests.Count + awaitingOrders.Count,
             awaitingRequests.Select(r => new ProcurementDigestItem($"Заявка {r.Number} — {r.Title}, к закупке ≈ {ProcurementRules.Money(r.PurchaseTotal)} сум", $"/requests/{r.Id}"))
                 .Concat(awaitingOrders.Select(o => new ProcurementDigestItem($"Заказ {o.Number} — {o.Supplier}, {ProcurementRules.Money(o.Total)} сум", $"/procurement/orders/{o.Id}"))));
 
@@ -84,9 +87,29 @@ public sealed partial class ProcurementReminderService
             submitted.Select(r => new ProcurementDigestItem($"{r.Number} — {r.Title} ({r.Department}), ≈ {ProcurementRules.Money(r.EstimatedTotal)} сум", $"/requests/{r.Id}")));
 
         var bought = await db.ProcurementPurchaseOrders.AsNoTracking().Where(o => placed.Contains(o.Status) && o.ApprovedAt >= yFrom && o.ApprovedAt < yTo)
-            .OrderByDescending(o => o.Total).Select(o => new { o.Id, o.Number, Supplier = o.Supplier!.Name, o.Total }).ToListAsync(ct);
+            .OrderByDescending(o => o.Total)
+            .Select(o => new
+            {
+                o.Id, o.Number, Supplier = o.Supplier!.Name, o.Total, o.Direct,
+                Request = o.Items.Select(i => new { i.RequestItem!.RequestId, i.RequestItem.Request!.Number }).FirstOrDefault(),
+            })
+            .ToListAsync(ct);
+        // «Куплено» — по заявке (заказы поставщикам больше не оформляются, ссылка — на заявку); прежние заказы — как были.
         var purchases = Section($"Закупки за вчера: {ProcurementRules.Money(bought.Sum(o => o.Total))} сум", bought.Count,
-            bought.Select(o => new ProcurementDigestItem($"{o.Number} — {o.Supplier}, {ProcurementRules.Money(o.Total)} сум", $"/procurement/orders/{o.Id}")));
+            bought.Select(o => o.Direct && o.Request is { } r
+                ? new ProcurementDigestItem($"Куплено по заявке {r.Number} — {o.Supplier}, {ProcurementRules.Money(o.Total)} сум", $"/requests/{r.RequestId}")
+                : new ProcurementDigestItem($"{o.Number} — {o.Supplier}, {ProcurementRules.Money(o.Total)} сум", $"/procurement/orders/{o.Id}")));
+
+        var orderable = ProcurementOrderService.Orderable;
+        var toBuyRows = await db.ProcurementRequests.AsNoTracking()
+            .Where(r => orderable.Contains(r.Status) && r.Items.Any(i => i.Status != ProcurementItemStatus.Cancelled && i.Quantity - i.FromStock > i.OrderedQty))
+            .OrderBy(r => r.DesiredDate == null).ThenBy(r => r.DesiredDate).ThenBy(r => r.ApprovedAt)
+            .Select(r => new { r.Id, r.Number, r.Title, Department = r.Department!.Name, r.DesiredDate })
+            .ToListAsync(ct);
+        var toBuy = Section("Ждут закупки", toBuyRows.Count,
+            toBuyRows.Select(r => new ProcurementDigestItem(
+                $"{r.Number} — {r.Title} ({r.Department}){(r.DesiredDate is { } d ? d < today ? $", нужно было к {d:dd.MM.yyyy}" : $", нужно к {d:dd.MM.yyyy}" : "")}",
+                $"/requests/{r.Id}")));
 
         var overdueOrders = await db.ProcurementPurchaseOrders.AsNoTracking().Where(o => live.Contains(o.Status) && o.ExpectedDate != null && o.ExpectedDate < today)
             .OrderBy(o => o.ExpectedDate).Select(o => new { o.Id, o.Number, Supplier = o.Supplier!.Name, o.ExpectedDate, Responsible = o.Responsible!.FullName }).ToListAsync(ct);
@@ -99,7 +122,8 @@ public sealed partial class ProcurementReminderService
             dueToday.Select(o => new ProcurementDigestItem($"{o.Number} — {o.Supplier}", $"/procurement/orders/{o.Id}")));
 
         var posted = await db.ProcurementStockDocuments.AsNoTracking()
-            .Where(d => d.OrderId != null && d.Status == ProcurementStockDocumentStatus.Posted && d.PostedAt >= yFrom && d.PostedAt < yTo).OrderBy(d => d.PostedAt)
+            .Where(d => d.OrderId != null && !d.Order!.Direct && d.Status == ProcurementStockDocumentStatus.Posted && d.PostedAt >= yFrom && d.PostedAt < yTo)
+            .OrderBy(d => d.PostedAt)
             .Select(d => new { d.Id, d.Number, Order = d.Order!.Number, Supplier = d.Order.Supplier!.Name, Problems = d.ReceiptLines.Any(l => l.Defective > 0 || l.Shortage > 0) })
             .ToListAsync(ct);
         var received = Section("Принято на склад за вчера", posted.Count,
@@ -125,7 +149,7 @@ public sealed partial class ProcurementReminderService
         var tasks = Section("Просроченные задачи снабжения", supplyTasks.Count,
             supplyTasks.Select(t => new ProcurementDigestItem($"{t.Title} — {t.Assignee ?? "без исполнителя"}, срок {t.DueDate:dd.MM.yyyy}", $"/tasks/task/{t.Id}")));
 
-        return [awaiting, newRequests, purchases, overdue, expected, received, claims, low, tasks];
+        return [awaiting, newRequests, toBuy, purchases, overdue, expected, received, claims, low, tasks];
     }
 
     /// <summary>

@@ -40,16 +40,22 @@ test("checkDraft — то же, что проверит сервер", () => {
   assert.match(checkDraft({ ...ok, items: [item({ categoryId: "" })] }, false), /категорию/);
   assert.match(checkDraft({ ...ok, reason: "" }, true), /причину/);
   assert.equal(checkDraft({ ...ok, reason: "" }, false), null); // черновик — без причины можно
+  // Цена у части к закупке обязательна при отправке (черновик — без неё); всё со склада — цена не нужна.
+  assert.match(checkDraft({ ...ok, items: [item({ price: "" })] }, true), /Позиция 1: укажите примерную цену/);
+  assert.equal(checkDraft({ ...ok, items: [item({ price: "" })] }, false), null);
+  assert.equal(checkDraft({ ...ok, items: [item({ price: "", itemId: "i1", available: 100, fromStock: "20", quantity: "20" })] }, true), null);
   // Пустая строка позиции в конце формы не мешает.
   assert.equal(checkDraft({ ...ok, items: [item(), item({ name: "", quantity: "", price: "" })] }, true), null);
 });
 
-test("этапы заявки: доработка — на шаге «Отправлена», отмена — вне полосы", () => {
+test("этапы заявки: любой шаг маршрута и доработка — «Согласование», отмена — вне полосы", () => {
   assert.equal(stageIndex("Draft"), 0);
   assert.equal(stageIndex("RevisionRequired"), 1);
-  assert.equal(stageIndex("DirectorApproval"), 2);
-  assert.equal(stageIndex("PartiallyFulfilled"), 3);
-  assert.equal(stageIndex("Fulfilled"), 4);
+  assert.equal(stageIndex("HeadApproval"), 1);
+  assert.equal(stageIndex("FinanceApproval"), 1);
+  assert.equal(stageIndex("DirectorApproval"), 1);
+  assert.equal(stageIndex("PartiallyFulfilled"), 2);
+  assert.equal(stageIndex("Fulfilled"), 3);
   assert.equal(stageIndex("Cancelled"), -1);
   assert.equal(stageIndex("Rejected"), -1);
   assert.equal(dateRu("2026-11-15"), "15.11.2026");

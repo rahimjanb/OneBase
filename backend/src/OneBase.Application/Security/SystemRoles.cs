@@ -105,7 +105,7 @@ public static class SystemRoles
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
     public static readonly IReadOnlyList<string> SettingsPermissions =
         [Permissions.UsersManage, Permissions.IntegrationsManage, Permissions.AiSettingsManage, Permissions.DataManage, Permissions.SalesManage, Permissions.LogsRead,
-            Permissions.TelegramManage];
+            Permissions.TelegramManage, Permissions.ProcurementSettings];
 
     /// <summary>Порядок ролей в списках: администратор, директор, отделы.</summary>
     public static int OrderOf(string name)

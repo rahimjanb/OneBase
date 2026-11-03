@@ -257,14 +257,27 @@ public enum ProcurementApprovalDecision
     Revision,
 }
 
+/// <summary>Шаг маршрута согласования заявки: руководитель отдела, финансист, директор.</summary>
+public static class ProcurementApprovalStages
+{
+    public const string Head = "head";
+    public const string Finance = "finance";
+    public const string Director = "director";
+}
+
 /// <summary>
-/// Решение директора по заявке: раунд согласования (повторное — следующий раунд), решение, комментарий (обязателен при отказе и возврате),
-/// кто и когда, снимок заявки на момент решения (позиции, количества, цены, сумма закупки).
+/// Решение согласующего по заявке: раунд согласования (повторная отправка — следующий раунд), шаг маршрута (руководитель отдела, финансист,
+/// директор), решение, комментарий (обязателен при отказе и возврате), кто и когда, снимок заявки на момент решения (позиции, количества,
+/// цены, сумма закупки).
 /// </summary>
 public class ProcurementApproval : Entity
 {
     public Guid RequestId { get; set; }
     public int Round { get; set; }
+
+    /// <summary>Шаг маршрута (ProcurementApprovalStages); решения до нового маршрута — директора.</summary>
+    public string Stage { get; set; } = ProcurementApprovalStages.Director;
+
     public ProcurementApprovalDecision Decision { get; set; }
     public string? Comment { get; set; }
 
@@ -279,11 +292,15 @@ public class ProcurementApproval : Entity
 }
 
 /// <summary>
-/// Настройки снабжения (одна строка, Id = 1): допуск роста цены или суммы без повторного согласования, %; через сколько дней просрочки
-/// задача снабжения эскалируется руководителю снабжения и директору.
+/// Настройки снабжения (одна строка, Id = 1, «Настройки → Отделы → Снабжение»): маршрут согласования заявок (финансист, директор, лимит без
+/// директора), допуск роста цены или суммы без повторного согласования, %; через сколько дней просрочки задача снабжения эскалируется
+/// руководителю снабжения и директору.
 /// </summary>
 public class ProcurementSettings
 {
+    /// <summary>Лимит покупки без директора по умолчанию: 5 млн сум.</summary>
+    public const decimal DefaultDirectorLimit = 5_000_000m;
+
     public int Id { get; set; } = 1;
 
     public decimal ReapprovalTolerancePercent { get; set; }
@@ -293,6 +310,15 @@ public class ProcurementSettings
 
     /// <summary>Просрочка задачи снабжения (дней), после которой — директору.</summary>
     public int EscalateDirectorDays { get; set; } = 3;
+
+    /// <summary>Финансист: согласует заявку после руководителя отдела (заявку руководителя — первым).</summary>
+    public Guid? FinanceApproverId { get; set; }
+
+    /// <summary>Директор: согласует заявку после финансиста, если её сумма больше лимита.</summary>
+    public Guid? DirectorApproverId { get; set; }
+
+    /// <summary>Лимит покупки без директора, сум: заявка на большую сумму после финансиста идёт к директору.</summary>
+    public decimal DirectorLimit { get; set; } = DefaultDirectorLimit;
 
     public DateTimeOffset? UpdatedAt { get; set; }
     public Guid? UpdatedById { get; set; }

@@ -3,6 +3,8 @@
 export type RequestStatus =
   | "Draft"
   | "Submitted"
+  | "HeadApproval"
+  | "FinanceApproval"
   | "DirectorApproval"
   | "Approved"
   | "Rejected"
@@ -93,20 +95,48 @@ export type RequestAbilities = {
   return: boolean;
   cancel: boolean;
   attach: boolean;
-  /** Решение директора: утвердить или отклонить. */
+  /** Решение согласующего текущего шага (руководитель отдела, финансист, директор): согласовать, отклонить, вернуть. */
   approve: boolean;
+  /** Финансист при согласовании уточняет цены позиций к закупке. */
+  price: boolean;
   /** Выдача со склада (кладовщик). */
   issue: boolean;
   /** Правка утверждённой заявки снабжением — существенное изменение уйдёт директору повторно. */
   approvedEdit: boolean;
   /** Добавлять и сравнивать предложения поставщиков (снабжение). */
   offer: boolean;
-  /** Заказать у поставщика: есть утверждённое, ещё не заказанное. */
+  /** Заказать у поставщика: есть утверждённое, ещё не заказанное (прежний путь; на экране не показывается). */
   order: boolean;
+  /** «Куплено» (снабжение): заявка утверждена, есть что купить. */
+  purchase: boolean;
 };
 
 export type ApprovalDecision = "Approved" | "Rejected" | "Revision";
-export type RequestApproval = { id: string; round: number; decision: ApprovalDecision; comment: string | null; deciderName: string; purchaseTotal: number; createdAt: string };
+export type ApprovalStage = "head" | "finance" | "director";
+export type RequestApproval = {
+  id: string;
+  round: number;
+  decision: ApprovalDecision;
+  comment: string | null;
+  deciderName: string;
+  purchaseTotal: number;
+  createdAt: string;
+  stage: ApprovalStage;
+};
+
+/**
+ * Шаг маршрута в карточке: руководитель отдела, финансист, директор, снабжение. state: done — согласовал, current — решает сейчас, pending —
+ * впереди, skipped — не нужен (reason: initiatorHead, noHeads, noPurchase, underLimit), rejected, returned. who — кто решил или кто решает;
+ * пусто у финансиста и директора — не выбран в настройках.
+ */
+export type RouteStep = {
+  key: ApprovalStage | "supply";
+  state: "done" | "current" | "pending" | "skipped" | "rejected" | "returned";
+  who: string[];
+  at: string | null;
+  comment: string | null;
+  reason: "initiatorHead" | "noHeads" | "noPurchase" | "underLimit" | null;
+};
 
 export type RequestDetail = {
   id: string;
@@ -142,6 +172,10 @@ export type RequestDetail = {
   approvals: RequestApproval[];
   offersCount: number;
   orders: RequestOrder[];
+  /** Маршрут согласования текущего раунда; у заявок прежнего порядка (через снабжение) — null. */
+  route: RouteStep[] | null;
+  /** Лимит покупки без директора, сум (из «Настройки → Отделы → Снабжение»). */
+  directorLimit: number;
 };
 
 export type RequestCategory = { id: string; name: string; code: string | null; sortOrder: number; isActive: boolean; used: number };
@@ -178,6 +212,8 @@ export type RequestNav = {
   toIssue: number;
   /** Кладовщику: заказов, которые ждут приёмки. */
   toReceive: number;
+  /** Решает шаг маршрута: руководитель отдела, финансист или директор — видит «Ждут моего согласования». */
+  decides: boolean;
 };
 
 // ---------- Склад ----------
@@ -256,14 +292,16 @@ export type Page<T> = { items: T[]; total: number; page: number; pageSize: numbe
 
 export const movementKindLabel: Record<MovementKind, string> = { Receipt: "Приход", Issue: "Выдача", WriteOff: "Списание", Adjustment: "Инвентаризация" };
 
-export const approvalDecisionLabel: Record<ApprovalDecision, string> = { Approved: "Утверждена", Rejected: "Отклонена", Revision: "Возвращена на доработку" };
+export const approvalDecisionLabel: Record<ApprovalDecision, string> = { Approved: "Согласована", Rejected: "Отклонена", Revision: "Возвращена на доработку" };
 
 export type RequestPage = { items: RequestRow[]; total: number; page: number; pageSize: number };
 
 export const requestStatuses: RequestStatus[] = [
   "Draft",
-  "Submitted",
+  "HeadApproval",
+  "FinanceApproval",
   "DirectorApproval",
+  "Submitted",
   "RevisionRequired",
   "Approved",
   "PartiallyFulfilled",
@@ -274,7 +312,9 @@ export const requestStatuses: RequestStatus[] = [
 
 export const requestStatusLabel: Record<RequestStatus, string> = {
   Draft: "Черновик",
-  Submitted: "Отправлена",
+  Submitted: "У снабжения",
+  HeadApproval: "Ожидает руководителя",
+  FinanceApproval: "Ожидает финансиста",
   DirectorApproval: "Ожидает директора",
   Approved: "Утверждена",
   Rejected: "Отклонена",
@@ -299,14 +339,19 @@ export const itemStatusLabel: Record<ItemStatus, string> = {
   Received: "Поступила на склад",
 };
 
-/** Этапы заявки для полосы в карточке: доработка — шаг «Отправлена», отклонение и отмена — отдельно (полоса не рисуется). */
-export const requestStages: RequestStatus[] = ["Draft", "Submitted", "DirectorApproval", "Approved", "Fulfilled"];
+/** Этапы заявки для полосы в карточке: черновик → согласование (любой шаг маршрута и доработка) → утверждена → выполнена. */
+export const requestStages = ["Черновик", "Согласование", "Утверждена", "Выполнена"] as const;
 
-/** Номер этапа статуса на полосе (0…4); -1 — заявка вне полосы (отклонена, отменена). */
+/** Шаги согласования: заявка ждёт решения руководителя отдела, финансиста или директора (и прежний шаг «у снабжения»). */
+export const approvalStatuses: RequestStatus[] = ["HeadApproval", "FinanceApproval", "DirectorApproval", "Submitted"];
+
+/** Номер этапа статуса на полосе (0…3); -1 — заявка вне полосы (отклонена, отменена). */
 export function stageIndex(status: RequestStatus): number {
-  if (status === "RevisionRequired") return 1;
-  if (status === "PartiallyFulfilled") return 3;
-  return requestStages.indexOf(status);
+  if (status === "Draft") return 0;
+  if (status === "RevisionRequired" || approvalStatuses.includes(status)) return 1;
+  if (status === "Approved" || status === "PartiallyFulfilled") return 2;
+  if (status === "Fulfilled") return 3;
+  return -1;
 }
 
 /** Группы статусов фильтра списка — то же, что принимает /api/procurement/requests. */
@@ -430,6 +475,9 @@ export function checkDraft(draft: { title: string; reason: string; items: ItemDr
       if (p === null || p < 0) return `Позиция ${n}: цена — не отрицательное число.`;
       if (Math.round(p * 100) / 100 !== p) return `Позиция ${n}: цена — не больше двух знаков после запятой.`;
     }
+    // Цена обязательна у части к закупке: по сумме заявки решается, нужен ли директор.
+    if (submit && split(item).toPurchase > 0 && !((parseNumber(item.price) ?? 0) > 0))
+      return `Позиция ${n}: укажите примерную цену — по сумме заявки решается, нужен ли директор.`;
   }
   if (submit && !draft.reason.trim()) return "Укажите причину закупки — без неё заявку не отправить.";
   return null;
@@ -832,7 +880,42 @@ export type Need = {
   categoryName: string;
 };
 
-export type RequestOrder = { id: string; number: string; status: OrderStatus; supplierName: string; total: number; expectedDate: string | null };
+/** Заказ поставщику по заявке; direct — покупка «Куплено»: кто купил (responsibleName) и когда (deliveredAt). */
+export type RequestOrder = {
+  id: string;
+  number: string;
+  status: OrderStatus;
+  supplierName: string;
+  total: number;
+  expectedDate: string | null;
+  direct: boolean;
+  deliveredAt: string | null;
+  responsibleName: string | null;
+};
+
+/** Позиция «к закупке»: сколько осталось купить, согласованная цена за единицу. */
+export type ToBuyLine = { requestItemId: string; lineNo: number; name: string; categoryName: string; unitCode: string; left: number; price: number | null; sku: string | null; comment: string | null };
+
+/** Утверждённая заявка, по которой снабжению осталось купить; overdue — желаемая дата прошла; total — остаток к закупке, сум. */
+export type ToBuy = {
+  requestId: string;
+  number: string;
+  title: string;
+  priority: RequestPriority;
+  status: RequestStatus;
+  departmentName: string;
+  initiatorName: string;
+  desiredDate: string | null;
+  approvedAt: string | null;
+  overdue: boolean;
+  total: number;
+  lines: ToBuyLine[];
+};
+
+export type ToBuyView = { canBuy: boolean; requests: ToBuy[] };
+
+/** Что получилось после «Куплено»: покупка (PO-), приход на склад (RC-), сумма. */
+export type PurchaseResult = { orderId: string; orderNumber: string; receiptId: string; receiptNumber: string; total: number };
 
 export const orderStatuses: OrderStatus[] = ["Draft", "AwaitingApproval", "Approved", "Ordered", "PartiallyDelivered", "Delivered", "Completed", "Cancelled"];
 
@@ -854,7 +937,66 @@ export const documentKindLabel: Record<string, string> = {
   waybill: "Накладная",
   act: "Акт",
   payment: "Платёжное поручение",
+  protocol: "Протокол тендера",
   other: "Документ",
+};
+
+/** Тендерная закупка: договор заключён — ждёт поставки; поставлено; отменена. */
+export type TenderStatus = "Contracted" | "Delivered" | "Cancelled";
+
+export const tenderStatusLabel: Record<TenderStatus, string> = { Contracted: "Ждёт поставки", Delivered: "Поставлено", Cancelled: "Отменена" };
+
+/** Строка журнала тендерных закупок; overdue — срок поставки прошёл, а поставки нет. */
+export type TenderRow = {
+  id: string;
+  number: string;
+  title: string;
+  tenderNo: string | null;
+  tenderDate: string;
+  supplierId: string;
+  supplierName: string;
+  categoryName: string;
+  status: TenderStatus;
+  deliveryDate: string | null;
+  deliveredOn: string | null;
+  overdue: boolean;
+  total: number;
+  lines: number;
+  firstItem: string | null;
+  responsibleName: string;
+};
+
+/** Журнал: страница и итоги — сумма по фильтру (без отменённых), ждут поставки и просрочены — по всему журналу. */
+export type TenderList = Page<TenderRow> & { amount: number; waiting: number; overdue: number; canCreate: boolean };
+
+export type TenderItem = { id: string; lineNo: number; name: string; unitCode: string; quantity: number; price: number; sum: number };
+
+export type TenderDetail = {
+  id: string;
+  number: string;
+  title: string;
+  tenderNo: string | null;
+  tenderDate: string;
+  supplierId: string;
+  supplierName: string;
+  categoryId: string;
+  categoryName: string;
+  contractNo: string | null;
+  participants: number | null;
+  deliveryDate: string | null;
+  status: TenderStatus;
+  deliveredOn: string | null;
+  cancelledAt: string | null;
+  overdue: boolean;
+  total: number;
+  comment: string | null;
+  responsibleName: string;
+  createdAt: string;
+  version: number;
+  items: TenderItem[];
+  documents: ProcDocument[];
+  history: RequestEvent[];
+  can: { edit: boolean; deliver: boolean; cancel: boolean; attach: boolean };
 };
 
 /** Итоги заказа или предложения — как на сервере: позиции − скидка (не ниже нуля) + НДС сверху (если цены без НДС) + доставка. */
@@ -1003,7 +1145,21 @@ export type Board = {
   to: string;
   access: { canApprove: boolean; canCreateRequest: boolean; canCreateOrder: boolean; canManageSuppliers: boolean; canSeeTeam: boolean; seesRequests: boolean; seesMetrics: boolean };
   summary: { pendingApprovalCount: number | null; pendingApprovalAmount: number | null; overdueDeliveries: number | null; overdueTasks: number | null };
-  pipeline: { requestsAwaitingOrder: number | null; onApprovalCount: number | null; onApprovalAmount: number | null; ordersInProgress: number; inTransit: number; awaitingReceipt: number };
+  /**
+   * Путь закупки: на согласовании (число и сумма), к закупке (requestsAwaitingOrder — заявок, toBuyAmount — остаток по согласованным ценам,
+   * overdueToBuy — с прошедшей желаемой датой), на складе к выдаче (toIssue). Заказы до отправки, в пути и приёмка — прежний путь.
+   */
+  pipeline: {
+    requestsAwaitingOrder: number | null;
+    onApprovalCount: number | null;
+    onApprovalAmount: number | null;
+    ordersInProgress: number;
+    inTransit: number;
+    awaitingReceipt: number;
+    toBuyAmount: number | null;
+    overdueToBuy: number | null;
+    toIssue: number;
+  };
   approvals: { id: string; number: string; title: string; amount: number; department: string; initiator: string; submittedAt: string | null }[] | null;
   ordersOnApproval: number;
   upcoming: { id: string; number: string; supplierName: string; expectedDate: string }[] | null;
@@ -1014,10 +1170,13 @@ export type Board = {
     byCategory: Amount[];
     suppliers: { id: string; name: string; orders: number; total: number; onTime: number | null; claims: number; rating: number | null }[];
   } | null;
-  team: { userId: string; name: string; role: string; tasks: number; orders: number; overdue: number; load: number; loadLevel: "free" | "low" | "high" }[] | null;
+  /** Сотрудники снабжения; bought — куплено за период (покупки и поставленные заказы). */
+  team: { userId: string; name: string; role: string; tasks: number; orders: number; overdue: number; load: number; loadLevel: "free" | "low" | "high"; bought: number }[] | null;
   digests: DigestRow[] | null;
   empty: boolean;
   errors: string[];
+  /** Сколько заявок ждут решения самого пользователя (approvals — первые три из них). */
+  myApprovalCount: number;
 };
 
 /** Период обзора: этот месяц, прошлый месяц, 3 месяца, год — даты «гггг-мм-дд» (Ташкент). */

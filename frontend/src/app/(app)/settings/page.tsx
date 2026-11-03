@@ -11,8 +11,8 @@ export async function generateMetadata() {
   return { title: t("Настройки · OneBase") };
 }
 
-/** Карточка видна только с правом permission: директору — лишь «Пользователи и роли», сотрудникам раздел закрыт. */
-const sections = [
+/** Карточка видна только с правом permission (или с любым из списка): директору — лишь его разделы, сотрудникам раздел закрыт. */
+const sections: { href: string | null; icon: typeof Users; title: string; text: string; permission: string | string[] }[] = [
   {
     href: "/settings/users",
     icon: Users,
@@ -69,14 +69,20 @@ const sections = [
     text: "Ошибки интеграции Linko, синхронизации и сервера. Отмена идущей синхронизации.",
     permission: "system.logs.read",
   },
-  { href: null, icon: Building2, title: "Отделы", text: "Структура компании и руководители отделов.", permission: "ai.settings.manage" },
+  {
+    href: "/settings/departments",
+    icon: Building2,
+    title: "Отделы",
+    text: "Шесть отделов компании: руководители и настройки каждого отдела — у снабжения маршрут согласования заявок и лимит без директора.",
+    permission: ["users.manage", "procurement.settings"],
+  },
   { href: null, icon: Bot, title: "Доступ AI-агентов", text: "Какие инструменты разрешены каждому AI-сотруднику.", permission: "ai.settings.manage" },
 ];
 
 export default async function SettingsPage() {
   const me = await apiGet<Me>("/api/auth/me", "/settings");
   if (!me.canOpenSettings) redirect("/no-access?from=%2Fsettings");
-  const visible = sections.filter((s) => has(me, s.permission));
+  const visible = sections.filter((s) => (Array.isArray(s.permission) ? s.permission : [s.permission]).some((p) => has(me, p)));
   const t = await getT();
   return (
     <>

@@ -182,6 +182,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Procurement.ProcurementOfferItem> ProcurementOfferItems => Set<OneBase.Domain.Procurement.ProcurementOfferItem>();
     public DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrder> ProcurementPurchaseOrders => Set<OneBase.Domain.Procurement.ProcurementPurchaseOrder>();
     public DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrderItem> ProcurementPurchaseOrderItems => Set<OneBase.Domain.Procurement.ProcurementPurchaseOrderItem>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementTender> ProcurementTenders => Set<OneBase.Domain.Procurement.ProcurementTender>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementTenderItem> ProcurementTenderItems => Set<OneBase.Domain.Procurement.ProcurementTenderItem>();
     public DbSet<OneBase.Domain.Procurement.ProcurementOrderApproval> ProcurementOrderApprovals => Set<OneBase.Domain.Procurement.ProcurementOrderApproval>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<PushKeys> PushKeys => Set<PushKeys>();

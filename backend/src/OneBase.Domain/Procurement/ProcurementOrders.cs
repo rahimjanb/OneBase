@@ -204,6 +204,12 @@ public class ProcurementPurchaseOrder : Entity
     /// <summary>Задача ответственному в «Задачах» (отдел «Снабжение»).</summary>
     public Guid? TaskId { get; set; }
 
+    /// <summary>
+    /// Покупка снабжения («Куплено» по заявке): снабженец купил сам — заказ сразу закрыт и оприходован на склад, без отправки поставщику,
+    /// доставки и приёмки.
+    /// </summary>
+    public bool Direct { get; set; }
+
     public Guid? ClientKey { get; set; }
 
     public uint Version { get; set; }

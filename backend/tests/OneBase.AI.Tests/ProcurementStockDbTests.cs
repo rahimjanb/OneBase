@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OneBase.Application.Field;
 using OneBase.Application.Procurement;
 using OneBase.Application.Security;
+using OneBase.Application.Work;
 using OneBase.Domain.Identity;
 using OneBase.Domain.Procurement;
 using OneBase.Domain.Work;
@@ -25,7 +26,7 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
     private static readonly string[] Keeper = [Permissions.ProcurementRequest, Permissions.ProcurementWarehouse];
     private static readonly string[] AllRights = [.. Permissions.All];
 
-    private sealed record Org(Department Dept, User Employee, User Supply, User Director, User Keeper, User Admin, Guid Category);
+    private sealed record Org(Department Dept, User Employee, User Supply, User Director, User Keeper, User Admin, Guid Category, User Financier);
 
     private async Task<Org> SeedAsync()
     {
@@ -64,8 +65,13 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
         }
 
         var org = new Org(dept, Person("st-emp", "Сотрудник Производства"), Person("st-sup", "Снабженец", supplyRole), Person("st-dir", "Директор", directorRole),
-            Person("st-kpr", "Кладовщик", keeperRole), Person("st-adm", "Администратор", adminRole), Guid.Empty);
-        db.Users.AddRange(org.Employee, org.Supply, org.Director, org.Keeper, org.Admin);
+            Person("st-kpr", "Кладовщик", keeperRole), Person("st-adm", "Администратор", adminRole), Guid.Empty, Person("st-fin", "Финансист"));
+        db.Users.AddRange(org.Employee, org.Supply, org.Director, org.Keeper, org.Admin, org.Financier);
+        await db.SaveChangesAsync();
+        // Маршрут: у отдела нет руководителя — заявка сразу к финансисту; директор маршрута не выбран — решает роль «Директор»; лимит 5 млн.
+        var settings = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
+        (settings.FinanceApproverId, settings.DirectorApproverId, settings.DirectorLimit, settings.ReapprovalTolerancePercent) =
+            (org.Financier.Id, null, ProcurementSettings.DefaultDirectorLimit, 0);
         await db.SaveChangesAsync();
         var category = await db.ProcurementCategories.Where(c => c.Code == "production_materials").Select(c => c.Id).SingleAsync();
         return org with { Category = category };
@@ -114,7 +120,7 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
         [new(null, null, null, null, qty, 15_000, null, itemId, fromStock, purchaseReason)], submit);
 
     [PostgresFact]
-    public async Task Stock_is_checked_reserved_and_only_the_director_approves_the_purchase()
+    public async Task Stock_is_checked_reserved_and_only_the_financier_approves_his_step()
     {
         var org = await SeedAsync();
         var item = await ItemAsync(org, "Гранулы ПЭТ", 40);
@@ -127,7 +133,7 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
         var balance = await BalanceAsync(item);
         Assert.Equal((40m, 40m), (balance.OnHand, balance.Reserved));
         var submitted = await As(org.Supply, Supply, (r, _, c) => r.GetAsync(c, id, default));
-        Assert.Equal(ProcurementRequestStatus.Submitted, submitted.Status);
+        Assert.Equal(ProcurementRequestStatus.FinanceApproval, submitted.Status); // у отдела нет руководителя — сразу к финансисту
         var line = Assert.Single(submitted.Items);
         Assert.Equal((40m, 60m, 40m, ProcurementItemStatus.ToPurchase), (line.FromStock, line.ToPurchase, line.ReservedLeft, line.Status));
         Assert.Equal(60 * 15_000m, submitted.PurchaseTotal);
@@ -135,15 +141,15 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
         // Остаток уже в резерве — вторая заявка его не получит.
         await Assert.ThrowsAsync<FieldConflictException>(() => As(org.Employee, Employee, (r, _, c) => r.CreateAsync(c, Request(item, 10, 10), default)));
 
-        await As(org.Supply, Supply, (r, _, c) => r.ForwardAsync(c, id, default));
-        // Утверждает только директор: не снабжение, не инициатор и не администратор со всеми правами (прямые вызовы API).
-        foreach (var (user, perms) in new[] { (org.Supply, Supply), (org.Employee, Employee), (org.Admin, AllRights) })
+        // Шаг финансиста согласует только финансист: не снабжение, не инициатор, не директор и не администратор со всеми правами (прямые вызовы API).
+        foreach (var (user, perms) in new[] { (org.Supply, Supply), (org.Employee, Employee), (org.Director, Director), (org.Admin, AllRights) })
         {
             await Assert.ThrowsAsync<FieldForbiddenException>(() => As(user, perms, (r, _, c) => r.ApproveAsync(c, id, null, default)));
         }
 
-        await As(org.Director, Director, (r, _, c) => r.ApproveAsync(c, id, "Согласовано", default));
-        await As(org.Director, Director, (r, _, c) => r.ApproveAsync(c, id, null, default)); // повторное нажатие — без второго решения
+        // 900 000 сум — не больше лимита: после финансиста сразу в снабжение, директор не нужен.
+        await As(org.Financier, Employee, (r, _, c) => r.ApproveAsync(c, id, "Согласовано", default));
+        await As(org.Financier, Employee, (r, _, c) => r.ApproveAsync(c, id, null, default)); // повторное нажатие — без второго решения
 
         // Кладовщик выдаёт 40 из резерва: остаток 0, резерв 0, заявка частично выполнена (60 ждут закупки).
         await Assert.ThrowsAsync<FieldForbiddenException>(() =>
@@ -161,8 +167,13 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
         Assert.Equal(ProcurementRequestStatus.PartiallyFulfilled, detail.Status);
         Assert.Equal((40m, ProcurementItemStatus.PartiallyIssued), (detail.Items[0].IssuedQty, detail.Items[0].Status));
         var approval = Assert.Single(detail.Approvals!);
-        Assert.Equal((1, ProcurementApprovalDecision.Approved, "Согласовано", "Директор"), (approval.Round, approval.Decision, approval.Comment, approval.DeciderName));
-        Assert.Equal(["created", "submitted", "forwarded", "approved", "issued"], detail.History.Select(h => h.Action));
+        Assert.Equal((1, ProcurementApprovalDecision.Approved, "Согласовано", "Финансист", ProcurementApprovalStages.Finance),
+            (approval.Round, approval.Decision, approval.Comment, approval.DeciderName, approval.Stage));
+        Assert.Equal(["created", "submitted", "approved", "issued"], detail.History.Select(h => h.Action));
+        // Маршрут в карточке: руководителя нет, финансист согласовал, директор не нужен (сумма не больше лимита), заявка у снабжения.
+        Assert.Equal([("head", "skipped", "noHeads"), ("finance", "done", null), ("director", "skipped", "underLimit"), ("supply", "current", null)],
+            detail.Route!.Select(x => (x.Key, x.State, x.Reason)));
+        Assert.Equal("Финансист", Assert.Single(detail.Route![1].Who));
 
         var movements = await As(org.Keeper, Keeper, (_, s, c) => s.MovementsAsync(c, new ProcurementMovementSearch(item), default));
         Assert.Equal([-40m, 40m], movements.Items.Select(m => m.Quantity));
@@ -171,7 +182,9 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
 
         using var scope = fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
-        Assert.True(await db.UserNotifications.AnyAsync(n => n.RecipientId == org.Director.Id && n.Link == $"/requests/{id}" && n.Title.Contains("согласования")));
+        Assert.True(await db.UserNotifications.AnyAsync(n => n.RecipientId == org.Financier.Id && n.Link == $"/requests/{id}" && n.Title.Contains("ждёт вашего согласования")));
+        Assert.False(await db.UserNotifications.AnyAsync(n => n.RecipientId == org.Director.Id && n.Link == $"/requests/{id}" && n.Title.Contains("ждёт вашего согласования")));
+        Assert.True(await db.UserNotifications.AnyAsync(n => n.RecipientId == org.Supply.Id && n.Title.StartsWith("Согласована к закупке")));
         Assert.True(await db.UserNotifications.AnyAsync(n => n.RecipientId == org.Keeper.Id && n.Title.StartsWith("К выдаче со склада")));
         Assert.False(await db.UserNotifications.AnyAsync(n => n.RecipientId == org.Admin.Id && n.Link == $"/requests/{id}")); // технический администратор
     }
@@ -230,11 +243,11 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
         var org = await SeedAsync();
         var item = await ItemAsync(org, "Лента упаковочная", 30);
         var id = await As(org.Employee, Employee, (r, _, c) => r.CreateAsync(c, Request(item, 50, 30), default));
-        await As(org.Supply, Supply, (r, _, c) => r.ForwardAsync(c, id, default));
         Assert.Equal(30m, (await BalanceAsync(item)).Reserved);
 
-        await Assert.ThrowsAsync<FieldValidationException>(() => As(org.Director, Director, (r, _, c) => r.ReturnAsync(c, id, " ", default)));
-        await As(org.Director, Director, (r, _, c) => r.ReturnAsync(c, id, "Уменьшите объём — склад скоро пополнится", default));
+        await Assert.ThrowsAsync<FieldValidationException>(() => As(org.Financier, Employee, (r, _, c) => r.ReturnAsync(c, id, " ", default)));
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => As(org.Director, Director, (r, _, c) => r.ReturnAsync(c, id, "Не мой шаг", default)));
+        await As(org.Financier, Employee, (r, _, c) => r.ReturnAsync(c, id, "Уменьшите объём — склад скоро пополнится", default));
         Assert.Equal(0m, (await BalanceAsync(item)).Reserved);
         var returned = await As(org.Employee, Employee, (r, _, c) => r.GetAsync(c, id, default));
         Assert.Equal(ProcurementRequestStatus.RevisionRequired, returned.Status);
@@ -244,9 +257,8 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
         // Исправленная заявка снова резервирует и идёт на второй раунд; отказ — с комментарием, резерв снимается.
         await As(org.Employee, Employee, (r, _, c) => r.SubmitAsync(c, id, default));
         Assert.Equal(30m, (await BalanceAsync(item)).Reserved);
-        await As(org.Supply, Supply, (r, _, c) => r.ForwardAsync(c, id, default));
-        await Assert.ThrowsAsync<FieldValidationException>(() => As(org.Director, Director, (r, _, c) => r.RejectAsync(c, id, null, default)));
-        await As(org.Director, Director, (r, _, c) => r.RejectAsync(c, id, "Нет бюджета в этом месяце", default));
+        await Assert.ThrowsAsync<FieldValidationException>(() => As(org.Financier, Employee, (r, _, c) => r.RejectAsync(c, id, null, default)));
+        await As(org.Financier, Employee, (r, _, c) => r.RejectAsync(c, id, "Нет бюджета в этом месяце", default));
         var rejected = await As(org.Employee, Employee, (r, _, c) => r.GetAsync(c, id, default));
         Assert.Equal(ProcurementRequestStatus.Rejected, rejected.Status);
         Assert.Equal([1, 2], rejected.Approvals!.Select(a => a.Round));
@@ -255,13 +267,12 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
     }
 
     [PostgresFact]
-    public async Task Material_change_of_an_approved_request_goes_back_to_the_director()
+    public async Task Material_change_of_an_approved_request_goes_back_to_the_financier()
     {
         var org = await SeedAsync();
         var id = await As(org.Employee, Employee, (r, _, c) => r.CreateAsync(c, new ProcurementRequestInput("Оснастка", null, ProcurementPriority.Normal, null,
             "Износ оснастки", null, [new(null, "Пресс-форма", org.Category, "шт", 2, 1_000_000)], Submit: true), default));
-        await As(org.Supply, Supply, (r, _, c) => r.ForwardAsync(c, id, default));
-        await As(org.Director, Director, (r, _, c) => r.ApproveAsync(c, id, null, default));
+        await As(org.Financier, Employee, (r, _, c) => r.ApproveAsync(c, id, null, default));
         var approved = await As(org.Supply, Supply, (r, _, c) => r.GetAsync(c, id, default));
         Assert.True(approved.Can.Edit && approved.Can.ApprovedEdit);
         await Assert.ThrowsAsync<FieldConflictException>(() => // инициатор утверждённую не правит
@@ -273,20 +284,66 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
         Assert.Equal(ProcurementRequestStatus.Approved, cheaper.Status);
         Assert.Contains("без повторного согласования", cheaper.History[^1].Text);
 
-        // Цена выше утверждённой (допуск 0 %) — снова к директору, второй раунд.
+        // Цена выше утверждённой (допуск 0 %) — снова к финансисту, второй раунд: он решит по новой сумме, нужен ли директор.
         await As(org.Supply, Supply, (r, _, c) => r.UpdateAsync(c, id, Edit(cheaper, 2, 1_100_000), default));
-        var again = await As(org.Director, Director, (r, _, c) => r.GetAsync(c, id, default));
-        Assert.Equal((ProcurementRequestStatus.DirectorApproval, 2), (again.Status, again.ApprovalRound));
+        var again = await As(org.Financier, Employee, (r, _, c) => r.GetAsync(c, id, default));
+        Assert.Equal((ProcurementRequestStatus.FinanceApproval, 2), (again.Status, again.ApprovalRound));
         Assert.Contains("повторное согласование", again.History[^1].Text);
-        Assert.True(again.Can.Approve);
+        Assert.True(again.Can.Approve && again.Can.Price);
 
         // Допуск 15 %: рост цены на 10 % после второго утверждения — без повторного согласования.
-        await Assert.ThrowsAsync<FieldForbiddenException>(() => As(org.Supply, Supply, (r, _, c) => r.UpdateSettingsAsync(c, new(15), default)));
-        await As(org.Director, Director, (r, _, c) => r.UpdateSettingsAsync(c, new(15), default));
-        await As(org.Director, Director, (r, _, c) => r.ApproveAsync(c, id, null, default));
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => As(org.Supply, Supply, (r, _, c) => r.UpdateSettingsAsync(c, new(15, 1, 3, org.Financier.Id), default)));
+        await As(org.Director, Director, (r, _, c) => r.UpdateSettingsAsync(c, new(15, 1, 3, org.Financier.Id), default));
+        await As(org.Financier, Employee, (r, _, c) => r.ApproveAsync(c, id, null, default));
         var second = await As(org.Supply, Supply, (r, _, c) => r.GetAsync(c, id, default));
         await As(org.Supply, Supply, (r, _, c) => r.UpdateAsync(c, id, Edit(second, 2, 1_210_000), default));
         Assert.Equal(ProcurementRequestStatus.Approved, (await As(org.Supply, Supply, (r, _, c) => r.GetAsync(c, id, default))).Status);
+        await As(org.Director, Director, (r, _, c) => r.UpdateSettingsAsync(c, new(0), default));
+    }
+
+    [PostgresFact]
+    public async Task Departments_settings_assign_heads_and_store_the_supply_approval_route()
+    {
+        var org = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var departments = scope.ServiceProvider.GetRequiredService<DepartmentSettingsService>();
+        var usersManage = new HashSet<string> { Permissions.UsersManage };
+
+        // Раздел открыт с правом «Пользователи» или «Настройки снабжения»; руководителей меняет только «Пользователи».
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => departments.ListAsync(Supply.ToHashSet(), default));
+        var view = await departments.ListAsync(Director.ToHashSet(), default);
+        Assert.Equal((false, true), (view.CanEditHeads, view.CanEditSupply));
+        Assert.Contains(view.Departments, d => d.Code == org.Dept.Code);
+        Assert.Contains(await departments.UsersAsync(Director.ToHashSet(), default), u => u.Id == org.Supply.Id);
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => departments.SetHeadsAsync(org.Director.Id, Director.ToHashSet(), org.Dept.Code, [org.Employee.Id], default));
+
+        // Руководитель из настроек — тот же, что в «Задачах» и в заявках (контекст снабжения видит его руководителем отдела).
+        await departments.SetHeadsAsync(org.Admin.Id, usersManage, org.Dept.Code, [org.Supply.Id], default);
+        var card = (await departments.ListAsync(usersManage, default)).Departments.Single(d => d.Code == org.Dept.Code);
+        Assert.Equal((org.Supply.Id, 6), (Assert.Single(card.Heads).Id, card.Users));
+        Assert.Contains(org.Dept.Id, await As(org.Supply, Supply, (_, _, c) => Task.FromResult(c.HeadOf)));
+        await departments.SetHeadsAsync(org.Admin.Id, usersManage, org.Dept.Code, [], default);
+        Assert.Empty((await departments.ListAsync(usersManage, default)).Departments.Single(d => d.Code == org.Dept.Code).Heads);
+
+        // Маршрут заявок: лимит по умолчанию — 5 млн; сохраняются финансист, директор и лимит, имена — для показа.
+        Assert.Equal(5_000_000m, (await As(org.Director, Director, (r, _, c) => r.SettingsAsync(c, default))).DirectorLimit);
+        await Assert.ThrowsAsync<FieldForbiddenException>(() =>
+            As(org.Supply, Supply, (r, _, c) => r.UpdateSettingsAsync(c, new ProcurementSettingsView(0, 1, 3, org.Supply.Id, org.Director.Id, 7_500_000), default)));
+        await As(org.Director, Director, (r, _, c) => r.UpdateSettingsAsync(c, new ProcurementSettingsView(0, 1, 3, org.Supply.Id, org.Director.Id, 7_500_000), default));
+        var route = await As(org.Director, Director, (r, _, c) => r.SettingsAsync(c, default));
+        Assert.Equal((org.Supply.Id, "Снабженец", org.Director.Id, "Директор", 7_500_000m),
+            (route.FinanceApproverId, route.FinanceApproverName, route.DirectorApproverId, route.DirectorApproverName, route.DirectorLimit));
+
+        // Неверный лимит (ноль, дробный) и отключённый пользователь — ошибка, сохранённое не меняется.
+        await Assert.ThrowsAsync<FieldValidationException>(() => As(org.Director, Director, (r, _, c) => r.UpdateSettingsAsync(c, new ProcurementSettingsView(0, 1, 3, null, null, 0), default)));
+        await Assert.ThrowsAsync<FieldValidationException>(() => As(org.Director, Director, (r, _, c) => r.UpdateSettingsAsync(c, new ProcurementSettingsView(0, 1, 3, null, null, 1_000.5m), default)));
+        var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
+        await db.Users.Where(u => u.Id == org.Keeper.Id).ExecuteUpdateAsync(u => u.SetProperty(x => x.IsActive, false));
+        await Assert.ThrowsAsync<FieldValidationException>(() =>
+            As(org.Director, Director, (r, _, c) => r.UpdateSettingsAsync(c, new ProcurementSettingsView(0, 1, 3, org.Keeper.Id, null, 5_000_000), default)));
+        Assert.Equal(org.Supply.Id, (await As(org.Director, Director, (r, _, c) => r.SettingsAsync(c, default))).FinanceApproverId);
+
+        // Вернуть общие настройки класса: без согласующих, лимит по умолчанию.
         await As(org.Director, Director, (r, _, c) => r.UpdateSettingsAsync(c, new(0), default));
     }
 

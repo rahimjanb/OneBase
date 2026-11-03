@@ -129,6 +129,8 @@ public sealed partial class ProcurementRequestService
     {
         ProcurementRequestStatus.Draft => "Qoralama",
         ProcurementRequestStatus.Submitted => "Yuborilgan",
+        ProcurementRequestStatus.HeadApproval => "Bo'lim rahbarini kutmoqda",
+        ProcurementRequestStatus.FinanceApproval => "Moliyachini kutmoqda",
         ProcurementRequestStatus.DirectorApproval => "Direktorni kutmoqda",
         ProcurementRequestStatus.Approved => "Tasdiqlangan",
         ProcurementRequestStatus.Rejected => "Rad etilgan",

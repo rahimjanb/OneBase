@@ -53,8 +53,20 @@ export default async function RequestsPage() {
 
   const tiles = [
     { label: "Черновики", value: s.Draft, icon: FilePen, href: "/requests/my?status=draft", tone: "text-ink-2" },
-    { label: "Отправлены", value: s.Submitted, icon: Send, href: `${list}?status=Submitted`, tone: "text-accent-strong" },
-    { label: "Ждут директора", value: s.DirectorApproval, icon: Hourglass, href: nav.isDirector ? "/requests/approvals" : `${list}?status=DirectorApproval`, tone: "text-violet-light" },
+    {
+      label: "На согласовании",
+      value: (s.HeadApproval ?? 0) + (s.FinanceApproval ?? 0) + s.DirectorApproval + s.Submitted,
+      icon: Hourglass,
+      href: `${list}?status=HeadApproval,FinanceApproval,DirectorApproval,Submitted`,
+      tone: "text-violet-light",
+    },
+    {
+      label: "Ждут моего решения",
+      value: nav.awaitingApproval,
+      icon: Send,
+      href: nav.decides || nav.isDirector ? "/requests/approvals" : `${list}?status=open`,
+      tone: "text-accent-strong",
+    },
     { label: "На доработке", value: s.RevisionRequired, icon: Undo2, href: `${list}?status=RevisionRequired`, tone: "text-warn" },
     { label: "Утверждены", value: s.Approved + s.PartiallyFulfilled, icon: BadgeCheck, href: `${list}?status=Approved,PartiallyFulfilled`, tone: "text-ok" },
     { label: "Срочные в работе", value: overview.urgentOpen, icon: Flame, href: `${list}?status=open&priority=Urgent`, tone: "text-bad" },
@@ -105,7 +117,7 @@ export default async function RequestsPage() {
                   <Inbox className="size-4" aria-hidden /> {t("Ждут вашего действия")}
                 </h2>
                 <p className="mb-2 text-xs text-ink-3">
-                  {nav.isDirector
+                  {nav.decides
                     ? t("Заявки на вашем согласовании, ваши черновики и возвраты")
                     : nav.manages
                       ? t("Ваши черновики и возвраты на доработку, отправленные заявки — на проверку снабжению")

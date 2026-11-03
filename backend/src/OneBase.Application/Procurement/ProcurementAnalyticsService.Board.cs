@@ -20,11 +20,21 @@ public sealed record ProcurementBoardAccess(
 public sealed record ProcurementBoardSummary(int? PendingApprovalCount, decimal? PendingApprovalAmount, int? OverdueDeliveries, int? OverdueTasks);
 
 /// <summary>
-/// Путь закупки сейчас: утверждённые заявки, которые ещё ждут заказа; заявки на согласовании директора; заказы до отправки поставщику
-/// (черновик, на согласовании, утверждён); в пути (оформлен, частично поставлен); ждут приёмки (срок поставки сегодня или прошёл, или начата
-/// приёмка). «В пути» и «ждут приёмки» не пересекаются. Этапы заявок — null, если пользователь не видит все заявки.
+/// Путь закупки сейчас — три этапа: заявки на согласовании (руководитель отдела, финансист, директор: число и сумма к закупке); к закупке —
+/// утверждённые заявки, по которым снабжению осталось что-то купить (число, остаток по согласованным ценам, сколько из них с прошедшей
+/// желаемой датой); на складе — заявки, товар по которым ждёт выдачи (резерв). Этапы заявок — null, если пользователь не видит все
+/// заявки. Заказы поставщикам до отправки, в пути и ждущие приёмки — прежний путь (заказы больше не оформляются, но старые доводятся).
 /// </summary>
-public sealed record ProcurementPipeline(int? RequestsAwaitingOrder, int? OnApprovalCount, decimal? OnApprovalAmount, int OrdersInProgress, int InTransit, int AwaitingReceipt);
+public sealed record ProcurementPipeline(
+    int? RequestsAwaitingOrder,
+    int? OnApprovalCount,
+    decimal? OnApprovalAmount,
+    int OrdersInProgress,
+    int InTransit,
+    int AwaitingReceipt,
+    decimal? ToBuyAmount = null,
+    int? OverdueToBuy = null,
+    int ToIssue = 0);
 
 public sealed record ProcurementApprovalBrief(Guid Id, string Number, string Title, decimal Amount, string Department, string Initiator, DateTimeOffset? SubmittedAt);
 
@@ -42,10 +52,16 @@ public sealed record ProcurementBoardAnalytics(
     IReadOnlyList<ProcurementAmount> ByCategory,
     IReadOnlyList<ProcurementSupplierStat> Suppliers);
 
-/// <summary>Сотрудник снабжения: открытые задачи, заказы в работе, просрочено (задачи + заказы), нагрузка и её уровень (free, low, high).</summary>
-public sealed record ProcurementTeamRow(Guid UserId, string Name, string Role, int Tasks, int Orders, int Overdue, int Load, string LoadLevel);
+/// <summary>
+/// Сотрудник снабжения: открытые задачи, заказы в работе, просрочено (задачи + заказы), нагрузка и её уровень (free, low, high), куплено за
+/// период (покупки «Куплено» и поставленные заказы).
+/// </summary>
+public sealed record ProcurementTeamRow(Guid UserId, string Name, string Role, int Tasks, int Orders, int Overdue, int Load, string LoadLevel, int Bought = 0);
 
-/// <summary>Обзор снабжения: что требует действия, путь закупки, показатели и аналитика периода, сотрудники — по правам роли.</summary>
+/// <summary>
+/// Обзор снабжения: что требует действия, путь закупки, показатели и аналитика периода, сотрудники — по правам роли. MyApprovalCount —
+/// сколько заявок ждут решения самого пользователя (Approvals — первые три из них).
+/// </summary>
 public sealed record ProcurementBoard(
     DateOnly From,
     DateOnly To,
@@ -60,7 +76,8 @@ public sealed record ProcurementBoard(
     IReadOnlyList<ProcurementTeamRow>? Team,
     IReadOnlyList<ProcurementDigestRow>? Digests,
     bool Empty,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<string> Errors,
+    int MyApprovalCount = 0);
 
 public sealed partial class ProcurementAnalyticsService
 {
@@ -82,7 +99,9 @@ public sealed partial class ProcurementAnalyticsService
 
         var head = await SupplyHeadAsync(ctx, ct);
         var seesRequests = ctx.ReadsAll || ctx.IsDirector;
-        var access = new ProcurementBoardAccess(ctx.IsDirector, ctx.CanCreate, ctx.Manages, ctx.Manages, ctx.IsDirector || ctx.Configures || head, seesRequests, seesRequests);
+        // Согласовать из обзора может тот, кто решает шаг маршрута (руководитель отдела, финансист, директор).
+        var access = new ProcurementBoardAccess(ProcurementRules.DecidesAny(ctx), ctx.CanCreate, ctx.Manages, ctx.Manages, ctx.IsDirector || ctx.Configures || head, seesRequests,
+            seesRequests);
         var errors = new List<string>();
 
         async Task<T?> Safe<T>(string block, Func<Task<T>> load) where T : class
@@ -120,17 +139,27 @@ public sealed partial class ProcurementAnalyticsService
             })
             .ToListAsync(ct);
         var awaitingReceipt = transit.Count(o => o.Draft || (o.ExpectedDate is { } d && d <= today));
+        var toBuy = seesRequests ? await Safe("pipeline", () => ToBuyAsync(today, ct)) : null;
+        var issuable = ProcurementRules.IssuableStatuses;
+        var toIssue = await db.ProcurementStockReservations.AsNoTracking()
+            .Where(x => x.Status == ProcurementReservationStatus.Active && x.Quantity > x.Issued
+                        && db.ProcurementRequests.Any(r => r.Id == x.RequestId && issuable.Contains(r.Status)))
+            .Select(x => x.RequestId).Distinct().CountAsync(ct);
         var pipeline = new ProcurementPipeline(
-            headBoard?.WaitingOrder,
+            toBuy?.Count ?? headBoard?.WaitingOrder,
             director?.AwaitingRequests,
             director?.AwaitingRequestsTotal,
             inProgress,
             transit.Count - awaitingReceipt,
-            awaitingReceipt);
+            awaitingReceipt,
+            toBuy?.Amount,
+            toBuy?.Overdue,
+            toIssue);
 
-        var approvals = ctx.IsDirector
-            ? await Safe("approvals", () => db.ProcurementRequests.AsNoTracking()
-                .Where(r => r.Status == ProcurementRequestStatus.DirectorApproval)
+        // «Ждёт согласования» — заявки, которые ждут решения пользователя на его шаге маршрута (руководитель отдела, финансист, директор).
+        var myApprovals = ProcurementRules.DecidesAny(ctx) ? await db.ProcurementRequests.AsNoTracking().AwaitingDecision(ctx).CountAsync(ct) : 0;
+        var approvals = ProcurementRules.DecidesAny(ctx)
+            ? await Safe("approvals", () => db.ProcurementRequests.AsNoTracking().AwaitingDecision(ctx)
                 .OrderBy(r => r.ForwardedAt ?? r.SubmittedAt)
                 .Take(3)
                 .Select(r => new ProcurementApprovalBrief(r.Id, r.Number, r.Title, r.PurchaseTotal, r.Department!.Name, r.Initiator!.FullName, r.SubmittedAt))
@@ -171,7 +200,26 @@ public sealed partial class ProcurementAnalyticsService
             team,
             digests,
             empty,
-            errors.Distinct().ToList());
+            errors.Distinct().ToList(),
+            myApprovals);
+    }
+
+    private sealed record ToBuyCount(int Count, decimal Amount, int Overdue);
+
+    /// <summary>К закупке: утверждённые заявки с некупленным остатком — число, остаток по согласованным ценам, с прошедшей желаемой датой.</summary>
+    private async Task<ToBuyCount> ToBuyAsync(DateOnly today, CancellationToken ct)
+    {
+        var orderable = ProcurementOrderService.Orderable;
+        var rows = await db.ProcurementRequests.AsNoTracking()
+            .Where(r => orderable.Contains(r.Status) && r.Items.Any(i => i.Status != ProcurementItemStatus.Cancelled && i.Quantity - i.FromStock > i.OrderedQty))
+            .Select(r => new
+            {
+                r.DesiredDate,
+                Left = r.Items.Where(i => i.Status != ProcurementItemStatus.Cancelled && i.Quantity - i.FromStock > i.OrderedQty && i.EstimatedPrice != null)
+                    .Sum(i => (i.Quantity - i.FromStock - i.OrderedQty) * i.EstimatedPrice!.Value),
+            })
+            .ToListAsync(ct);
+        return new ToBuyCount(rows.Count, Math.Round(rows.Sum(r => r.Left), 2), rows.Count(r => r.DesiredDate is { } d && d < today));
     }
 
     /// <summary>Поставщики с утверждёнными заказами за период — по сумме; рейтинг и его части — за всё время (как в карточке поставщика).</summary>
@@ -209,7 +257,8 @@ public sealed partial class ProcurementAnalyticsService
                 s.ActiveOrders,
                 s.OverdueTasks + s.OverdueOrders,
                 s.Load,
-                s.Load == 0 ? "free" : s.Load >= HighLoad ? "high" : "low"))
+                s.Load == 0 ? "free" : s.Load >= HighLoad ? "high" : "low",
+                s.Delivered))
             .ToList();
     }
 }

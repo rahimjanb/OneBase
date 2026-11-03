@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, Gavel, Repeat } from "lucide-react";
-import { RequestPriorityPill } from "@/components/requests/RequestKit";
+import { RequestPriorityPill, RequestStatusPill } from "@/components/requests/RequestKit";
 import { requireRequests } from "@/components/requests/RequestListPage";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
@@ -15,15 +15,15 @@ export async function generateMetadata() {
 }
 
 /**
- * «Согласования» — очередь директора: заявки, переданные снабжением на согласование (давно ждущие — первыми), с суммой к закупке,
- * причиной и пометкой повторного согласования. Решение — в карточке заявки (там позиции, остатки, история и вложения). Видна только
- * роли «Директор»; утвердить через API может тоже только она.
+ * «Согласования» — заявки, которые ждут решения пользователя на его шаге маршрута (руководитель отдела — заявки своего отдела, финансист,
+ * директор), давно ждущие — первыми, с суммой к закупке, причиной и пометкой повторного согласования. Решение — в карточке заявки (там
+ * позиции, остатки, маршрут, история и вложения). Видна тем, кто решает какой-то шаг; согласовать через API может тоже только он.
  */
 export default async function ApprovalsPage() {
   await requireRequests();
   const t = await getT();
   const nav = await apiGet<RequestNav>("/api/procurement/nav", "/requests/approvals");
-  if (!nav.isDirector) redirect("/requests");
+  if (!nav.decides && !nav.isDirector) redirect("/requests");
   const [data, orders] = await Promise.all([
     apiGet<RequestPage>("/api/procurement/requests?scope=approvals&pageSize=100", "/requests/approvals"),
     apiGet<Page<OrderRow>>("/api/procurement/orders?status=awaiting&pageSize=100", "/requests/approvals"),
@@ -34,7 +34,7 @@ export default async function ApprovalsPage() {
     <>
       <PageHeader
         title={t("Согласования")}
-        subtitle={t("Заявки, которые снабжение передало вам на согласование: утвердите, отклоните или верните на доработку")}
+        subtitle={t("Заявки, которые ждут вашего решения: согласуйте, отклоните или верните на доработку")}
         breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Заявки"), href: "/requests" }, { label: t("Согласования") }]}
       />
       <PageBody>
@@ -73,7 +73,7 @@ export default async function ApprovalsPage() {
               <Gavel className="size-7" aria-hidden />
             </span>
             <h2 className="mt-4 text-lg font-semibold text-ink">{t("Согласовывать нечего")}</h2>
-            <p className="mt-1.5 max-w-md text-sm text-ink-2">{t("Новые заявки появятся здесь, когда снабжение передаст их вам.")}</p>
+            <p className="mt-1.5 max-w-md text-sm text-ink-2">{t("Заявки появятся здесь, когда дойдут до вашего шага согласования.")}</p>
           </section>
         ) : (
           <>
@@ -93,6 +93,7 @@ export default async function ApprovalsPage() {
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-2">
                         <span className="text-xs tabular-nums text-ink-3">{r.number}</span>
+                        <RequestStatusPill status={r.status} />
                         <RequestPriorityPill priority={r.priority} />
                         {r.approvalRound > 1 && (
                           <span className="inline-flex items-center gap-1 rounded-md bg-violet-soft px-1.5 py-0.5 text-[11px] font-semibold text-violet-light">

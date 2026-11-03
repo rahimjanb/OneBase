@@ -55,21 +55,82 @@ public class ProcurementRulesTests
     [InlineData(ProcurementRequestStatus.DirectorApproval, ProcurementRequestStatus.Rejected, true, true, false)]
     [InlineData(ProcurementRequestStatus.DirectorApproval, ProcurementRequestStatus.Approved, true, true, false)] // снабжение и инициатор — нет
     [InlineData(ProcurementRequestStatus.Cancelled, ProcurementRequestStatus.Submitted, true, true, false)]
+    [InlineData(ProcurementRequestStatus.HeadApproval, ProcurementRequestStatus.Cancelled, true, false, true)] // инициатор отменяет до утверждения
+    [InlineData(ProcurementRequestStatus.FinanceApproval, ProcurementRequestStatus.Approved, true, true, false)] // ни инициатор, ни снабжение не согласуют
     public void Transitions_follow_the_roles(ProcurementRequestStatus from, ProcurementRequestStatus to, bool owner, bool manages, bool allowed)
     {
         Assert.Equal(allowed, ProcurementRules.CanTransition(from, to, owner, manages));
     }
 
     [Theory]
+    [InlineData(ProcurementRequestStatus.HeadApproval, ProcurementRequestStatus.Approved, true)]
+    [InlineData(ProcurementRequestStatus.FinanceApproval, ProcurementRequestStatus.Rejected, true)]
     [InlineData(ProcurementRequestStatus.DirectorApproval, ProcurementRequestStatus.Approved, true)]
-    [InlineData(ProcurementRequestStatus.DirectorApproval, ProcurementRequestStatus.Rejected, true)]
     [InlineData(ProcurementRequestStatus.DirectorApproval, ProcurementRequestStatus.RevisionRequired, true)]
-    [InlineData(ProcurementRequestStatus.Submitted, ProcurementRequestStatus.Approved, false)] // сначала снабжение передаёт директору
+    [InlineData(ProcurementRequestStatus.Submitted, ProcurementRequestStatus.Approved, false)] // заявку прежнего шага сначала снабжение передаёт директору
     [InlineData(ProcurementRequestStatus.Approved, ProcurementRequestStatus.Rejected, false)]
-    [InlineData(ProcurementRequestStatus.Submitted, ProcurementRequestStatus.DirectorApproval, false)] // директор не обрабатывает за снабжение
-    public void Director_decides_only_requests_waiting_for_him(ProcurementRequestStatus from, ProcurementRequestStatus to, bool allowed)
+    [InlineData(ProcurementRequestStatus.Submitted, ProcurementRequestStatus.DirectorApproval, false)] // согласующий не обрабатывает за снабжение
+    public void Approver_decides_only_the_step_waiting_for_him(ProcurementRequestStatus from, ProcurementRequestStatus to, bool allowed)
     {
-        Assert.Equal(allowed, ProcurementRules.CanTransition(from, to, owner: false, manages: false, director: true));
+        Assert.Equal(allowed, ProcurementRules.CanTransition(from, to, owner: false, manages: false, decides: true));
+        Assert.False(ProcurementRules.CanTransition(from, to, owner: false, manages: true, decides: false) && from != ProcurementRequestStatus.Submitted);
+    }
+
+    [Fact]
+    public void Each_step_is_decided_by_its_own_approver()
+    {
+        var colleague = Guid.NewGuid();
+        var head = Ctx([Permissions.ProcurementRequest], MyDept);
+        var financier = new ProcurementContext(Me, new HashSet<string> { Permissions.ProcurementRequest }, OtherDept, new HashSet<Guid>(), IsFinancier: true);
+        var director = new ProcurementContext(Me, new HashSet<string>(), OtherDept, new HashSet<Guid>(), IsDirector: true, ApprovesAsDirector: true);
+        var roleOnly = new ProcurementContext(Me, new HashSet<string>(), OtherDept, new HashSet<Guid>(), IsDirector: true, ApprovesAsDirector: false);
+
+        Assert.True(ProcurementRules.Decides(head, Request(colleague, MyDept, ProcurementRequestStatus.HeadApproval)));
+        Assert.False(ProcurementRules.Decides(head, Request(colleague, OtherDept, ProcurementRequestStatus.HeadApproval))); // чужой отдел
+        Assert.False(ProcurementRules.Decides(head, Request(colleague, MyDept, ProcurementRequestStatus.FinanceApproval)));
+        Assert.True(ProcurementRules.Decides(financier, Request(colleague, MyDept, ProcurementRequestStatus.FinanceApproval)));
+        Assert.False(ProcurementRules.Decides(financier, Request(colleague, MyDept, ProcurementRequestStatus.DirectorApproval)));
+        Assert.True(ProcurementRules.Decides(director, Request(colleague, MyDept, ProcurementRequestStatus.DirectorApproval)));
+        Assert.False(ProcurementRules.Decides(roleOnly, Request(colleague, MyDept, ProcurementRequestStatus.DirectorApproval))); // директор маршрута выбран другой
+        // Финансист и директор маршрута видят отправленные заявки всех отделов (решают по ним), черновики — нет.
+        Assert.True(ProcurementRules.CanView(financier, Request(colleague, MyDept, ProcurementRequestStatus.HeadApproval)));
+        Assert.False(ProcurementRules.CanView(financier, Request(colleague, MyDept, ProcurementRequestStatus.Draft)));
+        Assert.True(financier.CanOpen);
+    }
+
+    [Theory]
+    // Заявка сотрудника — руководителю его отдела; заявка руководителя и отдела без руководителя — финансисту.
+    [InlineData(false, true, true, ProcurementRequestStatus.HeadApproval)]
+    [InlineData(true, true, true, ProcurementRequestStatus.FinanceApproval)]
+    [InlineData(false, false, true, ProcurementRequestStatus.FinanceApproval)]
+    // Всё со склада: сотрудник — к руководителю; руководитель — утверждена сама (закупки нет).
+    [InlineData(false, true, false, ProcurementRequestStatus.HeadApproval)]
+    [InlineData(true, true, false, ProcurementRequestStatus.Approved)]
+    public void Route_starts_with_the_department_head_unless_the_head_asks(bool initiatorHeads, bool hasHeads, bool purchase, ProcurementRequestStatus first)
+    {
+        Assert.Equal(first, ProcurementRules.FirstStep(initiatorHeads, hasHeads, purchase));
+    }
+
+    [Theory]
+    [InlineData(ProcurementRequestStatus.HeadApproval, true, 9_000_000, ProcurementRequestStatus.FinanceApproval)]
+    [InlineData(ProcurementRequestStatus.HeadApproval, false, 0, ProcurementRequestStatus.Approved)] // всё со склада — финансисту нечего согласовывать
+    [InlineData(ProcurementRequestStatus.FinanceApproval, true, 5_000_000, ProcurementRequestStatus.Approved)] // ровно лимит — без директора
+    [InlineData(ProcurementRequestStatus.FinanceApproval, true, 5_000_001, ProcurementRequestStatus.DirectorApproval)]
+    [InlineData(ProcurementRequestStatus.DirectorApproval, true, 9_000_000, ProcurementRequestStatus.Approved)]
+    public void After_the_financier_only_sums_above_the_limit_go_to_the_director(ProcurementRequestStatus step, bool purchase, decimal total, ProcurementRequestStatus next)
+    {
+        Assert.Equal(next, ProcurementRules.NextStep(step, purchase, total, 5_000_000));
+    }
+
+    [Fact]
+    public void Price_is_required_for_the_purchase_part()
+    {
+        ProcurementRequestItem Item(int line, decimal qty, decimal fromStock, decimal? price) =>
+            new() { Name = $"Позиция {line}", LineNo = line, UnitCode = "шт", Quantity = qty, FromStock = fromStock, EstimatedPrice = price };
+
+        Assert.Null(ProcurementRules.MissingPrice([Item(1, 10, 10, null), Item(2, 5, 0, 12_000)])); // всё со склада — цена не нужна
+        Assert.Contains("Позиция 2 «Позиция 2»", ProcurementRules.MissingPrice([Item(1, 10, 0, 1_000), Item(2, 5, 0, null)]));
+        Assert.NotNull(ProcurementRules.MissingPrice([Item(1, 10, 4, 0)])); // нулевая цена — как без цены
     }
 
     private static ProcurementApprovedLine Line(Guid id, decimal toPurchase, decimal? price, string name = "Бумага", decimal fromStock = 0) =>

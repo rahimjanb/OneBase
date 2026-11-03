@@ -113,4 +113,52 @@ public sealed class ProcurementStockLedger(IAppDbContext db, IProcurementNumbers
         db.ProcurementStockMovements.Add(movement);
         return movement;
     }
+
+    /// <summary>
+    /// Приход под позицию заявки (приёмка по заказу, «Куплено»): движение «приход» по цене, «получено» в позиции, карточка склада — у позиции
+    /// без неё. Пока по заявке выдают, поступившее резервируется под неё — на складе, но занято до выдачи инициатору (к выдаче). active —
+    /// действующие резервы позиций заявок (дополняется новыми).
+    /// </summary>
+    public void ReceiveForRequest(ProcurementStockDocument doc, ProcurementStockBalance balance, ProcurementRequestItem requestItem, decimal quantity, decimal? unitCost,
+        string itemLabel, Dictionary<Guid, ProcurementStockReservation> active)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var itemId = balance.ItemId;
+        Move(doc, balance, ProcurementMovementKind.Receipt, quantity, itemLabel, unitCost, requestItem.Id);
+        requestItem.ReceivedQty += quantity;
+        requestItem.ItemId ??= itemId;
+        requestItem.UpdatedAt = now;
+        var request = requestItem.Request!;
+        if (ProcurementRules.Issuable(request.Status) && requestItem.Status != ProcurementItemStatus.Cancelled)
+        {
+            if (active.GetValueOrDefault(requestItem.Id) is { } reservation)
+            {
+                if (reservation.ItemId != itemId)
+                {
+                    throw new FieldConflictException($"«{itemLabel}»: под заявку уже зарезервирована другая карточка склада — примите на неё.");
+                }
+
+                reservation.Quantity += quantity;
+            }
+            else
+            {
+                var created = new ProcurementStockReservation
+                {
+                    WarehouseId = doc.WarehouseId, ItemId = itemId, RequestId = request.Id, RequestItemId = requestItem.Id, Quantity = quantity,
+                };
+                db.ProcurementStockReservations.Add(created);
+                active[requestItem.Id] = created;
+            }
+
+            balance.Reserved += quantity;
+            request.UsesStock = true;
+        }
+
+        if (requestItem.Status != ProcurementItemStatus.Cancelled)
+        {
+            requestItem.Status = ProcurementRules.ItemStatus(requestItem, submitted: true);
+        }
+
+        request.UpdatedAt = now;
+    }
 }

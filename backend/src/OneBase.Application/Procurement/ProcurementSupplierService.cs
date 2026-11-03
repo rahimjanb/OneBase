@@ -275,6 +275,43 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
 
     // ---------- Правка ----------
 
+    /// <summary>
+    /// Поставщик из формы покупки или тендера: из справочника (действующий) или по названию — действующий с тем же названием (без учёта
+    /// регистра), а если такого нет — новый с одним названием (остальное заполнят в справочнике; запись в истории — у вызывающего). Created —
+    /// поставщик новый (ещё не сохранён).
+    /// </summary>
+    internal static async Task<(ProcurementSupplier Supplier, bool Created)> ResolveAsync(IAppDbContext db, ProcurementContext ctx, Guid? id, string? name, string what,
+        CancellationToken ct)
+    {
+        if (id is { } supplierId)
+        {
+            var chosen = await db.ProcurementSuppliers.FirstOrDefaultAsync(s => s.Id == supplierId, ct) ?? throw new FieldValidationException("Поставщик не найден.");
+            return chosen.IsActive ? (chosen, false) : throw new FieldValidationException($"Поставщик «{chosen.Name}» отключён — выберите другого.");
+        }
+
+        var text = name?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            throw new FieldValidationException(what);
+        }
+
+        if (text.Length > 200)
+        {
+            throw new FieldValidationException("Название поставщика — до 200 символов.");
+        }
+
+        var lower = text.ToLower();
+        var existing = await db.ProcurementSuppliers.Where(s => s.IsActive && s.Name.ToLower() == lower).OrderBy(s => s.CreatedAt).FirstOrDefaultAsync(ct);
+        if (existing is not null)
+        {
+            return (existing, false);
+        }
+
+        var supplier = new ProcurementSupplier { Name = text, CreatedById = ctx.UserId };
+        db.ProcurementSuppliers.Add(supplier);
+        return (supplier, true);
+    }
+
     public async Task<Guid> CreateAsync(ProcurementContext ctx, ProcurementSupplierInput input, CancellationToken ct)
     {
         RequireManage(ctx);

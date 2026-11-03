@@ -11,7 +11,7 @@ export async function generateMetadata() {
   return { title: t("К выдаче · OneBase") };
 }
 
-/** Заявки к выдаче со склада: резерв по позициям, выдача кладовщиком (можно частями). */
+/** Заявки к выдаче со склада: резерв по позициям (взятое со склада и купленное снабжением), выдача кладовщиком (можно частями). */
 export default async function ToIssuePage() {
   await requireRequests();
   const t = await getT();
@@ -22,7 +22,7 @@ export default async function ToIssuePage() {
     <>
       <PageHeader
         title={t("К выдаче")}
-        subtitle={t("Заявки, где товар взят со склада: он зарезервирован и ждёт выдачи отделу")}
+        subtitle={t("Товар на складе под заявки — со склада и купленный снабжением: ждёт выдачи сотруднику")}
         breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("К выдаче") }]}
       />
       <PageBody>

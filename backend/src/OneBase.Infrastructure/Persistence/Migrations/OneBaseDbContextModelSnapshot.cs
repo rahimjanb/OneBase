@@ -3777,6 +3777,11 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb");
 
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3786,9 +3791,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("DeciderId")
                         .HasDatabaseName("IX_ProcurementApprovals_DeciderId");
 
-                    b.HasIndex("RequestId", "Round")
+                    b.HasIndex("RequestId", "Round", "Stage")
                         .IsUnique()
-                        .HasDatabaseName("IX_ProcurementApprovals_RequestId_Round");
+                        .HasDatabaseName("IX_ProcurementApprovals_RequestId_Round_Stage");
 
                     b.ToTable("Approvals", "procurement");
                 });
@@ -4317,6 +4322,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<bool>("Direct")
+                        .HasColumnType("boolean");
+
                     b.Property<decimal>("Discount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -4761,11 +4769,21 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<int>("Id")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("DirectorApproverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("DirectorLimit")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<int>("EscalateDirectorDays")
                         .HasColumnType("integer");
 
                     b.Property<int>("EscalateHeadDays")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("FinanceApproverId")
+                        .HasColumnType("uuid");
 
                     b.Property<decimal>("ReapprovalTolerancePercent")
                         .HasPrecision(5, 2)
@@ -4779,6 +4797,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("PK_ProcurementSettings");
+
+                    b.HasIndex("DirectorApproverId");
+
+                    b.HasIndex("FinanceApproverId");
 
                     b.ToTable("Settings", "procurement");
                 });
@@ -5138,6 +5160,150 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_ProcurementSupplierCategories_CategoryId");
 
                     b.ToTable("SupplierCategories", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementTender", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ClientKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ContractNo")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("DeliveredOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("DeliveryDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("Participants")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ResponsibleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("TenderDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("TenderNo")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementTenders");
+
+                    b.HasIndex("CategoryId")
+                        .HasDatabaseName("IX_ProcurementTenders_CategoryId");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementTenders_Number");
+
+                    b.HasIndex("ResponsibleId")
+                        .HasDatabaseName("IX_ProcurementTenders_ResponsibleId");
+
+                    b.HasIndex("TenderDate")
+                        .HasDatabaseName("IX_ProcurementTenders_TenderDate");
+
+                    b.HasIndex("ResponsibleId", "ClientKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementTenders_ResponsibleId_ClientKey")
+                        .HasFilter("\"ClientKey\" IS NOT NULL");
+
+                    b.HasIndex("Status", "DeliveryDate")
+                        .HasDatabaseName("IX_ProcurementTenders_Status_DeliveryDate");
+
+                    b.HasIndex("SupplierId", "TenderDate")
+                        .HasDatabaseName("IX_ProcurementTenders_SupplierId_TenderDate");
+
+                    b.ToTable("Tenders", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementTenderItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LineNo")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("TenderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UnitCode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementTenderItems");
+
+                    b.HasIndex("TenderId")
+                        .HasDatabaseName("IX_ProcurementTenderItems_TenderId");
+
+                    b.ToTable("TenderItems", "procurement");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementUnit", b =>
@@ -9039,6 +9205,19 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Request");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementSettings", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("DirectorApproverId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("OneBase.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("FinanceApproverId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockBalance", b =>
                 {
                     b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "Item")
@@ -9132,6 +9311,48 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Category");
 
                     b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementTender", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementCategory", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementTenders_Categories_CategoryId");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "Responsible")
+                        .WithMany()
+                        .HasForeignKey("ResponsibleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementTenders_Users_ResponsibleId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementSupplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementTenders_Suppliers_SupplierId");
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Responsible");
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementTenderItem", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementTender", "Tender")
+                        .WithMany("Items")
+                        .HasForeignKey("TenderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementTenderItems_Tenders_TenderId");
+
+                    b.Navigation("Tender");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Sales.LinkoOrderLine", b =>
@@ -9650,6 +9871,11 @@ namespace OneBase.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementSupplier", b =>
                 {
                     b.Navigation("Categories");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementTender", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Sales.LinkoOrder", b =>

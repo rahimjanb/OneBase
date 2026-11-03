@@ -69,6 +69,10 @@ public class ProcurementControlDbTests(DataManagerDb fixture) : IClassFixture<Da
         db.Users.AddRange(org.Employee, org.Other, org.Supply, org.Director, org.Keeper, org.SupplyHead);
         db.WorkDepartmentHeads.Add(new WorkDepartmentHead { Department = supplyDept, UserId = org.SupplyHead.Id });
         await db.SaveChangesAsync();
+        // Маршрут: у отдела заявителя нет руководителя — заявка сразу к финансисту (здесь им назначен директор), директор маршрута — роль, лимит 5 млн.
+        var route = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
+        (route.FinanceApproverId, route.DirectorApproverId, route.DirectorLimit) = (org.Director.Id, null, ProcurementSettings.DefaultDirectorLimit);
+        await db.SaveChangesAsync();
         return org with { Category = await db.ProcurementCategories.Where(c => c.Code == "stationery").Select(c => c.Id).SingleAsync(), Department = dept.Id };
     }
 
@@ -95,7 +99,6 @@ public class ProcurementControlDbTests(DataManagerDb fixture) : IClassFixture<Da
     {
         var request = await As(org.Employee, Employee, (sp, c) => Get<ProcurementRequestService>(sp).CreateAsync(c, new ProcurementRequestInput("Бумага для буклетов", null,
             ProcurementPriority.High, FieldClock.Today.AddDays(10), "Выставка", "Нужна белая", [new(null, "Бумага А4 | 80 г", org.Category, "пачка", 100, 45_000)], Submit: true), default));
-        await As(org.Supply, Supply, (sp, c) => Get<ProcurementRequestService>(sp).ForwardAsync(c, request, default));
         await As(org.Director, Director, (sp, c) => Get<ProcurementRequestService>(sp).ApproveAsync(c, request, "Согласовано", default));
         var item = (await As(org.Supply, Supply, (sp, c) => Get<ProcurementRequestService>(sp).GetAsync(c, request, default))).Items[0].Id;
         var supplier = await As(org.Supply, Supply, (sp, c) => Get<ProcurementSupplierService>(sp).CreateAsync(c,
@@ -224,9 +227,8 @@ public class ProcurementControlDbTests(DataManagerDb fixture) : IClassFixture<Da
     {
         var org = await SeedAsync();
         var today = FieldClock.Today;
-        var waiting = await As(org.Employee, Employee, (sp, c) => Get<ProcurementRequestService>(sp).CreateAsync(c, new ProcurementRequestInput("Ждёт директора", null,
+        var waiting = await As(org.Employee, Employee, (sp, c) => Get<ProcurementRequestService>(sp).CreateAsync(c, new ProcurementRequestInput("Ждёт согласования", null,
             ProcurementPriority.Normal, null, "Нужно", null, [new(null, "Маркеры", org.Category, "шт", 10, 15_000)], Submit: true), default));
-        await As(org.Supply, Supply, (sp, c) => Get<ProcurementRequestService>(sp).ForwardAsync(c, waiting, default));
         Guid task;
         using (var scope = fixture.Services.CreateScope())
         {

@@ -13,7 +13,7 @@ import { dateRu, parseNumber, quantity, type ToIssue } from "@/lib/procurement";
 
 const newKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
-/** Заявки к выдаче со склада: что зарезервировано и сколько на складе; кладовщик выдаёт из резерва (можно частями). */
+/** Заявки к выдаче со склада: что зарезервировано (со склада или куплено) и сколько на складе; кладовщик выдаёт из резерва (можно частями). */
 export function ToIssueView({ items, warehouse }: { items: ToIssue[]; warehouse: boolean }) {
   const t = useT();
   const router = useRouter();
@@ -66,7 +66,7 @@ export function ToIssueView({ items, warehouse }: { items: ToIssue[]; warehouse:
           <PackageCheck className="size-7" aria-hidden />
         </span>
         <h2 className="mt-4 text-lg font-semibold text-ink">{t("Выдавать нечего")}</h2>
-        <p className="mt-1.5 max-w-md text-sm text-ink-2">{t("Здесь появятся заявки, где сотрудники взяли товар со склада: он зарезервирован и ждёт выдачи.")}</p>
+        <p className="mt-1.5 max-w-md text-sm text-ink-2">{t("Здесь появятся заявки, товар по которым на складе: взятый со склада или купленный снабжением. Он зарезервирован и ждёт выдачи.")}</p>
       </section>
     );
   }

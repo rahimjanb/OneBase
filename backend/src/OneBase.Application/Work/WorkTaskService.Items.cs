@@ -500,22 +500,7 @@ public sealed partial class WorkTaskService
             throw new FieldForbiddenException("Руководителей отделов назначает руководство.");
         }
 
-        var department = await db.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.Code == code, ct) ?? throw new FieldNotFoundException("Отдел не найден.");
-        var ids = userIds.Distinct().ToList();
-        if (await db.Users.CountAsync(u => ids.Contains(u.Id) && u.IsActive, ct) != ids.Count)
-        {
-            throw new FieldValidationException("Руководитель — действующий пользователь OneBase.");
-        }
-
-        var current = await db.WorkDepartmentHeads.Where(h => h.DepartmentId == department.Id).ToListAsync(ct);
-        db.WorkDepartmentHeads.RemoveRange(current.Where(h => !ids.Contains(h.UserId)));
-        foreach (var id in ids.Where(id => current.All(h => h.UserId != id)))
-        {
-            db.WorkDepartmentHeads.Add(new WorkDepartmentHead { DepartmentId = department.Id, UserId = id });
-        }
-
-        await db.SaveChangesAsync(ct);
-        await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "work.heads.updated", "department", department.Code, new { heads = ids }, ct);
+        await DepartmentSettingsService.ReplaceHeadsAsync(db, audit, ctx.UserId, code, userIds, ct);
     }
 
     /// <summary>Пользователи для выбора участников проекта и руководителей (действующие).</summary>
