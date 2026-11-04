@@ -7,14 +7,14 @@ import { LogoutLink } from "./AppBridge";
 import { LanguageToggle } from "./LanguageToggle";
 import { MobileSearch } from "./MobileSearch";
 import { NotificationBell } from "./NotificationBell";
-import { SectionNav } from "./SectionNav";
+import { ModuleNav } from "./ModuleNav";
 import { Logo } from "./Sidebar";
 import { ThemeToggle } from "./ThemeToggle";
 import { Breadcrumbs, TopbarSearch } from "./TopbarSearch";
 
 /**
  * Верхняя панель — одна на все страницы (живёт в layout, поэтому не перерисовывается и не пропадает при переходах).
- * На компьютере (ТЗ dashboard): высота 64, крошки «Компания › Раздел», кнопки разделов (в «Продажах», «HR» и «Задачах»), поиск по центру,
+ * На компьютере (ТЗ dashboard): высота 64, название раздела, в модулях с разделами — «‹», название модуля и вкладки с «Ещё» (ModuleNav), поиск по центру,
  * справа тема, язык, уведомления, разделитель и меню пользователя с градиентным аватаром.
  * На телефоне это тёмная шапка приложения (ТЗ 1base-mobile-home): логотип и справа три круглые кнопки 40×40 — поиск, уведомления, аватар;
  * тема и язык — в «Профиле» нижней панели; кнопки разделов — второй строкой.
@@ -29,11 +29,9 @@ export function Topbar({ me, permissions }: { me: Me | null; permissions: readon
         <div className="flex h-[52px] items-center lg:hidden">
           <Logo />
         </div>
-        <div className="hidden shrink-0 lg:block">
-          <Breadcrumbs />
-        </div>
+        <Breadcrumbs />
         <Suspense fallback={null}>
-          <SectionNav permissions={me?.permissions ?? null} />
+          <ModuleNav permissions={me?.permissions ?? null} userId={me?.id ?? null} />
         </Suspense>
         <TopbarSearch />
         {/* Справа всегда у края: в разделах с кнопками в шапке (Продажи, HR, Задачи) поиска нет, и без ml-auto блок вставал сразу за кнопками. */}
@@ -52,7 +50,7 @@ export function Topbar({ me, permissions }: { me: Me | null; permissions: readon
                   <span className="grid size-[40px] place-items-center rounded-full border border-white/10 bg-white/10 text-xs font-semibold text-white lg:size-[34px] lg:border-0 lg:bg-gradient-to-br lg:from-brand-from lg:to-violet lg:font-bold">
                     {initials(me)}
                   </span>
-                  {/* Тесно (кнопки разделов продаж не помещаются вместе с именем, data-crowded ставит SectionNav) — только аватар. */}
+                  {/* В модулях с вкладками (data-crowded ставит ModuleNav) — только аватар: место вкладкам. */}
                   <span data-user-name className="hidden lg:block [[data-crowded]_&]:hidden">
                     <span className="block max-w-[220px] truncate text-[13px] font-semibold leading-tight text-ink">{me.name || me.login}</span>
                     <span className="block max-w-[220px] truncate text-[11.5px] leading-tight text-ink-4">{me.roles[0] ?? me.position ?? me.login}</span>

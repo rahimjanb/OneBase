@@ -10,7 +10,7 @@ import { isActive, navLabel, settings, workspace } from "./Sidebar";
 
 /**
  * Поиск в шапке (ТЗ dashboard): 420×38, подсказка «⌘K»; Ctrl/⌘+K ставит курсор в поле, Esc убирает. Сам поиск по данным — следующий шаг.
- * В «Продажах», «HR» и «Задачах» шапку занимают кнопки разделов — поиска там нет (и SectionNav меряет тесноту по блоку справа, как раньше).
+ * В модулях с вкладками («Продажи», HR, «Задачи», «Заявки», «Снабжение») шапку занимают вкладки (ModuleNav) — поиска там нет.
  */
 export function TopbarSearch() {
   const t = useT();
@@ -58,10 +58,12 @@ export function Breadcrumbs() {
   const item =
     workspace.find((i) => isActive(pathname, i)) ??
     (isActive(pathname, settings) ? settings : null);
+  // В модулях с вкладками слева — «‹» и название модуля (ModuleNav).
+  if (sectionOf(pathname)) return null;
   return (
     <nav
       aria-label={t("Навигация")}
-      className="flex items-center gap-1.5 whitespace-nowrap text-[13px]"
+      className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap text-[13px] lg:flex"
     >
       <span className="font-medium text-ink">{t(pathname === "/me" ? "Мой день" : item ? navLabel(item, home) : "Обзор")}</span>
     </nav>

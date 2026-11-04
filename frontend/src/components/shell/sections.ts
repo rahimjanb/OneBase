@@ -40,34 +40,48 @@ export type SectionTab = {
   headsOnly?: boolean;
   /** Только роли «Директор» (Согласования) — признак из /api/procurement/nav, не право. */
   approverOnly?: boolean;
+  /** Короткое пояснение — в меню «Ещё» и в поиске разделов. */
+  description?: string;
 };
 
 /**
  * Раздел с кнопками в верхней панели (как в «Продажах»): какие кнопки и какая из них открыта для адреса.
  * keepPeriod — переносить период и план между кнопками (только «Продажи»).
  */
-export type SectionDef = { id: "sales" | "hr" | "tasks" | "requests" | "procurement"; label: string; tabs: SectionTab[]; active: (pathname: string) => string | null; keepPeriod?: boolean };
+export type SectionDef = {
+  id: "sales" | "hr" | "tasks" | "requests" | "procurement";
+  label: string;
+  /** Название модуля в верхней панели: «Продажи», «HR»… */
+  title: string;
+  /** Кнопка «назад» слева от названия: «Продажи», «Снабжение» и HR открываются из «Отделов». */
+  back?: { href: string; label: string };
+  tabs: SectionTab[];
+  active: (pathname: string) => string | null;
+  keepPeriod?: boolean;
+};
+
+const toDepartments = { href: "/departments", label: "Назад к отделам" };
 
 const under = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
 const hrTabs: SectionTab[] = [
-  { key: "overview", label: "Обзор", href: "/hr", icon: LayoutGrid },
-  { key: "employees", label: "Сотрудники", href: "/hr/employees", icon: Users },
-  { key: "attendance", label: "Посещаемость", href: "/hr/attendance", icon: DoorOpen },
-  { key: "deviations", label: "Опоздания и отсутствия", short: "Опоздания", href: "/hr/deviations", icon: CalendarClock },
-  { key: "timesheets", label: "Табели", href: "/hr/timesheets", icon: Table2 },
-  { key: "reports", label: "Отчёты", href: "/hr/reports", icon: ChartColumn },
+  { key: "overview", label: "Обзор", href: "/hr", icon: LayoutGrid, description: "сводка дня и посещаемость" },
+  { key: "employees", label: "Сотрудники", href: "/hr/employees", icon: Users, description: "список и карточки сотрудников" },
+  { key: "attendance", label: "Посещаемость", href: "/hr/attendance", icon: DoorOpen, description: "приходы и уходы по дням" },
+  { key: "deviations", label: "Опоздания и отсутствия", short: "Опоздания", href: "/hr/deviations", icon: CalendarClock, description: "кто опоздал или не пришёл" },
+  { key: "timesheets", label: "Табели", href: "/hr/timesheets", icon: Table2, description: "рабочее время за период" },
+  { key: "reports", label: "Отчёты", href: "/hr/reports", icon: ChartColumn, description: "отчёты по дисциплине" },
 ];
 
 export const taskTabs: SectionTab[] = [
-  { key: "overview", label: "Обзор", href: "/tasks", icon: LayoutGrid },
-  { key: "all", label: "Все задачи", short: "Все", href: "/tasks/all", icon: ListChecks },
-  { key: "board", label: "Канбан", href: "/tasks/board", icon: KanbanSquare },
-  { key: "my", label: "Мои задачи", short: "Мои", href: "/tasks/my", icon: UserRound },
-  { key: "department", label: "Задачи отдела", short: "Отдел", href: "/tasks/department", icon: UsersRound },
-  { key: "archive", label: "Архив", href: "/tasks/archive", icon: Archive },
-  { key: "suggestions", label: "Предложения AI", short: "AI", href: "/tasks/suggestions", icon: Sparkles, headsOnly: true },
-  { key: "projects", label: "Проекты", href: "/tasks/projects", icon: FolderKanban },
+  { key: "overview", label: "Обзор", href: "/tasks", icon: LayoutGrid, description: "сводка по задачам" },
+  { key: "all", label: "Все задачи", short: "Все", href: "/tasks/all", icon: ListChecks, description: "все задачи, которые вам видны" },
+  { key: "board", label: "Канбан", href: "/tasks/board", icon: KanbanSquare, description: "задачи по статусам" },
+  { key: "my", label: "Мои задачи", short: "Мои", href: "/tasks/my", icon: UserRound, description: "назначенные вам" },
+  { key: "department", label: "Задачи отдела", short: "Отдел", href: "/tasks/department", icon: UsersRound, description: "задачи вашего отдела" },
+  { key: "archive", label: "Архив", href: "/tasks/archive", icon: Archive, description: "выполненные и отменённые" },
+  { key: "suggestions", label: "Предложения AI", short: "AI", href: "/tasks/suggestions", icon: Sparkles, headsOnly: true, description: "задачи, которые предлагает AI" },
+  { key: "projects", label: "Проекты", href: "/tasks/projects", icon: FolderKanban, description: "группы связанных задач" },
 ];
 
 /**
@@ -75,12 +89,12 @@ export const taskTabs: SectionTab[] = [
  * категории — тем, кто их настраивает. Задачи снабжения — в «Задачах» (отдел «Снабжение»).
  */
 export const requestTabs: SectionTab[] = [
-  { key: "overview", label: "Обзор", href: "/requests", icon: LayoutGrid },
-  { key: "all", label: "Все заявки", short: "Все", href: "/requests/all", icon: ListChecks, permission: "procurement.read" },
-  { key: "my", label: "Мои заявки", short: "Мои", href: "/requests/my", icon: UserRound },
-  { key: "department", label: "Заявки отдела", short: "Отдел", href: "/requests/department", icon: UsersRound, headsOnly: true },
-  { key: "approvals", label: "Согласования", href: "/requests/approvals", icon: Gavel, approverOnly: true },
-  { key: "categories", label: "Настройки", href: "/requests/categories", icon: Tags, permission: "procurement.settings" },
+  { key: "overview", label: "Обзор", href: "/requests", icon: LayoutGrid, description: "сводка по заявкам" },
+  { key: "all", label: "Все заявки", short: "Все", href: "/requests/all", icon: ListChecks, permission: "procurement.read", description: "заявки всех отделов" },
+  { key: "my", label: "Мои заявки", short: "Мои", href: "/requests/my", icon: UserRound, description: "ваши заявки на закупку" },
+  { key: "department", label: "Заявки отдела", short: "Отдел", href: "/requests/department", icon: UsersRound, headsOnly: true, description: "заявки сотрудников отдела" },
+  { key: "approvals", label: "Согласования", href: "/requests/approvals", icon: Gavel, approverOnly: true, description: "ждут вашего решения" },
+  { key: "categories", label: "Настройки", href: "/requests/categories", icon: Tags, permission: "procurement.settings", description: "категории закупок" },
 ];
 
 /**
@@ -90,21 +104,23 @@ export const requestTabs: SectionTab[] = [
  * в навигации их нет, старые заказы открываются по ссылкам.
  */
 export const procurementTabs: SectionTab[] = [
-  { key: "overview", label: "Обзор", href: "/procurement", icon: LayoutDashboard },
-  { key: "buy", label: "К закупке", href: "/procurement/buy", icon: ShoppingBag, permission: "procurement.read" },
-  { key: "tenders", label: "Тендеры", href: "/procurement/tenders", icon: ScrollText, permission: "procurement.read" },
-  { key: "suppliers", label: "Поставщики", href: "/procurement/suppliers", icon: Building, permission: "procurement.read" },
-  { key: "stock", label: "Склад", href: "/procurement/stock", icon: Warehouse },
-  { key: "issue", label: "К выдаче", href: "/procurement/issue", icon: PackageCheck },
-  { key: "movements", label: "Движения", href: "/procurement/movements", icon: ArrowLeftRight },
-  { key: "reports", label: "Отчёты", href: "/procurement/reports", icon: FileBarChart, permission: "procurement.read" },
+  { key: "overview", label: "Обзор", href: "/procurement", icon: LayoutDashboard, description: "путь закупки и показатели" },
+  { key: "buy", label: "К закупке", href: "/procurement/buy", icon: ShoppingBag, permission: "procurement.read", description: "согласованные заявки" },
+  { key: "tenders", label: "Тендеры", href: "/procurement/tenders", icon: ScrollText, permission: "procurement.read", description: "журнал тендерных закупок" },
+  { key: "suppliers", label: "Поставщики", href: "/procurement/suppliers", icon: Building, permission: "procurement.read", description: "реестр и рейтинг" },
+  { key: "stock", label: "Склад", href: "/procurement/stock", icon: Warehouse, description: "остатки и каталог" },
+  { key: "issue", label: "К выдаче", href: "/procurement/issue", icon: PackageCheck, description: "выдача со склада по заявкам" },
+  { key: "movements", label: "Движения", href: "/procurement/movements", icon: ArrowLeftRight, description: "журнал прихода и расхода" },
+  { key: "reports", label: "Отчёты", href: "/procurement/reports", icon: FileBarChart, permission: "procurement.read", description: "выгрузки по снабжению" },
 ];
 
 export const sections: SectionDef[] = [
-  { id: "sales", label: "Разделы продаж", tabs: salesTabs, active: activeSalesTab, keepPeriod: true },
+  { id: "sales", label: "Разделы продаж", title: "Продажи", back: toDepartments, tabs: salesTabs, active: activeSalesTab, keepPeriod: true },
   {
     id: "hr",
     label: "Разделы HR",
+    title: "HR",
+    back: toDepartments,
     tabs: hrTabs,
     // Карточка сотрудника — «Сотрудники».
     active: (pathname) => (pathname === "/hr" ? "overview" : hrTabs.find((t) => t.key !== "overview" && under(pathname, t.href))?.key ?? null),
@@ -112,8 +128,9 @@ export const sections: SectionDef[] = [
   {
     id: "tasks",
     label: "Разделы задач",
+    title: "Задачи",
     tabs: taskTabs,
-    // Карточка задачи — «Все задачи» (SectionNav подсвечивает список, откуда её открыли); страница отдела (/tasks/{код}) — «Задачи отдела».
+    // Карточка задачи — «Все задачи» (ModuleNav подсвечивает список, откуда её открыли); страница отдела (/tasks/{код}) — «Задачи отдела».
     active: (pathname) => {
       if (pathname === "/tasks") return "overview";
       if (pathname.startsWith("/tasks/task/")) return "all";
@@ -124,6 +141,7 @@ export const sections: SectionDef[] = [
   {
     id: "requests",
     label: "Разделы заявок",
+    title: "Заявки",
     tabs: requestTabs,
     // Новая заявка — «Мои заявки»; карточка заявки — без подсветки (открывают из любого списка и из уведомления).
     active: (pathname) => {
@@ -135,6 +153,8 @@ export const sections: SectionDef[] = [
   {
     id: "procurement",
     label: "Разделы снабжения",
+    title: "Снабжение",
+    back: toDepartments,
     tabs: procurementTabs,
     // «Обзор» — сама страница раздела и журнал сводок; остальные — по началу адреса.
     active: (pathname) =>

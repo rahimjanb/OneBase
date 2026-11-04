@@ -1,4 +1,4 @@
-import { Activity, Award, BadgePercent, Boxes, CalendarDays, Clock, FileCheck2, Layers, LayoutGrid, Package, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
+import { Activity, Award, BadgePercent, Box, Boxes, CalendarRange, Clock3, FileCheck, Layers, LayoutGrid, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
 
 export type SalesTab = "analytics" | "assortment" | "skuSales" | "primary" | "stock" | "outstock" | "plans" | "kpi" | "promo" | "problems" | "pnl" | "akt" | "dso" | "method";
 
@@ -6,20 +6,20 @@ export type SalesTab = "analytics" | "assortment" | "skuSales" | "primary" | "st
  * Разделы продаж — кнопки в верхней панели, каждая открывает свою страницу. Настройки продаж — в «Настройки».
  * permission — кнопка видна только с этим правом (право на сами «Продажи» проверяет layout раздела).
  */
-export const salesTabs: { key: SalesTab; label: string; href: string; icon: typeof TrendingUp; permission?: string }[] = [
-  { key: "analytics", label: "Вторичка", href: "/sales", icon: TrendingUp },
-  { key: "assortment", label: "Ассортимент", href: "/sales/assortment", icon: LayoutGrid },
-  { key: "skuSales", label: "Продажи по SKU", href: "/sales/sku-sales", icon: Package },
-  { key: "primary", label: "Первичка", href: "/sales/primary", icon: Boxes },
-  { key: "stock", label: "Рек. остаток", href: "/sales/stock", icon: Layers },
-  { key: "outstock", label: "Аутсток", href: "/sales/outstock", icon: Activity },
-  { key: "plans", label: "Планы", href: "/sales/plans", icon: CalendarDays },
-  { key: "promo", label: "Акции", href: "/sales/promo", icon: BadgePercent },
-  { key: "kpi", label: "KPI", href: "/sales/kpi", icon: Award },
-  { key: "problems", label: "Проблемные агенты", href: "/sales/problems", icon: TriangleAlert },
-  { key: "pnl", label: "P&L дилеров", href: "/sales/pnl", icon: Wallet, permission: "finance.read" },
-  { key: "akt", label: "Акт сверки", href: "/sales/akt", icon: FileCheck2, permission: "finance.read" },
-  { key: "dso", label: "DSO", href: "/sales/dso", icon: Clock, permission: "finance.read" },
+export const salesTabs: { key: SalesTab; label: string; description: string; href: string; icon: typeof TrendingUp; permission?: string }[] = [
+  { key: "analytics", label: "Вторичка", description: "план, факт и работа ТП", href: "/sales", icon: TrendingUp },
+  { key: "assortment", label: "Ассортимент", description: "матрица и покрытие SKU", href: "/sales/assortment", icon: LayoutGrid },
+  { key: "skuSales", label: "Продажи по SKU", description: "динамика по товарам", href: "/sales/sku-sales", icon: Box },
+  { key: "primary", label: "Первичка", description: "отгрузки дистрибьюторам", href: "/sales/primary", icon: Boxes },
+  { key: "stock", label: "Рек. остаток", description: "рекомендуемые остатки", href: "/sales/stock", icon: Layers },
+  { key: "outstock", label: "Аутсток", description: "нехватка товара на точках", href: "/sales/outstock", icon: Activity },
+  { key: "plans", label: "Планы", description: "планы РОП и «Завод»", href: "/sales/plans", icon: CalendarRange },
+  { key: "promo", label: "Акции", description: "промо и скидки", href: "/sales/promo", icon: BadgePercent },
+  { key: "kpi", label: "KPI", description: "показатели агентов", href: "/sales/kpi", icon: Award },
+  { key: "problems", label: "Проблемные агенты", description: "отклонения от плана", href: "/sales/problems", icon: TriangleAlert },
+  { key: "pnl", label: "P&L дилеров", description: "прибыль и убытки", href: "/sales/pnl", icon: Wallet, permission: "finance.read" },
+  { key: "akt", label: "Акт сверки", description: "взаиморасчёты", href: "/sales/akt", icon: FileCheck, permission: "finance.read" },
+  { key: "dso", label: "DSO", description: "оборачиваемость дебиторки", href: "/sales/dso", icon: Clock3, permission: "finance.read" },
   // «Как считается» (/sales/method) без кнопки: страница открывается по адресу.
 ];
 

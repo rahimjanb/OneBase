@@ -16,7 +16,7 @@ const withoutPeriod: (SalesTab | null)[] = [null, "stock", "outstock", "method",
 
 /**
  * Полоса раздела «Продажи» под верхней панелью: период, план (на страницах с планом подразделений), свежесть данных и «Обновить».
- * Кнопки разделов — в верхней панели (SectionNav). Живёт в layout раздела — при переходах не перерисовывается.
+ * Кнопки разделов — в верхней панели (ModuleNav). Живёт в layout раздела — при переходах не перерисовывается.
  */
 export function SalesNav({ months, status }: { months: SalesMonth[]; status: SyncStatus }) {
   const pathname = usePathname();
