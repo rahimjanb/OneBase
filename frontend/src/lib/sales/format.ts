@@ -38,6 +38,23 @@ export function money(value: number | null | undefined, t: T = plain): string {
   return ru(0).format(value);
 }
 
+/** Крупная сумма: от 100 млрд — с одним знаком («114,7 млрд»), от 1 млрд — с двумя («28,96 млрд»), меньше — как money («31,3 млн»). */
+export function bigSum(value: number | null | undefined, t: T = plain): string {
+  const [n, unit] = bigSumParts(value, t);
+  return unit ? `${n} ${unit}` : n;
+}
+
+/** То же по частям — число и множитель («143,7», «млрд»): крупная цифра и мелкая подпись рядом. */
+export function bigSumParts(value: number | null | undefined, t: T = plain): [string, string] {
+  if (value == null || Number.isNaN(value)) return [DASH, ""];
+  const abs = Math.abs(value);
+  if (abs >= 1e11) return [ru(1).format(value / 1e9), t("млрд")];
+  if (abs >= 1e9) return [ru(2).format(value / 1e9), t("млрд")];
+  if (abs >= 1e6) return [ru(1).format(value / 1e6), t("млн")];
+  if (abs >= 1e3) return [ru(0).format(value / 1e3), t("тыс")];
+  return [ru(0).format(value), ""];
+}
+
 /** Доля 0..1 → «86%» или «86,4%». */
 export function pct(share: number | null | undefined, digits = 0): string {
   return share == null || Number.isNaN(share) ? DASH : `${ru(digits).format(share * 100)}%`;

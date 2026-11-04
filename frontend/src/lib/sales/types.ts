@@ -486,6 +486,34 @@ export type SyncStatus = {
 
 export type SalesMonth = { year: number; month: number };
 
+/** Направление обзора «Первички» (GET /api/sales/primary/overview): тонны и сумма нетто возвратов, доли по тоннам и по сумме (0..1, итог 0 — null). */
+export type PrimaryOverviewDirection = {
+  id: "republic" | "export";
+  tons: number;
+  amount: number;
+  shareTons: number | null;
+  shareAmount: number | null;
+  /** Республика: дилеры и прямые клиенты. */
+  counterparties: number | null;
+  /** Экспорт: страны. */
+  countries: number | null;
+  /** Документы отгрузки (республика) или заказы (экспорт). */
+  orders: number;
+  /** Сумма за тонну — считает сервер; тонн нет — null. */
+  avgPricePerTon: number | null;
+};
+
+/** Обзор «Первички» за месяц, квартал или с начала года: итог — сумма направлений. */
+export type PrimaryOverview = {
+  period: import("@/lib/primary-period").PrimaryPeriodView;
+  totalTons: number;
+  totalAmount: number;
+  directions: PrimaryOverviewDirection[];
+  months: { year: number; month: number; republicTons: number; republicAmount: number; exportTons: number; exportAmount: number }[];
+  years: number[];
+  dataThrough: string | null;
+};
+
 // ---------- Качество данных, «Завод», магазин, ассортимент, остатки, первичка ----------
 
 export type UncategorizedType = { id: string; name: string; kg: number; revenue: number; orders: number };

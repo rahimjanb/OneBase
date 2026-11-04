@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
+import { PrimaryStrip, PrimaryStripActions } from "./primary/PrimaryFilters";
 import { SalesToolbar } from "./SalesToolbar";
 import { SyncControls } from "./SyncButton";
 import { activeSalesTab, usesPlan, type SalesTab } from "./tabs";
@@ -25,10 +26,15 @@ export function SalesNav({ months, status }: { months: SalesMonth[]; status: Syn
 
   const year = Number(params.get("year") ?? months[0]?.year ?? new Date().getFullYear());
   const month = Number(params.get("month") ?? months[0]?.month ?? new Date().getMonth() + 1);
+  // Обзор «Первички» — свой период (месяц, квартал, с начала года), единицы и «Excel»; на телефоне фильтры — в самой странице.
+  const primaryOverview = pathname === "/sales/primary";
+  const through = status.dataAsOf ? status.dataAsOf.slice(0, 10) : null;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      {!withoutPeriod.includes(active) ? (
+      {primaryOverview ? (
+        <PrimaryStrip years={[...new Set(months.map((m) => m.year))]} through={through} />
+      ) : !withoutPeriod.includes(active) ? (
         <SalesToolbar
           months={months}
           year={year}
@@ -39,7 +45,10 @@ export function SalesNav({ months, status }: { months: SalesMonth[]; status: Syn
       ) : (
         <span />
       )}
-      <SyncControls initial={status} />
+      <div className="flex items-center gap-2">
+        {primaryOverview && <PrimaryStripActions through={through} />}
+        <SyncControls initial={status} />
+      </div>
     </div>
   );
 }

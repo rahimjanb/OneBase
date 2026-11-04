@@ -415,6 +415,37 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         CancellationToken ct) =>
         primary.GetExportAsync(year, month, new PrimaryCalendarQuery(from, to, day, string.IsNullOrEmpty(dealer) ? null : dealer), ct);
 
+    /// <summary>
+    /// Обзор «Первички»: отгрузка завода всего и два направления (республика, экспорт) за период — period=month (year, month), quarter (year,
+    /// quarter) или ytd (с начала года, по умолчанию); тонны, сумма, доли по тоннам и по сумме, контрагенты, страны, заказы, сумма за тонну.
+    /// </summary>
+    [HttpGet("primary/overview")]
+    public Task<PrimaryOverview> PrimaryOverview(
+        [FromServices] PrimaryService primary,
+        [FromQuery] string? period,
+        [FromQuery] int? year,
+        [FromQuery] int? month,
+        [FromQuery] int? quarter,
+        CancellationToken ct) =>
+        primary.OverviewAsync(period, year, month, quarter, ct);
+
+    /// <summary>«Excel» обзора «Первички» за тот же период: направления и по месяцам. Имя файла — в пути (iOS и браузеры берут его оттуда).</summary>
+    [HttpGet("primary/overview/xlsx/{fileName}")]
+    public async Task<IActionResult> PrimaryOverviewWorkbook(
+        [FromServices] PrimaryService primary,
+        [FromServices] OneBase.Application.Reports.IReportWorkbookWriter writer,
+        string fileName,
+        [FromQuery] string? period,
+        [FromQuery] int? year,
+        [FromQuery] int? month,
+        [FromQuery] int? quarter,
+        CancellationToken ct)
+    {
+        var view = await primary.OverviewAsync(period, year, month, quarter, ct);
+        var name = OneBase.AI.Reports.ReportService.FileName(Path.GetFileNameWithoutExtension(fileName));
+        return File(writer.Write(PrimaryOverviewExport.Build(view), DateTimeOffset.UtcNow), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name);
+    }
+
     /// <summary>Расчёт месяца по выбранному плану — для страниц с планом подразделений: старт, республика, РМ, регион.</summary>
     private Task<SalesAnalytics> Load(PeriodQuery q, CancellationToken ct) => loader.LoadAsync(q.Year, q.Month, SalesPlans.Parse(q.Plan), ct);
 
