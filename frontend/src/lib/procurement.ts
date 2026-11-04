@@ -511,6 +511,28 @@ export type SupplierRow = {
   rating: number | null;
   lastOrderAt: string | null;
   leadTimeDays: number | null;
+  /** Фирма — юридическое название, если в компании поставщика зовут иначе. */
+  legalName: string | null;
+  /** Что поставляет: по строке на позицию. */
+  products: string | null;
+};
+
+/** Итог импорта поставщиков или проверки файла (dryRun — ничего не сохранено). */
+export type SupplierImportResult = {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+  dryRun: boolean;
+  /** Какой столбец файла куда пошёл: «Название ← «Поставшик»». */
+  columns: string[] | null;
+  /** Строки-продолжения, присоединённые к поставщику выше. */
+  joined: number;
+  /** Повторы в файле, объединённые в одного поставщика. */
+  duplicates: number;
+  /** Будут отключены («не работаем»). */
+  inactive: number;
+  sample: { row: number; name: string; legalName: string | null; inn: string | null; phone: string | null; contactPerson: string | null; products: number; isActive: boolean; isNew: boolean }[] | null;
 };
 
 export type SupplierRating = {
@@ -549,6 +571,8 @@ export type SupplierCard = {
   leadTimeDays: number | null;
   notes: string | null;
   isActive: boolean;
+  legalName: string | null;
+  products: string | null;
   categories: { id: string; name: string }[];
   rating: SupplierRating;
   orders: { id: string; number: string; status: OrderStatus; orderDate: string | null; expectedDate: string | null; total: number; overdue: boolean; lines: number }[];

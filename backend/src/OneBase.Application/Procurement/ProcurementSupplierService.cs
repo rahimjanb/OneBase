@@ -19,9 +19,11 @@ public sealed record ProcurementSupplierRow(
     int Overdue,
     int? Rating,
     DateTimeOffset? LastOrderAt,
-    int? LeadTimeDays);
+    int? LeadTimeDays,
+    string? LegalName = null,
+    string? Products = null);
 
-/// <summary>Реестр поставщиков: поиск (название, ИНН, контакт, телефон), категория, активные/отключённые, сортировка.</summary>
+/// <summary>Реестр поставщиков: поиск (название, фирма, ИНН, контакт, телефон, что поставляет), категория, активные/отключённые, сортировка.</summary>
 public sealed record ProcurementSupplierSearch(string? Search = null, Guid? CategoryId = null, bool? Active = true, string? Sort = null, bool Desc = false, int Page = 1, int PageSize = 50);
 
 public sealed record ProcurementSupplierInput(
@@ -38,7 +40,9 @@ public sealed record ProcurementSupplierInput(
     int? LeadTimeDays,
     string? Notes,
     IReadOnlyList<Guid>? CategoryIds,
-    bool IsActive = true);
+    bool IsActive = true,
+    string? LegalName = null,
+    string? Products = null);
 
 /// <summary>
 /// Рейтинг поставщика: итог 0–100 и составляющие (null — нет данных): сроки (доля заказов без просрочки среди тех, чей срок наступил),
@@ -88,9 +92,28 @@ public sealed record ProcurementSupplierCard(
     int Offers,
     decimal OrdersTotal,
     bool CanEdit,
-    IReadOnlyList<ProcurementClaimView>? Claims = null);
+    IReadOnlyList<ProcurementClaimView>? Claims = null,
+    string? LegalName = null,
+    string? Products = null);
 
-public sealed record ProcurementSupplierImportResult(int Created, int Updated, int Skipped, IReadOnlyList<string> Errors);
+/// <summary>
+/// Итог импорта (или проверки файла — DryRun, ничего не сохранено): сколько добавится, обновится и пропустится; Columns — какой столбец файла
+/// куда пошёл («Название ← «Поставшик»»); Joined — строки-продолжения, присоединённые к поставщику выше; Duplicates — повторы в файле, объединённые
+/// в одного поставщика; Inactive — сколько будут отключены («не работаем»); Sample — первые поставщики, как они будут записаны.
+/// </summary>
+public sealed record ProcurementSupplierImportResult(
+    int Created,
+    int Updated,
+    int Skipped,
+    IReadOnlyList<string> Errors,
+    bool DryRun = false,
+    IReadOnlyList<string>? Columns = null,
+    int Joined = 0,
+    int Duplicates = 0,
+    int Inactive = 0,
+    IReadOnlyList<ProcurementSupplierImportSample>? Sample = null);
+
+public sealed record ProcurementSupplierImportSample(int Row, string Name, string? LegalName, string? Inn, string? Phone, string? ContactPerson, int Products, bool IsActive, bool IsNew);
 
 /// <summary>
 /// Поставщики снабжения: реестр с аналитикой (заказы, сумма, просрочки, рейтинг), карточка (реквизиты, категории, история заказов, цен
@@ -140,8 +163,9 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
         if (!string.IsNullOrWhiteSpace(s.Search))
         {
             var text = s.Search.Trim().ToLower();
-            q = q.Where(x => x.Name.ToLower().Contains(text) || (x.Inn != null && x.Inn.Contains(text)) || (x.ContactPerson != null && x.ContactPerson.ToLower().Contains(text))
-                             || (x.Phone != null && x.Phone.Contains(text)));
+            q = q.Where(x => x.Name.ToLower().Contains(text) || (x.LegalName != null && x.LegalName.ToLower().Contains(text)) || (x.Inn != null && x.Inn.Contains(text))
+                             || (x.ContactPerson != null && x.ContactPerson.ToLower().Contains(text)) || (x.Phone != null && x.Phone.Contains(text))
+                             || (x.Products != null && x.Products.ToLower().Contains(text)));
         }
 
         var total = await q.CountAsync(ct);
@@ -152,7 +176,7 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
         var rows = await q
             .Select(x => new
             {
-                x.Id, x.Name, x.Inn, x.ContactPerson, x.Phone, x.IsActive, x.LeadTimeDays,
+                x.Id, x.Name, x.Inn, x.ContactPerson, x.Phone, x.IsActive, x.LeadTimeDays, x.LegalName, x.Products,
                 Categories = x.Categories.Select(c => c.Category!.Name).ToList(),
                 Orders = stats.Count(o => o.SupplierId == x.Id),
                 Total = stats.Where(o => o.SupplierId == x.Id).Sum(o => (decimal?)o.Total) ?? 0m,
@@ -163,7 +187,7 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
         // Сортировка по аналитике — здесь: поставщиков немного, рейтинг считается из нескольких источников.
         var ratings = await RatingsAsync(rows.Select(r => r.Id).ToList(), ct);
         var list = rows.Select(r => new ProcurementSupplierRow(r.Id, r.Name, r.Inn, r.ContactPerson, r.Phone, r.Categories.Order().ToList(), r.IsActive, r.Orders,
-                r.Total, ratings[r.Id].OverdueOrders, ratings[r.Id].Overall, r.Last, r.LeadTimeDays))
+                r.Total, ratings[r.Id].OverdueOrders, ratings[r.Id].Overall, r.Last, r.LeadTimeDays, r.LegalName, r.Products))
             .ToList();
         IEnumerable<ProcurementSupplierRow> sorted = s.Sort switch
         {
@@ -210,7 +234,9 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
             await db.ProcurementOffers.CountAsync(o => o.SupplierId == id, ct),
             orders.Where(o => Placed.Contains(o.Status)).Sum(o => o.Total),
             ctx.Manages,
-            await ProcurementReceiptService.ClaimsAsync(db, null, id, ct));
+            await ProcurementReceiptService.ClaimsAsync(db, null, id, ct),
+            s.LegalName,
+            s.Products);
     }
 
     /// <summary>Рейтинг поставщиков (см. ProcurementSupplierRating) — пачкой по списку.</summary>
@@ -360,19 +386,15 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
             throw new FieldValidationException("Категория не найдена.");
         }
 
-        supplier.Name = name;
-        supplier.Inn = inn;
-        supplier.ContactPerson = Text(input.ContactPerson, 200, "Контактное лицо");
-        supplier.Phone = Text(input.Phone, 50, "Телефон");
-        supplier.Email = email;
-        supplier.Address = Text(input.Address, 500, "Адрес");
-        supplier.BankName = Text(input.BankName, 200, "Банк");
-        supplier.BankMfo = Text(input.BankMfo, 20, "МФО");
-        supplier.BankAccount = Text(input.BankAccount, 40, "Расчётный счёт");
-        supplier.PaymentTerms = Text(input.PaymentTerms, 500, "Условия оплаты");
-        supplier.LeadTimeDays = input.LeadTimeDays;
-        supplier.Notes = Text(input.Notes, 2000, "Примечание");
-        supplier.IsActive = input.IsActive;
+        // Сначала все проверки, потом запись: при ошибке карточка не меняется наполовину.
+        var (legalName, contact, phone, address) =
+            (Text(input.LegalName, 300, "Фирма"), Text(input.ContactPerson, 200, "Контактное лицо"), Text(input.Phone, 200, "Телефон"), Text(input.Address, 500, "Адрес"));
+        var (bank, mfo, account, terms) =
+            (Text(input.BankName, 200, "Банк"), Text(input.BankMfo, 20, "МФО"), Text(input.BankAccount, 40, "Расчётный счёт"), Text(input.PaymentTerms, 500, "Условия оплаты"));
+        var (products, notes) = (Text(input.Products, 2000, "Что поставляет"), Text(input.Notes, 2000, "Примечание"));
+        (supplier.Name, supplier.LegalName, supplier.Inn, supplier.ContactPerson, supplier.Phone, supplier.Email, supplier.Address) = (name, legalName, inn, contact, phone, email, address);
+        (supplier.BankName, supplier.BankMfo, supplier.BankAccount, supplier.PaymentTerms) = (bank, mfo, account, terms);
+        (supplier.LeadTimeDays, supplier.Products, supplier.Notes, supplier.IsActive) = (input.LeadTimeDays, products, notes, input.IsActive);
         foreach (var gone in supplier.Categories.Where(c => !categoryIds.Contains(c.CategoryId)).ToList())
         {
             supplier.Categories.Remove(gone);
@@ -398,29 +420,117 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
 
     // ---------- Импорт ----------
 
-    private static readonly Dictionary<string, string[]> Headers = new()
+    /// <summary>
+    /// Заголовки столбцов. Сравнение без регистра и знаков препинания, «ё» = «е»: сначала точное совпадение, затем начало заголовка
+    /// («Наименование поставщика», «ИНН поставщика»). Русские, узбекские (кириллица и латиница) названия и частые опечатки («Поставшик»).
+    /// </summary>
+    private static readonly (string Field, string Label, string[] Names)[] Headers = Normalized(
+    [
+        ("name", "Название", ["название", "наименование", "поставщик", "поставшик", "поставщики", "компания", "контрагент", "етказиб берувчи", "етказувчи", "таъминотчи",
+            "yetkazib beruvchi", "nomi", "номи"]),
+        ("legal", "Фирма", ["фирма", "фирмаси", "юрлицо", "юр лицо", "юридическое лицо", "юридическое название", "организация", "ташкилот", "firma", "firmasi", "tashkilot"]),
+        ("inn", "ИНН", ["инн", "стир", "stir", "inn"]),
+        ("contact", "Контактное лицо", ["контактное лицо", "контакт", "контакты", "ответственный", "представитель", "менеджер", "ишловчи ходим", "ходим", "масъул шахс",
+            "kontakt"]),
+        ("phone", "Телефон", ["телефон", "тел", "тел номер", "номер телефона", "телефоны", "мобильный", "телефон раками", "phone", "tel", "telefon", "telefon raqami"]),
+        ("email", "Email", ["email", "e mail", "почта", "эл почта", "электронная почта"]),
+        ("address", "Адрес", ["адрес", "город", "регион", "етказувчи манзили", "манзил", "манзили", "шахар", "manzil", "manzili"]),
+        ("bank", "Банк", ["банк", "bank"]),
+        ("mfo", "МФО", ["мфо", "mfo"]),
+        ("account", "Расчётный счёт", ["расчетный счет", "р с", "счет", "хисоб раками", "hisob raqami"]),
+        ("terms", "Условия оплаты", ["условия оплаты", "оплата", "тулов шартлари"]),
+        ("lead", "Срок поставки", ["срок поставки", "срок поставки дней", "срок дней"]),
+        ("categories", "Категории", ["категории", "категория", "группа", "тури", "сирё", "сырье"]),
+        ("products", "Что поставляет", ["что поставляет", "что закупаем", "товары", "продукция", "материалы", "номенклатура", "ассортимент", "олинадиган хомашёлар",
+            "хомашёлар", "хомашё", "хом ашё", "маҳсулотлар", "mahsulotlar", "xomashyo"]),
+        ("active", "Работаем", ["работаем", "работаем сейчас", "статус", "активен", "хозирда ишланади ёки ишланмаяпти", "хозирда ишланади", "ишлаймизми", "холати", "holati"]),
+        ("notes", "Примечание", ["примечание", "комментарий", "изох", "izoh"]),
+        ("number", "№", ["№", "n", "no", "п п", "номер"]),
+    ]);
+
+    /// <summary>Поля, где значений может быть несколько (строки-продолжения добавляют, а не заменяют): как их склеивать.</summary>
+    private static readonly Dictionary<string, string> Many = new()
     {
-        ["name"] = ["название", "наименование", "поставщик", "компания"],
-        ["inn"] = ["инн", "stir", "inn"],
-        ["contact"] = ["контактное лицо", "контакт", "контактное"],
-        ["phone"] = ["телефон", "тел", "phone"],
-        ["email"] = ["email", "e-mail", "почта", "эл. почта"],
-        ["address"] = ["адрес"],
-        ["bank"] = ["банк"],
-        ["mfo"] = ["мфо"],
-        ["account"] = ["расчётный счёт", "расчетный счет", "р/с", "счёт", "счет"],
-        ["terms"] = ["условия оплаты", "оплата"],
-        ["lead"] = ["срок поставки", "срок поставки, дней", "срок, дней"],
-        ["categories"] = ["категории", "категория"],
-        ["notes"] = ["примечание", "комментарий"],
+        ["legal"] = ", ", ["contact"] = ", ", ["phone"] = ", ", ["address"] = ", ", ["categories"] = ", ", ["products"] = "\n", ["notes"] = "\n",
     };
 
+    /// <summary>«Пусто» в таблицах: прочерк, «нет», «йўқ»…</summary>
+    private static readonly HashSet<string> Blank = ["нет", "йук", "йўқ", "yoq", "yo q", "н д", "n a", "не указан", "не указано"];
+
+    private static readonly HashSet<string> No = ["нет", "йук", "йўқ", "yoq", "yo q", "не работаем", "не работает", "ишламаймиз", "ишланмаяпти", "ишламайди", "отключен", "неактивен", "false", "0"];
+
+    private static readonly HashSet<string> Yes = ["да", "ха", "ҳа", "ha", "работаем", "работает", "ишлаймиз", "ишланади", "активен", "true", "1"];
+
+    private static (string, string, string[])[] Normalized((string Field, string Label, string[] Names)[] list) =>
+        list.Select(h => (h.Field, h.Label, h.Names.Select(Norm).ToArray())).ToArray();
+
+    /// <summary>Для сравнения: нижний регистр, «ё» → «е», знаки препинания — пробелы (кроме «№»), лишние пробелы убраны.</summary>
+    private static string Norm(string? text)
+    {
+        var chars = (text ?? "").ToLowerInvariant().Replace('ё', 'е').Select(c => char.IsLetterOrDigit(c) || c == '№' ? c : ' ').ToArray();
+        return string.Join(' ', new string(chars).Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>Категория по названию с узбекским написанием: «сирё» = «Сырьё» (без «ь», «ъ», «ы» = «и»).</summary>
+    private static string Loose(string text) => Norm(text).Replace("ь", "").Replace("ъ", "").Replace('ы', 'и');
+
+    /// <summary>Столбцы строки заголовков: поле → номер столбца (каждый столбец — одному полю).</summary>
+    private static Dictionary<string, int> MatchHeaders(IReadOnlyList<string> row)
+    {
+        var cells = row.Select(Norm).ToList();
+        var found = new Dictionary<string, int>();
+        foreach (var exact in new[] { true, false })
+        {
+            foreach (var (field, _, names) in Headers)
+            {
+                if (found.ContainsKey(field))
+                {
+                    continue;
+                }
+
+                for (var i = 0; i < cells.Count; i++)
+                {
+                    var cell = cells[i];
+                    if (cell.Length > 0 && !found.ContainsValue(i) && names.Any(n => cell == n || (!exact && cell.StartsWith(n + " ", StringComparison.Ordinal))))
+                    {
+                        found[field] = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>Поставщик из файла: первая строка и строки-продолжения под ней (без названия), значения по полям без повторов.</summary>
+    private sealed class ImportRecord(int row, string name)
+    {
+        public int Row { get; } = row;
+        public string Name { get; } = name;
+        public Dictionary<string, List<string>> Values { get; } = [];
+
+        public void Add(string field, string value)
+        {
+            var list = Values.TryGetValue(field, out var existing) ? existing : Values[field] = [];
+            if (!list.Contains(value, StringComparer.OrdinalIgnoreCase))
+            {
+                list.Add(value);
+            }
+        }
+
+        public string? Get(string field) =>
+            Values.TryGetValue(field, out var list) ? Many.TryGetValue(field, out var separator) ? string.Join(separator, list) : list[0] : null;
+    }
+
     /// <summary>
-    /// Импорт из Excel/CSV: строка заголовков (Название, ИНН, Контактное лицо, Телефон, Email, Адрес, Банк, МФО, Расчётный счёт,
-    /// Условия оплаты, Срок поставки, Категории через запятую, Примечание) — дальше по строке на поставщика. Совпадение по ИНН, без ИНН —
-    /// по названию: найден — обновляются заполненные поля, нет — создаётся. Строка с ошибкой пропускается с пояснением.
+    /// Импорт из Excel/CSV. Строка заголовков — в первых 20 строках любого листа (нужен столбец с названием поставщика), названия столбцов —
+    /// см. Headers. Строка без названия — продолжение поставщика выше (ещё телефон, контакт, позиция «что поставляет»); повторы в файле (тот же
+    /// ИНН, без ИНН — то же название) объединяются. Значения «нет», «-» — пусто; «Работаем: нет / йўқ» — поставщик отключён; столбцы без
+    /// известного заголовка — в примечание. Совпадение с реестром по ИНН, без ИНН — по названию: найден — обновляются заполненные поля,
+    /// нет — создаётся. Строка с ошибкой пропускается с пояснением. dryRun — только проверка: ничего не сохраняется.
     /// </summary>
-    public async Task<ProcurementSupplierImportResult> ImportAsync(ProcurementContext ctx, Stream content, string fileName, CancellationToken ct)
+    public async Task<ProcurementSupplierImportResult> ImportAsync(ProcurementContext ctx, Stream content, string fileName, CancellationToken ct, bool dryRun = false)
     {
         RequireManage(ctx);
         ReportDocument document;
@@ -433,68 +543,175 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
             throw new FieldValidationException(e.Message);
         }
 
-        var rows = document.Sheets.FirstOrDefault()?.Rows ?? [];
+        IReadOnlyList<IReadOnlyList<string>> rows = [];
         var headerIndex = -1;
         var columns = new Dictionary<string, int>();
-        for (var r = 0; r < Math.Min(rows.Count, 10) && headerIndex < 0; r++)
+        foreach (var sheet in document.Sheets)
         {
-            var cells = rows[r].Select(c => c.Trim().ToLowerInvariant().Replace('ё', 'е')).ToList();
-            var found = new Dictionary<string, int>();
-            foreach (var (field, names) in Headers)
+            for (var r = 0; r < Math.Min(sheet.Rows.Count, 20) && headerIndex < 0; r++)
             {
-                var index = cells.FindIndex(c => names.Any(n => c == n.Replace('ё', 'е')));
-                if (index >= 0)
+                var found = MatchHeaders(sheet.Rows[r]);
+                if (found.ContainsKey("name"))
                 {
-                    found[field] = index;
+                    (rows, headerIndex, columns) = (sheet.Rows, r, found);
                 }
             }
 
-            if (found.ContainsKey("name"))
+            if (headerIndex >= 0)
             {
-                headerIndex = r;
-                columns = found;
+                break;
             }
         }
 
         if (headerIndex < 0)
         {
-            throw new FieldValidationException("Не найдена строка заголовков: нужен столбец «Название» (и по желанию ИНН, Телефон, Email, Адрес, Банк, МФО, Расчётный счёт…).");
+            throw new FieldValidationException(
+                "Не найдена строка заголовков: нужен столбец с названием поставщика («Название», «Наименование», «Поставщик», «Етказиб берувчи»…). Остальные — по желанию: ИНН, Фирма, Телефон, Контактное лицо, Адрес, Что поставляет…");
         }
 
-        var categories = await db.ProcurementCategories.AsNoTracking().ToListAsync(ct);
-        var existing = await db.ProcurementSuppliers.Include(x => x.Categories).ToListAsync(ct);
-        int created = 0, updated = 0, skipped = 0;
+        // Столбцы с непонятным заголовком (и без заголовка) — в примечание, чтобы ничего из файла не потерялось.
+        var header = rows[headerIndex];
+        var width = rows.Skip(headerIndex).Max(r => r.Count);
+        var extra = Enumerable.Range(0, width).Where(i => !columns.ContainsValue(i)).ToList();
+        string Title(int i) => i < header.Count ? header[i].Trim() : "";
+        var mapped = Headers.Where(h => h.Field != "number" && columns.ContainsKey(h.Field))
+            .Select(h => $"{h.Label} ← «{Title(columns[h.Field])}»").ToList();
+        if (extra.Any(i => Title(i).Length > 0))
+        {
+            mapped.Add($"Примечание ← {string.Join(", ", extra.Where(i => Title(i).Length > 0).Select(i => $"«{Title(i)}»"))}");
+        }
+
+        // 1. Строки → поставщики.
+        var records = new List<ImportRecord>();
+        var byKey = new Dictionary<string, ImportRecord>();
+        ImportRecord? last = null;
+        int skipped = 0, joined = 0, duplicates = 0;
         var errors = new List<string>();
+        void Error(string text)
+        {
+            if (errors.Count < 50)
+            {
+                errors.Add(text);
+            }
+        }
+
         for (var r = headerIndex + 1; r < rows.Count; r++)
         {
             var row = rows[r];
-            string? Cell(string field) => columns.TryGetValue(field, out var i) && i < row.Count && !string.IsNullOrWhiteSpace(row[i]) ? row[i].Trim() : null;
-            var name = Cell("name");
-            if (name is null)
+            string Raw(int i) => i < row.Count ? row[i].Trim() : "";
+            string? Cell(string field)
             {
-                if (row.Any(c => !string.IsNullOrWhiteSpace(c)))
+                if (!columns.TryGetValue(field, out var i))
                 {
-                    skipped++;
-                    errors.Add($"Строка {r + 1}: нет названия — пропущена.");
+                    return null;
                 }
 
-                continue;
+                var value = Raw(i);
+                var norm = Norm(value);
+                return norm.Length == 0 || (field != "active" && Blank.Contains(norm)) ? null : value;
             }
 
+            var notes = extra.Select(i => (Title: Title(i), Value: Raw(i))).Where(x => Norm(x.Value).Length > 0).ToList();
+            var note = notes.Count == 0 ? null
+                : string.Join("; ", notes.Where(x => x.Title.Length > 0).Select(x => $"{x.Title}: {x.Value}")
+                    .Append(string.Join(" ", notes.Where(x => x.Title.Length == 0).Select(x => x.Value))).Where(x => x.Length > 0));
+            var fields = Headers.Select(h => h.Field).Where(f => f is not ("name" or "number")).ToList();
+            var hasData = note is not null || fields.Any(f => Cell(f) is not null);
+            var name = Cell("name");
+            ImportRecord entry;
+            if (name is null)
+            {
+                if (!hasData)
+                {
+                    continue; // пустая строка или только номер
+                }
+
+                if (last is null || Cell("number") is not null)
+                {
+                    skipped++;
+                    Error($"Строка {r + 1}: нет названия — пропущена.");
+                    continue;
+                }
+
+                entry = last;
+                joined++;
+            }
+            else
+            {
+                if (name.Length > 200)
+                {
+                    skipped++;
+                    Error($"Строка {r + 1}: название длиннее 200 символов — пропущена.");
+                    last = null;
+                    continue;
+                }
+
+                var digits = new string((Cell("inn") ?? "").Where(char.IsDigit).ToArray());
+                var key = digits.Length is >= 9 and <= 14 ? $"inn:{digits}" : $"name:{name.ToLowerInvariant()}";
+                if (byKey.TryGetValue(key, out var same))
+                {
+                    entry = same;
+                    duplicates++;
+                }
+                else
+                {
+                    entry = byKey[key] = new ImportRecord(r + 1, name);
+                    records.Add(entry);
+                }
+
+                last = entry;
+            }
+
+            foreach (var field in fields)
+            {
+                if (Cell(field) is { } value)
+                {
+                    entry.Add(field, value);
+                }
+            }
+
+            if (note is not null)
+            {
+                entry.Add("notes", note);
+            }
+        }
+
+        // 2. Поставщики → реестр.
+        var categories = await db.ProcurementCategories.AsNoTracking().ToListAsync(ct);
+        var existing = await db.ProcurementSuppliers.Include(x => x.Categories).ToListAsync(ct);
+        var missingCategories = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        int created = 0, updated = 0, inactive = 0;
+        var sample = new List<ProcurementSupplierImportSample>();
+        foreach (var entry in records)
+        {
             try
             {
-                var inn = NormalizeInn(Cell("inn"));
+                var inn = NormalizeInn(entry.Get("inn"));
                 var supplier = (inn is not null ? existing.FirstOrDefault(x => x.Inn == inn) : null)
-                               ?? existing.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
+                               ?? existing.FirstOrDefault(x => string.Equals(x.Name, entry.Name, StringComparison.OrdinalIgnoreCase));
                 var isNew = supplier is null;
-                supplier ??= new ProcurementSupplier { Name = name, CreatedById = ctx.UserId };
-                var lead = Cell("lead") is { } leadText && int.TryParse(new string(leadText.Where(char.IsDigit).ToArray()), out var days) ? days : supplier.LeadTimeDays;
-                var categoryIds = (Cell("categories") ?? "").Split(',', ';').Select(c => c.Trim()).Where(c => c.Length > 0)
-                    .Select(c => categories.FirstOrDefault(x => string.Equals(x.Name, c, StringComparison.OrdinalIgnoreCase))?.Id).OfType<Guid>().ToList();
-                await ApplyAsync(supplier, new ProcurementSupplierInput(name, inn ?? supplier.Inn, Cell("contact") ?? supplier.ContactPerson, Cell("phone") ?? supplier.Phone,
-                    Cell("email") ?? supplier.Email, Cell("address") ?? supplier.Address, Cell("bank") ?? supplier.BankName, Cell("mfo") ?? supplier.BankMfo,
-                    Cell("account") ?? supplier.BankAccount, Cell("terms") ?? supplier.PaymentTerms, lead, Cell("notes") ?? supplier.Notes,
-                    categoryIds.Count > 0 ? categoryIds : supplier.Categories.Select(c => c.CategoryId).ToList(), supplier.IsActive), ct);
+                supplier ??= new ProcurementSupplier { Name = entry.Name, CreatedById = ctx.UserId };
+                var lead = entry.Get("lead") is { } leadText && int.TryParse(new string(leadText.Where(char.IsDigit).ToArray()), out var days) ? days : supplier.LeadTimeDays;
+                var active = entry.Get("active") is { } state ? No.Contains(Norm(state)) ? false : Yes.Contains(Norm(state)) ? true : supplier.IsActive : supplier.IsActive;
+                var categoryIds = new List<Guid>();
+                foreach (var text in (entry.Get("categories") ?? "").Split(',', ';').Select(c => c.Trim()).Where(c => c.Length > 0))
+                {
+                    if (categories.FirstOrDefault(x => Loose(x.Name) == Loose(text)) is { } category)
+                    {
+                        categoryIds.Add(category.Id);
+                    }
+                    else
+                    {
+                        missingCategories.Add(text);
+                    }
+                }
+
+                await ApplyAsync(supplier, new ProcurementSupplierInput(entry.Name, inn ?? supplier.Inn, entry.Get("contact") ?? supplier.ContactPerson,
+                    entry.Get("phone") ?? supplier.Phone, entry.Get("email") ?? supplier.Email, entry.Get("address") ?? supplier.Address,
+                    entry.Get("bank") ?? supplier.BankName, entry.Get("mfo") ?? supplier.BankMfo, entry.Get("account") ?? supplier.BankAccount,
+                    entry.Get("terms") ?? supplier.PaymentTerms, lead, entry.Get("notes") ?? supplier.Notes,
+                    categoryIds.Count > 0 ? categoryIds : supplier.Categories.Select(c => c.CategoryId).ToList(), active,
+                    entry.Get("legal") ?? supplier.LegalName, entry.Get("products") ?? supplier.Products), ct);
                 if (isNew)
                 {
                     db.ProcurementSuppliers.Add(supplier);
@@ -506,18 +723,27 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
                     supplier.UpdatedAt = DateTimeOffset.UtcNow;
                     updated++;
                 }
+
+                inactive += supplier.IsActive ? 0 : 1;
+                if (sample.Count < 8)
+                {
+                    sample.Add(new ProcurementSupplierImportSample(entry.Row, supplier.Name, supplier.LegalName, supplier.Inn, supplier.Phone, supplier.ContactPerson,
+                        supplier.Products?.Split('\n').Length ?? 0, supplier.IsActive, isNew));
+                }
             }
             catch (FieldValidationException e)
             {
                 skipped++;
-                if (errors.Count < 50)
-                {
-                    errors.Add($"Строка {r + 1} («{name}»): {e.Message}");
-                }
+                Error($"Строка {entry.Row} («{entry.Name}»): {e.Message}");
             }
         }
 
-        if (created + updated > 0)
+        if (missingCategories.Count > 0)
+        {
+            errors.Insert(0, $"Категории не найдены и не проставлены: {string.Join(", ", missingCategories.Select(c => $"«{c}»"))} — их можно добавить в настройках заявок.");
+        }
+
+        if (!dryRun && created + updated > 0)
         {
             db.ProcurementAuditLogs.Add(new ProcurementAuditLog
             {
@@ -526,8 +752,12 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
             });
             await db.SaveChangesAsync(ct);
         }
+        else
+        {
+            db.ChangeTracker.Clear(); // проверка файла: ничего не сохраняется
+        }
 
-        return new ProcurementSupplierImportResult(created, updated, skipped, errors);
+        return new ProcurementSupplierImportResult(created, updated, skipped, errors, dryRun, mapped, joined, duplicates, inactive, sample);
     }
 
     private void Log(ProcurementContext ctx, Guid id, string action, string text) =>

@@ -72,6 +72,18 @@ export function SupplierCardView({ supplier, documents, categories }: { supplier
       <PageBody>
         <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0 space-y-4">
+            {supplier.products && (
+              <section className={card}>
+                <h2 className="mb-2.5 text-base font-semibold text-ink">{t("Что поставляет")}</h2>
+                <ul className="flex flex-wrap gap-1.5">
+                  {supplier.products.split("\n").map((p, i) => (
+                    <li key={`${p}-${i}`} className="rounded-lg bg-muted px-2.5 py-1 text-sm text-ink">
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
                 { label: "Заказов", value: String(supplier.orders.filter((o) => o.status !== "Cancelled").length) },
@@ -207,6 +219,7 @@ export function SupplierCardView({ supplier, documents, categories }: { supplier
             <section className={card}>
               <h2 className="mb-1 text-base font-semibold text-ink">{t("Реквизиты и контакты")}</h2>
               <dl className="divide-y divide-line">
+                {supplier.legalName && <Fact label="Фирма">{supplier.legalName}</Fact>}
                 <Fact label="Контактное лицо">{supplier.contactPerson ?? "—"}</Fact>
                 <Fact label="Телефон">{supplier.phone ? <a href={`tel:${supplier.phone}`} className="text-accent-strong">{supplier.phone}</a> : "—"}</Fact>
                 <Fact label="Email">{supplier.email ? <a href={`mailto:${supplier.email}`} className="text-accent-strong">{supplier.email}</a> : "—"}</Fact>
@@ -230,6 +243,7 @@ export function SupplierCardView({ supplier, documents, categories }: { supplier
               )}
               {supplier.notes && <p className="mt-3 whitespace-pre-line rounded-lg bg-muted px-3 py-2 text-sm text-ink-2">{supplier.notes}</p>}
             </section>
+
           </div>
         </div>
       </PageBody>

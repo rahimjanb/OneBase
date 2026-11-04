@@ -321,15 +321,17 @@ internal static class ProcurementModel
             e.ToTable("Suppliers", Schema);
             e.HasKey(x => x.Id).HasName("PK_ProcurementSuppliers");
             e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.LegalName).HasMaxLength(300);
             e.Property(x => x.Inn).HasMaxLength(20);
             e.Property(x => x.ContactPerson).HasMaxLength(200);
-            e.Property(x => x.Phone).HasMaxLength(50);
+            e.Property(x => x.Phone).HasMaxLength(200);
             e.Property(x => x.Email).HasMaxLength(200);
             e.Property(x => x.Address).HasMaxLength(500);
             e.Property(x => x.BankName).HasMaxLength(200);
             e.Property(x => x.BankMfo).HasMaxLength(20);
             e.Property(x => x.BankAccount).HasMaxLength(40);
             e.Property(x => x.PaymentTerms).HasMaxLength(500);
+            e.Property(x => x.Products).HasMaxLength(2000);
             e.Property(x => x.Notes).HasMaxLength(2000);
             e.HasIndex(x => x.Inn).IsUnique().HasFilter("\"Inn\" IS NOT NULL").HasDatabaseName("IX_ProcurementSuppliers_Inn");
             e.HasIndex(x => x.Name).HasDatabaseName("IX_ProcurementSuppliers_Name");

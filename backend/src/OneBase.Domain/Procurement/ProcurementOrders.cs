@@ -11,10 +11,15 @@ public class ProcurementSupplier : Entity
 {
     public required string Name { get; set; }
 
+    /// <summary>Фирма — юридическое название (ООО «…»), если поставщика в компании зовут иначе («Арахис Наманган»); null — не указано.</summary>
+    public string? LegalName { get; set; }
+
     /// <summary>ИНН (9 цифр в Узбекистане); null — не указан.</summary>
     public string? Inn { get; set; }
 
     public string? ContactPerson { get; set; }
+
+    /// <summary>Телефоны — один или несколько через запятую.</summary>
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public string? Address { get; set; }
@@ -31,6 +36,9 @@ public class ProcurementSupplier : Entity
 
     /// <summary>Обычный срок поставки, дней.</summary>
     public int? LeadTimeDays { get; set; }
+
+    /// <summary>Что поставляет: товары и сырьё, по строке на позицию (ищется в реестре).</summary>
+    public string? Products { get; set; }
 
     public string? Notes { get; set; }
     public bool IsActive { get; set; } = true;

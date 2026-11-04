@@ -64,10 +64,13 @@ public sealed class ProcurementPurchasingController(
         return NoContent();
     }
 
-    /// <summary>Импорт поставщиков из Excel (.xlsx) или CSV: по ИНН (без ИНН — по названию) создаёт или обновляет.</summary>
+    /// <summary>
+    /// Импорт поставщиков из Excel (.xlsx) или CSV: по ИНН (без ИНН — по названию) создаёт или обновляет. dryRun=true — проверка файла:
+    /// что и куда попадёт, без сохранения.
+    /// </summary>
     [HttpPost("suppliers/import")]
     [RequestSizeLimit(6 * 1024 * 1024)]
-    public async Task<ProcurementSupplierImportResult> ImportSuppliers(IFormFile? file, CancellationToken ct)
+    public async Task<ProcurementSupplierImportResult> ImportSuppliers(IFormFile? file, [FromQuery] bool dryRun, CancellationToken ct)
     {
         if (file is null || file.Length == 0)
         {
@@ -75,7 +78,7 @@ public sealed class ProcurementPurchasingController(
         }
 
         await using var stream = file.OpenReadStream();
-        return await suppliers.ImportAsync(await ContextAsync(ct), stream, file.FileName, ct);
+        return await suppliers.ImportAsync(await ContextAsync(ct), stream, file.FileName, ct, dryRun);
     }
 
     // ---------- Документы поставщиков, предложений, заказов ----------

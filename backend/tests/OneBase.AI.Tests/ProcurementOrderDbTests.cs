@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -277,5 +278,82 @@ public class ProcurementOrderDbTests(DataManagerDb fixture) : IClassFixture<Data
         Assert.Equal(("договор.pdf", "contract"), (keeperDocs.Single().FileName, keeperDocs.Single().Kind));
         await Assert.ThrowsAsync<FieldForbiddenException>(() => As(org.Employee, Employee, (sp, c) =>
             sp.GetRequiredService<ProcurementDocumentService>().DownloadAsync(c, doc, default)));
+    }
+
+    /// <summary>
+    /// Реальный вид таблицы снабжения: заголовки на узбекском и с опечаткой, поставщик на нескольких строках (ещё телефон, ещё сырьё), «Нет» вместо
+    /// фирмы, «Йук» — не работаем, повтор по ИНН, столбцы без заголовка, строка с одним номером. Сначала проверка (ничего не сохраняется), потом импорт.
+    /// </summary>
+    [PostgresFact]
+    public async Task Supplier_import_reads_real_world_sheet_with_continuation_rows_and_uzbek_headers()
+    {
+        var org = await SeedAsync();
+        var s = Guid.NewGuid().ToString("N")[..5];
+        var inn = $"30{Random.Shared.Next(1_000_000, 9_999_999)}";
+        using var book = new XLWorkbook();
+        var sheet = book.AddWorksheet("Sheet1");
+        object[][] rows =
+        [
+            ["№", "Поставшик", "сирё", "Етказувчи Манзили", "Фирмаси", "ИНН", "Тел номер", "Ишловчи Ходим", "Олинадиган Хомашёлар", "Хозирда ишланади ёки ишланмаяпти"],
+            [1, $"Арахис {s}", "сирё", "ТОШКЕНТ", $"OOO «Тест {s}»", inn, "90 000 00 01", "Анвар", "Арахис очищенный", "Ишлаймиз"],
+            ["", "", "", "", "", "", "90 000 00 02", "", "Арахис жареный"],
+            ["", "", "", "", "", "", "", "", $"Кунжут {s}", "", "Сверка учун", "99 000 00 03"],
+            [2, $"Масло {s}", "сирё", "", "Нет", "", "91 000 00 00", "", "Масло подсолнечное", "Йук"],
+            [3, $"Арахис {s} опт", "сирё", "", "", inn, "90 000 00 01", "", "Арахис очищенный"],
+            [4],
+            [5, $"Ошибка {s}", "", "", "", "12"],
+        ];
+        for (var r = 0; r < rows.Length; r++)
+        {
+            for (var c = 0; c < rows[r].Length; c++)
+            {
+                sheet.Cell(r + 1, c + 1).Value = rows[r][c] is int n ? n : (string)rows[r][c];
+            }
+        }
+
+        var file = new MemoryStream();
+        book.SaveAs(file);
+        Task<ProcurementSupplierImportResult> Import(bool dryRun) => As(org.Supply, Supply, (sp, c) =>
+            S(sp).ImportAsync(c, new MemoryStream(file.ToArray()), "Поставщики контакты.xlsx", default, dryRun));
+
+        var check = await Import(true);
+        Assert.True(check.DryRun);
+        Assert.Equal((2, 0, 1), (check.Created, check.Updated, check.Skipped));
+        Assert.Equal((2, 1, 1), (check.Joined, check.Duplicates, check.Inactive));
+        Assert.Contains("Название ← «Поставшик»", check.Columns!);
+        Assert.Contains("Фирма ← «Фирмаси»", check.Columns!);
+        Assert.Contains("Что поставляет ← «Олинадиган Хомашёлар»", check.Columns!);
+        Assert.Contains("Работаем ← «Хозирда ишланади ёки ишланмаяпти»", check.Columns!);
+        Assert.Contains("ИНН", Assert.Single(check.Errors));
+        Assert.Equal(3, check.Sample!.First(x => x.Name == $"Арахис {s}").Products);
+        Assert.Empty((await As(org.Supply, Supply, (sp, c) => S(sp).SearchAsync(c, new ProcurementSupplierSearch(s, Active: null), default))).Items);
+
+        var done = await Import(false);
+        Assert.Equal((2, 0, 1), (done.Created, done.Updated, done.Skipped));
+        var found = await As(org.Supply, Supply, (sp, c) => S(sp).SearchAsync(c, new ProcurementSupplierSearch($"кунжут {s}"), default));
+        var card = await As(org.Supply, Supply, (sp, c) => S(sp).GetAsync(c, Assert.Single(found.Items).Id, default));
+        Assert.Equal(($"Арахис {s}", $"OOO «Тест {s}»", inn, "Анвар", "ТОШКЕНТ"), (card.Name, card.LegalName, card.Inn, card.ContactPerson, card.Address));
+        Assert.Equal("90 000 00 01, 90 000 00 02", card.Phone);
+        Assert.Equal($"Арахис очищенный\nАрахис жареный\nКунжут {s}", card.Products);
+        Assert.Equal("Сверка учун 99 000 00 03", card.Notes);
+        Assert.Equal(["Сырьё"], card.Categories.Select(c => c.Name));
+        Assert.True(card.IsActive);
+        var oil = Assert.Single((await As(org.Supply, Supply, (sp, c) => S(sp).SearchAsync(c, new ProcurementSupplierSearch($"Масло {s}", Active: null), default))).Items);
+        Assert.False(oil.IsActive);
+        Assert.Null(oil.LegalName);
+
+        // Повторный импорт того же файла: те же поставщики обновляются, телефоны и сырьё не задваиваются.
+        var again = await Import(false);
+        Assert.Equal((0, 2, 1), (again.Created, again.Updated, again.Skipped));
+        card = await As(org.Supply, Supply, (sp, c) => S(sp).GetAsync(c, card.Id, default));
+        Assert.Equal("90 000 00 01, 90 000 00 02", card.Phone);
+
+        // CSV с заголовками-фразами: «Наименование поставщика», «ИНН поставщика», «Тел.».
+        var csv = $"Наименование поставщика;ИНН поставщика;Тел.;Что поставляет\nООО Префикс {s};;+998 90 111 11 11;Бумага\n";
+        var prefix = await As(org.Supply, Supply, (sp, c) => S(sp).ImportAsync(c, new MemoryStream(Encoding.UTF8.GetBytes(csv)), "suppliers.csv", default));
+        Assert.Equal(1, prefix.Created);
+        Assert.Contains("Название ← «Наименование поставщика»", prefix.Columns!);
+        Assert.Contains("ИНН ← «ИНН поставщика»", prefix.Columns!);
+        Assert.Contains("Телефон ← «Тел.»", prefix.Columns!);
     }
 }
