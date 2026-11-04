@@ -4948,6 +4948,91 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("StockDocuments", "procurement");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockImport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Documents")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<DateOnly?>("LastDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("Posted")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Rows")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Skipped")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementStockImports");
+
+                    b.HasIndex("WarehouseId", "CreatedAt")
+                        .HasDatabaseName("IX_ProcurementStockImports_WarehouseId_CreatedAt");
+
+                    b.ToTable("StockImports", "procurement");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockImportRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ImportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementStockImportRows");
+
+                    b.HasIndex("ImportId")
+                        .HasDatabaseName("IX_ProcurementStockImportRows_ImportId");
+
+                    b.HasIndex("WarehouseId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementStockImportRows_WarehouseId_Key");
+
+                    b.ToTable("StockImportRows", "procurement");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockMovement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -9280,6 +9365,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Department");
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockImportRow", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementStockImport", null)
+                        .WithMany()
+                        .HasForeignKey("ImportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementStockImportRows_StockImports_ImportId");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementStockMovement", b =>

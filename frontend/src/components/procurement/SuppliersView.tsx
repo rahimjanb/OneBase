@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { FileSpreadsheet, Loader2, Plus, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, Plus, Search } from "lucide-react";
 import { Sheet } from "@/components/field/Sheet";
 import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { money, type Page, type RequestCategory, type SupplierCard, type SupplierImportResult, type SupplierRow } from "@/lib/procurement";
+import { FileImport, ImportColumns, ImportErrors } from "./FileImport";
 import { RatingBadge } from "./ProcKit";
 
 const field =
@@ -18,102 +19,21 @@ const secondary = "inline-flex h-9 items-center gap-2 rounded-lg border border-l
 /** «Новый поставщик» и «Импорт из Excel» — кнопки шапки (снабжение). Импорт — в два шага: проверка файла (что и куда попадёт), затем загрузка. */
 export function SupplierActions({ categories }: { categories: RequestCategory[] }) {
   const t = useT();
-  const router = useRouter();
   const [creating, setCreating] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<SupplierImportResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const send = async (picked: File, dryRun: boolean) => {
-    setBusy(true);
-    setError(null);
-    try {
-      const form = new FormData();
-      form.append("file", picked);
-      const response = await fetch(`/bff/api/procurement/suppliers/import${dryRun ? "?dryRun=true" : ""}`, { method: "POST", body: form });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(json.error ? t(json.error) : t("Ошибка {status}", { status: response.status }));
-      setResult(json);
-      if (!dryRun) router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setResult(null);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const close = () => {
-    setFile(null);
-    setResult(null);
-    setError(null);
-  };
-  const checking = result?.dryRun !== false;
-  const ready = result !== null && result.created + result.updated > 0;
-
   return (
     <div className="flex items-center gap-2">
-      <input
-        ref={input}
-        type="file"
-        accept=".xlsx,.xlsm,.csv"
-        className="sr-only"
-        tabIndex={-1}
-        onChange={(e) => {
-          const picked = e.target.files?.[0];
-          if (picked) {
-            setFile(picked);
-            void send(picked, true);
-          }
-          e.target.value = "";
-        }}
+      <FileImport<SupplierImportResult>
+        endpoint="/bff/api/procurement/suppliers/import"
+        checkTitle="Проверка файла"
+        doneTitle="Импорт поставщиков"
+        hint="Нужен столбец с названием поставщика, остальные — по желанию: Фирма, ИНН, Телефон, Контактное лицо, Адрес, Email, Банк, МФО, Расчётный счёт, Условия оплаты, Срок поставки, Категории, Что поставляет, Работаем, Примечание. Заголовки — по-русски или по-узбекски. Строка без названия — продолжение поставщика выше. Совпадение с реестром — по ИНН, без ИНН — по названию."
+        ready={(r) => r.created + r.updated > 0}
+        report={(r) => <ImportReport result={r} />}
       />
-      <button type="button" onClick={() => input.current?.click()} disabled={busy} className={secondary}>
-        {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileSpreadsheet className="size-4" aria-hidden />}
-        <span className="max-sm:sr-only">{t("Импорт из Excel")}</span>
-      </button>
       <button type="button" onClick={() => setCreating(true)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3.5 text-sm font-semibold text-white hover:bg-accent-strong">
         <Plus className="size-4" aria-hidden /> <span className="max-sm:sr-only">{t("Новый поставщик")}</span>
       </button>
       <SupplierFormSheet open={creating} onClose={() => setCreating(false)} categories={categories} />
-      <Sheet
-        open={file !== null}
-        onClose={close}
-        title={checking ? t("Проверка файла") : t("Импорт поставщиков")}
-        footer={
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={close} className="inline-flex h-10 items-center rounded-lg border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-muted">
-              {checking ? t("Отмена") : t("Закрыть")}
-            </button>
-            {checking && (
-              <button
-                type="button"
-                onClick={() => file && void send(file, false)}
-                disabled={busy || !ready}
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-50"
-              >
-                {busy && result && <Loader2 className="size-4 animate-spin" aria-hidden />}
-                {t("Импортировать")}
-              </button>
-            )}
-          </div>
-        }
-      >
-        {file && <p className="mb-3 truncate text-sm text-ink-3">{file.name}</p>}
-        {busy && !result && !error && (
-          <p className="flex items-center gap-2 text-sm text-ink-2">
-            <Loader2 className="size-4 animate-spin" aria-hidden /> {t("Читаем файл…")}
-          </p>
-        )}
-        <ErrorNote text={error} />
-        {result && <ImportReport result={result} />}
-        <p className="mt-4 text-xs text-ink-3">
-          {t(
-            "Нужен столбец с названием поставщика, остальные — по желанию: Фирма, ИНН, Телефон, Контактное лицо, Адрес, Email, Банк, МФО, Расчётный счёт, Условия оплаты, Срок поставки, Категории, Что поставляет, Работаем, Примечание. Заголовки — по-русски или по-узбекски. Строка без названия — продолжение поставщика выше. Совпадение с реестром — по ИНН, без ИНН — по названию.",
-          )}
-        </p>
-      </Sheet>
     </div>
   );
 }
@@ -137,28 +57,8 @@ function ImportReport({ result }: { result: SupplierImportResult }) {
         {notes.length > 0 && <p className="mt-1 text-ink-3">{notes.join(" · ")}</p>}
         {result.dryRun && <p className="mt-1 text-ink-3">{t("Это проверка — в реестре пока ничего не изменилось.")}</p>}
       </div>
-      {result.errors.length > 0 && (
-        <ul className="max-h-48 space-y-1 overflow-y-auto rounded-xl bg-muted px-3 py-2 text-xs text-ink-2">
-          {result.errors.map((e) => (
-            <li key={e}>{t(e)}</li>
-          ))}
-        </ul>
-      )}
-      {result.dryRun && result.columns && result.columns.length > 0 && (
-        <section>
-          <h3 className="mb-1.5 text-xs font-semibold text-ink-3">{t("Столбцы файла")}</h3>
-          <ul className="grid gap-x-4 gap-y-1 text-ink-2 sm:grid-cols-2">
-            {result.columns.map((c) => {
-              const [to, from] = c.split(" ← ");
-              return (
-                <li key={c} className="min-w-0 truncate">
-                  <span className="text-ink">{t(to)}</span> <span className="text-ink-3">← {from}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+      <ImportErrors errors={result.errors} />
+      {result.dryRun && <ImportColumns columns={result.columns} />}
       {result.dryRun && result.sample && result.sample.length > 0 && (
         <section>
           <h3 className="mb-1.5 text-xs font-semibold text-ink-3">{t("Первые поставщики")}</h3>

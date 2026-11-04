@@ -16,7 +16,8 @@ namespace OneBase.Api.Controllers;
 [Authorize]
 [FieldErrors]
 [Route("api/procurement")]
-public sealed class ProcurementController(ProcurementRequestService requests, ProcurementStockService stock, ProcurementDocumentService documents, IFileStorage storage)
+public sealed class ProcurementController(ProcurementRequestService requests, ProcurementStockService stock, ProcurementDocumentService documents, IFileStorage storage,
+    ProcurementStockImportService stockImport)
     : ControllerBase
 {
     private Task<ProcurementContext> ContextAsync(CancellationToken ct) =>
@@ -256,6 +257,24 @@ public sealed class ProcurementController(ProcurementRequestService requests, Pr
     [HttpPost("stock/issue")]
     public async Task<IActionResult> Issue(ProcurementStockOperationInput input, CancellationToken ct) =>
         Ok(new { id = await stock.IssueAsync(await ContextAsync(ct), input, ct) });
+
+    /// <summary>
+    /// Загрузка движений склада из Excel (кладовщик): первая — начальные остатки по файлу, следующие — только новые строки. dryRun=true —
+    /// проверка файла: что и куда попадёт, без сохранения.
+    /// </summary>
+    [HttpPost("stock/import")]
+    [RequestSizeLimit(30 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 30 * 1024 * 1024)]
+    public async Task<ProcurementStockImportResult> ImportStock(IFormFile? file, [FromQuery] bool dryRun, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+        {
+            throw new FieldValidationException("Выберите файл Excel или CSV.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        return await stockImport.ImportAsync(await ContextAsync(ct), stream, file.FileName, ct, dryRun);
+    }
 
     public sealed record CommentBody(string? Comment);
 }

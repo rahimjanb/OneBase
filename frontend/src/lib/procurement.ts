@@ -243,6 +243,34 @@ export type CatalogOption = { id: string; sku: string; name: string; categoryId:
 export type MovementKind = "Receipt" | "Issue" | "WriteOff" | "Adjustment";
 export type StockDocumentKind = "Receipt" | "Issue" | "WriteOff" | "Inventory";
 
+/**
+ * Итог загрузки движений склада из Excel (dryRun — проверка, ничего не сохранено). mode: opening — первая загрузка, по файлу заводятся
+ * начальные остатки; movements — проводятся только новые строки. unknownFile — склад уже загружали, а из этого файла не учтено ни строки.
+ */
+export type StockImportResult = {
+  dryRun: boolean;
+  mode: "opening" | "movements";
+  columns: string[];
+  rows: number;
+  known: number;
+  new: number;
+  receipts: number;
+  issues: number;
+  writeOffs: number;
+  adjustments: number;
+  posted: number;
+  skipped: number;
+  items: number;
+  newItems: number;
+  newDepartments: string[];
+  clamped: number;
+  firstDate: string | null;
+  lastDate: string | null;
+  errors: string[];
+  sample: { date: string | null; kind: "Opening" | "In" | "Out" | "WriteOff"; place: string | null; sku: string; name: string; unitCode: string; quantity: number }[];
+  unknownFile: boolean;
+};
+
 export type MovementRow = {
   id: string;
   createdAt: string;

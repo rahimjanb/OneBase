@@ -424,7 +424,7 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
     /// Заголовки столбцов. Сравнение без регистра и знаков препинания, «ё» = «е»: сначала точное совпадение, затем начало заголовка
     /// («Наименование поставщика», «ИНН поставщика»). Русские, узбекские (кириллица и латиница) названия и частые опечатки («Поставшик»).
     /// </summary>
-    private static readonly (string Field, string Label, string[] Names)[] Headers = Normalized(
+    private static readonly TableImport.Column[] Headers = TableImport.Columns(
     [
         ("name", "Название", ["название", "наименование", "поставщик", "поставшик", "поставщики", "компания", "контрагент", "етказиб берувчи", "етказувчи", "таъминотчи",
             "yetkazib beruvchi", "nomi", "номи"]),
@@ -454,54 +454,11 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
         ["legal"] = ", ", ["contact"] = ", ", ["phone"] = ", ", ["address"] = ", ", ["categories"] = ", ", ["products"] = "\n", ["notes"] = "\n",
     };
 
-    /// <summary>«Пусто» в таблицах: прочерк, «нет», «йўқ»…</summary>
-    private static readonly HashSet<string> Blank = ["нет", "йук", "йўқ", "yoq", "yo q", "н д", "n a", "не указан", "не указано"];
-
     private static readonly HashSet<string> No = ["нет", "йук", "йўқ", "yoq", "yo q", "не работаем", "не работает", "ишламаймиз", "ишланмаяпти", "ишламайди", "отключен", "неактивен", "false", "0"];
 
     private static readonly HashSet<string> Yes = ["да", "ха", "ҳа", "ha", "работаем", "работает", "ишлаймиз", "ишланади", "активен", "true", "1"];
 
-    private static (string, string, string[])[] Normalized((string Field, string Label, string[] Names)[] list) =>
-        list.Select(h => (h.Field, h.Label, h.Names.Select(Norm).ToArray())).ToArray();
-
-    /// <summary>Для сравнения: нижний регистр, «ё» → «е», знаки препинания — пробелы (кроме «№»), лишние пробелы убраны.</summary>
-    private static string Norm(string? text)
-    {
-        var chars = (text ?? "").ToLowerInvariant().Replace('ё', 'е').Select(c => char.IsLetterOrDigit(c) || c == '№' ? c : ' ').ToArray();
-        return string.Join(' ', new string(chars).Split(' ', StringSplitOptions.RemoveEmptyEntries));
-    }
-
-    /// <summary>Категория по названию с узбекским написанием: «сирё» = «Сырьё» (без «ь», «ъ», «ы» = «и»).</summary>
-    private static string Loose(string text) => Norm(text).Replace("ь", "").Replace("ъ", "").Replace('ы', 'и');
-
-    /// <summary>Столбцы строки заголовков: поле → номер столбца (каждый столбец — одному полю).</summary>
-    private static Dictionary<string, int> MatchHeaders(IReadOnlyList<string> row)
-    {
-        var cells = row.Select(Norm).ToList();
-        var found = new Dictionary<string, int>();
-        foreach (var exact in new[] { true, false })
-        {
-            foreach (var (field, _, names) in Headers)
-            {
-                if (found.ContainsKey(field))
-                {
-                    continue;
-                }
-
-                for (var i = 0; i < cells.Count; i++)
-                {
-                    var cell = cells[i];
-                    if (cell.Length > 0 && !found.ContainsValue(i) && names.Any(n => cell == n || (!exact && cell.StartsWith(n + " ", StringComparison.Ordinal))))
-                    {
-                        found[field] = i;
-                        break;
-                    }
-                }
-            }
-        }
-
-        return found;
-    }
+    private static string Norm(string? text) => TableImport.Norm(text);
 
     /// <summary>Поставщик из файла: первая строка и строки-продолжения под ней (без названия), значения по полям без повторов.</summary>
     private sealed class ImportRecord(int row, string name)
@@ -543,39 +500,19 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
             throw new FieldValidationException(e.Message);
         }
 
-        IReadOnlyList<IReadOnlyList<string>> rows = [];
-        var headerIndex = -1;
-        var columns = new Dictionary<string, int>();
-        foreach (var sheet in document.Sheets)
-        {
-            for (var r = 0; r < Math.Min(sheet.Rows.Count, 20) && headerIndex < 0; r++)
-            {
-                var found = MatchHeaders(sheet.Rows[r]);
-                if (found.ContainsKey("name"))
-                {
-                    (rows, headerIndex, columns) = (sheet.Rows, r, found);
-                }
-            }
-
-            if (headerIndex >= 0)
-            {
-                break;
-            }
-        }
-
-        if (headerIndex < 0)
+        var table = TableImport.Find(document, Headers, found => found.ContainsKey("name"));
+        if (table is null)
         {
             throw new FieldValidationException(
                 "Не найдена строка заголовков: нужен столбец с названием поставщика («Название», «Наименование», «Поставщик», «Етказиб берувчи»…). Остальные — по желанию: ИНН, Фирма, Телефон, Контактное лицо, Адрес, Что поставляет…");
         }
 
         // Столбцы с непонятным заголовком (и без заголовка) — в примечание, чтобы ничего из файла не потерялось.
-        var header = rows[headerIndex];
+        var (rows, headerIndex, columns) = (table.Rows, table.Header, table.Columns);
         var width = rows.Skip(headerIndex).Max(r => r.Count);
         var extra = Enumerable.Range(0, width).Where(i => !columns.ContainsValue(i)).ToList();
-        string Title(int i) => i < header.Count ? header[i].Trim() : "";
-        var mapped = Headers.Where(h => h.Field != "number" && columns.ContainsKey(h.Field))
-            .Select(h => $"{h.Label} ← «{Title(columns[h.Field])}»").ToList();
+        string Title(int i) => table.Title(i);
+        var mapped = TableImport.Mapped(Headers, table, "number");
         if (extra.Any(i => Title(i).Length > 0))
         {
             mapped.Add($"Примечание ← {string.Join(", ", extra.Where(i => Title(i).Length > 0).Select(i => $"«{Title(i)}»"))}");
@@ -608,7 +545,7 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
 
                 var value = Raw(i);
                 var norm = Norm(value);
-                return norm.Length == 0 || (field != "active" && Blank.Contains(norm)) ? null : value;
+                return norm.Length == 0 || (field != "active" && TableImport.Blank.Contains(norm)) ? null : value;
             }
 
             var notes = extra.Select(i => (Title: Title(i), Value: Raw(i))).Where(x => Norm(x.Value).Length > 0).ToList();
@@ -696,7 +633,7 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
                 var categoryIds = new List<Guid>();
                 foreach (var text in (entry.Get("categories") ?? "").Split(',', ';').Select(c => c.Trim()).Where(c => c.Length > 0))
                 {
-                    if (categories.FirstOrDefault(x => Loose(x.Name) == Loose(text)) is { } category)
+                    if (categories.FirstOrDefault(x => TableImport.Loose(x.Name) == TableImport.Loose(text)) is { } category)
                     {
                         categoryIds.Add(category.Id);
                     }

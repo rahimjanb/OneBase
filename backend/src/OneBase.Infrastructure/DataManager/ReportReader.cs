@@ -19,15 +19,17 @@ internal sealed class ReportReader(DataManagerOptions options) : IReportReader
 
     public IReadOnlyCollection<string> Extensions { get; } = [".xlsx", ".xlsm", ".csv", ".txt"];
 
-    public ReportDocument Read(Stream content, string fileName)
+    public ReportDocument Read(Stream content, string fileName) => Read(content, fileName, options.MaxRowsPerSheet);
+
+    public ReportDocument Read(Stream content, string fileName, int maxRows)
     {
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
         try
         {
             return extension switch
             {
-                ".xlsx" or ".xlsm" => Excel(content),
-                ".csv" or ".txt" => Csv(content),
+                ".xlsx" or ".xlsm" => Excel(content, maxRows),
+                ".csv" or ".txt" => Csv(content, maxRows),
                 ".xls" => throw new NotSupportedException("Старый формат .xls не читается: сохраните файл в Excel как .xlsx."),
                 _ => throw new NotSupportedException($"Формат {extension} не поддерживается. Можно: {string.Join(", ", Extensions)}."),
             };
@@ -38,7 +40,7 @@ internal sealed class ReportReader(DataManagerOptions options) : IReportReader
         }
     }
 
-    private ReportDocument Excel(Stream stream)
+    private ReportDocument Excel(Stream stream, int maxRows)
     {
         using var book = new XLWorkbook(stream);
         var sheets = new List<ReportSheet>();
@@ -53,7 +55,7 @@ internal sealed class ReportReader(DataManagerOptions options) : IReportReader
 
             var lastRow = used.LastRow().RowNumber();
             var lastColumn = used.LastColumn().ColumnNumber();
-            var rowLimit = Math.Min(lastRow, options.MaxRowsPerSheet);
+            var rowLimit = Math.Min(lastRow, maxRows);
             var columnLimit = Math.Min(lastColumn, options.MaxColumns);
             var rows = new List<IReadOnlyList<string>>(rowLimit);
             for (var r = 1; r <= rowLimit; r++)
@@ -105,7 +107,7 @@ internal sealed class ReportReader(DataManagerOptions options) : IReportReader
         return value.ToString(CultureInfo.InvariantCulture).Trim();
     }
 
-    private ReportDocument Csv(Stream stream)
+    private ReportDocument Csv(Stream stream, int maxRows)
     {
         using var buffer = new MemoryStream();
         stream.CopyTo(buffer);
@@ -119,7 +121,7 @@ internal sealed class ReportReader(DataManagerOptions options) : IReportReader
         {
             total++;
             columns = Math.Max(columns, row.Count);
-            if (rows.Count < options.MaxRowsPerSheet)
+            if (rows.Count < maxRows)
             {
                 rows.Add(row.Take(options.MaxColumns).Select(c => c.Trim()).ToList());
             }

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { MovementsView } from "@/components/procurement/MovementsView";
+import { StockImport } from "@/components/procurement/StockImport";
 import { requireRequests } from "@/components/requests/RequestListPage";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
@@ -35,6 +36,7 @@ export default async function MovementsPage({ searchParams }: { searchParams: Pr
         title={t("Движения")}
         subtitle={t("Журнал склада: приход, выдача, списание и инвентаризация — не правится, исправление — новым документом")}
         breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Движения") }]}
+        actions={nav.warehouse ? <StockImport /> : undefined}
       />
       <PageBody>
         <MovementsView data={data} />

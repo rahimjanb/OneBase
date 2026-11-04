@@ -15,4 +15,7 @@ public interface IReportReader
 
     /// <exception cref="NotSupportedException">Формат не поддерживается или файл повреждён — текст для пользователя.</exception>
     ReportDocument Read(Stream content, string fileName);
+
+    /// <summary>То же со своим пределом строк на лист — для импорта журналов, которые длиннее отчётов (обрезанный лист — Truncated).</summary>
+    ReportDocument Read(Stream content, string fileName, int maxRows) => Read(content, fileName);
 }

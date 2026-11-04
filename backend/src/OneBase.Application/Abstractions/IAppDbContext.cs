@@ -142,6 +142,8 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrder> ProcurementPurchaseOrders { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrderItem> ProcurementPurchaseOrderItems { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementTender> ProcurementTenders { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementStockImport> ProcurementStockImports { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementStockImportRow> ProcurementStockImportRows { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementTenderItem> ProcurementTenderItems { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementOrderApproval> ProcurementOrderApprovals { get; }
     DbSet<OneBase.Domain.Work.PushSubscription> PushSubscriptions { get; }

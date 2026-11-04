@@ -214,6 +214,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Procurement.ProcurementStockService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementDocumentService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementSupplierService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementStockImportService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementOrderService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementReceiptService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementPurchaseService>();

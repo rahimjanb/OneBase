@@ -272,6 +272,26 @@ internal static class ProcurementModel
                 .HasConstraintName("FK_ProcurementStockMovements_Items_ItemId");
         });
 
+        b.Entity<ProcurementStockImport>(e =>
+        {
+            e.ToTable("StockImports", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProcurementStockImports");
+            e.Property(x => x.FileName).HasMaxLength(260);
+            e.Property(x => x.Mode).HasConversion<string>().HasMaxLength(16);
+            e.HasIndex(x => new { x.WarehouseId, x.CreatedAt }).HasDatabaseName("IX_ProcurementStockImports_WarehouseId_CreatedAt");
+        });
+
+        b.Entity<ProcurementStockImportRow>(e =>
+        {
+            e.ToTable("StockImportRows", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProcurementStockImportRows");
+            e.Property(x => x.Key).HasMaxLength(64);
+            e.HasIndex(x => new { x.WarehouseId, x.Key }).IsUnique().HasDatabaseName("IX_ProcurementStockImportRows_WarehouseId_Key");
+            e.HasIndex(x => x.ImportId).HasDatabaseName("IX_ProcurementStockImportRows_ImportId");
+            e.HasOne<ProcurementStockImport>().WithMany().HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementStockImportRows_StockImports_ImportId");
+        });
+
         b.Entity<ProcurementStockReservation>(e =>
         {
             e.ToTable("StockReservations", Schema);
