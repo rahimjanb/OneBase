@@ -73,6 +73,7 @@ export function ReceiptDetailView({ receipt }: { receipt: ReceiptDetail }) {
         back="/procurement/receipts"
         breadcrumbs={[
           { label: "OneBase", href: "/" },
+          { label: t("Отделы"), href: "/departments" },
           { label: t("Снабжение"), href: "/procurement" },
           { label: t("Приёмка"), href: "/procurement/receipts" },
           { label: receipt.number },

@@ -8,7 +8,8 @@ export const workspacePermissions = ["ai.agents.run", "sales.read", "finance.rea
 
 export const navPermissions: Record<string, string[]> = {
   "/": workspacePermissions,
-  "/departments": workspacePermissions,
+  // «Отделы» — вход и в «Продажи», «Снабжение», HR: виден всем, кто может открыть хотя бы один из них.
+  "/departments": [...workspacePermissions, "procurement.warehouse", "procurement.read", "procurement.manage", "integrations.manage", "hr.department"],
   // Задачи — раздел пользователя (галочка «Задачи» в «Пользователях»); что из задач видно, решает backend.
   "/tasks": ["work.tasks"],
   // Заявки на закупку: свои — у всех ролей отделов; все — снабжению и директору; что видно, решает backend.

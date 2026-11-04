@@ -32,6 +32,7 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: P
         back="/procurement/receipts"
         breadcrumbs={[
           { label: "OneBase", href: "/" },
+          { label: t("Отделы"), href: "/departments" },
           { label: t("Снабжение"), href: "/procurement" },
           { label: t("Приёмка"), href: "/procurement/receipts" },
           { label: form.orderNumber },

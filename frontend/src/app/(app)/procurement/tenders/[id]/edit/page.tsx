@@ -29,6 +29,7 @@ export default async function EditTenderPage({ params }: { params: Promise<{ id:
         back={`/procurement/tenders/${id}`}
         breadcrumbs={[
           { label: "OneBase", href: "/" },
+          { label: t("Отделы"), href: "/departments" },
           { label: t("Снабжение"), href: "/procurement" },
           { label: t("Тендеры"), href: "/procurement/tenders" },
           { label: tender.number, href: `/procurement/tenders/${id}` },

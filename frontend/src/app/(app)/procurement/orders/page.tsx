@@ -41,7 +41,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <PageHeader
         title={t("Заказы поставщикам")}
         subtitle={t("Закупки по утверждённым заявкам: сроки поставки, просрочки, частичные поставки")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Заказы") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Заказы") }]}
         actions={
           nav.manages ? (
             <Link href="/procurement/orders/new" className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3.5 text-sm font-semibold text-white hover:bg-accent-strong">

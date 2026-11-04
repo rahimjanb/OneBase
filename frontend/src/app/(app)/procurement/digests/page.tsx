@@ -27,7 +27,7 @@ export default async function DigestsPage({ searchParams }: { searchParams: Prom
         title={t("Ежедневные сводки")}
         subtitle={t("Каждое утро — что ждёт решения, просрочки, поступления, претензии и остатки; сводки хранятся здесь")}
         back="/procurement"
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Сводки") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Сводки") }]}
       />
       <PageBody>
         <div className="mx-auto max-w-4xl">

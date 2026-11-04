@@ -224,6 +224,18 @@ const dashboard: Dict = {
   "По неделям": "Haftalar bo'yicha",
   "Открытые и выполненные за месяц: {n}": "Ochiq va oy davomida bajarilgan: {n}",
   "из них просрочено": "shundan muddati o'tgan",
+  // «Отделы»: карточки HR и «Снабжение».
+  "нет данных Verifix": "Verifix ma'lumotlari yo'q",
+  "явка с начала месяца · {month}": "oy boshidan davomat · {month}",
+  "явка сегодня": "bugungi davomat",
+  "Явка сегодня: {pct}": "Bugungi davomat: {pct}",
+  "Явка сегодня: отметок ещё нет": "Bugungi davomat: hali belgilar yo'q",
+  "заявки видят снабжение и директор": "arizalarni ta'minot va direktor ko'radi",
+  "Заявки к закупке": "Xarid qilinadigan arizalar",
+  "заявок к закупке — без просрочки": "xarid qilinadigan arizalar — muddati o'tmagan",
+  "всё согласованное закуплено": "kelishilganlarning hammasi sotib olindi",
+  "К закупке: {a}, просрочено: {b}, на согласовании: {c}": "Xarid qilinadigan: {a}, muddati o'tgan: {b}, kelishuvda: {c}",
+  "К закупке: {a}, просрочено: {b}": "Xarid qilinadigan: {a}, muddati o'tgan: {b}",
 };
 
 export default dashboard;

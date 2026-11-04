@@ -19,7 +19,7 @@ export async function HrHeader({ title, subtitle, crumb, actions }: { title: str
     <PageHeader
       title={t(title)}
       subtitle={subtitle ? t(subtitle) : undefined}
-      breadcrumbs={[{ label: "OneBase", href: "/" }, { label: "HR", href: "/hr" }, ...(crumb ?? [{ label: t(title) }])]}
+      breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: "HR", href: "/hr" }, ...(crumb ?? [{ label: t(title) }])]}
       actions={actions}
     />
   );

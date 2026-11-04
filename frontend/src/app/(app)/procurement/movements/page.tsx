@@ -35,7 +35,7 @@ export default async function MovementsPage({ searchParams }: { searchParams: Pr
       <PageHeader
         title={t("Движения")}
         subtitle={t("Журнал склада: приход, выдача, списание и инвентаризация — не правится, исправление — новым документом")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Движения") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Движения") }]}
         actions={nav.warehouse ? <StockImport /> : undefined}
       />
       <PageBody>

@@ -49,7 +49,7 @@ export async function SalesFrame({
       <PageHeader
         title={title}
         subtitle={subtitle}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Продажи"), href: query ? `/sales?${query}` : "/sales" }, ...crumbs]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Продажи"), href: query ? `/sales?${query}` : "/sales" }, ...crumbs]}
         back={back}
         actions={period && !period.closed ? <DataThroughChip period={period} /> : undefined}
       />

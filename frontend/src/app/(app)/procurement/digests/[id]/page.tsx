@@ -25,7 +25,7 @@ export default async function DigestPage({ params }: { params: Promise<{ id: str
         title={t("Сводка за {date}", { date: dateRu(d.day) })}
         subtitle={t("Сформирована {at} · получателей: {n}", { at: stampRu(d.createdAt), n: d.recipients })}
         back="/procurement/digests"
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Сводки"), href: "/procurement/digests" }, { label: dateRu(d.day) }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Сводки"), href: "/procurement/digests" }, { label: dateRu(d.day) }]}
         actions={
           <span className="inline-flex gap-2">
             {d.previousId && (

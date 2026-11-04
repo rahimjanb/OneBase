@@ -37,7 +37,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
       <PageHeader
         title={t("Поставщики")}
         subtitle={t("Реестр поставщиков: реквизиты, категории, рейтинг, заказы и просрочки")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Поставщики") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Поставщики") }]}
         actions={nav.manages ? <SupplierActions categories={form.categories} /> : undefined}
       />
       <PageBody>

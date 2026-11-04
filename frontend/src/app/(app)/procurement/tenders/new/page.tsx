@@ -27,7 +27,7 @@ export default async function NewTenderPage() {
         title={t("Новый тендер")}
         subtitle={t("Запишите проведённый тендер: что закупали, кто победил, по какой цене и когда поставка")}
         back="/procurement/tenders"
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Тендеры"), href: "/procurement/tenders" }, { label: t("Новый тендер") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Тендеры"), href: "/procurement/tenders" }, { label: t("Новый тендер") }]}
       />
       <PageBody>
         <TenderForm categories={form.categories} units={form.units} suppliers={suppliers.map((s) => ({ id: s.id, name: s.name }))} />

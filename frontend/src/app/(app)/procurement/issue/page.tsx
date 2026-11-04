@@ -23,7 +23,7 @@ export default async function ToIssuePage() {
       <PageHeader
         title={t("К выдаче")}
         subtitle={t("Товар на складе под заявки — со склада и купленный снабжением: ждёт выдачи сотруднику")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("К выдаче") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("К выдаче") }]}
       />
       <PageBody>
         <ToIssueView items={items} warehouse={nav.warehouse} />

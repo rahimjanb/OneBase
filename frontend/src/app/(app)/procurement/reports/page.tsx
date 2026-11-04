@@ -40,7 +40,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       <PageHeader
         title={t("Отчёты")}
         subtitle={t("Закупки, поставки, приёмки и поставщики за период — с выгрузкой в Excel и PDF")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Отчёты") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Отчёты") }]}
       />
       <PageBody>
         <ReportsView

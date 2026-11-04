@@ -1,6 +1,6 @@
 // Демо-данные до подключения backend API. Структура повторяет будущие ответы API.
 
-export type DepartmentStatus = "done" | "ok" | "attention";
+export type DepartmentStatus = "done" | "ok" | "attention" | "none";
 
 export type Department = {
   code: string;

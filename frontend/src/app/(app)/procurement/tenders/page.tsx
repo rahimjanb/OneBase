@@ -36,7 +36,7 @@ export default async function TendersPage({ searchParams }: { searchParams: Prom
       <PageHeader
         title={t("Тендеры")}
         subtitle={t("Журнал закупок сырья и материалов через тендер: победитель, цены, договор и поставка")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Тендеры") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Тендеры") }]}
         actions={
           data.canCreate && (data.total > 0 || one(sp, "q") || one(sp, "status") || one(sp, "from") || one(sp, "to")) ? (
             <Link href="/procurement/tenders/new" className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3.5 text-sm font-semibold text-white hover:bg-accent-strong">

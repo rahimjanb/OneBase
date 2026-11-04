@@ -31,7 +31,7 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
         title={t("Новый заказ поставщику")}
         subtitle={t("Только по утверждённым директором заявкам: что, сколько и почём заказать")}
         back={request ? `/requests/${request}` : "/procurement/orders"}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Заказы"), href: "/procurement/orders" }, { label: t("Новый заказ") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Заказы"), href: "/procurement/orders" }, { label: t("Новый заказ") }]}
       />
       <PageBody>
         <OrderForm needs={needs} suppliers={suppliers} responsibles={responsibles} me={me?.id ?? ""} offer={comparison?.offers.find((o) => o.id === offer) ?? null} />

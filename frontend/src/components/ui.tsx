@@ -38,6 +38,7 @@ const statusStyles: Record<DepartmentStatus, { label: string; dot: string; text:
   done: { label: "План выполнен", dot: "bg-ok", text: "text-ok" },
   ok: { label: "В норме", dot: "bg-ok", text: "text-ok" },
   attention: { label: "Требует внимания", dot: "bg-warn", text: "text-warn" },
+  none: { label: "Нет данных", dot: "bg-ink-3", text: "text-ink-3" },
 };
 
 export function StatusDot({ status }: { status: DepartmentStatus }) {

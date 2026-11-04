@@ -160,7 +160,7 @@ export function OrderDetailView({ order }: { order: OrderDetail }) {
           </span>
         }
         back="/procurement/orders"
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Заказы"), href: "/procurement/orders" }, { label: order.number }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Заказы"), href: "/procurement/orders" }, { label: order.number }]}
         actions={<span className="max-lg:hidden">{actions}</span>}
       />
       <PageBody>

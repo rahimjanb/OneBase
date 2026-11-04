@@ -7,7 +7,6 @@ import {
   ChartNoAxesColumn,
   ClipboardList,
   ClipboardPen,
-  Warehouse,
   Database,
   DatabaseZap,
   Grid3x3,
@@ -18,7 +17,6 @@ import {
   X,
   Send,
   SlidersHorizontal,
-  UsersRound,
   Sparkles,
   UserRound,
   type LucideIcon,
@@ -44,15 +42,13 @@ const tasksHref = "/tasks";
 
 /** Веер слева направо: разделы, которых нет во вкладках, и создание рассылки. Цвета иконок — умеренные, у каждого пункта свой. */
 const fanSections: (FanItem & { allowed: (p: readonly string[]) => boolean })[] = [
-  { href: "/departments", label: "Отделы", icon: Grid3x3, color: "#22b573", allowed: (p) => canOpen("/departments", p) },
+  { href: "/departments", label: "Отделы", icon: Grid3x3, color: "#22b573", also: ["/sales", "/procurement", "/hr"], allowed: (p) => canOpen("/departments", p) },
   { href: "/base", label: "Файлы", icon: Database, color: "#ff8a00", also: ["/files"], allowed: (p) => canOpen("/base", p) },
   { href: "/data-manager", label: "Данные", icon: DatabaseZap, color: "#14b8a6", allowed: (p) => canOpen("/data-manager", p) },
   { href: tasksHref, label: "Задачи", icon: ClipboardList, color: "#8b5cf6", allowed: (p) => canOpen(tasksHref, p) },
-  { href: "/hr", label: "HR", icon: UsersRound, color: "#06b6d4", allowed: (p) => canOpen("/hr", p) },
   { href: "/campaigns", label: "Рассылки", icon: Send, color: "#0878ff", allowed: (p) => canOpen("/campaigns", p) },
   // Последним из разделов: вкладки нижней панели добираются из веера по порядку — у существующих ролей они не меняются.
   { href: "/requests", label: "Заявки", icon: ClipboardPen, color: "#f59e0b", allowed: (p) => canOpen("/requests", p) },
-  { href: "/procurement", label: "Снабжение", icon: Warehouse, color: "#10b981", allowed: (p) => canOpen("/procurement", p) },
   { href: "/campaigns?new=1", label: "Новая рассылка", icon: MessageSquarePlus, color: "#f43f5e", action: true, allowed: (p) => canOpen("/campaigns", p) },
 ];
 const settingsItem: FanItem = { href: "/settings", label: "Настройки", icon: SlidersHorizontal, color: "#64748b" };

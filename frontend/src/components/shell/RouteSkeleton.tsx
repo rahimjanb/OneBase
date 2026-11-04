@@ -32,6 +32,8 @@ function Busy({ className = "", children }: { className?: string; children: Reac
 
 const card = "rounded-xl border border-line bg-surface";
 const ONEBASE: Crumb = { label: "OneBase", href: "/" };
+/** «Продажи», «Снабжение» и HR открываются из «Отделов». */
+const DEPARTMENTS: Crumb = { label: "Отделы", href: "/departments" };
 
 /** Заголовки страниц, известные до данных: макет открывается с настоящим названием. Страницы записей (регион, сотрудник) — плашкой. */
 const titles: Record<string, string> = {
@@ -90,11 +92,11 @@ function titleOf(pathname: string): string | undefined {
 /** Крошки над заголовком (на компьютере) — как у самих страниц раздела, чтобы заголовок не сдвигался, когда придут данные. */
 function crumbsOf(pathname: string, title: string | undefined): Crumb[] | undefined {
   const last = title ? [{ label: title }] : [];
-  if (pathname.startsWith("/sales")) return [ONEBASE, { label: "Продажи", href: "/sales" }, ...(pathname === "/sales" ? [] : last)];
-  if (pathname.startsWith("/hr")) return [ONEBASE, { label: "HR", href: "/hr" }, ...last];
+  if (pathname.startsWith("/sales")) return [ONEBASE, DEPARTMENTS, { label: "Продажи", href: "/sales" }, ...(pathname === "/sales" ? [] : last)];
+  if (pathname.startsWith("/hr")) return [ONEBASE, DEPARTMENTS, { label: "HR", href: "/hr" }, ...last];
   if (pathname.startsWith("/tasks/")) return [ONEBASE, { label: "Задачи", href: "/tasks" }, ...last];
   if (pathname.startsWith("/requests/")) return [ONEBASE, { label: "Заявки", href: "/requests" }, ...last];
-  if (pathname.startsWith("/procurement")) return [ONEBASE, { label: "Снабжение", href: "/procurement" }, ...last];
+  if (pathname.startsWith("/procurement")) return [ONEBASE, DEPARTMENTS, { label: "Снабжение", href: "/procurement" }, ...last];
   if (pathname === "/settings") return [ONEBASE, { label: "Настройки" }];
   if (pathname.startsWith("/settings")) return [ONEBASE, { label: "Настройки", href: "/settings" }, ...last];
   if (pathname.startsWith("/base")) return [ONEBASE, { label: "Файлы", href: "/base" }];

@@ -60,7 +60,7 @@ export function SupplierCardView({ supplier, documents, categories }: { supplier
           </span>
         }
         back="/procurement/suppliers"
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Поставщики"), href: "/procurement/suppliers" }, { label: supplier.name }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Поставщики"), href: "/procurement/suppliers" }, { label: supplier.name }]}
         actions={
           supplier.canEdit ? (
             <button type="button" onClick={() => setEditing(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3.5 text-sm font-medium text-ink hover:bg-muted">

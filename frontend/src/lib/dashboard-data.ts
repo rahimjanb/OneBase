@@ -94,6 +94,12 @@ function hrBrief(o: HrOverview, month: HrReportBrief | null): HrBrief {
   };
 }
 
+/** Явка для карточки HR в «Отделах»: сегодня и с начала месяца — те же запросы и расчёт, что у главной; нет доступа к HR — null. */
+export async function loadHrBrief(today = tashkentToday()): Promise<HrBrief | null> {
+  const [h, hm] = await Promise.all([apiTry<HrOverview>("/api/hr/overview"), apiTry<HrReportBrief>(`/api/hr/reports?from=${today.slice(0, 8)}01&to=${today}`)]);
+  return h ? hrBrief(h, hm) : null;
+}
+
 /** Все запросы главной — сразу и параллельно; fast и trends — обещания для своих блоков. */
 export function loadHome() {
   const today = tashkentToday();

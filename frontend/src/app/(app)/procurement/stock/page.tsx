@@ -40,7 +40,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       <PageHeader
         title={t("Склад")}
         subtitle={t("Центральный склад снабжения: остатки, резерв заявок, доступно и минимум")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Склад") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Склад") }]}
         actions={<StockActions warehouse={nav.warehouse} catalog={catalog} departments={departments} categories={form.categories} units={form.units} />}
       />
       <PageBody>

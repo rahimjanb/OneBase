@@ -23,7 +23,7 @@ export default async function ToBuyPage() {
       <PageHeader
         title={t("К закупке")}
         subtitle={t("Согласованные заявки: купите и отметьте «Куплено» — товар поступит на склад и будет ждать выдачи сотруднику")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("К закупке") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("К закупке") }]}
       />
       <PageBody>
         <ToBuyView items={data.requests} canBuy={data.canBuy} />

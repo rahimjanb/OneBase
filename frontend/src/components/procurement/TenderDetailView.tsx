@@ -101,7 +101,7 @@ export function TenderDetailView({ tender }: { tender: TenderDetail }) {
           </span>
         }
         back="/procurement/tenders"
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Тендеры"), href: "/procurement/tenders" }, { label: tender.number }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Тендеры"), href: "/procurement/tenders" }, { label: tender.number }]}
         actions={<span className="max-lg:hidden">{actions}</span>}
       />
       <PageBody>

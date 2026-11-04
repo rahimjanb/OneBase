@@ -37,7 +37,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
       <PageHeader
         title={t("Приёмка")}
         subtitle={t("Поставки по заказам: фактическое количество, брак, недостача и накладные — склад пополняется только после подтверждения")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Приёмка") }]}
+        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Приёмка") }]}
       />
       <PageBody>
         <ReceiptsView expected={expected} data={data} warehouse={nav.warehouse} />
