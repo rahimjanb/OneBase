@@ -39,6 +39,11 @@ public sealed class SkiaReportRenderer : IReportRenderer
             return BattleCardRenderer.Render(document, battle, Faces.Value);
         }
 
+        if (document.Incentive is { } incentive)
+        {
+            return IncentiveCardRenderer.Render(incentive, Faces.Value, document.Test);
+        }
+
         var layout = new Layout(document, Faces.Value, compact: false);
         var pages = layout.Paginate(layout.Blocks());
         if (pages.Count > 1)

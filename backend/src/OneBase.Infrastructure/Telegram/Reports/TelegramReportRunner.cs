@@ -90,7 +90,8 @@ public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvid
                 .SetProperty(d => d.Error, "Автоотчёты обновлены: отправка прежнего вида отменена."), ct);
 
         var settings = await db.TelegramReportSettings.AsNoTracking().FirstOrDefaultAsync(ct);
-        var jobs = await db.TelegramReportJobs.AsNoTracking().Where(j => j.Enabled).ToListAsync(ct);
+        // В порядке каталога: запуски в одно время ставятся в очередь (и уходят) по порядку — карточка акции 18:00 после «Поля боя».
+        var jobs = (await db.TelegramReportJobs.AsNoTracking().Where(j => j.Enabled).ToListAsync(ct)).OrderBy(j => ReportCatalog.Order(j.Code)).ToList();
         var added = 0;
         var refreshed = false;
         foreach (var job in jobs)
@@ -372,7 +373,11 @@ public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvid
             return await sp.GetRequiredService<WeeklyPdfService>().AttemptAsync(delivery, chat!, scope, retry: true, ct);
         }
 
-        return await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, null, token), retry: true, ct);
+        // Язык картинок получателя (если задан), иначе — из общих настроек.
+        var language = delivery.SubscriptionId is { } sid
+            ? await db.TelegramReportSubscriptions.AsNoTracking().Where(x => x.Id == sid).Select(x => x.Language).FirstOrDefaultAsync(ct)
+            : null;
+        return await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, language, token), retry: true, ct);
     }
 
     /// <summary>Запуски, у которых не осталось отправок в очереди: итог (done / partial) и счётчики.</summary>

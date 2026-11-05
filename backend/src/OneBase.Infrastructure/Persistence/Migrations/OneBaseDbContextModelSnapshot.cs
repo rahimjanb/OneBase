@@ -3417,6 +3417,173 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("UserSessions");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Incentive.IncentiveProgram", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("MaxStores")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MonthsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Product")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.PrimitiveCollection<long[]>("ProductTypeIds")
+                        .IsRequired()
+                        .HasColumnType("bigint[]");
+
+                    b.Property<string>("RmMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool>("SeparateWholesale")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("StaleData")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("StoreSetsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("SvCopies")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SvSummary")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TiersJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<long[]>("WholesaleAgentIds")
+                        .IsRequired()
+                        .HasColumnType("bigint[]");
+
+                    b.HasKey("Id")
+                        .HasName("PK_IncentivePrograms");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_IncentivePrograms_Code");
+
+                    b.ToTable("Programs", "incentive");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Incentive.IncentiveRouteTarget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("AgentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("AvgMonth")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("BattleLevel")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<long>("MarketId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MarketName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Prize")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RouteSource")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Set")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Sub")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal>("TargetKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_IncentiveRouteTargets");
+
+                    b.HasIndex("ProgramId", "Date")
+                        .HasDatabaseName("IX_IncentiveRouteTargets_Program_Date");
+
+                    b.HasIndex("ProgramId", "AgentId", "Date", "MarketId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_IncentiveRouteTargets_Program_Agent_Date_Market");
+
+                    b.ToTable("RouteTargets", "incentive");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceBinding", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7867,6 +8034,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Evening")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Language")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
                     b.Property<bool>("Midday")
                         .HasColumnType("boolean");
 
@@ -9038,6 +9209,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Incentive.IncentiveRouteTarget", b =>
+                {
+                    b.HasOne("OneBase.Domain.Incentive.IncentiveProgram", null)
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceBinding", b =>

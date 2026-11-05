@@ -159,6 +159,10 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Hr.HrSyncState> HrSyncStates { get; }
     DbSet<OneBase.Domain.Battle.BattleGoal> BattleGoals { get; }
 
+    // Накопительные акции для ТП (Twizos): настройки акции и цели магазинов маршрута дня в кг.
+    DbSet<OneBase.Domain.Incentive.IncentiveProgram> IncentivePrograms { get; }
+    DbSet<OneBase.Domain.Incentive.IncentiveRouteTarget> IncentiveRouteTargets { get; }
+
     // Источники данных: привязки Google Sheets определяют владельца полей OneBase; конфликты — журнал отказов и строк с ошибками.
     DbSet<OneBase.Domain.Integrations.DataSourceConnection> DataSourceConnections { get; }
     DbSet<OneBase.Domain.Integrations.DataSourceBinding> DataSourceBindings { get; }

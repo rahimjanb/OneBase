@@ -191,6 +191,10 @@ public static class DependencyInjection
         // «Поле боя»: правила (раздел Battle, по умолчанию — ТЗ v2) и цели ТП.
         services.AddSingleton(config.GetSection("Battle").Get<OneBase.Application.Telegram.Battle.BattleOptions>() ?? new OneBase.Application.Telegram.Battle.BattleOptions());
         services.AddScoped<OneBase.Application.Telegram.Battle.BattleGoalService>();
+        // Накопительная акция для ТП (Twizos): накопление кг, место, норма, цели магазинов маршрута; настройки акции — в базе (incentive.Programs).
+        services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveService>();
+        services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveRouteService>();
+        services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveCardBuilder>();
         // Еженедельный отчёт (PDF РОП / РМ / СВ / ТП): модель из расчётов «Продаж», KPI, «Акций», «Остатков», DSO; формулы целей — раздел WeeklyReport.
         services.AddSingleton(config.GetSection("WeeklyReport").Get<OneBase.Application.Telegram.Weekly.WeeklyReportOptions>()
                               ?? new OneBase.Application.Telegram.Weekly.WeeklyReportOptions());
@@ -199,6 +203,7 @@ public static class DependencyInjection
         services.AddScoped<Telegram.Reports.TelegramReportSender>();
         services.AddScoped<Telegram.Reports.WeeklyPdfService>();
         services.AddScoped<Telegram.Reports.TelegramReportService>();
+        services.AddScoped<Telegram.Reports.IncentiveSettingsService>();
         services.AddSingleton<Telegram.Reports.TelegramReportRunner>();
         services.AddHostedService<Telegram.Reports.TelegramReportWorker>();
 

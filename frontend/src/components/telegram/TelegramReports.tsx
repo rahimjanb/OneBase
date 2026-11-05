@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarClock, CalendarDays, Eye, FileText, History, LayoutDashboard, Link2, Loader2, Pencil, Plus, Search, Send, Trash2, Users } from "lucide-react";
+import { CalendarClock, CalendarDays, Eye, FileText, Gift, History, LayoutDashboard, Link2, Loader2, Pencil, Plus, Search, Send, Trash2, Users } from "lucide-react";
 import { button, danger, field, primary } from "@/components/ai/form";
 import { Alert, Note, Section } from "@/components/sales/bits";
 import { useT } from "@/i18n/client";
@@ -25,6 +25,7 @@ import {
   type ReportRole,
 } from "@/lib/telegramReports";
 import { TelegramDailyPlans } from "./TelegramDailyPlans";
+import { IncentivesPanel } from "./TelegramIncentives";
 import { ReportsOverviewPanel, type ReportsTab } from "./TelegramReportsOverview";
 import { ReportHistoryPanel, ReportPreviewPanel, RoleChip, ScopePicker, defaultScope, when, type Scope } from "./TelegramReportsPreview";
 import { WeeklyPdfPanel } from "./TelegramWeeklyPdf";
@@ -37,6 +38,7 @@ const tabs: { key: Tab; label: string; icon: typeof Users }[] = [
   { key: "recipients", label: "Получатели", icon: Users },
   { key: "preview", label: "Предпросмотр и тест", icon: Eye },
   { key: "pdf", label: "Отчёты PDF", icon: FileText },
+  { key: "incentives", label: "Акции", icon: Gift },
   { key: "dailyplan", label: "Дневной план", icon: CalendarDays },
   { key: "history", label: "История", icon: History },
 ];
@@ -93,6 +95,7 @@ export function TelegramReports({ initial, initialTab }: { initial: ReportOvervi
           {tab === "recipients" && <Recipients data={data} onChanged={reload} />}
           {tab === "preview" && <ReportPreviewPanel data={data} />}
           {tab === "pdf" && <WeeklyPdfPanel data={data} onSaved={(weeklyPdf) => setData((d) => ({ ...d, weeklyPdf }))} />}
+          {tab === "incentives" && <IncentivesPanel data={data} onTab={setTab} />}
           {tab === "dailyplan" && <TelegramDailyPlans canUseSales={data.canUseSales} />}
           {tab === "history" && <ReportHistoryPanel data={data} onChanged={reload} />}
         </div>
@@ -287,22 +290,26 @@ function JobRow({ job, onSaved }: { job: ReportJob; onSaved: (job: ReportJob) =>
         </label>
         <div>
           <span className="mb-1 block text-xs font-medium text-ink-2">{t("Дни")}</span>
-          <div className="flex gap-1">
-            {weekDays.map((d) => {
-              const on = form.days.includes(d.day);
-              return (
-                <button
-                  key={d.day}
-                  type="button"
-                  onClick={() => toggleDay(d.day)}
-                  aria-pressed={on}
-                  className={`h-9 min-w-8 rounded-lg px-1.5 text-xs font-semibold ${on ? "bg-accent text-white" : "border border-line bg-surface text-ink-3 hover:bg-muted"}`}
-                >
-                  {t(d.label)}
-                </button>
-              );
-            })}
-          </div>
+          {job.monthEnd ? (
+            <p className="flex h-9 items-center text-sm text-ink-2">{t("Последний рабочий день месяца (пн–сб)")}</p>
+          ) : (
+            <div className="flex gap-1">
+              {weekDays.map((d) => {
+                const on = form.days.includes(d.day);
+                return (
+                  <button
+                    key={d.day}
+                    type="button"
+                    onClick={() => toggleDay(d.day)}
+                    aria-pressed={on}
+                    className={`h-9 min-w-8 rounded-lg px-1.5 text-xs font-semibold ${on ? "bg-accent text-white" : "border border-line bg-surface text-ink-3 hover:bg-muted"}`}
+                  >
+                    {t(d.label)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <label className="block w-[170px]">
           <span className="mb-1 block text-xs font-medium text-ink-2">{t("Часовой пояс")}</span>
@@ -390,6 +397,7 @@ const inputOf = (r: ReportRecipient): ReportRecipientInput => ({
   reports: r.reports,
   enabled: r.enabled,
   pdfLanguage: r.pdfLanguage,
+  language: r.language,
 });
 
 /** Отчёты роли по умолчанию: всё, что роли положено, кроме недели в понедельник и еженедельного PDF (их включают отдельно). */
@@ -544,7 +552,10 @@ function Recipients({ data, onChanged }: { data: ReportOverview; onChanged: () =
                     <span className="font-semibold text-ink">{r.name}</span>
                   </div>
                   {r.name !== r.scope && <div className="text-sm text-ink-2">{r.scope}</div>}
-                  <div className="text-xs text-ink-3">{r.role === "tp" ? r.region : t("ТП в отчёте: {n}", { n: r.agents })}</div>
+                  <div className="text-xs text-ink-3">
+                    {r.role === "tp" ? r.region : t("ТП в отчёте: {n}", { n: r.agents })}
+                    {r.language && ` · ${t("картинки: {lang}", { lang: t(reportLanguages.find((l) => l.code === r.language)?.label ?? r.language) })}`}
+                  </div>
                   {r.problem && <div className="mt-1 max-w-[480px] text-xs text-warn">{t(r.problem)}</div>}
                 </div>
                 <div className="min-w-[220px] flex-1">
@@ -751,6 +762,22 @@ function RecipientEditor({
               );
             })}
           </div>
+          {jobs.some((j) => !isPdfJob(j) && input.reports.includes(j.code)) && (
+            <label className="mt-4 block">
+              <span className="mb-1 block text-xs font-medium text-ink-2">{t("Язык картинок")}</span>
+              <select className={field} value={input.language ?? ""} onChange={(e) => setInput((i) => ({ ...i, language: (e.target.value || null) as ReportLanguage | null }))}>
+                <option value="">
+                  {t("Как в общих настройках ({lang})", { lang: t(reportLanguages.find((l) => l.code === data.settings.language)?.label ?? "Русский").toLowerCase() })}
+                </option>
+                {reportLanguages.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {t(l.label)}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-ink-3">{t("Надписи на картинках этого получателя; подпись под картинкой акции — всегда по-русски и по-узбекски.")}</span>
+            </label>
+          )}
           {jobs.some((j) => isPdfJob(j) && input.reports.includes(j.code)) && (
             <label className="mt-4 block">
               <span className="mb-1 block text-xs font-medium text-ink-2">{t("Язык PDF")}</span>

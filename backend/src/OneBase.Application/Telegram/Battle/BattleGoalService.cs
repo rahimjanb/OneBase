@@ -63,6 +63,12 @@ public sealed class BattleGoalService(IAppDbContext db, SalesOptions sales, Batt
         return new BattleWeek(agentId, agentName, region, monday, monday.AddDays(5), days, Progress(goals), rank, participants, ordersAsOf);
     }
 
+    /// <summary>
+    /// Поставить цели недели с date до субботы, если их ещё нет (без оценки) — накопительная акция берёт набор Твизос-цели «Поля боя» для своих
+    /// целей магазинов, поэтому цели «Поля боя» должны быть поставлены раньше. Повторный вызов ничего не меняет.
+    /// </summary>
+    public async Task EnsureDayAsync(long agentId, DateOnly date, CancellationToken ct) => await EnsureWeekAsync(agentId, BattleRules.Monday(date), date, ct);
+
     /// <summary>ТП вне программы: оптовые рынки (по словам в имени Linko).</summary>
     public async Task<bool> IsExcludedAgentAsync(long agentId, CancellationToken ct) =>
         BattleRules.MentionsAgent(agentId, await LinkoNameAsync(agentId, ct), options.ExcludedAgentWords);
@@ -122,7 +128,7 @@ public sealed class BattleGoalService(IAppDbContext db, SalesOptions sales, Batt
             }
 
             // Плана в Linko нет — свой маршрут: день недели точки по её плановым визитам или заказам.
-            own ??= await OwnWeekdaysAsync(agentId, monday, ct);
+            own ??= await FieldRoutes.OwnWeekdaysAsync(db, sales, agentId, monday, ct);
             var mine = own.Where(kv => kv.Value == day.DayOfWeek).Select(kv => kv.Key).ToList();
             if (mine.Count > 0)
             {
@@ -267,37 +273,6 @@ public sealed class BattleGoalService(IAppDbContext db, SalesOptions sales, Batt
             .Select(p => new { p.Name, p.BeginDate, p.TillDate }).ToListAsync(ct);
         var grid = promos.Where(p => BattleRules.ParseMogulPromo(options, p.Name) is not null).ToList();
         return days.Where(d => grid.Any(p => (p.BeginDate is null || p.BeginDate <= d) && (p.TillDate is null || p.TillDate >= d))).ToHashSet();
-    }
-
-    /// <summary>
-    /// Собственный маршрут (нет плана в Linko): точки, где ТП ответственный, по дню недели — чаще всего в плане за 8 недель, иначе чаще всего
-    /// заказывали за 90 дней, иначе ровно по дням.
-    /// </summary>
-    private async Task<Dictionary<long, DayOfWeek>> OwnWeekdaysAsync(long agentId, DateOnly monday, CancellationToken ct)
-    {
-        var markets = await db.LinkoMarkets.AsNoTracking().Where(m => m.ResponsibleAgentId == agentId).Select(m => m.Id).ToListAsync(ct);
-        if (markets.Count == 0)
-        {
-            return [];
-        }
-
-        var ids = markets.ToArray();
-        var since = monday.AddDays(-56);
-        var planned = (await db.LinkoVisits.AsNoTracking()
-                .Where(v => v.UserId == agentId && v.MarketId != null && ids.Contains(v.MarketId.Value) && v.IsInPlan && v.Day >= since && v.Day < monday)
-                .Select(v => new { MarketId = v.MarketId!.Value, v.Day }).ToListAsync(ct))
-            .GroupBy(v => v.MarketId)
-            .ToDictionary(g => g.Key, g => g.GroupBy(v => v.Day.DayOfWeek).OrderByDescending(x => x.Count()).First().Key);
-        var sold = sales.FieldSoldStatuses;
-        var orderSince = monday.AddDays(-90);
-        var ordered = (await db.LinkoOrders.AsNoTracking()
-                .Where(o => o.MarketId != null && ids.Contains(o.MarketId.Value) && sold.Contains(o.Status) && o.AcceptedDate != null && o.AcceptedDate >= orderSince && o.AcceptedDate < monday)
-                .Select(o => new { MarketId = o.MarketId!.Value, Day = o.AcceptedDate!.Value }).ToListAsync(ct))
-            .GroupBy(o => o.MarketId)
-            .ToDictionary(g => g.Key, g => g.GroupBy(o => o.Day.DayOfWeek).Where(x => x.Key != DayOfWeek.Sunday).OrderByDescending(x => x.Count()).Select(x => (DayOfWeek?)x.Key).FirstOrDefault());
-        DayOfWeek[] workDays = [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday];
-        return markets.ToDictionary(id => id, id =>
-            planned.TryGetValue(id, out var p) ? p : ordered.TryGetValue(id, out var o) && o is { } day ? day : workDays[(int)(id % 6)]);
     }
 
     /// <summary>Закупы ТТ за окно месяцев (доставленные заказы по дате приёмки): средние в месяц и лучшие накладные текущего месяца до скидки.</summary>

@@ -35,7 +35,8 @@ public sealed record ReportJobView(
     DateTimeOffset? NextRunAt,
     ReportRunBrief? LastRun,
     int Recipients,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt,
+    bool MonthEnd = false);
 
 public sealed record ReportJobInput(bool Enabled, string? Time, string? TimeZone, IReadOnlyList<int>? Days, int? CatchUpMinutes);
 
@@ -67,7 +68,8 @@ public sealed record ReportRecipientView(
     bool Enabled,
     string? Problem,
     IReadOnlyList<ReportDeliveryBrief> Last,
-    string? PdfLanguage);
+    string? PdfLanguage,
+    string? Language = null);
 
 public sealed record ReportRecipientInput(
     string? Role,
@@ -79,7 +81,8 @@ public sealed record ReportRecipientInput(
     IReadOnlyList<Guid>? ChatIds,
     IReadOnlyList<string>? Reports,
     bool Enabled,
-    string? PdfLanguage = null);
+    string? PdfLanguage = null,
+    string? Language = null);
 
 public sealed record ReportPersonOption(long Id, string Name);
 

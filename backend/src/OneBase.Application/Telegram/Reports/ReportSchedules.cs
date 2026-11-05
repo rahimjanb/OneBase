@@ -29,6 +29,29 @@ public static class ReportSchedules
 
     public static bool Includes(int days, DayOfWeek day) => (days & Bit(day)) != 0;
 
+    /// <summary>Последний рабочий день месяца (пн–сб): после него до конца месяца — только воскресенье или ничего.</summary>
+    public static bool IsMonthEnd(DateOnly day)
+    {
+        if (day.DayOfWeek == DayOfWeek.Sunday)
+        {
+            return false;
+        }
+
+        for (var d = day.AddDays(1); d.Month == day.Month; d = d.AddDays(1))
+        {
+            if (d.DayOfWeek != DayOfWeek.Sunday)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Идёт ли запуск в этот день: дни недели расписания; запуск «конец месяца» — только в последний рабочий день месяца.</summary>
+    public static bool RunsOn(TelegramReportJob job, DateOnly day) =>
+        ReportCatalog.Find(job.Code)?.MonthEnd == true ? IsMonthEnd(day) : Includes(job.Days, day.DayOfWeek);
+
     /// <summary>Дни недели битами из списка 1–7 (пн–вс).</summary>
     public static int DaysOf(IEnumerable<int> isoDays) => isoDays.Where(d => d is >= 1 and <= 7).Distinct().Aggregate(0, (acc, d) => acc | (1 << (d - 1)));
 
@@ -81,7 +104,7 @@ public static class ReportSchedules
         foreach (var day in new[] { today, today.AddDays(-1) })
         {
             var at = At(day, job.Time, job.TimeZone);
-            if (at <= nowUtc && nowUtc - at <= catchUp && at >= armed && Includes(job.Days, day.DayOfWeek))
+            if (at <= nowUtc && nowUtc - at <= catchUp && at >= armed && RunsOn(job, day))
             {
                 return new ReportSlot(day, at.ToUniversalTime()); // в базу — только UTC
             }
@@ -106,7 +129,7 @@ public static class ReportSchedules
         foreach (var day in new[] { today, today.AddDays(-1) })
         {
             var at = At(day, job.Time, job.TimeZone);
-            if (at <= nowUtc && nowUtc - at > catchUp && at >= armed && Includes(job.Days, day.DayOfWeek))
+            if (at <= nowUtc && nowUtc - at > catchUp && at >= armed && RunsOn(job, day))
             {
                 return new ReportSlot(day, at.ToUniversalTime()); // в базу — только UTC
             }
@@ -124,11 +147,11 @@ public static class ReportSchedules
         }
 
         var today = DateOnly.FromDateTime(Local(nowUtc, job.TimeZone).DateTime);
-        for (var i = 0; i <= 7; i++)
+        for (var i = 0; i <= 62; i++) // запуск «конец месяца» — до двух месяцев вперёд
         {
             var day = today.AddDays(i);
             var at = At(day, job.Time, job.TimeZone);
-            if (at > nowUtc && Includes(job.Days, day.DayOfWeek))
+            if (at > nowUtc && RunsOn(job, day))
             {
                 return at;
             }

@@ -390,9 +390,16 @@ public class WorkFieldDatabaseTests(DataManagerDb fixture) : IClassFixture<DataM
                     Status = FieldTaskStatus.Completed, CompletedAt = DateTimeOffset.UtcNow.AddDays(-1), Result = "Выложено на две полки",
                 },
                 new FieldTask { Title = "Задача Петрова", AssignedTo = petrov, CreatedByType = FieldActorType.System, DueDate = today.AddDays(-5) });
+            // Визит — сегодня по Ташкенту: «40 минут назад» сразу после полуночи — ещё вчера, и визит не попал бы в сегодняшний маршрут.
+            var started = DateTimeOffset.UtcNow.AddMinutes(-40);
+            if (FieldClock.LocalDate(started) != today)
+            {
+                started = FieldClock.DayStartUtc(today);
+            }
+
             var visit = new FieldVisit
             {
-                MarketId = 9101, Agent = ivanov, StartedAt = DateTimeOffset.UtcNow.AddMinutes(-40), EndedAt = DateTimeOffset.UtcNow.AddMinutes(-25),
+                MarketId = 9101, Agent = ivanov, StartedAt = started, EndedAt = started.AddMinutes(15),
                 Status = FieldVisitStatus.Completed, Result = FieldVisitResult.Order, Amount = 1_500_000, Comment = "Взяли кекс и рулет", GeoStatus = FieldGeoStatus.Ok,
             };
             var route = new FieldRoute { Date = today, Agent = ivanov, Status = FieldRouteStatus.InProgress, Source = FieldRouteSource.Linko };

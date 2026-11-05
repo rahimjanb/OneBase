@@ -14,7 +14,7 @@ namespace OneBase.Api.Controllers;
 [ApiController]
 [Route("api/settings/telegram/reports")]
 [HasPermission(Permissions.TelegramManage)]
-public sealed class TelegramReportsController(TelegramReportService reports) : ControllerBase
+public sealed class TelegramReportsController(TelegramReportService reports, IncentiveSettingsService incentives) : ControllerBase
 {
     [HttpGet]
     public Task<IActionResult> Overview(CancellationToken ct) => Run(async () => Ok(await reports.OverviewAsync(CanUseSales, ct)));
@@ -27,6 +27,25 @@ public sealed class TelegramReportsController(TelegramReportService reports) : C
     [HttpPut("weekly-pdf")]
     public Task<IActionResult> SaveWeeklyPdf(WeeklyPdfSettingsInput input, CancellationToken ct) =>
         Run(async () => Ok(await reports.SaveWeeklyPdfAsync(input, User.GetUserId(), ct)));
+
+    /// <summary>«Акции»: накопительные акции (Twizos и будущие), типы товаров Linko для выбора, имена оптовых ТП.</summary>
+    [HttpGet("incentives")]
+    public Task<IActionResult> Incentives(CancellationToken ct) => Run(async () => Ok(await incentives.OverviewAsync(ct)));
+
+    /// <summary>Новая акция по образцу (создаётся выключенной).</summary>
+    [HttpPost("incentives")]
+    public Task<IActionResult> CreateIncentive(IncentiveProgramInput input, CancellationToken ct) =>
+        Run(async () => Ok(await incentives.CreateAsync(input, User.GetUserId(), ct)));
+
+    /// <summary>Настройки акции: период, товары, ступени и призы, ориентиры, цели магазинов, оптовые ТП, СВ и РМ, несвежие данные, включение.</summary>
+    [HttpPut("incentives/{code}")]
+    public Task<IActionResult> SaveIncentive(string code, IncentiveProgramInput input, CancellationToken ct) =>
+        Run(async () => Ok(await incentives.SaveAsync(code, input, User.GetUserId(), ct)));
+
+    /// <summary>Накоплено сейчас по оргструктуре «Продаж» (только с sales.read): розница и опт своими местами.</summary>
+    [HttpGet("incentives/{code}/standings")]
+    public Task<IActionResult> IncentiveStandings(string code, [FromQuery] DateOnly? date, CancellationToken ct) =>
+        Run(async () => Ok(await incentives.StandingsAsync(code, date, CanUseSales, ct)));
 
     /// <summary>Расписание запуска (code — «daily.midday», «weekly.saturday» …): включение, время, дни, пояс, догон пропущенного.</summary>
     [HttpPut("jobs/{code}")]

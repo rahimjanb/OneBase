@@ -198,6 +198,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<HrSyncRun> HrSyncRuns => Set<HrSyncRun>();
     public DbSet<HrSyncState> HrSyncStates => Set<HrSyncState>();
     public DbSet<OneBase.Domain.Battle.BattleGoal> BattleGoals => Set<OneBase.Domain.Battle.BattleGoal>();
+    public DbSet<OneBase.Domain.Incentive.IncentiveProgram> IncentivePrograms => Set<OneBase.Domain.Incentive.IncentiveProgram>();
+    public DbSet<OneBase.Domain.Incentive.IncentiveRouteTarget> IncentiveRouteTargets => Set<OneBase.Domain.Incentive.IncentiveRouteTarget>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -209,6 +211,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         WorkModel.Configure(b);
         HrModel.Configure(b);
         BattleModel.Configure(b);
+        IncentiveModel.Configure(b);
         TelegramModel.Configure(b);
         ProcurementModel.Configure(b);
 

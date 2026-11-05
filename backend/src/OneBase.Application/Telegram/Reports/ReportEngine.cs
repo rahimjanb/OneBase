@@ -3,6 +3,8 @@ using OneBase.Application.Abstractions;
 using OneBase.Application.Sales;
 using OneBase.Application.Sales.Metrics;
 using OneBase.Application.Telegram.Battle;
+using OneBase.Application.Telegram.Incentive;
+using OneBase.Domain.Incentive;
 using OneBase.Domain.Telegram;
 
 namespace OneBase.Application.Telegram.Reports;
@@ -12,7 +14,8 @@ namespace OneBase.Application.Telegram.Reports;
 /// построении (ТП — только свои цифры, СВ — свой регион, РМ — регионы направления): получатель не получит чужих данных, даже если
 /// настройки устарели.
 /// </summary>
-public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, ReportDataService data, BattleGoalService battle, BattleOptions battleOptions)
+public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, ReportDataService data, BattleGoalService battle, BattleOptions battleOptions,
+    IncentiveService incentive, IncentiveCardBuilder incentiveCards)
 {
     /// <summary>Регионы месяца с супервайзерами и ТП и направления РМ (кэш раздела «Продажи»).</summary>
     public async Task<(IReadOnlyList<ReportRegionTeam> Teams, IReadOnlyList<ReportDirection> Directions)> StructureAsync(DateOnly date, CancellationToken ct)
@@ -51,6 +54,11 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
         if (info.Report == ReportType.Battle)
         {
             return await BuildBattleAsync(info, resolved, teams, date, now, language, cutoff, midday, jobTime, ct);
+        }
+
+        if (info.Report == ReportType.Incentive)
+        {
+            return await BuildIncentiveAsync(info, resolved, teams, date, now, language, cutoff, midday, jobTime, ct);
         }
 
         var peers = info.Report == ReportType.Weekly && scope.Role == TelegramReportRoles.Tp
@@ -133,5 +141,124 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
         var mogulLine = ReportTexts.Format(language, "Могул — одной накладной · фрукты от {0} сум → ещё −{1}%", ReportFormat.Number(battleOptions.FruitMinSum), battleOptions.FruitPercent);
         var cards = new BattleCards(info.Slot, days, weeks, prizes, mogulLine, battleOptions.Bonus, language);
         return BattleReport.Build(context, cards);
+    }
+
+    /// <summary>
+    /// 9. «Накопительная акция» (действующая включённая акция дня; нет — «пропущено»). ТП — своя карточка; СВ — сводка команды региона и в 08:30
+    /// и 18:00 копии карточек ТП региона, подписанных на акцию (никого — все ТП региона, до десяти), по настройкам акции; РМ — сводка регионов
+    /// направления (по настройке — и карточки ТП); рейтинг — у РМ по направлению (без направления — вся акция, это рейтинг для канала), у СВ —
+    /// по региону. Место считается среди всех ТП оргструктуры. Заказы Linko не обновились к отправке — отметка «данные на …» или пропуск (настройка).
+    /// У участников «Поля боя» его цели на день ставятся раньше целей акции: набор Твизос-цели «Поля боя» переносится в карточку акции.
+    /// </summary>
+    private async Task<ReportDocument> BuildIncentiveAsync(ReportJobInfo info, ResolvedScope resolved, IReadOnlyList<ReportRegionTeam> teams, DateOnly date,
+        DateTimeOffset now, string language, TimeOnly cutoff, TimeOnly midday, TimeOnly jobTime, CancellationToken ct)
+    {
+        var ordersAsOf = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "orders").Select(s => s.LastSuccessAt).FirstOrDefaultAsync(ct);
+        var facts = new ReportFacts
+        {
+            Categories = [], CategoryPrice = new Dictionary<string, decimal>(), Plans = new Dictionary<(long, int, int), MonthPlan>(), Orders = [], Visits = [],
+            OrdersAsOf = ordersAsOf, VisitsAsOf = ordersAsOf,
+        };
+        var context = new ReportContext(info, resolved, date, now, language, facts, midday, cutoff, 30, null, jobTime, null);
+        var program = await incentive.ActiveAsync(date, ct);
+        if (program is null)
+        {
+            return IncentiveReport.Skip(context, context.T("Накопительной акции в этот день нет: акция выключена или день вне её периода."));
+        }
+
+        var stale = IncentiveReport.IsStale(info, date, ordersAsOf);
+        if (stale && program.StaleData == IncentiveStaleData.Skip)
+        {
+            return IncentiveReport.Skip(context, context.T("Заказы Linko не обновились к отправке — карточка акции не отправлена (в настройках акции: при несвежих данных пропускать)."));
+        }
+
+        // Участники — все ТП оргструктуры месяца (место — среди них).
+        var participants = teams.SelectMany(t => t.Agents.Select(a => new IncentiveAgent(a.Id, a.Name, t.Name))).DistinctBy(a => a.Id).ToList();
+        var slot = info.Slot;
+        var cards = new List<IncentiveAgent>();
+        IncentiveTeamSpec? team = null;
+        string? ratingScope = null;
+        HashSet<long>? ratingAgents = null;
+        List<IncentiveAgent> Agents(ScopeRegion region) => region.Agents.Select(a => new IncentiveAgent(a.Id, a.Name, region.Name)).ToList();
+        switch (resolved.Scope.Role)
+        {
+            case TelegramReportRoles.Tp:
+                cards.Add(new IncentiveAgent(resolved.Agent!.Id, resolved.Agent.Name, resolved.Regions[0].Name));
+                break;
+            case TelegramReportRoles.Sv:
+            {
+                var region = resolved.Regions[0];
+                var agents = Agents(region);
+                ratingScope = region.Name;
+                ratingAgents = agents.Select(a => a.Id).ToHashSet();
+                if (slot != IncentiveSlot.Rating)
+                {
+                    if (program.SvSummary)
+                    {
+                        team = new IncentiveTeamSpec(TelegramReportRoles.Sv, resolved.Title, [new(region.Name, region.Supervisor, agents)]);
+                    }
+
+                    if (program.SvCopies && slot is IncentiveSlot.Morning or IncentiveSlot.Evening)
+                    {
+                        var subscribed = (await db.TelegramReportSubscriptions.AsNoTracking()
+                                .Where(s => s.Enabled && s.Role == TelegramReportRoles.Tp && s.AgentId != null && s.Reports.Contains(ReportCatalog.Incentive + "."))
+                                .Select(s => s.AgentId!.Value).ToListAsync(ct))
+                            .ToHashSet();
+                        var own = agents.Where(a => subscribed.Contains(a.Id)).ToList();
+                        cards.AddRange(own.Count > 0 ? own : agents.Take(10));
+                    }
+                }
+
+                break;
+            }
+
+            default:
+            {
+                var agents = resolved.Regions.SelectMany(Agents).DistinctBy(a => a.Id).ToList();
+                if (resolved.Scope.DirectionId is not null)
+                {
+                    ratingScope = resolved.Title;
+                    ratingAgents = agents.Select(a => a.Id).ToHashSet();
+                }
+
+                if (slot != IncentiveSlot.Rating)
+                {
+                    team = new IncentiveTeamSpec(TelegramReportRoles.Rm, resolved.Title,
+                        resolved.Regions.Select(r => new IncentiveTeamRegionSpec(r.Name, r.Supervisor, Agents(r))).ToList());
+                    if (program.RmMode == IncentiveRmMode.Cards)
+                    {
+                        cards.AddRange(agents.Take(19));
+                    }
+                }
+
+                break;
+            }
+        }
+
+        if (slot != IncentiveSlot.Rating && cards.Count == 0 && team is null)
+        {
+            return IncentiveReport.Skip(context, context.T("Этой роли в этот запуск акции ничего не положено: копии и сводка выключены в настройках акции."));
+        }
+
+        var today = DateOnly.FromDateTime(now.DateTime);
+        if (IncentiveSlot.IsDay(slot) && date >= today && await db.TelegramReportJobs.AsNoTracking().AnyAsync(j => j.Enabled && j.Code.StartsWith(ReportCatalog.Battle + "."), ct))
+        {
+            var battleAgents = (await db.TelegramReportSubscriptions.AsNoTracking()
+                    .Where(s => s.Enabled && s.Role == TelegramReportRoles.Tp && s.AgentId != null && s.Reports.Contains(ReportCatalog.Battle + "."))
+                    .Select(s => s.AgentId!.Value).ToListAsync(ct))
+                .ToHashSet();
+            var involved = cards.Select(a => a.Id).Concat(team?.Regions.SelectMany(r => r.Agents).Select(a => a.Id) ?? []).Distinct();
+            foreach (var agentId in involved.Where(battleAgents.Contains))
+            {
+                await battle.EnsureDayAsync(agentId, date, ct);
+            }
+        }
+
+        var times = await db.TelegramReportJobs.AsNoTracking().Where(j => j.Code == "incentive.morning" || j.Code == "incentive.evening")
+            .ToDictionaryAsync(j => j.Code, j => j.Time, ct);
+        var request = new IncentiveCardRequest(slot, date, language, participants, cards, info.IsMidday ? cutoff : null, team, ratingScope, ratingAgents,
+            Persist: date == today, Stale: stale, DayStart: times.GetValueOrDefault("incentive.morning", ReportCatalog.Find("incentive.morning")!.Time),
+            DayEnd: times.GetValueOrDefault("incentive.evening", ReportCatalog.Find("incentive.evening")!.Time));
+        return IncentiveReport.Build(context, await incentiveCards.BuildAsync(program, request, ct));
     }
 }

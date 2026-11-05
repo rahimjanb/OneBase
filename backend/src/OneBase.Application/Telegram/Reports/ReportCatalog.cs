@@ -27,6 +27,13 @@ public enum ReportType
     Battle,
 
     /// <summary>
+    /// 9. Накопительная акция (Twizos, ТЗ «Проект 3»): маршрут дня 08:30, полдень 13:00, итог дня 18:00 (после «Поля боя»), итог недели и рейтинг в
+    /// субботу, итог месяца в последний рабочий день месяца. ТП — личная карточка, СВ — копии карточек ТП и сводка команды, РМ — сводка регионов,
+    /// канал — рейтинг (получатель «РМ · вся страна» с групповым чатом). Настройки и действующая акция — incentive.Programs.
+    /// </summary>
+    Incentive,
+
+    /// <summary>
     /// 8. Еженедельный PDF (понедельник, за прошлую неделю пн–сб): РОП (РМ без направления) — страна, РМ — направление, СВ — регион и команда,
     /// ТП — личная карточка. Строится WeeklyReportBuilder и рисуется WeeklyPdfRenderer — не картинками ReportEngine.
     /// </summary>
@@ -35,9 +42,10 @@ public enum ReportType
 
 /// <summary>
 /// Запуск отчёта: код «отчёт.момент», время и дни по умолчанию, кому он (роли), сколько минут после времени его ещё можно догнать
-/// после простоя сервера.
+/// после простоя сервера. MonthEnd — только в последний рабочий день месяца (пн–сб), дни недели расписания для него не важны.
 /// </summary>
-public sealed record ReportJobInfo(string Code, ReportType Report, string Slot, TimeOnly Time, int Days, IReadOnlyList<string> Roles, int CatchUpMinutes)
+public sealed record ReportJobInfo(string Code, ReportType Report, string Slot, TimeOnly Time, int Days, IReadOnlyList<string> Roles, int CatchUpMinutes,
+    bool MonthEnd = false)
 {
     /// <summary>Промежуточный срез дня (13:00): факт — заказы до времени запуска.</summary>
     public bool IsMidday => Slot is "midday" or "reminder";
@@ -58,12 +66,16 @@ public static class ReportCatalog
     public const string Categories = "categories";
     public const string Weekly = "weekly";
     public const string Battle = "battle";
+    public const string Incentive = "incentive";
     public const string WeeklyPdf = "weekly-pdf";
 
     private static readonly IReadOnlyList<string> Everyone = TelegramReportRoles.All;
 
     /// <summary>«Поле боя» — ТП лично и СВ (копии карточек своих ТП); РМ на тесте не шлём.</summary>
     private static readonly IReadOnlyList<string> Field = [TelegramReportRoles.Tp, TelegramReportRoles.Sv];
+
+    /// <summary>Рейтинг акции — в канал (РМ «вся страна» с групповым чатом) и сводками СВ и РМ; ТП лично чужих цифр не получает.</summary>
+    private static readonly IReadOnlyList<string> Managers = [TelegramReportRoles.Rm, TelegramReportRoles.Sv];
 
     public static readonly IReadOnlyList<ReportJobInfo> Jobs =
     [
@@ -84,8 +96,30 @@ public static class ReportCatalog
         new("battle.midday", ReportType.Battle, "midday", new(13, 0), ReportSchedules.WorkDays, Field, 120),
         new("battle.evening", ReportType.Battle, "evening", new(18, 0), ReportSchedules.WorkDays, Field, 180),
         new("battle.saturday", ReportType.Battle, "saturday", new(18, 0), ReportSchedules.Saturday, Field, 240),
+        // Накопительная акция — после «Поля боя»: в одно время запуски ставятся в очередь в порядке каталога, карточка акции 18:00 уходит после
+        // карточки «Поля боя» (ТЗ «Проект 3», раздел 5).
+        new("incentive.morning", ReportType.Incentive, "morning", new(8, 30), ReportSchedules.WorkDays, Everyone, 120),
+        new("incentive.midday", ReportType.Incentive, "midday", new(13, 0), ReportSchedules.WorkDays, Everyone, 120),
+        new("incentive.evening", ReportType.Incentive, "evening", new(18, 0), ReportSchedules.WorkDays, Everyone, 180),
+        new("incentive.week", ReportType.Incentive, "week", new(18, 0), ReportSchedules.Saturday, Everyone, 240),
+        new("incentive.rating", ReportType.Incentive, "rating", new(18, 30), ReportSchedules.Saturday, Managers, 240),
+        new("incentive.month", ReportType.Incentive, "month", new(18, 0), ReportSchedules.WorkDays, Everyone, 360, MonthEnd: true),
         new("weekly-pdf.monday", ReportType.WeeklyPdf, "monday", new(9, 0), ReportSchedules.Monday, Everyone, 360),
     ];
+
+    /// <summary>Порядок запуска в каталоге: запуски в одно время ставятся в очередь в этом порядке («Поле боя» — раньше акции).</summary>
+    public static int Order(string? code)
+    {
+        for (var i = 0; i < Jobs.Count; i++)
+        {
+            if (Jobs[i].Code == code)
+            {
+                return i;
+            }
+        }
+
+        return int.MaxValue;
+    }
 
     /// <summary>Запуск рисуется PDF-документом (еженедельный PDF), а не картинками.</summary>
     public static bool IsPdf(string? code) => Find(code)?.Report == ReportType.WeeklyPdf;
@@ -100,6 +134,7 @@ public static class ReportCatalog
         ReportType.Promo => Promo,
         ReportType.Categories => Categories,
         ReportType.Battle => Battle,
+        ReportType.Incentive => Incentive,
         ReportType.WeeklyPdf => WeeklyPdf,
         _ => Weekly,
     };
@@ -113,6 +148,7 @@ public static class ReportCatalog
         ReportType.Promo => "4. Заказы с акцией",
         ReportType.Categories => "5. Заказы по категориям",
         ReportType.Battle => "7. Поле боя",
+        ReportType.Incentive => "9. Накопительная акция",
         ReportType.WeeklyPdf => "8. Еженедельный PDF",
         _ => "6. Итоги недели",
     };
@@ -128,6 +164,12 @@ public static class ReportCatalog
         (ReportType.Battle, "midday") => "полдень",
         (ReportType.Battle, "evening") => "итог дня",
         (ReportType.Battle, "saturday") => "итог недели",
+        (ReportType.Incentive, "morning") => "маршрут дня",
+        (ReportType.Incentive, "midday") => "полдень",
+        (ReportType.Incentive, "evening") => "итог дня",
+        (ReportType.Incentive, "week") => "итог недели",
+        (ReportType.Incentive, "rating") => "рейтинг акции",
+        (ReportType.Incentive, "month") => "итог месяца",
         (ReportType.WeeklyPdf, "monday") => "PDF за прошлую неделю",
         _ => SlotTitle(slot),
     };

@@ -3,9 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 using OneBase.Application.Field;
 using OneBase.Application.Sales;
 using OneBase.Application.Telegram;
+using OneBase.Application.Telegram.Incentive;
 using OneBase.Application.Telegram.Reports;
 using OneBase.Application.Telegram.Weekly;
 using OneBase.Domain.Identity;
+using OneBase.Domain.Incentive;
 using OneBase.Domain.Sales;
 using OneBase.Domain.Telegram;
 using OneBase.Infrastructure.Persistence;
@@ -675,9 +677,23 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
     [PostgresFact]
     public async Task Rm_sees_regions_of_the_country_and_reports_render_for_every_role()
     {
+        try
+        {
+            await RmSeesRegionsAsync();
+        }
+        finally
+        {
+            await CleanIncentiveAsync();
+        }
+    }
+
+    private async Task RmSeesRegionsAsync()
+    {
         var s = await SeedAsync();
         using var scope = fixture.Services.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<TelegramReportService>();
+        // Накопительная акция идёт — её запуски тоже рисуются для каждой роли.
+        await SeedIncentiveAsync(scope.ServiceProvider.GetRequiredService<OneBaseDbContext>(), s.Today, enabled: true, IncentiveStaleData.Stamp);
         fixture.Clock.Now = Utc(s.Today, 18, 5);
         var output = Environment.GetEnvironmentVariable("ONEBASE_REPORT_PNG"); // папка для просмотра картинок; в CI не задана
 
@@ -717,5 +733,303 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         Assert.DoesNotContain("Тест магазин", silent.Plain());
         Assert.DoesNotContain("Магазин «Нур»", silent.Plain()); // покупал вчера
         fixture.Clock.Now = null;
+    }
+
+    // ---------- Накопительная акция (9) ----------
+
+    /// <summary>
+    /// Акция теста вокруг сегодняшнего дня (другие выключены) и Twizos в заказах ТП Хоразма: у 61 — 50 кг доставлено и 3,64 кг заказа сегодня в
+    /// точке маршрута 1101, у 62 — 30 кг.
+    /// </summary>
+    private static async Task SeedIncentiveAsync(OneBaseDbContext db, DateOnly today, bool enabled, string stale)
+    {
+        await db.IncentivePrograms.ExecuteUpdateAsync(u => u.SetProperty(p => p.Enabled, false));
+        if (!await db.LinkoProductTypes.AnyAsync(t => t.Id == 22))
+        {
+            db.LinkoProductTypes.Add(new LinkoProductType { Id = 22, Name = "Снек" });
+        }
+
+        if (!await db.LinkoProductTypes.AnyAsync(t => t.Id == 26))
+        {
+            db.LinkoProductTypes.Add(new LinkoProductType { Id = 26, Name = "Снек 140 г", ParentId = 22 });
+        }
+
+        if (!await db.LinkoProducts.AnyAsync(p => p.Id == 9_710_001))
+        {
+            db.LinkoProducts.Add(new LinkoProduct { Id = 9_710_001, Name = "Twizos Kabob 140 г", Code = "604", TypeId = 26 });
+        }
+
+        long[] ids = [800_200_001, 800_200_002, 800_200_003];
+        await db.LinkoOrderLines.Where(l => ids.Contains(l.OrderId)).ExecuteDeleteAsync();
+        await db.LinkoOrders.Where(o => ids.Contains(o.Id)).ExecuteDeleteAsync();
+        LinkoOrder Order(long id, long agent, DateOnly created, DateOnly? accepted, string status, decimal kg) => new()
+        {
+            Id = id, AgentId = agent, MarketId = 1101, Status = status, CreatedDate = created, CreatedAt = created.ToDateTime(new TimeOnly(10, 0)), AcceptedDate = accepted,
+            AcceptedAt = accepted?.ToDateTime(new TimeOnly(12, 0)), BranchId = 5, BranchName = "Хоразм", TotalWeight = kg,
+            Lines = [new LinkoOrderLine { Id = id, ProductId = 9_710_001, Amount = 1, TotalWeight = kg }],
+        };
+        db.LinkoOrders.AddRange(
+            Order(800_200_001, 61, today.AddDays(-4), today.AddDays(-3), "delivered", 50),
+            Order(800_200_002, 62, today.AddDays(-4), today.AddDays(-3), "delivered", 30),
+            Order(800_200_003, 61, today, null, "not_delivered", 3.64m));
+        var s = IncentiveTests.Twizos();
+        db.IncentivePrograms.Add(new IncentiveProgram
+        {
+            Code = $"test-{Guid.NewGuid():N}"[..20], Name = s.Name, Product = s.Product, ProductTypeIds = [22], StartDate = today.AddDays(-40), EndDate = today.AddDays(40),
+            TiersJson = System.Text.Json.JsonSerializer.Serialize(s.Tiers, IncentiveSettings.Json), MonthsJson = "[]",
+            StoreSetsJson = System.Text.Json.JsonSerializer.Serialize(s.StoreSets, IncentiveSettings.Json), Enabled = enabled, StaleData = stale,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>Убрать данные акции теста: заказы с Twizos не должны попасть в факт других отчётов этой базы.</summary>
+    private async Task CleanIncentiveAsync()
+    {
+        using var scope = fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
+        long[] ids = [800_200_001, 800_200_002, 800_200_003];
+        await db.LinkoOrderLines.Where(l => ids.Contains(l.OrderId)).ExecuteDeleteAsync();
+        await db.LinkoOrders.Where(o => ids.Contains(o.Id)).ExecuteDeleteAsync();
+        await db.IncentivePrograms.Where(p => p.Code.StartsWith("test-") || p.Code == "twizos-2027q1").ExecuteDeleteAsync(); // цели магазинов — каскадом
+        await db.IncentivePrograms.ExecuteUpdateAsync(u => u.SetProperty(p => p.Enabled, false));
+        await db.TelegramReportSubscriptions.ExecuteDeleteAsync();
+        await db.TelegramReportJobs.ExecuteDeleteAsync();
+        fixture.Clock.Now = null;
+    }
+
+    [PostgresFact]
+    public async Task Incentive_cards_go_after_battle_to_agent_supervisor_and_channel_once()
+    {
+        try
+        {
+            await IncentiveCardsGoAfterBattleAsync();
+        }
+        finally
+        {
+            await CleanIncentiveAsync();
+        }
+    }
+
+    private async Task IncentiveCardsGoAfterBattleAsync()
+    {
+        var s = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var service = sp.GetRequiredService<TelegramReportService>();
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        await SeedIncentiveAsync(db, s.Today, enabled: true, IncentiveStaleData.Stamp);
+
+        // ТП — своя карточка (рейтинг ему не положен); СВ — сводка и копии в группу и рейтинг региона; канал — получатель «РМ · вся страна».
+        var tp = await service.SaveRecipientAsync(null, Tp(61, s.OtherChatId, "battle.evening", "incentive.evening", "incentive.rating"), true, s.AdminId, default);
+        Assert.Equal(["battle.evening", "incentive.evening"], tp.Reports);
+        await service.SaveRecipientAsync(null, Sv(s, [s.GroupChatId], "incentive.evening", "incentive.rating"), true, s.AdminId, default);
+        await service.SaveRecipientAsync(null, new ReportRecipientInput(TelegramReportRoles.Rm, "Канал Candy Gold | Agent", null, null, null, null, [s.PrivateChatId],
+            ["incentive.rating"], true), true, s.AdminId, default);
+
+        fixture.Clock.Now = Utc(s.Today, 16, 30);
+        foreach (var (code, time) in new[] { ("battle.evening", "18:00"), ("incentive.evening", "18:00"), ("incentive.rating", "18:30") })
+        {
+            await service.SaveJobAsync(code, new ReportJobInput(true, time, "Asia/Tashkent", EveryDay, null), s.AdminId, default);
+        }
+
+        var runner = Runner(sp);
+        fixture.Clock.Now = Utc(s.Today, 18, 1);
+        await runner.TickAsync(default);
+
+        // 18:00: «Поле боя» и акция в одно время — строки «Поля боя» поставлены (и уходят) раньше.
+        var rows = await db.TelegramReportDeliveries.AsNoTracking().Where(d => d.Period == s.Today && d.Trigger == "schedule").OrderBy(d => d.CreatedAt).ToListAsync();
+        Assert.Equal(["battle.evening", "incentive.evening"], rows.Where(r => r.ChatId == s.OtherChatId).Select(r => r.Report));
+        Assert.True(rows.Where(r => r.Report == "battle.evening").Max(r => r.CreatedAt) <= rows.Where(r => r.Report == "incentive.evening").Min(r => r.CreatedAt));
+
+        var cards = fixture.Telegram.Sent.Where(m => m.Message.Text?.StartsWith("9. Накопительная акция") == true).ToList();
+        var mine = Assert.Single(cards, m => m.Peer.PeerId == OtherPeer);
+        var photo = Assert.Single(mine.Message.Files);
+        Assert.True(photo.Photo && photo.ContentType == "image/png");
+        Assert.Contains("Бахтиёр Юлдашев", mine.Message.Text);
+        Assert.Contains("Накоплено 53,6 кг. До планшета", mine.Message.Text); // 50 доставлено + 3,64 заказа сегодня
+        Assert.DoesNotContain("Дилшод", mine.Message.Text); // ТП — только свои цифры
+        var group = Assert.Single(cards, m => m.Peer.PeerId == GroupPeer);
+        Assert.Equal(2, group.Message.Files.Count); // сводка команды + копия карточки ТП 61 (подписан на акцию)
+        Assert.Contains("3 ТП: накоплено 83,6 кг", group.Message.Text);
+        var targets = await db.IncentiveRouteTargets.AsNoTracking().Where(t => t.AgentId == 61 && t.Date == s.Today).ToListAsync();
+        Assert.Contains(targets, t => t.MarketId == 1101);
+
+        // 18:30 — рейтинг: СВ — регион, канал — вся акция. Второй круг ничего не шлёт.
+        fixture.Clock.Now = Utc(s.Today, 18, 31);
+        await runner.TickAsync(default);
+        var ratings = fixture.Telegram.Sent.Where(m => m.Message.Text?.Contains("Рейтинг акции Twizos") == true).ToList();
+        Assert.Equal([GroupPeer, PrivatePeer], ratings.Select(m => m.Peer.PeerId).Order());
+        Assert.Contains("1 — Бахтиёр Юлдашев, 53,6 кг", ratings[0].Message.Text);
+        Assert.Equal(0, await runner.TickAsync(default));
+        var runs = await db.TelegramReportRuns.AsNoTracking().ToDictionaryAsync(r => r.Job);
+        Assert.Equal(("done", 2, 2), (runs["incentive.evening"].Status, runs["incentive.evening"].Planned, runs["incentive.evening"].Sent));
+        Assert.Equal(("done", 2, 2), (runs["incentive.rating"].Status, runs["incentive.rating"].Planned, runs["incentive.rating"].Sent));
+        fixture.Clock.Now = null;
+    }
+
+    [PostgresFact]
+    public async Task Incentive_is_skipped_when_off_or_stale_by_settings_and_other_reports_still_go()
+    {
+        try
+        {
+            await IncentiveSkippedAsync();
+        }
+        finally
+        {
+            await CleanIncentiveAsync();
+        }
+    }
+
+    private async Task IncentiveSkippedAsync()
+    {
+        var s = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var service = sp.GetRequiredService<TelegramReportService>();
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        await SeedIncentiveAsync(db, s.Today, enabled: false, IncentiveStaleData.Skip);
+        fixture.Clock.Now = Utc(s.Today, 18, 5);
+        var tp = await service.SaveRecipientAsync(null, Tp(61, s.OtherChatId, "daily.evening", "incentive.evening"), true, s.AdminId, default);
+
+        // Акция выключена — карточка акции «пропущена» с причиной, дневной отчёт уходит как обычно.
+        var off = Assert.Single(await service.SendNowAsync(tp.Id, new ReportSendInput("incentive.evening", true), true, s.AdminId, default));
+        Assert.Equal("skipped", off.Status);
+        Assert.Contains("акции в этот день нет", off.Error);
+        Assert.Equal("sent", Assert.Single(await service.SendNowAsync(tp.Id, new ReportSendInput("daily.evening", true), true, s.AdminId, default)).Status);
+
+        // Включена, но заказы Linko не обновлялись сегодня: «пропускать» — не уходит; «отметка» — уходит с последними данными.
+        await db.IncentivePrograms.Where(p => p.Code.StartsWith("test-")).ExecuteUpdateAsync(u => u.SetProperty(p => p.Enabled, true));
+        await db.LinkoSyncStates.Where(x => x.Entity == "orders").ExecuteUpdateAsync(u => u.SetProperty(x => x.LastSuccessAt, Utc(s.Today.AddDays(-1), 17)));
+        var skipped = Assert.Single(await service.SendNowAsync(tp.Id, new ReportSendInput("incentive.evening", true), true, s.AdminId, default));
+        Assert.Equal("skipped", skipped.Status);
+        Assert.Contains("не обновились", skipped.Error);
+        await db.IncentivePrograms.Where(p => p.Code.StartsWith("test-")).ExecuteUpdateAsync(u => u.SetProperty(p => p.StaleData, IncentiveStaleData.Stamp));
+        var stamped = Assert.Single(await service.SendNowAsync(tp.Id, new ReportSendInput("incentive.evening", true), true, s.AdminId, default));
+        Assert.Equal("sent", stamped.Status);
+        var delivery = await db.TelegramReportDeliveries.AsNoTracking().SingleAsync(d => d.Id == stamped.DeliveryId);
+        Assert.Equal(Utc(s.Today.AddDays(-1), 17), delivery.DataAsOf);
+        fixture.Clock.Now = null;
+    }
+
+    [PostgresFact]
+    public async Task Incentive_settings_are_validated_saved_created_by_template_and_show_standings()
+    {
+        try
+        {
+            await IncentiveSettingsAsync();
+        }
+        finally
+        {
+            await CleanIncentiveAsync();
+        }
+    }
+
+    private async Task IncentiveSettingsAsync()
+    {
+        var s = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var settings = sp.GetRequiredService<IncentiveSettingsService>();
+        await SeedIncentiveAsync(sp.GetRequiredService<OneBaseDbContext>(), s.Today, enabled: true, IncentiveStaleData.Stamp);
+
+        var overview = await settings.OverviewAsync(default);
+        var twizos = Assert.Single(overview.Programs, p => p.Code == "twizos-2026q4");
+        Assert.Equal(("off", false, 3), (twizos.State, twizos.Enabled, twizos.Tiers.Count));
+        Assert.Equal([0.98m, 3.64m, 4.62m, 7.64m], twizos.StoreSets.Select(x => x.Kg)); // по возрастанию закупа
+        var test = Assert.Single(overview.Programs, p => p.Code.StartsWith("test-") && p.Enabled);
+        Assert.Equal("running", test.State);
+        Assert.True(test.WorkDaysLeft > 0);
+        Assert.Contains(overview.ProductTypes, t => t.Id == 26 && t.ParentId == 22);
+        Assert.Equal(["tablet", "tv", "phone", "gift"], overview.Images);
+
+        IncentiveProgramInput Input(IncentiveProgramView v) => new(null, v.Name, v.Product, v.ProductTypeIds, v.Start, v.End, v.Tiers, v.Months, v.StoreSets,
+            v.WholesaleAgentIds, v.SeparateWholesale, v.SvCopies, v.SvSummary, v.RmMode, v.StaleData, v.Enabled, v.MaxStores);
+        var input = Input(twizos);
+        Task Save(IncentiveProgramInput i) => settings.SaveAsync(twizos.Code, i, s.AdminId, default);
+        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { End = twizos.Start.AddDays(-1) }));
+        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { ProductTypeIds = [999_999] }));
+        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { Tiers = [] }));
+        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { Tiers = [.. twizos.Tiers, twizos.Tiers[0]] })); // два одинаковых порога
+        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { StoreSets = twizos.StoreSets.Where(x => x.MinAvg > 0).ToList() })); // нет набора «от 0»
+        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { Months = [new(2026, 11, 0.7m), new(2026, 12, 0.6m)] })); // больше 100%
+        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { MaxStores = 0 }));
+        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { MaxStores = 31 }));
+        Assert.Equal(12, twizos.MaxStores); // по умолчанию — как на образце ТЗ
+        // Акция теста включена на сегодня ± 40 дней — включить вторую на те же даты нельзя (даты от теста, а не от календаря: Twizos закончится 31.12).
+        var overlap = await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { Enabled = true, Start = test.Start, End = test.End, Months = [] }));
+        Assert.Contains("уже включена", overlap.Message);
+
+        var saved = await settings.SaveAsync(twizos.Code, input with
+        {
+            WholesaleAgentIds = [62, 62, 0], StaleData = IncentiveStaleData.Skip, RmMode = IncentiveRmMode.Cards, MaxStores = 15,
+        }, s.AdminId, default);
+        Assert.Equal(15, saved.MaxStores);
+        Assert.Equal([62L], saved.WholesaleAgentIds);
+        Assert.Equal((IncentiveStaleData.Skip, IncentiveRmMode.Cards, false), (saved.StaleData, saved.RmMode, saved.Enabled));
+
+        // Новая акция по образцу — свой код (приводится к нижнему регистру), создаётся выключенной.
+        var copy = await settings.CreateAsync(input with { Code = "Twizos-2027Q1", Name = "Twizos весна", Enabled = true }, s.AdminId, default);
+        Assert.Equal(("twizos-2027q1", "Twizos весна", false), (copy.Code, copy.Name, copy.Enabled));
+        await Assert.ThrowsAsync<ReportValidationException>(() => settings.CreateAsync(input with { Code = "twizos-2027q1" }, s.AdminId, default));
+        await Assert.ThrowsAsync<ReportValidationException>(() => settings.CreateAsync(input with { Code = "a b" }, s.AdminId, default));
+
+        // Накоплено сейчас — по оргструктуре: 61 — 53,64 (50 + 3,64 сегодня), 62 — 30, у 63 накоплений нет — без места.
+        var standings = await settings.StandingsAsync(test.Code, s.Today, canUseSales: true, default);
+        Assert.Equal([61L, 62L, 63L], standings.Rows.Select(r => r.AgentId));
+        Assert.Equal((1, 53.64m, 3.64m, "Планшет Samsung"), (standings.Rows[0].Place!.Value, standings.Rows[0].Total, standings.Rows[0].Today, standings.Rows[0].Next));
+        Assert.Null(standings.Rows[2].Place);
+        await Assert.ThrowsAsync<ReportForbiddenException>(() => settings.StandingsAsync(test.Code, s.Today, canUseSales: false, default));
+
+        // В расписании итог месяца помечен «конец месяца».
+        var jobs = (await sp.GetRequiredService<TelegramReportService>().OverviewAsync(true, default)).Jobs;
+        Assert.True(jobs.Single(j => j.Code == "incentive.month").MonthEnd);
+        Assert.False(jobs.Single(j => j.Code == "incentive.evening").MonthEnd);
+    }
+
+    [PostgresFact]
+    public async Task Recipient_language_is_used_for_scheduled_manual_and_preview_reports()
+    {
+        try
+        {
+            await RecipientLanguageAsync();
+        }
+        finally
+        {
+            await CleanIncentiveAsync();
+        }
+    }
+
+    private async Task RecipientLanguageAsync()
+    {
+        var s = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var service = sp.GetRequiredService<TelegramReportService>();
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+
+        // Общий язык — русский; у ТП 63 — узбекский, у СВ — не задан.
+        await Assert.ThrowsAsync<ReportValidationException>(() => service.SaveRecipientAsync(null, Tp(63, s.AgentChatId, "daily.evening") with { Language = "fr" }, true, s.AdminId, default));
+        var tp = await service.SaveRecipientAsync(null, Tp(63, s.AgentChatId, "daily.evening") with { Language = "uz" }, true, s.AdminId, default);
+        Assert.Equal("uz", tp.Language);
+        var sv = await service.SaveRecipientAsync(null, Sv(s, [s.GroupChatId], "daily.evening"), true, s.AdminId, default);
+        Assert.Null(sv.Language);
+
+        // По расписанию: ТП — по-узбекски, СВ — по-русски (общий язык).
+        fixture.Clock.Now = Utc(s.Today, 16, 30);
+        await service.SaveJobAsync("daily.evening", new ReportJobInput(true, "18:00", "Asia/Tashkent", EveryDay, null), s.AdminId, default);
+        fixture.Clock.Now = Utc(s.Today, 18, 1);
+        await Runner(sp).TickAsync(default);
+        Assert.StartsWith("1. Kunlik reja", fixture.Telegram.Sent.Single(m => m.Peer.PeerId == AgentPeer).Message.Text);
+        Assert.StartsWith("1. Дневной план", fixture.Telegram.Sent.Single(m => m.Peer.PeerId == GroupPeer).Message.Text);
+
+        // «Отправить сейчас» и предпросмотр по получателю — тоже на его языке; выбранный в предпросмотре язык важнее.
+        fixture.Telegram.Reset();
+        fixture.Telegram.Sessions.Add(s.AccountId);
+        Assert.Equal("sent", Assert.Single(await service.SendNowAsync(tp.Id, new ReportSendInput("daily.evening", true), true, s.AdminId, default)).Status);
+        Assert.StartsWith("1. Kunlik reja", Assert.Single(fixture.Telegram.Sent).Message.Text);
+        var preview = await service.PreviewAsync(new ReportPreviewInput("daily.evening", null, null, null, null, null, tp.Id, s.Today, null, null), true, default);
+        Assert.StartsWith("1. Kunlik reja", preview.Caption);
+        var ru = await service.PreviewAsync(new ReportPreviewInput("daily.evening", null, null, null, null, null, tp.Id, s.Today, null, "ru"), true, default);
+        Assert.StartsWith("1. Дневной план", ru.Caption);
     }
 }

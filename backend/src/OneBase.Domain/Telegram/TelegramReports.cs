@@ -196,6 +196,9 @@ public class TelegramReportSubscription : Entity
     /// <summary>Язык еженедельного PDF (ru или uz); пусто — язык отчётов из общих настроек.</summary>
     public string? PdfLanguage { get; set; }
 
+    /// <summary>Язык картинок автоотчётов этого получателя (ru, uz, uz-Cyrl): ТП — по-узбекски, СВ — по-русски; пусто — язык из общих настроек.</summary>
+    public string? Language { get; set; }
+
     /// <summary>Прежние флаги дневного отчёта — перенесены в Reports.</summary>
     public bool Morning { get; set; }
     public bool Midday { get; set; }

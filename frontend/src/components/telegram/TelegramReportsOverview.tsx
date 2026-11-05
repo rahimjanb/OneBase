@@ -6,7 +6,7 @@ import { useT } from "@/i18n/client";
 import { isPdfJob, reportRoles, runStatus, telegramStatus, type ReportOverview, type TelegramStatus } from "@/lib/telegramReports";
 import { RoleChip, when } from "./TelegramReportsPreview";
 
-export type ReportsTab = "overview" | "schedule" | "recipients" | "preview" | "pdf" | "dailyplan" | "history";
+export type ReportsTab = "overview" | "schedule" | "recipients" | "preview" | "pdf" | "incentives" | "dailyplan" | "history";
 
 /** Данные Linko старше этого — «устарели» (как у еженедельного отчёта). */
 const StaleHours = 6;

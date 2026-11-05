@@ -61,6 +61,9 @@ public sealed record ReportDocument(
     /// <summary>Карточки «Поля боя» (вертикальные 1080 px) — рисуются отдельным рисовальщиком вместо таблиц; null — обычный отчёт 16:9.</summary>
     public Battle.BattleCards? Battle { get; init; }
 
+    /// <summary>Карточки накопительной акции (вертикальные 1080 px) — свой рисовальщик; null — не акция.</summary>
+    public Incentive.IncentiveCards? Incentive { get; init; }
+
     /// <summary>Текст для Telegram-агента («что было в отчёте?») и резервной отправки без картинки.</summary>
     public string Plain()
     {

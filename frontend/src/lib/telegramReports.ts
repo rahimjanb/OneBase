@@ -12,8 +12,8 @@ export const reportRoles: { key: ReportRole; label: string; hint: string; classN
 
 export const roleOf = (role: string) => reportRoles.find((r) => r.key === role) ?? reportRoles[1];
 
-/** Шесть отчётов (листы ТЗ «ИИ ассистент в ТГ 2»), «Поле боя» и еженедельный PDF. */
-export type ReportType = "daily" | "no-purchase" | "no-orders" | "promo" | "categories" | "weekly" | "battle" | "weekly-pdf";
+/** Шесть отчётов (листы ТЗ «ИИ ассистент в ТГ 2»), «Поле боя», еженедельный PDF и накопительная акция. */
+export type ReportType = "daily" | "no-purchase" | "no-orders" | "promo" | "categories" | "weekly" | "battle" | "weekly-pdf" | "incentive";
 
 export const reportTypes: { key: ReportType; title: string; hint: string }[] = [
   { key: "daily", title: "1. Дневной план", hint: "8:30 — план дня в сумах и кг, по категориям и визитам; 13:00 — промежуточный итог; 18:00 — итог дня" },
@@ -24,6 +24,7 @@ export const reportTypes: { key: ReportType; title: string; hint: string }[] = [
   { key: "weekly", title: "6. Итоги недели", hint: "Суббота 18:00 — итоги недели пн–сб; понедельник 8:30 — пересчитанные итоги прошлой недели" },
   { key: "battle", title: "7. Поле боя", hint: "Карточки целей ТП по магазинам маршрута: 8:30 — маршрут дня, 13:00 — полдень, 18:00 — итог дня, суббота 18:00 — итог недели; СВ — копии карточек своих ТП" },
   { key: "weekly-pdf", title: "8. Еженедельный PDF", hint: "Понедельник 9:00 — PDF за прошлую неделю пн–сб: РОП — страна, РМ — направление, СВ — регион и команда, ТП — личная карточка. Предпросмотр и формулы — на вкладке «Отчёты PDF»" },
+  { key: "incentive", title: "9. Накопительная акция", hint: "Twizos: 8:30 — маршрут дня с целями в кг, 13:00 — полдень, 18:00 — итог дня (после «Поля боя»), суббота 18:00 — итог недели и 18:30 — рейтинг, последний рабочий день месяца — итог месяца; СВ — сводка команды и копии карточек ТП, РМ — сводка регионов" },
 ];
 
 /** Запуск рисуется PDF-документом, а не картинками: у него своя вкладка, в предпросмотре картинок и «Отправить» его нет. */
@@ -74,6 +75,8 @@ export type ReportJob = {
   lastRun: ReportRunBrief | null;
   recipients: number;
   updatedAt: string | null;
+  /** Только в последний рабочий день месяца (итог месяца акции): дни недели не важны. */
+  monthEnd?: boolean;
 };
 
 export type ReportJobInput = Pick<ReportJob, "enabled" | "time" | "timeZone" | "days" | "catchUpMinutes">;
@@ -109,6 +112,8 @@ export type ReportRecipient = {
   last: ReportDeliveryBrief[];
   /** Язык еженедельного PDF; null — язык отчётов из общих настроек. */
   pdfLanguage: ReportLanguage | null;
+  /** Язык картинок автоотчётов получателя (ТП — по-узбекски, СВ — по-русски); null — из общих настроек. */
+  language: ReportLanguage | null;
 };
 
 export type ReportRecipientInput = {
@@ -122,6 +127,7 @@ export type ReportRecipientInput = {
   reports: string[];
   enabled: boolean;
   pdfLanguage?: ReportLanguage | null;
+  language?: ReportLanguage | null;
 };
 
 export type ReportPerson = { id: number; name: string };
@@ -539,4 +545,85 @@ export const reportsApi = {
 
     return bff<ReportHistory>(`${base}/history?${params}`);
   },
+};
+
+// ---------- Накопительные акции (вкладка «Акции») ----------
+
+/** Ступень акции: порог, кг; приз; коротко («планшет»); «до кого» по-русски («планшета»); картинка; по-узбекски. */
+export type IncentiveTier = { kg: number; prize: string; short: string; image: string; prizeUz: string | null; shortUz: string | null; of: string | null };
+
+/** Ориентир месяца: доля порога (0,35 = 35%). */
+export type IncentiveMonthShare = { year: number; month: number; share: number };
+
+/** Цель магазина: набор для ТТ со средним закупом от minAvg сум/мес, вес, приз клиенту, уровень набора «Поля боя». */
+export type IncentiveStoreSet = { minAvg: number; contents: string; kg: number; prize: string | null; level: string | null; contentsUz: string | null; prizeUz: string | null };
+
+export type IncentiveState = "off" | "upcoming" | "running" | "finished";
+
+export type IncentiveProgram = {
+  code: string;
+  name: string;
+  product: string;
+  productTypeIds: number[];
+  start: string;
+  end: string;
+  tiers: IncentiveTier[];
+  months: IncentiveMonthShare[];
+  storeSets: IncentiveStoreSet[];
+  wholesaleAgentIds: number[];
+  separateWholesale: boolean;
+  svCopies: boolean;
+  svSummary: boolean;
+  rmMode: "summary" | "cards";
+  staleData: "stamp" | "skip";
+  enabled: boolean;
+  state: IncentiveState;
+  workDaysLeft: number;
+  updatedAt: string | null;
+  /** Магазинов с целью на маршруте дня — не больше (1–30). */
+  maxStores: number;
+};
+
+export type IncentiveOverview = {
+  programs: IncentiveProgram[];
+  productTypes: { id: number; name: string; parentId: number | null }[];
+  agents: { id: number; name: string }[];
+  images: string[];
+};
+
+export type IncentiveProgramInput = Omit<IncentiveProgram, "code" | "state" | "workDaysLeft" | "updatedAt"> & { code?: string };
+
+export type IncentiveStandingRow = {
+  place: number | null;
+  agentId: number;
+  name: string;
+  region: string | null;
+  wholesale: boolean;
+  total: number;
+  delivered: number;
+  returned: number;
+  today: number;
+  reached: string | null;
+  next: string | null;
+  toNext: number | null;
+};
+
+export type IncentiveStandings = { code: string; date: string; dataAsOf: string | null; workDaysLeft: number; rows: IncentiveStandingRow[] };
+
+export const incentiveStates: Record<IncentiveState, { label: string; className: string }> = {
+  off: { label: "Выключена", className: "text-ink-3" },
+  upcoming: { label: "Скоро начнётся", className: "text-warn" },
+  running: { label: "Идёт", className: "text-ok" },
+  finished: { label: "Закончилась", className: "text-ink-3" },
+};
+
+export const incentiveImages: Record<string, string> = { tablet: "Планшет", tv: "Телевизор", phone: "Телефон", gift: "Подарок (без картинки)" };
+
+export const incentivesApi = {
+  overview: () => bff<IncentiveOverview>(`${base}/incentives`),
+  save: (code: string, input: IncentiveProgramInput) => bff<IncentiveProgram>(`${base}/incentives/${encodeURIComponent(code)}`, { method: "PUT", body: json(input) }),
+  /** Новая акция по образцу — создаётся выключенной. */
+  create: (input: IncentiveProgramInput) => bff<IncentiveProgram>(`${base}/incentives`, { method: "POST", body: json(input) }),
+  /** Накоплено сейчас по оргструктуре «Продаж» (нужно право sales.read). */
+  standings: (code: string, date?: string) => bff<IncentiveStandings>(`${base}/incentives/${encodeURIComponent(code)}/standings${date ? `?date=${date}` : ""}`),
 };

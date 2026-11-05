@@ -85,7 +85,7 @@ public sealed class TelegramReportService(
             return new ReportJobView(info.Code, ReportCatalog.Key(info.Report), ReportCatalog.Title(info.Report), info.Slot, ReportCatalog.SlotTitle(info.Report, info.Slot), info.Roles,
                 job.Enabled, job.Time.ToString("HH:mm"), job.TimeZone, ReportSchedules.IsoDays(job.Days), job.CatchUpMinutes, ReportSchedules.Next(job, now),
                 run is null ? null : new ReportRunBrief(run.Id, run.Period, run.StartedAt, run.FinishedAt, run.Status, run.Planned, run.Sent, run.Failed, run.Skipped, run.Error),
-                recipients.Count(r => r.Enabled && r.Reports.Contains(info.Code)), job.UpdatedAt);
+                recipients.Count(r => r.Enabled && r.Reports.Contains(info.Code)), job.UpdatedAt, info.MonthEnd);
         }).ToList();
     }
 
@@ -160,7 +160,7 @@ public sealed class TelegramReportService(
             var recent = last.Where(d => d.SubscriptionId == s.Id).GroupBy(d => (d.Report, d.RecipientTitle)).Select(g => g.First()).Take(6)
                 .Select(d => new ReportDeliveryBrief(d.Report!, d.RecipientTitle, d.Status, d.SentAt ?? d.CreatedAt, d.Error)).ToList();
             views.Add(new ReportRecipientView(s.Id, s.Role, s.Title ?? scopeTitle, scopeTitle, s.DirectionId, s.RegionId, s.RegionId is { } rid ? regionNames.GetValueOrDefault(rid) : null,
-                s.SupervisorId, s.AgentId, agents, chatRefs, status, reports, s.Enabled, problem, recent, s.PdfLanguage));
+                s.SupervisorId, s.AgentId, agents, chatRefs, status, reports, s.Enabled, problem, recent, s.PdfLanguage, s.Language));
         }
 
         return views;
@@ -406,6 +406,9 @@ public sealed class TelegramReportService(
         var pdfLanguage = string.IsNullOrWhiteSpace(input.PdfLanguage)
             ? null
             : UiLanguage.Normalize(input.PdfLanguage) ?? throw new ReportValidationException("Язык PDF — ru, uz или uz-Cyrl.");
+        var language = string.IsNullOrWhiteSpace(input.Language)
+            ? null
+            : UiLanguage.Normalize(input.Language) ?? throw new ReportValidationException("Язык картинок — ru, uz или uz-Cyrl.");
 
         var settings = await SettingsAsync(ct);
         var account = settings.AccountId ?? throw new ReportValidationException("Сначала выберите аккаунт Telegram для автоотчётов.");
@@ -434,6 +437,7 @@ public sealed class TelegramReportService(
         row.AgentName = resolved.Agent?.Name;
         row.Reports = string.Join(',', reports);
         row.PdfLanguage = pdfLanguage;
+        row.Language = language;
         row.Enabled = input.Enabled;
         row.Chats.RemoveAll(c => !chatIds.Contains(c.ChatId));
         foreach (var chatId in chatIds.Where(c => row.Chats.All(x => x.ChatId != c)))
@@ -454,7 +458,7 @@ public sealed class TelegramReportService(
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, userId.ToString(), id is null ? "telegram.reports.recipient_created" : "telegram.reports.recipient_updated",
             nameof(TelegramReportSubscription), row.Id.ToString(),
-            new { row.Role, row.DirectionId, row.RegionId, row.SupervisorId, row.AgentId, Chats = chatIds, row.Reports, row.PdfLanguage, row.Enabled }, ct);
+            new { row.Role, row.DirectionId, row.RegionId, row.SupervisorId, row.AgentId, Chats = chatIds, row.Reports, row.PdfLanguage, row.Language, row.Enabled }, ct);
         return (await RecipientsAsync(account, teams, directions, await ChatsAsync(account, ct), ct)).First(s => s.Id == row.Id);
     }
 
@@ -593,7 +597,7 @@ public sealed class TelegramReportService(
 
             results.Add(ReportCatalog.IsPdf(job)
                 ? await weeklyPdf.AttemptAsync(delivery, chat!, scope, retry: true, ct)
-                : await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, null, token), retry: true, ct));
+                : await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, recipient.Language, token), retry: true, ct));
         }
 
         return results;
@@ -638,6 +642,10 @@ public sealed class TelegramReportService(
 
         var settings = await SettingsAsync(ct);
         var chat = await db.TelegramChats.AsNoTracking().FirstOrDefaultAsync(c => c.Id == delivery.ChatId, ct);
+        // Язык получателя (если задан) — как при отправке по расписанию.
+        var language = delivery.SubscriptionId is { } sid
+            ? await db.TelegramReportSubscriptions.AsNoTracking().Where(x => x.Id == sid).Select(x => x.Language).FirstOrDefaultAsync(ct)
+            : null;
         if (TelegramReportSender.ChatProblem(chat, settings.AccountId) is { } problem)
         {
             throw new ReportValidationException(problem);
@@ -650,7 +658,7 @@ public sealed class TelegramReportService(
         var period = delivery.Period;
         return ReportCatalog.IsPdf(job)
             ? await weeklyPdf.AttemptAsync(delivery, chat!, scope, retry: true, ct)
-            : await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, null, token), retry: true, ct);
+            : await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, language, token), retry: true, ct);
     }
 
     /// <summary>
@@ -726,10 +734,12 @@ public sealed class TelegramReportService(
         }
 
         ReportScope scope;
+        string? recipientLanguage = null;
         if (input.RecipientId is { } recipientId)
         {
             var s = await db.TelegramReportSubscriptions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == recipientId, ct) ?? throw new KeyNotFoundException();
             scope = ReportScope.Of(s);
+            recipientLanguage = s.Language;
         }
         else
         {
@@ -765,7 +775,8 @@ public sealed class TelegramReportService(
             at = ReportSchedules.At(d, job.Time, job.TimeZone); // прошлый день — на время запуска
         }
 
-        var language = UiLanguage.Normalize(input.Language);
+        // Язык: выбранный в предпросмотре, иначе — получателя (если выбран получатель), иначе — из общих настроек.
+        var language = UiLanguage.Normalize(input.Language) ?? recipientLanguage;
         return (info.Code, scope, date, at, language);
     }
 

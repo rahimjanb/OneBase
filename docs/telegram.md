@@ -165,7 +165,8 @@ OneBase работает от имени **пользовательских ак
 
 «Настройки → Telegram → Автоматические отчёты» (`/settings/telegram/reports`, право `telegram.manage`; получатели, предпросмотр и
 отправка — ещё и `sales.read`) — шесть отчётов картинками PNG по расписанию, для трёх ролей: **РМ**, **СВ**, **ТП**, и седьмой —
-«Поле боя» (карточки целей ТП по магазинам маршрута, вертикальные 1080 px; ТП и СВ; см. [battle.md](battle.md)). Отдельного бота нет:
+«Поле боя» (карточки целей ТП по магазинам маршрута, вертикальные 1080 px; ТП и СВ; см. [battle.md](battle.md)), восьмой — еженедельный PDF,
+девятый — «Накопительная акция» (карточки акции Twizos для ТП, СВ, РМ и канала; см. [incentive.md](incentive.md)). Отдельного бота нет:
 отчёты уходят с уже подключённого аккаунта OneBase. Постановка — «ИИ ассистент в ТГ 2.xlsx» (листы 1–6).
 
 **Отчёты и запуски** (`ReportCatalog`; время, дни, часовой пояс и «догон» — в `telegram.ReportJobs`, каждый запуск включается отдельно,
@@ -180,11 +181,15 @@ OneBase работает от имени **пользовательских ак
 | 5. Заказы по категориям | 13:00 · 18:00 | РМ, СВ, ТП |
 | 6. Итоги недели | суббота 18:00 — неделя пн–сб · понедельник 08:30 — прошлая неделя заново | РМ, СВ, ТП |
 | 7. Поле боя | 08:30 маршрут дня · 13:00 полдень · 18:00 итог дня · суббота 18:00 итог недели | ТП, СВ |
+| 9. Накопительная акция | 08:30 маршрут дня · 13:00 полдень · 18:00 итог дня (после «Поля боя») · суббота 18:00 итог недели и 18:30 рейтинг · последний рабочий день месяца 18:00 — итог месяца | РМ, СВ, ТП; рейтинг — РМ и СВ |
 
-Дни по умолчанию — пн–сб (неделя — суббота и понедельник), пояс — `Asia/Tashkent`.
+Дни по умолчанию — пн–сб (неделя — суббота и понедельник), пояс — `Asia/Tashkent`. Итог месяца акции идёт в последний рабочий день месяца
+(пн–сб), дни недели для него не важны. Запуски в одно время ставятся в очередь в порядке каталога («Поле боя» — раньше акции).
 
 **Получатели** (`telegram.ReportSubscriptions`) — не пользователи Sales Base, а оргструктура «Продаж»: **роль → область → чаты →
 отчёты роли**. РМ — направление (или вся страна), СВ — регион и супервайзер, ТП — торговый представитель (регион подставляется сам).
+У получателя можно задать **язык картинок** (ru, uz, uz-Cyrl): ТП — по-узбекски, СВ — по-русски; не задан — язык из общих настроек; он же — в
+«Отправить сейчас», «Повторить» и предпросмотре по получателю (язык, выбранный в предпросмотре, важнее). Язык PDF — отдельно.
 Чаты — личные чаты и группы аккаунта, куда можно писать; «Telegram привязан» — личный чат человека, подтвердившего свой Telegram кодом
 в OneBase (`UserPermissions.VerifiedAt`). Сервер проверяет область по данным «Продаж» месяца, чаты и отчёты роли при сохранении **и при
 каждом построении отчёта**: ТП получает только свои цифры (в недельном рейтинге — только своё место), СВ — свой регион, РМ — регионы
@@ -273,10 +278,15 @@ API не попадают.
 `/api/settings/telegram/reports` (`telegram.manage`): `GET` обзор (настройки, 13 запусков со следующим и последним запуском,
 получатели, направления, регионы с СВ и ТП, чаты, метрики за 7 дней); `PUT settings` (`{ accountId, language, noPurchaseDays,
 refreshBeforeSend }`); `PUT jobs/{code}` (`{ enabled, time, timeZone, days, catchUpMinutes }`, code — `daily.midday`, `weekly.saturday`…);
-`POST recipients`, `PUT|DELETE recipients/{id}` (`{ role, title, directionId, regionId, supervisorId, agentId, chatIds, reports, enabled }`);
+`POST recipients`, `PUT|DELETE recipients/{id}` (`{ role, title, directionId, regionId, supervisorId, agentId, chatIds, reports, enabled, pdfLanguage,
+language }`);
 `POST recipients/{id}/send` (`{ job, force }` — во все чаты; уже отправлен сегодня — 409); `POST preview` (`{ job, role, directionId,
 regionId, supervisorId, agentId, recipientId, date, time, language }`); `POST test` (`{ report, chatId }`); `POST deliveries/{id}/retry?force=`;
 `GET history?from=&to=&report=&regionId=&status=&page=`. Без `sales.read` — 400 `{ error, forbidden: true }`, конфликт — 409.
+
+Накопительные акции (`telegram.manage`): `GET incentives` (акции, типы товаров Linko, имена оптовых ТП), `POST incentives` (новая по образцу,
+выключенной), `PUT incentives/{code}` (настройки и включение), `GET incentives/{code}/standings?date=` («накоплено сейчас», `sales.read`);
+у запуска в обзоре — `monthEnd` (итог месяца). Подробно — [incentive.md](incentive.md).
 
 `/api/settings/telegram` (`telegram.manage`): `GET` обзор; `PUT credentials`; `POST accounts`; `PUT|DELETE accounts/{id}`;
 `POST accounts/{id}/login` (номер), `…/login/code`, `…/login/password`, `…/check`, `…/disconnect`; `GET|PUT accounts/{id}/agent`;
@@ -355,4 +365,6 @@ delete — полный доступ массово не выдаётся); `GET
 праздник, план появился позже, прошлый день без записи. `DailyPlanTests` — формула и сценарии (пример ТЗ, выполнен/перевыполнен, нет
 плана, план 0, воскресенье, праздник, последний день месяца, нет рабочих дней, факт 0, итог региона из сумм, формат и округление). `TelegramReportsMigrationTests` —
 перенос данных `TelegramReportsV2` и откат.
-`ONEBASE_REPORT_PNG=<папка>` — `TelegramReportDbTests` сохраняет туда картинки всех запусков для просмотра.
+`ONEBASE_REPORT_PNG=<папка>` — `TelegramReportDbTests` сохраняет туда картинки всех запусков для просмотра. Накопительная акция —
+`IncentiveTests`, `IncentiveDbTests`, `IncentiveCardTests` и её тесты в `TelegramReportDbTests` (см. [incentive.md](incentive.md));
+`ONEBASE_INCENTIVE_PNG=<папка>` — `IncentiveCardTests` сохраняет туда карточки акции.

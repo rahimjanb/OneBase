@@ -116,9 +116,9 @@ public class TelegramReportTests
     [Fact]
     public void Catalog_has_thirteen_runs_of_six_reports_at_the_specified_times()
     {
-        Assert.Equal(18, ReportCatalog.Jobs.Count); // 13 запусков шести отчётов + 4 запуска «Поля боя» + еженедельный PDF
+        Assert.Equal(24, ReportCatalog.Jobs.Count); // 13 запусков шести отчётов + 4 запуска «Поля боя» + еженедельный PDF + 6 запусков накопительной акции
         Assert.Equal(ReportCatalog.Jobs.Count, ReportCatalog.Jobs.Select(j => j.Code).Distinct().Count());
-        Assert.Equal(8, ReportCatalog.Jobs.Select(j => j.Report).Distinct().Count());
+        Assert.Equal(9, ReportCatalog.Jobs.Select(j => j.Report).Distinct().Count());
         var pdf = Assert.Single(ReportCatalog.Jobs, j => j.Report == ReportType.WeeklyPdf);
         Assert.Equal(("weekly-pdf.monday", "09:00", ReportSchedules.Monday, "weekly-pdf"), (pdf.Code, pdf.Time.ToString("HH:mm"), pdf.Days, ReportCatalog.Key(pdf.Report)));
         Assert.Equal(TelegramReportRoles.All, pdf.Roles);
@@ -132,13 +132,16 @@ public class TelegramReportTests
         Assert.Equal("13:00 18:00", Times(ReportType.Promo));
         Assert.Equal("13:00 18:00", Times(ReportType.Categories));
         Assert.Equal("18:00 08:30", Times(ReportType.Weekly));
+        Assert.Equal("08:30 13:00 18:00 18:00 18:30 18:00", Times(ReportType.Incentive));
 
         // Напоминание 17:00 — только ТП; неделя — суббота 18:00 и понедельник 8:30; остальное — пн–сб.
         Assert.Equal([TelegramReportRoles.Tp], ReportCatalog.Find("no-orders.reminder")!.Roles);
         Assert.Equal(ReportSchedules.Saturday, ReportCatalog.Find("weekly.saturday")!.Days);
         Assert.Equal(ReportSchedules.Monday, ReportCatalog.Find("weekly.monday")!.Days);
         Assert.Equal(ReportSchedules.Saturday, ReportCatalog.Find("battle.saturday")!.Days);
-        Assert.All(ReportCatalog.Jobs.Where(j => j.Report is not (ReportType.Weekly or ReportType.WeeklyPdf) && j.Slot != "saturday"), j => Assert.Equal(ReportSchedules.WorkDays, j.Days));
+        Assert.All(ReportCatalog.Jobs.Where(j => j.Report is not (ReportType.Weekly or ReportType.WeeklyPdf) && j.Slot is not ("saturday" or "week" or "rating")),
+            j => Assert.Equal(ReportSchedules.WorkDays, j.Days));
+        Assert.Equal(ReportSchedules.Saturday, ReportCatalog.Find("incentive.week")!.Days & ReportCatalog.Find("incentive.rating")!.Days);
 
         // Отчёты получателя: неизвестные коды и чужие роли отбрасываются.
         var codes = ReportCatalog.Parse("daily.morning, no-orders.reminder,unknown,daily.morning");
