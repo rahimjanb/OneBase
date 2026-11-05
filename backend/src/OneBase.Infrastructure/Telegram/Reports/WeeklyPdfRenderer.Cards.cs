@@ -56,6 +56,10 @@ public sealed partial class WeeklyPdfRenderer
 
         private static string Range(DateOnly from, DateOnly to) => $"{from:dd.MM}–{to:dd.MM.yyyy}";
 
+        /// <summary>Цвет «к прошлой неделе»: по проценту, а без него (малая база) — по разнице в кг.</summary>
+        private static Tone WeekTone(WeeklyEmployeeMetrics e) =>
+            e.WeekVsPrev is { } d ? (d >= 0 ? Tone.Good : Tone.Bad) : e.PrevWeekKg is { } b ? (e.WeekKg >= b ? Tone.Good : Tone.Bad) : Tone.None;
+
         private void Page(PageDescriptor page, string kicker, string name, Action<IContainer> content)
         {
             page.Size(420, 746);
@@ -101,10 +105,10 @@ public sealed partial class WeeklyPdfRenderer
                 col.Item().Row(row =>
                 {
                     row.Spacing(8);
-                    row.RelativeItem().Element(x => Tile(x, T("Неделя, кг"), Number(e.WeekKg), e.WeekVsPrev is { } d ? (d >= 0 ? Tone.Good : Tone.Bad) : Tone.None, t =>
+                    row.RelativeItem().Element(x => Tile(x, T("Неделя, кг"), Number(e.WeekKg), WeekTone(e), t =>
                     {
                         t.Span(T("к пр. неделе") + " ");
-                        t.Span(WeeklyTexts.Delta(e.WeekVsPrev)).FontColor(ToneColor(e.WeekVsPrev is { } dd ? (dd >= 0 ? Tone.Good : Tone.Bad) : Tone.None)).SemiBold();
+                        t.Span(WeeklyTexts.Delta(lang, e.WeekVsPrev, e.WeekKg, e.PrevWeekKg)).FontColor(ToneColor(WeekTone(e))).SemiBold();
                     }));
                     row.RelativeItem().Element(x => Tile(x, T("Месяц, % плана"), Percent(e.Execution), PlanTone(e.Execution), t => t.Span(e.LinkoPlan is { } plan
                         ? F("{0} из {1} {2}", Amount(e.LinkoFact, e.LinkoUnit), Amount(plan, e.LinkoUnit), Unit(e.LinkoUnit))
@@ -122,9 +126,9 @@ public sealed partial class WeeklyPdfRenderer
                 col.Item().Row(row =>
                 {
                     row.Spacing(8);
-                    row.RelativeItem().Element(x => Tile(x, T("Визиты / заказы"), $"{Number(e.WeekVisits)} / {Number(e.WeekOrders)}",
+                    row.RelativeItem().Element(x => Tile(x, T("Визиты / с заказом"), $"{Number(e.WeekVisits)} / {Number(e.WeekVisitsWithOrder)}",
                         e.WeekConversion is { } cv ? (cv >= ConversionGoal ? Tone.Good : Tone.Bad) : Tone.None,
-                        t => t.Span(F("конверсия {0} · цель {1}", Percent(e.WeekConversion), Percent(ConversionGoal)))));
+                        t => t.Span(F("конверсия {0} · цель {1} · заказов {2}", Percent(e.WeekConversion), Percent(ConversionGoal), Number(e.WeekOrders)))));
                     row.RelativeItem().Element(x => Tile(x, T("ТТ по акции"), Number(promo?.OutletsWeek ?? 0), Tone.None,
                         t => t.Span(F("прошлая неделя {0}", Number(promo?.OutletsPrevWeek ?? 0)))));
                 });
@@ -174,7 +178,7 @@ public sealed partial class WeeklyPdfRenderer
             var monthEnd = new DateOnly(r.DataThrough.Year, r.DataThrough.Month, 1).AddMonths(1).AddDays(-1);
             return r.DataThrough < monthEnd
                 ? F("КПУ: что добрать за {0}–{1}", r.DataThrough.AddDays(1).ToString("dd", CultureInfo.InvariantCulture), monthEnd.ToString("dd.MM", CultureInfo.InvariantCulture))
-                : T("КПУ месяца");
+                : T("КПУ: итог месяца");
         }
 
         private string Need(WeeklyKpiCell k) => k.Need is not { } need ? "—" : k.Unit == KpiMath.Sum ? F("{0} млн", (need / 1_000_000).ToString("#,0.0", Ru)) : Number(Math.Ceiling(need));
@@ -328,7 +332,9 @@ public sealed partial class WeeklyPdfRenderer
             ["{0} тыс."] = "{0} ming",
             ["максимум {0} тыс."] = "maksimum {0} ming",
             ["суммы скрыты"] = "summalar yashirilgan",
-            ["Визиты / заказы"] = "Tashriflar / buyurtmalar",
+            ["Визиты / с заказом"] = "Tashriflar / buyurtmali",
+            ["конверсия {0} · цель {1} · заказов {2}"] = "konversiya {0} · maqsad {1} · buyurtmalar {2}",
+            ["КПУ: итог месяца"] = "KPU: oy yakuni",
             ["конверсия {0} · цель {1}"] = "konversiya {0} · maqsad {1}",
             ["ТТ по акции"] = "Aksiya bo'yicha SN",
             ["прошлая неделя {0}"] = "o'tgan hafta {0}",

@@ -113,6 +113,13 @@ public sealed class MonthData
     /// <summary>Планы регионов выбранного вида на следующий месяц; пусто — карточка следующего месяца по планам ТП из Linko.</summary>
     public IReadOnlyList<PlanRow> NextRegionPlans { get; init; } = [];
 
+    /// <summary>
+    /// Второй план регионов месяца (РОП при выбранном «Заводе» и наоборот) — подпись рядом с выполнением, в расчёт не входит; AltSource —
+    /// его вид (null — второго плана на месяц нет).
+    /// </summary>
+    public IReadOnlyList<PlanRow> AltRegionPlans { get; init; } = [];
+    public string? AltSource { get; init; }
+
     /// <summary>Выбранный вид плана: PlanSources.Rop или PlanSources.Factory.</summary>
     public string SelectedPlan { get; init; } = PlanSources.Rop;
 

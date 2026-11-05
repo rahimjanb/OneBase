@@ -122,6 +122,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<SalesRegion> SalesRegions => Set<SalesRegion>();
     public DbSet<SalesAgentProfile> SalesAgentProfiles => Set<SalesAgentProfile>();
     public DbSet<SalesRegionPlan> SalesRegionPlans => Set<SalesRegionPlan>();
+    public DbSet<SalesFactoryPlan> SalesFactoryPlans => Set<SalesFactoryPlan>();
     public DbSet<SalesAgentPlan> SalesAgentPlans => Set<SalesAgentPlan>();
     public DbSet<SalesTarget> SalesTargets => Set<SalesTarget>();
     public DbSet<SalesPnlValue> SalesPnlValues => Set<SalesPnlValue>();

@@ -572,6 +572,10 @@ public sealed class DataManagerTools(
                 };
             })
             .ToList();
+        // План «Завод» завод задаёт итогами страны по категориям («Настройки продаж»): по регионам OneBase раскладывает его сам, в таблице строк нет.
+        var factoryTotals = kind == PlanKind.Factory
+            ? await db.SalesFactoryPlans.AsNoTracking().Where(p => p.Year == year && p.Month == month).ToListAsync(ct)
+            : [];
         return new
         {
             kind = kind.ToString(),
@@ -579,7 +583,13 @@ public sealed class DataManagerTools(
             monthHasRegionPlans = rows.Count > 0,
             republicTotal = list.Sum(r => r.total ?? 0),
             regions = list,
-            note = rows.Count == 0 && kind != PlanKind.Primary ? "Планов регионов этого вида на месяц нет — OneBase считает план из планов ТП Linko." : null,
+            factoryTotals = factoryTotals.Count > 0
+                ? factoryTotals.ToDictionary(p => categories.GetValueOrDefault(p.CategoryId, $"тип {p.CategoryId}"), p => p.PlanKg)
+                : null,
+            note = rows.Count == 0 && factoryTotals.Count > 0
+                ? "План «Завод» на месяц задан итогами страны по категориям («Настройки продаж» → «План «Завод»»): OneBase раскладывает его по регионам "
+                  + "пропорционально их плану РОП в каждой категории. Цифры по регионам — get_sales_kpis с plan=factory."
+                : rows.Count == 0 && kind != PlanKind.Primary ? "Планов регионов этого вида на месяц нет — OneBase считает план из планов ТП Linko." : null,
         };
     }
 

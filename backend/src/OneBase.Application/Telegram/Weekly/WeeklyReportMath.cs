@@ -124,6 +124,24 @@ public static class WeeklyReportMath
     public static int Return(int sleeping, decimal share) => sleeping <= 0 ? 0 : Round(sleeping * share);
 
     /// <summary>Цель продаж недели: план месяца ÷ рабочие дни месяца × рабочие дни недели; плана нет — null.</summary>
+    /// <summary>
+    /// План региона, разложенный по ТП: основа — первая из bases (по порядку важности: весовые планы, планы в сумах, факт), где вес есть хотя
+    /// бы у половины ТП; такой нет — где ТП с весом больше всего. Доля ТП — его вес ÷ сумма весов. Ни в одной основе весов нет — пусто.
+    /// </summary>
+    public static Dictionary<long, decimal> SplitPlan(decimal regionPlan, IReadOnlyList<IReadOnlyDictionary<long, decimal>> bases)
+    {
+        static int Covered(IReadOnlyDictionary<long, decimal> b) => b.Values.Count(v => v > 0);
+        var weights = bases.FirstOrDefault(b => Covered(b) > 0 && Covered(b) * 2 >= b.Count)
+                      ?? bases.Where(b => Covered(b) > 0).OrderByDescending(Covered).FirstOrDefault();
+        if (weights is null || regionPlan <= 0)
+        {
+            return [];
+        }
+
+        var total = weights.Values.Where(v => v > 0).Sum();
+        return weights.ToDictionary(kv => kv.Key, kv => kv.Value > 0 ? regionPlan * kv.Value / total : 0);
+    }
+
     public static decimal? SalesGoal(decimal? monthPlan, int monthWorkDays, int weekWorkDays) =>
         monthPlan is > 0 && monthWorkDays > 0 ? Math.Round(monthPlan.Value / monthWorkDays * weekWorkDays, 0, MidpointRounding.AwayFromZero) : null;
 

@@ -71,6 +71,8 @@ export type KpiTiles = {
   planSource: PlanSource;
   /** Цвет выполнения — с сервера (от 90% — зелёный, от 60% — оранжевый, ниже — красный). */
   executionLevel: TargetLevel | null;
+  /** Второй план регионов рядом с выбранным (РОП при «Заводе» и наоборот): весь факт охвата к нему; null — второго плана нет. */
+  altPlan?: { source: PlanSource; planKg: number; execution: number | null } | null;
 };
 
 /** План по выручке: только агенты с планом в Linko; fact — их выручка. */

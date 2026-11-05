@@ -340,6 +340,17 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         Assert.Equal((1.5m, (decimal?)null), (stored.GoalAkbFactor, stored.GoalPromoFactor));
         Assert.Equal(1.1m, sp.GetRequiredService<WeeklyReportOptions>().GoalAkbFactor); // appsettings не меняются
 
+        // Недельный PDF по расписанию — по субботу последней полной недели: в первые дни месяца это прошлый месяц, а ТП 62 и 63 в команде
+        // только по вчерашним и сегодняшним данным — визиты и в ту субботу, иначе тест падал со 2-го по 7-е число каждого месяца.
+        var saturday = WeeklyReportMath.ScheduledThrough(s.Today);
+        if (saturday.Month != s.Today.Month)
+        {
+            db.LinkoVisits.AddRange(
+                new LinkoVisit { Id = 700_009, UserId = 62, MarketId = 1103, Day = saturday, Date = saturday.ToDateTime(new TimeOnly(10, 0)), IsInPlan = true, Status = "done" },
+                new LinkoVisit { Id = 700_010, UserId = 63, MarketId = 1101, Day = saturday, Date = saturday.ToDateTime(new TimeOnly(11, 0)), IsInPlan = true, Status = "done" });
+            await db.SaveChangesAsync();
+        }
+
         // Включён в 08:00 на каждый день, 09:00 — время запуска. ТП: первая попытка — сбой связи (повтор позже), СВ — сразу.
         fixture.Clock.Now = Utc(s.Today, 8);
         Assert.True((await service.SaveJobAsync("weekly-pdf.monday", new ReportJobInput(true, "09:00", "Asia/Tashkent", EveryDay, null), s.AdminId, default)).Enabled);

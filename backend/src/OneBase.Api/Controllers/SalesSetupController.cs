@@ -20,8 +20,12 @@ namespace OneBase.Api.Controllers;
 [Route("api/sales/setup")]
 [HasPermission(Permissions.SalesRead)]
 [InvalidateSalesCache]
-public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOptions, IAuditLogger audit, FieldOwnership ownership) : ControllerBase
+public sealed class SalesSetupController(
+    IAppDbContext db, SalesOptions salesOptions, IAuditLogger audit, FieldOwnership ownership, SalesDataLoader loader, DataChangeService dataChanges)
+    : ControllerBase
 {
+    private const decimal MaxFactoryKg = 100_000_000m; // итог категории на месяц: больше — опечатка (лишние нули)
+
     private const int NameLength = 200; // как в схеме sales: Name, ManagerName, SupervisorName, DealerName — varchar(200)
 
     public sealed record DirectionInput(string? Name, string? Kind, string? ManagerName, string? Description, int SortOrder);
@@ -244,6 +248,87 @@ public sealed class SalesSetupController(IAppDbContext db, SalesOptions salesOpt
 
         await db.SaveChangesAsync(ct);
         return NoContent();
+    }
+
+    // ---------- План «Завод» ----------
+
+    /// <summary>Итоги страны по категориям на месяц (FactoryPlans). null или 0 — у категории плана «Завод» нет.</summary>
+    public sealed record FactoryPlanInput(int Year, int Month, Dictionary<long, decimal?> Totals);
+
+    /// <summary>
+    /// План «Завод» месяца: категории отчёта, итоги завода, план РОП и раскладка по регионам — по их доле в плане РОП категории
+    /// (SalesPlans.Cascade). Если на месяц план «Завод» загружен по регионам (таблица, Data Manager), он и показан, а итоги не используются.
+    /// </summary>
+    [HttpGet("factory-plan")]
+    public async Task<IActionResult> FactoryPlan([FromQuery] int year, [FromQuery] int month, CancellationToken ct)
+    {
+        if (year is < 2000 or > 2100 || month is < 1 or > 12) return BadRequest(new { error = "Неверный месяц" });
+
+        var view = await loader.FactoryPlanAsync(year, month, ct);
+        var categories = await dataChanges.CategoriesAsync(ct);
+        return Ok(new
+        {
+            view.Year,
+            view.Month,
+            Categories = categories.Select(c => new { Id = c.TypeId, c.Name }),
+            view.Totals,
+            view.RopTotals,
+            view.Explicit,
+            view.BaseYear,
+            view.BaseMonth,
+            view.Regions,
+            UpdatedAt = await db.SalesFactoryPlans.AsNoTracking()
+                .Where(p => p.Year == year && p.Month == month)
+                .Select(p => (DateTimeOffset?)(p.UpdatedAt ?? p.CreatedAt))
+                .MaxAsync(ct),
+        });
+    }
+
+    /// <summary>Заменяет итоги плана «Завод» на месяц: категории без значения (или с 0) плана «Завод» не имеют.</summary>
+    [HttpPut("factory-plan")]
+    [HasPermission(Permissions.SalesManage)]
+    public async Task<IActionResult> UpdateFactoryPlan(FactoryPlanInput input, CancellationToken ct)
+    {
+        if (input.Year is < 2000 or > 2100 || input.Month is < 1 or > 12) return BadRequest(new { error = "Неверный месяц" });
+
+        var categories = (await dataChanges.CategoriesAsync(ct)).ToDictionary(c => c.TypeId, c => c.Name);
+        var unknown = input.Totals.Keys.Where(k => !categories.ContainsKey(k)).ToList();
+        if (unknown.Count > 0) return BadRequest(new { error = $"Неизвестные категории: {string.Join(", ", unknown)}" });
+
+        var bad = input.Totals.Where(t => t.Value is < 0 or > MaxFactoryKg).Select(t => categories[t.Key]).ToList();
+        if (bad.Count > 0) return BadRequest(new { error = $"План должен быть от 0 до {MaxFactoryKg:N0} кг: {string.Join(", ", bad)}" });
+
+        var wanted = input.Totals.Where(t => t.Value is > 0).ToDictionary(t => t.Key, t => Math.Round(t.Value!.Value, 3));
+        var rows = await db.SalesFactoryPlans.Where(p => p.Year == input.Year && p.Month == input.Month).ToListAsync(ct);
+        var before = rows.ToDictionary(r => r.CategoryId, r => r.PlanKg);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var row in rows.Where(r => !wanted.ContainsKey(r.CategoryId)))
+        {
+            db.SalesFactoryPlans.Remove(row);
+        }
+
+        foreach (var (category, kg) in wanted)
+        {
+            var row = rows.FirstOrDefault(r => r.CategoryId == category);
+            if (row is null)
+            {
+                db.SalesFactoryPlans.Add(new SalesFactoryPlan { Year = input.Year, Month = input.Month, CategoryId = category, PlanKg = kg });
+            }
+            else if (row.PlanKg != kg)
+            {
+                row.PlanKg = kg;
+                row.UpdatedAt = now;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "sales.factory_plan.updated", "sales_factory_plan", $"{input.Year:D4}-{input.Month:D2}",
+            new
+            {
+                before = before.ToDictionary(b => categories.GetValueOrDefault(b.Key, b.Key.ToString()), b => b.Value),
+                after = wanted.ToDictionary(w => categories[w.Key], w => w.Value),
+            }, ct);
+        return await FactoryPlan(input.Year, input.Month, ct);
     }
 
     /// <summary>Планы из Linko (kpi_plans) — только для просмотра.</summary>

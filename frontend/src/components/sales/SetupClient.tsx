@@ -6,7 +6,7 @@ import { useT, tNow } from "@/i18n/client";
 import { CancelSyncButton } from "./CancelSyncButton";
 import { SyncProgressBar } from "./SyncProgressBar";
 import { Note, Section } from "./bits";
-import { dateTime, num } from "@/lib/sales/format";
+import { dateTime, kg, monthLabel, num, pct } from "@/lib/sales/format";
 import { linkoEntityLabels } from "@/lib/integrations";
 import type { SyncStatus } from "@/lib/sales/types";
 
@@ -112,6 +112,7 @@ export function SetupClient() {
       <DirectionsSection directions={setup.directions} run={run} />
       <RegionsSection regions={setup.regions} directions={setup.directions} owners={setup.owners ?? {}} run={run} />
       <AgentsSection agents={setup.agents} />
+      <FactoryPlanSection />
       <TargetsSection targets={setup.targets} run={run} />
     </>
   );
@@ -467,6 +468,208 @@ function TargetsSection({ targets, run }: { targets: Record<string, number>; run
           </label>
         ))}
       </div>
+    </Section>
+  );
+}
+
+/** План «Завод» месяца (GET setup/factory-plan): итоги завода и план РОП по категориям, раскладка по регионам. Ключи словарей — id категорий. */
+type FactoryPlan = {
+  year: number;
+  month: number;
+  categories: { id: number; name: string }[];
+  totals: Record<string, number>;
+  ropTotals: Record<string, number>;
+  /** План «Завод» на месяц загружен по регионам (таблица, Data Manager): итоги не используются. */
+  explicit: boolean;
+  /** Месяц плана РОП, по которому разложено; null — раскладывать не по чему. */
+  baseYear: number | null;
+  baseMonth: number | null;
+  regions: { id: string; name: string; factory: Record<string, number>; rop: Record<string, number> }[];
+  updatedAt: string | null;
+};
+
+const sumOf = (values: Record<string, number>) => Object.values(values).reduce((a, v) => a + (v || 0), 0);
+const kgInput = (text: string | undefined) => (text?.trim() ? Number(text.replace(/\s/g, "").replace(",", ".")) : null);
+
+/**
+ * План «Завод»: завод задаёт план итогом страны по категориям — по регионам OneBase раскладывает его сам, по их доле в плане РОП той же
+ * категории (как «Полевой контроль»). Переключатель «План «Завод»» во «Вторичке» появляется на месяц, у которого есть итоги и план РОП.
+ */
+function FactoryPlanSection() {
+  const t = useT();
+  const [today] = useState(() => new Date());
+  const [period, setPeriod] = useState({ year: today.getFullYear(), month: today.getMonth() + 1 });
+  const [plan, setPlan] = useState<FactoryPlan | null>(null);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
+
+  const show = (view: FactoryPlan) => {
+    setPlan(view);
+    setValues(Object.fromEntries(view.categories.map((c) => [String(c.id), view.totals[c.id] ? String(view.totals[c.id]) : ""])));
+  };
+
+  useEffect(() => {
+    let alive = true;
+    bff<FactoryPlan>(`setup/factory-plan?year=${period.year}&month=${period.month}`)
+      .then((view) => {
+        if (alive) show(view);
+      })
+      .catch((e) => {
+        if (alive) setMessage({ tone: "bad", text: (e as Error).message });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [period.year, period.month]);
+
+  const pick = (next: { year: number; month: number }) => {
+    setPlan(null);
+    setMessage(null);
+    setPeriod(next);
+  };
+
+  const save = async () => {
+    if (!plan) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const totals = Object.fromEntries(plan.categories.map((c) => [c.id, kgInput(values[c.id])]));
+      show(await bff<FactoryPlan>("setup/factory-plan", { method: "PUT", body: JSON.stringify({ year: plan.year, month: plan.month, totals }) }));
+      setMessage({ tone: "ok", text: "План «Завод» сохранён" });
+    } catch (e) {
+      setMessage({ tone: "bad", text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const entered = Object.values(values).reduce((a, v) => a + (kgInput(v) || 0), 0);
+  const years = [today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1];
+  const cats = plan?.categories ?? [];
+  // В таблице — только категории с планом «Завод» хотя бы у одного региона: столбцы из одних прочерков не нужны.
+  const tableCats = cats.filter((c) => plan?.regions.some((r) => r.factory[c.id]));
+  const ownBase = plan != null && plan.baseYear === plan.year && plan.baseMonth === plan.month;
+  const hasTotals = plan != null && sumOf(plan.totals) > 0;
+
+  return (
+    <Section
+      title={t("План «Завод»")}
+      hint={t("итог страны по категориям · по регионам раскладывается по плану РОП")}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <select className={control} aria-label={t("Месяц")} value={period.month} onChange={(e) => pick({ ...period, month: Number(e.target.value) })}>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+              <option key={m} value={m}>
+                {monthLabel(period.year, m, t).split(" ")[0]}
+              </option>
+            ))}
+          </select>
+          <select className={control} aria-label={t("Год")} value={period.year} onChange={(e) => pick({ ...period, year: Number(e.target.value) })}>
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+          <button className={primary} disabled={!plan || busy || plan.explicit} onClick={save}>
+            {t("Сохранить")}
+          </button>
+        </div>
+      }
+    >
+      {message && (
+        <div className={`mb-3 rounded-lg px-3 py-2 text-sm ${message.tone === "ok" ? "bg-ok-soft text-ok" : "bg-bad-soft text-bad"}`}>{t(message.text)}</div>
+      )}
+      {!plan ? (
+        <div className="h-24 animate-pulse rounded-lg bg-muted" />
+      ) : (
+        <>
+          {plan.explicit && (
+            <p className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
+              {t("На {month} план «Завод» загружен по регионам (таблица или Data Manager) — действует он, итоги по категориям не используются.", {
+                month: monthLabel(plan.year, plan.month, t).toLowerCase(),
+              })}
+            </p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {cats.map((c) => (
+              <label key={c.id} className="block">
+                <span className="block text-sm text-ink">{c.name}</span>
+                <span className="mb-1 block text-[11px] text-ink-3">
+                  {plan.ropTotals[c.id] ? t("план РОП {kg} кг", { kg: kg(plan.ropTotals[c.id]) }) : t("в плане РОП нет")}
+                </span>
+                <input
+                  className={input}
+                  inputMode="decimal"
+                  placeholder={t("нет плана")}
+                  aria-label={t("{category}, кг", { category: c.name })}
+                  disabled={plan.explicit}
+                  value={values[c.id] ?? ""}
+                  onChange={(e) => setValues({ ...values, [c.id]: e.target.value })}
+                />
+              </label>
+            ))}
+          </div>
+          <p className="mt-3 text-sm text-ink-2">
+            {t("Итого {kg} кг", { kg: kg(entered) })}
+            {sumOf(plan.ropTotals) > 0 && <> · {t("план РОП {kg} кг", { kg: kg(sumOf(plan.ropTotals)) })}</>}
+            {plan.updatedAt && <span className="text-ink-3"> · {t("сохранено {at}", { at: dateTime(plan.updatedAt) })}</span>}
+          </p>
+          {hasTotals && !plan.explicit && plan.baseMonth == null && (
+            <p className="mt-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">
+              {t("Плана РОП на этот и прошлые месяцы нет — разложить план «Завод» по регионам не по чему, во «Вторичке» его не будет.")}
+            </p>
+          )}
+          {hasTotals && !plan.explicit && plan.baseYear != null && plan.baseMonth != null && !ownBase && (
+            <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
+              {t("Плана РОП на этот месяц ещё нет — по регионам разложено по плану РОП за {month}. Когда план РОП месяца загрузится, раскладка пересчитается сама.", {
+                month: monthLabel(plan.baseYear, plan.baseMonth, t).toLowerCase(),
+              })}
+            </p>
+          )}
+          {plan.regions.some((r) => sumOf(r.factory) > 0) && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b border-line text-right text-[11px] uppercase tracking-wide text-ink-3">
+                    <th className="py-2 pr-2 text-left font-semibold">{t("Регион")}</th>
+                    {tableCats.map((c) => (
+                      <th key={c.id} className="py-2 pr-2 font-semibold">
+                        {c.name}
+                      </th>
+                    ))}
+                    <th className="py-2 pr-2 font-semibold">{t("Завод, кг")}</th>
+                    <th className="py-2 font-semibold">{t("План РОП, кг")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plan.regions.map((r) => (
+                    <tr key={r.id} className="border-b border-line text-right tabular-nums last:border-b-0">
+                      <td className="py-1.5 pr-2 text-left font-medium text-ink">{r.name}</td>
+                      {tableCats.map((c) => (
+                        <td key={c.id} className="py-1.5 pr-2 text-ink-2" title={r.rop[c.id] ? t("план РОП {kg} кг", { kg: kg(r.rop[c.id]) }) : undefined}>
+                          {r.factory[c.id] ? kg(r.factory[c.id]) : <span className="text-ink-3">—</span>}
+                        </td>
+                      ))}
+                      <td className="py-1.5 pr-2 font-semibold text-ink">{sumOf(r.factory) > 0 ? kg(sumOf(r.factory)) : <span className="text-ink-3">—</span>}</td>
+                      <td className="py-1.5 text-ink-3">
+                        {sumOf(r.rop) > 0 ? kg(sumOf(r.rop)) : "—"}
+                        {sumOf(r.rop) > 0 && sumOf(r.factory) > 0 && <span className="ml-1 text-[11px]">({pct(sumOf(r.factory) / sumOf(r.rop))})</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Note>
+            {t(
+              "Завод задаёт план итогом по стране в каждой категории. По регионам он делится пропорционально их плану РОП в этой категории (у категории, которой нет в плане РОП, — пропорционально всему плану РОП региона), в целых кг: сумма регионов равна итогу завода. Пока плана РОП месяца нет — по последнему месяцу с ним. Регион без плана РОП плана «Завод» не получает: его продажи идут в республику без плана. Пустое поле — у категории плана «Завод» нет. Если на месяц план «Завод» загружен по регионам (таблица, Data Manager), действует он. Планы ТП остаются из Linko. Во «Вторичке» план выбирается переключателем «План РОП / План «Завод»», под выполнением виден второй план.",
+            )}
+          </Note>
+        </>
+      )}
     </Section>
   );
 }

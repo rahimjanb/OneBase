@@ -86,6 +86,82 @@ public class SalesPlansTests
         Assert.Equal(PlanSources.Linko, SalesPlans.Select(2026, 9, PlanKind.Factory, outside, RegionOf, AgentPlans).Source);
     }
 
+    /// <summary>План РОП ноября: Север — 200 кг категории 4 и 50 кг категории 5, Юг (через старый филиал) — 100 кг категории 4; «Завод» вне вторички.</summary>
+    private static readonly RegionPlanRow[] NovemberRop =
+    [
+        new(North, PlanKind.Rop, 2026, 11, 4, 200),
+        new(North, PlanKind.Rop, 2026, 11, 5, 50),
+        new(OldSouth, PlanKind.Rop, 2026, 11, 4, 100),
+        new(Factory, PlanKind.Rop, 2026, 11, 4, 999),
+    ];
+
+    [Fact]
+    public void Factory_totals_are_split_by_regions_share_in_rop_plan_of_the_category_in_whole_kg()
+    {
+        FactoryTotalRow[] totals = [new(2026, 11, 4, 1000), new(2026, 11, 5, 90), new(2026, 11, 6, 30)];
+
+        var cascade = SalesPlans.Cascade(2026, 11, totals, NovemberRop, RegionOf);
+
+        Assert.False(cascade.Explicit);
+        Assert.Equal((2026, 11), (cascade.BaseYear, cascade.BaseMonth));
+        // Категория 4: 1000 × 200/300 = 666,67 и 333,33 — целые 666 и 333, оставшийся 1 кг — Северу (дробная часть больше); сумма = итог завода.
+        // Категория 5 — только у Севера. Категории 6 в плане РОП нет — по всему плану РОП региона: 30 × 250/350 = 21,43 и 8,57 → 21 и 9.
+        Assert.Equal(
+            [(North, 4L, 667m), (South, 4L, 333m), (North, 5L, 90m), (North, 6L, 21m), (South, 6L, 9m)],
+            cascade.Rows.Select(r => (r.RegionId, r.CategoryId!.Value, r.PlanKg)).OrderBy(r => r.Value).ThenBy(r => r.RegionId));
+        Assert.All(cascade.Rows, r => Assert.Equal((PlanKind.Factory, 2026, 11), (r.Kind, r.Year, r.Month)));
+    }
+
+    [Fact]
+    public void Cascaded_factory_plan_is_selected_like_region_plans_and_rop_stands_next_to_it()
+    {
+        var rows = SalesPlans.WithFactory(NovemberRop, [new(2026, 11, 4, 600)], RegionOf);
+
+        Assert.Equal([PlanSources.Rop, PlanSources.Factory], SalesPlans.Available(2026, 11, rows, RegionOf));
+        var factory = SalesPlans.Select(2026, 11, PlanKind.Factory, rows, RegionOf, []);
+        Assert.Equal(PlanSources.Factory, factory.Source);
+        Assert.Equal(600m, factory.Plans.Sum(p => p.PlanKg)); // 400 Северу и 200 Югу
+        Assert.Equal(PlanSources.Rop, factory.AltSource); // второй план — РОП: 350 кг регионов вторички, «Завод» отброшен
+        Assert.Equal(350m, factory.AltPlans!.Sum(p => p.PlanKg));
+
+        var rop = SalesPlans.Select(2026, 11, PlanKind.Rop, rows, RegionOf, []);
+        Assert.Equal((PlanSources.Factory, 600m), (rop.AltSource, rop.AltPlans!.Sum(p => p.PlanKg)));
+    }
+
+    [Fact]
+    public void Factory_plan_loaded_by_regions_wins_over_totals()
+    {
+        // На сентябрь план «Завод» уже заведён по регионам (таблица): итоги страны не раскладываются, строка Севера остаётся одна.
+        var cascade = SalesPlans.Cascade(2026, 9, [new(2026, 9, 4, 5000)], Rows, RegionOf);
+        Assert.True(cascade.Explicit);
+        Assert.Empty(cascade.Rows);
+
+        var rows = SalesPlans.WithFactory(Rows, [new(2026, 9, 4, 5000)], RegionOf);
+        Assert.Equal(280m, Assert.Single(rows, r => r.Kind == PlanKind.Factory).PlanKg);
+    }
+
+    [Fact]
+    public void Until_rop_plan_of_the_month_is_loaded_factory_totals_are_split_by_the_last_month_with_rop_plan()
+    {
+        // Декабрьского плана РОП ещё нет — по ноябрьскому; итогов на месяц нет или плана РОП нет совсем — раскладки нет.
+        var december = SalesPlans.Cascade(2026, 12, [new(2026, 12, 4, 300)], NovemberRop, RegionOf);
+        Assert.Equal((2026, 11), (december.BaseYear, december.BaseMonth));
+        Assert.Equal([200m, 100m], december.Rows.OrderBy(r => r.RegionId).Select(r => r.PlanKg));
+
+        Assert.Empty(SalesPlans.Cascade(2026, 12, [], NovemberRop, RegionOf).Rows);
+        var nothing = SalesPlans.Cascade(2026, 10, [new(2026, 10, 4, 300)], NovemberRop, RegionOf); // будущий план РОП — не основа
+        Assert.Equal((null, null), (nothing.BaseYear, nothing.BaseMonth));
+        Assert.Empty(SalesPlans.Available(2026, 10, SalesPlans.WithFactory(NovemberRop, [new(2026, 10, 4, 300)], RegionOf), RegionOf));
+    }
+
+    [Theory]
+    [InlineData(1000, new[] { 2.0, 1.0 }, new[] { 667.0, 333.0 })]
+    [InlineData(10.5, new[] { 1.0, 1.0 }, new[] { 5.5, 5.0 })] // итог не в целых кг: дробный остаток — большему весу (при равных — первому)
+    [InlineData(3, new[] { 1.0, 1.0, 1.0, 0.0 }, new[] { 1.0, 1.0, 1.0, 0.0 })]
+    [InlineData(100, new[] { 0.0, 0.0 }, new[] { 0.0, 0.0 })] // делить не по чему
+    public void Allocate_keeps_the_total_exactly(double total, double[] weights, double[] expected) =>
+        Assert.Equal(expected.Select(e => (decimal)e), SalesPlans.Allocate((decimal)total, weights.Select(w => (decimal)w).ToList()));
+
     [Theory]
     [InlineData("factory", PlanKind.Factory)]
     [InlineData("FACTORY", PlanKind.Factory)]

@@ -105,6 +105,8 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Sales.Primary.PrimaryService>();
         services.AddScoped<OneBase.Application.Sales.SkuSales.SkuSalesService>();
         services.AddScoped<OneBase.Application.Sales.Promo.PromoService>();
+        services.AddScoped<OneBase.Application.Sales.Dmp.DmpService>();
+        services.AddScoped<OneBase.Application.Sales.Health.SystemService>();
         services.AddScoped<OneBase.Application.Sales.Settlements.SettlementsService>();
         services.AddScoped<OneBase.Application.Sales.Pnl.PnlService>();
         services.AddSingleton<LinkoSyncCoordinator>();

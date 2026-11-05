@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { useT } from "@/i18n/client";
 import { useMonthExit } from "./MonthExit";
 import { useAvailablePlans } from "./PlanAvailability";
@@ -16,7 +18,8 @@ const plans: { key: PlanKind; label: string }[] = [
 /**
  * Период (месяц) и план (РОП / «Завод»). Меняют параметры адреса — сервер пересчитывает страницу.
  * План — знаменатель выполнения у республики, РМ и региона. Вид плана, которого на месяц нет (сообщает страница — period.availablePlans),
- * выбрать нельзя: сервер взял бы планы ТП из Linko. Если такой вид уже выбран (ссылка, смена месяца), кнопка остаётся нажатой и объясняет.
+ * выбрать нельзя: сервер взял бы планы ТП из Linko. Если такой вид уже выбран (ссылка, смена месяца), кнопка остаётся нажатой. Нажатие на кнопку
+ * плана, которого нет, открывает подсказку: чего не хватает и где это завести (подсказка в title на телефоне не видна).
  * Смена месяца со страницы ТП или магазина уходит к региону (нет региона — к республике), план сохраняется (DOC-filters §12; страница сообщает
  * адрес через ReportMonthExit).
  */
@@ -40,6 +43,9 @@ export function SalesToolbar({
   const params = useSearchParams();
   const available = useAvailablePlans(year, month);
   const exit = useMonthExit(pathname);
+  // Подсказка о недостающем плане — для месяца, в котором её открыли: смена месяца её закрывает.
+  const [hint, setHint] = useState<{ plan: PlanKind; month: string } | null>(null);
+  const shown = hint && hint.month === `${year}-${month}` && available != null && !available.includes(hint.plan) ? hint.plan : null;
 
   const go = (changes: Record<string, string | null>, path = pathname) => {
     const next = new URLSearchParams(params);
@@ -68,7 +74,7 @@ export function SalesToolbar({
   const options = months.some((m) => m.year === year && m.month === month) ? months : [{ year, month }, ...months];
 
   return (
-    <div className="flex flex-wrap items-center gap-2 max-lg:w-full">
+    <div className="relative flex flex-wrap items-center gap-2 max-lg:w-full">
       <select
         aria-label={t("Период")}
         value={`${year}-${month}`}
@@ -97,9 +103,11 @@ export function SalesToolbar({
                 type="button"
                 aria-pressed={selected}
                 aria-disabled={blocked || undefined}
+                aria-expanded={missing ? shown === p.key : undefined}
                 title={missing ? t("{missing} — план ТП из Linko", { missing: planMissingText(p.key, t) }) : undefined}
                 onClick={() => {
-                  if (!blocked) go({ plan: p.key === "rop" ? null : p.key });
+                  if (missing) setHint(shown === p.key ? null : { plan: p.key, month: `${year}-${month}` });
+                  else go({ plan: p.key === "rop" ? null : p.key });
                 }}
                 className={`whitespace-nowrap px-3 font-medium ${
                   selected
@@ -115,6 +123,35 @@ export function SalesToolbar({
               </button>
             );
           })}
+        </div>
+      )}
+      {showPlan && shown && (
+        <div
+          role="status"
+          className="absolute left-0 top-full z-30 mt-2 w-[min(26rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface-solid p-3 text-sm text-ink-2 shadow-lg"
+        >
+          <p>
+            {shown === "factory"
+              ? t("Плана «Завод» на {month} в OneBase нет — выполнение считается по планам ТП из Linko. Задайте итоги завода по категориям в «Настройках продаж» (по регионам они разложатся по плану РОП) или привяжите лист с планом «Завод» по регионам в «Источниках данных».", {
+                  month: monthLabel(year, month, t).toLowerCase(),
+                })
+              : t("Плана РОП на {month} в OneBase нет — выполнение считается по планам ТП из Linko. Загрузите его: привязка Google Sheets в «Источниках данных» или AI Data Manager.", {
+                  month: monthLabel(year, month, t).toLowerCase(),
+                })}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            {shown === "factory" && (
+              <Link href="/sales/setup" className="font-medium text-accent hover:underline">
+                {t("Настройки продаж")}
+              </Link>
+            )}
+            <Link href="/settings/data-sources" className="font-medium text-accent hover:underline">
+              {t("Источники данных")}
+            </Link>
+            <button type="button" className="ml-auto text-ink-3 hover:text-ink" onClick={() => setHint(null)}>
+              {t("Закрыть")}
+            </button>
+          </div>
         </div>
       )}
     </div>

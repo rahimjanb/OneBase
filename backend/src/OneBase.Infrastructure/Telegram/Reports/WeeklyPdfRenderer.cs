@@ -78,7 +78,10 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
             {
                 doc.Page(p => Page(p, T("Динамика"), T("Как идёт неделя по дням и где мы относительно прошлых месяцев"), Dynamics));
                 doc.Page(p => Page(p, T("Рейтинг ТП"), T("Кто тянет команду и кто отстаёт"), Rating));
-                doc.Page(p => Page(p, T("КПУ: что добрать до конца месяца"), T("Предварительный расчёт по Linko. «Премия» в строке ниже порога — сколько даст выход на порог"), Kpu));
+                doc.Page(p => Page(p, MonthOver ? T("КПУ: итог месяца") : T("КПУ: что добрать до конца месяца"),
+                    MonthOver
+                        ? T("Месяц закончился: добирать уже нечего, «в день» не считается. KPI нового месяца появятся, когда их заведут в Linko")
+                        : T("Предварительный расчёт по Linko. «Премия» в строке ниже порога — сколько даст выход на порог"), Kpu));
                 doc.Page(p => Page(p, T("Линии"), T("Что продаём и что не продаём"), Lines));
                 doc.Page(p => Page(p, T("Клиенты: спящие и новые"), T("Кто не заказывает 15–30 и больше 30 дней"), Clients));
                 doc.Page(p => Page(p, T("Акции"), T("Как двигаются акции по ТП и какая цель на неделю"), Promo));
@@ -169,6 +172,15 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
             value is not { } v ? Tone.None : v >= good ? Tone.Good : v >= warn ? Tone.Warn : Tone.Bad;
 
         private static Tone DeltaTone(decimal? change) => change is not { } c ? Tone.None : c >= 0 ? Tone.Good : Tone.Bad;
+
+        /// <summary>«К прошлой неделе»: процент, а от малой базы — разница в кг (WeeklyTexts.Delta); цвет — по знаку.</summary>
+        private string WeekDelta(decimal? change, decimal now, decimal? before) => WeeklyTexts.Delta(lang, change, now, before);
+
+        private static Tone WeekDeltaTone(decimal? change, decimal now, decimal? before) =>
+            change is not null ? DeltaTone(change) : before is { } b ? (now >= b ? Tone.Good : Tone.Bad) : Tone.None;
+
+        /// <summary>Месяц отчёта закончился: добирать и «нужно в день» уже нечего — страницы показывают итог.</summary>
+        private bool MonthOver => r.Calendar.MonthWorkDaysLeft == 0;
 
         private static void Tile(IContainer c, string label, string value, Tone accent, Action<TextDescriptor>? sub = null, float size = 19)
         {
@@ -302,7 +314,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
                         Number(s.WeekKg), Tone.None, t =>
                         {
                             t.Span(T("к тем же дням пр. недели") + " ");
-                            DeltaSpan(t, s.WeekVsPrev);
+                            t.Span(WeekDelta(s.WeekVsPrev, s.WeekKg, s.PrevWeekKg)).FontColor(ToneColor(WeekDeltaTone(s.WeekVsPrev, s.WeekKg, s.PrevWeekKg))).SemiBold();
                             t.Span(" · " + Short(s.WeekRevenue, lang));
                         }));
                     row.RelativeItem().Element(x => Tile(x, T("Месяц, кг"), Number(s.MonthKg), PlanTone(s.Execution),
@@ -330,7 +342,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
                 {
                     row.Spacing(10);
                     row.RelativeItem().Element(x => Box(x, T("Выводы недели"), Conclusions));
-                    row.RelativeItem().Element(x => Box(x, T("Нужный темп до конца месяца"), Pace));
+                    row.RelativeItem().Element(x => Box(x, MonthOver ? T("Итог месяца: порог и план") : T("Нужный темп до конца месяца"), Pace));
                 });
                 col.Item().Element(Team);
             });
@@ -371,6 +383,23 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
         private void Pace(IContainer c)
         {
             var s = r.SalesMetrics;
+            if (MonthOver)
+            {
+                // Месяц закончился: сколько не хватило до порога и до плана, без «нужно в день».
+                c.Column(col =>
+                {
+                    col.Item().Element(x => Table(x, [new(T("Цель"), 2), new(T("Не хватило, кг")), new(T("Итог"))],
+                    [
+                        [new(T("80% плана (порог КПУ)"), Dot: s.To80?.Remaining is > 0 ? Tone.Bad : Tone.Good), Plain(Number(s.To80?.Remaining)),
+                            new(s.To80 is null ? "—" : s.To80.Remaining > 0 ? T("не взят") : T("взят"), Bold: true)],
+                        [new(T("100% плана"), Dot: s.To100?.Remaining is > 0 ? Tone.Bad : Tone.Good), Plain(Number(s.To100?.Remaining)),
+                            new(s.To100 is null ? "—" : s.To100.Remaining > 0 ? T("не взят") : T("взят"), Bold: true)],
+                    ]));
+                    col.Item().Element(x => Note(x, F("Месяц закончился: все {0} рабочих дней отработаны, выполнено {1} плана.", r.Calendar.MonthWorkDays, Percent(s.Execution))));
+                });
+                return;
+            }
+
             c.Column(col =>
             {
                 col.Item().Element(x => Table(x, [new(T("Цель"), 2), new(T("Осталось, кг")), new(T("Нужно в день")), new(T("Сейчас в день"))],
@@ -404,7 +433,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
                         row.RelativeItem().Element(x => Tile(x, e.Name, $"{Number(e.WeekKg)} {T("кг")}", PlanTone(e.Execution), t =>
                         {
                             t.Span(T("неделя") + " ");
-                            DeltaSpan(t, e.WeekVsPrev);
+                            t.Span(WeekDelta(e.WeekVsPrev, e.WeekKg, e.PrevWeekKg)).FontColor(ToneColor(WeekDeltaTone(e.WeekVsPrev, e.WeekKg, e.PrevWeekKg))).SemiBold();
                             t.Span(F(" · месяц {0} плана", Percent(e.Execution)));
                             if (e.PremiumNow is { } premium)
                             {
@@ -421,7 +450,8 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
             var rows = r.Regions.Select(g => (IReadOnlyList<Cell>)
             [
                 new(g.Name, Bold: true), new(g.SupervisorName ?? T("не указан"), Color: Tone.None), Plain(Number(g.Sales.WeekKg)),
-                new(WeeklyTexts.Delta(g.Sales.WeekVsPrev), Color: DeltaTone(g.Sales.WeekVsPrev)), Plain(Number(g.Sales.MonthKg)), Plain(Number(g.Sales.PlanKg)),
+                new(WeekDelta(g.Sales.WeekVsPrev, g.Sales.WeekKg, g.Sales.PrevWeekKg), Color: WeekDeltaTone(g.Sales.WeekVsPrev, g.Sales.WeekKg, g.Sales.PrevWeekKg)),
+                Plain(Number(g.Sales.MonthKg)), Plain(Number(g.Sales.PlanKg)),
                 new(Percent(g.Sales.Execution), Dot: PlanTone(g.Sales.Execution)), Plain(Percent(g.Sales.ForecastExecution)),
                 new(WeeklyTexts.Delta(g.Sales.VsPrevMonth), Color: DeltaTone(g.Sales.VsPrevMonth)), Plain($"{Number(g.Sales.MonthAkb)} / {Number(g.Sales.AkbPlan)}"),
             ]).ToList();
@@ -432,7 +462,7 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
                     [new(T("Регион"), 1.3f, false), new(T("СВР"), 2.4f, false), new(T("Неделя, кг")), new(T("к пр. нед.")), new(T("Месяц, кг")), new(T("План")),
                         new(T("% плана")), new(T("Прогноз")), new(T("к пр. мес.*")), new(T("АКБ / план"), 1.45f)],
                     rows,
-                    [new(T("Итого"), Bold: true), Plain(""), Plain(Number(s.WeekKg)), new(WeeklyTexts.Delta(s.WeekVsPrev), Color: DeltaTone(s.WeekVsPrev)), Plain(Number(s.MonthKg)),
+                    [new(T("Итого"), Bold: true), Plain(""), Plain(Number(s.WeekKg)), new(WeekDelta(s.WeekVsPrev, s.WeekKg, s.PrevWeekKg), Color: WeekDeltaTone(s.WeekVsPrev, s.WeekKg, s.PrevWeekKg)), Plain(Number(s.MonthKg)),
                         Plain(Number(s.PlanKg)), new(Percent(s.Execution), Dot: PlanTone(s.Execution)), Plain(Percent(s.ForecastExecution)),
                         new(WeeklyTexts.Delta(s.VsPrevMonth), Color: DeltaTone(s.VsPrevMonth)), Plain($"{Number(s.MonthAkb)} / {Number(s.AkbPlan)}")], 7.5f, 2.6f));
                 col.Item().Element(x => Note(x, F("* К прошлому месяцу за то же число рабочих дней. Светофор % плана — к темпу месяца ({0} рабочих дней прошло).",
@@ -576,7 +606,8 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
             var rows = r.EmployeeMetrics.Select((e, i) => (IReadOnlyList<Cell>)
             [
                 Plain($"{i + 1}"), new(e.Name, Bold: true, Muted: best?.AgentId == e.AgentId ? T("лучший ТП недели") : null), Plain(Number(e.WeekKg)),
-                new(WeeklyTexts.Delta(e.WeekVsPrev), Color: DeltaTone(e.WeekVsPrev)), Plain(Number(e.MonthKg)), new(Percent(e.Execution), Dot: PlanTone(e.Execution)),
+                new(WeekDelta(e.WeekVsPrev, e.WeekKg, e.PrevWeekKg), Color: WeekDeltaTone(e.WeekVsPrev, e.WeekKg, e.PrevWeekKg)), Plain(Number(e.MonthKg)),
+                new(Percent(e.Execution), Dot: PlanTone(e.Execution)),
                 new($"{Number(e.MonthAkb)} / {Number(e.AkbPlan)}", Dot: TargetTone(e.AkbPlan is > 0 ? e.MonthAkb / e.AkbPlan : null, 0.9m, 0.7m)),
                 Plain(Number(e.WeekVisits)), new(Percent(e.WeekConversion), Dot: TargetTone(e.WeekConversion, 0.7m, 0.5m)),
                 new(Percent(e.WeekRouteShare), Dot: TargetTone(e.WeekRouteShare, 0.9m, 0.8m)), new(Thousands(e.PremiumNow), Bold: true),
@@ -894,8 +925,20 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
                     row.RelativeItem().Element(t => Tile(t, T("DSO"), m.Dso is { } dso ? dso.ToString("0.0", Ru) + " " + T("дн.") : "—",
                         m.Dso is { } f && m.Norm is { } n ? (f <= n ? Tone.Good : Tone.Bad) : Tone.None, s => s.Span(m.Norm is { } nn ? F("норма {0} дн.", nn) : T("норма не задана")), 14));
                     row.RelativeItem().Element(t => Tile(t, T("Оплачено в месяце"), Millions(m.PaidMonth) + " " + T("млн"), Tone.None,
-                        s => s.Span(F("отгружено {0} млн", Millions(m.ShippedMonth))), 14));
+                        s => s.Span(m.PaidMonth < 0 ? F("возврат денег дилеру · отгружено {0} млн", Millions(m.ShippedMonth)) : F("отгружено {0} млн", Millions(m.ShippedMonth))), 14));
                 });
+                if (m.Parts is { Count: > 1 } parts)
+                {
+                    // Сменился дилер склада: прежний и новый — отдельными строками, чтобы не смешивать долг одного с возвратом другого.
+                    col.Item().Element(x => Table(x, [new(T("Дилер"), 2f, false), new(T("Долг, млн")), new(T("Просрочка")), new(T("Оплачено")), new(T("Отгружено")), new(T("Ближайший срок"))],
+                        parts.Select(p => (IReadOnlyList<Cell>)
+                        [
+                            Plain(p.Name), Plain(Millions(p.Debt)), new(Millions(p.Overdue), Color: p.Overdue > 0 ? Tone.Bad : Tone.None),
+                            new(Millions(p.PaidMonth), Muted: p.PaidMonth < 0 ? T("возврат денег") : null), Plain(Millions(p.ShippedMonth)),
+                            Plain(p.Open.Where(o => o.Due is not null).Select(o => o.Due!.Value).DefaultIfEmpty().Min() is { } due && due != default
+                                ? due.ToString("dd.MM", CultureInfo.InvariantCulture) : "—"),
+                        ]), null, 8));
+                }
                 if (m.Open.Count > 0)
                 {
                     col.Item().Element(x => Table(x, [new(T("Отгрузка")), new(T("Остаток, млн")), new(T("Срок оплаты"))],
@@ -919,10 +962,15 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
                 col.Item().Row(row =>
                 {
                     row.Spacing(8);
-                    row.RelativeItem().Element(x => Tile(x, T("Продажи"), g.SalesKg is { } kg ? $"{Number(kg)} {T("кг")}" : "—", Tone.None,
-                        t => t.Span(g.PlanOfNextMonth ? T("по плану следующего месяца") : T("ориентир по плану этого месяца"))));
-                    row.RelativeItem().Element(x => Tile(x, T("АКБ недели"), $"{Number(g.Akb)} {T("ТТ")}", Tone.None, t => t.Span(T("+10% к прошлой неделе"))));
-                    row.RelativeItem().Element(x => Tile(x, T("ТТ по акциям"), Number(g.Promo), Tone.None, t => t.Span(T("+20% к прошлой неделе"))));
+                    var goalSum = g.Agents.Any(a => a.SalesSum is not null) ? g.Agents.Sum(a => a.SalesSum ?? 0) : (decimal?)null;
+                    row.RelativeItem().Element(x => Tile(x, T("Продажи"), WeeklyTexts.GoalSales(lang, g.SalesKg, goalSum), Tone.None,
+                        t => t.Span(g.FromRegionPlan ? T("план РОП следующего месяца, разложен по ТП")
+                            : g.PlanOfNextMonth ? T("по плану следующего месяца") : T("ориентир по плану этого месяца"))));
+                    row.RelativeItem().Element(x => Tile(x, T("АКБ недели"), $"{Number(g.Akb)} {T("ТТ")}", Tone.None,
+                        t => t.Span(F("было {0} · +{1}% к прошлой неделе", Number(g.AkbWas), Number(Math.Round((g.AkbFactor - 1) * 100))))));
+                    // Минимум на ТП (настройка «Отчёты PDF») часто больше факта: подпись говорит, откуда цифра.
+                    row.RelativeItem().Element(x => Tile(x, T("ТТ по акциям"), Number(g.Promo), Tone.None,
+                        t => t.Span(F("было {0} · +{1}%, но не меньше {2} на ТП", Number(g.PromoWas), Number(Math.Round((g.PromoFactor - 1) * 100)), Number(g.PromoMin)))));
                     row.RelativeItem().Element(x => Tile(x, T("Вернуть спящих"), Number(g.Return15To30 + g.Return30Plus), Tone.None,
                         t => t.Span(F("{0} из 15–30 дн. · {1} из 30+", g.Return15To30, g.Return30Plus))));
                     row.RelativeItem().Element(x => Tile(x, T("ДМП"), "—", Tone.None, t => t.Span(T("нет данных о стеллажах"))));
@@ -930,17 +978,18 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
                 col.Item().Element(x => Box(x, F("Цели каждому ТП на {0}", Range(g.WeekFrom, g.WeekTo)), b => b.Column(cc =>
                 {
                     cc.Item().Element(t => Table(t,
-                        [new(T("ТП"), 2.4f, false), new(T("Продажи, кг*")), new(T("АКБ недели, ТТ")), new(T("ТТ по акциям")), new(T("Вернуть спящих 15–30")),
+                        [new(T("ТП"), 2.4f, false), new(T("Продажи*")), new(T("АКБ недели, ТТ")), new(T("ТТ по акциям")), new(T("Вернуть спящих 15–30")),
                             new(T("Вернуть спящих 30+"))],
                         g.Agents.Select(a => (IReadOnlyList<Cell>)
                         [
                             new(a.Name, Bold: true),
-                            Plain(a.SalesKg is null && a.SalesSum is { } goalSum ? $"{(goalSum / 1_000_000).ToString("#,0.0", CultureInfo.GetCultureInfo("ru-RU"))} {T("млн сум")}" : Number(a.SalesKg)),
+                            Plain(WeeklyTexts.GoalSales(lang, a.SalesKg, a.SalesSum)),
                             new(Number(a.Akb), Muted: F("было {0}", a.AkbWas)), new(Number(a.Promo), Muted: F("было {0}", a.PromoWas)),
                             new(Number(a.Return15To30), Muted: F("из {0}", a.Sleeping15To30)), new(Number(a.Return30Plus), Muted: F("из {0}", a.Sleeping30Plus)),
                         ])));
-                    cc.Item().Element(n => Note(n, F("* План месяца ÷ {0} рабочих дней × {1}. АКБ недели = уникальные ТТ прошлой полной недели × 1,1; ТТ по акциям × 1,2 (не меньше 25); вернуть 30% спящих 15–30 дней и 20% спящих 30+. Списки ТТ — в карточке каждого ТП.",
-                        r.Calendar.MonthWorkDays, g.WeekWorkDays)));
+                    cc.Item().Element(n => Note(n, (g.FromRegionPlan ? T("* Планов ТП на следующий месяц в Linko ещё нет: план РОП региона разложен по ТП по их планам этого месяца. ") : "")
+                        + F("* План месяца ÷ {0} рабочих дней × {1}. АКБ недели = уникальные ТТ прошлой полной недели × 1,1; ТТ по акциям × 1,2 (не меньше 25); вернуть 30% спящих 15–30 дней и 20% спящих 30+. Списки ТТ — в карточке каждого ТП.",
+                        g.MonthWorkDays > 0 ? g.MonthWorkDays : r.Calendar.MonthWorkDays, g.WeekWorkDays)));
                 })));
                 col.Item().Row(row =>
                 {
@@ -1037,6 +1086,27 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
             "Ish kunlari: du–sh, bayramlarsiz. Oyda {0}, ishlandi {1}, qoldi {2}. Prognoz = fakt ÷ {1} × {0}.",
         ["Команда за неделю"] = "Hafta jamoasi",
         ["кг"] = "kg",
+        ["КПУ: итог месяца"] = "KPU: oy yakuni",
+        ["Месяц закончился: добирать уже нечего, «в день» не считается. KPI нового месяца появятся, когда их заведут в Linko"] = "Oy tugadi: yetkazadigan narsa qolmadi, «kuniga» hisoblanmaydi. Yangi oy KPI lari Linko'ga kiritilganda paydo bo'ladi",
+        ["Итог месяца: порог и план"] = "Oy yakuni: chegara va reja",
+        ["Не хватило, кг"] = "Yetmadi, kg",
+        ["Итог"] = "Yakun",
+        ["взят"] = "olindi",
+        ["не взят"] = "olinmadi",
+        ["Месяц закончился: все {0} рабочих дней отработаны, выполнено {1} плана."] = "Oy tugadi: barcha {0} ish kuni ishlandi, rejaning {1} bajarildi.",
+        ["план РОП следующего месяца, разложен по ТП"] = "keyingi oyning ROP rejasi, TP larga taqsimlangan",
+        ["было {0} · +{1}% к прошлой неделе"] = "edi {0} · o'tgan haftaga +{1}%",
+        ["было {0} · +{1}%, но не меньше {2} на ТП"] = "edi {0} · +{1}%, lekin har bir TP ga kamida {2}",
+        ["Продажи*"] = "Savdo*",
+        ["* Планов ТП на следующий месяц в Linko ещё нет: план РОП региона разложен по ТП по их планам этого месяца. "] = "* Keyingi oy uchun TP rejalari Linko'da hali yo'q: hududning ROP rejasi TP larga shu oydagi rejalari bo'yicha taqsimlangan. ",
+        ["возврат денег дилеру · отгружено {0} млн"] = "dilerga pul qaytarildi · jo'natildi {0} mln",
+        ["Дилер"] = "Diler",
+        ["Долг, млн"] = "Qarz, mln",
+        ["Просрочка"] = "Muddati o'tgan",
+        ["Оплачено"] = "To'langan",
+        ["Отгружено"] = "Jo'natilgan",
+        ["Ближайший срок"] = "Eng yaqin muddat",
+        ["возврат денег"] = "pul qaytarildi",
         ["неделя"] = "hafta",
         [" · месяц {0} плана"] = " · oy rejaning {0}",
         [" · КПУ {0} тыс."] = " · KPU {0} ming",
@@ -1134,12 +1204,10 @@ public sealed partial class WeeklyPdfRenderer : IWeeklyPdfRenderer
             "TWIZOS stellajlari (olingan, o'rnatilgan, o'rnatishdan keyingi buyurtmalar) OneBase'ga hozircha yuklanmaydi: Linko inventari sinxronlanmaydi. Yuklash qo'shiladi — shunda bu yerda SN bo'yicha o'rnatish, qo'shimcha buyurtmalar va yangi stellajlar uchun nomzodlar paydo bo'ladi.",
         ["Нет данных по дилерам области."] = "Hudud dilerlari bo'yicha ma'lumot yo'q.",
         ["Остатки, отгрузка и деньги дилеров"] = "Diler qoldiqlari, jo'natma va pullari",
-        ["Дилер"] = "Diler",
         ["SKU в нуле*"] = "Nolda SKU*",
         ["Отгрузить до запаса, кг"] = "Zaxiragacha jo'natish, kg",
         ["Упущено, кг"] = "Boy berildi, kg",
         ["Упущено, млн"] = "Boy berildi, mln",
-        ["Долг, млн"] = "Qarz, mln",
         ["Просрочка, млн"] = "Muddati o'tgan, mln",
         ["DSO, дн."] = "DSO, kun",
         ["Норма"] = "Me'yor",

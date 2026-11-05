@@ -1362,4 +1362,26 @@ public class SalesAnalyticsTests
         Assert.Equal((300m, 60m, 0.2m, 240m), (problems.Fact!.FactKg, problems.Fact.UnassignedKg, problems.Fact.UnassignedShare!.Value, problems.Fact.AssignedKg));
         Assert.Equal("РМ 1", Assert.Single(problems.Directions!).Name);
     }
+
+    [Fact]
+    public void Agents_list_every_team_agent_once_with_the_numbers_of_the_agent_card()
+    {
+        var analytics = new SalesAnalytics(Data(
+            plans: [new PlanRow(null, 1, 9, null, 200), new PlanRow(null, 3, 9, null, 60)],
+            revenuePlans: [new PlanRow(null, 1, 9, null, 2000)]));
+
+        var view = analytics.CachedAgents();
+
+        // Агент 4 продаёт в филиале без региона: он в списке, регион — «Без региона».
+        Assert.Equal([1L, 2L, 3L, 4L], view.Agents.Select(a => a.AgentId).Order());
+        var row = view.Agents.Single(a => a.AgentId == 1);
+        var card = analytics.Agent(1);
+        Assert.Equal((card.PlanKg, card.FactKg, card.Execution, card.Revenue, card.RevenueExecution, card.Akb),
+            (row.PlanKg, row.FactKg, row.Execution, row.Revenue, row.RevenueExecution, row.Akb));
+        Assert.Equal((200m, 100m, 0.5m, 0.5m), (row.PlanKg!.Value, row.FactKg, row.Execution!.Value, row.RevenueExecution!.Value));
+        Assert.Equal(("Север", "РМ 1"), (row.RegionName, row.DirectionName));
+        Assert.Null(view.Agents.Single(a => a.AgentId == 4).RegionId);
+        Assert.Equal(["Без региона", "Север", "Юг"], view.Regions.Select(r => r.Name));
+        Assert.Equal([Rm1.ToString()], view.Directions.Select(d => d.Id));
+    }
 }

@@ -171,6 +171,21 @@ public sealed class SalesOptions
         stockName is { } name && ExportStocks.Any(s => string.Equals(s.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
+    /// ДМП (дополнительное место продаж — стеллажи в магазинах): типы товаров Linko с оборудованием, по названию без учёта регистра, вместе
+    /// с подтипами. Путь стеллажа: перемещение с завода на склад дилера → заказ магазина со строкой стеллажа. Пусто — раздела нет.
+    /// </summary>
+    public string[] DmpProductTypes { get; set; } = ["Оборудование"];
+
+    /// <summary>Категория отчёта, под которую стоит стеллаж (Twizos — «Придзел»): её вес магазина показывается рядом со всем весом.</summary>
+    public string? DmpFocusCategory { get; set; } = "Придзел";
+
+    /// <summary>Статусы заказа магазина со стеллажом: «доставлен» — стеллаж установлен.</summary>
+    public string[] DmpInstalledStatuses { get; set; } = ["delivered"];
+
+    /// <summary>Статусы заказа магазина со стеллажом: «отдан» — стеллаж выдан, доставка не подтверждена.</summary>
+    public string[] DmpIssuedStatuses { get; set; } = ["given"];
+
+    /// <summary>
     /// Типы торговых точек Linko, заказы которых с филиала «Завод» — экспорт («Первичка → Экспорт»).
     /// Тип EXPORT стоит и у части магазинов других филиалов — их заказы в экспорт не входят.
     /// </summary>

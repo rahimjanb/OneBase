@@ -44,7 +44,7 @@ public static class DataSourceCatalog
     public static readonly IReadOnlyList<DataSourceField> Fields =
     [
         new(PlanRop, "План РОП", "plan", "Регион × категория × месяц, кг. Вторичка: выполнение, прогноз, рейтинг регионов и РМ.", PlanKind.Rop),
-        new(PlanFactory, "План «Завод»", "plan", "Регион × категория × месяц, кг. Переключатель «План «Завод»» во вторичке.", PlanKind.Factory),
+        new(PlanFactory, "План «Завод»", "plan", "Регион × категория × месяц, кг. Переключатель «План «Завод»» во вторичке. Итоги страны по категориям — в «Настройках продаж»: по регионам они раскладываются сами.", PlanKind.Factory),
         new(PlanPrimary, "План первички", "plan", "Дилер (регион) × категория × месяц, кг. Первичка: план, выполнение, остаток.", PlanKind.Primary),
         new(Dealer, "Дилер региона", "profile", "Подпись строк первички, P&L и карточек регионов («Бобур Самарканд»).", null, RegionProfilePlanner.Dealer),
         new(Supervisor, "СВР региона", "profile", "Супервайзер региона во вторичке.", null, RegionProfilePlanner.Supervisor),

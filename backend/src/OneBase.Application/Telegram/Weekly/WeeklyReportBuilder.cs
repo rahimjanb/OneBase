@@ -139,7 +139,8 @@ public sealed class WeeklyReportBuilder(
         var promoMetrics = await PromoAsync(resolved, regionViews, fullFrom, fullTo, weekFrom, weekEnd, monthStart, dataThrough, ct);
         var (dealers, dealerSources) = await DealersAsync(regionViews, money, dataThrough, warnings, ct);
         warnings.Add(WeeklyNote.Of("dmp-missing"));
-        var goals = await GoalsAsync(agents, team, plans, kpi, fullWeekLines, promoMetrics, clients, weekTo, dataThrough, holidays, ct);
+        var goals = await GoalsAsync(agents, team, plans, kpi, resolved.Regions, regionViews, monthLines, fullWeekLines, promoMetrics, clients, weekTo, dataThrough,
+            holidays, ct);
 
         var sources = await SourcesAsync(kpiView.LoadedAt, promoMetrics.AsOf, dealerSources, ct);
         var stale = sources.FirstOrDefault(s => s.Key == WeeklySources.Orders);
@@ -313,7 +314,7 @@ public sealed class WeeklyReportBuilder(
             visits, visits > 0 ? (decimal)route!.WithOrder / visits : null, route?.Plan ?? 0, route?.DoneInPlan ?? 0,
             route is { Plan: > 0 } r ? (decimal)r.DoneInPlan / r.Plan : null, monthKg, planKg, total?.Pct,
             total is { Plan: > 0 } ? WeeklyReportMath.Ratio(forecast, total.Plan) : null, SalesMath.Akb(ownMonth), plan?.PlanAkb, kpi?.PremiumNow, kpi?.PremiumMax,
-            total?.Plan, total?.Fact, total?.Unit);
+            total?.Plan, total?.Fact, total?.Unit, route?.WithOrder ?? 0);
     }
 
     // ---------- KPI ----------
@@ -531,12 +532,15 @@ public sealed class WeeklyReportBuilder(
             var names = new[] { view.Dealer }.Concat(aliases.GetValueOrDefault(id) ?? []).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
             var matched = dso?.Dealers.Where(d => names.Any(n => SameDealer(d.Name, n) || SameDealer(d.Key, n))).ToList() ?? [];
             var dealerMoney = DealerMoney(matched);
+            // Подпись блока — дилер, который сейчас работает со складом (последняя открытая отгрузка), а не имя склада в Linko.
+            var dealerName = matched.Where(d => d.Open.Count > 0 || d.ShippedMonth > 0).OrderByDescending(d => d.Open.Select(o => o.Date).DefaultIfEmpty().Max())
+                .ThenByDescending(d => d.ShippedMonth).FirstOrDefault()?.Name ?? view.Dealer;
             if (money && dso is not null && dealerMoney is null && !string.IsNullOrWhiteSpace(view.Dealer))
             {
                 warnings.Add(WeeklyNote.Of("dso-dealer-missing", ("region", view.Name), ("dealer", view.Dealer)));
             }
 
-            result.Add(new WeeklyDealerMetrics(id, view.Name, view.Dealer, stockView.SnapshotDate, withSales.Count(x => x.Cell.Kg is not > 0), withSales.Sum(x => x.Cell.OrderKg),
+            result.Add(new WeeklyDealerMetrics(id, view.Name, dealerName, stockView.SnapshotDate, withSales.Count(x => x.Cell.Kg is not > 0), withSales.Sum(x => x.Cell.OrderKg),
                 deficit, ship, lost is null ? null : lost.Month, pairs?.Sum(p => p.LostKg), pairs?.Sum(p => p.LostSum),
                 pairs?.Where(p => p.LostKg > 0).OrderByDescending(p => p.LostSum).Take(5).Select(p => new WeeklyLostSku(p.Product, p.ZeroDays, p.LostKg, p.LostSum)).ToList() ?? [],
                 dealerMoney));
@@ -556,11 +560,19 @@ public sealed class WeeklyReportBuilder(
             return null;
         }
 
+        static WeeklyDealerMoney One(DsoDealer d) => new(d.Name, d.Debt, d.Overdue, d.Fact, d.Norm, d.Status, d.PaidMonth, d.ShippedMonth, d.LastPay,
+            d.Open.OrderBy(o => o.Date).Select(o => new WeeklyDealerOpen(o.Date, o.Remaining, o.Due)).ToList());
+
         var ordered = matched.OrderByDescending(d => d.Debt).ToList();
+        if (ordered.Count == 1)
+        {
+            return One(ordered[0]);
+        }
+
         var main = ordered[0];
         return new WeeklyDealerMoney(string.Join(" + ", ordered.Select(d => d.Name)), matched.Sum(d => d.Debt), matched.Sum(d => d.Overdue), main.Fact, main.Norm,
             main.Status, matched.Sum(d => d.PaidMonth), matched.Sum(d => d.ShippedMonth), matched.Max(d => d.LastPay),
-            matched.SelectMany(d => d.Open).OrderBy(o => o.Date).Select(o => new WeeklyDealerOpen(o.Date, o.Remaining, o.Due)).ToList());
+            matched.SelectMany(d => d.Open).OrderBy(o => o.Date).Select(o => new WeeklyDealerOpen(o.Date, o.Remaining, o.Due)).ToList(), ordered.Select(One).ToList());
     }
 
     /// <summary>Дилер DSO и дилер региона — одно и то же: без регистра, лишних пробелов и «ё».</summary>
@@ -573,7 +585,8 @@ public sealed class WeeklyReportBuilder(
     // ---------- Цели ----------
 
     private async Task<WeeklyGoals> GoalsAsync(IReadOnlyList<ReportPerson> agents, IReadOnlyDictionary<long, TeamRow> team, IReadOnlyDictionary<long, AgentMonthPlan> plans,
-        WeeklyKpiMetrics kpi, IReadOnlyList<SaleLine> fullWeek, PromoResult promoResult, WeeklyClientMetrics clients, DateOnly weekTo, DateOnly dataThrough,
+        WeeklyKpiMetrics kpi, IReadOnlyList<ScopeRegion> scopeRegions, IReadOnlyDictionary<Guid, RegionView> regionViews, IReadOnlyList<SaleLine> month,
+        IReadOnlyList<SaleLine> fullWeek, PromoResult promoResult, WeeklyClientMetrics clients, DateOnly weekTo, DateOnly dataThrough,
         IReadOnlyDictionary<DateOnly, string> holidays, CancellationToken ct)
     {
         var nextFrom = weekTo.AddDays(2);
@@ -584,6 +597,13 @@ public sealed class WeeklyReportBuilder(
             ? (await linko.AgentPlansAsync(agents.Select(a => a.Id).ToList(), planMonth.Year, planMonth.Month, ct)).ToDictionary(p => p.LinkoUserId)
             : new Dictionary<long, AgentMonthPlan>();
         var ofNextMonth = nextMonth && nextPlans.Values.Any(p => p.PlanKg is > 0);
+        // Планов ТП на следующий месяц в Linko ещё нет (их заводят в начале месяца), а план РОП региона уже есть — он и раскладывается по ТП.
+        var fromRegion = nextMonth && !ofNextMonth ? RegionPlanByAgent(agents, team, plans, kpi, scopeRegions, regionViews, month) : [];
+        if (fromRegion.Count > 0)
+        {
+            ofNextMonth = true;
+        }
+
         if (!ofNextMonth)
         {
             planMonth = new DateOnly(dataThrough.Year, dataThrough.Month, 1);
@@ -594,7 +614,9 @@ public sealed class WeeklyReportBuilder(
 
         var rows = agents.Select(a =>
         {
-            decimal? plan = ofNextMonth ? nextPlans.GetValueOrDefault(a.Id)?.PlanKg : team.GetValueOrDefault(a.Id)?.PlanKg ?? plans.GetValueOrDefault(a.Id)?.PlanKg;
+            decimal? plan = ofNextMonth
+                ? nextPlans.GetValueOrDefault(a.Id)?.PlanKg ?? (fromRegion.TryGetValue(a.Id, out var share) ? share : null)
+                : team.GetValueOrDefault(a.Id)?.PlanKg ?? plans.GetValueOrDefault(a.Id)?.PlanKg;
             // Весового плана нет — «Тотал» KPI Linko этого месяца (тот же, что «% плана» в карточке ТП): в кг — цель в кг, в сумах — в сумах.
             decimal? planSum = null;
             if (plan is null && !ofNextMonth && kpi.People.FirstOrDefault(p => p.Id == a.Id) is { } person)
@@ -616,7 +638,49 @@ public sealed class WeeklyReportBuilder(
 
         var sales = rows.Where(r => r.SalesKg is not null).Select(r => r.SalesKg!.Value).ToList();
         return new WeeklyGoals(nextFrom, nextTo, weekDays, ofNextMonth, sales.Count == 0 ? null : sales.Sum(), rows.Sum(r => r.Akb), rows.Sum(r => r.Promo),
-            rows.Sum(r => r.Return15To30), rows.Sum(r => r.Return30Plus), false, rows);
+            rows.Sum(r => r.Return15To30), rows.Sum(r => r.Return30Plus), false, rows, fromRegion.Count > 0, monthDays, rows.Sum(r => r.AkbWas), rows.Sum(r => r.PromoWas),
+            options.GoalAkbFactor, options.GoalPromoFactor, options.GoalPromoMin);
+    }
+
+    /// <summary>
+    /// План РОП (или «Завод») региона на следующий месяц, разложенный по ТП (WeeklyReportMath.SplitPlan): доля ТП — по его плану этого месяца
+    /// (весовой план Linko или «Тотал» KPI в кг; так заведено меньше чем у половины ТП — «Тотал» в сумах; нет и его — по факту месяца). Регион
+    /// без плана следующего месяца — его ТП без цели продаж. Вакансий в командах нет: план региона делят действующие ТП.
+    /// </summary>
+    private static Dictionary<long, decimal> RegionPlanByAgent(IReadOnlyList<ReportPerson> agents, IReadOnlyDictionary<long, TeamRow> team,
+        IReadOnlyDictionary<long, AgentMonthPlan> plans, WeeklyKpiMetrics kpi, IReadOnlyList<ScopeRegion> regions, IReadOnlyDictionary<Guid, RegionView> views,
+        IReadOnlyList<SaleLine> month)
+    {
+        var result = new Dictionary<long, decimal>();
+        var inScope = agents.Select(a => a.Id).ToHashSet();
+        foreach (var region in regions)
+        {
+            if (!views.TryGetValue(region.Id, out var view) || view.NextMonth is not { PlanKg: > 0 } next || next.Source == PlanSources.Linko)
+            {
+                continue;
+            }
+
+            var ids = region.Agents.Select(a => a.Id).Where(inScope.Contains).ToList();
+            if (ids.Count == 0)
+            {
+                continue;
+            }
+
+            decimal? Cell(long id, string label, string unit) =>
+                kpi.People.FirstOrDefault(p => p.Id == id)?.Cells.FirstOrDefault(c => c.Label == label && c.Unit == unit)?.Plan;
+            var bases = new List<IReadOnlyDictionary<long, decimal>>
+            {
+                ids.ToDictionary(id => id, id => team.GetValueOrDefault(id)?.PlanKg ?? plans.GetValueOrDefault(id)?.PlanKg ?? Cell(id, "Тотал", KpiMath.Kg) ?? 0),
+                ids.ToDictionary(id => id, id => Cell(id, "Тотал (сумма)", KpiMath.Sum) ?? 0),
+                ids.ToDictionary(id => id, id => Math.Max(0, month.Where(l => l.AgentId == id).Sum(l => l.Kg))),
+            };
+            foreach (var (id, plan) in WeeklyReportMath.SplitPlan(next.PlanKg, bases))
+            {
+                result[id] = plan;
+            }
+        }
+
+        return result;
     }
 
     // ---------- Выводы ----------

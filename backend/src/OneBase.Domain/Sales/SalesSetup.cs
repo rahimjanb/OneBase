@@ -105,6 +105,18 @@ public class SalesRegionPlan : Entity
     public decimal PlanKg { get; set; }
 }
 
+/// <summary>
+/// План «Завод» на всю страну: кг категории отчёта за месяц (CategoryId — первый тип товара категории, как в SalesRegionPlan). Завод задаёт
+/// план так, без регионов; по регионам он раскладывается по плану РОП (SalesPlans.Cascade). Ведётся в «Настройках продаж».
+/// </summary>
+public class SalesFactoryPlan : Entity
+{
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public long CategoryId { get; set; }
+    public decimal PlanKg { get; set; }
+}
+
 /// <summary>План торгового представителя, кг за месяц.</summary>
 public class SalesAgentPlan : Entity
 {

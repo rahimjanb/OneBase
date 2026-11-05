@@ -241,6 +241,12 @@ internal static class SalesModel
             e.HasIndex(x => new { x.RegionId, x.Kind, x.Year, x.Month, x.CategoryId }).IsUnique().AreNullsDistinct(false);
         });
 
+        b.Entity<SalesFactoryPlan>(e =>
+        {
+            e.ToTable("FactoryPlans", "sales");
+            e.HasIndex(x => new { x.Year, x.Month, x.CategoryId }).IsUnique();
+        });
+
         b.Entity<SalesAgentPlan>(e =>
         {
             e.ToTable("AgentPlans", "sales");

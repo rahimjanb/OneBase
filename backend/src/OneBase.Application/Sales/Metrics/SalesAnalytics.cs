@@ -448,7 +448,23 @@ public sealed partial class SalesAnalytics
             coverage.Agents,
             outsideTeam,
             _d.PlanSource,
-            SalesMath.ExecutionLevelOf(execution));
+            SalesMath.ExecutionLevelOf(execution),
+            AltPlanOf(scope, fact));
+    }
+
+    /// <summary>Второй план регионов охвата (AltPlanTile); null — на месяц его нет или у охвата нет ни одного региона с ним.</summary>
+    private AltPlanTile? AltPlanOf(IReadOnlySet<Guid>? scope, decimal fact)
+    {
+        if (_d.AltSource is not { } source)
+        {
+            return null;
+        }
+
+        var plan = (scope ?? (IEnumerable<Guid>)_regions.Keys)
+            .Select(r => SalesMath.PlanTotal(_d.AltRegionPlans.Where(p => p.RegionId == r)))
+            .Where(p => p is not null)
+            .Sum();
+        return plan is > 0 ? new AltPlanTile(source, plan.Value, SalesMath.Ratio(fact, plan.Value)) : null;
     }
 
     /// <summary>Прогноз на конец месяца (факт по текущему темпу) — только у идущего месяца; у закрытого прогноза нет.</summary>

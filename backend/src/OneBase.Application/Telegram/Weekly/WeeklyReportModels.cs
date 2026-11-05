@@ -129,7 +129,7 @@ public sealed record WeeklyRegionMetrics(
     WeeklySalesMetrics Sales);
 
 /// <summary>
-/// ТП: неделя (кг, сумма, к прошлой неделе, заказы, АКБ недели, выполненные визиты, конверсия = визиты с заказом ÷ визиты, маршрут = по маршруту ÷
+/// ТП: неделя (кг, сумма, к прошлой неделе, заказы, АКБ недели, выполненные визиты и визиты с заказом, конверсия = визиты с заказом ÷ визиты, маршрут = по маршруту ÷
 /// план), месяц (кг по правилам «Продаж», план, АКБ и план АКБ), премия КПУ сейчас (null — нет KPI в Linko или нет права на деньги).
 /// Execution и ForecastExecution — «% плана» из Linko (решение 31.10.2026): показатель «Тотал» KPI (в кг, без него — в сумах), прогноз —
 /// по рабочим дням; LinkoPlan, LinkoFact, LinkoUnit — его план и факт («4 450 из 4 700 кг»). Нет KPI в Linko — null («нет данных»).
@@ -158,7 +158,8 @@ public sealed record WeeklyEmployeeMetrics(
     decimal? PremiumMax,
     decimal? LinkoPlan = null,
     decimal? LinkoFact = null,
-    string? LinkoUnit = null);
+    string? LinkoUnit = null,
+    int WeekVisitsWithOrder = 0);
 
 /// <summary>Спящая ТТ: последняя покупка, дней без покупки, сколько брала (кг за месяц последней покупки), ТП — кто продавал больше всех.</summary>
 public sealed record WeeklySleepingMarket(long MarketId, string Name, long? AgentId, string? AgentName, DateOnly LastPurchase, int Days, decimal Kg, string Bucket);
@@ -250,8 +251,9 @@ public sealed record WeeklyDealerMetrics(
     IReadOnlyList<WeeklyLostSku> Lost,
     WeeklyDealerMoney? Money);
 
+/// <summary>Деньги дилера; Parts — по каждому имени дилера региона (после смены дилера — прежний и новый отдельно), если их больше одного.</summary>
 public sealed record WeeklyDealerMoney(string Name, decimal Debt, decimal Overdue, decimal? Dso, int? Norm, string Status, decimal PaidMonth, decimal ShippedMonth, DateOnly? LastPay,
-    IReadOnlyList<WeeklyDealerOpen> Open);
+    IReadOnlyList<WeeklyDealerOpen> Open, IReadOnlyList<WeeklyDealerMoney>? Parts = null);
 
 /// <summary>
 /// Показатель КПУ: план, факт, % и порог (Linko), сколько добрать до порога и в день (по оставшимся рабочим дням), статус и премия
@@ -305,4 +307,11 @@ public sealed record WeeklyGoals(
     int Return15To30,
     int Return30Plus,
     bool DmpAvailable,
-    IReadOnlyList<WeeklyAgentGoal> Agents);
+    IReadOnlyList<WeeklyAgentGoal> Agents,
+    bool FromRegionPlan = false,
+    int MonthWorkDays = 0,
+    int AkbWas = 0,
+    int PromoWas = 0,
+    decimal AkbFactor = 1.1m,
+    decimal PromoFactor = 1.2m,
+    int PromoMin = 0);

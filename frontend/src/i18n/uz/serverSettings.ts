@@ -150,7 +150,7 @@ const dict: Dict = {
   "P&L дилеров": "Dilerlar P&L",
   "Регион × категория × месяц, кг. Вторичка: выполнение, прогноз, рейтинг регионов и РМ.":
     "Mintaqa × toifa × oy, kg. Ikkilamchi: bajarilish, prognoz, mintaqalar va RM reytingi.",
-  "Регион × категория × месяц, кг. Переключатель «План «Завод»» во вторичке.": "Mintaqa × toifa × oy, kg. Ikkilamchidagi «Zavod» rejasi almashtirgichi.",
+  "Регион × категория × месяц, кг. Переключатель «План «Завод»» во вторичке. Итоги страны по категориям — в «Настройках продаж»: по регионам они раскладываются сами.": "Mintaqa × toifa × oy, kg. Ikkilamchidagi «Zavod» rejasi almashtirgichi. Toifalar bo'yicha mamlakat jamilari — «Savdo sozlamalari»da: mintaqalarga ular o'zi taqsimlanadi.",
   "Дилер (регион) × категория × месяц, кг. Первичка: план, выполнение, остаток.": "Diler (mintaqa) × toifa × oy, kg. Birlamchi: reja, bajarilish, qoldiq.",
   "Подпись строк первички, P&L и карточек регионов («Бобур Самарканд»).": "Birlamchi va P&L qatorlari hamda mintaqa kartochkalari yorlig'i («Бобур Самарканд»).",
   "Супервайзер региона во вторичке.": "Ikkilamchidagi mintaqa supervayzeri.",

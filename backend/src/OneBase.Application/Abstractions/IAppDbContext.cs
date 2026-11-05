@@ -81,6 +81,7 @@ public interface IAppDbContext
     DbSet<SalesRegion> SalesRegions { get; }
     DbSet<SalesAgentProfile> SalesAgentProfiles { get; }
     DbSet<SalesRegionPlan> SalesRegionPlans { get; }
+    DbSet<SalesFactoryPlan> SalesFactoryPlans { get; }
     DbSet<SalesAgentPlan> SalesAgentPlans { get; }
     DbSet<SalesTarget> SalesTargets { get; }
     DbSet<SalesPnlValue> SalesPnlValues { get; }

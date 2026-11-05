@@ -79,6 +79,10 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         return analytics.HasRegion(id) ? analytics.CachedRegion(id, from, to, metric, metric == "akb" ? category : null) : NotFound();
     }
 
+    /// <summary>«Агенты»: все ТП месяца — выполнение плана, прогноз, выручка, АКБ, визиты, страйк и замечания; фильтры и поиск — на странице.</summary>
+    [HttpGet("agents")]
+    public async Task<AgentsView> Agents([FromQuery] PeriodQuery q, CancellationToken ct) => (await LoadDefaultPlan(q, ct)).CachedAgents();
+
     [HttpGet("agents/{id:long}")]
     public async Task<ActionResult<AgentView>> Agent(long id, [FromQuery] PeriodQuery q, CancellationToken ct)
     {
@@ -244,6 +248,29 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
             .ToList();
         return await promo.GetAsync(month, rm, ids, ct) is { } view ? view : NotFound(new { error = "Строк со скидками за год нет." });
     }
+
+    /// <summary>
+    /// «ДМП»: стеллажи в магазинах на дату данных — приход на склады дилеров, остатки, установки в магазины и как магазины заказывают до и
+    /// после установки. Товаров-стеллажей (Sales:DmpProductTypes) в копии Linko нет — 404.
+    /// </summary>
+    /// <summary>
+    /// «Система» за месяц (year, month): маршрут — заказы от плана визитов Linko, качество дистрибуции — ядро ассортимента и верхние точки,
+    /// деньги и запас дилеров — только с правом «Финансы» (без него Money = null, MoneyHidden = true).
+    /// </summary>
+    [HttpGet("system")]
+    public async Task<OneBase.Application.Sales.Health.SystemView> SystemHealth(
+        [FromQuery] PeriodQuery q,
+        [FromServices] OneBase.Application.Sales.Health.SystemService system,
+        [FromServices] OneBase.AI.Security.IUserPermissions permissions,
+        CancellationToken ct)
+    {
+        var money = (await permissions.GetAsync(User.GetUserId(), ct)).Contains(Permissions.FinanceRead);
+        return await system.GetAsync(q.Year, q.Month, money, ct);
+    }
+
+    [HttpGet("dmp")]
+    public async Task<ActionResult<OneBase.Application.Sales.Dmp.DmpView>> Dmp([FromServices] OneBase.Application.Sales.Dmp.DmpService dmp, CancellationToken ct) =>
+        await dmp.GetAsync(ct) is { } view ? view : NotFound(new { error = "Стеллажей в Linko нет: товаров типа «Оборудование» не найдено." });
 
     /// <summary>
     /// «Продажи по SKU» за отрезок месяцев: from, to — «ГГГГ-ММ» (по умолчанию — с января года последних данных по их месяц; не длиннее

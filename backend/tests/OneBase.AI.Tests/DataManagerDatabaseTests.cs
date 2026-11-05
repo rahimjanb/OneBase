@@ -365,6 +365,7 @@ public sealed class DataManagerDb : IAsyncLifetime
         await db.DataFiles.ExecuteDeleteAsync();
         await db.DataConversations.ExecuteDeleteAsync();
         await db.SalesRegionPlans.ExecuteDeleteAsync();
+        await db.SalesFactoryPlans.ExecuteDeleteAsync();
         await db.SalesPnlValues.ExecuteDeleteAsync();
         await db.DataSourceSyncRuns.ExecuteDeleteAsync();
         await db.DataSourceConflicts.ExecuteDeleteAsync();

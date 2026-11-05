@@ -143,11 +143,11 @@ public class SettlementsTests
     }
 
     /// <summary>
-    /// Сменился дилер склада: нового ещё нет в листе норм оплаты, но его отгрузки без оплат — долг региона. Он в DSO «без нормы» (просрочка не
-    /// считается), а не пропадает вместе с долгом.
+    /// Сменился дилер склада: нового ещё нет в листе норм оплаты, но его отгрузки без оплат — долг региона. Он в DSO с нормой по умолчанию
+    /// (20 дней, «*»: срок 20.10 + 20 = 09.11), а не пропадает вместе с долгом.
     /// </summary>
     [Fact]
-    public void New_warehouse_dealer_without_payment_terms_is_in_dso_without_norm()
+    public void New_warehouse_dealer_missing_from_payment_terms_is_in_dso_with_default_norm()
     {
         var data = Base(D(10, 31),
             Book("Сирдарё", docs: [new(D(10, 1), 100_000, "t:1")]),
@@ -156,7 +156,8 @@ public class SettlementsTests
         var view = DsoCompute.Build(data);
 
         var dealer = Assert.Single(view.Dealers, d => d.Name == "Новый дилер");
-        Assert.Equal(("noterm", 550_000m, 0m, 550_000m), (dealer.Status, dealer.Debt, dealer.Overdue, dealer.ShippedMonth));
+        Assert.Equal(("active", true, 550_000m, 0m, 550_000m), (dealer.Status, dealer.DefaultNorm, dealer.Debt, dealer.Overdue, dealer.ShippedMonth));
+        Assert.Equal(D(11, 9), Assert.Single(dealer.Open).Due);
     }
 
     private static ReportDocument Sheet(string name, params string[][] rows) =>

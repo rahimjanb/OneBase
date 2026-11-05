@@ -26,6 +26,19 @@ public static class WeeklyTexts
         ? (c >= 0 ? "+" : "−") + Math.Abs(Math.Round(c * 100, 0, MidpointRounding.AwayFromZero)).ToString(CultureInfo.InvariantCulture) + "%"
         : "—";
 
+    /// <summary>
+    /// «К прошлой неделе»: процент; процента нет (база меньше WeeklyReportMath.MinChangeBaseKg или неделя ушла в возвраты), а база есть —
+    /// разница в кг («+28 кг»): от 15 кг «+185%» ничего не значит, но сама разница видна. Базы нет — «—».
+    /// </summary>
+    public static string Delta(string language, decimal? change, decimal now, decimal? before) => change is not null || before is not { } b
+        ? Delta(change)
+        : (now - b >= 0 ? "+" : "−") + ReportFormat.Number(Math.Abs(Math.Round(now - b, 0, MidpointRounding.AwayFromZero))) + " " + T(language, "кг");
+
+    /// <summary>Цель продаж недели: в кг, а если план ТП заведён в сумах — в млн сум.</summary>
+    public static string GoalSales(string language, decimal? kg, decimal? sum) => kg is { } k
+        ? ReportFormat.Number(k) + " " + T(language, "кг")
+        : sum is { } s ? (s / 1_000_000).ToString("#,0.0", CultureInfo.GetCultureInfo("ru-RU")) + " " + T(language, "млн сум") : "—";
+
     /// <summary>Текст замечания или вывода модели на языке отчёта; неизвестный код — null (не показывается).</summary>
     public static string? Note(WeeklyNote note, string language)
     {
@@ -88,14 +101,15 @@ public static class WeeklyTexts
             lines.Add(F(language, "Итоги недели {0} · {1}", week, e?.Name ?? r.ScopeName));
             if (e is not null)
             {
-                lines.Add(F(language, "Неделя: {0} кг ({1} к прошлой) · месяц — {2} плана", ReportFormat.Number(e.WeekKg), Delta(e.WeekVsPrev), ReportFormat.Percent(e.Execution)));
-                lines.Add(F(language, "АКБ недели {0} · визиты / заказы {1} / {2}", e.WeekAkb, e.WeekVisits, e.WeekOrders));
+                lines.Add(F(language, "Неделя: {0} кг ({1} к прошлой) · месяц — {2} плана", ReportFormat.Number(e.WeekKg), Delta(language, e.WeekVsPrev, e.WeekKg, e.PrevWeekKg),
+                    ReportFormat.Percent(e.Execution)));
+                lines.Add(F(language, "АКБ недели {0} · визиты {1}, с заказом {2} · заказов {3}", e.WeekAkb, e.WeekVisits, e.WeekVisitsWithOrder, e.WeekOrders));
             }
 
             if (goal is not null)
             {
-                lines.Add(F(language, "Цели на {0}: продажи {1} кг, АКБ {2}, ТТ по акциям {3}, вернуть спящих {4}", next, ReportFormat.Number(goal.SalesKg), goal.Akb, goal.Promo,
-                    goal.Return15To30 + goal.Return30Plus));
+                lines.Add(F(language, "Цели на {0}: продажи {1}, АКБ {2}, ТТ по акциям {3}, вернуть спящих {4}", next, GoalSales(language, goal.SalesKg, goal.SalesSum), goal.Akb,
+                    goal.Promo, goal.Return15To30 + goal.Return30Plus));
             }
         }
         else
@@ -103,13 +117,14 @@ public static class WeeklyTexts
             var who = r.Role switch { "rop" => T(language, "РОП"), TelegramReportRoles.Rm => T(language, "РМ"), _ => T(language, "СВ") };
             lines.Add($"{F(language, "Неделя {0}", week)} · {who} {r.ScopeName}{(r.SupervisorName is { Length: > 0 } sv ? " · " + sv : "")}");
             var s = r.SalesMetrics;
-            lines.Add(F(language, "Продажи недели: {0} кг ({1} к прошлой)", ReportFormat.Number(s.WeekKg), Delta(s.WeekVsPrev)));
+            lines.Add(F(language, "Продажи недели: {0} кг ({1} к прошлой)", ReportFormat.Number(s.WeekKg), Delta(language, s.WeekVsPrev, s.WeekKg, s.PrevWeekKg)));
             lines.Add(F(language, "Месяц: {0} кг — {1} плана, прогноз {2}", ReportFormat.Number(s.MonthKg), ReportFormat.Percent(s.Execution), ReportFormat.Percent(s.ForecastExecution)));
             lines.Add(F(language, "АКБ месяца: {0} из {1}", ReportFormat.Number(s.MonthAkb), ReportFormat.Number(s.AkbPlan)));
             lines.AddRange(r.Recommendations.Where(n => n.Code is "good" or "bad").Select(n => Note(n, language)).OfType<string>());
             if (r.Role == TelegramReportRoles.Sv)
             {
-                lines.Add(F(language, "Цель на {0}: продажи {1} кг, АКБ {2}, ТТ по акциям {3}", next, ReportFormat.Number(g.SalesKg), g.Akb, g.Promo));
+                var sum = g.Agents.Any(a => a.SalesSum is not null) ? g.Agents.Sum(a => a.SalesSum ?? 0) : (decimal?)null;
+                lines.Add(F(language, "Цель на {0}: продажи {1}, АКБ {2}, ТТ по акциям {3}", next, GoalSales(language, g.SalesKg, sum), g.Akb, g.Promo));
             }
 
             if (cards)
@@ -136,8 +151,10 @@ public static class WeeklyTexts
         ["ТЕСТОВАЯ ОТПРАВКА"] = "SINOV JO'NATMASI",
         ["Итоги недели {0} · {1}"] = "Hafta yakunlari {0} · {1}",
         ["Неделя: {0} кг ({1} к прошлой) · месяц — {2} плана"] = "Hafta: {0} kg (o'tganiga nisbatan {1}) · oy — rejaning {2}",
-        ["АКБ недели {0} · визиты / заказы {1} / {2}"] = "Hafta AKB {0} · tashriflar / buyurtmalar {1} / {2}",
-        ["Цели на {0}: продажи {1} кг, АКБ {2}, ТТ по акциям {3}, вернуть спящих {4}"] = "{0} maqsadlari: savdo {1} kg, AKB {2}, aksiyalar bo'yicha SN {3}, uxlayotganlarni qaytarish {4}",
+        ["АКБ недели {0} · визиты {1}, с заказом {2} · заказов {3}"] = "Hafta AKB {0} · tashriflar {1}, buyurtmali {2} · buyurtmalar {3}",
+        ["кг"] = "kg",
+        ["млн сум"] = "mln so'm",
+        ["Цели на {0}: продажи {1}, АКБ {2}, ТТ по акциям {3}, вернуть спящих {4}"] = "{0} maqsadlari: savdo {1}, AKB {2}, aksiyalar bo'yicha SN {3}, uxlayotganlarni qaytarish {4}",
         ["РОП"] = "ROP",
         ["РМ"] = "RM",
         ["СВ"] = "SV",
@@ -145,7 +162,7 @@ public static class WeeklyTexts
         ["Продажи недели: {0} кг ({1} к прошлой)"] = "Hafta savdosi: {0} kg (o'tganiga nisbatan {1})",
         ["Месяц: {0} кг — {1} плана, прогноз {2}"] = "Oy: {0} kg — rejaning {1}, prognoz {2}",
         ["АКБ месяца: {0} из {1}"] = "Oy AKB: {1} dan {0}",
-        ["Цель на {0}: продажи {1} кг, АКБ {2}, ТТ по акциям {3}"] = "{0} maqsadi: savdo {1} kg, AKB {2}, aksiyalar bo'yicha SN {3}",
+        ["Цель на {0}: продажи {1}, АКБ {2}, ТТ по акциям {3}"] = "{0} maqsadi: savdo {1}, AKB {2}, aksiyalar bo'yicha SN {3}",
         ["Карточки ТП — вторым файлом."] = "TP kartochkalari — ikkinchi faylda.",
         ["Данные на {0} — неполные: {1}."] = "Ma'lumotlar {0} holatiga — to'liq emas: {1}.",
         ["Данные на {0}."] = "Ma'lumotlar {0} holatiga.",

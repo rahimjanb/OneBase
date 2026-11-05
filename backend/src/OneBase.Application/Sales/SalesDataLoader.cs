@@ -352,22 +352,13 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         // Регионы — филиалы вторички: исключённые («Завод») в структуре не показываются, у них отдельный блок;
         // пропускаемых («К К Мерч») во вторичке нет совсем — ни региона, ни визитов в их точках.
         // Старые филиалы («Жиззах (эски)») считаются в текущем регионе с тем же названием.
-        var excludedBranchIds = await BranchIdsAsync("sales:excluded-branches", ExcludedLower, ct);
         var ignoredBranchIds = await BranchIdsAsync("sales:ignored-branches", IgnoredLower, ct);
-        // Оргструктура — данные OneBase («Настройки продаж»): направления (РМ, каналы), у региона — направление, СВР и дилер; в Linko их нет.
-        var structure = SalesStructure.Build(
-            await db.SalesDirections.AsNoTracking().ToListAsync(ct),
-            await db.SalesRegions.AsNoTracking().ToListAsync(ct),
-            excludedBranchIds.Concat(ignoredBranchIds).ToHashSet(),
-            options.OldBranchSuffix,
-            options.ChannelRegions); // регионы-каналы (базар, сети): их строки — только в закрытом месяце (SecondarySales.ChannelsOn)
+        var structure = await StructureAsync(ct);
 
         // План вторички — РОП или «Завод» из sales."RegionPlans" (год месяца и следующий месяц); на месяц без них — планы ТП из Linko.
         // Читаются оба вида: план — выбранного, а по обоим — какие планы на месяц вообще заведены (переключатель плана).
-        var regionPlans = await db.SalesRegionPlans.AsNoTracking()
-            .Where(p => (p.Kind == PlanKind.Rop || p.Kind == PlanKind.Factory) && (p.Year == year || (p.Year == next.Year && p.Month == next.Month)))
-            .Select(p => new RegionPlanRow(p.RegionId, p.Kind, p.Year, p.Month, p.CategoryId, p.PlanKg))
-            .ToListAsync(ct);
+        // План «Завод», заданный итогами страны (sales."FactoryPlans"), раскладывается по регионам по плану РОП (SalesPlans.WithFactory).
+        var regionPlans = await RegionPlansAsync(year, next, structure.RegionOf, ct);
         var plans = SalesPlans.Select(year, month, kind, regionPlans, structure.RegionOf, agentPlans);
 
         var markets = await db.LinkoMarkets.AsNoTracking()
@@ -412,6 +403,8 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             Plans = plans.Plans,
             YearRegionPlans = plans.YearRegionPlans,
             NextRegionPlans = plans.NextRegionPlans,
+            AltRegionPlans = plans.AltPlans ?? [],
+            AltSource = plans.AltSource,
             SelectedPlan = SalesPlans.SourceOf(kind),
             AvailablePlans = SalesPlans.Available(year, month, regionPlans, structure.RegionOf),
             PlanSource = plans.Source,
@@ -532,6 +525,56 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
     }
 
     /// <summary>Филиалы с этими названиями (в нижнем регистре) — по названию филиала в заказах.</summary>
+    /// <summary>
+    /// Планы регионов РОП и «Завод» за год и следующий месяц (next) вместе с планом «Завод», разложенным из итогов страны. Раскладке нужен
+    /// план РОП прошлых месяцев (пока РОП месяца не заведён): поэтому РОП читается и за прошлый год — для января.
+    /// </summary>
+    private async Task<IReadOnlyList<RegionPlanRow>> RegionPlansAsync(int year, DateOnly next, Func<Guid, Guid?> regionOf, CancellationToken ct)
+    {
+        var rows = await db.SalesRegionPlans.AsNoTracking()
+            .Where(p => (p.Kind == PlanKind.Rop || p.Kind == PlanKind.Factory)
+                        && (p.Year == year || (p.Year == next.Year && p.Month == next.Month) || (p.Kind == PlanKind.Rop && p.Year == year - 1 && p.Month == 12)))
+            .Select(p => new RegionPlanRow(p.RegionId, p.Kind, p.Year, p.Month, p.CategoryId, p.PlanKg))
+            .ToListAsync(ct);
+        var totals = await db.SalesFactoryPlans.AsNoTracking()
+            .Where(p => p.Year == year || (p.Year == next.Year && p.Month == next.Month))
+            .Select(p => new FactoryTotalRow(p.Year, p.Month, p.CategoryId, p.PlanKg))
+            .ToListAsync(ct);
+        return SalesPlans.WithFactory(rows, totals, regionOf);
+    }
+
+    /// <summary>Оргструктура — данные OneBase («Настройки продаж»): направления (РМ, каналы), у региона — направление, СВР и дилер; в Linko их нет.</summary>
+    private async Task<SalesStructureData> StructureAsync(CancellationToken ct)
+    {
+        var excludedBranchIds = await BranchIdsAsync("sales:excluded-branches", ExcludedLower, ct);
+        var ignoredBranchIds = await BranchIdsAsync("sales:ignored-branches", IgnoredLower, ct);
+        return SalesStructure.Build(
+            await db.SalesDirections.AsNoTracking().ToListAsync(ct),
+            await db.SalesRegions.AsNoTracking().ToListAsync(ct),
+            excludedBranchIds.Concat(ignoredBranchIds).ToHashSet(),
+            options.OldBranchSuffix,
+            options.ChannelRegions); // регионы-каналы (базар, сети): их строки — только в закрытом месяце (SecondarySales.ChannelsOn)
+    }
+
+    /// <summary>
+    /// План «Завод» месяца для «Настроек продаж»: итоги страны, план РОП месяца и раскладка по регионам вторички (или признак, что план
+    /// «Завод» на месяц заведён по регионам и итоги не используются).
+    /// </summary>
+    public async Task<FactoryPlanView> FactoryPlanAsync(int year, int month, CancellationToken ct = default)
+    {
+        var structure = await StructureAsync(ct);
+        var rows = await db.SalesRegionPlans.AsNoTracking()
+            .Where(p => (p.Kind == PlanKind.Rop || p.Kind == PlanKind.Factory) && (p.Year == year || (p.Year == year - 1 && p.Month == 12)))
+            .Select(p => new RegionPlanRow(p.RegionId, p.Kind, p.Year, p.Month, p.CategoryId, p.PlanKg))
+            .ToListAsync(ct);
+        var totals = await db.SalesFactoryPlans.AsNoTracking()
+            .Where(p => p.Year == year && p.Month == month)
+            .Select(p => new FactoryTotalRow(p.Year, p.Month, p.CategoryId, p.PlanKg))
+            .ToListAsync(ct);
+        var cascade = SalesPlans.Cascade(year, month, totals, rows, structure.RegionOf);
+        return FactoryPlanView.Of(cascade, totals, rows, structure);
+    }
+
     private async Task<HashSet<long>> BranchIdsAsync(string key, string[] names, CancellationToken ct) =>
         await Cached(key, async () =>
         {

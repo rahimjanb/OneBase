@@ -58,6 +58,24 @@ public class WeeklyReportMathTests
     }
 
     [Fact]
+    public void Region_plan_of_next_month_is_split_by_agents_plans_of_this_month()
+    {
+        // Ноябрьских планов ТП в Linko ещё нет, план РОП региона — 21 000 кг. Весовых планов октября нет ни у кого, в сумах — у двух ТП из трёх:
+        // делим по ним (2 : 1), третий без плана — 0; по факту делили бы, только если сумм нет.
+        IReadOnlyDictionary<long, decimal> kg = new Dictionary<long, decimal> { [1] = 0, [2] = 0, [3] = 0 };
+        IReadOnlyDictionary<long, decimal> sum = new Dictionary<long, decimal> { [1] = 200_000_000, [2] = 100_000_000, [3] = 0 };
+        IReadOnlyDictionary<long, decimal> fact = new Dictionary<long, decimal> { [1] = 500, [2] = 500, [3] = 500 };
+        var bySum = WeeklyReportMath.SplitPlan(21_000m, [kg, sum, fact]);
+        Assert.Equal((14_000m, 7_000m, 0m), (bySum[1], bySum[2], bySum[3]));
+        Assert.Equal(21_000m, bySum.Values.Sum());
+
+        // План в сумах только у одного из трёх (меньше половины) — делим по факту, поровну.
+        IReadOnlyDictionary<long, decimal> few = new Dictionary<long, decimal> { [1] = 100_000_000, [2] = 0, [3] = 0 };
+        Assert.Equal(7_000m, WeeklyReportMath.SplitPlan(21_000m, [kg, few, fact])[2]);
+        Assert.Empty(WeeklyReportMath.SplitPlan(21_000m, [kg]));
+    }
+
+    [Fact]
     public void Dealer_money_adds_up_the_dealer_and_its_previous_names()
     {
         // Сменился дилер склада: у прежнего долг закрыт возвратом, у нового — отгрузки без оплат. Деньги региона — по обоим.
@@ -317,6 +335,21 @@ public class WeeklyReportDbTests(DataManagerDb fixture) : IClassFixture<DataMana
             Assert.Empty(again.Incomplete);
             Assert.Equal((1, 2), (again.WeeklyGoals.Agents.Single(a => a.AgentId == Second).AkbWas, again.WeeklyGoals.Agents.Single(a => a.AgentId == Second).Akb));
             await db.TelegramWeeklyPdfSettings.ExecuteDeleteAsync();
+
+            // План РОП региона на ноябрь есть, а планов ТП на ноябрь в Linko нет — цели 02–07.11 из плана РОП, разложенного по ТП по их планам
+            // октября: у первого 200 кг, у второго плана нет — весь план первому (вес есть у половины ТП).
+            db.SalesRegionPlans.Add(new Domain.Sales.SalesRegionPlan { RegionId = fixture.KhorazmId, Kind = Domain.Sales.PlanKind.Rop, Year = 2026, Month = 11, PlanKg = 600 });
+            await db.SaveChangesAsync();
+            scope.ServiceProvider.GetRequiredService<SalesCacheSignal>().Invalidate();
+            var byRop = await fixture.Services.CreateScope().ServiceProvider.GetRequiredService<WeeklyReportBuilder>()
+                .BuildAsync(new ReportScope(TelegramReportRoles.Sv, RegionId: fixture.KhorazmId), new DateOnly(2026, 10, 29), money: true, CancellationToken.None);
+            var ropGoals = byRop.WeeklyGoals;
+            Assert.True(ropGoals.PlanOfNextMonth && ropGoals.FromRegionPlan);
+            Assert.Equal(Math.Round(600m / ropGoals.MonthWorkDays * ropGoals.WeekWorkDays, 0, MidpointRounding.AwayFromZero), ropGoals.Agents.Single(x => x.AgentId == First).SalesKg);
+            Assert.Null(ropGoals.Agents.Single(x => x.AgentId == Second).SalesKg);
+            Assert.Equal(ropGoals.Agents.Single(x => x.AgentId == First).SalesKg, ropGoals.SalesKg);
+            await db.SalesRegionPlans.Where(x => x.RegionId == fixture.KhorazmId && x.Year == 2026 && x.Month == 11).ExecuteDeleteAsync();
+            scope.ServiceProvider.GetRequiredService<SalesCacheSignal>().Invalidate();
         }
 
         // Воскресенье 1 ноября (есть продажа этого дня): неделя — прошедшая 26–31.10, месяц — октябрь, а не ноябрь с одним днём.

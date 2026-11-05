@@ -80,7 +80,14 @@ public sealed record KpiTiles(
     int PlanAgents = 0,
     int VisitsOutsideTeam = 0,
     string PlanSource = PlanSources.Linko,
-    TargetLevel? ExecutionLevel = null);
+    TargetLevel? ExecutionLevel = null,
+    AltPlanTile? AltPlan = null);
+
+/// <summary>
+/// Второй план регионов рядом с выбранным (РОП при «Заводе» и наоборот), как в «Полевом контроле»: «план РОП: 82,4% из 400 000 кг». План —
+/// сумма планов регионов охвата этого вида, выполнение — весь факт охвата к нему (регион без своего плана добавляет факт, но не план).
+/// </summary>
+public sealed record AltPlanTile(string Source, decimal PlanKg, decimal? Execution);
 
 /// <summary>
 /// План по выручке: только агенты, у которых он есть в Linko (sales_sum).

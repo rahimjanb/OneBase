@@ -58,6 +58,12 @@ export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
           ? t("{fact} из {plan} кг", { fact: kg(kpi.planFactKg), plan: kg(kpi.planKg) })
           : t("факт {kg} кг · плана нет", { kg: kg(kpi.factKg) })}
         {fromLinko && <span className="block">{hasPlan ? t("{missing} — план ТП из Linko", { missing }) : missing}</span>}
+        {/* Второй план стоит рядом, а не вместо: видно и «по своему плану», и «по плану другой стороны» без переключения (как «Полевой контроль»). */}
+        {kpi.altPlan && (
+          <span className="block" title={t("{source}: весь факт к нему, в выполнение не входит", { source: capitalize(t(planSourceText[kpi.altPlan.source])) })}>
+            {t("{source}: {pct} из {plan} кг", { source: t(planSourceText[kpi.altPlan.source]), pct: pct(kpi.altPlan.execution, 1), plan: kg(kpi.altPlan.planKg) })}
+          </span>
+        )}
       </KpiTile>
       <KpiTile
         label={t("Выручка")}

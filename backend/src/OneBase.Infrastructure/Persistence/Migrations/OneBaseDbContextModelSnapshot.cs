@@ -6472,6 +6472,38 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("Directions", "sales");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Sales.SalesFactoryPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("CategoryId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("PlanKg")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Year", "Month", "CategoryId")
+                        .IsUnique();
+
+                    b.ToTable("FactoryPlans", "sales");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Sales.SalesHoliday", b =>
                 {
                     b.Property<Guid>("Id")
