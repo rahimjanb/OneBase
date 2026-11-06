@@ -4,6 +4,7 @@ using OneBase.Api.Auth;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Field;
 using OneBase.Application.Procurement;
+using OneBase.Application.Reports;
 
 namespace OneBase.Api.Controllers;
 
@@ -19,7 +20,7 @@ namespace OneBase.Api.Controllers;
 [Route("api/procurement")]
 public sealed class ProcurementController(ProcurementRequestService requests, ProcurementStockService stock, ProcurementDocumentService documents, IFileStorage storage,
     ProcurementStockImportService stockImport, ProcurementWarehouseService warehouses, ProcurementBatchService batches, ProcurementInsightService insight,
-    ProcurementCatalogImportService catalogImport, ProcurementSheetImportService sheetImports)
+    ProcurementCatalogImportService catalogImport, ProcurementSheetImportService sheetImports, IReportWorkbookWriter excel)
     : ControllerBase
 {
     private Task<ProcurementContext> ContextAsync(CancellationToken ct) =>
@@ -241,7 +242,7 @@ public sealed class ProcurementController(ProcurementRequestService requests, Pr
 
     // ---------- Склад ----------
 
-    /// <summary>Остатки: warehouse — склад (не указан — сумма по всем складам).</summary>
+    /// <summary>Остатки: warehouse — склад (не указан — сумма по всем складам), hideEmpty — без позиций с нулевым остатком.</summary>
     [HttpGet("stock")]
     public async Task<PageResult<ProcurementStockRow>> Stock(
         [FromQuery] string? q = null,
@@ -252,8 +253,40 @@ public sealed class ProcurementController(ProcurementRequestService requests, Pr
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] Guid? warehouse = null,
+        [FromQuery] bool hideEmpty = false,
         CancellationToken ct = default) =>
-        await stock.StockAsync(await ContextAsync(ct), new ProcurementStockSearch(q, category, filter, sort, desc, page, pageSize, warehouse), ct);
+        await stock.StockAsync(await ContextAsync(ct), new ProcurementStockSearch(q, category, filter, sort, desc, page, pageSize, warehouse, hideEmpty), ct);
+
+    /// <summary>Остатки в Excel — с тем же фильтром, поиском, складом и порядком, что список; все строки.</summary>
+    [HttpGet("stock/xlsx")]
+    public async Task<IActionResult> StockExcel(
+        [FromQuery] string? q = null,
+        [FromQuery] Guid? category = null,
+        [FromQuery] string? filter = null,
+        [FromQuery] string? sort = null,
+        [FromQuery] bool desc = false,
+        [FromQuery] Guid? warehouse = null,
+        [FromQuery] bool hideEmpty = false,
+        CancellationToken ct = default)
+    {
+        var report = await stock.ExportAsync(await ContextAsync(ct), new ProcurementStockSearch(q, category, filter, sort, desc, WarehouseId: warehouse, HideEmpty: hideEmpty), ct);
+        return File(excel.Write(report, DateTimeOffset.UtcNow), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"stock-{FieldClock.Today:yyyy-MM-dd}.xlsx");
+    }
+
+    /// <summary>«Задать минимумы»: позиции без минимума (сначала по расходу) или items — эти позиции; предложение — расход за 30 дней.</summary>
+    [HttpGet("stock/minimums")]
+    public async Task<ProcurementMinimumPlan> Minimums(
+        [FromQuery] string? q = null,
+        [FromQuery] Guid? category = null,
+        [FromQuery] Guid[]? items = null,
+        [FromQuery] int take = 200,
+        CancellationToken ct = default) =>
+        await stock.MinimumsAsync(await ContextAsync(ct), new ProcurementMinimumSearch(q, category, items, take), ct);
+
+    /// <summary>Минимальные остатки списком (кладовщик или снабжение); ответ — сколько позиций изменено.</summary>
+    [HttpPut("items/minimums")]
+    public async Task<IActionResult> SetMinimums(ProcurementMinimumsInput input, CancellationToken ct) =>
+        Ok(new { changed = await stock.SetMinimumsAsync(await ContextAsync(ct), input, ct) });
 
     [HttpGet("stock/summary")]
     public async Task<ProcurementStockSummary> StockSummary([FromQuery] Guid? warehouse, CancellationToken ct) =>

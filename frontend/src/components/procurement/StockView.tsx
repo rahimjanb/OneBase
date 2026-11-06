@@ -9,20 +9,19 @@ import {
   ArrowLeftRight,
   ArrowUpFromLine,
   CalendarClock,
-  ChevronLeft,
-  ChevronRight,
+  ChevronDown,
   ClipboardList,
+  Ellipsis,
   FlaskConical,
   Loader2,
   PackageMinus,
-  PackagePlus,
   Pencil,
   Plus,
-  Search,
-  ShieldAlert,
+  ScanBarcode,
   X,
 } from "lucide-react";
 import { Sheet } from "@/components/field/Sheet";
+import { BarcodeScanner } from "@/components/scan/BarcodeScanner";
 import { QualitySpecSheet } from "@/components/quality/QualitySpecSheet";
 import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
@@ -52,31 +51,24 @@ import {
   type StockSummary,
   type Warehouse,
   type BatchRow,
+  type CatalogOption,
   type QualityControl,
 } from "@/lib/procurement";
+import { allColumns, nextSort, readColumns, type StockColumn } from "@/lib/stock-view";
 import { BatchEntrySheet } from "./BatchEntrySheet";
 import { CatalogImport } from "./CatalogImport";
+import { BatchAlerts, Dropdown, MenuItem, MinimumHint, SelectionBar, StockCards, StockFooter, StockTable, StockToolbar, toolButton } from "./StockBoard";
+import { MinimumsSheet } from "./StockMinimums";
+import { StockChips, StockFiltersSheet, StockMobileList, StockSearch, StockTiles } from "./StockMobile";
 import { StockOperation, type OperationKind } from "./StockOperation";
 
 const field =
   "h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60";
 const secondary = "inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink hover:bg-muted";
 
-const filters = [
-  { value: "", label: "Все" },
-  { value: "low", label: "Ниже минимума" },
-  { value: "empty", label: "Нет на складе" },
-  { value: "reserved", label: "В резерве" },
-  { value: "expiring", label: "Истекает срок" },
-  { value: "expired", label: "Просрочено" },
-  { value: "control", label: "На контроле" },
-  { value: "blocked", label: "Забраковано и заблокировано" },
-  { value: "inactive", label: "Отключённые" },
-] as const;
-
 /**
- * Кнопки операций склада: кладовщику — все (по складам, где он проводит операции; «Перемещение» — когда складов больше одного), снабжению —
- * только новая позиция каталога.
+ * Кнопки операций склада, как на макете: кладовщику — «Приход», «Выдача» и меню «Операции» (списание, инвентаризация, перемещение — когда
+ * складов больше одного; по складам, где он проводит операции); тем, кто ведёт каталог, — загрузка каталога из Excel и «Новая позиция».
  */
 export function StockActions({
   warehouse,
@@ -98,35 +90,71 @@ export function StockActions({
   const t = useT();
   const [op, setOp] = useState<OperationKind | null>(null);
   const [creating, setCreating] = useState(false);
+  const camera = useCamera();
   const posts = warehouse && warehouses.some((w) => w.isActive && w.posts);
   const several = activeWarehouses(warehouses).length > 1;
   return (
-    <div className="flex items-center gap-1.5 sm:flex-wrap sm:gap-2">
+    <div className="flex items-center gap-2">
+      {camera && (
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event(scanEvent))}
+          aria-label={t("Сканировать штрихкод")}
+          className="grid size-12 place-items-center rounded-full border border-line-strong bg-surface text-ink hover:bg-muted lg:hidden"
+        >
+          <ScanBarcode className="size-6" aria-hidden />
+        </button>
+      )}
       {posts && (
-        <>
-          <button type="button" onClick={() => setOp("receipt")} className={secondary}>
+        <div className="hidden items-center gap-2 lg:flex">
+          <button type="button" onClick={() => setOp("receipt")} className={toolButton}>
             <ArrowDownToLine className="size-4" aria-hidden /> <span className="max-sm:sr-only">{t("Приход")}</span>
           </button>
-          <button type="button" onClick={() => setOp("issue")} className={secondary}>
+          <button type="button" onClick={() => setOp("issue")} className={toolButton}>
             <ArrowUpFromLine className="size-4" aria-hidden /> <span className="max-sm:sr-only">{t("Выдача")}</span>
           </button>
-          <button type="button" onClick={() => setOp("writeoff")} className={secondary}>
-            <PackageMinus className="size-4" aria-hidden /> <span className="max-sm:sr-only">{t("Списание")}</span>
-          </button>
-          <button type="button" onClick={() => setOp("inventory")} className={secondary}>
-            <ClipboardList className="size-4" aria-hidden /> <span className="max-sm:sr-only">{t("Инвентаризация")}</span>
-          </button>
-          {several && (
-            <button type="button" onClick={() => setOp("transfer")} className={secondary}>
-              <ArrowLeftRight className="size-4" aria-hidden /> <span className="max-sm:sr-only">{t("Перемещение")}</span>
-            </button>
-          )}
-        </>
+          <Dropdown
+            label={t("Операции")}
+            align="right"
+            button={(open, toggle) => (
+              <button type="button" onClick={toggle} aria-expanded={open} aria-haspopup="menu" className={toolButton}>
+                <Ellipsis className="size-4" aria-hidden /> <span className="max-sm:sr-only">{t("Операции")}</span>
+                <ChevronDown className="size-4 text-ink-3 max-sm:hidden" aria-hidden />
+              </button>
+            )}
+          >
+            {(close) => (
+              <>
+                <MenuItem icon={PackageMinus} onClick={() => (close(), setOp("writeoff"))}>
+                  {t("Списание")}
+                </MenuItem>
+                <MenuItem icon={ClipboardList} onClick={() => (close(), setOp("inventory"))}>
+                  {t("Инвентаризация")}
+                </MenuItem>
+                {several && (
+                  <MenuItem icon={ArrowLeftRight} onClick={() => (close(), setOp("transfer"))}>
+                    {t("Перемещение")}
+                  </MenuItem>
+                )}
+              </>
+            )}
+          </Dropdown>
+        </div>
       )}
-      {catalog && <CatalogImport />}
+      {posts && catalog && <span aria-hidden className="mx-1 hidden h-7 w-px bg-line-strong lg:block" />}
+      {/* Загрузка каталога из Excel — на компьютере; в шапке телефона, как на макете, — сканер и «+». */}
       {catalog && (
-        <button type="button" onClick={() => setCreating(true)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3.5 text-sm font-semibold text-white hover:bg-accent-strong">
-          <PackagePlus className="size-4" aria-hidden /> <span className="max-sm:sr-only">{t("Новая позиция")}</span>
+        <span className="hidden lg:contents">
+          <CatalogImport compact />
+        </span>
+      )}
+      {catalog && (
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          className="grid size-12 place-items-center rounded-full bg-accent text-white shadow-lg shadow-accent/30 hover:bg-accent-strong lg:inline-flex lg:h-10 lg:w-auto lg:items-center lg:gap-2 lg:rounded-xl lg:px-4 lg:text-sm lg:font-semibold lg:shadow-none"
+        >
+          <Plus className="size-6 lg:size-4" aria-hidden /> <span className="max-lg:sr-only">{t("Новая позиция")}</span>
         </button>
       )}
       {op && <StockOperation kind={op} open onClose={() => setOp(null)} departments={departments} warehouses={warehouses} warehouseId={warehouseId} />}
@@ -135,10 +163,37 @@ export function StockActions({
   );
 }
 
+/** Кнопка сканера в шапке телефона открывает сканер экрана склада. */
+const scanEvent = "onebase:stock-scan";
+
+/** Камера есть, и браузер её даёт (https или localhost) — иначе кнопок сканера нет. Проверяется в браузере после загрузки. */
+function useCamera() {
+  const [camera, setCamera] = useState(false);
+  useEffect(() => setCamera(typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia)), []);
+  return camera;
+}
+
+/** Позиция строки для формы операции: остаток — выбранного склада или всех (склад формы подтянет свой). */
+const asOption = (r: StockRow): CatalogOption => ({
+  id: r.itemId,
+  sku: r.sku,
+  name: r.name,
+  categoryId: r.categoryId,
+  categoryName: r.categoryName,
+  unitCode: r.unitCode,
+  onHand: r.onHand,
+  available: r.available,
+  tracksBatches: r.tracksBatches,
+  shelfLifeDays: r.shelfLifeDays,
+});
+
+const columnsKey = "onebase:stock:columns";
+
 /**
- * Склад: плитки (позиций, ниже минимума, нет на складе, в резерве, заявок к выдаче), поиск по SKU, названию, штрихкоду, склад (когда
- * складов больше одного: один или все вместе), категория и фильтры, таблица остатков (на складе, в резерве, доступно, минимум); строка
- * открывает карточку товара — остаток по складам, движения, резервы, правка.
+ * Склад по макету: карточки-фильтры (все позиции, ниже минимума, нет на складе, в резерве; «К выдаче» — переход), сроки партий, подсказка о
+ * минимумах; таблица в одной карточке с панелью фильтров (поиск, склад, категория, «Ещё фильтры», «Скрыть нулевые», Excel, колонки),
+ * сортировкой по заголовкам, галочками для прихода и выдачи, быстрыми действиями и страницами. Строка открывает карточку позиции.
+ * Фильтр, поиск, склад, сортировка и страница — в адресе.
  */
 export function StockView({
   data,
@@ -171,10 +226,70 @@ export function StockView({
   const params = useSearchParams();
   const [search, setSearch] = useState(params.get("q") ?? "");
   const [open, setOpen] = useState<string | null>(null);
+  const [op, setOp] = useState<{ kind: OperationKind; options: CatalogOption[] } | null>(null);
+  const [minimum, setMinimum] = useState<{ open: boolean; item: { id: string; name: string } | null }>({ open: false, item: null });
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [columns, setColumnsState] = useState<Set<StockColumn>>(() => new Set(allColumns));
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [extra, setExtra] = useState<StockRow[]>([]);
+  const [loaded, setLoaded] = useState(data.page);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  const [now] = useState(() => new Date());
+  const camera = useCamera();
+  const [scanning, setScanning] = useState(false);
+  const [missing, setMissing] = useState<string | null>(null);
+  const [newBarcode, setNewBarcode] = useState<string | null>(null);
   const filter = params.get("filter") ?? "";
   const category = params.get("category") ?? "";
   const store = params.get("warehouse") ?? "";
+  const sort = params.get("sort") ?? "";
+  const desc = params.get("desc") === "1";
+  const hideEmpty = params.get("hideEmpty") === "1";
   const stores = activeWarehouses(warehouses);
+  const posts = warehouse && warehouses.some((w) => w.isActive && w.posts);
+
+  // Кнопка сканера в шапке (телефон) — событием: шапка и экран — соседние части страницы.
+  useEffect(() => {
+    const open = () => setScanning(true);
+    window.addEventListener(scanEvent, open);
+    return () => window.removeEventListener(scanEvent, open);
+  }, []);
+
+  /**
+   * Код со сканера: в поиск; одна позиция с таким штрихкодом или артикулом (в том числе отключённая) — сразу её карточка; нет в каталоге —
+   * сообщение и «Новая позиция с этим штрихкодом» тем, кто ведёт каталог.
+   */
+  const scanned = async (code: string) => {
+    setScanning(false);
+    setMissing(null);
+    setSearch(code);
+    try {
+      const found = await bff<Page<StockRow>>(`procurement/stock?${new URLSearchParams({ q: code, filter: "all", pageSize: "5" })}`);
+      const exact = found.items.filter((r) => r.barcode === code || r.sku === code);
+      if (exact.length === 1) setOpen(exact[0].itemId);
+      else if (found.items.length === 0) setMissing(code);
+    } catch {
+      // поиск по коду уже в строке поиска — список покажет, что нашлось
+    }
+  };
+
+  // Колонки — из браузера (на сервере их нет: сначала все, потом сохранённые).
+  useEffect(() => {
+    setColumnsState(new Set(readColumns(window.localStorage.getItem(columnsKey))));
+  }, []);
+  const setColumns = (next: Set<StockColumn>) => {
+    setColumnsState(next);
+    window.localStorage.setItem(columnsKey, JSON.stringify([...next]));
+  };
+
+  // Другая страница или фильтр — выбор сбрасывается (галочки только у видимых строк), «Загрузить ещё» — начинается заново.
+  useEffect(() => {
+    setSelected(new Set());
+    setExtra([]);
+    setLoaded(data.page);
+    setMoreError(null);
+  }, [data]);
 
   const apply = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params.toString());
@@ -194,180 +309,127 @@ export function StockView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const tiles = [
-    { label: "Позиций в каталоге", value: summary.items, filter: "" },
-    { label: "Ниже минимума", value: summary.low, filter: "low", tone: summary.low > 0 ? "text-warn" : "" },
-    { label: "Нет на складе", value: summary.empty, filter: "empty", tone: summary.empty > 0 ? "text-bad" : "" },
-    { label: "С резервом", value: summary.withReserve, filter: "reserved" },
-    // Сроки — когда есть позиции по партиям.
-    ...(summary.tracked > 0
-      ? [
-          { label: "Истекает срок", value: summary.expiring, filter: "expiring", tone: summary.expiring > 0 ? "text-warn" : "" },
-          { label: "Просрочено", value: summary.expired, filter: "expired", tone: summary.expired > 0 ? "text-bad" : "" },
-          { label: "На контроле", value: summary.onControl, filter: "control", tone: summary.onControl > 0 ? "text-warn" : "" },
-          { label: "Забраковано и заблокировано", value: summary.blocked, filter: "blocked", tone: summary.blocked > 0 ? "text-bad" : "" },
-        ]
-      : []),
-  ];
-  const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
+  const exportQuery = new URLSearchParams();
+  for (const key of ["q", "category", "filter", "sort", "desc", "warehouse", "hideEmpty"]) {
+    const value = params.get(key);
+    if (value) exportQuery.set(key, key === "desc" || key === "hideEmpty" ? "true" : value);
+  }
+  // Телефон: следующие 50 строк с теми же фильтром, поиском, складом и порядком — к уже показанным.
+  const loadMore = async () => {
+    const query = new URLSearchParams(exportQuery);
+    query.set("page", String(loaded + 1));
+    query.set("pageSize", String(data.pageSize));
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const next = await bff<Page<StockRow>>(`procurement/stock?${query}`);
+      setExtra((rows) => {
+        const seen = new Set([...data.items, ...rows].map((r) => r.itemId));
+        return [...rows, ...next.items.filter((r) => !seen.has(r.itemId))];
+      });
+      setLoaded(next.page);
+    } catch (e) {
+      setMoreError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+  // Фильтры шторки (кроме чипов): склад, категория, редкие фильтры, «скрыть нулевые», порядок.
+  const sheetFilters = [store, category, ["", "low", "empty", "reserved"].includes(filter) ? "" : filter, hideEmpty ? "1" : "", sort].filter(Boolean).length;
+
+  const exportHref = `/bff/api/procurement/stock/xlsx${exportQuery.size ? `?${exportQuery}` : ""}`;
+  const operate = (kind: OperationKind, rows: StockRow[]) => {
+    const list = kind === "issue" || kind === "writeoff" ? rows.filter((r) => r.available > 0) : rows;
+    if (list.length > 0) setOp({ kind, options: list.map(asOption) });
+  };
+  const chosen = data.items.filter((r) => selected.has(r.itemId));
 
   return (
-    <>
-      <div className={`grid grid-cols-2 gap-3 ${summary.tracked > 0 ? "sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9" : "sm:grid-cols-5"}`}>
-        {tiles.map((tile) => (
-          <button
-            key={tile.label}
-            type="button"
-            onClick={() => apply({ filter: tile.filter || null })}
-            className={`rounded-xl border bg-surface p-4 text-left transition-colors hover:border-accent/40 ${filter === tile.filter ? "border-accent/50 ring-1 ring-accent/20" : "border-line"}`}
-          >
-            <div className={`text-2xl font-semibold tabular-nums text-ink ${tile.tone ?? ""}`}>{tile.value}</div>
-            <div className="mt-0.5 text-xs text-ink-3">{t(tile.label)}</div>
-          </button>
-        ))}
-        <Link href="/procurement/issue" className="col-span-2 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-accent/40 sm:col-span-1">
-          <div className="text-2xl font-semibold tabular-nums text-accent-strong">{summary.toIssueRequests}</div>
-          <div className="mt-0.5 text-xs text-ink-3">{t("Заявок к выдаче")}</div>
-        </Link>
-      </div>
-
-      <div className="my-4 flex flex-wrap items-center gap-2">
-        <label className="relative block min-w-[220px] flex-1 sm:max-w-[320px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" aria-hidden />
-          <span className="sr-only">{t("Поиск")}</span>
-          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("Артикул, название, штрихкод")} className={`${field} pl-9`} />
-        </label>
-        {stores.length > 1 && (
-          <select value={store} onChange={(e) => apply({ warehouse: e.target.value || null })} aria-label={t("Склад")} className={`${field} w-auto max-w-[240px]`}>
-            <option value="">{t("Все склады")}</option>
-            {stores.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-        )}
-        <select value={category} onChange={(e) => apply({ category: e.target.value || null })} aria-label={t("Категория")} className={`${field} w-auto max-w-[240px]`}>
-          <option value="">{t("Все категории")}</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <div className="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
-          {filters.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => apply({ filter: f.value || null })}
-              className={`h-8 rounded-lg px-3 text-sm ${filter === f.value ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-2 hover:text-ink"}`}
-            >
-              {t(f.label)}
+    <div className="space-y-4 lg:space-y-5">
+      {/* Телефон (макет): плитки операций, поиск с «Фильтрами», чипы. */}
+      {posts && <StockTiles several={stores.length > 1} onOperation={(kind) => setOp({ kind, options: [] })} />}
+      <StockSearch search={search} onSearch={setSearch} active={sheetFilters} onFilters={() => setFiltersOpen(true)} />
+      {missing && (
+        <div role="status" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-line bg-surface px-4 py-3">
+          <ScanBarcode className="size-5 shrink-0 text-ink-3" aria-hidden />
+          <p className="min-w-0 flex-1 text-sm text-ink">{t("Штрихкода {code} нет в каталоге.", { code: missing })}</p>
+          {catalog && (
+            <button type="button" onClick={() => (setNewBarcode(missing), setMissing(null))} className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3.5 text-sm font-semibold text-white hover:bg-accent-strong">
+              <Plus className="size-4" aria-hidden /> {t("Новая позиция с этим штрихкодом")}
             </button>
-          ))}
+          )}
+          <button type="button" onClick={() => setMissing(null)} aria-label={t("Закрыть")} className="grid size-9 place-items-center rounded-lg text-ink-3 hover:bg-muted hover:text-ink">
+            <X className="size-4" aria-hidden />
+          </button>
         </div>
-      </div>
+      )}
+      <StockChips summary={summary} filter={filter} onFilter={(f) => apply({ filter: f || null })} />
+      {/* Компьютер: карточки-фильтры. */}
+      <StockCards summary={summary} filter={filter} onFilter={(f) => apply({ filter: f || null })} />
+      <BatchAlerts summary={summary} filter={filter} onFilter={(f) => apply({ filter: f || null })} />
+      {catalog && <MinimumHint summary={summary} onOpen={() => setMinimum({ open: true, item: null })} />}
 
-      {data.items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line bg-surface px-4 py-10 text-center text-sm text-ink-3">
-          {summary.items === 0 ? t("Каталог склада пуст — добавьте позиции кнопкой «Новая позиция», затем проведите приход.") : t("По этому фильтру позиций нет.")}
-        </p>
-      ) : (
-        <>
-          <div className="hidden overflow-x-auto rounded-xl border border-line bg-surface lg:block">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
-                  <th className="px-3 py-2.5 font-semibold">{t("Артикул")}</th>
-                  <th className="px-3 py-2.5 font-semibold">{t("Наименование")}</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">{t("На складе")}</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">{t("В резерве")}</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">{t("Доступно")}</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">{t("Минимум")}</th>
-                  <th className="px-3 py-2.5 font-semibold">{t("Последнее движение")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((r) => (
-                  <tr key={r.itemId} onClick={() => setOpen(r.itemId)} className={`cursor-pointer border-b border-line last:border-0 hover:bg-muted/50 ${r.isActive ? "" : "opacity-60"}`}>
-                    <td className="px-3 py-2.5 tabular-nums text-ink-3">{r.sku}</td>
-                    <td className="px-3 py-2.5">
-                      <button type="button" className="text-left font-medium text-ink hover:text-accent-strong">
-                        {r.name}
-                      </button>
-                      <span className="block text-xs text-ink-3">
-                        {r.categoryName}
-                        {r.tracksBatches && ` · ${t("по партиям")}`}
-                        {r.nearestExpiry && ` · ${t("ближайший срок {date}", { date: dateRu(r.nearestExpiry) })}`}
-                      </span>
-                      {r.expired > 0 && (
-                        <span className="flex items-center gap-1 text-xs text-bad">
-                          <CalendarClock className="size-3.5" aria-hidden /> {t("просрочено {n} {unit} — не выдаётся", { n: quantity(r.expired), unit: r.unitCode })}
-                        </span>
-                      )}
-                      <QualityHold row={r} />
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-ink">
-                      {quantity(r.onHand)} <span className="text-ink-3">{r.unitCode}</span>
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-2">{r.reserved > 0 ? quantity(r.reserved) : "—"}</td>
-                    <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${r.low ? "text-warn" : r.available > 0 ? "text-ok" : "text-ink-3"}`}>
-                      {r.low && <AlertTriangle className="mr-1 inline size-3.5" aria-label={t("Ниже минимума")} />}
-                      {quantity(r.available)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-3">{r.minQty > 0 ? quantity(r.minQty) : "—"}</td>
-                    <td className="px-3 py-2.5 tabular-nums text-ink-3">{r.lastMovementAt ? stampRu(r.lastMovementAt) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <ul className="space-y-2 lg:hidden">
-            {data.items.map((r) => (
-              <li key={r.itemId}>
-                <button type="button" onClick={() => setOpen(r.itemId)} className="block w-full rounded-xl border border-line bg-surface p-3.5 text-left">
-                  <span className="flex items-start justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="block text-xs tabular-nums text-ink-3">{r.sku}</span>
-                      <span className="block font-medium text-ink">{r.name}</span>
-                    </span>
-                    <span className={`shrink-0 text-right text-sm font-semibold tabular-nums ${r.low ? "text-warn" : r.available > 0 ? "text-ok" : "text-ink-3"}`}>
-                      {quantity(r.available)} {r.unitCode}
-                      <span className="block text-[11px] font-normal text-ink-3">{t("доступно")}</span>
-                    </span>
-                  </span>
-                  <span className="mt-1 block text-xs text-ink-3">
-                    {t("на складе {a} · в резерве {b}", { a: quantity(r.onHand), b: quantity(r.reserved) })}
-                    {r.minQty > 0 && ` · ${t("мин. {n}", { n: quantity(r.minQty) })}`}
-                    {r.nearestExpiry && ` · ${t("ближайший срок {date}", { date: dateRu(r.nearestExpiry) })}`}
-                  </span>
-                  {r.expired > 0 && <span className="mt-0.5 block text-xs text-bad">{t("просрочено {n} {unit} — не выдаётся", { n: quantity(r.expired), unit: r.unitCode })}</span>}
-                  <QualityHold row={r} />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-ink-2">
-            <span>{t("Позиций: {n}", { n: data.total })}</span>
-            {pages > 1 && (
-              <div className="flex items-center gap-2">
-                {data.page > 1 && (
-                  <button type="button" onClick={() => apply({ page: String(data.page - 1) })} className={secondary}>
-                    <ChevronLeft className="size-4" /> {t("Назад")}
-                  </button>
-                )}
-                <span>{t("{page} из {pages}", { page: data.page, pages })}</span>
-                {data.page < pages && (
-                  <button type="button" onClick={() => apply({ page: String(data.page + 1) })} className={secondary}>
-                    {t("Дальше")} <ChevronRight className="size-4" />
-                  </button>
-                )}
+      <section className="overflow-hidden rounded-2xl border border-line bg-surface">
+        <StockToolbar
+          search={search}
+          onSearch={setSearch}
+          stores={stores}
+          store={store}
+          categories={categories}
+          category={category}
+          filter={filter}
+          summary={summary}
+          hideEmpty={hideEmpty}
+          exportHref={exportHref}
+          columns={columns}
+          onColumns={setColumns}
+          apply={apply}
+          onScan={camera ? () => setScanning(true) : undefined}
+        />
+        {posts && chosen.length > 0 && <SelectionBar count={chosen.length} onOperation={(kind) => operate(kind, chosen)} onClear={() => setSelected(new Set())} />}
+        {data.items.length === 0 ? (
+          <p className="px-4 py-12 text-center text-sm text-ink-3">
+            {summary.items === 0 ? t("Каталог склада пуст — добавьте позиции кнопкой «Новая позиция», затем проведите приход.") : t("По этому фильтру позиций нет.")}
+          </p>
+        ) : (
+          <>
+            <StockTable
+              rows={data.items}
+              columns={columns}
+              sort={sort}
+              desc={desc}
+              onSort={(key) => {
+                const next = nextSort(sort, desc, key);
+                apply({ sort: next.sort || null, desc: next.desc ? "1" : null });
+              }}
+              posts={posts}
+              catalog={catalog}
+              selected={selected}
+              onSelect={setSelected}
+              onOpen={setOpen}
+              onOperation={operate}
+              onMinimum={(r) => setMinimum({ open: true, item: { id: r.itemId, name: r.name } })}
+            />
+            <StockMobileList
+              rows={extra.length ? [...data.items, ...extra] : data.items}
+              total={data.total}
+              sort={sort}
+              now={now}
+              onSort={() => setFiltersOpen(true)}
+              onOpen={setOpen}
+              more={loaded * data.pageSize < data.total}
+              loading={loadingMore}
+              onMore={() => void loadMore()}
+            />
+            {moreError && (
+              <div className="px-4 pb-4 lg:hidden">
+                <ErrorNote text={moreError} />
               </div>
             )}
-          </div>
-        </>
-      )}
+          </>
+        )}
+        <StockFooter page={data.page} pageSize={data.pageSize} total={data.total} sort={sort} onPage={(page) => apply({ page: page > 1 ? String(page) : null })} />
+      </section>
 
       <ItemSheet
         id={open}
@@ -382,20 +444,26 @@ export function StockView({
         quality={quality}
         prices={prices}
       />
-    </>
-  );
-}
-
-/** Остаток, который не выдать по качеству: на контроле — ждёт решения, забраковано и заблокировано. */
-function QualityHold({ row }: { row: StockRow }) {
-  const t = useT();
-  if (row.onControl <= 0 && row.blocked <= 0) return null;
-  return (
-    <span className="flex flex-wrap items-center gap-x-2 text-xs">
-      <ShieldAlert className="size-3.5 text-warn" aria-hidden />
-      {row.onControl > 0 && <span className="text-warn">{t("на контроле {n} {unit}", { n: quantity(row.onControl), unit: row.unitCode })}</span>}
-      {row.blocked > 0 && <span className="text-bad">{t("забраковано и заблокировано {n} {unit}", { n: quantity(row.blocked), unit: row.unitCode })}</span>}
-    </span>
+      {op && <StockOperation kind={op.kind} open onClose={() => setOp(null)} departments={departments} warehouses={warehouses} warehouseId={store || null} presets={op.options} />}
+      <MinimumsSheet open={minimum.open} item={minimum.item} onClose={() => setMinimum({ open: false, item: null })} />
+      <BarcodeScanner open={scanning} onClose={() => setScanning(false)} onCode={(code) => void scanned(code)} />
+      <ItemFormSheet open={newBarcode !== null} onClose={() => setNewBarcode(null)} categories={categories} units={units} barcode={newBarcode ?? undefined} />
+      <StockFiltersSheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        stores={stores}
+        store={store}
+        categories={categories}
+        category={category}
+        filter={filter}
+        summary={summary}
+        hideEmpty={hideEmpty}
+        sort={sort}
+        desc={desc}
+        exportHref={exportHref}
+        apply={apply}
+      />
+    </div>
   );
 }
 
@@ -780,6 +848,7 @@ function ItemFormSheet({
   units,
   item,
   itemUnits = [],
+  barcode,
 }: {
   open: boolean;
   onClose: () => void;
@@ -787,6 +856,8 @@ function ItemFormSheet({
   units: RequestUnit[];
   item?: StockRow;
   itemUnits?: ItemUnit[];
+  /** Новая позиция со штрихкодом со сканера. */
+  barcode?: string;
 }) {
   const t = useT();
   const router = useRouter();
@@ -815,11 +886,11 @@ function ItemFormSheet({
             qualityControl: item.qualityControl,
             purchaseUnits: itemUnits.map((u) => unitRow(u.unitCode, String(u.factor).replace(".", ","))),
           }
-        : emptyForm,
+        : { ...emptyForm, barcode: barcode ?? "" },
     );
     // itemUnits — из карточки, меняется вместе с item.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, item]);
+  }, [open, item, barcode]);
 
   const save = async () => {
     setError(null);

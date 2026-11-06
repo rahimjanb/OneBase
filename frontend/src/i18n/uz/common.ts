@@ -260,6 +260,22 @@ const dict: Dict = {
   "выдача со склада по заявкам": "arizalar bo'yicha ombordan berish",
   "журнал прихода и расхода": "kirim va chiqim jurnali",
   "выгрузки по снабжению": "ta'minot bo'yicha yuklamalar",
+
+  // Сканер штрихкода камерой (components/scan/BarcodeScanner).
+  "Сканер штрихкода": "Shtrixkod skaneri",
+  "Ввести код": "Kodni kiritish",
+  "Включаем камеру…": "Kamera yoqilmoqda…",
+  "Загружаем распознавание…": "Aniqlash yuklanmoqda…",
+  "Включить фонарик": "Chiroqni yoqish",
+  "Выключить фонарик": "Chiroqni o'chirish",
+  "Наведите камеру на штрихкод — он прочитается сам": "Kamerani shtrixkodga qarating — u o'zi o'qiladi",
+  "Штрихкод или артикул": "Shtrixkod yoki artikul",
+  "Нет доступа к камере. Разрешите камеру для этого сайта в настройках браузера и попробуйте снова.": "Kameraga ruxsat yo'q. Brauzer sozlamalarida bu sayt uchun kameraga ruxsat bering va qayta urinib ko'ring.",
+  "Камера не найдена.": "Kamera topilmadi.",
+  "Камера занята другим приложением. Закройте его и попробуйте снова.": "Kamera boshqa ilova bilan band. Uni yoping va qayta urinib ko'ring.",
+  "Камера работает только на защищённом адресе (https). Откройте OneBase по https.": "Kamera faqat himoyalangan manzilda (https) ishlaydi. OneBase'ni https orqali oching.",
+  "Камеру не удалось включить.": "Kamerani yoqib bo'lmadi.",
+  "Не удалось загрузить распознавание штрихкодов. Проверьте связь и попробуйте снова.": "Shtrixkodlarni aniqlashni yuklab bo'lmadi. Aloqani tekshiring va qayta urinib ko'ring.",
 };
 
 export default dict;

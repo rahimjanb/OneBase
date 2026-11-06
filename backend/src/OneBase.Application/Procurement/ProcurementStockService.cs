@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Field;
+using OneBase.Application.Reports;
 using OneBase.Application.Work;
 using OneBase.Domain.Audit;
 using OneBase.Domain.Identity;
@@ -8,7 +10,10 @@ using OneBase.Domain.Procurement;
 
 namespace OneBase.Application.Procurement;
 
-/// <summary>Строка остатков склада: позиция каталога, на складе, в резерве, доступно, минимум, «ниже минимума».</summary>
+/// <summary>
+/// Строка остатков склада: позиция каталога, на складе, в резерве, доступно, минимум, «ниже минимума»; LastMovementKind — вид последнего
+/// движения (приход, выдача…) по выбранному складу или по всем.
+/// </summary>
 public sealed record ProcurementStockRow(
     Guid ItemId,
     string Sku,
@@ -33,20 +38,46 @@ public sealed record ProcurementStockRow(
     string? StorageConditions = null,
     decimal OnControl = 0,
     decimal Blocked = 0,
-    ProcurementQualityControl QualityControl = ProcurementQualityControl.None);
+    ProcurementQualityControl QualityControl = ProcurementQualityControl.None,
+    ProcurementMovementKind? LastMovementKind = null);
 
 /// <summary>
 /// Остатки: поиск (SKU, название, штрихкод), категория, фильтр (low — ниже минимума, reserved — есть резерв, empty — нет на складе,
 /// inactive — отключённые, expired — есть просроченные партии, expiring — у ближайшей годной партии срок скоро, control — есть партии на
 /// контроле качества, blocked — забракованные или заблокированные), склад (не указан — сумма по всем складам). Expired — просроченный
 /// остаток допущенных партий, OnControl — на контроле, Blocked — забракованный и заблокированный: всё это не выдаётся и в «доступно» не
-/// входит. NearestExpiry — ближайший срок годной партии.
+/// входит. NearestExpiry — ближайший срок годной партии. HideEmpty — «скрыть нулевые»: только позиции с остатком (вместе с любым фильтром).
 /// </summary>
 public sealed record ProcurementStockSearch(string? Search = null, Guid? CategoryId = null, string? Filter = null, string? Sort = null, bool Desc = false, int Page = 1,
-    int PageSize = 50, Guid? WarehouseId = null);
+    int PageSize = 50, Guid? WarehouseId = null, bool HideEmpty = false);
 
+/// <summary>
+/// Плитки склада. NoMin — активные позиции без минимального остатка (подсказка «задайте минимумы»), NoMinMoving — из них ходовые: с движением
+/// за 90 дней.
+/// </summary>
 public sealed record ProcurementStockSummary(int Items, int Low, int Empty, int WithReserve, int ToIssueRequests, int Expired = 0, int Expiring = 0, int Tracked = 0,
-    int OnControl = 0, int Blocked = 0);
+    int OnControl = 0, int Blocked = 0, int NoMin = 0, int NoMinMoving = 0);
+
+/// <summary>
+/// Позиции для «Задать минимумы»: Items — эти позиции (кнопка «Мин.» в строке, с минимумом или без), иначе активные без минимума с поиском и
+/// категорией; Take — сколько строк (Total — сколько всего).
+/// </summary>
+public sealed record ProcurementMinimumSearch(string? Search = null, Guid? CategoryId = null, IReadOnlyList<Guid>? Items = null, int Take = 200);
+
+/// <summary>
+/// Позиция в «Задать минимумы»: остаток по всем складам; Issued30 и Issued90 — расход за 30 и 90 дней (выдачи отделам и в производство минус
+/// возвраты из производства и сторно выдач); Moving — ходовая, было движение за 90 дней; Suggested — предложение минимума: расход за 30 дней
+/// вверх до целых (нет расхода — нет предложения).
+/// </summary>
+public sealed record ProcurementMinimumRow(Guid ItemId, string Sku, string Name, string CategoryName, string UnitCode, decimal OnHand, decimal MinQty, decimal Issued30,
+    decimal Issued90, DateTimeOffset? LastMovementAt, bool Moving, decimal? Suggested);
+
+public sealed record ProcurementMinimumPlan(int Total, IReadOnlyList<ProcurementMinimumRow> Rows);
+
+/// <summary>Минимальные остатки списком (кладовщик или снабжение): позиция и новый минимум, 0 — без минимума.</summary>
+public sealed record ProcurementMinimumsInput(IReadOnlyList<ProcurementMinimumInput>? Items);
+
+public sealed record ProcurementMinimumInput(Guid ItemId, decimal MinQty);
 
 /// <summary>
 /// Позиция каталога из формы: SKU, название, категория, единица, штрихкод, описание, минимальный остаток, активна; профиль сырья — учёт
@@ -197,6 +228,17 @@ public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLe
     public async Task<PageResult<ProcurementStockRow>> StockAsync(ProcurementContext ctx, ProcurementStockSearch s, CancellationToken ct)
     {
         RequireStock(ctx);
+        var q = Filtered(s);
+        var total = await q.CountAsync(ct);
+        var pageSize = Math.Clamp(s.PageSize, 5, 200);
+        var page = Math.Max(s.Page, 1);
+        var rows = await Sorted(q, s).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return new PageResult<ProcurementStockRow>(rows.Select(r => r.Row()).ToList(), total, page, pageSize);
+    }
+
+    /// <summary>Остатки с фильтром, категорией, поиском и «скрыть нулевые» — для списка и выгрузки в Excel.</summary>
+    private IQueryable<StockData> Filtered(ProcurementStockSearch s)
+    {
         var today = ledger.Today;
         var q = Rows(s.WarehouseId);
         q = s.Filter switch
@@ -223,21 +265,121 @@ public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLe
             q = q.Where(r => r.Sku.ToLower().Contains(text) || r.Name.ToLower().Contains(text) || (r.Barcode != null && r.Barcode.ToLower() == text));
         }
 
-        var total = await q.CountAsync(ct);
-        var pageSize = Math.Clamp(s.PageSize, 5, 200);
-        var page = Math.Max(s.Page, 1);
-        q = s.Sort switch
+        if (s.HideEmpty)
+        {
+            q = q.Where(r => r.OnHand > 0);
+        }
+
+        return q;
+    }
+
+    /// <summary>
+    /// Порядок списка; при равенстве — по названию и ID, чтобы страницы и «Загрузить ещё» не теряли и не повторяли строки. Позиции без
+    /// движений — в конце при любом направлении сортировки по дате движения.
+    /// </summary>
+    private static IOrderedQueryable<StockData> Sorted(IQueryable<StockData> q, ProcurementStockSearch s)
+    {
+        var sorted = s.Sort switch
         {
             "sku" => s.Desc ? q.OrderByDescending(r => r.Sku) : q.OrderBy(r => r.Sku),
             "onHand" => s.Desc ? q.OrderByDescending(r => r.OnHand) : q.OrderBy(r => r.OnHand),
             "available" => s.Desc ? q.OrderByDescending(r => r.Available) : q.OrderBy(r => r.Available),
             "reserved" => s.Desc ? q.OrderByDescending(r => r.Reserved) : q.OrderBy(r => r.Reserved),
-            "category" => s.Desc ? q.OrderByDescending(r => r.CategoryName) : q.OrderBy(r => r.CategoryName).ThenBy(r => r.Name),
-            "moved" => s.Desc ? q.OrderByDescending(r => r.LastMovementAt) : q.OrderBy(r => r.LastMovementAt),
+            "category" => s.Desc ? q.OrderByDescending(r => r.CategoryName) : q.OrderBy(r => r.CategoryName),
+            "moved" => s.Desc
+                ? q.OrderByDescending(r => r.LastMovementAt != null).ThenByDescending(r => r.LastMovementAt)
+                : q.OrderByDescending(r => r.LastMovementAt != null).ThenBy(r => r.LastMovementAt),
             _ => s.Desc ? q.OrderByDescending(r => r.Name) : q.OrderBy(r => r.Name),
         };
-        var rows = await q.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
-        return new PageResult<ProcurementStockRow>(rows.Select(r => r.Row()).ToList(), total, page, pageSize);
+        return sorted.ThenBy(r => r.Name).ThenBy(r => r.ItemId);
+    }
+
+    private static string L(string ru, string uz) => UiLanguage.IsUzbek ? UiLanguage.Uzbek(uz) : ru;
+
+    private static string KindLabel(ProcurementMovementKind kind) => kind switch
+    {
+        ProcurementMovementKind.Receipt => L("Приход", "Kirim"),
+        ProcurementMovementKind.Issue => L("Выдача", "Berish"),
+        ProcurementMovementKind.WriteOff => L("Списание", "Hisobdan chiqarish"),
+        ProcurementMovementKind.Adjustment => L("Инвентаризация", "Inventarizatsiya"),
+        ProcurementMovementKind.TransferOut => L("Перемещение: ушло", "Ko'chirish: chiqdi"),
+        ProcurementMovementKind.TransferIn => L("Перемещение: пришло", "Ko'chirish: keldi"),
+        ProcurementMovementKind.BatchEntry => L("Ввод партий", "Partiyalarni kiritish"),
+        ProcurementMovementKind.Reversal => L("Сторно", "Storno"),
+        ProcurementMovementKind.SupplierReturn => L("Возврат поставщику", "Yetkazib beruvchiga qaytarish"),
+        ProcurementMovementKind.ProductionIssue => L("Выдача в производство", "Ishlab chiqarishga berish"),
+        ProcurementMovementKind.ProductionReturn => L("Возврат из производства", "Ishlab chiqarishdan qaytarish"),
+        _ => kind.ToString(),
+    };
+
+    /// <summary>
+    /// Остатки в Excel: те же фильтр, поиск, склад, «скрыть нулевые» и порядок, что в списке, — все строки (до 10 000). Колонки партий
+    /// (просрочено, на контроле, забраковано, ближайший срок) — когда в выгрузке есть позиции с партиями.
+    /// </summary>
+    public async Task<AiReportContent> ExportAsync(ProcurementContext ctx, ProcurementStockSearch s, CancellationToken ct)
+    {
+        RequireStock(ctx);
+        var max = ProcurementReportService.MaxRows;
+        var list = await Sorted(Filtered(s), s).Take(max + 1).ToListAsync(ct);
+        var cut = list.Count > max;
+        var rows = list.Take(max).Select(r => r.Row()).ToList();
+        var batches = rows.Any(r => r.TracksBatches);
+        static JsonElement J(object? value) => JsonSerializer.SerializeToElement(value);
+        static string? At(DateTimeOffset? at) => at?.ToOffset(FieldClock.Offset).ToString("yyyy-MM-ddTHH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        AiReportColumn Text(string ru, string uz) => new(L(ru, uz), ReportFormats.Text);
+        AiReportColumn Qty(string ru, string uz) => new(L(ru, uz), ReportFormats.Number, false);
+        AiReportColumn Date(string ru, string uz) => new(L(ru, uz), ReportFormats.Date, false);
+        List<AiReportColumn> columns =
+        [
+            Text("Артикул", "Artikul"), Text("Наименование", "Nomi"), Text("Категория", "Toifa"), Text("Ед.", "Birl."), Qty("На складе", "Omborda"),
+            Qty("В резерве", "Zaxirada"), Qty("Доступно", "Mavjud"), Qty("Минимум", "Minimum"), Text("Ниже минимума", "Minimumdan past"),
+            Date("Последнее движение", "Oxirgi harakat"), Text("Вид движения", "Harakat turi"),
+        ];
+        if (batches)
+        {
+            columns.AddRange([Qty("Просрочено", "Muddati o'tgan"), Qty("На контроле", "Nazoratda"), Qty("Забраковано", "Yaroqsiz"), Date("Ближайший срок", "Eng yaqin muddat")]);
+        }
+
+        var cells = rows.Select(r =>
+        {
+            List<JsonElement> row =
+            [
+                J(r.Sku), J(r.Name), J(r.CategoryName), J(r.UnitCode), J(r.OnHand), J(r.Reserved), J(r.Available), J(r.MinQty > 0 ? r.MinQty : null),
+                J(r.Low ? L("да", "ha") : null), J(At(r.LastMovementAt)), J(r.LastMovementKind is { } kind ? KindLabel(kind) : null),
+            ];
+            if (batches)
+            {
+                row.AddRange([J(r.TracksBatches ? r.Expired : null), J(r.TracksBatches ? r.OnControl : null), J(r.TracksBatches ? r.Blocked : null),
+                    J(r.NearestExpiry?.ToString("yyyy-MM-dd"))]);
+            }
+
+            return (IReadOnlyList<JsonElement>)row;
+        }).ToList();
+
+        var warehouse = s.WarehouseId is { } id
+            ? await db.ProcurementWarehouses.AsNoTracking().Where(w => w.Id == id).Select(w => w.Name).FirstOrDefaultAsync(ct) ?? throw new FieldNotFoundException("Склад не найден.")
+            : L("все склады", "barcha omborlar");
+        var note = new List<string> { L($"Склад: {warehouse}.", $"Ombor: {warehouse}.") };
+        if (s.HideEmpty)
+        {
+            note.Add(L("Без позиций с нулевым остатком.", "Qoldig'i nol bo'lgan pozitsiyalarsiz."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(s.Search))
+        {
+            note.Add(L($"Поиск: «{s.Search.Trim()}».", $"Qidiruv: «{s.Search.Trim()}»."));
+        }
+
+        note.Add(L("Доступно — на складе без резерва заявок и без того, что не выдаётся (просрочено, на контроле, забраковано).",
+            "Mavjud — omborda, arizalar zaxirasisiz va berilmaydiganlarsiz (muddati o'tgan, nazoratda, yaroqsiz)."));
+        if (cut)
+        {
+            note.Add(L($"Показаны первые {max:N0} строк — уточните фильтр.", $"Birinchi {max:N0} qator ko'rsatilgan — filtrni aniqlashtiring."));
+        }
+
+        var title = $"{L("Остатки склада", "Ombor qoldiqlari")} — {warehouse}, {FieldClock.Now:dd.MM.yyyy HH:mm}";
+        return new AiReportContent(title, [new AiReportSheet(L("Остатки", "Qoldiqlar"), columns, cells, false, string.Join(" ", note))],
+            [L("Снабжение → Склад", "Ta'minot → Ombor")]);
     }
 
     /// <summary>Строка остатков для запроса: класс со свойствами — по ним EF строит фильтры и сортировку в SQL (по record не умеет).</summary>
@@ -270,10 +412,11 @@ public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLe
         public decimal OnControl { get; init; }
         public decimal Blocked { get; init; }
         public ProcurementQualityControl QualityControl { get; init; }
+        public ProcurementMovementKind? LastMovementKind { get; init; }
 
         public ProcurementStockRow Row() => new(ItemId, Sku, Name, CategoryId, CategoryName, UnitCode, OnHand, Reserved, Available, MinQty,
             MinQty > 0 && Available < MinQty, IsActive, Barcode, Description, LastMovementAt, TracksBatches, Expired, NearestExpiry, ShelfLifeDays, ExpiryWarningDays,
-            StorageConditions, OnControl, Blocked, QualityControl);
+            StorageConditions, OnControl, Blocked, QualityControl, LastMovementKind);
     }
 
     /// <summary>
@@ -322,6 +465,8 @@ public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLe
                 Barcode = i.Barcode,
                 Description = i.Description,
                 LastMovementAt = moved.Where(m => m.ItemId == i.Id).Max(m => (DateTimeOffset?)m.CreatedAt),
+                LastMovementKind = moved.Where(m => m.ItemId == i.Id).OrderByDescending(m => m.CreatedAt).ThenByDescending(m => m.Id)
+                    .Select(m => (ProcurementMovementKind?)m.Kind).FirstOrDefault(),
                 TracksBatches = i.TracksBatches,
                 Expired = expired,
                 NearestExpiry = nearest,
@@ -352,7 +497,155 @@ public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLe
             await rows.CountAsync(r => r.ExpiringBy != null && r.ExpiringBy <= today, ct),
             await rows.CountAsync(r => r.TracksBatches, ct),
             await rows.CountAsync(r => r.OnControl > 0, ct),
-            await rows.CountAsync(r => r.Blocked > 0, ct));
+            await rows.CountAsync(r => r.Blocked > 0, ct),
+            await rows.CountAsync(r => r.MinQty <= 0, ct),
+            await rows.CountAsync(r => r.MinQty <= 0 && r.LastMovementAt >= Now.AddDays(-MovingDays), ct));
+    }
+
+    /// <summary>Ходовая позиция — с движением за столько дней («Задать минимумы» — сначала они).</summary>
+    public const int MovingDays = 90;
+
+    /// <summary>Предложение минимума — расход за столько дней.</summary>
+    public const int SuggestDays = 30;
+
+    /// <summary>Сколько минимумов сохраняется одним запросом.</summary>
+    public const int MaxMinimums = 500;
+
+    /// <summary>
+    /// Расход позиций: выдачи отделам и в производство (минус), возвраты из производства и сторно выдач (плюс). Перемещения и списания —
+    /// не расход.
+    /// </summary>
+    private IQueryable<ProcurementStockMovement> Consumption() =>
+        db.ProcurementStockMovements.AsNoTracking().Where(m =>
+            m.Kind == ProcurementMovementKind.Issue || m.Kind == ProcurementMovementKind.ProductionIssue || m.Kind == ProcurementMovementKind.ProductionReturn
+            || (m.Kind == ProcurementMovementKind.Reversal
+                && db.ProcurementStockDocuments.Any(d => d.Id == m.Document!.ReversesDocumentId && d.Kind == ProcurementStockDocumentKind.Issue)));
+
+    /// <summary>Строка «Задать минимумы» для запроса: класс со свойствами — по ним EF сортирует в SQL.</summary>
+    private sealed class MinimumData
+    {
+        public Guid ItemId { get; init; }
+        public string Sku { get; init; } = "";
+        public string Name { get; init; } = "";
+        public string CategoryName { get; init; } = "";
+        public string UnitCode { get; init; } = "";
+        public decimal OnHand { get; init; }
+        public decimal MinQty { get; init; }
+        public decimal Issued30 { get; init; }
+        public decimal Issued90 { get; init; }
+        public DateTimeOffset? LastMovementAt { get; init; }
+    }
+
+    /// <summary>
+    /// «Задать минимумы» (кладовщик или снабжение): активные позиции без минимума — сначала с наибольшим расходом за 30 и 90 дней, потом
+    /// ходовые (движение за 90 дней), внутри — по названию; Items — эти позиции («Мин.» в строке). Остаток и расход — по всем складам:
+    /// минимум один на позицию.
+    /// </summary>
+    public async Task<ProcurementMinimumPlan> MinimumsAsync(ProcurementContext ctx, ProcurementMinimumSearch s, CancellationToken ct)
+    {
+        RequireCatalog(ctx);
+        var now = Now;
+        var since30 = now.AddDays(-SuggestDays);
+        var since90 = now.AddDays(-MovingDays);
+        var items = db.ProcurementItems.AsNoTracking();
+        if (s.Items is { Count: > 0 } ids)
+        {
+            items = items.Where(i => ids.Contains(i.Id));
+        }
+        else
+        {
+            items = items.Where(i => i.IsActive && i.MinQty <= 0);
+            if (s.CategoryId is { } category)
+            {
+                items = items.Where(i => i.CategoryId == category);
+            }
+
+            if (!string.IsNullOrWhiteSpace(s.Search))
+            {
+                var text = s.Search.Trim().ToLower();
+                items = items.Where(i => i.Sku.ToLower().Contains(text) || i.Name.ToLower().Contains(text) || (i.Barcode != null && i.Barcode.ToLower() == text));
+            }
+        }
+
+        var used = Consumption();
+        var moved = db.ProcurementStockMovements.AsNoTracking();
+        var q = from i in items
+            select new MinimumData
+            {
+                ItemId = i.Id,
+                Sku = i.Sku,
+                Name = i.Name,
+                CategoryName = i.Category!.Name,
+                UnitCode = i.UnitCode,
+                OnHand = db.ProcurementStockBalances.Where(b => b.ItemId == i.Id).Sum(b => (decimal?)b.OnHand) ?? 0m,
+                MinQty = i.MinQty,
+                Issued30 = -(used.Where(m => m.ItemId == i.Id && m.CreatedAt >= since30).Sum(m => (decimal?)m.Quantity) ?? 0m),
+                Issued90 = -(used.Where(m => m.ItemId == i.Id && m.CreatedAt >= since90).Sum(m => (decimal?)m.Quantity) ?? 0m),
+                LastMovementAt = moved.Where(m => m.ItemId == i.Id).Max(m => (DateTimeOffset?)m.CreatedAt),
+            };
+        var total = await q.CountAsync(ct);
+        // Ходовые — вперёд, но между собой по названию: время движения у загруженного журнала почти одно, порядок по нему читается как случайный.
+        var rows = await q.OrderByDescending(r => r.Issued30).ThenByDescending(r => r.Issued90)
+            .ThenByDescending(r => r.LastMovementAt != null && r.LastMovementAt >= since90).ThenBy(r => r.Name).ThenBy(r => r.ItemId)
+            .Take(Math.Clamp(s.Take, 1, MaxMinimums)).ToListAsync(ct);
+        return new ProcurementMinimumPlan(total, rows.Select(r =>
+        {
+            var issued30 = Math.Max(0, r.Issued30);
+            return new ProcurementMinimumRow(r.ItemId, r.Sku, r.Name, r.CategoryName, r.UnitCode, r.OnHand, r.MinQty, issued30, Math.Max(0, r.Issued90),
+                r.LastMovementAt, r.LastMovementAt >= since90, issued30 > 0 ? Math.Ceiling(issued30) : null);
+        }).ToList());
+    }
+
+    /// <summary>
+    /// Минимальные остатки списком (кладовщик или снабжение): до 500 позиций, каждая один раз, минимум от 0 (0 — без минимума). Меняются
+    /// только отличающиеся; в журнал аудита — каждая позиция: было и стало. Возвращает, сколько позиций изменено.
+    /// </summary>
+    public async Task<int> SetMinimumsAsync(ProcurementContext ctx, ProcurementMinimumsInput input, CancellationToken ct)
+    {
+        RequireCatalog(ctx);
+        var lines = input.Items ?? [];
+        if (lines.Count is 0 or > MaxMinimums)
+        {
+            throw new FieldValidationException($"Укажите минимумы — от 1 до {MaxMinimums} позиций за раз.");
+        }
+
+        if (lines.Select(l => l.ItemId).Distinct().Count() != lines.Count)
+        {
+            throw new FieldValidationException("Позиция указана дважды — у каждой позиции один минимум.");
+        }
+
+        if (lines.Any(l => l.MinQty < 0 || l.MinQty > ProcurementRules.MaxQuantity || decimal.Round(l.MinQty, 3) != l.MinQty))
+        {
+            throw new FieldValidationException("Минимальный остаток — не отрицательный, не больше трёх знаков после запятой; 0 — без минимума.");
+        }
+
+        var ids = lines.Select(l => l.ItemId).ToList();
+        var items = await db.ProcurementItems.Where(i => ids.Contains(i.Id)).ToDictionaryAsync(i => i.Id, ct);
+        if (items.Count != ids.Count)
+        {
+            throw new FieldNotFoundException("Позиция каталога не найдена.");
+        }
+
+        var changed = new List<(ProcurementItem Item, decimal Before)>();
+        foreach (var line in lines)
+        {
+            var item = items[line.ItemId];
+            if (item.MinQty != line.MinQty)
+            {
+                changed.Add((item, item.MinQty));
+                item.MinQty = line.MinQty;
+                item.UpdatedAt = Now;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        foreach (var (item, before) in changed)
+        {
+            await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.item.min_set", "procurement_item", item.Id.ToString(),
+                new { item.Sku, item.Name, before, after = item.MinQty }, ct);
+        }
+
+        return changed.Count;
     }
 
     /// <summary>

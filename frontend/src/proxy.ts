@@ -74,6 +74,6 @@ export const config = {
   // Кроме статики, картинок, /bff (прокси к API сам отвечает 401 без сессии) и файлов веб-приложения:
   // манифест, service worker, офлайн-страницу и иконки браузер запрашивает без входа — иначе установка не работает.
   matcher: [
-    "/((?!_next/static|_next/image|bff/|favicon.ico|robots.txt|manifest.webmanifest|sw.js|offline.html|icons/|brand/|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|txt|woff2?|css|js|map)$).*)",
+    "/((?!_next/static|_next/image|bff/|favicon.ico|robots.txt|manifest.webmanifest|sw.js|offline.html|icons/|brand/|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|txt|woff2?|css|js|map|wasm)$).*)",
   ],
 };

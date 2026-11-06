@@ -79,6 +79,7 @@ export function StockOperation({
   warehouses,
   warehouseId,
   preset,
+  presets,
 }: {
   kind: OperationKind;
   open: boolean;
@@ -89,6 +90,8 @@ export function StockOperation({
   warehouseId?: string | null;
   /** Открыть сразу с этой позицией (из карточки товара). */
   preset?: CatalogOption | null;
+  /** Открыть сразу с этими позициями — по строке каждая (выбранные галочками в таблице склада). */
+  presets?: CatalogOption[] | null;
 }) {
   const t = useT();
   const router = useRouter();
@@ -112,8 +115,9 @@ export function StockOperation({
   useEffect(() => {
     if (!open) return;
     const from = operationWarehouse(warehouses, warehouseId);
-    // Карточка товара открывает операцию с остатком всего склада (по всем складам) — остаток склада формы подтянется при выборе товара.
-    setLines([{ ...blank(), option: preset ?? null, warehouse: preset && warehouseId === from ? from : null }]);
+    // Карточка товара и таблица открывают операцию с остатком всего склада (по всем складам) — остаток склада формы подтянется при выборе товара.
+    const chosen = presets?.length ? presets : preset ? [preset] : [];
+    setLines(chosen.length ? chosen.map((option) => ({ ...blank(), option, warehouse: warehouseId === from ? from : null })) : [blank()]);
     setComment("");
     setReference("");
     setDepartment("");
@@ -124,7 +128,7 @@ export function StockOperation({
     clientKey.current = newKey();
     // warehouses — с сервера, меняются только при обновлении страницы.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, preset, warehouseId]);
+  }, [open, preset, presets, warehouseId]);
 
   // Партии позиций на складе формы — для выбора в выдаче, списании, перемещении и инвентаризации.
   const tracked = lines.filter((x) => x.option?.tracksBatches).map((x) => x.option!.id);

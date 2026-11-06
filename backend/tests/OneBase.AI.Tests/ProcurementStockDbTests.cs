@@ -394,4 +394,114 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
         var toIssue = await As(org.Keeper, Keeper, (_, s, c) => s.ToIssueAsync(c, default));
         Assert.Equal(6m, Assert.Single(toIssue, t => t.RequestId == id).Lines.Single().Left);
     }
+
+    [PostgresFact]
+    public async Task Stock_list_shows_the_last_movement_hides_empty_and_exports_the_same_rows()
+    {
+        var org = await SeedAsync();
+        var tag = $"Склад-{Guid.NewGuid():N}"[..14];
+        var received = await ItemAsync(org, $"{tag} Агар", 10);
+        var empty = await ItemAsync(org, $"{tag} Ароматизатор", 0);
+        var issued = await ItemAsync(org, $"{tag} Желатин", 5, minQty: 4);
+        await As(org.Keeper, Keeper, (_, s, c) => s.IssueAsync(c, new([new(issued, 2)], "На участок", DepartmentId: org.Dept.Id), default));
+
+        var all = await As(org.Supply, Supply, (_, s, c) => s.StockAsync(c, new ProcurementStockSearch(tag), default));
+        Assert.Equal([received, empty, issued], all.Items.Select(r => r.ItemId)); // по названию
+        Assert.Equal([ProcurementMovementKind.Receipt, null, ProcurementMovementKind.Issue], all.Items.Select(r => r.LastMovementKind));
+
+        // «Скрыть нулевые» — вместе с любым фильтром: «ниже минимума» остаётся, «нет на складе» пустеет.
+        var nonZero = await As(org.Supply, Supply, (_, s, c) => s.StockAsync(c, new ProcurementStockSearch(tag, HideEmpty: true), default));
+        Assert.Equal([received, issued], nonZero.Items.Select(r => r.ItemId));
+        var low = await As(org.Supply, Supply, (_, s, c) => s.StockAsync(c, new ProcurementStockSearch(tag, Filter: "low", HideEmpty: true), default));
+        Assert.Equal(issued, Assert.Single(low.Items).ItemId); // доступно 3 < минимум 4
+        Assert.Empty((await As(org.Supply, Supply, (_, s, c) => s.StockAsync(c, new ProcurementStockSearch(tag, Filter: "empty", HideEmpty: true), default))).Items);
+
+        // По дате движения: позиция без движений — в конце при любом направлении.
+        var recent = await As(org.Supply, Supply, (_, s, c) => s.StockAsync(c, new ProcurementStockSearch(tag, Sort: "moved", Desc: true), default));
+        Assert.Equal([issued, received, empty], recent.Items.Select(r => r.ItemId));
+        var oldest = await As(org.Supply, Supply, (_, s, c) => s.StockAsync(c, new ProcurementStockSearch(tag, Sort: "moved"), default));
+        Assert.Equal([received, issued, empty], oldest.Items.Select(r => r.ItemId));
+
+        // Excel — те же строки и порядок, что список; позиций с партиями нет — колонок партий нет.
+        var report = await As(org.Supply, Supply, (_, s, c) => s.ExportAsync(c, new ProcurementStockSearch(tag, HideEmpty: true), default));
+        var sheet = Assert.Single(report.Sheets);
+        Assert.Equal(11, sheet.Columns.Count);
+        Assert.Equal(("Последнее движение", "Вид движения"), (sheet.Columns[9].Header, sheet.Columns[10].Header));
+        Assert.Equal([$"{tag} Агар", $"{tag} Желатин"], sheet.Rows.Select(r => r[1].GetString()));
+        Assert.Equal(["Приход", "Выдача"], sheet.Rows.Select(r => r[10].GetString()));
+        Assert.Equal([null, "да"], sheet.Rows.Select(r => r[8].ValueKind == System.Text.Json.JsonValueKind.Null ? null : r[8].GetString())); // ниже минимума
+        Assert.Equal(3m, sheet.Rows[1][6].GetDecimal()); // доступно
+        Assert.Contains("все склады", report.Title);
+        using (var scope = fixture.Services.CreateScope())
+        {
+            // Файл собирается общим писателем отчётов: дата движения со временем, числа — числами.
+            var file = scope.ServiceProvider.GetRequiredService<OneBase.Application.Reports.IReportWorkbookWriter>().Write(report, DateTimeOffset.UtcNow);
+            Assert.True(file.Length > 1000);
+        }
+
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => As(org.Employee, Employee, (_, s, c) => s.ExportAsync(c, new(), default)));
+    }
+
+    [PostgresFact]
+    public async Task Minimums_are_suggested_from_issues_and_saved_only_by_catalog_keepers()
+    {
+        var org = await SeedAsync();
+        var before = await As(org.Supply, Supply, (_, s, c) => s.SummaryAsync(c, default));
+        var tag = $"Мин-{Guid.NewGuid():N}"[..12];
+        var hot = await ItemAsync(org, $"{tag} Какао", 100);
+        var slow = await ItemAsync(org, $"{tag} Ванилин", 50);
+        var idle = await ItemAsync(org, $"{tag} Кунжут", 0);
+        Task<Guid> Issue(decimal qty) => As(org.Keeper, Keeper, (_, s, c) => s.IssueAsync(c, new([new(hot, qty)], "В цех", DepartmentId: org.Dept.Id), default));
+        await Issue(7.2m);
+        var wrong = await Issue(3);
+        var old = await Issue(4);
+        using (var scope = fixture.Services.CreateScope())
+        {
+            // Выдача 40 дней назад — в расходе за 90 дней, но не за 30.
+            await scope.ServiceProvider.GetRequiredService<OneBaseDbContext>().ProcurementStockMovements.Where(m => m.DocumentId == old)
+                .ExecuteUpdateAsync(u => u.SetProperty(m => m.CreatedAt, DateTimeOffset.UtcNow.AddDays(-40)));
+        }
+
+        await As(org.Keeper, Keeper, (_, s, c) => s.ReverseAsync(c, wrong, new ProcurementReversalInput("Ошибка в количестве"), default)); // сторно — не расход
+
+        // Без минимума — три новые позиции, ходовых (движение за 90 дней) — две.
+        var mid = await As(org.Supply, Supply, (_, s, c) => s.SummaryAsync(c, default));
+        Assert.Equal((before.NoMin + 3, before.NoMinMoving + 2), (mid.NoMin, mid.NoMinMoving));
+
+        var plan = await As(org.Keeper, Keeper, (_, s, c) => s.MinimumsAsync(c, new ProcurementMinimumSearch(tag), default));
+        Assert.Equal(3, plan.Total);
+        Assert.Equal([hot, slow, idle], plan.Rows.Select(r => r.ItemId)); // сначала по расходу, потом ходовые
+        var cocoa = plan.Rows[0];
+        Assert.Equal((88.8m, 7.2m, 11.2m, 8m, true), (cocoa.OnHand, cocoa.Issued30, cocoa.Issued90, cocoa.Suggested, cocoa.Moving));
+        Assert.Equal((0m, (decimal?)null, true), (plan.Rows[1].Issued30, plan.Rows[1].Suggested, plan.Rows[1].Moving));
+        Assert.Equal((false, (DateTimeOffset?)null), (plan.Rows[2].Moving, plan.Rows[2].LastMovementAt));
+
+        // Минимумы ведут кладовщик и снабжение; директор и сотрудник — нет.
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => As(org.Director, Director, (_, s, c) => s.MinimumsAsync(c, new(), default)));
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => As(org.Director, Director, (_, s, c) => s.SetMinimumsAsync(c, new([new(hot, 8)]), default)));
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => As(org.Employee, Employee, (_, s, c) => s.SetMinimumsAsync(c, new([new(hot, 8)]), default)));
+        foreach (var bad in new ProcurementMinimumsInput[] { new([]), new([new(hot, -1)]), new([new(hot, 1.2345m)]), new([new(hot, 1), new(hot, 2)]) })
+        {
+            await Assert.ThrowsAsync<FieldValidationException>(() => As(org.Keeper, Keeper, (_, s, c) => s.SetMinimumsAsync(c, bad, default)));
+        }
+
+        await Assert.ThrowsAsync<FieldNotFoundException>(() => As(org.Keeper, Keeper, (_, s, c) => s.SetMinimumsAsync(c, new([new(Guid.NewGuid(), 1)]), default)));
+
+        var changed = await As(org.Keeper, Keeper, (_, s, c) => s.SetMinimumsAsync(c, new([new(hot, 8), new(slow, 0), new(idle, 2.5m)]), default));
+        Assert.Equal(2, changed); // у ванилина минимума и не было
+        Assert.Equal(0, await As(org.Supply, Supply, (_, s, c) => s.SetMinimumsAsync(c, new([new(hot, 8)]), default)));
+
+        var after = await As(org.Supply, Supply, (_, s, c) => s.SummaryAsync(c, default));
+        Assert.Equal((before.NoMin + 1, before.NoMinMoving + 1), (after.NoMin, after.NoMinMoving)); // остался ванилин
+        var left = await As(org.Supply, Supply, (_, s, c) => s.MinimumsAsync(c, new ProcurementMinimumSearch(tag), default));
+        Assert.Equal(slow, Assert.Single(left.Rows).ItemId);
+        var one = await As(org.Keeper, Keeper, (_, s, c) => s.MinimumsAsync(c, new ProcurementMinimumSearch(Items: [hot]), default)); // «Мин.» в строке
+        Assert.Equal(8m, Assert.Single(one.Rows).MinQty);
+
+        using var check = fixture.Services.CreateScope();
+        var log = await check.ServiceProvider.GetRequiredService<OneBaseDbContext>().AuditLogs.AsNoTracking()
+            .SingleAsync(l => l.Action == "procurement.item.min_set" && l.EntityId == hot.ToString());
+        using var data = System.Text.Json.JsonDocument.Parse(log.Data!);
+        Assert.Equal((0m, 8m), (data.RootElement.GetProperty("before").GetDecimal(), data.RootElement.GetProperty("after").GetDecimal()));
+    }
 }

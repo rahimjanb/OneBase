@@ -32,7 +32,17 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
   const warehouse = one(sp, "warehouse");
   const [data, summary, form, departments, stores] = await Promise.all([
     apiGet<Page<StockRow>>(
-      `/api/procurement/stock${qs({ q: one(sp, "q"), category: one(sp, "category"), filter: one(sp, "filter"), page: one(sp, "page"), pageSize: 50, warehouse })}`,
+      `/api/procurement/stock${qs({
+        q: one(sp, "q"),
+        category: one(sp, "category"),
+        filter: one(sp, "filter"),
+        sort: one(sp, "sort"),
+        desc: one(sp, "desc") === "1" ? "true" : undefined,
+        hideEmpty: one(sp, "hideEmpty") === "1" ? "true" : undefined,
+        page: one(sp, "page"),
+        pageSize: 50,
+        warehouse,
+      })}`,
       "/procurement/stock",
     ),
     apiGet<StockSummary>(`/api/procurement/stock/summary${qs({ warehouse })}`, "/procurement/stock"),
@@ -46,7 +56,10 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         title={t("Склад")}
-        subtitle={several ? t("Склады снабжения: остатки по складу или по всем, резерв заявок, доступно и минимум") : t("Центральный склад снабжения: остатки, резерв заявок, доступно и минимум")}
+        subtitle={
+          // На телефоне подзаголовка нет (макет): место — плиткам операций.
+          <span className="max-lg:hidden">{several ? t("Остатки, резерв заявок, доступно и минимум — по складу или по всем") : t("Остатки, резерв заявок, доступно и минимум")}</span>
+        }
         breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Снабжение"), href: "/procurement" }, { label: t("Склад") }]}
         actions={
           <StockActions

@@ -263,6 +263,8 @@ export type StockRow = {
   onControl: number;
   blocked: number;
   qualityControl: QualityControl;
+  /** Вид последнего движения по выбранному складу или по всем: «приход» под датой. */
+  lastMovementKind?: MovementKind | null;
 };
 
 export type StockSummary = {
@@ -276,7 +278,31 @@ export type StockSummary = {
   tracked: number;
   onControl: number;
   blocked: number;
+  /** Активные позиции без минимума и из них ходовые (движение за 90 дней) — подсказка «Задать минимумы». */
+  noMin: number;
+  noMinMoving: number;
 };
+
+/**
+ * Позиция в «Задать минимумы»: остаток по всем складам, расход за 30 и 90 дней (выдачи минус возвраты), ходовая — было движение за 90 дней;
+ * suggested — предложение минимума: расход за 30 дней вверх до целых.
+ */
+export type MinimumRow = {
+  itemId: string;
+  sku: string;
+  name: string;
+  categoryName: string;
+  unitCode: string;
+  onHand: number;
+  minQty: number;
+  issued30: number;
+  issued90: number;
+  lastMovementAt: string | null;
+  moving: boolean;
+  suggested: number | null;
+};
+
+export type MinimumPlan = { total: number; rows: MinimumRow[] };
 
 /** Контроль качества позиции при приходе: нет, по документам, документы и лаборатория. */
 export type QualityControl = "None" | "Documents" | "Lab";

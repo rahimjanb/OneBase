@@ -21,9 +21,12 @@ export function FileImport<R extends { dryRun: boolean }>({
   ready,
   report,
   label = "Импорт из Excel",
+  compact = false,
 }: {
   /** Подпись кнопки. */
   label?: string;
+  /** Кнопка-значок: подпись — во всплывающей подсказке и для экранного диктора. */
+  compact?: boolean;
   endpoint: string;
   checkTitle: string;
   doneTitle: string;
@@ -81,9 +84,15 @@ export function FileImport<R extends { dryRun: boolean }>({
           e.target.value = "";
         }}
       />
-      <button type="button" onClick={() => input.current?.click()} disabled={busy} className={secondary}>
+      <button
+        type="button"
+        onClick={() => input.current?.click()}
+        disabled={busy}
+        title={compact ? t(label) : undefined}
+        className={compact ? "grid size-10 place-items-center rounded-xl border border-line-strong bg-surface text-ink-2 hover:bg-muted hover:text-ink disabled:opacity-60" : secondary}
+      >
         {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileSpreadsheet className="size-4" aria-hidden />}
-        <span className="max-sm:sr-only">{t(label)}</span>
+        <span className={compact ? "sr-only" : "max-sm:sr-only"}>{t(label)}</span>
       </button>
       <Sheet
         open={file !== null}
