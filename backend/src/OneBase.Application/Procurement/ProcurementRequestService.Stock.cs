@@ -14,7 +14,8 @@ public sealed record ProcurementRequestIssueInput(IReadOnlyList<ProcurementIssue
 /// <summary>
 /// Настройки снабжения для экрана («Настройки → Отделы → Снабжение»): маршрут согласования заявок — финансист, директор и лимит покупки без
 /// директора (сум); допуск роста цены или суммы без повторного согласования, %; через сколько дней просрочки задача снабжения уходит
-/// руководителю снабжения и директору. Имена согласующих — только для показа (при сохранении не читаются).
+/// руководителю снабжения и директору; маршрут сырья — включён ли и кто руководитель снабжения (не выбран — руководители отдела
+/// «Снабжение»). Имена согласующих — только для показа (при сохранении не читаются). RawRouteEnabled null — не менять (прежние клиенты).
 /// </summary>
 public sealed record ProcurementSettingsView(
     decimal ReapprovalTolerancePercent,
@@ -24,7 +25,12 @@ public sealed record ProcurementSettingsView(
     Guid? DirectorApproverId = null,
     decimal DirectorLimit = ProcurementSettings.DefaultDirectorLimit,
     string? FinanceApproverName = null,
-    string? DirectorApproverName = null);
+    string? DirectorApproverName = null,
+    bool? RawRouteEnabled = null,
+    Guid? SupplyApproverId = null,
+    string? SupplyApproverName = null,
+    IReadOnlyList<string>? SupplyHeads = null,
+    decimal? OverconsumptionPercent = null);
 
 public sealed partial class ProcurementRequestService
 {
@@ -70,6 +76,7 @@ public sealed partial class ProcurementRequestService
         }
 
         var warehouse = reservations[0].WarehouseId;
+        var store = await ledger.WarehouseAsync(ctx, warehouse, ct); // закреплённый кладовщик выдаёт только со своих складов
         var doc = await ledger.DocumentAsync(ProcurementStockDocumentKind.Issue, warehouse, ctx.UserId, ct);
         doc.DepartmentId = r.DepartmentId;
         doc.RequestId = r.Id;
@@ -95,7 +102,20 @@ public sealed partial class ProcurementRequestService
                 throw new FieldConflictException($"«{item.Name}»: в резерве осталось {ProcurementRules.Quantity(left)} {item.UnitCode} — больше не выдать.");
             }
 
-            ledger.Move(doc, balances[reservation.ItemId], ProcurementMovementKind.Issue, -line.Quantity, item.Name, requestItemId: item.Id, fromReserve: true);
+            var balance = balances[reservation.ItemId];
+            if (ledger.Tracks(reservation.ItemId))
+            {
+                // Позиция с партиями: из годных партий по FEFO, резерв уменьшается вместе с остатком.
+                foreach (var (batch, quantity) in await ledger.PickAsync(balance, store.Name, item.Name, line.Quantity, null, usableOnly: true, keepReserve: false, ct))
+                {
+                    ledger.MoveBatch(doc, balance, batch, ProcurementMovementKind.Issue, -quantity, item.Name, requestItemId: item.Id, fromReserve: true);
+                }
+            }
+            else
+            {
+                ledger.Move(doc, balance, ProcurementMovementKind.Issue, -line.Quantity, item.Name, requestItemId: item.Id, fromReserve: true);
+            }
+
             reservation.Issued += line.Quantity;
             if (reservation.Issued >= reservation.Quantity)
             {
@@ -133,12 +153,16 @@ public sealed partial class ProcurementRequestService
     {
         RequireOpen(ctx);
         var settings = await db.ProcurementSettings.AsNoTracking().FirstOrDefaultAsync(ct);
-        var ids = new[] { settings?.FinanceApproverId, settings?.DirectorApproverId }.OfType<Guid>().ToList();
+        var ids = new[] { settings?.FinanceApproverId, settings?.DirectorApproverId, settings?.SupplyApproverId }.OfType<Guid>().ToList();
         var names = await db.Users.AsNoTracking().Where(u => ids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
         string? Name(Guid? id) => id is { } x ? names.GetValueOrDefault(x) : null;
+        // Руководители отдела «Снабжение» — кто согласует сырьё, пока слот не выбран.
+        var supplyHeads = await db.WorkDepartmentHeads.AsNoTracking().Where(h => h.Department!.Code == ProcurementPeople.SupplyDepartment && h.User!.IsActive)
+            .Select(h => h.User!.FullName).OrderBy(n => n).ToListAsync(ct);
         return new ProcurementSettingsView(settings?.ReapprovalTolerancePercent ?? 0m, settings?.EscalateHeadDays ?? 1, settings?.EscalateDirectorDays ?? 3,
             settings?.FinanceApproverId, settings?.DirectorApproverId, settings?.DirectorLimit ?? ProcurementSettings.DefaultDirectorLimit,
-            Name(settings?.FinanceApproverId), Name(settings?.DirectorApproverId));
+            Name(settings?.FinanceApproverId), Name(settings?.DirectorApproverId), settings?.RawRouteEnabled ?? false, settings?.SupplyApproverId,
+            Name(settings?.SupplyApproverId), supplyHeads, settings?.OverconsumptionPercent ?? ProcurementSettings.DefaultOverconsumptionPercent);
     }
 
     /// <summary>Наибольший лимит покупки без директора: 1 трлн сум.</summary>
@@ -173,10 +197,15 @@ public sealed partial class ProcurementRequestService
             throw new FieldValidationException("Лимит без директора — целая сумма больше нуля, до 1 трлн сум.");
         }
 
-        var approvers = new[] { input.FinanceApproverId, input.DirectorApproverId }.OfType<Guid>().Distinct().ToList();
+        if (input.OverconsumptionPercent is { } over && (over < 0 || over > 100 || decimal.Round(over, 2) != over))
+        {
+            throw new FieldValidationException("Порог перерасхода сырья — от 0 до 100 %, не больше двух знаков после запятой.");
+        }
+
+        var approvers = new[] { input.FinanceApproverId, input.DirectorApproverId, input.SupplyApproverId }.OfType<Guid>().Distinct().ToList();
         if (await db.Users.CountAsync(u => approvers.Contains(u.Id) && u.IsActive, ct) != approvers.Count)
         {
-            throw new FieldValidationException("Финансист и директор — действующие пользователи OneBase.");
+            throw new FieldValidationException("Финансист, директор и руководитель снабжения — действующие пользователи OneBase.");
         }
 
         var settings = await db.ProcurementSettings.FirstOrDefaultAsync(ct);
@@ -189,7 +218,7 @@ public sealed partial class ProcurementRequestService
         object Snapshot() => new
         {
             settings.ReapprovalTolerancePercent, settings.EscalateHeadDays, settings.EscalateDirectorDays, settings.FinanceApproverId, settings.DirectorApproverId,
-            settings.DirectorLimit,
+            settings.DirectorLimit, settings.RawRouteEnabled, settings.SupplyApproverId, settings.OverconsumptionPercent,
         };
         var before = Snapshot();
         settings.ReapprovalTolerancePercent = tolerance;
@@ -198,6 +227,17 @@ public sealed partial class ProcurementRequestService
         settings.FinanceApproverId = input.FinanceApproverId;
         settings.DirectorApproverId = input.DirectorApproverId;
         settings.DirectorLimit = input.DirectorLimit;
+        if (input.RawRouteEnabled is { } raw)
+        {
+            // Маршрут сырья и его руководитель снабжения меняются вместе (прежние клиенты их не присылают — остаются как были).
+            settings.RawRouteEnabled = raw;
+            settings.SupplyApproverId = input.SupplyApproverId;
+        }
+        if (input.OverconsumptionPercent is { } threshold)
+        {
+            settings.OverconsumptionPercent = threshold;
+        }
+
         settings.UpdatedAt = Now;
         settings.UpdatedById = ctx.UserId;
         await db.SaveChangesAsync(ct);

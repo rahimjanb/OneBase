@@ -111,7 +111,15 @@ export function ToBuyView({ items, canBuy }: { items: ToBuy[]; canBuy: boolean }
         open={!!open}
         onClose={() => setOpen(null)}
         request={{ id: open?.requestId ?? "", number: open?.number ?? "", title: open?.title ?? "" }}
-        lines={(open?.lines ?? []).map((l) => ({ requestItemId: l.requestItemId, name: l.name, unitCode: l.unitCode, left: l.left, price: l.price }))}
+        lines={(open?.lines ?? []).map((l) => ({
+          requestItemId: l.requestItemId,
+          name: l.name,
+          unitCode: l.unitCode,
+          left: l.left,
+          price: l.price,
+          tracksBatches: l.tracksBatches,
+          shelfLifeDays: l.shelfLifeDays,
+        }))}
         onDone={() => {
           setOpen(null);
           router.refresh();

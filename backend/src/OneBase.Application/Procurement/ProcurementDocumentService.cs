@@ -8,19 +8,21 @@ namespace OneBase.Application.Procurement;
 
 /// <summary>
 /// Документы поставщиков, коммерческих предложений, заказов, приёмок и тендерных закупок (договор, КП, счёт, накладная, акт, платёжное
-/// поручение, протокол тендера): файл в
+/// поручение, протокол тендера), партий и проверок качества (сертификат, декларация, протокол испытаний): файл в
 /// MinIO (procurement/{тип}/{владелец}/{файл}), описание — в базе. Видят: поставщика, заказ и приёмку — снабжение, директор, кладовщик;
-/// предложение — снабжение и директор. Прикрепляет снабжение (к заказу и приёмке — и кладовщик: накладные, акты). Удаляет загрузивший
-/// или снабжение.
+/// предложение — снабжение и директор; партию — все, кто видит склад; проверку качества — все, кто видит контроль качества. Прикрепляет
+/// снабжение (к заказу и приёмке — и кладовщик: накладные, акты; к партии и проверке — кладовщик, лаборатория и назначенные по качеству).
+/// Удаляет загрузивший или снабжение.
 /// Вложения заявок — в ProcurementRequestService.
 /// </summary>
 public sealed class ProcurementDocumentService(IAppDbContext db)
 {
     /// <summary>
     /// Виды: договор, коммерческое предложение, счёт, накладная, акт (приёмки), платёжное поручение (пока только файл — оплаты придут с
-    /// финансами), протокол итогов тендера, прочее.
+    /// финансами), протокол итогов тендера; сертификат качества, декларация соответствия, протокол испытаний, спецификация; прочее.
     /// </summary>
-    private static readonly HashSet<string> Kinds = ["contract", "offer", "invoice", "waybill", "act", "payment", "protocol", "other"];
+    private static readonly HashSet<string> Kinds =
+        ["contract", "offer", "invoice", "waybill", "act", "payment", "protocol", "certificate", "declaration", "lab_report", "specification", "other"];
 
     public async Task<List<ProcurementDocumentView>> ListAsync(ProcurementContext ctx, string ownerType, Guid ownerId, CancellationToken ct)
     {
@@ -35,9 +37,11 @@ public sealed class ProcurementDocumentService(IAppDbContext db)
     public async Task<Guid> AttachAsync(ProcurementContext ctx, string ownerType, Guid ownerId, ProcurementUpload upload, string? kind, IFileStorage storage, CancellationToken ct)
     {
         await RequireViewAsync(ctx, ownerType, ownerId, ct);
-        if (!(ctx.Manages || (ownerType is ProcurementOrderRules.OrderDoc or ProcurementOrderRules.ReceiptDoc && ctx.Warehouse)))
+        var quality = ownerType is ProcurementQualityService.BatchDoc or ProcurementQualityService.CheckDoc;
+        if (!(ctx.Manages || (ownerType is ProcurementOrderRules.OrderDoc or ProcurementOrderRules.ReceiptDoc && ctx.Warehouse)
+              || (quality && (ctx.Warehouse || ctx.Quality || ctx.DecidesQuality))))
         {
-            throw new FieldForbiddenException("Документы прикрепляет снабжение (к заказу и приёмке — и кладовщик).");
+            throw new FieldForbiddenException("Документы прикрепляет снабжение (к заказу и приёмке — и кладовщик, к партии и проверке качества — кладовщик и лаборатория).");
         }
 
         if (upload.SizeBytes <= 0)
@@ -181,15 +185,40 @@ public sealed class ProcurementDocumentService(IAppDbContext db)
                 }
 
                 break;
+            case ProcurementQualityService.BatchDoc:
+                if (!await db.ProcurementBatches.AnyAsync(b => b.Id == ownerId, ct))
+                {
+                    throw new FieldNotFoundException("Партия не найдена.");
+                }
+
+                if (!ctx.SeesStock)
+                {
+                    throw new FieldForbiddenException("Документы партии видят кладовщик, лаборатория, снабжение и директор.");
+                }
+
+                break;
+            case ProcurementQualityService.CheckDoc:
+                if (!await db.ProcurementQualityChecks.AnyAsync(c => c.Id == ownerId, ct))
+                {
+                    throw new FieldNotFoundException("Проверка качества не найдена.");
+                }
+
+                if (!ctx.SeesQuality)
+                {
+                    throw new FieldForbiddenException("Документы проверки качества видят лаборатория, кладовщик, снабжение и директор.");
+                }
+
+                break;
             case ProcurementTenderService.Doc:
                 if (!await db.ProcurementTenders.AnyAsync(t => t.Id == ownerId, ct))
                 {
                     throw new FieldNotFoundException("Тендерная закупка не найдена.");
                 }
 
-                if (!buyer)
+                // Кладовщик принимает поставку по тендеру — видит его документы (договор, накладные).
+                if (!buyer && !ctx.Warehouse)
                 {
-                    throw new FieldForbiddenException("Тендерные закупки видят снабжение и директор.");
+                    throw new FieldForbiddenException("Тендерные закупки видят снабжение, директор и кладовщик.");
                 }
 
                 break;

@@ -49,7 +49,7 @@ export function RatingBadge({ rating }: { rating: number | null }) {
  * Документы поставщика, предложения, заказа или тендерной закупки: список (скачать, удалить), прикрепить файл с видом (договор, КП, счёт…). Права проверяет
  * сервер; can — показать кнопку прикрепления.
  */
-export function DocumentsBlock({ owner, id, documents, can, kinds }: { owner: "supplier" | "offer" | "order" | "receipt" | "tender"; id: string; documents: ProcDocument[]; can: boolean; kinds: string[] }) {
+export function DocumentsBlock({ owner, id, documents, can, kinds }: { owner: "supplier" | "offer" | "order" | "receipt" | "tender" | "batch" | "qc"; id: string; documents: ProcDocument[]; can: boolean; kinds: string[] }) {
   const t = useT();
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);

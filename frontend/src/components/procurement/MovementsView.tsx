@@ -2,17 +2,24 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Loader2, Search, Undo2 } from "lucide-react";
+import { Sheet } from "@/components/field/Sheet";
+import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
-import { movementKindLabel, quantity, stampRu, type MovementKind, type MovementRow, type Page } from "@/lib/procurement";
+import { bff } from "@/lib/bff";
+import { dateRu, movementKindLabel, quantity, reversible, stampRu, type MovementKind, type MovementRow, type Page, type Warehouse } from "@/lib/procurement";
 
 const field =
   "h-10 rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
-const kinds: MovementKind[] = ["Receipt", "Issue", "WriteOff", "Adjustment"];
+const kinds: MovementKind[] = ["Receipt", "Issue", "WriteOff", "Adjustment", "TransferOut", "TransferIn", "BatchEntry", "Reversal", "SupplierReturn"];
 
-/** Журнал движений склада: вид, даты, поиск по артикулу, названию и номеру документа; до/после по каждой строке. Журнал не правится. */
-export function MovementsView({ data }: { data: Page<MovementRow> }) {
+/**
+ * Журнал движений склада: вид, склад (когда складов больше одного), даты, поиск по артикулу, названию и номеру документа; до/после по
+ * каждой строке — остаток склада движения, у перемещения — куда ушло или откуда пришло; партия строки. Журнал не правится: ошибку исправляет
+ * сторно (кладовщик) — зеркальный документ.
+ */
+export function MovementsView({ data, warehouses, canReverse = false }: { data: Page<MovementRow>; warehouses: Warehouse[]; canReverse?: boolean }) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
@@ -35,6 +42,8 @@ export function MovementsView({ data }: { data: Page<MovementRow> }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
+  const several = warehouses.length > 1;
+  const [reversing, setReversing] = useState<MovementRow | null>(null);
 
   return (
     <>
@@ -44,6 +53,16 @@ export function MovementsView({ data }: { data: Page<MovementRow> }) {
           <span className="sr-only">{t("Поиск")}</span>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("Артикул, название, номер документа")} className={`${field} w-full pl-9`} />
         </label>
+        {several && (
+          <select value={params.get("warehouse") ?? ""} onChange={(e) => apply({ warehouse: e.target.value || null })} aria-label={t("Склад")} className={field}>
+            <option value="">{t("Все склады")}</option>
+            {warehouses.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.isActive ? w.name : t("{name} (отключён)", { name: w.name })}
+              </option>
+            ))}
+          </select>
+        )}
         <select value={params.get("kind") ?? ""} onChange={(e) => apply({ kind: e.target.value || null })} aria-label={t("Вид движения")} className={field}>
           <option value="">{t("Все движения")}</option>
           {kinds.map((k) => (
@@ -67,6 +86,10 @@ export function MovementsView({ data }: { data: Page<MovementRow> }) {
                 </span>
                 <span className="block truncate text-xs text-ink-3">
                   {t(movementKindLabel[m.kind])} · <span className="tabular-nums">{m.documentNumber}</span> · {stampRu(m.createdAt)}
+                  {several && m.warehouseName && ` · ${m.warehouseName}`}
+                  {m.counterpartName && ` · ${m.kind === "TransferOut" ? "→" : "←"} ${m.counterpartName}`}
+                  {m.batchNumber && ` · ${t("партия {n}, до {date}", { n: m.batchNumber, date: dateRu(m.batchExpiresOn) })}`}
+
                   {m.actorName && ` · ${m.actorName}`}
                   {m.departmentName && ` · ${m.departmentName}`}
                   {m.receiver && ` · ${t("получил")}: ${m.receiver}`}
@@ -77,6 +100,27 @@ export function MovementsView({ data }: { data: Page<MovementRow> }) {
                   <Link href={`/requests/${m.requestId}`} className="text-xs text-accent-strong hover:underline">
                     {t("заявка {n}", { n: m.requestNumber ?? "" })}
                   </Link>
+                )}
+                {m.tenderId && (
+                  <Link href={`/procurement/tenders/${m.tenderId}`} className="block text-xs text-accent-strong hover:underline">
+                    {t("поставка по тендеру")}
+                  </Link>
+                )}
+                {(m.reversedBy || (canReverse && reversible(m))) && (
+                  <span className="flex flex-wrap gap-x-3 text-xs">
+                    {m.batchId && (
+                      <Link href={`/procurement/batches/${m.batchId}`} className="text-accent-strong hover:underline">
+                        {t("карточка партии")}
+                      </Link>
+                    )}
+                    {m.reversedBy ? (
+                      <span className="text-ink-3">{t("сторнирован документом {n}", { n: m.reversedBy })}</span>
+                    ) : (
+                      <button type="button" onClick={() => setReversing(m)} className="inline-flex items-center gap-1 text-accent-strong hover:underline">
+                        <Undo2 className="size-3.5" aria-hidden /> {t("Сторно {n}", { n: m.documentNumber })}
+                      </button>
+                    )}
+                  </span>
                 )}
                 {m.orderId && (
                   <span className="flex flex-wrap gap-x-3 text-xs">
@@ -100,8 +144,10 @@ export function MovementsView({ data }: { data: Page<MovementRow> }) {
           ))}
         </ul>
       )}
+      {reversing && <ReverseSheet movement={reversing} onClose={() => setReversing(null)} />}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-ink-2">
         <span>{t("Движений: {n}", { n: data.total })}</span>
+
         {pages > 1 && (
           <div className="flex items-center gap-2">
             {data.page > 1 && (
@@ -119,5 +165,68 @@ export function MovementsView({ data }: { data: Page<MovementRow> }) {
         )}
       </div>
     </>
+  );
+}
+
+const newKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+
+/** Сторно документа: зеркальные движения на те же склады и партии; исправленный документ остаётся в журнале. Причина обязательна. */
+function ReverseSheet({ movement, onClose }: { movement: MovementRow; onClose: () => void }) {
+  const t = useT();
+  const router = useRouter();
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const clientKey = useRef(newKey());
+  const save = async () => {
+    if (!reason.trim()) {
+      setError(t("Укажите причину сторно."));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await bff(`procurement/stock/documents/${movement.documentId}/reverse`, { method: "POST", body: JSON.stringify({ reason: reason.trim(), clientKey: clientKey.current }) });
+      onClose();
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={t("Сторно {n}", { n: movement.documentNumber })}
+      subtitle={t("Все строки документа проведутся обратно — на те же склады и партии. Документ останется в журнале с пометкой «сторнирован».")}
+      footer={
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="inline-flex h-10 items-center rounded-lg border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-muted">
+            {t("Закрыть")}
+          </button>
+          <button type="button" onClick={() => void save()} disabled={busy} className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-50">
+            {busy && <Loader2 className="size-4 animate-spin" aria-hidden />}
+            {t("Сторнировать")}
+          </button>
+        </div>
+      }
+    >
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium text-ink">{t("Причина")}</span>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          maxLength={1000}
+          rows={3}
+          autoFocus
+          className="w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        />
+      </label>
+      <div className="mt-3">
+        <ErrorNote text={error} />
+      </div>
+    </Sheet>
   );
 }

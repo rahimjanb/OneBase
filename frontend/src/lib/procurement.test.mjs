@@ -1,7 +1,7 @@
 // Раздел «Заявки» (lib/procurement.ts): node --test src/lib/procurement.test.mjs.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkDraft, compactMoney, dateRu, draftTotal, lineSum, money, orderTotals, parseNumber, periodOf, purchaseTotal, quantity, ratingText, receiptLine, reportCell, split, stageIndex, stockCover } from "./procurement.ts";
+import { activeWarehouses, batchExpiry, batchOptionLabel, batchesTotal, checkDraft, compactMoney, costToBase, dateRu, draftTotal, lineSum, money, operationWarehouse, orderTotals, parseNumber, periodOf, purchaseTotal, quantity, ratingText, receiptLine, reversible, reportCell, split, stageIndex, stockCover, unitToBase } from "./procurement.ts";
 
 const item = (over = {}) => ({ key: "k", id: null, name: "Бумага А4", categoryId: "c1", unitCode: "пачка", quantity: "20", price: "45000", comment: "", ...over });
 
@@ -125,4 +125,50 @@ test("compactMoney и reportCell: крупные суммы коротко, яч
   assert.equal(reportCell("2026-11-01", "date"), "01.11.2026");
   assert.equal(reportCell(4400000, "money"), "4 400 000");
   assert.equal(reportCell(null, "text"), "");
+});
+
+const store = (over = {}) => ({ id: "w", code: "w", name: "Склад", kind: "Other", departmentId: null, departmentName: null, address: null, isDefault: false, isActive: true, items: 0, keepers: [], posts: true, version: 1, ...over });
+
+test("operationWarehouse: выбранный склад, если по нему можно проводить, иначе по умолчанию, иначе первый доступный", () => {
+  const list = [store({ id: "central", isDefault: true }), store({ id: "raw" }), store({ id: "old", isActive: false }), store({ id: "shop", posts: false })];
+  assert.equal(operationWarehouse(list, "raw"), "raw");
+  assert.equal(operationWarehouse(list, null), "central");
+  assert.equal(operationWarehouse(list, "shop"), "central"); // чужой склад — по умолчанию
+  assert.equal(operationWarehouse(list, "old"), "central"); // отключённый — по умолчанию
+  // Закреплённый только за складом сырья: склад по умолчанию ему недоступен.
+  assert.equal(operationWarehouse([store({ id: "central", isDefault: true, posts: false }), store({ id: "raw" })], null), "raw");
+  assert.equal(operationWarehouse([store({ id: "central", isDefault: true, posts: false })], null), null);
+  assert.deepEqual(activeWarehouses(list).map((w) => w.id), ["central", "raw", "shop"]);
+  assert.deepEqual(activeWarehouses(null), []);
+});
+
+test("партии: сумма, срок по дате производства, сторно и подпись — как на сервере", () => {
+  const d = (quantity, over = {}) => ({ key: "k", no: "", made: "", expires: "", quantity, ...over });
+  assert.equal(batchesTotal([d("40"), d("60,5")]), 100.5);
+  assert.equal(batchesTotal([d("40"), d("")]), null);
+  assert.equal(batchesTotal([d("0")]), null);
+  assert.equal(batchExpiry("2027-04-01", "", null), "2027-04-01");
+  assert.equal(batchExpiry("", "2026-11-05", 180), "2027-05-04");
+  assert.equal(batchExpiry("", "2026-11-05", null), null);
+  const m = (over = {}) => ({ documentKind: "Receipt", orderId: null, requestId: null, reversedBy: null, ...over });
+  assert.equal(reversible(m()), true);
+  assert.equal(reversible(m({ documentKind: "Transfer" })), true);
+  assert.equal(reversible(m({ orderId: "o" })), false); // приёмка по заказу
+  assert.equal(reversible(m({ documentKind: "Issue", requestId: "r" })), false); // выдача по заявке
+  assert.equal(reversible(m({ documentKind: "BatchEntry" })), false);
+  assert.equal(reversible(m({ reversedBy: "STN-2026-00001" })), false);
+  assert.equal(reversible(m({ tenderId: "t" })), false); // поставка по тендеру
+  assert.equal(
+    batchOptionLabel({ id: "b", number: "LOT-2026-00012", supplierBatchNo: "A-1", expiresOn: "2027-04-01", onHand: 40, usable: false }, "кг"),
+    "LOT-2026-00012 · A-1 · до 01.04.2027 · 40 кг · просрочена",
+  );
+});
+
+test("единицы закупки: пересчёт в единицу карточки до трёх знаков, цена за единицу карточки — как на сервере", () => {
+  assert.equal(unitToBase(4, 25), 100); // 4 мешка по 25 кг
+  assert.equal(unitToBase(1.5, 0.5), 0.75);
+  assert.equal(unitToBase(0.1, 0.0125), null); // 0,00125 — больше трёх знаков: не округляем молча
+  assert.equal(unitToBase(3, 1), 3);
+  assert.equal(costToBase(250000, 25), 10000); // мешок за 250 000 — 10 000 за кг
+  assert.equal(costToBase(100, 3), 33.33);
 });

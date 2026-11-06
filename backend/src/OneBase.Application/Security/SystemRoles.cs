@@ -31,6 +31,18 @@ public static class SystemRoles
     /// </summary>
     public const string WarehouseRole = "Кладовщик";
 
+    /// <summary>
+    /// Лаборатория: контроль качества сырья — проверка документов и показателей партий, пробы, спецификации; видит склад и партии. Допускать
+    /// и браковать партии может только назначенный в настройках качества. Отдел — в карточке пользователя.
+    /// </summary>
+    public const string LabRole = "Лаборатория";
+
+    /// <summary>Технолог: рецептуры и их версии, просмотр заданий на выпуск и аналитики производства. Отдел — в карточке пользователя.</summary>
+    public const string TechnologistRole = "Технолог";
+
+    /// <summary>Роль отдела «Производство».</summary>
+    public const string ProductionRole = "Производство";
+
     /// <summary>Роли Sales Base (sales.1base.uz).</summary>
     public const string FieldRm = "РМ (Sales Base)";
 
@@ -64,12 +76,17 @@ public static class SystemRoles
         new("Продажи", "Сотрудник отдела продаж: раздел «Продажи», консультант, файлы.", "sales", [Permissions.SalesRead, .. Employee]),
         new("Финансы", "Сотрудник финансового отдела: оплаты и продажи, консультант, файлы.", "finance", [Permissions.FinanceRead, Permissions.SalesRead, .. Employee]),
         new("HR", "Сотрудник HR: кадровые данные, консультант, файлы.", "hr", [Permissions.HrRead, .. Employee]),
-        new("Производство", "Сотрудник производства: остатки и продажи товаров (раздел «Продажи»), консультант, файлы.", "production", [Permissions.SalesRead, .. Employee]),
+        new(ProductionRole, "Сотрудник производства: задания на выпуск (создать, выпустить, закрыть), рецептуры и расход сырья — просмотр; остатки и продажи товаров (раздел «Продажи»), консультант, файлы.", "production",
+            [Permissions.SalesRead, Permissions.ProductionRead, Permissions.ProductionManage, .. Employee]),
         new("Снабжение", "Сотрудник снабжения: все заявки на закупку и их обработка, остатки и продажи товаров (раздел «Продажи»), консультант, файлы.", "supply",
             [Permissions.SalesRead, Permissions.ProcurementRead, Permissions.ProcurementManage, .. Employee]),
         new("Маркетинг", "Сотрудник маркетинга: продажи, ассортимент и клиенты (раздел «Продажи»), консультант, файлы.", "marketing", [Permissions.SalesRead, .. Employee]),
         new(WarehouseRole, "Склад снабжения: каталог, остатки, приход, выдача отделам и по заявкам, списание, инвентаризация; консультант, файлы.", null,
             [Permissions.ProcurementWarehouse, .. Employee]),
+        new(LabRole, "Контроль качества сырья: проверка документов и показателей партий, пробы, спецификации материалов; склад и партии — просмотр; консультант, файлы.", null,
+            [Permissions.QualityCheck, .. Employee]),
+        new(TechnologistRole, "Рецептуры: состав продукции, нормы и потери, версии; задания на выпуск и расход сырья — просмотр; консультант, файлы.", null,
+            [Permissions.ProductionRecipes, Permissions.ProductionRead, .. Employee]),
         new(FieldRm, "Sales Base: вся структура полевых продаж — команды, точки, маршруты, задачи, KPI, решения по рекомендациям AI; аналитика продаж и консультант.", null,
             [Permissions.FieldUse, Permissions.FieldManage, Permissions.SalesRead, Permissions.AgentsRun, Permissions.WorkTasks]),
         new(FieldSupervisor, "Sales Base: своя команда — агенты, точки, маршруты, визиты, задачи и KPI команды.", null, [Permissions.FieldUse]),
@@ -100,6 +117,11 @@ public static class SystemRoles
         (Director, Permissions.ProcurementSettings),
         ("Снабжение", Permissions.ProcurementRead),
         ("Снабжение", Permissions.ProcurementManage),
+        // «Производство» (этапы 5–6): задания на выпуск — отделу производства; рецептуры и расход — смотрят директор и снабжение.
+        (ProductionRole, Permissions.ProductionRead),
+        (ProductionRole, Permissions.ProductionManage),
+        (Director, Permissions.ProductionRead),
+        ("Снабжение", Permissions.ProductionRead),
     ];
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
@@ -149,5 +171,9 @@ public static class SystemRoles
         [Permissions.ProcurementManage] = "Снабжение: обработка заявок",
         [Permissions.ProcurementSettings] = "Заявки: категории и правила закупок",
         [Permissions.ProcurementWarehouse] = "Склад снабжения: остатки, приход, выдача, списание",
+        [Permissions.QualityCheck] = "Качество сырья: проверки партий и спецификации",
+        [Permissions.ProductionRead] = "Производство: рецептуры, задания и расход — просмотр",
+        [Permissions.ProductionManage] = "Производство: задания на выпуск",
+        [Permissions.ProductionRecipes] = "Производство: рецептуры",
     };
 }

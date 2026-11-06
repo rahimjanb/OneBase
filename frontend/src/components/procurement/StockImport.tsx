@@ -1,27 +1,53 @@
 "use client";
 
+import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useT } from "@/i18n/client";
-import { dateRu, quantity, type StockImportResult } from "@/lib/procurement";
+import { dateRu, operationWarehouse, quantity, type StockImportResult, type Warehouse } from "@/lib/procurement";
 import { FileImport, ImportColumns, ImportErrors } from "./FileImport";
 
 const kinds = { Opening: "остаток", In: "приход", Out: "выдача", WriteOff: "списание" } as const;
 
-/** «Импорт из Excel» в «Движениях» (кладовщик): первая загрузка журнала склада — начальные остатки, следующие — только новые строки. */
-export function StockImport() {
-  return (
+/**
+ * «Импорт из Excel» в «Движениях» (кладовщик): первая загрузка журнала склада — начальные остатки, следующие — только новые строки. У
+ * каждого склада свой журнал: склад загрузки выбирается рядом с кнопкой, когда кладовщик проводит операции больше чем по одному складу.
+ */
+export function StockImport({ warehouses }: { warehouses: Warehouse[] }) {
+  const t = useT();
+  const choices = warehouses.filter((w) => w.isActive && w.posts);
+  const [warehouse, setWarehouse] = useState(() => operationWarehouse(warehouses));
+  if (choices.length === 0) return null;
+  const importer = (
     <FileImport<StockImportResult>
-      endpoint="/bff/api/procurement/stock/import"
+      endpoint={`/bff/api/procurement/stock/import${warehouse ? `?warehouse=${warehouse}` : ""}`}
       checkTitle="Проверка файла"
       doneTitle="Загрузка движений"
-      hint="Журнал склада из Excel: дата, приход или расход, артикул или название, единица, количество, цех или склад — заголовки по-русски или по-узбекски, столбцы узнаются сами. Первая загрузка заводит начальные остатки, следующие загрузки того же файла проводят только новые строки. Расход в цех — выдача отделу (нового цеха — новый отдел), «Утилизация» и «Испарения» — списание."
+      hint="Журнал склада из Excel: дата, приход или расход, артикул или название, единица, количество, цех или склад — заголовки по-русски или по-узбекски, столбцы узнаются сами. Первая загрузка заводит начальные остатки, следующие загрузки того же файла проводят только новые строки. Расход в цех — выдача отделу (нового цеха — новый отдел), «Утилизация» и «Испарения» — списание. Столбцы «Партия», «Срок годности» и «Дата производства» — для сырья по партиям: приход заводит партию, расход берёт указанную партию или ближайшую по сроку."
       ready={(r) => r.posted > 0}
       report={(r) => <StockImportReport result={r} />}
     />
   );
+  if (choices.length < 2) return importer;
+  return (
+    <div className="flex items-center gap-2">
+      <select
+        value={warehouse ?? ""}
+        onChange={(e) => setWarehouse(e.target.value)}
+        aria-label={t("Склад загрузки")}
+        className="h-9 max-w-[200px] rounded-lg border border-line bg-surface px-2.5 text-sm text-ink focus:border-accent focus:outline-none"
+      >
+        {choices.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name}
+          </option>
+        ))}
+      </select>
+      {importer}
+    </div>
+  );
 }
 
-function StockImportReport({ result: r }: { result: StockImportResult }) {
+export function StockImportReport({ result: r }: { result: StockImportResult }) {
   const t = useT();
   const opening = r.mode === "opening";
   const docs = [
@@ -38,7 +64,10 @@ function StockImportReport({ result: r }: { result: StockImportResult }) {
         </p>
       )}
       <div className="space-y-1">
+        {r.warehouse && <p className="text-ink-3">{t("Склад: {name}", { name: r.warehouse })}</p>}
+        {r.batches > 0 && <p className="text-ink-2">{r.dryRun ? t("Новых партий будет: {n}", { n: r.batches }) : t("Новых партий: {n}", { n: r.batches })}</p>}
         {opening ? (
+
           <>
             <p className="font-medium text-ink">
               {r.dryRun ? t("Первая загрузка — начальные остатки по файлу.") : t("Начальные остатки занесены.")}

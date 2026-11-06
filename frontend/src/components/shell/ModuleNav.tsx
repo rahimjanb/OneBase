@@ -14,7 +14,7 @@ import { sectionOf } from "./sections";
 
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-/** Счётчики разделов из /api/work/nav и /api/procurement/nav; признаки руководителя и согласующего. */
+/** Счётчики разделов из /api/work/nav, /api/procurement/nav и /api/quality/nav; признаки руководителя и согласующего. */
 type WorkNav = {
   heads: boolean;
   pendingSuggestions?: number;
@@ -24,6 +24,10 @@ type WorkNav = {
   awaitingApproval?: number;
   toIssue?: number;
   toReceive?: number;
+  /** «Качество»: открытые проверки партий. */
+  open?: number;
+  /** «Производство → Задания»: выпущены и в работе. */
+  orders?: number;
 };
 
 /** Закреплённые и порядок вкладок модуля у пользователя — в localStorage (серверных настроек пользователя в OneBase нет). */
@@ -77,7 +81,14 @@ export function ModuleNav({ permissions, userId }: { permissions: string[] | nul
 
   const [work, setWork] = useState<WorkNav | null>(null);
   useEffect(() => {
-    const url = sectionId === "tasks" ? "/bff/api/work/nav" : sectionId === "requests" || sectionId === "procurement" ? "/bff/api/procurement/nav" : null;
+    const url =
+      sectionId === "tasks"
+        ? "/bff/api/work/nav"
+        : sectionId === "requests" || sectionId === "procurement"
+          ? "/bff/api/procurement/nav"
+          : sectionId === "production"
+            ? "/bff/api/production/nav"
+            : null;
     if (!url) return;
     let live = true;
     fetch(url)
@@ -95,7 +106,10 @@ export function ModuleNav({ permissions, userId }: { permissions: string[] | nul
     () =>
       (section?.tabs ?? []).filter(
         // «Согласования» — тем, кто решает шаг маршрута заявок, и директору; «Предложения AI», «Заявки отдела» — руководителям.
-        (tab) => (!tab.permission || permissions?.includes(tab.permission)) && (!tab.headsOnly || work?.heads) && (!tab.approverOnly || work?.decides || work?.isDirector),
+        (tab) =>
+          (!tab.permission || (Array.isArray(tab.permission) ? tab.permission : [tab.permission]).some((p) => permissions?.includes(p))) &&
+          (!tab.headsOnly || work?.heads) &&
+          (!tab.approverOnly || work?.decides || work?.isDirector),
       ),
     [section, permissions, work],
   );
@@ -112,7 +126,11 @@ export function ModuleNav({ permissions, userId }: { permissions: string[] | nul
                 ? work?.toIssue
                 : sectionId === "procurement" && key === "receipts"
                   ? work?.toReceive
-                  : undefined;
+                  : sectionId === "production" && key === "quality"
+                    ? work?.open
+                    : sectionId === "production" && key === "orders"
+                      ? work?.orders
+                      : undefined;
       return n && n > 0 ? n : undefined;
     },
     [sectionId, work],

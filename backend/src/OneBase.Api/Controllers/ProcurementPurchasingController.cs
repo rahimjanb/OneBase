@@ -173,6 +173,11 @@ public sealed class ProcurementPurchasingController(
     }
 
     /// <summary>Поставлено: дата (по умолчанию — сегодня).</summary>
+    /// <summary>Поставка по тендеру на склад (кладовщик): приход партиями, у позиций — «поставлено».</summary>
+    [HttpPost("tenders/{id:guid}/delivery")]
+    public async Task<IActionResult> TenderDelivery(Guid id, ProcurementTenderDeliveryInput input, CancellationToken ct) =>
+        Ok(new { id = await tenders.DeliverAsync(await ContextAsync(ct), id, input, ct) });
+
     [HttpPost("tenders/{id:guid}/delivered")]
     public async Task<IActionResult> TenderDelivered(Guid id, DeliveredBody body, CancellationToken ct)
     {

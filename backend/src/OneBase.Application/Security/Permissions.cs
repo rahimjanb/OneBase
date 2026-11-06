@@ -74,6 +74,21 @@ public static class Permissions
     /// </summary>
     public const string ProcurementWarehouse = "procurement.warehouse";
 
+    /// <summary>
+    /// Контроль качества сырья (лаборатория): очередь проверок, проверка документов, показатели и пробы, спецификации материалов; видит
+    /// склад и партии. Решение «допустить / забраковать» — не право, а назначение в настройках качества.
+    /// </summary>
+    public const string QualityCheck = "quality.check";
+
+    /// <summary>«Производство»: рецептуры, задания на выпуск, расход сырья и аналитика производства — просмотр.</summary>
+    public const string ProductionRead = "production.read";
+
+    /// <summary>Задания на выпуск (мастер, руководитель производства): создать, выпустить, закрыть с фактическим выходом, отменить.</summary>
+    public const string ProductionManage = "production.manage";
+
+    /// <summary>Рецептуры (технолог): создать, править черновик, ввести версию в действие, архивировать.</summary>
+    public const string ProductionRecipes = "production.recipes";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
@@ -103,5 +118,9 @@ public static class Permissions
         ProcurementManage,
         ProcurementSettings,
         ProcurementWarehouse,
+        QualityCheck,
+        ProductionRead,
+        ProductionManage,
+        ProductionRecipes,
     ];
 }

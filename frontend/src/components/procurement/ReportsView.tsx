@@ -22,7 +22,13 @@ export function ReportsView({
   departments,
   employees,
   suppliers,
+  base = "procurement",
+  warehouses = [],
 }: {
+  /** Чьи отчёты: снабжения или производства (те же предпросмотр, Excel и PDF). */
+  base?: "procurement" | "production";
+  /** Склады — фильтр отчётов производства. */
+  warehouses?: { id: string; name: string }[];
   kinds: ReportInfo[];
   kind: string;
   preview: ReportPreview;
@@ -54,11 +60,11 @@ export function ReportsView({
     start(() => router.push(`${pathname}?${next}`, { scroll: false }));
   };
   const query = new URLSearchParams();
-  for (const key of ["from", "to", "department", "category", "employee", "supplier"]) {
+  for (const key of ["from", "to", "department", "category", "employee", "supplier", "warehouse"]) {
     const v = params.get(key);
     if (v) query.set(key, v);
   }
-  const download = (ext: "xlsx" | "pdf") => `/bff/api/procurement/reports/${encodeURIComponent(kind)}/${ext}${query.size ? `?${query}` : ""}`;
+  const download = (ext: "xlsx" | "pdf") => `/bff/api/${base}/reports/${encodeURIComponent(kind)}/${ext}${query.size ? `?${query}` : ""}`;
   const select = (key: string, label: string, options: { id: string; name: string }[]) => (
     <select value={params.get(key) ?? ""} onChange={(e) => apply({ [key]: e.target.value || null })} aria-label={t(label)} className={`${field} max-w-[220px]`}>
       <option value="">{t(label)}</option>
@@ -115,10 +121,11 @@ export function ReportsView({
           <input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} onBlur={() => to && apply({ to })} aria-label={t("По")} className={field} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {select("department", "Все отделы", departments.map((d) => ({ id: d.id, name: d.name })))}
-          {select("category", "Все категории", categories.map((c) => ({ id: c.id, name: c.name })))}
-          {select("employee", "Все сотрудники", employees)}
-          {select("supplier", "Все поставщики", suppliers)}
+          {departments.length > 0 && select("department", "Все отделы", departments.map((d) => ({ id: d.id, name: d.name })))}
+          {categories.length > 0 && select("category", "Все категории", categories.map((c) => ({ id: c.id, name: c.name })))}
+          {employees.length > 0 && select("employee", "Все сотрудники", employees)}
+          {suppliers.length > 0 && select("supplier", "Все поставщики", suppliers)}
+          {warehouses.length > 1 && select("warehouse", "Все склады", warehouses)}
           <span className="ml-auto inline-flex gap-2">
             <a href={download("xlsx")} className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3.5 text-sm font-semibold text-white hover:bg-accent-strong">
               <FileSpreadsheet className="size-4" aria-hidden /> Excel

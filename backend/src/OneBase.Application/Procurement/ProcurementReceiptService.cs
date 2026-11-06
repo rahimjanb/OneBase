@@ -390,7 +390,7 @@ public sealed class ProcurementReceiptService(
         }
 
         var order = await ReceivableOrderAsync(input.OrderId, ct);
-        var warehouse = await ledger.DefaultWarehouseIdAsync(ct);
+        var warehouse = (await ledger.WarehouseAsync(ctx, null, ct)).Id;
         var doc = await ledger.DocumentAsync(ProcurementStockDocumentKind.Receipt, warehouse, ctx.UserId, ct);
         doc.Status = ProcurementStockDocumentStatus.Draft;
         doc.OrderId = order.Id;
@@ -451,6 +451,7 @@ public sealed class ProcurementReceiptService(
             throw new FieldConflictException("Приёмку уже изменили в другом окне — обновите страницу.");
         }
 
+        await ledger.WarehouseAsync(ctx, doc.WarehouseId, ct);
         var order = await ReceivableOrderAsync(doc.OrderId!.Value, ct);
         await PostCoreAsync(ctx, doc, order, ct);
         await db.SaveChangesAsync(ct);

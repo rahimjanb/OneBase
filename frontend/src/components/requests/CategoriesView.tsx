@@ -46,8 +46,13 @@ export function CategoriesView({ categories }: { categories: RequestCategory[] }
     }
     if (await run("add", () => bff("procurement/categories", { method: "POST", body: JSON.stringify({ name: name.trim() }) }))) setName("");
   };
-  const update = (c: RequestCategory, patch: Partial<Pick<RequestCategory, "name" | "isActive">>) =>
-    run(c.id, () => bff(`procurement/categories/${c.id}`, { method: "PUT", body: JSON.stringify({ name: patch.name ?? c.name, sortOrder: c.sortOrder, isActive: patch.isActive ?? c.isActive }) }));
+  const update = (c: RequestCategory, patch: Partial<Pick<RequestCategory, "name" | "isActive" | "isProduction">>) =>
+    run(c.id, () =>
+      bff(`procurement/categories/${c.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ name: patch.name ?? c.name, sortOrder: c.sortOrder, isActive: patch.isActive ?? c.isActive, isProduction: patch.isProduction ?? c.isProduction ?? false }),
+      }),
+    );
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -106,6 +111,16 @@ export function CategoriesView({ categories }: { categories: RequestCategory[] }
                     {!c.isActive && ` · ${t("отключена")}`}
                   </span>
                 </span>
+                <label className="inline-flex shrink-0 items-center gap-1.5 text-xs text-ink-2" title={t("Заявка с закупкой такой позиции идёт маршрутом сырья, когда он включён")}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(c.isProduction)}
+                    disabled={busy === c.id}
+                    onChange={(e) => void update(c, { isProduction: e.target.checked })}
+                    className="size-4 accent-[var(--color-accent)]"
+                  />
+                  {t("сырьё")}
+                </label>
                 <button type="button" onClick={() => setEditing({ id: c.id, name: c.name })} aria-label={t("Переименовать «{name}»", { name: c.name })} className="grid size-9 place-items-center rounded-lg text-ink-3 hover:bg-muted hover:text-ink">
                   <Pencil className="size-4" aria-hidden />
                 </button>

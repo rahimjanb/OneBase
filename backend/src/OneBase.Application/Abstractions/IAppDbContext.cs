@@ -127,6 +127,14 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Procurement.ProcurementDocument> ProcurementDocuments { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementItem> ProcurementItems { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementWarehouse> ProcurementWarehouses { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementWarehouseKeeper> ProcurementWarehouseKeepers { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementBatch> ProcurementBatches { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementBatchBalance> ProcurementBatchBalances { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementQualitySpec> ProcurementQualitySpecs { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementQualityCheck> ProcurementQualityChecks { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementQualityResult> ProcurementQualityResults { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementQualityApprover> ProcurementQualityApprovers { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementItemUnit> ProcurementItemUnits { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementStockBalance> ProcurementStockBalances { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementStockDocument> ProcurementStockDocuments { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementReceiptLine> ProcurementReceiptLines { get; }
@@ -143,6 +151,11 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrder> ProcurementPurchaseOrders { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrderItem> ProcurementPurchaseOrderItems { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementTender> ProcurementTenders { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementSheetImport> ProcurementSheetImports { get; }
+    DbSet<OneBase.Domain.Production.ProductionRecipe> ProductionRecipes { get; }
+    DbSet<OneBase.Domain.Production.ProductionRecipeLine> ProductionRecipeLines { get; }
+    DbSet<OneBase.Domain.Production.ProductionOrder> ProductionOrders { get; }
+    DbSet<OneBase.Domain.Production.ProductionOrderLine> ProductionOrderLines { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementStockImport> ProcurementStockImports { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementStockImportRow> ProcurementStockImportRows { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementTenderItem> ProcurementTenderItems { get; }

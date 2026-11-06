@@ -5,6 +5,7 @@ export type RequestStatus =
   | "Submitted"
   | "HeadApproval"
   | "FinanceApproval"
+  | "SupplyApproval"
   | "DirectorApproval"
   | "Approved"
   | "Rejected"
@@ -73,6 +74,9 @@ export type RequestItem = {
   orderedQty: number;
   /** Закупленное, принятое на склад (подтверждённые приёмки). */
   receivedQty: number;
+  /** Карточка склада ведётся по партиям: «Куплено» вносит партии со сроком годности. */
+  tracksBatches?: boolean;
+  shelfLifeDays?: number | null;
 };
 
 export type RequestDocument = { id: string; fileName: string; contentType: string; sizeBytes: number; uploadedByName: string | null; createdAt: string; canDelete: boolean };
@@ -112,7 +116,8 @@ export type RequestAbilities = {
 };
 
 export type ApprovalDecision = "Approved" | "Rejected" | "Revision";
-export type ApprovalStage = "head" | "finance" | "director";
+/** Шаг согласования: руководитель отдела, финансист, директор; в маршруте сырья — руководитель снабжения. */
+export type ApprovalStage = "head" | "finance" | "director" | "supply_head";
 export type RequestApproval = {
   id: string;
   round: number;
@@ -135,8 +140,11 @@ export type RouteStep = {
   who: string[];
   at: string | null;
   comment: string | null;
-  reason: "initiatorHead" | "noHeads" | "noPurchase" | "underLimit" | null;
+  reason: "initiatorHead" | "noHeads" | "noPurchase" | "underLimit" | "initiatorSupply" | null;
 };
+
+/** Тендерная закупка, исполняющая заявку. */
+export type RequestTender = { id: string; number: string; title: string; status: TenderStatus; total: number; supplierName: string };
 
 export type RequestDetail = {
   id: string;
@@ -174,11 +182,16 @@ export type RequestDetail = {
   orders: RequestOrder[];
   /** Маршрут согласования текущего раунда; у заявок прежнего порядка (через снабжение) — null. */
   route: RouteStep[] | null;
+  /** Тендеры, исполняющие заявку (снабжению и директору). */
+  tenders?: RequestTender[] | null;
+  /** Маршрут сырья: руководитель снабжения → директор (всегда). */
+  rawRoute?: boolean;
   /** Лимит покупки без директора, сум (из «Настройки → Отделы → Снабжение»). */
   directorLimit: number;
 };
 
-export type RequestCategory = { id: string; name: string; code: string | null; sortOrder: number; isActive: boolean; used: number };
+/** Категория закупок; isProduction — сырьё и материалы производства (маршрут сырья, когда он включён). */
+export type RequestCategory = { id: string; name: string; code: string | null; sortOrder: number; isActive: boolean; used: number; isProduction?: boolean };
 export type RequestUnit = { code: string; name: string };
 export type RequestDepartment = { id: string; code: string; name: string };
 
@@ -214,6 +227,9 @@ export type RequestNav = {
   toReceive: number;
   /** Решает шаг маршрута: руководитель отдела, финансист или директор — видит «Ждут моего согласования». */
   decides: boolean;
+  /** Лаборатория: проверки качества и спецификации; decidesQuality — назначен решать по качеству партий. */
+  quality?: boolean;
+  decidesQuality?: boolean;
 };
 
 // ---------- Склад ----------
@@ -234,14 +250,248 @@ export type StockRow = {
   barcode: string | null;
   description: string | null;
   lastMovementAt: string | null;
+  /**
+   * Позиция ведётся по партиям; expired — просроченный остаток допущенных партий, onControl — на контроле качества, blocked — забракованный и
+   * заблокированный: всё это не выдаётся и в «доступно» не входит; nearestExpiry — срок ближайшей годной партии.
+   */
+  tracksBatches: boolean;
+  expired: number;
+  nearestExpiry: string | null;
+  shelfLifeDays: number | null;
+  expiryWarningDays: number | null;
+  storageConditions: string | null;
+  onControl: number;
+  blocked: number;
+  qualityControl: QualityControl;
 };
 
-export type StockSummary = { items: number; low: number; empty: number; withReserve: number; toIssueRequests: number };
+export type StockSummary = {
+  items: number;
+  low: number;
+  empty: number;
+  withReserve: number;
+  toIssueRequests: number;
+  expired: number;
+  expiring: number;
+  tracked: number;
+  onControl: number;
+  blocked: number;
+};
 
-export type CatalogOption = { id: string; sku: string; name: string; categoryId: string; categoryName: string; unitCode: string; onHand: number; available: number };
+/** Контроль качества позиции при приходе: нет, по документам, документы и лаборатория. */
+export type QualityControl = "None" | "Documents" | "Lab";
 
-export type MovementKind = "Receipt" | "Issue" | "WriteOff" | "Adjustment";
-export type StockDocumentKind = "Receipt" | "Issue" | "WriteOff" | "Inventory";
+export const qualityControlLabel: Record<QualityControl, string> = { None: "Нет", Documents: "Проверка документов", Lab: "Документы и лаборатория" };
+
+/** Статус качества партии: выдаётся только допущенная (и не просроченная). */
+export type BatchQuality = "Approved" | "Pending" | "Rejected" | "Blocked";
+
+export const batchQualityLabel: Record<BatchQuality, string> = { Approved: "Допущена", Pending: "На контроле", Rejected: "Забракована", Blocked: "Заблокирована" };
+
+export const batchQualityTone: Record<BatchQuality, string> = {
+  Approved: "bg-ok-soft text-ok",
+  Pending: "bg-warn-soft text-warn",
+  Rejected: "bg-bad-soft text-bad",
+  Blocked: "bg-bad-soft text-bad",
+};
+
+export type CatalogOption = {
+  id: string;
+  sku: string;
+  name: string;
+  categoryId: string;
+  categoryName: string;
+  unitCode: string;
+  onHand: number;
+  available: number;
+  tracksBatches?: boolean;
+  shelfLifeDays?: number | null;
+  /** Единицы закупки: приход можно провести в них (пересчёт в единицу карточки). */
+  units?: ItemUnit[];
+};
+
+/** Единица закупки позиции: 1 unitCode = factor единиц карточки (мешок = 25 кг). */
+export type ItemUnit = { unitCode: string; factor: number };
+
+/** Количество в единице карточки: q × factor; больше трёх знаков после пересчёта — null (как на сервере: не округляем молча). */
+export function unitToBase(q: number, factor: number): number | null {
+  const value = q * factor;
+  const rounded = Math.round(value * 1000) / 1000;
+  return Math.abs(value - rounded) < 1e-9 ? rounded : null;
+}
+
+/** Цена за единицу карточки: цена единицы закупки ÷ коэффициент, до двух знаков. */
+export const costToBase = (cost: number, factor: number) => Math.round((cost / factor) * 100) / 100;
+
+export type MovementKind =
+  | "Receipt"
+  | "Issue"
+  | "WriteOff"
+  | "Adjustment"
+  | "TransferOut"
+  | "TransferIn"
+  | "BatchEntry"
+  | "Reversal"
+  | "SupplierReturn"
+  | "ProductionIssue"
+  | "ProductionReturn";
+export type StockDocumentKind = "Receipt" | "Issue" | "WriteOff" | "Inventory" | "Transfer" | "BatchEntry" | "Reversal" | "SupplierReturn" | "ProductionIssue" | "ProductionReturn";
+
+/** Срок партии: ok, expiring — истекает, expired — просрочена, unknown — срок не указан (партия заблокирована до указания срока). */
+export type BatchState = "ok" | "expiring" | "expired" | "unknown";
+
+export const batchStateLabel: Record<BatchState, string> = { ok: "В сроке", expiring: "Истекает срок", expired: "Просрочена", unknown: "Срок не указан" };
+
+/**
+ * Партия в реестре: остаток выбранного склада или всех; daysLeft — дней до срока (меньше нуля — просрочена, без срока — null); quality —
+ * статус качества, usable — можно выдать (допущена и не просрочена), blockReason — почему заблокирована.
+ */
+export type BatchRow = {
+  id: string;
+  number: string;
+  itemId: string;
+  sku: string;
+  itemName: string;
+  unitCode: string;
+  supplierBatchNo: string | null;
+  supplierName: string | null;
+  manufacturedOn: string | null;
+  expiresOn: string | null;
+  receivedOn: string;
+  onHand: number;
+  state: BatchState;
+  daysLeft: number | null;
+  unitCost: number | null;
+  quality: BatchQuality;
+  usable: boolean;
+  blockReason: string | null;
+};
+
+/** Проверка качества партии в её карточке. */
+export type BatchCheck = { id: string; number: string; status: QualityCheckStatus; decision: BatchQuality | null; createdAt: string; decidedAt: string | null; decidedByName: string | null };
+
+/** Карточка партии: остатки, движения, проверки качества, история решений, документы; can — заблокировать, снять блокировку, вернуть поставщику, прикрепить. */
+export type BatchCard = {
+  batch: BatchRow;
+  storageConditions: string | null;
+  sourceDocumentId: string;
+  sourceNumber: string;
+  warehouses: { warehouseId: string; name: string; onHand: number }[];
+  movements: MovementRow[];
+  checks: BatchCheck[] | null;
+  history: RequestEvent[] | null;
+  documents: ProcDocument[] | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  version: number;
+  can: { block: boolean; unblock: boolean; return: boolean; attach: boolean } | null;
+  supplierId: string | null;
+};
+
+/** Партия позиции на складе для формы — по FEFO; usable — можно выдать; quality — статус качества. */
+export type BatchOption = { id: string; number: string; supplierBatchNo: string | null; expiresOn: string | null; onHand: number; usable: boolean; quality?: BatchQuality };
+
+/** Партия прихода в форме (строки — как ввёл пользователь); unknown — «срок не известен» (только ввод партий). */
+export type BatchDraft = { key: string; no: string; made: string; expires: string; quantity: string; unknown?: boolean };
+
+/** Сумма партий формы; null — есть нераспознанное количество. */
+export function batchesTotal(drafts: BatchDraft[]): number | null {
+  let total = 0;
+  for (const d of drafts) {
+    const q = parseNumber(d.quantity);
+    if (q === null || q <= 0) return null;
+    total += q;
+  }
+  return Math.round(total * 1000) / 1000;
+}
+
+/** Срок годности партии: указанный или дата производства + срок хранения позиции (ГГГГ-ММ-ДД); не определить — null. Как на сервере. */
+export function batchExpiry(expires: string, made: string, shelfLifeDays: number | null | undefined): string | null {
+  if (expires) return expires;
+  if (!made || !shelfLifeDays) return null;
+  const d = new Date(`${made}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + shelfLifeDays);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Почему партию не выдать: на контроле, забракована, заблокирована, срок не указан, просрочена; годна — null. */
+export function batchHold(b: Pick<BatchOption, "usable" | "quality" | "expiresOn">): string | null {
+  if (b.usable) return null;
+  if (b.quality && b.quality !== "Approved") return batchQualityLabel[b.quality].toLowerCase();
+  return b.expiresOn ? "просрочена" : "срок не указан";
+}
+
+/** Подпись партии в списке: «LOT-2026-00012 · A-1021 · до 01.04.2027 · 40 кг»; не выдать — почему. */
+export const batchOptionLabel = (b: BatchOption, unit: string) =>
+  [b.number, b.supplierBatchNo, b.expiresOn ? `до ${dateRu(b.expiresOn)}` : "срок не указан", `${quantity(b.onHand)} ${unit}`, b.usable ? null : batchHold(b)]
+    .filter(Boolean)
+    .join(" · ");
+
+/** Тон срока: просрочена — красный, истекает и «срок не указан» — жёлтый. */
+export const batchTone = (state: BatchState) => (state === "expired" ? "text-bad" : state === "expiring" || state === "unknown" ? "text-warn" : "text-ink-2");
+
+/**
+ * Можно сторнировать: приход без заказа, выдача отделу, списание (кроме проб лаборатории), инвентаризация, перемещение — не сторнированные (как
+ * на сервере). Возврат поставщику не сторнируется.
+ */
+export const reversible = (m: Pick<MovementRow, "documentKind" | "orderId" | "requestId" | "reversedBy"> & { qualityCheckId?: string | null; tenderId?: string | null }) =>
+  ["Receipt", "Issue", "WriteOff", "Inventory", "Transfer"].includes(m.documentKind) && !m.orderId && !m.requestId && !m.reversedBy && !m.qualityCheckId && !m.tenderId;
+
+/** Шаг проверки качества: документы, лаборатория, ждёт решения, решение принято, отменена (приход сторнирован). */
+export type QualityCheckStatus = "Documents" | "Lab" | "Decision" | "Decided" | "Cancelled";
+
+export const qualityCheckStatusLabel: Record<QualityCheckStatus, string> = {
+  Documents: "Проверка документов",
+  Lab: "Лаборатория",
+  Decision: "Ждёт решения",
+  Decided: "Решение принято",
+  Cancelled: "Отменена",
+};
+
+export type WarehouseKind = "Central" | "RawMaterials" | "Workshop" | "Other";
+
+export const warehouseKindLabel: Record<WarehouseKind, string> = { Central: "Центральный", RawMaterials: "Склад сырья", Workshop: "Кладовая цеха", Other: "Другой" };
+
+/** Склад снабжения: posts — текущий пользователь проводит по нему операции (кладовщик, закреплённый за ним или ни за каким складом). */
+export type Warehouse = {
+  id: string;
+  code: string;
+  name: string;
+  kind: WarehouseKind;
+  departmentId: string | null;
+  departmentName: string | null;
+  address: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+  /** Позиций с остатком. */
+  items: number;
+  keepers: { id: string; name: string }[];
+  posts: boolean;
+  version: number;
+  /** Кто ведёт данные склада в переходный период: не выбран (как раньше), OneBase, таблица; с какой даты. */
+  dataOwner?: DataOwner;
+  dataOwnerSince?: string | null;
+};
+
+export type DataOwner = "None" | "OneBase" | "Sheet";
+
+export const dataOwnerLabel: Record<DataOwner, string> = { None: "Не выбран — и вручную, и загрузкой", OneBase: "OneBase — загрузка журнала закрыта", Sheet: "Таблица — ручные операции закрыты" };
+
+export type WarehousesView = {
+  warehouses: Warehouse[];
+  keeperOptions: { id: string; name: string }[];
+  departments: RequestDepartment[];
+  canEdit: boolean;
+};
+
+/** Действующие склады; выбор склада показывается, только когда их больше одного. */
+export const activeWarehouses = (list: Warehouse[] | null | undefined) => (list ?? []).filter((w) => w.isActive);
+
+/** Склад, по которому открыть операцию: выбранный в фильтре (если по нему можно проводить), иначе по умолчанию, иначе первый доступный. */
+export function operationWarehouse(list: Warehouse[], selected?: string | null): string | null {
+  const posts = list.filter((w) => w.isActive && w.posts);
+  return (posts.find((w) => w.id === selected) ?? posts.find((w) => w.isDefault) ?? posts[0])?.id ?? null;
+}
 
 /**
  * Итог загрузки движений склада из Excel (dryRun — проверка, ничего не сохранено). mode: opening — первая загрузка, по файлу заводятся
@@ -269,6 +519,10 @@ export type StockImportResult = {
   errors: string[];
   sample: { date: string | null; kind: "Opening" | "In" | "Out" | "WriteOff"; place: string | null; sku: string; name: string; unitCode: string; quantity: number }[];
   unknownFile: boolean;
+  /** Склад загрузки. */
+  warehouse: string | null;
+  /** Новых партий (позиции с партиями). */
+  batches: number;
 };
 
 export type MovementRow = {
@@ -296,13 +550,47 @@ export type MovementRow = {
   /** Приход по заказу поставщику (приёмка): документ — приёмка, заказ — источник. */
   orderId: string | null;
   orderNumber: string | null;
+  /** Склад движения; у перемещения counterpartName — другой склад (куда ушло или откуда пришло). */
+  warehouseName: string | null;
+  counterpartName: string | null;
+  /** Партия строки (позиция с партиями) и её остаток на складе после движения; reversedBy — номер сторно, если документ сторнирован. */
+  batchId: string | null;
+  batchNumber: string | null;
+  batchExpiresOn: string | null;
+  batchAfter: number | null;
+  reversedBy: string | null;
+  /** Списание проб лаборатории — по какой проверке качества (не сторнируется). */
+  qualityCheckId: string | null;
+  /** Поставка по тендеру (не сторнируется — тендер помнит, сколько поставлено). */
+  tenderId?: string | null;
 };
 
 export type ItemCard = {
   item: StockRow;
   movements: MovementRow[];
   reservations: { requestId: string; requestNumber: string; requestTitle: string; departmentName: string; quantity: number; createdAt: string }[];
+  /** Остаток на каждом складе, где позиция есть или была. */
+  warehouses: { warehouseId: string; name: string; isDefault: boolean; onHand: number; reserved: number; available: number }[] | null;
+  /** Единицы закупки карточки. */
+  units?: ItemUnit[] | null;
 };
+
+/** Покупка позиции в истории цен: source — заказ, тендер или приход без заказа; цена — за единицу карточки. */
+export type ItemPricePoint = {
+  date: string;
+  orderNumber: string;
+  supplierName: string;
+  quantity: number;
+  price: number;
+  urgent: boolean;
+  fromOffer: boolean;
+  source: "order" | "tender" | "receipt";
+};
+
+/** История цен позиции за год: покупки, последняя, лучшая и худшая цена (в единице карточки). */
+export type ItemPrices = { itemId: string; unitCode: string; points: ItemPricePoint[]; last: number | null; min: number | null; max: number | null };
+
+export const priceSourceLabel: Record<ItemPricePoint["source"], string> = { order: "заказ", tender: "тендер", receipt: "приход" };
 
 export type ToIssue = {
   requestId: string;
@@ -318,7 +606,20 @@ export type ToIssue = {
 
 export type Page<T> = { items: T[]; total: number; page: number; pageSize: number };
 
-export const movementKindLabel: Record<MovementKind, string> = { Receipt: "Приход", Issue: "Выдача", WriteOff: "Списание", Adjustment: "Инвентаризация" };
+export const movementKindLabel: Record<MovementKind, string> = {
+  Receipt: "Приход",
+  Issue: "Выдача",
+  WriteOff: "Списание",
+  Adjustment: "Инвентаризация",
+  TransferOut: "Перемещение: ушло",
+  TransferIn: "Перемещение: пришло",
+  BatchEntry: "Ввод партий",
+  Reversal: "Сторно",
+  SupplierReturn: "Возврат поставщику",
+  ProductionIssue: "Выдача в производство",
+  ProductionReturn: "Возврат из производства",
+};
+
 
 export const approvalDecisionLabel: Record<ApprovalDecision, string> = { Approved: "Согласована", Rejected: "Отклонена", Revision: "Возвращена на доработку" };
 
@@ -328,6 +629,7 @@ export const requestStatuses: RequestStatus[] = [
   "Draft",
   "HeadApproval",
   "FinanceApproval",
+  "SupplyApproval",
   "DirectorApproval",
   "Submitted",
   "RevisionRequired",
@@ -343,6 +645,7 @@ export const requestStatusLabel: Record<RequestStatus, string> = {
   Submitted: "У снабжения",
   HeadApproval: "Ожидает руководителя",
   FinanceApproval: "Ожидает финансиста",
+  SupplyApproval: "Ожидает руководителя снабжения",
   DirectorApproval: "Ожидает директора",
   Approved: "Утверждена",
   Rejected: "Отклонена",
@@ -370,8 +673,8 @@ export const itemStatusLabel: Record<ItemStatus, string> = {
 /** Этапы заявки для полосы в карточке: черновик → согласование (любой шаг маршрута и доработка) → утверждена → выполнена. */
 export const requestStages = ["Черновик", "Согласование", "Утверждена", "Выполнена"] as const;
 
-/** Шаги согласования: заявка ждёт решения руководителя отдела, финансиста или директора (и прежний шаг «у снабжения»). */
-export const approvalStatuses: RequestStatus[] = ["HeadApproval", "FinanceApproval", "DirectorApproval", "Submitted"];
+/** Шаги согласования: заявка ждёт решения руководителя отдела, финансиста, руководителя снабжения (сырьё) или директора (и прежний шаг «у снабжения»). */
+export const approvalStatuses: RequestStatus[] = ["HeadApproval", "FinanceApproval", "SupplyApproval", "DirectorApproval", "Submitted"];
 
 /** Номер этапа статуса на полосе (0…3); -1 — заявка вне полосы (отклонена, отменена). */
 export function stageIndex(status: RequestStatus): number {
@@ -946,7 +1249,20 @@ export type RequestOrder = {
 };
 
 /** Позиция «к закупке»: сколько осталось купить, согласованная цена за единицу. */
-export type ToBuyLine = { requestItemId: string; lineNo: number; name: string; categoryName: string; unitCode: string; left: number; price: number | null; sku: string | null; comment: string | null };
+/** tracksBatches — позиция склада с партиями: «Куплено» вносит партии (срок годности; на контроль, если у позиции контроль качества). */
+export type ToBuyLine = {
+  requestItemId: string;
+  lineNo: number;
+  name: string;
+  categoryName: string;
+  unitCode: string;
+  left: number;
+  price: number | null;
+  sku: string | null;
+  comment: string | null;
+  tracksBatches?: boolean;
+  shelfLifeDays?: number | null;
+};
 
 /** Утверждённая заявка, по которой снабжению осталось купить; overdue — желаемая дата прошла; total — остаток к закупке, сум. */
 export type ToBuy = {
@@ -990,6 +1306,10 @@ export const documentKindLabel: Record<string, string> = {
   act: "Акт",
   payment: "Платёжное поручение",
   protocol: "Протокол тендера",
+  certificate: "Сертификат качества",
+  declaration: "Декларация соответствия",
+  lab_report: "Протокол испытаний",
+  specification: "Спецификация",
   other: "Документ",
 };
 
@@ -1021,7 +1341,30 @@ export type TenderRow = {
 /** Журнал: страница и итоги — сумма по фильтру (без отменённых), ждут поставки и просрочены — по всему журналу. */
 export type TenderList = Page<TenderRow> & { amount: number; waiting: number; overdue: number; canCreate: boolean };
 
-export type TenderItem = { id: string; lineNo: number; name: string; unitCode: string; quantity: number; price: number; sum: number };
+/**
+ * Позиция тендера; itemId — карточка склада (поставка на склад только по таким); factor — сколько единиц карточки в единице позиции
+ * (1 — та же; null — единица не задана у карточки); receivedQty и left — поставлено и осталось, в единице позиции.
+ */
+export type TenderItem = {
+  id: string;
+  lineNo: number;
+  name: string;
+  unitCode: string;
+  quantity: number;
+  price: number;
+  sum: number;
+  itemId?: string | null;
+  sku?: string | null;
+  itemUnitCode?: string | null;
+  tracksBatches?: boolean;
+  shelfLifeDays?: number | null;
+  factor?: number | null;
+  receivedQty?: number;
+  left?: number;
+};
+
+/** Поставка по тендеру на склад: приход RC-. */
+export type TenderDelivery = { documentId: string; number: string; at: string; reference: string | null; lines: number; actorName: string | null };
 
 export type TenderDetail = {
   id: string;
@@ -1048,7 +1391,15 @@ export type TenderDetail = {
   items: TenderItem[];
   documents: ProcDocument[];
   history: RequestEvent[];
-  can: { edit: boolean; deliver: boolean; cancel: boolean; attach: boolean };
+  /** receive — принять поставку на склад (кладовщик). */
+  can: { edit: boolean; deliver: boolean; cancel: boolean; attach: boolean; receive?: boolean };
+  /** Заявка, которую исполняет тендер, и склад поставки. */
+  requestId?: string | null;
+  requestNumber?: string | null;
+  requestTitle?: string | null;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
+  deliveries?: TenderDelivery[] | null;
 };
 
 /** Итоги заказа или предложения — как на сервере: позиции − скидка (не ниже нуля) + НДС сверху (если цены без НДС) + доставка. */

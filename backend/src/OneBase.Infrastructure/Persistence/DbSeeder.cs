@@ -188,7 +188,11 @@ public static class DbSeeder
             var (code, name) = ProcurementCategories[i];
             if (!codes.Contains(code) && !names.Contains(name.ToLowerInvariant()))
             {
-                db.ProcurementCategories.Add(new OneBase.Domain.Procurement.ProcurementCategory { Code = code, Name = name, SortOrder = (i + 1) * 10 });
+                // Сырьё и производственные материалы — категории маршрута сырья (сам маршрут включается в настройках снабжения).
+                db.ProcurementCategories.Add(new OneBase.Domain.Procurement.ProcurementCategory
+                {
+                    Code = code, Name = name, SortOrder = (i + 1) * 10, IsProduction = code is "raw_materials" or "production_materials",
+                });
             }
         }
 

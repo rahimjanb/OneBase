@@ -3,8 +3,8 @@ import { TenderForm } from "@/components/procurement/TenderForm";
 import { requireRequests } from "@/components/requests/RequestListPage";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
-import type { RequestFormData, SupplierRow, TenderDetail } from "@/lib/procurement";
-import { apiGet, apiGetOrNull } from "@/lib/server-api";
+import type { RequestFormData, SupplierRow, TenderDetail, ToBuyView, WarehousesView } from "@/lib/procurement";
+import { apiGet, apiGetOrNull, apiTry } from "@/lib/server-api";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -20,7 +20,12 @@ export default async function EditTenderPage({ params }: { params: Promise<{ id:
   if (!tender) notFound();
   if (!tender.can.edit) redirect(`/procurement/tenders/${id}`);
   const t = await getT();
-  const [form, suppliers] = await Promise.all([apiGet<RequestFormData>("/api/procurement/form", path), apiGet<SupplierRow[]>("/api/procurement/suppliers/options", path)]);
+  const [form, suppliers, toBuy, stores] = await Promise.all([
+    apiGet<RequestFormData>("/api/procurement/form", path),
+    apiGet<SupplierRow[]>("/api/procurement/suppliers/options", path),
+    apiTry<ToBuyView>("/api/procurement/to-buy"),
+    apiTry<WarehousesView>("/api/procurement/warehouses"),
+  ]);
   return (
     <>
       <PageHeader
@@ -37,7 +42,14 @@ export default async function EditTenderPage({ params }: { params: Promise<{ id:
         ]}
       />
       <PageBody>
-        <TenderForm initial={tender} categories={form.categories} units={form.units} suppliers={suppliers.map((s) => ({ id: s.id, name: s.name }))} />
+        <TenderForm
+          initial={tender}
+          categories={form.categories}
+          units={form.units}
+          suppliers={suppliers.map((s) => ({ id: s.id, name: s.name }))}
+          requests={(toBuy?.requests ?? []).map((r) => ({ id: r.requestId, number: r.number, title: r.title }))}
+          warehouses={stores?.warehouses ?? []}
+        />
       </PageBody>
     </>
   );

@@ -12,7 +12,8 @@ const field =
 /**
  * Поле товара с подсказками из каталога склада (SKU, название, штрихкод) и доступным остатком. free — можно оставить своё наименование
  * (форма заявки: товара нет на складе — всё к закупке); иначе нужно выбрать из каталога (складские операции). Выбранный товар —
- * с артикулом и крестиком «отвязать»; locked — по позиции уже есть выдача или резерв, товар не меняется.
+ * с артикулом и крестиком «отвязать»; locked — по позиции уже есть выдача или резерв, товар не меняется. warehouseId — остаток этого
+ * склада (складские операции); без него — склада по умолчанию, на котором резервируют заявки.
  */
 export function CatalogPicker({
   name,
@@ -22,6 +23,8 @@ export function CatalogPicker({
   locked = false,
   placeholder,
   label,
+  warehouseId,
+  freeHint,
   onText,
   onPick,
   onUnlink,
@@ -33,6 +36,9 @@ export function CatalogPicker({
   locked?: boolean;
   placeholder?: string;
   label: string;
+  warehouseId?: string | null;
+  /** Подсказка под списком в режиме free (по умолчанию — про заявку). */
+  freeHint?: string;
   onText?: (text: string) => void;
   onPick: (option: CatalogOption) => void;
   onUnlink?: () => void;
@@ -53,7 +59,7 @@ export function CatalogPicker({
     let alive = true;
     setLoading(true);
     const timer = window.setTimeout(() => {
-      bff<CatalogOption[]>(`procurement/catalog?q=${encodeURIComponent(text.trim())}`)
+      bff<CatalogOption[]>(`procurement/catalog?q=${encodeURIComponent(text.trim())}${warehouseId ? `&warehouse=${warehouseId}` : ""}`)
         .then((found) => alive && (setOptions(found), setActive(0)))
         .catch(() => alive && setOptions([]))
         .finally(() => alive && setLoading(false));
@@ -62,7 +68,7 @@ export function CatalogPicker({
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [text, open, linked]);
+  }, [text, open, linked, warehouseId]);
 
   useEffect(() => {
     if (!open) return;
@@ -156,7 +162,9 @@ export function CatalogPicker({
               </button>
             </li>
           ))}
-          {free && options.length > 0 && <li className="px-3 pb-1 pt-1.5 text-[11px] text-ink-3">{t("Нет в списке — оставьте своё наименование, всё пойдёт к закупке")}</li>}
+          {free && options.length > 0 && (
+            <li className="px-3 pb-1 pt-1.5 text-[11px] text-ink-3">{freeHint ?? t("Нет в списке — оставьте своё наименование, всё пойдёт к закупке")}</li>
+          )}
         </ul>
       )}
     </div>

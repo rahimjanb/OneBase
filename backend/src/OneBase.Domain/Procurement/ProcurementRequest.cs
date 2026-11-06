@@ -6,7 +6,9 @@ namespace OneBase.Domain.Procurement;
 /// <summary>
 /// Статус заявки на закупку. Хранится строкой — новые значения добавляются без миграции данных.
 /// Маршрут: Draft → HeadApproval (руководитель отдела; заявку руководителя — пропуск) → FinanceApproval (финансист) → DirectorApproval
-/// (директор, если сумма к закупке больше лимита) → Approved (к закупке) → PartiallyFulfilled → Fulfilled. RevisionRequired — возвращена на
+/// (директор, если сумма к закупке больше лимита) → Approved (к закупке) → PartiallyFulfilled → Fulfilled. Маршрут сырья (включается в
+/// настройках снабжения; заявка с закупкой позиции категории сырья): Draft → SupplyApproval (руководитель снабжения) → DirectorApproval
+/// (директор — всегда, без лимита) → Approved; финансисту — уведомление без шага. RevisionRequired — возвращена на
 /// доработку (снова отправляется после правки), Rejected — отклонена согласующим, Cancelled — отменена инициатором. Submitted — прежний
 /// шаг «у снабжения» до нового маршрута: такие заявки доводятся по-старому (снабжение передаёт директору).
 /// </summary>
@@ -23,6 +25,9 @@ public enum ProcurementRequestStatus
     Cancelled,
     HeadApproval,
     FinanceApproval,
+
+    /// <summary>Маршрут сырья: ждёт руководителя снабжения (слот в настройках, иначе руководители отдела «Снабжение»).</summary>
+    SupplyApproval,
 }
 
 /// <summary>Приоритет заявки: низкий, обычный, высокий, срочный.</summary>
@@ -103,6 +108,12 @@ public class ProcurementRequest : Entity
     /// <summary>Предполагаемая сумма к закупке: часть «к закупке» × предполагаемая цена (то, что согласует директор).</summary>
     public decimal PurchaseTotal { get; set; }
 
+    /// <summary>
+    /// Маршрут сырья (выбирается при отправке): есть закупка позиции категории сырья и маршрут включён в настройках — руководитель снабжения,
+    /// затем директор (всегда). Повторное согласование после правки идёт тем же маршрутом.
+    /// </summary>
+    public bool RawRoute { get; set; }
+
     /// <summary>Раунд согласования директором: 1 — первое, 2+ — повторное после существенного изменения.</summary>
     public int ApprovalRound { get; set; }
 
@@ -172,6 +183,12 @@ public class ProcurementCategory : Entity
 
     /// <summary>Код системной категории (засевается при запуске); у добавленных вручную — null.</summary>
     public string? Code { get; set; }
+
+    /// <summary>
+    /// Сырьё и материалы производства: заявка с закупкой такой позиции идёт маршрутом сырья (руководитель снабжения → директор), когда он
+    /// включён в настройках снабжения. Засевается у «Сырья» и «Производственных материалов».
+    /// </summary>
+    public bool IsProduction { get; set; }
 
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;

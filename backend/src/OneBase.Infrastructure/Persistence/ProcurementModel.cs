@@ -138,6 +138,8 @@ internal static class ProcurementModel
             e.Property(x => x.Barcode).HasMaxLength(64);
             e.Property(x => x.Description).HasMaxLength(1000);
             e.Property(x => x.MinQty).HasPrecision(18, 3);
+            e.Property(x => x.StorageConditions).HasMaxLength(300);
+            e.Property(x => x.QualityControl).HasConversion<string>().HasMaxLength(16);
             e.HasIndex(x => x.Sku).IsUnique().HasDatabaseName("IX_ProcurementItems_Sku");
             e.HasIndex(x => x.Barcode).HasDatabaseName("IX_ProcurementItems_Barcode");
             e.HasIndex(x => x.CategoryId).HasDatabaseName("IX_ProcurementItems_CategoryId");
@@ -154,7 +156,143 @@ internal static class ProcurementModel
             e.HasKey(x => x.Id).HasName("PK_ProcurementWarehouses");
             e.Property(x => x.Code).HasMaxLength(32);
             e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Address).HasMaxLength(300);
+            e.Property(x => x.DataOwner).HasConversion<string>().HasMaxLength(16).HasDefaultValue(ProcurementDataOwner.None);
+            e.Property(x => x.Version).IsRowVersion();
             e.HasIndex(x => x.Code).IsUnique().HasDatabaseName("IX_ProcurementWarehouses_Code");
+            e.HasIndex(x => x.DepartmentId).HasDatabaseName("IX_ProcurementWarehouses_DepartmentId");
+            e.HasOne(x => x.Department).WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementWarehouses_Departments_DepartmentId");
+            e.HasMany(x => x.Keepers).WithOne(x => x.Warehouse).HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProcurementWarehouseKeepers_Warehouses_WarehouseId");
+        });
+
+        b.Entity<ProcurementBatch>(e =>
+        {
+            e.ToTable("Batches", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProcurementBatches");
+            e.Property(x => x.Number).HasMaxLength(32);
+            e.Property(x => x.SupplierBatchNo).HasMaxLength(64);
+            e.Property(x => x.UnitCost).HasPrecision(18, 2);
+            e.Property(x => x.QualityStatus).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.BlockReason).HasMaxLength(1000);
+            e.Property(x => x.Version).IsRowVersion();
+            e.HasIndex(x => x.Number).IsUnique().HasDatabaseName("IX_ProcurementBatches_Number");
+            // Очередь контроля и заблокированные: партии не в статусе «допущена».
+            e.HasIndex(x => x.QualityStatus).HasFilter("\"QualityStatus\" <> 'Approved'").HasDatabaseName("IX_ProcurementBatches_QualityStatus");
+            e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.QualityDecidedById).OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_ProcurementBatches_Users_QualityDecidedById");
+            e.HasIndex(x => x.QualityDecidedById).HasDatabaseName("IX_ProcurementBatches_QualityDecidedById");
+            e.HasIndex(x => new { x.ItemId, x.ExpiresOn }).HasDatabaseName("IX_ProcurementBatches_ItemId_ExpiresOn");
+            e.HasIndex(x => new { x.ItemId, x.SupplierBatchNo }).HasDatabaseName("IX_ProcurementBatches_ItemId_SupplierBatchNo");
+            e.HasIndex(x => x.SupplierId).HasDatabaseName("IX_ProcurementBatches_SupplierId");
+            e.HasIndex(x => x.SourceDocumentId).HasDatabaseName("IX_ProcurementBatches_SourceDocumentId");
+            e.HasOne(x => x.Item).WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementBatches_Items_ItemId");
+            e.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementBatches_Suppliers_SupplierId");
+            e.HasOne<ProcurementStockDocument>().WithMany().HasForeignKey(x => x.SourceDocumentId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementBatches_StockDocuments_SourceDocumentId");
+        });
+
+        b.Entity<ProcurementBatchBalance>(e =>
+        {
+            e.ToTable("BatchBalances", Schema, t => t.HasCheckConstraint("CK_ProcurementBatchBalances_OnHand", "\"OnHand\" >= 0"));
+            e.HasKey(x => new { x.WarehouseId, x.BatchId }).HasName("PK_ProcurementBatchBalances");
+            e.Property(x => x.OnHand).HasPrecision(18, 3);
+            e.Property(x => x.Version).IsRowVersion();
+            e.HasIndex(x => new { x.WarehouseId, x.ItemId }).HasDatabaseName("IX_ProcurementBatchBalances_WarehouseId_ItemId");
+            e.HasIndex(x => x.BatchId).HasDatabaseName("IX_ProcurementBatchBalances_BatchId");
+            e.HasIndex(x => x.ItemId).HasDatabaseName("IX_ProcurementBatchBalances_ItemId");
+            e.HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementBatchBalances_Batches_BatchId");
+            e.HasOne<ProcurementWarehouse>().WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementBatchBalances_Warehouses_WarehouseId");
+            e.HasOne<ProcurementItem>().WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementBatchBalances_Items_ItemId");
+        });
+
+        b.Entity<ProcurementQualitySpec>(e =>
+        {
+            e.ToTable("QualitySpecs", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProcurementQualitySpecs");
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Unit).HasMaxLength(32);
+            e.Property(x => x.Min).HasPrecision(18, 4);
+            e.Property(x => x.Max).HasPrecision(18, 4);
+            e.Property(x => x.Expected).HasMaxLength(300);
+            e.Property(x => x.Method).HasMaxLength(300);
+            e.HasIndex(x => new { x.ItemId, x.LineNo }).HasDatabaseName("IX_ProcurementQualitySpecs_ItemId_LineNo");
+            e.HasOne(x => x.Item).WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementQualitySpecs_Items_ItemId");
+        });
+
+        b.Entity<ProcurementQualityCheck>(e =>
+        {
+            e.ToTable("QualityChecks", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProcurementQualityChecks");
+            e.Property(x => x.Number).HasMaxLength(32);
+            e.Property(x => x.Control).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Decision).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.DocumentsNote).HasMaxLength(2000);
+            e.Property(x => x.LabNote).HasMaxLength(2000);
+            e.Property(x => x.DecisionComment).HasMaxLength(2000);
+            e.Property(x => x.SampleQty).HasPrecision(18, 3);
+            e.Property(x => x.Version).IsRowVersion();
+            e.HasIndex(x => x.Number).IsUnique().HasDatabaseName("IX_ProcurementQualityChecks_Number");
+            // Открытая проверка у партии — одна.
+            e.HasIndex(x => x.BatchId).IsUnique().HasFilter("\"Status\" IN ('Documents', 'Lab', 'Decision')")
+                .HasDatabaseName("IX_ProcurementQualityChecks_BatchId_Open");
+            e.HasIndex(x => new { x.Status, x.CreatedAt }).HasDatabaseName("IX_ProcurementQualityChecks_Status_CreatedAt");
+            e.HasIndex(x => x.WarehouseId).HasDatabaseName("IX_ProcurementQualityChecks_WarehouseId");
+            e.HasIndex(x => x.DecidedById).HasDatabaseName("IX_ProcurementQualityChecks_DecidedById");
+            e.HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementQualityChecks_Batches_BatchId");
+            e.HasOne<ProcurementWarehouse>().WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementQualityChecks_Warehouses_WarehouseId");
+            e.HasOne(x => x.DecidedBy).WithMany().HasForeignKey(x => x.DecidedById).OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_ProcurementQualityChecks_Users_DecidedById");
+            e.HasMany(x => x.Results).WithOne(x => x.Check).HasForeignKey(x => x.CheckId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProcurementQualityResults_QualityChecks_CheckId");
+        });
+
+        b.Entity<ProcurementQualityResult>(e =>
+        {
+            e.ToTable("QualityResults", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProcurementQualityResults");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Unit).HasMaxLength(32);
+            e.Property(x => x.Min).HasPrecision(18, 4);
+            e.Property(x => x.Max).HasPrecision(18, 4);
+            e.Property(x => x.Expected).HasMaxLength(300);
+            e.Property(x => x.Value).HasPrecision(18, 4);
+            e.Property(x => x.Text).HasMaxLength(500);
+            e.HasIndex(x => new { x.CheckId, x.LineNo }).HasDatabaseName("IX_ProcurementQualityResults_CheckId_LineNo");
+            e.HasIndex(x => x.SpecId).HasDatabaseName("IX_ProcurementQualityResults_SpecId");
+            e.HasOne<ProcurementQualitySpec>().WithMany().HasForeignKey(x => x.SpecId).OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_ProcurementQualityResults_QualitySpecs_SpecId");
+        });
+
+        b.Entity<ProcurementQualityApprover>(e =>
+        {
+            e.ToTable("QualityApprovers", Schema);
+            e.HasKey(x => x.UserId).HasName("PK_ProcurementQualityApprovers");
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProcurementQualityApprovers_Users_UserId");
+        });
+
+        b.Entity<ProcurementWarehouseKeeper>(e =>
+        {
+            e.ToTable("WarehouseKeepers", Schema);
+            e.HasKey(x => new { x.WarehouseId, x.UserId }).HasName("PK_ProcurementWarehouseKeepers");
+            e.HasIndex(x => x.UserId).HasDatabaseName("IX_ProcurementWarehouseKeepers_UserId");
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProcurementWarehouseKeepers_Users_UserId");
         });
 
         b.Entity<ProcurementStockBalance>(e =>
@@ -201,6 +339,25 @@ internal static class ProcurementModel
                 .HasConstraintName("FK_ProcurementStockDocuments_Users_ActorId");
             e.HasOne<ProcurementWarehouse>().WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_ProcurementStockDocuments_Warehouses_WarehouseId");
+            e.HasIndex(x => x.TargetWarehouseId).HasDatabaseName("IX_ProcurementStockDocuments_TargetWarehouseId");
+            e.HasIndex(x => x.ReversesDocumentId).IsUnique().HasFilter("\"ReversesDocumentId\" IS NOT NULL")
+                .HasDatabaseName("IX_ProcurementStockDocuments_ReversesDocumentId");
+            e.HasOne<ProcurementStockDocument>().WithMany().HasForeignKey(x => x.ReversesDocumentId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementStockDocuments_StockDocuments_ReversesDocumentId");
+            e.HasIndex(x => x.SupplierId).HasDatabaseName("IX_ProcurementStockDocuments_SupplierId");
+            e.HasOne<ProcurementSupplier>().WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementStockDocuments_Suppliers_SupplierId");
+            e.HasOne<ProcurementWarehouse>().WithMany().HasForeignKey(x => x.TargetWarehouseId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementStockDocuments_Warehouses_TargetWarehouseId");
+            e.HasIndex(x => x.QualityCheckId).HasDatabaseName("IX_ProcurementStockDocuments_QualityCheckId");
+            e.HasIndex(x => x.TenderId).HasDatabaseName("IX_ProcurementStockDocuments_TenderId");
+            e.HasOne<ProcurementTender>().WithMany().HasForeignKey(x => x.TenderId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementStockDocuments_Tenders_TenderId");
+            e.HasOne<OneBase.Domain.Production.ProductionOrder>().WithMany().HasForeignKey(x => x.ProductionOrderId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementStockDocuments_ProductionOrders_ProductionOrderId");
+            e.HasIndex(x => x.ProductionOrderId).HasFilter("\"ProductionOrderId\" IS NOT NULL").HasDatabaseName("IX_ProcurementStockDocuments_ProductionOrderId");
+            e.HasOne<ProcurementQualityCheck>().WithMany().HasForeignKey(x => x.QualityCheckId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementStockDocuments_QualityChecks_QualityCheckId");
             e.HasOne(x => x.Order).WithMany().HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_ProcurementStockDocuments_PurchaseOrders_OrderId");
             e.HasMany(x => x.ReceiptLines).WithOne(x => x.Document).HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade)
@@ -263,9 +420,16 @@ internal static class ProcurementModel
             e.Property(x => x.BalanceBefore).HasPrecision(18, 3);
             e.Property(x => x.BalanceAfter).HasPrecision(18, 3);
             e.Property(x => x.UnitCost).HasPrecision(18, 2);
+            e.Property(x => x.BatchBefore).HasPrecision(18, 3);
+            e.Property(x => x.BatchAfter).HasPrecision(18, 3);
             e.HasIndex(x => new { x.ItemId, x.CreatedAt }).HasDatabaseName("IX_ProcurementStockMovements_ItemId_CreatedAt");
+            e.HasIndex(x => new { x.BatchId, x.CreatedAt }).HasDatabaseName("IX_ProcurementStockMovements_BatchId_CreatedAt");
+            e.HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementStockMovements_Batches_BatchId");
+
             e.HasIndex(x => x.DocumentId).HasDatabaseName("IX_ProcurementStockMovements_DocumentId");
             e.HasIndex(x => x.CreatedAt).HasDatabaseName("IX_ProcurementStockMovements_CreatedAt");
+            e.HasIndex(x => new { x.WarehouseId, x.CreatedAt }).HasDatabaseName("IX_ProcurementStockMovements_WarehouseId_CreatedAt");
             e.HasOne(x => x.Document).WithMany().HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_ProcurementStockMovements_StockDocuments_DocumentId");
             e.HasOne(x => x.Item).WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict)
@@ -331,9 +495,11 @@ internal static class ProcurementModel
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.ReapprovalTolerancePercent).HasPrecision(5, 2);
             e.Property(x => x.DirectorLimit).HasPrecision(18, 2);
+            e.Property(x => x.OverconsumptionPercent).HasPrecision(5, 2).HasDefaultValue(ProcurementSettings.DefaultOverconsumptionPercent);
             // Согласующие — пользователи OneBase; удалённый пользователь снимается с маршрута, а не ломает настройки.
             e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.FinanceApproverId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.DirectorApproverId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.SupplyApproverId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<ProcurementSupplier>(e =>
@@ -456,6 +622,27 @@ internal static class ProcurementModel
         });
 
         // Журнал тендерных закупок: записи снабжения (сырьё для производства), на склад не приходуются.
+        b.Entity<ProcurementSheetImport>(e =>
+        {
+            e.ToTable("SheetImports", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProcurementSheetImports");
+            e.Property(x => x.Sheet).HasMaxLength(200);
+            e.Property(x => x.Schedule).HasMaxLength(16);
+            e.Property(x => x.DailyAt).HasMaxLength(5);
+            e.Property(x => x.LastStatus).HasMaxLength(16);
+            e.Property(x => x.LastMessage).HasMaxLength(2000);
+            e.Property(x => x.Version).IsRowVersion();
+            // Один лист — один склад: та же таблица не загружается на склад дважды.
+            e.HasIndex(x => new { x.WarehouseId, x.ConnectionId, x.Sheet }).IsUnique().HasDatabaseName("IX_ProcurementSheetImports_Warehouse_Connection_Sheet");
+            e.HasIndex(x => x.NextRunAt).HasDatabaseName("IX_ProcurementSheetImports_NextRunAt");
+            e.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementSheetImports_Warehouses_WarehouseId");
+            e.HasOne<OneBase.Domain.Integrations.DataSourceConnection>().WithMany().HasForeignKey(x => x.ConnectionId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProcurementSheetImports_DataSourceConnections_ConnectionId");
+            e.HasOne(x => x.Owner).WithMany().HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementSheetImports_Users_OwnerId");
+        });
+
         b.Entity<ProcurementTender>(e =>
         {
             e.ToTable("Tenders", Schema);
@@ -484,6 +671,12 @@ internal static class ProcurementModel
                 .HasConstraintName("FK_ProcurementTenders_Users_ResponsibleId");
             e.HasMany(x => x.Items).WithOne(x => x.Tender).HasForeignKey(x => x.TenderId).OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_ProcurementTenderItems_Tenders_TenderId");
+            e.HasIndex(x => x.RequestId).HasDatabaseName("IX_ProcurementTenders_RequestId");
+            e.HasOne(x => x.Request).WithMany().HasForeignKey(x => x.RequestId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementTenders_Requests_RequestId");
+            e.HasIndex(x => x.WarehouseId).HasDatabaseName("IX_ProcurementTenders_WarehouseId");
+            e.HasOne<ProcurementWarehouse>().WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementTenders_Warehouses_WarehouseId");
         });
 
         b.Entity<ProcurementTenderItem>(e =>
@@ -495,7 +688,24 @@ internal static class ProcurementModel
             e.Property(x => x.UnitCode).HasMaxLength(16);
             e.Property(x => x.Quantity).HasPrecision(18, 3);
             e.Property(x => x.Price).HasPrecision(18, 2);
+            e.Property(x => x.ReceivedQty).HasPrecision(18, 3);
             e.HasIndex(x => x.TenderId).HasDatabaseName("IX_ProcurementTenderItems_TenderId");
+            e.HasIndex(x => x.ItemId).HasDatabaseName("IX_ProcurementTenderItems_ItemId");
+            e.HasOne(x => x.Item).WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementTenderItems_Items_ItemId");
+        });
+
+        b.Entity<ProcurementItemUnit>(e =>
+        {
+            e.ToTable("ItemUnits", Schema, t => t.HasCheckConstraint("CK_ProcurementItemUnits_Factor", "\"Factor\" > 0"));
+            e.HasKey(x => new { x.ItemId, x.UnitCode }).HasName("PK_ProcurementItemUnits");
+            e.Property(x => x.UnitCode).HasMaxLength(16);
+            e.Property(x => x.Factor).HasPrecision(18, 6);
+            e.HasIndex(x => x.UnitCode).HasDatabaseName("IX_ProcurementItemUnits_UnitCode");
+            e.HasOne(x => x.Item).WithMany(x => x.Units).HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProcurementItemUnits_Items_ItemId");
+            e.HasOne<ProcurementUnit>().WithMany().HasForeignKey(x => x.UnitCode).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementItemUnits_Units_UnitCode");
         });
 
         b.Entity<ProcurementOrderApproval>(e =>

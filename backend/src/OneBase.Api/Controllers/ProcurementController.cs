@@ -8,16 +8,18 @@ using OneBase.Application.Procurement;
 namespace OneBase.Api.Controllers;
 
 /// <summary>
-/// Снабжение: заявки на закупку (позиции, категории, приоритет, вложения, история, резерв, согласование директором, выдача) и склад
-/// (остатки, каталог, движения, приход, списание, инвентаризация, выдача отделу). Доступ решают ProcurementRequestService и
-/// ProcurementStockService по правам из токена, отделу, руководству и роли «Директор» из базы — никогда по параметрам запроса.
+/// Снабжение: заявки на закупку (позиции, категории, приоритет, вложения, история, резерв, согласование директором, выдача) и склады
+/// (справочник складов, остатки по складу или по всем, каталог, движения, приход, списание, инвентаризация, выдача отделу, перемещение).
+/// Доступ решают ProcurementRequestService, ProcurementStockService и ProcurementWarehouseService по правам из токена, отделу, руководству,
+/// закреплению за складами и роли «Директор» из базы — никогда по параметрам запроса.
 /// </summary>
 [ApiController]
 [Authorize]
 [FieldErrors]
 [Route("api/procurement")]
 public sealed class ProcurementController(ProcurementRequestService requests, ProcurementStockService stock, ProcurementDocumentService documents, IFileStorage storage,
-    ProcurementStockImportService stockImport)
+    ProcurementStockImportService stockImport, ProcurementWarehouseService warehouses, ProcurementBatchService batches, ProcurementInsightService insight,
+    ProcurementCatalogImportService catalogImport, ProcurementSheetImportService sheetImports)
     : ControllerBase
 {
     private Task<ProcurementContext> ContextAsync(CancellationToken ct) =>
@@ -188,8 +190,58 @@ public sealed class ProcurementController(ProcurementRequestService requests, Pr
         return NoContent();
     }
 
+    // ---------- Склады ----------
+
+    [HttpGet("warehouses")]
+    public async Task<ProcurementWarehousesView> Warehouses(CancellationToken ct) => await warehouses.ListAsync(await ContextAsync(ct), ct);
+
+    [HttpPost("warehouses")]
+    public async Task<IActionResult> CreateWarehouse(ProcurementWarehouseInput input, CancellationToken ct) =>
+        Ok(new { id = await warehouses.CreateAsync(await ContextAsync(ct), input, ct) });
+
+    [HttpPut("warehouses/{id:guid}")]
+    public async Task<IActionResult> UpdateWarehouse(Guid id, ProcurementWarehouseInput input, CancellationToken ct)
+    {
+        await warehouses.UpdateAsync(await ContextAsync(ct), id, input, ct);
+        return NoContent();
+    }
+
+    // ---------- Партии ----------
+
+    /// <summary>Реестр партий: state — usable, expiring, expired; empty=true — и закончившиеся; warehouse — остаток склада.</summary>
+    [HttpGet("batches")]
+    public async Task<PageResult<ProcurementBatchRow>> Batches(
+        [FromQuery] Guid? item = null,
+        [FromQuery] Guid? warehouse = null,
+        [FromQuery] string? state = null,
+        [FromQuery] string? q = null,
+        [FromQuery] bool empty = false,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default) =>
+        await batches.ListAsync(await ContextAsync(ct), new ProcurementBatchSearch(item, warehouse, state, q, empty, page, pageSize), ct);
+
+    /// <summary>Партии позиции на складе для формы (FEFO).</summary>
+    [HttpGet("batches/options")]
+    public async Task<List<ProcurementBatchOption>> BatchOptions([FromQuery] Guid item, [FromQuery] Guid warehouse, CancellationToken ct) =>
+        await batches.OptionsAsync(await ContextAsync(ct), item, warehouse, ct);
+
+    [HttpGet("batches/{id:guid}")]
+    public async Task<ProcurementBatchCard> Batch(Guid id, CancellationToken ct) => await batches.CardAsync(await ContextAsync(ct), id, ct);
+
+    /// <summary>Ввод партий на имеющийся остаток позиции (кладовщик): позиция начинает вестись по партиям.</summary>
+    [HttpPost("stock/batch-entry")]
+    public async Task<IActionResult> BatchEntry(ProcurementBatchEntryInput input, CancellationToken ct) =>
+        Ok(new { id = await stock.BatchEntryAsync(await ContextAsync(ct), input, ct) });
+
+    /// <summary>Сторно складского документа (кладовщик): зеркальные движения, исправленный документ не меняется.</summary>
+    [HttpPost("stock/documents/{id:guid}/reverse")]
+    public async Task<IActionResult> Reverse(Guid id, ProcurementReversalInput input, CancellationToken ct) =>
+        Ok(new { id = await stock.ReverseAsync(await ContextAsync(ct), id, input, ct) });
+
     // ---------- Склад ----------
 
+    /// <summary>Остатки: warehouse — склад (не указан — сумма по всем складам).</summary>
     [HttpGet("stock")]
     public async Task<PageResult<ProcurementStockRow>> Stock(
         [FromQuery] string? q = null,
@@ -199,18 +251,25 @@ public sealed class ProcurementController(ProcurementRequestService requests, Pr
         [FromQuery] bool desc = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
+        [FromQuery] Guid? warehouse = null,
         CancellationToken ct = default) =>
-        await stock.StockAsync(await ContextAsync(ct), new ProcurementStockSearch(q, category, filter, sort, desc, page, pageSize), ct);
+        await stock.StockAsync(await ContextAsync(ct), new ProcurementStockSearch(q, category, filter, sort, desc, page, pageSize, warehouse), ct);
 
     [HttpGet("stock/summary")]
-    public async Task<ProcurementStockSummary> StockSummary(CancellationToken ct) => await stock.SummaryAsync(await ContextAsync(ct), ct);
+    public async Task<ProcurementStockSummary> StockSummary([FromQuery] Guid? warehouse, CancellationToken ct) =>
+        await stock.SummaryAsync(await ContextAsync(ct), ct, warehouse);
 
-    /// <summary>Товары каталога для формы заявки — с доступным остатком.</summary>
+    /// <summary>Товары каталога для формы заявки — с доступным остатком склада по умолчанию; warehouse — остаток другого склада (складские операции).</summary>
     [HttpGet("catalog")]
-    public async Task<List<ProcurementCatalogOption>> Catalog([FromQuery] string? q, CancellationToken ct) => await stock.CatalogSearchAsync(await ContextAsync(ct), q, ct);
+    public async Task<List<ProcurementCatalogOption>> Catalog([FromQuery] string? q, [FromQuery] Guid? warehouse, CancellationToken ct) =>
+        await stock.CatalogSearchAsync(await ContextAsync(ct), q, ct, warehouse);
 
     [HttpGet("items/{id:guid}")]
-    public async Task<ProcurementItemCard> Item(Guid id, CancellationToken ct) => await stock.ItemAsync(await ContextAsync(ct), id, ct);
+    public async Task<ProcurementItemCard> Item(Guid id, [FromQuery] Guid? warehouse, CancellationToken ct) => await stock.ItemAsync(await ContextAsync(ct), id, ct, warehouse);
+
+    /// <summary>Закупочные цены позиции за год: заказы и «Куплено», тендеры, приходы без заказа — снабжение и директор.</summary>
+    [HttpGet("items/{id:guid}/prices")]
+    public async Task<ProcurementItemPrices> ItemPrices(Guid id, CancellationToken ct) => await insight.ItemPricesAsync(await ContextAsync(ct), id, ct);
 
     [HttpPost("items")]
     public async Task<IActionResult> CreateItem(ProcurementCatalogInput input, CancellationToken ct) =>
@@ -232,8 +291,11 @@ public sealed class ProcurementController(ProcurementRequestService requests, Pr
         [FromQuery] string? q = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
+        [FromQuery] Guid? warehouse = null,
+        [FromQuery] Guid? batch = null,
         CancellationToken ct = default) =>
-        await stock.MovementsAsync(await ContextAsync(ct), new ProcurementMovementSearch(item, kind, from, to, q, page, pageSize), ct);
+        await stock.MovementsAsync(await ContextAsync(ct), new ProcurementMovementSearch(item, kind, from, to, q, page, pageSize, warehouse, batch), ct);
+
 
     [HttpGet("stock/departments")]
     public async Task<List<ProcurementDepartmentOption>> StockDepartments(CancellationToken ct) => await stock.DepartmentsAsync(await ContextAsync(ct), ct);
@@ -241,7 +303,7 @@ public sealed class ProcurementController(ProcurementRequestService requests, Pr
     [HttpGet("stock/to-issue")]
     public async Task<List<ProcurementToIssue>> ToIssue(CancellationToken ct) => await stock.ToIssueAsync(await ContextAsync(ct), ct);
 
-    /// <summary>Складские операции (кладовщик): приход, списание, инвентаризация, выдача отделу без заявки.</summary>
+    /// <summary>Складские операции (кладовщик): приход, списание, инвентаризация, выдача отделу без заявки — по складу из формы (не указан — по умолчанию).</summary>
     [HttpPost("stock/receipt")]
     public async Task<IActionResult> Receipt(ProcurementStockOperationInput input, CancellationToken ct) =>
         Ok(new { id = await stock.ReceiptAsync(await ContextAsync(ct), input, ct) });
@@ -258,14 +320,24 @@ public sealed class ProcurementController(ProcurementRequestService requests, Pr
     public async Task<IActionResult> Issue(ProcurementStockOperationInput input, CancellationToken ct) =>
         Ok(new { id = await stock.IssueAsync(await ContextAsync(ct), input, ct) });
 
+    /// <summary>Возврат поставщику забракованных или заблокированных партий (кладовщик склада): документ SRT-…, причина обязательна.</summary>
+    [HttpPost("stock/supplier-return")]
+    public async Task<IActionResult> SupplierReturn(ProcurementStockOperationInput input, CancellationToken ct) =>
+        Ok(new { id = await stock.SupplierReturnAsync(await ContextAsync(ct), input, ct) });
+
+    /// <summary>Перемещение между складами (кладовщик склада-отправителя): одним документом, обе стороны — одной записью.</summary>
+    [HttpPost("stock/transfer")]
+    public async Task<IActionResult> Transfer(ProcurementTransferInput input, CancellationToken ct) =>
+        Ok(new { id = await stock.TransferAsync(await ContextAsync(ct), input, ct) });
+
     /// <summary>
     /// Загрузка движений склада из Excel (кладовщик): первая — начальные остатки по файлу, следующие — только новые строки. dryRun=true —
-    /// проверка файла: что и куда попадёт, без сохранения.
+    /// проверка файла: что и куда попадёт, без сохранения. warehouse — склад загрузки (не указан — по умолчанию): у каждого склада свой журнал.
     /// </summary>
     [HttpPost("stock/import")]
     [RequestSizeLimit(30 * 1024 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = 30 * 1024 * 1024)]
-    public async Task<ProcurementStockImportResult> ImportStock(IFormFile? file, [FromQuery] bool dryRun, CancellationToken ct)
+    public async Task<ProcurementStockImportResult> ImportStock(IFormFile? file, [FromQuery] bool dryRun, [FromQuery] Guid? warehouse, CancellationToken ct)
     {
         if (file is null || file.Length == 0)
         {
@@ -273,8 +345,50 @@ public sealed class ProcurementController(ProcurementRequestService requests, Pr
         }
 
         await using var stream = file.OpenReadStream();
-        return await stockImport.ImportAsync(await ContextAsync(ct), stream, file.FileName, ct, dryRun);
+        return await stockImport.ImportAsync(await ContextAsync(ct), stream, file.FileName, ct, dryRun, warehouse);
     }
+
+    /// <summary>Импорт каталога материалов из Excel или CSV (кладовщик, снабжение): по артикулу создаёт или обновляет позиции; dryRun — только проверка.</summary>
+    [HttpPost("items/import")]
+    [RequestSizeLimit(30 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 30 * 1024 * 1024)]
+    public async Task<ProcurementCatalogImportResult> ImportCatalog(IFormFile? file, [FromQuery] bool dryRun, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+        {
+            throw new FieldValidationException("Выберите файл Excel или CSV.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        return await catalogImport.ImportAsync(await ContextAsync(ct), stream, file.FileName, ct, dryRun);
+    }
+
+    /// <summary>Загрузки журнала склада из таблиц Google (кладовщик): настройки по своим складам и таблицы из «Источников данных».</summary>
+    [HttpGet("stock/sheets")]
+    public async Task<ProcurementSheetImportsView> SheetImports(CancellationToken ct) => await sheetImports.ListAsync(await ContextAsync(ct), ct);
+
+    [HttpPost("stock/sheets")]
+    public async Task<IActionResult> CreateSheetImport(ProcurementSheetImportInput input, CancellationToken ct) =>
+        Ok(new { id = await sheetImports.SaveAsync(await ContextAsync(ct), null, input, ct) });
+
+    [HttpPut("stock/sheets/{id:guid}")]
+    public async Task<IActionResult> UpdateSheetImport(Guid id, ProcurementSheetImportInput input, CancellationToken ct)
+    {
+        await sheetImports.SaveAsync(await ContextAsync(ct), id, input, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("stock/sheets/{id:guid}")]
+    public async Task<IActionResult> DeleteSheetImport(Guid id, CancellationToken ct)
+    {
+        await sheetImports.DeleteAsync(await ContextAsync(ct), id, ct);
+        return NoContent();
+    }
+
+    /// <summary>Загрузить лист сейчас (dryRun — только проверить): тот же разбор и отчёт, что у файла.</summary>
+    [HttpPost("stock/sheets/{id:guid}/run")]
+    public async Task<ProcurementStockImportResult> RunSheetImport(Guid id, [FromQuery] bool dryRun, CancellationToken ct) =>
+        await sheetImports.RunAsync(await ContextAsync(ct), id, dryRun, ct);
 
     public sealed record CommentBody(string? Comment);
 }

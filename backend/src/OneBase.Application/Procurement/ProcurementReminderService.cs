@@ -8,7 +8,7 @@ using OneBase.Domain.Work;
 
 namespace OneBase.Application.Procurement;
 
-public sealed record ProcurementReminderResult(int DueSoon, int Overdue, int LowStock, bool Digest = false, int Escalated = 0);
+public sealed record ProcurementReminderResult(int DueSoon, int Overdue, int LowStock, bool Digest = false, int Escalated = 0, int Expiring = 0, int Expired = 0);
 
 /// <summary>
 /// Напоминания снабжения — вызываются вместе с напоминаниями «Задач» (WorkTaskReminderWorker, раз в 15 минут после 09:00):
@@ -16,7 +16,8 @@ public sealed record ProcurementReminderResult(int DueSoon, int Overdue, int Low
 /// напоминает его задача по заказу); остаток ниже минимума — снабжению и кладовщикам. Каждое — один раз: отметка ставится условным
 /// обновлением в базе, поэтому перезапуск и частые проверки не дублируют; перенесли дату поставки — будет новое напоминание.
 /// Тем же проходом — ежедневная сводка директору и руководителю снабжения (одна на день, хранится журналом) и эскалация просроченных
-/// задач снабжения: руководителю снабжения, позже — директору (пороги — в настройках снабжения).
+/// задач снабжения: руководителю снабжения, позже — директору (пороги — в настройках снабжения). Сроки партий: истекает (за «сколько дней»
+/// позиции, по умолчанию 30) и просрочена — кладовщикам и руководителю снабжения, по разу на партию.
 /// </summary>
 public sealed partial class ProcurementReminderService(IAppDbContext db, UserNotifier notifier)
 {
@@ -27,8 +28,71 @@ public sealed partial class ProcurementReminderService(IAppDbContext db, UserNot
         var low = await LowStockAsync(ct);
         var digest = await DigestAsync(today, ct);
         var escalated = await EscalateAsync(today, ct);
-        return new ProcurementReminderResult(dueSoon, overdue, low, digest, escalated);
+        var (expiring, expired) = await ExpiryAsync(today, ct);
+        return new ProcurementReminderResult(dueSoon, overdue, low, digest, escalated, expiring, expired);
     }
+
+    /// <summary>
+    /// Сроки партий с остатком: «истекает срок» — один раз на срок партии (перенесли срок — напомнит снова), «просрочена» — один раз; отметка —
+    /// условным обновлением, поэтому повторные проверки не дублируют. Одно уведомление на проверку — со списком партий.
+    /// </summary>
+    private async Task<(int Expiring, int Expired)> ExpiryAsync(DateOnly today, CancellationToken ct)
+    {
+        var rows = await db.ProcurementBatches.AsNoTracking()
+            // Без срока («срок не указан» — партия и так заблокирована) и забракованные (их возвращают или списывают) — не напоминаются.
+            .Where(b => b.ExpiresOn != null && b.QualityStatus != ProcurementBatchQuality.Rejected
+                        && db.ProcurementBatchBalances.Any(x => x.BatchId == b.Id && x.OnHand > 0))
+            .Where(b => (b.ExpiresOn < today && b.ExpiredNotifiedOn == null)
+                        || (b.ExpiresOn >= today && (b.ExpiryWarnedFor == null || b.ExpiryWarnedFor != b.ExpiresOn)
+                            && b.ExpiresOn!.Value.AddDays(-(b.Item!.ExpiryWarningDays ?? ProcurementBatchRules.DefaultWarningDays)) <= today))
+            .OrderBy(b => b.ExpiresOn)
+            .Select(b => new { b.Id, b.Number, b.SupplierBatchNo, ExpiresOn = b.ExpiresOn!.Value, Item = b.Item!.Name })
+            .ToListAsync(ct);
+        var expiring = new List<string>();
+        var expired = new List<string>();
+        foreach (var b in rows)
+        {
+            var label = $"{b.Item} — {ProcurementBatchRules.Label(b.Number, b.SupplierBatchNo, b.ExpiresOn)}";
+            if (b.ExpiresOn < today)
+            {
+                if (await db.ProcurementBatches.Where(x => x.Id == b.Id && x.ExpiredNotifiedOn == null).ExecuteUpdateAsync(s => s.SetProperty(x => x.ExpiredNotifiedOn, today), ct) > 0)
+                {
+                    expired.Add(label);
+                }
+            }
+            else if (await db.ProcurementBatches.Where(x => x.Id == b.Id && (x.ExpiryWarnedFor == null || x.ExpiryWarnedFor != b.ExpiresOn))
+                         .ExecuteUpdateAsync(s => s.SetProperty(x => x.ExpiryWarnedFor, b.ExpiresOn), ct) > 0)
+            {
+                expiring.Add(label);
+            }
+        }
+
+        if (expiring.Count + expired.Count == 0)
+        {
+            return (0, 0);
+        }
+
+        var people = (await ProcurementPeople.WithPermissionAsync(db, Permissions.ProcurementWarehouse, ct)).Concat(await ProcurementPeople.SupplyHeadsAsync(db, ct)).Distinct().ToList();
+        string List(List<string> labels) => string.Join("; ", labels.Take(5)) + (labels.Count > 5 ? $" и ещё {labels.Count - 5}" : "");
+        foreach (var user in people)
+        {
+            if (expiring.Count > 0)
+            {
+                notifier.Notify(user, UserNotificationKind.ProcurementStatus, $"Истекает срок годности: {ProcurementRules.Quantity(expiring.Count)} парт.", List(expiring),
+                    "/procurement/batches?state=expiring");
+            }
+
+            if (expired.Count > 0)
+            {
+                notifier.Notify(user, UserNotificationKind.ProcurementStatus, $"Просрочено партий: {ProcurementRules.Quantity(expired.Count)} — не выдаются", List(expired),
+                    "/procurement/batches?state=expired");
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        return (expiring.Count, expired.Count);
+    }
+
 
     private async Task<int> DueSoonAsync(DateOnly today, CancellationToken ct)
     {

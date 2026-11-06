@@ -20,13 +20,13 @@ const one = (sp: SearchParams, key: string) => {
   return (Array.isArray(v) ? v[0] : v) || undefined;
 };
 
-/** «Снабжение → Тендеры»: журнал тендерных закупок сырья и материалов для производства — записи снабжения. Видят снабжение и директор. */
+/** «Снабжение → Тендеры»: журнал тендерных закупок сырья и материалов для производства — записи снабжения. Видят снабжение, директор и кладовщик (приём поставки). */
 export default async function TendersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireRequests();
   const t = await getT();
   const sp = await searchParams;
   const nav = await apiGet<RequestNav>("/api/procurement/nav", "/procurement/tenders");
-  if (!nav.readsAll && !nav.isDirector) redirect("/procurement");
+  if (!nav.readsAll && !nav.isDirector && !nav.warehouse) redirect("/procurement");
   const data = await apiGet<TenderList>(
     `/api/procurement/tenders${qs({ q: one(sp, "q"), status: one(sp, "status"), from: one(sp, "from"), to: one(sp, "to"), supplier: one(sp, "supplier"), page: one(sp, "page") })}`,
     "/procurement/tenders",

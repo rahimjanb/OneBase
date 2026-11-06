@@ -138,6 +138,10 @@ public static class DependencyInjection
         services.AddScoped<DataSources.DataSourceService>();
         services.AddScoped<DataSources.DataSourceTransfer>();
         services.AddHostedService<DataSources.DataSourceSyncWorker>();
+        services.AddScoped<OneBase.Application.Procurement.IStockSheetSource, DataSources.StockSheetSource>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementSheetImportService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementCatalogImportService>();
+        services.AddHostedService<DataSources.StockSheetImportWorker>();
 
         // Отчёты AI-консультанта: файл Excel из листов отчёта; документы Telegram-агента (письма, планы, разборы) — Word из Markdown.
         services.AddSingleton<OneBase.Application.Reports.IReportWorkbookWriter, Reports.ReportWorkbookWriter>();
@@ -219,6 +223,9 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Procurement.ProcurementStockLedger>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementRequestService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementStockService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementWarehouseService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementBatchService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementQualityService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementDocumentService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementSupplierService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementStockImportService>();
@@ -226,6 +233,9 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Procurement.ProcurementReceiptService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementPurchaseService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementTenderService>();
+        services.AddScoped<OneBase.Application.Production.ProductionRecipeService>();
+        services.AddScoped<OneBase.Application.Production.ProductionOrderService>();
+        services.AddScoped<OneBase.Application.Production.ProductionAnalyticsService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementReminderService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementAnalyticsService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementReportService>();

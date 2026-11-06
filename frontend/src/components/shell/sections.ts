@@ -1,7 +1,9 @@
 import {
   Archive,
   ArrowLeftRight,
+  BookOpenCheck,
   Building,
+  Factory,
   CalendarClock,
   ChartColumn,
   DoorOpen,
@@ -14,6 +16,7 @@ import {
   ListChecks,
   PackageCheck,
   ScrollText,
+  ShieldCheck,
   ShoppingBag,
   Sparkles,
   Table2,
@@ -36,7 +39,8 @@ export type SectionTab = {
   short?: string;
   href: string;
   icon: LucideIcon;
-  permission?: string;
+  /** Право кнопки; список — достаточно любого из них. */
+  permission?: string | string[];
   headsOnly?: boolean;
   /** Только роли «Директор» (Согласования) — признак из /api/procurement/nav, не право. */
   approverOnly?: boolean;
@@ -49,7 +53,7 @@ export type SectionTab = {
  * keepPeriod — переносить период и план между кнопками (только «Продажи»).
  */
 export type SectionDef = {
-  id: "sales" | "hr" | "tasks" | "requests" | "procurement";
+  id: "sales" | "hr" | "tasks" | "requests" | "procurement" | "production";
   label: string;
   /** Название модуля в верхней панели: «Продажи», «HR»… */
   title: string;
@@ -106,12 +110,36 @@ export const requestTabs: SectionTab[] = [
 export const procurementTabs: SectionTab[] = [
   { key: "overview", label: "Обзор", href: "/procurement", icon: LayoutDashboard, description: "путь закупки и показатели" },
   { key: "buy", label: "К закупке", href: "/procurement/buy", icon: ShoppingBag, permission: "procurement.read", description: "согласованные заявки" },
-  { key: "tenders", label: "Тендеры", href: "/procurement/tenders", icon: ScrollText, permission: "procurement.read", description: "журнал тендерных закупок" },
+  // Тендеры видит и кладовщик: принимает поставку по тендеру на склад.
+  {
+    key: "tenders",
+    label: "Тендеры",
+    href: "/procurement/tenders",
+    icon: ScrollText,
+    permission: ["procurement.read", "procurement.warehouse"],
+    description: "журнал тендерных закупок",
+  },
   { key: "suppliers", label: "Поставщики", href: "/procurement/suppliers", icon: Building, permission: "procurement.read", description: "реестр и рейтинг" },
   { key: "stock", label: "Склад", href: "/procurement/stock", icon: Warehouse, description: "остатки и каталог" },
+  { key: "batches", label: "Партии", href: "/procurement/batches", icon: CalendarClock, description: "сроки годности и остатки партий" },
   { key: "issue", label: "К выдаче", href: "/procurement/issue", icon: PackageCheck, description: "выдача со склада по заявкам" },
   { key: "movements", label: "Движения", href: "/procurement/movements", icon: ArrowLeftRight, description: "журнал прихода и расхода" },
   { key: "reports", label: "Отчёты", href: "/procurement/reports", icon: FileBarChart, permission: "procurement.read", description: "выгрузки по снабжению" },
+];
+
+/** Кто видит производство (рецептуры, задания, аналитику): производство, технолог, кладовщик, снабжение, директор, лаборатория. */
+const productionViewers = ["production.read", "production.manage", "production.recipes", "procurement.warehouse", "procurement.read", "procurement.manage", "quality.check"];
+
+/**
+ * «Производство» (D5): обзор сырья и производства, задания на выпуск (выдача и возврат сырья по партиям, закрытие со сверкой нормы),
+ * рецептуры с версиями, контроль качества сырья, отчёты.
+ */
+export const productionTabs: SectionTab[] = [
+  { key: "overview", label: "Обзор", href: "/production", icon: LayoutDashboard, permission: productionViewers, description: "сырьё и производство на сегодня" },
+  { key: "orders", label: "Задания", href: "/production/orders", icon: Factory, permission: productionViewers, description: "задания на выпуск и расход сырья" },
+  { key: "recipes", label: "Рецептуры", href: "/production/recipes", icon: BookOpenCheck, permission: productionViewers, description: "состав продукции и нормы" },
+  { key: "quality", label: "Качество", href: "/production/quality", icon: ShieldCheck, description: "контроль качества партий сырья" },
+  { key: "reports", label: "Отчёты", href: "/production/reports", icon: FileBarChart, permission: productionViewers, description: "партии, качество, расход и норма" },
 ];
 
 export const sections: SectionDef[] = [
@@ -160,10 +188,25 @@ export const sections: SectionDef[] = [
     active: (pathname) =>
       pathname === "/procurement" || under(pathname, "/procurement/digests") ? "overview" : (procurementTabs.find((t) => t.key !== "overview" && under(pathname, t.href))?.key ?? null),
   },
+  {
+    id: "production",
+    label: "Разделы производства",
+    title: "Производство",
+    back: toDepartments,
+    tabs: productionTabs,
+    active: (pathname) => (pathname === "/production" ? "overview" : (productionTabs.find((t) => t.key !== "overview" && under(pathname, t.href))?.key ?? null)),
+  },
 ];
 
-const sectionBase: Record<SectionDef["id"], string> = { sales: "/sales", hr: "/hr", tasks: "/tasks", requests: "/requests", procurement: "/procurement" };
+const sectionBase: Record<SectionDef["id"], string> = {
+  sales: "/sales",
+  hr: "/hr",
+  tasks: "/tasks",
+  requests: "/requests",
+  procurement: "/procurement",
+  production: "/production",
+};
 
-/** Раздел страницы: «Продажи», «HR», «Задачи», «Заявки» — или null (в остальных разделах кнопок в шапке нет). */
+/** Раздел страницы: «Продажи», «HR», «Задачи», «Заявки», «Снабжение», «Производство» — или null (в остальных разделах кнопок в шапке нет). */
 export const sectionOf = (pathname: string): SectionDef | null =>
   sections.find((s) => (s.id === "sales" ? pathname.startsWith("/sales") : under(pathname, sectionBase[s.id]))) ?? null;

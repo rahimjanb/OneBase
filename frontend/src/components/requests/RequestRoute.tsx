@@ -5,7 +5,13 @@ import { Check, CircleDashed, Clock3, Minus, OctagonX, Route as RouteIcon, Undo2
 import { useT } from "@/i18n/client";
 import { money, stampRu, type RequestDetail, type RouteStep } from "@/lib/procurement";
 
-const title: Record<RouteStep["key"], string> = { head: "Руководитель отдела", finance: "Финансист", director: "Директор", supply: "Снабжение" };
+const title: Record<RouteStep["key"], string> = {
+  head: "Руководитель отдела",
+  finance: "Финансист",
+  supply_head: "Руководитель снабжения",
+  director: "Директор",
+  supply: "Снабжение",
+};
 
 const look: Record<RouteStep["state"], { icon: LucideIcon; ring: string; text: string }> = {
   done: { icon: Check, ring: "border-ok/40 bg-ok-soft text-ok", text: "text-ink" },
@@ -36,6 +42,8 @@ export function RequestRoute({ detail }: { detail: RequestDetail }) {
         return t("Не нужен: всё выдаётся со склада");
       case "underLimit":
         return t("Не нужен: к закупке не больше {limit}", { limit });
+      case "initiatorSupply":
+        return t("Не нужен: заявку создал руководитель снабжения");
       default:
         return t("Не нужен");
     }
@@ -67,6 +75,9 @@ export function RequestRoute({ detail }: { detail: RequestDetail }) {
         <RouteIcon className="size-4 text-ink-3" aria-hidden /> {t("Маршрут согласования")}
         {detail.approvalRound > 1 && <span className="text-sm font-normal text-ink-3">· {t("раунд {n}", { n: detail.approvalRound })}</span>}
       </h2>
+      {detail.rawRoute && (
+        <p className="-mt-1 mb-3 text-xs text-ink-3">{t("Закупка сырья: согласуют руководитель снабжения, затем директор — при любой сумме.")}</p>
+      )}
       <ol className="flex flex-col">
         {detail.route.map((step, i) => {
           const l = look[step.state];
@@ -83,7 +94,11 @@ export function RequestRoute({ detail }: { detail: RequestDetail }) {
                 {line && <p className={`text-xs ${step.state === "skipped" ? "text-ink-4" : "text-ink-2"}`}>{line}</p>}
                 {missing && (
                   <p className="mt-0.5 text-xs text-warn">
-                    {step.key === "finance" ? t("Финансист не выбран — заявка ждёт.") : t("Директор не выбран — заявка ждёт.")}{" "}
+                    {step.key === "finance"
+                      ? t("Финансист не выбран — заявка ждёт.")
+                      : step.key === "supply_head"
+                        ? t("Руководитель снабжения не выбран — заявка ждёт.")
+                        : t("Директор не выбран — заявка ждёт.")}{" "}
                     <Link href="/settings/departments/supply" className="underline underline-offset-2">
                       {t("Настройки → Отделы → Снабжение")}
                     </Link>

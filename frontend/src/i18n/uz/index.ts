@@ -11,6 +11,7 @@ import home from "./home";
 import hr from "./hr";
 import lib from "./lib";
 import myDay from "./myDay";
+import production from "./production";
 import requests from "./requests";
 import sales from "./sales";
 import salesPages from "./salesPages";
@@ -30,6 +31,7 @@ export const uz: Dict = {
   // «Мой день» и календарь — первыми: тот же текст в словарях разделов перекрывает перевод отсюда.
   ...myDay,
   ...requests,
+  ...production,
   ...fieldControl,
   // Тексты сервера (ошибки, пояснения, подписи) — переводятся по ключу или шаблону; словари интерфейса ниже перекрывают их.
   ...serverSales,

@@ -12,7 +12,8 @@ namespace OneBase.Application.Procurement;
 
 public sealed record ProcurementDepartmentOption(Guid Id, string Code, string Name);
 
-public sealed record ProcurementCategoryView(Guid Id, string Name, string? Code, int SortOrder, bool IsActive, int Used);
+/// <summary>Категория закупок; IsProduction — сырьё и материалы производства (маршрут сырья, когда он включён).</summary>
+public sealed record ProcurementCategoryView(Guid Id, string Name, string? Code, int SortOrder, bool IsActive, int Used, bool IsProduction = false);
 
 public sealed record ProcurementUnitView(string Code, string Name);
 
@@ -23,7 +24,8 @@ public sealed record ProcurementFormData(
     IReadOnlyList<ProcurementCategoryView> Categories,
     IReadOnlyList<ProcurementUnitView> Units);
 
-public sealed record ProcurementCategoryInput(string? Name, int? SortOrder, bool IsActive = true);
+/// <summary>Категория из формы; IsProduction null — не менять.</summary>
+public sealed record ProcurementCategoryInput(string? Name, int? SortOrder, bool IsActive = true, bool? IsProduction = null);
 
 /// <summary>Вложение к загрузке: имя, размер и содержимое (поток читается один раз). Тип файла определяется по расширению.</summary>
 public sealed record ProcurementUpload(string FileName, long SizeBytes, Stream Content);
@@ -65,7 +67,7 @@ public sealed partial class ProcurementRequestService
         Guid? fallback = departments.Count == 1 ? departments[0].Id : null;
         var preferred = ctx.DepartmentId is { } own && departments.Any(d => d.Id == own) ? own : fallback;
         var categories = await db.ProcurementCategories.AsNoTracking().Where(c => c.IsActive).OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
-            .Select(c => new ProcurementCategoryView(c.Id, c.Name, c.Code, c.SortOrder, c.IsActive, 0))
+            .Select(c => new ProcurementCategoryView(c.Id, c.Name, c.Code, c.SortOrder, c.IsActive, 0, c.IsProduction))
             .ToListAsync(ct);
         var units = await db.ProcurementUnits.AsNoTracking().OrderBy(u => u.SortOrder).Select(u => new ProcurementUnitView(u.Code, u.Name)).ToListAsync(ct);
         return new ProcurementFormData(departments.Select(d => new ProcurementDepartmentOption(d.Id, d.Code, d.Name)).ToList(), preferred, categories, units);
@@ -532,7 +534,7 @@ public sealed partial class ProcurementRequestService
         return await db.ProcurementCategories.AsNoTracking()
             .Where(c => withInactive || c.IsActive)
             .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
-            .Select(c => new ProcurementCategoryView(c.Id, c.Name, c.Code, c.SortOrder, c.IsActive, db.ProcurementRequestItems.Count(i => i.CategoryId == c.Id)))
+            .Select(c => new ProcurementCategoryView(c.Id, c.Name, c.Code, c.SortOrder, c.IsActive, db.ProcurementRequestItems.Count(i => i.CategoryId == c.Id), c.IsProduction))
             .ToListAsync(ct);
     }
 
@@ -541,11 +543,11 @@ public sealed partial class ProcurementRequestService
         RequireConfigures(ctx);
         var name = await CategoryNameAsync(input.Name, null, ct);
         var order = input.SortOrder ?? ((await db.ProcurementCategories.MaxAsync(c => (int?)c.SortOrder, ct) ?? 0) + 10);
-        var category = new ProcurementCategory { Name = name, SortOrder = order, IsActive = input.IsActive };
+        var category = new ProcurementCategory { Name = name, SortOrder = order, IsActive = input.IsActive, IsProduction = input.IsProduction ?? false };
         db.ProcurementCategories.Add(category);
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.category.created", "procurement_category", category.Id.ToString(),
-            new { category.Name, category.SortOrder, category.IsActive }, ct);
+            new { category.Name, category.SortOrder, category.IsActive, category.IsProduction }, ct);
         return category.Id;
     }
 
@@ -554,14 +556,15 @@ public sealed partial class ProcurementRequestService
     {
         RequireConfigures(ctx);
         var category = await db.ProcurementCategories.FirstOrDefaultAsync(c => c.Id == id, ct) ?? throw new FieldNotFoundException("Категория не найдена.");
-        var before = new { category.Name, category.SortOrder, category.IsActive };
+        var before = new { category.Name, category.SortOrder, category.IsActive, category.IsProduction };
         category.Name = await CategoryNameAsync(input.Name, id, ct);
         category.SortOrder = input.SortOrder ?? category.SortOrder;
         category.IsActive = input.IsActive;
+        category.IsProduction = input.IsProduction ?? category.IsProduction;
         category.UpdatedAt = Now;
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.category.updated", "procurement_category", category.Id.ToString(),
-            new { before, after = new { category.Name, category.SortOrder, category.IsActive } }, ct);
+            new { before, after = new { category.Name, category.SortOrder, category.IsActive, category.IsProduction } }, ct);
     }
 
     private static void RequireConfigures(ProcurementContext ctx)

@@ -47,6 +47,8 @@ public sealed record ProcurementSupplierInput(
 /// <summary>
 /// Рейтинг поставщика: итог 0–100 и составляющие (null — нет данных): сроки (доля заказов без просрочки среди тех, чей срок наступил),
 /// качество (оценка предложений, 1–5 → 0–100), соблюдение цен (доля строк заказа не дороже предложения). Претензии и полнота — после приёмки.
+/// Претензии — доля без проблем среди строк приёмок (брак, недостача) и решений по партиям поставщика (забракована — проблема):
+/// QualityChecks — решений по партиям, RejectedBatches — из них забраковано.
 /// </summary>
 public sealed record ProcurementSupplierRating(
     int? Overall,
@@ -62,7 +64,9 @@ public sealed record ProcurementSupplierRating(
     int ReceiptLines = 0,
     int ClaimLines = 0,
     int FinishedOrders = 0,
-    int LateOrders = 0);
+    int LateOrders = 0,
+    int QualityChecks = 0,
+    int RejectedBatches = 0);
 
 public sealed record ProcurementSupplierOrderRow(Guid Id, string Number, ProcurementOrderStatus Status, DateOnly? OrderDate, DateOnly? ExpectedDate, decimal Total, bool Overdue, int Lines);
 
@@ -262,6 +266,12 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
             .GroupBy(l => l.Document!.Order!.SupplierId)
             .Select(g => new { g.Key, Lines = g.Count(), Problems = g.Count(l => l.Defective > 0 || l.Shortage > 0) })
             .ToDictionaryAsync(x => x.Key, ct);
+        // Решения лаборатории по партиям поставщика: забракованная партия — такая же проблема поставки, как брак при приёмке.
+        var decided = await db.ProcurementQualityChecks.AsNoTracking()
+            .Where(c => c.Status == ProcurementQualityCheckStatus.Decided && c.Batch!.SupplierId != null && ids.Contains(c.Batch.SupplierId.Value))
+            .GroupBy(c => c.Batch!.SupplierId!.Value)
+            .Select(g => new { g.Key, Checks = g.Count(), Rejected = g.Count(c => c.Decision == ProcurementBatchQuality.Rejected) })
+            .ToDictionaryAsync(x => x.Key, ct);
         var finished = new[] { ProcurementOrderStatus.Delivered, ProcurementOrderStatus.Completed };
         var completeness = await db.ProcurementPurchaseOrderItems.AsNoTracking()
             .Where(i => ids.Contains(i.Order!.SupplierId) && finished.Contains(i.Order.Status))
@@ -288,14 +298,17 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
             var p = priced.Where(x => x.SupplierId == id && x.Offered != null).ToList();
             var r = receipts.GetValueOrDefault(id);
             var c = completeness.GetValueOrDefault(id);
+            var qc = decided.GetValueOrDefault(id);
+            var lines = (r?.Lines ?? 0) + (qc?.Checks ?? 0);
+            var problems = (r?.Problems ?? 0) + (qc?.Rejected ?? 0);
             decimal? onTime = d.Count == 0 ? null : Math.Round(100m * (d.Count - late) / d.Count, 1);
             decimal? qual = q.Count == 0 ? null : Math.Round((decimal)q.Average(x => x.Quality) * 20m, 1);
             decimal? prices = p.Count == 0 ? null : Math.Round(100m * p.Count(x => x.UnitPrice <= x.Offered) / p.Count, 1);
-            decimal? claims = r is null || r.Lines == 0 ? null : Math.Round(100m * (r.Lines - r.Problems) / r.Lines, 1);
+            decimal? claims = lines == 0 ? null : Math.Round(100m * (lines - problems) / lines, 1);
             decimal? complete = c is null || c.Ordered <= 0 ? null : Math.Round(Math.Min(100m, 100m * c.Received / c.Ordered), 1);
             var currentOverdue = d.Count(x => x.Overdue);
             return new ProcurementSupplierRating(ProcurementOrderRules.Rating(onTime, qual, prices, claims, complete), onTime, qual, prices, d.Count, currentOverdue,
-                q.Count, p.Count, claims, complete, r?.Lines ?? 0, r?.Problems ?? 0, c?.Orders ?? 0, late);
+                q.Count, p.Count, claims, complete, r?.Lines ?? 0, r?.Problems ?? 0, c?.Orders ?? 0, late, qc?.Checks ?? 0, qc?.Rejected ?? 0);
         });
     }
 

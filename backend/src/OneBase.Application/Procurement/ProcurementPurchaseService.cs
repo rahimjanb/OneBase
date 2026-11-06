@@ -9,8 +9,8 @@ using OneBase.Domain.Work;
 
 namespace OneBase.Application.Procurement;
 
-/// <summary>Куплено по позиции заявки: сколько и почём за единицу (сум).</summary>
-public sealed record ProcurementPurchaseLineInput(Guid RequestItemId, decimal Quantity, decimal Price);
+/// <summary>Куплено по позиции заявки: сколько и почём за единицу (сум); у позиции склада с партиями — партии со сроком (сумма = количество).</summary>
+public sealed record ProcurementPurchaseLineInput(Guid RequestItemId, decimal Quantity, decimal Price, IReadOnlyList<ProcurementBatchInput>? Batches = null);
 
 /// <summary>
 /// «Куплено» по заявке из формы: позиции (сколько и почём), где купили — поставщик из справочника (SupplierId) или название магазина
@@ -27,7 +27,10 @@ public sealed record ProcurementPurchaseInput(
 /// <summary>Что получилось: покупка (заказ PO-, сразу закрыт), приход на склад (RC-), сумма.</summary>
 public sealed record ProcurementPurchaseResult(Guid OrderId, string OrderNumber, Guid ReceiptId, string ReceiptNumber, decimal Total);
 
-/// <summary>Позиция «к закупке»: сколько осталось купить, согласованная цена за единицу, карточка склада (если связана).</summary>
+/// <summary>
+/// Позиция «к закупке»: сколько осталось купить, согласованная цена за единицу, карточка склада (если связана); TracksBatches — карточка
+/// ведётся по партиям (при «Куплено» — партии со сроком), ShelfLifeDays — её срок хранения.
+/// </summary>
 public sealed record ProcurementToBuyLine(
     Guid RequestItemId,
     int LineNo,
@@ -37,7 +40,9 @@ public sealed record ProcurementToBuyLine(
     decimal Left,
     decimal? Price,
     string? Sku,
-    string? Comment);
+    string? Comment,
+    bool TracksBatches = false,
+    int? ShelfLifeDays = null);
 
 /// <summary>Утверждённая заявка, по которой снабжению осталось что-то купить; Overdue — желаемая дата прошла; Total — остаток к закупке, сум.</summary>
 public sealed record ProcurementToBuy(
@@ -100,7 +105,7 @@ public sealed class ProcurementPurchaseService(
                 r.Id, r.Number, r.Title, r.Priority, r.Status, Department = r.Department!.Name, Initiator = r.Initiator!.FullName, r.DesiredDate, r.ApprovedAt,
                 Lines = r.Items.Where(i => i.Status != ProcurementItemStatus.Cancelled && i.Quantity - i.FromStock > i.OrderedQty).OrderBy(i => i.LineNo)
                     .Select(i => new ProcurementToBuyLine(i.Id, i.LineNo, i.Name, i.Category!.Name, i.UnitCode, i.Quantity - i.FromStock - i.OrderedQty, i.EstimatedPrice,
-                        i.Item == null ? null : i.Item.Sku, i.Comment))
+                        i.Item == null ? null : i.Item.Sku, i.Comment, i.Item != null && i.Item.TracksBatches, i.Item == null ? null : i.Item.ShelfLifeDays))
                     .ToList(),
             })
             .ToListAsync(ct);
@@ -151,7 +156,7 @@ public sealed class ProcurementPurchaseService(
                 throw new FieldValidationException("Позиция повторяется — укажите её одной строкой.");
             }
 
-            var bought = new List<(ProcurementRequestItem Item, decimal Quantity, decimal Price)>();
+            var bought = new List<(ProcurementRequestItem Item, decimal Quantity, decimal Price, IReadOnlyList<ProcurementBatchInput>? Batches)>();
             foreach (var line in lines)
             {
                 var item = r.Items.FirstOrDefault(i => i.Id == line.RequestItemId) ?? throw new FieldValidationException("Позиция не из этой заявки.");
@@ -178,7 +183,7 @@ public sealed class ProcurementPurchaseService(
                     throw new FieldValidationException($"«{item.Name}»: укажите цену за {item.UnitCode} — больше нуля, не больше двух знаков после запятой.");
                 }
 
-                bought.Add((item, line.Quantity, line.Price));
+                bought.Add((item, line.Quantity, line.Price, line.Batches));
             }
 
             var reference = Text(input.Reference, 100, "Номер чека или накладной");
@@ -204,7 +209,7 @@ public sealed class ProcurementPurchaseService(
                 ClientKey = input.ClientKey,
             };
             var no = 0;
-            foreach (var (item, quantity, price) in bought)
+            foreach (var (item, quantity, price, _) in bought)
             {
                 order.Items.Add(new ProcurementPurchaseOrderItem
                 {
@@ -218,6 +223,7 @@ public sealed class ProcurementPurchaseService(
             db.ProcurementPurchaseOrders.Add(order);
 
             var warehouse = await ledger.DefaultWarehouseIdAsync(ct);
+            await ledger.RequireManualAsync(warehouse, ct);
             var doc = await ledger.DocumentAsync(ProcurementStockDocumentKind.Receipt, warehouse, ctx.UserId, ct);
             doc.OrderId = order.Id;
             doc.RequestId = r.Id;
@@ -230,7 +236,9 @@ public sealed class ProcurementPurchaseService(
             var active = await db.ProcurementStockReservations
                 .Where(x => itemIds.Contains(x.RequestItemId) && x.Status == ProcurementReservationStatus.Active).ToDictionaryAsync(x => x.RequestItemId, ct);
             var balances = await ledger.BalancesAsync(warehouse, cards.Values.Select(c => c.Id), ct);
-            foreach (var (orderItem, (item, quantity, price)) in order.Items.Zip(bought))
+            var cardIds = cards.Values.Select(c => c.Id).ToList();
+            var catalog = await db.ProcurementItems.AsNoTracking().Where(i => cardIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id, ct);
+            foreach (var (orderItem, (item, quantity, price, batches)) in order.Items.Zip(bought))
             {
                 var card = cards[item.Id];
                 var line = new ProcurementReceiptLine
@@ -241,8 +249,24 @@ public sealed class ProcurementPurchaseService(
                 db.ProcurementReceiptLines.Add(line);
                 item.Request = r;
                 item.OrderedQty += quantity;
-                ledger.ReceiveForRequest(doc, balances[card.Id], item, quantity, price, item.Name, active);
+                if (ledger.Tracks(card.Id))
+                {
+                    // Позиция склада с партиями: партии со сроком, у позиции с контролем — на контроль (резерв под заявку — после допуска).
+                    var stockItem = catalog.GetValueOrDefault(card.Id) ?? throw new FieldNotFoundException("Позиция каталога не найдена.");
+                    await ledger.ReceiveBatchesForRequestAsync(doc, balances[card.Id], item, stockItem, CheckBatches(item.Name, quantity, batches, stockItem), price,
+                        supplier.Id, item.Name, active, ct);
+                }
+                else if (batches is { Count: > 0 })
+                {
+                    throw new FieldValidationException($"«{item.Name}»: позиция склада ведётся без партий — партии не указывайте.");
+                }
+                else
+                {
+                    ledger.ReceiveForRequest(doc, balances[card.Id], item, quantity, price, item.Name, active);
+                }
             }
+
+            await ProcurementQualityNotices.NewChecksAsync(db, notifier, ledger.NewChecks, ct);
 
             var settings = await db.ProcurementSettings.AsNoTracking().FirstOrDefaultAsync(ct);
             var tolerance = settings?.ReapprovalTolerancePercent ?? 0m;
@@ -287,6 +311,36 @@ public sealed class ProcurementPurchaseService(
 
             return new ProcurementPurchaseResult(order.Id, order.Number, doc.Id, doc.Number, order.Total);
         });
+
+    /// <summary>
+    /// Партии покупки позиции с партиями: хотя бы одна, до 50, сумма = купленному, у каждой — срок (или дата производства и срок хранения),
+    /// просроченное не принимается. Ошибка — 400 с понятным текстом.
+    /// </summary>
+    private List<(ProcurementBatchInput Batch, DateOnly Expires)> CheckBatches(string label, decimal quantity, IReadOnlyList<ProcurementBatchInput>? batches, ProcurementItem item)
+    {
+        var list = batches ?? [];
+        if (list.Count == 0)
+        {
+            throw new FieldValidationException($"«{label}» ведётся по партиям — укажите партию и срок годности.");
+        }
+
+        if (list.Count > ProcurementBatchRules.MaxBatchesPerLine)
+        {
+            throw new FieldValidationException($"«{label}»: в одной строке — до {ProcurementBatchRules.MaxBatchesPerLine} партий.");
+        }
+
+        if (list.Sum(b => b.Quantity) != quantity)
+        {
+            throw new FieldValidationException(
+                $"«{label}»: партии вместе — {ProcurementRules.Quantity(list.Sum(b => b.Quantity))}, а куплено {ProcurementRules.Quantity(quantity)} — должно совпасть.");
+        }
+
+        return list.Select(b =>
+        {
+            var expires = ProcurementBatchRules.ExpiresOn(b.ExpiresOn, b.ManufacturedOn, item.ShelfLifeDays);
+            return ProcurementBatchRules.Check(label, b, expires, ledger.Today) is { } error ? throw new FieldValidationException(error) : (b, expires!.Value);
+        }).ToList();
+    }
 
     private sealed record Card(Guid Id, string Sku, string Name, bool Created);
 

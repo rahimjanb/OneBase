@@ -20,7 +20,10 @@ export function FileImport<R extends { dryRun: boolean }>({
   hint,
   ready,
   report,
+  label = "Импорт из Excel",
 }: {
+  /** Подпись кнопки. */
+  label?: string;
   endpoint: string;
   checkTitle: string;
   doneTitle: string;
@@ -42,7 +45,7 @@ export function FileImport<R extends { dryRun: boolean }>({
     try {
       const form = new FormData();
       form.append("file", picked);
-      const response = await fetch(`${endpoint}${dryRun ? "?dryRun=true" : ""}`, { method: "POST", body: form });
+      const response = await fetch(`${endpoint}${dryRun ? `${endpoint.includes("?") ? "&" : "?"}dryRun=true` : ""}`, { method: "POST", body: form });
       const json = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(json.error ? t(json.error) : t("Ошибка {status}", { status: response.status }));
       setResult(json);
@@ -80,7 +83,7 @@ export function FileImport<R extends { dryRun: boolean }>({
       />
       <button type="button" onClick={() => input.current?.click()} disabled={busy} className={secondary}>
         {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileSpreadsheet className="size-4" aria-hidden />}
-        <span className="max-sm:sr-only">{t("Импорт из Excel")}</span>
+        <span className="max-sm:sr-only">{t(label)}</span>
       </button>
       <Sheet
         open={file !== null}

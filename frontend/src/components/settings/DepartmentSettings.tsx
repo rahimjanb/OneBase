@@ -10,6 +10,10 @@ import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { groupSum, parseSum, type DepartmentCard, type DepartmentPerson, type SupplySettings } from "@/lib/departments";
+import type { WarehousesView } from "@/lib/procurement";
+import type { QualitySettings } from "@/lib/quality";
+import { QualitySettingsSection } from "./QualitySettingsSection";
+import { WarehousesSection } from "./WarehousesSection";
 
 const section = "rounded-xl border border-line bg-surface p-5";
 const sectionTitle = "text-base font-semibold text-ink";
@@ -17,7 +21,8 @@ const small = "h-10 rounded-lg border border-line bg-surface px-3 text-right tex
 
 /**
  * Настройки одного отдела: руководители (право «Пользователи»); у снабжения — маршрут согласования заявок (финансист, директор, лимит
- * без директора) и правила (допуск, эскалация) — право «Настройки снабжения»; у продаж — ссылка на их оргструктуру. Без права — только чтение.
+ * без директора), правила (допуск, эскалация), склады и кто решает по качеству партий — право «Настройки снабжения»; у продаж — ссылка на
+ * их оргструктуру. Без права — только чтение.
  */
 export function DepartmentSettings({
   department,
@@ -25,18 +30,25 @@ export function DepartmentSettings({
   canEditHeads,
   canEditSupply,
   supply,
+  warehouses = null,
+  quality = null,
 }: {
   department: DepartmentCard;
   users: DepartmentPerson[];
   canEditHeads: boolean;
   canEditSupply: boolean;
   supply: SupplySettings | null;
+  warehouses?: WarehousesView | null;
+  quality?: QualitySettings | null;
 }) {
   const t = useT();
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
       <HeadsSection department={department} users={users} canEdit={canEditHeads} />
       {supply && <SupplyRoute settings={supply} users={users} canEdit={canEditSupply} />}
+      {warehouses && <WarehousesSection view={warehouses} />}
+      {quality && <QualitySettingsSection settings={quality} />}
+
       {department.code === "sales" && (
         <section className={section}>
           <h2 className={sectionTitle}>{t("Продажи: оргструктура и цели")}</h2>
@@ -167,6 +179,9 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
   const [tolerance, setTolerance] = useState(String(settings.reapprovalTolerancePercent).replace(".", ","));
   const [headDays, setHeadDays] = useState(String(settings.escalateHeadDays));
   const [directorDays, setDirectorDays] = useState(String(settings.escalateDirectorDays));
+  const [overPercent, setOverPercent] = useState(String(settings.overconsumptionPercent ?? 5).replace(".", ","));
+  const [raw, setRaw] = useState(Boolean(settings.rawRouteEnabled));
+  const [supply, setSupply] = useState(settings.supplyApproverId ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -184,6 +199,8 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
     const dir = Number(directorDays.trim());
     if (!Number.isInteger(head) || head < 1 || head > 30) return setError(t("Руководителю снабжения — через 1–30 дней просрочки."));
     if (!Number.isInteger(dir) || dir < head || dir > 60) return setError(t("Директору — не раньше, чем руководителю снабжения, и не позже 60 дней просрочки."));
+    const over = Number(overPercent.replace(",", ".").trim());
+    if (!Number.isFinite(over) || over < 0 || over > 100) return setError(t("Порог перерасхода сырья — от 0 до 100 %, не больше двух знаков после запятой."));
     setBusy(true);
     setError(null);
     try {
@@ -196,6 +213,9 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
           financeApproverId: finance || null,
           directorApproverId: director || null,
           directorLimit: limitValue,
+          rawRouteEnabled: raw,
+          supplyApproverId: supply || null,
+          overconsumptionPercent: over,
         }),
       });
       setSaved(true);
@@ -263,6 +283,39 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
         </ol>
       </section>
 
+      <section className={section} aria-labelledby="supply-raw">
+        <h2 id="supply-raw" className={sectionTitle}>
+          {t("Маршрут закупки сырья")}
+        </h2>
+        <p className="mt-1 text-sm text-ink-2">
+          {t(
+            "Заявку, где к закупке есть позиция категории сырья, согласуют руководитель снабжения, затем директор — при любой сумме. Финансист шага не получает, но узнаёт об утверждённой закупке. Категории сырья отмечаются в «Заявки → Настройки».",
+          )}
+        </p>
+        <label className="mt-3 flex items-start gap-2 text-sm text-ink">
+          <input type="checkbox" checked={raw} onChange={(e) => touch(setRaw)(e.target.checked)} disabled={!canEdit} className="mt-0.5 size-4 accent-[var(--color-accent)]" />
+          <span>
+            {t("Включить маршрут сырья")}
+            <span className="block text-xs text-ink-3">
+              {raw
+                ? t("Включён — заявки с сырьём к закупке, отправленные после включения, идут к руководителю снабжения, затем к директору.")
+                : t("Выключен — все заявки идут обычным маршрутом. Включение действует на заявки, отправленные после него.")}
+            </span>
+          </span>
+        </label>
+        <div className="mt-3">
+          <span className="text-sm font-medium text-ink">{t("Руководитель снабжения")}</span>
+          {person(supply, touch(setSupply), options(supply, settings.supplyApproverName ?? null), t("Руководитель снабжения"))}
+          {!supply && (
+            <p className={`mt-1.5 text-xs ${(settings.supplyHeads?.length ?? 0) > 0 ? "text-ink-3" : raw ? "text-warn" : "text-ink-3"}`}>
+              {(settings.supplyHeads?.length ?? 0) > 0
+                ? t("Не выбран — согласуют руководители отдела «Снабжение»: {list}.", { list: settings.supplyHeads!.join(", ") })
+                : t("Не выбран, и у отдела «Снабжение» нет руководителя — заявки на сырьё будут ждать.")}
+            </p>
+          )}
+        </div>
+      </section>
+
       <section className={section} aria-labelledby="supply-rules">
         <h2 id="supply-rules" className={sectionTitle}>
           {t("Правила снабжения")}
@@ -289,6 +342,12 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
             {t("дн.")}
           </label>
         </div>
+        <h3 className="mt-5 text-sm font-semibold text-ink">{t("Перерасход сырья в производстве")}</h3>
+        <p className="mt-1 text-sm text-ink-2">{t("При закрытии задания на выпуск расход сверяется с нормой на фактический выход. Строка с перерасходом больше порога помечается, руководитель производства получает уведомление.")}</p>
+        <label className="mt-2 inline-flex items-center gap-2 text-sm text-ink">
+          {t("Порог перерасхода")}
+          <input value={overPercent} onChange={(e) => touch(setOverPercent)(e.target.value)} inputMode="decimal" disabled={!canEdit} className={`${small} w-20`} />%
+        </label>
       </section>
 
       {canEdit ? (

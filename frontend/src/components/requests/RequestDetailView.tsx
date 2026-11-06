@@ -45,6 +45,7 @@ import {
   requestStatusLabel,
   stageIndex,
   stampRu,
+  tenderStatusLabel,
   type RequestDetail,
 } from "@/lib/procurement";
 import { RequestRoute } from "./RequestRoute";
@@ -67,6 +68,7 @@ const dialogText: Record<"return" | "cancel" | "approve" | "reject", { title: st
 /** Что будет после согласования — по шагу маршрута и (у финансиста) сумме к закупке. */
 function approveHint(detail: RequestDetail, purchase: number, t: (text: string, vars?: Record<string, string | number>) => string): string {
   if (detail.status === "HeadApproval") return t("Дальше заявку согласует финансист.");
+  if (detail.status === "SupplyApproval") return t("Закупка сырья — дальше заявку согласует директор при любой сумме.");
   if (detail.status === "FinanceApproval") {
     return purchase > detail.directorLimit
       ? t("К закупке больше {limit} сум — дальше заявку согласует директор.", { limit: money(detail.directorLimit) })
@@ -299,7 +301,15 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
   const ordered = detail.orders.filter((o) => !o.direct);
   const toBuy = detail.items
     .filter((i) => i.status !== "Cancelled" && i.toPurchase > i.orderedQty)
-    .map((i) => ({ requestItemId: i.id, name: i.name, unitCode: i.unitCode, left: Math.round((i.toPurchase - i.orderedQty) * 1000) / 1000, price: i.estimatedPrice }));
+    .map((i) => ({
+      requestItemId: i.id,
+      name: i.name,
+      unitCode: i.unitCode,
+      left: Math.round((i.toPurchase - i.orderedQty) * 1000) / 1000,
+      price: i.estimatedPrice,
+      tracksBatches: i.tracksBatches,
+      shelfLifeDays: i.shelfLifeDays,
+    }));
 
   return (
     <>
@@ -596,6 +606,29 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
                           <span className="mt-0.5 block text-xs text-ink-3">
                             {o.supplierName} · {money(o.total)} {t("сум")}
                             {o.expectedDate && ` · ${t("ожидается {date}", { date: dateRu(o.expectedDate) })}`}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {(detail.tenders?.length ?? 0) > 0 && (
+                <section className={card} aria-labelledby="rq-tenders">
+                  <h2 id="rq-tenders" className="mb-2 flex items-center gap-2 text-base font-semibold text-ink">
+                    <ShoppingCart className="size-4 text-ink-3" aria-hidden /> {t("Тендеры по заявке")}
+                  </h2>
+                  <ul className="divide-y divide-line">
+                    {detail.tenders!.map((x) => (
+                      <li key={x.id}>
+                        <Link href={`/procurement/tenders/${x.id}`} className="block py-2.5 text-sm hover:text-accent-strong">
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="font-medium tabular-nums text-ink">{x.number}</span>
+                            <span className="text-xs text-ink-3">{t(tenderStatusLabel[x.status])}</span>
+                          </span>
+                          <span className="mt-0.5 block text-xs text-ink-3">
+                            {x.title} · {x.supplierName} · {money(x.total)} {t("сум")}
                           </span>
                         </Link>
                       </li>

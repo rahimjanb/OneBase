@@ -18,6 +18,13 @@ export type SupplySettings = {
   directorLimit: number;
   financeApproverName: string | null;
   directorApproverName: string | null;
+  /** Маршрут сырья: включён ли, руководитель снабжения (не выбран — руководители отдела «Снабжение»: supplyHeads). */
+  rawRouteEnabled?: boolean | null;
+  supplyApproverId?: string | null;
+  supplyApproverName?: string | null;
+  supplyHeads?: string[] | null;
+  /** Перерасход сырья по заданию на выпуск, %, выше которого строка помечается и руководитель производства получает уведомление. */
+  overconsumptionPercent?: number | null;
 };
 
 export const departmentIcons: Record<string, LucideIcon> = { sales: Handshake, production: Factory, supply: Truck, finance: Landmark, marketing: Megaphone, hr: Users };

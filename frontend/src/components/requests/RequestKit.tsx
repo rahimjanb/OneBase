@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, BadgeCheck, Ban, CircleCheckBig, FilePen, Flame, Hourglass, Landmark, Minus, OctagonX, PackageOpen, Send, Undo2, UserCheck, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, BadgeCheck, Ban, CircleCheckBig, FilePen, Flame, Hourglass, Landmark, Minus, OctagonX, PackageOpen, Send, Truck, Undo2, UserCheck, type LucideIcon } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { requestPriorityLabel, requestStatusLabel, type RequestPriority, type RequestStatus } from "@/lib/procurement";
 
@@ -10,6 +10,7 @@ export const requestStatusLook: Record<RequestStatus, { icon: LucideIcon; tone: 
   Submitted: { icon: Send, tone: "bg-accent-soft text-accent-strong", dot: "bg-accent" },
   HeadApproval: { icon: UserCheck, tone: "bg-accent-soft text-accent-strong", dot: "bg-accent" },
   FinanceApproval: { icon: Landmark, tone: "bg-violet-soft text-violet-light", dot: "bg-violet" },
+  SupplyApproval: { icon: Truck, tone: "bg-violet-soft text-violet-light", dot: "bg-violet" },
   DirectorApproval: { icon: Hourglass, tone: "bg-violet-soft text-violet-light", dot: "bg-violet" },
   RevisionRequired: { icon: Undo2, tone: "bg-warn-soft text-warn", dot: "bg-warn" },
   Approved: { icon: BadgeCheck, tone: "bg-ok-soft text-ok", dot: "bg-ok" },

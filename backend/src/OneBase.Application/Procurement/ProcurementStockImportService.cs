@@ -19,7 +19,8 @@ public sealed record ProcurementStockImportSample(DateOnly? Date, string Kind, s
 /// начальные остатки; movements — проводятся только новые строки. Columns — какой столбец файла куда пошёл. Rows — строк движений в файле,
 /// Known — учтены раньше, New — учитываются сейчас; Receipts, Issues, WriteOffs — документы; Posted и Skipped — строки; Clamped — позиции,
 /// у которых по файлу остаток меньше нуля (заведены нулём); NewItems и NewDepartments — что добавится в каталог и в отделы. UnknownFile —
-/// склад уже загружали, а из этого файла не учтено ни одной строки: все его строки пойдут новыми движениями (другой журнал?).
+/// склад уже загружали, а из этого файла не учтено ни одной строки: все его строки пойдут новыми движениями (другой журнал?). Warehouse —
+/// склад загрузки (у каждого склада свой журнал и свои начальные остатки).
 /// </summary>
 public sealed record ProcurementStockImportResult(
     bool DryRun,
@@ -42,7 +43,9 @@ public sealed record ProcurementStockImportResult(
     DateOnly? LastDate,
     IReadOnlyList<string> Errors,
     IReadOnlyList<ProcurementStockImportSample> Sample,
-    bool UnknownFile = false);
+    bool UnknownFile = false,
+    string? Warehouse = null,
+    int Batches = 0);
 
 /// <summary>
 /// Загрузка движений склада из Excel/CSV — журнала, который ведут в таблице (дата, приход/расход, артикул, название, единица, количество,
@@ -53,7 +56,8 @@ public sealed record ProcurementStockImportResult(
 /// отделов, становится новым отделом; артикул, которого нет в каталоге, — новой позицией («Сырьё»). Остаток не уходит в минус: такая
 /// строка пропускается и загрузится в следующий раз (после прихода или инвентаризации). Загружает кладовщик.
 /// </summary>
-public sealed class ProcurementStockImportService(IAppDbContext db, IReportReader reader, ProcurementStockLedger ledger, IProcurementNumbers numbers, IAuditLogger audit)
+public sealed class ProcurementStockImportService(IAppDbContext db, IReportReader reader, ProcurementStockLedger ledger, IProcurementNumbers numbers, IAuditLogger audit,
+    OneBase.Application.Work.UserNotifier notifier)
 {
     /// <summary>Строк на листе — с запасом: журнал склада растёт на тысячи строк в месяц.</summary>
     public const int MaxRows = 200_000;
@@ -77,6 +81,10 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
         ("place", "Цех / склад", ["цех ва склад номлари", "цех склад", "цех", "склад", "получатель", "откуда куда", "куда", "откуда", "кому", "отдел", "подразделение",
             "булим", "bo lim"]),
         ("batch", "Партия", ["партия", "номер партии", "partiya"]),
+        ("expires", "Срок годности", ["срок годности", "годен до", "годность", "срок хранения до", "яроқлилик муддати", "yaroqlilik muddati", "amal qilish muddati",
+            "expiry", "best before"]),
+        ("made", "Дата производства", ["дата производства", "дата изготовления", "изготовлен", "произведен", "ишлаб чиқарилган сана", "ишлаб чикарилган сана",
+            "ishlab chiqarilgan sana"]),
         ("reference", "Номер документа", ["номер документа", "накладная", "номер накладной", "№ документа", "hujjat"]),
         ("price", "Цена", ["цена", "цена за единицу", "нарх", "narx"]),
         ("comment", "Комментарий", ["комментарий", "примечание", "изох", "izoh"]),
@@ -121,7 +129,7 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
 
     /// <summary>Строка движения из файла (разобранная). ItemKey — артикул (без регистра) или, без артикула, название.</summary>
     private sealed record Line(int Row, DateTimeOffset? Filled, DateOnly Date, Flow Flow, string? Place, string? Sku, string Name, string? Unit, decimal Quantity,
-        decimal? Price, string? Batch, string? Reference, string? Comment)
+        decimal? Price, string? Batch, string? Reference, string? Comment, DateOnly? Expires = null, DateOnly? Made = null)
     {
         public string Key { get; set; } = "";
         public string ItemKey => Sku is { } sku ? $"sku:{sku.ToLowerInvariant()}" : $"name:{TableImport.Norm(Name)}";
@@ -134,12 +142,90 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
         public string Label => $"{Item.Sku} {Item.Name}";
     }
 
-    public async Task<ProcurementStockImportResult> ImportAsync(ProcurementContext ctx, Stream content, string fileName, CancellationToken ct, bool dryRun = false)
+    /// <summary>
+    /// Партия позиции в загрузке: уже лежит на складе (Stored), заведена этой загрузкой (Created) или ещё будет заведена; Qty — её остаток по
+    /// ходу строк файла; Quality — статус качества (новая партия позиции с контролем — на контроле, её не выдать до решения).
+    /// </summary>
+    private sealed class BatchSlot
+    {
+        public ProcurementBatchBalance? Stored { get; init; }
+        public ProcurementBatchBalance? Created { get; set; }
+        public string? No { get; init; }
+        public DateOnly? Expires { get; init; }
+        public ProcurementBatchQuality Quality { get; init; } = ProcurementBatchQuality.Approved;
+        public DateOnly? Made { get; init; }
+        public DateOnly Received { get; init; }
+        public decimal Qty { get; set; }
+        public ProcurementBatchBalance? Balance => Stored ?? Created;
+    }
+
+    /// <summary>
+    /// Строка позиции с партиями: приход — в партию с тем же номером и сроком на этом складе или новую (срок — из файла или по дате производства
+    /// и сроку хранения позиции; у позиции с контролем качества — только в партию этой же загрузки: каждая поставка проходит контроль);
+    /// расход — из партии с номером строки или FEFO; выдача — только годное на дату строки (допущенное и не просроченное). arriving — статус
+    /// новой партии. Не получилось — текст ошибки (с окончанием fail), остатки партий не тронуты.
+    /// </summary>
+    private static string? Allocate(ItemPlan plan, List<BatchSlot> slots, Line line, string fail, out List<(BatchSlot Slot, decimal Qty)> taken,
+        ProcurementBatchQuality arriving = ProcurementBatchQuality.Approved)
+    {
+        taken = [];
+        var no = line.Batch is null ? null : Cut(line.Batch, 64);
+        if (line.Flow == Flow.In)
+        {
+            var expires = ProcurementBatchRules.ExpiresOn(line.Expires, line.Made, plan.Item.ShelfLifeDays);
+            if (ProcurementBatchRules.Check(plan.Label, new ProcurementBatchInput(no, line.Made, line.Expires, line.Quantity), expires, line.Date) is { } error)
+            {
+                return $"Строка {line.Row}: {error}";
+            }
+
+            var slot = slots.FirstOrDefault(s => s.No == no && s.Expires == expires && (s.Stored is null || plan.Item.QualityControl == ProcurementQualityControl.None));
+            if (slot is null)
+            {
+                slot = new BatchSlot { No = no, Expires = expires!.Value, Made = line.Made, Received = line.Date, Quality = arriving };
+                slots.Add(slot);
+            }
+
+            slot.Qty += line.Quantity;
+            taken.Add((slot, line.Quantity));
+            return null;
+        }
+
+        var issue = line.Flow == Flow.Out;
+        var pool = slots.Where(s => s.Qty > 0 && (no is null || s.No == no) && (!issue || ProcurementBatchRules.Usable(s.Quality, s.Expires, line.Date)))
+            .OrderBy(s => s.Expires ?? DateOnly.MaxValue).ThenBy(s => s.Received).ToList();
+        var left = line.Quantity;
+        foreach (var slot in pool.TakeWhile(_ => left > 0))
+        {
+            var take = Math.Min(left, slot.Qty);
+            taken.Add((slot, take));
+            left -= take;
+        }
+
+        if (left > 0)
+        {
+            taken = [];
+            return $"Строка {line.Row} («{plan.Label}», {line.Date:dd.MM.yyyy}): {(no is null ? "" : $"партия «{no}» — ")}{(issue ? "годного " : "")}на складе "
+                   + $"{ProcurementRules.Quantity(pool.Sum(s => s.Qty))} {plan.Item.UnitCode} — {ProcurementRules.Quantity(line.Quantity)} не провести; {fail}.";
+        }
+
+        foreach (var (slot, qty) in taken)
+        {
+            slot.Qty -= qty;
+        }
+
+        return null;
+    }
+
+    public async Task<ProcurementStockImportResult> ImportAsync(ProcurementContext ctx, Stream content, string fileName, CancellationToken ct, bool dryRun = false,
+        Guid? warehouseId = null)
     {
         if (!ctx.Warehouse)
         {
             throw new FieldForbiddenException("Движения склада загружает кладовщик.");
         }
+
+        // Склад загрузки (не указан — склад по умолчанию): закреплённый кладовщик загружает только на свои склады.
+        var warehouse = await ledger.WarehouseAsync(ctx, warehouseId, ct, ProcurementWarehouseUse.Import);
 
         ReportDocument document;
         try
@@ -149,6 +235,21 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
         catch (NotSupportedException e)
         {
             throw new FieldValidationException(e.Message);
+        }
+
+        return await ImportDocumentAsync(ctx, warehouse, document, fileName, ct, dryRun);
+    }
+
+    /// <summary>
+    /// Разбор и проводка уже прочитанной таблицы (файл или лист Google): те же проверки, отчёт и отпечатки строк — повторная загрузка не проводит
+    /// строки второй раз. source — имя файла или «таблица / лист» (в документе и отчёте). Склад уже проверен вызывающим (WarehouseAsync, Import).
+    /// </summary>
+    public async Task<ProcurementStockImportResult> ImportDocumentAsync(ProcurementContext ctx, ProcurementWarehouse warehouse, ReportDocument document, string fileName,
+        CancellationToken ct, bool dryRun = false)
+    {
+        if (!ctx.Warehouse)
+        {
+            throw new FieldForbiddenException("Движения склада загружает кладовщик.");
         }
 
         var table = TableImport.Find(document, Headers, f =>
@@ -181,10 +282,10 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
             Error("В файле нет столбца с единицей измерения — новые позиции каталога заводятся в штуках.");
         }
 
-        return await ledger.RetryAsync(() => PlanAsync(ctx, fileName, table, lines, rowCount, invalid, errors, dryRun, ct));
+        return await ledger.RetryAsync(() => PlanAsync(ctx, warehouse, fileName, table, lines, rowCount, invalid, errors, dryRun, ct));
     }
 
-    private async Task<ProcurementStockImportResult> PlanAsync(ProcurementContext ctx, string fileName, TableImport.Table table, List<Line> lines, int rowCount,
+    private async Task<ProcurementStockImportResult> PlanAsync(ProcurementContext ctx, ProcurementWarehouse store, string fileName, TableImport.Table table, List<Line> lines, int rowCount,
         int invalid, List<string> parseErrors, bool dryRun, CancellationToken ct)
     {
         var errors = new List<string>(parseErrors);
@@ -197,7 +298,7 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
         }
 
         var skipped = invalid;
-        var warehouse = await ledger.DefaultWarehouseIdAsync(ct);
+        var warehouse = store.Id;
         var known = (await db.ProcurementStockImportRows.AsNoTracking().Where(r => r.WarehouseId == warehouse).Select(r => r.Key).ToListAsync(ct)).ToHashSet();
         var opening = known.Count == 0;
         var relevant = opening ? lines : lines.Where(l => !known.Contains(l.Key)).ToList();
@@ -222,9 +323,11 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
 
             var latest = group.OrderBy(l => l.Date).ThenBy(l => l.Row).Last();
             var unit = group.Where(l => l.Unit is not null).GroupBy(l => l.Unit!).OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault() ?? "шт";
+            // В файле есть срок годности — новая позиция сразу ведётся по партиям.
             plans[group.Key] = new ItemPlan(new ProcurementItem
             {
                 Sku = first.Sku ?? "", Name = latest.Name.Length <= 300 ? latest.Name : latest.Name[..300], CategoryId = category, UnitCode = unit,
+                TracksBatches = table.Columns.ContainsKey("expires"),
             }, true);
         }
 
@@ -290,6 +393,18 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
         // Остатки (у новых позиций — новые строки с нулями); при проверке файла ничего из этого не сохраняется.
         var balances = await ledger.BalancesAsync(warehouse, plans.Values.Select(p => p.Item.Id), ct);
         var onHand = plans.Values.ToDictionary(p => p, p => (balances[p.Item.Id].OnHand, balances[p.Item.Id].Reserved));
+        // Позиции с партиями: партии склада по ходу строк (у новых позиций — пусто).
+        var slots = new Dictionary<ItemPlan, List<BatchSlot>>();
+        foreach (var plan in plans.Values.Where(p => p.Item.TracksBatches))
+        {
+            slots[plan] = plan.IsNew
+                ? []
+                : (await ledger.BatchStockAsync(warehouse, plan.Item.Id, ct, withEmpty: true)).Select(b => new BatchSlot
+                {
+                    Stored = b, No = b.Batch!.SupplierBatchNo, Expires = b.Batch.ExpiresOn, Made = b.Batch.ManufacturedOn, Received = b.Batch.ReceivedOn, Qty = b.OnHand,
+                    Quality = b.Batch.QualityStatus,
+                }).ToList();
+        }
         var last = accepted.Count == 0 ? FieldClock.Today : accepted.Max(l => l.Date);
         var import = new ProcurementStockImport
         {
@@ -314,7 +429,8 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
         if (opening)
         {
             // Начальные остатки: приход минус расход по всем строкам файла; меньше нуля — нулём; одна инвентаризация на разницу с учётом.
-            var facts = accepted.GroupBy(l => plans[l.ItemKey]).Select(g => (Plan: g.Key, Fact: g.Sum(l => l.Flow == Flow.In ? l.Quantity : -l.Quantity))).ToList();
+            var facts = accepted.Where(l => !plans[l.ItemKey].Item.TracksBatches).GroupBy(l => plans[l.ItemKey])
+                .Select(g => (Plan: g.Key, Fact: g.Sum(l => l.Flow == Flow.In ? l.Quantity : -l.Quantity))).ToList();
             ProcurementStockDocument? doc = null;
             foreach (var (plan, total) in facts.OrderBy(f => f.Plan.Item.Sku, StringComparer.OrdinalIgnoreCase))
             {
@@ -351,6 +467,49 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
                 }
             }
 
+            // Позиции с партиями: история файла прогоняется по партиям с нуля — остаток каждой партии заводится одной инвентаризацией.
+            foreach (var group in accepted.Where(l => plans[l.ItemKey].Item.TracksBatches).GroupBy(l => plans[l.ItemKey]).OrderBy(g => g.Key.Item.Sku, StringComparer.OrdinalIgnoreCase))
+            {
+                var plan = group.Key;
+                if (onHand[plan].OnHand != 0)
+                {
+                    Error($"«{plan.Label}»: на складе уже есть остаток по партиям — начальные остатки по файлу не заводятся.");
+                    continue;
+                }
+
+                var list = slots[plan] = [];
+                foreach (var line in group.OrderBy(l => l.Date).ThenBy(l => l.Row))
+                {
+                    if (Allocate(plan, list, line, "в начальный остаток строка не вошла", out _) is { } error)
+                    {
+                        Error(error);
+                    }
+                }
+
+                var batched = list.Where(s => s.Qty > 0).ToList();
+                if (batched.Count == 0)
+                {
+                    continue;
+                }
+
+                adjustments++;
+                if (sample.Count < 8)
+                {
+                    sample.Add(new ProcurementStockImportSample(last, "Opening", null, plan.Item.Sku, plan.Item.Name, plan.Item.UnitCode, batched.Sum(s => s.Qty)));
+                }
+
+                if (!dryRun)
+                {
+                    doc ??= await OpeningDocumentAsync(warehouse, ctx.UserId, fileName, last, ct);
+                    foreach (var slot in batched)
+                    {
+                        slot.Created = await ledger.NewBatchAsync(doc, warehouse, plan.Item.Id, slot.No, slot.Made, slot.Expires, null, null, ct);
+                        slot.Created.Batch!.ReceivedOn = slot.Received;
+                        ledger.MoveBatch(doc, balances[plan.Item.Id], slot.Created, ProcurementMovementKind.Adjustment, slot.Qty, plan.Label);
+                    }
+                }
+            }
+
             counted.AddRange(accepted.Select(l => (l, doc?.Id)));
         }
         else
@@ -363,8 +522,45 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
                 var first = group.First();
                 var moment = first.Filled is { } filled && FieldClock.LocalDate(filled) == first.Date ? filled : Noon(first.Date);
                 var ok = new List<(ItemPlan Plan, decimal Quantity, decimal? Price, List<Line> Rows)>();
+                var batchOk = new List<(ItemPlan Plan, Line Row, List<(BatchSlot Slot, decimal Qty)> Taken)>();
                 foreach (var item in group.GroupBy(l => plans[l.ItemKey]))
                 {
+                    if (item.Key.Item.TracksBatches)
+                    {
+                        // Позиция с партиями — каждая строка своей партией.
+                        foreach (var line in item.OrderBy(l => l.Row))
+                        {
+                            var (had, held) = onHand[item.Key];
+                            // Новая поставка позиции с контролем качества — на контроль, как приход на складе.
+                            var arriving = item.Key.Item.QualityControl == ProcurementQualityControl.None ? ProcurementBatchQuality.Approved : ProcurementBatchQuality.Pending;
+                            if (Allocate(item.Key, slots[item.Key], line, "строка загрузится в следующий раз", out var taken, arriving) is { } error)
+                            {
+                                skipped++;
+                                Error(error);
+                                continue;
+                            }
+
+                            var now = line.Flow == Flow.In ? had + line.Quantity : had - line.Quantity;
+                            if (now < held)
+                            {
+                                foreach (var (slot, qty) in taken)
+                                {
+                                    slot.Qty += line.Flow == Flow.In ? -qty : qty;
+                                }
+
+                                skipped++;
+                                Error($"Строка {line.Row} («{item.Key.Label}», {line.Date:dd.MM.yyyy}): на складе {ProcurementRules.Quantity(had)} {item.Key.Item.UnitCode}, в резерве "
+                                      + $"{ProcurementRules.Quantity(held)} — {ProcurementRules.Quantity(line.Quantity)} не провести; строка загрузится в следующий раз.");
+                                continue;
+                            }
+
+                            onHand[item.Key] = (now, held);
+                            batchOk.Add((item.Key, line, taken));
+                        }
+
+                        continue;
+                    }
+
                     var quantity = item.Sum(l => l.Quantity);
                     var (have, reserved) = onHand[item.Key];
                     var after = first.Flow == Flow.In ? have + quantity : have - quantity;
@@ -381,7 +577,7 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
                     ok.Add((item.Key, quantity, first.Flow == Flow.In ? item.LastOrDefault(l => l.Price is not null)?.Price : null, item.ToList()));
                 }
 
-                if (ok.Count == 0)
+                if (ok.Count == 0 && batchOk.Count == 0)
                 {
                     continue;
                 }
@@ -409,6 +605,12 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
                 {
                     sample.Add(new ProcurementStockImportSample(first.Date, first.Flow.ToString(), first.Place is null ? null : Clean(first.Place), plan.Item.Sku, plan.Item.Name,
                         plan.Item.UnitCode, quantity));
+                }
+
+                foreach (var (plan, row, _) in batchOk.Where(_ => sample.Count < 8))
+                {
+                    sample.Add(new ProcurementStockImportSample(first.Date, first.Flow.ToString(), first.Place is null ? null : Clean(first.Place), plan.Item.Sku, plan.Item.Name,
+                        plan.Item.UnitCode, row.Quantity));
                 }
 
                 ProcurementStockDocument? doc = null;
@@ -439,28 +641,47 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
                     }
 
                     doc.Comment = string.IsNullOrEmpty(doc.Comment) ? $"Из файла «{Cut(fileName, 200)}»" : doc.Comment;
+                    var movementKind = kind switch
+                    {
+                        ProcurementStockDocumentKind.Receipt => ProcurementMovementKind.Receipt,
+                        ProcurementStockDocumentKind.WriteOff => ProcurementMovementKind.WriteOff,
+                        _ => ProcurementMovementKind.Issue,
+                    };
                     foreach (var (plan, quantity, price, _) in ok)
                     {
                         var delta = kind == ProcurementStockDocumentKind.Receipt ? quantity : -quantity;
-                        var movementKind = kind switch
-                        {
-                            ProcurementStockDocumentKind.Receipt => ProcurementMovementKind.Receipt,
-                            ProcurementStockDocumentKind.WriteOff => ProcurementMovementKind.WriteOff,
-                            _ => ProcurementMovementKind.Issue,
-                        };
                         ledger.Move(doc, balances[plan.Item.Id], movementKind, delta, plan.Label, price is { } p ? decimal.Round(p, 2) : null).CreatedAt = moment;
+                    }
+
+                    foreach (var (plan, row, taken) in batchOk)
+                    {
+                        var cost = kind == ProcurementStockDocumentKind.Receipt && row.Price is { } rp ? decimal.Round(rp, 2) : (decimal?)null;
+                        foreach (var (slot, qty) in taken)
+                        {
+                            if (slot.Balance is null)
+                            {
+                                slot.Created = await ledger.NewBatchAsync(doc, warehouse, plan.Item.Id, slot.No, slot.Made, slot.Expires, cost, null, ct,
+                                    slot.Quality == ProcurementBatchQuality.Pending ? plan.Item.QualityControl : ProcurementQualityControl.None);
+                                slot.Created.Batch!.ReceivedOn = slot.Received;
+                            }
+
+                            ledger.MoveBatch(doc, balances[plan.Item.Id], slot.Balance!, movementKind, kind == ProcurementStockDocumentKind.Receipt ? qty : -qty, plan.Label, cost)
+                                .CreatedAt = moment;
+                        }
                     }
                 }
 
                 counted.AddRange(ok.SelectMany(x => x.Rows).Select(l => (l, doc?.Id)));
+                counted.AddRange(batchOk.Select(x => (x.Row, doc?.Id)));
             }
         }
 
         var newItems = plans.Values.Count(p => p.IsNew);
+        var newBatches = slots.Values.Sum(list => list.Count(s => s.Stored is null && (opening ? s.Qty > 0 : true)));
         var result = new ProcurementStockImportResult(dryRun, opening ? "opening" : "movements", TableImport.Mapped(Headers, table), rowCount, knownCount, relevant.Count,
             receipts, issues, writeOffs, adjustments, counted.Count, skipped, plans.Count, newItems, newDepartments.Select(d => d.Name).ToList(), clamped,
             counted.Count == 0 ? null : counted.Min(c => c.Line.Date), counted.Count == 0 ? null : counted.Max(c => c.Line.Date), errors, sample,
-            !opening && knownCount == 0 && relevant.Count > 0);
+            !opening && knownCount == 0 && relevant.Count > 0, store.Name, newBatches);
         if (dryRun || counted.Count == 0)
         {
             db.ChangeTracker.Clear(); // проверка файла (или нечего проводить): ничего не сохраняется
@@ -469,6 +690,7 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
 
         (import.Posted, import.Skipped, import.Documents, import.LastDate) = (counted.Count, skipped, receipts + issues + writeOffs + (adjustments > 0 ? 1 : 0), result.LastDate);
         db.ProcurementStockImportRows.AddRange(counted.Select(c => new ProcurementStockImportRow { ImportId = import.Id, WarehouseId = warehouse, Key = c.Line.Key, DocumentId = c.DocumentId }));
+        await ProcurementQualityNotices.NewChecksAsync(db, notifier, ledger.NewChecks, ct);
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.stock.imported", "procurement_stock_import", import.Id.ToString(),
             new { import.FileName, Mode = import.Mode.ToString(), import.Rows, import.Posted, import.Skipped, import.Documents, NewItems = newItems, NewDepartments = result.NewDepartments },
@@ -575,6 +797,29 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
             var place = Cell("place");
             var price = Cell("price") is { } priceText ? Number(priceText) : null;
             var batch = Cell("batch");
+            DateOnly? expires = null, made = null;
+            if (Cell("expires") is { } expiresText)
+            {
+                if (When(expiresText) is not { } parsedExpiry)
+                {
+                    Bad($"срок годности «{expiresText}» не распознан");
+                    continue;
+                }
+
+                expires = DateOnly.FromDateTime(parsedExpiry);
+            }
+
+            if (Cell("made") is { } madeText)
+            {
+                if (When(madeText) is not { } parsedMade)
+                {
+                    Bad($"дата производства «{madeText}» не распознана");
+                    continue;
+                }
+
+                made = DateOnly.FromDateTime(parsedMade);
+            }
+
             var reference = Cell("reference");
             var comment = Cell("comment");
             var flows = new List<(Flow Flow, decimal Quantity)>();
@@ -626,7 +871,9 @@ public sealed class ProcurementStockImportService(IAppDbContext db, IReportReade
             foreach (var (flow, quantity) in flows)
             {
                 var final = flow == Flow.Out && place is not null && WriteOffStems.Any(TableImport.Norm(place).Contains) ? Flow.WriteOff : flow;
-                lines.Add(new Line(number, filled, date, final, place, sku is null ? null : Cut(sku, 64), name, unit, decimal.Round(quantity, 3), price, batch, reference, comment));
+                lines.Add(new Line(number, filled, date, final, place, sku is null ? null : Cut(sku, 64), name, unit, decimal.Round(quantity, 3), price, batch, reference, comment,
+                    expires, made));
+
             }
         }
 

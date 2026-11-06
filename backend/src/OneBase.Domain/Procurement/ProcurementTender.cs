@@ -14,7 +14,9 @@ public enum ProcurementTenderStatus
 /// <summary>
 /// Тендерная закупка — журнал снабжения: сырьё и материалы для производства, закупленные через тендер. Запись снабженец добавляет вручную
 /// после тендера: предмет, номер и дата тендера, победитель (поставщик), договор, участники, позиции с ценами, срок поставки; потом отмечает
-/// поставку. На склад снабжения не приходуется — сырьё идёт в производство. Номер TN-год-NNNNN. Version — xmin.
+/// поставку. Исполняет утверждённую заявку (RequestId) и поставляется на склад (WarehouseId): «Поставка по тендеру» — приход RC- партиями на
+/// контроль, у позиций растёт «поставлено»; поставлено всё — тендер поставлен. Позиция без карточки склада на склад не приходуется —
+/// остаток закрывает «Отметить поставку». Номер TN-год-NNNNN. Version — xmin.
 /// </summary>
 public class ProcurementTender : Entity
 {
@@ -64,10 +66,20 @@ public class ProcurementTender : Entity
 
     public uint Version { get; set; }
 
+    /// <summary>Утверждённая заявка, которую исполняет тендер (по желанию).</summary>
+    public Guid? RequestId { get; set; }
+    public ProcurementRequest? Request { get; set; }
+
+    /// <summary>Склад, на который поставляют (не указан — склад по умолчанию).</summary>
+    public Guid? WarehouseId { get; set; }
+
     public ICollection<ProcurementTenderItem> Items { get; set; } = [];
 }
 
-/// <summary>Позиция тендерной закупки: наименование, единица, количество, цена за единицу (сум).</summary>
+/// <summary>
+/// Позиция тендерной закупки: наименование, единица, количество, цена за единицу (сум); карточка склада (ItemId) — тогда позицию принимают
+/// на склад: в единице карточки или в её единице закупки (мешок = 50 кг); ReceivedQty — поставлено (в единице позиции тендера).
+/// </summary>
 public class ProcurementTenderItem
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
@@ -82,4 +94,9 @@ public class ProcurementTenderItem
 
     public decimal Quantity { get; set; }
     public decimal Price { get; set; }
+
+    public Guid? ItemId { get; set; }
+    public ProcurementItem? Item { get; set; }
+
+    public decimal ReceivedQty { get; set; }
 }

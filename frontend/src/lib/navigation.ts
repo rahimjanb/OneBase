@@ -14,8 +14,10 @@ export const navPermissions: Record<string, string[]> = {
   "/tasks": ["work.tasks"],
   // Заявки на закупку: свои — у всех ролей отделов; все — снабжению и директору; что видно, решает backend.
   "/requests": ["procurement.request", "procurement.read", "procurement.manage", "procurement.settings", "procurement.warehouse"],
-  // Склад снабжения: кладовщик, снабжение, директор.
-  "/procurement": ["procurement.warehouse", "procurement.read", "procurement.manage"],
+  // Склад снабжения: кладовщик, снабжение, директор; склад и партии смотрит и лаборатория.
+  "/procurement": ["procurement.warehouse", "procurement.read", "procurement.manage", "quality.check"],
+  // «Производство»: задания и рецептуры (производство, технолог), контроль качества (лаборатория), кладовщик, снабжение, директор.
+  "/production": ["production.read", "production.manage", "production.recipes", "quality.check", "procurement.warehouse", "procurement.read", "procurement.manage"],
   // HR: право «HR», администратор интеграций или руководитель отдела с привязанными подразделениями Verifix (hr.department — не право,
   // а признак из /api/auth/me; доступ к данным всё равно проверяет backend).
   "/hr": ["hr.read", "integrations.manage", "hr.department"],
@@ -27,15 +29,15 @@ export const navPermissions: Record<string, string[]> = {
 };
 
 /** Порядок разделов в меню — по нему выбирается стартовая страница, если «Обзор» недоступен. */
-const order = ["/", "/departments", "/tasks", "/hr", "/base", "/consultant", "/data-manager", "/campaigns", "/requests", "/procurement"];
+const order = ["/", "/departments", "/tasks", "/hr", "/base", "/consultant", "/data-manager", "/campaigns", "/requests", "/procurement", "/production"];
 
 export function canOpen(href: string, permissions: readonly string[]): boolean {
   const need = navPermissions[href];
   return !need || need.some((p) => permissions.includes(p));
 }
 
-/** Свой раздел отдела в OneBase; у остальных отделов рабочий раздел — их задачи. */
-const departmentSections: Record<string, string> = { sales: "/sales", hr: "/hr", supply: "/procurement" };
+/** Свой раздел отдела в OneBase; у остальных отделов рабочий раздел — их задачи. Производство — задания на выпуск, рецептуры, качество сырья. */
+const departmentSections: Record<string, string> = { sales: "/sales", hr: "/hr", supply: "/procurement", production: "/production" };
 
 /**
  * Куда ведёт кнопка отдела: свой раздел («Продажи», HR, «Снабжение»), иначе задачи отдела; нет доступа — следующий доступный, и только в крайнем случае —

@@ -168,6 +168,14 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Procurement.ProcurementDocument> ProcurementDocuments => Set<OneBase.Domain.Procurement.ProcurementDocument>();
     public DbSet<OneBase.Domain.Procurement.ProcurementItem> ProcurementItems => Set<OneBase.Domain.Procurement.ProcurementItem>();
     public DbSet<OneBase.Domain.Procurement.ProcurementWarehouse> ProcurementWarehouses => Set<OneBase.Domain.Procurement.ProcurementWarehouse>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementWarehouseKeeper> ProcurementWarehouseKeepers => Set<OneBase.Domain.Procurement.ProcurementWarehouseKeeper>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementBatch> ProcurementBatches => Set<OneBase.Domain.Procurement.ProcurementBatch>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementBatchBalance> ProcurementBatchBalances => Set<OneBase.Domain.Procurement.ProcurementBatchBalance>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementQualitySpec> ProcurementQualitySpecs => Set<OneBase.Domain.Procurement.ProcurementQualitySpec>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementQualityCheck> ProcurementQualityChecks => Set<OneBase.Domain.Procurement.ProcurementQualityCheck>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementQualityResult> ProcurementQualityResults => Set<OneBase.Domain.Procurement.ProcurementQualityResult>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementQualityApprover> ProcurementQualityApprovers => Set<OneBase.Domain.Procurement.ProcurementQualityApprover>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementItemUnit> ProcurementItemUnits => Set<OneBase.Domain.Procurement.ProcurementItemUnit>();
     public DbSet<OneBase.Domain.Procurement.ProcurementStockBalance> ProcurementStockBalances => Set<OneBase.Domain.Procurement.ProcurementStockBalance>();
     public DbSet<OneBase.Domain.Procurement.ProcurementStockDocument> ProcurementStockDocuments => Set<OneBase.Domain.Procurement.ProcurementStockDocument>();
     public DbSet<OneBase.Domain.Procurement.ProcurementReceiptLine> ProcurementReceiptLines => Set<OneBase.Domain.Procurement.ProcurementReceiptLine>();
@@ -184,6 +192,11 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrder> ProcurementPurchaseOrders => Set<OneBase.Domain.Procurement.ProcurementPurchaseOrder>();
     public DbSet<OneBase.Domain.Procurement.ProcurementPurchaseOrderItem> ProcurementPurchaseOrderItems => Set<OneBase.Domain.Procurement.ProcurementPurchaseOrderItem>();
     public DbSet<OneBase.Domain.Procurement.ProcurementTender> ProcurementTenders => Set<OneBase.Domain.Procurement.ProcurementTender>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementSheetImport> ProcurementSheetImports => Set<OneBase.Domain.Procurement.ProcurementSheetImport>();
+    public DbSet<OneBase.Domain.Production.ProductionRecipe> ProductionRecipes => Set<OneBase.Domain.Production.ProductionRecipe>();
+    public DbSet<OneBase.Domain.Production.ProductionRecipeLine> ProductionRecipeLines => Set<OneBase.Domain.Production.ProductionRecipeLine>();
+    public DbSet<OneBase.Domain.Production.ProductionOrder> ProductionOrders => Set<OneBase.Domain.Production.ProductionOrder>();
+    public DbSet<OneBase.Domain.Production.ProductionOrderLine> ProductionOrderLines => Set<OneBase.Domain.Production.ProductionOrderLine>();
     public DbSet<OneBase.Domain.Procurement.ProcurementStockImport> ProcurementStockImports => Set<OneBase.Domain.Procurement.ProcurementStockImport>();
     public DbSet<OneBase.Domain.Procurement.ProcurementStockImportRow> ProcurementStockImportRows => Set<OneBase.Domain.Procurement.ProcurementStockImportRow>();
     public DbSet<OneBase.Domain.Procurement.ProcurementTenderItem> ProcurementTenderItems => Set<OneBase.Domain.Procurement.ProcurementTenderItem>();
@@ -214,6 +227,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         IncentiveModel.Configure(b);
         TelegramModel.Configure(b);
         ProcurementModel.Configure(b);
+        ProductionModel.Configure(b);
 
         // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.
         b.Entity<DataSourceConnection>(e =>

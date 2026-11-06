@@ -62,6 +62,7 @@ const titles: Record<string, string> = {
   "/requests/categories": "Настройки заявок",
   "/requests/approvals": "Согласования",
   "/procurement/stock": "Склад",
+  "/procurement/batches": "Партии",
   "/procurement/orders": "Заказы поставщикам",
   "/procurement/orders/new": "Новый заказ поставщику",
   "/procurement/suppliers": "Поставщики",
@@ -75,6 +76,11 @@ const titles: Record<string, string> = {
   "/procurement/digests": "Ежедневные сводки",
   "/procurement/receipts": "Приёмка",
   "/procurement/receipts/new": "Приёмка по заказу",
+  "/production": "Производство",
+  "/production/quality": "Качество",
+  "/production/orders": "Задания",
+  "/production/recipes": "Рецептуры",
+  "/production/reports": "Отчёты производства",
   "/reports": "Отчёты",
   "/ai": "AI Dashboard",
   ...Object.fromEntries(salesTabs.map((tab) => [tab.href, tab.label])),
@@ -97,6 +103,7 @@ function crumbsOf(pathname: string, title: string | undefined): Crumb[] | undefi
   if (pathname.startsWith("/tasks/")) return [ONEBASE, { label: "Задачи", href: "/tasks" }, ...last];
   if (pathname.startsWith("/requests/")) return [ONEBASE, { label: "Заявки", href: "/requests" }, ...last];
   if (pathname.startsWith("/procurement")) return [ONEBASE, DEPARTMENTS, { label: "Снабжение", href: "/procurement" }, ...last];
+  if (pathname.startsWith("/production")) return [ONEBASE, DEPARTMENTS, { label: "Производство", href: "/production" }, ...last];
   if (pathname === "/settings") return [ONEBASE, { label: "Настройки" }];
   if (pathname.startsWith("/settings")) return [ONEBASE, { label: "Настройки", href: "/settings" }, ...last];
   if (pathname.startsWith("/base")) return [ONEBASE, { label: "Файлы", href: "/base" }];
@@ -608,7 +615,7 @@ function ProcurementOverviewSkeleton({ pathname }: { pathname: string }) {
 function PageSkeleton({ pathname }: { pathname: string }) {
   if (pathname === "/procurement") return <ProcurementOverviewSkeleton pathname={pathname} />;
   const list =
-    pathname.startsWith("/tasks/") || pathname.startsWith("/settings/") || pathname.startsWith("/campaigns") || pathname.startsWith("/requests/") || pathname.startsWith("/procurement");
+    pathname.startsWith("/tasks/") || pathname.startsWith("/settings/") || pathname.startsWith("/campaigns") || pathname.startsWith("/requests/") || pathname.startsWith("/procurement") || pathname.startsWith("/production");
   return (
     <Busy>
       <Header pathname={pathname} />

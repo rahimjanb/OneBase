@@ -29,14 +29,171 @@ public class ProcurementItem : Entity
 
     /// <summary>Когда ушло уведомление «ниже минимума»; снимается, когда доступно снова не ниже минимума.</summary>
     public DateTimeOffset? LowStockNotifiedAt { get; set; }
+
+    /// <summary>
+    /// Учёт по партиям (сырьё): остаток — по партиям со сроком годности, выдаётся только непросроченное (FEFO). Включается сразу у позиции
+    /// без остатка, с остатком — вводом партий на весь остаток.
+    /// </summary>
+    public bool TracksBatches { get; set; }
+
+    /// <summary>Срок хранения, дней: срок годности партии по дате производства, когда срок не указан.</summary>
+    public int? ShelfLifeDays { get; set; }
+
+    /// <summary>За сколько дней до срока годности напомнить (null — 30).</summary>
+    public int? ExpiryWarningDays { get; set; }
+
+    /// <summary>Условия хранения: «сухо, до +25 °C».</summary>
+    public string? StorageConditions { get; set; }
+
+    /// <summary>Единицы закупки с коэффициентом (мешок = 50 кг): приход в них, остаток и партии — в единице карточки.</summary>
+    public ICollection<ProcurementItemUnit> Units { get; set; } = [];
+
+    /// <summary>
+    /// Контроль качества при приходе (только у позиции с партиями): нет — партия сразу допущена; документы или документы и лаборатория —
+    /// партия «на контроле» до решения назначенного (спецификация — ProcurementQualitySpec).
+    /// </summary>
+    public ProcurementQualityControl QualityControl { get; set; }
 }
 
-/// <summary>Склад. Пока один — «Центральный склад» (засевается при запуске); несколько складов — позже.</summary>
+/// <summary>
+/// Единица закупки позиции (D10): сколько единиц карточки в одной — «мешок = 50 кг». Приход по тендеру и на складе можно вести в ней:
+/// количество и цена пересчитываются в единицу карточки (остаток, партии и рецептуры — только в ней).
+/// </summary>
+public class ProcurementItemUnit
+{
+    public Guid ItemId { get; set; }
+    public ProcurementItem? Item { get; set; }
+    public required string UnitCode { get; set; }
+
+    /// <summary>Единиц карточки в одной единице закупки (больше нуля, до шести знаков).</summary>
+    public decimal Factor { get; set; }
+}
+
+/// <summary>
+/// Партия: свой номер LOT-год-NNNNN, номер партии производителя, поставщик, даты производства и годности, цена прихода за единицу.
+/// Партия одна на все склады: перемещение двигает ту же партию, поэтому номер, срок и история сохраняются. Появляется только приходом
+/// или вводом партий; не удаляется. Отметки ExpiryWarnedFor и ExpiredNotifiedOn — напоминания о сроке ушли (один раз на срок).
+/// QualityStatus — допущена, на контроле, забракована, заблокирована: выдаётся только допущенная и не просроченная (ProcurementBatchRules.Usable).
+/// </summary>
+public class ProcurementBatch : Entity
+{
+    public required string Number { get; set; }
+
+    public Guid ItemId { get; set; }
+    public ProcurementItem? Item { get; set; }
+
+    public string? SupplierBatchNo { get; set; }
+
+    public Guid? SupplierId { get; set; }
+    public ProcurementSupplier? Supplier { get; set; }
+
+    public DateOnly? ManufacturedOn { get; set; }
+
+    /// <summary>
+    /// Годен по этот день включительно (Ташкент): со следующего дня партия не выдаётся. null — «срок не указан» (только при вводе остатков):
+    /// партия заблокирована, пока назначенный по качеству не укажет срок.
+    /// </summary>
+    public DateOnly? ExpiresOn { get; set; }
+
+    public DateOnly ReceivedOn { get; set; }
+
+    /// <summary>Документ, которым партия появилась (приход, ввод партий, загрузка журнала).</summary>
+    public Guid SourceDocumentId { get; set; }
+
+    public decimal? UnitCost { get; set; }
+
+    public DateOnly? ExpiryWarnedFor { get; set; }
+    public DateOnly? ExpiredNotifiedOn { get; set; }
+
+    public ProcurementBatchQuality QualityStatus { get; set; } = ProcurementBatchQuality.Approved;
+
+    /// <summary>Последнее решение по качеству: допуск, брак, блокировка, снятие блокировки — кто и когда.</summary>
+    public DateTimeOffset? QualityDecidedAt { get; set; }
+
+    public Guid? QualityDecidedById { get; set; }
+
+    /// <summary>Почему заблокирована (у Blocked).</summary>
+    public string? BlockReason { get; set; }
+
+    public uint Version { get; set; }
+}
+
+/// <summary>
+/// Остаток партии на складе. У позиции с партиями остаток позиции на складе (ProcurementStockBalance) = сумма остатков её партий —
+/// держит проводка (ProcurementStockLedger), проверяют тесты. Резерв заявок — у позиции, не у партии. Version — xmin.
+/// </summary>
+public class ProcurementBatchBalance
+{
+    public Guid WarehouseId { get; set; }
+    public Guid BatchId { get; set; }
+    public ProcurementBatch? Batch { get; set; }
+    public Guid ItemId { get; set; }
+
+    public decimal OnHand { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public uint Version { get; set; }
+}
+
+/// <summary>Вид склада: центральный, склад сырья, кладовая цеха, другой.</summary>
+public enum ProcurementWarehouseKind
+{
+    Central,
+    RawMaterials,
+    Workshop,
+    Other,
+}
+
+/// <summary>
+/// Склад снабжения. «Центральный склад» засевается при запуске и остаётся складом по умолчанию: на нём резервируют заявки, на него приходуют
+/// приёмка и «Куплено». Остальные склады заводятся в «Настройки → Отделы → Снабжение». Не удаляется — отключается (только без остатка).
+/// Кладовщики склада (Keepers): закреплённый за складами проводит операции только по ним; без закреплений — по всем складам. Version — xmin.
+/// </summary>
 public class ProcurementWarehouse : Entity
 {
     public required string Code { get; set; }
     public required string Name { get; set; }
     public bool IsDefault { get; set; }
+
+    public ProcurementWarehouseKind Kind { get; set; } = ProcurementWarehouseKind.Central;
+
+    /// <summary>Отдел — у кладовой цеха (кому она принадлежит).</summary>
+    public Guid? DepartmentId { get; set; }
+    public Department? Department { get; set; }
+
+    public string? Address { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Кто ведёт данные склада в переходный период (D13): не выбран — как раньше (и ручные операции, и загрузка журнала); OneBase — загрузка
+    /// журнала закрыта; таблица — ручные операции закрыты (кроме контроля качества), остатки ведёт загрузка журнала. DataOwnerSince — с какой даты.
+    /// </summary>
+    public ProcurementDataOwner DataOwner { get; set; } = ProcurementDataOwner.None;
+
+    public DateOnly? DataOwnerSince { get; set; }
+
+    public uint Version { get; set; }
+
+    public ICollection<ProcurementWarehouseKeeper> Keepers { get; set; } = [];
+}
+
+/// <summary>Владелец данных склада: не выбран (как раньше), OneBase, таблица (Excel / Google Sheets).</summary>
+public enum ProcurementDataOwner
+{
+    None,
+    OneBase,
+    Sheet,
+}
+
+/// <summary>Кладовщик, закреплённый за складом.</summary>
+public class ProcurementWarehouseKeeper
+{
+    public Guid WarehouseId { get; set; }
+    public ProcurementWarehouse? Warehouse { get; set; }
+    public Guid UserId { get; set; }
+    public User? User { get; set; }
 }
 
 /// <summary>
@@ -72,6 +229,27 @@ public enum ProcurementMovementKind
 
     /// <summary>Корректировка по инвентаризации (± разница учёта и факта).</summary>
     Adjustment,
+
+    /// <summary>Перемещение: ушло со склада-отправителя (минус).</summary>
+    TransferOut,
+
+    /// <summary>Перемещение: пришло на склад-получатель (плюс).</summary>
+    TransferIn,
+
+    /// <summary>Ввод партий: остаток позиции не меняется (0), партия получает свою часть (BatchAfter).</summary>
+    BatchEntry,
+
+    /// <summary>Сторно: зеркально строке исправленного документа.</summary>
+    Reversal,
+
+    /// <summary>Возврат поставщику забракованной или заблокированной партии (минус).</summary>
+    SupplierReturn,
+
+    /// <summary>Выдача в производство по заданию на выпуск (минус): только годные партии.</summary>
+    ProductionIssue,
+
+    /// <summary>Возврат из производства по заданию (плюс): в ту же партию, не больше выданного.</summary>
+    ProductionReturn,
 }
 
 /// <summary>Состояние складского документа: приёмка по заказу сначала черновик (остатки не меняются) и проводится подтверждением.</summary>
@@ -91,10 +269,28 @@ public enum ProcurementStockDocumentKind
     Issue,
     WriteOff,
     Inventory,
+
+    /// <summary>Перемещение между складами: со склада документа (WarehouseId) на TargetWarehouseId, обе стороны — одной записью.</summary>
+    Transfer,
+
+    /// <summary>Ввод партий: имеющийся остаток позиции разложен по партиям со сроком — позиция начинает вестись по партиям.</summary>
+    BatchEntry,
+
+    /// <summary>Сторно: зеркальные движения документа ReversesDocumentId; исправленный документ не меняется.</summary>
+    Reversal,
+
+    /// <summary>Возврат поставщику забракованной или заблокированной партии (SRT-); не сторнируется.</summary>
+    SupplierReturn,
+
+    /// <summary>Выдача в производство по заданию на выпуск (PIS-); не сторнируется — исправляет возврат из производства.</summary>
+    ProductionIssue,
+
+    /// <summary>Возврат из производства по заданию (PRT-); не сторнируется.</summary>
+    ProductionReturn,
 }
 
 /// <summary>
-/// Складской документ: приход, выдача отделу, списание, инвентаризация. Номер — RC-, ISS-, WO-, INV-год-NNNNN. Строки — движения журнала.
+/// Складской документ: приход, выдача отделу, списание, инвентаризация, перемещение. Номер — RC-, ISS-, WO-, INV-, TRF-год-NNNNN. Строки — движения журнала.
 /// ClientKey — ключ повтора формы: повторное нажатие не проводит документ второй раз. Приход по заказу поставщику (OrderId) — приёмка:
 /// черновик с фактическим количеством, браком и недостачей (ReceiptLines); склад меняется только при подтверждении. Version — xmin:
 /// двойное подтверждение одной приёмки не проводит её дважды.
@@ -113,6 +309,24 @@ public class ProcurementStockDocument : Entity
     public ProcurementPurchaseOrder? Order { get; set; }
 
     public Guid WarehouseId { get; set; }
+
+    /// <summary>Склад-получатель (перемещение); у остальных документов — null.</summary>
+    public Guid? TargetWarehouseId { get; set; }
+
+    /// <summary>Сторно: какой документ исправляет (уникально — документ сторнируется один раз).</summary>
+    public Guid? ReversesDocumentId { get; set; }
+
+    /// <summary>Поставщик прихода без заказа (переходит в партии); у возврата поставщику — кому вернули.</summary>
+    public Guid? SupplierId { get; set; }
+
+    /// <summary>Списание проб лаборатории — по какой проверке качества (такое списание не сторнируется).</summary>
+    public Guid? QualityCheckId { get; set; }
+
+    /// <summary>Поставка по тендеру (приход): какой тендерной закупки — не сторнируется (поставленное уже в тендере).</summary>
+    public Guid? TenderId { get; set; }
+
+    /// <summary>Выдача в производство и возврат из него: по какому заданию на выпуск (не сторнируются — выданное считается в задании).</summary>
+    public Guid? ProductionOrderId { get; set; }
 
     /// <summary>Отдел-получатель (выдача).</summary>
     public Guid? DepartmentId { get; set; }
@@ -222,6 +436,12 @@ public class ProcurementStockMovement : Entity
     public Guid? RequestItemId { get; set; }
 
     public Guid? ActorId { get; set; }
+
+    /// <summary>Партия (у позиции с партиями — у каждой строки) и её остаток на складе до и после.</summary>
+    public Guid? BatchId { get; set; }
+    public ProcurementBatch? Batch { get; set; }
+    public decimal? BatchBefore { get; set; }
+    public decimal? BatchAfter { get; set; }
 }
 
 public enum ProcurementReservationStatus
@@ -257,12 +477,13 @@ public enum ProcurementApprovalDecision
     Revision,
 }
 
-/// <summary>Шаг маршрута согласования заявки: руководитель отдела, финансист, директор.</summary>
+/// <summary>Шаг маршрута согласования заявки: руководитель отдела, финансист, директор; в маршруте сырья — руководитель снабжения.</summary>
 public static class ProcurementApprovalStages
 {
     public const string Head = "head";
     public const string Finance = "finance";
     public const string Director = "director";
+    public const string SupplyHead = "supply_head";
 }
 
 /// <summary>
@@ -320,6 +541,44 @@ public class ProcurementSettings
     /// <summary>Лимит покупки без директора, сум: заявка на большую сумму после финансиста идёт к директору.</summary>
     public decimal DirectorLimit { get; set; } = DefaultDirectorLimit;
 
+    /// <summary>
+    /// Маршрут сырья включён: заявка с закупкой позиции категории сырья идёт руководителю снабжения, затем директору (всегда). Выключен —
+    /// все заявки идут обычным маршрутом (так было до этапа закупки сырья).
+    /// </summary>
+    public bool RawRouteEnabled { get; set; }
+
+    /// <summary>Руководитель снабжения в маршруте сырья; не выбран — руководители отдела «Снабжение».</summary>
+    public Guid? SupplyApproverId { get; set; }
+
+    /// <summary>Перерасход сырья по заданию на выпуск, %, выше которого строка помечается и руководитель производства получает уведомление.</summary>
+    public decimal OverconsumptionPercent { get; set; } = DefaultOverconsumptionPercent;
+
+    public const decimal DefaultOverconsumptionPercent = 5m;
+
     public DateTimeOffset? UpdatedAt { get; set; }
     public Guid? UpdatedById { get; set; }
+}
+
+/// <summary>
+/// Загрузка журнала склада из таблицы Google (переходный период, этап 7): подключение из «Источников данных», лист, склад, расписание
+/// (manual — кнопкой, interval — каждые IntervalMinutes, daily — в DailyAt по Ташкенту). Разбор — тот же, что у файла: те же проверки и отчёт,
+/// повторная загрузка не проводит строки второй раз. OwnerId — кладовщик, от имени которого проводится загрузка по расписанию.
+/// </summary>
+public class ProcurementSheetImport : Entity
+{
+    public Guid WarehouseId { get; set; }
+    public ProcurementWarehouse? Warehouse { get; set; }
+    public Guid ConnectionId { get; set; }
+    public required string Sheet { get; set; }
+    public string Schedule { get; set; } = "manual";
+    public int? IntervalMinutes { get; set; }
+    public string? DailyAt { get; set; }
+    public bool Enabled { get; set; } = true;
+    public DateTimeOffset? NextRunAt { get; set; }
+    public DateTimeOffset? LastRunAt { get; set; }
+    public string? LastStatus { get; set; }
+    public string? LastMessage { get; set; }
+    public Guid OwnerId { get; set; }
+    public User? Owner { get; set; }
+    public uint Version { get; set; }
 }

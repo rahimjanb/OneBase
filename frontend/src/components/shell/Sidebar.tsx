@@ -38,7 +38,7 @@ export const navGroups: NavGroup[] = [
     title: "Рабочее пространство",
     items: [
       { href: "/", label: "Обзор", icon: LayoutGrid, also: ["/me"] },
-      { href: "/departments", label: "Отделы", icon: Building2, also: ["/sales", "/procurement", "/hr"] },
+      { href: "/departments", label: "Отделы", icon: Building2, also: ["/sales", "/procurement", "/production", "/hr"] },
       { href: "/tasks", label: "Задачи", icon: ListChecks },
       { href: "/requests", label: "Заявки", icon: ClipboardPen },
       { href: "/reports", label: "Отчёты", icon: ChartColumn, soon: true, badge: "скоро" },

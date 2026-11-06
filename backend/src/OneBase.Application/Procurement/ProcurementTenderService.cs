@@ -1,16 +1,21 @@
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Field;
+using OneBase.Application.Work;
 using OneBase.Domain.Procurement;
 
 namespace OneBase.Application.Procurement;
 
-/// <summary>Позиция тендерной закупки из формы: наименование, единица, количество, цена за единицу (сум).</summary>
-public sealed record ProcurementTenderLineInput(string? Name, string? UnitCode, decimal Quantity, decimal Price);
+/// <summary>
+/// Позиция тендерной закупки из формы: наименование, единица, количество, цена за единицу (сум); карточка склада (ItemId) — тогда позицию
+/// принимают на склад: единица — карточки или её единица закупки.
+/// </summary>
+public sealed record ProcurementTenderLineInput(string? Name, string? UnitCode, decimal Quantity, decimal Price, Guid? ItemId = null);
 
 /// <summary>
 /// Тендерная закупка из формы: предмет, номер и дата тендера, победитель (поставщик из справочника или название — новый добавится сам),
-/// категория, договор, участники, срок поставки, комментарий, позиции. ClientKey — ключ повтора формы; Version — версия при правке.
+/// категория, договор, участники, срок поставки, комментарий, позиции. ClientKey — ключ повтора формы; Version — версия при правке;
+/// RequestId — утверждённая заявка, которую исполняет тендер; WarehouseId — склад поставки (не указан — склад по умолчанию).
 /// </summary>
 public sealed record ProcurementTenderInput(
     string? Title,
@@ -25,7 +30,19 @@ public sealed record ProcurementTenderInput(
     string? Comment,
     IReadOnlyList<ProcurementTenderLineInput>? Items,
     Guid? ClientKey = null,
-    uint? Version = null);
+    uint? Version = null,
+    Guid? RequestId = null,
+    Guid? WarehouseId = null);
+
+/// <summary>Строка поставки по тендеру: позиция тендера, сколько пришло (в её единице), партии (у позиции склада с партиями; в той же единице).</summary>
+public sealed record ProcurementTenderDeliveryLine(Guid TenderItemId, decimal Quantity, IReadOnlyList<ProcurementBatchInput>? Batches = null);
+
+/// <summary>Поставка по тендеру на склад: строки, склад (не указан — склад тендера), номер накладной, комментарий, ключ повтора формы.</summary>
+public sealed record ProcurementTenderDeliveryInput(IReadOnlyList<ProcurementTenderDeliveryLine>? Lines, Guid? WarehouseId = null, string? Reference = null, string? Comment = null,
+    Guid? ClientKey = null);
+
+/// <summary>Поставка по тендеру в его карточке: приход RC-, когда, накладная, позиций (партии одной позиции — одна), кто принял.</summary>
+public sealed record ProcurementTenderDeliveryView(Guid DocumentId, string Number, DateTimeOffset At, string? Reference, int Lines, string? ActorName);
 
 /// <summary>Строка журнала: Overdue — договор, срок поставки прошёл, а поставки нет.</summary>
 public sealed record ProcurementTenderRow(
@@ -64,10 +81,18 @@ public sealed record ProcurementTenderList(
     int Overdue,
     bool CanCreate);
 
-public sealed record ProcurementTenderItemView(Guid Id, int LineNo, string Name, string UnitCode, decimal Quantity, decimal Price, decimal Sum);
+/// <summary>
+/// Позиция тендера в карточке: карточка склада (артикул, единица карточки, партии, срок хранения), коэффициент единицы тендера к единице
+/// карточки (1 — та же; null — не пересчитать), поставлено и осталось (в единице позиции тендера).
+/// </summary>
+public sealed record ProcurementTenderItemView(Guid Id, int LineNo, string Name, string UnitCode, decimal Quantity, decimal Price, decimal Sum, Guid? ItemId = null,
+    string? Sku = null, string? ItemUnitCode = null, bool TracksBatches = false, int? ShelfLifeDays = null, decimal? Factor = null, decimal ReceivedQty = 0, decimal Left = 0);
 
-/// <summary>Что можно с записью: изменить, отметить поставку, отменить, прикрепить документы — снабжение; отменённую — ничего.</summary>
-public sealed record ProcurementTenderAbilities(bool Edit, bool Deliver, bool Cancel, bool Attach);
+/// <summary>
+/// Что можно с записью: изменить, отметить поставку (закрыть без склада), отменить, прикрепить документы — снабжение; принять поставку на склад —
+/// кладовщик (по позициям с карточкой склада, пока тендер ждёт поставки); отменённую — ничего.
+/// </summary>
+public sealed record ProcurementTenderAbilities(bool Edit, bool Deliver, bool Cancel, bool Attach, bool Receive = false);
 
 public sealed record ProcurementTenderDetail(
     Guid Id,
@@ -94,14 +119,22 @@ public sealed record ProcurementTenderDetail(
     IReadOnlyList<ProcurementTenderItemView> Items,
     IReadOnlyList<ProcurementDocumentView> Documents,
     IReadOnlyList<ProcurementEventView> History,
-    ProcurementTenderAbilities Can);
+    ProcurementTenderAbilities Can,
+    Guid? RequestId = null,
+    string? RequestNumber = null,
+    string? RequestTitle = null,
+    Guid? WarehouseId = null,
+    string? WarehouseName = null,
+    IReadOnlyList<ProcurementTenderDeliveryView>? Deliveries = null);
 
 /// <summary>
 /// Журнал тендерных закупок снабжения: сырьё и материалы для производства, закупленные через тендер. Записи добавляет и правит снабжение
-/// (каждое изменение — в истории: было и стало), отмечает поставку; ошибочную запись отменяет с причиной — не удаляет. Видят снабжение и
-/// директор. На склад снабжения записи не приходуются.
+/// (каждое изменение — в истории: было и стало), отмечает поставку; ошибочную запись отменяет с причиной — не удаляет. Тендер исполняет
+/// утверждённую заявку и поставляется на склад: кладовщик принимает поставку партиями (на контроль, если у позиции контроль качества), у
+/// позиций растёт «поставлено». Видят снабжение, директор и кладовщик.
 /// </summary>
-public sealed class ProcurementTenderService(IAppDbContext db, IProcurementNumbers numbers, ProcurementDocumentService documents)
+public sealed class ProcurementTenderService(IAppDbContext db, IProcurementNumbers numbers, ProcurementDocumentService documents, ProcurementStockLedger ledger,
+    UserNotifier notifier)
 {
     public const string Doc = "tender";
     public const string Prefix = "TN";
@@ -111,9 +144,9 @@ public sealed class ProcurementTenderService(IAppDbContext db, IProcurementNumbe
 
     private static void RequireView(ProcurementContext ctx)
     {
-        if (!ctx.ReadsAll && !ctx.IsDirector)
+        if (!ctx.ReadsAll && !ctx.IsDirector && !ctx.Warehouse)
         {
-            throw new FieldForbiddenException("Тендерные закупки видят снабжение и директор.");
+            throw new FieldForbiddenException("Тендерные закупки видят снабжение, директор и кладовщик.");
         }
     }
 
@@ -184,14 +217,171 @@ public sealed class ProcurementTenderService(IAppDbContext db, IProcurementNumbe
         var history = await db.ProcurementAuditLogs.AsNoTracking().Where(e => e.DocType == Doc && e.DocId == id).OrderBy(e => e.CreatedAt)
             .Select(e => new ProcurementEventView(e.Id, e.Action, e.Text, e.Actor == null ? "Система" : e.Actor.FullName, e.FromStatus, e.ToStatus, e.Comment, e.CreatedAt))
             .ToListAsync(ct);
+        var itemIds = t.Items.Select(i => i.ItemId).OfType<Guid>().Distinct().ToList();
+        var cards = await db.ProcurementItems.AsNoTracking().Include(i => i.Units).Where(i => itemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id, ct);
+        var items = t.Items.OrderBy(i => i.LineNo).Select(i =>
+        {
+            var card = i.ItemId is { } itemId ? cards.GetValueOrDefault(itemId) : null;
+            var factor = card is null ? (decimal?)null : ProcurementUnitRules.Factor(card.UnitCode, i.UnitCode, card.Units.Select(u => (u.UnitCode, u.Factor)));
+            return new ProcurementTenderItemView(i.Id, i.LineNo, i.Name, i.UnitCode, i.Quantity, i.Price, Math.Round(i.Quantity * i.Price, 2), i.ItemId, card?.Sku, card?.UnitCode,
+                card?.TracksBatches ?? false, card?.ShelfLifeDays, factor, i.ReceivedQty, Math.Max(0, i.Quantity - i.ReceivedQty));
+        }).ToList();
+        var deliveries = await db.ProcurementStockDocuments.AsNoTracking().Where(d => d.TenderId == id).OrderBy(d => d.CreatedAt)
+            .Select(d => new ProcurementTenderDeliveryView(d.Id, d.Number, d.PostedAt ?? d.CreatedAt, d.Reference,
+                db.ProcurementStockMovements.Where(m => m.DocumentId == d.Id).Select(m => m.ItemId).Distinct().Count(), d.Actor == null ? null : d.Actor.FullName))
+            .ToListAsync(ct);
+        var request = t.RequestId is { } requestId
+            ? await db.ProcurementRequests.AsNoTracking().Where(r => r.Id == requestId).Select(r => new { r.Number, r.Title }).FirstOrDefaultAsync(ct)
+            : null;
+        var warehouse = t.WarehouseId is { } warehouseId ? await db.ProcurementWarehouses.AsNoTracking().Where(w => w.Id == warehouseId).Select(w => w.Name).FirstOrDefaultAsync(ct) : null;
         var open = t.Status != ProcurementTenderStatus.Cancelled;
-        var can = new ProcurementTenderAbilities(ctx.Manages && open, ctx.Manages && t.Status == ProcurementTenderStatus.Contracted, ctx.Manages && open, ctx.Manages);
+        var contracted = t.Status == ProcurementTenderStatus.Contracted;
+        var can = new ProcurementTenderAbilities(ctx.Manages && open, ctx.Manages && contracted, ctx.Manages && open, ctx.Manages,
+            ctx.Warehouse && contracted && items.Any(i => i.ItemId is not null && i.Factor is not null && i.Left > 0));
         return new ProcurementTenderDetail(t.Id, t.Number, t.Title, t.TenderNo, t.TenderDate, t.SupplierId, t.Supplier!.Name, t.CategoryId, t.Category!.Name, t.ContractNo,
             t.Participants, t.DeliveryDate, t.Status, t.DeliveredOn, t.CancelledAt, Overdue(t), t.Total, t.Comment, t.Responsible!.FullName, t.CreatedAt, t.Version,
-            t.Items.OrderBy(i => i.LineNo).Select(i => new ProcurementTenderItemView(i.Id, i.LineNo, i.Name, i.UnitCode, i.Quantity, i.Price, Math.Round(i.Quantity * i.Price, 2)))
-                .ToList(),
-            await documents.ListAsync(ctx, Doc, id, ct), history, can);
+            items, await documents.ListAsync(ctx, Doc, id, ct), history, can, t.RequestId, request?.Number, request?.Title, t.WarehouseId, warehouse, deliveries);
     }
+
+    // ---------- Поставка на склад ----------
+
+    /// <summary>
+    /// Поставка по тендеру на склад (кладовщик склада): строки по позициям тендера с карточкой склада — сколько пришло в единице позиции (не
+    /// больше осталось), у позиции с партиями — партии со сроком (сумма = количество). Пересчёт в единицу карточки — по единице закупки.
+    /// Одной записью: приход RC- со ссылкой на тендер (поставщик — победитель, цена — тендера), партии — на контроль, если у позиции контроль
+    /// качества; «поставлено» у позиций; поставлено всё — тендер поставлен. Повтор формы с тем же ключом не принимает второй раз.
+    /// </summary>
+    public Task<Guid> DeliverAsync(ProcurementContext ctx, Guid id, ProcurementTenderDeliveryInput input, CancellationToken ct) => ledger.RetryAsync(async () =>
+    {
+        if (!ctx.Warehouse)
+        {
+            throw new FieldForbiddenException("Поставку по тендеру принимает кладовщик.");
+        }
+
+        if (input.ClientKey is { } key)
+        {
+            var done = await db.ProcurementStockDocuments.AsNoTracking().Where(d => d.ActorId == ctx.UserId && d.ClientKey == key).Select(d => d.Id).FirstOrDefaultAsync(ct);
+            if (done != Guid.Empty)
+            {
+                return done;
+            }
+        }
+
+        var tender = await TrackedAsync(id, ct);
+        if (tender.Status != ProcurementTenderStatus.Contracted)
+        {
+            throw new FieldConflictException(tender.Status == ProcurementTenderStatus.Delivered
+                ? "По тендеру всё поставлено — принимать больше нечего."
+                : "Тендерная закупка отменена — поставку по ней не принять.");
+        }
+
+        var lines = (input.Lines ?? []).Where(l => l.Quantity != 0).ToList();
+        if (lines.Count == 0)
+        {
+            throw new FieldValidationException("Укажите, что пришло: количество хотя бы по одной позиции.");
+        }
+
+        if (lines.GroupBy(l => l.TenderItemId).Any(g => g.Count() > 1))
+        {
+            throw new FieldValidationException("Позиция повторяется — укажите её одной строкой.");
+        }
+
+        var store = await ledger.WarehouseAsync(ctx, input.WarehouseId ?? tender.WarehouseId, ct);
+        var itemIds = tender.Items.Select(i => i.ItemId).OfType<Guid>().Distinct().ToList();
+        var cards = await db.ProcurementItems.AsNoTracking().Include(i => i.Units).Where(i => itemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id, ct);
+        var balances = await ledger.BalancesAsync(store.Id, itemIds, ct);
+        var doc = await ledger.DocumentAsync(ProcurementStockDocumentKind.Receipt, store.Id, ctx.UserId, ct);
+        doc.TenderId = tender.Id;
+        doc.SupplierId = tender.SupplierId;
+        doc.PostedAt = Now;
+        doc.Reference = Text(input.Reference, 100, "Номер накладной");
+        doc.Comment = Text(input.Comment, 1000, "Комментарий") ?? $"Поставка по тендеру {tender.Number}";
+        doc.ClientKey = input.ClientKey;
+        var received = new List<string>();
+        foreach (var line in lines)
+        {
+            var ti = tender.Items.FirstOrDefault(i => i.Id == line.TenderItemId) ?? throw new FieldValidationException("Позиция не из этой тендерной закупки.");
+            if (ti.ItemId is not { } itemId || cards.GetValueOrDefault(itemId) is not { } card)
+            {
+                throw new FieldValidationException($"«{ti.Name}»: позиция не связана с карточкой склада — свяжите её в тендере, чтобы принять на склад.");
+            }
+
+            var label = $"{card.Sku} {card.Name}";
+            if (line.Quantity < 0 || line.Quantity > ProcurementRules.MaxQuantity || decimal.Round(line.Quantity, 3) != line.Quantity)
+            {
+                throw new FieldValidationException($"«{ti.Name}»: количество — больше нуля, не больше трёх знаков после запятой.");
+            }
+
+            var left = ti.Quantity - ti.ReceivedQty;
+            if (line.Quantity > left)
+            {
+                throw new FieldConflictException(left > 0
+                    ? $"«{ti.Name}»: по тендеру осталось поставить {ProcurementRules.Quantity(left)} {ti.UnitCode} — больше не принять."
+                    : $"«{ti.Name}»: по тендеру поставлено всё.");
+            }
+
+            var factor = ProcurementUnitRules.Factor(card.UnitCode, ti.UnitCode, card.Units.Select(u => (u.UnitCode, u.Factor)))
+                         ?? throw new FieldValidationException(
+                             $"«{ti.Name}»: единица тендера «{ti.UnitCode}» не совпадает с карточкой ({card.UnitCode}) — добавьте её в единицы закупки карточки.");
+            decimal Base(decimal quantity) => ProcurementUnitRules.ToBase(quantity, factor)
+                                              ?? throw new FieldValidationException($"«{ti.Name}»: {ProcurementRules.Quantity(quantity)} {ti.UnitCode} — больше трёх знаков в {card.UnitCode}.");
+            var quantity = Base(line.Quantity);
+            var cost = ProcurementUnitRules.CostToBase(ti.Price, factor);
+            var balance = balances[card.Id];
+            if (ledger.Tracks(card.Id))
+            {
+                var batches = line.Batches ?? [];
+                if (batches.Count == 0 || batches.Count > ProcurementBatchRules.MaxBatchesPerLine)
+                {
+                    throw new FieldValidationException($"«{label}» ведётся по партиям — укажите партии и срок годности (до {ProcurementBatchRules.MaxBatchesPerLine}).");
+                }
+
+                if (batches.Sum(b => b.Quantity) != line.Quantity)
+                {
+                    throw new FieldValidationException(
+                        $"«{label}»: партии вместе — {ProcurementRules.Quantity(batches.Sum(b => b.Quantity))}, а пришло {ProcurementRules.Quantity(line.Quantity)} {ti.UnitCode} — должно совпасть.");
+                }
+
+                foreach (var b in batches)
+                {
+                    var expires = ProcurementBatchRules.ExpiresOn(b.ExpiresOn, b.ManufacturedOn, card.ShelfLifeDays);
+                    if (ProcurementBatchRules.Check(label, b, expires, ledger.Today) is { } error)
+                    {
+                        throw new FieldValidationException(error);
+                    }
+
+                    var batch = await ledger.NewBatchAsync(doc, store.Id, card.Id, b.SupplierBatchNo, b.ManufacturedOn, expires!.Value, cost, tender.SupplierId, ct, card.QualityControl);
+                    ledger.MoveBatch(doc, balance, batch, ProcurementMovementKind.Receipt, Base(b.Quantity), label, cost);
+                }
+            }
+            else if (line.Batches is { Count: > 0 })
+            {
+                throw new FieldValidationException($"«{label}»: позиция склада ведётся без партий — партии не указывайте.");
+            }
+            else
+            {
+                ledger.Move(doc, balance, ProcurementMovementKind.Receipt, quantity, label, cost);
+            }
+
+            ti.ReceivedQty += line.Quantity;
+            received.Add($"{ti.Name} — {ProcurementRules.Quantity(line.Quantity)} {ti.UnitCode}");
+        }
+
+        var from = tender.Status;
+        if (tender.Items.All(i => i.ReceivedQty >= i.Quantity))
+        {
+            tender.Status = ProcurementTenderStatus.Delivered;
+            tender.DeliveredOn = ledger.Today;
+        }
+
+        tender.UpdatedAt = Now;
+        Log(ctx, tender.Id, "received", from == tender.Status ? null : from, from == tender.Status ? null : tender.Status,
+            $"Принято на склад «{store.Name}» ({doc.Number}): {string.Join(", ", received)}{(tender.Status == ProcurementTenderStatus.Delivered ? " — поставлено всё" : "")}",
+            doc.Reference);
+        await ProcurementQualityNotices.NewChecksAsync(db, notifier, ledger.NewChecks, ct);
+        await db.SaveChangesAsync(ct);
+        return doc.Id;
+    });
 
     private static bool Overdue(ProcurementTender t) =>
         t.Status == ProcurementTenderStatus.Contracted && t.DeliveryDate is { } d && d < FieldClock.Today;
@@ -240,10 +430,10 @@ public sealed class ProcurementTenderService(IAppDbContext db, IProcurementNumbe
             throw new FieldConflictException("Запись уже изменили в другом окне — обновите страницу.");
         }
 
-        var before = Describe(tender, tender.Supplier!.Name, tender.Category!.Name);
+        var before = Describe(tender, tender.Supplier!.Name, tender.Category!.Name, await LinksAsync(tender, ct));
         var (supplier, created) = await ApplyAsync(ctx, tender, input, ct);
         var category = await db.ProcurementCategories.AsNoTracking().Where(c => c.Id == tender.CategoryId).Select(c => c.Name).FirstAsync(ct);
-        var after = Describe(tender, supplier.Name, category);
+        var after = Describe(tender, supplier.Name, category, await LinksAsync(tender, ct));
         var changes = before.Where(b => after.GetValueOrDefault(b.Key) != b.Value).Select(b => $"{b.Key}: {b.Value} → {after[b.Key]}").ToList();
         if (changes.Count == 0)
         {
@@ -377,6 +567,57 @@ public sealed class ProcurementTenderService(IAppDbContext db, IProcurementNumbe
             items.Add(new ProcurementTenderItem { TenderId = tender.Id, LineNo = no, Name = name, UnitCode = unit, Quantity = line.Quantity, Price = line.Price });
         }
 
+        // Карточки склада позиций: действующие; единица позиции — карточки или её единица закупки (иначе на складе не пересчитать).
+        var linkIds = items.Select(i => lines[i.LineNo - 1].ItemId).OfType<Guid>().Distinct().ToList();
+        var linked = await db.ProcurementItems.AsNoTracking().Include(i => i.Units).Where(i => linkIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id, ct);
+        foreach (var item in items)
+        {
+            if (lines[item.LineNo - 1].ItemId is not { } itemId)
+            {
+                continue;
+            }
+
+            var card = linked.GetValueOrDefault(itemId);
+            if (card is null || (!card.IsActive && tender.Items.All(i => i.ItemId != itemId)))
+            {
+                throw new FieldValidationException($"«{item.Name}»: карточка склада не найдена или отключена.");
+            }
+
+            if (ProcurementUnitRules.Factor(card.UnitCode, item.UnitCode, card.Units.Select(u => (u.UnitCode, u.Factor))) is null)
+            {
+                throw new FieldValidationException(
+                    $"«{item.Name}»: единица «{item.UnitCode}» не совпадает с карточкой «{card.Sku}» ({card.UnitCode}) — добавьте её в единицы закупки карточки.");
+            }
+
+            item.ItemId = itemId;
+        }
+
+        // Заявка, которую исполняет тендер, — утверждённая (уже связанную можно оставить); склад поставки — действующий.
+        if (input.RequestId is { } requestId && requestId != tender.RequestId
+            && !await db.ProcurementRequests.AnyAsync(r => r.Id == requestId && ProcurementOrderService.Orderable.Contains(r.Status), ct))
+        {
+            throw new FieldValidationException("Свяжите тендер с утверждённой заявкой — к закупке.");
+        }
+
+        if (input.WarehouseId is { } warehouseId && warehouseId != tender.WarehouseId && !await db.ProcurementWarehouses.AnyAsync(w => w.Id == warehouseId && w.IsActive, ct))
+        {
+            throw new FieldValidationException("Склад поставки не найден или отключён.");
+        }
+
+        // После поставки на склад позиции не меняются: «поставлено» считается по ним.
+        if (tender.Items.Any(i => i.ReceivedQty > 0))
+        {
+            static string Line(string name, string unit, decimal quantity, decimal price, Guid? itemId) => $"{name}|{unit}|{quantity}|{price}|{itemId}";
+            var was = tender.Items.OrderBy(i => i.LineNo).Select(i => Line(i.Name, i.UnitCode, i.Quantity, i.Price, i.ItemId)).ToList();
+            var now = items.Select(i => Line(i.Name, i.UnitCode, i.Quantity, i.Price, i.ItemId)).ToList();
+            if (!was.SequenceEqual(now))
+            {
+                throw new FieldConflictException("По тендеру уже есть поставки на склад — позиции не изменить (остаток закрывает «Отметить поставку»).");
+            }
+
+            items = tender.Items.OrderBy(i => i.LineNo).ToList();
+        }
+
         var supplier = await ProcurementSupplierService.ResolveAsync(db, ctx, input.SupplierId, input.SupplierName, "Укажите победителя тендера — поставщика.", ct);
         tender.Title = title;
         tender.TenderNo = Text(input.TenderNo, 100, "Номер тендера");
@@ -388,24 +629,36 @@ public sealed class ProcurementTenderService(IAppDbContext db, IProcurementNumbe
         tender.Participants = input.Participants;
         tender.DeliveryDate = input.DeliveryDate;
         tender.Comment = Text(input.Comment, 2000, "Комментарий");
-        foreach (var old in tender.Items.ToList())
+        tender.RequestId = input.RequestId;
+        tender.WarehouseId = input.WarehouseId;
+        if (!tender.Items.Any(i => i.ReceivedQty > 0))
         {
-            db.ProcurementTenderItems.Remove(old);
-        }
+            foreach (var old in tender.Items.ToList())
+            {
+                db.ProcurementTenderItems.Remove(old);
+            }
 
-        tender.Items.Clear();
-        foreach (var item in items)
-        {
-            tender.Items.Add(item);
-            db.ProcurementTenderItems.Add(item);
+            tender.Items.Clear();
+            foreach (var item in items)
+            {
+                tender.Items.Add(item);
+                db.ProcurementTenderItems.Add(item);
+            }
         }
 
         tender.Total = items.Sum(i => Math.Round(i.Quantity * i.Price, 2));
         return supplier;
     }
 
+    /// <summary>Номер связанной заявки и название склада поставки — для истории правок.</summary>
+    private async Task<(string Request, string Warehouse)> LinksAsync(ProcurementTender t, CancellationToken ct) =>
+    (
+        t.RequestId is { } r ? await db.ProcurementRequests.AsNoTracking().Where(x => x.Id == r).Select(x => x.Number).FirstOrDefaultAsync(ct) ?? "—" : "—",
+        t.WarehouseId is { } w ? await db.ProcurementWarehouses.AsNoTracking().Where(x => x.Id == w).Select(x => x.Name).FirstOrDefaultAsync(ct) ?? "—" : "—"
+    );
+
     /// <summary>Поля записи для истории правок: подпись → значение.</summary>
-    private static Dictionary<string, string> Describe(ProcurementTender t, string supplier, string category) => new()
+    private static Dictionary<string, string> Describe(ProcurementTender t, string supplier, string category, (string Request, string Warehouse) links) => new()
     {
         ["предмет"] = t.Title,
         ["номер тендера"] = t.TenderNo ?? "—",
@@ -415,6 +668,8 @@ public sealed class ProcurementTenderService(IAppDbContext db, IProcurementNumbe
         ["договор"] = t.ContractNo ?? "—",
         ["участников"] = t.Participants?.ToString() ?? "—",
         ["срок поставки"] = t.DeliveryDate?.ToString("dd.MM.yyyy") ?? "—",
+        ["заявка"] = links.Request,
+        ["склад"] = links.Warehouse,
         ["комментарий"] = t.Comment ?? "—",
         ["позиции"] = string.Join(", ", t.Items.OrderBy(i => i.LineNo)
             .Select(i => $"{i.Name} {ProcurementRules.Quantity(i.Quantity)} {i.UnitCode} × {ProcurementRules.Money(i.Price)}")),

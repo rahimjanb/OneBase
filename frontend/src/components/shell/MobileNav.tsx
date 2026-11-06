@@ -42,7 +42,7 @@ const tasksHref = "/tasks";
 
 /** Веер слева направо: разделы, которых нет во вкладках, и создание рассылки. Цвета иконок — умеренные, у каждого пункта свой. */
 const fanSections: (FanItem & { allowed: (p: readonly string[]) => boolean })[] = [
-  { href: "/departments", label: "Отделы", icon: Grid3x3, color: "#22b573", also: ["/sales", "/procurement", "/hr"], allowed: (p) => canOpen("/departments", p) },
+  { href: "/departments", label: "Отделы", icon: Grid3x3, color: "#22b573", also: ["/sales", "/procurement", "/production", "/hr"], allowed: (p) => canOpen("/departments", p) },
   { href: "/base", label: "Файлы", icon: Database, color: "#ff8a00", also: ["/files"], allowed: (p) => canOpen("/base", p) },
   { href: "/data-manager", label: "Данные", icon: DatabaseZap, color: "#14b8a6", allowed: (p) => canOpen("/data-manager", p) },
   { href: tasksHref, label: "Задачи", icon: ClipboardList, color: "#8b5cf6", allowed: (p) => canOpen(tasksHref, p) },
