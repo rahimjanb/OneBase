@@ -80,3 +80,19 @@ export async function apiTry<T>(path: string): Promise<T | null> {
     return null;
   }
 }
+
+/**
+ * Запрос для карточки, которая отличает «нет доступа» от сбоя: нет сессии, 401 или 403 — forbidden (карточка без числа), сеть или другой
+ * ответ — error (карточка «Не удалось загрузить» и «Повторить»).
+ */
+export async function apiOutcome<T>(path: string): Promise<{ state: "ok"; data: T } | { state: "forbidden" } | { state: "error" }> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) return { state: "forbidden" };
+  try {
+    const response = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}`, "Accept-Language": await getLang() }, cache: "no-store" });
+    if (response.status === 401 || response.status === 403) return { state: "forbidden" };
+    return response.ok ? { state: "ok", data: (await response.json()) as T } : { state: "error" };
+  } catch {
+    return { state: "error" };
+  }
+}

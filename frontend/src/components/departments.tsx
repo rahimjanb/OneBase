@@ -9,10 +9,10 @@ import {
   UserRound,
   type LucideIcon,
 } from "lucide-react";
-import { Card, ProgressBar, StatusDot } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { getT } from "@/i18n/server";
 import type { Department } from "@/lib/demo-data";
-import { filesLabel, foldersLabel, percent } from "@/lib/format";
+import { filesLabel, foldersLabel } from "@/lib/format";
 
 const icons: Record<string, LucideIcon> = {
   production: Factory,
@@ -29,30 +29,6 @@ export function DepartmentIcon({ code }: { code: string }) {
     <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
       <Icon className="size-[18px]" strokeWidth={2} />
     </span>
-  );
-}
-
-/** Карточка показателей отдела («Отделы»): открывает раздел отдела — href из departmentHref (свой раздел или задачи отдела). Только с сервера. */
-export async function DepartmentStatusCard({ department: d, href }: { department: Department; href: string }) {
-  const t = await getT();
-  return (
-    <Link href={href} className="group block max-lg:active:opacity-75">
-      <Card className="h-full p-5 transition-colors group-hover:border-accent/40">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold text-ink">{t(d.name)}</span>
-          <ArrowUpRight className="size-4 text-ink-3 group-hover:text-accent-strong" />
-        </div>
-        <div className="mt-3 flex items-center gap-3">
-          <span className="text-[1.75rem] font-semibold leading-none tracking-tight">{d.score == null ? "—" : percent(d.score)}</span>
-          <StatusDot status={d.status} />
-        </div>
-        {d.caption && <div className="mt-1 text-xs text-ink-3">{d.caption}</div>}
-        <div className="mt-4 text-xs text-ink-2">{t(d.metric.label)}</div>
-        <div className="mt-2" title={`${t(d.metric.label)}: ${percent(d.metric.value)}`}>
-          <ProgressBar value={d.metric.value} tone={d.status === "attention" ? "warn" : "ok"} />
-        </div>
-      </Card>
-    </Link>
   );
 }
 
