@@ -206,6 +206,10 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Telegram.TelegramReportRun> TelegramReportRuns { get; }
     DbSet<OneBase.Domain.Telegram.TelegramReportDailyPlan> TelegramReportDailyPlans { get; }
 
+    // Цифровой двойник: здания модели территории и их привязки к отделам и складам.
+    DbSet<OneBase.Domain.Twin.TwinObject> TwinObjects { get; }
+    DbSet<OneBase.Domain.Twin.TwinObjectLink> TwinObjectLinks { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Отслеживаемые сущности — чтобы отбросить несохранённые строки после конфликта уникального индекса (второй экземпляр службы).</summary>

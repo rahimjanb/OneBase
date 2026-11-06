@@ -8213,6 +8213,83 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("WeeklyPdfSettings", "telegram");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Twin.TwinObject", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_TwinObjects");
+
+                    b.HasIndex("Key")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TwinObjects_Key");
+
+                    b.ToTable("Objects", "twin");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Twin.TwinObjectLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("LinkoStockId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("ObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_TwinObjectLinks");
+
+                    b.HasIndex("DepartmentId")
+                        .HasDatabaseName("IX_TwinObjectLinks_DepartmentId");
+
+                    b.HasIndex("ObjectId")
+                        .HasDatabaseName("IX_TwinObjectLinks_ObjectId");
+
+                    b.HasIndex("WarehouseId")
+                        .HasDatabaseName("IX_TwinObjectLinks_WarehouseId");
+
+                    b.ToTable("ObjectLinks", "twin", t =>
+                        {
+                            t.HasCheckConstraint("CK_TwinObjectLinks_OneTarget", "(CASE WHEN \"DepartmentId\" IS NULL THEN 0 ELSE 1 END) + (CASE WHEN \"WarehouseId\" IS NULL THEN 0 ELSE 1 END) + (CASE WHEN \"LinkoStockId\" IS NULL THEN 0 ELSE 1 END) = 1");
+                        });
+                });
+
             modelBuilder.Entity("OneBase.Domain.Work.CalendarEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -9848,6 +9925,34 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Account");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Twin.TwinObjectLink", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_TwinObjectLinks_Departments_DepartmentId");
+
+                    b.HasOne("OneBase.Domain.Twin.TwinObject", "Object")
+                        .WithMany("Links")
+                        .HasForeignKey("ObjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_TwinObjectLinks_TwinObjects_ObjectId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementWarehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_TwinObjectLinks_ProcurementWarehouses_WarehouseId");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Object");
+
+                    b.Navigation("Warehouse");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Work.CalendarEvent", b =>
                 {
                     b.HasOne("OneBase.Domain.Identity.User", "CreatedBy")
@@ -10222,6 +10327,11 @@ namespace OneBase.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("OneBase.Domain.Telegram.TelegramReportSubscription", b =>
                 {
                     b.Navigation("Chats");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Twin.TwinObject", b =>
+                {
+                    b.Navigation("Links");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Work.CalendarEvent", b =>

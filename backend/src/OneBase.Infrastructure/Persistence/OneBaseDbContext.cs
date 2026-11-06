@@ -213,6 +213,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Battle.BattleGoal> BattleGoals => Set<OneBase.Domain.Battle.BattleGoal>();
     public DbSet<OneBase.Domain.Incentive.IncentiveProgram> IncentivePrograms => Set<OneBase.Domain.Incentive.IncentiveProgram>();
     public DbSet<OneBase.Domain.Incentive.IncentiveRouteTarget> IncentiveRouteTargets => Set<OneBase.Domain.Incentive.IncentiveRouteTarget>();
+    public DbSet<OneBase.Domain.Twin.TwinObject> TwinObjects => Set<OneBase.Domain.Twin.TwinObject>();
+    public DbSet<OneBase.Domain.Twin.TwinObjectLink> TwinObjectLinks => Set<OneBase.Domain.Twin.TwinObjectLink>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -228,6 +230,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         TelegramModel.Configure(b);
         ProcurementModel.Configure(b);
         ProductionModel.Configure(b);
+        TwinModel.Configure(b);
 
         // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.
         b.Entity<DataSourceConnection>(e =>

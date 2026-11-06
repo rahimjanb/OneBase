@@ -10,6 +10,8 @@ export const navPermissions: Record<string, string[]> = {
   "/": workspacePermissions,
   // «Отделы» — вход и в «Продажи», «Снабжение», HR: виден всем, кто может открыть хотя бы один из них.
   "/departments": [...workspacePermissions, "procurement.warehouse", "procurement.read", "procurement.manage", "integrations.manage", "hr.department"],
+  // Цифровой двойник — общий раздел компании; что видно в карточках, решают права разделов (backend).
+  "/twin": workspacePermissions,
   // Задачи — раздел пользователя (галочка «Задачи» в «Пользователях»); что из задач видно, решает backend.
   "/tasks": ["work.tasks"],
   // Заявки на закупку: свои — у всех ролей отделов; все — снабжению и директору; что видно, решает backend.
@@ -29,7 +31,7 @@ export const navPermissions: Record<string, string[]> = {
 };
 
 /** Порядок разделов в меню — по нему выбирается стартовая страница, если «Обзор» недоступен. */
-const order = ["/", "/departments", "/tasks", "/hr", "/base", "/consultant", "/data-manager", "/campaigns", "/requests", "/procurement", "/production"];
+const order = ["/", "/twin", "/departments", "/tasks", "/hr", "/base", "/consultant", "/data-manager", "/campaigns", "/requests", "/procurement", "/production"];
 
 export function canOpen(href: string, permissions: readonly string[]): boolean {
   const need = navPermissions[href];

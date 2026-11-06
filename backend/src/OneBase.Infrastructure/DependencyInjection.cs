@@ -218,6 +218,9 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Work.CalendarService>();
         services.AddScoped<OneBase.Application.Work.NotificationCenter>();
 
+        // Цифровой двойник: снимок предприятия из сервисов разделов и привязки зданий к отделам и складам.
+        services.AddScoped<OneBase.Application.Twin.TwinService>();
+
         // Раздел «Заявки» (снабжение): заявки на закупку, номера документов без повторов.
         services.AddScoped<OneBase.Application.Procurement.IProcurementNumbers, Persistence.ProcurementNumbers>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementStockLedger>();

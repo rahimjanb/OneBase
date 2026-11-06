@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowRight,
+  Boxes,
   Building2,
   CalendarDays,
   ChartColumn,
@@ -38,6 +39,7 @@ export const navGroups: NavGroup[] = [
     title: "Рабочее пространство",
     items: [
       { href: "/", label: "Обзор", icon: LayoutGrid, also: ["/me"] },
+      { href: "/twin", label: "Цифровой двойник", icon: Boxes, short: "Двойник" },
       { href: "/departments", label: "Отделы", icon: Building2, also: ["/sales", "/procurement", "/production", "/hr"] },
       { href: "/tasks", label: "Задачи", icon: ListChecks },
       { href: "/requests", label: "Заявки", icon: ClipboardPen },

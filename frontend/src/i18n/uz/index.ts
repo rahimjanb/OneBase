@@ -22,6 +22,7 @@ import serverSettings from "./serverSettings";
 import settings from "./settings";
 import tasks from "./tasks";
 import telegramReports from "./telegramReports";
+import twin from "./twin";
 
 /**
  * Узбекский (латиница): ключ — русский текст интерфейса. Словари по разделам, чтобы их можно было вести независимо;
@@ -31,6 +32,8 @@ export const uz: Dict = {
   // «Мой день» и календарь — первыми: тот же текст в словарях разделов перекрывает перевод отсюда.
   ...myDay,
   ...requests,
+  // Цифровой двойник: общие слова переведены так же, как в разделах; разделы ниже перекрывают его.
+  ...twin,
   ...production,
   ...fieldControl,
   // Тексты сервера (ошибки, пояснения, подписи) — переводятся по ключу или шаблону; словари интерфейса ниже перекрывают их.

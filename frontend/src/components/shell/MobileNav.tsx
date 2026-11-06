@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
+  Boxes,
   ChartNoAxesColumn,
   ClipboardList,
   ClipboardPen,
@@ -49,6 +50,7 @@ const fanSections: (FanItem & { allowed: (p: readonly string[]) => boolean })[] 
   { href: "/campaigns", label: "Рассылки", icon: Send, color: "#0878ff", allowed: (p) => canOpen("/campaigns", p) },
   // Последним из разделов: вкладки нижней панели добираются из веера по порядку — у существующих ролей они не меняются.
   { href: "/requests", label: "Заявки", icon: ClipboardPen, color: "#f59e0b", allowed: (p) => canOpen("/requests", p) },
+  { href: "/twin", label: "Двойник", icon: Boxes, color: "#6366f1", allowed: (p) => canOpen("/twin", p) },
   { href: "/campaigns?new=1", label: "Новая рассылка", icon: MessageSquarePlus, color: "#f43f5e", action: true, allowed: (p) => canOpen("/campaigns", p) },
 ];
 const settingsItem: FanItem = { href: "/settings", label: "Настройки", icon: SlidersHorizontal, color: "#64748b" };
