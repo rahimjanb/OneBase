@@ -16,6 +16,25 @@ public class SalesMathTests
         Assert.Null(SalesMath.Forecast(900, 0, 30));
     }
 
+    [Fact]
+    public void Pace_shows_where_the_plan_should_be_today_the_current_pace_and_what_is_needed_per_day()
+    {
+        // Как на макете: 52 991 кг из 437 410 за 7 дней из 30 — должно быть 23%, темп 7 570 кг в день, нужно 16 714 кг в день.
+        var pace = SalesMath.Pace(52_991, 437_410, 7, 30, closed: false);
+        Assert.Equal(7m / 30, pace.Expected);
+        Assert.Equal(7_570m, Math.Round(pace.PaceKg!.Value));
+        Assert.Equal(16_714m, Math.Round(pace.RequiredKg!.Value));
+        Assert.Equal(SalesMath.Forecast(52_991, 7, 30), pace.PaceKg * 30); // темп × дни месяца — прогноз сервера
+
+        Assert.Null(SalesMath.Pace(450_000, 437_410, 20, 30, closed: false).RequiredKg); // план уже выполнен
+        Assert.Null(SalesMath.Pace(52_991, null, 7, 30, closed: false).RequiredKg); // плана нет — темп есть
+        Assert.Equal(7_570m, Math.Round(SalesMath.Pace(52_991, null, 7, 30, closed: false).PaceKg!.Value));
+        var closed = SalesMath.Pace(300_000, 437_410, 30, 30, closed: true);
+        Assert.Equal((1m, 10_000m, (decimal?)null), (closed.Expected!.Value, closed.PaceKg!.Value, closed.RequiredKg));
+        var first = SalesMath.Pace(0, 437_410, 0, 30, closed: false); // 1-е число: полных дней нет
+        Assert.Equal((0m, (decimal?)null), (first.Expected!.Value, first.PaceKg));
+    }
+
     [Theory]
     [InlineData(2026, 9, 27, 27)] // 1–27 сентября
     [InlineData(2026, 10, 5, 30)] // данные уже за октябрь — сентябрь отработан целиком

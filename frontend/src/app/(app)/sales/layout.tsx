@@ -20,7 +20,8 @@ export default async function SalesLayout({ children }: { children: React.ReactN
   return (
     <PlanAvailabilityProvider>
       <MonthExitProvider>
-        <div className="border-b border-line bg-surface">
+        {/* data-sales-bar — на «Вторичке» полоса в палитре ТЗ (globals.css). */}
+        <div data-sales-bar className="border-b border-line bg-surface">
           <div className="mx-auto max-w-[1800px] px-4 py-3 sm:px-6">
             <Suspense fallback={<div className="h-9" />}>
               <SalesNav months={months} status={status} />

@@ -423,6 +423,7 @@ public sealed partial class SalesAnalytics
         var outsideTeam = agents.Where(a => !InTeam(a)).Sum(a => StatsOf(a).Visits.Done);
         var active = ActiveReps(scope);
         var execution = plan is null ? null : SalesMath.Ratio(coverage.Fact, plan);
+        var planForecastExecution = planForecast is null ? null : SalesMath.Ratio(planForecast.Value, plan);
         // Выручка на ТТ и АКБ на агента копятся весь месяц: в идущем месяце к цели — их прогноз на конец месяца.
         var akbForecast = AkbForecast(akb, PreviousLines(scope).ToList());
         var revenueForecast = ForecastOf(revenue);
@@ -432,7 +433,7 @@ public sealed partial class SalesAnalytics
             plan,
             execution,
             forecast,
-            planForecast is null ? null : SalesMath.Ratio(planForecast.Value, plan),
+            planForecastExecution,
             revenue,
             akb,
             TargetValue.Of(visits.Conversion, _d.Targets.Conversion),
@@ -449,7 +450,11 @@ public sealed partial class SalesAnalytics
             outsideTeam,
             _d.PlanSource,
             SalesMath.ExecutionLevelOf(execution),
-            AltPlanOf(scope, fact));
+            AltPlanOf(scope, fact),
+            SalesMath.Pace(plan is null ? fact : coverage.Fact, plan, _elapsed, _d.DaysInMonth, _d.Closed) with
+            {
+                Level = _d.Closed ? SalesMath.ExecutionLevelOf(execution) : SalesMath.ForecastLevelOf(planForecastExecution),
+            });
     }
 
     /// <summary>Второй план регионов охвата (AltPlanTile); null — на месяц его нет или у охвата нет ни одного региона с ним.</summary>

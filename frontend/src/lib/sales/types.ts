@@ -73,7 +73,16 @@ export type KpiTiles = {
   executionLevel: TargetLevel | null;
   /** Второй план регионов рядом с выбранным (РОП при «Заводе» и наоборот): весь факт охвата к нему; null — второго плана нет. */
   altPlan?: { source: PlanSource; planKg: number; execution: number | null } | null;
+  /** Темп месяца для «Выполнения плана» (сервер, SalesMath.Pace); нет в ответе — блок темпа не показывается. */
+  pace?: PlanPace | null;
 };
+
+/**
+ * Темп месяца — на той же базе дней, что прогноз: expected — где должно быть выполнение к отчётному дню (доля плана; у закрытого месяца — 1),
+ * paceKg — текущий темп, кг в день, requiredKg — нужно в день до плана (null — плана нет, выполнен или месяц закрыт).
+ * level — цвет «Выполнения плана»: в идущем месяце по прогнозу (от 100% — зелёный, от 90% — жёлтый), в закрытом — по выполнению.
+ */
+export type PlanPace = { expected: number | null; paceKg: number | null; requiredKg: number | null; level?: TargetLevel | null };
 
 /** План по выручке: только агенты с планом в Linko; fact — их выручка. */
 export type RevenuePlanTile = {

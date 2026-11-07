@@ -81,7 +81,16 @@ public sealed record KpiTiles(
     int VisitsOutsideTeam = 0,
     string PlanSource = PlanSources.Linko,
     TargetLevel? ExecutionLevel = null,
-    AltPlanTile? AltPlan = null);
+    AltPlanTile? AltPlan = null,
+    PlanPace? Pace = null);
+
+/// <summary>
+/// Темп месяца (SalesMath.Pace): Expected — где должно быть выполнение к отчётному дню (доля плана), PaceKg — текущий темп, кг в день,
+/// RequiredKg — сколько нужно в день до плана (null — плана нет, выполнен, месяц закрыт). Факт — тот же, что у выполнения (факт в плане),
+/// без плана — весь факт. Level — цвет «Выполнения плана» на «Вторичке»: в идущем месяце — по прогнозу (ForecastLevelOf), в закрытом —
+/// по выполнению (ExecutionLevelOf); без плана — null.
+/// </summary>
+public sealed record PlanPace(decimal? Expected, decimal? PaceKg, decimal? RequiredKg, TargetLevel? Level = null);
 
 /// <summary>
 /// Второй план регионов рядом с выбранным (РОП при «Заводе» и наоборот), как в «Полевом контроле»: «план РОП: 82,4% из 400 000 кг». План —

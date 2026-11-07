@@ -451,6 +451,12 @@ public class SalesAnalyticsTests
             .Republic(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 10));
         Assert.False(running.Period.Closed);
         Assert.Equal(630m, running.Kpi.ForecastKg); // 210 кг за 10 дней × 30
+        // Темп «Выполнения плана» — на той же базе дней, что прогноз: должно быть 10/30 плана, темп × 30 = прогноз факта в плане.
+        var pace = running.Kpi.Pace!;
+        Assert.Equal(10m / 30, pace.Expected);
+        Assert.Equal(running.Kpi.PlanForecastKg, pace.PaceKg * 30);
+        Assert.Equal((running.Kpi.PlanKg - running.Kpi.PlanFactKg) / 20, pace.RequiredKg);
+        Assert.Equal(SalesMath.ForecastLevelOf(running.Kpi.ForecastExecution), pace.Level); // цвет идущего месяца — по прогнозу
         Assert.NotNull(running.CategoryCards.Single().VsPrevMonth);
         Assert.Equal(900m, running.Excluded!.ForecastKg);
         Assert.Equal(0.5m, running.Excluded.VsPrevMonth); // прогноз 900 кг к 600 кг прошлого месяца
@@ -464,6 +470,8 @@ public class SalesAnalyticsTests
         Assert.Null(republic.Kpi.ForecastExecution);
         Assert.Null(republic.Kpi.PlanForecastKg);
         Assert.Equal(205m / 360m, republic.Kpi.Execution); // факт регионов с планом ÷ план
+        Assert.Equal((1m, (decimal?)null), (republic.Kpi.Pace!.Expected!.Value, republic.Kpi.Pace.RequiredKg)); // закрытый месяц: нужно в день — нет
+        Assert.Equal(republic.Kpi.ExecutionLevel, republic.Kpi.Pace.Level); // закрытого — по выполнению
         Assert.Null(republic.Kpi.RevenuePlan!.Forecast);
         Assert.Null(republic.Kpi.RevenuePlan.ForecastExecution);
         Assert.All(republic.Regions, r => Assert.True(r.ForecastKg is null && r.ForecastExecution is null));

@@ -40,6 +40,20 @@ public static class SalesMath
         elapsedDays <= 0 ? null : fact / elapsedDays * daysInMonth;
 
     /// <summary>
+    /// Темп месяца для «Выполнения плана» — на той же базе дней, что прогноз (Forecast): ожидаемая доля плана к отчётному дню = прошедшие
+    /// дни ÷ дней в месяце (у закрытого месяца — 1), текущий темп = факт ÷ прошедшие дни, нужно в день = остаток плана ÷ оставшиеся дни.
+    /// Нужно в день — null, если плана нет, он уже выполнен, месяц закрыт или дней не осталось; темп — null, пока полных дней нет.
+    /// </summary>
+    public static PlanPace Pace(decimal fact, decimal? plan, decimal elapsedDays, int daysInMonth, bool closed)
+    {
+        decimal? expected = closed ? 1m : daysInMonth <= 0 ? null : Math.Clamp(elapsedDays / daysInMonth, 0m, 1m);
+        decimal? pace = closed ? (daysInMonth > 0 ? fact / daysInMonth : null) : elapsedDays > 0 ? fact / elapsedDays : null;
+        var left = daysInMonth - elapsedDays;
+        decimal? required = plan is { } p && p > 0 && fact < p && !closed && left > 0 ? (p - fact) / left : null;
+        return new PlanPace(expected, pace, required);
+    }
+
+    /// <summary>
     /// Прошедшие дни месяца — база темпа (прогноз, темп к своему среднему, «те же дни»). Последний день полный — отработанные дни.
     /// Отчётный день — сегодняшний, неполный: полные дни + доля сегодняшнего = продажи (кг) сегодня к среднему полному дню, не больше 1.
     /// Иначе утром сегодняшний день считался бы целым при малой части его продаж и прогноз проседал бы (2-го числа — почти вдвое).

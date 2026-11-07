@@ -15,7 +15,7 @@ import type { AgentCardRow, AgentsView } from "@/lib/sales/agents";
 
 const control = "h-9 rounded-lg border border-line bg-surface px-3 text-sm text-ink shadow-sm max-lg:h-11";
 
-type Status = "all" | "done" | "below" | "noPlan" | "flags" | "vacancy";
+type Status = "all" | "done" | "below" | "noPlan" | "critical" | "risk" | "ok" | "flags" | "vacancy";
 type Sort = "execution" | "fact" | "revenue" | "strike" | "name";
 
 const statuses: { key: Status; label: string }[] = [
@@ -23,6 +23,9 @@ const statuses: { key: Status; label: string }[] = [
   { key: "done", label: "Выполняют план" },
   { key: "below", label: "Ниже плана" },
   { key: "noPlan", label: "Без плана" },
+  { key: "critical", label: "Критично" },
+  { key: "risk", label: "Риск" },
+  { key: "ok", label: "В норме" },
   { key: "flags", label: "С замечаниями" },
   { key: "vacancy", label: "Вакансии" },
 ];
@@ -38,6 +41,13 @@ const sorts: { key: Sort; label: string }[] = [
 /** Выполнение для статуса: в идущем месяце — по прогнозу (факт к середине месяца всегда «ниже плана»), в закрытом — по факту. */
 const progressOf = (a: AgentCardRow) => a.forecastExecution ?? a.execution;
 
+/**
+ * «Критично / Риск / В норме» — как блок ТП на «Вторичке» (сервер, FlagCountsOf): действующие ТП без вакансий по худшему флагу;
+ * «В норме» — без критичных и рисковых флагов (справочные не считаются).
+ */
+const worstOf = (a: AgentCardRow): "critical" | "risk" | "ok" =>
+  a.flags.some((f) => f.severity === "Critical") ? "critical" : a.flags.some((f) => f.severity === "Risk") ? "risk" : "ok";
+
 const matches = (a: AgentCardRow, s: Status) =>
   s === "all"
     ? true
@@ -47,9 +57,11 @@ const matches = (a: AgentCardRow, s: Status) =>
         ? progressOf(a) != null && progressOf(a)! < 1
         : s === "noPlan"
           ? !a.planKg
-          : s === "flags"
-            ? a.flags.length > 0
-            : a.isVacancy;
+          : s === "critical" || s === "risk" || s === "ok"
+            ? !a.isVacancy && a.isSalesRep && worstOf(a) === s
+            : s === "flags"
+              ? a.flags.length > 0
+              : a.isVacancy;
 
 const normalize = (s: string) => s.toLocaleLowerCase("ru").replace(/ё/g, "е").trim();
 

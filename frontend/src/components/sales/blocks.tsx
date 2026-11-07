@@ -16,7 +16,8 @@ export const planSourceText: Record<PlanSource, string> = {
   linko: "сумма планов ТП из Linko",
 };
 
-const planTileLabel: Record<PlanSource, string> = {
+/** Подпись выполнения по источнику плана — у плиток KPI и главного блока «Вторички». */
+export const planTileLabel: Record<PlanSource, string> = {
   rop: "Выполнение плана РОП",
   factory: "Выполнение плана «Завод»",
   linko: "Выполнение плана",

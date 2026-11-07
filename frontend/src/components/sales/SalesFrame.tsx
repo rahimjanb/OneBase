@@ -23,6 +23,8 @@ async function DataThroughChip({ through }: { through: string }) {
  * Разделы — в верхней панели, период и «Обновить» — в полосе раздела (sales/layout.tsx).
  * period — у страниц вторички: чип «данные по ДД.ММ» справа в шапке, пока месяц идёт; какие планы заведены на месяц — переключателю плана.
  * through — тот же чип у страниц со своим периодом (обзор «Первички»): по какой день данные.
+ * aside — своё содержимое справа в шапке вместо чипа («Вторичка» — «Данные по 07.11 · прошло 7 из 30 дней» с мини-полосой).
+ * display — шапка и отступы по макету страницы-сводки (PageHeader variant="display"; «Вторичка»).
  * Серверный (подключают только страницы): перевод — getT(); заголовок и крошки переводит PageHeader.
  */
 export async function SalesFrame({
@@ -33,15 +35,19 @@ export async function SalesFrame({
   sp,
   period,
   through,
+  aside,
+  display,
   children,
 }: {
   title: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   crumbs?: Crumb[];
   back?: string;
   sp: SalesSearchParams;
   period?: Period;
   through?: string | null;
+  aside?: React.ReactNode;
+  display?: boolean;
   children: React.ReactNode;
 }) {
   const t = await getT();
@@ -54,10 +60,13 @@ export async function SalesFrame({
         subtitle={subtitle}
         breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Продажи"), href: query ? `/sales?${query}` : "/sales" }, ...crumbs]}
         back={back}
-        actions={period && !period.closed ? <DataThroughChip through={period.dataThrough} /> : through ? <DataThroughChip through={through} /> : undefined}
+        variant={display ? "display" : undefined}
+        actions={
+          aside ?? (period && !period.closed ? <DataThroughChip through={period.dataThrough} /> : through ? <DataThroughChip through={through} /> : undefined)
+        }
       />
       {period && <ReportPlans year={period.year} month={period.month} plans={period.availablePlans} />}
-      <PageBody>{children}</PageBody>
+      <PageBody variant={display ? "display" : undefined}>{children}</PageBody>
     </>
   );
 }

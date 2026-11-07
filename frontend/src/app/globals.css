@@ -211,6 +211,132 @@ body {
   background-attachment: fixed;
 }
 
+/*
+ * «Продажи → Вторичка» — палитра ТЗ (sales-secondary-implementation-prompt.md, «Дизайн-токены»; макеты «Продажи · Вторичка»), только на
+ * этой странице: содержимое помечено data-palette="sales-secondary", токены приложения внутри него заменены значениями ТЗ, компоненты
+ * пользуются теми же классами. Соответствие: bg → page, surface-2 → muted, border / border-strong → line / line-strong, text / text-2 →
+ * ink / ink-2, muted → ink-3, subtle → ink-4, link → accent-strong, success → ok, warning → warn, danger → bad.
+ * Карточки непрозрачные, как в макете, а не стекло остальных страниц; фон всего экрана на этой странице — тоже из ТЗ. Верхняя панель
+ * (data-topbar) и полоса раздела (data-sales-bar) на этой странице — в той же палитре, как в макете.
+ */
+[data-palette="sales-secondary"],
+body:has([data-palette="sales-secondary"]) :is([data-topbar], [data-sales-bar]) {
+  --color-page: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-surface-solid: #ffffff;
+  --color-muted: #f1f3f6;
+  --color-muted-solid: #f1f3f6;
+  --color-line: #e7e9ee;
+  --color-line-strong: #d6dae2;
+  --color-ink: #0e1322;
+  --color-ink-2: #3a4255;
+  --color-ink-3: #5d667a;
+  --color-ink-4: #8f97a8;
+  --color-accent: #2f6bff;
+  --color-accent-soft: #2f6bff14;
+  --color-accent-strong: #2f6bff;
+  --color-ok: #0f9f4f;
+  --color-ok-soft: #12a15016;
+  --color-warn: #c26a00;
+  --color-warn-soft: #f59e0b1c;
+  --color-bad: #dc3545;
+  --color-bad-soft: #e5484d14;
+  --color-violet: #7c3aed;
+  --color-violet-strong: #7c3aed;
+  --color-violet-soft: #7c3aed12;
+  /* Основа фона «Выполнения плана» под градиентом статуса: доля цвета статуса и с чем он смешан (в тёмной — bg, как #1A0E14 макета). */
+  --sec-panel-tint: 3%;
+  --sec-panel-base: var(--color-surface);
+}
+
+:root[data-theme="dark"] :is([data-palette="sales-secondary"], body:has([data-palette="sales-secondary"]) :is([data-topbar], [data-sales-bar])),
+:root[data-brand="onebase"]:not([data-theme="light"]) :is([data-palette="sales-secondary"], body:has([data-palette="sales-secondary"]) :is([data-topbar], [data-sales-bar])) {
+  --color-page: #060a14;
+  --color-surface: #0c1221;
+  --color-surface-solid: #121a2d;
+  --color-muted: #121a2d;
+  --color-muted-solid: #121a2d;
+  --color-line: #1a2338;
+  --color-line-strong: #26314d;
+  --color-ink: #eef1f7;
+  --color-ink-2: #c9cfdc;
+  --color-ink-3: #8d97ae;
+  --color-ink-4: #5c6680;
+  --color-accent: #3d7bff;
+  --color-accent-soft: #3d7bff1f;
+  --color-accent-strong: #7fa6ff;
+  --color-ok: #2bd47d;
+  --color-ok-soft: #2bd47d1a;
+  --color-warn: #f6a93b;
+  --color-warn-soft: #f6a93b1a;
+  --color-bad: #ff5a6a;
+  --color-bad-soft: #ff5a6a1a;
+  --color-violet: #a78bfa;
+  --color-violet-strong: #a78bfa;
+  --color-violet-soft: #8b5cf61f;
+  --sec-panel-tint: 7%;
+  --sec-panel-base: var(--color-page);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) :is([data-palette="sales-secondary"], body:has([data-palette="sales-secondary"]) :is([data-topbar], [data-sales-bar])) {
+    --color-page: #060a14;
+    --color-surface: #0c1221;
+    --color-surface-solid: #121a2d;
+    --color-muted: #121a2d;
+    --color-muted-solid: #121a2d;
+    --color-line: #1a2338;
+    --color-line-strong: #26314d;
+    --color-ink: #eef1f7;
+    --color-ink-2: #c9cfdc;
+    --color-ink-3: #8d97ae;
+    --color-ink-4: #5c6680;
+    --color-accent: #3d7bff;
+    --color-accent-soft: #3d7bff1f;
+    --color-accent-strong: #7fa6ff;
+    --color-ok: #2bd47d;
+    --color-ok-soft: #2bd47d1a;
+    --color-warn: #f6a93b;
+    --color-warn-soft: #f6a93b1a;
+    --color-bad: #ff5a6a;
+    --color-bad-soft: #ff5a6a1a;
+    --color-violet: #a78bfa;
+    --color-violet-strong: #a78bfa;
+    --color-violet-soft: #8b5cf61f;
+    --sec-panel-tint: 7%;
+    --sec-panel-base: var(--color-page);
+  }
+}
+
+/* Фон экрана «Вторички»: bg ТЗ, в тёмной теме — с лёгким синим свечением сверху справа, как в макете. */
+body:has([data-palette="sales-secondary"]) {
+  background-color: #f5f6f8;
+}
+:root[data-theme="dark"] body:has([data-palette="sales-secondary"]),
+:root[data-brand="onebase"]:not([data-theme="light"]) body:has([data-palette="sales-secondary"]) {
+  background-color: #060a14;
+  background-image: radial-gradient(65% 60% at 85% 0%, rgb(27 63 160 / 0.18), rgb(6 9 20 / 0));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body:has([data-palette="sales-secondary"]) {
+    background-color: #060a14;
+    background-image: radial-gradient(65% 60% at 85% 0%, rgb(27 63 160 / 0.18), rgb(6 9 20 / 0));
+  }
+}
+/* Полоса раздела на «Вторичке» — без своей заливки, на фоне экрана (макет); активная вкладка — сплошной акцент с тенью, без градиента
+   тёмной темы OneBase. */
+body:has([data-palette="sales-secondary"]) [data-sales-bar] {
+  background-color: transparent;
+}
+:root[data-brand="onebase"]:not([data-theme="light"]) body:has([data-palette="sales-secondary"]) [data-topbar] .bg-accent.text-white {
+  background-image: none;
+  box-shadow: 0 4px 12px rgb(61 123 255 / 0.3);
+}
+/* Крошки в шапке «Вторички» — subtle ТЗ (общий PageHeader красит их muted). */
+[data-palette="sales-secondary"] header nav {
+  color: var(--color-ink-4);
+}
+
 /* Основные кнопки и сообщения пользователя — градиент со свечением, как в макете; при наведении — светлее, а не голубой фон под белым текстом. */
 :root[data-brand="onebase"]:not([data-theme="light"]) .bg-accent.text-white:not([data-product="field"] *) {
   /* Вокруг акцента #3056D3; белый текст в середине кнопки — контраст не ниже 4,5. */
