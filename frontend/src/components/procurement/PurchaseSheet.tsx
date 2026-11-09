@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, ShoppingBag } from "lucide-react";
+import { Loader2, PackageCheck, ShoppingBag, Truck } from "lucide-react";
 import { BatchDrafts, newBatchDraft } from "@/components/procurement/BatchDrafts";
 import { Sheet } from "@/components/field/Sheet";
 import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { batchExpiry, batchesTotal, money, parseNumber, quantity, type BatchDraft, type PurchaseResult, type SupplierRow } from "@/lib/procurement";
+import { batchExpiry, batchesTotal, money, parseNumber, quantity, type BatchDraft, type PurchaseResult, type SupplierRow, type WarehousesView } from "@/lib/procurement";
+import { todayInTashkent } from "@/lib/tasks";
 
 /**
  * Позиция, которую можно отметить купленной: сколько осталось купить, согласованная цена за единицу; tracksBatches — карточка склада
@@ -24,9 +25,12 @@ const newKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? 
 
 /**
  * «Куплено» по заявке (снабжение): сколько и почём купили по каждой позиции (по умолчанию — весь остаток по согласованной цене), где купили
- * (поставщик из справочника — подсказкой, новый магазин добавится сам), номер чека и комментарий. Купленное сразу приходуется на склад и
- * ждёт выдачи сотруднику. Позицию, которую ещё не купили, оставьте с пустым количеством. Позиция с партиями — партии со сроком годности;
- * с контролем качества партия встаёт на контроль, резерв заявки — после допуска (брак — позиция снова к закупке).
+ * (поставщик из справочника — подсказкой, новый магазин добавится сам), номер чека и комментарий. Два варианта:
+ * «Товар уже у нас» — купленное сразу приходуется на склад и ждёт выдачи сотруднику; позиция с партиями — партии со сроком годности, с
+ * контролем качества партия встаёт на контроль, резерв заявки — после допуска (брак — позиция снова к закупке).
+ * «Привезёт поставщик» — когда и на какой склад: на склад пока ничего не приходуется, покупка ждёт машину («Снабжение → Поставки»):
+ * кладовщик отметит приезд с партиями, лаборатория проверит, кладовщик взвесит и примет — под заявку.
+ * Позицию, которую ещё не купили, оставьте с пустым количеством.
  */
 export function PurchaseSheet({
   open,
@@ -49,6 +53,11 @@ export function PurchaseSheet({
   const [reference, setReference] = useState("");
   const [comment, setComment] = useState("");
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
+  const [mode, setMode] = useState<"now" | "delivery">("now");
+  const [date, setDate] = useState("");
+  const [warehouse, setWarehouse] = useState("");
+  const [warehouses, setWarehouses] = useState<WarehousesView["warehouses"]>([]);
+  const delivery = mode === "delivery";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const key = useRef("");
@@ -61,12 +70,22 @@ export function PurchaseSheet({
     setWhere("");
     setReference("");
     setComment("");
+    setMode("now");
+    setDate("");
     setError(null);
     key.current = newKey();
     let alive = true;
     bff<SupplierRow[]>("procurement/suppliers/options")
       .then((rows) => alive && setSuppliers(rows))
       .catch(() => alive && setSuppliers([]));
+    bff<WarehousesView>("procurement/warehouses")
+      .then((view) => {
+        if (!alive) return;
+        const active = view.warehouses.filter((w) => w.isActive);
+        setWarehouses(active);
+        setWarehouse((active.find((w) => w.isDefault) ?? active[0])?.id ?? "");
+      })
+      .catch(() => alive && setWarehouses([]));
     return () => {
       alive = false;
     };
@@ -76,8 +95,9 @@ export function PurchaseSheet({
 
   const rows = lines.map((l) => {
     const drafts = batches[l.requestItemId];
-    // Позиция с партиями: количество — сумма партий; пустые партии — позицию не купили.
-    const q = l.tracksBatches && drafts ? (drafts.every((b) => !b.quantity.trim()) ? null : batchesTotal(drafts) ?? NaN) : parseNumber(qty[l.requestItemId] ?? "");
+    // Позиция с партиями: количество — сумма партий (пустые — позицию не купили); у «привезёт поставщик» партии впишет кладовщик — количество строкой.
+    const q =
+      l.tracksBatches && drafts && !delivery ? (drafts.every((b) => !b.quantity.trim()) ? null : batchesTotal(drafts) ?? NaN) : parseNumber(qty[l.requestItemId] ?? "");
     const p = parseNumber(price[l.requestItemId] ?? "");
     return { line: l, q, p, sum: q !== null && !Number.isNaN(q) && p !== null ? Math.round(q * p * 100) / 100 : null };
   });
@@ -86,9 +106,10 @@ export function PurchaseSheet({
   const submit = async () => {
     const chosen = rows.filter((r) => r.q !== null && r.q !== 0);
     if (chosen.length === 0) return setError(t("Укажите, что куплено: количество и цену хотя бы по одной позиции."));
+    if (delivery && (!date || date < todayInTashkent())) return setError(t("Укажите, когда привезёт поставщик: сегодня или позже."));
     for (const r of chosen) {
-      if (r.line.tracksBatches && Number.isNaN(r.q)) return setError(t("«{name}»: укажите количество каждой партии.", { name: r.line.name }));
-      if (r.line.tracksBatches && batches[r.line.requestItemId]?.some((b) => !batchExpiry(b.expires, b.made, r.line.shelfLifeDays)))
+      if (r.line.tracksBatches && !delivery && Number.isNaN(r.q)) return setError(t("«{name}»: укажите количество каждой партии.", { name: r.line.name }));
+      if (r.line.tracksBatches && !delivery && batches[r.line.requestItemId]?.some((b) => !batchExpiry(b.expires, b.made, r.line.shelfLifeDays)))
         return setError(t("«{name}»: укажите срок годности каждой партии.", { name: r.line.name }));
       if (r.q === null || r.q < 0 || Math.round(r.q * 1000) / 1000 !== r.q) return setError(t("«{name}»: количество — больше нуля, не больше трёх знаков после запятой.", { name: r.line.name }));
       if (r.q > r.line.left) return setError(t("«{name}»: осталось купить {n} — больше не оприходовать.", { name: r.line.name, n: `${quantity(r.line.left)} ${r.line.unitCode}` }));
@@ -107,7 +128,7 @@ export function PurchaseSheet({
             requestItemId: r.line.requestItemId,
             quantity: r.q,
             price: r.p,
-            batches: r.line.tracksBatches
+            batches: r.line.tracksBatches && !delivery
               ? (batches[r.line.requestItemId] ?? []).map((b) => ({
                   supplierBatchNo: b.no.trim() || null,
                   manufacturedOn: b.made || null,
@@ -121,6 +142,8 @@ export function PurchaseSheet({
           reference: reference.trim() || null,
           comment: comment.trim() || null,
           clientKey: key.current,
+          deliveryDate: delivery ? date : null,
+          warehouseId: delivery ? warehouse || null : null,
         }),
       });
       onDone(result);
@@ -137,7 +160,7 @@ export function PurchaseSheet({
       onClose={onClose}
       title={t("Куплено")}
       subtitle={`${request.number} · ${request.title}`}
-      size={lines.some((l) => l.tracksBatches) ? "xl" : undefined}
+      size={lines.some((l) => l.tracksBatches) || delivery ? "xl" : undefined}
       footer={
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-ink-2">
@@ -148,12 +171,55 @@ export function PurchaseSheet({
               {t("Закрыть")}
             </button>
             <button type="button" onClick={() => void submit()} disabled={busy} className={primary}>
-              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ShoppingBag className="size-4" aria-hidden />} {t("Оприходовать")}
+              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : delivery ? <Truck className="size-4" aria-hidden /> : <ShoppingBag className="size-4" aria-hidden />}{" "}
+              {t(delivery ? "Куплено — ждать машину" : "Оприходовать")}
             </button>
           </div>
         </div>
       }
     >
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-muted p-1" role="radiogroup" aria-label={t("Где товар")}>
+        {(
+          [
+            ["now", PackageCheck, "Товар уже у нас", "сразу на склад"],
+            ["delivery", Truck, "Привезёт поставщик", "машина → качество → вес"],
+          ] as const
+        ).map(([value, Icon, label, hint]) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={mode === value}
+            onClick={() => setMode(value)}
+            className={`rounded-lg px-3 py-2 text-left ${mode === value ? "bg-surface text-ink shadow-sm" : "text-ink-2 hover:text-ink"}`}
+          >
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              <Icon className="size-4" aria-hidden /> {t(label)}
+            </span>
+            <span className="block text-xs text-ink-3">{t(hint)}</span>
+          </button>
+        ))}
+      </div>
+      {delivery && (
+        <div className="mb-4 grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Когда привезёт")}</span>
+            <input type="date" value={date} min={todayInTashkent()} onChange={(e) => setDate(e.target.value)} className={field} />
+          </label>
+          {warehouses.length > 1 && (
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-ink">{t("На какой склад")}</span>
+              <select value={warehouse} onChange={(e) => setWarehouse(e.target.value)} className={field}>
+                {warehouses.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
       <p className="mb-2 text-sm font-medium text-ink">
         {t("Что купили")} <span className="font-normal text-ink-3">{t("количество и цена за единицу")}</span>
       </p>
@@ -167,7 +233,7 @@ export function PurchaseSheet({
                 <span className="shrink-0 text-xs text-ink-3">{t("осталось {n}", { n: `${quantity(line.left)} ${line.unitCode}` })}</span>
               </div>
               <div className="mt-2 flex items-center gap-2">
-                {line.tracksBatches ? (
+                {line.tracksBatches && !delivery ? (
                   <span className="w-20 text-right text-sm tabular-nums text-ink-2" aria-label={t("Куплено, количество: {name}", { name: line.name })}>
                     {q === null || Number.isNaN(q) ? "—" : quantity(q)}
                   </span>
@@ -200,7 +266,7 @@ export function PurchaseSheet({
                     : t("Согласовано: {price} сум за {unit}", { price: money(line.price), unit: line.unitCode })}
                 </p>
               )}
-              {line.tracksBatches && batches[line.requestItemId] && (
+              {line.tracksBatches && !delivery && batches[line.requestItemId] && (
                 <>
                   <p className="mt-2 text-xs text-ink-3">{t("По партиям: номер, срок годности и количество каждой. Пустые партии — позицию ещё не купили.")}</p>
                   <BatchDrafts
@@ -227,7 +293,7 @@ export function PurchaseSheet({
       </label>
       <label className="mb-3 block">
         <span className="mb-1.5 block text-sm font-medium text-ink">
-          {t("Номер чека или накладной")} <span className="font-normal text-ink-3">{t("необязательно")}</span>
+          {t(delivery ? "Номер счёта или договора" : "Номер чека или накладной")} <span className="font-normal text-ink-3">{t("необязательно")}</span>
         </span>
         <input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={100} className={field} />
       </label>
@@ -243,7 +309,13 @@ export function PurchaseSheet({
           className="w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
       </label>
-      <p className="mt-3 text-xs text-ink-3">{t("Купленное сразу поступит на склад и будет ждать выдачи сотруднику.")}</p>
+      <p className="mt-3 text-xs text-ink-3">
+        {t(
+          delivery
+            ? "На склад пока ничего не поступит: покупка появится у кладовщика в «Ближайших поставках». Приедет машина — лаборатория проверит качество, кладовщик взвесит и примет, товар будет ждать выдачи сотруднику."
+            : "Купленное сразу поступит на склад и будет ждать выдачи сотруднику.",
+        )}
+      </p>
       <div className="mt-3">
         <ErrorNote text={error} />
       </div>

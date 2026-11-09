@@ -55,7 +55,7 @@ public class ProcurementWarehouseDbTests(DataManagerDb fixture) : IClassFixture<
         var settings = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
         (settings.FinanceApproverId, settings.DirectorApproverId) = (null, null);
         await db.SaveChangesAsync();
-        var category = await db.ProcurementCategories.Where(c => c.Code == "raw_materials").Select(c => c.Id).SingleAsync();
+        var category = await db.ProcurementCategories.Where(c => c.Code == "components").Select(c => c.Id).SingleAsync();
         var central = await db.ProcurementWarehouses.Where(w => w.IsDefault).Select(w => w.Id).SingleAsync();
         return org with { Category = category, Central = central };
     }

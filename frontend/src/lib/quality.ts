@@ -12,14 +12,17 @@ function num(text: string): number | null {
 /** Вкладка «Качество»: видна ли, вносит ли пользователь проверки (лаборатория), решает ли (назначенный), счётчики открытых проверок. */
 export type QualityNav = { sees: boolean; quality: boolean; decides: boolean; configures: boolean; open: number; documents: number; lab: number; decision: number };
 
-/** Проверка в очереди: шаг, контроль, партия, позиция, поставщик, склад прихода, пришло и остаток, дней ждёт, итоги шагов, решение. */
+/**
+ * Проверка в очереди: шаг, контроль, партия, позиция, поставщик, склад прихода, пришло и остаток, дней ждёт, итоги шагов, решение. Проверка
+ * поставки (приезд машины) до приёмки — без партии: пришло — по накладной, поставка — номер AR-.
+ */
 export type QualityCheckRow = {
   id: string;
   number: string;
   status: QualityCheckStatus;
   control: QualityControl;
-  batchId: string;
-  batchNumber: string;
+  batchId: string | null;
+  batchNumber: string | null;
   supplierBatchNo: string | null;
   expiresOn: string | null;
   itemId: string;
@@ -38,6 +41,8 @@ export type QualityCheckRow = {
   decision: BatchQuality | null;
   decidedByName: string | null;
   decidedAt: string | null;
+  arrivalId?: string | null;
+  arrivalNumber?: string | null;
 };
 
 export type SpecKind = "Document" | "Parameter";

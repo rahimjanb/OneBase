@@ -268,8 +268,8 @@ public sealed class ProcurementSupplierService(IAppDbContext db, IReportReader r
             .ToDictionaryAsync(x => x.Key, ct);
         // Решения лаборатории по партиям поставщика: забракованная партия — такая же проблема поставки, как брак при приёмке.
         var decided = await db.ProcurementQualityChecks.AsNoTracking()
-            .Where(c => c.Status == ProcurementQualityCheckStatus.Decided && c.Batch!.SupplierId != null && ids.Contains(c.Batch.SupplierId.Value))
-            .GroupBy(c => c.Batch!.SupplierId!.Value)
+            .Where(c => c.Status == ProcurementQualityCheckStatus.Decided && c.SupplierId != null && ids.Contains(c.SupplierId.Value))
+            .GroupBy(c => c.SupplierId!.Value)
             .Select(g => new { g.Key, Checks = g.Count(), Rejected = g.Count(c => c.Decision == ProcurementBatchQuality.Rejected) })
             .ToDictionaryAsync(x => x.Key, ct);
         var finished = new[] { ProcurementOrderStatus.Delivered, ProcurementOrderStatus.Completed };

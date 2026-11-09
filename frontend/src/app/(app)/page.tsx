@@ -9,12 +9,15 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { KpiTrendChart } from "@/components/dashboard/KpiTrendChart";
 import { LeadersCard } from "@/components/dashboard/LeadersCard";
 import { MobileOverview } from "@/components/dashboard/mobile/MobileOverview";
+import { HomeAttention } from "@/components/home/HomeAttention";
+import { WorkHome } from "@/components/home/WorkHome";
 import { MyDay } from "@/components/me/MyDay";
 import { TasksDonut } from "@/components/dashboard/TasksDonut";
 import { UpcomingTasks } from "@/components/dashboard/UpcomingTasks";
 import { DesktopOverviewSkeleton } from "@/components/shell/RouteSkeleton";
 import { getLocale, getT } from "@/i18n/server";
 import type { AiAlertsView } from "@/lib/ai";
+import type { HomeView } from "@/lib/arrivals";
 import type { HrLeaders } from "@/lib/hr";
 import { activityOf, insightsOf, upcomingOf, type NotificationRow } from "@/lib/dashboard";
 import { loadHome } from "@/lib/dashboard-data";
@@ -26,9 +29,12 @@ import { apiSession, apiTry } from "@/lib/server-api";
 import type { DepartmentTasks, PageResult, WorkTask } from "@/lib/tasks";
 import type { Me } from "@/lib/users";
 
-export async function generateMetadata() {
-  const [t, me] = await Promise.all([getT(), apiSession<Me>("/api/auth/me")]);
-  return { title: t(me?.home === "my_day" ? "Мой день · OneBase" : "Обзор · OneBase") };
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export async function generateMetadata({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const [t, me, sp] = await Promise.all([getT(), apiSession<Me>("/api/auth/me"), searchParams]);
+  const work = me?.home === "work" && sp.view !== "company";
+  return { title: t(me?.home === "my_day" ? "Мой день · OneBase" : work ? "Рабочий стол · OneBase" : "Обзор · OneBase") };
 }
 
 /**
@@ -39,16 +45,36 @@ export async function generateMetadata() {
  * На телефоне (< 768) — своя раскладка (MobileOverview, ТЗ 1base-mobile-home) из тех же данных; все запросы — один раз на обе.
  * Каждая раскладка грузится сама по себе: пока идут данные — заготовки, а не пустой экран.
  * Роль «Сотрудник» (me.home = my_day) видит здесь «Мой день» (components/me) — свои рабочее время, задачи, календарь, документы и AI-план.
+ * Кладовщик, лаборатория, снабжение и аналитик (me.home = work) — «Рабочий стол» (components/home): машины на приёмке, ближайшие поставки,
+ * проверки качества, согласования, принятое на склад; «Обзор» компании им открыт ссылкой (?view=company). Руководителю отдела, директору и
+ * финансисту над «Обзором» — «Ждут вас»: согласования, «можно получить», принятое на склад.
  */
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   // Кто вошёл — тот же ответ, что уже получил layout (apiSession кэширует его на запрос): у роли «Сотрудник» главная — «Мой день»,
   // сводку компании для неё не запрашиваем.
-  const [me, locale] = await Promise.all([apiSession<Me>("/api/auth/me"), getLocale()]);
+  const [me, locale, sp] = await Promise.all([apiSession<Me>("/api/auth/me"), getLocale(), searchParams]);
   if (me?.home === "my_day") return <MyDay me={me} now={new Date()} locale={locale} />;
+  if (me?.home === "work" && sp.view !== "company") {
+    const data = await apiTry<HomeView>("/api/procurement/home");
+    if (data) {
+      const now = new Date();
+      const dateLabel = now.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Tashkent" });
+      return (
+        <WorkHome
+          data={data}
+          name={me.firstName || me.name || me.login || ""}
+          dateLabel={dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1)}
+          companyHref={canOpen("/", me.permissions) ? "/?view=company" : null}
+        />
+      );
+    }
+  }
   // Запросы данных «Обзора» (apiTry не бросает ошибок: нет ответа — null).
   const alerts = apiTry<AiAlertsView>("/api/ai/alerts");
   const departments = apiTry<DepartmentTasks[]>("/api/work/departments");
   const home = loadHome();
+  // «Ждут вас» над «Обзором» — одним запросом на обе раскладки.
+  const attention = apiTry<HomeView>("/api/procurement/home");
   // Роль без общих разделов (например, «Админ 2») начинает со своего первого раздела.
   if (me && !canOpen("/", me.permissions)) redirect(homeFor(me.permissions));
   const now = new Date();
@@ -58,10 +84,22 @@ export default async function DashboardPage() {
     <>
       <div className="max-md:hidden">
         <Suspense fallback={<DesktopOverviewSkeleton />}>
-          <DesktopOverview me={me} name={name} now={now} locale={locale} alerts={alerts} departments={departments} home={home} />
+          <DesktopOverview me={me} name={name} now={now} locale={locale} alerts={alerts} departments={departments} home={home} attention={attention} />
         </Suspense>
       </div>
-      <MobileOverview name={name} now={now} locale={locale} apiOk={me !== null} alerts={alerts} home={home} />
+      <MobileOverview
+        name={name}
+        now={now}
+        locale={locale}
+        apiOk={me !== null}
+        alerts={alerts}
+        home={home}
+        attention={
+          <Suspense fallback={null}>
+            <HomeAttention data={attention} />
+          </Suspense>
+        }
+      />
     </>
   );
 }
@@ -74,6 +112,7 @@ async function DesktopOverview({
   alerts: alertsRequest,
   departments: departmentsRequest,
   home,
+  attention,
 }: {
   me: Me | null;
   name: string;
@@ -82,6 +121,7 @@ async function DesktopOverview({
   alerts: Promise<AiAlertsView | null>;
   departments: Promise<DepartmentTasks[] | null>;
   home: ReturnType<typeof loadHome>;
+  attention: Promise<HomeView | null>;
 }) {
   const [alerts, departments, fast, trends, notifications, leaders, t] = await Promise.all([
     alertsRequest,
@@ -115,6 +155,9 @@ async function DesktopOverview({
         initial={headerClock(now, locale)}
         locale={locale}
       />
+      <Suspense fallback={null}>
+        <HomeAttention data={attention} />
+      </Suspense>
       <FilterBar departments={DEPARTMENTS.map((d) => d.name)} updatedMinutesAgo={minutesSince(fast.hr?.syncedAt, now)} />
       <AiFocusPanel insights={alerts ? insightsOf(alerts, t) : []} available={alerts !== null} departments={units.length} tasks={view.activeTasks ?? 0} t={t} />
 

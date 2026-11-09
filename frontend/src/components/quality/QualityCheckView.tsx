@@ -118,12 +118,26 @@ export function QualityCheckView({ card: data }: { card: QualityCheckCard }) {
           <section className={card}>
             <dl className="space-y-2 text-sm">
               {[
-                { label: "Партия", value: <Link href={`/procurement/batches/${c.batchId}`} className="font-medium text-accent-strong hover:underline">{c.batchNumber}</Link> },
+                {
+                  label: "Партия",
+                  value: c.batchId ? <Link href={`/procurement/batches/${c.batchId}`} className="font-medium text-accent-strong hover:underline">{c.batchNumber}</Link> : null,
+                },
+                {
+                  label: "Поставка",
+                  value: c.arrivalId ? (
+                    <>
+                      <Link href={`/procurement/arrivals/${c.arrivalId}`} className="font-medium tabular-nums text-accent-strong hover:underline">
+                        {c.arrivalNumber}
+                      </Link>
+                      {!c.batchId && <span className="text-ink-3"> · {t("товар в машине, на склад ещё не принят")}</span>}
+                    </>
+                  ) : null,
+                },
                 { label: "Номер партии производителя", value: c.supplierBatchNo },
                 { label: "Позиция", value: `${c.itemName} · ${c.sku}` },
                 { label: "Поставщик", value: c.supplierName },
-                { label: "Пришло", value: `${quantity(c.received)} ${c.unitCode} · ${c.warehouseName}` },
-                { label: "Сейчас на складах", value: `${quantity(c.onHand)} ${c.unitCode}` },
+                { label: c.batchId ? "Пришло" : "По накладной", value: `${quantity(c.received)} ${c.unitCode} · ${c.warehouseName}` },
+                { label: "Сейчас на складах", value: c.batchId ? `${quantity(c.onHand)} ${c.unitCode}` : null },
                 { label: "Годна до", value: c.expiresOn ? dateRu(c.expiresOn) : t("не указан") },
                 { label: "Контроль", value: t(qualityControlLabel[c.control]) },
                 { label: "Условия хранения", value: data.storageConditions },
@@ -147,12 +161,14 @@ export function QualityCheckView({ card: data }: { card: QualityCheckCard }) {
               <DocumentsBlock owner="qc" id={c.id} documents={data.documents} can={data.can.attach} kinds={["lab_report", "certificate", "declaration", "other"]} />
             </div>
           </section>
-          <section>
-            <h2 className="mb-2 text-sm font-semibold text-ink">{t("Документы партии")}</h2>
-            <div className={card}>
-              <DocumentsBlock owner="batch" id={c.batchId} documents={data.batchDocuments} can={data.can.attach} kinds={["certificate", "declaration", "lab_report", "other"]} />
-            </div>
-          </section>
+          {c.batchId && (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold text-ink">{t("Документы партии")}</h2>
+              <div className={card}>
+                <DocumentsBlock owner="batch" id={c.batchId} documents={data.batchDocuments} can={data.can.attach} kinds={["certificate", "declaration", "lab_report", "other"]} />
+              </div>
+            </section>
+          )}
           {data.history.length > 0 && (
             <section>
               <h2 className="mb-2 text-sm font-semibold text-ink">{t("История")}</h2>
@@ -429,7 +445,8 @@ function LabStep({ data, done }: { data: QualityCheckCard; done: QualityResult[]
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-ink">
-                {t("Проба, {unit}", { unit: c.unitCode })} <span className="font-normal text-ink-3">{t("спишется с партии")}</span>
+                {t("Проба, {unit}", { unit: c.unitCode })}{" "}
+                <span className="font-normal text-ink-3">{t(c.batchId ? "спишется с партии" : "из машины — со склада не списывается")}</span>
               </span>
               <input
                 value={sample}
@@ -440,7 +457,7 @@ function LabStep({ data, done }: { data: QualityCheckCard; done: QualityResult[]
                 className={`${field} tabular-nums disabled:bg-muted`}
               />
             </label>
-            {stocked.length > 1 && data.sampleQty === null && (
+            {c.batchId && stocked.length > 1 && data.sampleQty === null && (
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium text-ink">{t("Склад пробы")}</span>
                 <select value={warehouse} onChange={(e) => setWarehouse(e.target.value)} className={field}>
@@ -510,10 +527,17 @@ function DecisionStep({ data }: { data: QualityCheckCard }) {
       </h2>
       {c.status === "Decided" && c.decision ? (
         <div className="mt-3 space-y-1 text-sm">
-          <p className={`font-semibold ${c.decision === "Approved" ? "text-ok" : "text-bad"}`}>{t(c.decision === "Approved" ? "Партия допущена" : "Партия забракована")}</p>
+          <p className={`font-semibold ${c.decision === "Approved" ? "text-ok" : "text-bad"}`}>
+            {t(c.batchId ? (c.decision === "Approved" ? "Партия допущена" : "Партия забракована") : c.decision === "Approved" ? "Допущено к приёмке" : "Забраковано — вернуть поставщику")}
+          </p>
           {data.decisionComment && <p className="text-ink-2">{data.decisionComment}</p>}
           <p className="text-xs text-ink-3">{[c.decidedByName, c.decidedAt ? stampRu(c.decidedAt) : null].filter(Boolean).join(" · ")}</p>
-          {c.decision === "Rejected" && <p className="text-xs text-ink-3">{t("Кладовщик возвращает партию поставщику или списывает — в карточке партии.")}</p>}
+          {c.decision === "Rejected" && (
+            <p className="text-xs text-ink-3">
+              {t(c.batchId ? "Кладовщик возвращает партию поставщику или списывает — в карточке партии." : "На склад не принимается — кладовщик возвращает поставщику с машиной.")}
+            </p>
+          )}
+          {c.decision === "Approved" && !c.batchId && c.arrivalId && <p className="text-xs text-ink-3">{t("Кладовщик взвесит и примет на склад — партия появится при приёмке.")}</p>}
         </div>
       ) : c.status === "Cancelled" ? (
         <p className="mt-2 text-sm text-ink-3">{data.decisionComment ?? t("Проверка отменена.")}</p>
@@ -550,7 +574,9 @@ function DecisionStep({ data }: { data: QualityCheckCard }) {
         <p className="mt-2 text-sm text-ink-3">
           {c.status === "Decision"
             ? t("Ждёт решения назначенного по качеству.")
-            : t("Решение — после проверок. Партия до него {state} и не выдаётся.", { state: t(batchQualityLabel.Pending).toLowerCase() })}
+            : c.batchId
+              ? t("Решение — после проверок. Партия до него {state} и не выдаётся.", { state: t(batchQualityLabel.Pending).toLowerCase() })
+              : t("Решение — после проверок. Товар ждёт в машине: на склад его примут после допуска.")}
         </p>
       )}
     </section>

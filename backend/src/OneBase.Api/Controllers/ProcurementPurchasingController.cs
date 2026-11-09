@@ -26,6 +26,8 @@ public sealed class ProcurementPurchasingController(
     ProcurementReceiptService receipts,
     ProcurementPurchaseService purchases,
     ProcurementTenderService tenders,
+    ProcurementArrivalService arrivals,
+    ProcurementHomeService home,
     ProcurementDocumentService documents,
     IFileStorage storage) : ControllerBase
 {
@@ -190,6 +192,59 @@ public sealed class ProcurementPurchasingController(
     public async Task<IActionResult> CancelTender(Guid id, ProcurementController.CommentBody body, CancellationToken ct)
     {
         await tenders.CancelAsync(await ContextAsync(ct), id, body.Comment, ct);
+        return NoContent();
+    }
+
+    // ---------- Поставки (приезд машины) ----------
+
+    /// <summary>Главная по ролям: ближайшие поставки, машины на приёмке, принято на склад, качество, склад, согласования — по правам пользователя.</summary>
+    [HttpGet("home")]
+    public async Task<ProcurementHomeView> Home(CancellationToken ct) => await home.GetAsync(await ContextAsync(ct), ct);
+
+    /// <summary>
+    /// Ждут поставки — тендеры и покупки «Куплено — привезёт поставщик», по которым поставлено не всё (просроченные сверху); tender или order —
+    /// один источник; take — сколько.
+    /// </summary>
+    [HttpGet("arrivals/expected")]
+    public async Task<IReadOnlyList<ProcurementExpectedDelivery>> ExpectedDeliveries(
+        [FromQuery] Guid? tender = null,
+        [FromQuery] Guid? order = null,
+        [FromQuery] Guid? source = null,
+        [FromQuery] int take = 100,
+        CancellationToken ct = default) =>
+        await arrivals.ExpectedAsync(await ContextAsync(ct), source ?? tender ?? order, take, ct);
+
+    /// <summary>Поставки: status (open — на проверке и к приёмке, quality, ready, accepted, returned, cancelled, done, all), q, tender или order, страница.</summary>
+    [HttpGet("arrivals")]
+    public async Task<PageResult<ProcurementArrivalRow>> Arrivals(
+        [FromQuery] string? status = "open",
+        [FromQuery] string? q = null,
+        [FromQuery] Guid? tender = null,
+        [FromQuery] Guid? order = null,
+        [FromQuery] Guid? source = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        CancellationToken ct = default) =>
+        await arrivals.SearchAsync(await ContextAsync(ct), new ProcurementArrivalSearch(status, q, source ?? tender ?? order, page, pageSize), ct);
+
+    [HttpGet("arrivals/{id:guid}")]
+    public async Task<ProcurementArrivalDetail> Arrival(Guid id, CancellationToken ct) => await arrivals.GetAsync(await ContextAsync(ct), id, ct);
+
+    /// <summary>«Машина приехала» (кладовщик): склад не меняется, по строкам с контролем — проверки качества.</summary>
+    [HttpPost("arrivals")]
+    public async Task<IActionResult> RegisterArrival(ProcurementArrivalInput input, CancellationToken ct) =>
+        Ok(new { id = await arrivals.RegisterAsync(await ContextAsync(ct), input, ct) });
+
+    /// <summary>«Принять на склад» (кладовщик): фактические места и вес — приход RC-, уведомления снабжению, аналитикам и финансисту.</summary>
+    [HttpPost("arrivals/{id:guid}/accept")]
+    public async Task<IActionResult> AcceptArrival(Guid id, ProcurementArrivalAcceptInput input, CancellationToken ct) =>
+        Ok(new { receiptId = await arrivals.AcceptAsync(await ContextAsync(ct), id, input, ct) });
+
+    /// <summary>Отменить поставку до приёмки — причина обязательна.</summary>
+    [HttpPost("arrivals/{id:guid}/cancel")]
+    public async Task<IActionResult> CancelArrival(Guid id, ProcurementArrivalCancelInput input, CancellationToken ct)
+    {
+        await arrivals.CancelAsync(await ContextAsync(ct), id, input, ct);
         return NoContent();
     }
 

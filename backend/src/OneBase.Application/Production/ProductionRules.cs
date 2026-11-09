@@ -4,8 +4,8 @@ using OneBase.Domain.Production;
 namespace OneBase.Application.Production;
 
 /// <summary>
-/// Правила производства (чистые функции — проверяются тестами): потребность по норме, отклонение факта от нормы, перерасход, переходы
-/// заданий на выпуск, проверка кода рецептуры.
+/// Правила производства (чистые функции — проверяются тестами): потребность по норме (без этапов; цепочка — ProductionCalc), отклонение факта
+/// от нормы, перерасход, переходы заданий на выпуск и версий рецептуры, проверка кода рецептуры.
 /// </summary>
 public static partial class ProductionRules
 {
@@ -54,8 +54,33 @@ public static partial class ProductionRules
     public static string Label(ProductionRecipeStatus status) => status switch
     {
         ProductionRecipeStatus.Draft => "Черновик",
-        ProductionRecipeStatus.Active => "Действующая",
+        ProductionRecipeStatus.PendingApproval => "На утверждении",
+        ProductionRecipeStatus.Active => "Утверждена",
         _ => "Архив",
+    };
+
+    /// <summary>Неутверждённая версия: черновик или на утверждении — у кода одна.</summary>
+    public static readonly ProductionRecipeStatus[] OpenStatuses = [ProductionRecipeStatus.Draft, ProductionRecipeStatus.PendingApproval];
+
+    public static bool Open(ProductionRecipeStatus status) => status is ProductionRecipeStatus.Draft or ProductionRecipeStatus.PendingApproval;
+
+    public static string Label(ProductionStageKind kind) => kind switch
+    {
+        ProductionStageKind.Mixing => "Замес",
+        ProductionStageKind.Baking => "Выпечка",
+        ProductionStageKind.Filling => "Начинка",
+        ProductionStageKind.Glazing => "Глазурь",
+        ProductionStageKind.Adding => "Добавки",
+        ProductionStageKind.Cooling => "Охлаждение",
+        ProductionStageKind.Packing => "Упаковка",
+        _ => "Другое",
+    };
+
+    public static string Label(ProductionDefectBase basis) => basis switch
+    {
+        ProductionDefectBase.Input => "от поступившего на этап",
+        ProductionDefectBase.Finished => "от готовой продукции",
+        _ => "от обработанного на этапе",
     };
 
     /// <summary>Код рецептуры: 1–32 знака — буквы, цифры, «-», «_», «.»; пробелы по краям убираются, регистр сохраняется.</summary>

@@ -1,7 +1,7 @@
 // Раздел «Заявки» (lib/procurement.ts): node --test src/lib/procurement.test.mjs.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { activeWarehouses, batchExpiry, batchOptionLabel, batchesTotal, checkDraft, compactMoney, costToBase, dateRu, draftTotal, lineSum, money, operationWarehouse, orderTotals, parseNumber, periodOf, purchaseTotal, quantity, ratingText, receiptLine, reversible, reportCell, split, stageIndex, stockCover, unitToBase } from "./procurement.ts";
+import { activeWarehouses, batchExpiry, batchOptionLabel, batchesTotal, checkDraft, compactMoney, costToBase, dateRu, draftTotal, kindAccepts, lineSum, money, operationWarehouse, orderTotals, parseNumber, periodOf, purchaseTotal, quantity, ratingText, rawRouteProblem, receiptLine, reversible, reportCell, split, stageIndex, stockCover, unitToBase } from "./procurement.ts";
 
 const item = (over = {}) => ({ key: "k", id: null, name: "Бумага А4", categoryId: "c1", unitCode: "пачка", quantity: "20", price: "45000", comment: "", ...over });
 
@@ -52,6 +52,7 @@ test("этапы заявки: любой шаг маршрута и дораб�
   assert.equal(stageIndex("Draft"), 0);
   assert.equal(stageIndex("RevisionRequired"), 1);
   assert.equal(stageIndex("HeadApproval"), 1);
+  assert.equal(stageIndex("AnalystApproval"), 1);
   assert.equal(stageIndex("FinanceApproval"), 1);
   assert.equal(stageIndex("DirectorApproval"), 1);
   assert.equal(stageIndex("PartiallyFulfilled"), 2);
@@ -171,4 +172,26 @@ test("единицы закупки: пересчёт в единицу карт
   assert.equal(unitToBase(3, 1), 3);
   assert.equal(costToBase(250000, 25), 10000); // мешок за 250 000 — 10 000 за кг
   assert.equal(costToBase(100, 3), 33.33);
+});
+
+test("тип заявки: сырьё — только в заявке на сырьё, остальное — только в обычной", () => {
+  const raw = { isProduction: true };
+  const parts = { isProduction: false };
+  assert.equal(kindAccepts("Raw", raw), true);
+  assert.equal(kindAccepts("Raw", parts), false);
+  assert.equal(kindAccepts("Regular", raw), false);
+  assert.equal(kindAccepts("Regular", parts), true);
+  assert.equal(kindAccepts("Regular", undefined), true); // категория неизвестна (не из списка формы) — как не сырьё
+  assert.equal(kindAccepts("Raw", {}), false);
+});
+
+test("маршрут сырья: у каждого автора шаги, без повторов, директор один раз, свой шаг автору нельзя", () => {
+  const ok = { supply: ["analyst", "finance"], analyst: ["finance"], finance: ["analyst"] };
+  assert.equal(rawRouteProblem(ok), null);
+  assert.equal(rawRouteProblem({ ...ok, supply: ["analyst", "finance", "director_limit"] }), null);
+  assert.match(rawRouteProblem({ ...ok, supply: [] }), /хотя бы один шаг/);
+  assert.match(rawRouteProblem({ ...ok, supply: ["finance", "finance"] }), /один раз/);
+  assert.match(rawRouteProblem({ ...ok, finance: ["director", "director_limit"] }), /один раз/);
+  assert.match(rawRouteProblem({ ...ok, analyst: ["analyst"] }), /собственный шаг/);
+  assert.match(rawRouteProblem({ ...ok, finance: ["finance", "analyst"] }), /собственный шаг/);
 });

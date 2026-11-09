@@ -79,7 +79,9 @@ const titles: Record<string, string> = {
   "/production": "Производство",
   "/production/quality": "Качество",
   "/production/orders": "Задания",
-  "/production/recipes": "Рецептуры",
+  "/production/recipes": "Техкарты",
+  "/production/technologist": "Технолог",
+  "/production/shifts": "Смены",
   "/production/reports": "Отчёты производства",
   "/reports": "Отчёты",
   "/ai": "AI Dashboard",
@@ -665,6 +667,35 @@ function CalendarSkeleton() {
   );
 }
 
+/** Рабочий стол (кладовщик, лаборатория, снабжение, аналитик): шапка, четыре показателя, машины и поставки слева, решения справа. */
+function WorkHomeSkeleton() {
+  return (
+    <Busy className="mx-auto flex max-w-[1440px] flex-col gap-5 px-4 pb-12 pt-4 sm:px-6 lg:px-8 lg:pt-8">
+      <div className="space-y-2">
+        <Sk className="h-4 w-64" />
+        <Sk className="h-8 w-80" />
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Sk key={i} className="h-[104px] rounded-2xl" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="space-y-2">
+          <Sk className="h-5 w-48" />
+          {[0, 1, 2].map((i) => (
+            <Sk key={i} className="h-24 rounded-2xl" />
+          ))}
+        </div>
+        <div className="space-y-2">
+          <Sk className="h-5 w-40" />
+          <Sk className="h-48 rounded-2xl" />
+        </div>
+      </div>
+    </Busy>
+  );
+}
+
 /**
  * Макет страницы на время перехода (loading.tsx): по нажатию сразу открывается новая страница — её шапка с настоящим названием,
  * рамки карточек и таблиц, на месте данных мягкие плашки; данные приходят следом и встают на те же места. Макет выбирается по адресу.
@@ -676,6 +707,7 @@ export function RouteSkeleton({ inSales = false }: { inSales?: boolean }) {
   const home = useHomeKind();
   // Главная сотрудника и прямая ссылка — «Мой день».
   if ((pathname === "/" && home === "my_day") || pathname === "/me") return <MyDaySkeleton label={t("Загрузка")} />;
+  if (pathname === "/" && home === "work") return <WorkHomeSkeleton />;
   if (pathname === "/") {
     return (
       <>

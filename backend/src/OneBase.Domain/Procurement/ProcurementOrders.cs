@@ -164,6 +164,9 @@ public class ProcurementPurchaseOrder : Entity
     /// <summary>Ожидаемая дата доставки.</summary>
     public DateOnly? ExpectedDate { get; set; }
 
+    /// <summary>Склад, на который поставщик привезёт покупку «Куплено» (не указан — склад по умолчанию).</summary>
+    public Guid? WarehouseId { get; set; }
+
     public string? PaymentTerms { get; set; }
 
     /// <summary>Скидка на заказ, сумма (UZS).</summary>

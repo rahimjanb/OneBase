@@ -19,7 +19,7 @@ export const navPermissions: Record<string, string[]> = {
   // Склад снабжения: кладовщик, снабжение, директор; склад и партии смотрит и лаборатория.
   "/procurement": ["procurement.warehouse", "procurement.read", "procurement.manage", "quality.check"],
   // «Производство»: задания и рецептуры (производство, технолог), контроль качества (лаборатория), кладовщик, снабжение, директор.
-  "/production": ["production.read", "production.manage", "production.recipes", "quality.check", "procurement.warehouse", "procurement.read", "procurement.manage"],
+  "/production": ["production.read", "production.manage", "production.recipes", "production.operate", "quality.check", "procurement.warehouse", "procurement.read", "procurement.manage"],
   // HR: право «HR», администратор интеграций или руководитель отдела с привязанными подразделениями Verifix (hr.department — не право,
   // а признак из /api/auth/me; доступ к данным всё равно проверяет backend).
   // Подбор: право «Подбор» или заявки на сотрудника (hr.requests — признак из /api/auth/me для руководителей отделов).

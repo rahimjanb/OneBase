@@ -11,8 +11,9 @@ using OneBase.Infrastructure.Persistence;
 namespace OneBase.AI.Tests;
 
 /// <summary>
-/// Закупка сырья на настоящем PostgreSQL (ONEBASE_TEST_POSTGRES, иначе пропускается): маршрут сырья «руководитель снабжения → директор» —
-/// последовательно и независимо от суммы, пропустить шаг нельзя, остальные заявки — прежним маршрутом; поставка по тендеру — на склад
+/// Закупка сырья на настоящем PostgreSQL (ONEBASE_TEST_POSTGRES, иначе пропускается): заявки «Закупка сырья» создают снабжение, аналитик и
+/// финансист, согласуют шагами по автору из настроек (по умолчанию снабженец: аналитик → финансист; аналитик: финансист; финансист:
+/// аналитик), свою заявку никто не согласует, заявки в пути идут своими шагами, прежний маршрут сырья доходит по-старому; поставка по тендеру — на склад
 /// партиями на контроль, в единице закупки; «Куплено» позиции с партиями — на контроль, резерв под заявку после допуска, брак — снова к
 /// закупке; единицы закупки на складе; история цен — заказы, тендеры и приходы без двойного учёта.
 /// </summary>
@@ -26,7 +27,7 @@ public class ProcurementRawPurchaseDbTests(DataManagerDb fixture) : IClassFixtur
     private static readonly string[] Admin = [.. Permissions.All];
 
     private sealed record Org(string S, Department Dept, User Employee, User Financier, User Director, User SupplyHead, User Buyer, User Keeper, User Lab, User Admin,
-        Guid Raw, Guid Stationery, Guid Central);
+        Guid Raw, Guid Stationery, Guid Central, User Analyst);
 
     private async Task<Org> SeedAsync()
     {
@@ -57,13 +58,16 @@ public class ProcurementRawPurchaseDbTests(DataManagerDb fixture) : IClassFixtur
             return user;
         }
 
+        // Роль «Аналитик» — по имени (шаг маршрута сырья); в тестовой базе ролей по умолчанию нет — создаётся один раз на базу.
+        var analyst = await db.Roles.FirstOrDefaultAsync(r => r.Name == SystemRoles.AnalystRole) ?? new Role { Name = SystemRoles.AnalystRole };
         var org = new Org(s, dept, Person("rp-emp", "Технолог"), Person("rp-fin", "Финансист"), Person("rp-dir", "Директор"), Person("rp-sh", "Руководитель снабжения"),
             Person("rp-buy", "Снабженец", RoleWith($"Снабжение {s}", Permissions.ProcurementManage)), Person("rp-kpr", "Кладовщик", RoleWith($"Кладовщик {s}", Permissions.ProcurementWarehouse)),
-            Person("rp-lab", "Завлаб", RoleWith($"Лаборатория {s}", Permissions.QualityCheck)), Person("rp-adm", "Админ"), Guid.Empty, Guid.Empty, Guid.Empty);
-        db.Users.AddRange(org.Employee, org.Financier, org.Director, org.SupplyHead, org.Buyer, org.Keeper, org.Lab, org.Admin);
+            Person("rp-lab", "Завлаб", RoleWith($"Лаборатория {s}", Permissions.QualityCheck)), Person("rp-adm", "Админ"), Guid.Empty, Guid.Empty, Guid.Empty,
+            Person("rp-an", "Аналитик", analyst));
+        db.Users.AddRange(org.Employee, org.Financier, org.Director, org.SupplyHead, org.Buyer, org.Keeper, org.Lab, org.Admin, org.Analyst);
         var settings = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
-        (settings.FinanceApproverId, settings.DirectorApproverId, settings.DirectorLimit, settings.RawRouteEnabled, settings.SupplyApproverId) =
-            (org.Financier.Id, org.Director.Id, ProcurementSettings.DefaultDirectorLimit, false, null);
+        (settings.FinanceApproverId, settings.DirectorApproverId, settings.DirectorLimit, settings.RawRouteEnabled, settings.SupplyApproverId, settings.RawRouteSteps) =
+            (org.Financier.Id, org.Director.Id, ProcurementSettings.DefaultDirectorLimit, false, null, null);
         await db.SaveChangesAsync();
         db.ProcurementQualityApprovers.RemoveRange(await db.ProcurementQualityApprovers.ToListAsync());
         db.ProcurementQualityApprovers.Add(new ProcurementQualityApprover { UserId = org.Lab.Id });
@@ -89,15 +93,24 @@ public class ProcurementRawPurchaseDbTests(DataManagerDb fixture) : IClassFixtur
 
     private static ProcurementRequestService R(IServiceProvider sp) => sp.GetRequiredService<ProcurementRequestService>();
 
-    private Task RouteAsync(Org org, bool raw, Guid? supplyApprover) => Do(org.Director, Boss, async (sp, c) =>
+    /// <summary>Маршрут сырья по авторам в настройках (директор — право «Настройки снабжения»).</summary>
+    private Task RawStepsAsync(Org org, Dictionary<string, IReadOnlyList<string>> steps) => Do(org.Director, Boss, async (sp, c) =>
     {
         var now = await R(sp).SettingsAsync(c, default);
-        await R(sp).UpdateSettingsAsync(c, now with { RawRouteEnabled = raw, SupplyApproverId = supplyApprover }, default);
+        await R(sp).UpdateSettingsAsync(c, now with { RawSteps = steps }, default);
     });
 
-    private Task<Guid> RequestAsync(Org org, User initiator, Guid category, decimal qty, decimal price, Guid? item = null, string name = "Мука") =>
-        As(initiator, Employee, (sp, c) => R(sp).CreateAsync(c, new ProcurementRequestInput($"{name} для цеха {org.S}", null, ProcurementPriority.Normal, null, "Выпуск", null,
-            [new(null, $"{name} {org.S}", category, "кг", qty, price, ItemId: item)], true), default));
+    private static ProcurementRequestInput Input(Org org, Guid category, decimal qty, decimal price, Guid? item, string name, ProcurementRequestKind kind) =>
+        new($"{name} для цеха {org.S}", null, ProcurementPriority.Normal, null, "Выпуск", null, [new(null, $"{name} {org.S}", category, "кг", qty, price, ItemId: item)], true,
+            Kind: kind);
+
+    /// <summary>Обычная заявка (сотрудник).</summary>
+    private Task<Guid> RequestAsync(Org org, User initiator, Guid category, decimal qty, decimal price, Guid? item = null, string name = "Бумага") =>
+        As(initiator, Employee, (sp, c) => R(sp).CreateAsync(c, Input(org, category, qty, price, item, name, ProcurementRequestKind.Regular), default));
+
+    /// <summary>Заявка «Закупка сырья» — от снабженца, аналитика или финансиста (права автора — permissions).</summary>
+    private Task<Guid> RawAsync(Org org, User initiator, string[] permissions, decimal qty, decimal price, Guid? item = null, string name = "Мука") =>
+        As(initiator, permissions, (sp, c) => R(sp).CreateAsync(c, Input(org, org.Raw, qty, price, item, name, ProcurementRequestKind.Raw), default));
 
     private Task<ProcurementRequestDetail> DetailAsync(Org org, Guid id) => As(org.Buyer, Supply, (sp, c) => R(sp).GetAsync(c, id, default));
 
@@ -112,75 +125,146 @@ public class ProcurementRawPurchaseDbTests(DataManagerDb fixture) : IClassFixtur
         As(org.Keeper, Keeper, (sp, c) => sp.GetRequiredService<ProcurementStockService>().CreateItemAsync(c, new ProcurementCatalogInput($"RP-{Guid.NewGuid():N}"[..14],
             $"{name} {org.S}", org.Raw, "кг", null, null, 0, TracksBatches: batches, ShelfLifeDays: 180, QualityControl: control, Units: units), default));
 
-    /// <summary>Утверждённая обычным маршрутом заявка (финансист, сумма в лимите).</summary>
-    private async Task<Guid> ApprovedAsync(Org org, Guid category, decimal qty, decimal price, Guid? item = null, string name = "Мука")
+    /// <summary>Утверждённая заявка на сырьё: снабженец создаёт, аналитик и финансист согласуют (маршрут по умолчанию).</summary>
+    private async Task<Guid> ApprovedAsync(Org org, decimal qty, decimal price, Guid? item = null, string name = "Мука")
     {
-        var id = await RequestAsync(org, org.Employee, category, qty, price, item, name);
+        var id = await RawAsync(org, org.Buyer, Supply, qty, price, item, name);
+        await Do(org.Analyst, Employee, (sp, c) => R(sp).ApproveAsync(c, id, null, default));
         await Do(org.Financier, Employee, (sp, c) => R(sp).ApproveAsync(c, id, null, default));
         Assert.Equal(ProcurementRequestStatus.Approved, (await DetailAsync(org, id)).Status);
         return id;
     }
 
     [PostgresFact]
-    public async Task Raw_route_goes_supply_head_then_director_whatever_the_amount_and_other_requests_keep_their_route()
+    public async Task Raw_requests_are_created_by_supply_analyst_or_financier_and_go_their_authors_route()
     {
         var org = await SeedAsync();
 
-        // Маршрут сырья выключен — заявка на сырьё идёт прежним маршрутом (финансист).
-        await RouteAsync(org, false, null);
-        var before = await RequestAsync(org, org.Employee, org.Raw, 10, 1_000);
-        Assert.Equal(ProcurementRequestStatus.FinanceApproval, (await DetailAsync(org, before)).Status);
-        await Do(org.Employee, Employee, (sp, c) => R(sp).CancelAsync(c, before, null, default));
+        // Кто создаёт: сотрудник (технолог) заявку на сырьё не создаёт; сырьё — только отдельной заявкой, а в ней — только сырьё.
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => RawAsync(org, org.Employee, Employee, 10, 1_000));
+        Assert.Contains("отдельной заявкой «Закупка сырья»",
+            (await Assert.ThrowsAsync<FieldValidationException>(() => RequestAsync(org, org.Employee, org.Raw, 10, 1_000, name: "Мука"))).Message);
+        await Assert.ThrowsAsync<FieldValidationException>(() => As(org.Buyer, Supply, (sp, c) =>
+            R(sp).CreateAsync(c, Input(org, org.Stationery, 5, 2_000, null, "Бумага", ProcurementRequestKind.Raw), default)));
+        Assert.Equal(ProcurementRequestStatus.FinanceApproval, (await DetailAsync(org, await RequestAsync(org, org.Employee, org.Stationery, 5, 2_000))).Status);
 
-        // Включён: руководитель снабжения → директор, хотя сумма меньше лимита; директор, финансист и администратор шаг снабжения не решают.
-        await RouteAsync(org, true, org.SupplyHead.Id);
-        var id = await RequestAsync(org, org.Employee, org.Raw, 10, 1_000);
+        // Снабженец: аналитик → финансист → снабжение, директор не нужен даже сверх лимита (10 000 000 > 5 000 000).
+        var id = await RawAsync(org, org.Buyer, Supply, 10, 1_000_000);
         var detail = await DetailAsync(org, id);
-        Assert.Equal((ProcurementRequestStatus.SupplyApproval, true), (detail.Status, detail.RawRoute));
-        Assert.Equal([ProcurementApprovalStages.SupplyHead, ProcurementApprovalStages.Director, "supply"], detail.Route!.Select(s => s.Key));
+        Assert.Equal((ProcurementRequestStatus.AnalystApproval, ProcurementRequestKind.Raw, true), (detail.Status, detail.Kind, detail.RawRoute));
+        Assert.Equal([ProcurementApprovalStages.Analyst, ProcurementApprovalStages.Finance, "supply"], detail.Route!.Select(s => s.Key));
         Assert.Equal("current", detail.Route![0].State);
-        Assert.True(await NotifiedAsync(org.SupplyHead, "Заявка ждёт вашего согласования"));
-        await Assert.ThrowsAsync<FieldForbiddenException>(() => Do(org.Director, Boss, (sp, c) => R(sp).ApproveAsync(c, id, null, default)));
+        Assert.Contains($"Аналитик {org.S}", detail.Route[0].Who);
+        Assert.True(await NotifiedAsync(org.Analyst, "Заявка ждёт вашего согласования"));
         await Assert.ThrowsAsync<FieldForbiddenException>(() => Do(org.Financier, Employee, (sp, c) => R(sp).ApproveAsync(c, id, null, default)));
         await Assert.ThrowsAsync<FieldForbiddenException>(() => Do(org.Admin, Admin, (sp, c) => R(sp).ApproveAsync(c, id, null, default)));
-        await Do(org.SupplyHead, Employee, (sp, c) => R(sp).ApproveAsync(c, id, "Нужно для выпуска", default));
-        Assert.Equal(ProcurementRequestStatus.DirectorApproval, (await DetailAsync(org, id)).Status);
-        await Do(org.Director, Boss, (sp, c) => R(sp).ApproveAsync(c, id, null, default));
+        await Do(org.Analyst, Employee, (sp, c) => R(sp).ApproveAsync(c, id, "Объём по плану выпуска", default));
+        Assert.Equal(ProcurementRequestStatus.FinanceApproval, (await DetailAsync(org, id)).Status);
+        Assert.True(await NotifiedAsync(org.Financier, "Заявка ждёт вашего согласования"));
+        await Do(org.Financier, Employee, (sp, c) => R(sp).ApproveAsync(c, id, null, default));
         detail = await DetailAsync(org, id);
         Assert.Equal(ProcurementRequestStatus.Approved, detail.Status);
         Assert.Equal(["done", "done", "current"], detail.Route!.Select(s => s.State));
-        Assert.True(await NotifiedAsync(org.Financier, "Утверждена закупка сырья")); // финансист — уведомление без шага (D4)
+        Assert.True(await NotifiedAsync(org.Buyer, "Согласована к закупке")); // утверждённая — в снабжение
 
-        // Заявка не на сырьё — прежним маршрутом; заявка самого руководителя снабжения — сразу директору.
-        Assert.Equal(ProcurementRequestStatus.FinanceApproval, (await DetailAsync(org, await RequestAsync(org, org.Employee, org.Stationery, 5, 2_000, name: "Бумага"))).Status);
-        Assert.Equal(ProcurementRequestStatus.DirectorApproval, (await DetailAsync(org, await RequestAsync(org, org.SupplyHead, org.Raw, 3, 1_000))).Status);
+        // Аналитик — сразу финансисту; финансист — аналитику.
+        var byAnalyst = await RawAsync(org, org.Analyst, Employee, 3, 1_000);
+        detail = await DetailAsync(org, byAnalyst);
+        Assert.Equal(ProcurementRequestStatus.FinanceApproval, detail.Status);
+        Assert.Equal([ProcurementApprovalStages.Finance, "supply"], detail.Route!.Select(s => s.Key));
+        await Do(org.Financier, Employee, (sp, c) => R(sp).ApproveAsync(c, byAnalyst, null, default));
+        Assert.Equal(ProcurementRequestStatus.Approved, (await DetailAsync(org, byAnalyst)).Status);
+        var byFinancier = await RawAsync(org, org.Financier, Employee, 3, 1_000);
+        detail = await DetailAsync(org, byFinancier);
+        Assert.Equal(ProcurementRequestStatus.AnalystApproval, detail.Status);
+        Assert.Equal([ProcurementApprovalStages.Analyst, "supply"], detail.Route!.Select(s => s.Key));
 
-        // Руководитель снабжения не выбран — решают руководители отдела «Снабжение».
-        await RouteAsync(org, true, null);
+        // Свою заявку не согласует никто: финансист с ролью «Аналитик» — шаг аналитика решает другой аналитик.
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
-            var supply = await db.Departments.FirstOrDefaultAsync(d => d.Code == "supply") ?? db.Departments.Add(new Department { Code = "supply", Name = "Снабжение" }).Entity;
-            await db.SaveChangesAsync();
-            db.WorkDepartmentHeads.Add(new WorkDepartmentHead { DepartmentId = supply.Id, UserId = org.Buyer.Id });
+            var role = await db.Roles.SingleAsync(r => r.Name == SystemRoles.AnalystRole);
+            var financier = await db.Users.Include(u => u.Roles).SingleAsync(u => u.Id == org.Financier.Id);
+            financier.Roles.Add(new UserRole { Role = role });
             await db.SaveChangesAsync();
         }
 
-        var next = await RequestAsync(org, org.Employee, org.Raw, 4, 1_000);
-        Assert.Equal(ProcurementRequestStatus.SupplyApproval, (await DetailAsync(org, next)).Status);
-        await Assert.ThrowsAsync<FieldForbiddenException>(() => Do(org.SupplyHead, Employee, (sp, c) => R(sp).ApproveAsync(c, next, null, default)));
-        await Do(org.Buyer, Supply, (sp, c) => R(sp).ReturnAsync(c, next, "Уточните объём", default));
-        Assert.Equal(ProcurementRequestStatus.RevisionRequired, (await DetailAsync(org, next)).Status);
-        await RouteAsync(org, false, null);
+        var own = await RawAsync(org, org.Financier, Employee, 2, 1_000);
+        Assert.Equal(ProcurementRequestStatus.AnalystApproval, (await DetailAsync(org, own)).Status);
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => Do(org.Financier, Employee, (sp, c) => R(sp).ApproveAsync(c, own, null, default)));
+        await Do(org.Analyst, Employee, (sp, c) => R(sp).ApproveAsync(c, byFinancier, null, default));
+        await Do(org.Analyst, Employee, (sp, c) => R(sp).ApproveAsync(c, own, null, default));
+        Assert.Equal((ProcurementRequestStatus.Approved, ProcurementRequestStatus.Approved), ((await DetailAsync(org, byFinancier)).Status, (await DetailAsync(org, own)).Status));
+    }
+
+    [PostgresFact]
+    public async Task Raw_route_is_configurable_requests_in_flight_keep_their_steps_and_the_old_route_still_finishes()
+    {
+        var org = await SeedAsync();
+
+        // Маршрут по умолчанию — в настройках; свой шаг автору и пустую строку не задать.
+        var settings = await As(org.Director, Boss, (sp, c) => R(sp).SettingsAsync(c, default));
+        Assert.Equal(["analyst", "finance"], settings.RawSteps![ProcurementRawRoute.SupplyAuthor]);
+        Dictionary<string, IReadOnlyList<string>> Route(params string[] supply) => new()
+        {
+            [ProcurementRawRoute.SupplyAuthor] = supply, [ProcurementRawRoute.AnalystAuthor] = ["finance"], [ProcurementRawRoute.FinanceAuthor] = ["analyst"],
+        };
+        await Assert.ThrowsAsync<FieldValidationException>(() => RawStepsAsync(org, Route()));
+        await Assert.ThrowsAsync<FieldValidationException>(() => RawStepsAsync(org, new(Route("analyst")) { [ProcurementRawRoute.AnalystAuthor] = ["analyst", "finance"] }));
+
+        // Заявка в пути идёт шагами, с которыми её отправили; новая — новым маршрутом: директор, если сумма больше лимита.
+        var inFlight = await RawAsync(org, org.Buyer, Supply, 10, 1_000_000);
+        await RawStepsAsync(org, Route("analyst", "finance", "director_limit"));
+        var big = await RawAsync(org, org.Buyer, Supply, 10, 1_000_000);
+        var small = await RawAsync(org, org.Buyer, Supply, 10, 1_000);
+        Assert.Equal([ProcurementApprovalStages.Analyst, ProcurementApprovalStages.Finance, ProcurementApprovalStages.Director, "supply"],
+            (await DetailAsync(org, small)).Route!.Select(s => s.Key));
+        Assert.Equal(("skipped", "underLimit"), ((await DetailAsync(org, small)).Route![2].State, (await DetailAsync(org, small)).Route![2].Reason));
+        foreach (var id in new[] { inFlight, big, small })
+        {
+            await Do(org.Analyst, Employee, (sp, c) => R(sp).ApproveAsync(c, id, null, default));
+            await Do(org.Financier, Employee, (sp, c) => R(sp).ApproveAsync(c, id, null, default));
+        }
+
+        Assert.Equal(
+            (ProcurementRequestStatus.Approved, ProcurementRequestStatus.DirectorApproval, ProcurementRequestStatus.Approved),
+            ((await DetailAsync(org, inFlight)).Status, (await DetailAsync(org, big)).Status, (await DetailAsync(org, small)).Status));
+        await Do(org.Director, Boss, (sp, c) => R(sp).ApproveAsync(c, big, null, default));
+        Assert.Equal(ProcurementRequestStatus.Approved, (await DetailAsync(org, big)).Status);
+
+        // Существенная правка утверждённой заявки на сырьё — снова с первого шага её маршрута (аналитик), новый раунд.
+        var approved = await DetailAsync(org, small);
+        var line = approved.Items[0];
+        await Do(org.Buyer, Supply, (sp, c) => R(sp).UpdateAsync(c, small, new ProcurementRequestInput(approved.Title, null, approved.Priority, null, approved.Reason, null,
+            [new(line.Id, line.Name, line.CategoryId, line.UnitCode, 15, line.EstimatedPrice)], Version: approved.Version), default));
+        var again = await DetailAsync(org, small);
+        Assert.Equal((ProcurementRequestStatus.AnalystApproval, 2), (again.Status, again.ApprovalRound));
+
+        // Прежний маршрут сырья (отправлена до типов заявок: у руководителя снабжения) доходит по-старому: руководитель снабжения → директор.
+        var old = await RequestAsync(org, org.Employee, org.Stationery, 2, 1_000);
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
+            var r = await db.ProcurementRequests.SingleAsync(x => x.Id == old);
+            (r.Kind, r.RawRoute, r.RouteSteps, r.Status) = (ProcurementRequestKind.Raw, true, null, ProcurementRequestStatus.SupplyApproval);
+            (await db.ProcurementSettings.SingleAsync()).SupplyApproverId = org.SupplyHead.Id;
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal([ProcurementApprovalStages.SupplyHead, ProcurementApprovalStages.Director, "supply"], (await DetailAsync(org, old)).Route!.Select(s => s.Key));
+        await Do(org.SupplyHead, Employee, (sp, c) => R(sp).ApproveAsync(c, old, null, default));
+        Assert.Equal(ProcurementRequestStatus.DirectorApproval, (await DetailAsync(org, old)).Status);
+        await Do(org.Director, Boss, (sp, c) => R(sp).ApproveAsync(c, old, null, default));
+        Assert.Equal(ProcurementRequestStatus.Approved, (await DetailAsync(org, old)).Status);
+        Assert.True(await NotifiedAsync(org.Financier, "Утверждена закупка сырья")); // прежний маршрут: финансисту — уведомление без шага (D4)
     }
 
     [PostgresFact]
     public async Task Tender_delivery_lands_in_batches_on_control_in_the_purchase_unit()
     {
         var org = await SeedAsync();
-        await RouteAsync(org, false, null);
         var flour = await ItemAsync(org, "Мука", batches: true, ProcurementQualityControl.Documents, [new("упак", 25)]);
-        var request = await ApprovedAsync(org, org.Raw, 100, 9_000, flour);
+        var request = await ApprovedAsync(org, 100, 9_000, flour);
         var tenders = (Func<IServiceProvider, ProcurementTenderService>)(sp => sp.GetRequiredService<ProcurementTenderService>());
         ProcurementTenderInput Input(IReadOnlyList<ProcurementTenderLineInput> lines) => new($"Мука на квартал {org.S}", "T-1", FieldClock.Today.AddDays(-3), null,
             $"ООО Зерно {org.S}", org.Raw, "Д-1", 3, FieldClock.Today.AddDays(10), null, lines, RequestId: request, WarehouseId: org.Central);
@@ -239,9 +323,9 @@ public class ProcurementRawPurchaseDbTests(DataManagerDb fixture) : IClassFixtur
     public async Task Bought_raw_material_waits_for_quality_then_is_reserved_or_goes_back_to_purchase()
     {
         var org = await SeedAsync();
-        await RouteAsync(org, false, null);
+
         var cocoa = await ItemAsync(org, "Какао", batches: true, ProcurementQualityControl.Documents);
-        var request = await ApprovedAsync(org, org.Raw, 20, 60_000, cocoa, "Какао");
+        var request = await ApprovedAsync(org, 20, 60_000, cocoa, "Какао");
         var line = (await DetailAsync(org, request)).Items[0].Id;
         var purchases = (Func<IServiceProvider, ProcurementPurchaseService>)(sp => sp.GetRequiredService<ProcurementPurchaseService>());
         ProcurementPurchaseInput Bought(params ProcurementBatchInput[] batches) => new([new(line, 20, 61_000, batches)], null, $"ООО Какао {org.S}", "Чек 5", null);

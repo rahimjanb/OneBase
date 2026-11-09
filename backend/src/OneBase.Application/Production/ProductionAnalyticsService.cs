@@ -57,14 +57,16 @@ public sealed record ProductionOverview(
     decimal ApprovalAmount,
     IReadOnlyList<ProductionPriceChange> Prices,
     int OpenOrders,
-    int OverdueOrders);
+    int OverdueOrders,
+    int AnalystApproval = 0,
+    int FinanceApproval = 0);
 
 /// <summary>
 /// Аналитика сырья и производства: обзор и отчёты (предпросмотр, Excel, PDF — одна модель листов): «Партии и сроки», «Контроль качества»,
 /// «Расход и норма», «Движения по партиям», «Сверка позиций и партий». Считается запросами к журналу при открытии (без витрин). Видят
 /// производство, технолог, кладовщик, лаборатория, снабжение и директор; рост цен — снабжению и директору.
 /// </summary>
-public sealed class ProductionAnalyticsService(IAppDbContext db, ProcurementQualityService quality, ProcurementInsightService insight, TimeProvider clock)
+public sealed partial class ProductionAnalyticsService(IAppDbContext db, ProcurementQualityService quality, ProcurementInsightService insight, TimeProvider clock)
 {
     public const int MaxRows = 10_000;
 
@@ -87,9 +89,10 @@ public sealed class ProductionAnalyticsService(IAppDbContext db, ProcurementQual
     [
         new("batches", L("Партии и сроки", "Partiyalar va muddatlar"), L("Остатки партий: склад, поставщик, срок годности, статус качества, сумма", "Partiya qoldiqlari: ombor, yetkazib beruvchi, yaroqlilik muddati, sifat holati, summa")),
         new("quality", L("Контроль качества", "Sifat nazorati"), L("Проверки партий за период: шаг, решение, кто и когда решил, сколько дней шла проверка", "Davr bo'yicha partiyalar tekshiruvi: qadam, qaror, kim va qachon qaror qildi, tekshiruv necha kun davom etdi")),
-        new("consumption", L("Расход и норма", "Sarf va me'yor"), L("Закрытые задания на выпуск: норма на фактический выход, расход, отклонение по позициям", "Yopilgan ishlab chiqarish topshiriqlari: haqiqiy chiqishga me'yor, sarf, pozitsiyalar bo'yicha og'ish")),
+        new("consumption", L("Расход и норма", "Sarf va me'yor"), L("Закрытые задания на выпуск: норма на фактический выход, по результатам смен, расход, отклонение по позициям", "Yopilgan ishlab chiqarish topshiriqlari: haqiqiy chiqishga me'yor, smenalar natijalari bo'yicha, sarf, pozitsiyalar bo'yicha og'ish")),
         new("batch_moves", L("Движения по партиям", "Partiyalar bo'yicha harakatlar"), L("Приход, выдача, перемещения, списания по партиям за период", "Davr bo'yicha partiyalar kirimi, berilishi, ko'chirilishi, hisobdan chiqarilishi")),
         new("reconcile", L("Сверка позиций и партий", "Pozitsiyalar va partiyalar solishtiruvi"), L("Остаток позиции на складе и сумма её партий — должны совпадать", "Ombordagi pozitsiya qoldig'i va uning partiyalari yig'indisi — mos kelishi kerak")),
+        .. TechnologistKinds,
     ];
 
     private static void Require(ProcurementContext ctx)
@@ -142,7 +145,7 @@ public sealed class ProductionAnalyticsService(IAppDbContext db, ProcurementQual
 
         var decisions = await db.ProcurementQualityChecks.AsNoTracking()
             .Where(c => c.DecidedAt >= f.FromUtc && c.DecidedAt < f.ToUtc && c.Decision != null && (warehouseId == null || c.WarehouseId == warehouseId))
-            .Select(c => new { c.Decision, Supplier = c.Batch!.Supplier == null ? null : c.Batch.Supplier.Name }).ToListAsync(ct);
+            .Select(c => new { c.Decision, Supplier = c.Supplier == null ? null : c.Supplier.Name }).ToListAsync(ct);
         var rejected = decisions.Count(d => d.Decision == ProcurementBatchQuality.Rejected);
         var suppliers = decisions.GroupBy(d => d.Supplier ?? L("без поставщика", "yetkazib beruvchisiz"))
             .Select(g => new ProductionSupplierReject(g.Key, g.Count(), g.Count(d => d.Decision == ProcurementBatchQuality.Rejected),
@@ -154,11 +157,19 @@ public sealed class ProductionAnalyticsService(IAppDbContext db, ProcurementQual
         var free = await ProductionStock.AvailableAsync(db, minItems.Select(i => i.Id), warehouseId, today, ct);
         var belowMin = minItems.Count(i => free.GetValueOrDefault(i.Id) < i.MinQty);
 
-        var closed = await db.ProductionOrderLines.AsNoTracking()
+        // Норма закрытых заданий — расход по результатам утверждённых смен (как в сверке задания), без смен — норма на фактический выход.
+        var closedLines = await db.ProductionOrderLines.AsNoTracking()
             .Where(l => l.Order!.Status == ProductionOrderStatus.Completed && l.Order.CompletedAt >= f.FromUtc && l.Order.CompletedAt < f.ToUtc
                         && (warehouseId == null || l.Order.WarehouseId == warehouseId) && (f.DepartmentId == null || l.Order.DepartmentId == f.DepartmentId))
-            .Select(l => new { l.OrderId, l.Order!.Number, l.Item!.Name, l.Item.UnitCode, l.ActualNormQty, Actual = l.IssuedQty - l.ReturnedQty, l.Overconsumed })
+            .Select(l => new { l.OrderId, l.Order!.Number, l.Order.RecipeId, l.ItemId, l.Item!.Name, l.Item.UnitCode, l.ActualNormQty, Actual = l.IssuedQty - l.ReturnedQty })
             .ToListAsync(ct);
+        var byShifts = await UsedAsync(closedLines.Select(l => (l.OrderId, l.RecipeId)).Distinct().ToList(), ct);
+        var overThreshold = await OverThresholdAsync(ct);
+        var closed = closedLines.Select(l =>
+        {
+            decimal? norm = byShifts.TryGetValue(l.OrderId, out var items) && items.TryGetValue(l.ItemId, out var u) ? u : l.ActualNormQty;
+            return new { l.OrderId, l.Number, l.Name, l.UnitCode, ActualNormQty = norm, l.Actual, Overconsumed = norm is { } n && ProductionRules.Overconsumed(l.Actual, n, overThreshold) };
+        }).ToList();
         var deviations = closed.Where(l => l.ActualNormQty is not null).Select(l =>
             {
                 var (dq, dp) = ProductionRules.Deviation(l.Actual, l.ActualNormQty!.Value);
@@ -184,7 +195,8 @@ public sealed class ProductionAnalyticsService(IAppDbContext db, ProcurementQual
             .OrderBy(d => d.Days).Take(8).ToList();
 
         var approvals = await db.ProcurementRequests.AsNoTracking()
-            .Where(r => r.Status == ProcurementRequestStatus.SupplyApproval || (r.RawRoute && r.Status == ProcurementRequestStatus.DirectorApproval))
+            .Where(r => r.Status == ProcurementRequestStatus.SupplyApproval || r.Status == ProcurementRequestStatus.AnalystApproval
+                        || (r.RawRoute && (r.Status == ProcurementRequestStatus.DirectorApproval || r.Status == ProcurementRequestStatus.FinanceApproval)))
             .Select(r => new { r.Status, r.PurchaseTotal }).ToListAsync(ct);
         IReadOnlyList<ProductionPriceChange> prices = [];
         if (ctx.ReadsAll || ctx.IsDirector)
@@ -206,7 +218,8 @@ public sealed class ProductionAnalyticsService(IAppDbContext db, ProcurementQual
             decisions.Count, rejected, suppliers, belowMin,
             closed.Select(l => l.OrderId).Distinct().Count(), closed.Sum(l => l.ActualNormQty ?? 0), closed.Sum(l => l.Actual), closed.Count(l => l.Overconsumed), deviations,
             lowDays, approvals.Count(a => a.Status == ProcurementRequestStatus.SupplyApproval), approvals.Count(a => a.Status == ProcurementRequestStatus.DirectorApproval),
-            approvals.Sum(a => a.PurchaseTotal), prices, open.Count, open.Count(d => d < today));
+            approvals.Sum(a => a.PurchaseTotal), prices, open.Count, open.Count(d => d < today),
+            approvals.Count(a => a.Status == ProcurementRequestStatus.AnalystApproval), approvals.Count(a => a.Status == ProcurementRequestStatus.FinanceApproval));
     }
 
     /// <summary>Последняя цена прихода позиции (за единицу карточки) — для запаса без цены партии.</summary>
@@ -240,9 +253,15 @@ public sealed class ProductionAnalyticsService(IAppDbContext db, ProcurementQual
             "quality" => await QualityAsync(f, warehouseId, ct),
             "consumption" => await ConsumptionAsync(f, warehouseId, ct),
             "batch_moves" => await BatchMovesAsync(f, warehouseId, ct),
+            "output" => await OutputReportAsync(f, ct),
+            "defects" => await DefectsReportAsync(f, ct),
+            "check" => await CheckReportAsync(f, false, ct),
+            "packaging" => await CheckReportAsync(f, true, ct),
+            "semi" => await SemiReportAsync(f, warehouseId, ct),
+            "recipes" => await RecipesReportAsync(ct),
             _ => await ReconcileAsync(warehouseId, ct),
         };
-        var period = kind is "batches" or "reconcile" ? L($"на {Today:dd.MM.yyyy}", $"{Today:dd.MM.yyyy} holatiga") : $"{f.From:dd.MM.yyyy} — {f.To:dd.MM.yyyy}";
+        var period = kind is "batches" or "reconcile" or "recipes" ? L($"на {Today:dd.MM.yyyy}", $"{Today:dd.MM.yyyy} holatiga") : $"{f.From:dd.MM.yyyy} — {f.To:dd.MM.yyyy}";
         return new AiReportContent($"{info.Title}, {period}", [sheet], [L("Производство → Отчёты", "Ishlab chiqarish → Hisobotlar")]);
     }
 
@@ -291,7 +310,10 @@ public sealed class ProductionAnalyticsService(IAppDbContext db, ProcurementQual
         var rows = await q.OrderBy(c => c.CreatedAt).Take(MaxRows)
             .Select(c => new
             {
-                c.Number, Batch = c.Batch!.Number, c.Batch.SupplierBatchNo, Item = c.Batch.Item!.Name, Supplier = c.Batch.Supplier == null ? null : c.Batch.Supplier.Name,
+                // Поставка до приёмки — без партии: вместо неё номер поставки (AR-), партия поставщика — из строки поставки.
+                c.Number, Batch = c.Batch != null ? c.Batch.Number : c.Arrival == null ? null : c.Arrival.Number,
+                SupplierBatchNo = c.Batch != null ? c.Batch.SupplierBatchNo : db.ProcurementArrivalLines.Where(l => l.QualityCheckId == c.Id).Select(l => l.SupplierBatchNo).FirstOrDefault(),
+                Item = c.Item!.Name, Supplier = c.Supplier == null ? null : c.Supplier.Name,
                 c.Control, c.Status, c.Decision, c.DecisionComment, c.CreatedAt, c.DecidedAt, Decider = c.DecidedBy == null ? null : c.DecidedBy.FullName,
             })
             .ToListAsync(ct);
@@ -318,27 +340,33 @@ public sealed class ProductionAnalyticsService(IAppDbContext db, ProcurementQual
         var rows = await q.OrderBy(l => l.Order!.CompletedAt).ThenBy(l => l.Order!.Number).ThenBy(l => l.LineNo).Take(MaxRows)
             .Select(l => new
             {
-                l.Order!.Number, l.Order.CompletedAt, Department = l.Order.Department!.Name, l.Order.Recipe!.Code, l.Order.Recipe.VersionNo, Recipe = l.Order.Recipe.Name,
-                l.Order.Recipe.OutputUnit, l.Order.PlannedQty, l.Order.OutputQty, l.Item!.Sku, Item = l.Item.Name, l.Item.UnitCode, l.RequiredQty, l.ActualNormQty, l.IssuedQty,
-                l.ReturnedQty, l.Overconsumed,
+                l.OrderId, l.Order!.RecipeId, l.ItemId, l.Order.Number, l.Order.CompletedAt, Department = l.Order.Department!.Name, l.Order.Recipe!.Code, l.Order.Recipe.VersionNo,
+                Recipe = l.Order.Recipe.Name, l.Order.Recipe.OutputUnit, l.Order.PlannedQty, l.Order.OutputQty, l.Item!.Sku, Item = l.Item.Name, l.Item.UnitCode, l.RequiredQty,
+                l.ActualNormQty, l.IssuedQty, l.ReturnedQty,
             })
             .ToListAsync(ct);
+        // Отклонение и перерасход — к расходу по результатам утверждённых смен (как в сверке задания), без смен — к норме на факт.
+        var used = await UsedAsync(rows.Select(r => (r.OrderId, r.RecipeId)).Distinct().ToList(), ct);
+        var overThreshold = await OverThresholdAsync(ct);
         return new AiReportSheet(L("Расход и норма", "Sarf va me'yor"),
             [
                 Text(L("Задание", "Topshiriq")), Date(L("Закрыто", "Yopilgan")), Text(L("Цех", "Sex")), Text(L("Рецептура", "Retseptura")), Text(L("Выход, ед.", "Chiqish, birl.")),
                 Num(L("План", "Reja")), Num(L("Факт выхода", "Haqiqiy chiqish")), Text(L("Артикул", "Artikul")), Text(L("Позиция", "Pozitsiya")), Text(L("Ед.", "Birl.")),
-                Num(L("Потребность на план", "Rejaga ehtiyoj")), Num(L("Норма на факт", "Haqiqatga me'yor"), true), Num(L("Выдано", "Berilgan"), true),
+                Num(L("Потребность на план", "Rejaga ehtiyoj")), Num(L("Норма на факт", "Haqiqatga me'yor"), true),
+                Num(L("По результатам смен", "Smenalar natijalari bo'yicha"), true), Num(L("Выдано", "Berilgan"), true),
                 Num(L("Возвращено", "Qaytarilgan"), true), Num(L("Расход", "Sarf"), true), Num(L("Отклонение", "Og'ish"), true), Pct(L("Отклонение, %", "Og'ish, %")),
                 Text(L("Перерасход", "Ortiqcha sarf")),
             ],
             rows.Select(r =>
             {
                 var actual = r.IssuedQty - r.ReturnedQty;
-                var (dq, dp) = r.ActualNormQty is { } n ? ProductionRules.Deviation(actual, n) : (0m, (decimal?)null);
+                decimal? byResults = used.TryGetValue(r.OrderId, out var items) && items.TryGetValue(r.ItemId, out var u) ? u : null;
+                var basis = byResults ?? r.ActualNormQty;
+                var (dq, dp) = basis is { } n ? ProductionRules.Deviation(actual, n) : (0m, (decimal?)null);
                 return (IReadOnlyList<JsonElement>)[
                     J(r.Number), J(D(r.CompletedAt)), J(r.Department), J($"{r.Code} v{r.VersionNo} — {r.Recipe}"), J(r.OutputUnit), J(r.PlannedQty), J(r.OutputQty), J(r.Sku),
-                    J(r.Item), J(r.UnitCode), J(r.RequiredQty), J(r.ActualNormQty), J(r.IssuedQty), J(r.ReturnedQty), J(actual), J(dq), J(dp),
-                    J(r.Overconsumed ? L("да", "ha") : null),
+                    J(r.Item), J(r.UnitCode), J(r.RequiredQty), J(r.ActualNormQty), J(byResults), J(r.IssuedQty), J(r.ReturnedQty), J(actual), J(dq), J(dp),
+                    J(basis is { } b && ProductionRules.Overconsumed(actual, b, overThreshold) ? L("да", "ha") : null),
                 ];
             }).ToList(), true, Cap(total));
     }

@@ -126,8 +126,9 @@ public sealed class AuthController(
             user.Position,
             DepartmentName = department,
             Roles = roles,
-            // Главная: у роли «Сотрудник» — «Мой день», у остальных — «Обзор» компании.
-            Home = roles.Contains(SystemRoles.EmployeeRole) ? "my_day" : "overview",
+            // Главная: у роли «Сотрудник» — «Мой день»; у кладовщика, лаборатории, снабжения и аналитика — «Рабочий стол» (поставки, приёмка,
+            // качество, согласования); у остальных — «Обзор» компании.
+            Home = roles.Contains(SystemRoles.EmployeeRole) ? "my_day" : WorksInSupply(roles, permissions) ? "work" : "overview",
             Permissions = permissions,
             CanOpenSettings = SystemRoles.SettingsPermissions.Any(permissions.Contains) || agentDepartments.Count > 0,
             // «Настройки → ИИ-агенты»: отделы, агентами которых управляет пользователь (администратор AI, HR, Telegram, руководитель отдела).
@@ -138,4 +139,13 @@ public sealed class AuthController(
             HiringRequests = (await recruitment.ContextAsync(id, permissions.ToHashSet(), ct)).SeesRequests,
         });
     }
+
+    /// <summary>
+    /// Рабочий стол снабжения и склада — главная кладовщика, лаборатории, снабжения и аналитика. Директору и администратору (у него все права)
+    /// — «Обзор» компании.
+    /// </summary>
+    private static bool WorksInSupply(IReadOnlyCollection<string> roles, IReadOnlyCollection<string> permissions) =>
+        !roles.Contains(SystemRoles.Admin) && !roles.Contains(SystemRoles.Director)
+        && (roles.Contains(SystemRoles.AnalystRole) || permissions.Contains(Permissions.ProcurementWarehouse) || permissions.Contains(Permissions.QualityCheck)
+            || permissions.Contains(Permissions.ProcurementManage));
 }

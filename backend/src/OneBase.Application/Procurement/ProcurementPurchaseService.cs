@@ -14,7 +14,9 @@ public sealed record ProcurementPurchaseLineInput(Guid RequestItemId, decimal Qu
 
 /// <summary>
 /// «Куплено» по заявке из формы: позиции (сколько и почём), где купили — поставщик из справочника (SupplierId) или название магазина
-/// (SupplierName: есть такой в справочнике — он, нет — добавляется), номер чека или накладной, комментарий, ключ повтора формы.
+/// (SupplierName: есть такой в справочнике — он, нет — добавляется), номер чека или накладной, комментарий, ключ повтора формы. Два варианта:
+/// товар уже у нас — приходуется сразу (DeliveryDate не указана); привезёт поставщик — DeliveryDate (когда привезёт) и склад (WarehouseId; не
+/// указан — склад по умолчанию): на склад ничего не приходуется, покупка ждёт машину — «Машина приехала» → качество → вес → склад.
 /// </summary>
 public sealed record ProcurementPurchaseInput(
     IReadOnlyList<ProcurementPurchaseLineInput>? Lines,
@@ -22,10 +24,12 @@ public sealed record ProcurementPurchaseInput(
     string? SupplierName,
     string? Reference,
     string? Comment,
-    Guid? ClientKey = null);
+    Guid? ClientKey = null,
+    DateOnly? DeliveryDate = null,
+    Guid? WarehouseId = null);
 
-/// <summary>Что получилось: покупка (заказ PO-, сразу закрыт), приход на склад (RC-), сумма.</summary>
-public sealed record ProcurementPurchaseResult(Guid OrderId, string OrderNumber, Guid ReceiptId, string ReceiptNumber, decimal Total);
+/// <summary>Что получилось: покупка (заказ PO-), приход на склад (RC-; у «привезёт поставщик» — нет, ждёт машину к DeliveryDate), сумма.</summary>
+public sealed record ProcurementPurchaseResult(Guid OrderId, string OrderNumber, Guid? ReceiptId, string? ReceiptNumber, decimal Total, DateOnly? DeliveryDate = null);
 
 /// <summary>
 /// Позиция «к закупке»: сколько осталось купить, согласованная цена за единицу, карточка склада (если связана); TracksBatches — карточка
@@ -126,10 +130,15 @@ public sealed class ProcurementPurchaseService(
 
             if (input.ClientKey is { } key
                 && await db.ProcurementPurchaseOrders.AsNoTracking().Where(o => o.CreatedById == ctx.UserId && o.ClientKey == key && o.Direct)
-                    .Select(o => new { o.Id, o.Number, o.Total, Receipt = db.ProcurementStockDocuments.Where(d => d.OrderId == o.Id).Select(d => new { d.Id, d.Number }).First() })
+                    .Select(o => new
+                    {
+                        o.Id, o.Number, o.Total, o.ExpectedDate, o.Status,
+                        Receipt = db.ProcurementStockDocuments.Where(d => d.OrderId == o.Id).OrderBy(d => d.CreatedAt).Select(d => new { d.Id, d.Number }).FirstOrDefault(),
+                    })
                     .FirstOrDefaultAsync(ct) is { } done)
             {
-                return new ProcurementPurchaseResult(done.Id, done.Number, done.Receipt.Id, done.Receipt.Number, done.Total);
+                return new ProcurementPurchaseResult(done.Id, done.Number, done.Receipt?.Id, done.Receipt?.Number, done.Total,
+                    done.Receipt is null ? done.ExpectedDate : null);
             }
 
             var r = await db.ProcurementRequests.Include(x => x.Items).FirstOrDefaultAsync(x => x.Id == requestId, ct) ?? throw new FieldNotFoundException("Заявка не найдена.");
@@ -190,6 +199,11 @@ public sealed class ProcurementPurchaseService(
             var comment = Text(input.Comment, 1000, "Комментарий");
             var (supplier, newSupplier) = await ProcurementSupplierService.ResolveAsync(db, ctx, input.SupplierId, input.SupplierName, "Укажите, где купили: магазин или поставщика.", ct);
             var cards = await CardsAsync(bought.Select(b => b.Item).ToList(), ct);
+            if (input.DeliveryDate is { } deliveryDate)
+            {
+                return await AwaitDeliveryAsync(ctx, r, bought.Select(b => (b.Item, b.Quantity, b.Price, b.Batches)).ToList(), cards, supplier, newSupplier, deliveryDate,
+                    input.WarehouseId, reference, comment, input.ClientKey, ct);
+            }
 
             var order = new ProcurementPurchaseOrder
             {
@@ -311,6 +325,123 @@ public sealed class ProcurementPurchaseService(
 
             return new ProcurementPurchaseResult(order.Id, order.Number, doc.Id, doc.Number, order.Total);
         });
+
+    /// <summary>
+    /// «Куплено — привезёт поставщик»: покупка (заказ PO-, «Куплено», заказан — ждёт поставки к дате, на склад), позиции заявки — «заказано»
+    /// (из «к закупке» уходят), карточки склада — связываются с позициями заявки (их примут при приезде машины). Склад не меняется: партии и
+    /// сроки впишет кладовщик, когда машина приедет; позиции с контролем проверит лаборатория до склада. Автору заявки — «поставщик привезёт»,
+    /// кладовщикам склада — «ожидается поставка», финансисту — если дороже согласованного.
+    /// </summary>
+    private async Task<ProcurementPurchaseResult> AwaitDeliveryAsync(ProcurementContext ctx, ProcurementRequest r,
+        List<(ProcurementRequestItem Item, decimal Quantity, decimal Price, IReadOnlyList<ProcurementBatchInput>? Batches)> bought, Dictionary<Guid, Card> cards,
+        ProcurementSupplier supplier, bool newSupplier, DateOnly deliveryDate, Guid? warehouseId, string? reference, string? comment, Guid? clientKey, CancellationToken ct)
+    {
+        var today = FieldClock.Today;
+        if (deliveryDate < today || deliveryDate > today.AddDays(365))
+        {
+            throw new FieldValidationException("Когда привезёт поставщик — сегодня или позже, не дальше чем через год.");
+        }
+
+        if (bought.FirstOrDefault(b => b.Batches is { Count: > 0 }) is { Item: { } withBatches })
+        {
+            throw new FieldValidationException($"«{withBatches.Name}»: партии и сроки впишет кладовщик, когда машина приедет, — сейчас их не указывайте.");
+        }
+
+        var storeId = warehouseId ?? await ledger.DefaultWarehouseIdAsync(ct);
+        var store = await db.ProcurementWarehouses.AsNoTracking().FirstOrDefaultAsync(w => w.Id == storeId, ct) ?? throw new FieldNotFoundException("Склад не найден.");
+        if (!store.IsActive)
+        {
+            throw new FieldConflictException($"Склад «{store.Name}» отключён — поставку на него не принять.");
+        }
+
+        ProcurementStockLedger.CheckOwner(store, ProcurementWarehouseUse.Manual);
+        var order = new ProcurementPurchaseOrder
+        {
+            Number = await numbers.NextAsync(ProcurementOrderRules.OrderPrefix, ct),
+            SupplierId = supplier.Id,
+            ResponsibleId = ctx.UserId,
+            CreatedById = ctx.UserId,
+            Status = ProcurementOrderStatus.Ordered,
+            Direct = true,
+            OrderDate = today,
+            ExpectedDate = deliveryDate,
+            WarehouseId = store.Id,
+            PricesIncludeVat = true,
+            ApprovedAt = Now,
+            OrderedAt = Now,
+            Comment = comment,
+            ClientKey = clientKey,
+        };
+        var no = 0;
+        foreach (var (item, quantity, price, _) in bought)
+        {
+            order.Items.Add(new ProcurementPurchaseOrderItem
+            {
+                OrderId = order.Id, LineNo = ++no, RequestItemId = item.Id, Name = item.Name, UnitCode = item.UnitCode, Quantity = quantity, UnitPrice = price,
+            });
+            item.Request = r;
+            item.ItemId ??= cards[item.Id].Id;
+            item.OrderedQty += quantity;
+            item.UpdatedAt = Now;
+            if (item.Status != ProcurementItemStatus.Cancelled)
+            {
+                item.Status = ProcurementRules.ItemStatus(item, submitted: true);
+            }
+        }
+
+        order.Subtotal = order.Items.Sum(i => Math.Round(i.Quantity * i.UnitPrice, 2));
+        order.Total = order.Subtotal;
+        db.ProcurementPurchaseOrders.Add(order);
+        r.UpdatedAt = Now;
+
+        var settings = await db.ProcurementSettings.AsNoTracking().FirstOrDefaultAsync(ct);
+        var tolerance = settings?.ReapprovalTolerancePercent ?? 0m;
+        var dearer = bought.Where(b => b.Item.EstimatedPrice is { } approved && b.Price > approved * (1 + tolerance / 100)).ToList();
+        var summary = string.Join("; ", bought.Select(b =>
+            $"{b.Item.Name} — {ProcurementRules.Quantity(b.Quantity)} {b.Item.UnitCode} × {ProcurementRules.Money(b.Price)} = {ProcurementRules.Money(Math.Round(b.Quantity * b.Price, 2))} сум"));
+        var dearerText = dearer.Count == 0
+            ? null
+            : "Дороже согласованного: " + string.Join("; ", dearer.Select(b =>
+                $"{b.Item.Name} — {ProcurementRules.Money(b.Price)} вместо {ProcurementRules.Money(b.Item.EstimatedPrice!.Value)} сум за {b.Item.UnitCode}"));
+        var when = deliveryDate.ToString("dd.MM.yyyy");
+        Log(ctx, ProcurementRules.RequestDoc, r.Id, "purchased",
+            $"Куплено у «{supplier.Name}» ({order.Number}{(reference is null ? "" : $", счёт {reference}")}): {summary}; итого {ProcurementRules.Money(order.Total)} сум. " +
+            $"Привезёт поставщик {when} на склад «{store.Name}» — примут после проверки качества" + (dearerText is null ? "" : $". {dearerText}"), comment);
+        Log(ctx, ProcurementOrderRules.OrderDoc, order.Id, "created",
+            $"Куплено по заявке {r.Number} у «{supplier.Name}»: {ProcurementRequestService.Positions(order.Items.Count)}, {ProcurementRules.Money(order.Total)} сум — " +
+            $"привезёт поставщик {when}, склад «{store.Name}»", comment, nameof(ProcurementOrderStatus.Ordered));
+        if (newSupplier)
+        {
+            Log(ctx, ProcurementOrderRules.SupplierDoc, supplier.Id, "created", $"Поставщик добавлен при покупке по заявке {r.Number}", null);
+        }
+
+        Notify(ctx, r.InitiatorId, UserNotificationKind.ProcurementStatus, $"Куплено по заявке {r.Number} — поставщик привезёт {when}", summary, $"/requests/{r.Id}");
+        var keepers = await db.ProcurementWarehouseKeepers.AsNoTracking().Where(k => k.WarehouseId == store.Id).Select(k => k.UserId).ToListAsync(ct);
+        if (keepers.Count == 0)
+        {
+            keepers = await ProcurementPeople.WithPermissionAsync(db, Permissions.ProcurementWarehouse, ct);
+        }
+
+        foreach (var keeper in keepers)
+        {
+            Notify(ctx, keeper, UserNotificationKind.ProcurementRequest, $"Ожидается поставка {when}: {supplier.Name}", $"{order.Number} по заявке {r.Number} · {summary}",
+                "/procurement/arrivals");
+        }
+
+        if (dearerText is not null && settings?.FinanceApproverId is { } financier)
+        {
+            Notify(ctx, financier, UserNotificationKind.ProcurementStatus, $"Куплено дороже согласованного: заявка {r.Number}", dearerText, $"/requests/{r.Id}");
+        }
+
+        await db.SaveChangesAsync(ct);
+        foreach (var card in cards.Values.Where(c => c.Created).DistinctBy(c => c.Id))
+        {
+            await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "procurement.item.created", "procurement_item", card.Id.ToString(),
+                new { card.Sku, card.Name, source = $"purchase {order.Number}" }, ct);
+        }
+
+        return new ProcurementPurchaseResult(order.Id, order.Number, null, null, order.Total, deliveryDate);
+    }
 
     /// <summary>
     /// Партии покупки позиции с партиями: хотя бы одна, до 50, сумма = купленному, у каждой — срок (или дата производства и срок хранения),

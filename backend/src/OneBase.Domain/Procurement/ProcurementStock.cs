@@ -250,6 +250,9 @@ public enum ProcurementMovementKind
 
     /// <summary>Возврат из производства по заданию (плюс): в ту же партию, не больше выданного.</summary>
     ProductionReturn,
+
+    /// <summary>Приход выхода производства по заданию (плюс): новая партия полуфабриката или продукции.</summary>
+    ProductionOutput,
 }
 
 /// <summary>Состояние складского документа: приёмка по заказу сначала черновик (остатки не меняются) и проводится подтверждением.</summary>
@@ -287,6 +290,9 @@ public enum ProcurementStockDocumentKind
 
     /// <summary>Возврат из производства по заданию (PRT-); не сторнируется.</summary>
     ProductionReturn,
+
+    /// <summary>Приход выхода производства (полуфабрикат или готовая продукция с позицией склада) по закрытому заданию (PRC-); не сторнируется.</summary>
+    ProductionOutput,
 }
 
 /// <summary>
@@ -484,6 +490,7 @@ public static class ProcurementApprovalStages
     public const string Finance = "finance";
     public const string Director = "director";
     public const string SupplyHead = "supply_head";
+    public const string Analyst = "analyst";
 }
 
 /// <summary>
@@ -549,6 +556,13 @@ public class ProcurementSettings
 
     /// <summary>Руководитель снабжения в маршруте сырья; не выбран — руководители отдела «Снабжение».</summary>
     public Guid? SupplyApproverId { get; set; }
+
+    /// <summary>
+    /// Маршрут заявок «Закупка сырья» — шаги по автору заявки (JSON: {"supply":["analyst","finance"],"analyst":["finance"],"finance":["analyst"]}).
+    /// null — маршрут по умолчанию (ProcurementRawRoute.Default). Флажок RawRouteEnabled и SupplyApproverId — прежний маршрут, для заявок,
+    /// отправленных до типов заявок.
+    /// </summary>
+    public string? RawRouteSteps { get; set; }
 
     /// <summary>Перерасход сырья по заданию на выпуск, %, выше которого строка помечается и руководитель производства получает уведомление.</summary>
     public decimal OverconsumptionPercent { get; set; } = DefaultOverconsumptionPercent;

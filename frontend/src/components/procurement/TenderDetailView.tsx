@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AlertTriangle, Ban, CircleCheckBig, History, Loader2, PackagePlus, Pencil } from "lucide-react";
+import { AlertTriangle, Ban, CircleCheckBig, History, Loader2, Pencil, Truck } from "lucide-react";
 import { Sheet } from "@/components/field/Sheet";
-import { TenderDeliverySheet } from "@/components/procurement/TenderDeliverySheet";
+import { ArrivalSheet } from "@/components/procurement/ArrivalSheet";
+import { ArrivalItem } from "@/components/procurement/ArrivalsView";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { dateRu, money, quantity, stampRu, type TenderDetail, type Warehouse } from "@/lib/procurement";
+import type { ArrivalRow, ExpectedDelivery } from "@/lib/arrivals";
+import { dateRu, money, quantity, stampRu, type TenderDetail } from "@/lib/procurement";
 import { todayInTashkent } from "@/lib/tasks";
 import { DocumentsBlock } from "./ProcKit";
 import { TenderStatusPill } from "./TendersView";
@@ -32,16 +34,20 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 /**
  * Тендерная закупка: предмет, победитель, позиции и сумма, договор, срок и факт поставки, документы (протокол, договор, счёт) и история
  * правок. Снабжение изменяет запись, отмечает поставку и отменяет ошибочную запись с причиной. Тендер исполняет заявку и поставляется на
- * склад: кладовщик принимает поставку партиями («Принять на склад»), у позиций растёт «поставлено»; приходы — в «Поставках на склад».
+ * склад: приехала машина — кладовщик отмечает «Машина приехала», лаборатория проверяет качество, кладовщик взвешивает и принимает; у
+ * позиций растёт «поставлено». Машины по тендеру — в «Поставках», приходы — в «Приходах на склад».
  */
 export function TenderDetailView({
   tender,
-  warehouses = [],
+  expected = null,
+  arrivals = [],
   seesStock = false,
   seesRequests = false,
 }: {
   tender: TenderDetail;
-  warehouses?: Warehouse[];
+  /** Что ещё можно привезти по тендеру — для «Машина приехала» (кладовщик). */
+  expected?: ExpectedDelivery | null;
+  arrivals?: ArrivalRow[];
   seesStock?: boolean;
   /** Карточка заявки открывается снабжению и директору; кладовщику — номер без ссылки. */
   seesRequests?: boolean;
@@ -90,13 +96,13 @@ export function TenderDetailView({
         </Link>
       )}
       {can.deliver && (
-        <button type="button" onClick={() => setDialog("delivered")} className={can.receive ? secondary : primary}>
+        <button type="button" onClick={() => setDialog("delivered")} className={expected?.canArrive ? secondary : primary}>
           <CircleCheckBig className="size-4" aria-hidden /> {t("Поставлено")}
         </button>
       )}
-      {can.receive && (
+      {expected?.canArrive && (
         <button type="button" onClick={() => setReceiving(true)} className={primary}>
-          <PackagePlus className="size-4" aria-hidden /> {t("Принять на склад")}
+          <Truck className="size-4" aria-hidden /> {t("Машина приехала")}
         </button>
       )}
     </div>
@@ -182,10 +188,23 @@ export function TenderDetailView({
                 </p>
               </section>
 
+              {arrivals.length > 0 && (
+                <section className={card} aria-labelledby="tn-arrivals">
+                  <h2 id="tn-arrivals" className="mb-3 text-base font-semibold text-ink">
+                    {t("Машины")} <span className="font-normal text-ink-3">· {arrivals.length}</span>
+                  </h2>
+                  <ul className="space-y-2">
+                    {arrivals.map((r) => (
+                      <ArrivalItem key={r.id} row={r} />
+                    ))}
+                  </ul>
+                </section>
+              )}
+
               {(tender.deliveries?.length ?? 0) > 0 && (
                 <section className={card} aria-labelledby="tn-deliveries">
                   <h2 id="tn-deliveries" className="mb-3 text-base font-semibold text-ink">
-                    {t("Поставки на склад")} <span className="font-normal text-ink-3">· {tender.deliveries!.length}</span>
+                    {t("Приходы на склад")} <span className="font-normal text-ink-3">· {tender.deliveries!.length}</span>
                   </h2>
                   <ul className="divide-y divide-line">
                     {tender.deliveries!.map((d) => (
@@ -278,7 +297,7 @@ export function TenderDetailView({
         </div>
       </PageBody>
 
-      {receiving && <TenderDeliverySheet tender={tender} warehouses={warehouses} onClose={() => setReceiving(false)} />}
+      {receiving && expected && <ArrivalSheet delivery={expected} onClose={() => setReceiving(false)} />}
 
       <Sheet
         open={dialog !== null}
@@ -306,7 +325,7 @@ export function TenderDetailView({
             <input type="date" value={date} min={tender.tenderDate} max={todayInTashkent()} onChange={(e) => setDate(e.target.value)} className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink" />
             {stocked && (
               <span className="mt-2 block text-xs text-ink-3">
-                {t("Тендер закроется без прихода на склад. Если товар пришёл на склад — его принимает кладовщик кнопкой «Принять на склад».")}
+                {t("Тендер закроется без прихода на склад. Если приехала машина — кладовщик отмечает «Машина приехала» и принимает товар после проверки качества.")}
               </span>
             )}
           </label>

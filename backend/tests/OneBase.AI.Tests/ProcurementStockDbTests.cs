@@ -73,7 +73,7 @@ public class ProcurementStockDbTests(DataManagerDb fixture) : IClassFixture<Data
         (settings.FinanceApproverId, settings.DirectorApproverId, settings.DirectorLimit, settings.ReapprovalTolerancePercent) =
             (org.Financier.Id, null, ProcurementSettings.DefaultDirectorLimit, 0);
         await db.SaveChangesAsync();
-        var category = await db.ProcurementCategories.Where(c => c.Code == "production_materials").Select(c => c.Id).SingleAsync();
+        var category = await db.ProcurementCategories.Where(c => c.Code == "components").Select(c => c.Id).SingleAsync();
         return org with { Category = category };
     }
 

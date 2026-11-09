@@ -4263,6 +4263,246 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("Approvals", "procurement");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementArrival", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("AcceptedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AcceptedTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset>("ArrivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClientKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DriverName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ReadyAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("RegisteredById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TenderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VehicleNo")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementArrivals");
+
+                    b.HasIndex("AcceptedById")
+                        .HasDatabaseName("IX_ProcurementArrivals_AcceptedById");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementArrivals_Number");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("IX_ProcurementArrivals_OrderId")
+                        .HasFilter("\"OrderId\" IS NOT NULL");
+
+                    b.HasIndex("ReceiptId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementArrivals_ReceiptId")
+                        .HasFilter("\"ReceiptId\" IS NOT NULL");
+
+                    b.HasIndex("RegisteredById")
+                        .HasDatabaseName("IX_ProcurementArrivals_RegisteredById");
+
+                    b.HasIndex("SupplierId")
+                        .HasDatabaseName("IX_ProcurementArrivals_SupplierId");
+
+                    b.HasIndex("TenderId")
+                        .HasDatabaseName("IX_ProcurementArrivals_TenderId");
+
+                    b.HasIndex("WarehouseId")
+                        .HasDatabaseName("IX_ProcurementArrivals_WarehouseId");
+
+                    b.HasIndex("RegisteredById", "ClientKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementArrivals_RegisteredById_ClientKey")
+                        .HasFilter("\"ClientKey\" IS NOT NULL");
+
+                    b.HasIndex("Status", "ArrivedAt")
+                        .HasDatabaseName("IX_ProcurementArrivals_Status_ArrivedAt");
+
+                    b.ToTable("Arrivals", "procurement", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProcurementArrivals_Source", "(\"TenderId\" IS NULL) <> (\"OrderId\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementArrivalLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AcceptedQty")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal?>("AcceptedWeight")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("ArrivalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Control")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal>("Declared")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("DeclaredBase")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<DateOnly?>("ExpiresOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LineNo")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("ManufacturedOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("OrderItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Quality")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("QualityCheckId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("StockQty")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("SupplierBatchNo")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("TenderItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UnitCode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProcurementArrivalLines");
+
+                    b.HasIndex("BatchId")
+                        .HasDatabaseName("IX_ProcurementArrivalLines_BatchId")
+                        .HasFilter("\"BatchId\" IS NOT NULL");
+
+                    b.HasIndex("ItemId")
+                        .HasDatabaseName("IX_ProcurementArrivalLines_ItemId");
+
+                    b.HasIndex("OrderItemId")
+                        .HasDatabaseName("IX_ProcurementArrivalLines_OrderItemId")
+                        .HasFilter("\"OrderItemId\" IS NOT NULL");
+
+                    b.HasIndex("QualityCheckId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementArrivalLines_QualityCheckId")
+                        .HasFilter("\"QualityCheckId\" IS NOT NULL");
+
+                    b.HasIndex("TenderItemId")
+                        .HasDatabaseName("IX_ProcurementArrivalLines_TenderItemId");
+
+                    b.HasIndex("ArrivalId", "LineNo")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcurementArrivalLines_ArrivalId_LineNo");
+
+                    b.ToTable("ArrivalLines", "procurement", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProcurementArrivalLines_Quantities", "\"Declared\" > 0 AND (\"AcceptedQty\" IS NULL OR \"AcceptedQty\" >= 0) AND (\"AcceptedWeight\" IS NULL OR \"AcceptedWeight\" >= 0) AND (\"StockQty\" IS NULL OR \"StockQty\" >= 0)");
+                        });
+                });
+
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementAuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5050,6 +5290,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id")
                         .HasName("PK_ProcurementPurchaseOrders");
 
@@ -5068,6 +5311,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OrderedAt")
                         .HasDatabaseName("IX_ProcurementPurchaseOrders_OrderedAt");
+
+                    b.HasIndex("WarehouseId")
+                        .HasDatabaseName("IX_ProcurementPurchaseOrders_WarehouseId")
+                        .HasFilter("\"WarehouseId\" IS NOT NULL");
 
                     b.HasIndex("CreatedById", "ClientKey")
                         .IsUnique()
@@ -5155,7 +5402,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("BatchId")
+                    b.Property<Guid?>("ArrivalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BatchId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Control")
@@ -5193,6 +5443,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<bool?>("DocumentsOk")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("LabAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -5220,6 +5473,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -5235,6 +5491,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("PK_ProcurementQualityChecks");
 
+                    b.HasIndex("ArrivalId")
+                        .HasDatabaseName("IX_ProcurementQualityChecks_ArrivalId")
+                        .HasFilter("\"ArrivalId\" IS NOT NULL");
+
                     b.HasIndex("BatchId")
                         .IsUnique()
                         .HasDatabaseName("IX_ProcurementQualityChecks_BatchId_Open")
@@ -5243,9 +5503,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("DecidedById")
                         .HasDatabaseName("IX_ProcurementQualityChecks_DecidedById");
 
+                    b.HasIndex("ItemId")
+                        .HasDatabaseName("IX_ProcurementQualityChecks_ItemId");
+
                     b.HasIndex("Number")
                         .IsUnique()
                         .HasDatabaseName("IX_ProcurementQualityChecks_Number");
+
+                    b.HasIndex("SupplierId")
+                        .HasDatabaseName("IX_ProcurementQualityChecks_SupplierId");
 
                     b.HasIndex("WarehouseId")
                         .HasDatabaseName("IX_ProcurementQualityChecks_WarehouseId");
@@ -5504,6 +5770,13 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("InitiatorId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Regular");
+
                     b.Property<string>("Number")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -5524,6 +5797,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<string>("Reason")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("RouteSteps")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -5692,6 +5969,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("RawRouteEnabled")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("RawRouteSteps")
+                        .HasColumnType("jsonb");
 
                     b.Property<decimal>("ReapprovalTolerancePercent")
                         .HasPrecision(5, 2)
@@ -5971,6 +6251,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status", "PostedAt")
                         .HasDatabaseName("IX_ProcurementStockDocuments_Status_PostedAt");
+
+                    b.HasIndex(new[] { "ProductionOrderId" }, "IX_ProcurementStockDocuments_ProductionOrderId_Output")
+                        .IsUnique()
+                        .HasFilter("\"Kind\" = 'ProductionOutput'");
 
                     b.ToTable("StockDocuments", "procurement");
                 });
@@ -6574,6 +6858,61 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("WarehouseKeepers", "procurement");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionDefectType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("NormPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<Guid>("RecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Reworkable")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("StageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionDefectTypes");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("RecipeId")
+                        .HasDatabaseName("IX_ProductionDefectTypes_RecipeId");
+
+                    b.HasIndex("StageId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionDefectTypes_StageId_Name");
+
+                    b.ToTable("DefectTypes", "production", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductionDefectTypes_NormPercent", "\"NormPercent\" >= 0 AND \"NormPercent\" < 100");
+                        });
+                });
+
             modelBuilder.Entity("OneBase.Domain.Production.ProductionOrder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6610,6 +6949,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("OutputQty")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("PlanSnapshot")
+                        .HasColumnType("jsonb");
 
                     b.Property<DateOnly>("PlannedDate")
                         .HasColumnType("date");
@@ -6752,6 +7094,14 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ActivatedById")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("BatchMaxKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal?>("BatchMinKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -6767,6 +7117,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CreatedById")
                         .HasColumnType("uuid");
 
+                    b.Property<DateOnly?>("EffectiveFrom")
+                        .HasColumnType("date");
+
                     b.Property<long?>("LinkoProductId")
                         .HasColumnType("bigint");
 
@@ -6774,6 +7127,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("OutputItemId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("OutputName")
                         .IsRequired()
@@ -6789,10 +7145,37 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<decimal?>("PackKg")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.Property<int?>("PacksPerBox")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("PartialBatches")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("PieceKg")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SubmittedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TechCardNo")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("TechnologistId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -6813,10 +7196,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Code")
                         .IsUnique()
-                        .HasDatabaseName("IX_ProductionRecipes_Code_Draft")
-                        .HasFilter("\"Status\" = 'Draft'");
+                        .HasDatabaseName("IX_ProductionRecipes_Code_Open")
+                        .HasFilter("\"Status\" IN ('Draft', 'PendingApproval')");
+
+                    b.HasIndex("OutputItemId");
 
                     b.HasIndex("OutputUnit");
+
+                    b.HasIndex("SubmittedById");
+
+                    b.HasIndex("TechnologistId");
 
                     b.HasIndex("Code", "VersionNo")
                         .IsUnique()
@@ -6824,7 +7213,11 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Recipes", "production", t =>
                         {
+                            t.HasCheckConstraint("CK_ProductionRecipes_Batch", "(\"BatchMinKg\" IS NULL OR \"BatchMinKg\" > 0) AND (\"BatchMaxKg\" IS NULL OR \"BatchMaxKg\" > 0) AND (\"BatchMinKg\" IS NULL OR \"BatchMaxKg\" IS NULL OR \"BatchMinKg\" <= \"BatchMaxKg\")");
+
                             t.HasCheckConstraint("CK_ProductionRecipes_OutputQuantity", "\"OutputQuantity\" > 0");
+
+                            t.HasCheckConstraint("CK_ProductionRecipes_Packaging", "(\"PieceKg\" IS NULL OR \"PieceKg\" > 0) AND (\"PackKg\" IS NULL OR \"PackKg\" > 0) AND (\"PacksPerBox\" IS NULL OR \"PacksPerBox\" > 0)");
 
                             t.HasCheckConstraint("CK_ProductionRecipes_VersionNo", "\"VersionNo\" > 0");
                         });
@@ -6836,12 +7229,23 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Output");
+
                     b.Property<string>("Comment")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GroupName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("ItemId")
                         .HasColumnType("uuid");
@@ -6860,6 +7264,17 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RecipeId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("StageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UnitCode")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal?>("UnitKg")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -6869,15 +7284,422 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("ItemId")
                         .HasDatabaseName("IX_ProductionRecipeLines_ItemId");
 
-                    b.HasIndex("RecipeId", "ItemId")
+                    b.HasIndex("StageId")
+                        .HasDatabaseName("IX_ProductionRecipeLines_StageId");
+
+                    b.HasIndex("UnitCode");
+
+                    b.HasIndex("RecipeId", "StageId", "ItemId")
                         .IsUnique()
-                        .HasDatabaseName("IX_ProductionRecipeLines_RecipeId_ItemId");
+                        .HasDatabaseName("IX_ProductionRecipeLines_RecipeId_StageId_ItemId");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("RecipeId", "StageId", "ItemId"), false);
 
                     b.ToTable("RecipeLines", "production", t =>
                         {
                             t.HasCheckConstraint("CK_ProductionRecipeLines_LossPercent", "\"LossPercent\" >= 0 AND \"LossPercent\" <= 100");
 
                             t.HasCheckConstraint("CK_ProductionRecipeLines_Quantity", "\"Quantity\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeStage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Area")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefectBase")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal?>("MoistureNorm")
+                        .HasPrecision(9, 3)
+                        .HasColumnType("numeric(9,3)");
+
+                    b.Property<decimal?>("MoistureTolerance")
+                        .HasPrecision(9, 3)
+                        .HasColumnType("numeric(9,3)");
+
+                    b.Property<string>("MoistureUnit")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("RecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Reworkable")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("StageNo")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("YieldMaxPercent")
+                        .HasPrecision(7, 3)
+                        .HasColumnType("numeric(7,3)");
+
+                    b.Property<decimal?>("YieldMinPercent")
+                        .HasPrecision(7, 3)
+                        .HasColumnType("numeric(7,3)");
+
+                    b.Property<decimal>("YieldPercent")
+                        .HasPrecision(7, 3)
+                        .HasColumnType("numeric(7,3)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionRecipeStages");
+
+                    b.HasIndex("RecipeId", "StageNo")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionRecipeStages_RecipeId_StageNo");
+
+                    b.ToTable("RecipeStages", "production", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductionRecipeStages_StageNo", "\"StageNo\" > 0");
+
+                            t.HasCheckConstraint("CK_ProductionRecipeStages_Yield", "\"YieldPercent\" > 0 AND (\"YieldMinPercent\" IS NULL OR \"YieldMinPercent\" <= \"YieldPercent\") AND (\"YieldMaxPercent\" IS NULL OR \"YieldMaxPercent\" >= \"YieldPercent\")");
+                        });
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShift", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Boxes")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid?>("ClientKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClosedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid?>("CorrectsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("GoodOutput")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Line")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("OperatorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Packs")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateOnly>("ShiftDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("ShiftNo")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("SupervisorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionShifts");
+
+                    b.HasIndex("ApprovedById");
+
+                    b.HasIndex("CorrectsId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionShifts_CorrectsId_Open")
+                        .HasFilter("\"CorrectsId\" IS NOT NULL AND \"Status\" IN ('Draft', 'Closed')");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionShifts_Number");
+
+                    b.HasIndex("OperatorId");
+
+                    b.HasIndex("SupervisorId");
+
+                    b.HasIndex("CreatedById", "ClientKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionShifts_CreatedById_ClientKey")
+                        .HasFilter("\"ClientKey\" IS NOT NULL");
+
+                    b.HasIndex("OrderId", "ShiftDate")
+                        .HasDatabaseName("IX_ProductionShifts_OrderId_ShiftDate");
+
+                    b.HasIndex("Status", "ShiftDate")
+                        .HasDatabaseName("IX_ProductionShifts_Status_ShiftDate");
+
+                    b.ToTable("Shifts", "production", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductionShifts_Output", "(\"GoodOutput\" IS NULL OR \"GoodOutput\" >= 0) AND (\"Packs\" IS NULL OR \"Packs\" >= 0) AND (\"Boxes\" IS NULL OR \"Boxes\" >= 0)");
+
+                            t.HasCheckConstraint("CK_ProductionShifts_ShiftNo", "\"ShiftNo\" BETWEEN 1 AND 9");
+                        });
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShiftBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("MassKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("No")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ShiftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionShiftBatches");
+
+                    b.HasIndex("ShiftId", "No")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionShiftBatches_ShiftId_No");
+
+                    b.ToTable("ShiftBatches", "production", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductionShiftBatches_MassKg", "\"MassKg\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShiftDefect", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DefectTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("QuantityKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("Rework")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("ShiftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("StageNo")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionShiftDefects");
+
+                    b.HasIndex("DefectTypeId");
+
+                    b.HasIndex("ShiftId")
+                        .HasDatabaseName("IX_ProductionShiftDefects_ShiftId");
+
+                    b.ToTable("ShiftDefects", "production", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductionShiftDefects_QuantityKg", "\"QuantityKg\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShiftMaterial", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("ShiftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("StageNo")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionShiftMaterials");
+
+                    b.HasIndex("ItemId")
+                        .HasDatabaseName("IX_ProductionShiftMaterials_ItemId");
+
+                    b.HasIndex("ShiftId")
+                        .HasDatabaseName("IX_ProductionShiftMaterials_ShiftId");
+
+                    b.ToTable("ShiftMaterials", "production", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductionShiftMaterials_Quantity", "\"Quantity\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShiftStage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Done")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("InputKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal?>("Moisture")
+                        .HasPrecision(9, 3)
+                        .HasColumnType("numeric(9,3)");
+
+                    b.Property<decimal?>("OutputKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal?>("ReworkKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("ShiftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("StageNo")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionShiftStages");
+
+                    b.HasIndex("ShiftId", "StageNo")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionShiftStages_ShiftId_StageNo");
+
+                    b.ToTable("ShiftStages", "production", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductionShiftStages_Kg", "(\"InputKg\" IS NULL OR \"InputKg\" >= 0) AND (\"OutputKg\" IS NULL OR \"OutputKg\" >= 0) AND (\"ReworkKg\" IS NULL OR \"ReworkKg\" >= 0)");
                         });
                 });
 
@@ -12086,6 +12908,117 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Decider");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementArrival", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "AcceptedBy")
+                        .WithMany()
+                        .HasForeignKey("AcceptedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementArrivals_Users_AcceptedById");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementPurchaseOrder", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementArrivals_PurchaseOrders_OrderId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementStockDocument", null)
+                        .WithMany()
+                        .HasForeignKey("ReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementArrivals_StockDocuments_ReceiptId");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "RegisteredBy")
+                        .WithMany()
+                        .HasForeignKey("RegisteredById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementArrivals_Users_RegisteredById");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementSupplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementArrivals_Suppliers_SupplierId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementTender", "Tender")
+                        .WithMany()
+                        .HasForeignKey("TenderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementArrivals_Tenders_TenderId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementWarehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementArrivals_Warehouses_WarehouseId");
+
+                    b.Navigation("AcceptedBy");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("RegisteredBy");
+
+                    b.Navigation("Supplier");
+
+                    b.Navigation("Tender");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementArrivalLine", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementArrival", "Arrival")
+                        .WithMany("Lines")
+                        .HasForeignKey("ArrivalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementArrivalLines_Arrivals_ArrivalId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementBatch", "Batch")
+                        .WithMany()
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementArrivalLines_Batches_BatchId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementArrivalLines_Items_ItemId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementPurchaseOrderItem", "OrderItem")
+                        .WithMany()
+                        .HasForeignKey("OrderItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementArrivalLines_PurchaseOrderItems_OrderItemId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementQualityCheck", "QualityCheck")
+                        .WithMany()
+                        .HasForeignKey("QualityCheckId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementArrivalLines_QualityChecks_QualityCheckId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementTenderItem", "TenderItem")
+                        .WithMany()
+                        .HasForeignKey("TenderItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementArrivalLines_TenderItems_TenderItemId");
+
+                    b.Navigation("Arrival");
+
+                    b.Navigation("Batch");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("OrderItem");
+
+                    b.Navigation("QualityCheck");
+
+                    b.Navigation("TenderItem");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementAuditLog", b =>
                 {
                     b.HasOne("OneBase.Domain.Identity.User", "Actor")
@@ -12290,6 +13223,12 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_ProcurementPurchaseOrders_Suppliers_SupplierId");
 
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementWarehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementPurchaseOrders_Warehouses_WarehouseId");
+
                     b.Navigation("Responsible");
 
                     b.Navigation("Supplier");
@@ -12330,11 +13269,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementQualityCheck", b =>
                 {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementArrival", "Arrival")
+                        .WithMany()
+                        .HasForeignKey("ArrivalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementQualityChecks_Arrivals_ArrivalId");
+
                     b.HasOne("OneBase.Domain.Procurement.ProcurementBatch", "Batch")
                         .WithMany()
                         .HasForeignKey("BatchId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("FK_ProcurementQualityChecks_Batches_BatchId");
 
                     b.HasOne("OneBase.Domain.Identity.User", "DecidedBy")
@@ -12343,6 +13287,19 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("FK_ProcurementQualityChecks_Users_DecidedById");
 
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProcurementQualityChecks_Items_ItemId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementSupplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProcurementQualityChecks_Suppliers_SupplierId");
+
                     b.HasOne("OneBase.Domain.Procurement.ProcurementWarehouse", null)
                         .WithMany()
                         .HasForeignKey("WarehouseId")
@@ -12350,9 +13307,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_ProcurementQualityChecks_Warehouses_WarehouseId");
 
+                    b.Navigation("Arrival");
+
                     b.Navigation("Batch");
 
                     b.Navigation("DecidedBy");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("Supplier");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementQualityResult", b =>
@@ -12768,6 +13731,35 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionDefectType", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProductionDefectTypes_Items_ItemId");
+
+                    b.HasOne("OneBase.Domain.Production.ProductionRecipe", "Recipe")
+                        .WithMany("DefectTypes")
+                        .HasForeignKey("RecipeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionDefectTypes_Recipes_RecipeId");
+
+                    b.HasOne("OneBase.Domain.Production.ProductionRecipeStage", "Stage")
+                        .WithMany()
+                        .HasForeignKey("StageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionDefectTypes_Stages_StageId");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("Recipe");
+
+                    b.Navigation("Stage");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Production.ProductionOrder", b =>
                 {
                     b.HasOne("OneBase.Domain.Identity.User", null)
@@ -12842,6 +13834,12 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("FK_ProductionRecipes_Users_ActivatedById");
 
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "OutputItem")
+                        .WithMany()
+                        .HasForeignKey("OutputItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProductionRecipes_Items_OutputItemId");
+
                     b.HasOne("OneBase.Domain.Procurement.ProcurementUnit", null)
                         .WithMany()
                         .HasForeignKey("OutputUnit")
@@ -12849,7 +13847,25 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_ProductionRecipes_Units_OutputUnit");
 
+                    b.HasOne("OneBase.Domain.Identity.User", "SubmittedBy")
+                        .WithMany()
+                        .HasForeignKey("SubmittedById")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProductionRecipes_Users_SubmittedById");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "Technologist")
+                        .WithMany()
+                        .HasForeignKey("TechnologistId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProductionRecipes_Users_TechnologistId");
+
                     b.Navigation("ActivatedBy");
+
+                    b.Navigation("OutputItem");
+
+                    b.Navigation("SubmittedBy");
+
+                    b.Navigation("Technologist");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeLine", b =>
@@ -12868,9 +13884,133 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_ProductionRecipeLines_Recipes_RecipeId");
 
+                    b.HasOne("OneBase.Domain.Production.ProductionRecipeStage", "Stage")
+                        .WithMany()
+                        .HasForeignKey("StageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("FK_ProductionRecipeLines_Stages_StageId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementUnit", null)
+                        .WithMany()
+                        .HasForeignKey("UnitCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProductionRecipeLines_Units_UnitCode");
+
                     b.Navigation("Item");
 
                     b.Navigation("Recipe");
+
+                    b.Navigation("Stage");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeStage", b =>
+                {
+                    b.HasOne("OneBase.Domain.Production.ProductionRecipe", "Recipe")
+                        .WithMany("Stages")
+                        .HasForeignKey("RecipeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionRecipeStages_Recipes_RecipeId");
+
+                    b.Navigation("Recipe");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShift", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", "ApprovedBy")
+                        .WithMany()
+                        .HasForeignKey("ApprovedById")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProductionShifts_Users_ApprovedById");
+
+                    b.HasOne("OneBase.Domain.Production.ProductionShift", null)
+                        .WithMany()
+                        .HasForeignKey("CorrectsId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_ProductionShifts_Shifts_CorrectsId");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "Operator")
+                        .WithMany()
+                        .HasForeignKey("OperatorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionShifts_Users_OperatorId");
+
+                    b.HasOne("OneBase.Domain.Production.ProductionOrder", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionShifts_Orders_OrderId");
+
+                    b.HasOne("OneBase.Domain.Identity.User", "Supervisor")
+                        .WithMany()
+                        .HasForeignKey("SupervisorId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProductionShifts_Users_SupervisorId");
+
+                    b.Navigation("ApprovedBy");
+
+                    b.Navigation("Operator");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Supervisor");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShiftBatch", b =>
+                {
+                    b.HasOne("OneBase.Domain.Production.ProductionShift", null)
+                        .WithMany("Batches")
+                        .HasForeignKey("ShiftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionShiftBatches_Shifts_ShiftId");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShiftDefect", b =>
+                {
+                    b.HasOne("OneBase.Domain.Production.ProductionDefectType", null)
+                        .WithMany()
+                        .HasForeignKey("DefectTypeId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProductionShiftDefects_DefectTypes_DefectTypeId");
+
+                    b.HasOne("OneBase.Domain.Production.ProductionShift", null)
+                        .WithMany("Defects")
+                        .HasForeignKey("ShiftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionShiftDefects_Shifts_ShiftId");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShiftMaterial", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionShiftMaterials_Items_ItemId");
+
+                    b.HasOne("OneBase.Domain.Production.ProductionShift", null)
+                        .WithMany("Materials")
+                        .HasForeignKey("ShiftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionShiftMaterials_Shifts_ShiftId");
+
+                    b.Navigation("Item");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShiftStage", b =>
+                {
+                    b.HasOne("OneBase.Domain.Production.ProductionShift", null)
+                        .WithMany("Stages")
+                        .HasForeignKey("ShiftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionShiftStages_Shifts_ShiftId");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Recruitment.ApplicationEvent", b =>
@@ -13572,6 +14712,11 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Runs");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementArrival", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementItem", b =>
                 {
                     b.Navigation("Units");
@@ -13624,7 +14769,22 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipe", b =>
                 {
+                    b.Navigation("DefectTypes");
+
                     b.Navigation("Lines");
+
+                    b.Navigation("Stages");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionShift", b =>
+                {
+                    b.Navigation("Batches");
+
+                    b.Navigation("Defects");
+
+                    b.Navigation("Materials");
+
+                    b.Navigation("Stages");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Recruitment.Candidate", b =>

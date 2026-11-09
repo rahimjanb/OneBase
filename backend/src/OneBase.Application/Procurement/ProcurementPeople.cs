@@ -24,6 +24,25 @@ internal static class ProcurementPeople
             .Select(u => u.Id)
             .ToListAsync(ct);
 
+    /// <summary>Аналитики закупок — роль «Аналитик».</summary>
+    public static Task<List<Guid>> AnalystsAsync(IAppDbContext db, CancellationToken ct) =>
+        db.Users.AsNoTracking().Where(u => u.IsActive && u.Roles.Any(x => x.Role.Name == SystemRoles.AnalystRole)).Select(u => u.Id).ToListAsync(ct);
+
+    /// <summary>Финансист: выбранный в маршруте согласования («Настройки → Отделы → Снабжение»); пока не выбран — сотрудники с ролью «Финансы».</summary>
+    public static async Task<List<Guid>> FinanceAsync(IAppDbContext db, CancellationToken ct)
+    {
+        var chosen = await db.ProcurementSettings.AsNoTracking().Select(s => s.FinanceApproverId).FirstOrDefaultAsync(ct);
+        if (chosen is { } id && await db.Users.AsNoTracking().AnyAsync(u => u.Id == id && u.IsActive, ct))
+        {
+            return [id];
+        }
+
+        return await db.Users.AsNoTracking().Where(u => u.IsActive && u.Roles.Any(x => x.Role.Name == FinanceRole)).Select(u => u.Id).ToListAsync(ct);
+    }
+
+    /// <summary>Роль финансового отдела.</summary>
+    public const string FinanceRole = "Финансы";
+
     /// <summary>Руководство закупок: директор и руководитель снабжения.</summary>
     public static async Task<List<Guid>> LeadersAsync(IAppDbContext db, CancellationToken ct) =>
         [.. (await DirectorsAsync(db, ct)).Concat(await SupplyHeadsAsync(db, ct)).Distinct()];

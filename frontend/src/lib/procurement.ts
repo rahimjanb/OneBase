@@ -6,6 +6,7 @@ export type RequestStatus =
   | "HeadApproval"
   | "FinanceApproval"
   | "SupplyApproval"
+  | "AnalystApproval"
   | "DirectorApproval"
   | "Approved"
   | "Rejected"
@@ -15,6 +16,44 @@ export type RequestStatus =
   | "Cancelled";
 
 export type RequestPriority = "Low" | "Normal" | "High" | "Urgent";
+
+/** Тип заявки: обычная закупка или закупка сырья (только позиции категорий сырья; создают финансист, аналитик и снабжение). */
+export type RequestKind = "Regular" | "Raw";
+
+export const requestKindLabel: Record<RequestKind, string> = { Regular: "Обычная закупка", Raw: "Закупка сырья" };
+
+/** Шаг маршрута заявок «Закупка сырья» и автор заявки — как в «Настройки → Отделы → Снабжение». */
+export type RawStep = "analyst" | "finance" | "director" | "director_limit";
+export type RawAuthor = "supply" | "analyst" | "finance";
+export const rawSteps: RawStep[] = ["analyst", "finance", "director", "director_limit"];
+export const rawAuthors: RawAuthor[] = ["supply", "analyst", "finance"];
+export const rawStepLabel: Record<RawStep, string> = {
+  analyst: "Аналитик",
+  finance: "Финансист",
+  director: "Директор",
+  director_limit: "Директор, если сумма больше лимита",
+};
+export const rawAuthorLabel: Record<RawAuthor, string> = { supply: "Создаёт снабженец", analyst: "Создаёт аналитик", finance: "Создаёт финансист" };
+
+/** Категория подходит типу заявки: в заявке на сырьё — только категории сырья, в обычной — без них. */
+export const kindAccepts = (kind: RequestKind, category: { isProduction?: boolean } | undefined) =>
+  (category?.isProduction ?? false) === (kind === "Raw");
+
+/**
+ * Проверка маршрута сырья перед сохранением (тот же порядок, что на сервере): у каждого автора хотя бы один шаг, без повторов, директор — один
+ * раз; свою заявку автор не согласует. Ошибка — русский текст (переводится), иначе null.
+ */
+export function rawRouteProblem(route: Record<RawAuthor, RawStep[]>): string | null {
+  for (const author of rawAuthors) {
+    const steps = route[author] ?? [];
+    if (steps.length === 0) return "У каждого автора заявки — хотя бы один шаг согласования.";
+    if (new Set(steps).size !== steps.length || (steps.includes("director") && steps.includes("director_limit")))
+      return "Каждый шаг — один раз; директор — один раз: всегда или если сумма больше лимита.";
+    if ((author === "analyst" && steps.includes("analyst")) || (author === "finance" && steps.includes("finance")))
+      return "Свою заявку автор не согласует: уберите его собственный шаг.";
+  }
+  return null;
+}
 
 export type ItemStatus = "Pending" | "Cancelled" | "Reserved" | "ToPurchase" | "PartiallyIssued" | "Issued" | "Ordered" | "Received";
 
@@ -44,6 +83,7 @@ export type RequestRow = {
   approvalRound: number;
   forwardedAt: string | null;
   reason: string | null;
+  kind?: RequestKind;
 };
 
 export type RequestItem = {
@@ -116,8 +156,8 @@ export type RequestAbilities = {
 };
 
 export type ApprovalDecision = "Approved" | "Rejected" | "Revision";
-/** Шаг согласования: руководитель отдела, финансист, директор; в маршруте сырья — руководитель снабжения. */
-export type ApprovalStage = "head" | "finance" | "director" | "supply_head";
+/** Шаг согласования: руководитель отдела, аналитик (заявки на сырьё), финансист, директор; в прежнем маршруте сырья — руководитель снабжения. */
+export type ApprovalStage = "head" | "analyst" | "finance" | "director" | "supply_head";
 export type RequestApproval = {
   id: string;
   round: number;
@@ -130,9 +170,9 @@ export type RequestApproval = {
 };
 
 /**
- * Шаг маршрута в карточке: руководитель отдела, финансист, директор, снабжение. state: done — согласовал, current — решает сейчас, pending —
- * впереди, skipped — не нужен (reason: initiatorHead, noHeads, noPurchase, underLimit), rejected, returned. who — кто решил или кто решает;
- * пусто у финансиста и директора — не выбран в настройках.
+ * Шаг маршрута в карточке: руководитель отдела, аналитик, финансист, директор, снабжение. state: done — согласовал, current — решает сейчас,
+ * pending — впереди, skipped — не нужен (reason: initiatorHead, noHeads, noPurchase, underLimit, initiatorDirector), rejected, returned.
+ * who — кто решил или кто решает; пусто у финансиста и директора — не выбран в настройках, у аналитика — нет пользователей с ролью «Аналитик».
  */
 export type RouteStep = {
   key: ApprovalStage | "supply";
@@ -140,7 +180,7 @@ export type RouteStep = {
   who: string[];
   at: string | null;
   comment: string | null;
-  reason: "initiatorHead" | "noHeads" | "noPurchase" | "underLimit" | "initiatorSupply" | null;
+  reason: "initiatorHead" | "noHeads" | "noPurchase" | "underLimit" | "initiatorSupply" | "initiatorDirector" | null;
 };
 
 /** Тендерная закупка, исполняющая заявку. */
@@ -184,18 +224,27 @@ export type RequestDetail = {
   route: RouteStep[] | null;
   /** Тендеры, исполняющие заявку (снабжению и директору). */
   tenders?: RequestTender[] | null;
-  /** Маршрут сырья: руководитель снабжения → директор (всегда). */
+  /** Маршрут сырья: шаги по автору из настроек (у заявок до типов — руководитель снабжения → директор). */
   rawRoute?: boolean;
+  kind?: RequestKind;
   /** Лимит покупки без директора, сум (из «Настройки → Отделы → Снабжение»). */
   directorLimit: number;
 };
 
-/** Категория закупок; isProduction — сырьё и материалы производства (маршрут сырья, когда он включён). */
+/** Категория закупок; isProduction — сырьё: такие позиции — только в заявках «Закупка сырья». */
 export type RequestCategory = { id: string; name: string; code: string | null; sortOrder: number; isActive: boolean; used: number; isProduction?: boolean };
 export type RequestUnit = { code: string; name: string };
 export type RequestDepartment = { id: string; code: string; name: string };
 
-export type RequestFormData = { departments: RequestDepartment[]; defaultDepartmentId: string | null; categories: RequestCategory[]; units: RequestUnit[] };
+/** Данные формы; canCreateRaw — может создавать заявки «Закупка сырья», rawSteps — шаги согласования его заявки на сырьё. */
+export type RequestFormData = {
+  departments: RequestDepartment[];
+  defaultDepartmentId: string | null;
+  categories: RequestCategory[];
+  units: RequestUnit[];
+  canCreateRaw?: boolean;
+  rawSteps?: RawStep[] | null;
+};
 
 export type RequestOverview = {
   byStatus: Record<RequestStatus, number>;
@@ -230,6 +279,8 @@ export type RequestNav = {
   /** Лаборатория: проверки качества и спецификации; decidesQuality — назначен решать по качеству партий. */
   quality?: boolean;
   decidesQuality?: boolean;
+  /** Может создавать заявки «Закупка сырья»: финансист, аналитик, снабжение. */
+  canCreateRaw?: boolean;
 };
 
 // ---------- Склад ----------
@@ -360,8 +411,20 @@ export type MovementKind =
   | "Reversal"
   | "SupplierReturn"
   | "ProductionIssue"
-  | "ProductionReturn";
-export type StockDocumentKind = "Receipt" | "Issue" | "WriteOff" | "Inventory" | "Transfer" | "BatchEntry" | "Reversal" | "SupplierReturn" | "ProductionIssue" | "ProductionReturn";
+  | "ProductionReturn"
+  | "ProductionOutput";
+export type StockDocumentKind =
+  | "Receipt"
+  | "Issue"
+  | "WriteOff"
+  | "Inventory"
+  | "Transfer"
+  | "BatchEntry"
+  | "Reversal"
+  | "SupplierReturn"
+  | "ProductionIssue"
+  | "ProductionReturn"
+  | "ProductionOutput";
 
 /** Срок партии: ok, expiring — истекает, expired — просрочена, unknown — срок не указан (партия заблокирована до указания срока). */
 export type BatchState = "ok" | "expiring" | "expired" | "unknown";
@@ -644,6 +707,7 @@ export const movementKindLabel: Record<MovementKind, string> = {
   SupplierReturn: "Возврат поставщику",
   ProductionIssue: "Выдача в производство",
   ProductionReturn: "Возврат из производства",
+  ProductionOutput: "Приход из производства",
 };
 
 
@@ -654,6 +718,7 @@ export type RequestPage = { items: RequestRow[]; total: number; page: number; pa
 export const requestStatuses: RequestStatus[] = [
   "Draft",
   "HeadApproval",
+  "AnalystApproval",
   "FinanceApproval",
   "SupplyApproval",
   "DirectorApproval",
@@ -672,6 +737,7 @@ export const requestStatusLabel: Record<RequestStatus, string> = {
   HeadApproval: "Ожидает руководителя",
   FinanceApproval: "Ожидает финансиста",
   SupplyApproval: "Ожидает руководителя снабжения",
+  AnalystApproval: "Ожидает аналитика",
   DirectorApproval: "Ожидает директора",
   Approved: "Утверждена",
   Rejected: "Отклонена",
@@ -699,8 +765,8 @@ export const itemStatusLabel: Record<ItemStatus, string> = {
 /** Этапы заявки для полосы в карточке: черновик → согласование (любой шаг маршрута и доработка) → утверждена → выполнена. */
 export const requestStages = ["Черновик", "Согласование", "Утверждена", "Выполнена"] as const;
 
-/** Шаги согласования: заявка ждёт решения руководителя отдела, финансиста, руководителя снабжения (сырьё) или директора (и прежний шаг «у снабжения»). */
-export const approvalStatuses: RequestStatus[] = ["HeadApproval", "FinanceApproval", "SupplyApproval", "DirectorApproval", "Submitted"];
+/** Шаги согласования: заявка ждёт решения руководителя отдела, аналитика, финансиста, руководителя снабжения (прежний маршрут сырья) или директора (и прежний шаг «у снабжения»). */
+export const approvalStatuses: RequestStatus[] = ["HeadApproval", "AnalystApproval", "FinanceApproval", "SupplyApproval", "DirectorApproval", "Submitted"];
 
 /** Номер этапа статуса на полосе (0…3); -1 — заявка вне полосы (отклонена, отменена). */
 export function stageIndex(status: RequestStatus): number {
@@ -1309,7 +1375,8 @@ export type ToBuy = {
 export type ToBuyView = { canBuy: boolean; requests: ToBuy[] };
 
 /** Что получилось после «Куплено»: покупка (PO-), приход на склад (RC-), сумма. */
-export type PurchaseResult = { orderId: string; orderNumber: string; receiptId: string; receiptNumber: string; total: number };
+/** «Куплено»: покупка (заказ PO-), приход RC- — у «привезёт поставщик» прихода нет, покупка ждёт машину к deliveryDate. */
+export type PurchaseResult = { orderId: string; orderNumber: string; receiptId: string | null; receiptNumber: string | null; total: number; deliveryDate?: string | null };
 
 export const orderStatuses: OrderStatus[] = ["Draft", "AwaitingApproval", "Approved", "Ordered", "PartiallyDelivered", "Delivered", "Completed", "Cancelled"];
 

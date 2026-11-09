@@ -20,7 +20,7 @@ export type Me = {
   /** Отдел пользователя (по роли, у роли без отдела — выбранный в карточке). */
   departmentName?: string | null;
   /** Главная: my_day — «Мой день» (роль «Сотрудник»), overview — «Обзор» компании. */
-  home?: "my_day" | "overview";
+  home?: "my_day" | "overview" | "work";
 };
 
 export type UserRow = {

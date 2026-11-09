@@ -30,7 +30,11 @@ public class ProductionDbTests(DataManagerDb fixture) : IClassFixture<DataManage
     private static readonly string[] Boss = [Permissions.ProcurementRequest, Permissions.ProcurementRead, Permissions.ProcurementSettings];
     private static readonly string[] Employee = [Permissions.ProcurementRequest];
 
-    private sealed record Org(string S, Department Shop, User Technologist, User Master, User Keeper, User Buyer, User Director, User Employee, Guid Raw, Guid Central);
+    private sealed record Org(string S, Department Shop, User Technologist, User Master, User Keeper, User Buyer, User Director, User Employee, Guid Raw, Guid Central)
+    {
+        /// <summary>Второй технолог — утверждает версии первого (свою версию не утверждают).</summary>
+        public User Chief { get; init; } = null!;
+    }
 
     private async Task<Org> SeedAsync()
     {
@@ -65,11 +69,12 @@ public class ProductionDbTests(DataManagerDb fixture) : IClassFixture<DataManage
             Person("pd-kpr", "Кладовщик", RoleWith($"Кладовщик {s}", Permissions.ProcurementWarehouse)),
             Person("pd-buy", "Снабженец", RoleWith($"Снабжение {s}", Permissions.ProcurementManage)), Person("pd-dir", "Директор"), Person("pd-emp", "Сотрудник"), Guid.Empty,
             Guid.Empty);
-        db.Users.AddRange(org.Technologist, org.Master, org.Keeper, org.Buyer, org.Director, org.Employee);
+        var chief = Person("pd-chief", "Главный технолог");
+        db.Users.AddRange(org.Technologist, org.Master, org.Keeper, org.Buyer, org.Director, org.Employee, chief);
         await db.SaveChangesAsync();
         var raw = await db.ProcurementCategories.Where(c => c.Code == "raw_materials").Select(c => c.Id).SingleAsync();
         var central = await db.ProcurementWarehouses.Where(w => w.IsDefault).Select(w => w.Id).SingleAsync();
-        return org with { Raw = raw, Central = central };
+        return org with { Raw = raw, Central = central, Chief = chief };
     }
 
     private async Task<T> As<T>(User user, string[] permissions, Func<IServiceProvider, ProcurementContext, Task<T>> act)
@@ -110,6 +115,13 @@ public class ProductionDbTests(DataManagerDb fixture) : IClassFixture<DataManage
         }
     }
 
+    /// <summary>Технолог отправляет версию на утверждение, главный технолог утверждает — она становится действующей.</summary>
+    private async Task ActivateAsync(Org org, Guid id)
+    {
+        await Do(org.Technologist, Technologist, (sp, c) => Recipes(sp).SubmitAsync(c, id, default));
+        await Do(org.Chief, Technologist, (sp, c) => Recipes(sp).ApproveAsync(c, id, default));
+    }
+
     private static ProductionRecipeInput Recipe(string code, string name, params (Guid Item, decimal Qty, decimal Loss)[] lines) =>
         new(code, name, null, $"{name} (выход)", "кг", 100, null, lines.Select(l => new ProductionRecipeLineInput(l.Item, l.Qty, l.Loss)).ToList());
 
@@ -130,7 +142,7 @@ public class ProductionDbTests(DataManagerDb fixture) : IClassFixture<DataManage
         await Assert.ThrowsAsync<FieldValidationException>(() => Do(org.Technologist, Technologist, (sp, c) =>
             Recipes(sp).UpdateAsync(c, v1, Recipe(code, "Печенье", (flour, 60, 0), (flour, 1, 0)), default))); // повтор позиции
         await Do(org.Technologist, Technologist, (sp, c) => Recipes(sp).UpdateAsync(c, v1, Recipe(code, "Печенье", (flour, 60, 2), (sugar, 12.5m, 0)), default));
-        await Do(org.Technologist, Technologist, (sp, c) => Recipes(sp).ActivateAsync(c, v1, default));
+        await ActivateAsync(org, v1);
 
         // Действующая не правится; новая версия — копия в черновик (один на код), её ввод в действие отправляет v1 в архив.
         await Assert.ThrowsAsync<FieldConflictException>(() => Do(org.Technologist, Technologist, (sp, c) =>
@@ -141,7 +153,7 @@ public class ProductionDbTests(DataManagerDb fixture) : IClassFixture<DataManage
         Assert.Equal((2, ProductionRecipeStatus.Draft, 2), (draft.VersionNo, draft.Status, draft.Lines.Count));
         Assert.Equal(60m, draft.Lines.Single(l => l.ItemId == flour).Quantity);
         await Do(org.Technologist, Technologist, (sp, c) => Recipes(sp).UpdateAsync(c, v2, Recipe(code, "Печенье", (flour, 55, 2), (sugar, 12.5m, 0)) with { Version = draft.Version }, default));
-        await Do(org.Technologist, Technologist, (sp, c) => Recipes(sp).ActivateAsync(c, v2, default));
+        await ActivateAsync(org, v2);
         var archived = await As(org.Technologist, Technologist, (sp, c) => Recipes(sp).GetAsync(c, v1, default));
         Assert.Equal(ProductionRecipeStatus.Archived, archived.Status);
         Assert.Equal([ProductionRecipeStatus.Active, ProductionRecipeStatus.Archived], archived.Versions.Select(v => v.Status));
@@ -173,7 +185,7 @@ public class ProductionDbTests(DataManagerDb fixture) : IClassFixture<DataManage
         Task<Guid> Create(Guid r) => As(org.Master, Master, (sp, c) => Orders(sp).CreateAsync(c,
             new ProductionOrderInput(r, org.Shop.Id, org.Central, 100, today, org.Master.Id, null, Guid.NewGuid()), default));
         await Assert.ThrowsAsync<FieldConflictException>(() => Create(recipe));
-        await Do(org.Technologist, Technologist, (sp, c) => Recipes(sp).ActivateAsync(c, recipe, default));
+        await ActivateAsync(org, recipe);
         await Assert.ThrowsAsync<FieldForbiddenException>(() => As(org.Keeper, Keeper, (sp, c) => Orders(sp).CreateAsync(c,
             new ProductionOrderInput(recipe, org.Shop.Id, org.Central, 100, today, null, null), default)));
         var id = await Create(recipe);

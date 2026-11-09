@@ -1,6 +1,7 @@
 import type { Dict } from "../core";
 import agents from "./agents";
 import ai from "./ai";
+import arrivals from "./arrivals";
 import campaigns from "./campaigns";
 import common from "./common";
 import dashboard from "./dashboard";
@@ -23,6 +24,7 @@ import serverSales from "./serverSales";
 import serverSettings from "./serverSettings";
 import settings from "./settings";
 import tasks from "./tasks";
+import technologist from "./technologist";
 import telegramReports from "./telegramReports";
 import twin from "./twin";
 
@@ -37,6 +39,10 @@ export const uz: Dict = {
   // Цифровой двойник: общие слова переведены так же, как в разделах; разделы ниже перекрывают его.
   ...twin,
   ...production,
+  // «Технолог» — после производства: его термины (замес, этап, брак) перекрывают общие.
+  ...technologist,
+  // Поставки (приезд машины, качество до склада, приёмка) и главная по ролям.
+  ...arrivals,
   ...fieldControl,
   // Тексты сервера (ошибки, пояснения, подписи) — переводятся по ключу или шаблону; словари интерфейса ниже перекрывают их.
   ...serverSales,

@@ -259,6 +259,7 @@ internal sealed class GetPurchaseRequestsTool(ProcurementRequestService requests
         ["head_approval"] = nameof(ProcurementRequestStatus.HeadApproval),
         ["finance_approval"] = nameof(ProcurementRequestStatus.FinanceApproval),
         ["supply_approval"] = nameof(ProcurementRequestStatus.SupplyApproval),
+        ["analyst_approval"] = nameof(ProcurementRequestStatus.AnalystApproval),
         ["director_approval"] = nameof(ProcurementRequestStatus.DirectorApproval),
         ["approved"] = nameof(ProcurementRequestStatus.Approved),
         ["rejected"] = nameof(ProcurementRequestStatus.Rejected),

@@ -22,7 +22,7 @@ namespace OneBase.AI.Tests;
 /// </summary>
 public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<ConsultantDb>
 {
-    private sealed record Org(User Employee, User Other, User Supply, User SupplyHead, User Director, User Keeper, User Admin, Guid Raw, string Tag);
+    private sealed record Org(User Employee, User Other, User Supply, User SupplyHead, User Director, User Keeper, User Admin, Guid Parts, string Tag);
 
     private static T Get<T>(IServiceProvider sp) where T : notnull => sp.GetRequiredService<T>();
 
@@ -133,7 +133,7 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
         var route = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
         (route.FinanceApproverId, route.DirectorApproverId, route.DirectorLimit) = (org.Director.Id, null, ProcurementSettings.DefaultDirectorLimit);
         await db.SaveChangesAsync();
-        return org with { Raw = await db.ProcurementCategories.Where(c => c.Code == "raw_materials").Select(c => c.Id).SingleAsync() };
+        return org with { Parts = await db.ProcurementCategories.Where(c => c.Code == "components").Select(c => c.Id).SingleAsync() };
     }
 
     [PostgresFact]
@@ -145,8 +145,8 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
         var start = await As(org.Director, (sp, c) => Get<ProcurementAnalyticsService>(sp).DashboardAsync(c, ProcurementFilter.Of(today, today), default));
 
         // Склад: гранулы — 30 кг на складе, краска — карточка без остатка.
-        var granules = await As(org.Keeper, (sp, c) => S(sp).CreateItemAsync(c, new ProcurementCatalogInput($"G-{org.Tag}", $"Гранулы {org.Tag}", org.Raw, "кг", null, null, 0), default));
-        var paint = await As(org.Keeper, (sp, c) => S(sp).CreateItemAsync(c, new ProcurementCatalogInput($"P-{org.Tag}", $"Краска {org.Tag}", org.Raw, "кг", null, null, 5), default));
+        var granules = await As(org.Keeper, (sp, c) => S(sp).CreateItemAsync(c, new ProcurementCatalogInput($"G-{org.Tag}", $"Гранулы {org.Tag}", org.Parts, "кг", null, null, 0), default));
+        var paint = await As(org.Keeper, (sp, c) => S(sp).CreateItemAsync(c, new ProcurementCatalogInput($"P-{org.Tag}", $"Краска {org.Tag}", org.Parts, "кг", null, null, 5), default));
         await As(org.Keeper, (sp, c) => S(sp).ReceiptAsync(c, new ProcurementStockOperationInput([new(granules, 30, 12_000)], "Начальный остаток", "НАКЛ-0"), default));
 
         // 1–4. Групповая заявка из двух позиций: гранулы 100 кг (30 со склада — в резерв, 70 к закупке) и краска 10 кг (вся к закупке).
@@ -173,9 +173,9 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
 
         // Пока заявку не согласовали — заказать нельзя.
         var supplierA = await As(org.Supply, (sp, c) => Get<ProcurementSupplierService>(sp).CreateAsync(c,
-            new ProcurementSupplierInput($"ООО Полимер {org.Tag}", null, null, null, null, null, null, null, null, null, 3, null, [org.Raw]), default));
+            new ProcurementSupplierInput($"ООО Полимер {org.Tag}", null, null, null, null, null, null, null, null, null, 3, null, [org.Parts]), default));
         var supplierB = await As(org.Supply, (sp, c) => Get<ProcurementSupplierService>(sp).CreateAsync(c,
-            new ProcurementSupplierInput($"ООО Колор {org.Tag}", null, null, null, null, null, null, null, null, null, 3, null, [org.Raw]), default));
+            new ProcurementSupplierInput($"ООО Колор {org.Tag}", null, null, null, null, null, null, null, null, null, 3, null, [org.Parts]), default));
         ProcurementOrderInput Order(Guid supplier, Guid line, decimal qty, decimal price) =>
             new(supplier, null, org.Supply.Id, today.AddDays(5), null, 0, 12, true, 0, null, [new ProcurementOrderLineInput(line, qty, price)], Submit: true);
         Assert.NotNull(await Record.ExceptionAsync(() => As(org.Supply, (sp, c) => O(sp).CreateAsync(c, Order(supplierA, gLine, 70, 14_000), default))));
@@ -309,8 +309,8 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
         await As(org.Director, (sp, c) => R(sp).UpdateSettingsAsync(c, new ProcurementSettingsView(7, 2, 4), default));
         var category = await As(org.Director, (sp, c) => R(sp).CreateCategoryAsync(c, new ProcurementCategoryInput($"Упаковка {org.Tag}", null), default));
         await As(org.Director, (sp, c) => R(sp).UpdateCategoryAsync(c, category, new ProcurementCategoryInput($"Упаковка и тара {org.Tag}", null), default));
-        var item = await As(org.Keeper, (sp, c) => S(sp).CreateItemAsync(c, new ProcurementCatalogInput($"A-{org.Tag}", $"Плёнка {org.Tag}", org.Raw, "кг", null, null, 5), default));
-        await As(org.Keeper, (sp, c) => S(sp).UpdateItemAsync(c, item, new ProcurementCatalogInput($"A-{org.Tag}", $"Плёнка {org.Tag}", org.Raw, "кг", null, null, 20), default));
+        var item = await As(org.Keeper, (sp, c) => S(sp).CreateItemAsync(c, new ProcurementCatalogInput($"A-{org.Tag}", $"Плёнка {org.Tag}", org.Parts, "кг", null, null, 5), default));
+        await As(org.Keeper, (sp, c) => S(sp).UpdateItemAsync(c, item, new ProcurementCatalogInput($"A-{org.Tag}", $"Плёнка {org.Tag}", org.Parts, "кг", null, null, 20), default));
 
         using var scope = fixture.Services.CreateScope();
         var logs = await Get<OneBaseDbContext>(scope.ServiceProvider).AuditLogs.AsNoTracking()
@@ -334,7 +334,7 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
 
         var before = await Board(org.Director);
         var request = await As(org.Employee, (sp, c) => R(sp).CreateAsync(c, new ProcurementRequestInput($"Плёнка {org.Tag}", null, ProcurementPriority.Normal,
-            null, "Упаковка", null, [new(null, $"Плёнка {org.Tag}", org.Raw, "кг", 10, 20_000)], Submit: true), default));
+            null, "Упаковка", null, [new(null, $"Плёнка {org.Tag}", org.Parts, "кг", 10, 20_000)], Submit: true), default));
 
         // Директор (здесь — и финансист маршрута): заявка ждёт его решения — в итоге, на этапе «Согласование» и в карточке с суммой к закупке.
         var director = await Board(org.Director);
@@ -371,7 +371,7 @@ public class ProcurementEndToEndDbTests(ConsultantDb fixture) : IClassFixture<Co
         var approved = await Board(org.Director);
         Assert.Equal(director.Pipeline.RequestsAwaitingOrder + 1, approved.Pipeline.RequestsAwaitingOrder);
         var supplier = await As(org.Supply, (sp, c) => Get<ProcurementSupplierService>(sp).CreateAsync(c,
-            new ProcurementSupplierInput($"ООО Плёнка {org.Tag}", null, null, null, null, null, null, null, null, null, 3, null, [org.Raw]), default));
+            new ProcurementSupplierInput($"ООО Плёнка {org.Tag}", null, null, null, null, null, null, null, null, null, 3, null, [org.Parts]), default));
         var line = (await As(org.Supply, (sp, c) => R(sp).GetAsync(c, request, default))).Items[0].Id;
         var order = await As(org.Supply, (sp, c) => O(sp).CreateAsync(c, new ProcurementOrderInput(supplier, null, org.Supply.Id, today.AddDays(3), null, 0, 12, true, 0, null,
             [new ProcurementOrderLineInput(line, 10, 19_000)], Submit: true), default));

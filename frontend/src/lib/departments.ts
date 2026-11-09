@@ -1,4 +1,5 @@
 import { Factory, Handshake, Landmark, Megaphone, Truck, Users, type LucideIcon } from "lucide-react";
+import type { RawAuthor, RawStep } from "./procurement";
 
 /** «Настройки → Отделы» (GET /api/settings/departments): отделы, руководители, маршрут заявок снабжения (GET /api/procurement/settings). */
 
@@ -18,11 +19,16 @@ export type SupplySettings = {
   directorLimit: number;
   financeApproverName: string | null;
   directorApproverName: string | null;
-  /** Маршрут сырья: включён ли, руководитель снабжения (не выбран — руководители отдела «Снабжение»: supplyHeads). */
+  /**
+   * Прежний маршрут сырья (руководитель снабжения → директор): только для заявок, отправленных до типов заявок; на экране не показывается,
+   * при сохранении не меняется.
+   */
   rawRouteEnabled?: boolean | null;
   supplyApproverId?: string | null;
   supplyApproverName?: string | null;
   supplyHeads?: string[] | null;
+  /** Маршрут заявок «Закупка сырья»: шаги согласования по автору заявки. */
+  rawSteps?: Record<RawAuthor, RawStep[]> | null;
   /** Перерасход сырья по заданию на выпуск, %, выше которого строка помечается и руководитель производства получает уведомление. */
   overconsumptionPercent?: number | null;
 };

@@ -13,7 +13,8 @@ const field =
  * Поле товара с подсказками из каталога склада (SKU, название, штрихкод) и доступным остатком. free — можно оставить своё наименование
  * (форма заявки: товара нет на складе — всё к закупке); иначе нужно выбрать из каталога (складские операции). Выбранный товар —
  * с артикулом и крестиком «отвязать»; locked — по позиции уже есть выдача или резерв, товар не меняется. warehouseId — остаток этого
- * склада (складские операции); без него — склада по умолчанию, на котором резервируют заявки.
+ * склада (складские операции); без него — склада по умолчанию, на котором резервируют заявки. accept — какие товары предлагать (форма
+ * заявки: по типу заявки — сырьё только в заявке на сырьё).
  */
 export function CatalogPicker({
   name,
@@ -25,6 +26,7 @@ export function CatalogPicker({
   label,
   warehouseId,
   freeHint,
+  accept,
   onText,
   onPick,
   onUnlink,
@@ -39,6 +41,7 @@ export function CatalogPicker({
   warehouseId?: string | null;
   /** Подсказка под списком в режиме free (по умолчанию — про заявку). */
   freeHint?: string;
+  accept?: (option: CatalogOption) => boolean;
   onText?: (text: string) => void;
   onPick: (option: CatalogOption) => void;
   onUnlink?: () => void;
@@ -60,7 +63,7 @@ export function CatalogPicker({
     setLoading(true);
     const timer = window.setTimeout(() => {
       bff<CatalogOption[]>(`procurement/catalog?q=${encodeURIComponent(text.trim())}${warehouseId ? `&warehouse=${warehouseId}` : ""}`)
-        .then((found) => alive && (setOptions(found), setActive(0)))
+        .then((found) => alive && (setOptions(accept ? found.filter(accept) : found), setActive(0)))
         .catch(() => alive && setOptions([]))
         .finally(() => alive && setLoading(false));
     }, 250);

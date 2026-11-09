@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 
-export type HomeKind = "my_day" | "overview";
+export type HomeKind = "my_day" | "overview" | "work";
 
 const Context = createContext<HomeKind>("overview");
 

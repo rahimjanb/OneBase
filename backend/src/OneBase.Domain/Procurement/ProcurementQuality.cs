@@ -70,18 +70,32 @@ public class ProcurementQualitySpec : Entity
 }
 
 /// <summary>
-/// Проверка качества партии (QC-год-NNNNN): заводится приходом позиции с контролем. Документы → лаборатория (отбор пробы — списание
-/// «Пробы лаборатории», показатели по спецификации) → решение назначенного: допустить или забраковать (с комментарием). Решение
-/// неизменяемо; открытая проверка у партии одна. Version — xmin: двойное нажатие не принимает второе решение.
+/// Проверка качества партии (QC-год-NNNNN): заводится приходом позиции с контролем или приездом машины (поставка AR-, до склада — партии ещё
+/// нет, она появится при приёмке). Документы → лаборатория (отбор пробы — списание «Пробы лаборатории»; до склада проба только
+/// записывается, показатели по спецификации) → решение назначенного: допустить или забраковать (с комментарием). Решение неизменяемо;
+/// открытая проверка у партии одна. Version — xmin: двойное нажатие не принимает второе решение.
 /// </summary>
 public class ProcurementQualityCheck : Entity
 {
     public required string Number { get; set; }
 
-    public Guid BatchId { get; set; }
+    /// <summary>Партия; у проверки поставки до приёмки — null (партия появится, когда кладовщик примет допущенное).</summary>
+    public Guid? BatchId { get; set; }
     public ProcurementBatch? Batch { get; set; }
 
-    /// <summary>Склад, на который пришла партия.</summary>
+    /// <summary>Позиция склада — у партии та же.</summary>
+    public Guid ItemId { get; set; }
+    public ProcurementItem? Item { get; set; }
+
+    /// <summary>Поставщик — для рейтинга поставщика, в том числе по забракованному при приезде, что на склад не пришло.</summary>
+    public Guid? SupplierId { get; set; }
+    public ProcurementSupplier? Supplier { get; set; }
+
+    /// <summary>Поставка (приезд машины), строку которой проверяют до склада.</summary>
+    public Guid? ArrivalId { get; set; }
+    public ProcurementArrival? Arrival { get; set; }
+
+    /// <summary>Склад, на который пришла (или принимается) партия.</summary>
     public Guid WarehouseId { get; set; }
 
     /// <summary>Контроль позиции на момент прихода (документы или документы и лаборатория).</summary>

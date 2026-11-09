@@ -49,7 +49,7 @@ import {
   type RequestDetail,
 } from "@/lib/procurement";
 import { RequestRoute } from "./RequestRoute";
-import { RequestPriorityPill, RequestStatusPill, requestStatusLook } from "./RequestKit";
+import { RequestKindPill, RequestPriorityPill, RequestStatusPill, requestStatusLook } from "./RequestKit";
 import { allowedFiles, fileProblem, uploadRequestFile } from "./RequestForm";
 
 const card = "rounded-2xl border border-line bg-surface p-4 sm:p-5";
@@ -65,8 +65,16 @@ const dialogText: Record<"return" | "cancel" | "approve" | "reject", { title: st
   reject: { title: "Отклонить заявку", button: "Отклонить", label: "Почему отклонена", required: true, hint: "Комментарий увидит инициатор. Резерв на складе снимется." },
 };
 
-/** Что будет после согласования — по шагу маршрута и (у финансиста) сумме к закупке. */
+/** Что будет после согласования — по шагу маршрута и (у финансиста) сумме к закупке; заявка на сырьё — по своим шагам. */
 function approveHint(detail: RequestDetail, purchase: number, t: (text: string, vars?: Record<string, string | number>) => string): string {
+  if (detail.kind === "Raw" && detail.route && !detail.route.some((s) => s.key === "supply_head")) {
+    const at = detail.route.findIndex((s) => s.state === "current");
+    const next = detail.route.slice(at + 1).find((s) => s.state === "pending");
+    if (next?.key === "analyst") return t("Дальше заявку согласует аналитик.");
+    if (next?.key === "finance") return t("Дальше заявку согласует финансист.");
+    if (next?.key === "director") return t("Дальше заявку согласует директор.");
+    return t("После согласования заявка уйдёт в снабжение.");
+  }
   if (detail.status === "HeadApproval") return t("Дальше заявку согласует финансист.");
   if (detail.status === "SupplyApproval") return t("Закупка сырья — дальше заявку согласует директор при любой сумме.");
   if (detail.status === "FinanceApproval") {
@@ -320,6 +328,7 @@ export function RequestDetailView({ detail, filesFailed, backHref }: { detail: R
             <span className="tabular-nums">{detail.number}</span>
             <RequestStatusPill status={detail.status} />
             <RequestPriorityPill priority={detail.priority} />
+            <RequestKindPill kind={detail.kind} />
           </span>
         }
         back={backHref}

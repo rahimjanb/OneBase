@@ -9,7 +9,7 @@ using OneBase.Application.Reports;
 namespace OneBase.Api.Controllers;
 
 /// <summary>
-/// «Производство»: рецептуры (версии, потребность), задания на выпуск (выпуск, выдача и возврат сырья по партиям, закрытие со сверкой нормы),
+/// «Производство»: рецептуры и технологические карты (этапы, брак, версии, утверждение, сравнение, расчёт по цепочке), задания на выпуск (выпуск, выдача и возврат сырья по партиям, закрытие со сверкой нормы),
 /// обзор сырья и производства, отчёты (предпросмотр, Excel, PDF). Доступ решают сервисы по правам из токена — никогда по параметрам запроса.
 /// </summary>
 [ApiController]
@@ -20,6 +20,7 @@ public sealed class ProductionController(
     ProcurementRequestService requests,
     ProductionRecipeService recipes,
     ProductionOrderService orders,
+    ProductionShiftService shifts,
     ProductionAnalyticsService analytics,
     IReportWorkbookWriter excel,
     IReportPdfWriter pdf) : ControllerBase
@@ -38,6 +39,9 @@ public sealed class ProductionController(
     public async Task<ProductionRecipeList> Recipes([FromQuery] string? q, [FromQuery] string? status, CancellationToken ct) =>
         await recipes.ListAsync(await ContextAsync(ct), q, status, ct);
 
+    [HttpGet("recipes/form")]
+    public async Task<ProductionRecipeForm> RecipeForm(CancellationToken ct) => await recipes.FormAsync(await ContextAsync(ct), ct);
+
     [HttpGet("recipes/options")]
     public async Task<IReadOnlyList<ProductionRecipeOption>> RecipeOptions(CancellationToken ct) => await recipes.OptionsAsync(await ContextAsync(ct), ct);
 
@@ -55,12 +59,33 @@ public sealed class ProductionController(
         return NoContent();
     }
 
-    [HttpPost("recipes/{id:guid}/activate")]
-    public async Task<IActionResult> Activate(Guid id, CancellationToken ct)
+    /// <summary>Черновик — на утверждение (технолог; карта без ошибок расчёта).</summary>
+    [HttpPost("recipes/{id:guid}/submit")]
+    public async Task<IActionResult> Submit(Guid id, CancellationToken ct)
     {
-        await recipes.ActivateAsync(await ContextAsync(ct), id, ct);
+        await recipes.SubmitAsync(await ContextAsync(ct), id, ct);
         return NoContent();
     }
+
+    /// <summary>Утвердить: другой технолог или начальник производства — не отправивший версию.</summary>
+    [HttpPost("recipes/{id:guid}/approve")]
+    public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
+    {
+        await recipes.ApproveAsync(await ContextAsync(ct), id, ct);
+        return NoContent();
+    }
+
+    /// <summary>Вернуть в черновик: утверждающий — с причиной, автор — отозвать.</summary>
+    [HttpPost("recipes/{id:guid}/return")]
+    public async Task<IActionResult> ReturnRecipe(Guid id, ProcurementController.CommentBody body, CancellationToken ct)
+    {
+        await recipes.ReturnAsync(await ContextAsync(ct), id, body.Comment, ct);
+        return NoContent();
+    }
+
+    /// <summary>Сравнение двух версий одной рецептуры: карта, этапы, компоненты, виды брака.</summary>
+    [HttpGet("recipes/{id:guid}/compare/{other:guid}")]
+    public async Task<ProductionRecipeComparison> Compare(Guid id, Guid other, CancellationToken ct) => await recipes.CompareAsync(await ContextAsync(ct), id, other, ct);
 
     [HttpPost("recipes/{id:guid}/new-version")]
     public async Task<IActionResult> NewVersion(Guid id, CancellationToken ct) => Ok(new { id = await recipes.NewVersionAsync(await ContextAsync(ct), id, ct) });
@@ -72,7 +97,7 @@ public sealed class ProductionController(
         return NoContent();
     }
 
-    /// <summary>Потребность рецептуры на quantity выхода и доступно на складе warehouse (не указан — на всех складах).</summary>
+    /// <summary>Потребность рецептуры на quantity выхода (плановый расчёт по цепочке: этапы, замесы, компоненты) и доступно на складе warehouse.</summary>
     [HttpGet("recipes/{id:guid}/requirement")]
     public async Task<ProductionRequirement> Requirement(Guid id, [FromQuery] decimal quantity, [FromQuery] Guid? warehouse, CancellationToken ct) =>
         await recipes.RequirementAsync(await ContextAsync(ct), id, quantity, warehouse, ct);
@@ -124,10 +149,67 @@ public sealed class ProductionController(
         return NoContent();
     }
 
+    /// <summary>Оприходовать выход закрытого задания на склад задания (кладовщик): позиция склада выхода из версии, партия, документ PRC-.</summary>
+    [HttpPost("orders/{id:guid}/receive-output")]
+    public async Task<ProductionMoveResult> ReceiveOutput(Guid id, CancellationToken ct) => await orders.ReceiveOutputAsync(await ContextAsync(ct), id, ct);
+
     [HttpPost("orders/{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid id, ProcurementController.CommentBody body, CancellationToken ct)
     {
         await orders.CancelAsync(await ContextAsync(ct), id, body.Comment, ct);
+        return NoContent();
+    }
+
+    // ---------- Смены ----------
+
+    /// <summary>Журнал смен: status — open, Draft, Closed, Approved, Superseded, Cancelled; order, from, to (дата смены), q.</summary>
+    [HttpGet("shifts")]
+    public async Task<ProductionShiftList> Shifts([FromQuery] string? q, [FromQuery] string? status, [FromQuery] Guid? order, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default) =>
+        await shifts.SearchAsync(await ContextAsync(ct), new ProductionShiftSearch(q, status, order, from, to, page, pageSize), ct);
+
+    [HttpGet("shifts/form")]
+    public async Task<ProductionShiftForm> ShiftForm(CancellationToken ct) => await shifts.FormAsync(await ContextAsync(ct), ct);
+
+    [HttpGet("shifts/{id:guid}")]
+    public async Task<ProductionShiftDetail> Shift(Guid id, CancellationToken ct) => await shifts.GetAsync(await ContextAsync(ct), id, ct);
+
+    [HttpPost("shifts")]
+    public async Task<IActionResult> CreateShift(ProductionShiftCreateInput input, CancellationToken ct) => Ok(new { id = await shifts.CreateAsync(await ContextAsync(ct), input, ct) });
+
+    /// <summary>Автосохранение ввода смены; в ответ — новая версия (xmin) для следующего сохранения.</summary>
+    [HttpPut("shifts/{id:guid}")]
+    public async Task<IActionResult> SaveShift(Guid id, ProductionShiftInput input, CancellationToken ct) =>
+        Ok(new { version = await shifts.SaveAsync(await ContextAsync(ct), id, input, ct) });
+
+    [HttpPost("shifts/{id:guid}/close")]
+    public async Task<IActionResult> CloseShift(Guid id, CancellationToken ct)
+    {
+        await shifts.CloseAsync(await ContextAsync(ct), id, ct);
+        return NoContent();
+    }
+
+    [HttpPost("shifts/{id:guid}/approve")]
+    public async Task<IActionResult> ApproveShift(Guid id, CancellationToken ct)
+    {
+        await shifts.ApproveAsync(await ContextAsync(ct), id, ct);
+        return NoContent();
+    }
+
+    [HttpPost("shifts/{id:guid}/return")]
+    public async Task<IActionResult> ReturnShift(Guid id, ProcurementController.CommentBody body, CancellationToken ct)
+    {
+        await shifts.ReturnAsync(await ContextAsync(ct), id, body.Comment, ct);
+        return NoContent();
+    }
+
+    [HttpPost("shifts/{id:guid}/correct")]
+    public async Task<IActionResult> CorrectShift(Guid id, CancellationToken ct) => Ok(new { id = await shifts.CorrectAsync(await ContextAsync(ct), id, ct) });
+
+    [HttpPost("shifts/{id:guid}/cancel")]
+    public async Task<IActionResult> CancelShift(Guid id, ProcurementController.CommentBody body, CancellationToken ct)
+    {
+        await shifts.CancelAsync(await ContextAsync(ct), id, body.Comment, ct);
         return NoContent();
     }
 
@@ -136,6 +218,11 @@ public sealed class ProductionController(
     [HttpGet("overview")]
     public async Task<ProductionOverview> Overview([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] Guid? warehouse, CancellationToken ct) =>
         await analytics.OverviewAsync(await ContextAsync(ct), ProcurementFilter.Of(from, to), warehouse, ct);
+
+    /// <summary>Панель «Технолога»: выпуск, план, брак, расход, выпечка, задания и проблемы за период (from, to, department).</summary>
+    [HttpGet("technologist")]
+    public async Task<ProductionDashboard> Technologist([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] Guid? department, CancellationToken ct) =>
+        await analytics.TechnologistAsync(await ContextAsync(ct), ProcurementFilter.Of(from, to, department), ct);
 
     [HttpGet("reports")]
     public IReadOnlyList<ProcurementReportInfo> ReportKinds() => ProductionAnalyticsService.Kinds;

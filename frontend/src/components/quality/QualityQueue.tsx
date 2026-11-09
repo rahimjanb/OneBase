@@ -12,10 +12,14 @@ const field =
   "h-10 rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
 const secondary = "inline-flex h-9 items-center gap-1 rounded-lg border border-line bg-surface px-3 text-sm hover:bg-muted";
 
-/** Шаг проверки или решение — плашкой. */
-export function CheckStatus({ row }: { row: Pick<QualityCheckRow, "status" | "decision"> }) {
+/** Шаг проверки или решение — плашкой; у товара в машине (поставка до приёмки) — «допущено к приёмке» или «вернуть поставщику». */
+export function CheckStatus({ row }: { row: Pick<QualityCheckRow, "status" | "decision"> & Partial<Pick<QualityCheckRow, "batchId" | "arrivalId">> }) {
   const t = useT();
-  if (row.decision) return <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${batchQualityTone[row.decision]}`}>{t(batchQualityLabel[row.decision])}</span>;
+  if (row.decision) {
+    const inTruck = !row.batchId && row.arrivalId;
+    const label = inTruck ? (row.decision === "Approved" ? "Допущено к приёмке" : "Вернуть поставщику") : batchQualityLabel[row.decision];
+    return <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${batchQualityTone[row.decision]}`}>{t(label)}</span>;
+  }
   const tone = row.status === "Decision" ? "bg-accent-soft text-accent-strong" : row.status === "Cancelled" ? "bg-muted text-ink-3" : "bg-warn-soft text-warn";
   return <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${tone}`}>{t(qualityCheckStatusLabel[row.status])}</span>;
 }
@@ -131,7 +135,9 @@ export function QualityQueue({ data, nav, warehouses }: { data: Page<QualityChec
                     <td className="px-3 py-2.5">
                       <span className="block text-ink">{c.itemName}</span>
                       <span className="text-xs tabular-nums text-ink-3">
-                        {[c.batchNumber, c.supplierBatchNo, c.expiresOn ? t("годна до {date}", { date: dateRu(c.expiresOn) }) : null].filter(Boolean).join(" · ")}
+                        {[c.batchNumber ?? (c.arrivalNumber ? t("{n} · в машине", { n: c.arrivalNumber }) : null), c.supplierBatchNo, c.expiresOn ? t("годна до {date}", { date: dateRu(c.expiresOn) }) : null]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-ink-2">{c.supplierName ?? "—"}</td>
@@ -160,7 +166,7 @@ export function QualityQueue({ data, nav, warehouses }: { data: Page<QualityChec
                 <Link href={`/production/quality/${c.id}`} className="block rounded-xl border border-line bg-surface p-3.5">
                   <span className="flex items-start justify-between gap-3">
                     <span className="min-w-0">
-                      <span className="block text-xs tabular-nums text-ink-3">{[c.number, c.batchNumber].join(" · ")}</span>
+                      <span className="block text-xs tabular-nums text-ink-3">{[c.number, c.batchNumber ?? c.arrivalNumber].filter(Boolean).join(" · ")}</span>
                       <span className="block font-medium text-ink">{c.itemName}</span>
                     </span>
                     <CheckStatus row={c} />

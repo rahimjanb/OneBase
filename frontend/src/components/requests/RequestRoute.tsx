@@ -7,6 +7,7 @@ import { money, stampRu, type RequestDetail, type RouteStep } from "@/lib/procur
 
 const title: Record<RouteStep["key"], string> = {
   head: "Руководитель отдела",
+  analyst: "Аналитик",
   finance: "Финансист",
   supply_head: "Руководитель снабжения",
   director: "Директор",
@@ -23,9 +24,10 @@ const look: Record<RouteStep["state"], { icon: LucideIcon; ring: string; text: s
 };
 
 /**
- * Маршрут согласования заявки (текущий раунд): руководитель отдела → финансист → директор (если к закупке больше лимита) → снабжение.
- * У каждого шага — кто согласовал (дата, комментарий), кто решает сейчас, кто впереди или почему шаг не нужен. Финансист или директор не
- * выбран — подсказка, где его выбрать.
+ * Маршрут согласования заявки (текущий раунд): руководитель отдела → финансист → директор (если к закупке больше лимита) → снабжение;
+ * заявка «Закупка сырья» — шаги по автору из настроек снабжения (аналитик, финансист, директор). У каждого шага — кто согласовал (дата,
+ * комментарий), кто решает сейчас, кто впереди или почему шаг не нужен. Финансист или директор не выбран, аналитиков нет — подсказка,
+ * где это исправить.
  */
 export function RequestRoute({ detail }: { detail: RequestDetail }) {
   const t = useT();
@@ -44,6 +46,8 @@ export function RequestRoute({ detail }: { detail: RequestDetail }) {
         return t("Не нужен: к закупке не больше {limit}", { limit });
       case "initiatorSupply":
         return t("Не нужен: заявку создал руководитель снабжения");
+      case "initiatorDirector":
+        return t("Не нужен: заявку создал директор");
       default:
         return t("Не нужен");
     }
@@ -76,7 +80,11 @@ export function RequestRoute({ detail }: { detail: RequestDetail }) {
         {detail.approvalRound > 1 && <span className="text-sm font-normal text-ink-3">· {t("раунд {n}", { n: detail.approvalRound })}</span>}
       </h2>
       {detail.rawRoute && (
-        <p className="-mt-1 mb-3 text-xs text-ink-3">{t("Закупка сырья: согласуют руководитель снабжения, затем директор — при любой сумме.")}</p>
+        <p className="-mt-1 mb-3 text-xs text-ink-3">
+          {detail.route.some((s) => s.key === "supply_head")
+            ? t("Закупка сырья: согласуют руководитель снабжения, затем директор — при любой сумме.")
+            : t("Закупка сырья: шаги согласования — по автору заявки, как в настройках снабжения.")}
+        </p>
       )}
       <ol className="flex flex-col">
         {detail.route.map((step, i) => {
@@ -92,7 +100,15 @@ export function RequestRoute({ detail }: { detail: RequestDetail }) {
               <div className="min-w-0 flex-1 pt-0.5">
                 <p className={`text-sm font-medium ${step.state === "skipped" ? "text-ink-3" : l.text}`}>{t(title[step.key])}</p>
                 {line && <p className={`text-xs ${step.state === "skipped" ? "text-ink-4" : "text-ink-2"}`}>{line}</p>}
-                {missing && (
+                {missing && step.key === "analyst" && (
+                  <p className="mt-0.5 text-xs text-warn">
+                    {t("Аналитиков нет — заявка ждёт.")}{" "}
+                    <Link href="/settings/users" className="underline underline-offset-2">
+                      {t("Назначьте роль «Аналитик»")}
+                    </Link>
+                  </p>
+                )}
+                {missing && step.key !== "analyst" && (
                   <p className="mt-0.5 text-xs text-warn">
                     {step.key === "finance"
                       ? t("Финансист не выбран — заявка ждёт.")

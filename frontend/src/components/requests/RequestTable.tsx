@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Paperclip } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { dateRu, money, type RequestPage, type RequestRow } from "@/lib/procurement";
-import { RequestPriorityPill, RequestStatusPill } from "./RequestKit";
+import { RequestKindPill, RequestPriorityPill, RequestStatusPill } from "./RequestKit";
 
 const columns: { key: string; label: string; sort?: string; className?: string }[] = [
   { key: "request", label: "Заявка", sort: "number" },
@@ -90,6 +90,7 @@ export function RequestTable({ data, empty }: { data: RequestPage; empty: string
                     <span className="block text-xs font-medium tabular-nums text-ink-3">{row.number}</span>
                     <span className="block font-medium text-ink group-hover:text-accent-strong">{row.title}</span>
                   </Link>
+                  <RequestKindPill kind={row.kind} className="mt-1" />
                   {row.attachments > 0 && (
                     <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-ink-3">
                       <Paperclip className="size-3" aria-hidden /> {row.attachments}
@@ -124,6 +125,7 @@ export function RequestTable({ data, empty }: { data: RequestPage; empty: string
                 <span className="min-w-0">
                   <span className="block text-xs tabular-nums text-ink-3">{row.number}</span>
                   <span className="block font-medium text-ink">{row.title}</span>
+                  <RequestKindPill kind={row.kind} className="mt-1" />
                 </span>
                 <RequestStatusPill status={row.status} />
               </div>

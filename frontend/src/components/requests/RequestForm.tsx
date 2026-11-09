@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, FileText, Loader2, Paperclip, Plus, Save, Send, Trash2, Warehouse, X } from "lucide-react";
+import { AlertTriangle, FileText, Loader2, Paperclip, Plus, Save, Send, Trash2, Warehouse, Wheat, X } from "lucide-react";
 import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
@@ -10,6 +10,7 @@ import { fileSize } from "@/lib/format";
 import {
   checkDraft,
   draftTotal,
+  kindAccepts,
   lineSum,
   money,
   parseNumber,
@@ -17,11 +18,14 @@ import {
   quantity as qtyText,
   split,
   stockCover,
+  rawStepLabel,
+  requestKindLabel,
   requestPriorities,
   requestPriorityLabel,
   type ItemDraft,
   type RequestDetail,
   type RequestFormData,
+  type RequestKind,
   type RequestPriority,
 } from "@/lib/procurement";
 import { todayInTashkent } from "@/lib/tasks";
@@ -66,17 +70,19 @@ function blankItem(categoryId: string, unitCode = "шт"): ItemDraft {
 const numberText = (n: number | null) => (n === null ? "" : String(n).replace(".", ","));
 
 /**
- * Новая заявка и правка (черновик или заявка на доработке): название, отдел, приоритет, желаемая дата, позиции строками (наименование,
- * категория, количество, единица, цена — сумма считается сразу), причина и комментарий, вложения. «Сохранить черновик» — без отправки,
- * «Отправить» — сразу на проверку снабжению. Повторное нажатие не создаёт вторую заявку (ключ формы). Сервер проверяет всё ещё раз.
+ * Новая заявка и правка (черновик или заявка на доработке): тип (обычная закупка или закупка сырья — тем, кому сырьё разрешено), название,
+ * отдел, приоритет, желаемая дата, позиции строками (наименование, категория, количество, единица, цена — сумма считается сразу), причина и
+ * комментарий, вложения. Категории и товары каталога — по типу: сырьё только в заявке на сырьё. «Сохранить черновик» — без отправки,
+ * «Отправить» — сразу на согласование. Повторное нажатие не создаёт вторую заявку (ключ формы). Сервер проверяет всё ещё раз.
  */
-export function RequestForm({ form, initial }: { form: RequestFormData; initial?: RequestDetail }) {
+export function RequestForm({ form, initial, defaultKind = "Regular" }: { form: RequestFormData; initial?: RequestDetail; defaultKind?: RequestKind }) {
   const t = useT();
   const router = useRouter();
   const today = todayInTashkent();
   const clientKey = useRef<string>(typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
   const fileInput = useRef<HTMLInputElement>(null);
 
+  const [kind, setKind] = useState<RequestKind>(initial?.kind ?? (form.canCreateRaw ? defaultKind : "Regular"));
   const [title, setTitle] = useState(initial?.title ?? "");
   const [departmentId, setDepartmentId] = useState(initial?.departmentId ?? form.defaultDepartmentId ?? "");
   const [priority, setPriority] = useState<RequestPriority>(initial?.priority ?? "Normal");
@@ -126,6 +132,20 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
   // изменение отправит заявку директору повторно.
   const approvedEdit = initial?.can.approvedEdit ?? false;
   const stockLocked = (item: ItemDraft) => (item.issued ?? 0) > 0 || (approvedEdit && !!item.id && (parseNumber(item.fromStock ?? "") ?? 0) > 0);
+  // Тип выбирают те, кому разрешена закупка сырья (и автор черновика на сырьё — чтобы вернуть его в обычную); у утверждённой — не меняется.
+  const choosesKind = !approvedEdit && (form.canCreateRaw || initial?.kind === "Raw");
+  const categoryOf = (id: string) => categories.find((c) => c.id === id);
+  // Сменили тип: позиции чужих категорий — без категории (и без товара каталога), чтобы выбрать подходящие.
+  const changeKind = (next: RequestKind) => {
+    setKind(next);
+    setItems((list) =>
+      list.map((i) =>
+        !i.categoryId || kindAccepts(next, categoryOf(i.categoryId)) || stockLocked(i)
+          ? i
+          : { ...i, categoryId: "", ...(i.itemId ? { itemId: null, sku: null, available: null, fromStock: "0", fromStockTouched: false, purchaseReason: "" } : {}) },
+      ),
+    );
+  };
 
   const patch = (rowKey: string, change: Partial<ItemDraft>) => setItems((list) => list.map((i) => (i.key === rowKey ? { ...i, ...change } : i)));
   // Количество или выбранный товар поменялись — «со склада» подставляется само (сколько есть), пока пользователь не менял его руками.
@@ -186,6 +206,7 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
       submit,
       clientKey: initial ? null : clientKey.current,
       version: initial?.version ?? null,
+      kind,
     };
     try {
       let id = initial?.id;
@@ -250,7 +271,9 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
           <p className="flex items-start gap-2 rounded-2xl border border-violet/30 bg-violet-soft px-4 py-3 text-sm text-ink">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-violet-light" aria-hidden />
             <span>
-              {t("Заявка утверждена директором. Рост количества к закупке или цены, новые и удалённые позиции отправят её директору на повторное согласование; уменьшение — только в историю.")}
+              {initial?.kind === "Raw"
+                ? t("Заявка на сырьё утверждена. Рост количества к закупке или цены, новые и удалённые позиции отправят её на повторное согласование с первого шага маршрута; уменьшение — только в историю.")
+                : t("Заявка утверждена директором. Рост количества к закупке или цены, новые и удалённые позиции отправят её директору на повторное согласование; уменьшение — только в историю.")}
             </span>
           </p>
         )}
@@ -263,6 +286,36 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
 
         <section className={card}>
           <div className="grid gap-4 sm:grid-cols-2">
+            {choosesKind && (
+              <div className="sm:col-span-2">
+                <span className={label}>{t("Тип заявки")}</span>
+                <div role="radiogroup" aria-label={t("Тип заявки")} className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+                  {(["Regular", "Raw"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      role="radio"
+                      aria-checked={kind === k}
+                      disabled={k === "Raw" && !form.canCreateRaw}
+                      onClick={() => kind !== k && changeKind(k)}
+                      className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                        kind === k ? "bg-surface text-ink shadow-sm" : "text-ink-2 hover:text-ink"
+                      }`}
+                    >
+                      {k === "Raw" && <Wheat className="size-4" aria-hidden />}
+                      {t(requestKindLabel[k])}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs text-ink-3">
+                  {kind === "Raw"
+                    ? form.rawSteps?.length
+                      ? t("Только позиции категорий сырья. Согласуют: {steps} → снабжение.", { steps: form.rawSteps.map((s) => t(rawStepLabel[s]).toLowerCase()).join(" → ") })
+                      : t("Только позиции категорий сырья.")
+                    : t("Сырьё — отдельной заявкой «Закупка сырья».")}
+                </p>
+              </div>
+            )}
             <div className="sm:col-span-2">
               <label htmlFor="rq-title" className={label}>
                 {t("Название")}
@@ -272,7 +325,7 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={200}
-                placeholder={t("Например: канцелярия на ноябрь")}
+                placeholder={kind === "Raw" ? t("Например: мука и какао на ноябрь") : t("Например: канцелярия на ноябрь")}
                 className={field}
                 autoFocus={!initial}
                 disabled={approvedEdit}
@@ -328,7 +381,9 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
             <h2 id="rq-items" className="text-base font-semibold text-ink">
               {t("Позиции")}
             </h2>
-            <span className="text-xs text-ink-3">{t("Цена за единицу обязательна для закупки — по сумме решается, нужен ли директор")}</span>
+            <span className="text-xs text-ink-3">
+              {kind === "Raw" ? t("Цена за единицу обязательна для закупки") : t("Цена за единицу обязательна для закупки — по сумме решается, нужен ли директор")}
+            </span>
           </div>
 
           <div className="hidden grid-cols-[24px_minmax(0,2fr)_minmax(0,1.6fr)_84px_92px_116px_104px_32px] gap-2 border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3 @3xl:grid">
@@ -365,6 +420,7 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
                         linked={!!item.itemId}
                         locked={stockLocked(item)}
                         label={t("Наименование, позиция {n}", { n: index + 1 })}
+                        accept={(o) => kindAccepts(kind, categoryOf(o.categoryId))}
                         onText={(name) => patch(item.key, { name })}
                         onPick={(o) =>
                           patchItem(item.key, {
@@ -388,11 +444,13 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
                       className={`${field} col-span-2 truncate @3xl:col-span-1 ${item.categoryId ? "" : "text-ink-3"}`}
                     >
                       {!item.categoryId && <option value="">{t("Выберите категорию")}</option>}
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
+                      {categories
+                        .filter((c) => kindAccepts(kind, c) || c.id === item.categoryId)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
                     </select>
                     <input
                       value={item.quantity}
@@ -533,7 +591,7 @@ export function RequestForm({ form, initial }: { form: RequestFormData; initial?
           <div className="flex gap-2 lg:flex-col">{actions}</div>
           {!approvedEdit && (
             <p className="text-xs leading-relaxed text-ink-3">
-              {t("После отправки часть «со склада» резервируется, остальное снабжение передаст директору на согласование. Изменить заявку можно будет, только если её вернут на доработку.")}
+              {t("После отправки часть «со склада» резервируется, остальное уйдёт на согласование по маршруту. Изменить заявку можно будет, только если её вернут на доработку.")}
             </p>
           )}
         </div>

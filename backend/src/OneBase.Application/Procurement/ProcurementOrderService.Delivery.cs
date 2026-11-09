@@ -25,6 +25,11 @@ public sealed partial class ProcurementOrderService
         }
 
         var note = Text(reason, 2000, "Причина") ?? throw new FieldValidationException("Укажите, почему остаток не будет поставлен.");
+        if (await ProcurementArrivalService.HasOpenAsync(db, order.Id, ct))
+        {
+            throw new FieldConflictException($"По заказу {order.Number} машина на приёмке — сначала примите или отмените поставку.");
+        }
+
         var closed = new List<(ProcurementPurchaseOrderItem Item, decimal Quantity)>();
         foreach (var item in order.Items)
         {

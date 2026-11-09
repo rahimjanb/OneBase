@@ -308,8 +308,11 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Procurement.ProcurementReceiptService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementPurchaseService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementTenderService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementArrivalService>();
+        services.AddScoped<OneBase.Application.Procurement.ProcurementHomeService>();
         services.AddScoped<OneBase.Application.Production.ProductionRecipeService>();
         services.AddScoped<OneBase.Application.Production.ProductionOrderService>();
+        services.AddScoped<OneBase.Application.Production.ProductionShiftService>();
         services.AddScoped<OneBase.Application.Production.ProductionAnalyticsService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementReminderService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementAnalyticsService>();

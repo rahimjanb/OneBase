@@ -24,7 +24,7 @@ export default async function QualityCheckPage({ params }: { params: Promise<{ i
     <>
       <PageHeader
         title={card.check.number}
-        subtitle={`${card.check.itemName} · ${card.check.batchNumber}`}
+        subtitle={[card.check.itemName, card.check.batchNumber ?? (card.check.arrivalNumber ? t("{n} · в машине", { n: card.check.arrivalNumber }) : null)].filter(Boolean).join(" · ")}
         back="/production/quality"
         breadcrumbs={[
           { label: "OneBase", href: "/" },

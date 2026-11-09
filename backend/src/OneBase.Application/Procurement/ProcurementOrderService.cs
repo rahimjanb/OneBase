@@ -180,6 +180,7 @@ public sealed partial class ProcurementOrderService(
     [
         ProcurementRequestStatus.Submitted, ProcurementRequestStatus.HeadApproval, ProcurementRequestStatus.FinanceApproval, ProcurementRequestStatus.DirectorApproval,
         ProcurementRequestStatus.Approved, ProcurementRequestStatus.PartiallyFulfilled, ProcurementRequestStatus.SupplyApproval,
+        ProcurementRequestStatus.AnalystApproval,
     ];
 
     /// <summary>Заявки, по которым можно заказывать: утверждённые директором (или сами — всё со склада) и частично выполненные.</summary>
@@ -369,7 +370,8 @@ public sealed partial class ProcurementOrderService(
             manage && o.Status == ProcurementOrderStatus.Approved,
             manage && ProcurementOrderRules.Cancellable(o.Status) && items.All(i => i.ReceivedQty == 0),
             manage || ctx.Warehouse,
-            ctx.Warehouse && ProcurementOrderRules.Receivable.Contains(o.Status),
+            // Покупку «Куплено — привезёт поставщик» принимают поставкой (машина → качество → вес), не приёмкой по заказу.
+            ctx.Warehouse && ProcurementOrderRules.Receivable.Contains(o.Status) && !o.Direct,
             manage && o.Status == ProcurementOrderStatus.PartiallyDelivered,
             manage && o.Status == ProcurementOrderStatus.Delivered && claims.All(c => c.Status != ProcurementClaimStatus.Open),
             manage && claims.Any(c => c.Status == ProcurementClaimStatus.Open));
@@ -890,6 +892,11 @@ public sealed partial class ProcurementOrderService(
         if (!ProcurementOrderRules.Cancellable(order.Status) || order.Items.Any(i => i.ReceivedQty > 0))
         {
             throw new FieldConflictException($"Заказ «{ProcurementOrderRules.Label(order.Status)}» — поставка уже началась, отменить нельзя.");
+        }
+
+        if (await ProcurementArrivalService.HasOpenAsync(db, order.Id, ct))
+        {
+            throw new FieldConflictException($"По заказу {order.Number} машина на приёмке — сначала примите или отмените поставку.");
         }
 
         var note = Text(reason, 2000, "Причина");

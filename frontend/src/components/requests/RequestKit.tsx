@@ -1,8 +1,28 @@
 "use client";
 
-import { ArrowDown, ArrowUp, BadgeCheck, Ban, CircleCheckBig, FilePen, Flame, Hourglass, Landmark, Minus, OctagonX, PackageOpen, Send, Truck, Undo2, UserCheck, type LucideIcon } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  BadgeCheck,
+  Ban,
+  CircleCheckBig,
+  FilePen,
+  Flame,
+  Hourglass,
+  Landmark,
+  Minus,
+  OctagonX,
+  PackageOpen,
+  SearchCheck,
+  Send,
+  Truck,
+  Undo2,
+  UserCheck,
+  Wheat,
+  type LucideIcon,
+} from "lucide-react";
 import { useT } from "@/i18n/client";
-import { requestPriorityLabel, requestStatusLabel, type RequestPriority, type RequestStatus } from "@/lib/procurement";
+import { requestKindLabel, requestPriorityLabel, requestStatusLabel, type RequestKind, type RequestPriority, type RequestStatus } from "@/lib/procurement";
 
 /** Вид статусов заявки — один для таблицы, карточек, обзора и карточки заявки: цвет и значок (токены темы). */
 export const requestStatusLook: Record<RequestStatus, { icon: LucideIcon; tone: string; dot: string }> = {
@@ -11,6 +31,7 @@ export const requestStatusLook: Record<RequestStatus, { icon: LucideIcon; tone: 
   HeadApproval: { icon: UserCheck, tone: "bg-accent-soft text-accent-strong", dot: "bg-accent" },
   FinanceApproval: { icon: Landmark, tone: "bg-violet-soft text-violet-light", dot: "bg-violet" },
   SupplyApproval: { icon: Truck, tone: "bg-violet-soft text-violet-light", dot: "bg-violet" },
+  AnalystApproval: { icon: SearchCheck, tone: "bg-violet-soft text-violet-light", dot: "bg-violet" },
   DirectorApproval: { icon: Hourglass, tone: "bg-violet-soft text-violet-light", dot: "bg-violet" },
   RevisionRequired: { icon: Undo2, tone: "bg-warn-soft text-warn", dot: "bg-warn" },
   Approved: { icon: BadgeCheck, tone: "bg-ok-soft text-ok", dot: "bg-ok" },
@@ -34,6 +55,18 @@ export function RequestStatusPill({ status, className = "" }: { status: RequestS
     <span className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-semibold leading-5 ${look.tone} ${className}`}>
       <look.icon className="size-3.5" aria-hidden />
       {t(requestStatusLabel[status])}
+    </span>
+  );
+}
+
+/** Метка «Закупка сырья» — только у заявок на сырьё (обычная заявка без метки). */
+export function RequestKindPill({ kind, className = "" }: { kind?: RequestKind; className?: string }) {
+  const t = useT();
+  if (kind !== "Raw") return null;
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-muted px-[7px] py-0.5 text-[11px] font-semibold leading-4 text-ink-2 ${className}`}>
+      <Wheat className="size-[11px]" strokeWidth={2.25} aria-hidden />
+      {t(requestKindLabel[kind])}
     </span>
   );
 }

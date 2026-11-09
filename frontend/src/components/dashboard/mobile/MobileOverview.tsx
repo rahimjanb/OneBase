@@ -30,6 +30,8 @@ type Props = {
   apiOk: boolean;
   alerts: Promise<AiAlertsView | null>;
   home: Home;
+  /** Что ждёт решения пользователя (согласования, «можно получить», принято на склад) — под приветствием; нет дел — ничего. */
+  attention?: React.ReactNode;
 };
 
 /**
@@ -37,7 +39,7 @@ type Props = {
  * данных. Цифры — настоящие (lib/dashboard-data): продажи, HR и задачи. Каждый блок ждёт только свои данные и до тех пор показывает
  * заготовку: медленная динамика (прошлые месяцы продаж) не держит остальную страницу.
  */
-export async function MobileOverview({ name, now, locale, apiOk, alerts, home }: Props) {
+export async function MobileOverview({ name, now, locale, apiOk, alerts, home, attention }: Props) {
   const t = await getT();
   const loading = t("Загрузка");
   const at = now.toISOString();
@@ -54,6 +56,7 @@ export async function MobileOverview({ name, now, locale, apiOk, alerts, home }:
         <Suspense fallback={<GreetingSkeleton label={loading} />}>
           <Head name={name} now={now} locale={locale} fast={home.fast} />
         </Suspense>
+        {attention}
         <Filters departments={DEPARTMENTS.map((d) => ({ code: d.code, name: d.name }))} />
         <Suspense fallback={<KpiSkeleton label={loading} />}>
           <Kpi fast={home.fast} />

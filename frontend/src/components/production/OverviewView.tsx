@@ -13,7 +13,7 @@ function Tile({ label, value, hint, tone = "", href }: { label: string; value: s
   const t = useT();
   const body = (
     <>
-      <span className={`block text-2xl font-semibold tabular-nums text-ink ${tone}`}>{value}</span>
+      <span className={`block text-2xl font-semibold tabular-nums ${tone || "text-ink"}`}>{value}</span>
       <span className="block text-xs text-ink-3">{t(label)}</span>
       {hint && <span className="mt-0.5 block text-[11px] text-ink-3">{hint}</span>}
     </>
@@ -39,6 +39,13 @@ export function OverviewView({ data, warehouses }: { data: ProductionOverview; w
   const params = useSearchParams();
   const today = todayInTashkent();
   const units = { bn: t("млрд"), mn: t("млн"), th: t("тыс.") };
+  // Заявки на сырьё на согласовании — по шагам, только ненулевые (руководитель снабжения — прежний маршрут).
+  const approvalParts = [
+    (data.analystApproval ?? 0) > 0 && t("у аналитика {n}", { n: data.analystApproval! }),
+    (data.financeApproval ?? 0) > 0 && t("у финансиста {n}", { n: data.financeApproval! }),
+    data.directorApproval > 0 && t("у директора {n}", { n: data.directorApproval }),
+    data.supplyApproval > 0 && t("у руководителя снабжения {n}", { n: data.supplyApproval }),
+  ].filter((x): x is string => typeof x === "string");
   const apply = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params.toString());
     for (const [k, v] of Object.entries(patch)) {
@@ -189,13 +196,9 @@ export function OverviewView({ data, warehouses }: { data: ProductionOverview; w
               </li>
             ))}
           </ul>
-          {(data.supplyApproval > 0 || data.directorApproval > 0) && (
+          {approvalParts.length > 0 && (
             <p className="mt-3 rounded-lg bg-muted px-3 py-2 text-xs text-ink-2">
-              {t("Закупка сырья на согласовании: у руководителя снабжения {a}, у директора {b} — на {s} сум", {
-                a: data.supplyApproval,
-                b: data.directorApproval,
-                s: money(data.approvalAmount),
-              })}
+              {t("Закупка сырья на согласовании: {parts} — на {s} сум", { parts: approvalParts.join(", "), s: money(data.approvalAmount) })}
             </p>
           )}
         </section>

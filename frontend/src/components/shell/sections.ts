@@ -1,12 +1,12 @@
 import {
   Archive,
   ArrowLeftRight,
-  BookOpenCheck,
+  FlaskConical,
+  ClipboardList,
   Building,
   Factory,
   CalendarClock,
   ChartColumn,
-  ClipboardList,
   DoorOpen,
   FileBarChart,
   FolderKanban,
@@ -21,6 +21,7 @@ import {
   ShoppingBag,
   Sparkles,
   Table2,
+  Truck,
   Tags,
   UserPlus,
   UserRound,
@@ -126,6 +127,15 @@ export const procurementTabs: SectionTab[] = [
     permission: ["procurement.read", "procurement.warehouse"],
     description: "журнал тендерных закупок",
   },
+  // Поставки — приезд машин по тендерам: кладовщик отмечает и принимает, лаборатория проверяет, снабжение и аналитик следят.
+  {
+    key: "arrivals",
+    label: "Поставки",
+    href: "/procurement/arrivals",
+    icon: Truck,
+    permission: ["procurement.read", "procurement.warehouse", "quality.check"],
+    description: "машины: качество, взвешивание, приёмка",
+  },
   { key: "suppliers", label: "Поставщики", href: "/procurement/suppliers", icon: Building, permission: "procurement.read", description: "реестр и рейтинг" },
   { key: "stock", label: "Склад", href: "/procurement/stock", icon: Warehouse, description: "остатки и каталог" },
   { key: "batches", label: "Партии", href: "/procurement/batches", icon: CalendarClock, description: "сроки годности и остатки партий" },
@@ -135,7 +145,7 @@ export const procurementTabs: SectionTab[] = [
 ];
 
 /** Кто видит производство (рецептуры, задания, аналитику): производство, технолог, кладовщик, снабжение, директор, лаборатория. */
-const productionViewers = ["production.read", "production.manage", "production.recipes", "procurement.warehouse", "procurement.read", "procurement.manage", "quality.check"];
+const productionViewers = ["production.read", "production.manage", "production.recipes", "production.operate", "procurement.warehouse", "procurement.read", "procurement.manage", "quality.check"];
 
 /**
  * «Производство» (D5): обзор сырья и производства, задания на выпуск (выдача и возврат сырья по партиям, закрытие со сверкой нормы),
@@ -144,7 +154,8 @@ const productionViewers = ["production.read", "production.manage", "production.r
 export const productionTabs: SectionTab[] = [
   { key: "overview", label: "Обзор", href: "/production", icon: LayoutDashboard, permission: productionViewers, description: "сырьё и производство на сегодня" },
   { key: "orders", label: "Задания", href: "/production/orders", icon: Factory, permission: productionViewers, description: "задания на выпуск и расход сырья" },
-  { key: "recipes", label: "Рецептуры", href: "/production/recipes", icon: BookOpenCheck, permission: productionViewers, description: "состав продукции и нормы" },
+  { key: "recipes", label: "Технолог", href: "/production/technologist", icon: FlaskConical, permission: productionViewers, description: "техкарты, этапы, брак и расчёт сырья" },
+  { key: "shifts", label: "Смены", href: "/production/shifts", icon: ClipboardList, permission: productionViewers, description: "сменные отчёты: замесы, выпечка, брак, упаковка" },
   { key: "quality", label: "Качество", href: "/production/quality", icon: ShieldCheck, description: "контроль качества партий сырья" },
   { key: "reports", label: "Отчёты", href: "/production/reports", icon: FileBarChart, permission: productionViewers, description: "партии, качество, расход и норма" },
 ];
@@ -201,7 +212,9 @@ export const sections: SectionDef[] = [
     title: "Производство",
     back: toDepartments,
     tabs: productionTabs,
-    active: (pathname) => (pathname === "/production" ? "overview" : (productionTabs.find((t) => t.key !== "overview" && under(pathname, t.href))?.key ?? null)),
+    // Техкарты (/production/recipes) — внутри «Технолога».
+    active: (pathname) =>
+      pathname === "/production" ? "overview" : under(pathname, "/production/recipes") ? "recipes" : (productionTabs.find((t) => t.key !== "overview" && under(pathname, t.href))?.key ?? null),
   },
 ];
 

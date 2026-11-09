@@ -23,6 +23,8 @@ internal static class ProcurementModel
             e.Property(x => x.Comment).HasMaxLength(2000);
             e.Property(x => x.Priority).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(24);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16).HasDefaultValue(ProcurementRequestKind.Regular);
+            e.Property(x => x.RouteSteps).HasMaxLength(200);
             e.Property(x => x.EstimatedTotal).HasPrecision(18, 2);
             e.Property(x => x.PurchaseTotal).HasPrecision(18, 2);
             e.Property(x => x.ApprovedSnapshot).HasColumnType("jsonb");
@@ -257,6 +259,97 @@ internal static class ProcurementModel
                 .HasConstraintName("FK_ProcurementQualityChecks_Users_DecidedById");
             e.HasMany(x => x.Results).WithOne(x => x.Check).HasForeignKey(x => x.CheckId).OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_ProcurementQualityResults_QualityChecks_CheckId");
+            e.HasIndex(x => x.ItemId).HasDatabaseName("IX_ProcurementQualityChecks_ItemId");
+            e.HasOne(x => x.Item).WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementQualityChecks_Items_ItemId");
+            e.HasIndex(x => x.SupplierId).HasDatabaseName("IX_ProcurementQualityChecks_SupplierId");
+            e.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementQualityChecks_Suppliers_SupplierId");
+            e.HasIndex(x => x.ArrivalId).HasFilter("\"ArrivalId\" IS NOT NULL").HasDatabaseName("IX_ProcurementQualityChecks_ArrivalId");
+            e.HasOne(x => x.Arrival).WithMany().HasForeignKey(x => x.ArrivalId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementQualityChecks_Arrivals_ArrivalId");
+        });
+
+        b.Entity<ProcurementArrival>(e =>
+        {
+            // Поставка — по тендеру или по заказу «Куплено», ровно по одному из них.
+            e.ToTable("Arrivals", Schema, t => t.HasCheckConstraint("CK_ProcurementArrivals_Source", "(\"TenderId\" IS NULL) <> (\"OrderId\" IS NULL)"));
+            e.HasKey(x => x.Id).HasName("PK_ProcurementArrivals");
+            e.Property(x => x.Number).HasMaxLength(32);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.VehicleNo).HasMaxLength(32);
+            e.Property(x => x.DriverName).HasMaxLength(200);
+            e.Property(x => x.Reference).HasMaxLength(100);
+            e.Property(x => x.Comment).HasMaxLength(1000);
+            e.Property(x => x.CancelReason).HasMaxLength(1000);
+            e.Property(x => x.AcceptedTotal).HasPrecision(18, 2);
+            e.Property(x => x.Version).IsRowVersion();
+            e.HasIndex(x => x.Number).IsUnique().HasDatabaseName("IX_ProcurementArrivals_Number");
+            e.HasIndex(x => new { x.Status, x.ArrivedAt }).HasDatabaseName("IX_ProcurementArrivals_Status_ArrivedAt");
+            e.HasIndex(x => x.TenderId).HasDatabaseName("IX_ProcurementArrivals_TenderId");
+            e.HasIndex(x => x.SupplierId).HasDatabaseName("IX_ProcurementArrivals_SupplierId");
+            e.HasIndex(x => x.WarehouseId).HasDatabaseName("IX_ProcurementArrivals_WarehouseId");
+            e.HasIndex(x => x.RegisteredById).HasDatabaseName("IX_ProcurementArrivals_RegisteredById");
+            e.HasIndex(x => x.AcceptedById).HasDatabaseName("IX_ProcurementArrivals_AcceptedById");
+            e.HasIndex(x => x.ReceiptId).IsUnique().HasFilter("\"ReceiptId\" IS NOT NULL").HasDatabaseName("IX_ProcurementArrivals_ReceiptId");
+            // Повтор формы «Машина приехала» с тем же ключом не заводит вторую поставку.
+            e.HasIndex(x => new { x.RegisteredById, x.ClientKey }).IsUnique().HasFilter("\"ClientKey\" IS NOT NULL")
+                .HasDatabaseName("IX_ProcurementArrivals_RegisteredById_ClientKey");
+            e.HasOne(x => x.Tender).WithMany().HasForeignKey(x => x.TenderId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivals_Tenders_TenderId");
+            e.HasIndex(x => x.OrderId).HasFilter("\"OrderId\" IS NOT NULL").HasDatabaseName("IX_ProcurementArrivals_OrderId");
+            e.HasOne(x => x.Order).WithMany().HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivals_PurchaseOrders_OrderId");
+
+            e.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivals_Suppliers_SupplierId");
+            e.HasOne<ProcurementWarehouse>().WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivals_Warehouses_WarehouseId");
+            e.HasOne(x => x.RegisteredBy).WithMany().HasForeignKey(x => x.RegisteredById).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivals_Users_RegisteredById");
+            e.HasOne(x => x.AcceptedBy).WithMany().HasForeignKey(x => x.AcceptedById).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivals_Users_AcceptedById");
+            e.HasOne<ProcurementStockDocument>().WithMany().HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivals_StockDocuments_ReceiptId");
+            e.HasMany(x => x.Lines).WithOne(x => x.Arrival).HasForeignKey(x => x.ArrivalId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProcurementArrivalLines_Arrivals_ArrivalId");
+        });
+
+        b.Entity<ProcurementArrivalLine>(e =>
+        {
+            e.ToTable("ArrivalLines", Schema, t =>
+            {
+                t.HasCheckConstraint("CK_ProcurementArrivalLines_Quantities",
+                    "\"Declared\" > 0 AND (\"AcceptedQty\" IS NULL OR \"AcceptedQty\" >= 0) AND (\"AcceptedWeight\" IS NULL OR \"AcceptedWeight\" >= 0) AND (\"StockQty\" IS NULL OR \"StockQty\" >= 0)");
+            });
+            e.HasKey(x => x.Id).HasName("PK_ProcurementArrivalLines");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.UnitCode).HasMaxLength(16);
+            e.Property(x => x.Declared).HasPrecision(18, 3);
+            e.Property(x => x.DeclaredBase).HasPrecision(18, 3);
+            e.Property(x => x.SupplierBatchNo).HasMaxLength(100);
+            e.Property(x => x.Control).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Quality).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.AcceptedQty).HasPrecision(18, 3);
+            e.Property(x => x.AcceptedWeight).HasPrecision(18, 3);
+            e.Property(x => x.StockQty).HasPrecision(18, 3);
+            e.Property(x => x.Comment).HasMaxLength(500);
+            e.HasIndex(x => new { x.ArrivalId, x.LineNo }).IsUnique().HasDatabaseName("IX_ProcurementArrivalLines_ArrivalId_LineNo");
+            e.HasIndex(x => x.TenderItemId).HasDatabaseName("IX_ProcurementArrivalLines_TenderItemId");
+            e.HasIndex(x => x.ItemId).HasDatabaseName("IX_ProcurementArrivalLines_ItemId");
+            e.HasIndex(x => x.QualityCheckId).IsUnique().HasFilter("\"QualityCheckId\" IS NOT NULL").HasDatabaseName("IX_ProcurementArrivalLines_QualityCheckId");
+            e.HasIndex(x => x.BatchId).HasFilter("\"BatchId\" IS NOT NULL").HasDatabaseName("IX_ProcurementArrivalLines_BatchId");
+            e.HasOne(x => x.TenderItem).WithMany().HasForeignKey(x => x.TenderItemId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivalLines_TenderItems_TenderItemId");
+            e.HasIndex(x => x.OrderItemId).HasFilter("\"OrderItemId\" IS NOT NULL").HasDatabaseName("IX_ProcurementArrivalLines_OrderItemId");
+            e.HasOne(x => x.OrderItem).WithMany().HasForeignKey(x => x.OrderItemId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivalLines_PurchaseOrderItems_OrderItemId");
+            e.HasOne(x => x.Item).WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivalLines_Items_ItemId");
+            e.HasOne(x => x.QualityCheck).WithMany().HasForeignKey(x => x.QualityCheckId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivalLines_QualityChecks_QualityCheckId");
+            e.HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementArrivalLines_Batches_BatchId");
         });
 
         b.Entity<ProcurementQualityResult>(e =>
@@ -356,6 +449,8 @@ internal static class ProcurementModel
             e.HasOne<OneBase.Domain.Production.ProductionOrder>().WithMany().HasForeignKey(x => x.ProductionOrderId).OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_ProcurementStockDocuments_ProductionOrders_ProductionOrderId");
             e.HasIndex(x => x.ProductionOrderId).HasFilter("\"ProductionOrderId\" IS NOT NULL").HasDatabaseName("IX_ProcurementStockDocuments_ProductionOrderId");
+            // Приход выхода по заданию — один: повтор и одновременное нажатие второй раз не приходуют.
+            e.HasIndex(x => x.ProductionOrderId, "IX_ProcurementStockDocuments_ProductionOrderId_Output").IsUnique().HasFilter("\"Kind\" = 'ProductionOutput'");
             e.HasOne<ProcurementQualityCheck>().WithMany().HasForeignKey(x => x.QualityCheckId).OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_ProcurementStockDocuments_QualityChecks_QualityCheckId");
             e.HasOne(x => x.Order).WithMany().HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict)
@@ -496,6 +591,7 @@ internal static class ProcurementModel
             e.Property(x => x.ReapprovalTolerancePercent).HasPrecision(5, 2);
             e.Property(x => x.DirectorLimit).HasPrecision(18, 2);
             e.Property(x => x.OverconsumptionPercent).HasPrecision(5, 2).HasDefaultValue(ProcurementSettings.DefaultOverconsumptionPercent);
+            e.Property(x => x.RawRouteSteps).HasColumnType("jsonb");
             // Согласующие — пользователи OneBase; удалённый пользователь снимается с маршрута, а не ломает настройки.
             e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.FinanceApproverId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.DirectorApproverId).OnDelete(DeleteBehavior.SetNull);
@@ -587,6 +683,9 @@ internal static class ProcurementModel
             e.Property(x => x.Version).IsRowVersion();
             e.HasIndex(x => x.Number).IsUnique().HasDatabaseName("IX_ProcurementPurchaseOrders_Number");
             e.HasIndex(x => new { x.Status, x.ExpectedDate }).HasDatabaseName("IX_ProcurementPurchaseOrders_Status_ExpectedDate");
+            e.HasIndex(x => x.WarehouseId).HasFilter("\"WarehouseId\" IS NOT NULL").HasDatabaseName("IX_ProcurementPurchaseOrders_WarehouseId");
+            e.HasOne<ProcurementWarehouse>().WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProcurementPurchaseOrders_Warehouses_WarehouseId");
             e.HasIndex(x => new { x.SupplierId, x.Status }).HasDatabaseName("IX_ProcurementPurchaseOrders_SupplierId_Status");
             e.HasIndex(x => new { x.ResponsibleId, x.Status }).HasDatabaseName("IX_ProcurementPurchaseOrders_ResponsibleId_Status");
             e.HasIndex(x => x.OfferId).HasDatabaseName("IX_ProcurementPurchaseOrders_OfferId");

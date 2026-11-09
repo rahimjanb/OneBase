@@ -95,6 +95,9 @@ public static class Permissions
     /// <summary>Подбор персонала — управление: вакансии, кандидаты, резюме, этапы, согласия, решения по заявкам, дубли, срок хранения.</summary>
     public const string HrRecruitmentManage = "hr.recruitment.manage";
 
+    /// <summary>Ввод смены (оператор производства): замесы, выпечка, брак по этапам, упаковка, закрыть смену. Рецептуры и нормы не меняет.</summary>
+    public const string ProductionOperate = "production.operate";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
@@ -130,5 +133,6 @@ public static class Permissions
         ProductionRecipes,
         HrRecruitmentRead,
         HrRecruitmentManage,
+        ProductionOperate,
     ];
 }

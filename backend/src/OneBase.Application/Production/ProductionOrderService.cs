@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Field;
@@ -41,8 +43,26 @@ public sealed record ProductionOrderMove(string ItemName, string UnitCode, strin
 public sealed record ProductionOrderDocument(Guid Id, string Number, ProcurementStockDocumentKind Kind, DateTimeOffset At, string? ActorName, string? Comment, string? Receiver,
     IReadOnlyList<ProductionOrderMove> Moves);
 
-/// <summary>Что можно: изменить (черновик), выпустить, выдать и вернуть (кладовщик склада задания), закрыть, отменить.</summary>
-public sealed record ProductionOrderAbilities(bool Edit, bool Release, bool Issue, bool Return, bool Complete, bool Cancel);
+/// <summary>Что можно: изменить (черновик), выпустить, выдать и вернуть (кладовщик склада задания), закрыть, отменить, оприходовать выход (кладовщик).</summary>
+public sealed record ProductionOrderAbilities(bool Edit, bool Release, bool Issue, bool Return, bool Complete, bool Cancel, bool Receive = false);
+
+/// <summary>
+/// Сверка по позиции: план (потребность на план), норма на фактический выпуск, по результатам смен (норма на фактический брак этапов и
+/// материалов), факт склада (выдано − возвращено), взвешено в сменах; отклонение факта от расчёта по результатам (а их нет — от нормы на
+/// факт). Null — нет данных (не подставляется ноль).
+/// </summary>
+public sealed record ProductionCheckLine(Guid ItemId, string Name, string UnitCode, decimal Plan, decimal? NormOnFact, decimal? ByResults, decimal Fact, decimal? Weighed,
+    decimal? Deviation, decimal? DeviationPercent);
+
+/// <summary>Сверка задания: от какого выхода (смены или закрытие), смен утверждено, неполный ли расчёт по результатам, строки, расчёт по результатам.</summary>
+public sealed record ProductionOrderCheck(decimal Output, string OutputSource, int Shifts, IReadOnlyList<string> Missing, IReadOnlyList<ProductionCheckLine> Lines,
+    CalcResult? ByResults);
+
+/// <summary>
+/// Выход на склад: позиция склада, сколько (в её единице), документ прихода и партия, если уже оприходован; цена партии — материалы задания
+/// по цене выданных партий на единицу выхода.
+/// </summary>
+public sealed record ProductionOrderOutput(Guid ItemId, string ItemName, string UnitCode, decimal? Quantity, string? DocumentNumber, string? BatchNumber, decimal? UnitCost = null);
 
 public sealed record ProductionOrderDetail(
     Guid Id,
@@ -75,7 +95,12 @@ public sealed record ProductionOrderDetail(
     IReadOnlyList<ProductionOrderHolding> Holdings,
     IReadOnlyList<ProductionOrderDocument> Documents,
     IReadOnlyList<ProcurementEventView> History,
-    ProductionOrderAbilities Can);
+    ProductionOrderAbilities Can,
+    CalcResult? Plan = null,
+    ProductionOrderCheck? Check = null,
+    ProductionOrderOutput? Output = null,
+    int ShiftsOpen = 0,
+    decimal? ShiftsGoodOutput = null);
 
 /// <summary>Строка выдачи: позиция задания, сколько, партия (не указана — FEFO из годных).</summary>
 public sealed record ProductionIssueLine(Guid ItemId, decimal Quantity, Guid? BatchId = null);
@@ -105,8 +130,9 @@ public sealed record ProductionNamed(Guid Id, string Name);
 /// же партии (не больше выданного). Закрытие — фактический выход: норма на факт выхода, отклонение по каждой позиции; перерасход больше
 /// порога из настроек снабжения — пометка и уведомление руководителю производства. Готовая продукция на склад OneBase не приходуется.
 /// Отменить можно, только если у цеха на руках ничего нет. Резерва сырья под задание нет (D14): доступность проверяется при выдаче.
+/// Потребность и норма на факт — расчётный механизм по цепочке версии (ProductionCalc); плановый расчёт хранится снимком в задании.
 /// </summary>
-public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers numbers, ProcurementStockLedger ledger, UserNotifier notifier)
+public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers numbers, ProcurementStockLedger ledger, UserNotifier notifier, ProductionShiftService shifts)
 {
     public const string ProductionDepartment = "production";
 
@@ -195,10 +221,16 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
         var settings = await db.ProcurementSettings.AsNoTracking().FirstOrDefaultAsync(ct);
         var threshold = settings?.OverconsumptionPercent ?? ProcurementSettings.DefaultOverconsumptionPercent;
         var available = await ProductionStock.AvailableAsync(db, o.Lines.Select(l => l.ItemId), o.WarehouseId, ledger.Today, ct);
+        var recipe = (await ProductionRecipeService.LoadAsync(db, r => r.Id == o.RecipeId, false, ct, q => q.Include(r => r.OutputItem))).Single();
+        var results = await shifts.OrderResultsAsync(o, recipe, ct);
+        var used = ResultItems(ProductionRecipeCalc.From(recipe), results?.Calculation);
         var lines = o.Lines.OrderBy(l => l.LineNo).Select(l =>
         {
             var consumed = l.IssuedQty - l.ReturnedQty;
-            (decimal Quantity, decimal? Percent)? dev = l.ActualNormQty is { } norm ? ProductionRules.Deviation(consumed, norm) : null;
+            // После закрытия: отклонение — к расходу по результатам смен (как в сверке), без смен — к норме на фактический выход.
+            (decimal Quantity, decimal? Percent)? dev = l.ActualNormQty is { } norm
+                ? ProductionRules.Deviation(consumed, used is not null && used.TryGetValue(l.ItemId, out var u) ? u : norm)
+                : null;
             return new ProductionOrderLineView(l.Id, l.LineNo, l.ItemId, l.Item!.Sku, l.Item.Name, l.Item.UnitCode, l.Item.TracksBatches, l.NormQty, l.LossPercent, l.RequiredQty,
                 l.IssuedQty, l.ReturnedQty, consumed, ProductionRules.LeftToIssue(l.RequiredQty, l.IssuedQty, l.ReturnedQty), available.GetValueOrDefault(l.ItemId), l.ActualNormQty,
                 dev?.Quantity, dev?.Percent, l.Overconsumed);
@@ -208,7 +240,7 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
             {
                 m.DocumentId, m.Document!.Number, m.Document.Kind, At = m.Document.PostedAt ?? m.Document.CreatedAt, Actor = m.Document.Actor == null ? null : m.Document.Actor.FullName,
                 m.Document.Comment, m.Document.Receiver, m.ItemId, ItemName = m.Item!.Name, m.Item.UnitCode, m.BatchId, BatchNumber = m.Batch == null ? null : m.Batch.Number,
-                ExpiresOn = m.Batch == null ? null : m.Batch.ExpiresOn, SupplierBatchNo = m.Batch == null ? null : m.Batch.SupplierBatchNo, m.Quantity,
+                ExpiresOn = m.Batch == null ? null : m.Batch.ExpiresOn, SupplierBatchNo = m.Batch == null ? null : m.Batch.SupplierBatchNo, m.Quantity, m.UnitCost,
             })
             .ToListAsync(ct);
         var documents = moves.GroupBy(m => m.DocumentId).Select(g =>
@@ -217,7 +249,8 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
             return new ProductionOrderDocument(g.Key, f.Number, f.Kind, f.At, f.Actor, f.Comment, f.Receiver,
                 g.Select(m => new ProductionOrderMove(m.ItemName, m.UnitCode, m.BatchNumber, Math.Abs(m.Quantity))).ToList());
         }).OrderByDescending(d => d.At).ToList();
-        var holdings = moves.GroupBy(m => (m.ItemId, m.BatchId)).Select(g =>
+        var lineItems = o.Lines.Select(l => l.ItemId).ToHashSet();
+        var holdings = moves.Where(m => lineItems.Contains(m.ItemId)).GroupBy(m => (m.ItemId, m.BatchId)).Select(g =>
         {
             var f = g.First();
             var issued = -g.Where(m => m.Kind == ProcurementStockDocumentKind.ProductionIssue).Sum(m => m.Quantity);
@@ -228,6 +261,15 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
             .Select(e => new ProcurementEventView(e.Id, e.Action, e.Text, e.Actor == null ? "Система" : e.Actor.FullName, e.FromStatus, e.ToStatus, e.Comment, e.CreatedAt))
             .ToListAsync(ct);
         var net = o.Lines.Sum(l => l.IssuedQty - l.ReturnedQty);
+        var plan = o.PlanSnapshot is { } json ? JsonSerializer.Deserialize<CalcResult>(json, SnapshotJson) : null;
+        var shiftsOpen = await db.ProductionShifts.CountAsync(s => s.OrderId == id && (s.Status == ProductionShiftStatus.Draft || s.Status == ProductionShiftStatus.Closed), ct);
+        var check = Check(o, recipe, results, lines);
+        var outputMove = moves.FirstOrDefault(m => m.Kind == ProcurementStockDocumentKind.ProductionOutput);
+        var output = recipe.OutputItem is { } outItem
+            ? new ProductionOrderOutput(outItem.Id, outItem.Name, outItem.UnitCode,
+                o.OutputQty is { } q ? ProductionCalc.Convert(q, recipe.OutputUnit, outItem.UnitCode) : null, outputMove?.Number, outputMove?.BatchNumber,
+                outputMove?.UnitCost)
+            : null;
         var keeper = ctx.Posts(o.WarehouseId) && o.Warehouse!.IsActive;
         var can = new ProductionOrderAbilities(
             ctx.Produces && ProductionRules.Editable(o.Status),
@@ -235,13 +277,15 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
             keeper && ProductionRules.Issuable(o.Status),
             keeper && ProductionRules.Issuable(o.Status) && holdings.Any(h => h.Left > 0),
             ctx.Produces && ProductionRules.Issuable(o.Status),
-            ctx.Produces && ProductionRules.Cancellable(o.Status, net));
+            ctx.Produces && ProductionRules.Cancellable(o.Status, net),
+            keeper && o.Status == ProductionOrderStatus.Completed && output is { DocumentNumber: null, Quantity: > 0 });
         return new ProductionOrderDetail(o.Id, o.Number, o.RecipeId, o.Recipe!.Code, o.Recipe.VersionNo, o.Recipe.Name, o.Recipe.OutputName, o.Recipe.OutputUnit,
             o.Recipe.OutputQuantity, o.DepartmentId, o.Department!.Name, o.WarehouseId, o.Warehouse!.Name, o.PlannedQty, o.PlannedDate, o.Status, o.OutputQty, o.ResponsibleId,
-            o.Responsible?.FullName, o.Comment, o.CreatedAt, o.ReleasedAt, o.CompletedAt, o.CancelledAt, o.Version, threshold, lines, holdings, documents, history, can);
+            o.Responsible?.FullName, o.Comment, o.CreatedAt, o.ReleasedAt, o.CompletedAt, o.CancelledAt, o.Version, threshold, lines, holdings, documents, history, can, plan, check,
+            output, shiftsOpen, results?.GoodOutput);
     }
 
-    /// <summary>Новое задание — черновик по действующей версии рецептуры; строки — нормы версии (снимок) и потребность на план.</summary>
+    /// <summary>Новое задание — черновик по действующей версии рецептуры; строки — потребность по расчёту цепочки на план (снимок расчёта — в задании).</summary>
     public async Task<Guid> CreateAsync(ProcurementContext ctx, ProductionOrderInput input, CancellationToken ct)
     {
         RequireManage(ctx);
@@ -251,7 +295,7 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
             return done;
         }
 
-        var recipe = await db.ProductionRecipes.AsNoTracking().Include(r => r.Lines).FirstOrDefaultAsync(r => r.Id == input.RecipeId, ct)
+        var recipe = (await ProductionRecipeService.LoadAsync(db, r => r.Id == input.RecipeId, false, ct)).FirstOrDefault()
                      ?? throw new FieldValidationException("Выберите рецептуру.");
         if (recipe.Status != ProductionRecipeStatus.Active)
         {
@@ -263,12 +307,11 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
             Number = await numbers.NextAsync(ProductionRules.OrderPrefix, ct), RecipeId = recipe.Id, CreatedById = ctx.UserId, ClientKey = input.ClientKey,
         };
         await ApplyAsync(order, input, ct);
-        foreach (var line in recipe.Lines.OrderBy(l => l.LineNo))
+        foreach (var line in Plan(order, recipe))
         {
             order.Lines.Add(new ProductionOrderLine
             {
-                OrderId = order.Id, LineNo = line.LineNo, ItemId = line.ItemId, NormQty = line.Quantity, LossPercent = line.LossPercent,
-                RequiredQty = ProductionRules.Requirement(line.Quantity, order.PlannedQty, recipe.OutputQuantity, line.LossPercent),
+                OrderId = order.Id, LineNo = line.LineNo, ItemId = line.ItemId, NormQty = line.Norm, LossPercent = line.LossPercent, RequiredQty = line.Required,
             });
         }
 
@@ -296,9 +339,11 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
         }
 
         await ApplyAsync(order, input, ct);
+        var recipe = (await ProductionRecipeService.LoadAsync(db, r => r.Id == order.RecipeId, false, ct)).Single();
+        var required = Plan(order, recipe).ToDictionary(l => l.ItemId, l => l.Required);
         foreach (var line in order.Lines)
         {
-            line.RequiredQty = ProductionRules.Requirement(line.NormQty, order.PlannedQty, order.Recipe!.OutputQuantity, line.LossPercent);
+            line.RequiredQty = required.GetValueOrDefault(line.ItemId);
         }
 
         order.UpdatedAt = DateTimeOffset.UtcNow;
@@ -356,8 +401,7 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
             return done;
         }
 
-        var order = await LoadForMoveAsync(id, ct);
-        var warehouse = await ledger.WarehouseAsync(ctx, order.WarehouseId, ct);
+        var (order, warehouse) = await LoadForMoveAsync(ctx, id, ct);
         var lines = Lines(input.Lines?.Select(l => (l.ItemId, l.Quantity, l.BatchId)));
         var reason = Clean(input.Reason, 1000);
         // Больше, чем осталось выдать до потребности (строки одной позиции складываются), — только с причиной.
@@ -430,8 +474,7 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
             return done;
         }
 
-        var order = await LoadForMoveAsync(id, ct);
-        var warehouse = await ledger.WarehouseAsync(ctx, order.WarehouseId, ct);
+        var (order, warehouse) = await LoadForMoveAsync(ctx, id, ct);
         var lines = Lines(input.Lines?.Select(l => (l.ItemId, l.Quantity, l.BatchId)));
         var held = await db.ProcurementStockMovements.AsNoTracking()
             .Where(m => m.Document!.ProductionOrderId == order.Id && m.WarehouseId == warehouse.Id)
@@ -487,7 +530,10 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
         return new ProductionMoveResult(doc.Id, doc.Number);
     });
 
-    /// <summary>Закрыть задание: фактический выход, норма на факт и отклонение по каждой позиции; перерасход больше порога — пометка и уведомление.</summary>
+    /// <summary>
+    /// Закрыть задание: фактический выход, норма на факт по каждой позиции; перерасход больше порога (к расходу по результатам смен, без смен — к
+    /// норме) — пометка и уведомление.
+    /// </summary>
     public async Task CompleteAsync(ProcurementContext ctx, Guid id, ProductionCompleteInput input, CancellationToken ct)
     {
         RequireManage(ctx);
@@ -509,15 +555,21 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
         }
 
         var threshold = (await db.ProcurementSettings.AsNoTracking().FirstOrDefaultAsync(ct))?.OverconsumptionPercent ?? ProcurementSettings.DefaultOverconsumptionPercent;
+        // Норма на фактический выход — тот же расчёт цепочки закреплённой версии (утверждённая версия не меняется).
+        var recipe = (await ProductionRecipeService.LoadAsync(db, r => r.Id == order.RecipeId, false, ct)).Single();
+        var normOnOutput = Calculate(recipe, input.OutputQty).Items.ToDictionary(i => i.ItemId, i => i.Quantity);
+        // Перерасход — к расходу по результатам утверждённых смен (фактические замесы и брак), без смен — к норме на фактический выход.
+        var used = ResultItems(ProductionRecipeCalc.From(recipe), (await shifts.OrderResultsAsync(order, recipe, ct))?.Calculation);
         var over = new List<string>();
         foreach (var line in order.Lines.OrderBy(l => l.LineNo))
         {
-            line.ActualNormQty = ProductionRules.Requirement(line.NormQty, input.OutputQty, order.Recipe!.OutputQuantity, line.LossPercent);
+            line.ActualNormQty = normOnOutput.GetValueOrDefault(line.ItemId);
             var consumed = line.IssuedQty - line.ReturnedQty;
-            line.Overconsumed = ProductionRules.Overconsumed(consumed, line.ActualNormQty.Value, threshold);
+            var basis = used is not null && used.TryGetValue(line.ItemId, out var u) ? u : line.ActualNormQty.Value;
+            line.Overconsumed = ProductionRules.Overconsumed(consumed, basis, threshold);
             if (line.Overconsumed)
             {
-                var (dq, dp) = ProductionRules.Deviation(consumed, line.ActualNormQty.Value);
+                var (dq, dp) = ProductionRules.Deviation(consumed, basis);
                 over.Add($"{line.Item!.Name}: +{ProcurementRules.Quantity(dq)} {line.Item.UnitCode}{(dp is { } p ? $" ({ProcurementRules.Quantity(p)} %)" : "")}");
             }
         }
@@ -566,6 +618,124 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
         await SaveAsync(ct);
     }
 
+    /// <summary>
+    /// Оприходовать выход закрытого задания на склад задания (кладовщик): позиция склада выхода из версии рецептуры, количество — фактический
+    /// выход в её единице; позиция с партиями — новая партия (номер задания, дата выпуска, срок — по сроку хранения позиции; контроль качества
+    /// — как у позиции). Документ PRC-; второй приход по заданию не проводится (проверка и уникальный индекс).
+    /// </summary>
+    public Task<ProductionMoveResult> ReceiveOutputAsync(ProcurementContext ctx, Guid id, CancellationToken ct) => ledger.RetryAsync(async () =>
+    {
+        var order = await db.ProductionOrders.FirstOrDefaultAsync(o => o.Id == id, ct) ?? throw new FieldNotFoundException("Задание на выпуск не найдено.");
+        // Сначала права: приходует только кладовщик склада задания — и повторный запрос тоже.
+        var warehouse = await ledger.WarehouseAsync(ctx, order.WarehouseId, ct);
+        if (await db.ProcurementStockDocuments.AsNoTracking().Where(d => d.ProductionOrderId == id && d.Kind == ProcurementStockDocumentKind.ProductionOutput)
+                .Select(d => new ProductionMoveResult(d.Id, d.Number)).FirstOrDefaultAsync(ct) is { } done)
+        {
+            return done;
+        }
+
+        if (order.Status != ProductionOrderStatus.Completed || order.OutputQty is not > 0)
+        {
+            throw new FieldConflictException("Выход приходуют по закрытому заданию с фактическим выходом больше нуля.");
+        }
+
+        var recipe = await db.ProductionRecipes.AsNoTracking().Include(r => r.OutputItem).FirstAsync(r => r.Id == order.RecipeId, ct);
+        var item = recipe.OutputItem ?? throw new FieldConflictException("У версии рецептуры не указана позиция склада выхода — выход на склад OneBase не приходуется.");
+        var qty = ProductionCalc.Convert(order.OutputQty.Value, recipe.OutputUnit, item.UnitCode)
+                  ?? throw new FieldConflictException($"Выход в «{recipe.OutputUnit}» не переводится в единицу позиции «{item.UnitCode}».");
+        var doc = await ledger.DocumentAsync(ProcurementStockDocumentKind.ProductionOutput, warehouse.Id, ctx.UserId, ct);
+        doc.ProductionOrderId = order.Id;
+        doc.PostedAt = DateTimeOffset.UtcNow;
+        doc.DepartmentId = order.DepartmentId;
+        doc.Comment = $"Выход задания {order.Number}";
+        var balance = (await ledger.BalancesAsync(warehouse.Id, [item.Id], ct))[item.Id];
+        string? batchNo = null;
+        if (ledger.Tracks(item.Id))
+        {
+            // Цена партии выхода — материалы задания по цене выданных партий на единицу выхода (без труда и накладных); часть без цены — без цены.
+            var cost = await ProductionCost.MaterialsAsync(db, order.Id, ct) is { } materials ? decimal.Round(materials / qty, 2, MidpointRounding.AwayFromZero) : (decimal?)null;
+            var today = ledger.Today;
+            var batch = await ledger.NewBatchAsync(doc, warehouse.Id, item.Id, order.Number, today, item.ShelfLifeDays is { } days ? today.AddDays(days) : null, cost, null, ct,
+                item.QualityControl);
+            ledger.MoveBatch(doc, balance, batch, ProcurementMovementKind.ProductionOutput, qty, item.Name, cost);
+            batchNo = batch.Batch!.Number;
+        }
+        else
+        {
+            ledger.Move(doc, balance, ProcurementMovementKind.ProductionOutput, qty, item.Name);
+        }
+
+        Log(ctx, order.Id, "output", null, null,
+            $"Выход оприходован ({doc.Number}): {item.Name} {ProcurementRules.Quantity(qty)} {item.UnitCode}{(batchNo is null ? "" : $", партия {batchNo}")}");
+        await db.SaveChangesAsync(ct);
+        return new ProductionMoveResult(doc.Id, doc.Number);
+    });
+
+    /// <summary>
+    /// Расход по результатам смен по позициям склада: норма на фактические замесы, брак этапов и материалов, упаковку (штучное — вверх до
+    /// целого). Смен нет или карта с ошибками — null. С ним сверяется факт: отклонение и перерасход — к нему, а без смен — к норме на выход.
+    /// </summary>
+    internal static Dictionary<Guid, decimal>? ResultItems(CalcRecipe calc, CalcResult? results) =>
+        results is { Problems.Count: 0 } r
+            ? r.Lines.GroupBy(l => l.ItemId).ToDictionary(g => g.Key, g => g.Sum(l =>
+            {
+                var line = calc.Lines.First(x => x.Key == l.Key);
+                var value = ProductionCalc.ToItemUnit(line, l.WithDefects ?? l.Gross) ?? l.ItemGross;
+                return ProductionCalc.Counted(l.ItemUnit) ? Math.Ceiling(value) : decimal.Round(value, 3, MidpointRounding.AwayFromZero);
+            }))
+            : null;
+
+    /// <summary>
+    /// Сверка «норма — факт — отклонение» по позициям: выход — фактический при закрытии, а до него — годный по утверждённым сменам; норма на
+    /// этот выход и расчёт по результатам смен (фактический брак этапов и материалов, замесы, упаковки) — в единице склада.
+    /// </summary>
+    private static ProductionOrderCheck? Check(ProductionOrder o, ProductionRecipe recipe, ProductionOrderResults? results, IReadOnlyList<ProductionOrderLineView> lines)
+    {
+        var output = o.OutputQty ?? results?.GoodOutput;
+        if (output is null)
+        {
+            return null;
+        }
+
+        var calc = ProductionRecipeCalc.From(recipe);
+        var norm = ProductionCalc.Plan(calc, output.Value);
+        var normItems = norm.Problems.Count == 0 ? norm.Items.ToDictionary(i => i.ItemId, i => i.Quantity) : null;
+        var byResults = ResultItems(calc, results?.Calculation);
+        var rows = lines.Select(l =>
+        {
+            decimal? n = normItems?.GetValueOrDefault(l.ItemId);
+            decimal? b = byResults?.GetValueOrDefault(l.ItemId);
+            var basis = b ?? n;
+            (decimal Quantity, decimal? Percent)? dev = basis is { } x ? ProductionRules.Deviation(l.Consumed, x) : null;
+            return new ProductionCheckLine(l.ItemId, l.Name, l.UnitCode, l.Required, n, b, l.Consumed, results?.Weighed.TryGetValue(l.ItemId, out var w) == true ? w : null,
+                dev?.Quantity, dev?.Percent);
+        }).ToList();
+        return new ProductionOrderCheck(output.Value, o.OutputQty is not null ? "completion" : "shifts", results?.Shifts ?? 0, results?.Calculation.Missing ?? [], rows,
+            results?.Calculation);
+    }
+
+    internal static readonly JsonSerializerOptions SnapshotJson = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
+
+    /// <summary>Плановый расчёт версии на количество; карта не считается (не должно быть у утверждённой) — конфликт, а не нули.</summary>
+    private static CalcResult Calculate(ProductionRecipe recipe, decimal quantity)
+    {
+        var calc = ProductionCalc.Plan(ProductionRecipeCalc.From(recipe), quantity);
+        if (calc.Problems.Count > 0)
+        {
+            throw new FieldConflictException($"Рецептура {recipe.Code} (версия {recipe.VersionNo}) не считается: {string.Join(" ", calc.Problems.Take(3))}");
+        }
+
+        return calc;
+    }
+
+    /// <summary>Расчёт на план задания: снимок — в задании, строки — по позициям.</summary>
+    private static IReadOnlyList<(Guid ItemId, int LineNo, decimal Norm, decimal LossPercent, decimal Required)> Plan(ProductionOrder order, ProductionRecipe recipe)
+    {
+        var calc = Calculate(recipe, order.PlannedQty);
+        order.PlanSnapshot = JsonSerializer.Serialize(calc, SnapshotJson);
+        return ProductionRecipeCalc.OrderLines(recipe, calc);
+    }
+
     private async Task ApplyAsync(ProductionOrder order, ProductionOrderInput input, CancellationToken ct)
     {
         if (input.DepartmentId is not { } department || !await db.Departments.AnyAsync(d => d.Id == department, ct))
@@ -601,10 +771,12 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
         order.Comment = Clean(input.Comment, 2000);
     }
 
-    private async Task<ProductionOrder> LoadForMoveAsync(Guid id, CancellationToken ct)
+    /// <summary>Задание для выдачи или возврата: сначала права (кладовщик склада задания), потом состояние — выдают по выпущенному или в работе.</summary>
+    private async Task<(ProductionOrder Order, ProcurementWarehouse Warehouse)> LoadForMoveAsync(ProcurementContext ctx, Guid id, CancellationToken ct)
     {
         var order = await db.ProductionOrders.Include(o => o.Lines).ThenInclude(l => l.Item).FirstOrDefaultAsync(o => o.Id == id, ct)
                     ?? throw new FieldNotFoundException("Задание на выпуск не найдено.");
+        var warehouse = await ledger.WarehouseAsync(ctx, order.WarehouseId, ct);
         if (!ProductionRules.Issuable(order.Status))
         {
             throw new FieldConflictException(order.Status == ProductionOrderStatus.Draft
@@ -612,7 +784,7 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
                 : "Задание закрыто или отменено — выдачи и возвраты по нему не проводятся.");
         }
 
-        return order;
+        return (order, warehouse);
     }
 
     private static List<(Guid ItemId, decimal Qty, Guid? BatchId)> Lines(IEnumerable<(Guid ItemId, decimal Quantity, Guid? BatchId)>? input)

@@ -15,16 +15,18 @@ public interface IProcurementNumbers
 /// пользователь, а пока не выбран — любой с ролью «Директор». Согласует не право (его получил бы и администратор), а место в маршруте.
 /// Keeps — склады, за которыми закреплён кладовщик (пусто — все склады). DecidesQuality — назначен решать по качеству партий (настройки качества):
 /// решение по партии — тоже место, а не право. ApprovesAsSupply — руководитель снабжения в маршруте сырья (слот в настройках, а пока не выбран —
-/// руководители отдела «Снабжение»).
+/// руководители отдела «Снабжение»); так согласуются заявки сырья, отправленные до типов заявок. IsAnalyst — роль «Аналитик» (из базы):
+/// шаг «аналитик» маршрута заявок «Закупка сырья».
 /// </summary>
 public sealed record ProcurementContext(Guid UserId, IReadOnlySet<string> Permissions, Guid? DepartmentId, IReadOnlySet<Guid> HeadOf, bool IsDirector = false,
-    bool IsFinancier = false, bool ApprovesAsDirector = false, IReadOnlySet<Guid>? Keeps = null, bool DecidesQuality = false, bool ApprovesAsSupply = false)
+    bool IsFinancier = false, bool ApprovesAsDirector = false, IReadOnlySet<Guid>? Keeps = null, bool DecidesQuality = false, bool ApprovesAsSupply = false,
+    bool IsAnalyst = false)
 {
     /// <summary>Проводит операции по складу: кладовщик, закреплённый за этим складом или не закреплённый ни за каким (тогда — по всем).</summary>
     public bool Posts(Guid warehouseId) => Warehouse && (Keeps is not { Count: > 0 } || Keeps.Contains(warehouseId));
 
-    /// <summary>Финансист, директор маршрута или руководитель снабжения маршрута сырья: видит все отправленные заявки и решает по своему шагу.</summary>
-    public bool Approves => IsFinancier || ApprovesAsDirector || ApprovesAsSupply;
+    /// <summary>Финансист, директор маршрута, аналитик или руководитель снабжения маршрута сырья: видит все отправленные заявки и решает по своему шагу.</summary>
+    public bool Approves => IsFinancier || ApprovesAsDirector || ApprovesAsSupply || IsAnalyst;
 
     /// <summary>Видит все отправленные заявки компании: снабжение, директор.</summary>
     public bool ReadsAll => Permissions.Contains(Security.Permissions.ProcurementRead) || Manages;
@@ -47,6 +49,9 @@ public sealed record ProcurementContext(Guid UserId, IReadOnlySet<string> Permis
     /// <summary>Создаёт свои заявки.</summary>
     public bool CanCreate => Permissions.Contains(Security.Permissions.ProcurementRequest) || ReadsAll;
 
+    /// <summary>Создаёт заявки «Закупка сырья»: финансист маршрута, аналитик (роль «Аналитик»), снабжение (право «Снабжение: обработка заявок»).</summary>
+    public bool CanCreateRaw => IsFinancier || IsAnalyst || Manages;
+
     /// <summary>Раздел «Заявки» открыт.</summary>
     public bool CanOpen => CanCreate || Manages || Configures || Warehouse || IsDirector || Approves;
 
@@ -60,7 +65,10 @@ public sealed record ProcurementContext(Guid UserId, IReadOnlySet<string> Permis
     public bool Produces => Permissions.Contains(Security.Permissions.ProductionManage);
 
     /// <summary>Видит рецептуры, задания и расход: производство, технолог, кладовщик (выдаёт по заданиям), снабжение, директор, лаборатория.</summary>
-    public bool SeesProduction => Permissions.Contains(Security.Permissions.ProductionRead) || Recipes || Produces || Warehouse || ReadsAll || IsDirector || Quality;
+    public bool SeesProduction => Permissions.Contains(Security.Permissions.ProductionRead) || Recipes || Produces || Operates || Warehouse || ReadsAll || IsDirector || Quality;
+
+    /// <summary>Ввод смены: оператор производства (право «Производство: ввод смены»); мастер (задания на выпуск) — тоже.</summary>
+    public bool Operates => Permissions.Contains(Security.Permissions.ProductionOperate) || Produces;
 
     public bool Heads(Guid departmentId) => HeadOf.Contains(departmentId);
 }
@@ -86,6 +94,7 @@ public static class ProcurementRules
         ProcurementStockDocumentKind.SupplierReturn => "SRT",
         ProcurementStockDocumentKind.ProductionIssue => "PIS",
         ProcurementStockDocumentKind.ProductionReturn => "PRT",
+        ProcurementStockDocumentKind.ProductionOutput => "PRC",
         _ => "INV",
     };
 
@@ -98,11 +107,15 @@ public static class ProcurementRules
     [
         ProcurementRequestStatus.Submitted, ProcurementRequestStatus.HeadApproval, ProcurementRequestStatus.FinanceApproval, ProcurementRequestStatus.DirectorApproval,
         ProcurementRequestStatus.RevisionRequired, ProcurementRequestStatus.Approved, ProcurementRequestStatus.PartiallyFulfilled, ProcurementRequestStatus.SupplyApproval,
+        ProcurementRequestStatus.AnalystApproval,
     ];
 
-    /// <summary>Шаги согласования: заявка ждёт решения руководителя отдела, финансиста, руководителя снабжения (маршрут сырья) или директора.</summary>
+    /// <summary>Шаги согласования: заявка ждёт решения руководителя отдела, аналитика, финансиста, руководителя снабжения (прежний маршрут сырья) или директора.</summary>
     public static readonly ProcurementRequestStatus[] Approval =
-        [ProcurementRequestStatus.HeadApproval, ProcurementRequestStatus.FinanceApproval, ProcurementRequestStatus.SupplyApproval, ProcurementRequestStatus.DirectorApproval];
+    [
+        ProcurementRequestStatus.HeadApproval, ProcurementRequestStatus.FinanceApproval, ProcurementRequestStatus.SupplyApproval, ProcurementRequestStatus.DirectorApproval,
+        ProcurementRequestStatus.AnalystApproval,
+    ];
 
     public static readonly ProcurementRequestStatus[] Closed =
         [ProcurementRequestStatus.Fulfilled, ProcurementRequestStatus.Rejected, ProcurementRequestStatus.Cancelled];
@@ -118,11 +131,15 @@ public static class ProcurementRules
         || (r.Status != ProcurementRequestStatus.Draft
             && (ctx.ReadsAll || ctx.Heads(r.DepartmentId) || ctx.IsDirector || ctx.Approves || (ctx.Warehouse && r.UsesStock)));
 
-    /// <summary>Решает текущий шаг согласования: руководитель отдела заявки, финансист маршрута, руководитель снабжения (сырьё), директор маршрута.</summary>
+    /// <summary>
+    /// Решает текущий шаг согласования: руководитель отдела заявки, финансист маршрута, аналитик (кроме автора заявки — свою заявку не
+    /// согласует), руководитель снабжения (прежний маршрут сырья), директор маршрута.
+    /// </summary>
     public static bool Decides(ProcurementContext ctx, ProcurementRequest r) => r.Status switch
     {
         ProcurementRequestStatus.HeadApproval => ctx.Heads(r.DepartmentId),
         ProcurementRequestStatus.FinanceApproval => ctx.IsFinancier,
+        ProcurementRequestStatus.AnalystApproval => ctx.IsAnalyst && r.InitiatorId != ctx.UserId,
         ProcurementRequestStatus.SupplyApproval => ctx.ApprovesAsSupply,
         ProcurementRequestStatus.DirectorApproval => ctx.ApprovesAsDirector,
         _ => false,
@@ -135,8 +152,11 @@ public static class ProcurementRules
         var finance = ctx.IsFinancier;
         var director = ctx.ApprovesAsDirector;
         var supply = ctx.ApprovesAsSupply;
+        var analyst = ctx.IsAnalyst;
+        var me = ctx.UserId;
         return q.Where(r => (r.Status == ProcurementRequestStatus.HeadApproval && heads.Contains(r.DepartmentId))
                             || (finance && r.Status == ProcurementRequestStatus.FinanceApproval)
+                            || (analyst && r.Status == ProcurementRequestStatus.AnalystApproval && r.InitiatorId != me)
                             || (supply && r.Status == ProcurementRequestStatus.SupplyApproval)
                             || (director && r.Status == ProcurementRequestStatus.DirectorApproval));
     }
@@ -151,6 +171,7 @@ public static class ProcurementRules
         ProcurementRequestStatus.FinanceApproval => ProcurementApprovalStages.Finance,
         ProcurementRequestStatus.SupplyApproval => ProcurementApprovalStages.SupplyHead,
         ProcurementRequestStatus.DirectorApproval => ProcurementApprovalStages.Director,
+        ProcurementRequestStatus.AnalystApproval => ProcurementApprovalStages.Analyst,
         _ => null,
     };
 
@@ -204,10 +225,12 @@ public static class ProcurementRules
         (ProcurementRequestStatus.Draft or ProcurementRequestStatus.RevisionRequired, ProcurementRequestStatus.Submitted) => owner,
         (ProcurementRequestStatus.Submitted, ProcurementRequestStatus.DirectorApproval) => manages,
         (ProcurementRequestStatus.Submitted, ProcurementRequestStatus.RevisionRequired) => manages,
-        (ProcurementRequestStatus.HeadApproval or ProcurementRequestStatus.FinanceApproval or ProcurementRequestStatus.SupplyApproval or ProcurementRequestStatus.DirectorApproval,
+        (ProcurementRequestStatus.HeadApproval or ProcurementRequestStatus.FinanceApproval or ProcurementRequestStatus.SupplyApproval or ProcurementRequestStatus.DirectorApproval
+            or ProcurementRequestStatus.AnalystApproval,
             ProcurementRequestStatus.Approved or ProcurementRequestStatus.Rejected or ProcurementRequestStatus.RevisionRequired) => decides,
         (ProcurementRequestStatus.Draft or ProcurementRequestStatus.Submitted or ProcurementRequestStatus.RevisionRequired or ProcurementRequestStatus.HeadApproval
-            or ProcurementRequestStatus.FinanceApproval or ProcurementRequestStatus.SupplyApproval or ProcurementRequestStatus.DirectorApproval,
+            or ProcurementRequestStatus.FinanceApproval or ProcurementRequestStatus.SupplyApproval or ProcurementRequestStatus.DirectorApproval
+            or ProcurementRequestStatus.AnalystApproval,
             ProcurementRequestStatus.Cancelled) => owner,
         _ => false,
     };
@@ -222,7 +245,7 @@ public static class ProcurementRules
     public static readonly ProcurementRequestStatus[] IssuableStatuses =
     [
         ProcurementRequestStatus.Submitted, ProcurementRequestStatus.FinanceApproval, ProcurementRequestStatus.DirectorApproval, ProcurementRequestStatus.Approved,
-        ProcurementRequestStatus.PartiallyFulfilled, ProcurementRequestStatus.SupplyApproval,
+        ProcurementRequestStatus.PartiallyFulfilled, ProcurementRequestStatus.SupplyApproval, ProcurementRequestStatus.AnalystApproval,
     ];
 
     /// <summary>Утверждённую заявку правит снабжение (цена, количество, состав) — существенное изменение отправляет её директору повторно.</summary>
@@ -310,6 +333,7 @@ public static class ProcurementRules
         ProcurementRequestStatus.HeadApproval => "Ожидает руководителя отдела",
         ProcurementRequestStatus.FinanceApproval => "Ожидает финансиста",
         ProcurementRequestStatus.SupplyApproval => "Ожидает руководителя снабжения",
+        ProcurementRequestStatus.AnalystApproval => "Ожидает аналитика",
         ProcurementRequestStatus.DirectorApproval => "Ожидает директора",
         ProcurementRequestStatus.Approved => "Утверждена",
         ProcurementRequestStatus.Rejected => "Отклонена",
@@ -319,6 +343,8 @@ public static class ProcurementRules
         ProcurementRequestStatus.Cancelled => "Отменена",
         _ => status.ToString(),
     };
+
+    public static string Label(ProcurementRequestKind kind) => kind == ProcurementRequestKind.Raw ? "Закупка сырья" : "Обычная закупка";
 
     public static string Label(ProcurementPriority priority) => priority switch
     {

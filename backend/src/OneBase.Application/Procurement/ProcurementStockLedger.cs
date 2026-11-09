@@ -269,7 +269,8 @@ public sealed class ProcurementStockLedger(IAppDbContext db, IProcurementNumbers
             batch.QualityStatus = ProcurementBatchQuality.Pending;
             var check = new ProcurementQualityCheck
             {
-                Number = await numbers.NextAsync(ProcurementQualityRules.Prefix, ct), BatchId = batch.Id, Batch = batch, WarehouseId = warehouseId, Control = control,
+                Number = await numbers.NextAsync(ProcurementQualityRules.Prefix, ct), BatchId = batch.Id, Batch = batch, ItemId = itemId, SupplierId = supplierId,
+                WarehouseId = warehouseId, Control = control,
             };
             db.ProcurementQualityChecks.Add(check);
             _checks.Add(check);
@@ -417,6 +418,13 @@ public sealed class ProcurementStockLedger(IAppDbContext db, IProcurementNumbers
 
         Received(balance, requestItem, batches.Sum(b => b.Batch.Quantity), usable, itemLabel, active);
     }
+
+    /// <summary>
+    /// Принято под позицию заявки уже проведённым движением (партия допущена проверкой до склада — поставка «Куплено»): «получено» и резерв
+    /// всего принятого под заявку — к выдаче.
+    /// </summary>
+    public void ReceivedForRequest(ProcurementStockBalance balance, ProcurementRequestItem requestItem, decimal quantity, string itemLabel,
+        Dictionary<Guid, ProcurementStockReservation> active) => Received(balance, requestItem, quantity, quantity, itemLabel, active);
 
     /// <summary>«Получено» в позиции заявки и резерв под неё поступившего (reserve из quantity), карточка склада — у позиции без неё, статусы.</summary>
     private void Received(ProcurementStockBalance balance, ProcurementRequestItem requestItem, decimal quantity, decimal reserve, string itemLabel,

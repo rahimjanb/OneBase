@@ -196,7 +196,7 @@ public sealed class ProcurementReceiptService(
         RequireView(ctx);
         var today = FieldClock.Today;
         var receivable = ProcurementOrderRules.Receivable;
-        var rows = await db.ProcurementPurchaseOrders.AsNoTracking().Where(o => receivable.Contains(o.Status))
+        var rows = await db.ProcurementPurchaseOrders.AsNoTracking().Where(o => receivable.Contains(o.Status) && !o.Direct)
             .Select(o => new
             {
                 o.Id, o.Number, o.Status, o.SupplierId, Supplier = o.Supplier!.Name, Responsible = o.Responsible!.FullName, o.ExpectedDate,
@@ -261,12 +261,12 @@ public sealed class ProcurementReceiptService(
     {
         RequireView(ctx);
         var o = await db.ProcurementPurchaseOrders.AsNoTracking().Where(x => x.Id == orderId)
-                    .Select(x => new { x.Id, x.Number, x.Status, x.SupplierId, Supplier = x.Supplier!.Name, x.ExpectedDate })
+                    .Select(x => new { x.Id, x.Number, x.Status, x.SupplierId, Supplier = x.Supplier!.Name, x.ExpectedDate, x.Direct })
                     .FirstOrDefaultAsync(ct)
                 ?? throw new FieldNotFoundException("Заказ не найден.");
         var lines = await OrderLinesAsync(orderId, ct);
         return new ProcurementReceiptForm(o.Id, o.Number, o.Status, o.SupplierId, o.Supplier, o.ExpectedDate,
-            ProcurementOrderRules.IsOverdue(o.Status, o.ExpectedDate, FieldClock.Today), ctx.Warehouse && ProcurementOrderRules.Receivable.Contains(o.Status), lines);
+            ProcurementOrderRules.IsOverdue(o.Status, o.ExpectedDate, FieldClock.Today), ctx.Warehouse && ProcurementOrderRules.Receivable.Contains(o.Status) && !o.Direct, lines);
     }
 
     private Task<List<ProcurementReceiptOrderLine>> OrderLinesAsync(Guid orderId, CancellationToken ct) =>
@@ -521,6 +521,11 @@ public sealed class ProcurementReceiptService(
     {
         var order = await db.ProcurementPurchaseOrders.Include(o => o.Items).Include(o => o.Supplier).FirstOrDefaultAsync(o => o.Id == orderId, ct)
                     ?? throw new FieldNotFoundException("Заказ не найден.");
+        if (order.Direct)
+        {
+            throw new FieldConflictException($"{order.Number} — покупка «Куплено»: её принимают поставкой («Снабжение → Поставки» → «Машина приехала»).");
+        }
+
         if (!ProcurementOrderRules.Receivable.Contains(order.Status))
         {
             throw new FieldConflictException(order.Status is ProcurementOrderStatus.Approved or ProcurementOrderStatus.Draft or ProcurementOrderStatus.AwaitingApproval

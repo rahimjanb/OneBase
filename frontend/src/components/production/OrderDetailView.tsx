@@ -9,8 +9,9 @@ import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { batchOptionLabel, dateRu, parseNumber, quantity, stampRu, type BatchOption } from "@/lib/procurement";
-import { deviation, percentLabel, requirement, type ProductionOrderDetail } from "@/lib/production";
+import { batchOptionLabel, dateRu, money, parseNumber, quantity, stampRu, type BatchOption } from "@/lib/procurement";
+import { deviation, percentLabel, requirement, type ProductionOrderDetail, type Requirement } from "@/lib/production";
+import { RecipeCalcResult } from "./RecipeCalcResult";
 import { Fact, OrderStatusPill, card, field, newKey, primary, secondary } from "./ProdKit";
 
 type Dialog = "release" | "issue" | "return" | "complete" | "cancel" | null;
@@ -76,6 +77,11 @@ export function OrderDetailView({ order }: { order: ProductionOrderDetail }) {
           <CircleCheckBig className="size-4" aria-hidden /> {t("Закрыть задание")}
         </button>
       )}
+      {can.receive && (
+        <button type="button" onClick={() => void post("receive-output", {})} disabled={busy} className={primary}>
+          <PackagePlus className="size-4" aria-hidden /> {t("Оприходовать выход")}
+        </button>
+      )}
     </div>
   );
 
@@ -109,6 +115,34 @@ export function OrderDetailView({ order }: { order: ProductionOrderDetail }) {
       <PageBody>
         <div className="mx-auto max-w-6xl space-y-4">
           <div className="lg:hidden">{actions}</div>
+          {(order.status === "Released" || order.status === "InProgress" || order.shiftsOpen > 0 || order.shiftsGoodOutput !== null) && (
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm text-ink-2">
+              <span>
+                {t("Смены")}: {order.shiftsGoodOutput !== null ? t("годный выход по утверждённым {q}", { q: `${quantity(order.shiftsGoodOutput)} ${order.outputUnit}` }) : t("утверждённых нет")}
+                {order.shiftsOpen > 0 && ` · ${t("открытых {n}", { n: order.shiftsOpen })}`}
+              </span>
+              <Link href={`/production/shifts?order=${order.id}`} className="font-medium text-accent-strong hover:underline">
+                {order.status === "Released" || order.status === "InProgress" ? t("Смены и новая смена") : t("Смены задания")}
+              </Link>
+            </p>
+          )}
+          {order.output && (order.status === "Completed" || order.output.documentNumber) && (
+            <p className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm text-ink-2">
+              {order.output.documentNumber
+                ? t("Выход оприходован: {item} {q} — {doc}{batch}", {
+                    item: order.output.itemName,
+                    q: `${quantity(order.output.quantity ?? 0)} ${order.output.unitCode}`,
+                    doc: order.output.documentNumber,
+                    batch: order.output.batchNumber ? `, ${t("партия {n}", { n: order.output.batchNumber })}` : "",
+                  }) +
+                  (order.output.batchNumber
+                    ? ` · ${order.output.unitCost !== null
+                        ? t("цена партии {s} сум за {unit} — сырьё по цене выданных партий", { s: money(order.output.unitCost), unit: order.output.unitCode })
+                        : t("цены партии нет — не всё сырьё выдано партиями с ценой")}`
+                    : "")
+                : t("Выход {q} приходуется на склад как «{item}» — это делает кладовщик склада задания.", { q: `${quantity(order.output.quantity ?? 0)} ${order.output.unitCode}`, item: order.output.itemName })}
+            </p>
+          )}
           {order.status === "Draft" && (
             <p className="rounded-xl border border-line bg-muted px-4 py-2.5 text-sm text-ink-2">
               {t("Черновик: проверьте план и склад и нажмите «Выпустить» — потребность зафиксируется, и кладовщик сможет выдать сырьё.")}
@@ -179,13 +213,82 @@ export function OrderDetailView({ order }: { order: ProductionOrderDetail }) {
                 </div>
                 {done && (
                   <p className="mt-3 border-t border-line pt-3 text-xs text-ink-3">
-                    {t("Норма на факт — норма рецептуры на фактический выход {q} с потерями; расход — выдано минус возвращено. Перерасход больше {p} % отмечен красным.", {
+                    {t("Норма на факт — расчёт цепочки рецептуры на фактический выход {q} (выход и брак этапов, замесы, упаковка); расход — выдано минус возвращено; отклонение — к расходу по результатам утверждённых смен, без смен — к норме на факт. Перерасход больше {p} % отмечен красным.", {
                       q: `${quantity(order.outputQty ?? 0)} ${order.outputUnit}`,
                       p: quantity(order.thresholdPercent),
                     })}
                   </p>
                 )}
               </section>
+
+              {order.check && (
+                <section className={card} aria-labelledby="po-check">
+                  <h2 id="po-check" className="mb-1 text-base font-semibold text-ink">{t("Норма — факт — отклонение")}</h2>
+                  <p className="mb-3 text-xs text-ink-3">
+                    {order.check.outputSource === "completion"
+                      ? t("На фактический выход {q} при закрытии.", { q: `${quantity(order.check.output)} ${order.outputUnit}` })
+                      : t("На годный выход по утверждённым сменам: {q}, смен {n}.", { q: `${quantity(order.check.output)} ${order.outputUnit}`, n: order.check.shifts })}{" "}
+                    {t("По результатам — норма на фактический брак этапов и материалов; факт — выдано со склада минус возвращено; отклонение — факт минус расчёт по результатам.")}
+                  </p>
+                  {order.check.missing.length > 0 && (
+                    <ul className="mb-3 rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-ink">
+                      {order.check.missing.map((m) => (
+                        <li key={m}>{t(m)}</li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px] text-sm">
+                      <thead>
+                        <tr className="whitespace-nowrap border-b border-line text-left text-[11px] text-ink-3">
+                          <th className="py-2 pr-3 font-semibold">{t("Позиция")}</th>
+                          <th className="py-2 pr-3 text-right font-semibold">{t("План")}</th>
+                          <th className="py-2 pr-3 text-right font-semibold">{t("Норма на факт")}</th>
+                          <th className="py-2 pr-3 text-right font-semibold">{t("По результатам")}</th>
+                          <th className="py-2 pr-3 text-right font-semibold">{t("Факт склада")}</th>
+                          <th className="py-2 pr-3 text-right font-semibold">{t("Взвешено")}</th>
+                          <th className="py-2 text-right font-semibold">{t("Отклонение")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.check.lines.map((l) => {
+                          const bad = l.deviationPercent !== null && l.deviationPercent > order.thresholdPercent;
+                          return (
+                            <tr key={l.itemId} className="border-b border-line last:border-0">
+                              <td className="py-2 pr-3 text-ink">
+                                {l.name} <span className="text-xs text-ink-3">{l.unitCode}</span>
+                              </td>
+                              <td className="whitespace-nowrap py-2 pr-3 text-right tabular-nums text-ink-2">{quantity(l.plan)}</td>
+                              <td className="whitespace-nowrap py-2 pr-3 text-right tabular-nums">{l.normOnFact !== null ? quantity(l.normOnFact) : "—"}</td>
+                              <td className="whitespace-nowrap py-2 pr-3 text-right tabular-nums">{l.byResults !== null ? quantity(l.byResults) : "—"}</td>
+                              <td className="whitespace-nowrap py-2 pr-3 text-right font-semibold tabular-nums">{quantity(l.fact)}</td>
+                              <td className="whitespace-nowrap py-2 pr-3 text-right tabular-nums text-ink-2">{l.weighed !== null ? quantity(l.weighed) : "—"}</td>
+                              <td className={`whitespace-nowrap py-2 text-right tabular-nums ${bad ? "font-semibold text-bad" : "text-ink-2"}`}>
+                                {l.deviation !== null ? `${l.deviation > 0 ? "+" : ""}${quantity(l.deviation)} · ${percentLabel(l.deviationPercent)}` : "—"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {order.plan && order.plan.stages.length > 0 && (
+                <details className={`${card} group`}>
+                  <summary className="cursor-pointer list-none text-base font-semibold text-ink marker:hidden">
+                    {t("Расчёт на план по цепочке")}{" "}
+                    <span className="text-sm font-normal text-ink-3">
+                      · {t("на {q} — снимок расчёта задания", { q: `${quantity(order.plan.quantity)} ${order.plan.outputUnit}` })}
+                      {order.plan.batches && ` · ${t("замесов: {n}", { n: order.plan.batches.batches.length })}`}
+                    </span>
+                  </summary>
+                  <div className="mt-3">
+                    <RecipeCalcResult calc={order.plan} />
+                  </div>
+                </details>
+              )}
 
               {order.holdings.length > 0 && (
                 <section className={card} aria-labelledby="po-hold">
@@ -575,15 +678,37 @@ function ReturnSheet({ order, onClose }: { order: ProductionOrderDetail; onClose
   );
 }
 
-/** Закрытие задания: фактический выход; сразу видно норму на факт и отклонение по позициям. */
+/**
+ * Закрытие задания: фактический выход; сразу видно норму на факт и отклонение по позициям. Норма на факт — тот же расчёт цепочки
+ * закреплённой версии, что сделает сервер при закрытии (замесы, брак этапов, упаковки), а не пропорция от плана.
+ */
 function CompleteSheet({ order, onClose }: { order: ProductionOrderDetail; onClose: () => void }) {
   const t = useT();
   const router = useRouter();
-  const [output, setOutput] = useState(text(order.plannedQty));
+  const [output, setOutput] = useState(text(order.shiftsGoodOutput ?? order.plannedQty));
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [norms, setNorms] = useState<Record<string, number> | null>(null);
   const q = parseNumber(output);
+  useEffect(() => {
+    setNorms(null);
+    if (q === null || q < 0) return;
+    if (q === 0) {
+      setNorms(Object.fromEntries(order.lines.map((l) => [l.itemId, 0])));
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      bff<Requirement>(`production/recipes/${order.recipeId}/requirement?quantity=${q}`)
+        .then((r) => alive && setNorms(Object.fromEntries(r.lines.map((l) => [l.itemId, l.required]))))
+        .catch(() => alive && setNorms(Object.fromEntries(order.lines.map((l) => [l.itemId, requirement(l.norm, q, order.recipeOutput, l.lossPercent)]))));
+    }, 300);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [q, order]);
 
   const submit = async () => {
     setError(null);
@@ -628,7 +753,8 @@ function CompleteSheet({ order, onClose }: { order: ProductionOrderDetail; onClo
         </label>
         <p className="pb-2 text-xs text-ink-3">{t("план {q}", { q: `${quantity(order.plannedQty)} ${order.outputUnit}` })}</p>
       </div>
-      {q !== null && q >= 0 && (
+      {q !== null && q >= 0 && norms === null && <Loader2 className="mt-3 size-4 animate-spin text-ink-3" aria-label={t("Считаем норму на факт")} />}
+      {q !== null && q >= 0 && norms !== null && (
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[480px] text-sm">
             <thead>
@@ -641,7 +767,7 @@ function CompleteSheet({ order, onClose }: { order: ProductionOrderDetail; onClo
             </thead>
             <tbody>
               {order.lines.map((l) => {
-                const norm = requirement(l.norm, q, order.recipeOutput, l.lossPercent);
+                const norm = norms[l.itemId] ?? 0;
                 const d = deviation(l.consumed, norm);
                 const bad = norm > 0 ? l.consumed > (norm * (100 + order.thresholdPercent)) / 100 : l.consumed > 0;
                 return (

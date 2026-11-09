@@ -14,8 +14,9 @@ public sealed record ProcurementRequestIssueInput(IReadOnlyList<ProcurementIssue
 /// <summary>
 /// Настройки снабжения для экрана («Настройки → Отделы → Снабжение»): маршрут согласования заявок — финансист, директор и лимит покупки без
 /// директора (сум); допуск роста цены или суммы без повторного согласования, %; через сколько дней просрочки задача снабжения уходит
-/// руководителю снабжения и директору; маршрут сырья — включён ли и кто руководитель снабжения (не выбран — руководители отдела
-/// «Снабжение»). Имена согласующих — только для показа (при сохранении не читаются). RawRouteEnabled null — не менять (прежние клиенты).
+/// руководителю снабжения и директору; RawSteps — маршрут заявок «Закупка сырья»: шаги по автору (supply, analyst, finance → analyst,
+/// finance, director, director_limit), null при сохранении — не менять. RawRouteEnabled и SupplyApproverId — прежний маршрут сырья (для
+/// заявок, отправленных до типов заявок; новые заявки он не меняет), null — не менять. Имена согласующих — только для показа.
 /// </summary>
 public sealed record ProcurementSettingsView(
     decimal ReapprovalTolerancePercent,
@@ -30,7 +31,8 @@ public sealed record ProcurementSettingsView(
     Guid? SupplyApproverId = null,
     string? SupplyApproverName = null,
     IReadOnlyList<string>? SupplyHeads = null,
-    decimal? OverconsumptionPercent = null);
+    decimal? OverconsumptionPercent = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? RawSteps = null);
 
 public sealed partial class ProcurementRequestService
 {
@@ -162,7 +164,8 @@ public sealed partial class ProcurementRequestService
         return new ProcurementSettingsView(settings?.ReapprovalTolerancePercent ?? 0m, settings?.EscalateHeadDays ?? 1, settings?.EscalateDirectorDays ?? 3,
             settings?.FinanceApproverId, settings?.DirectorApproverId, settings?.DirectorLimit ?? ProcurementSettings.DefaultDirectorLimit,
             Name(settings?.FinanceApproverId), Name(settings?.DirectorApproverId), settings?.RawRouteEnabled ?? false, settings?.SupplyApproverId,
-            Name(settings?.SupplyApproverId), supplyHeads, settings?.OverconsumptionPercent ?? ProcurementSettings.DefaultOverconsumptionPercent);
+            Name(settings?.SupplyApproverId), supplyHeads, settings?.OverconsumptionPercent ?? ProcurementSettings.DefaultOverconsumptionPercent,
+            ProcurementRawRoute.Parse(settings?.RawRouteSteps));
     }
 
     /// <summary>Наибольший лимит покупки без директора: 1 трлн сум.</summary>
@@ -171,7 +174,8 @@ public sealed partial class ProcurementRequestService
     /// <summary>
     /// Настройки снабжения (директор и администратор — право «Настройки снабжения»): допуск роста цены или суммы без повторного согласования
     /// 0–100 %, до двух знаков; дни эскалации; маршрут согласования — финансист и директор (действующие пользователи OneBase, можно не
-    /// выбирать) и лимит покупки без директора (больше нуля, до 1 трлн сум, целые сумы).
+    /// выбирать) и лимит покупки без директора (больше нуля, до 1 трлн сум, целые сумы); маршрут заявок «Закупка сырья» по автору
+    /// (ProcurementRawRoute.Check).
     /// </summary>
     public async Task UpdateSettingsAsync(ProcurementContext ctx, ProcurementSettingsView input, CancellationToken ct)
     {
@@ -202,6 +206,11 @@ public sealed partial class ProcurementRequestService
             throw new FieldValidationException("Порог перерасхода сырья — от 0 до 100 %, не больше двух знаков после запятой.");
         }
 
+        if (input.RawSteps is { } rawSteps && ProcurementRawRoute.Check(rawSteps) is { } wrongRoute)
+        {
+            throw new FieldValidationException(wrongRoute);
+        }
+
         var approvers = new[] { input.FinanceApproverId, input.DirectorApproverId, input.SupplyApproverId }.OfType<Guid>().Distinct().ToList();
         if (await db.Users.CountAsync(u => approvers.Contains(u.Id) && u.IsActive, ct) != approvers.Count)
         {
@@ -218,7 +227,7 @@ public sealed partial class ProcurementRequestService
         object Snapshot() => new
         {
             settings.ReapprovalTolerancePercent, settings.EscalateHeadDays, settings.EscalateDirectorDays, settings.FinanceApproverId, settings.DirectorApproverId,
-            settings.DirectorLimit, settings.RawRouteEnabled, settings.SupplyApproverId, settings.OverconsumptionPercent,
+            settings.DirectorLimit, settings.RawRouteEnabled, settings.SupplyApproverId, settings.OverconsumptionPercent, settings.RawRouteSteps,
         };
         var before = Snapshot();
         settings.ReapprovalTolerancePercent = tolerance;
@@ -236,6 +245,12 @@ public sealed partial class ProcurementRequestService
         if (input.OverconsumptionPercent is { } threshold)
         {
             settings.OverconsumptionPercent = threshold;
+        }
+
+        if (input.RawSteps is { } route)
+        {
+            // Маршрут сырья по авторам: действует для заявок, отправленных после сохранения; заявки в пути идут своими шагами.
+            settings.RawRouteSteps = ProcurementRawRoute.Serialize(route);
         }
 
         settings.UpdatedAt = Now;

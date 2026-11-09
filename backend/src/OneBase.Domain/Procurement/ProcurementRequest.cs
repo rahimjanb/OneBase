@@ -8,7 +8,9 @@ namespace OneBase.Domain.Procurement;
 /// Маршрут: Draft → HeadApproval (руководитель отдела; заявку руководителя — пропуск) → FinanceApproval (финансист) → DirectorApproval
 /// (директор, если сумма к закупке больше лимита) → Approved (к закупке) → PartiallyFulfilled → Fulfilled. Маршрут сырья (включается в
 /// настройках снабжения; заявка с закупкой позиции категории сырья): Draft → SupplyApproval (руководитель снабжения) → DirectorApproval
-/// (директор — всегда, без лимита) → Approved; финансисту — уведомление без шага. RevisionRequired — возвращена на
+/// (директор — всегда, без лимита) → Approved; финансисту — уведомление без шага (так ушли заявки до типов заявок). Заявка типа «Закупка
+/// сырья» идёт шагами из настроек по автору (снабженец, аналитик, финансист): AnalystApproval, FinanceApproval, DirectorApproval → Approved.
+/// RevisionRequired — возвращена на
 /// доработку (снова отправляется после правки), Rejected — отклонена согласующим, Cancelled — отменена инициатором. Submitted — прежний
 /// шаг «у снабжения» до нового маршрута: такие заявки доводятся по-старому (снабжение передаёт директору).
 /// </summary>
@@ -28,6 +30,19 @@ public enum ProcurementRequestStatus
 
     /// <summary>Маршрут сырья: ждёт руководителя снабжения (слот в настройках, иначе руководители отдела «Снабжение»).</summary>
     SupplyApproval,
+
+    /// <summary>Заявка на закупку сырья: ждёт аналитика — любого с ролью «Аналитик», кроме автора заявки.</summary>
+    AnalystApproval,
+}
+
+/// <summary>
+/// Тип заявки — выбирается при создании: обычная закупка или закупка сырья (позиции только категорий сырья; создают финансист, аналитик и
+/// снабжение; согласуют по маршруту сырья из настроек). В обычной заявке позиций сырья нет. Хранится строкой.
+/// </summary>
+public enum ProcurementRequestKind
+{
+    Regular,
+    Raw,
 }
 
 /// <summary>Приоритет заявки: низкий, обычный, высокий, срочный.</summary>
@@ -71,6 +86,9 @@ public class ProcurementRequest : Entity
 
     public required string Title { get; set; }
 
+    /// <summary>Тип заявки: обычная закупка или закупка сырья (меняется, пока заявка в черновике или на доработке).</summary>
+    public ProcurementRequestKind Kind { get; set; } = ProcurementRequestKind.Regular;
+
     public Guid DepartmentId { get; set; }
     public Department? Department { get; set; }
 
@@ -113,6 +131,12 @@ public class ProcurementRequest : Entity
     /// затем директор (всегда). Повторное согласование после правки идёт тем же маршрутом.
     /// </summary>
     public bool RawRoute { get; set; }
+
+    /// <summary>
+    /// Шаги маршрута сырья, с которыми заявку отправили (ключи ProcurementRawRoute через запятую: analyst, finance, director, director_limit) —
+    /// изменение настроек не меняет маршрут заявки в пути. null — обычная заявка или заявка сырья прежнего маршрута (руководитель снабжения).
+    /// </summary>
+    public string? RouteSteps { get; set; }
 
     /// <summary>Раунд согласования директором: 1 — первое, 2+ — повторное после существенного изменения.</summary>
     public int ApprovalRound { get; set; }

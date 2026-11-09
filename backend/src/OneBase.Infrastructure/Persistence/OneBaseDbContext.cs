@@ -197,12 +197,21 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Procurement.ProcurementSheetImport> ProcurementSheetImports => Set<OneBase.Domain.Procurement.ProcurementSheetImport>();
     public DbSet<OneBase.Domain.Production.ProductionRecipe> ProductionRecipes => Set<OneBase.Domain.Production.ProductionRecipe>();
     public DbSet<OneBase.Domain.Production.ProductionRecipeLine> ProductionRecipeLines => Set<OneBase.Domain.Production.ProductionRecipeLine>();
+    public DbSet<OneBase.Domain.Production.ProductionRecipeStage> ProductionRecipeStages => Set<OneBase.Domain.Production.ProductionRecipeStage>();
+    public DbSet<OneBase.Domain.Production.ProductionDefectType> ProductionDefectTypes => Set<OneBase.Domain.Production.ProductionDefectType>();
+    public DbSet<OneBase.Domain.Production.ProductionShift> ProductionShifts => Set<OneBase.Domain.Production.ProductionShift>();
+    public DbSet<OneBase.Domain.Production.ProductionShiftBatch> ProductionShiftBatches => Set<OneBase.Domain.Production.ProductionShiftBatch>();
+    public DbSet<OneBase.Domain.Production.ProductionShiftStage> ProductionShiftStages => Set<OneBase.Domain.Production.ProductionShiftStage>();
+    public DbSet<OneBase.Domain.Production.ProductionShiftDefect> ProductionShiftDefects => Set<OneBase.Domain.Production.ProductionShiftDefect>();
+    public DbSet<OneBase.Domain.Production.ProductionShiftMaterial> ProductionShiftMaterials => Set<OneBase.Domain.Production.ProductionShiftMaterial>();
     public DbSet<OneBase.Domain.Production.ProductionOrder> ProductionOrders => Set<OneBase.Domain.Production.ProductionOrder>();
     public DbSet<OneBase.Domain.Production.ProductionOrderLine> ProductionOrderLines => Set<OneBase.Domain.Production.ProductionOrderLine>();
     public DbSet<OneBase.Domain.Procurement.ProcurementStockImport> ProcurementStockImports => Set<OneBase.Domain.Procurement.ProcurementStockImport>();
     public DbSet<OneBase.Domain.Procurement.ProcurementStockImportRow> ProcurementStockImportRows => Set<OneBase.Domain.Procurement.ProcurementStockImportRow>();
     public DbSet<OneBase.Domain.Procurement.ProcurementTenderItem> ProcurementTenderItems => Set<OneBase.Domain.Procurement.ProcurementTenderItem>();
     public DbSet<OneBase.Domain.Procurement.ProcurementOrderApproval> ProcurementOrderApprovals => Set<OneBase.Domain.Procurement.ProcurementOrderApproval>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementArrival> ProcurementArrivals => Set<OneBase.Domain.Procurement.ProcurementArrival>();
+    public DbSet<OneBase.Domain.Procurement.ProcurementArrivalLine> ProcurementArrivalLines => Set<OneBase.Domain.Procurement.ProcurementArrivalLine>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<PushKeys> PushKeys => Set<PushKeys>();
 

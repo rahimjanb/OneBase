@@ -40,8 +40,17 @@ public static class SystemRoles
     /// <summary>Технолог: рецептуры и их версии, просмотр заданий на выпуск и аналитики производства. Отдел — в карточке пользователя.</summary>
     public const string TechnologistRole = "Технолог";
 
+    /// <summary>Оператор производства: ввод сменных отчётов (замесы, выпечка, брак, упаковка); рецептуры, нормы и задания не меняет. Отдел — в карточке пользователя.</summary>
+    public const string OperatorRole = "Оператор производства";
+
     /// <summary>Роль отдела «Производство».</summary>
     public const string ProductionRole = "Производство";
+
+    /// <summary>
+    /// Аналитик закупок: создаёт заявки на закупку сырья и согласует их на шаге «аналитик» (маршрут сырья — «Настройки → Отделы → Снабжение»);
+    /// видит все отправленные заявки, склад и производство — для оценки потребности. Отдел — в карточке пользователя.
+    /// </summary>
+    public const string AnalystRole = "Аналитик";
 
     /// <summary>Роли Sales Base (sales.1base.uz).</summary>
     public const string FieldRm = "РМ (Sales Base)";
@@ -86,8 +95,12 @@ public static class SystemRoles
             [Permissions.ProcurementWarehouse, .. Employee]),
         new(LabRole, "Контроль качества сырья: проверка документов и показателей партий, пробы, спецификации материалов; склад и партии — просмотр; консультант, файлы.", null,
             [Permissions.QualityCheck, .. Employee]),
+        new(AnalystRole, "Закупка сырья: заявки на сырьё и их согласование на шаге «аналитик»; все заявки, склад и производство — просмотр; консультант, файлы.", null,
+            [Permissions.ProcurementRead, Permissions.ProductionRead, .. Employee]),
         new(TechnologistRole, "Рецептуры: состав продукции, нормы и потери, версии; задания на выпуск и расход сырья — просмотр; консультант, файлы.", null,
             [Permissions.ProductionRecipes, Permissions.ProductionRead, .. Employee]),
+        new(OperatorRole, "Ввод сменных отчётов производства: фактические замесы, выпечка, брак по этапам, упаковка, закрытие смены; рецептуры и задания — просмотр; консультант, файлы.", null,
+            [Permissions.ProductionOperate, Permissions.ProductionRead, .. Employee]),
         new(FieldRm, "Sales Base: вся структура полевых продаж — команды, точки, маршруты, задачи, KPI, решения по рекомендациям AI; аналитика продаж и консультант.", null,
             [Permissions.FieldUse, Permissions.FieldManage, Permissions.SalesRead, Permissions.AgentsRun, Permissions.WorkTasks]),
         new(FieldSupervisor, "Sales Base: своя команда — агенты, точки, маршруты, визиты, задачи и KPI команды.", null, [Permissions.FieldUse]),
@@ -182,5 +195,6 @@ public static class SystemRoles
         [Permissions.ProductionRecipes] = "Производство: рецептуры",
         [Permissions.HrRecruitmentRead] = "Подбор персонала: просмотр",
         [Permissions.HrRecruitmentManage] = "Подбор персонала: управление",
+        [Permissions.ProductionOperate] = "Производство: ввод смены",
     };
 }

@@ -55,9 +55,9 @@ export default async function RequestsPage() {
     { label: "Черновики", value: s.Draft, icon: FilePen, href: "/requests/my?status=draft", tone: "text-ink-2" },
     {
       label: "На согласовании",
-      value: (s.HeadApproval ?? 0) + (s.FinanceApproval ?? 0) + (s.SupplyApproval ?? 0) + s.DirectorApproval + s.Submitted,
+      value: (s.HeadApproval ?? 0) + (s.AnalystApproval ?? 0) + (s.FinanceApproval ?? 0) + (s.SupplyApproval ?? 0) + s.DirectorApproval + s.Submitted,
       icon: Hourglass,
-      href: `${list}?status=HeadApproval,FinanceApproval,SupplyApproval,DirectorApproval,Submitted`,
+      href: `${list}?status=HeadApproval,AnalystApproval,FinanceApproval,SupplyApproval,DirectorApproval,Submitted`,
       tone: "text-violet-light",
     },
     {

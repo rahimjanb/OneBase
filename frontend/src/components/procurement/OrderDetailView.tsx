@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AlertTriangle, Archive, BadgeCheck, Ban, Check, Gavel, History, ListChecks, Loader2, OctagonX, PackageCheck, PackageX, Pencil, Send, Truck, Undo2 } from "lucide-react";
 import { Sheet } from "@/components/field/Sheet";
+import { ArrivalSheet } from "@/components/procurement/ArrivalSheet";
+import { ArrivalItem, ExpectedCard } from "@/components/procurement/ArrivalsView";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
+import type { ArrivalRow, ExpectedDelivery } from "@/lib/arrivals";
 import { bff } from "@/lib/bff";
 import { approvalDecisionLabel, dateRu, money, quantity, stampRu, type OrderDetail } from "@/lib/procurement";
 import { todayInTashkent } from "@/lib/tasks";
@@ -47,9 +50,20 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
  * разрешённые (сервер проверяет то же самое): снабжение — изменить, оформить, отметить заказанным, отменить, закрыть остаток, закрыть
  * заказ; директор — утвердить, отклонить, вернуть; кладовщик — принять товар.
  */
-export function OrderDetailView({ order }: { order: OrderDetail }) {
+export function OrderDetailView({
+  order,
+  expected = null,
+  arrivals = [],
+}: {
+  order: OrderDetail;
+  /** Покупка «Куплено — привезёт поставщик», которая ждёт машину: что ещё привезут (кладовщику — «Машина приехала»). */
+  expected?: ExpectedDelivery | null;
+  /** Машины по покупке: проверка качества, приёмка, итог. */
+  arrivals?: ArrivalRow[];
+}) {
   const t = useT();
   const router = useRouter();
+  const [arriving, setArriving] = useState<ExpectedDelivery | null>(null);
   const [dialog, setDialog] = useState<Kind | null>(null);
   const [note, setNote] = useState("");
   const [date, setDate] = useState(todayInTashkent());
@@ -279,6 +293,29 @@ export function OrderDetailView({ order }: { order: OrderDetail }) {
                 </dl>
               </section>
 
+              {(expected || arrivals.length > 0) && (
+                <section className={card} aria-labelledby="po-arrivals">
+                  <h2 id="po-arrivals" className="mb-1 text-base font-semibold text-ink">
+                    {t("Поставка")}
+                  </h2>
+                  <p className="mb-3 text-sm text-ink-2">
+                    {t("Покупку «Куплено» привезёт поставщик: кладовщик отмечает приезд машины, лаборатория проверяет качество, кладовщик взвешивает и принимает — под заявку.")}
+                  </p>
+                  {expected && (
+                    <ul className="mb-3">
+                      <ExpectedCard delivery={expected} onArrive={setArriving} />
+                    </ul>
+                  )}
+                  {arrivals.length > 0 && (
+                    <ul className="space-y-2">
+                      {arrivals.map((a) => (
+                        <ArrivalItem key={a.id} row={a} />
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
               {(order.receipts.length > 0 || can.receive) && (
                 <section className={card} aria-labelledby="po-receipts">
                   <h2 id="po-receipts" className="mb-2 text-base font-semibold text-ink">
@@ -456,6 +493,7 @@ export function OrderDetailView({ order }: { order: OrderDetail }) {
           <ErrorNote text={error} />
         </div>
       </Sheet>
+      {arriving && <ArrivalSheet delivery={arriving} onClose={() => setArriving(null)} />}
     </>
   );
 }

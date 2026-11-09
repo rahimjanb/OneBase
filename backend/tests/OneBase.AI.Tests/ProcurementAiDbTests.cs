@@ -32,7 +32,7 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
         "get_supplier_history", "compare_supplier_offers", "get_procurement_expenses", "get_procurement_employee_kpi", "get_low_stock_items", "get_purchase_price_history",
     ];
 
-    private sealed record Org(User Employee, User Other, User Supply, User Director, User Keeper, Guid Raw, Guid SupplierA, Guid SupplierB, string Tag)
+    private sealed record Org(User Employee, User Other, User Supply, User Director, User Keeper, Guid Parts, Guid SupplierA, Guid SupplierB, string Tag)
     {
         public string NameA => $"ООО Альфа {Tag}";
         public string NameB => $"ООО Бета {Tag}";
@@ -123,14 +123,14 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
                 Person("ai-kpr", $"Кладовщик {tag}", supplyDept, keeper), Guid.Empty, Guid.Empty, Guid.Empty, tag);
             db.Users.AddRange(org.Employee, org.Other, org.Supply, org.Director, org.Keeper);
             await db.SaveChangesAsync();
-            org = org with { Raw = await db.ProcurementCategories.Where(c => c.Code == "raw_materials").Select(c => c.Id).SingleAsync() };
+            org = org with { Parts = await db.ProcurementCategories.Where(c => c.Code == "components").Select(c => c.Id).SingleAsync() };
             // Маршрут: у отдела заявителя нет руководителя — заявка сразу к финансисту (здесь им назначен директор), директор маршрута — роль, лимит 5 млн.
             var route = await db.ProcurementSettings.FirstOrDefaultAsync() ?? db.ProcurementSettings.Add(new ProcurementSettings()).Entity;
             (route.FinanceApproverId, route.DirectorApproverId, route.DirectorLimit) = (org.Director.Id, null, ProcurementSettings.DefaultDirectorLimit);
             await db.SaveChangesAsync();
         }
 
-        ProcurementSupplierInput Supplier(string name) => new(name, null, null, null, null, null, null, null, null, null, 2, null, [org.Raw]);
+        ProcurementSupplierInput Supplier(string name) => new(name, null, null, null, null, null, null, null, null, null, 2, null, [org.Parts]);
         var a = await As(org.Supply, (sp, c) => Get<ProcurementSupplierService>(sp).CreateAsync(c, Supplier(org.NameA), default));
         var b = await As(org.Supply, (sp, c) => Get<ProcurementSupplierService>(sp).CreateAsync(c, Supplier(org.NameB), default));
         return org with { SupplierA = a, SupplierB = b };
@@ -141,7 +141,7 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
         ProcurementPriority priority = ProcurementPriority.Normal, Guid? itemId = null)
     {
         var request = await As(org.Employee, (sp, c) => Get<ProcurementRequestService>(sp).CreateAsync(c, new ProcurementRequestInput($"Закупка: {name}", null, priority,
-            FieldClock.Today.AddDays(10), "Производство", null, [new(null, name, org.Raw, "пачка", quantity, estimate, ItemId: itemId)], Submit: true), default));
+            FieldClock.Today.AddDays(10), "Производство", null, [new(null, name, org.Parts, "пачка", quantity, estimate, ItemId: itemId)], Submit: true), default));
         await As(org.Director, (sp, c) => Get<ProcurementRequestService>(sp).ApproveAsync(c, request, "Согласовано", default));
         var detail = await As(org.Supply, (sp, c) => Get<ProcurementRequestService>(sp).GetAsync(c, request, default));
         return (request, detail.Number, detail.Items[0].Id);
@@ -213,7 +213,7 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
         await BuyAsync(org, sugar, 100, 12_000, org.SupplierA, 30, ProcurementPriority.Urgent);
         var late = await BuyAsync(org, sugar, 50, 11_000, org.SupplierB, 10, expectedInDays: -2);
 
-        var prices = await Data(org.Supply, "get_purchase_price_history", new { category = "Сырьё", search = org.Tag, min_change_percent = 10 });
+        var prices = await Data(org.Supply, "get_purchase_price_history", new { category = "Комплектующие", search = org.Tag, min_change_percent = 10 });
         var item = Assert.Single(prices.GetProperty("items").EnumerateArray());
         Assert.Equal(10m, item.GetProperty("changePercent").GetDecimal());
         Assert.Equal(10_000m, item.GetProperty("baseline").GetProperty("price").GetDecimal());
@@ -251,7 +251,7 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
         // Две утверждённые заявки «Сырья» без заказа — можно заказать одним заказом; мука есть на складе снабжения ниже минимума и уже в закупке.
         var sku = $"AI-{org.Tag}";
         var card = await As(org.Keeper, (sp, c) => Get<ProcurementStockService>(sp).CreateItemAsync(c,
-            new ProcurementCatalogInput(sku, $"Мука {org.Tag}", org.Raw, "пачка", null, null, 10), default));
+            new ProcurementCatalogInput(sku, $"Мука {org.Tag}", org.Parts, "пачка", null, null, 10), default));
         var flour = await ApprovedAsync(org, $"Мука {org.Tag}", 40, 6_000, itemId: card);
         var salt = await ApprovedAsync(org, $"Соль {org.Tag}", 10, 6_000);
         var pending = await Data(org.Supply, "get_pending_approvals", new { limit = 50 });
@@ -287,7 +287,7 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
         var org = await SeedAsync();
         var mine = await ApprovedAsync(org, $"Картон {org.Tag}", 5, 1_000);
         await As(org.Other, (sp, c) => Get<ProcurementRequestService>(sp).CreateAsync(c, new ProcurementRequestInput($"Чужая заявка {org.Tag}", null, ProcurementPriority.Normal,
-            null, "Склад", null, [new(null, $"Скотч {org.Tag}", org.Raw, "пачка", 1, 100)], Submit: true), default));
+            null, "Склад", null, [new(null, $"Скотч {org.Tag}", org.Parts, "пачка", 1, 100)], Submit: true), default));
 
         // Сотрудник: обзор и свои заявки — да; чужой заявки не видно; заказы, цены, расходы — нет доступа.
         var overview = await Data(org.Employee, "get_procurement_overview");
@@ -318,7 +318,7 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
 
         // Директор (здесь — и финансист маршрута) видит заявку у финансиста; без прав снабжения — ни одного инструмента.
         await As(org.Employee, (sp, c) => Get<ProcurementRequestService>(sp).CreateAsync(c, new ProcurementRequestInput($"На согласование {org.Tag}", null, ProcurementPriority.Normal,
-            null, "Производство", null, [new(null, $"Клей {org.Tag}", org.Raw, "пачка", 1, 100)], Submit: true), default));
+            null, "Производство", null, [new(null, $"Клей {org.Tag}", org.Parts, "пачка", 1, 100)], Submit: true), default));
         var pending = await Data(org.Director, "get_pending_approvals", new { limit = 50 });
         Assert.True(pending.GetProperty("financeApprovalRequests").GetProperty("total").GetInt32() >= 1);
         using (var scope = fixture.Services.CreateScope())
@@ -339,7 +339,7 @@ public class ProcurementAiDbTests(ConsultantDb fixture, ITestOutputHelper output
         await BuyAsync(org, $"Сахар {org.Tag}", 100, 12_000, org.SupplierB, 20);
 
         var model = fixture.Model.Reset();
-        model.Then([new LlmToolCall("1", "get_purchase_price_history", Args(new { category = "Сырьё", search = org.Tag, min_change_percent = 10 }))])
+        model.Then([new LlmToolCall("1", "get_purchase_price_history", Args(new { category = "Комплектующие", search = org.Tag, min_change_percent = 10 }))])
             .Then($$"""
                 {"agent":"supply","status":"completed","summary":"Сахар {{org.Tag}} подорожал на 20%: с 10 000 до 12 000 сум.","findings":["Сахар {{org.Tag}}: цена выросла с 10 000 до 12 000 сум (+20%), сверх базы — 200 000 сум"],"metrics":[],"problems":[],"recommendations":["Запросить предложения у нескольких поставщиков"],"data_sources":[]}
                 """);

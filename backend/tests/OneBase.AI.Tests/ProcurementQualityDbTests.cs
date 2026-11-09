@@ -72,7 +72,7 @@ public class ProcurementQualityDbTests(DataManagerDb fixture) : IClassFixture<Da
         var supplier = new ProcurementSupplier { Name = $"Поставщик {s}" };
         db.ProcurementSuppliers.Add(supplier);
         await db.SaveChangesAsync();
-        var category = await db.ProcurementCategories.Where(c => c.Code == "raw_materials").Select(c => c.Id).SingleAsync();
+        var category = await db.ProcurementCategories.Where(c => c.Code == "components").Select(c => c.Id).SingleAsync();
         var central = await db.ProcurementWarehouses.Where(w => w.IsDefault).Select(w => w.Id).SingleAsync();
         var org = new Org(s, dept, keeper, lab, decider, admin, boss, category, central, supplier.Id);
 

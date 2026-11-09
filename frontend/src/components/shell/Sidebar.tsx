@@ -102,7 +102,8 @@ function Badge({ text, tone }: { text: string; tone?: "default" | "new" }) {
 }
 
 /** Подпись пункта: главная сотрудника («Сотрудник») — «Мой день». */
-export const navLabel = (item: NavItem, home: HomeKind) => (item.href === "/" && home === "my_day" ? "Мой день" : item.label);
+export const navLabel = (item: NavItem, home: HomeKind) =>
+  item.href === "/" && home === "my_day" ? "Мой день" : item.href === "/" && home === "work" ? "Рабочий стол" : item.label;
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const t = useT();

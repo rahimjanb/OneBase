@@ -154,12 +154,21 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Procurement.ProcurementSheetImport> ProcurementSheetImports { get; }
     DbSet<OneBase.Domain.Production.ProductionRecipe> ProductionRecipes { get; }
     DbSet<OneBase.Domain.Production.ProductionRecipeLine> ProductionRecipeLines { get; }
+    DbSet<OneBase.Domain.Production.ProductionRecipeStage> ProductionRecipeStages { get; }
+    DbSet<OneBase.Domain.Production.ProductionDefectType> ProductionDefectTypes { get; }
+    DbSet<OneBase.Domain.Production.ProductionShift> ProductionShifts { get; }
+    DbSet<OneBase.Domain.Production.ProductionShiftBatch> ProductionShiftBatches { get; }
+    DbSet<OneBase.Domain.Production.ProductionShiftStage> ProductionShiftStages { get; }
+    DbSet<OneBase.Domain.Production.ProductionShiftDefect> ProductionShiftDefects { get; }
+    DbSet<OneBase.Domain.Production.ProductionShiftMaterial> ProductionShiftMaterials { get; }
     DbSet<OneBase.Domain.Production.ProductionOrder> ProductionOrders { get; }
     DbSet<OneBase.Domain.Production.ProductionOrderLine> ProductionOrderLines { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementStockImport> ProcurementStockImports { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementStockImportRow> ProcurementStockImportRows { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementTenderItem> ProcurementTenderItems { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementOrderApproval> ProcurementOrderApprovals { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementArrival> ProcurementArrivals { get; }
+    DbSet<OneBase.Domain.Procurement.ProcurementArrivalLine> ProcurementArrivalLines { get; }
     DbSet<OneBase.Domain.Work.PushSubscription> PushSubscriptions { get; }
     DbSet<OneBase.Domain.Work.PushKeys> PushKeys { get; }
 

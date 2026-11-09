@@ -309,6 +309,7 @@ public sealed class ProcurementStockService(IAppDbContext db, ProcurementStockLe
         ProcurementMovementKind.SupplierReturn => L("Возврат поставщику", "Yetkazib beruvchiga qaytarish"),
         ProcurementMovementKind.ProductionIssue => L("Выдача в производство", "Ishlab chiqarishga berish"),
         ProcurementMovementKind.ProductionReturn => L("Возврат из производства", "Ishlab chiqarishdan qaytarish"),
+        ProcurementMovementKind.ProductionOutput => L("Приход из производства", "Ishlab chiqarishdan kirim"),
         _ => kind.ToString(),
     };
 

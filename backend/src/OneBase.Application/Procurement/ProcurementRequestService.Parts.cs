@@ -12,17 +12,22 @@ namespace OneBase.Application.Procurement;
 
 public sealed record ProcurementDepartmentOption(Guid Id, string Code, string Name);
 
-/// <summary>Категория закупок; IsProduction — сырьё и материалы производства (маршрут сырья, когда он включён).</summary>
+/// <summary>Категория закупок; IsProduction — сырьё: такие позиции — только в заявках «Закупка сырья».</summary>
 public sealed record ProcurementCategoryView(Guid Id, string Name, string? Code, int SortOrder, bool IsActive, int Used, bool IsProduction = false);
 
 public sealed record ProcurementUnitView(string Code, string Name);
 
-/// <summary>Для формы заявки: за какие отделы можно подать заявку (и какой по умолчанию), активные категории, единицы измерения.</summary>
+/// <summary>
+/// Для формы заявки: за какие отделы можно подать заявку (и какой по умолчанию), активные категории, единицы измерения; CanCreateRaw — может
+/// создавать заявки «Закупка сырья», RawSteps — шаги согласования его заявки на сырьё (маршрут из настроек по автору).
+/// </summary>
 public sealed record ProcurementFormData(
     IReadOnlyList<ProcurementDepartmentOption> Departments,
     Guid? DefaultDepartmentId,
     IReadOnlyList<ProcurementCategoryView> Categories,
-    IReadOnlyList<ProcurementUnitView> Units);
+    IReadOnlyList<ProcurementUnitView> Units,
+    bool CanCreateRaw = false,
+    IReadOnlyList<string>? RawSteps = null);
 
 /// <summary>Категория из формы; IsProduction null — не менять.</summary>
 public sealed record ProcurementCategoryInput(string? Name, int? SortOrder, bool IsActive = true, bool? IsProduction = null);
@@ -70,7 +75,10 @@ public sealed partial class ProcurementRequestService
             .Select(c => new ProcurementCategoryView(c.Id, c.Name, c.Code, c.SortOrder, c.IsActive, 0, c.IsProduction))
             .ToListAsync(ct);
         var units = await db.ProcurementUnits.AsNoTracking().OrderBy(u => u.SortOrder).Select(u => new ProcurementUnitView(u.Code, u.Name)).ToListAsync(ct);
-        return new ProcurementFormData(departments.Select(d => new ProcurementDepartmentOption(d.Id, d.Code, d.Name)).ToList(), preferred, categories, units);
+        var author = ProcurementRawRoute.Author(ctx);
+        var rawSteps = author is null ? null : (await RouteSettingsAsync(ct)).Raw[author];
+        return new ProcurementFormData(departments.Select(d => new ProcurementDepartmentOption(d.Id, d.Code, d.Name)).ToList(), preferred, categories, units,
+            author is not null, rawSteps);
     }
 
     /// <summary>

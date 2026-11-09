@@ -544,7 +544,7 @@ function Pipeline({ board, sum }: { board: Board; sum: (v: number) => string }) 
           count: p.onApprovalCount,
           title: "Заявки",
           hint: "на согласовании",
-          href: board.access.canApprove ? "/requests/approvals" : "/requests/all?status=HeadApproval,FinanceApproval,SupplyApproval,DirectorApproval,Submitted",
+          href: board.access.canApprove ? "/requests/approvals" : "/requests/all?status=HeadApproval,AnalystApproval,FinanceApproval,SupplyApproval,DirectorApproval,Submitted",
           action: board.access.canApprove,
           amount: p.onApprovalAmount,
         }]

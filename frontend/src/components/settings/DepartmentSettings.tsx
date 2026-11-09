@@ -3,14 +3,23 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowRight, Check, Loader2, Pencil, Search, Truck } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Loader2, Pencil, Plus, Search, Truck, X } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { UserAvatar } from "@/components/tasks/TaskKit";
 import { ErrorNote } from "@/components/tasks/TaskBadges";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { groupSum, parseSum, type DepartmentCard, type DepartmentPerson, type SupplySettings } from "@/lib/departments";
-import type { WarehousesView } from "@/lib/procurement";
+import {
+  rawAuthorLabel,
+  rawAuthors,
+  rawRouteProblem,
+  rawStepLabel,
+  rawSteps,
+  type RawAuthor,
+  type RawStep,
+  type WarehousesView,
+} from "@/lib/procurement";
 import type { QualitySettings } from "@/lib/quality";
 import { QualitySettingsSection } from "./QualitySettingsSection";
 import { WarehousesSection } from "./WarehousesSection";
@@ -180,8 +189,7 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
   const [headDays, setHeadDays] = useState(String(settings.escalateHeadDays));
   const [directorDays, setDirectorDays] = useState(String(settings.escalateDirectorDays));
   const [overPercent, setOverPercent] = useState(String(settings.overconsumptionPercent ?? 5).replace(".", ","));
-  const [raw, setRaw] = useState(Boolean(settings.rawRouteEnabled));
-  const [supply, setSupply] = useState(settings.supplyApproverId ?? "");
+  const [route, setRoute] = useState<Record<RawAuthor, RawStep[]>>(settings.rawSteps ?? { supply: ["analyst", "finance"], analyst: ["finance"], finance: ["analyst"] });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -201,6 +209,8 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
     if (!Number.isInteger(dir) || dir < head || dir > 60) return setError(t("Директору — не раньше, чем руководителю снабжения, и не позже 60 дней просрочки."));
     const over = Number(overPercent.replace(",", ".").trim());
     if (!Number.isFinite(over) || over < 0 || over > 100) return setError(t("Порог перерасхода сырья — от 0 до 100 %, не больше двух знаков после запятой."));
+    const routeProblem = rawRouteProblem(route);
+    if (routeProblem) return setError(t(routeProblem));
     setBusy(true);
     setError(null);
     try {
@@ -213,9 +223,11 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
           financeApproverId: finance || null,
           directorApproverId: director || null,
           directorLimit: limitValue,
-          rawRouteEnabled: raw,
-          supplyApproverId: supply || null,
+          // Прежний маршрут сырья (флажок и руководитель снабжения) не присылается — сервер оставляет его как был.
+          rawRouteEnabled: null,
+          supplyApproverId: null,
           overconsumptionPercent: over,
+          rawSteps: route,
         }),
       });
       setSaved(true);
@@ -243,7 +255,7 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
     <>
       <section className={section} aria-labelledby="supply-route">
         <h2 id="supply-route" className={sectionTitle}>
-          {t("Маршрут заявок на закупку")}
+          {t("Маршрут обычных закупок")}
         </h2>
         <p className="mt-1 text-sm text-ink-2">{t("Кто согласует заявку, прежде чем она попадёт в снабжение. Цена в заявке обязательна — по сумме решается, нужен ли директор.")}</p>
 
@@ -289,31 +301,15 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
         </h2>
         <p className="mt-1 text-sm text-ink-2">
           {t(
-            "Заявку, где к закупке есть позиция категории сырья, согласуют руководитель снабжения, затем директор — при любой сумме. Финансист шага не получает, но узнаёт об утверждённой закупке. Категории сырья отмечаются в «Заявки → Настройки».",
+            "Заявки «Закупка сырья» создают снабженцы, аналитики и финансист — в них только позиции категорий сырья («Заявки → Настройки»). Кто согласует — зависит от автора; после последнего шага заявка уходит в снабжение.",
           )}
         </p>
-        <label className="mt-3 flex items-start gap-2 text-sm text-ink">
-          <input type="checkbox" checked={raw} onChange={(e) => touch(setRaw)(e.target.checked)} disabled={!canEdit} className="mt-0.5 size-4 accent-[var(--color-accent)]" />
-          <span>
-            {t("Включить маршрут сырья")}
-            <span className="block text-xs text-ink-3">
-              {raw
-                ? t("Включён — заявки с сырьём к закупке, отправленные после включения, идут к руководителю снабжения, затем к директору.")
-                : t("Выключен — все заявки идут обычным маршрутом. Включение действует на заявки, отправленные после него.")}
-            </span>
-          </span>
-        </label>
-        <div className="mt-3">
-          <span className="text-sm font-medium text-ink">{t("Руководитель снабжения")}</span>
-          {person(supply, touch(setSupply), options(supply, settings.supplyApproverName ?? null), t("Руководитель снабжения"))}
-          {!supply && (
-            <p className={`mt-1.5 text-xs ${(settings.supplyHeads?.length ?? 0) > 0 ? "text-ink-3" : raw ? "text-warn" : "text-ink-3"}`}>
-              {(settings.supplyHeads?.length ?? 0) > 0
-                ? t("Не выбран — согласуют руководители отдела «Снабжение»: {list}.", { list: settings.supplyHeads!.join(", ") })
-                : t("Не выбран, и у отдела «Снабжение» нет руководителя — заявки на сырьё будут ждать.")}
-            </p>
+        <RawRouteTable route={route} onChange={touch(setRoute)} canEdit={canEdit} />
+        <p className="mt-3 text-xs text-ink-3">
+          {t(
+            "Аналитики — пользователи с ролью «Аналитик» («Настройки → Пользователи»); финансист, директор и лимит — из маршрута выше. Свою заявку автор не согласует. Новый маршрут действует для заявок, отправленных после сохранения.",
           )}
-        </div>
+        </p>
       </section>
 
       <section className={section} aria-labelledby="supply-rules">
@@ -369,6 +365,77 @@ function SupplyRoute({ settings, users, canEdit }: { settings: SupplySettings; u
 }
 
 /** Шаг маршрута: номер в кружке, линия к следующему шагу, заголовок и содержимое. */
+/**
+ * Маршрут сырья по авторам: строка на автора — шаги по порядку (убрать — крестик, добавить — список). Свой шаг автору не предлагается;
+ * директор — один раз (всегда или если сумма больше лимита). Порядок — как добавлены: чтобы поменять, уберите шаг и добавьте снова.
+ */
+function RawRouteTable({ route, onChange, canEdit }: { route: Record<RawAuthor, RawStep[]>; onChange: (route: Record<RawAuthor, RawStep[]>) => void; canEdit: boolean }) {
+  const t = useT();
+  const own: Record<RawAuthor, RawStep | null> = { supply: null, analyst: "analyst", finance: "finance" };
+  const set = (author: RawAuthor, steps: RawStep[]) => onChange({ ...route, [author]: steps });
+  return (
+    <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
+      {rawAuthors.map((author) => {
+        const steps = route[author] ?? [];
+        const director = steps.includes("director") || steps.includes("director_limit");
+        const free = rawSteps.filter((s) => !steps.includes(s) && s !== own[author] && !(director && (s === "director" || s === "director_limit")));
+        return (
+          <li key={author} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+            <span className="w-44 shrink-0 text-sm font-medium text-ink">{t(rawAuthorLabel[author])}</span>
+            <ol className="flex min-w-0 flex-wrap items-center gap-1.5" aria-label={t("Шаги: {who}", { who: t(rawAuthorLabel[author]) })}>
+              {steps.map((step, i) => (
+                <li key={step} className="flex items-center gap-1.5">
+                  {i > 0 && <ChevronRight className="size-3.5 text-ink-3" aria-hidden />}
+                  <span className="inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-muted pl-2.5 pr-1 text-sm text-ink">
+                    {t(rawStepLabel[step])}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => set(author, steps.filter((s) => s !== step))}
+                        aria-label={t("Убрать шаг «{step}»", { step: t(rawStepLabel[step]) })}
+                        className="grid size-6 place-items-center rounded-md text-ink-3 hover:text-bad"
+                      >
+                        <X className="size-3.5" aria-hidden />
+                      </button>
+                    )}
+                  </span>
+                </li>
+              ))}
+              {canEdit && free.length > 0 && (
+                <li className="flex items-center gap-1.5">
+                  {steps.length > 0 && <ChevronRight className="size-3.5 text-ink-3" aria-hidden />}
+                  <label className="relative inline-flex h-8 items-center gap-1 rounded-lg border border-dashed border-line-strong px-2.5 text-sm text-ink-2 hover:text-ink">
+                    <Plus className="size-3.5" aria-hidden />
+                    {t("Шаг")}
+                    <select
+                      value=""
+                      onChange={(e) => e.target.value && set(author, [...steps, e.target.value as RawStep])}
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                      aria-label={t("Добавить шаг: {who}", { who: t(rawAuthorLabel[author]) })}
+                    >
+                      <option value="" />
+                      {free.map((s) => (
+                        <option key={s} value={s}>
+                          {t(rawStepLabel[s])}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </li>
+              )}
+              <li className="flex items-center gap-1.5 text-sm text-ink-3">
+                <ChevronRight className="size-3.5" aria-hidden />
+                {t("Снабжение")}
+              </li>
+            </ol>
+            {steps.length === 0 && <span className="text-xs text-warn">{t("Нужен хотя бы один шаг")}</span>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function Step({ n, title, last = false, children }: { n: number; title: string; last?: boolean; children: React.ReactNode }) {
   return (
     <li className="relative flex gap-4 pb-6 last:pb-0">
