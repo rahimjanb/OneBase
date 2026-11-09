@@ -75,7 +75,7 @@ public interface ITelegramRouteClaim
 /// <item>диалог уже закреплён — его хозяин (подразделение выключено у аккаунта — «не распределён»);</item>
 /// <item>новый диалог: признак ровно одного включённого подразделения — ему; признаки двух — «не распределён»; признаков нет —
 ///   подразделение аккаунта по умолчанию (нет такого — «не распределён»);</item>
-/// <item>человек из списка пользователей агента продаж к другому подразделению сам не уходит — «не распределён», решает человек.</item>
+/// <item>человек из списка пользователей агента продаж на номере, который работает и на продажи, — продажам (другое подразделение его не забирает).</item>
 /// </list>
 /// Сменить хозяина закреплённого диалога может только человек (<see cref="TelegramConversationService"/>).
 /// </summary>
@@ -131,10 +131,11 @@ public sealed class TelegramMessageRouter(IAppDbContext db, IEnumerable<ITelegra
             _ => (fallback, fallback is null ? "no_default" : "default"),
         };
 
-        if (department is not null && department != TelegramDepartments.Sales && enabled.Contains(TelegramDepartments.Sales)
-            && await IsSalesUserAsync(m, ct))
+        // Человек из списка агента продаж на номере, который работает и на продажи, — продажам, как до маршрутизации: другое подразделение
+        // (признак или «по умолчанию») не забирает у агента продаж его людей.
+        if (department != TelegramDepartments.Sales && enabled.Contains(TelegramDepartments.Sales) && await IsSalesUserAsync(m, ct))
         {
-            (department, reason) = (null, "sales_user");
+            (department, reason) = (TelegramDepartments.Sales, "sales_user");
         }
 
         var row = new TelegramConversation

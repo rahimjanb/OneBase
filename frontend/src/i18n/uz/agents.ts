@@ -165,6 +165,34 @@ const dict: Dict = {
   "Другой документ": "Boshqa hujjat",
   "Нужно решение HR": "HR qarori kerak",
   "Ответ AI остановлен ограничением": "AI javobi cheklov bilan to'xtatildi",
+
+  // ---------- Номер Telegram у агента ----------
+  "Номер Telegram": "Telegram raqami",
+  "Любой номер отдела": "Bo'limning istalgan raqami",
+  "Сохранить номер": "Raqamni saqlash",
+  "Сохраняю…": "Saqlanmoqda…",
+  "не подключён": "ulanmagan",
+  "ждёт код": "kod kutilmoqda",
+  "ждёт пароль": "parol kutilmoqda",
+  "отключён": "uzilgan",
+  "ошибка подключения": "ulanish xatosi",
+  "у агента «{name}»": "«{name}» agentida",
+  "не работает на отдел": "bo'lim uchun ishlamaydi",
+  "номер: {name}": "raqam: {name}",
+  "не распределён": "taqsimlanmagan",
+
+  // ---------- Почему агент может не отвечать ----------
+  "Почему агент может не отвечать": "Agent nega javob bermasligi mumkin",
+  "Проверить": "Tekshirish",
+  "Проверяю…": "Tekshirilmoqda…",
+  "Агент сейчас не ответит — причин: {count}": "Agent hozir javob bermaydi — sabablar: {count}",
+  "Агент ответит, но есть замечания": "Agent javob beradi, lekin e'tiborga oling",
+  "Всё готово: агент отвечает": "Hammasi tayyor: agent javob beradi",
+  "Последние диалоги номера": "Raqamdagi so'nggi suhbatlar",
+  "в порядке": "joyida",
+  "для сведения": "ma'lumot uchun",
+  "внимание": "diqqat",
+  "мешает ответу": "javobga xalaqit beradi",
 };
 
 export default dict;

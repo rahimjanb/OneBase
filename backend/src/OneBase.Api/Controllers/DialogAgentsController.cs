@@ -20,7 +20,8 @@ namespace OneBase.Api.Controllers;
 [Authorize]
 [FieldErrors]
 [Route("api/agents")]
-public sealed class DialogAgentsController(DialogAgentService agents, DialogAgentTester tester, IAppDbContext db) : ControllerBase
+public sealed class DialogAgentsController(DialogAgentService agents, DialogAgentAccounts accounts, DialogAgentHealth health, DialogAgentTester tester, IAppDbContext db,
+    IConfiguration config) : ControllerBase
 {
     public sealed record ModeInput(TelegramConversationMode Mode);
 
@@ -38,6 +39,16 @@ public sealed class DialogAgentsController(DialogAgentService agents, DialogAgen
 
     [HttpPut("{id:guid}")]
     public async Task<AgentView> Save(Guid id, AgentInput input, CancellationToken ct) => await agents.SaveAsync(await AccessAsync(ct), id, input, ct);
+
+    /// <summary>Номер Telegram, через который агент отвечает (null — любой номер отдела).</summary>
+    [HttpPut("{id:guid}/account")]
+    public async Task<AgentView> SetAccount(Guid id, AgentAccountInput input, CancellationToken ct) => await accounts.SetAsync(await AccessAsync(ct), id, input, ct);
+
+    /// <summary>«Почему агент может не отвечать»: проверки и последние диалоги номера (только чтение, без вызова модели).</summary>
+    [HttpGet("{id:guid}/health")]
+    public async Task<AgentHealthView> Health(Guid id, CancellationToken ct) =>
+        await health.GetAsync(await AccessAsync(ct), id,
+            new AgentServerFlags(config.GetValue("Telegram:Enabled", true), config.GetValue("Telegram:Routing:Enabled", true)), ct);
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)

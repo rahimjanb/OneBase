@@ -28,7 +28,7 @@ public sealed class AssistantAgent(
 
     public async Task ReplyAsync(AssistantTurn turn, CancellationToken ct)
     {
-        var agent = await agents.AssistantForAsync(turn.Department, ct);
+        var agent = await agents.AssistantForAsync(turn.Department, turn.AccountId, ct);
         if (agent is null)
         {
             return; // у отдела нет включённого агента — отвечают сотрудники

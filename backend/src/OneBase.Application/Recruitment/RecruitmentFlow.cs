@@ -77,7 +77,7 @@ public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbo
         }
 
         var s = await SettingsAsync(ct);
-        var recruiter = await agents.RecruiterForAsync(null, ct);
+        var recruiter = await agents.RecruiterForAsync(null, null, ct);
         return new AiSettingsView(s.InterviewDayStart.ToString("HH:mm", CultureInfo.InvariantCulture), s.InterviewDayEnd.ToString("HH:mm", CultureInfo.InvariantCulture),
             s.InterviewSlotMinutes, s.InterviewDays, s.AutoScore, s.ReadScans, recruiter?.Id, recruiter?.Enabled == true);
     }
@@ -155,13 +155,13 @@ public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbo
 
     /// <summary>
     /// Напоминание кандидату, который не ответил (одно на паузу), — в рабочее время агента-рекрутера, через столько часов, сколько задано у него
-    /// («Настройки → ИИ-агенты»; 0 — не напоминать): диалог ведёт AI, последнее сообщение — от AI и не напоминание, подбор по вакансии с
-    /// AI-рекрутером идёт. Текст — шаблон (без платного вызова), на языке кандидата.
+    /// («Настройки → ИИ-агенты»; 0 — не напоминать): диалог ведёт AI, последнее сообщение — от AI и не напоминание, подбор по вакансии идёт,
+    /// агент диалога (по вакансии и номеру) включён. Текст — шаблон (без платного вызова), на языке кандидата.
     /// </summary>
     private async Task<int> FollowUpsAsync(CancellationToken ct)
     {
-        var recruiters = await db.DialogAgents.AsNoTracking()
-            .Where(a => a.Department == TelegramDepartments.Hr && a.Kind == Domain.AI.DialogAgentKinds.Recruiter && a.Enabled && a.FollowUpHours > 0).ToListAsync(ct);
+        var all = await db.DialogAgents.AsNoTracking().Where(a => a.Department == TelegramDepartments.Hr && a.Kind == Domain.AI.DialogAgentKinds.Recruiter).ToListAsync(ct);
+        var recruiters = all.Where(a => a.Enabled && a.FollowUpHours > 0).ToList();
         if (recruiters.Count == 0)
         {
             return 0;
@@ -169,7 +169,6 @@ public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbo
 
         var now = clock.GetUtcNow();
         var cutoff = now.AddHours(-recruiters.Min(a => a.FollowUpHours));
-        var fallback = recruiters.FirstOrDefault(a => a.IsDefault);
         var conversations = await db.TelegramConversations.AsNoTracking()
             .Where(c => c.Department == TelegramDepartments.Hr && c.Mode == TelegramConversationMode.Ai && c.RelatedType == RecruitmentService.CandidateRelation && c.LastMessageAt < cutoff)
             .Take(100).ToListAsync(ct);
@@ -192,13 +191,14 @@ public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbo
             var candidate = await db.Candidates.AsNoTracking().FirstOrDefaultAsync(x => x.Id == c.RelatedId, ct);
             var application = await db.CandidateApplications.AsNoTracking().Include(a => a.Vacancy)
                 .Where(a => a.CandidateId == c.RelatedId && a.ClosedAt == null).OrderByDescending(a => a.StageChangedAt).FirstOrDefaultAsync(ct);
-            if (candidate is null || application?.Vacancy is not { AiRecruiter: true } vacancy)
+            if (candidate is null || application?.Vacancy is not { } vacancy)
             {
                 continue;
             }
 
-            var agent = vacancy.AgentId is { } own ? recruiters.FirstOrDefault(a => a.Id == own) : fallback;
-            if (agent is null || last.SentAt > now.AddHours(-agent.FollowUpHours) || !Agents.DialogAgentRules.InWork(agent, now))
+            // Агент диалога — по вакансии и номеру, как при ответе (DialogAgentPick).
+            var agent = Agents.DialogAgentPick.Recruiter(all, vacancy.AgentId, c.AccountId);
+            if (agent is not { Enabled: true } || agent.FollowUpHours <= 0 || last.SentAt > now.AddHours(-agent.FollowUpHours) || !Agents.DialogAgentRules.InWork(agent, now))
             {
                 continue; // агент выключен, рано или нерабочее время — напомним позже
             }

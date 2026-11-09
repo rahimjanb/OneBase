@@ -70,6 +70,44 @@ public class DialogAgentRulesTests
     }
 
     [Fact]
+    public void Agent_of_the_number_answers_there_and_agents_bound_elsewhere_do_not()
+    {
+        Guid number1 = Guid.NewGuid(), number2 = Guid.NewGuid();
+        DialogAgent Recruiter(string name, bool isDefault, Guid? account, bool enabled = true)
+        {
+            var a = DialogAgentService.Defaults("hr", DialogAgentKinds.Recruiter, name);
+            (a.IsDefault, a.AccountId, a.Enabled) = (isDefault, account, enabled);
+            return a;
+        }
+
+        var main = Recruiter("По умолчанию", true, null);
+        var first = Recruiter("Номер 1", false, number1);
+        var second = Recruiter("Номер 2", false, number2);
+        var all = new[] { main, first, second };
+
+        Assert.Same(first, DialogAgentPick.Recruiter(all, null, number1)); // агент номера — раньше агента по умолчанию
+        Assert.Same(main, DialogAgentPick.Recruiter(all, null, Guid.NewGuid())); // на номере без своего агента — агент без номера
+        Assert.Same(main, DialogAgentPick.Recruiter(all, main.Id, number1)); // свой агент вакансии (без номера) отвечает на любом номере
+        Assert.Same(first, DialogAgentPick.Recruiter(all, second.Id, number1)); // агент вакансии с другим номером здесь не отвечает
+        Assert.Same(main, DialogAgentPick.Recruiter(all, null, null)); // номер не известен — по умолчанию, как раньше
+        main.AccountId = number2;
+        Assert.Null(DialogAgentPick.Recruiter([main, second], null, number1)); // все агенты на других номерах — на этом номере некому
+
+        DialogAgent Assistant(string name, bool isDefault, Guid? account)
+        {
+            var a = DialogAgentService.Defaults("supply", DialogAgentKinds.Assistant, name);
+            (a.IsDefault, a.AccountId, a.Enabled) = (isDefault, account, true);
+            return a;
+        }
+
+        var supply = Assistant("Снабжение", true, null);
+        var bound = Assistant("Снабжение — номер 2", false, number2);
+        Assert.Same(bound, DialogAgentPick.Assistant([supply, bound], number2));
+        Assert.Same(supply, DialogAgentPick.Assistant([supply, bound], number1));
+        Assert.Null(DialogAgentPick.Assistant([bound], number1));
+    }
+
+    [Fact]
     public void Recognized_id_document_keeps_no_text_and_resume_keeps_its_text()
     {
         var passport = DocumentVisionReader.Parse("{\"document_type\":\"id_document\",\"text\":\"AA1234567 Каримов\"}")!;
@@ -322,6 +360,187 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
         var second = (await agents.RepliesAsync(Admin, agent.Id, "drafts", default)).Items.Single();
         await agents.RejectAsync(Admin, second.Id, default);
         Assert.Single(await db.TelegramOutgoingMessages.AsNoTracking().ToListAsync());
+    }
+
+    // ---------- Номер Telegram у агента ----------
+
+    /// <summary>Подключённый номер без подразделений (как после «Подключить» в «Настройки → Telegram»): целиком у продаж.</summary>
+    private async Task<Guid> NumberAsync(IServiceProvider sp, string name, long telegramId)
+    {
+        fixture.Telegram.Me = new TelegramMe(telegramId, $"onebase_{telegramId}", name);
+        var accounts = sp.GetRequiredService<TelegramAccountService>();
+        await accounts.SaveCredentialsAsync(123456, "0123456789abcdef0123456789abcdef", fixture.AdminId);
+        var account = await accounts.CreateAccountAsync(name, fixture.AdminId);
+        await accounts.StartLoginAsync(account.Id, $"+998 90 000 {telegramId % 100:00} 0{telegramId % 10}", fixture.AdminId);
+        await accounts.SubmitCodeAsync(account.Id, fixture.Telegram.Code, fixture.AdminId);
+        return account.Id;
+    }
+
+    private TelegramIncoming From(Guid account, long peer, int id, string text) =>
+        new(account, new TelegramPeerRef(peer, TelegramChatType.Private, false, peer), "Собеседник", id, peer, null, "Собеседник", text, fixture.Clock.GetUtcNow(), false, false);
+
+    [PostgresFact]
+    public async Task Agent_answers_through_the_number_chosen_for_it_and_the_number_keeps_working_for_sales()
+    {
+        var (scope, db) = await StartAsync();
+        using var _ = scope;
+        var sp = scope.ServiceProvider;
+        var admin = Admin with { ManageAccounts = true };
+        var agents = sp.GetRequiredService<DialogAgentService>();
+        var choose = sp.GetRequiredService<DialogAgentAccounts>();
+        var number1 = await NumberAsync(sp, "Отдел продаж", 777_000_501);
+        var number2 = await NumberAsync(sp, "Снабжение 2", 777_000_502);
+        var first = await SupplyAgentAsync(sp, admin);
+
+        // Номер без подразделений — у продаж; в окне агента его можно выбрать (администратор Telegram), занят он или нет — видно.
+        var view = await agents.GetAsync(admin, first.Id, default);
+        var option = view.Accounts!.Single(a => a.Id == number1);
+        Assert.Equal((false, "sales", true, true), (option.Serves, option.DefaultDepartment, option.Selectable, view.CanConfigureAccounts));
+
+        // Выбрали номер: он работает на снабжение и продажи, новые диалоги — снабжению; аудит.
+        view = await choose.SetAsync(admin, first.Id, new AgentAccountInput(number1), default);
+        Assert.Equal(number1, view.AccountId);
+        var departments = await db.TelegramAccountDepartments.AsNoTracking().Where(d => d.AccountId == number1).OrderBy(d => d.Department).ToListAsync();
+        Assert.Equal([("sales", false), ("supply", true)], departments.Select(d => (d.Department, d.IsDefault)));
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Action == "agents.account" && a.EntityId == first.Id.ToString()));
+
+        // Незнакомый написал на номер — отвечает агент через этот номер.
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Здравствуйте! Чем помочь?\"]}");
+        await DeliverAsync(From(number1, 8201, 1, "Здравствуйте"));
+        var reply = await db.TelegramOutgoingMessages.AsNoTracking().SingleAsync();
+        Assert.Equal((number1, "supply", "Здравствуйте! Чем помочь?"), (reply.AccountId, reply.Department, reply.Text));
+
+        // Человек из списка агента продаж на этом номере остаётся у продаж.
+        var accounts = sp.GetRequiredService<TelegramAccountService>();
+        await accounts.SavePermissionAsync(number1, null, new TelegramPermissionInput(8202, null, "Иван", TelegramAccessMode.SentOnly, null, false, true), fixture.AdminId);
+        var route = await sp.GetRequiredService<TelegramMessageRouter>().RouteAsync(From(number1, 8202, 1, "Как продажи?"), default);
+        Assert.Equal(("sales", "sales_user"), (route.Department, route.Reason));
+
+        // Второй агент снабжения со своим номером: на номере 2 отвечает он, на номере 1 — по-прежнему первый.
+        var second = await agents.CreateAsync(admin, new AgentCreateInput("supply", DialogAgentKinds.Assistant, "Снабжение — второй номер"), default);
+        var secondAgent = await db.DialogAgents.SingleAsync(a => a.Id == second.Id);
+        (secondAgent.Enabled, secondAgent.ReplyDelayMinSeconds, secondAgent.ReplyDelayMaxSeconds, secondAgent.Typing, secondAgent.WorkFrom, secondAgent.WorkTo, secondAgent.WorkDays) =
+            (true, 0, 0, false, null, null, "1,2,3,4,5,6,7");
+        secondAgent.DisplayName = "Камола";
+        await db.SaveChangesAsync();
+        await choose.SetAsync(admin, second.Id, new AgentAccountInput(number2), default);
+        fixture.Gateway.Script.Enqueue(m =>
+        {
+            Assert.Contains("Тебя зовут Камола", m[0].Content);
+            return "{\"action\":\"reply\",\"messages\":[\"Это второй номер снабжения.\"]}";
+        });
+        await DeliverAsync(From(number2, 8203, 1, "Добрый день"));
+        Assert.Equal(number2, (await db.TelegramOutgoingMessages.AsNoTracking().SingleAsync(m => m.Text == "Это второй номер снабжения.")).AccountId);
+        Assert.Equal(first.Id, (await db.DialogAgentReplies.AsNoTracking().SingleAsync(r => r.AccountId == number1)).AgentId);
+        Assert.Equal(second.Id, (await db.DialogAgentReplies.AsNoTracking().SingleAsync(r => r.AccountId == number2)).AgentId);
+
+        // Номер агента снабжения рекрутеру HR не выбрать.
+        var recruiter = await agents.EnsureRecruiterAsync(default);
+        var taken = await Assert.ThrowsAsync<FieldValidationException>(() => choose.SetAsync(admin, recruiter.Id, new AgentAccountInput(number1), default));
+        Assert.Contains("уже выбран у агента", taken.Message);
+        Assert.Equal("Снабжение", (await agents.GetAsync(admin, recruiter.Id, default)).Accounts!.Single(a => a.Id == number1).TakenBy);
+
+        // Убрали номер — агент снова отвечает на любом номере отдела; настройки номера не меняются.
+        view = await choose.SetAsync(admin, second.Id, new AgentAccountInput(null), default);
+        Assert.Null(view.AccountId);
+        Assert.True(await db.TelegramAccountDepartments.AnyAsync(d => d.AccountId == number2 && d.Department == "supply" && d.IsDefault));
+    }
+
+    [PostgresFact]
+    public async Task Without_telegram_rights_only_numbers_of_the_department_can_be_chosen_and_stuck_dialogs_go_to_the_agent()
+    {
+        var (scope, db) = await StartAsync();
+        using var _ = scope;
+        var sp = scope.ServiceProvider;
+        var admin = Admin with { ManageAccounts = true };
+        var choose = sp.GetRequiredService<DialogAgentAccounts>();
+        var sales = await NumberAsync(sp, "Отдел продаж", 777_000_511);
+        var supplyNumber = await NumberAsync(sp, "Снабжение", 777_000_512);
+        await sp.GetRequiredService<TelegramDepartmentService>().SaveAsync(supplyNumber, new TelegramDepartmentsInput(["supply"], null), fixture.AdminId);
+        var agent = await SupplyAgentAsync(sp, admin);
+        db.WorkDepartmentHeads.Add(new WorkDepartmentHead { DepartmentId = (await db.Departments.SingleAsync(d => d.Code == "supply")).Id, UserId = fixture.ViewerId });
+        await db.SaveChangesAsync();
+        var head = await sp.GetRequiredService<DialogAgentService>().AccessAsync(fixture.ViewerId, new HashSet<string>(), default);
+        Assert.False(head.ManageAccounts);
+
+        // У номера снабжения нет отдела по умолчанию — диалог «не распределён», AI молчит.
+        await DeliverAsync(From(supplyNumber, 8301, 1, "Здравствуйте"));
+        var stuck = await db.TelegramConversations.AsNoTracking().SingleAsync();
+        Assert.Equal(((string?)null, "no_default"), (stuck.Department, stuck.RouteReason));
+        Assert.Empty(fixture.Gateway.Calls);
+
+        // Руководитель снабжения: номер продаж выбрать нельзя (он не работает на снабжение), номер снабжения — можно, настройки номера не меняются.
+        var options = (await sp.GetRequiredService<DialogAgentService>().GetAsync(head, agent.Id, default)).Accounts!;
+        Assert.Equal((false, true), (options.Single(a => a.Id == sales).Selectable, options.Single(a => a.Id == supplyNumber).Selectable));
+        await Assert.ThrowsAsync<FieldValidationException>(() => choose.SetAsync(head, agent.Id, new AgentAccountInput(sales), default));
+        Assert.False(await db.TelegramAccountDepartments.AnyAsync(d => d.AccountId == sales));
+        await choose.SetAsync(head, agent.Id, new AgentAccountInput(supplyNumber), default);
+        Assert.False(await db.TelegramAccountDepartments.AnyAsync(d => d.AccountId == supplyNumber && d.IsDefault));
+
+        // Администратор выбрал номер ещё раз — новые диалоги и «не распределённый» диалог — снабжению; следующий ответ — от агента.
+        await choose.SetAsync(admin, agent.Id, new AgentAccountInput(supplyNumber), default);
+        stuck = await db.TelegramConversations.AsNoTracking().SingleAsync();
+        Assert.Equal(("supply", DialogAgentAccounts.AgentAccountReason), (stuck.Department, stuck.RouteReason));
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Здравствуйте! Слушаю вас.\"]}");
+        await DeliverAsync(From(supplyNumber, 8301, 2, "Есть кто?"));
+        Assert.Equal(supplyNumber, (await db.TelegramOutgoingMessages.AsNoTracking().SingleAsync()).AccountId);
+    }
+
+    [PostgresFact]
+    public async Task Health_panel_explains_why_the_agent_is_silent_and_where_dialogs_went()
+    {
+        var (scope, db) = await StartAsync();
+        using var _ = scope;
+        var sp = scope.ServiceProvider;
+        var admin = Admin with { ManageAccounts = true };
+        var health = sp.GetRequiredService<DialogAgentHealth>();
+        var flags = new AgentServerFlags(true, true);
+        var view = await sp.GetRequiredService<DialogAgentService>().CreateAsync(admin, new AgentCreateInput("supply", DialogAgentKinds.Assistant, "Снабжение"), default);
+
+        // Новый агент: выключен и без номера — оба «не ответит»; распределение выключено на сервере — тоже видно.
+        var report = await health.GetAsync(admin, view.Id, new AgentServerFlags(true, false), default);
+        Assert.Contains(report.Checks, c => c is { Status: "bad", Title: "Агент выключен — никому не пишет" });
+        Assert.Contains(report.Checks, c => c is { Status: "bad", Title: "Нет номера Telegram" });
+        Assert.Contains(report.Checks, c => c.Status == "bad" && c.Title.Contains("Распределение диалогов"));
+
+        // Номер продаж без подразделений, выбранный у агента: работает на снабжение, новые диалоги — агенту; люди агента продаж — у продаж.
+        var number = await NumberAsync(sp, "Отдел продаж", 777_000_521);
+        await sp.GetRequiredService<TelegramAccountService>().SavePermissionAsync(number, null,
+            new TelegramPermissionInput(8402, null, "Иван", TelegramAccessMode.SentOnly, null, false, true), fixture.AdminId);
+        var agent = await db.DialogAgents.SingleAsync(a => a.Id == view.Id);
+        (agent.Enabled, agent.ReplyDelayMinSeconds, agent.ReplyDelayMaxSeconds, agent.Typing, agent.WorkFrom, agent.WorkTo) = (true, 0, 0, false, null, null);
+        await db.SaveChangesAsync();
+        await sp.GetRequiredService<DialogAgentAccounts>().SetAsync(admin, view.Id, new AgentAccountInput(number), default);
+        report = await health.GetAsync(admin, view.Id, flags, default);
+        Assert.DoesNotContain(report.Checks, c => c.Status == "bad");
+        Assert.Contains(report.Checks, c => c is { Status: "ok", Title: "Номер «Отдел продаж» подключён" });
+        Assert.Contains(report.Checks, c => c is { Status: "ok", Title: "Новые диалоги на номере «Отдел продаж» идут агенту" });
+        Assert.Contains(report.Checks, c => c.Status == "info" && c.Title.Contains("списка агента продаж (1)"));
+
+        // Диалоги номера: свой — с именем и ответом AI; человек агента продаж — у продаж.
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Здравствуйте!\"]}");
+        await DeliverAsync(From(number, 8401, 1, "Добрый день"));
+        await sp.GetRequiredService<TelegramMessageRouter>().RouteAsync(From(number, 8402, 1, "Продажи за день?"), default);
+        report = await health.GetAsync(admin, view.Id, flags, default);
+        var mine = report.Dialogs.Single(d => d.Ours);
+        Assert.Equal(("Снабжение", "новые диалоги номера идут этому отделу"), (mine.Department, mine.Reason));
+        Assert.StartsWith("ответ AI в очереди", mine.Outcome);
+        var sales = report.Dialogs.Single(d => !d.Ours);
+        Assert.Equal(("Продажи", "человек из списка агента продаж", "отвечает отдел «Продажи»"), (sales.Department, sales.Reason, sales.Outcome));
+
+        // Руководитель снабжения (без права на номера) не видит имён чужих диалогов.
+        var supply = await db.Departments.SingleAsync(d => d.Code == "supply");
+        db.WorkDepartmentHeads.Add(new WorkDepartmentHead { DepartmentId = supply.Id, UserId = fixture.ViewerId });
+        await db.SaveChangesAsync();
+        var head = await sp.GetRequiredService<DialogAgentService>().AccessAsync(fixture.ViewerId, new HashSet<string>(), default);
+        Assert.StartsWith("Собеседник …", (await health.GetAsync(head, view.Id, flags, default)).Dialogs.Single(d => !d.Ours).Name);
+
+        // Режим «С проверкой» и нерабочее время с ответом утром — предупреждения.
+        (agent.Mode, agent.WorkFrom, agent.WorkTo, agent.WorkDays, agent.OffHours) = (DialogAgentMode.Approval, new TimeOnly(0, 0), new TimeOnly(0, 1), "1", "morning");
+        await db.SaveChangesAsync();
+        report = await health.GetAsync(admin, view.Id, flags, default);
+        Assert.Contains(report.Checks, c => c.Status == "warn" && c.Title.StartsWith("Режим «С проверкой»"));
+        Assert.Contains(report.Checks, c => c.Status == "warn" && c.Title.StartsWith("Сейчас нерабочее время") && c.Detail!.Contains("Ответы уйдут"));
     }
 
     // ---------- Права и настройки ----------

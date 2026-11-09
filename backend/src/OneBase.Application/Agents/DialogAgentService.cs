@@ -27,7 +27,8 @@ public sealed class DialogAgentService(
     public const int MaxAnswers = 200;
 
     public async Task<AgentAccess> AccessAsync(Guid userId, IReadOnlySet<string> permissions, CancellationToken ct) =>
-        new(userId, await DialogAgentAccess.DepartmentsAsync(db, userId, permissions, ct), permissions.Contains(Security.Permissions.TelegramManage));
+        new(userId, await DialogAgentAccess.DepartmentsAsync(db, userId, permissions, ct), permissions.Contains(Security.Permissions.TelegramManage),
+            permissions.Contains(Security.Permissions.TelegramManage) || permissions.Contains(Security.Permissions.AiSettingsManage));
 
     /// <summary>Какие агенты можно создать в отделе: HR — рекрутеров; продажи — нет (агент продаж — у аккаунта Telegram); остальные — помощников.</summary>
     public static IReadOnlyList<string> KindsFor(string department) => department switch
@@ -150,12 +151,35 @@ public sealed class DialogAgentService(
             : [];
         var accounts = await db.TelegramAccountDepartments.CountAsync(d => d.Department == agent.Department, ct);
         var drafts = await db.DialogAgentReplies.CountAsync(r => r.AgentId == id && r.Status == DialogReplyStatus.Draft, ct);
+        var options = await AccountOptionsAsync(access, agent, ct);
         return new AgentView(agent.Id, agent.Department, department, agent.Kind, agent.Name, agent.Enabled, agent.IsDefault, agent.Mode.ToString(), agent.DisplayName,
             agent.Intro, agent.Tone, agent.Language, agent.Length, agent.Emoji, agent.SplitMessages, agent.Instructions, agent.ScreeningQuestions, agent.AllowedTopics,
             agent.ForbiddenTopics, agent.ForbiddenPhrases, agent.HandoffPhrases, agent.MaxReplyChars, agent.MaxRepliesPerHour, agent.MaxRepliesPerDay,
             agent.CanDiscussSalary, agent.CanScheduleInterviews, agent.HandoffReply, Time(agent.WorkFrom), Time(agent.WorkTo), agent.WorkDays, agent.OffHours,
             agent.ReplyDelayMinSeconds, agent.ReplyDelayMaxSeconds, agent.Typing, agent.FollowUpHours, agent.ModelProvider, agent.Model, agent.UpdatedAt ?? agent.CreatedAt,
-            answers, models, vacancies, accounts, drafts);
+            answers, models, vacancies, accounts, drafts, agent.AccountId, options, access.ManageAccounts);
+    }
+
+    /// <summary>Номера Telegram для выбора у агента: состояние, работает ли номер на отдел, кому новые диалоги, занят ли агентом другого отдела.</summary>
+    private async Task<IReadOnlyList<AgentAccountOption>> AccountOptionsAsync(AgentAccess access, DialogAgent agent, CancellationToken ct)
+    {
+        var list = await db.TelegramAccounts.AsNoTracking().OrderBy(a => a.Name)
+            .Select(a => new { a.Id, a.Name, a.Username, a.PhoneHint, a.Status }).ToListAsync(ct);
+        var ids = list.Select(a => a.Id).ToList();
+        var rows = await db.TelegramAccountDepartments.AsNoTracking().Where(d => ids.Contains(d.AccountId)).ToListAsync(ct);
+        var taken = await db.DialogAgents.AsNoTracking().Where(a => a.AccountId != null && ids.Contains(a.AccountId.Value) && a.Department != agent.Department)
+            .Select(a => new { AccountId = a.AccountId!.Value, a.Name }).ToListAsync(ct);
+        var names = await db.Departments.AsNoTracking().Select(d => new { d.Code, d.Name }).ToDictionaryAsync(d => d.Code, d => d.Name, ct);
+        return list.Select(a =>
+        {
+            var own = rows.Where(r => r.AccountId == a.Id).ToList();
+            // Номер без подразделений — целиком у продаж (как до маршрутизации).
+            var fallback = own.Count == 0 ? TelegramDepartments.Sales : own.FirstOrDefault(r => r.IsDefault)?.Department;
+            var serves = own.Any(r => r.Department == agent.Department);
+            var takenBy = taken.FirstOrDefault(t => t.AccountId == a.Id)?.Name;
+            return new AgentAccountOption(a.Id, a.Name, a.Username, a.PhoneHint, a.Status.ToString(), serves, fallback,
+                fallback is null ? null : names.GetValueOrDefault(fallback, fallback), takenBy, takenBy is null && (access.ManageAccounts || serves));
+        }).ToList();
     }
 
     private static string? Time(TimeOnly? t) => t?.ToString("HH:mm", CultureInfo.InvariantCulture);
@@ -553,18 +577,15 @@ public sealed class DialogAgentService(
         return agent;
     }
 
-    /// <summary>Рекрутер вакансии: свой агент вакансии, иначе рекрутер HR по умолчанию. null — нет ни одного.</summary>
-    public async Task<DialogAgent?> RecruiterForAsync(Guid? agentId, CancellationToken ct)
+    /// <summary>
+    /// Рекрутер диалога: свой агент вакансии, иначе агент номера, иначе рекрутер HR без номера по умолчанию (<see cref="DialogAgentPick.Recruiter"/>).
+    /// null — нет ни одного, кто может отвечать на этом номере.
+    /// </summary>
+    public async Task<DialogAgent?> RecruiterForAsync(Guid? agentId, Guid? accountId, CancellationToken ct)
     {
-        if (agentId is { } id && await db.DialogAgents.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id && a.Kind == DialogAgentKinds.Recruiter, ct) is { } own)
-        {
-            return own;
-        }
-
         await EnsureRecruiterAsync(ct);
-        return await db.DialogAgents.AsNoTracking()
-            .Where(a => a.Department == TelegramDepartments.Hr && a.Kind == DialogAgentKinds.Recruiter).OrderByDescending(a => a.IsDefault).ThenBy(a => a.CreatedAt)
-            .FirstOrDefaultAsync(ct);
+        var recruiters = await db.DialogAgents.AsNoTracking().Where(a => a.Department == TelegramDepartments.Hr && a.Kind == DialogAgentKinds.Recruiter).ToListAsync(ct);
+        return DialogAgentPick.Recruiter(recruiters, agentId, accountId);
     }
 
     /// <summary>ИИ-рекрутеры HR — для выбора у вакансии (подбор видит их без прав на настройки агентов).</summary>
@@ -577,12 +598,15 @@ public sealed class DialogAgentService(
             .ToListAsync(ct);
     }
 
-    /// <summary>Помощник отдела: агент по умолчанию, если включён, иначе первый включённый. null — отдел отвечает сам.</summary>
-    public async Task<DialogAgent?> AssistantForAsync(string department, CancellationToken ct) =>
-        await db.DialogAgents.AsNoTracking().Where(a => a.Department == department && a.Kind == DialogAgentKinds.Assistant && a.Enabled)
-            .OrderByDescending(a => a.IsDefault).ThenBy(a => a.CreatedAt).FirstOrDefaultAsync(ct);
+    /// <summary>
+    /// Помощник отдела на номере: включённый агент этого номера, иначе включённый агент отдела без номера (по умолчанию — первым). null — отдел
+    /// отвечает сам.
+    /// </summary>
+    public async Task<DialogAgent?> AssistantForAsync(string department, Guid? accountId, CancellationToken ct) =>
+        DialogAgentPick.Assistant(await db.DialogAgents.AsNoTracking().Where(a => a.Department == department && a.Kind == DialogAgentKinds.Assistant && a.Enabled)
+            .ToListAsync(ct), accountId);
 
-    private async Task<DialogAgent> AgentAsync(AgentAccess access, Guid id, CancellationToken ct, bool tracked = false)
+    internal async Task<DialogAgent> AgentAsync(AgentAccess access, Guid id, CancellationToken ct, bool tracked = false)
     {
         var query = tracked ? db.DialogAgents : db.DialogAgents.AsNoTracking();
         var agent = await query.FirstOrDefaultAsync(a => a.Id == id, ct) ?? throw new FieldNotFoundException("Агент не найден.");

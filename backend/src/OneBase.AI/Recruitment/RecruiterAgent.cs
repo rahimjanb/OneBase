@@ -74,13 +74,17 @@ public static class RecruiterRules
         language == "uz" || AnswerLanguages.Of(text) is AnswerLanguage.UzLatn or AnswerLanguage.UzCyrl;
 }
 
-/// <summary>Решение модели: действие, сообщения кандидату, для HR — вид передачи и причина, заметки и ответы на вопросы отбора.</summary>
+/// <summary>
+/// Решение модели: действие, сообщения кандидату, для HR — вид передачи и причина, заметки, ответы на вопросы отбора и код вакансии, которую
+/// выбрал кандидат (V12; кандидат записывается на неё).
+/// </summary>
 public sealed record RecruiterDecision(string Action, IReadOnlyList<string> Messages, string? HandoffKind, string? Reason, string? Notes,
-    IReadOnlyDictionary<string, string> Answers);
+    IReadOnlyDictionary<string, string> Answers, string? Vacancy = null);
 
 /// <summary>
-/// AI-рекрутер в диалоге HR — ИИ-агент «Рекрутер» из «Настройки → ИИ-агенты» (у вакансии — свой агент или рекрутер HR по умолчанию). Работает,
-/// только если агент включён и у вакансии кандидата (или хотя бы у одной открытой вакансии, если вакансии ещё нет) включён AI-рекрутер.
+/// AI-рекрутер в диалоге HR — ИИ-агент «Рекрутер» из «Настройки → ИИ-агенты» (свой агент вакансии, агент номера или рекрутер HR по умолчанию,
+/// <see cref="DialogAgentPick"/>). Работает, если агент включён. Знает все открытые вакансии OneBase: название, отдел, город, занятость,
+/// зарплату (если ему можно её называть), описание, требования и условия.
 /// Без модели: согласие на обработку данных, просьба о человеке и фразы «сразу к человеку», лимит ответов, выбор времени собеседования.
 /// Модель ведёт переписку как опытный рекрутер: отвечает на вопросы, задаёт вопросы отбора по одному, опирается на резюме, приглашает на
 /// собеседование (время — из календаря), сложное передаёт HR. Ответ проходит ограничения агента и уходит с паузой «как человек»
@@ -100,6 +104,12 @@ public sealed class RecruiterAgent(
     private const int HistoryMessages = 24;
     private const int ResumeChars = 4000;
 
+    /// <summary>Открытых вакансий в промпте — не больше; подробности (описание, требования, условия) — в пределах VacancyChars.</summary>
+    internal const int MaxVacancies = 40;
+
+    private const int VacancyChars = 9000;
+    private const int VacancyFieldChars = 400;
+
     internal const string HandoffKinds = "salary|conditions|unclear|human_requested|review";
 
     private sealed record Turn(RecruiterTurn Raw, DialogAgent Agent, Candidate Candidate, CandidateApplication? Application, bool Uzbek);
@@ -112,19 +122,15 @@ public sealed class RecruiterAgent(
             return;
         }
 
-        var application = await db.CandidateApplications.AsNoTracking().Include(a => a.Vacancy)
+        var application = await db.CandidateApplications.AsNoTracking().Include(a => a.Vacancy).ThenInclude(v => v!.Department)
             .Where(a => a.CandidateId == candidate.Id && a.ClosedAt == null).OrderByDescending(a => a.StageChangedAt).FirstOrDefaultAsync(ct);
-        var openAi = await db.Vacancies.AsNoTracking().Where(v => v.Status == VacancyStatus.Open && v.AiRecruiter).OrderBy(v => v.Number).Take(10).ToListAsync(ct);
-        if (application is not null ? application.Vacancy?.AiRecruiter != true : openAi.Count == 0)
-        {
-            return; // AI-рекрутер для этой вакансии не включён — отвечает HR
-        }
-
-        var agent = await agents.RecruiterForAsync(application?.Vacancy?.AgentId, ct);
+        var agent = await agents.RecruiterForAsync(application?.Vacancy?.AgentId, raw.AccountId, ct);
         if (agent is not { Enabled: true })
         {
-            return; // агент выключен в «Настройки → ИИ-агенты»
+            return; // агент выключен в «Настройки → ИИ-агенты» (или на этом номере нет рекрутера)
         }
+
+        var open = await OpenVacanciesAsync(db, ct);
 
         // Кандидат написал ещё до того, как ушёл прошлый ответ, — ответим на всё сразу.
         await delivery.SupersedeAsync(raw.ConversationId, "Кандидат написал ещё — ответ AI заменён новым", ct);
@@ -171,8 +177,12 @@ public sealed class RecruiterAgent(
             }
         }
 
-        await ModelTurnAsync(turn, openAi, ct);
+        await ModelTurnAsync(turn, open, ct);
     }
+
+    /// <summary>Открытые вакансии OneBase (с отделом) — всё, что рекрутер знает о вакансиях компании.</summary>
+    internal static Task<List<Vacancy>> OpenVacanciesAsync(IAppDbContext db, CancellationToken ct) =>
+        db.Vacancies.AsNoTracking().Include(v => v.Department).Where(v => v.Status == VacancyStatus.Open).OrderBy(v => v.Number).Take(MaxVacancies).ToListAsync(ct);
 
     private async Task<string> ConsentTextAsync(Turn turn, CancellationToken ct)
     {
@@ -226,7 +236,7 @@ public sealed class RecruiterAgent(
         }
     }
 
-    private async Task ModelTurnAsync(Turn turn, IReadOnlyList<Vacancy> openAi, CancellationToken ct)
+    private async Task ModelTurnAsync(Turn turn, IReadOnlyList<Vacancy> open, CancellationToken ct)
     {
         var raw = turn.Raw;
         var history = await db.TelegramConversationMessages.AsNoTracking().Where(m => m.ConversationId == raw.ConversationId)
@@ -238,7 +248,7 @@ public sealed class RecruiterAgent(
         var messages = new List<LlmMessage>
         {
             new(LlmRole.System, SystemPrompt(turn.Agent, answers)),
-            new(LlmRole.System, Context(turn.Agent, turn.Candidate, turn.Application, openAi, resume, clock.GetUtcNow())),
+            new(LlmRole.System, Context(turn.Agent, turn.Candidate, turn.Application, open, resume, clock.GetUtcNow())),
         };
         foreach (var m in history)
         {
@@ -295,6 +305,13 @@ public sealed class RecruiterAgent(
             await recruitment.SaveScreeningAnswersAsync(app.Id, decision.Answers, ct);
         }
 
+        // Кандидат выбрал вакансию из открытых — отклик на неё (дальше — её вопросы отбора и собеседование по ней).
+        if (Chosen(decision.Vacancy, open) is { } chosen && turn.Application?.VacancyId != chosen.Id
+            && await recruitment.AttachVacancyAsync(turn.Candidate.Id, chosen.Id, "telegram", null, ct))
+        {
+            logger.LogInformation("AI-рекрутер: кандидат {Candidate} записан на вакансию {Vacancy}", turn.Candidate.Id, chosen.Code);
+        }
+
         var usage = (Model: result.Model.ToString(), result.Usage.PromptTokens, result.Usage.OutputTokens);
         switch (decision.Action)
         {
@@ -340,6 +357,10 @@ public sealed class RecruiterAgent(
         }
     }
 
+    /// <summary>Открытая вакансия по коду, который вернула модель («V12»); нет такой среди открытых — null.</summary>
+    internal static Vacancy? Chosen(string? code, IReadOnlyList<Vacancy> open) =>
+        RecruitmentTelegramRules.VacancyCodes(code) is [var number, ..] ? open.FirstOrDefault(v => v.Number == number) : null;
+
     private static Guid? InterviewId(object? interview) => interview switch
     {
         Interview i => i.Id,
@@ -374,7 +395,7 @@ public sealed class RecruiterAgent(
         }
 
         return new RecruiterDecision(action, DialogAgentPrompt.Messages(json), RecruitmentExceptions.Kinds.ContainsKey(kind ?? string.Empty) ? kind : "unclear",
-            JsonText.Str(json, "reason"), JsonText.Str(json, "notes"), answers);
+            JsonText.Str(json, "reason"), JsonText.Str(json, "notes"), answers, JsonText.Str(json, "vacancy"));
     }
 
     /// <summary>Неизменная часть промпта агента (кэшируется у провайдера): кто он, как ведёт разговор, стиль, ограничения, готовые ответы.</summary>
@@ -393,6 +414,9 @@ public sealed class RecruiterAgent(
                       "или «Что уже известно». Ответы кандидата на вопросы отбора записывай в answers.");
         sb.AppendLine("- Если есть резюме — опирайся на него: можно отметить подходящий опыт кандидата. Резюме не пересказывай.");
         sb.AppendLine("- Не вываливай всё описание вакансии: отвечай на то, что спросили, и упоминай главное (график, оплата, место), когда это к слову.");
+        sb.AppendLine("- О вакансиях говори только по данным OneBase ниже (вакансия кандидата и открытые вакансии компании): не придумывай вакансий, зарплат, " +
+                      "графиков и условий, которых там нет. Спросили, какие есть вакансии, — коротко назови подходящие (название, город, главное).");
+        sb.AppendLine("- Кандидат выбрал вакансию из открытых или назвал её — укажи её код в поле vacancy (например V12): система запишет его на неё.");
         sb.AppendLine("- Когда главное выяснено и кандидат соответствует обязательным требованиям — пригласи на собеседование (action propose_interview). " +
                       "Время не называй — варианты из календаря добавит система.");
         sb.AppendLine("- Кандидат не подходит по обязательному требованию — не отказывай сам и не обнадёживай: поблагодари и скажи, что передашь анкету коллегам, " +
@@ -424,12 +448,15 @@ public sealed class RecruiterAgent(
         sb.AppendLine("Ответ — только JSON без пояснений:");
         sb.AppendLine("{\"action\":\"reply|propose_interview|handoff\",\"messages\":[\"сообщение кандидату\",\"второе сообщение, если нужно\"]," +
                       $"\"handoff_kind\":\"{HandoffKinds}\",\"reason\":\"для HR, кратко\",\"notes\":\"новое о кандидате (опыт, ожидания), кратко или пусто\"," +
-                      "\"answers\":{\"вопрос отбора\":\"ответ кандидата\"}}");
+                      "\"answers\":{\"вопрос отбора\":\"ответ кандидата\"},\"vacancy\":\"код вакансии, которую выбрал кандидат (V12), или пусто\"}");
         return sb.ToString();
     }
 
-    /// <summary>Меняющаяся часть: кандидат, вакансия, вопросы отбора и ответы на них, резюме, текущее время.</summary>
-    internal static string Context(DialogAgent agent, Candidate candidate, CandidateApplication? application, IReadOnlyList<Vacancy> openAi, string? resume,
+    /// <summary>
+    /// Меняющаяся часть: кандидат, его вакансия (целиком), вопросы отбора и ответы на них, открытые вакансии компании (у кандидата без
+    /// вакансии — с описанием, требованиями и условиями; у кандидата с вакансией — списком), резюме, текущее время.
+    /// </summary>
+    internal static string Context(DialogAgent agent, Candidate candidate, CandidateApplication? application, IReadOnlyList<Vacancy> open, string? resume,
         DateTimeOffset now)
     {
         var sb = new StringBuilder();
@@ -437,7 +464,7 @@ public sealed class RecruiterAgent(
         sb.AppendLine($"Кандидат: {candidate.FullName}{(candidate.City is { } city ? $", {city}" : string.Empty)}.");
         if (application?.Vacancy is { } v)
         {
-            sb.AppendLine($"Вакансия {v.Code}: {v.Title}. Этап кандидата: {Stage(application.Stage)}.");
+            sb.AppendLine($"Вакансия кандидата {v.Code}: {v.Title}. Этап кандидата: {Stage(application.Stage)}.");
             AppendVacancy(sb, v, agent.CanDiscussSalary);
             var known = RecruitmentService.ScreeningAnswers(application.ScreeningAnswers);
             var questions = DialogAgentRules.Lines(agent.ScreeningQuestions).Concat(DialogAgentRules.Lines(v.ScreeningQuestions)).Distinct().ToList();
@@ -458,14 +485,25 @@ public sealed class RecruiterAgent(
                     sb.AppendLine($"- {q}: {a}");
                 }
             }
+
+            var others = open.Where(x => x.Id != v.Id).ToList();
+            if (others.Count > 0)
+            {
+                sb.AppendLine("Другие открытые вакансии компании (данные OneBase; о них — только если кандидат спросит о другой работе):");
+                AppendVacancies(sb, others, agent.CanDiscussSalary, detailed: false);
+            }
+        }
+        else if (open.Count > 0)
+        {
+            sb.AppendLine("Кандидат ещё не выбрал вакансию. Узнай, какая работа ему интересна, и предложи подходящую из открытых вакансий компании " +
+                          "(кандидат может написать код вакансии):");
+            sb.AppendLine("Открытые вакансии компании (данные OneBase):");
+            AppendVacancies(sb, open, agent.CanDiscussSalary, detailed: true);
         }
         else
         {
-            sb.AppendLine("Кандидат ещё не выбрал вакансию. Узнай, какая работа ему интересна, и предложи подходящую из открытых (кандидат может написать код вакансии):");
-            foreach (var x in openAi)
-            {
-                sb.AppendLine($"- {x.Code}: {x.Title}{(x.City is { } c ? $", {c}" : string.Empty)}{(agent.CanDiscussSalary ? Salary(x) : string.Empty)}");
-            }
+            sb.AppendLine("Открытых вакансий сейчас нет. Скажи кандидату, что сейчас набора нет, и предложи прислать резюме — сотрудник HR свяжется, " +
+                          "когда появится подходящая вакансия. Вакансий не придумывай.");
         }
 
         if (!string.IsNullOrWhiteSpace(candidate.Notes))
@@ -493,6 +531,11 @@ public sealed class RecruiterAgent(
 
     private static void AppendVacancy(StringBuilder sb, Vacancy v, bool salary)
     {
+        if (v.Department?.Name is { Length: > 0 } department)
+        {
+            sb.AppendLine($"Отдел: {department}");
+        }
+
         if (salary)
         {
             sb.AppendLine($"Зарплата:{Salary(v)}");
@@ -503,6 +546,11 @@ public sealed class RecruiterAgent(
             sb.AppendLine($"Город: {city}");
         }
 
+        if (Employment(v.EmploymentType) is { } employment)
+        {
+            sb.AppendLine($"Занятость: {employment}");
+        }
+
         foreach (var (label, value) in new[] { ("Описание", v.Description), ("Требования", v.Requirements), ("Условия", v.Conditions) })
         {
             if (!string.IsNullOrWhiteSpace(value))
@@ -511,6 +559,72 @@ public sealed class RecruiterAgent(
             }
         }
     }
+
+    /// <summary>
+    /// Список вакансий: строка на вакансию (код, название, отдел, город, занятость, зарплата); detailed — ещё описание, требования и условия
+    /// (каждое — до VacancyFieldChars символов, всего — в пределах VacancyChars; дальше — только строки).
+    /// </summary>
+    private static void AppendVacancies(StringBuilder sb, IReadOnlyList<Vacancy> list, bool salary, bool detailed)
+    {
+        var budget = VacancyChars;
+        foreach (var v in list)
+        {
+            var facts = new List<string>();
+            if (v.Department?.Name is { Length: > 0 } department)
+            {
+                facts.Add($"отдел «{department}»");
+            }
+
+            if (v.City is { Length: > 0 } city)
+            {
+                facts.Add(city);
+            }
+
+            if (Employment(v.EmploymentType) is { } employment)
+            {
+                facts.Add(employment);
+            }
+
+            if (salary)
+            {
+                facts.Add("зарплата" + Salary(v));
+            }
+
+            var line = $"- {v.Code} «{v.Title}»{(facts.Count > 0 ? " — " + string.Join(", ", facts) : string.Empty)}";
+            sb.AppendLine(line);
+            budget -= line.Length;
+            if (!detailed || budget <= 0)
+            {
+                continue;
+            }
+
+            foreach (var (label, value) in new[] { ("Описание", v.Description), ("Требования", v.Requirements), ("Условия", v.Conditions) })
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    var text = $"  {label}: {Clip(value, VacancyFieldChars)}";
+                    sb.AppendLine(text);
+                    budget -= text.Length;
+                }
+            }
+        }
+    }
+
+    private static string Clip(string text, int max)
+    {
+        var t = string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return t.Length <= max ? t : t[..max].TrimEnd() + "…";
+    }
+
+    private static string? Employment(string? type) => type switch
+    {
+        "full" => "полная занятость",
+        "part" => "частичная занятость",
+        "shift" => "сменный график",
+        "remote" => "удалённо",
+        "temporary" => "временная работа",
+        _ => null,
+    };
 
     private static string Salary(Vacancy v) =>
         v.SalaryFrom is null && v.SalaryTo is null ? " не указана (обсуждает HR)"

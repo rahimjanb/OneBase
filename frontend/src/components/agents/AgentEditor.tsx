@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Ban, BookOpen, Bot, Clock, FlaskConical, MessageSquare, MessagesSquare, PenLine, ShieldCheck } from "lucide-react";
 import { button, danger, field, primary } from "@/components/ai/form";
+import { AgentHealth } from "@/components/agents/AgentHealth";
+import { AgentNumber } from "@/components/agents/AgentNumber";
 import { AgentAnswers, AgentDialogs, AgentReplies, AgentTest } from "@/components/agents/AgentTabs";
 import { Badge, Card, ErrorText, Label, textarea, useAction } from "@/components/recruitment/ui";
 import { useT } from "@/i18n/client";
@@ -63,7 +65,11 @@ export function AgentEditor({ initial }: { initial: AgentView }) {
         <Badge>{agent.departmentName}</Badge>
         <Badge className={agent.enabled ? "bg-ok-soft text-ok" : "bg-muted text-ink-3"}>{agent.enabled ? t("включён") : t("выключен")}</Badge>
         {agent.isDefault && <Badge>{t("агент отдела по умолчанию")}</Badge>}
-        {agent.telegramAccounts === 0 && <Badge className="bg-warn-soft text-warn">{t("у отдела нет номера Telegram")}</Badge>}
+        {agent.accountId ? (
+          <Badge>{t("номер: {name}", { name: agent.accounts.find((a) => a.id === agent.accountId)?.name ?? "—" })}</Badge>
+        ) : (
+          agent.telegramAccounts === 0 && <Badge className="bg-warn-soft text-warn">{t("у отдела нет номера Telegram")}</Badge>
+        )}
       </div>
 
       <nav className="flex flex-wrap gap-x-1 border-b border-line">
@@ -81,6 +87,9 @@ export function AgentEditor({ initial }: { initial: AgentView }) {
             </button>
           ))}
       </nav>
+
+      {tab === "main" && <AgentHealth agentId={agent.id} version={`${agent.updatedAt}|${agent.accountId}|${agent.enabled}|${agent.mode}`} />}
+      {tab === "main" && <AgentNumber key={agent.accountId ?? ""} agent={agent} onChange={setAgent} />}
 
       {tab === "main" && (
         <Card>
@@ -112,8 +121,8 @@ export function AgentEditor({ initial }: { initial: AgentView }) {
                 <b>{t("Агент включён")}</b>
                 <span className="block text-xs text-ink-3">
                   {recruiter
-                    ? t("Отвечает кандидатам по вакансиям, где включена «Миссия AI-рекрутера». Сначала просит согласие на обработку данных. Ответы — платные вызовы модели.")
-                    : t("Отвечает в Telegram на сообщения, которые пришли в отдел (номер с «Подразделения: {name}»). Ответы — платные вызовы модели.", { name: agent.departmentName })}
+                    ? t("Отвечает кандидатам, которые пишут на номер агента, и знает все открытые вакансии OneBase. Сначала просит согласие на обработку данных. Ответы — платные вызовы модели.")
+                    : t("Отвечает в Telegram на сообщения, которые пришли в отдел «{name}» на номер агента. Ответы — платные вызовы модели.", { name: agent.departmentName })}
                 </span>
               </span>
             </label>
@@ -142,7 +151,7 @@ export function AgentEditor({ initial }: { initial: AgentView }) {
                 {agent.vacancies.map((v) => (
                   <li key={v.id}>
                     <Link href={`/hr/recruitment/vacancies/${v.id}`} className="rounded-full border border-line px-2 py-0.5 text-xs hover:border-accent">
-                      {v.code} · {v.title} {v.aiRecruiter ? "· AI" : `· ${t("AI выключен")}`}
+                      {v.code} · {v.title}
                     </Link>
                   </li>
                 ))}

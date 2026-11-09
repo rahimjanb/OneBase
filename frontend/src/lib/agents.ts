@@ -1,4 +1,8 @@
+import type { AgentAccountOption } from "./agent-account";
 import { bff } from "./bff";
+
+export type { AgentAccountOption } from "./agent-account";
+export { accountChange, accountLabel } from "./agent-account";
 
 /** «Настройки → ИИ-агенты» (/api/agents): агенты отделов, готовые ответы, журнал ответов, диалоги отдела, проверка. */
 
@@ -78,7 +82,30 @@ export type AgentView = AgentSettingsInput & {
   vacancies: { id: string; code: string; title: string; aiRecruiter: boolean }[];
   telegramAccounts: number;
   drafts: number;
+  /** Номер Telegram, через который агент отвечает; null — любой номер отдела. */
+  accountId: string | null;
+  accounts: AgentAccountOption[];
+  /** Может выбрать любой номер (номер начнёт работать на отдел). Иначе — только номера, которые уже работают на отдел. */
+  canConfigureAccounts: boolean;
 };
+
+
+/** Проверка «почему агент может не отвечать»: ok, info, warn — ответ задержится или придёт не всем, bad — агент не ответит. */
+export type AgentCheck = { status: "ok" | "info" | "warn" | "bad"; title: string; detail: string | null };
+
+export type AgentHealthDialog = {
+  id: string;
+  name: string;
+  at: string | null;
+  accountName: string;
+  department: string;
+  ours: boolean;
+  reason: string;
+  mode: "Ai" | "Manual";
+  outcome: string;
+};
+
+export type AgentHealth = { checks: AgentCheck[]; dialogs: AgentHealthDialog[]; checkedAt: string };
 
 export type AgentReply = {
   id: string;
@@ -170,6 +197,8 @@ export const agentsApi = {
   send: (id: string, conversationId: string, text: string, clientKey: string) =>
     bff<AgentConversation>(`${base}/${id}/conversations/${conversationId}/messages`, body("POST", { text, clientKey })),
   mode: (id: string, conversationId: string, mode: "Ai" | "Manual") => bff<AgentConversation>(`${base}/${id}/conversations/${conversationId}/mode`, body("PUT", { mode })),
+  health: (id: string) => bff<AgentHealth>(`${base}/${id}/health`),
+  account: (id: string, accountId: string | null) => bff<AgentView>(`${base}/${id}/account`, body("PUT", { accountId })),
   test: (id: string, messages: AgentTestMessage[], vacancyId: string | null) => bff<AgentTestResult>(`${base}/${id}/test`, body("POST", { messages, vacancyId })),
 };
 
@@ -186,3 +215,4 @@ export function settingsOf(v: AgentView): AgentSettingsInput {
     workDays, offHours, replyDelayMinSeconds, replyDelayMaxSeconds, typing, followUpHours, modelProvider, model,
   };
 }
+

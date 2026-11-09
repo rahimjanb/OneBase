@@ -47,6 +47,12 @@ public class DialogAgent : Entity
 
     public DialogAgentMode Mode { get; set; } = DialogAgentMode.Auto;
 
+    /// <summary>
+    /// Номер Telegram (<c>telegram.Accounts</c>), через который агент отвечает: агент ведёт только диалоги этого номера. null — любой номер
+    /// отдела (если на номере нет своего агента).
+    /// </summary>
+    public Guid? AccountId { get; set; }
+
     // ---------- Как представляется и как пишет ----------
 
     /// <summary>Имя в переписке: «Дилноза». Пусто — без имени.</summary>

@@ -519,24 +519,17 @@ export function VacancyExtras({ ctx, vacancy, onChange }: { ctx: RecruitmentCont
   const agent = recruiters.find((r) => r.id === agentId) ?? recruiters.find((r) => r.isDefault);
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card title="Миссия AI-рекрутера">
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-0.5 size-4 accent-[var(--color-accent)]"
-            disabled={!ctx.canManage || !!busy}
-            checked={vacancy.aiRecruiter}
-            onChange={(e) => run("ai", async () => onChange(await save(e.target.checked)))}
-          />
-          <span>
-            {t("AI-рекрутер ведёт переписку с кандидатами этой вакансии")}
-            <span className="block text-xs text-ink-3">
-              {agent && !agent.enabled
-                ? t("Агент «{name}» сейчас выключен — включите его в «Настройки → ИИ-агенты».", { name: agent.name })
-                : t("Как он пишет и что ему можно — в «Настройки → ИИ-агенты».")}
-            </span>
+      <Card title="AI-рекрутер вакансии">
+        <p className="text-sm">
+          {!agent
+            ? t("AI-рекрутера ещё нет — создайте его в «Настройки → ИИ-агенты».")
+            : agent.enabled
+              ? t("Кандидатам этой вакансии в Telegram отвечает AI-рекрутер «{name}».", { name: agent.name })
+              : t("AI-рекрутер «{name}» выключен — кандидатам отвечает HR. Включить — в «Настройки → ИИ-агенты».", { name: agent.name })}
+          <span className="block text-xs text-ink-3">
+            {t("Рекрутер знает все открытые вакансии OneBase — описание, требования, условия и зарплату — и записывает кандидата на ту, что он выбрал.")}
           </span>
-        </label>
+        </p>
         {recruiters.length > 1 && (
           <Label label="Какой AI-рекрутер ведёт вакансию" className="mt-3">
             <select className={field} disabled={!ctx.canManage} value={agentId} onChange={(e) => setAgentId(e.target.value)}>

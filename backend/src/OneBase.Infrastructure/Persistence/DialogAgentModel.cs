@@ -34,6 +34,8 @@ internal static class DialogAgentModel
             e.Property(x => x.ModelProvider).HasMaxLength(32);
             e.Property(x => x.Model).HasMaxLength(200);
             e.HasIndex(x => new { x.Department, x.Kind });
+            e.HasOne<OneBase.Domain.Telegram.TelegramAccount>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.AccountId);
         });
 
         b.Entity<DialogAgentAnswer>(e =>

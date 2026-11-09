@@ -222,7 +222,7 @@ public class TelegramRoutingTests(DataManagerDb fixture) : IClassFixture<DataMan
     }
 
     [PostgresFact]
-    public async Task Claims_route_a_new_dialog_once_conflicts_and_sales_users_go_to_a_human()
+    public async Task Claims_route_a_new_dialog_once_conflicts_go_to_a_human_and_sales_users_stay_with_sales()
     {
         await fixture.ResetAsync();
         using var scope = fixture.Services.CreateScope();
@@ -245,13 +245,13 @@ public class TelegramRoutingTests(DataManagerDb fixture) : IClassFixture<DataMan
         var prod = new TelegramPeerRef(6003, TelegramChatType.Private, false, 63);
         Assert.Equal(("sales", "default"), Pair(await router.RouteAsync(Msg(accountId, prod, 1, 6003, "#PROD"), default)));
 
-        // Человек из списка агента продаж (по Telegram ID и ожидающий — по username) к HR сам не уходит.
+        // Человек из списка агента продаж (по Telegram ID и ожидающий — по username) к HR сам не уходит — остаётся у продаж.
         var accounts = sp.GetRequiredService<TelegramAccountService>();
         await accounts.SavePermissionAsync(accountId, null, new TelegramPermissionInput(5001, null, "Иван", TelegramAccessMode.SentOnly, null, false, true), fixture.AdminId);
         db.TelegramUserPermissions.Add(new TelegramUserPermission { AccountId = accountId, Username = "olga", CreatedById = fixture.AdminId });
         await db.SaveChangesAsync();
-        Assert.Equal(((string?)null, "sales_user"), Pair(await router.RouteAsync(Msg(accountId, Ivan, 1, 5001, "#V12 хочу к вам"), default)));
-        Assert.Equal(((string?)null, "sales_user"), Pair(await router.RouteAsync(Msg(accountId, Olga, 1, 5004, "#V12", username: "@Olga"), default)));
+        Assert.Equal(("sales", "sales_user"), Pair(await router.RouteAsync(Msg(accountId, Ivan, 1, 5001, "#V12 хочу к вам"), default)));
+        Assert.Equal(("sales", "sales_user"), Pair(await router.RouteAsync(Msg(accountId, Olga, 1, 5004, "#V12", username: "@Olga"), default)));
 
         // Свои исходящие и боты диалог не открывают.
         var quiet = new TelegramPeerRef(6004, TelegramChatType.Private, false, 64);

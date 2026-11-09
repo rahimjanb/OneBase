@@ -58,6 +58,13 @@ const dict: Dict = {
   "Удалённая": "Masofaviy",
   "Временная": "Vaqtinchalik",
   "Миссия AI-рекрутера": "AI-rekruter vazifasi",
+  "AI-рекрутер вакансии": "Vakansiya AI-rekruteri",
+  "AI-рекрутера ещё нет — создайте его в «Настройки → ИИ-агенты».": "AI-rekruter hali yo'q — uni «Sozlamalar → AI-agentlar»da yarating.",
+  "Кандидатам этой вакансии в Telegram отвечает AI-рекрутер «{name}».": "Bu vakansiya nomzodlariga Telegramda «{name}» AI-rekruteri javob beradi.",
+  "AI-рекрутер «{name}» выключен — кандидатам отвечает HR. Включить — в «Настройки → ИИ-агенты».":
+    "«{name}» AI-rekruteri o'chirilgan — nomzodlarga HR javob beradi. Yoqish — «Sozlamalar → AI-agentlar»da.",
+  "Рекрутер знает все открытые вакансии OneBase — описание, требования, условия и зарплату — и записывает кандидата на ту, что он выбрал.":
+    "Rekruter OneBase'dagi barcha ochiq vakansiyalarni biladi — tavsif, talablar, shartlar va maosh — va nomzodni u tanlagan vakansiyaga yozadi.",
   "Критерии оценки": "Baholash mezonlari",
   "Сохранить критерии": "Mezonlarni saqlash",
   "Интервьюеры": "Suhbatdoshlar",

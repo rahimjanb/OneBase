@@ -284,6 +284,8 @@ public static class DependencyInjection
         // для отделов без своего (снабжение, финансы…) — сам агент (OneBase.AI) отвечает, только если включён.
         services.AddScoped<OneBase.Application.Agents.DialogAgentDelivery>();
         services.AddScoped<OneBase.Application.Agents.DialogAgentService>();
+        services.AddScoped<OneBase.Application.Agents.DialogAgentAccounts>();
+        services.AddScoped<OneBase.Application.Agents.DialogAgentHealth>();
         services.AddScoped<OneBase.Application.Telegram.Routing.ITelegramDepartmentHandler, OneBase.Application.Agents.AssistantTelegramHandler>();
         services.AddScoped<OneBase.Application.Telegram.Outbox.ITelegramOutboxObserver, OneBase.Application.Agents.DialogAgentOutboxObserver>();
         services.AddHttpClient<OneBase.Application.Recruitment.Hh.IHhApi, Recruitment.HhClient>(c => c.Timeout = TimeSpan.FromSeconds(60));

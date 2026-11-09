@@ -1530,6 +1530,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("AllowedTopics")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -1677,6 +1680,8 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasColumnType("time without time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
 
                     b.HasIndex("Department", "Kind");
 
@@ -12556,6 +12561,14 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Conversation");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.AI.DialogAgent", b =>
+                {
+                    b.HasOne("OneBase.Domain.Telegram.TelegramAccount", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("OneBase.Domain.AI.DialogAgentAnswer", b =>

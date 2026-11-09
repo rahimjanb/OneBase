@@ -318,6 +318,63 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         Assert.All(fixture.Gateway.Calls, c => Assert.StartsWith("hr.recruiter.", c.Options.Context.Purpose));
     }
 
+    [PostgresFact]
+    public async Task Recruiter_knows_every_open_vacancy_of_onebase_and_signs_the_candidate_up_for_the_chosen_one()
+    {
+        var (scope, db, hr, sales) = await StartAsync();
+        using var _ = scope;
+        var sp = scope.ServiceProvider;
+        var account = await HrAccountAsync(sp);
+        var service = sp.GetRequiredService<RecruitmentService>();
+        var hrDepartment = (await db.Departments.FirstAsync(d => d.Code == "hr")).Id;
+        // Вакансии рекрутеров — без «Миссии AI-рекрутера»; черновик агент не знает.
+        var driver = await OpenVacancyAsync(sp, hr, sales);
+        var operatorVacancy = await service.CreateVacancyAsync(hr, new VacancyInput("Оператор call-центра", hrDepartment, "Приём звонков от клиентов",
+            "Грамотная речь, русский и узбекский", "График 2/2 с 9:00 до 21:00, обучение", 4_500_000, null, "Ташкент", "shift", 2, null), default);
+        await service.SetVacancyStatusAsync(hr, operatorVacancy.Id, VacancyStatus.Open, default);
+        await service.CreateVacancyAsync(hr, new VacancyInput("Главный бухгалтер", hrDepartment, null, null, null, null, null, null, null, 1, null), default);
+        var numbers = await db.Vacancies.AsNoTracking().ToDictionaryAsync(v => v.Id, v => v.Number);
+        await EnableRecruiterAsync(sp);
+
+        await DeliverAsync(Msg(account, 1, "Здравствуйте, какие у вас есть вакансии?"));
+        Assert.Contains("ответьте «Согласен»", (await QueuedAsync(db))[^1]);
+        await SendQueuedAsync();
+
+        // После согласия модель видит все открытые вакансии OneBase с отделом, занятостью, требованиями и условиями.
+        fixture.Gateway.Script.Enqueue(m =>
+        {
+            var context = m[1].Content;
+            Assert.Contains($"V{numbers[driver]} «Водитель-экспедитор» — отдел «Продажи», Ташкент, полная занятость", context);
+            Assert.Contains("Права категории C, опыт от 2 лет", context);
+            Assert.Contains($"V{numbers[operatorVacancy.Id]} «Оператор call-центра» — отдел «HR», Ташкент, сменный график, зарплата от 4500000 сум", context);
+            Assert.Contains("Грамотная речь, русский и узбекский", context);
+            Assert.Contains("График 2/2", context);
+            Assert.DoesNotContain("Главный бухгалтер", context);
+            Assert.Contains("не придумывай вакансий", m[0].Content);
+            return "{\"action\":\"reply\",\"messages\":[\"Сейчас открыты водитель-экспедитор и оператор call-центра. Что вам ближе?\"]}";
+        });
+        await DeliverAsync(Msg(account, 2, "Согласен"));
+        Assert.Contains("оператор call-центра", (await QueuedAsync(db))[^1]);
+
+        // Кандидат выбрал — модель вернула код вакансии, кандидат записан на неё.
+        fixture.Gateway.Script.Enqueue(_ =>
+            $"{{\"action\":\"reply\",\"messages\":[\"Отлично! Есть ли у вас опыт работы с клиентами?\"],\"vacancy\":\"V{numbers[operatorVacancy.Id]}\"}}");
+        await DeliverAsync(Msg(account, 3, "Хочу оператором"));
+        Assert.Equal(operatorVacancy.Id, (await db.CandidateApplications.AsNoTracking().SingleAsync()).VacancyId);
+
+        // Дальше — его вакансия целиком, остальные открытые — списком.
+        fixture.Gateway.Script.Enqueue(m =>
+        {
+            Assert.Contains($"Вакансия кандидата V{numbers[operatorVacancy.Id]}: Оператор call-центра", m[1].Content);
+            Assert.Contains("Занятость: сменный график", m[1].Content);
+            Assert.Contains($"Другие открытые вакансии компании", m[1].Content);
+            Assert.Contains($"V{numbers[driver]} «Водитель-экспедитор»", m[1].Content);
+            return "{\"action\":\"reply\",\"messages\":[\"Понял, спасибо!\"]}";
+        });
+        await DeliverAsync(Msg(account, 4, "Да, 2 года в магазине"));
+        Assert.Equal("Понял, спасибо!", (await QueuedAsync(db))[^1]);
+    }
+
     /// <summary>Рекрутер HR по умолчанию — включён, отвечает сразу (без паузы и «печатает…»), круглосуточно.</summary>
     internal static async Task<DialogAgent> EnableRecruiterAsync(IServiceProvider sp, Action<DialogAgent>? configure = null)
     {

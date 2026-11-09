@@ -2,8 +2,11 @@ using OneBase.Domain.AI;
 
 namespace OneBase.Application.Agents;
 
-/// <summary>Кто открыл раздел и какими отделами управляет (null в Departments не бывает: пусто — ни одним).</summary>
-public sealed record AgentAccess(Guid UserId, IReadOnlySet<string> Departments, bool SalesTelegram)
+/// <summary>
+/// Кто открыл раздел и какими отделами управляет (null в Departments не бывает: пусто — ни одним). ManageAccounts — может настраивать номера
+/// Telegram (право «Telegram» или «Настройки AI»): выбрать агенту любой номер.
+/// </summary>
+public sealed record AgentAccess(Guid UserId, IReadOnlySet<string> Departments, bool SalesTelegram, bool ManageAccounts = false)
 {
     public bool Manages(string department) => Departments.Contains(department);
 }
@@ -28,6 +31,13 @@ public sealed record AgentAnswerView(Guid Id, string Question, string Answer, bo
 public sealed record AgentAnswerInput(string Question, string Answer, bool Enabled = true);
 
 public sealed record AgentVacancyBrief(Guid Id, string Code, string Title, bool AiRecruiter);
+
+/// <summary>
+/// Номер Telegram для выбора у агента: состояние, работает ли он на отдел агента, кому на нём новые диалоги, занят ли агентом другого отдела,
+/// можно ли его выбрать (у кого нет права настраивать номера — только номера, которые уже работают на отдел).
+/// </summary>
+public sealed record AgentAccountOption(Guid Id, string Name, string? Username, string? PhoneHint, string Status, bool Serves, string? DefaultDepartment,
+    string? DefaultDepartmentName, string? TakenBy, bool Selectable);
 
 public sealed record AgentView(
     Guid Id,
@@ -72,7 +82,10 @@ public sealed record AgentView(
     IReadOnlyList<AgentModelOption> Models,
     IReadOnlyList<AgentVacancyBrief> Vacancies,
     int TelegramAccounts,
-    int Drafts);
+    int Drafts,
+    Guid? AccountId = null,
+    IReadOnlyList<AgentAccountOption>? Accounts = null,
+    bool CanConfigureAccounts = false);
 
 public sealed record AgentCreateInput(string Department, string Kind, string Name);
 

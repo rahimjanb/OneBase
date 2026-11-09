@@ -54,12 +54,14 @@ public sealed class DialogAgentTester(IAppDbContext db, IAiGateway ai, TimeProvi
 
         var answers = await db.DialogAgentAnswers.AsNoTracking().Where(a => a.AgentId == agent.Id).OrderBy(a => a.SortOrder).ToListAsync(ct);
         var messages = new List<LlmMessage>();
+        IReadOnlyList<Vacancy> open = [];
         if (recruiter)
         {
-            var vacancy = input.VacancyId is { } vid ? await db.Vacancies.AsNoTracking().FirstOrDefaultAsync(v => v.Id == vid, ct) : null;
-            var open = vacancy is null
-                ? await db.Vacancies.AsNoTracking().Where(v => v.Status == VacancyStatus.Open && v.AiRecruiter).OrderBy(v => v.Number).Take(10).ToListAsync(ct)
-                : [];
+            var vacancy = input.VacancyId is { } vid ? await db.Vacancies.AsNoTracking().Include(v => v.Department).FirstOrDefaultAsync(v => v.Id == vid, ct) : null;
+            open = await RecruiterAgent.OpenVacanciesAsync(db, ct);
+            notes.Add(open.Count == 0
+                ? "Открытых вакансий в OneBase нет — агент скажет, что сейчас набора нет."
+                : $"Агент знает открытые вакансии OneBase: {string.Join(", ", open.Take(8).Select(v => v.Code))}{(open.Count > 8 ? $" и ещё {open.Count - 8}" : string.Empty)}.");
             var candidate = new Candidate { FullName = "Тестовый кандидат" };
             var application = vacancy is null ? null : new CandidateApplication { CandidateId = candidate.Id, VacancyId = vacancy.Id, Vacancy = vacancy, Source = "test" };
             messages.Add(new LlmMessage(LlmRole.System, RecruiterAgent.SystemPrompt(agent, answers)));
@@ -106,6 +108,11 @@ public sealed class DialogAgentTester(IAppDbContext db, IAiGateway ai, TimeProvi
             foreach (var (q, a) in r.Answers)
             {
                 notes.Add($"Записал бы ответ на вопрос «{q}»: {a}");
+            }
+
+            if (RecruiterAgent.Chosen(r.Vacancy, open) is { } chosen && chosen.Id != input.VacancyId)
+            {
+                notes.Add($"Записал бы кандидата на вакансию {chosen.Code} «{chosen.Title}».");
             }
 
             if (r.Action == "propose_interview")
