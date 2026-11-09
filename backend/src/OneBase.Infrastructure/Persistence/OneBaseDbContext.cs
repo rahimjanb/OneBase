@@ -204,6 +204,10 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Production.ProductionShiftStage> ProductionShiftStages => Set<OneBase.Domain.Production.ProductionShiftStage>();
     public DbSet<OneBase.Domain.Production.ProductionShiftDefect> ProductionShiftDefects => Set<OneBase.Domain.Production.ProductionShiftDefect>();
     public DbSet<OneBase.Domain.Production.ProductionShiftMaterial> ProductionShiftMaterials => Set<OneBase.Domain.Production.ProductionShiftMaterial>();
+    public DbSet<OneBase.Domain.Production.ProductionRecipeImport> ProductionRecipeImports => Set<OneBase.Domain.Production.ProductionRecipeImport>();
+    public DbSet<OneBase.Domain.Production.ProductionRecipeImportRecipe> ProductionRecipeImportRecipes => Set<OneBase.Domain.Production.ProductionRecipeImportRecipe>();
+    public DbSet<OneBase.Domain.Production.ProductionRecipeImportLine> ProductionRecipeImportLines => Set<OneBase.Domain.Production.ProductionRecipeImportLine>();
+    public DbSet<OneBase.Domain.Production.ProductionRecipeImportItemMap> ProductionRecipeImportItemMaps => Set<OneBase.Domain.Production.ProductionRecipeImportItemMap>();
     public DbSet<OneBase.Domain.Production.ProductionOrder> ProductionOrders => Set<OneBase.Domain.Production.ProductionOrder>();
     public DbSet<OneBase.Domain.Production.ProductionOrderLine> ProductionOrderLines => Set<OneBase.Domain.Production.ProductionOrderLine>();
     public DbSet<OneBase.Domain.Procurement.ProcurementStockImport> ProcurementStockImports => Set<OneBase.Domain.Procurement.ProcurementStockImport>();
@@ -232,6 +236,27 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Recruitment.CandidateContact> CandidateContacts => Set<OneBase.Domain.Recruitment.CandidateContact>();
     public DbSet<OneBase.Domain.Recruitment.CandidateSource> CandidateSources => Set<OneBase.Domain.Recruitment.CandidateSource>();
     public DbSet<OneBase.Domain.Recruitment.CandidateResume> CandidateResumes => Set<OneBase.Domain.Recruitment.CandidateResume>();
+    public DbSet<OneBase.Domain.Recruitment.RecruitmentJob> RecruitmentJobs => Set<OneBase.Domain.Recruitment.RecruitmentJob>();
+    public DbSet<OneBase.Domain.Recruitment.VacancyInterviewSettings> VacancyInterviewSettings => Set<OneBase.Domain.Recruitment.VacancyInterviewSettings>();
+    public DbSet<OneBase.Domain.Recruitment.InterviewFeedback> InterviewFeedback => Set<OneBase.Domain.Recruitment.InterviewFeedback>();
+
+    public async Task<OneBase.Application.Abstractions.IAppTransaction> LockedTransactionAsync(IReadOnlyCollection<long> keys, CancellationToken ct)
+    {
+        var tx = await Database.BeginTransactionAsync(ct);
+        foreach (var key in keys.Distinct().Order())
+        {
+            await Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0})", [key], ct);
+        }
+
+        return new AppTransaction(tx);
+    }
+
+    private sealed class AppTransaction(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx) : OneBase.Application.Abstractions.IAppTransaction
+    {
+        public Task CommitAsync(CancellationToken ct) => tx.CommitAsync(ct);
+
+        public ValueTask DisposeAsync() => tx.DisposeAsync();
+    }
     public DbSet<OneBase.Domain.Recruitment.CandidateApplication> CandidateApplications => Set<OneBase.Domain.Recruitment.CandidateApplication>();
     public DbSet<OneBase.Domain.Recruitment.ApplicationEvent> ApplicationEvents => Set<OneBase.Domain.Recruitment.ApplicationEvent>();
     public DbSet<OneBase.Domain.Recruitment.CandidateConsent> CandidateConsents => Set<OneBase.Domain.Recruitment.CandidateConsent>();

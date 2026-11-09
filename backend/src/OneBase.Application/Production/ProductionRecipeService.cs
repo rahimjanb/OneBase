@@ -472,6 +472,28 @@ public sealed class ProductionRecipeService(IAppDbContext db, TimeProvider clock
         return copy.Id;
     }
 
+    /// <summary>
+    /// Новая версия с другим составом (импорт из Excel): черновик с номером на один больше последнего по данным формы — проверки и история как у
+    /// правки черновика; одно сохранение — либо версия создана целиком, либо нет. Неутверждённая версия у кода одна.
+    /// </summary>
+    internal async Task<Guid> NewVersionFromAsync(ProcurementContext ctx, Guid sourceId, ProductionRecipeInput input, string note, CancellationToken ct)
+    {
+        RequireEdit(ctx);
+        var source = await db.ProductionRecipes.AsNoTracking().FirstOrDefaultAsync(r => r.Id == sourceId, ct) ?? throw new FieldNotFoundException("Рецептура не найдена.");
+        if (await db.ProductionRecipes.AsNoTracking().FirstOrDefaultAsync(r => r.Code == source.Code && ProductionRules.OpenStatuses.Contains(r.Status), ct) is { } open)
+        {
+            throw new FieldConflictException($"У рецептуры {source.Code} уже есть {(open.Status == ProductionRecipeStatus.Draft ? "черновик" : "версия на утверждении")} — версия {open.VersionNo}.");
+        }
+
+        var next = await db.ProductionRecipes.Where(r => r.Code == source.Code).MaxAsync(r => r.VersionNo, ct) + 1;
+        var copy = new ProductionRecipe { Code = source.Code, VersionNo = next, Name = "", OutputName = "", OutputUnit = "", CreatedById = ctx.UserId };
+        var items = await ApplyAsync(copy, input, ct);
+        db.ProductionRecipes.Add(copy);
+        Log(ctx, copy.Id, "created", null, ProductionRecipeStatus.Draft, $"Создана версия {next} ({note}) — на основе версии {source.VersionNo}", Snapshot(copy, items));
+        await SaveAsync(ct);
+        return copy.Id;
+    }
+
     /// <summary>Архивировать действующую версию: по коду не останется действующей — новые задания по ней не создать.</summary>
     public async Task ArchiveAsync(ProcurementContext ctx, Guid id, string? comment, CancellationToken ct)
     {

@@ -65,7 +65,8 @@ public sealed class DialogAgentTester(IAppDbContext db, IAiGateway ai, TimeProvi
             var candidate = new Candidate { FullName = "Тестовый кандидат" };
             var application = vacancy is null ? null : new CandidateApplication { CandidateId = candidate.Id, VacancyId = vacancy.Id, Vacancy = vacancy, Source = "test" };
             messages.Add(new LlmMessage(LlmRole.System, RecruiterAgent.SystemPrompt(agent, answers)));
-            messages.Add(new LlmMessage(LlmRole.System, RecruiterAgent.Context(agent, candidate, application, open, null, now)));
+            messages.Add(new LlmMessage(LlmRole.System, RecruiterAgent.Context(agent, candidate, application, open, null, now,
+                RecruiterRules.Language(agent.Language, null, new OneBase.Application.Recruitment.LanguageDetectionService().Detect(last)))));
         }
         else
         {

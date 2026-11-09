@@ -32,9 +32,10 @@ public interface ICandidateScorer
 /// представляется, напоминание, ограничения) — в «Настройки → ИИ-агенты»: RecruiterAgentId и RecruiterEnabled — для ссылки и подсказки.
 /// </summary>
 public sealed record AiSettingsView(string InterviewDayStart, string InterviewDayEnd, int InterviewSlotMinutes, string InterviewDays, bool AutoScore, bool ReadScans,
-    Guid? RecruiterAgentId, bool RecruiterEnabled);
+    Guid? RecruiterAgentId, bool RecruiterEnabled, bool AnalyzeResumes = true);
 
-public sealed record AiSettingsInput(string InterviewDayStart, string InterviewDayEnd, int InterviewSlotMinutes, string InterviewDays, bool AutoScore, bool ReadScans = true);
+public sealed record AiSettingsInput(string InterviewDayStart, string InterviewDayEnd, int InterviewSlotMinutes, string InterviewDays, bool AutoScore, bool ReadScans = true,
+    bool AnalyzeResumes = true);
 
 /// <summary>Миссия вакансии: ведёт ли AI переписку, какой агент-рекрутер (null — по умолчанию), критерии оценки, вопросы отбора.</summary>
 public sealed record VacancyAiInput(bool AiRecruiter, string? Criteria, Guid? AgentId = null, string? ScreeningQuestions = null);
@@ -79,7 +80,7 @@ public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbo
         var s = await SettingsAsync(ct);
         var recruiter = await agents.RecruiterForAsync(null, null, ct);
         return new AiSettingsView(s.InterviewDayStart.ToString("HH:mm", CultureInfo.InvariantCulture), s.InterviewDayEnd.ToString("HH:mm", CultureInfo.InvariantCulture),
-            s.InterviewSlotMinutes, s.InterviewDays, s.AutoScore, s.ReadScans, recruiter?.Id, recruiter?.Enabled == true);
+            s.InterviewSlotMinutes, s.InterviewDays, s.AutoScore, s.ReadScans, recruiter?.Id, recruiter?.Enabled == true, s.AnalyzeResumes);
     }
 
     public async Task<AiSettingsView> SaveAiSettingsAsync(RecruitmentContext ctx, AiSettingsInput input, CancellationToken ct)
@@ -112,11 +113,12 @@ public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbo
         s.InterviewDays = string.Join(',', days);
         s.AutoScore = input.AutoScore;
         s.ReadScans = input.ReadScans;
+        s.AnalyzeResumes = input.AnalyzeResumes;
         s.UpdatedAt = clock.GetUtcNow();
         s.UpdatedById = ctx.UserId;
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "recruitment.ai.settings", nameof(RecruitmentSettings), "1",
-            new { s.AutoScore, s.ReadScans, s.InterviewSlotMinutes }, ct);
+            new { s.AutoScore, s.ReadScans, s.AnalyzeResumes, s.InterviewSlotMinutes }, ct);
         return await AiSettingsAsync(ctx, ct);
     }
 
@@ -205,9 +207,7 @@ public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbo
 
             var name = candidate.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() is { Length: > 1 } first && !first.StartsWith('@')
                        && !first.StartsWith("Telegram", StringComparison.Ordinal) ? first : null;
-            var text = candidate.Language == "uz"
-                ? $"Assalomu alaykum{(name is null ? string.Empty : $", {name}")}! «{vacancy.Title}» vakansiyasi bo'yicha o'ylab ko'rdingizmi? Savollaringiz bo'lsa, yozing — men shu yerdaman."
-                : $"Здравствуйте{(name is null ? string.Empty : $", {name}")}! Удалось подумать о вакансии «{vacancy.Title}»? Если остались вопросы — пишите, я на связи.";
+            var text = RecruiterTexts.FollowUp(CandidateLanguages.Of(candidate.Language, candidate.PreferredScript) ?? CandidateLang.Ru, name, vacancy.Title);
             await outbox.EnqueueAsync(new OutboxRequest(c.AccountId, c.PeerId, c.Id, TelegramDepartments.Hr, "followup", text, $"followup:{c.Id:N}:{last.Id}", "ai",
                 TypingSeconds: agent.Typing ? Agents.DialogAgentRules.TypingSeconds(text) : 0), ct);
             queued++;

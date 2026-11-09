@@ -122,8 +122,20 @@ public class Candidate : Entity
     public required string FullName { get; set; }
     public string? City { get; set; }
 
-    /// <summary>Язык общения: ru, uz.</summary>
+    /// <summary>Язык общения (предпочтительный): ru, uz.</summary>
     public string? Language { get; set; }
+
+    /// <summary>Графика предпочтительного языка: Latn, Cyrl (у русского — Cyrl). Узбекский без графики — латиница.</summary>
+    public string? PreferredScript { get; set; }
+
+    /// <summary>Что показало последнее сообщение кандидата: ru-Cyrl, uz-Latn, uz-Cyrl (null — не понять: «ok», «1»).</summary>
+    public string? LastDetectedLanguage { get; set; }
+
+    /// <summary>Уверенность последнего определения, 0–1.</summary>
+    public decimal? LanguageConfidence { get; set; }
+
+    /// <summary>Кто выбрал язык: auto (по переписке), candidate (попросил сам), hr (выбрал сотрудник). Выбранный человеком меняет только новая просьба.</summary>
+    public string? LanguageSource { get; set; }
 
     public string? Notes { get; set; }
 
@@ -182,15 +194,48 @@ public class CandidateSource : Entity
     public string? Note { get; set; }
 }
 
-/// <summary>Резюме: файл в хранилище OneBase и извлечённый текст (для поиска и оценки AI на этапе 5).</summary>
+/// <summary>Что с документом: получен (ждёт скачивания из Telegram), сохранён, обрабатывается, готов, ошибка, отклонён (содержимое не того типа).</summary>
+public enum DocumentStatus
+{
+    Received,
+    Stored,
+    Processing,
+    Done,
+    Failed,
+    Rejected,
+}
+
+/// <summary>Шаг обработки: не нужен, ждёт, ждёт согласия кандидата, готово, ошибка, пропущен (выключено в настройках или AI не настроен).</summary>
+public enum DocumentStepStatus
+{
+    NotNeeded,
+    Pending,
+    WaitingConsent,
+    Done,
+    Failed,
+    Skipped,
+}
+
+/// <summary>
+/// Документ кандидата (резюме, диплом, сертификат): оригинал — в MinIO (<c>recruitment/resumes/{кандидат}/{документ}</c>), в базе — только
+/// сведения о нём, текст и разбор. Оригинал сохраняется до любой обработки и не перезаписывается: каждая версия — отдельный документ.
+/// Из Telegram документ сначала «получен» (Status = Received, есть ссылка на сообщение), затем фоновое задание скачивает и сохраняет его.
+/// </summary>
 public class CandidateResume : Entity
 {
     public Guid CandidateId { get; set; }
+
+    /// <summary>Отклик, по которому документ пришёл (открытый в момент получения).</summary>
+    public Guid? ApplicationId { get; set; }
+
     public required string FileName { get; set; }
     public required string ContentType { get; set; }
     public long SizeBytes { get; set; }
     public required string ObjectKey { get; set; }
-    public required string Sha256 { get; set; }
+
+    /// <summary>SHA-256 оригинала; null — файл ещё не скачан из Telegram.</summary>
+    public string? Sha256 { get; set; }
+
     public string? Text { get; set; }
 
     /// <summary>Почему текст не извлечён (формат, скан без текста…); файл при этом есть.</summary>
@@ -202,8 +247,40 @@ public class CandidateResume : Entity
     /// <summary>Что за документ по мнению AI: resume, certificate, id_document (текст не сохраняется), other; null — не определялось.</summary>
     public string? DocumentType { get; set; }
 
+    /// <summary>manual, hh, telegram.</summary>
     public required string Source { get; set; }
+
     public Guid? UploadedById { get; set; }
+
+    public DocumentStatus Status { get; set; } = DocumentStatus.Stored;
+
+    /// <summary>Распознавание текста (текстовый слой или OCR моделью).</summary>
+    public DocumentStepStatus OcrStatus { get; set; } = DocumentStepStatus.Pending;
+
+    /// <summary>Разбор резюме AI (поля, сводка) и оценка под вакансию.</summary>
+    public DocumentStepStatus AnalysisStatus { get; set; } = DocumentStepStatus.Pending;
+
+    /// <summary>Тип по содержимому (сигнатуре): pdf, docx, doc, rtf, odt, txt, jpeg, png, webp; null — не проверялся или неизвестен.</summary>
+    public string? DetectedType { get; set; }
+
+    public int? PageCount { get; set; }
+
+    /// <summary>Почему обработка остановилась (файл не скачался, содержимое не того типа, повреждён) — для HR; оригинал при этом сохранён.</summary>
+    public string? ProcessingError { get; set; }
+
+    /// <summary>Откуда скачать из Telegram: аккаунт, чат, сообщение.</summary>
+    public Guid? TelegramAccountId { get; set; }
+
+    public long? TelegramPeerId { get; set; }
+    public int? TelegramMessageId { get; set; }
+
+    /// <summary>Разбор резюме (JSON): поля с доказательством — цитатой из текста, «сказано в резюме» или «выведено», проверено ли.</summary>
+    public string? Profile { get; set; }
+
+    /// <summary>Краткая сводка резюме от AI.</summary>
+    public string? Summary { get; set; }
+
+    public DateTimeOffset? ProcessedAt { get; set; }
 }
 
 public enum ApplicationStage
@@ -322,6 +399,9 @@ public class RecruitmentSettings
 
     /// <summary>Фото резюме и PDF-сканы без текста распознаёт AI (платный вызов на каждый такой файл). По умолчанию — да.</summary>
     public bool ReadScans { get; set; } = true;
+
+    /// <summary>Разбирать резюме AI (поля, сводка) и оценивать под вакансию — платный вызов на резюме. Выключено — только контакты из текста. По умолчанию — да.</summary>
+    public bool AnalyzeResumes { get; set; } = true;
 
     public DateTimeOffset? UpdatedAt { get; set; }
     public Guid? UpdatedById { get; set; }
@@ -503,20 +583,40 @@ public class VacancyInterviewer
     public Guid UserId { get; set; }
 }
 
+/// <summary>
+/// Статус собеседования (в задании: PROPOSED, AWAITING_CANDIDATE_CONFIRMATION, CONFIRMED, RESCHEDULED, CANCELLED, COMPLETED, NO_SHOW).
+/// Подтверждённое и перенесённое — действующие: у них событие календаря.
+/// </summary>
 public enum InterviewStatus
 {
-    /// <summary>Кандидату предложены варианты времени, ждём выбора.</summary>
+    /// <summary>Кандидату предложены варианты времени, ждём выбора. Это ещё не собеседование: время не занято.</summary>
     Proposed,
 
     Confirmed,
     Completed,
     Cancelled,
     NoShow,
+
+    /// <summary>Время выбрано (HR предложил одно время), ждём «да» кандидата; время удерживается до HoldUntil, события календаря ещё нет.</summary>
+    Awaiting,
+
+    /// <summary>Перенесено на новое время (событие календаря перенесено); подтвердил ли кандидат новое время — CandidateConfirmation.</summary>
+    Rescheduled,
+}
+
+/// <summary>Подтверждение кандидатом: ждём, подтвердил (сам в Telegram), отказался, подтвердил по словам HR (телефон, лично).</summary>
+public enum CandidateConfirmation
+{
+    Pending,
+    Confirmed,
+    Declined,
+    ByHr,
 }
 
 /// <summary>
-/// Собеседование: отклик, время, формат и место, интервьюеры — событие календаря OneBase (участники — пользователи), подтверждение
-/// кандидатом, напоминания. Предложенные кандидату варианты — ProposedSlotsJson.
+/// Собеседование — единственная запись о нём: отклик, кандидат, вакансия, ответственный интервьюер и участники, время и часовой пояс, формат,
+/// место или ссылка, статус, подтверждение кандидатом. Событие календаря OneBase — его отражение (CalendarEventId, одно на собеседование):
+/// создаётся, переносится и удаляется только вместе с собеседованием.
 /// </summary>
 public class Interview : Entity
 {
@@ -536,6 +636,103 @@ public class Interview : Entity
     public DateTimeOffset? ConfirmedAt { get; set; }
     public DateTimeOffset? RemindedAt { get; set; }
     public Guid? CreatedById { get; set; }
+
+    /// <summary>Ответственный интервьюер.</summary>
+    public Guid? InterviewerId { get; set; }
+
+    /// <summary>Участники (JSON-массив ID пользователей, вместе с интервьюером) — их занятость проверяется, они — участники события.</summary>
+    public string? Participants { get; set; }
+
+    /// <summary>Часовой пояс собеседования (IANA), по умолчанию Asia/Tashkent.</summary>
+    public string TimeZone { get; set; } = "Asia/Tashkent";
+
+    public string? MeetingUrl { get; set; }
+    public CandidateConfirmation CandidateConfirmation { get; set; } = CandidateConfirmation.Pending;
+
+    /// <summary>Время удерживается за кандидатом до этого момента (Awaiting); дальше — свободно.</summary>
+    public DateTimeOffset? HoldUntil { get; set; }
+
+    /// <summary>Прежнее время (при переносе).</summary>
+    public DateTimeOffset? PreviousStartsAt { get; set; }
+
+    public DateTimeOffset? CancelledAt { get; set; }
+
+    /// <summary>Кто отменил: candidate, hr, system.</summary>
+    public string? CancelledBy { get; set; }
+
+    public string? CancelReason { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+
+    /// <summary>Версия строки (xmin): два одновременных подтверждения не создадут двух событий календаря.</summary>
+    public uint Version { get; set; }
+}
+
+/// <summary>
+/// Настройки собеседования вакансии (одна строка на вакансию; пусто — общие настройки подбора): ответственный интервьюер (участники —
+/// интервьюеры вакансии), длительность, дни, часы, перерывы, минимальный срок записи, горизонт, формат, адрес, онлайн-ссылка, часовой пояс,
+/// порог оценки для приглашения, инструкция кандидату.
+/// </summary>
+public class VacancyInterviewSettings
+{
+    public Guid VacancyId { get; set; }
+    public Guid? InterviewerId { get; set; }
+    public int? DurationMinutes { get; set; }
+
+    /// <summary>Дни недели: 1 — пн … 7 — вс, через запятую.</summary>
+    public string? Days { get; set; }
+
+    public TimeOnly? DayStart { get; set; }
+    public TimeOnly? DayEnd { get; set; }
+
+    /// <summary>Перерывы: «13:00-14:00», несколько — через запятую.</summary>
+    public string? Breaks { get; set; }
+
+    public int? MinNoticeHours { get; set; }
+    public int? MaxAdvanceDays { get; set; }
+
+    /// <summary>office, online, phone.</summary>
+    public string? Format { get; set; }
+
+    public string? Address { get; set; }
+    public string? MeetingUrl { get; set; }
+    public string? TimeZone { get; set; }
+
+    /// <summary>Приглашать, только если оценка AI под вакансию не ниже (0–100); null — решает разговор (вопросы отбора).</summary>
+    public int? InviteMinScore { get; set; }
+
+    /// <summary>Что взять и как пройти — кандидату и в событие календаря.</summary>
+    public string? Instructions { get; set; }
+
+    public DateTimeOffset? UpdatedAt { get; set; }
+    public Guid? UpdatedById { get; set; }
+}
+
+public enum InterviewResult
+{
+    Passed,
+    Rejected,
+    AdditionalInterview,
+    WaitingDecision,
+}
+
+/// <summary>
+/// Итоги собеседования от сотрудника (одна запись на сотрудника и собеседование, правится): результат, оценки 1–5 (техническая, общение,
+/// профессиональные качества), сильные и слабые стороны, комментарий, рекомендация, следующий этап. Решение о найме — за HR и руководством.
+/// </summary>
+public class InterviewFeedback : Entity
+{
+    public Guid InterviewId { get; set; }
+    public Guid ApplicationId { get; set; }
+    public Guid AuthorId { get; set; }
+    public InterviewResult Result { get; set; }
+    public int? Technical { get; set; }
+    public int? Communication { get; set; }
+    public int? Professional { get; set; }
+    public string? Strengths { get; set; }
+    public string? Weaknesses { get; set; }
+    public string? Comments { get; set; }
+    public string? Recommendation { get; set; }
+    public ApplicationStage? NextStage { get; set; }
 }
 
 // ---------- Центр исключений (этап 7) ----------
@@ -568,4 +765,40 @@ public class RecruitmentException : Entity
     public Guid? ResolvedById { get; set; }
     public DateTimeOffset? ResolvedAt { get; set; }
     public string? Resolution { get; set; }
+}
+
+// ---------- Фоновые задания подбора ----------
+
+public enum RecruitmentJobStatus
+{
+    Pending,
+    Running,
+    Done,
+    Failed,
+}
+
+/// <summary>
+/// Фоновое задание подбора в очереди PostgreSQL (брокера в OneBase нет; как очередь исходящих Telegram): очередь (hr.resume.download,
+/// hr.resume.ocr, hr.resume.analysis, hr.candidate.scoring, hr.interview.scheduling, hr.interview.notifications), ключ (одно и то же
+/// задание не ставится дважды, пока не выполнено), над чем (RelatedId). Захват — условным UPDATE с арендой: упал сервер посреди задания —
+/// аренда истекла, задание берётся снова. Ошибка — повтор с паузой, после MaxAttempts — Failed и исключение для HR.
+/// </summary>
+public class RecruitmentJob
+{
+    public long Id { get; set; }
+    public required string Queue { get; set; }
+    public required string Key { get; set; }
+    public Guid RelatedId { get; set; }
+
+    /// <summary>Небольшие параметры задания (JSON).</summary>
+    public string? Payload { get; set; }
+
+    public RecruitmentJobStatus Status { get; set; } = RecruitmentJobStatus.Pending;
+    public int Attempts { get; set; }
+    public int MaxAttempts { get; set; } = 3;
+    public DateTimeOffset RunAfter { get; set; }
+    public DateTimeOffset? LockedUntil { get; set; }
+    public string? LastError { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? FinishedAt { get; set; }
 }

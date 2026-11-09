@@ -189,6 +189,7 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         // Синхронизация: кандидат с подтверждённым e-mail и резюме; платное резюме — исключение HR, остальное идёт.
         var result = await hh.SyncAsync(null, default);
         Assert.Equal((2, 1), (result.Responses, result.Errors));
+        await fixture.Services.GetRequiredService<OneBase.Application.Recruitment.Jobs.RecruitmentJobRunner>().DrainAsync(default); // текст резюме — в фоне
         var ivan = await db.Candidates.AsNoTracking().Include(c => c.Contacts).Include(c => c.Resumes).Include(c => c.Applications).SingleAsync(c => c.FullName == "Иванов Иван");
         Assert.Contains(ivan.Contacts, c => c.Kind == CandidateContactKind.Email && c.Value == "ivan.hh@example.com" && c.Verified);
         Assert.Contains(ivan.Contacts, c => c.Kind == CandidateContactKind.Phone && c.Value == "+998901112233" && !c.Verified);
@@ -425,6 +426,7 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         var candidate = await service.CreateCandidateAsync(hr, new CandidateInput("Ботир Каримов", null, null, null, [], "manual", null, vacancyId, "written"), default);
         await service.UploadResumeAsync(hr, candidate.CandidateId, new RecruitmentUpload("cv.txt", "text/plain", 0,
             new MemoryStream(Encoding.UTF8.GetBytes("Водитель категории C, стаж 6 лет. Работал в Логистика Плюс."))) with { SizeBytes = 90 }, default);
+        await fixture.Services.GetRequiredService<OneBase.Application.Recruitment.Jobs.RecruitmentJobRunner>().DrainAsync(default); // текст резюме — в фоне
         var applicationId = (await db.CandidateApplications.AsNoTracking().SingleAsync()).Id;
 
         fixture.Gateway.Script.Enqueue(m =>

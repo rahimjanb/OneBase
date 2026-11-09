@@ -25,6 +25,8 @@ export type CalendarEventView = {
   organizer: CalendarPerson | null;
   participants: CalendarPerson[];
   canEdit: boolean;
+  /** Событие — отражение записи другого раздела (recruitment — собеседование подбора): меняется только там. */
+  managedBy?: string | null;
 };
 
 export type CalendarAbilities = { departments: { code: string; name: string }[]; canAddForEveryone: boolean };

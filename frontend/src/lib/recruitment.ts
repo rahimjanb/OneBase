@@ -145,19 +145,7 @@ export type CandidateCard = {
   hasConsent: boolean;
   contacts: { id: string; kind: ContactKind; value: string; verified: boolean; source: string }[];
   sources: { source: string; externalId: string | null; note: string | null; createdAt: string }[];
-  resumes: {
-    id: string;
-    fileName: string;
-    sizeBytes: number;
-    source: string;
-    createdAt: string;
-    hasText: boolean;
-    textError: string | null;
-    textPreview: string | null;
-    textByAi: boolean;
-    documentType: string | null;
-    canReadAi: boolean;
-  }[];
+  resumes: CandidateDocument[];
   applications: {
     id: string;
     vacancyId: string;
@@ -173,6 +161,107 @@ export type CandidateCard = {
   }[];
   consents: { id: string; channel: string; textVersion: number; givenAt: string; withdrawnAt: string | null; recordedBy: string | null }[];
   duplicates: { id: string; otherCandidateId: string; otherName: string; kind: ContactKind; value: string }[];
+  /** Язык переписки: код (ru-Cyrl, uz-Latn, uz-Cyrl), кто выбрал (auto, candidate, hr), последнее определение и уверенность. */
+  languageInfo: { code: string | null; source: string | null; lastDetected: string | null; confidence: number | null } | null;
+};
+
+/** Поле разбора резюме: значение, цитата-доказательство, сказано прямо или выведено, проверено ли (цитата найдена в тексте). */
+export type ProfileField = { value: string | null; evidence?: string | null; basis: "stated" | "inferred"; verified: boolean };
+
+export type ResumeProfile = {
+  fullName?: ProfileField | null;
+  phone?: ProfileField | null;
+  email?: ProfileField | null;
+  location?: ProfileField | null;
+  professionalTitle?: ProfileField | null;
+  experienceYears?: ProfileField | null;
+  workExperience: { company?: string | null; position?: string | null; from?: string | null; to?: string | null; description?: string | null; verified: boolean }[];
+  education: { institution?: string | null; degree?: string | null; year?: string | null; verified: boolean }[];
+  skills: ProfileField[];
+  languages: ProfileField[];
+  certificates: ProfileField[];
+  salaryExpectation?: ProfileField | null;
+  additionalInformation?: ProfileField | null;
+  summary?: string | null;
+  quality: "good" | "partial" | "poor";
+};
+
+export type DocumentStatus = "Received" | "Stored" | "Processing" | "Done" | "Failed" | "Rejected";
+export type DocumentStep = "NotNeeded" | "Pending" | "WaitingConsent" | "Done" | "Failed" | "Skipped";
+
+/** Документ кандидата: оригинал в хранилище OneBase, статусы обработки, текст и разбор. */
+export type CandidateDocument = {
+  id: string;
+  fileName: string;
+  sizeBytes: number;
+  source: string;
+  createdAt: string;
+  hasText: boolean;
+  textError: string | null;
+  textPreview: string | null;
+  textByAi: boolean;
+  documentType: string | null;
+  canReadAi: boolean;
+  status: DocumentStatus;
+  ocrStatus: DocumentStep;
+  analysisStatus: DocumentStep;
+  detectedType: string | null;
+  contentType: string | null;
+  pageCount: number | null;
+  processingError: string | null;
+  summary: string | null;
+  profile: ResumeProfile | null;
+  vacancyCode: string | null;
+  canPreview: boolean;
+  processedAt: string | null;
+};
+
+export const documentStatusLabel: Record<DocumentStatus, string> = {
+  Received: "Получен, скачивается",
+  Stored: "Сохранён, ждёт обработки",
+  Processing: "Обрабатывается",
+  Done: "Обработан",
+  Failed: "Ошибка обработки",
+  Rejected: "Отклонён",
+};
+
+export const ocrStatusLabel: Record<DocumentStep, string> = {
+  NotNeeded: "из текстового слоя",
+  Pending: "ждёт",
+  WaitingConsent: "ждёт согласия кандидата",
+  Done: "распознан AI",
+  Failed: "не прочитан",
+  Skipped: "не распознавался",
+};
+
+export const analysisStatusLabel: Record<DocumentStep, string> = {
+  NotNeeded: "не нужен",
+  Pending: "ждёт",
+  WaitingConsent: "ждёт согласия кандидата",
+  Done: "разобран AI",
+  Failed: "не удался",
+  Skipped: "без AI — только контакты",
+};
+
+/** Документ ещё в работе: карточку стоит обновлять, пока он не готов (кроме ожидания согласия). */
+export function documentBusy(d: CandidateDocument): boolean {
+  if (d.status === "Received" || d.status === "Stored") return true;
+  return d.status === "Processing" && d.ocrStatus !== "WaitingConsent" && d.analysisStatus !== "WaitingConsent";
+}
+
+/** Язык и графика переписки с кандидатом. */
+export const LANGUAGE_CODES = ["ru-Cyrl", "uz-Latn", "uz-Cyrl"] as const;
+
+export const languageCodeLabel: Record<string, string> = {
+  "ru-Cyrl": "Русский",
+  "uz-Latn": "Узбекский (латиница)",
+  "uz-Cyrl": "Узбекский (кириллица)",
+};
+
+export const languageSourceLabel: Record<string, string> = {
+  auto: "по переписке",
+  candidate: "попросил кандидат",
+  hr: "выбрал сотрудник HR",
 };
 
 export type CandidateInput = {
@@ -281,7 +370,7 @@ export const recruitmentApi = {
     bff<CandidatePage>(`${base}/candidates${qs(q)}`),
   candidate: (id: string) => bff<CandidateCard>(`${base}/candidates/${id}`),
   createCandidate: (input: CandidateInput) => bff<IntakeResult>(`${base}/candidates`, post(input)),
-  updateCandidate: (id: string, input: { fullName: string; city: string | null; language: string | null; notes: string | null }) =>
+  updateCandidate: (id: string, input: { fullName: string; city: string | null; language: string | null; notes: string | null; languageCode?: string | null }) =>
     bff<CandidateCard>(`${base}/candidates/${id}`, put(input)),
   deleteCandidate: (id: string) => bff<void>(`${base}/candidates/${id}`, { method: "DELETE" }),
   addContact: (id: string, kind: ContactKind, value: string) => bff<CandidateCard>(`${base}/candidates/${id}/contacts`, post({ kind, value })),
@@ -305,8 +394,12 @@ export const recruitmentApi = {
   },
   resumeUrl: (resumeId: string) => `/bff/api/${base}/resumes/${resumeId}`,
   deleteResume: (resumeId: string) => bff<CandidateCard>(`${base}/resumes/${resumeId}`, { method: "DELETE" }),
-  /** «Распознать снова»: фото или скан читает AI (платный вызов). */
+  /** Просмотр в браузере (PDF, фото, текст) — тем же правом, что и скачивание. */
+  previewUrl: (resumeId: string) => `/bff/api/${base}/resumes/${resumeId}/preview`,
+  /** «Распознать заново (AI)»: фото или скан читает AI (платный вызов), затем разбор. */
   readResume: (resumeId: string) => bff<CandidateCard>(`${base}/resumes/${resumeId}/read`, { method: "POST" }),
+  /** «Обработать заново»: скачать (если не скачан), прочитать и разобрать — в фоне. */
+  reprocessResume: (resumeId: string) => bff<CandidateCard>(`${base}/resumes/${resumeId}/reprocess`, { method: "POST" }),
   addApplication: (id: string, vacancyId: string) => bff<CandidateCard>(`${base}/candidates/${id}/applications`, post({ vacancyId })),
   stage: (applicationId: string, stage: Stage, comment: string | null, rejectReason: string | null) =>
     bff<CandidateCard>(`${base}/applications/${applicationId}/stage`, post({ stage, comment, rejectReason })),

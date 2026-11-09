@@ -139,7 +139,96 @@ export type InterviewRow = {
   interviewers: string[];
   proposedSlots: Slot[];
   confirmedAt: string | null;
+  candidateConfirmation: "Pending" | "Confirmed" | "Declined" | "ByHr";
+  interviewer: string | null;
+  department: string | null;
+  timeZone: string;
+  meetingUrl: string | null;
+  holdUntil: string | null;
+  previousStartsAt: string | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  resumeId: string | null;
+  aiScore: number | null;
+  aiSummary: string | null;
+  calendarEventId: string | null;
+  feedback: Feedback[] | null;
 };
+
+export type InterviewResult = "Passed" | "Rejected" | "AdditionalInterview" | "WaitingDecision";
+
+export type Feedback = {
+  id: string;
+  authorId: string;
+  author: string;
+  result: InterviewResult;
+  technical: number | null;
+  communication: number | null;
+  professional: number | null;
+  strengths: string | null;
+  weaknesses: string | null;
+  comments: string | null;
+  recommendation: string | null;
+  nextStage: Stage | null;
+  at: string;
+};
+
+export type FeedbackInput = Omit<Feedback, "id" | "authorId" | "author" | "at">;
+
+/** Настройки собеседования вакансии: свои значения (null — общие) и что действует (effective…). */
+export type InterviewSettings = {
+  vacancyId: string;
+  interviewerId: string | null;
+  participants: string[];
+  durationMinutes: number | null;
+  days: string | null;
+  dayStart: string | null;
+  dayEnd: string | null;
+  breaks: string | null;
+  minNoticeHours: number | null;
+  maxAdvanceDays: number | null;
+  format: string | null;
+  address: string | null;
+  meetingUrl: string | null;
+  timeZone: string | null;
+  inviteMinScore: number | null;
+  instructions: string | null;
+  effectiveInterviewerId: string | null;
+  effectiveDuration: number;
+  effectiveDays: string;
+  effectiveDayStart: string;
+  effectiveDayEnd: string;
+  effectiveNotice: number;
+  effectiveHorizon: number;
+  effectiveFormat: string;
+  effectiveTimeZone: string;
+};
+
+export const interviewViews: [string, string][] = [
+  ["today", "Сегодня"],
+  ["tomorrow", "Завтра"],
+  ["week", "Эта неделя"],
+  ["upcoming", "Предстоящие"],
+  ["completed", "Прошедшие"],
+  ["cancelled", "Отменённые"],
+  ["rescheduled", "Перенесённые"],
+];
+
+export const confirmationLabel: Record<string, string> = {
+  Pending: "ждём подтверждения кандидата",
+  Confirmed: "кандидат подтвердил",
+  Declined: "кандидат отказался",
+  ByHr: "подтверждено со слов кандидата",
+};
+
+export const resultLabel: Record<InterviewResult, string> = {
+  Passed: "Прошёл",
+  Rejected: "Отказ",
+  AdditionalInterview: "Нужно ещё собеседование",
+  WaitingDecision: "Ждёт решения",
+};
+
+export const cancelledByLabel: Record<string, string> = { hr: "HR", candidate: "кандидат", system: "система" };
 
 export type ExceptionRow = {
   id: string;
@@ -165,6 +254,8 @@ export type AiSettings = {
   interviewDays: string;
   autoScore: boolean;
   readScans: boolean;
+  /** Разбирать резюме AI (поля, сводка) и оценивать под вакансию; выключено — только контакты из текста. */
+  analyzeResumes: boolean;
   recruiterAgentId: string | null;
   recruiterEnabled: boolean;
 };
@@ -203,8 +294,10 @@ export const exceptionLabel: Record<string, string> = {
 export const formatLabel: Record<string, string> = { office: "В офисе", online: "Онлайн", phone: "По телефону" };
 
 export const interviewStatusLabel: Record<string, string> = {
-  Proposed: "Предложено",
+  Proposed: "Предложены варианты",
+  Awaiting: "Ждёт подтверждения",
   Confirmed: "Назначено",
+  Rescheduled: "Перенесено",
   Completed: "Прошло",
   Cancelled: "Отменено",
   NoShow: "Не пришёл",
@@ -282,12 +375,22 @@ export const flowApi = {
   postText: (vacancyId: string, accountId: string, audience: string) =>
     bff<{ text: string }>(`${base}/vacancies/${vacancyId}/post-text`, body("POST", { accountId, audience })),
   interviews: (upcoming = true) => bff<InterviewRow[]>(`${base}/interviews${qs({ upcoming })}`),
+  interviewsView: (view: string) => bff<InterviewRow[]>(`${base}/interviews${qs({ view })}`),
+  interview: (id: string) => bff<InterviewRow>(`${base}/interviews/${id}`),
+  reschedule: (id: string, startsAt: string) => bff<InterviewRow>(`${base}/interviews/${id}/reschedule`, body("POST", { startsAt })),
+  cancelInterview: (id: string, reason: string | null) => bff<InterviewRow>(`${base}/interviews/${id}/cancel`, body("POST", { reason })),
+  confirmInterview: (id: string) => bff<InterviewRow>(`${base}/interviews/${id}/confirm`, body("POST")),
+  feedback: (id: string, input: FeedbackInput) => bff<InterviewRow>(`${base}/interviews/${id}/feedback`, body("POST", input)),
+  interviewSettings: (vacancyId: string) => bff<InterviewSettings>(`${base}/vacancies/${vacancyId}/interview-settings`),
+  saveInterviewSettings: (vacancyId: string, input: Omit<InterviewSettings, "vacancyId" | `effective${string}`>) =>
+    bff<InterviewSettings>(`${base}/vacancies/${vacancyId}/interview-settings`, body("PUT", input)),
   candidateInterviews: (candidateId: string) => bff<InterviewRow[]>(`${base}/candidates/${candidateId}/interviews`),
   interviewers: (vacancyId: string) => bff<string[]>(`${base}/vacancies/${vacancyId}/interviewers`),
   setInterviewers: (vacancyId: string, userIds: string[]) => bff<string[]>(`${base}/vacancies/${vacancyId}/interviewers`, body("PUT", { userIds })),
   slots: (vacancyId: string) => bff<Slot[]>(`${base}/vacancies/${vacancyId}/slots`),
-  book: (applicationId: string, startsAt: string, format: string, location: string | null) =>
-    bff<InterviewRow[]>(`${base}/interviews/book`, body("POST", { applicationId, startsAt, format, location })),
+  /** HR назначает время: confirmedByCandidate — кандидат уже подтвердил (по телефону); иначе — ждёт его «да» в Telegram. */
+  book: (applicationId: string, startsAt: string, format: string | null, location: string | null, confirmedByCandidate = false) =>
+    bff<InterviewRow[]>(`${base}/interviews/book`, body("POST", { applicationId, startsAt, format, location, confirmedByCandidate })),
   propose: (applicationId: string) => bff<InterviewRow[]>(`${base}/applications/${applicationId}/propose`, body("POST")),
   interviewStatus: (id: string, status: string) => bff<InterviewRow[]>(`${base}/interviews/${id}/status`, body("POST", { status })),
   exceptions: (status?: string) => bff<ExceptionRow[]>(`${base}/exceptions${qs({ status })}`),

@@ -81,6 +81,11 @@ export function EventDialog({ id, locale, abilities, onClose }: { id: string; lo
             </ul>
             {event.description && <p className="whitespace-pre-wrap text-ink">{event.description}</p>}
             {event.organizer && <p className="text-[12.5px] text-ink-3">{t("Организатор: {name}", { name: event.organizer.name })}</p>}
+            {event.managedBy === "recruitment" && (
+              <p className="rounded-md bg-surface-2 px-3 py-2 text-[12.5px] text-ink-2">
+                {t("Это собеседование подбора. Перенести или отменить его можно в HR → «Подбор» → «Собеседования» — тогда изменится и запись о собеседовании, и кандидату придёт сообщение.")}
+              </p>
+            )}
             {event.canEdit && (
               <div className="flex justify-end gap-2 border-t border-line pt-4">
                 <button type="button" onClick={remove} disabled={busy} className={`${button} text-bad hover:bg-bad-soft`}>

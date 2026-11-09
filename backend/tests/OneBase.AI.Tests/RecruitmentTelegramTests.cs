@@ -100,6 +100,7 @@ public class RecruitmentTelegramTests(DataManagerDb fixture) : IClassFixture<Dat
         fixture.Telegram.Files[(Candidate.PeerId, 2)] = RecruitmentTests.Pdf("Driver, category C, 7 years");
         await DeliverAsync(Msg(account, Candidate, 2, 7001, "Моё резюме", new TelegramIncomingFile("cv.pdf", "application/pdf", 500)));
         await DeliverAsync(Msg(account, Candidate, 3, 777_000_222, "Ответил с телефона", outgoing: true));
+        await fixture.Services.GetRequiredService<OneBase.Application.Recruitment.Jobs.RecruitmentJobRunner>().DrainAsync(default); // скачивание и текст — в фоне
 
         var candidate = await db.Candidates.AsNoTracking().Include(c => c.Contacts).Include(c => c.Applications).Include(c => c.Resumes).SingleAsync();
         Assert.Equal("Алишер Каримов", candidate.FullName);

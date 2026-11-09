@@ -1,5 +1,5 @@
 import { RecruitmentFrame, loadRecruitment } from "@/components/recruitment/RecruitmentPage";
-import { InterviewsView } from "@/components/recruitment/Flow";
+import { InterviewsBoard } from "@/components/recruitment/Interviews";
 import { getT } from "@/i18n/server";
 
 export async function generateMetadata() {
@@ -10,8 +10,8 @@ export async function generateMetadata() {
 export default async function Page() {
   const ctx = await loadRecruitment("/hr/recruitment/interviews");
   return (
-    <RecruitmentFrame title="Собеседования" subtitle="Время — из календаря OneBase, кандидат подтверждает в Telegram" ctx={ctx}>
-      <InterviewsView ctx={ctx} />
+    <RecruitmentFrame title="Собеседования" subtitle="Одна запись — и в подборе, и в календаре OneBase; кандидат выбирает и подтверждает время в Telegram" ctx={ctx}>
+      <InterviewsBoard ctx={ctx} />
     </RecruitmentFrame>
   );
 }

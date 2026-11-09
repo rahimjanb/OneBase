@@ -73,7 +73,7 @@ public sealed class DocumentVisionReader(IAiGateway gateway, IAiSettingsSource s
         var readiness = await gateway.GetReadinessAsync(ct);
         if (!readiness.Ready)
         {
-            return VisionReading.Failed("AI не настроен — фото и сканы не распознаются («Настройки → AI»).");
+            return VisionReading.NotAvailable("AI не настроен — фото и сканы не распознаются («Настройки → AI»).");
         }
 
         var route = AiTaskRouting.For(await settings.GetSettingsAsync(ct), AiTaskCategory.Extract);
@@ -103,7 +103,7 @@ public sealed class DocumentVisionReader(IAiGateway gateway, IAiSettingsSource s
         }
         catch (LlmNotConfiguredException ex)
         {
-            return VisionReading.Failed(ex.Message);
+            return VisionReading.NotAvailable(ex.Message);
         }
         catch (AiProviderException ex)
         {

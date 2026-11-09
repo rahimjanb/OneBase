@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
+import { InterviewSettingsCard } from "@/components/recruitment/Interviews";
 import { Badge, Card, ErrorText, Label, textarea, useAction } from "@/components/recruitment/ui";
 import { useT } from "@/i18n/client";
 import { stageLabel, when, type CandidateCard, type RecruitmentContext, type Stage, type Vacancy } from "@/lib/recruitment";
 import {
+  confirmationLabel,
   exceptionLabel,
   flowApi,
   formatLabel,
@@ -26,72 +28,6 @@ import {
   type Score,
   type Slot,
 } from "@/lib/recruitment-flow";
-
-// ---------- Собеседования ----------
-
-export function InterviewsView({ ctx }: { ctx: RecruitmentContext }) {
-  const t = useT();
-  const [upcoming, setUpcoming] = useState(true);
-  const [rows, setRows] = useState<InterviewRow[] | null>(null);
-  const { error, run } = useAction();
-  useEffect(() => {
-    run("load", async () => setRows(await flowApi.interviews(upcoming)));
-  }, [upcoming]); // eslint-disable-line react-hooks/exhaustive-deps
-  return (
-    <div className="space-y-3">
-      <div className="flex gap-2">
-        <button className={upcoming ? primary : button} onClick={() => setUpcoming(true)}>
-          {t("Предстоящие")}
-        </button>
-        <button className={!upcoming ? primary : button} onClick={() => setUpcoming(false)}>
-          {t("Прошедшие")}
-        </button>
-      </div>
-      <ErrorText error={error} />
-      {!rows ? (
-        <p className="text-sm text-ink-3">{t("Загрузка…")}</p>
-      ) : rows.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-ink-3">{t("Собеседований нет.")}</p>
-      ) : (
-        <ul className="space-y-2">
-          {rows.map((i) => (
-            <li key={i.id} className="rounded-xl border border-line bg-surface p-3 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span>
-                  <Link href={`/hr/recruitment/candidates/${i.candidateId}`} className="font-semibold text-ink hover:text-accent-strong">
-                    {i.candidateName}
-                  </Link>{" "}
-                  — {i.vacancyCode} {i.vacancyTitle}
-                </span>
-                <Badge className={i.status === "Confirmed" ? "bg-ok-soft text-ok" : i.status === "Proposed" ? "bg-warn-soft text-warn" : "bg-muted text-ink-2"}>
-                  {t(interviewStatusLabel[i.status] ?? i.status)}
-                </Badge>
-              </div>
-              <div className="mt-1 text-xs text-ink-2">
-                {i.startsAt ? slotText(i.startsAt) : t("варианты: {list}", { list: i.proposedSlots.map((s) => slotText(s.startsAt)).join("; ") || "—" })} ·{" "}
-                {t(formatLabel[i.format] ?? i.format)}
-                {i.location && ` · ${i.location}`}
-                {i.interviewers.length > 0 && ` · ${i.interviewers.join(", ")}`}
-              </div>
-              {ctx.canManage && i.status === "Confirmed" && (
-                <div className="mt-2 flex gap-2">
-                  {(["Completed", "NoShow", "Cancelled"] as const).map((s) => (
-                    <button key={s} className={button} onClick={() => run(s, async () => {
-                      await flowApi.interviewStatus(i.id, s);
-                      setRows(await flowApi.interviews(upcoming));
-                    })}>
-                      {t(interviewStatusLabel[s])}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 // ---------- Исключения ----------
 
@@ -322,6 +258,15 @@ export function AiSettingsCard({ ctx }: { ctx: RecruitmentContext }) {
             </span>
           </span>
         </label>
+        <label className="flex items-start gap-2 text-sm sm:col-span-2">
+          <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-accent)]" disabled={!ctx.canManage} checked={s.analyzeResumes} onChange={(e) => setS({ ...s, analyzeResumes: e.target.checked })} />
+          <span>
+            {t("Разбирать резюме AI")}
+            <span className="block text-xs text-ink-3">
+              {t("ФИО, контакты, опыт, образование, навыки и сводка — с цитатой из резюме; что не найдено в тексте, помечается «не подтверждено». Затем — оценка под вакансию. Выключено — из резюме берутся только телефон и почта. Платный вызов на каждое резюме; из Telegram — только после согласия кандидата.")}
+            </span>
+          </span>
+        </label>
         {ctx.canManage && (
           <div className="flex items-center gap-3 sm:col-span-2">
             <button className={primary} disabled={!!busy} onClick={() => run("save", async () => {
@@ -506,11 +451,8 @@ export function VacancyExtras({ ctx, vacancy, onChange }: { ctx: RecruitmentCont
   const [agentId, setAgentId] = useState(vacancy.agentId ?? "");
   const [recruiters, setRecruiters] = useState<RecruiterBrief[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
-  const [interviewers, setInterviewers] = useState<string[]>([]);
-  const [slots, setSlots] = useState<Slot[] | null>(null);
   const { busy, error, run } = useAction();
   useEffect(() => {
-    flowApi.interviewers(vacancy.id).then(setInterviewers, () => undefined);
     flowApi.people().then(setPeople, () => undefined);
     flowApi.recruiters().then(setRecruiters, () => undefined);
   }, [vacancy.id]);
@@ -560,33 +502,8 @@ export function VacancyExtras({ ctx, vacancy, onChange }: { ctx: RecruitmentCont
         )}
         <ErrorText error={error} />
       </Card>
-      <Card title="Интервьюеры">
-        <p className="mb-2 text-xs text-ink-3">{t("Их занятость — по календарю OneBase. Не выбраны — интервьюер рекрутер вакансии.")}</p>
-        <select
-          multiple
-          className={`${field} h-36`}
-          disabled={!ctx.canManage}
-          value={interviewers}
-          onChange={(e) => setInterviewers(Array.from(e.target.selectedOptions).map((o) => o.value))}
-        >
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-              {p.position && ` — ${p.position}`}
-            </option>
-          ))}
-        </select>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {ctx.canManage && (
-            <button className={button} disabled={!!busy} onClick={() => run("int", async () => setInterviewers(await flowApi.setInterviewers(vacancy.id, interviewers)))}>
-              {t("Сохранить")}
-            </button>
-          )}
-          <button className={button} onClick={() => run("slots", async () => setSlots(await flowApi.slots(vacancy.id)))}>
-            {t("Свободное время")}
-          </button>
-        </div>
-        {slots && <p className="mt-2 text-xs text-ink-2">{slots.length === 0 ? t("Свободного времени на 2 недели нет.") : slots.map((s) => slotText(s.startsAt)).join(" · ")}</p>}
+      <Card title="Собеседования" className="lg:col-span-2">
+        <InterviewSettingsCard ctx={ctx} vacancyId={vacancy.id} people={people} />
       </Card>
     </div>
   );
@@ -600,6 +517,7 @@ export function CandidateExtras({ ctx, card }: { ctx: RecruitmentContext; card: 
   const [interviews, setInterviews] = useState<InterviewRow[]>([]);
   const [negotiations, setNegotiations] = useState<HhNegotiation[]>([]);
   const [slots, setSlots] = useState<Record<string, Slot[]>>({});
+  const [confirmed, setConfirmed] = useState(false);
   const { busy, error, run } = useAction();
   useEffect(() => {
     flowApi.scores(card.id).then(setScores, () => undefined);
@@ -656,8 +574,14 @@ export function CandidateExtras({ ctx, card }: { ctx: RecruitmentContext; card: 
             {i.vacancyCode}: {t(interviewStatusLabel[i.status] ?? i.status)}
             {i.startsAt && ` · ${slotText(i.startsAt)}`}
             {i.location && ` · ${i.location}`}
+            {["Awaiting", "Confirmed", "Rescheduled"].includes(i.status) && <span className="text-xs text-ink-3"> · {t(confirmationLabel[i.candidateConfirmation])}</span>}
           </p>
         ))}
+        {interviews.length > 0 && (
+          <Link href="/hr/recruitment/interviews" className="text-xs text-accent-strong hover:underline">
+            {t("Перенести, отменить, итоги — в «Собеседованиях»")}
+          </Link>
+        )}
         {ctx.canManage &&
           open.map((a) => (
             <div key={a.id} className="mt-2 flex flex-wrap items-center gap-2 text-sm">
@@ -668,8 +592,14 @@ export function CandidateExtras({ ctx, card }: { ctx: RecruitmentContext; card: 
               <button className={button} onClick={() => run("slots", async () => setSlots({ ...slots, [a.id]: await flowApi.slots(a.vacancyId) }))}>
                 {t("Назначить самому")}
               </button>
+              {slots[a.id] && (
+                <label className="flex items-center gap-1 text-xs text-ink-2">
+                  <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+                  {t("кандидат уже подтвердил (по телефону)")}
+                </label>
+              )}
               {slots[a.id]?.map((s) => (
-                <button key={s.startsAt} className={primary} disabled={!!busy} onClick={() => run("book", async () => setInterviews(await flowApi.book(a.id, s.startsAt, "office", null)))}>
+                <button key={s.startsAt} className={primary} disabled={!!busy} onClick={() => run("book", async () => setInterviews(await flowApi.book(a.id, s.startsAt, null, null, confirmed)))}>
                   {slotText(s.startsAt)}
                 </button>
               ))}

@@ -53,9 +53,35 @@ public sealed class RecruitmentFlowController(RecruitmentService recruitment, In
 
     // ---------- Собеседования ----------
 
+    /// <summary>Собеседования по виду: today, tomorrow, week, upcoming, completed, cancelled, rescheduled (без вида — по старому флагу upcoming).</summary>
     [HttpGet("interviews")]
-    public async Task<IReadOnlyList<InterviewView>> Interviews([FromQuery] bool upcoming = true, CancellationToken ct = default) =>
-        await interviews.ListAsync(await ContextAsync(ct), upcoming, ct);
+    public async Task<IReadOnlyList<InterviewView>> Interviews([FromQuery] string? view, [FromQuery] bool upcoming = true, CancellationToken ct = default) =>
+        await interviews.ListAsync(await ContextAsync(ct), view ?? (upcoming ? "upcoming" : "past"), ct);
+
+    [HttpGet("interviews/{id:guid}")]
+    public async Task<InterviewView> Interview(Guid id, CancellationToken ct) => await interviews.GetAsync(await ContextAsync(ct), id, ct);
+
+    [HttpPost("interviews/{id:guid}/reschedule")]
+    public async Task<InterviewView> Reschedule(Guid id, RescheduleInput input, CancellationToken ct) =>
+        await interviews.RescheduleByHrAsync(await ContextAsync(ct), id, input, ct);
+
+    [HttpPost("interviews/{id:guid}/cancel")]
+    public async Task<InterviewView> Cancel(Guid id, CancelInput input, CancellationToken ct) => await interviews.CancelByHrAsync(await ContextAsync(ct), id, input, ct);
+
+    /// <summary>Кандидат подтвердил время (по телефону, лично) — отметка HR.</summary>
+    [HttpPost("interviews/{id:guid}/confirm")]
+    public async Task<InterviewView> Confirm(Guid id, CancellationToken ct) => await interviews.ConfirmByHrAsync(await ContextAsync(ct), id, ct);
+
+    [HttpPost("interviews/{id:guid}/feedback")]
+    public async Task<InterviewView> Feedback(Guid id, FeedbackInput input, CancellationToken ct) =>
+        await interviews.SaveFeedbackAsync(await ContextAsync(ct), id, input, recruitment, ct);
+
+    [HttpGet("vacancies/{id:guid}/interview-settings")]
+    public async Task<InterviewSettingsView> InterviewSettings(Guid id, CancellationToken ct) => await interviews.SettingsViewAsync(await ContextAsync(ct), id, ct);
+
+    [HttpPut("vacancies/{id:guid}/interview-settings")]
+    public async Task<InterviewSettingsView> SaveInterviewSettings(Guid id, InterviewSettingsInput input, CancellationToken ct) =>
+        await interviews.SaveSettingsAsync(await ContextAsync(ct), id, input, ct);
 
     [HttpGet("candidates/{id:guid}/interviews")]
     public async Task<IReadOnlyList<InterviewView>> CandidateInterviews(Guid id, CancellationToken ct) => await interviews.ForCandidateAsync(await ContextAsync(ct), id, ct);
@@ -91,7 +117,7 @@ public sealed class RecruitmentFlowController(RecruitmentService recruitment, In
     [HttpPost("interviews/book")]
     public async Task<IReadOnlyList<InterviewView>> Book(BookInput input, CancellationToken ct) => await interviews.BookByHrAsync(await ContextAsync(ct), input, ct);
 
-    /// <summary>Предложить кандидату варианты времени в его диалоге Telegram (если он есть) — он выберет номером.</summary>
+    /// <summary>Пригласить: варианты времени — кандидату в его диалог Telegram на его языке (он выберет номером); диалога нет — варианты видны в карточке.</summary>
     [HttpPost("applications/{id:guid}/propose")]
     public async Task<IReadOnlyList<InterviewView>> Propose(Guid id, CancellationToken ct)
     {
@@ -101,19 +127,7 @@ public sealed class RecruitmentFlowController(RecruitmentService recruitment, In
             throw new FieldForbiddenException("Собеседования назначает HR.");
         }
 
-        var (interview, slots) = await interviews.ProposeAsync(id, ctx.UserId, ct);
-        var conversation = await db.TelegramConversations.AsNoTracking()
-            .Where(c => c.Department == TelegramDepartments.Hr && c.RelatedType == RecruitmentService.CandidateRelation && c.RelatedId == interview.CandidateId)
-            .OrderByDescending(c => c.LastMessageAt).FirstOrDefaultAsync(ct);
-        if (conversation is not null && slots.Count > 0)
-        {
-            var uzbek = await db.Candidates.AsNoTracking().Where(c => c.Id == interview.CandidateId).Select(c => c.Language).FirstOrDefaultAsync(ct) == "uz";
-            var text = (uzbek ? "Sizni suhbatga taklif qilamiz. Qulay vaqtni tanlang:\n" : "Приглашаем вас на собеседование. Выберите удобное время:\n")
-                       + InterviewService.SlotsText(slots, uzbek) + (uzbek ? "\nVariant raqamini yozing." : "\nНапишите номер варианта.");
-            await outbox.EnqueueAsync(new OutboxRequest(conversation.AccountId, conversation.PeerId, conversation.Id, TelegramDepartments.Hr, "manual", text,
-                $"propose:{interview.Id:N}:{slots[0].StartsAt:yyyyMMddHHmm}", "user", ctx.UserId), ct);
-        }
-
+        var (interview, _) = await interviews.InviteAsync(id, ctx.UserId, ct);
         return await interviews.ForCandidateAsync(ctx, interview.CandidateId, ct);
     }
 

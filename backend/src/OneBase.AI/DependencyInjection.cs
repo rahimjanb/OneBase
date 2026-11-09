@@ -114,6 +114,7 @@ public static class DependencyInjection
         // включён AI-рекрутер), оценка резюме, тексты объявлений; фото и сканы резюме читает модель.
         services.AddScoped<OneBase.Application.Recruitment.Telegram.IRecruiterAgent, OneBase.AI.Recruitment.RecruiterAgent>();
         services.AddScoped<OneBase.Application.Recruitment.ICandidateScorer, OneBase.AI.Recruitment.CandidateScoring>();
+        services.AddScoped<OneBase.Application.Recruitment.Documents.IResumeAnalyzer, OneBase.AI.Recruitment.ResumeAnalyzer>();
         services.AddScoped<OneBase.Application.Abstractions.IDocumentVisionReader, OneBase.AI.Documents.DocumentVisionReader>();
         // ИИ-агенты остальных отделов (помощники) и «Проверка» агента в настройках.
         services.AddScoped<OneBase.Application.Agents.IAssistantAgent, OneBase.AI.DialogAgents.AssistantAgent>();

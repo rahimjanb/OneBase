@@ -128,13 +128,45 @@ public sealed class RecruitmentController(RecruitmentService recruitment, IFileS
         return File(buffer, file.ContentType, file.FileName);
     }
 
+    /// <summary>
+    /// Просмотр в браузере (PDF, фото, текст) — тем же правом, что и скачивание; остальное (Word, RTF) — только скачать. Без кэширования; картинка
+    /// и текст — в «песочнице» (скрипты не выполняются).
+    /// </summary>
+    [HttpGet("resumes/{id:guid}/preview")]
+    public async Task<IActionResult> PreviewResume(Guid id, CancellationToken ct)
+    {
+        var file = await recruitment.DownloadResumeAsync(await ContextAsync(ct), id, ct);
+        if (file.ContentType == "application/octet-stream")
+        {
+            throw new FieldValidationException("Этот формат в браузере не открывается — скачайте файл.");
+        }
+
+        var buffer = new MemoryStream();
+        await storage.DownloadAsync(file.ObjectKey, buffer, ct);
+        buffer.Position = 0;
+        Response.Headers.XContentTypeOptions = "nosniff";
+        Response.Headers.CacheControl = "private, no-store";
+        if (file.ContentType != "application/pdf")
+        {
+            Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'";
+        }
+
+        Response.Headers.ContentDisposition = new System.Net.Mime.ContentDisposition { Inline = true, FileName = "document" + Path.GetExtension(file.FileName) }.ToString();
+        return File(buffer, file.ContentType);
+    }
+
     [HttpDelete("resumes/{id:guid}")]
     public async Task<CandidateCard> DeleteResume(Guid id, CancellationToken ct) => await recruitment.DeleteResumeAsync(await ContextAsync(ct), id, ct);
 
-    /// <summary>«Распознать снова»: фото или скан резюме читает AI (платный вызов — по кнопке HR).</summary>
+    /// <summary>«Распознать заново (AI)»: фото или скан читает AI заново, затем разбор (платные вызовы — по кнопке HR).</summary>
     [HttpPost("resumes/{id:guid}/read")]
     [EnableRateLimiting("ai")]
-    public async Task<CandidateCard> ReadResume(Guid id, CancellationToken ct) => await recruitment.ReadResumeAgainAsync(await ContextAsync(ct), id, ct);
+    public async Task<CandidateCard> ReadResume(Guid id, CancellationToken ct) => await recruitment.ReadResumeAgainAsync(await ContextAsync(ct), id, true, ct);
+
+    /// <summary>«Обработать заново»: скачать из Telegram (если ещё не скачан), прочитать текст и разобрать — в фоне.</summary>
+    [HttpPost("resumes/{id:guid}/reprocess")]
+    [EnableRateLimiting("ai")]
+    public async Task<CandidateCard> ReprocessResume(Guid id, CancellationToken ct) => await recruitment.ReadResumeAgainAsync(await ContextAsync(ct), id, false, ct);
 
     [HttpPost("candidates/{id:guid}/applications")]
     public async Task<CandidateCard> AddApplication(Guid id, ApplicationInput input, CancellationToken ct) =>

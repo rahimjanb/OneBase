@@ -18,8 +18,9 @@ namespace OneBase.Application.Recruitment;
 public sealed partial class RecruitmentService(
     IAppDbContext db,
     IFileStorage storage,
-    IDocumentTextExtractor extractor,
     IEnumerable<IDocumentVisionReader> vision,
+    Documents.ResumeDocumentProcessor documents,
+    LanguageDetectionService languages,
     UserNotifier notifier,
     RecruitmentExceptions exceptions,
     IAuditLogger audit,

@@ -10,14 +10,20 @@ using OneBase.Domain.Telegram;
 
 namespace OneBase.Application.Recruitment.Telegram;
 
-/// <summary>Ход AI-рекрутера: новое сообщение кандидата в диалоге HR (агент — OneBase.AI, этап 5).</summary>
+/// <summary>
+/// Ход AI-рекрутера: новое сообщение кандидата в диалоге HR (агент — OneBase.AI). FileOutcome — что с вложением: Accepted (принято, обрабатывается),
+/// Unsupported, TooBig, Limit; null — вложения нет или оно не документ.
+/// </summary>
 public sealed record RecruiterTurn(Guid AccountId, long PeerId, Guid ConversationId, Guid CandidateId, int MessageId, string Text, DateTimeOffset At,
-    string? FileName = null, Guid? ResumeId = null);
+    string? FileName = null, Guid? ResumeId = null, string? FileOutcome = null);
 
 /// <summary>AI-рекрутер: отвечает кандидату через очередь исходящих или передаёт диалог человеку. Без регистрации — HR отвечает сам.</summary>
 public interface IRecruiterAgent
 {
     Task ReplyAsync(RecruiterTurn turn, CancellationToken ct);
+
+    /// <summary>Резюме кандидата разобрано — продолжить разговор с учётом резюме (в диалоге, который ведёт AI).</summary>
+    Task DocumentReadyAsync(Guid resumeId, CancellationToken ct);
 }
 
 /// <summary>Правила Telegram для подбора: код вакансии, слова поиска работы, ссылка на сообщение.</summary>
@@ -92,7 +98,7 @@ public sealed class RecruitmentRouteClaim(IAppDbContext db) : ITelegramRouteClai
 public sealed class RecruitmentTelegramHandler(
     IAppDbContext db,
     RecruitmentService recruitment,
-    ITelegramGateway telegram,
+    Documents.ResumeDocumentProcessor documents,
     IEnumerable<IRecruiterAgent> agents,
     TimeProvider clock,
     ILogger<RecruitmentTelegramHandler> logger) : ITelegramDepartmentHandler
@@ -134,6 +140,7 @@ public sealed class RecruitmentTelegramHandler(
         }
 
         var candidateId = await CandidateAsync(conversationId, m, ct);
+        await recruitment.NoteLanguageAsync(candidateId, m.Text, ct); // язык и графика переписки — до ответа
         foreach (var number in RecruitmentTelegramRules.VacancyCodes(m.Text))
         {
             var vacancyId = await db.Vacancies.AsNoTracking().Where(v => v.Number == number).Select(v => (Guid?)v.Id).FirstOrDefaultAsync(ct);
@@ -143,11 +150,23 @@ public sealed class RecruitmentTelegramHandler(
             }
         }
 
+        // Вложение — только запись «получен» и задание скачать: ответ кандидату не ждёт ни скачивания, ни распознавания.
         Guid? resumeId = null;
+        string? fileOutcome = null;
         var attachment = m.File ?? m.Photo; // документ или фото (фото резюме читает AI)
         if (attachment is { } file)
         {
-            resumeId = await ResumeAsync(m, file, candidateId, ct);
+            try
+            {
+                var received = await documents.ReceiveTelegramAsync(candidateId, new Documents.TelegramDocument(m.AccountId, m.Chat.PeerId, m.MessageId, file.FileName,
+                    file.MimeType, file.Size), ct);
+                resumeId = received.ResumeId;
+                fileOutcome = received.Outcome == Documents.ReceiveOutcome.Ignored ? null : received.Outcome.ToString();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Подбор: вложение из Telegram {Message} не записано", m.MessageId);
+            }
         }
 
         await SaveMessageAsync(conversationId, m, TelegramMessageDirection.In, "candidate", attachment?.FileName, resumeId, ct);
@@ -157,7 +176,8 @@ public sealed class RecruitmentTelegramHandler(
 
         if (route.AutoReply && agents.FirstOrDefault() is { } agent)
         {
-            await agent.ReplyAsync(new RecruiterTurn(m.AccountId, m.Chat.PeerId, conversationId, candidateId, m.MessageId, m.Text, m.Date, attachment?.FileName, resumeId), ct);
+            await agent.ReplyAsync(new RecruiterTurn(m.AccountId, m.Chat.PeerId, conversationId, candidateId, m.MessageId, m.Text, m.Date, attachment?.FileName, resumeId,
+                fileOutcome), ct);
         }
     }
 
@@ -238,27 +258,6 @@ public sealed class RecruitmentTelegramHandler(
             .SetProperty(c => c.Kind, "candidate")
             .SetProperty(c => c.TelegramUserId, m.FromUserId), ct);
         return result.CandidateId;
-    }
-
-    /// <summary>Вложение — сразу из Telegram (позже его не скачать) и, если это резюме, — в резюме кандидата.</summary>
-    private async Task<Guid?> ResumeAsync(TelegramIncoming m, TelegramIncomingFile file, Guid candidateId, CancellationToken ct)
-    {
-        if (!RecruitmentRules.ResumeExtensions.Contains(Path.GetExtension(file.FileName)) || file.Size > RecruitmentRules.MaxResumeBytes)
-        {
-            return null;
-        }
-
-        try
-        {
-            var bytes = await telegram.DownloadAsync(m.AccountId, m.Chat.PeerId, m.MessageId, ct);
-            return bytes is null ? null
-                : await recruitment.AddResumeAsync(candidateId, new RecruitmentUpload(file.FileName, file.MimeType, bytes.Length, new MemoryStream(bytes)), "telegram", null, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Подбор: вложение из Telegram {Message} не сохранено как резюме", m.MessageId);
-            return null;
-        }
     }
 
     private async Task SaveMessageAsync(Guid conversationId, TelegramIncoming m, TelegramMessageDirection direction, string author, string? fileName, Guid? resumeId, CancellationToken ct)

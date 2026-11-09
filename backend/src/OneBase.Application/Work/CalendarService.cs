@@ -60,7 +60,8 @@ public sealed record CalendarEventView(
     bool ForEveryone,
     CalendarPerson? Organizer,
     IReadOnlyList<CalendarPerson> Participants,
-    bool CanEdit);
+    bool CanEdit,
+    string? ManagedBy = null);
 
 /// <summary>Что может пользователь в календаре: события отдела (его код) и всей компании.</summary>
 public sealed record CalendarAbilities(IReadOnlyList<CalendarDepartmentOption> Departments, bool CanAddForEveryone);
@@ -155,7 +156,19 @@ public sealed class CalendarService(IAppDbContext db, UserNotifier notifier, IAu
         return new CalendarEventView(e.Id, e.Title, e.Description, e.Kind, DateOnly.FromDateTime(start.DateTime), e.AllDay ? null : TimeOnly.FromDateTime(start.DateTime),
             e.AllDay || e.EndsAt is null ? null : TimeOnly.FromDateTime(e.EndsAt.Value.ToOffset(Offset).DateTime), e.AllDay, e.Location, e.Department?.Code,
             e.Department?.Name, e.ForEveryone, Person(e.CreatedBy),
-            e.Participants.Select(p => Person(p.User)).OfType<CalendarPerson>().OrderBy(p => p.Name).ToList(), CanEdit(ctx, e));
+            e.Participants.Select(p => Person(p.User)).OfType<CalendarPerson>().OrderBy(p => p.Name).ToList(), CanEdit(ctx, e) && !await InterviewAsync(id, ct),
+            await InterviewAsync(id, ct) ? "recruitment" : null);
+    }
+
+    /// <summary>Событие — отражение собеседования подбора: меняется только вместе с ним (HR → «Подбор» → «Собеседования»).</summary>
+    private Task<bool> InterviewAsync(Guid eventId, CancellationToken ct) => db.Interviews.AnyAsync(i => i.CalendarEventId == eventId, ct);
+
+    private async Task GuardInterviewAsync(Guid eventId, CancellationToken ct)
+    {
+        if (await InterviewAsync(eventId, ct))
+        {
+            throw new FieldConflictException("Это собеседование подбора — перенести или отменить его можно в HR → «Подбор» → «Собеседования»: так изменится и запись о собеседовании, и кандидату придёт сообщение.");
+        }
     }
 
     /// <summary>Кого можно пригласить: действующие пользователи по имени (до 30).</summary>
@@ -211,6 +224,8 @@ public sealed class CalendarService(IAppDbContext db, UserNotifier notifier, IAu
             throw new FieldForbiddenException("Менять событие может его автор или руководство.");
         }
 
+        await GuardInterviewAsync(id, ct);
+
         var (startsAt, endsAt, allDay) = (e.StartsAt, e.EndsAt, e.AllDay);
         var participants = await ApplyAsync(ctx, e, input, ct);
         var before = e.Participants.Select(p => p.UserId).ToHashSet();
@@ -249,6 +264,8 @@ public sealed class CalendarService(IAppDbContext db, UserNotifier notifier, IAu
         {
             throw new FieldForbiddenException("Удалить событие может его автор или руководство.");
         }
+
+        await GuardInterviewAsync(id, ct);
 
         db.CalendarEvents.Remove(e);
         await db.SaveChangesAsync(ct);

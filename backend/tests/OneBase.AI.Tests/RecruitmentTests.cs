@@ -299,7 +299,9 @@ public class RecruitmentTests(DataManagerDb fixture) : IClassFixture<DataManager
         using var _ = scope;
         var candidate = await service.CreateCandidateAsync(Hr(s), new CandidateInput("Сардор Алиев", null, null, null, [], "manual", null, null, null), default);
 
-        var card = await service.UploadResumeAsync(Hr(s), candidate.CandidateId, Upload("Aliev CV.pdf", Pdf("Sales representative, 5 years in FMCG"), "application/pdf"), default);
+        await service.UploadResumeAsync(Hr(s), candidate.CandidateId, Upload("Aliev CV.pdf", Pdf("Sales representative, 5 years in FMCG"), "application/pdf"), default);
+        await scope.ServiceProvider.GetRequiredService<OneBase.Application.Recruitment.Jobs.RecruitmentJobRunner>().DrainAsync(default); // текст — в фоне
+        var card = await service.CandidateAsync(Hr(s), candidate.CandidateId, default);
         var resume = Assert.Single(card.Resumes);
         Assert.True(resume.HasText);
         Assert.Contains("Sales representative, 5 years in FMCG", resume.TextPreview);
@@ -307,7 +309,9 @@ public class RecruitmentTests(DataManagerDb fixture) : IClassFixture<DataManager
         // Тот же файл ещё раз — нет; фото — сохраняется без текста; исполняемый файл — нет.
         await Assert.ThrowsAsync<FieldConflictException>(() => service.UploadResumeAsync(Hr(s), candidate.CandidateId,
             Upload("copy.pdf", Pdf("Sales representative, 5 years in FMCG"), "application/pdf"), default));
-        card = await service.UploadResumeAsync(Hr(s), candidate.CandidateId, Upload("photo.jpg", [0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3], "image/jpeg"), default);
+        await service.UploadResumeAsync(Hr(s), candidate.CandidateId, Upload("photo.jpg", [0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3], "image/jpeg"), default);
+        await scope.ServiceProvider.GetRequiredService<OneBase.Application.Recruitment.Jobs.RecruitmentJobRunner>().DrainAsync(default);
+        card = await service.CandidateAsync(Hr(s), candidate.CandidateId, default);
         Assert.Contains(card.Resumes, r => r.FileName == "photo.jpg" && !r.HasText && r.TextError!.Contains("Фото"));
         await Assert.ThrowsAsync<FieldValidationException>(() => service.UploadResumeAsync(Hr(s), candidate.CandidateId, Upload("cv.exe", "MZ"), default));
 

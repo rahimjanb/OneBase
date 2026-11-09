@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BadgeCheck, Download, Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { button, danger, field, primary } from "@/components/ai/form";
+import { CandidateDocuments } from "@/components/recruitment/Documents";
 import { CandidateExtras } from "@/components/recruitment/Flow";
 import { Badge, Card, ErrorText, Label, textarea, useAction } from "@/components/recruitment/ui";
 import { useT } from "@/i18n/client";
@@ -13,6 +14,9 @@ import {
   contactLabel,
   day,
   documentLabel,
+  LANGUAGE_CODES,
+  languageCodeLabel,
+  languageSourceLabel,
   recruitmentApi,
   sourceLabel,
   STAGES,
@@ -320,7 +324,12 @@ export function CandidateCardView({ ctx, id }: { ctx: RecruitmentContext; id: st
                 <button
                   className={button}
                   onClick={() => {
-                    setInfo({ fullName: c.fullName, city: c.city ?? "", language: c.language ?? "", notes: c.notes ?? "" });
+                    setInfo({
+                      fullName: c.fullName,
+                      city: c.city ?? "",
+                      language: c.languageInfo?.code && c.languageInfo.source !== "auto" ? c.languageInfo.code : "auto",
+                      notes: c.notes ?? "",
+                    });
                     setEditing(true);
                   }}
                 >
@@ -353,11 +362,14 @@ export function CandidateCardView({ ctx, id }: { ctx: RecruitmentContext; id: st
             <Label label="Город">
               <input className={field} value={info.city} onChange={(e) => setInfo({ ...info, city: e.target.value })} />
             </Label>
-            <Label label="Язык общения">
+            <Label label="Язык переписки">
               <select className={field} value={info.language} onChange={(e) => setInfo({ ...info, language: e.target.value })}>
-                <option value="">—</option>
-                <option value="ru">{t("Русский")}</option>
-                <option value="uz">{t("Узбекский")}</option>
+                <option value="auto">{t("По переписке (определяется сам)")}</option>
+                {LANGUAGE_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {t(languageCodeLabel[code])}
+                  </option>
+                ))}
               </select>
             </Label>
             <Label label="Заметка" className="sm:col-span-3">
@@ -369,7 +381,13 @@ export function CandidateCardView({ ctx, id }: { ctx: RecruitmentContext; id: st
                 disabled={!!busy || !info.fullName.trim()}
                 onClick={() =>
                   act("info", async () => {
-                    const card = await recruitmentApi.updateCandidate(c.id, { fullName: info.fullName, city: info.city || null, language: info.language || null, notes: info.notes || null });
+                    const card = await recruitmentApi.updateCandidate(c.id, {
+                      fullName: info.fullName,
+                      city: info.city || null,
+                      language: c.language,
+                      notes: info.notes || null,
+                      languageCode: info.language || "auto",
+                    });
                     setEditing(false);
                     return card;
                   })
@@ -386,8 +404,10 @@ export function CandidateCardView({ ctx, id }: { ctx: RecruitmentContext; id: st
           <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
             <dt className="text-ink-3">{t("Город")}</dt>
             <dd>{c.city ?? "—"}</dd>
-            <dt className="text-ink-3">{t("Язык общения")}</dt>
-            <dd>{c.language === "uz" ? t("Узбекский") : c.language === "ru" ? t("Русский") : "—"}</dd>
+            <dt className="text-ink-3">{t("Язык переписки")}</dt>
+            <dd>
+              <CandidateLanguage info={c.languageInfo} />
+            </dd>
             <dt className="text-ink-3">{t("Источники")}</dt>
             <dd>{c.sources.map((s) => t(sourceLabel[s.source] ?? s.source) + (s.note ? ` (${s.note})` : "")).join(", ") || "—"}</dd>
             <dt className="text-ink-3">{t("Данные удалятся")}</dt>
@@ -638,68 +658,28 @@ export function CandidateCardView({ ctx, id }: { ctx: RecruitmentContext; id: st
 
       <CandidateExtras ctx={ctx} card={c} />
 
-      <Card
-        title="Резюме"
-        actions={
-          manage && (
-            <label className={`${button} cursor-pointer`}>
-              {busy === "resume" ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-              {t("Загрузить")}
-              <input
-                type="file"
-                className="hidden"
-                accept=".pdf,.docx,.doc,.rtf,.odt,.txt,.jpg,.jpeg,.png"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (file) act("resume", () => recruitmentApi.uploadResume(c.id, file));
-                }}
-              />
-            </label>
-          )
-        }
-      >
-        {c.resumes.length === 0 && (
-          <p className="text-sm text-ink-3">{t("Резюме пока нет. PDF, DOCX, TXT или фото — текст извлекается для поиска и оценки; фото и сканы читает AI.")}</p>
-        )}
-        <ul className="space-y-3">
-          {c.resumes.map((r) => (
-            <li key={r.id} className="rounded-lg border border-line p-3 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium">{r.fileName}</span>
-                <span className="flex items-center gap-2 text-xs text-ink-3">
-                  {Math.ceil(r.sizeBytes / 1024)} {t("КБ")} · {t(sourceLabel[r.source] ?? r.source)} · {when(r.createdAt)}
-                  <a className="text-accent-strong hover:underline" href={recruitmentApi.resumeUrl(r.id)}>
-                    <Download className="inline size-4" /> {t("Скачать")}
-                  </a>
-                  {manage && (
-                    <button className="text-ink-3 hover:text-bad" title={t("Удалить")} onClick={() => act("resume", () => recruitmentApi.deleteResume(r.id))}>
-                      <Trash2 className="size-4" />
-                    </button>
-                  )}
-                </span>
-              </div>
-              {r.textPreview ? (
-                <details className="mt-1">
-                  <summary className="cursor-pointer text-xs text-ink-3">
-                    {t("Текст резюме")}
-                    {r.textByAi && <Badge className="ml-2 bg-accent-soft text-accent-strong">{t("распознал AI")}</Badge>}
-                    {r.documentType && r.documentType !== "resume" && <Badge className="ml-1">{t(documentLabel[r.documentType] ?? r.documentType)}</Badge>}
-                  </summary>
-                  <p className="mt-1 whitespace-pre-line text-xs text-ink-2">{r.textPreview}</p>
-                </details>
-              ) : (
-                r.textError && <p className="mt-1 text-xs text-warn">{t(r.textError)}</p>
-              )}
-              {manage && r.canReadAi && (!r.hasText || r.textByAi) && r.documentType !== "id_document" && (
-                <button className="mt-1 text-xs text-accent-strong hover:underline disabled:opacity-50" disabled={!!busy} onClick={() => act("read", () => recruitmentApi.readResume(r.id))}>
-                  {busy === "read" ? <Loader2 className="inline size-3 animate-spin" /> : null} {t(r.hasText ? "Распознать снова (AI)" : "Распознать (AI)")}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <CandidateDocuments ctx={ctx} card={c} onCard={setC} />
     </div>
+  );
+}
+
+/** Язык переписки: какой закреплён и кем; что показало последнее сообщение, если другое (с уверенностью). */
+function CandidateLanguage({ info }: { info: CandidateCard["languageInfo"] }) {
+  const t = useT();
+  if (!info?.code) return <span className="text-ink-3">{t("ещё не определён — кандидат не писал или писал коротко")}</span>;
+  const other = info.lastDetected && info.lastDetected !== info.code;
+  return (
+    <span>
+      {t(languageCodeLabel[info.code] ?? info.code)}
+      {info.source && <span className="text-ink-3"> · {t(languageSourceLabel[info.source] ?? info.source)}</span>}
+      {other && info.lastDetected && (
+        <span className="block text-xs text-ink-3">
+          {t("последнее сообщение — {lang}, уверенность {p}%: язык не сменился", {
+            lang: t(languageCodeLabel[info.lastDetected] ?? info.lastDetected),
+            p: Math.round((info.confidence ?? 0) * 100),
+          })}
+        </span>
+      )}
+    </span>
   );
 }

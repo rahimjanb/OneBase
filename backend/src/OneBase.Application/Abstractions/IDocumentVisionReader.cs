@@ -4,9 +4,12 @@ namespace OneBase.Application.Abstractions;
 /// Что модель прочитала в документе. DocumentType — resume, certificate (диплом, сертификат, справка), id_document (паспорт, ID-карта — текст
 /// не переписывается), other. Error — почему не прочитано (для пользователя); тогда Text — null.
 /// </summary>
-public sealed record VisionReading(string? Text, string DocumentType, string? Error, string? Model = null)
+/// <summary>Unavailable — модель не настроена или платные вызовы заблокированы: файл не виноват, распознавание просто недоступно.</summary>
+public sealed record VisionReading(string? Text, string DocumentType, string? Error, string? Model = null, bool Unavailable = false)
 {
     public static VisionReading Failed(string error) => new(null, "other", error);
+
+    public static VisionReading NotAvailable(string error) => new(null, "other", error, null, true);
 }
 
 /// <summary>

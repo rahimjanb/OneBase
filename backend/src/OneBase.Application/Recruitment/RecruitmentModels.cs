@@ -150,7 +150,8 @@ public sealed record CandidateInput(
     Guid? VacancyId,
     string? ConsentChannel);
 
-public sealed record CandidateUpdateInput(string FullName, string? City, string? Language, string? Notes);
+/// <summary>LanguageCode — язык переписки (ru-Cyrl, uz-Latn, uz-Cyrl или «auto» — по переписке); null — по-старому из Language (ru/uz).</summary>
+public sealed record CandidateUpdateInput(string FullName, string? City, string? Language, string? Notes, string? LanguageCode = null);
 
 /// <summary>Контакт при приёме кандидата: Verified — подтверждён источником (Telegram, с которого человек написал; контакт из отклика HH).</summary>
 public sealed record IntakeContact(CandidateContactKind Kind, string Value, bool Verified);
@@ -196,8 +197,14 @@ public sealed record ContactView(Guid Id, string Kind, string Value, bool Verifi
 
 public sealed record SourceView(string Source, string? ExternalId, string? Note, DateTimeOffset CreatedAt);
 
+/// <summary>
+/// Документ кандидата: статусы (Status — получен, сохранён, обрабатывается, готов, ошибка, отклонён; OcrStatus; AnalysisStatus), тип по содержимому,
+/// разбор (Profile — поля с доказательствами), сводка, вакансия отклика, можно ли открыть в браузере (CanPreview — PDF, фото, текст).
+/// </summary>
 public sealed record ResumeView(Guid Id, string FileName, long SizeBytes, string Source, DateTimeOffset CreatedAt, bool HasText, string? TextError, string? TextPreview,
-    bool TextByAi = false, string? DocumentType = null, bool CanReadAi = false);
+    bool TextByAi = false, string? DocumentType = null, bool CanReadAi = false, string Status = "Done", string OcrStatus = "NotNeeded",
+    string AnalysisStatus = "Skipped", string? DetectedType = null, string? ContentType = null, int? PageCount = null, string? ProcessingError = null,
+    string? Summary = null, Documents.ResumeProfile? Profile = null, string? VacancyCode = null, bool CanPreview = false, DateTimeOffset? ProcessedAt = null);
 
 public sealed record ApplicationEventView(string? From, string To, string? Comment, string? Actor, DateTimeOffset At);
 
@@ -234,7 +241,11 @@ public sealed record CandidateCard(
     IReadOnlyList<ResumeView> Resumes,
     IReadOnlyList<ApplicationView> Applications,
     IReadOnlyList<ConsentView> Consents,
-    IReadOnlyList<DuplicateView> Duplicates);
+    IReadOnlyList<DuplicateView> Duplicates,
+    CandidateLanguageView? LanguageInfo = null);
+
+/// <summary>Язык переписки: код (ru-Cyrl, uz-Latn, uz-Cyrl; null — ещё не понятен), кто выбрал (auto, candidate, hr), последнее определение и уверенность.</summary>
+public sealed record CandidateLanguageView(string? Code, string? Source, string? LastDetected, decimal? Confidence);
 
 public sealed record ApplicationInput(Guid VacancyId);
 

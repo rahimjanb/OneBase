@@ -254,7 +254,21 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Twin.TwinService>();
 
         // Подбор персонала: заявки, вакансии, кандидаты; срок хранения данных кандидатов — внутренняя служба (наружу не ходит).
+        services.AddSingleton<OneBase.Application.Recruitment.LanguageDetectionService>();
+        services.AddSingleton<OneBase.Application.Recruitment.Documents.IResumeTextReader, Recruitment.Documents.ResumeTextReader>();
         services.AddScoped<OneBase.Application.Recruitment.RecruitmentService>();
+        // Документы кандидатов и фоновые очереди подбора (hr.resume.*, hr.candidate.scoring, hr.interview.*).
+        services.AddScoped<OneBase.Application.Recruitment.Documents.ResumeDocumentProcessor>();
+        services.AddScoped<OneBase.Application.Recruitment.Jobs.RecruitmentJobQueue>();
+        services.AddSingleton<OneBase.Application.Recruitment.Jobs.RecruitmentJobRunner>();
+        services.AddScoped<OneBase.Application.Recruitment.Jobs.IRecruitmentJobHandler, OneBase.Application.Recruitment.Documents.ResumeDownloadJob>();
+        services.AddScoped<OneBase.Application.Recruitment.Jobs.IRecruitmentJobHandler, OneBase.Application.Recruitment.Documents.ResumeOcrJob>();
+        services.AddScoped<OneBase.Application.Recruitment.Jobs.IRecruitmentJobHandler, OneBase.Application.Recruitment.Documents.ResumeAnalysisJob>();
+        services.AddScoped<OneBase.Application.Recruitment.Jobs.IRecruitmentJobHandler, OneBase.Application.Recruitment.Documents.CandidateScoringJob>();
+        services.AddScoped<OneBase.Application.Recruitment.Jobs.IRecruitmentJobHandler, OneBase.Application.Recruitment.InterviewNotificationsJob>();
+        services.AddScoped<OneBase.Application.Recruitment.Jobs.IRecruitmentJobHandler, OneBase.Application.Recruitment.InterviewSchedulingJob>();
+        services.AddScoped<OneBase.Application.Recruitment.Jobs.IRecruitmentSweeper, OneBase.Application.Recruitment.InterviewSweeper>();
+        services.AddScoped<OneBase.Application.Recruitment.Documents.IInterviewInviter, OneBase.Application.Recruitment.InterviewInviter>();
         services.AddScoped<OneBase.Application.Recruitment.RecruitmentRetentionService>();
         services.AddHostedService<Recruitment.RecruitmentRetentionWorker>();
 
@@ -276,6 +290,11 @@ public static class DependencyInjection
         // Собеседования (календарь OneBase) и автоматика подбора: напоминания, касания, проверка номеров HR, автооценка — раз в 5 минут.
         services.AddScoped<OneBase.Application.Recruitment.InterviewService>();
         services.AddScoped<OneBase.Application.Recruitment.RecruitmentAutomation>();
+        if (isolation.AllowOutbound<Recruitment.RecruitmentJobWorker>("Подбор: скачивание и разбор резюме, приглашения на собеседования"))
+        {
+            services.AddHostedService<Recruitment.RecruitmentJobWorker>();
+        }
+
         if (isolation.AllowOutbound<Recruitment.RecruitmentAutomationWorker>("Подбор: напоминания кандидатам и автоматика"))
         {
             services.AddHostedService<Recruitment.RecruitmentAutomationWorker>();
@@ -313,6 +332,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Procurement.ProcurementArrivalService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementHomeService>();
         services.AddScoped<OneBase.Application.Production.ProductionRecipeService>();
+        services.AddScoped<OneBase.Application.Production.Import.RecipeImportService>();
         services.AddScoped<OneBase.Application.Production.ProductionOrderService>();
         services.AddScoped<OneBase.Application.Production.ProductionShiftService>();
         services.AddScoped<OneBase.Application.Production.ProductionAnalyticsService>();

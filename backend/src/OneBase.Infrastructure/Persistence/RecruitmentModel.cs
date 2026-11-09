@@ -59,6 +59,10 @@ internal static class RecruitmentModel
             e.Property(x => x.FullName).HasMaxLength(200);
             e.Property(x => x.City).HasMaxLength(100);
             e.Property(x => x.Language).HasMaxLength(8);
+            e.Property(x => x.PreferredScript).HasMaxLength(4);
+            e.Property(x => x.LastDetectedLanguage).HasMaxLength(8);
+            e.Property(x => x.LanguageConfidence).HasPrecision(3, 2);
+            e.Property(x => x.LanguageSource).HasMaxLength(12);
             e.Property(x => x.Notes).HasMaxLength(4000);
             e.HasIndex(x => x.LastActivityAt);
             e.HasIndex(x => x.RetentionFrom);
@@ -97,8 +101,31 @@ internal static class RecruitmentModel
             e.Property(x => x.Sha256).HasMaxLength(64);
             e.Property(x => x.TextError).HasMaxLength(500);
             e.Property(x => x.Source).HasMaxLength(16);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.OcrStatus).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.AnalysisStatus).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.DetectedType).HasMaxLength(8);
+            e.Property(x => x.ProcessingError).HasMaxLength(500);
+            e.Property(x => x.Profile).HasColumnType("jsonb");
+            e.Property(x => x.Summary).HasMaxLength(2000);
             e.HasOne<Candidate>().WithMany(c => c.Resumes).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
+            // Тот же файл у кандидата — один документ; файл, ещё не скачанный из Telegram (Sha256 = null), уникальности не мешает.
             e.HasIndex(x => new { x.CandidateId, x.Sha256 }).IsUnique();
+        });
+
+        b.Entity<RecruitmentJob>(e =>
+        {
+            e.ToTable("Jobs", Schema);
+            e.Property(x => x.Id).UseIdentityByDefaultColumn();
+            e.Property(x => x.Queue).HasMaxLength(40);
+            e.Property(x => x.Key).HasMaxLength(120);
+            e.Property(x => x.Payload).HasMaxLength(2000);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.LastError).HasMaxLength(1000);
+            e.HasIndex(x => new { x.Queue, x.Status, x.RunAfter });
+            e.HasIndex(x => x.RelatedId);
+            // Одно и то же задание не ставится дважды, пока не выполнено.
+            e.HasIndex(x => new { x.Queue, x.Key }).IsUnique().HasFilter("\"Status\" IN ('Pending', 'Running')");
         });
 
         b.Entity<CandidateApplication>(e =>
@@ -234,9 +261,45 @@ internal static class RecruitmentModel
             e.Property(x => x.Location).HasMaxLength(300);
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.ProposedSlotsJson).HasMaxLength(2000);
+            e.Property(x => x.Participants).HasMaxLength(2000);
+            e.Property(x => x.TimeZone).HasMaxLength(40).HasDefaultValue("Asia/Tashkent");
+            e.Property(x => x.MeetingUrl).HasMaxLength(500);
+            e.Property(x => x.CandidateConfirmation).HasConversion<string>().HasMaxLength(16).HasDefaultValue(CandidateConfirmation.Pending);
+            e.Property(x => x.CancelledBy).HasMaxLength(16);
+            e.Property(x => x.CancelReason).HasMaxLength(500);
+            e.Property(x => x.Version).IsRowVersion();
             e.HasOne<CandidateApplication>().WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.Status, x.StartsAt });
             e.HasIndex(x => x.CandidateId);
+            // Одно событие календаря — одно собеседование: повтор подтверждения не создаёт второго события.
+            e.HasIndex(x => x.CalendarEventId).IsUnique().HasFilter("\"CalendarEventId\" IS NOT NULL");
+        });
+
+        b.Entity<VacancyInterviewSettings>(e =>
+        {
+            e.ToTable("InterviewSettings", Schema);
+            e.HasKey(x => x.VacancyId);
+            e.HasOne<Vacancy>().WithOne().HasForeignKey<VacancyInterviewSettings>(x => x.VacancyId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.Days).HasMaxLength(20);
+            e.Property(x => x.Breaks).HasMaxLength(200);
+            e.Property(x => x.Format).HasMaxLength(16);
+            e.Property(x => x.Address).HasMaxLength(300);
+            e.Property(x => x.MeetingUrl).HasMaxLength(500);
+            e.Property(x => x.TimeZone).HasMaxLength(40);
+            e.Property(x => x.Instructions).HasMaxLength(1000);
+        });
+
+        b.Entity<InterviewFeedback>(e =>
+        {
+            e.ToTable("InterviewFeedback", Schema);
+            e.Property(x => x.Result).HasConversion<string>().HasMaxLength(24);
+            e.Property(x => x.NextStage).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Strengths).HasMaxLength(2000);
+            e.Property(x => x.Weaknesses).HasMaxLength(2000);
+            e.Property(x => x.Comments).HasMaxLength(4000);
+            e.Property(x => x.Recommendation).HasMaxLength(2000);
+            e.HasOne<Interview>().WithMany().HasForeignKey(x => x.InterviewId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.InterviewId, x.AuthorId }).IsUnique();
         });
 
         b.Entity<RecruitmentException>(e =>

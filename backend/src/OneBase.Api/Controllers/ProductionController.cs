@@ -4,6 +4,7 @@ using OneBase.Api.Auth;
 using OneBase.Application.Field;
 using OneBase.Application.Procurement;
 using OneBase.Application.Production;
+using OneBase.Application.Production.Import;
 using OneBase.Application.Reports;
 
 namespace OneBase.Api.Controllers;
@@ -19,6 +20,7 @@ namespace OneBase.Api.Controllers;
 public sealed class ProductionController(
     ProcurementRequestService requests,
     ProductionRecipeService recipes,
+    RecipeImportService imports,
     ProductionOrderService orders,
     ProductionShiftService shifts,
     ProductionAnalyticsService analytics,
@@ -38,6 +40,51 @@ public sealed class ProductionController(
     [HttpGet("recipes")]
     public async Task<ProductionRecipeList> Recipes([FromQuery] string? q, [FromQuery] string? status, CancellationToken ct) =>
         await recipes.ListAsync(await ContextAsync(ct), q, status, ct);
+
+    // ---------- Импорт техкарт из Excel ----------
+
+    [HttpGet("recipe-imports")]
+    public async Task<IReadOnlyList<RecipeImportListRow>> RecipeImports(CancellationToken ct) => await imports.ListAsync(await ContextAsync(ct), ct);
+
+    /// <summary>Загрузить .xlsx: тот же файл (SHA-256) — та же загрузка (existing = true), новая не создаётся.</summary>
+    [HttpPost("recipe-imports")]
+    [RequestSizeLimit(RecipeImportService.MaxFileBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = RecipeImportService.MaxFileBytes + 1024 * 1024)]
+    public async Task<RecipeImportUploaded> UploadRecipeImport(IFormFile file, CancellationToken ct)
+    {
+        await using var stream = file.OpenReadStream();
+        return await imports.UploadAsync(await ContextAsync(ct), file.FileName, stream, ct);
+    }
+
+    [HttpGet("recipe-imports/{id:guid}")]
+    public async Task<RecipeImportView> RecipeImport(Guid id, CancellationToken ct) => await imports.GetAsync(await ContextAsync(ct), id, ct);
+
+    [HttpGet("recipe-imports/{id:guid}/missing")]
+    public async Task<IReadOnlyList<RecipeImportMissingRow>> RecipeImportMissing(Guid id, CancellationToken ct) =>
+        await imports.MissingAsync(await ContextAsync(ct), id, ct);
+
+    [HttpGet("recipe-imports/{id:guid}/recipes/{recipeId:guid}")]
+    public async Task<RecipeImportRecipeView> RecipeImportRecipe(Guid id, Guid recipeId, CancellationToken ct) =>
+        await imports.RecipeAsync(await ContextAsync(ct), id, recipeId, ct);
+
+    [HttpPut("recipe-imports/{id:guid}/recipes/{recipeId:guid}")]
+    public async Task<RecipeImportRecipeView> UpdateRecipeImportRecipe(Guid id, Guid recipeId, RecipeImportRecipeInput input, CancellationToken ct) =>
+        await imports.UpdateRecipeAsync(await ContextAsync(ct), id, recipeId, input, ct);
+
+    [HttpPut("recipe-imports/{id:guid}/lines/{lineId:guid}")]
+    public async Task<RecipeImportRecipeView> DecideRecipeImportLine(Guid id, Guid lineId, RecipeImportLineInput input, CancellationToken ct) =>
+        await imports.DecideLineAsync(await ContextAsync(ct), id, lineId, input, ct);
+
+    [HttpPost("recipe-imports/{id:guid}/map")]
+    public async Task<RecipeImportView> MapRecipeImportArticle(Guid id, RecipeImportMapInput input, CancellationToken ct) =>
+        await imports.MapArticleAsync(await ContextAsync(ct), id, input, ct);
+
+    [HttpPost("recipe-imports/{id:guid}/rematch")]
+    public async Task<RecipeImportView> RematchRecipeImport(Guid id, CancellationToken ct) => await imports.RematchAsync(await ContextAsync(ct), id, ct);
+
+    [HttpPost("recipe-imports/{id:guid}/apply")]
+    public async Task<RecipeImportApplyResult> ApplyRecipeImport(Guid id, RecipeImportApplyInput input, CancellationToken ct) =>
+        await imports.ApplyAsync(await ContextAsync(ct), id, input, ct);
 
     [HttpGet("recipes/form")]
     public async Task<ProductionRecipeForm> RecipeForm(CancellationToken ct) => await recipes.FormAsync(await ContextAsync(ct), ct);

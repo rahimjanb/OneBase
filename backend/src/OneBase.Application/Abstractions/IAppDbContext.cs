@@ -163,6 +163,10 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Production.ProductionShiftMaterial> ProductionShiftMaterials { get; }
     DbSet<OneBase.Domain.Production.ProductionOrder> ProductionOrders { get; }
     DbSet<OneBase.Domain.Production.ProductionOrderLine> ProductionOrderLines { get; }
+    DbSet<OneBase.Domain.Production.ProductionRecipeImport> ProductionRecipeImports { get; }
+    DbSet<OneBase.Domain.Production.ProductionRecipeImportRecipe> ProductionRecipeImportRecipes { get; }
+    DbSet<OneBase.Domain.Production.ProductionRecipeImportLine> ProductionRecipeImportLines { get; }
+    DbSet<OneBase.Domain.Production.ProductionRecipeImportItemMap> ProductionRecipeImportItemMaps { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementStockImport> ProcurementStockImports { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementStockImportRow> ProcurementStockImportRows { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementTenderItem> ProcurementTenderItems { get; }
@@ -228,6 +232,15 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Recruitment.CandidateContact> CandidateContacts { get; }
     DbSet<OneBase.Domain.Recruitment.CandidateSource> CandidateSources { get; }
     DbSet<OneBase.Domain.Recruitment.CandidateResume> CandidateResumes { get; }
+    DbSet<OneBase.Domain.Recruitment.RecruitmentJob> RecruitmentJobs { get; }
+    DbSet<OneBase.Domain.Recruitment.VacancyInterviewSettings> VacancyInterviewSettings { get; }
+    DbSet<OneBase.Domain.Recruitment.InterviewFeedback> InterviewFeedback { get; }
+
+    /// <summary>
+    /// Транзакция с блокировками PostgreSQL на ключи (advisory, до конца транзакции, по возрастанию ключей — без взаимных блокировок): запись
+    /// собеседований без двойного бронирования, даже если серверов OneBase несколько. Без CommitAsync — откат.
+    /// </summary>
+    Task<IAppTransaction> LockedTransactionAsync(IReadOnlyCollection<long> keys, CancellationToken ct);
     DbSet<OneBase.Domain.Recruitment.CandidateApplication> CandidateApplications { get; }
     DbSet<OneBase.Domain.Recruitment.ApplicationEvent> ApplicationEvents { get; }
     DbSet<OneBase.Domain.Recruitment.CandidateConsent> CandidateConsents { get; }

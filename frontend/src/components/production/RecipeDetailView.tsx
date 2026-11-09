@@ -431,6 +431,11 @@ export function RecipeDetailView({ recipe, warehouses, base }: { recipe: RecipeD
                   <Fact label="Заданий на выпуск">{recipe.orders}</Fact>
                   <Fact label="Создана">{stampRu(recipe.createdAt)}</Fact>
                 </dl>
+                {!staged && recipe.comment?.includes("Требуется распределение по этапам технологом") && (
+                  <p className="mt-2 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
+                    {t("Импортирована из Excel: состав без этапов. Распределите компоненты по этапам (замес, выпечка, начинка, глазурь, упаковка…) — в черновике или новой версии.")}
+                  </p>
+                )}
                 {recipe.comment && <p className="mt-2 whitespace-pre-line rounded-lg bg-muted px-3 py-2 text-sm text-ink-2">{recipe.comment}</p>}
               </section>
 

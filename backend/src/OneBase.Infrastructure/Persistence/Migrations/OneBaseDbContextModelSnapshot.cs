@@ -7231,6 +7231,356 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeImport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("AppliedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Sheets")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionRecipeImports");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("FileHash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionRecipeImports_FileHash");
+
+                    b.ToTable("RecipeImports", "production");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeImportItemMap", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Article")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionRecipeImportItemMaps");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("Article", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionRecipeImportItemMaps_Article_Name");
+
+                    b.ToTable("RecipeImportItemMaps", "production");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeImportLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Article")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Cell")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DecidedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("DecisionComment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Formula")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("ImportRecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal?>("ManualValue")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Match")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Raw")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Row")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Text")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("Value")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Weight")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionRecipeImportLines");
+
+                    b.HasIndex("Article")
+                        .HasDatabaseName("IX_ProductionRecipeImportLines_Article");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("ImportRecipeId", "Row")
+                        .HasDatabaseName("IX_ProductionRecipeImportLines_ImportRecipeId_Row");
+
+                    b.ToTable("RecipeImportLines", "production");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeImportRecipe", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("AppliedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Article")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("BaseLabel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal?>("BaseQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("BaseUnit")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Column")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ExistingRecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Fingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("GroupName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("HeaderRow")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ImportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Include")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSemiFinished")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Issues")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<long?>("LinkoProductId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("LinkoSuggestedId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("LossCell")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("LossRaw")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("OutputItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Sheet")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceKey")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TotalCell")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TotalFormula")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TotalRaw")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ProductionRecipeImportRecipes");
+
+                    b.HasIndex("OutputItemId");
+
+                    b.HasIndex("RecipeId")
+                        .HasDatabaseName("IX_ProductionRecipeImportRecipes_RecipeId");
+
+                    b.HasIndex("SourceKey")
+                        .HasDatabaseName("IX_ProductionRecipeImportRecipes_SourceKey");
+
+                    b.HasIndex("ImportId", "SourceKey", "Column")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionRecipeImportRecipes_ImportId_SourceKey_Column");
+
+                    b.ToTable("RecipeImportRecipes", "production");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeLine", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7773,12 +8123,28 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
 
+                    b.Property<decimal?>("LanguageConfidence")
+                        .HasPrecision(3, 2)
+                        .HasColumnType("numeric(3,2)");
+
+                    b.Property<string>("LanguageSource")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
                     b.Property<DateTimeOffset>("LastActivityAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastDetectedLanguage")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("PreferredScript")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
 
                     b.Property<DateTimeOffset?>("RetentionFrom")
                         .HasColumnType("timestamp with time zone");
@@ -7999,6 +8365,14 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AnalysisStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("ApplicationId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("CandidateId")
                         .HasColumnType("uuid");
 
@@ -8009,6 +8383,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DetectedType")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
 
                     b.Property<string>("DocumentType")
                         .HasColumnType("text");
@@ -8023,8 +8401,25 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
-                    b.Property<string>("Sha256")
+                    b.Property<string>("OcrStatus")
                         .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("PageCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProcessingError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Profile")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Sha256")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -8035,6 +8430,24 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid?>("TelegramAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("TelegramMessageId")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("TelegramPeerId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("Text")
                         .HasColumnType("text");
@@ -8382,8 +8795,29 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CalendarEventId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CancelledBy")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("CandidateConfirmation")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Pending");
+
                     b.Property<Guid>("CandidateId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset?>("ConfirmedAt")
                         .HasColumnType("timestamp with time zone");
@@ -8402,9 +8836,26 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<DateTimeOffset?>("HoldUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("InterviewerId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Location")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
+
+                    b.Property<string>("MeetingUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Participants")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset?>("PreviousStartsAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ProposedSlotsJson")
                         .HasMaxLength(2000)
@@ -8421,21 +8872,101 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("Asia/Tashkent");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("VacancyId")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ApplicationId");
+
+                    b.HasIndex("CalendarEventId")
+                        .IsUnique()
+                        .HasFilter("\"CalendarEventId\" IS NOT NULL");
 
                     b.HasIndex("CandidateId");
 
                     b.HasIndex("Status", "StartsAt");
 
                     b.ToTable("Interviews", "recruitment");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Recruitment.InterviewFeedback", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApplicationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comments")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int?>("Communication")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InterviewId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NextStage")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("Professional")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Recommendation")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("Strengths")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int?>("Technical")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Weaknesses")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InterviewId", "AuthorId")
+                        .IsUnique();
+
+                    b.ToTable("InterviewFeedback", "recruitment");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Recruitment.RecruitmentConsentText", b =>
@@ -8522,12 +9053,80 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("Exceptions", "recruitment");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Recruitment.RecruitmentJob", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Payload")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Queue")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("RelatedId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("RunAfter")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RelatedId");
+
+                    b.HasIndex("Queue", "Key")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN ('Pending', 'Running')");
+
+                    b.HasIndex("Queue", "Status", "RunAfter");
+
+                    b.ToTable("Jobs", "recruitment");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Recruitment.RecruitmentSettings", b =>
                 {
                     b.Property<int>("Id")
                         .HasColumnType("integer");
 
                     b.Property<bool>("AiEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("AnalyzeResumes")
                         .HasColumnType("boolean");
 
                     b.Property<string>("AssistantName")
@@ -8803,6 +9402,71 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status", "CreatedAt");
 
                     b.ToTable("Vacancies", "recruitment");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Recruitment.VacancyInterviewSettings", b =>
+                {
+                    b.Property<Guid>("VacancyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Breaks")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<TimeOnly?>("DayEnd")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<TimeOnly?>("DayStart")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<string>("Days")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("DurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Format")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Instructions")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("InterviewerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("InviteMinScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxAdvanceDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MeetingUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("MinNoticeHours")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TimeZone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("VacancyId");
+
+                    b.ToTable("InterviewSettings", "recruitment");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Recruitment.VacancyInterviewer", b =>
@@ -13884,6 +14548,66 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Technologist");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeImport", b =>
+                {
+                    b.HasOne("OneBase.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionRecipeImports_Users_CreatedById");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeImportItemMap", b =>
+                {
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", null)
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionRecipeImportItemMaps_Items_ItemId");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeImportLine", b =>
+                {
+                    b.HasOne("OneBase.Domain.Production.ProductionRecipeImportRecipe", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("ImportRecipeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionRecipeImportLines_Recipes_ImportRecipeId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", null)
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProductionRecipeImportLines_Items_ItemId");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeImportRecipe", b =>
+                {
+                    b.HasOne("OneBase.Domain.Production.ProductionRecipeImport", "Import")
+                        .WithMany("Recipes")
+                        .HasForeignKey("ImportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionRecipeImportRecipes_Imports_ImportId");
+
+                    b.HasOne("OneBase.Domain.Procurement.ProcurementItem", null)
+                        .WithMany()
+                        .HasForeignKey("OutputItemId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProductionRecipeImportRecipes_Items_OutputItemId");
+
+                    b.HasOne("OneBase.Domain.Production.ProductionRecipe", null)
+                        .WithMany()
+                        .HasForeignKey("RecipeId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_ProductionRecipeImportRecipes_Recipes_RecipeId");
+
+                    b.Navigation("Import");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeLine", b =>
                 {
                     b.HasOne("OneBase.Domain.Procurement.ProcurementItem", "Item")
@@ -14137,6 +14861,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Recruitment.InterviewFeedback", b =>
+                {
+                    b.HasOne("OneBase.Domain.Recruitment.Interview", null)
+                        .WithMany()
+                        .HasForeignKey("InterviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("OneBase.Domain.Recruitment.Vacancy", b =>
                 {
                     b.HasOne("OneBase.Domain.Identity.Department", "Department")
@@ -14151,6 +14884,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Recruitment.VacancyInterviewSettings", b =>
+                {
+                    b.HasOne("OneBase.Domain.Recruitment.Vacancy", null)
+                        .WithOne()
+                        .HasForeignKey("OneBase.Domain.Recruitment.VacancyInterviewSettings", "VacancyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("OneBase.Domain.Recruitment.VacancyInterviewer", b =>
@@ -14790,6 +15532,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Lines");
 
                     b.Navigation("Stages");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeImport", b =>
+                {
+                    b.Navigation("Recipes");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Production.ProductionRecipeImportRecipe", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Production.ProductionShift", b =>

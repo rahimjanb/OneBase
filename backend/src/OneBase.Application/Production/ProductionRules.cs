@@ -11,6 +11,7 @@ public static partial class ProductionRules
 {
     public const string OrderPrefix = "PRD";
     public const string RecipeDoc = "recipe";
+    public const string RecipeImportDoc = "recipe_import";
     public const string OrderDoc = "production_order";
     public const int MaxLines = 100;
     public const decimal MaxQuantity = 1_000_000_000m;

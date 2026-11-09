@@ -194,6 +194,13 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
         await handler.HandleAsync(m, route, default);
     }
 
+    /// <summary>Документы обрабатываются в фоне: выполнить очереди и перечитать карточку.</summary>
+    private async Task<CandidateCard> ProcessedAsync(RecruitmentService service, RecruitmentContext hr, Guid candidateId)
+    {
+        await fixture.Services.GetRequiredService<OneBase.Application.Recruitment.Jobs.RecruitmentJobRunner>().DrainAsync(default);
+        return await service.CandidateAsync(hr, candidateId, default);
+    }
+
     private static async Task<DialogAgent> SupplyAgentAsync(IServiceProvider sp, AgentAccess access, Action<DialogAgent>? configure = null)
     {
         var view = await sp.GetRequiredService<DialogAgentService>().CreateAsync(access, new AgentCreateInput("supply", DialogAgentKinds.Assistant, "Снабжение"), default);
@@ -227,27 +234,33 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
             Assert.Equal("image/jpeg", file.MediaType);
             return "{\"document_type\":\"resume\",\"text\":\"Нодира Алиева. Бухгалтер, 7 лет. 1С, Excel.\"}";
         });
-        var card = await service.UploadResumeAsync(hr, candidate.CandidateId, Upload("cv.jpg", [0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3], "image/jpeg"), default);
+        await service.UploadResumeAsync(hr, candidate.CandidateId, Upload("cv.jpg", [0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3], "image/jpeg"), default);
+        var card = await ProcessedAsync(service, hr, candidate.CandidateId);
         var photo = card.Resumes.Single(r => r.FileName == "cv.jpg");
         Assert.True(photo.HasText && photo.TextByAi);
         Assert.Contains("Бухгалтер, 7 лет", photo.TextPreview);
-        Assert.Equal("hr.resume.read", fixture.Gateway.Calls[^1].Options.Context.Purpose);
+        Assert.Contains(fixture.Gateway.Calls, c => c.Options.Context.Purpose == "hr.resume.read");
 
         // PDF с текстовым слоем — без модели; скан (PDF без текста) — модель читает документ application/pdf.
         var calls = fixture.Gateway.Calls.Count;
         await service.UploadResumeAsync(hr, candidate.CandidateId, Upload("cv.pdf", RecruitmentTests.Pdf("Accountant with 7 years of experience in 1C and Excel, IFRS reports, tax audits and payroll for FMCG distributors"), "application/pdf"), default);
-        Assert.Equal(calls, fixture.Gateway.Calls.Count);
+        fixture.Gateway.Script.Enqueue(_ => "{\"summary\":\"Бухгалтер\"}"); // разбор резюме (поля) — после текста
+        await ProcessedAsync(service, hr, candidate.CandidateId);
+        Assert.Equal(calls + 1, fixture.Gateway.Calls.Count);
+        Assert.Equal("hr.resume.analysis", fixture.Gateway.Calls[^1].Options.Context.Purpose); // текстовый слой — без OCR моделью
         fixture.Gateway.Script.Enqueue(m =>
         {
             Assert.Equal(LlmAttachment.Pdf, Assert.Single(m[^1].Attachments!).MediaType);
             return "{\"document_type\":\"certificate\",\"text\":\"Диплом. Ташкентский финансовый институт, 2015.\"}";
         });
-        card = await service.UploadResumeAsync(hr, candidate.CandidateId, Upload("diploma.pdf", RecruitmentTests.Pdf(" "), "application/pdf"), default);
+        await service.UploadResumeAsync(hr, candidate.CandidateId, Upload("diploma.pdf", RecruitmentTests.Pdf(" "), "application/pdf"), default);
+        card = await ProcessedAsync(service, hr, candidate.CandidateId);
         Assert.Contains("финансовый институт", card.Resumes.Single(r => r.FileName == "diploma.pdf").TextPreview);
 
         // Паспорт — текст не сохраняется.
         fixture.Gateway.Script.Enqueue(_ => "{\"document_type\":\"id_document\",\"text\":\"AA1234567\"}");
-        card = await service.UploadResumeAsync(hr, candidate.CandidateId, Upload("passport.png", [0x89, 0x50, 0x4E, 0x47, 9], "image/png"), default);
+        await service.UploadResumeAsync(hr, candidate.CandidateId, Upload("passport.png", [0x89, 0x50, 0x4E, 0x47, 9], "image/png"), default);
+        card = await ProcessedAsync(service, hr, candidate.CandidateId);
         var passport = card.Resumes.Single(r => r.FileName == "passport.png");
         Assert.False(passport.HasText);
         Assert.Equal("id_document", passport.DocumentType);
@@ -255,7 +268,8 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
         // Распознавание выключено в настройках подбора — модель не вызывается, причина видна HR.
         await db.RecruitmentSettings.ExecuteUpdateAsync(u => u.SetProperty(s => s.ReadScans, false));
         calls = fixture.Gateway.Calls.Count;
-        card = await service.UploadResumeAsync(hr, candidate.CandidateId, Upload("cv2.jpg", [0xFF, 0xD8, 0xFF, 0xE0, 7], "image/jpeg"), default);
+        await service.UploadResumeAsync(hr, candidate.CandidateId, Upload("cv2.jpg", [0xFF, 0xD8, 0xFF, 0xE0, 7], "image/jpeg"), default);
+        card = await ProcessedAsync(service, hr, candidate.CandidateId);
         Assert.Equal(calls, fixture.Gateway.Calls.Count);
         Assert.Contains("Распознавать фото и сканы", card.Resumes.Single(r => r.FileName == "cv2.jpg").TextError);
     }

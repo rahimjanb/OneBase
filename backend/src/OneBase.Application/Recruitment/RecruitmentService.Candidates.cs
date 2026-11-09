@@ -9,8 +9,9 @@ namespace OneBase.Application.Recruitment;
 
 public sealed partial class RecruitmentService
 {
+    /// <summary>Типы, которые браузер может показать сам (просмотр в карточке); остальное — только скачать.</summary>
     private static readonly HashSet<string> SafeTypes = new(StringComparer.OrdinalIgnoreCase)
-        { "application/pdf", "image/png", "image/jpeg", "text/plain" };
+        { "application/pdf", "image/png", "image/jpeg", "image/webp", "text/plain" };
 
     // ---------- Приём кандидата (вручную, HH, Telegram) ----------
 
@@ -182,6 +183,44 @@ public sealed partial class RecruitmentService
         await AddConsentAsync(candidateId, channel, null, ct);
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.Agent, "recruiter", "recruitment.consent.recorded", nameof(Candidate), candidateId.ToString(), new { channel, byCandidate = true }, ct);
+        await documents.ReleaseConsentAsync(candidateId, ct); // документы, ждавшие согласия, — распознать и разобрать
+    }
+
+    /// <summary>
+    /// Язык переписки после сообщения кандидата (<see cref="LanguageDetectionService.Decide"/>): короткое и неоднозначное сообщение язык не
+    /// меняет; меняют явная просьба, длинное уверенное сообщение или два уверенных подряд. Возвращает язык, на котором отвечать (null — ещё
+    /// не понятен).
+    /// </summary>
+    public async Task<CandidateLang?> NoteLanguageAsync(Guid candidateId, string? text, CancellationToken ct)
+    {
+        var c = await db.Candidates.FirstOrDefaultAsync(x => x.Id == candidateId, ct);
+        if (c is null)
+        {
+            return null;
+        }
+
+        var current = CandidateLanguages.Of(c.Language, c.PreferredScript);
+        var decision = languages.Decide(current, c.LanguageSource, c.LastDetectedLanguage, (double?)c.LanguageConfidence, text);
+        if (decision.Detected.Lang is not null)
+        {
+            // Неоднозначное сообщение («ok», «1», имя латиницей) прошлое определение не трогает: ни подтверждает, ни сбивает.
+            c.LastDetectedLanguage = decision.Detected.Code;
+            c.LanguageConfidence = (decimal)decision.Detected.Confidence;
+        }
+
+        if (decision.Changed && decision.Preferred is { } preferred)
+        {
+            (c.Language, c.PreferredScript) = CandidateLanguages.Fields(preferred);
+            c.LanguageSource = decision.Source;
+            await db.SaveChangesAsync(ct);
+            await audit.LogAsync(ActorType.System, "recruitment", "recruitment.candidate.language", nameof(Candidate), c.Id.ToString(),
+                new { from = current is { } f ? CandidateLanguages.Code(f) : null, to = CandidateLanguages.Code(preferred), source = decision.Source,
+                    confidence = decision.Detected.Confidence }, ct);
+            return preferred;
+        }
+
+        await db.SaveChangesAsync(ct);
+        return decision.Preferred ?? current;
     }
 
     public Task<bool> HasConsentAsync(Guid candidateId, CancellationToken ct) =>
@@ -422,7 +461,11 @@ public sealed partial class RecruitmentService
             c.Sources.OrderBy(x => x.CreatedAt).Select(x => new SourceView(x.Source, x.ExternalId, x.Note, x.CreatedAt)).ToList(),
             c.Resumes.OrderByDescending(x => x.CreatedAt).Select(x => new ResumeView(x.Id, x.FileName, x.SizeBytes, x.Source, x.CreatedAt, !string.IsNullOrEmpty(x.Text),
                 x.TextError, x.Text is { Length: > 0 } t ? (t.Length <= 1500 ? t : t[..1500] + "…") : null, x.TextByAi, x.DocumentType,
-                vision.FirstOrDefault() is { } reader && reader.Supports(Path.GetExtension(x.FileName)))).ToList(),
+                vision.FirstOrDefault() is { } reader && x.DetectedType is { } dt && reader.Supports("." + Documents.ResumeDocumentProcessor.Extension(dt))
+                && x.Status != DocumentStatus.Received && x.Status != DocumentStatus.Rejected,
+                x.Status.ToString(), x.OcrStatus.ToString(), x.AnalysisStatus.ToString(), x.DetectedType, x.ContentType, x.PageCount, x.ProcessingError, x.Summary,
+                Documents.ResumeProfiles.Parse(x.Profile), applications.FirstOrDefault(a => a.Id == x.ApplicationId)?.Vacancy?.Code,
+                x.Sha256 is not null && SafeTypes.Contains(x.ContentType), x.ProcessedAt)).ToList(),
             applications.Select(a => new ApplicationView(a.Id, a.VacancyId, a.Vacancy?.Code ?? "—", a.Vacancy?.Title ?? "—", a.Vacancy?.Status.ToString() ?? "—",
                 a.Stage.ToString(), a.Source, a.RejectReason, a.StageChangedAt,
                 events.Where(e => e.ApplicationId == a.Id).Select(e => new ApplicationEventView(e.FromStage?.ToString(), e.ToStage.ToString(), e.Comment,
@@ -433,7 +476,9 @@ public sealed partial class RecruitmentService
             {
                 var other = d.CandidateId == id ? d.OtherCandidateId : d.CandidateId;
                 return new DuplicateView(d.Id, other, others.GetValueOrDefault(other) ?? "—", d.Kind.ToString(), d.Value);
-            }).ToList());
+            }).ToList(),
+            new CandidateLanguageView(CandidateLanguages.Of(c.Language, c.PreferredScript) is { } lang ? CandidateLanguages.Code(lang) : null, c.LanguageSource,
+                c.LastDetectedLanguage, c.LanguageConfidence));
     }
 
     public async Task<IntakeResult> CreateCandidateAsync(RecruitmentContext ctx, CandidateInput input, CancellationToken ct)
@@ -462,7 +507,30 @@ public sealed partial class RecruitmentService
 
         candidate.FullName = Required(input.FullName, 200, "имя кандидата");
         candidate.City = Clean(input.City, 100);
-        candidate.Language = language;
+        if (input.LanguageCode is { } code)
+        {
+            // Язык переписки выбрал сотрудник — по переписке он больше не меняется (только явной просьбой кандидата); «auto» — снова по переписке.
+            if (code == "auto")
+            {
+                candidate.LanguageSource = "auto";
+            }
+            else if (CandidateLanguages.FromCode(code) is { } chosen)
+            {
+                (candidate.Language, candidate.PreferredScript) = CandidateLanguages.Fields(chosen);
+                candidate.LanguageSource = "hr";
+            }
+            else
+            {
+                throw new FieldValidationException("Язык переписки: русский, узбекский (латиница), узбекский (кириллица) или «по переписке».");
+            }
+        }
+        else if (language != candidate.Language)
+        {
+            candidate.Language = language;
+            candidate.PreferredScript = language switch { "ru" => "Cyrl", "uz" => candidate.PreferredScript ?? "Latn", _ => null };
+            candidate.LanguageSource = language is null ? null : "hr";
+        }
+
         candidate.Notes = Clean(input.Notes, 4000);
         candidate.UpdatedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
@@ -514,191 +582,95 @@ public sealed partial class RecruitmentService
         return await CandidateAsync(ctx, id, ct);
     }
 
-    /// <summary>Резюме кандидату: файл — в хранилище, текст — извлекается сразу (PDF, DOCX, TXT); не извлёкся — причина у резюме, файл остаётся.</summary>
-    public async Task<Guid> AddResumeAsync(Guid candidateId, RecruitmentUpload upload, string source, Guid? actorId, CancellationToken ct)
-    {
-        await CandidateRowAsync(candidateId, ct);
-        if (upload.SizeBytes <= 0)
-        {
-            throw new FieldValidationException("Файл пустой.");
-        }
-
-        if (upload.SizeBytes > RecruitmentRules.MaxResumeBytes)
-        {
-            throw new FieldValidationException($"Резюме больше {RecruitmentRules.MaxResumeBytes / 1024 / 1024} МБ.");
-        }
-
-        var fileName = SafeFileName(upload.FileName);
-        var extension = Path.GetExtension(fileName);
-        if (!RecruitmentRules.ResumeExtensions.Contains(extension))
-        {
-            throw new FieldValidationException("Резюме — PDF, Word (DOCX, DOC), RTF, ODT, TXT или фото (JPG, PNG).");
-        }
-
-        if (await db.CandidateResumes.CountAsync(r => r.CandidateId == candidateId, ct) >= RecruitmentRules.MaxResumesPerCandidate)
-        {
-            throw new FieldValidationException($"У кандидата — до {RecruitmentRules.MaxResumesPerCandidate} резюме. Удалите старые.");
-        }
-
-        using var buffer = new MemoryStream();
-        await upload.Content.CopyToAsync(buffer, ct);
-        if (buffer.Length > RecruitmentRules.MaxResumeBytes)
-        {
-            throw new FieldValidationException($"Резюме больше {RecruitmentRules.MaxResumeBytes / 1024 / 1024} МБ.");
-        }
-
-        var sha = Convert.ToHexStringLower(SHA256.HashData(buffer.ToArray()));
-        if (await db.CandidateResumes.AnyAsync(r => r.CandidateId == candidateId && r.Sha256 == sha, ct))
-        {
-            throw new FieldConflictException("Это резюме у кандидата уже есть.");
-        }
-
-        var reading = await ResumeTextAsync(buffer.ToArray(), fileName, candidateId, forceAi: false, ct);
-
-        var contentType = string.IsNullOrWhiteSpace(upload.ContentType) || upload.ContentType.Length > 200 ? "application/octet-stream" : upload.ContentType.Trim();
-        var resume = new CandidateResume
-        {
-            CandidateId = candidateId,
-            FileName = fileName,
-            ContentType = contentType,
-            SizeBytes = buffer.Length,
-            ObjectKey = string.Empty,
-            Sha256 = sha,
-            Text = reading.Text,
-            TextError = reading.Error,
-            TextByAi = reading.ByAi,
-            DocumentType = reading.DocumentType,
-            Source = source,
-            UploadedById = actorId,
-        };
-        resume.ObjectKey = $"recruitment/resumes/{candidateId:N}/{resume.Id:N}";
-        buffer.Position = 0;
-        await storage.PutAsync(resume.ObjectKey, buffer, buffer.Length, contentType, ct);
-        db.CandidateResumes.Add(resume);
-        await db.SaveChangesAsync(ct);
-        await RefreshRetentionAsync(candidateId, touch: true, ct);
-        return resume.Id;
-    }
-
-    private sealed record ResumeReading(string? Text, string? Error, bool ByAi, string? DocumentType);
-
-    /// <summary>Меньше стольких букв и цифр в текстовом слое PDF — это скан (подпись, номер страницы): его читает AI.</summary>
-    private const int MinPdfLetters = 80;
-
     /// <summary>
-    /// Текст резюме: текстовый слой (PDF, DOCX, TXT); фото и PDF-скан без текста — AI (Claude), если в настройках подбора включено
-    /// «Распознавать фото и сканы». forceAi — «Распознать снова»: AI читает и PDF с текстовым слоем.
+    /// Документ кандидату (HR, HH): оригинал — сразу в хранилище, текст, распознавание и разбор — в фоне (<see cref="Documents.ResumeDocumentProcessor"/>).
     /// </summary>
-    private async Task<ResumeReading> ResumeTextAsync(byte[] bytes, string fileName, Guid candidateId, bool forceAi, CancellationToken ct)
-    {
-        var extension = Path.GetExtension(fileName).ToLowerInvariant();
-        string? text = null;
-        string? error = null;
-        if (!forceAi && extractor.Extensions.Contains(extension))
-        {
-            try
-            {
-                text = (await extractor.ExtractAsync(new MemoryStream(bytes, writable: false), fileName, ct)).Trim();
-                if (text.Length == 0)
-                {
-                    (text, error) = (null, "В файле нет текста.");
-                }
-            }
-            catch (NotSupportedException ex)
-            {
-                error = ex.Message;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogWarning(ex, "Подбор: текст резюме {Candidate} не извлечён", candidateId);
-                error = "Текст не извлёкся — файл сохранён, его можно открыть.";
-            }
-        }
-        else if (!forceAi)
-        {
-            error = "Текст из этого формата не извлекается — файл сохранён.";
-        }
+    public Task<Guid> AddResumeAsync(Guid candidateId, RecruitmentUpload upload, string source, Guid? actorId, CancellationToken ct) =>
+        documents.UploadAsync(candidateId, upload, source, actorId, ct);
 
-        var scan = text is null || extension == ".pdf" && text.Count(char.IsLetterOrDigit) < MinPdfLetters;
-        if ((forceAi || scan) && vision.FirstOrDefault() is { } reader && reader.Supports(extension))
-        {
-            var settings = await db.RecruitmentSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Id == 1, ct) ?? new RecruitmentSettings();
-            if (!settings.ReadScans)
-            {
-                return new ResumeReading(Clip(text), text is null ? "Фото и сканы не распознаются: включите «Распознавать фото и сканы» в настройках подбора." : null,
-                    false, null);
-            }
-
-            var read = await reader.ReadAsync(bytes, fileName, "hr.resume.read", ct);
-            if (read.Text is { Length: > 0 } recognized)
-            {
-                return new ResumeReading(Clip(recognized), null, true, read.DocumentType);
-            }
-
-            return text is not null && !forceAi
-                ? new ResumeReading(Clip(text), null, false, read.DocumentType)
-                : new ResumeReading(null, $"{(extension == ".pdf" ? "Скан PDF" : "Фото")} не распознан{(extension == ".pdf" ? string.Empty : "о")}: {read.Error ?? "AI не нашёл в файле текста."}", false,
-                    read.DocumentType);
-        }
-
-        if (text is null && extension is ".jpg" or ".jpeg" or ".png" or ".webp")
-        {
-            error = "Фото — распознавание недоступно (AI не подключён).";
-        }
-
-        return new ResumeReading(Clip(text), text is null ? error : null, false, null);
-    }
-
-    private static string? Clip(string? text) =>
-        text is null ? null : text.Length > RecruitmentRules.MaxResumeText ? text[..RecruitmentRules.MaxResumeText] : text;
-
-    /// <summary>«Распознать снова»: файл из хранилища читает AI (фото, скан, PDF с плохим текстовым слоем). Платный вызов — только по кнопке HR.</summary>
-    public async Task<CandidateCard> ReadResumeAgainAsync(RecruitmentContext ctx, Guid resumeId, CancellationToken ct)
+    /// <summary>«Обработать заново» / «Распознать заново (AI)»: задания текста и разбора ставятся снова; результат появится в карточке.</summary>
+    public async Task<CandidateCard> ReadResumeAgainAsync(RecruitmentContext ctx, Guid resumeId, bool forceAi, CancellationToken ct)
     {
         RequireManage(ctx);
-        var r = await db.CandidateResumes.FirstOrDefaultAsync(x => x.Id == resumeId, ct) ?? throw new FieldNotFoundException("Резюме не найдено.");
-        if (vision.FirstOrDefault() is not { } reader || !reader.Supports(Path.GetExtension(r.FileName)))
-        {
-            throw new FieldValidationException("AI распознаёт только фото (JPG, PNG, WEBP) и PDF.");
-        }
-
-        using var buffer = new MemoryStream();
-        await storage.DownloadAsync(r.ObjectKey, buffer, ct);
-        var reading = await ResumeTextAsync(buffer.ToArray(), r.FileName, r.CandidateId, forceAi: true, ct);
-        if (reading.Text is null)
-        {
-            r.TextError = reading.Error;
-            r.DocumentType = reading.DocumentType ?? r.DocumentType;
-            await db.SaveChangesAsync(ct);
-            throw new FieldValidationException(reading.Error ?? "Распознать не удалось.");
-        }
-
-        r.Text = reading.Text;
-        r.TextError = null;
-        r.TextByAi = reading.ByAi;
-        r.DocumentType = reading.DocumentType;
-        r.UpdatedAt = clock.GetUtcNow();
-        await db.SaveChangesAsync(ct);
-        await AuditAsync(ctx, "recruitment.resume.read", nameof(Candidate), r.CandidateId, new { reading.ByAi }, ct);
-        return await CandidateAsync(ctx, r.CandidateId, ct);
+        var candidateId = await db.CandidateResumes.AsNoTracking().Where(x => x.Id == resumeId).Select(x => (Guid?)x.CandidateId).FirstOrDefaultAsync(ct)
+                          ?? throw new FieldNotFoundException("Документ не найден.");
+        await documents.ReprocessAsync(resumeId, forceAi, ctx.UserId, ct);
+        return await CandidateAsync(ctx, candidateId, ct);
     }
 
-    private static string SafeFileName(string? name)
+    /// <summary>
+    /// Карточка из разобранного резюме: проверенные телефон и почта — контакты (неподтверждённые: подтверждает источник, а не резюме), город — если
+    /// не указан, имя — если в карточке ник или заглушка («@sardor», «Telegram 123», одно слово). Прежнее не затирается. Совпал контакт с другим
+    /// кандидатом — подозрение на дубль для HR. Возвращает, что изменилось.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> EnrichFromResumeAsync(Guid candidateId, Documents.ResumeProfile profile, CancellationToken ct)
     {
-        var file = Path.GetFileName(name?.Trim() ?? string.Empty);
-        foreach (var bad in Path.GetInvalidFileNameChars())
+        var candidate = await db.Candidates.Include(c => c.Contacts).FirstOrDefaultAsync(c => c.Id == candidateId, ct);
+        if (candidate is null)
         {
-            file = file.Replace(bad, '_');
+            return [];
         }
 
-        file = file.Length <= 200 ? file : file[^200..];
-        return string.IsNullOrWhiteSpace(file) ? "resume" : file;
+        var changes = new List<string>();
+        var found = new List<(CandidateContactKind Kind, string Value)>();
+        if (profile.Phone is { Verified: true, Value: { } phone })
+        {
+            found.Add((CandidateContactKind.Phone, phone));
+        }
+
+        if (profile.Email is { Verified: true, Value: { } email })
+        {
+            found.Add((CandidateContactKind.Email, email));
+        }
+
+        found.AddRange((profile.ExtraPhones ?? []).Take(2).Select(x => (CandidateContactKind.Phone, x)));
+        found.AddRange((profile.ExtraEmails ?? []).Take(2).Select(x => (CandidateContactKind.Email, x)));
+        foreach (var (kind, value) in found.Distinct())
+        {
+            if (RecruitmentRules.Normalize(kind, value) is { } normalized && !candidate.Contacts.Any(c => c.Kind == kind && c.Value == normalized))
+            {
+                db.CandidateContacts.Add(new CandidateContact { CandidateId = candidate.Id, Kind = kind, Value = normalized, Source = "resume" });
+                changes.Add(kind == CandidateContactKind.Phone ? "phone" : "email");
+            }
+        }
+
+        if (profile.FullName is { Verified: true, Value: { } name } && Clean(name, 200) is { } clean && clean.Contains(' ')
+            && IsPlaceholderName(candidate.FullName) && clean != candidate.FullName)
+        {
+            candidate.FullName = clean;
+            changes.Add("name");
+        }
+
+        if (candidate.City is null && profile.Location is { Verified: true, Value: { } city } && Clean(city, 100) is { } cleanCity)
+        {
+            candidate.City = cleanCity;
+            changes.Add("city");
+        }
+
+        await db.SaveChangesAsync(ct);
+        if (changes.Any(c => c is "phone" or "email") && await DetectDuplicatesAsync(candidate.Id, ct) > 0)
+        {
+            await exceptions.RaiseAsync("duplicate", "По контактам из резюме кандидат похож на другого. Объедините карточки или отметьте, что это разные люди.",
+                candidate.Id, null, dedupKey: $"dup:{candidate.Id:N}", ct: ct);
+        }
+
+        return changes;
     }
+
+    /// <summary>Имя-заглушка из Telegram: «@ник», «Telegram 123», «Кандидат из Telegram», одно слово.</summary>
+    public static bool IsPlaceholderName(string name) =>
+        name.StartsWith('@') || name.StartsWith("Telegram", StringComparison.Ordinal) || name.StartsWith("Кандидат", StringComparison.Ordinal)
+        || !name.Trim().Contains(' ');
 
     public async Task<RecruitmentDownload> DownloadResumeAsync(RecruitmentContext ctx, Guid resumeId, CancellationToken ct)
     {
         RequireRead(ctx);
         var r = await db.CandidateResumes.AsNoTracking().FirstOrDefaultAsync(x => x.Id == resumeId, ct) ?? throw new FieldNotFoundException("Резюме не найдено.");
+        if (r.Sha256 is null)
+        {
+            throw new FieldConflictException("Файл ещё не получен из Telegram — подождите минуту или нажмите «Обработать заново».");
+        }
+
         await AuditAsync(ctx, "recruitment.resume.downloaded", nameof(Candidate), r.CandidateId, null, ct);
         return new RecruitmentDownload(r.FileName, SafeTypes.Contains(r.ContentType) ? r.ContentType : "application/octet-stream", r.ObjectKey);
     }
@@ -792,6 +764,7 @@ public sealed partial class RecruitmentService
         await db.SaveChangesAsync(ct);
         await RefreshRetentionAsync(id, touch: true, ct);
         await AuditAsync(ctx, "recruitment.consent.recorded", nameof(Candidate), id, new { channel }, ct);
+        await documents.ReleaseConsentAsync(id, ct);
         return await CandidateAsync(ctx, id, ct);
     }
 

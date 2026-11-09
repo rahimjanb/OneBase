@@ -56,9 +56,14 @@ export function RecipesView({ data }: { data: RecipeList }) {
           {t("Карта продукта — этапы изготовления (замес, выпечка, начинка, глазурь, упаковка…), рецептура замеса, нормы на 1 000 кг, выход и брак каждого этапа. По утверждённой версии создаются задания на выпуск, и система считает сырьё по цепочке.")}
         </p>
         {data.canCreate && (
-          <Link href="/production/recipes/new" className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong">
-            <Plus className="size-4" aria-hidden /> {t("Новая техкарта")}
-          </Link>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <Link href="/production/recipes/new" className="inline-flex h-10 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong">
+              <Plus className="size-4" aria-hidden /> {t("Новая техкарта")}
+            </Link>
+            <Link href="/production/recipes/import" className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-muted">
+              {t("Импортировать технологические карты из Excel")}
+            </Link>
+          </div>
         )}
       </section>
     );

@@ -259,5 +259,100 @@ internal static class ProductionModel
             e.HasOne(x => x.Item).WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_ProductionOrderLines_Items_ItemId");
         });
+
+        ConfigureImport(b);
+    }
+
+    /// <summary>
+    /// Импорт техкарт из Excel: загрузка (один файл — одна загрузка по SHA-256), её рецептуры и строки Excel (значения как в файле, точно — numeric
+    /// без ограничения разрядов), решения технолога и запомненные сопоставления «артикул и название → позиция склада». Только новые таблицы.
+    /// </summary>
+    private static void ConfigureImport(ModelBuilder b)
+    {
+        b.Entity<ProductionRecipeImport>(e =>
+        {
+            e.ToTable("RecipeImports", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProductionRecipeImports");
+            e.Property(x => x.FileName).HasMaxLength(255);
+            e.Property(x => x.FileHash).HasMaxLength(64);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Sheets).HasColumnType("jsonb");
+            e.Property(x => x.Version).IsRowVersion();
+            e.HasIndex(x => x.FileHash).IsUnique().HasDatabaseName("IX_ProductionRecipeImports_FileHash");
+            e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionRecipeImports_Users_CreatedById");
+            e.HasMany(x => x.Recipes).WithOne(x => x.Import).HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProductionRecipeImportRecipes_Imports_ImportId");
+        });
+
+        b.Entity<ProductionRecipeImportRecipe>(e =>
+        {
+            e.ToTable("RecipeImportRecipes", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProductionRecipeImportRecipes");
+            e.Property(x => x.SourceKey).HasMaxLength(300);
+            e.Property(x => x.Sheet).HasMaxLength(100);
+            e.Property(x => x.Column).HasMaxLength(8);
+            e.Property(x => x.Article).HasMaxLength(64);
+            e.Property(x => x.Name).HasMaxLength(500);
+            e.Property(x => x.GroupName).HasMaxLength(200);
+            e.Property(x => x.BaseQuantity).HasColumnType("numeric");
+            e.Property(x => x.BaseUnit).HasMaxLength(16);
+            e.Property(x => x.BaseLabel).HasMaxLength(200);
+            e.Property(x => x.TotalCell).HasMaxLength(16);
+            e.Property(x => x.TotalRaw).HasMaxLength(100);
+            e.Property(x => x.TotalFormula).HasMaxLength(500);
+            e.Property(x => x.LossCell).HasMaxLength(16);
+            e.Property(x => x.LossRaw).HasMaxLength(100);
+            e.Property(x => x.Code).HasMaxLength(32);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Action).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Issues).HasColumnType("jsonb");
+            e.Property(x => x.Fingerprint).HasMaxLength(64);
+            e.Property(x => x.Version).IsRowVersion();
+            e.HasIndex(x => new { x.ImportId, x.SourceKey, x.Column }).IsUnique().HasDatabaseName("IX_ProductionRecipeImportRecipes_ImportId_SourceKey_Column");
+            e.HasIndex(x => x.SourceKey).HasDatabaseName("IX_ProductionRecipeImportRecipes_SourceKey");
+            e.HasIndex(x => x.RecipeId).HasDatabaseName("IX_ProductionRecipeImportRecipes_RecipeId");
+            e.HasOne<ProductionRecipe>().WithMany().HasForeignKey(x => x.RecipeId).OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_ProductionRecipeImportRecipes_Recipes_RecipeId");
+            e.HasOne<OneBase.Domain.Procurement.ProcurementItem>().WithMany().HasForeignKey(x => x.OutputItemId).OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_ProductionRecipeImportRecipes_Items_OutputItemId");
+            e.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.ImportRecipeId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProductionRecipeImportLines_Recipes_ImportRecipeId");
+        });
+
+        b.Entity<ProductionRecipeImportLine>(e =>
+        {
+            e.ToTable("RecipeImportLines", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProductionRecipeImportLines");
+            e.Property(x => x.Cell).HasMaxLength(16);
+            e.Property(x => x.Article).HasMaxLength(64);
+            e.Property(x => x.Name).HasMaxLength(500);
+            e.Property(x => x.Unit).HasMaxLength(32);
+            e.Property(x => x.Weight).HasMaxLength(32);
+            e.Property(x => x.Kind).HasMaxLength(16);
+            e.Property(x => x.Raw).HasMaxLength(100);
+            e.Property(x => x.Formula).HasMaxLength(500);
+            e.Property(x => x.Value).HasColumnType("numeric");
+            e.Property(x => x.Text).HasMaxLength(200);
+            e.Property(x => x.Match).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Decision).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.ManualValue).HasColumnType("numeric");
+            e.Property(x => x.DecisionComment).HasMaxLength(500);
+            e.HasIndex(x => new { x.ImportRecipeId, x.Row }).HasDatabaseName("IX_ProductionRecipeImportLines_ImportRecipeId_Row");
+            e.HasIndex(x => x.Article).HasDatabaseName("IX_ProductionRecipeImportLines_Article");
+            e.HasOne<OneBase.Domain.Procurement.ProcurementItem>().WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_ProductionRecipeImportLines_Items_ItemId");
+        });
+
+        b.Entity<ProductionRecipeImportItemMap>(e =>
+        {
+            e.ToTable("RecipeImportItemMaps", Schema);
+            e.HasKey(x => x.Id).HasName("PK_ProductionRecipeImportItemMaps");
+            e.Property(x => x.Article).HasMaxLength(64);
+            e.Property(x => x.Name).HasMaxLength(500);
+            e.HasIndex(x => new { x.Article, x.Name }).IsUnique().HasDatabaseName("IX_ProductionRecipeImportItemMaps_Article_Name");
+            e.HasOne<OneBase.Domain.Procurement.ProcurementItem>().WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProductionRecipeImportItemMaps_Items_ItemId");
+        });
     }
 }

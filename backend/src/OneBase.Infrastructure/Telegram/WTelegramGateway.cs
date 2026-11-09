@@ -422,9 +422,10 @@ internal sealed class WTelegramGateway(
             return null;
         }
 
+        // Ссылка на файл живёт в памяти сессии; убирается после удачного скачивания — неудачное можно повторить (очередь hr.resume.download).
         Document? document = null;
         Photo? photo = null;
-        if (!session.Documents.TryRemove((peerId, messageId), out document) && !session.Photos.TryRemove((peerId, messageId), out photo))
+        if (!session.Documents.TryGetValue((peerId, messageId), out document) && !session.Photos.TryGetValue((peerId, messageId), out photo))
         {
             return null;
         }
@@ -442,6 +443,8 @@ internal sealed class WTelegramGateway(
                 await Limited(session.Client.DownloadFileAsync(photo!, buffer, (PhotoSizeBase?)null), SendTimeout);
             }
 
+            session.Documents.TryRemove((peerId, messageId), out _);
+            session.Photos.TryRemove((peerId, messageId), out _);
             return buffer.ToArray();
         }
         catch (RpcException ex)
