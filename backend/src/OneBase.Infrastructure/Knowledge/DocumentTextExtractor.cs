@@ -8,15 +8,19 @@ namespace OneBase.Infrastructure.Knowledge;
 
 /// <summary>
 /// Текст из документов для базы знаний: .txt, .md, .csv (UTF-8 или Windows-1251), .xlsx (строка таблицы — «заголовок: значение»),
-/// .docx (абзацы из word/document.xml). PDF и старые .doc/.xls не читаются — нужна конвертация.
+/// .docx (абзацы из word/document.xml), .pdf (текстовый слой страниц по порядку чтения, до MaxPdfPages страниц; скан без текста —
+/// понятная ошибка). Старые .doc/.xls не читаются — нужна конвертация.
 /// </summary>
 internal sealed class DocumentTextExtractor : IDocumentTextExtractor
 {
     private const int MaxRowsPerSheet = 20_000;
 
+    /// <summary>Страниц PDF — не больше (резюме и регламенты короче; огромный файл не должен держать сервер).</summary>
+    internal const int MaxPdfPages = 200;
+
     static DocumentTextExtractor() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-    public IReadOnlyCollection<string> Extensions { get; } = [".txt", ".md", ".csv", ".xlsx", ".docx"];
+    public IReadOnlyCollection<string> Extensions { get; } = [".txt", ".md", ".csv", ".xlsx", ".docx", ".pdf"];
 
     public async Task<string> ExtractAsync(Stream content, string fileName, CancellationToken cancellationToken = default)
     {
@@ -30,7 +34,7 @@ internal sealed class DocumentTextExtractor : IDocumentTextExtractor
             ".txt" or ".md" or ".csv" => Decode(buffer.ToArray()),
             ".xlsx" => Excel(buffer),
             ".docx" => Word(buffer),
-            ".pdf" => throw new NotSupportedException("PDF пока не читается: сохраните документ как .docx или .txt и загрузите снова."),
+            ".pdf" => Pdf(buffer.ToArray()),
             ".doc" or ".xls" => throw new NotSupportedException("Старый формат Office не читается: сохраните файл как .docx или .xlsx."),
             _ => throw new NotSupportedException($"Формат {extension} не поддерживается. Можно: {string.Join(", ", Extensions)}."),
         };
@@ -87,6 +91,45 @@ internal sealed class DocumentTextExtractor : IDocumentTextExtractor
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>Текст PDF по страницам в порядке чтения. Зашифрованный, повреждённый или скан без текстового слоя — NotSupportedException с объяснением.</summary>
+    private static string Pdf(byte[] bytes)
+    {
+        try
+        {
+            using var document = UglyToad.PdfPig.PdfDocument.Open(bytes);
+            var sb = new StringBuilder();
+            var pages = 0;
+            foreach (var page in document.GetPages())
+            {
+                if (++pages > MaxPdfPages)
+                {
+                    sb.AppendLine($"(документ обрезан: прочитаны первые {MaxPdfPages} страниц из {document.NumberOfPages})");
+                    break;
+                }
+
+                var text = UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor.ContentOrderTextExtractor.GetText(page);
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    sb.AppendLine(text.Trim());
+                    sb.AppendLine();
+                }
+            }
+
+            var result = sb.ToString().Trim();
+            return result.Length > 0
+                ? result
+                : throw new NotSupportedException("В PDF нет текста — похоже на скан или картинку. Загрузите документ с текстом (.pdf из Word, .docx, .txt).");
+        }
+        catch (UglyToad.PdfPig.Exceptions.PdfDocumentEncryptedException)
+        {
+            throw new NotSupportedException("PDF защищён паролем — снимите защиту и загрузите снова.");
+        }
+        catch (Exception ex) when (ex is not NotSupportedException and not OutOfMemoryException)
+        {
+            throw new NotSupportedException("PDF не читается: файл повреждён или в необычном формате. Сохраните его заново или загрузите .docx.");
+        }
     }
 
     private static string Word(Stream stream)

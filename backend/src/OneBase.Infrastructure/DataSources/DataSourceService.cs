@@ -87,7 +87,7 @@ public sealed class DataSourceService(
     OneBase.Application.Sales.SalesCacheSignal salesSignal)
 {
     private const int MaxMessage = 1000;
-    private readonly IDataProtector _protector = protection.CreateProtector("OneBase.DataSources.GoogleServiceAccount");
+    private readonly IDataProtector _protector = protection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.GoogleServiceAccount);
 
     public async Task<DataSourcesOverview> OverviewAsync(Guid userId, CancellationToken ct)
     {

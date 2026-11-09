@@ -51,6 +51,13 @@ builder.Services.AddRateLimiter(o =>
 
 var app = builder.Build();
 
+// Копия для проверки: в журнал — что выключено, чтобы по логу контейнера было видно, что копия наружу не пишет.
+if (app.Services.GetRequiredService<OneBase.Application.Recovery.RecoveryIsolation>() is { Isolated: true } isolation)
+{
+    app.Logger.LogWarning("Режим изоляции (Recovery:Isolated): внешние HTTP-запросы и Telegram выключены, платные вызовы AI заблокированы; не запущены: {Workers}",
+        string.Join("; ", isolation.DisabledWorkers.Select(w => w.Label)));
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();

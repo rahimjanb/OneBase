@@ -276,6 +276,9 @@ const dict: Dict = {
   "Камера работает только на защищённом адресе (https). Откройте OneBase по https.": "Kamera faqat himoyalangan manzilda (https) ishlaydi. OneBase'ni https orqali oching.",
   "Камеру не удалось включить.": "Kamerani yoqib bo'lmadi.",
   "Не удалось загрузить распознавание штрихкодов. Проверьте связь и попробуйте снова.": "Shtrixkodlarni aniqlashni yuklab bo'lmadi. Aloqani tekshiring va qayta urinib ko'ring.",
+
+  // Плашка восстановленной копии для проверки (Recovery:Isolated).
+  "Копия для проверки: внешние интеграции выключены": "Tekshiruv nusxasi: tashqi integratsiyalar o'chirilgan",
 };
 
 export default dict;

@@ -12,7 +12,7 @@ export async function generateMetadata() {
 }
 
 /** Карточка видна только с правом permission (или с любым из списка): директору — лишь его разделы, сотрудникам раздел закрыт. */
-const sections: { href: string | null; icon: typeof Users; title: string; text: string; permission: string | string[] }[] = [
+const sections: { href: string | null; icon: typeof Users; title: string; text: string; permission: string | string[]; agents?: boolean }[] = [
   {
     href: "/settings/users",
     icon: Users,
@@ -40,6 +40,14 @@ const sections: { href: string | null; icon: typeof Users; title: string; text: 
     title: "AI",
     text: "Провайдеры OpenAI и Anthropic, ключи API, модели и параметры консультанта.",
     permission: "ai.settings.manage",
+  },
+  {
+    href: "/settings/agents",
+    icon: Bot,
+    title: "ИИ-агенты",
+    text: "Агенты отделов ведут переписку в Telegram как живые сотрудники: рекрутер HR, помощники отделов, агенты продаж. Как пишут, ограничения, готовые ответы, проверка черновиков.",
+    permission: [],
+    agents: true,
   },
   {
     href: "/settings/telegram",
@@ -82,7 +90,9 @@ const sections: { href: string | null; icon: typeof Users; title: string; text: 
 export default async function SettingsPage() {
   const me = await apiGet<Me>("/api/auth/me", "/settings");
   if (!me.canOpenSettings) redirect("/no-access?from=%2Fsettings");
-  const visible = sections.filter((s) => (Array.isArray(s.permission) ? s.permission : [s.permission]).some((p) => has(me, p)));
+  const visible = sections.filter(
+    (s) => (s.agents && (me.agentDepartments?.length ?? 0) > 0) || (Array.isArray(s.permission) ? s.permission : [s.permission]).some((p) => has(me, p)),
+  );
   const t = await getT();
   return (
     <>

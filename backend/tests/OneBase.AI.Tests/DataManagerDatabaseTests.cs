@@ -85,6 +85,8 @@ public sealed class MemoryStorage : IFileStorage
         _files.Remove(objectKey);
         return Task.CompletedTask;
     }
+
+    public IAsyncEnumerable<string> ListKeysAsync(CancellationToken ct = default) => _files.Keys.ToArray().ToAsyncEnumerable();
 }
 
 /// <summary>Подставная таблица Google: лист(ы), которые «вернул» Google, счётчик чтений; Failure — Google недоступен (текст ошибки).</summary>
@@ -385,6 +387,7 @@ public sealed class DataManagerDb : IAsyncLifetime
         await db.UserNotifications.ExecuteDeleteAsync();
         await db.TelegramCampaigns.ExecuteDeleteAsync();
         await db.TelegramAccounts.ExecuteDeleteAsync();
+        await db.DialogAgents.ExecuteDeleteAsync();
         await db.TelegramLinkCodes.ExecuteDeleteAsync();
         await db.AiReports.ExecuteDeleteAsync();
         Telegram.Reset();

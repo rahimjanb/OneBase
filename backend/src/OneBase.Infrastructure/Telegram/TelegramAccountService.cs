@@ -134,7 +134,7 @@ public sealed class TelegramAccountService(
     private static readonly string[] Styles = ["short", "normal", "detailed"];
     private static readonly string[] Languages = ["auto", "ru", "uz", "uz-Cyrl", "en"];
 
-    private readonly IDataProtector _phoneProtector = protection.CreateProtector("OneBase.Telegram.Phone");
+    private readonly IDataProtector _phoneProtector = protection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.TelegramPhone);
 
     // ---------- Обзор и ключи приложения ----------
 

@@ -98,7 +98,9 @@ public sealed class AuthController(
     /// <summary>Текущий пользователь: профиль — из БД (правки видны сразу), роли и права — актуальные (см. AuthSetup).</summary>
     [HttpGet("me")]
     [Authorize]
-    public async Task<IActionResult> Me([FromServices] OneBase.Application.Hr.HrService hr, CancellationToken ct)
+    public async Task<IActionResult> Me([FromServices] OneBase.Application.Hr.HrService hr, [FromServices] OneBase.Application.Recruitment.RecruitmentService recruitment,
+        [FromServices] OneBase.Application.Agents.DialogAgentService agents,
+        CancellationToken ct)
     {
         var id = User.GetUserId();
         var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, ct);
@@ -109,6 +111,7 @@ public sealed class AuthController(
 
         var permissions = User.FindAll(OneBaseClaims.Permission).Select(c => c.Value).ToList();
         var roles = User.FindAll(OneBaseClaims.Role).Select(c => c.Value).OrderBy(SystemRoles.OrderOf).ToList();
+        var agentDepartments = (await agents.AccessAsync(id, permissions.ToHashSet(), ct)).Departments.Order(StringComparer.Ordinal).ToList();
         var department = user.DepartmentId is { } departmentId
             ? await db.Departments.AsNoTracking().Where(d => d.Id == departmentId).Select(d => d.Name).FirstOrDefaultAsync(ct)
             : null;
@@ -126,9 +129,13 @@ public sealed class AuthController(
             // Главная: у роли «Сотрудник» — «Мой день», у остальных — «Обзор» компании.
             Home = roles.Contains(SystemRoles.EmployeeRole) ? "my_day" : "overview",
             Permissions = permissions,
-            CanOpenSettings = SystemRoles.SettingsPermissions.Any(permissions.Contains),
+            CanOpenSettings = SystemRoles.SettingsPermissions.Any(permissions.Contains) || agentDepartments.Count > 0,
+            // «Настройки → ИИ-агенты»: отделы, агентами которых управляет пользователь (администратор AI, HR, Telegram, руководитель отдела).
+            AgentDepartments = agentDepartments,
             // Раздел HR: право «HR», интеграции или руководитель отдела, к которому привязаны подразделения Verifix.
             HrAccess = await hr.HasAccessAsync(id, permissions.ToHashSet(), ct),
+            // Заявки на сотрудника (HR → «Подбор»): руководитель отдела или тот, кто ведёт подбор.
+            HiringRequests = (await recruitment.ContextAsync(id, permissions.ToHashSet(), ct)).SeesRequests,
         });
     }
 }

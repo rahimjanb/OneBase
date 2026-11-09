@@ -91,6 +91,69 @@ internal static class TelegramModel
             e.HasIndex(x => new { x.AccountId, x.PeerId });
         });
 
+        // Маршрутизация: подразделения аккаунта и хозяин каждого диалога (нет строк у аккаунта — всё у продаж, как раньше).
+        b.Entity<TelegramAccountDepartment>(e =>
+        {
+            e.ToTable("AccountDepartments", Schema);
+            e.HasKey(x => new { x.AccountId, x.Department });
+            e.Property(x => x.Department).HasMaxLength(32);
+            e.Property(x => x.PauseReason).HasMaxLength(500);
+            e.Property(x => x.DailyLimit).HasDefaultValue(200);
+            e.Property(x => x.MinIntervalSeconds).HasDefaultValue(5);
+            // Одно подразделение по умолчанию на аккаунт — правило TelegramDepartmentService (единственный, кто пишет в таблицу).
+            e.HasOne<TelegramAccount>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TelegramConversation>(e =>
+        {
+            e.ToTable("Conversations", Schema);
+            e.Property(x => x.ChatType).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Department).HasMaxLength(32);
+            e.Property(x => x.RouteReason).HasMaxLength(24);
+            e.Property(x => x.Kind).HasMaxLength(32);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Mode).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.AssignedAgent).HasMaxLength(64);
+            e.Property(x => x.RelatedType).HasMaxLength(32);
+            e.HasOne<TelegramAccount>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.AccountId, x.PeerId }).IsUnique();
+            e.HasIndex(x => new { x.AccountId, x.Department, x.LastMessageAt });
+            e.HasIndex(x => new { x.RelatedType, x.RelatedId });
+        });
+
+        b.Entity<TelegramConversationMessage>(e =>
+        {
+            e.ToTable("ConversationMessages", Schema);
+            e.Property(x => x.Id).UseIdentityAlwaysColumn();
+            e.Property(x => x.Direction).HasConversion<string>().HasMaxLength(8);
+            e.Property(x => x.Text).HasMaxLength(8000);
+            e.Property(x => x.FileName).HasMaxLength(255);
+            e.Property(x => x.Author).HasMaxLength(16);
+            e.HasOne<TelegramConversation>().WithMany().HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.ConversationId, x.SentAt });
+            // Повторная доставка входящего не даёт второй строки.
+            e.HasIndex(x => new { x.AccountId, x.PeerId, x.MessageId, x.Direction }).IsUnique().HasFilter("\"MessageId\" IS NOT NULL");
+        });
+
+        b.Entity<TelegramOutgoingMessage>(e =>
+        {
+            e.ToTable("OutgoingMessages", Schema);
+            e.Property(x => x.Department).HasMaxLength(32);
+            e.Property(x => x.Kind).HasMaxLength(16);
+            e.Property(x => x.Text).HasMaxLength(4096);
+            e.Property(x => x.IdempotencyKey).HasMaxLength(200);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.MessageIds).HasMaxLength(500);
+            e.Property(x => x.Error).HasMaxLength(1000);
+            e.Property(x => x.RelatedType).HasMaxLength(32);
+            e.Property(x => x.Author).HasMaxLength(16);
+            e.HasOne<TelegramAccount>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.IdempotencyKey).IsUnique();
+            e.HasIndex(x => new { x.Status, x.NextAttemptAt });
+            e.HasIndex(x => new { x.AccountId, x.Department, x.SentAt });
+            e.HasIndex(x => new { x.RelatedType, x.RelatedId });
+        });
+
         b.Entity<TelegramIncomingMessage>(e =>
         {
             e.ToTable("IncomingMessages", Schema);

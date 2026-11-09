@@ -247,6 +247,25 @@ public sealed partial class AnthropicProvider(IHttpClientFactory httpFactory) : 
                     });
                     break;
 
+                case LlmRole.User when m.Attachments is { Count: > 0 } files:
+                {
+                    // Фото и PDF — блоками image и document перед текстом (так их советует передавать документация Claude).
+                    FlushResults();
+                    var parts = new JsonArray();
+                    foreach (var file in files)
+                    {
+                        parts.Add(new JsonObject
+                        {
+                            ["type"] = file.IsImage ? "image" : "document",
+                            ["source"] = new JsonObject { ["type"] = "base64", ["media_type"] = file.MediaType, ["data"] = Convert.ToBase64String(file.Data) },
+                        });
+                    }
+
+                    parts.Add(new JsonObject { ["type"] = "text", ["text"] = string.IsNullOrEmpty(m.Content) ? "(пусто)" : m.Content });
+                    messages.Add(new JsonObject { ["role"] = "user", ["content"] = parts });
+                    break;
+                }
+
                 case LlmRole.User:
                     FlushResults();
                     messages.Add(new JsonObject { ["role"] = "user", ["content"] = string.IsNullOrEmpty(m.Content) ? "(пусто)" : m.Content });

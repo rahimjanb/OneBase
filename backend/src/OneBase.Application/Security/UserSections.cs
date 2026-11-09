@@ -34,7 +34,7 @@ public static class UserSections
         new(Finance, "Финансы", "Оплаты, P&L дилеров, акт сверки, DSO, суммы KPI; AI-сотрудник финансов.",
             [Permissions.FinanceRead], [Permissions.FinanceRead]),
         new(Hr, "HR", "Сотрудники, посещаемость, опоздания и табели Verifix; HR AI по всем сотрудникам.",
-            [Permissions.HrRead], [Permissions.HrRead]),
+            [Permissions.HrRead, Permissions.HrRecruitmentRead, Permissions.HrRecruitmentManage], [Permissions.HrRead]),
         new(Tasks, "Задачи", "Задачи своего отдела и проектов; AI отвечает по задачам и просрочкам.",
             [Permissions.WorkTasks], [Permissions.WorkTasks]),
         new(Files, "Файлы", "Файлы своего отдела — просмотр и загрузка; документы базы знаний в ответах AI.",

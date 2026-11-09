@@ -1,4 +1,5 @@
 import type { Dict } from "../core";
+import agents from "./agents";
 import ai from "./ai";
 import campaigns from "./campaigns";
 import common from "./common";
@@ -12,6 +13,7 @@ import hr from "./hr";
 import lib from "./lib";
 import myDay from "./myDay";
 import production from "./production";
+import recruitment from "./recruitment";
 import requests from "./requests";
 import sales from "./sales";
 import salesPages from "./salesPages";
@@ -42,6 +44,8 @@ export const uz: Dict = {
   ...serverAi,
   ...serverSettings,
   ...hr,
+  ...recruitment,
+  ...agents,
   ...lib,
   ...common,
   ...home,

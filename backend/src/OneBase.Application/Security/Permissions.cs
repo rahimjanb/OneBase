@@ -89,6 +89,12 @@ public static class Permissions
     /// <summary>Рецептуры (технолог): создать, править черновик, ввести версию в действие, архивировать.</summary>
     public const string ProductionRecipes = "production.recipes";
 
+    /// <summary>Подбор персонала — просмотр: заявки на сотрудников, вакансии, кандидаты (персональные данные — только с этим правом).</summary>
+    public const string HrRecruitmentRead = "hr.recruitment.read";
+
+    /// <summary>Подбор персонала — управление: вакансии, кандидаты, резюме, этапы, согласия, решения по заявкам, дубли, срок хранения.</summary>
+    public const string HrRecruitmentManage = "hr.recruitment.manage";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
@@ -122,5 +128,7 @@ public static class Permissions
         ProductionRead,
         ProductionManage,
         ProductionRecipes,
+        HrRecruitmentRead,
+        HrRecruitmentManage,
     ];
 }

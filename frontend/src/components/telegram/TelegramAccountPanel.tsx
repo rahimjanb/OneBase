@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, LogOut, Pencil, RefreshCw, Smartphone, Trash2 } from "lucide-react";
 import { button, danger, field, primary } from "@/components/ai/form";
 import { Note } from "@/components/sales/bits";
+import { TelegramDepartments } from "@/components/telegram/TelegramDepartments";
 import { useT } from "@/i18n/client";
 import { accountStatus, ago, telegramApi, type TelegramAccount } from "@/lib/telegram";
 
@@ -242,6 +243,8 @@ export function TelegramAccountPanel({
 
       {message && <p className="mt-4 rounded-lg bg-ok-soft px-3 py-2 text-sm text-ok">{message}</p>}
       {error && <p className="mt-4 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
+
+      <TelegramDepartments accountId={account.id} />
 
       <Note>
         {t(

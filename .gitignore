@@ -25,3 +25,10 @@ Thumbs.db
 
 # Дампы базы (персональные данные и зашифрованные ключи)
 *.dump
+
+# Python (deploy/dr — Disaster Recovery)
+__pycache__/
+
+# Наборы резервных копий и ключи восстановления — никогда в git
+onebase-backup-*/
+*recovery-key*.txt

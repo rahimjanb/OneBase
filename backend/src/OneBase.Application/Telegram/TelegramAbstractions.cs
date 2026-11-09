@@ -66,7 +66,9 @@ public sealed record TelegramIncomingFile(string FileName, string? MimeType, lon
 
 /// <summary>
 /// Входящее сообщение аккаунта. Outgoing — отправлено самим аккаунтом (агент такие не обрабатывает); MentionsMe — в группе к аккаунту
-/// обратились (упоминание или ответ на его сообщение).
+/// обратились (упоминание или ответ на его сообщение). ReplyToMessageId — на какое сообщение чата это ответ (по нему подразделение узнаёт
+/// ответ на свою публикацию). Photo — фото (не документ): его читают подбор (фото резюме) и ИИ-агенты отделов; агент продаж фото не получает,
+/// как и раньше.
 /// </summary>
 public sealed record TelegramIncoming(
     Guid AccountId,
@@ -81,7 +83,9 @@ public sealed record TelegramIncoming(
     bool Outgoing,
     bool MentionsMe,
     TelegramIncomingFile? File = null,
-    bool FromBot = false);
+    bool FromBot = false,
+    int? ReplyToMessageId = null,
+    TelegramIncomingFile? Photo = null);
 
 /// <summary>
 /// Пользовательский аккаунт Telegram через MTProto (реализация — Infrastructure, WTelegramClient; в тестах — подставная). Сессия хранится

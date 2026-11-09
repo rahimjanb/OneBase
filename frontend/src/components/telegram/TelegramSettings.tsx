@@ -181,6 +181,15 @@ export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
           </div>
           <div className="p-4 sm:p-5">
             {tab === "connection" && <TelegramAccountPanel key={account.id} account={account} onChange={replace} onRemoved={removed} />}
+            {tab === "agent" && (
+              <p className="mb-3 text-xs text-ink-3">
+                {t("Агенты всех отделов (рекрутер HR, помощники отделов) и этот агент продаж собраны в")}{" "}
+                <Link className="text-accent-strong hover:underline" href="/settings/agents">
+                  {t("«Настройки → ИИ-агенты»")}
+                </Link>
+                .
+              </p>
+            )}
             {tab === "agent" && <TelegramAgentForm key={account.id} account={account} onSaved={(enabled) => replace({ ...account, agentEnabled: enabled })} />}
             {tab === "users" && <TelegramUsers key={account.id} account={account} onCount={(n) => setCount("permissions", n)} />}
             {tab === "chats" && <TelegramChats key={account.id} account={account} onCount={(n) => setCount("chats", n)} />}

@@ -35,6 +35,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Telegram.TelegramCampaign> TelegramCampaigns => Set<OneBase.Domain.Telegram.TelegramCampaign>();
     public DbSet<OneBase.Domain.Telegram.TelegramCampaignRecipient> TelegramCampaignRecipients => Set<OneBase.Domain.Telegram.TelegramCampaignRecipient>();
     public DbSet<OneBase.Domain.Telegram.TelegramCampaignAttachment> TelegramCampaignAttachments => Set<OneBase.Domain.Telegram.TelegramCampaignAttachment>();
+    public DbSet<OneBase.Domain.Telegram.TelegramAccountDepartment> TelegramAccountDepartments => Set<OneBase.Domain.Telegram.TelegramAccountDepartment>();
+    public DbSet<OneBase.Domain.Telegram.TelegramConversation> TelegramConversations => Set<OneBase.Domain.Telegram.TelegramConversation>();
     public DbSet<OneBase.Domain.Telegram.TelegramReportSettings> TelegramReportSettings => Set<OneBase.Domain.Telegram.TelegramReportSettings>();
     public DbSet<OneBase.Domain.Telegram.TelegramReportSchedule> TelegramReportSchedules => Set<OneBase.Domain.Telegram.TelegramReportSchedule>();
     public DbSet<OneBase.Domain.Telegram.TelegramReportSubscription> TelegramReportSubscriptions => Set<OneBase.Domain.Telegram.TelegramReportSubscription>();
@@ -215,6 +217,32 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Incentive.IncentiveRouteTarget> IncentiveRouteTargets => Set<OneBase.Domain.Incentive.IncentiveRouteTarget>();
     public DbSet<OneBase.Domain.Twin.TwinObject> TwinObjects => Set<OneBase.Domain.Twin.TwinObject>();
     public DbSet<OneBase.Domain.Twin.TwinObjectLink> TwinObjectLinks => Set<OneBase.Domain.Twin.TwinObjectLink>();
+    public DbSet<OneBase.Domain.Recruitment.HiringRequest> HiringRequests => Set<OneBase.Domain.Recruitment.HiringRequest>();
+    public DbSet<OneBase.Domain.Recruitment.Vacancy> Vacancies => Set<OneBase.Domain.Recruitment.Vacancy>();
+    public DbSet<OneBase.Domain.Recruitment.Candidate> Candidates => Set<OneBase.Domain.Recruitment.Candidate>();
+    public DbSet<OneBase.Domain.Recruitment.CandidateContact> CandidateContacts => Set<OneBase.Domain.Recruitment.CandidateContact>();
+    public DbSet<OneBase.Domain.Recruitment.CandidateSource> CandidateSources => Set<OneBase.Domain.Recruitment.CandidateSource>();
+    public DbSet<OneBase.Domain.Recruitment.CandidateResume> CandidateResumes => Set<OneBase.Domain.Recruitment.CandidateResume>();
+    public DbSet<OneBase.Domain.Recruitment.CandidateApplication> CandidateApplications => Set<OneBase.Domain.Recruitment.CandidateApplication>();
+    public DbSet<OneBase.Domain.Recruitment.ApplicationEvent> ApplicationEvents => Set<OneBase.Domain.Recruitment.ApplicationEvent>();
+    public DbSet<OneBase.Domain.Recruitment.CandidateConsent> CandidateConsents => Set<OneBase.Domain.Recruitment.CandidateConsent>();
+    public DbSet<OneBase.Domain.Recruitment.CandidateDuplicate> CandidateDuplicates => Set<OneBase.Domain.Recruitment.CandidateDuplicate>();
+    public DbSet<OneBase.Domain.Recruitment.RecruitmentSettings> RecruitmentSettings => Set<OneBase.Domain.Recruitment.RecruitmentSettings>();
+    public DbSet<OneBase.Domain.Recruitment.RecruitmentConsentText> RecruitmentConsentTexts => Set<OneBase.Domain.Recruitment.RecruitmentConsentText>();
+    public DbSet<OneBase.Domain.Recruitment.VacancyPublication> VacancyPublications => Set<OneBase.Domain.Recruitment.VacancyPublication>();
+    public DbSet<OneBase.Domain.Recruitment.RecruitmentSource> RecruitmentSources => Set<OneBase.Domain.Recruitment.RecruitmentSource>();
+    public DbSet<OneBase.Domain.Recruitment.TelegramLead> TelegramLeads => Set<OneBase.Domain.Recruitment.TelegramLead>();
+    public DbSet<OneBase.Domain.Telegram.TelegramConversationMessage> TelegramConversationMessages => Set<OneBase.Domain.Telegram.TelegramConversationMessage>();
+    public DbSet<OneBase.Domain.Telegram.TelegramOutgoingMessage> TelegramOutgoingMessages => Set<OneBase.Domain.Telegram.TelegramOutgoingMessage>();
+    public DbSet<OneBase.Domain.Recruitment.HhConnection> HhConnections => Set<OneBase.Domain.Recruitment.HhConnection>();
+    public DbSet<OneBase.Domain.Recruitment.HhNegotiation> HhNegotiations => Set<OneBase.Domain.Recruitment.HhNegotiation>();
+    public DbSet<OneBase.Domain.Recruitment.CandidateScore> CandidateScores => Set<OneBase.Domain.Recruitment.CandidateScore>();
+    public DbSet<OneBase.Domain.Recruitment.VacancyInterviewer> VacancyInterviewers => Set<OneBase.Domain.Recruitment.VacancyInterviewer>();
+    public DbSet<OneBase.Domain.Recruitment.Interview> Interviews => Set<OneBase.Domain.Recruitment.Interview>();
+    public DbSet<OneBase.Domain.Recruitment.RecruitmentException> RecruitmentExceptions => Set<OneBase.Domain.Recruitment.RecruitmentException>();
+    public DbSet<OneBase.Domain.AI.DialogAgent> DialogAgents => Set<OneBase.Domain.AI.DialogAgent>();
+    public DbSet<OneBase.Domain.AI.DialogAgentAnswer> DialogAgentAnswers => Set<OneBase.Domain.AI.DialogAgentAnswer>();
+    public DbSet<OneBase.Domain.AI.DialogAgentReply> DialogAgentReplies => Set<OneBase.Domain.AI.DialogAgentReply>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -231,6 +259,8 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         ProcurementModel.Configure(b);
         ProductionModel.Configure(b);
         TwinModel.Configure(b);
+        RecruitmentModel.Configure(b);
+        DialogAgentModel.Configure(b);
 
         // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.
         b.Entity<DataSourceConnection>(e =>

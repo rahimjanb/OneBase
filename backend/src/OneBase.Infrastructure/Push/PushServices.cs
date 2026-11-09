@@ -45,7 +45,7 @@ public sealed record VapidKeys(string PublicKey, string PrivateKey, string Subje
 /// </summary>
 public sealed class PushKeyProvider(IServiceScopeFactory scopes, IDataProtectionProvider dataProtection, IConfiguration config, ILogger<PushKeyProvider> logger)
 {
-    private readonly IDataProtector _protector = dataProtection.CreateProtector("OneBase.Push.Vapid");
+    private readonly IDataProtector _protector = dataProtection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.PushVapid);
     private readonly SemaphoreSlim _lock = new(1, 1);
     private VapidKeys? _keys;
     private bool _broken;

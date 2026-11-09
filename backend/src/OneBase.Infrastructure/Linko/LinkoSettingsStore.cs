@@ -51,8 +51,8 @@ public sealed class LinkoSettingsStore(
     public const string Code = "linko";
     public const string Department = "sales";
 
-    private readonly IDataProtector _protector = dataProtection.CreateProtector("OneBase.Integrations.Linko.Token");
-    private readonly IDataProtector _planProtector = dataProtection.CreateProtector("OneBase.Integrations.Linko.PlanToken");
+    private readonly IDataProtector _protector = dataProtection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.LinkoToken);
+    private readonly IDataProtector _planProtector = dataProtection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.LinkoPlanToken);
     private volatile LinkoConnectionSettings? _cached;
 
     public async Task<LinkoConnectionSettings> GetAsync(CancellationToken ct = default)

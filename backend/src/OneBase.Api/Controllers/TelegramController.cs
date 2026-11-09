@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OneBase.Api.Auth;
 using OneBase.Application.Security;
 using OneBase.Application.Telegram;
+using OneBase.Application.Telegram.Routing;
 using OneBase.Infrastructure.Telegram;
 
 namespace OneBase.Api.Controllers;
@@ -137,6 +138,37 @@ public sealed class TelegramController(TelegramAccountService telegram, OneBase.
     [HttpGet("accounts/{id:guid}/executions")]
     public Task<IActionResult> Executions(Guid id, [FromQuery] string? status, CancellationToken ct) =>
         Run(async () => Ok(await telegram.ExecutionsAsync(id, status, ct)));
+
+    // ---------- Подразделения аккаунта и хозяева диалогов (маршрутизация входящих) ----------
+
+    public sealed record ConversationDepartmentRequest(string? Department);
+    public sealed record ConversationModeRequest(OneBase.Domain.Telegram.TelegramConversationMode Mode);
+
+    /// <summary>Кто работает с аккаунтом: подразделения и кому новые диалоги. Configured = false — всё у продаж, как до маршрутизации.</summary>
+    [HttpGet("accounts/{id:guid}/departments")]
+    public Task<IActionResult> Departments(Guid id, [FromServices] TelegramDepartmentService departments, CancellationToken ct) =>
+        Run(async () => Ok(await departments.GetAsync(id, ct)));
+
+    [HttpPut("accounts/{id:guid}/departments")]
+    public Task<IActionResult> SaveDepartments(Guid id, TelegramDepartmentsInput input, [FromServices] TelegramDepartmentService departments, CancellationToken ct) =>
+        Run(async () => Ok(await departments.SaveAsync(id, input, User.GetUserId(), ct)));
+
+    /// <summary>Диалоги аккаунта с хозяевами; department — код подразделения или <c>unassigned</c>.</summary>
+    [HttpGet("accounts/{id:guid}/conversations")]
+    public Task<IActionResult> Conversations(Guid id, [FromQuery] string? department, [FromServices] TelegramConversationService conversations, CancellationToken ct) =>
+        Run(async () => Ok(await conversations.ListAsync(id, department, ct)));
+
+    /// <summary>Передать диалог подразделению; department = null — «не распределён».</summary>
+    [HttpPut("accounts/{id:guid}/conversations/{peerId:long}/department")]
+    public Task<IActionResult> AssignConversation(Guid id, long peerId, ConversationDepartmentRequest request,
+        [FromServices] TelegramConversationService conversations, CancellationToken ct) =>
+        Run(async () => Ok(await conversations.AssignAsync(id, peerId, request.Department, User.GetUserId(), ct)));
+
+    /// <summary>Ai — отвечает AI подразделения, Manual — ведёт человек (автоответы остановлены).</summary>
+    [HttpPut("accounts/{id:guid}/conversations/{peerId:long}/mode")]
+    public Task<IActionResult> ConversationMode(Guid id, long peerId, ConversationModeRequest request,
+        [FromServices] TelegramConversationService conversations, CancellationToken ct) =>
+        Run(async () => Ok(await conversations.SetModeAsync(id, peerId, request.Mode, User.GetUserId(), ct)));
 
     internal static async Task<IActionResult> Run(Func<Task<IActionResult>> action)
     {

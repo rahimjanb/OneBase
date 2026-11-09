@@ -4,13 +4,21 @@ import { Alert } from "@/components/sales/bits";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
 import { dayLabel, momentLabel, VERIFIX_JOURNAL, VERIFIX_SETTINGS, type HrContext, type HrSyncBrief } from "@/lib/hr";
-import { apiGet } from "@/lib/server-api";
+import { apiGet, apiOutcome } from "@/lib/server-api";
 
 /** Доступ к разделу HR (решает backend): нет доступа — страница «Нет доступа» (администратору интеграций — настройки Verifix). */
 export async function loadHr(path: string): Promise<HrContext> {
-  const ctx = await apiGet<HrContext>("/api/hr/context", path);
-  if (!ctx.hasAccess) redirect(ctx.managesIntegration ? VERIFIX_SETTINGS : `/no-access?from=${encodeURIComponent(path)}`);
-  return ctx;
+  const outcome = await apiOutcome<HrContext>("/api/hr/context");
+  if (outcome.state !== "ok" || !outcome.data.hasAccess) {
+    // Данных Verifix не видно, но подбор или заявки на сотрудника доступны (руководитель отдела, рекрутер) — туда, а не «Нет доступа».
+    const recruitment = await apiOutcome<{ canRead: boolean }>("/api/hr/recruitment/context");
+    if (recruitment.state === "ok") redirect(recruitment.data.canRead ? "/hr/recruitment" : "/hr/recruitment/requests");
+    if (outcome.state === "ok" && outcome.data.managesIntegration) redirect(VERIFIX_SETTINGS);
+    if (outcome.state === "error") return apiGet<HrContext>("/api/hr/context", path);
+    redirect(`/no-access?from=${encodeURIComponent(path)}`);
+  }
+
+  return outcome.data;
 }
 
 export async function HrHeader({ title, subtitle, crumb, actions }: { title: string; subtitle?: string; crumb?: { label: string; href?: string }[]; actions?: React.ReactNode }) {

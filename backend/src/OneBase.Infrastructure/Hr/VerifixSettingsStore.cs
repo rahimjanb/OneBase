@@ -106,7 +106,7 @@ public sealed class VerifixSettingsStore(
     public const int DefaultTracksInterval = 2;
     public const int MaxHistoryDays = 92;
 
-    private readonly IDataProtector _protector = dataProtection.CreateProtector("OneBase.Integrations.Verifix.ClientSecret");
+    private readonly IDataProtector _protector = dataProtection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.VerifixClientSecret);
     private volatile VerifixConnection? _cached;
 
     public async Task<VerifixConnection> GetAsync(CancellationToken ct = default)

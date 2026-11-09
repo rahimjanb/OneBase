@@ -6,6 +6,7 @@ import {
   Factory,
   CalendarClock,
   ChartColumn,
+  ClipboardList,
   DoorOpen,
   FileBarChart,
   FolderKanban,
@@ -21,6 +22,7 @@ import {
   Sparkles,
   Table2,
   Tags,
+  UserPlus,
   UserRound,
   Users,
   UsersRound,
@@ -68,13 +70,18 @@ const toDepartments = { href: "/departments", label: "Назад к отдела
 
 const under = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
+// Данные Verifix — тем, у кого есть доступ к HR (hr.department — признак из /api/auth/me); заявки на сотрудника — руководителям отделов и HR
+// (hr.requests); подбор — по праву «Подбор». «Заявки» раньше «Подбора»: путь /hr/recruitment/requests — вкладка заявок.
+const hrData = ["hr.department"];
 const hrTabs: SectionTab[] = [
-  { key: "overview", label: "Обзор", href: "/hr", icon: LayoutGrid, description: "сводка дня и посещаемость" },
-  { key: "employees", label: "Сотрудники", href: "/hr/employees", icon: Users, description: "список и карточки сотрудников" },
-  { key: "attendance", label: "Посещаемость", href: "/hr/attendance", icon: DoorOpen, description: "приходы и уходы по дням" },
-  { key: "deviations", label: "Опоздания и отсутствия", short: "Опоздания", href: "/hr/deviations", icon: CalendarClock, description: "кто опоздал или не пришёл" },
-  { key: "timesheets", label: "Табели", href: "/hr/timesheets", icon: Table2, description: "рабочее время за период" },
-  { key: "reports", label: "Отчёты", href: "/hr/reports", icon: ChartColumn, description: "отчёты по дисциплине" },
+  { key: "overview", label: "Обзор", href: "/hr", icon: LayoutGrid, permission: hrData, description: "сводка дня и посещаемость" },
+  { key: "employees", label: "Сотрудники", href: "/hr/employees", icon: Users, permission: hrData, description: "список и карточки сотрудников" },
+  { key: "attendance", label: "Посещаемость", href: "/hr/attendance", icon: DoorOpen, permission: hrData, description: "приходы и уходы по дням" },
+  { key: "deviations", label: "Опоздания и отсутствия", short: "Опоздания", href: "/hr/deviations", icon: CalendarClock, permission: hrData, description: "кто опоздал или не пришёл" },
+  { key: "timesheets", label: "Табели", href: "/hr/timesheets", icon: Table2, permission: hrData, description: "рабочее время за период" },
+  { key: "reports", label: "Отчёты", href: "/hr/reports", icon: ChartColumn, permission: hrData, description: "отчёты по дисциплине" },
+  { key: "requests", label: "Заявки на сотрудника", short: "Заявки", href: "/hr/recruitment/requests", icon: ClipboardList, permission: ["hr.requests"], description: "отделы просят новых сотрудников" },
+  { key: "recruitment", label: "Подбор", href: "/hr/recruitment", icon: UserPlus, permission: ["hr.recruitment.read", "hr.recruitment.manage"], description: "вакансии, кандидаты, Telegram, HH, собеседования" },
 ];
 
 export const taskTabs: SectionTab[] = [

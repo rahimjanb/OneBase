@@ -66,7 +66,7 @@ public static class SystemRoles
             Permissions.UsersManage, Permissions.SalesRead, Permissions.FinanceRead, Permissions.HrRead, Permissions.FilesRead, Permissions.FilesWrite,
             Permissions.FilesReadAll,
             Permissions.AgentsRun, Permissions.ApprovalsDecide, Permissions.AuditRead, Permissions.FieldPlan, Permissions.WorkTasks,
-            Permissions.ProcurementRequest, Permissions.ProcurementRead, Permissions.ProcurementSettings,
+            Permissions.ProcurementRequest, Permissions.ProcurementRead, Permissions.ProcurementSettings, Permissions.HrRecruitmentRead,
         ]),
         new(DataAdmin, "Файлы отдела продаж и AI Data Manager: загрузка отчётов, изменение планов, целей и дилеров регионов с подтверждением. "
                        + "В «Настройках» — только AI Data Manager.", "sales",
@@ -75,7 +75,8 @@ public static class SystemRoles
             Employee),
         new("Продажи", "Сотрудник отдела продаж: раздел «Продажи», консультант, файлы.", "sales", [Permissions.SalesRead, .. Employee]),
         new("Финансы", "Сотрудник финансового отдела: оплаты и продажи, консультант, файлы.", "finance", [Permissions.FinanceRead, Permissions.SalesRead, .. Employee]),
-        new("HR", "Сотрудник HR: кадровые данные, консультант, файлы.", "hr", [Permissions.HrRead, .. Employee]),
+        new("HR", "Сотрудник HR: кадровые данные, подбор персонала (заявки, вакансии, кандидаты), консультант, файлы.", "hr",
+            [Permissions.HrRead, Permissions.HrRecruitmentRead, Permissions.HrRecruitmentManage, .. Employee]),
         new(ProductionRole, "Сотрудник производства: задания на выпуск (создать, выпустить, закрыть), рецептуры и расход сырья — просмотр; остатки и продажи товаров (раздел «Продажи»), консультант, файлы.", "production",
             [Permissions.SalesRead, Permissions.ProductionRead, Permissions.ProductionManage, .. Employee]),
         new("Снабжение", "Сотрудник снабжения: все заявки на закупку и их обработка, остатки и продажи товаров (раздел «Продажи»), консультант, файлы.", "supply",
@@ -122,6 +123,10 @@ public static class SystemRoles
         (ProductionRole, Permissions.ProductionManage),
         (Director, Permissions.ProductionRead),
         ("Снабжение", Permissions.ProductionRead),
+        // Подбор персонала (HR Recruitment, этап 2): HR ведёт подбор, директор видит.
+        ("HR", Permissions.HrRecruitmentRead),
+        ("HR", Permissions.HrRecruitmentManage),
+        (Director, Permissions.HrRecruitmentRead),
     ];
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
@@ -175,5 +180,7 @@ public static class SystemRoles
         [Permissions.ProductionRead] = "Производство: рецептуры, задания и расход — просмотр",
         [Permissions.ProductionManage] = "Производство: задания на выпуск",
         [Permissions.ProductionRecipes] = "Производство: рецептуры",
+        [Permissions.HrRecruitmentRead] = "Подбор персонала: просмотр",
+        [Permissions.HrRecruitmentManage] = "Подбор персонала: управление",
     };
 }

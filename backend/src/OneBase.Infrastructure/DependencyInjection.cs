@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Minio;
 using OneBase.Application.Abstractions;
+using OneBase.Application.Recovery;
 using OneBase.Application.Sales;
 using OneBase.Infrastructure.Linko;
 using OneBase.Domain.Identity;
@@ -24,6 +25,14 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
+        // Копия для проверки (Recovery:Isolated): службы, которые пишут людям или ходят во внешние системы, не регистрируются (ниже —
+        // isolation.AllowOutbound), а каждый HttpClient из фабрики отклоняет запрос — даже тот, что человек запустит кнопкой.
+        var isolation = RecoveryIsolation.Register(services, config[RecoveryIsolation.ConfigKey]);
+        if (isolation.Isolated)
+        {
+            services.ConfigureHttpClientDefaults(http => http.AddHttpMessageHandler(() => new Recovery.IsolationHttpHandler()));
+        }
+
         // PostgreSQL — бизнес-данные и метаданные
         // Перехватчик сохранения ставит push-уведомления в очередь после успешного сохранения.
         services.AddSingleton<Push.PushQueue>();
@@ -137,11 +146,18 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.DataSources.IDataSourceGateway, DataSources.DataSourceGateway>();
         services.AddScoped<DataSources.DataSourceService>();
         services.AddScoped<DataSources.DataSourceTransfer>();
-        services.AddHostedService<DataSources.DataSourceSyncWorker>();
+        if (isolation.AllowOutbound<DataSources.DataSourceSyncWorker>("Google-таблицы: синхронизация источников данных"))
+        {
+            services.AddHostedService<DataSources.DataSourceSyncWorker>();
+        }
+
         services.AddScoped<OneBase.Application.Procurement.IStockSheetSource, DataSources.StockSheetSource>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementSheetImportService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementCatalogImportService>();
-        services.AddHostedService<DataSources.StockSheetImportWorker>();
+        if (isolation.AllowOutbound<DataSources.StockSheetImportWorker>("Google-таблицы: журнал склада"))
+        {
+            services.AddHostedService<DataSources.StockSheetImportWorker>();
+        }
 
         // Отчёты AI-консультанта: файл Excel из листов отчёта; документы Telegram-агента (письма, планы, разборы) — Word из Markdown.
         services.AddSingleton<OneBase.Application.Reports.IReportWorkbookWriter, Reports.ReportWorkbookWriter>();
@@ -158,7 +174,10 @@ public static class DependencyInjection
         services.AddSingleton<Logging.SystemLogQueue>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<ILoggerProvider, Logging.SystemLoggerProvider>());
         services.AddHostedService<Logging.SystemLogWriter>();
-        services.AddHostedService<LinkoSyncWorker>();
+        if (isolation.AllowOutbound<LinkoSyncWorker>("Linko: синхронизация продаж"))
+        {
+            services.AddHostedService<LinkoSyncWorker>();
+        }
 
         // Sales Base (sales.1base.uz): полевые продажи поверх зеркала Linko.
         services.AddScoped<OneBase.Application.Field.ILinkoSalesProvider, OneBase.Application.Field.LinkoMirrorSalesProvider>();
@@ -175,7 +194,10 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Field.FieldRecommendationService>();
         services.AddScoped<OneBase.Application.Field.FieldDashboardService>();
         services.AddScoped<Field.FieldStatsRefresher>();
-        services.AddHostedService<Field.FieldWorker>();
+        if (isolation.AllowOutbound<Field.FieldWorker>("Sales Base: статистика, AI-рекомендации и напоминания о просрочке"))
+        {
+            services.AddHostedService<Field.FieldWorker>();
+        }
 
         // Telegram: пользовательские аккаунты (MTProto, WTelegramClient) — один клиент на аккаунт на весь процесс; входящие → очередь агента.
         services.AddSingleton<OneBase.Application.Telegram.TelegramInbox>();
@@ -184,7 +206,14 @@ public static class DependencyInjection
         services.AddScoped<Telegram.TelegramAccountService>();
         services.AddScoped<OneBase.Application.Telegram.TelegramLinkService>();
         services.AddScoped<OneBase.Application.Telegram.TelegramMaterialService>();
-        services.AddHostedService<Telegram.TelegramConnectionWorker>();
+        // Маршрутизация входящих по подразделениям: хозяин диалога, подразделения аккаунта (обработчики подразделений — в AI).
+        services.AddScoped<OneBase.Application.Telegram.Routing.TelegramMessageRouter>();
+        services.AddScoped<OneBase.Application.Telegram.Routing.TelegramDepartmentService>();
+        services.AddScoped<OneBase.Application.Telegram.Routing.TelegramConversationService>();
+        if (isolation.AllowOutbound<Telegram.TelegramConnectionWorker>("Telegram: подключение аккаунтов"))
+        {
+            services.AddHostedService<Telegram.TelegramConnectionWorker>();
+        }
 
         // Автоотчёты в Telegram: шесть отчётов для РМ, СВ и ТП, картинки PNG 16:9 на сервере (SkiaSharp), 13 запусков по расписанию,
         // очередь и журнал в PostgreSQL.
@@ -209,7 +238,10 @@ public static class DependencyInjection
         services.AddScoped<Telegram.Reports.TelegramReportService>();
         services.AddScoped<Telegram.Reports.IncentiveSettingsService>();
         services.AddSingleton<Telegram.Reports.TelegramReportRunner>();
-        services.AddHostedService<Telegram.Reports.TelegramReportWorker>();
+        if (isolation.AllowOutbound<Telegram.Reports.TelegramReportWorker>("Telegram: автоотчёты по расписанию"))
+        {
+            services.AddHostedService<Telegram.Reports.TelegramReportWorker>();
+        }
 
         // Раздел «Задачи» OneBase: задачи отделов и проектов, уведомления пользователей, напоминания о сроках.
         services.AddScoped<OneBase.Application.Work.UserNotifier>();
@@ -220,6 +252,46 @@ public static class DependencyInjection
 
         // Цифровой двойник: снимок предприятия из сервисов разделов и привязки зданий к отделам и складам.
         services.AddScoped<OneBase.Application.Twin.TwinService>();
+
+        // Подбор персонала: заявки, вакансии, кандидаты; срок хранения данных кандидатов — внутренняя служба (наружу не ходит).
+        services.AddScoped<OneBase.Application.Recruitment.RecruitmentService>();
+        services.AddScoped<OneBase.Application.Recruitment.RecruitmentRetentionService>();
+        services.AddHostedService<Recruitment.RecruitmentRetentionWorker>();
+
+        // Telegram для HR: обработчик диалогов с кандидатами и признак HR (маршрутизатор), очередь исходящих подразделений и её отправка,
+        // публикации, источники и лиды.
+        services.AddScoped<OneBase.Application.Telegram.Outbox.TelegramOutbox>();
+        services.AddScoped<OneBase.Application.Telegram.Outbox.TelegramOutboxRunner>();
+        services.AddScoped<OneBase.Application.Telegram.Outbox.ITelegramOutboxObserver, OneBase.Application.Recruitment.Telegram.RecruitmentOutboxObserver>();
+        services.AddScoped<OneBase.Application.Telegram.Routing.ITelegramDepartmentHandler, OneBase.Application.Recruitment.Telegram.RecruitmentTelegramHandler>();
+        services.AddScoped<OneBase.Application.Telegram.Routing.ITelegramRouteClaim, OneBase.Application.Recruitment.Telegram.RecruitmentRouteClaim>();
+        services.AddScoped<OneBase.Application.Recruitment.Telegram.RecruitmentTelegramService>();
+        if (isolation.AllowOutbound<Telegram.TelegramOutboxWorker>("Telegram: исходящие подразделений (HR — ответы, публикации, напоминания)"))
+        {
+            services.AddHostedService<Telegram.TelegramOutboxWorker>();
+        }
+
+        // Центр исключений подбора; HH.uz — официальный API (HttpClient из фабрики: в копии для проверки закрыт), отклики раз в 15 минут.
+        services.AddScoped<OneBase.Application.Recruitment.RecruitmentExceptions>();
+        // Собеседования (календарь OneBase) и автоматика подбора: напоминания, касания, проверка номеров HR, автооценка — раз в 5 минут.
+        services.AddScoped<OneBase.Application.Recruitment.InterviewService>();
+        services.AddScoped<OneBase.Application.Recruitment.RecruitmentAutomation>();
+        if (isolation.AllowOutbound<Recruitment.RecruitmentAutomationWorker>("Подбор: напоминания кандидатам и автоматика"))
+        {
+            services.AddHostedService<Recruitment.RecruitmentAutomationWorker>();
+        }
+        // ИИ-агенты отделов («Настройки → ИИ-агенты»): настройки, журнал ответов, доставка ответов с паузой «как человек»; Telegram-обработчик
+        // для отделов без своего (снабжение, финансы…) — сам агент (OneBase.AI) отвечает, только если включён.
+        services.AddScoped<OneBase.Application.Agents.DialogAgentDelivery>();
+        services.AddScoped<OneBase.Application.Agents.DialogAgentService>();
+        services.AddScoped<OneBase.Application.Telegram.Routing.ITelegramDepartmentHandler, OneBase.Application.Agents.AssistantTelegramHandler>();
+        services.AddScoped<OneBase.Application.Telegram.Outbox.ITelegramOutboxObserver, OneBase.Application.Agents.DialogAgentOutboxObserver>();
+        services.AddHttpClient<OneBase.Application.Recruitment.Hh.IHhApi, Recruitment.HhClient>(c => c.Timeout = TimeSpan.FromSeconds(60));
+        services.AddScoped<Recruitment.HhService>();
+        if (isolation.AllowOutbound<Recruitment.HhSyncWorker>("HH.uz: отклики и резюме"))
+        {
+            services.AddHostedService<Recruitment.HhSyncWorker>();
+        }
 
         // Раздел «Заявки» (снабжение): заявки на закупку, номера документов без повторов.
         services.AddScoped<OneBase.Application.Procurement.IProcurementNumbers, Persistence.ProcurementNumbers>();
@@ -243,7 +315,10 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Procurement.ProcurementAnalyticsService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementReportService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementInsightService>();
-        services.AddHostedService<Work.WorkTaskReminderWorker>();
+        if (isolation.AllowOutbound<Work.WorkTaskReminderWorker>("Задачи и снабжение: напоминания о сроках"))
+        {
+            services.AddHostedService<Work.WorkTaskReminderWorker>();
+        }
 
         // HR: Verifix — сотрудники, отметки и табель (только чтение API Verifix). client_secret — в «Настройки → Интеграции → HR → Verifix»
         // (зашифрован Data Protection) или Verifix__ClientId / Verifix__ClientSecret в окружении сервера.
@@ -262,7 +337,10 @@ public static class DependencyInjection
         services.AddScoped<Hr.HrSyncService>();
         services.AddSingleton<Hr.HrSyncCoordinator>();
         services.AddScoped<OneBase.Application.Hr.HrService>();
-        services.AddHostedService<Hr.HrSyncWorker>();
+        if (isolation.AllowOutbound<Hr.HrSyncWorker>("Verifix: синхронизация HR"))
+        {
+            services.AddHostedService<Hr.HrSyncWorker>();
+        }
 
         // Web Push (Lib.Net.Http.WebPush: aes128gcm + VAPID, как требует и Apple). Ключи VAPID — в базе, токены — в памяти
         // (Apple просит не обновлять JWT чаще раза в час); повтор по 429 — не больше двух раз.
@@ -270,7 +348,13 @@ public static class DependencyInjection
         services.AddMemoryVapidTokenCache();
         services.AddPushServiceClient(o => o.MaxRetriesAfter = 2);
         services.AddSingleton<Push.PushKeyProvider>();
-        services.AddHostedService<Push.PushSender>();
+        if (isolation.AllowOutbound<Push.PushSender>("Push-уведомления"))
+        {
+            services.AddHostedService<Push.PushSender>();
+        }
+
+        // Проверка восстановленной копии: миграции, ключи, расшифровка секретов, ссылки на файлы (GET /api/recovery/check).
+        services.AddScoped<Recovery.RecoveryCheckService>();
 
         return services;
     }

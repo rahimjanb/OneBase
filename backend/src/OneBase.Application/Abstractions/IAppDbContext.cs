@@ -194,6 +194,8 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Telegram.TelegramCampaign> TelegramCampaigns { get; }
     DbSet<OneBase.Domain.Telegram.TelegramCampaignRecipient> TelegramCampaignRecipients { get; }
     DbSet<OneBase.Domain.Telegram.TelegramCampaignAttachment> TelegramCampaignAttachments { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramAccountDepartment> TelegramAccountDepartments { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramConversation> TelegramConversations { get; }
 
     // Автоотчёты в Telegram: настройки, расписания, получатели, журнал отправок.
     DbSet<OneBase.Domain.Telegram.TelegramReportSettings> TelegramReportSettings { get; }
@@ -209,6 +211,34 @@ public interface IAppDbContext
     // Цифровой двойник: здания модели территории и их привязки к отделам и складам.
     DbSet<OneBase.Domain.Twin.TwinObject> TwinObjects { get; }
     DbSet<OneBase.Domain.Twin.TwinObjectLink> TwinObjectLinks { get; }
+
+    // Подбор персонала: заявки, вакансии, кандидаты (контакты, источники, резюме, согласия, дубли), отклики и их история, настройки.
+    DbSet<OneBase.Domain.Recruitment.HiringRequest> HiringRequests { get; }
+    DbSet<OneBase.Domain.Recruitment.Vacancy> Vacancies { get; }
+    DbSet<OneBase.Domain.Recruitment.Candidate> Candidates { get; }
+    DbSet<OneBase.Domain.Recruitment.CandidateContact> CandidateContacts { get; }
+    DbSet<OneBase.Domain.Recruitment.CandidateSource> CandidateSources { get; }
+    DbSet<OneBase.Domain.Recruitment.CandidateResume> CandidateResumes { get; }
+    DbSet<OneBase.Domain.Recruitment.CandidateApplication> CandidateApplications { get; }
+    DbSet<OneBase.Domain.Recruitment.ApplicationEvent> ApplicationEvents { get; }
+    DbSet<OneBase.Domain.Recruitment.CandidateConsent> CandidateConsents { get; }
+    DbSet<OneBase.Domain.Recruitment.CandidateDuplicate> CandidateDuplicates { get; }
+    DbSet<OneBase.Domain.Recruitment.RecruitmentSettings> RecruitmentSettings { get; }
+    DbSet<OneBase.Domain.Recruitment.RecruitmentConsentText> RecruitmentConsentTexts { get; }
+    DbSet<OneBase.Domain.Recruitment.VacancyPublication> VacancyPublications { get; }
+    DbSet<OneBase.Domain.Recruitment.RecruitmentSource> RecruitmentSources { get; }
+    DbSet<OneBase.Domain.Recruitment.TelegramLead> TelegramLeads { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramConversationMessage> TelegramConversationMessages { get; }
+    DbSet<OneBase.Domain.Telegram.TelegramOutgoingMessage> TelegramOutgoingMessages { get; }
+    DbSet<OneBase.Domain.Recruitment.HhConnection> HhConnections { get; }
+    DbSet<OneBase.Domain.Recruitment.HhNegotiation> HhNegotiations { get; }
+    DbSet<OneBase.Domain.Recruitment.CandidateScore> CandidateScores { get; }
+    DbSet<OneBase.Domain.Recruitment.VacancyInterviewer> VacancyInterviewers { get; }
+    DbSet<OneBase.Domain.Recruitment.Interview> Interviews { get; }
+    DbSet<OneBase.Domain.Recruitment.RecruitmentException> RecruitmentExceptions { get; }
+    DbSet<OneBase.Domain.AI.DialogAgent> DialogAgents { get; }
+    DbSet<OneBase.Domain.AI.DialogAgentAnswer> DialogAgentAnswers { get; }
+    DbSet<OneBase.Domain.AI.DialogAgentReply> DialogAgentReplies { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 

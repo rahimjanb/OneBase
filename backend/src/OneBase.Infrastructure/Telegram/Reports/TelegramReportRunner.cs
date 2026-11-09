@@ -415,7 +415,7 @@ internal sealed class TelegramReportWorker(TelegramReportRunner runner, IConfigu
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!config.GetValue("Telegram:Enabled", true))
+        if (!WTelegramGateway.Enabled(config))
         {
             logger.LogInformation("Автоотчёты: Telegram выключен в этой среде (Telegram:Enabled=false)");
             return;

@@ -139,7 +139,7 @@ public sealed class AiSettingsStore(
     private volatile IReadOnlyDictionary<string, AiProviderState>? _providers;
     private volatile AiSettingsSnapshot? _settings;
 
-    private IDataProtector Protector(string code) => dataProtection.CreateProtector($"OneBase.AI.ProviderKey.{code}");
+    private IDataProtector Protector(string code) => dataProtection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.AiProviderKey(code));
 
     public async Task<IReadOnlyDictionary<string, AiProviderState>> GetProvidersAsync(CancellationToken ct = default)
     {

@@ -23,7 +23,21 @@ public sealed record LlmMessage(
     string Content,
     string? ToolCallId = null,
     IReadOnlyList<LlmToolCall>? ToolCalls = null,
-    LlmProviderContent? Raw = null);
+    LlmProviderContent? Raw = null,
+    IReadOnlyList<LlmAttachment>? Attachments = null);
+
+/// <summary>
+/// Файл в сообщении пользователя — модель читает его сама: фото (image/jpeg, image/png, image/webp, image/gif) или PDF (application/pdf,
+/// в том числе скан без текстового слоя). Идёт перед текстом сообщения — так модель читает его лучше.
+/// </summary>
+public sealed record LlmAttachment(string MediaType, byte[] Data, string FileName)
+{
+    public static readonly IReadOnlySet<string> ImageTypes = new HashSet<string>(StringComparer.Ordinal) { "image/jpeg", "image/png", "image/webp", "image/gif" };
+
+    public const string Pdf = "application/pdf";
+
+    public bool IsImage => ImageTypes.Contains(MediaType);
+}
 
 public sealed record LlmToolDefinition(string Name, string Description, JsonElement InputSchema);
 

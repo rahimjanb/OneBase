@@ -17,7 +17,7 @@ public sealed class TelegramCredentialsStore(IServiceScopeFactory scopes, IDataP
 {
     public const string Code = "telegram";
 
-    private readonly IDataProtector _protector = protection.CreateProtector("OneBase.Telegram.ApiHash");
+    private readonly IDataProtector _protector = protection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.TelegramApiHash);
     private volatile TelegramApiCredentials? _cached;
 
     public async Task<TelegramApiCredentials?> GetAsync(CancellationToken ct = default)

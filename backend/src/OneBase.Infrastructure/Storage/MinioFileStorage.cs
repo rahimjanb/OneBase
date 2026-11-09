@@ -41,6 +41,22 @@ internal sealed class MinioFileStorage(IMinioClient client, MinioOptions options
     public Task DeleteAsync(string objectKey, CancellationToken cancellationToken = default) =>
         client.RemoveObjectAsync(new RemoveObjectArgs().WithBucket(options.Bucket).WithObject(objectKey), cancellationToken);
 
+    public async IAsyncEnumerable<string> ListKeysAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (!await client.BucketExistsAsync(new BucketExistsArgs().WithBucket(options.Bucket), cancellationToken))
+        {
+            yield break;
+        }
+
+        await foreach (var item in client.ListObjectsEnumAsync(new ListObjectsArgs().WithBucket(options.Bucket).WithRecursive(true), cancellationToken))
+        {
+            if (!item.IsDir)
+            {
+                yield return item.Key;
+            }
+        }
+    }
+
     private async Task EnsureBucketAsync(CancellationToken cancellationToken)
     {
         if (_bucketReady)

@@ -28,6 +28,12 @@ export type TelegramAccount = {
 
 export type TelegramLive = { online: boolean; events: number; lastEventAt: string | null; messages: number; lastMessageAt: string | null };
 
+/** Подразделение, для которого работает аккаунт: включено, получает новые диалоги, есть ли у него AI-обработчик сообщений. */
+export type TelegramDepartment = { code: string; name: string; enabled: boolean; isDefault: boolean; hasHandler: boolean };
+
+/** configured = false — подразделения не заданы: все диалоги аккаунта у продаж (как до маршрутизации). */
+export type TelegramDepartments = { configured: boolean; departments: TelegramDepartment[] };
+
 export type TelegramOverview = { credentials: TelegramCredentials; accounts: TelegramAccount[] };
 
 export type TelegramLogin = { status: TelegramAccountStatus; account: TelegramAccount };
@@ -205,6 +211,9 @@ export const telegramApi = {
     bff<TelegramAccess>(`${base}/accounts/${id}/access`, { method: "PUT", body: json({ replyToAll, fullAccessUserId }) }),
   testAgent: (id: string, input: AgentTestInput) => bff<AgentTestResult>(`${base}/accounts/${id}/agent/test`, { method: "POST", body: json(input) }),
   executions: (id: string, status = "") => bff<TelegramExecution[]>(`${base}/accounts/${id}/executions?status=${encodeURIComponent(status)}`),
+  departments: (id: string) => bff<TelegramDepartments>(`${base}/accounts/${id}/departments`),
+  saveDepartments: (id: string, departments: string[], fallback: string | null) =>
+    bff<TelegramDepartments>(`${base}/accounts/${id}/departments`, { method: "PUT", body: json({ departments, default: fallback }) }),
 };
 
 export const myTelegramApi = {

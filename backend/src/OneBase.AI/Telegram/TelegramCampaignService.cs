@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OneBase.AI.Reports;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Telegram;
+using OneBase.Application.Telegram.Routing;
 using OneBase.Domain.Audit;
 using OneBase.Domain.Telegram;
 
@@ -103,8 +104,9 @@ public sealed class TelegramCampaignService(
 
     // ---------- Справочники мастера ----------
 
+    /// <summary>Аккаунты для рассылок продаж: без аккаунтов, отданных другим подразделениям (номер HR в рассылках продаж не нужен).</summary>
     public async Task<IReadOnlyList<CampaignAccount>> AccountsAsync(CancellationToken ct = default) =>
-        await db.TelegramAccounts.AsNoTracking().OrderBy(a => a.CreatedAt)
+        await db.AccountsServing(TelegramDepartments.Sales).AsNoTracking().OrderBy(a => a.CreatedAt)
             .Select(a => new CampaignAccount(a.Id, a.Name, a.Username, a.Status.ToString())).ToListAsync(ct);
 
     /// <summary>Чаты аккаунта для выбора получателей: поиск, тип; Added — уже в этой рассылке.</summary>
@@ -228,9 +230,9 @@ public sealed class TelegramCampaignService(
 
     public async Task<CampaignView> CreateAsync(CampaignInput input, Guid userId, CancellationToken ct = default)
     {
-        if (!await db.TelegramAccounts.AnyAsync(a => a.Id == input.AccountId, ct))
+        if (!await db.ServesAsync(input.AccountId, TelegramDepartments.Sales, ct))
         {
-            throw new TelegramException("Выберите аккаунт Telegram.", TelegramErrorKind.Config);
+            throw new TelegramException("Выберите аккаунт Telegram продаж.", TelegramErrorKind.Config);
         }
 
         var campaign = new TelegramCampaign { AccountId = input.AccountId, Name = "—", CreatedById = userId };
@@ -249,9 +251,9 @@ public sealed class TelegramCampaignService(
         EnsureEditable(campaign);
         if (campaign.AccountId != input.AccountId)
         {
-            if (!await db.TelegramAccounts.AnyAsync(a => a.Id == input.AccountId, ct))
+            if (!await db.ServesAsync(input.AccountId, TelegramDepartments.Sales, ct))
             {
-                throw new TelegramException("Выберите аккаунт Telegram.", TelegramErrorKind.Config);
+                throw new TelegramException("Выберите аккаунт Telegram продаж.", TelegramErrorKind.Config);
             }
 
             await db.TelegramCampaignRecipients.Where(r => r.CampaignId == id).ExecuteDeleteAsync(ct);

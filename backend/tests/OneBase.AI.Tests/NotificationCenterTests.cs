@@ -15,7 +15,7 @@ public class NotificationCatalogTests
     [Fact]
     public void Every_kind_has_a_type_and_one_category()
     {
-        string[] types = ["task_overdue", "task_due", "task_done", "task_comment", "task_assigned", "mention", "ai_insight", "ai_budget", "sales_alert", "calendar", "procurement", "system"];
+        string[] types = ["task_overdue", "task_due", "task_done", "task_comment", "task_assigned", "mention", "ai_insight", "ai_budget", "sales_alert", "calendar", "procurement", "hr_event", "system"];
         foreach (var kind in Enum.GetValues<UserNotificationKind>())
         {
             var (type, category) = NotificationCatalog.Of(kind);
@@ -27,6 +27,7 @@ public class NotificationCatalogTests
         Assert.Equal(Enum.GetValues<UserNotificationKind>().Length, all.Count);
         Assert.Equal(all.Count, all.Distinct().Count());
         Assert.Equal(("task_overdue", "tasks"), NotificationCatalog.Of(UserNotificationKind.TaskOverdue));
+        Assert.Equal(("hr_event", "hr"), NotificationCatalog.Of(UserNotificationKind.RecruitmentAlert));
         Assert.Equal(("ai_insight", "ai"), NotificationCatalog.Of(UserNotificationKind.TaskSuggestion));
         // Приглашение в событие календаря — раздел «Задачи» (вкладка и настройка «Что присылать»).
         Assert.Equal(("calendar", "tasks"), NotificationCatalog.Of(UserNotificationKind.CalendarInvite));

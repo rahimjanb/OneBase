@@ -319,6 +319,20 @@ const dict: Dict = {
   "Без текста": "Matnsiz",
   "попыток {n}": "urinishlar: {n}",
   "повтор {date}": "takror {date}",
+
+  // Подразделения аккаунта Telegram (components/telegram/TelegramDepartments).
+  "Подразделения": "Bo'linmalar",
+  "Подразделение": "Bo'linma",
+  "Не заданы — все диалоги этого номера у продаж.": "Belgilanmagan — bu raqamning barcha suhbatlari savdo bo'limida.",
+  "Работает для: {list}. Новые диалоги: {fallback}.": "Kimlar uchun ishlaydi: {list}. Yangi suhbatlar: {fallback}.",
+  "не распределять — решает человек": "taqsimlanmaydi — inson hal qiladi",
+  "Не распределять — решает человек": "Taqsimlamaslik — inson hal qiladi",
+  "У подразделения {list} AI-обработчика пока нет: его диалогам никто не отвечает автоматически.": "{list} bo'linmasida hozircha AI ishlovchisi yo'q: uning suhbatlariga hech kim avtomatik javob bermaydi.",
+  "Диалог принадлежит одному подразделению: агент продаж не видит диалоги HR, и наоборот. Диалоги, уже закреплённые за подразделением, остаются у него. Номер, который работает не для продаж, не предлагается рассылкам и автоотчётам продаж.": "Suhbat bitta bo'linmaga tegishli: savdo agenti HR suhbatlarini ko'rmaydi va aksincha. Bo'linmaga biriktirilgan suhbatlar unda qoladi. Savdo uchun ishlamaydigan raqam savdo tarqatmalari va avtohisobotlariga taklif qilinmaydi.",
+  "Работает с номером": "Raqam bilan ishlaydi",
+  "Новые диалоги": "Yangi suhbatlar",
+  "Новые диалоги — {name}": "Yangi suhbatlar — {name}",
+  "без AI-обработчика": "AI ishlovchisiz",
 };
 
 export default dict;

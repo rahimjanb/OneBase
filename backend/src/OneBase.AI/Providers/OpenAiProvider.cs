@@ -109,6 +109,16 @@ public sealed class OpenAiProvider(IHttpClientFactory httpFactory) : HttpAiProvi
             messages.Add(m.Role switch
             {
                 LlmRole.System => new JsonObject { ["role"] = "system", ["content"] = m.Content },
+                LlmRole.User when m.Attachments is { Count: > 0 } files => new JsonObject
+                {
+                    ["role"] = "user",
+                    ["content"] = new JsonArray([
+                        .. files.Select(f => (JsonNode?)(f.IsImage
+                            ? new JsonObject { ["type"] = "image_url", ["image_url"] = new JsonObject { ["url"] = DataUrl(f) } }
+                            : new JsonObject { ["type"] = "file", ["file"] = new JsonObject { ["filename"] = f.FileName, ["file_data"] = DataUrl(f) } })),
+                        new JsonObject { ["type"] = "text", ["text"] = m.Content },
+                    ]),
+                },
                 LlmRole.User => new JsonObject { ["role"] = "user", ["content"] = m.Content },
                 LlmRole.Tool => new JsonObject { ["role"] = "tool", ["tool_call_id"] = m.ToolCallId, ["content"] = m.Content },
                 _ => Assistant(m),
@@ -172,6 +182,18 @@ public sealed class OpenAiProvider(IHttpClientFactory httpFactory) : HttpAiProvi
             {
                 case LlmRole.System:
                     input.Add(new JsonObject { ["role"] = "system", ["content"] = m.Content });
+                    break;
+                case LlmRole.User when m.Attachments is { Count: > 0 } files:
+                    input.Add(new JsonObject
+                    {
+                        ["role"] = "user",
+                        ["content"] = new JsonArray([
+                            .. files.Select(f => (JsonNode?)(f.IsImage
+                                ? new JsonObject { ["type"] = "input_image", ["image_url"] = DataUrl(f) }
+                                : new JsonObject { ["type"] = "input_file", ["filename"] = f.FileName, ["file_data"] = DataUrl(f) })),
+                            new JsonObject { ["type"] = "input_text", ["text"] = m.Content },
+                        ]),
+                    });
                     break;
                 case LlmRole.User:
                     input.Add(new JsonObject { ["role"] = "user", ["content"] = m.Content });
@@ -268,6 +290,9 @@ public sealed class OpenAiProvider(IHttpClientFactory httpFactory) : HttpAiProvi
         var usage = root.TryGetProperty("usage", out var u) ? new AiTokenUsage(Int(u, "input_tokens"), Int(u, "output_tokens")) : AiTokenUsage.None;
         return new AiCompletion(text.Count == 0 ? null : string.Concat(text), calls, usage, Str(root, "model") ?? requestedModel, stop);
     }
+
+    /// <summary>Фото или PDF как data URL (base64) — так OpenAI принимает файлы прямо в сообщении.</summary>
+    private static string DataUrl(LlmAttachment file) => $"data:{file.MediaType};base64,{Convert.ToBase64String(file.Data)}";
 
     private static JsonObject Assistant(LlmMessage m)
     {

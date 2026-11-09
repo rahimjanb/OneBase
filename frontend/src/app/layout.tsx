@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { Inter, Manrope, Onest } from "next/font/google";
 import { Suspense } from "react";
 import { PwaRegister } from "@/components/shell/PwaRegister";
+import { RecoveryBanner } from "@/components/shell/RecoveryBanner";
 import { Splash, splashCss } from "@/components/shell/Splash";
 import { SplashReady } from "@/components/shell/SplashReady";
 import splashScreens from "@/components/shell/splashScreens.json";
@@ -130,6 +131,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           )}
           <PwaRegister />
         </I18nProvider>
+        {/* Копия для проверки (Recovery:Isolated) — своя граница Suspense: ответ API о режиме не задерживает страницу. */}
+        <Suspense fallback={null}>
+          <RecoveryBanner />
+        </Suspense>
       </body>
     </html>
   );

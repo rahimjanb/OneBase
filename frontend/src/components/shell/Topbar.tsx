@@ -31,7 +31,8 @@ export function Topbar({ me, permissions }: { me: Me | null; permissions: readon
         </div>
         <Breadcrumbs />
         <Suspense fallback={null}>
-          <ModuleNav permissions={me?.permissions ?? null} userId={me?.id ?? null} />
+          {/* Права с признаками из /api/auth/me (hr.department, hr.requests) — вкладки HR и подбора по ним. */}
+          <ModuleNav permissions={permissions ? [...permissions] : (me?.permissions ?? null)} userId={me?.id ?? null} />
         </Suspense>
         <TopbarSearch />
         {/* Справа всегда у края: в разделах с кнопками в шапке (Продажи, HR, Задачи) поиска нет, и без ml-auto блок вставал сразу за кнопками. */}

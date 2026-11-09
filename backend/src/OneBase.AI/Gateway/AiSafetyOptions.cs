@@ -8,6 +8,7 @@ namespace OneBase.AI.Gateway;
 /// вовсе, и сбой или отсутствие эмулятора — ошибка, а не вызов настоящего API. Ai:Safety:BlockPaidCalls — провайдеры выключены (без
 /// эмулятора ни одного вызова модели). Ai:Safety:MaxCalls / MaxCostUsd — сколько вызовов и долларов процесс может потратить за время
 /// работы (для разрешённых платных проверок): дошли — новые вызовы отклоняются, как при исчерпанном бюджете.
+/// Копия для проверки (Recovery:Isolated) — всегда блокировка: ключи в базе настоящие, а копия не должна тратить деньги и ходить наружу.
 /// </summary>
 public sealed record AiSafetyOptions(string? EmulatorUrl = null, bool BlockPaidCalls = false, int? MaxCalls = null, decimal? MaxCostUsd = null)
 {
@@ -19,6 +20,11 @@ public sealed record AiSafetyOptions(string? EmulatorUrl = null, bool BlockPaidC
 
     public static AiSafetyOptions From(IConfiguration config)
     {
+        if (OneBase.Application.Recovery.RecoveryIsolation.Parse(config[OneBase.Application.Recovery.RecoveryIsolation.ConfigKey]))
+        {
+            return new AiSafetyOptions(null, true);
+        }
+
         var url = config["Ai:Safety:EmulatorUrl"]?.Trim();
         if (!string.IsNullOrEmpty(url) && !Uri.TryCreate(url, UriKind.Absolute, out _))
         {

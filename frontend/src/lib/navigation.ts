@@ -9,7 +9,7 @@ export const workspacePermissions = ["ai.agents.run", "sales.read", "finance.rea
 export const navPermissions: Record<string, string[]> = {
   "/": workspacePermissions,
   // «Отделы» — вход и в «Продажи», «Снабжение», HR: виден всем, кто может открыть хотя бы один из них.
-  "/departments": [...workspacePermissions, "procurement.warehouse", "procurement.read", "procurement.manage", "integrations.manage", "hr.department"],
+  "/departments": [...workspacePermissions, "procurement.warehouse", "procurement.read", "procurement.manage", "integrations.manage", "hr.department", "hr.requests"],
   // Цифровой двойник — общий раздел компании; что видно в карточках, решают права разделов (backend).
   "/twin": workspacePermissions,
   // Задачи — раздел пользователя (галочка «Задачи» в «Пользователях»); что из задач видно, решает backend.
@@ -22,7 +22,8 @@ export const navPermissions: Record<string, string[]> = {
   "/production": ["production.read", "production.manage", "production.recipes", "quality.check", "procurement.warehouse", "procurement.read", "procurement.manage"],
   // HR: право «HR», администратор интеграций или руководитель отдела с привязанными подразделениями Verifix (hr.department — не право,
   // а признак из /api/auth/me; доступ к данным всё равно проверяет backend).
-  "/hr": ["hr.read", "integrations.manage", "hr.department"],
+  // Подбор: право «Подбор» или заявки на сотрудника (hr.requests — признак из /api/auth/me для руководителей отделов).
+  "/hr": ["hr.read", "integrations.manage", "hr.department", "hr.requests", "hr.recruitment.read", "hr.recruitment.manage"],
   "/reports": workspacePermissions,
   "/base": ["files.read"],
   "/consultant": ["ai.agents.run"],

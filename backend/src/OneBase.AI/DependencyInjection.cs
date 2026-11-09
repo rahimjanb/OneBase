@@ -17,6 +17,9 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddAi(this IServiceCollection services, IConfiguration config)
     {
+        // Копия для проверки (Recovery:Isolated): AI по расписанию и Telegram-агент не запускаются, платные вызовы заблокированы (AiSafetyOptions).
+        var isolation = OneBase.Application.Recovery.RecoveryIsolation.Register(services, config[OneBase.Application.Recovery.RecoveryIsolation.ConfigKey]);
+
         // Ключи провайдеров задаются в «Настройки → AI»; переменные окружения — запасной вариант.
         // Ни провайдер, ни модель в окружении не заданы — основная модель по умолчанию Claude.
         var provider = Value(config, "Llm:Provider", "LLM_PROVIDER");
@@ -84,8 +87,15 @@ public static class DependencyInjection
         });
         services.AddSingleton<OneBase.AI.Proactive.ProactiveStatus>();
         services.AddScoped<OneBase.AI.Proactive.ProactiveAnalyzer>();
-        services.AddHostedService<OneBase.AI.Proactive.ProactiveAnalysisWorker>();
-        services.AddHostedService<OneBase.AI.Work.DailyPlanWorker>();
+        if (isolation.AllowOutbound<OneBase.AI.Proactive.ProactiveAnalysisWorker>("AI: проактивный анализ по расписанию"))
+        {
+            services.AddHostedService<OneBase.AI.Proactive.ProactiveAnalysisWorker>();
+        }
+
+        if (isolation.AllowOutbound<OneBase.AI.Work.DailyPlanWorker>("AI: план на день"))
+        {
+            services.AddHostedService<OneBase.AI.Work.DailyPlanWorker>();
+        }
 
         services.AddScoped<OneBase.AI.Memory.AiMemoryStore>();
         services.AddScoped<OneBase.AI.Orchestration.AiRouter>();
@@ -96,13 +106,30 @@ public static class DependencyInjection
         services.AddScoped<ConsultantAnswerCache>();
         services.AddScoped<ConsultantChatService>();
         services.AddScoped<OneBase.AI.Reports.ReportService>();
-        // Telegram: AI-агент аккаунтов — входящие из очереди TelegramInbox (её наполняет клиент Telegram из Infrastructure).
+        // Telegram: входящие из очереди TelegramInbox (её наполняет клиент Telegram из Infrastructure) → маршрутизатор → обработчик
+        // подразделения. Продажи — AI-агент продаж; у HR обработчик появится вместе с рекрутером.
         services.AddScoped<OneBase.AI.Telegram.TelegramAgentService>();
-        services.AddHostedService<OneBase.AI.Telegram.TelegramAgentWorker>();
+        services.AddScoped<OneBase.Application.Telegram.Routing.ITelegramDepartmentHandler, OneBase.AI.Telegram.SalesTelegramHandler>();
+        // Подбор: AI-рекрутер в диалогах HR (ИИ-агент «Рекрутер» из «Настройки → ИИ-агенты»: работает, только если агент включён и у вакансии
+        // включён AI-рекрутер), оценка резюме, тексты объявлений; фото и сканы резюме читает модель.
+        services.AddScoped<OneBase.Application.Recruitment.Telegram.IRecruiterAgent, OneBase.AI.Recruitment.RecruiterAgent>();
+        services.AddScoped<OneBase.Application.Recruitment.ICandidateScorer, OneBase.AI.Recruitment.CandidateScoring>();
+        services.AddScoped<OneBase.Application.Abstractions.IDocumentVisionReader, OneBase.AI.Documents.DocumentVisionReader>();
+        // ИИ-агенты остальных отделов (помощники) и «Проверка» агента в настройках.
+        services.AddScoped<OneBase.Application.Agents.IAssistantAgent, OneBase.AI.DialogAgents.AssistantAgent>();
+        services.AddScoped<OneBase.AI.DialogAgents.DialogAgentTester>();
+        if (isolation.AllowOutbound<OneBase.AI.Telegram.TelegramAgentWorker>("Telegram: ответы AI-агента"))
+        {
+            services.AddHostedService<OneBase.AI.Telegram.TelegramAgentWorker>();
+        }
+
         // Рассылки: мастер и управление (сервис), очередь в PostgreSQL (runner) и фоновая отправка.
         services.AddScoped<OneBase.AI.Telegram.TelegramCampaignService>();
         services.AddSingleton<OneBase.AI.Telegram.TelegramCampaignRunner>();
-        services.AddHostedService<OneBase.AI.Telegram.TelegramCampaignWorker>();
+        if (isolation.AllowOutbound<OneBase.AI.Telegram.TelegramCampaignWorker>("Telegram: рассылки"))
+        {
+            services.AddHostedService<OneBase.AI.Telegram.TelegramCampaignWorker>();
+        }
 
         // Голос консультанта: вопрос голосом и озвучка ответа (OpenAI audio; ключ — из «Настройки → AI»).
         services.AddSingleton(config.GetSection(OneBase.AI.Voice.VoiceOptions.Section).Get<OneBase.AI.Voice.VoiceOptions>()

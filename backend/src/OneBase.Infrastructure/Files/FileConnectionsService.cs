@@ -109,8 +109,8 @@ public sealed class FileConnectionsService(
     /// <summary>Неверных кодов ссылки с одного адреса за <see cref="LockWindow"/> до паузы (429): подбор кода (160 бит) и так невозможен.</summary>
     public const int MaxLinkMisses = 30;
 
-    private readonly IDataProtector _protector = protection.CreateProtector("OneBase.Files.ConnectionPassword");
-    private readonly IDataProtector _links = protection.CreateProtector("OneBase.Files.ConnectionLink");
+    private readonly IDataProtector _protector = protection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.FileConnectionPassword);
+    private readonly IDataProtector _links = protection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.FileConnectionLink);
 
     private sealed record AuthEntry(Guid ConnectionId, string Username, Guid DepartmentId, AccessLevel Access, string Fingerprint);
 

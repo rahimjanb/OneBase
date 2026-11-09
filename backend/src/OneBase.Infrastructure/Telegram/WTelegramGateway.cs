@@ -29,13 +29,17 @@ internal sealed class WTelegramGateway(
     /// <summary>
     /// Telegram:Enabled=false (локальная среда) — аккаунты не подключаются вовсе: один и тот же аккаунт не должен работать локально и на
     /// проде одновременно (два клиента отвечали бы людям дважды). Проверка агента в настройках работает и без подключения.
+    /// Копия для проверки (Recovery:Isolated) — так же: сессия в базе та же, что на рабочем сервере, и Telegram разорвал бы её.
     /// </summary>
     public static bool Enabled(Microsoft.Extensions.Configuration.IConfiguration config) =>
-        Microsoft.Extensions.Configuration.ConfigurationBinder.GetValue(config, "Telegram:Enabled", true);
+        Microsoft.Extensions.Configuration.ConfigurationBinder.GetValue(config, "Telegram:Enabled", true) && !Isolated(config);
+
+    private static bool Isolated(Microsoft.Extensions.Configuration.IConfiguration config) =>
+        OneBase.Application.Recovery.RecoveryIsolation.Parse(config[OneBase.Application.Recovery.RecoveryIsolation.ConfigKey]);
 
     private static readonly JsonSerializerOptions StateJson = new() { IncludeFields = true };
 
-    private readonly IDataProtector _protector = protection.CreateProtector("OneBase.Telegram.Session");
+    private readonly IDataProtector _protector = protection.CreateProtector(OneBase.Application.Abstractions.ProtectionPurposes.TelegramSession);
     private readonly ConcurrentDictionary<Guid, Session> _sessions = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _gates = new();
     private readonly bool _logHooked = HookLog(logger);
@@ -67,6 +71,9 @@ internal sealed class WTelegramGateway(
         public LoginState Login { get; } = login;
         public UpdateManager? Manager { get; set; }
         public ConcurrentDictionary<(long Peer, int Message), Document> Documents { get; } = new();
+
+        /// <summary>Фото входящих сообщений — скачиваются по запросу (фото резюме), как документы.</summary>
+        public ConcurrentDictionary<(long Peer, int Message), Photo> Photos { get; } = new();
         public DateTimeOffset LastActivitySaved { get; set; }
 
         // Счётчики событий от Telegram — видно, что приём живой (статусы, прочтения, сообщения).
@@ -410,7 +417,14 @@ internal sealed class WTelegramGateway(
 
     public async Task<byte[]?> DownloadAsync(Guid accountId, long peerId, int messageId, CancellationToken ct = default)
     {
-        if (!_sessions.TryGetValue(accountId, out var session) || !session.Documents.TryRemove((peerId, messageId), out var document))
+        if (!_sessions.TryGetValue(accountId, out var session))
+        {
+            return null;
+        }
+
+        Document? document = null;
+        Photo? photo = null;
+        if (!session.Documents.TryRemove((peerId, messageId), out document) && !session.Photos.TryRemove((peerId, messageId), out photo))
         {
             return null;
         }
@@ -418,7 +432,16 @@ internal sealed class WTelegramGateway(
         try
         {
             using var buffer = new MemoryStream();
-            await Limited(session.Client.DownloadFileAsync(document, buffer), SendTimeout);
+            if (document is not null)
+            {
+                await Limited(session.Client.DownloadFileAsync(document, buffer), SendTimeout);
+            }
+            else
+            {
+                // Фото — в самом большом размере (null), чтобы текст на фото резюме читался.
+                await Limited(session.Client.DownloadFileAsync(photo!, buffer, (PhotoSizeBase?)null), SendTimeout);
+            }
+
             return buffer.ToArray();
         }
         catch (RpcException ex)
@@ -475,7 +498,9 @@ internal sealed class WTelegramGateway(
     {
         if (!Enabled(config))
         {
-            throw new TelegramException("Telegram в этой среде выключен (Telegram:Enabled=false): аккаунт работает на проде — локально его не подключаем.",
+            throw new TelegramException(Isolated(config)
+                    ? "Копия для проверки (Recovery:Isolated): Telegram не подключается — аккаунт работает на рабочем сервере."
+                    : "Telegram в этой среде выключен (Telegram:Enabled=false): аккаунт работает на проде — локально его не подключаем.",
                 TelegramErrorKind.Config);
         }
 
@@ -647,6 +672,20 @@ internal sealed class WTelegramGateway(
                 }
             }
 
+            TelegramIncomingFile? photoFile = null;
+            if (m.media is MessageMediaPhoto { photo: Photo photo })
+            {
+                session.Photos[(peer.PeerId, m.id)] = photo;
+                photoFile = new TelegramIncomingFile($"photo_{m.id}.jpg", "image/jpeg", PhotoBytes(photo));
+                if (session.Photos.Count > 200)
+                {
+                    foreach (var old in session.Photos.Keys.Take(50).ToList())
+                    {
+                        session.Photos.TryRemove(old, out _);
+                    }
+                }
+            }
+
             inbox.Post(new TelegramIncoming(
                 session.AccountId,
                 peer,
@@ -660,7 +699,9 @@ internal sealed class WTelegramGateway(
                 m.flags.HasFlag(Message.Flags.out_) || fromId == session.Client.UserId,
                 m.flags.HasFlag(Message.Flags.mentioned),
                 file,
-                from is not null && from.flags.HasFlag(User.Flags.bot)));
+                from is not null && from.flags.HasFlag(User.Flags.bot),
+                ReplyTo(m),
+                photoFile));
             ScheduleStateSave(session);
             await TouchAsync(session);
         }
@@ -669,6 +710,23 @@ internal sealed class WTelegramGateway(
             logger.LogWarning(ex, "Telegram {Account}: входящее не обработано", session.AccountId);
         }
     }
+
+    /// <summary>Размер самого большого варианта фото, байт (0 — неизвестен).</summary>
+    private static long PhotoBytes(Photo photo) =>
+        photo.sizes?.Max(s => s switch
+        {
+            PhotoSize p => (long)p.size,
+            PhotoSizeProgressive p => p.sizes is { Length: > 0 } sizes ? sizes.Max() : 0L,
+            _ => 0L,
+        }) ?? 0;
+
+    /// <summary>На какое сообщение этого чата ответ (null — не ответ или ответ на сообщение из другого чата).</summary>
+    private static int? ReplyTo(Message m) =>
+        m.reply_to is MessageReplyHeader header
+        && header.flags.HasFlag(MessageReplyHeader.Flags.has_reply_to_msg_id)
+        && !header.flags.HasFlag(MessageReplyHeader.Flags.has_reply_to_peer_id)
+            ? header.reply_to_msg_id
+            : null;
 
     /// <summary>
     /// Отправка: ждать ответа Telegram не дольше CallTimeout. Не дождались — неизвестно, ушло ли сообщение: ошибка без автоповтора

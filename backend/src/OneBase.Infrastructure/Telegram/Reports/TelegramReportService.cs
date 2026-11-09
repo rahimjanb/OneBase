@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Sales.Metrics;
 using OneBase.Application.Telegram.Reports;
+using OneBase.Application.Telegram.Routing;
 using OneBase.Application.Telegram.Weekly;
 using OneBase.Domain.Audit;
 using OneBase.Domain.Sales;
@@ -38,7 +39,8 @@ public sealed class TelegramReportService(
     public async Task<ReportOverview> OverviewAsync(bool canUseSales, CancellationToken ct)
     {
         var settings = await SettingsAsync(ct);
-        var accounts = await db.TelegramAccounts.AsNoTracking().OrderBy(a => a.CreatedAt)
+        // Аккаунты продаж: номер, отданный другому подразделению (HR), автоотчётам не предлагается.
+        var accounts = await db.AccountsServing(TelegramDepartments.Sales).AsNoTracking().OrderBy(a => a.CreatedAt)
             .Select(a => new ReportAccountOption(a.Id, a.Name, a.Status.ToString(), a.Username)).ToListAsync(ct);
         var (teams, directions) = canUseSales ? await engine.StructureAsync(Today(), ct) : ([], []);
         var regions = teams.Select(r => new ReportRegionOption(r.Id, r.Name, r.DirectionId, r.Manager, r.SupervisorName,
@@ -56,7 +58,7 @@ public sealed class TelegramReportService(
         var sync = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "orders" || s.Entity == "visits").Select(s => new { s.Entity, s.LastSuccessAt })
             .ToListAsync(ct);
         return new ReportOverview(SettingsView(settings), accounts, await JobsAsync(recipients, ct), recipients, directionOptions, regions, chats, canUseSales,
-            config.GetValue("Telegram:Enabled", true), metrics, WeeklyPdfView(await db.TelegramWeeklyPdfSettings.AsNoTracking().FirstOrDefaultAsync(ct)),
+            WTelegramGateway.Enabled(config), metrics, WeeklyPdfView(await db.TelegramWeeklyPdfSettings.AsNoTracking().FirstOrDefaultAsync(ct)),
             new ReportFreshness(sync.FirstOrDefault(s => s.Entity == "orders")?.LastSuccessAt, sync.FirstOrDefault(s => s.Entity == "visits")?.LastSuccessAt));
     }
 
@@ -196,9 +198,9 @@ public sealed class TelegramReportService(
             throw new ReportValidationException("Порог «без закупа» — от 1 до 365 дней.");
         }
 
-        if (input.AccountId is { } account && !await db.TelegramAccounts.AnyAsync(a => a.Id == account, ct))
+        if (input.AccountId is { } account && !await db.ServesAsync(account, TelegramDepartments.Sales, ct))
         {
-            throw new ReportValidationException("Аккаунт Telegram не найден.");
+            throw new ReportValidationException("Аккаунт Telegram не найден или работает не для продаж.");
         }
 
         var settings = await db.TelegramReportSettings.FirstOrDefaultAsync(ct);
