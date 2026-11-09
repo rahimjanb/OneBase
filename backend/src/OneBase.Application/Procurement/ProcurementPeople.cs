@@ -5,8 +5,9 @@ using OneBase.Application.Security;
 namespace OneBase.Application.Procurement;
 
 /// <summary>
-/// Кому уведомления снабжения: директор (роль из базы), руководитель снабжения (руководитель отдела «Снабжение»), у кого право от роли
-/// (снабжение, кладовщик). Администратор — техническая роль со всеми правами — в получатели «по праву» не попадает.
+/// Кому уведомления снабжения: директор (роль из базы), руководитель снабжения (руководитель отдела «Снабжение»), у кого есть право —
+/// по итоговым правам: роль, разделы и права, отмеченные в карточке пользователя (снабжение, кладовщик, лаборатория). Администратор —
+/// техническая роль со всеми правами — в получатели «по праву» не попадает (если право ему не отмечено галочкой).
 /// </summary>
 internal static class ProcurementPeople
 {
@@ -19,10 +20,7 @@ internal static class ProcurementPeople
         db.WorkDepartmentHeads.AsNoTracking().Where(h => h.Department!.Code == SupplyDepartment && h.User!.IsActive).Select(h => h.UserId).ToListAsync(ct);
 
     public static Task<List<Guid>> WithPermissionAsync(IAppDbContext db, string permission, CancellationToken ct) =>
-        db.Users.AsNoTracking()
-            .Where(u => u.IsActive && u.Roles.Any(x => x.Role.Name != SystemRoles.Admin && x.Role.Permissions.Any(p => p.Code == permission)))
-            .Select(u => u.Id)
-            .ToListAsync(ct);
+        db.ActiveUsersWithAsync(permission, ct, withoutAdmin: true);
 
     /// <summary>Аналитики закупок — роль «Аналитик».</summary>
     public static Task<List<Guid>> AnalystsAsync(IAppDbContext db, CancellationToken ct) =>

@@ -42,10 +42,8 @@ public sealed class LinkoSyncHealth(OneBaseDbContext db, SalesOptions options, T
             db.LinkoSyncStates.Add(alert);
         }
 
-        var recipients = await db.Users.AsNoTracking()
-            .Where(u => u.IsActive && u.Roles.Any(r => r.Role.Permissions.Any(p => p.Code == Permissions.IntegrationsManage)))
-            .Select(u => u.Id)
-            .ToListAsync(ct);
+        // По итоговым правам: роль и права, отмеченные в карточке пользователя.
+        var recipients = await db.ActiveUsersWithAsync(Permissions.IntegrationsManage, ct);
         var (title, body) = problem is not null
             ? ("Обмен с Linko не работает — данные в отчётах устарели",
                 $"{problem} {NextRunText(now)}Проверьте токен и доступность Linko в «Настройки → Интеграции» и обновите данные кнопкой «Обновить».")

@@ -16,6 +16,7 @@ import myDay from "./myDay";
 import production from "./production";
 import recruitment from "./recruitment";
 import requests from "./requests";
+import rights from "./rights";
 import sales from "./sales";
 import salesPages from "./salesPages";
 import serverAi from "./serverAi";
@@ -43,6 +44,8 @@ export const uz: Dict = {
   ...technologist,
   // Поставки (приезд машины, качество до склада, приёмка) и главная по ролям.
   ...arrivals,
+  // Права пользователя в разделах отделов и настройках.
+  ...rights,
   ...fieldControl,
   // Тексты сервера (ошибки, пояснения, подписи) — переводятся по ключу или шаблону; словари интерфейса ниже перекрывают их.
   ...serverSales,

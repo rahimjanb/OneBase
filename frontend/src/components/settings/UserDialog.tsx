@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Copy,
   DatabaseZap,
+  Factory,
   Fingerprint,
   FolderOpen,
   KeyRound,
@@ -15,11 +16,13 @@ import {
   MapPinned,
   RotateCcw,
   Send,
+  Settings,
   ShieldCheck,
   Sparkles,
   TrendingUp,
   UserRound,
   UsersRound,
+  Warehouse,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -27,7 +30,7 @@ import { button, field, primary } from "@/components/ai/form";
 import { Sheet } from "@/components/field/Sheet";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { sectionPermissions, titleCase, type HrCandidate, type UserRow, type UsersView } from "@/lib/users";
+import { rightsWithSections, sectionPermissions, titleCase, toggleRight, type HrCandidate, type UserRow, type UsersView } from "@/lib/users";
 
 type Form = {
   lastName: string;
@@ -40,6 +43,8 @@ type Form = {
   password: string;
   isActive: boolean;
   sections: string[];
+  /** Права в разделах отделов и настройках (UserRights). */
+  rights: string[];
   /** Отдел для роли без своего отдела («Сотрудник», директор). */
   departmentId: string;
   /** Сотрудник Verifix: по нему «Мой день» показывает рабочее время. */
@@ -47,6 +52,9 @@ type Form = {
   /** «Без привязки к Verifix» — пользователь не связан с сотрудником (подрядчик, служебная учётная запись). */
   noVerifix: boolean;
 };
+
+/** Значки групп прав: снабжение и склад, производство, настройки. */
+const groupIcons: Record<string, LucideIcon> = { supply: Warehouse, production: Factory, settings: Settings };
 
 const icons: Record<string, LucideIcon> = {
   sales: TrendingUp,
@@ -80,9 +88,11 @@ function generatePassword() {
 const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
 /**
- * Окно «Новый пользователь» / «Изменить пользователя»: слева профиль и вход, справа доступ — роль (права на управление и настройки,
- * отдел) и разделы галочками. Роль подставляет свои разделы, их можно изменить; итоговые права считает сервер (UserSections) — по ним
- * открываются разделы и отвечают AI-сотрудники. Выдать можно только раздел, к которому есть доступ у вас.
+ * Окно «Новый пользователь» / «Изменить пользователя»: слева профиль и вход, справа доступ — роль (отдел), разделы галочками и права в
+ * разделах отделов и настройках галочками по группам (снабжение и склад, производство, настройки). Роль подставляет свои разделы и права,
+ * их можно изменить; итоговые права считает сервер (UserSections, UserRights) — по ним открываются меню, страницы и действия, отвечают
+ * AI-сотрудники и приходят уведомления. Выдать можно только то, что есть у вас; право, которому нужно другое, включает его, снятое — снимает
+ * зависящие от него.
  */
 export function UserDialog({
   target,
@@ -121,6 +131,7 @@ export function UserDialog({
             password: "",
             isActive: true,
             sections: [],
+            rights: [],
             departmentId: "",
             hrEmployee: null,
             noVerifix: false,
@@ -136,6 +147,7 @@ export function UserDialog({
             password: "",
             isActive: target.isActive,
             sections: target.sections,
+            rights: target.rights ?? [],
             departmentId: target.departmentId ?? "",
             hrEmployee: target.hrEmployee ?? null,
             noVerifix: !target.hrEmployee,
@@ -146,7 +158,13 @@ export function UserDialog({
   const role = data.roles.find((r) => r.id === form?.roleId) ?? null;
   const roleSections = role?.sections ?? [];
   const asRole = !!form && !!role && sameSet(form.sections, roleSections);
-  const extraRights = useMemo(() => (role?.permissions ?? []).filter((p) => !sectionPermissions.has(p.code)), [role]);
+  const catalog = useMemo(() => data.rights ?? [], [data.rights]);
+  const roleRights = role?.rights ?? [];
+  const asRoleRights = !!form && !!role && sameSet(form.rights, roleRights);
+  const extraRights = useMemo(
+    () => (role?.permissions ?? []).filter((p) => !sectionPermissions.has(p.code) && !catalog.some((r) => r.key === p.code)),
+    [role, catalog],
+  );
 
   if (!target || !form) return null;
 
@@ -157,13 +175,20 @@ export function UserDialog({
 
   const pickRole = (roleId: string) => {
     const next = data.roles.find((r) => r.id === roleId);
-    // Новая роль — её разделы: сотрудник продаж получает «Продажи», «Задачи», «Файлы», консультанта; дальше галочки меняются вручную.
-    setForm((f) => (f ? { ...f, roleId, sections: next?.sections ?? [] } : f));
+    // Новая роль — её разделы и права: сотрудник продаж получает «Продажи», «Задачи», «Файлы», консультанта, кладовщик — склад и свои
+    // заявки; дальше галочки меняются вручную.
+    setForm((f) => (f ? { ...f, roleId, sections: next?.sections ?? [], rights: next?.rights ?? [] } : f));
     setError(null);
   };
 
-  const toggle = (key: string) =>
-    set("sections", form.sections.includes(key) ? form.sections.filter((k) => k !== key) : [...form.sections, key]);
+  const toggle = (key: string) => {
+    const sections = form.sections.includes(key) ? form.sections.filter((k) => k !== key) : [...form.sections, key];
+    // Снятый раздел снимает и права, которым он нужен (настройки продаж без «Продаж»).
+    setForm((f) => (f ? { ...f, sections, rights: rightsWithSections(f.rights, sections, catalog) } : f));
+    setError(null);
+  };
+
+  const toggleRightKey = (key: string, on: boolean) => set("rights", toggleRight(form.rights, key, on, catalog));
 
   const copyPassword = async () => {
     try {
@@ -224,11 +249,11 @@ export function UserDialog({
       onClose={busy ? () => {} : onClose}
       size="xl"
       title={isNew ? t("Новый пользователь") : t("Изменить пользователя")}
-      subtitle={user ? `${user.fullName || user.login} · ${user.login}` : t("Профиль, роль и разделы, к которым будет доступ")}
+      subtitle={user ? `${user.fullName || user.login} · ${user.login}` : t("Профиль, роль, разделы и права в них")}
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
           <p className={`min-h-5 flex-1 text-sm ${error ? "text-bad" : "hidden text-ink-3 sm:block"}`} role={error ? "alert" : undefined}>
-            {error ?? (isNew ? t("Пароль передайте сотруднику — после входа он сможет работать сразу.") : t("Роль, разделы и пароль действуют сразу."))}
+            {error ?? (isNew ? t("Пароль передайте сотруднику — после входа он сможет работать сразу.") : t("Роль, разделы, права и пароль действуют сразу."))}
           </p>
           <div className="flex gap-2">
             <button type="button" className={`${button} flex-1 justify-center sm:flex-none`} onClick={onClose} disabled={busy}>
@@ -331,7 +356,7 @@ export function UserDialog({
 
         <section aria-labelledby="user-access" className="space-y-4">
           <Heading id="user-access" icon={ShieldCheck} title={t("Доступ")} />
-          <Field label={t("Роль")} required hint={isMe ? t("Свои роль и разделы меняет другой администратор") : undefined}>
+          <Field label={t("Роль")} required hint={isMe ? t("Свои роль, разделы и права меняет другой администратор") : undefined}>
             <select className={field} value={form.roleId} onChange={(e) => pickRole(e.target.value)} disabled={isMe}>
               <option value="">{t("— выберите роль —")}</option>
               {data.roles.map((r) => (
@@ -442,6 +467,89 @@ export function UserDialog({
               )}
             </div>
           </div>
+
+          {catalog.length > 0 && (
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-ink">{t("Действия в отделах и настройки")}</span>
+                {role &&
+                  (asRoleRights ? (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-ink-3">{t("как у роли")}</span>
+                  ) : (
+                    <>
+                      <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-strong">{t("настроены вручную")}</span>
+                      {!isMe && (
+                        <button
+                          type="button"
+                          onClick={() => set("rights", rightsWithSections(roleRights, form.sections, catalog))}
+                          className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-accent-strong hover:underline"
+                        >
+                          <RotateCcw className="size-3.5" />
+                          {t("Как у роли")}
+                        </button>
+                      )}
+                    </>
+                  ))}
+              </div>
+              <p className="mb-2 text-xs text-ink-3">
+                {t("Отмеченное сотрудник видит в меню и может делать: принимать на склад, проверять качество, вести закупки и задания, открывать страницы настроек.")}
+              </p>
+              <div className="space-y-3">
+                {(data.rightGroups ?? []).map((g) => {
+                  const items = catalog.filter((r) => r.group === g.key);
+                  if (items.length === 0) return null;
+                  const GroupIcon = groupIcons[g.key] ?? Check;
+                  return (
+                    <fieldset key={g.key} className="rounded-xl border border-line p-3" aria-describedby={`rights-${g.key}`}>
+                      <legend className="flex items-center gap-1.5 px-1 text-[13px] font-semibold text-ink">
+                        <GroupIcon className="size-4 text-ink-3" aria-hidden />
+                        {t(g.title)}
+                      </legend>
+                      <p id={`rights-${g.key}`} className="mb-2 text-xs text-ink-3">
+                        {t(g.description)}
+                      </p>
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        {items.map((r) => {
+                          const on = form.rights.includes(r.key);
+                          const section = r.needsSection ? data.sections.find((x) => x.key === r.needsSection) : null;
+                          const blocked = !!section && !form.sections.includes(section.key);
+                          const locked = isMe || (!on && (!r.grantable || blocked));
+                          const neededBy = catalog.filter((x) => x.requires.includes(r.key) && form.rights.includes(x.key));
+                          return (
+                            <label
+                              key={r.key}
+                              title={!isMe && !on && !r.grantable ? t("У вас самих нет этого права — выдать его может администратор") : undefined}
+                              className={`flex gap-2.5 rounded-lg px-2.5 py-2 transition-colors ${on ? "bg-accent/10" : ""} ${
+                                locked ? "cursor-not-allowed opacity-55" : "cursor-pointer hover:bg-muted/60"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 size-4 shrink-0 accent-[var(--color-accent)]"
+                                checked={on}
+                                disabled={locked}
+                                onChange={(e) => toggleRightKey(r.key, e.target.checked)}
+                              />
+                              <span className="min-w-0">
+                                <span className="block text-sm font-medium text-ink">{t(r.title)}</span>
+                                <span className="block text-xs leading-snug text-ink-3">{t(r.description)}</span>
+                                {blocked && section && <span className="mt-0.5 block text-xs text-warn">{t("Нужен раздел «{name}»", { name: t(section.title) })}</span>}
+                                {on && neededBy.length > 0 && (
+                                  <span className="mt-0.5 block text-xs text-ink-3">
+                                    {t("Нужно для: {list}", { list: neededBy.map((x) => t(x.title)).join(", ") })}
+                                  </span>
+                                )}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
         <button type="submit" hidden aria-hidden tabIndex={-1} />
       </form>

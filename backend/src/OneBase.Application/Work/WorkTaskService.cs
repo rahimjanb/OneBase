@@ -560,11 +560,11 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
                 .Where(u => u.IsActive)
                 .Select(u => new
                 {
-                    u.Id, u.FullName, u.Login, u.Position, u.DepartmentId, Department = u.Department != null ? u.Department.Name : null, u.Sections,
+                    u.Id, u.FullName, u.Login, u.Position, u.DepartmentId, Department = u.Department != null ? u.Department.Name : null, u.Sections, u.Rights,
                     Permissions = u.Roles.SelectMany(r => r.Role.Permissions.Select(p => p.Code)).ToList(),
                 })
                 .ToListAsync(ct))
-            .Where(u => OneBase.Application.Security.UserSections.Effective(u.Permissions, u.Sections).Contains(OneBase.Application.Security.Permissions.WorkTasks))
+            .Where(u => OneBase.Application.Security.UserSections.Effective(u.Permissions, u.Sections, u.Rights).Contains(OneBase.Application.Security.Permissions.WorkTasks))
             .ToList();
         return users
             .Select(u => new WorkAssignee(u.Id, string.IsNullOrWhiteSpace(u.FullName) ? u.Login : u.FullName, u.Position, u.Department,

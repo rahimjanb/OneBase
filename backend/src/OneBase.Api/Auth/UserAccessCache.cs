@@ -32,7 +32,7 @@ public sealed class UserAccessCache(IServiceScopeFactory scopes, IMemoryCache ca
         UserAccess? access = user is { IsActive: true }
             ? new UserAccess(
                 user.Roles.Select(r => r.Role.Name).Distinct().ToList(),
-                UserSections.Effective(user.Roles.SelectMany(r => r.Role.Permissions).Select(p => p.Code), user.Sections).ToList())
+                UserSections.Effective(user.Roles.SelectMany(r => r.Role.Permissions).Select(p => p.Code), user.Sections, user.Rights).ToList())
             : null;
 
         cache.Set(Key(userId), access, Ttl);

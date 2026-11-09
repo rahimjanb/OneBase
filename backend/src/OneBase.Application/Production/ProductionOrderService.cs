@@ -206,8 +206,8 @@ public sealed class ProductionOrderService(IAppDbContext db, IProcurementNumbers
             .ToListAsync(ct);
         var warehouses = await db.ProcurementWarehouses.AsNoTracking().Where(w => w.IsActive).OrderByDescending(w => w.IsDefault).ThenBy(w => w.Name)
             .Select(w => new ProductionNamed(w.Id, w.Name)).ToListAsync(ct);
-        var people = await db.Users.AsNoTracking().Where(u => u.IsActive && u.Roles.Any(r => r.Role.Name != SystemRoles.Admin
-                && r.Role.Permissions.Any(p => p.Code == Permissions.ProductionManage)))
+        var managers = await db.ActiveUsersWithAsync(Permissions.ProductionManage, ct, withoutAdmin: true);
+        var people = await db.Users.AsNoTracking().Where(u => managers.Contains(u.Id))
             .OrderBy(u => u.FullName).Select(u => new ProductionNamed(u.Id, u.FullName)).ToListAsync(ct);
         return new ProductionOrderForm(recipes, departments, warehouses, people);
     }

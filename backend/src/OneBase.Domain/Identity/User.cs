@@ -43,6 +43,12 @@ public class User : Entity
     public List<string>? Sections { get; set; }
 
     /// <summary>
+    /// Права в разделах отделов и настройках, отмеченные пользователю (коды UserRights: procurement.warehouse, quality.check, users.manage…).
+    /// null — как у роли. Итоговые права — UserSections.Effective с ними.
+    /// </summary>
+    public List<string>? Rights { get; set; }
+
+    /// <summary>
     /// Разделы уведомлений, которые пользователь отключил (NotificationCatalog: tasks, ai, hr, sales, system): их нет в колокольчике и push.
     /// null или пусто — присылать всё.
     /// </summary>

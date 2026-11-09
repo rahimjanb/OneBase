@@ -46,6 +46,10 @@ export type UserRow = {
   sections: string[];
   /** Разделы отмечены вручную (иначе — как у роли). */
   sectionsCustom: boolean;
+  /** Права в разделах отделов и настройках (коды UserRights) — по роли или отмеченные вручную. */
+  rights?: string[];
+  /** Права отмечены вручную (иначе — как у роли). */
+  rightsCustom?: boolean;
   isMe: boolean;
   /** false — у пользователя роль с правами, которых нет у вас: изменить может только администратор. */
   canEdit: boolean;
@@ -67,6 +71,8 @@ export type RoleRow = {
   opensSettings: boolean;
   /** Разделы по умолчанию для этой роли. */
   sections: string[];
+  /** Права в разделах отделов и настройках по умолчанию для этой роли. */
+  rights?: string[];
   departmentId?: string | null;
   /** Роль «Сотрудник»: отдел выбирается в карточке и обязателен, главная — «Мой день». */
   isEmployee?: boolean;
@@ -75,10 +81,21 @@ export type RoleRow = {
 /** Раздел OneBase, который выбирается пользователю галочкой; grantable — у вас есть его права, выдать можно. */
 export type UserSection = { key: string; title: string; description: string; grantable: boolean };
 
+/**
+ * Право в разделе отдела или в настройках (галочка): группа (supply, production, settings), что даёт; requires — включаются вместе с ним
+ * (закупки — и просмотр заявок); needsSection — раздел, без которого право не действует (настройки продаж — «Продажи»); grantable — у вас
+ * оно есть, выдать можно.
+ */
+export type UserRight = { key: string; group: string; title: string; description: string; requires: string[]; needsSection: string | null; grantable: boolean };
+
+export type UserRightGroup = { key: string; title: string; description: string };
+
 export type UsersView = {
   users: UserRow[];
   roles: RoleRow[];
   sections: UserSection[];
+  rights?: UserRight[];
+  rightGroups?: UserRightGroup[];
   departments?: { id: string; code: string; name: string }[];
   /** Verifix подключён: при создании пользователя выбирается его сотрудник или «Без привязки к Verifix». */
   verifixAvailable?: boolean;
@@ -108,11 +125,41 @@ export function titleCase(value: string | null | undefined): string {
     .trim();
 }
 
-/** Права разделов — их показываем галочками, а не в списке «роль также даёт». */
+/** Права разделов — их показываем галочками, а не в списке «роль также даёт» (права отделов и настроек — тоже галочками, из каталога). */
 export const sectionPermissions = new Set([
-  "sales.read", "sales.manage", "finance.read", "hr.read", "work.tasks", "files.read", "files.write", "files.read.all", "files.manage",
+  "sales.read", "finance.read", "hr.read", "work.tasks", "files.read", "files.write", "files.read.all", "files.manage",
   "ai.agents.run", "field.plan", "field.use", "field.manage", "ai.data.manage", "telegram.campaigns",
 ]);
+
+/**
+ * Отметить или снять право: отмеченное включает то, без чего не работает (закупки — просмотр заявок); снятое снимает и те, кому оно нужно
+ * (сняли просмотр — снимаются закупки). Порядок — как в каталоге.
+ */
+export function toggleRight(chosen: readonly string[], key: string, on: boolean, catalog: readonly Pick<UserRight, "key" | "requires">[]): string[] {
+  const set = new Set(chosen);
+  if (on) {
+    const add = (k: string) => {
+      if (set.has(k)) return;
+      set.add(k);
+      catalog.find((r) => r.key === k)?.requires.forEach(add);
+    };
+    add(key);
+  } else {
+    const drop = (k: string) => {
+      set.delete(k);
+      catalog.filter((r) => r.requires.includes(k) && set.has(r.key)).forEach((r) => drop(r.key));
+    };
+    drop(key);
+  }
+  return catalog.filter((r) => set.has(r.key)).map((r) => r.key);
+}
+
+/** Права, которые не действуют без снятого раздела (настройки продаж без «Продаж»), — убираются вместе с ним. */
+export const rightsWithSections = (rights: readonly string[], sections: readonly string[], catalog: readonly Pick<UserRight, "key" | "needsSection">[]) =>
+  rights.filter((k) => {
+    const need = catalog.find((r) => r.key === k)?.needsSection;
+    return !need || sections.includes(need);
+  });
 
 export const has = (me: Me | null, permission: string) => !!me?.permissions.includes(permission);
 

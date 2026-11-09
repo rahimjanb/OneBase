@@ -239,10 +239,8 @@ public sealed class AiLimits(IServiceScopeFactory scopes, IAiSettingsSource sett
                 return;
             }
 
-            var recipients = await db.Users.AsNoTracking()
-                .Where(u => u.IsActive && u.Roles.Any(r => r.Role.Permissions.Any(p => p.Code == Permissions.AiSettingsManage)))
-                .Select(u => u.Id)
-                .ToListAsync(ct);
+            // По итоговым правам: роль и права, отмеченные в карточке пользователя.
+            var recipients = await db.ActiveUsersWithAsync(Permissions.AiSettingsManage, ct);
             foreach (var recipient in recipients)
             {
                 db.UserNotifications.Add(new UserNotification

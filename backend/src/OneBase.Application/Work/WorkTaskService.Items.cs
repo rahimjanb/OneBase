@@ -234,14 +234,17 @@ public sealed partial class WorkTaskService
             .Where(u => u.IsActive)
             .Select(u => new
             {
-                u.Id, u.FullName, u.Login, u.Position, u.DepartmentId, Department = u.Department != null ? u.Department.Name : null, u.Sections,
+                u.Id, u.FullName, u.Login, u.Position, u.DepartmentId, Department = u.Department != null ? u.Department.Name : null, u.Sections, u.Rights,
                 Permissions = u.Roles.SelectMany(r => r.Role.Permissions.Select(p => p.Code)).ToList(),
             })
             .ToListAsync(ct);
         return users
-            .Where(u => OneBase.Application.Security.UserSections.Effective(u.Permissions, u.Sections).Contains(OneBase.Application.Security.Permissions.WorkTasks))
-            .Where(u => u.Permissions.Contains(OneBase.Application.Security.Permissions.UsersManage) || u.DepartmentId == task.DepartmentId || heads.Contains(u.Id)
-                        || members.Contains(u.Id) || u.Id == task.AssigneeId || u.Id == task.CreatedById)
+            .Select(u => new { User = u, Effective = OneBase.Application.Security.UserSections.Effective(u.Permissions, u.Sections, u.Rights) })
+            .Where(x => x.Effective.Contains(OneBase.Application.Security.Permissions.WorkTasks))
+            .Select(x => (x.User, Manages: x.Effective.Contains(OneBase.Application.Security.Permissions.UsersManage)))
+            .Where(x => x.Manages || x.User.DepartmentId == task.DepartmentId || heads.Contains(x.User.Id)
+                        || members.Contains(x.User.Id) || x.User.Id == task.AssigneeId || x.User.Id == task.CreatedById)
+            .Select(x => x.User)
             .Select(u => new WorkAssignee(u.Id, string.IsNullOrWhiteSpace(u.FullName) ? u.Login : u.FullName, u.Position, u.Department, u.DepartmentId == task.DepartmentId))
             .OrderByDescending(a => a.InDepartment)
             .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)

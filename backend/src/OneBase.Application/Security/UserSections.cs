@@ -29,8 +29,9 @@ public static class UserSections
 
     public static readonly IReadOnlyList<UserSection> All =
     [
+        // Настройки продаж (sales.manage) — право в «Настройках» (UserRights): действует только вместе с этим разделом.
         new(Sales, "Продажи", "Вторичка, первичка, планы, АКБ, остатки, акции, KPI; AI отвечает по продажам, ассортименту и клиентам.",
-            [Permissions.SalesRead, Permissions.SalesManage], [Permissions.SalesRead]),
+            [Permissions.SalesRead], [Permissions.SalesRead]),
         new(Finance, "Финансы", "Оплаты, P&L дилеров, акт сверки, DSO, суммы KPI; AI-сотрудник финансов.",
             [Permissions.FinanceRead], [Permissions.FinanceRead]),
         new(Hr, "HR", "Сотрудники, посещаемость, опоздания и табели Verifix; HR AI по всем сотрудникам.",
@@ -54,22 +55,28 @@ public static class UserSections
     /// <summary>Права, которые принадлежат разделам (остальные — только роль).</summary>
     public static readonly IReadOnlySet<string> SectionPermissions = All.SelectMany(s => s.Permissions).ToHashSet(StringComparer.Ordinal);
 
-    /// <summary>Итоговые права: права роли, а если разделы выбраны — без прав невыбранных разделов и с правами выбранных.</summary>
-    public static HashSet<string> Effective(IEnumerable<string> rolePermissions, IReadOnlyCollection<string>? sections)
+    /// <summary>Итоговые права по роли и разделам (права в разделах отделов и настройках — как у роли).</summary>
+    public static HashSet<string> Effective(IEnumerable<string> rolePermissions, IReadOnlyCollection<string>? sections) => Effective(rolePermissions, sections, null);
+
+    /// <summary>
+    /// Итоговые права: права роли; разделы выбраны — без прав невыбранных разделов и с правами выбранных; права в разделах отделов и
+    /// настройках отмечены (UserRights) — они вместо прав роли из того списка. Право без нужного ему раздела не действует.
+    /// </summary>
+    public static HashSet<string> Effective(IEnumerable<string> rolePermissions, IReadOnlyCollection<string>? sections, IReadOnlyCollection<string>? rights)
     {
         var role = rolePermissions.ToHashSet(StringComparer.Ordinal);
-        if (sections is null)
+        var result = role;
+        if (sections is not null)
         {
-            return role;
+            result = role.Where(p => !SectionPermissions.Contains(p)).ToHashSet(StringComparer.Ordinal);
+            foreach (var section in All.Where(s => sections.Contains(s.Key)))
+            {
+                var own = section.Permissions.Where(role.Contains).ToList();
+                result.UnionWith(own.Count > 0 ? own : section.Grant);
+            }
         }
 
-        var result = role.Where(p => !SectionPermissions.Contains(p)).ToHashSet(StringComparer.Ordinal);
-        foreach (var section in All.Where(s => sections.Contains(s.Key)))
-        {
-            var own = section.Permissions.Where(role.Contains).ToList();
-            result.UnionWith(own.Count > 0 ? own : section.Grant);
-        }
-
+        UserRights.Apply(result, rights);
         return result;
     }
 
@@ -95,18 +102,27 @@ public static class UserSections
     {
         var row = await db.Users.AsNoTracking()
             .Where(u => u.Id == userId)
-            .Select(u => new { u.IsActive, u.Sections, Permissions = u.Roles.SelectMany(r => r.Role.Permissions.Select(p => p.Code)).ToList() })
+            .Select(u => new { u.IsActive, u.Sections, u.Rights, Permissions = u.Roles.SelectMany(r => r.Role.Permissions.Select(p => p.Code)).ToList() })
             .FirstOrDefaultAsync(ct);
-        return row is not null && (row.IsActive || includeInactive) ? Effective(row.Permissions, row.Sections) : null;
+        return row is not null && (row.IsActive || includeInactive) ? Effective(row.Permissions, row.Sections, row.Rights) : null;
     }
 
-    /// <summary>Активные пользователи, у которых итоговые права включают permission (уведомления, проверки «кто может»).</summary>
-    public static async Task<List<Guid>> ActiveUsersWithAsync(this IAppDbContext db, string permission, CancellationToken ct)
+    /// <summary>
+    /// Активные пользователи, у которых итоговые права (роль, разделы и отмеченные права) включают permission — уведомления, «кого назначить».
+    /// withoutAdmin — права роли «Администратор» не считаются: техническая роль со всеми правами в получатели «по праву» не попадает (ей
+    /// право можно отметить галочкой).
+    /// </summary>
+    public static async Task<List<Guid>> ActiveUsersWithAsync(this IAppDbContext db, string permission, CancellationToken ct, bool withoutAdmin = false)
     {
         var rows = await db.Users.AsNoTracking()
-            .Where(u => u.IsActive && (u.Sections != null || u.Roles.Any(r => r.Role.Permissions.Any(p => p.Code == permission))))
-            .Select(u => new { u.Id, u.Sections, Permissions = u.Roles.SelectMany(r => r.Role.Permissions.Select(p => p.Code)).ToList() })
+            .Where(u => u.IsActive && (u.Sections != null || u.Rights != null
+                                       || u.Roles.Any(r => (!withoutAdmin || r.Role.Name != SystemRoles.Admin) && r.Role.Permissions.Any(p => p.Code == permission))))
+            .Select(u => new
+            {
+                u.Id, u.Sections, u.Rights,
+                Permissions = u.Roles.Where(r => !withoutAdmin || r.Role.Name != SystemRoles.Admin).SelectMany(r => r.Role.Permissions.Select(p => p.Code)).ToList(),
+            })
             .ToListAsync(ct);
-        return rows.Where(r => Effective(r.Permissions, r.Sections).Contains(permission)).Select(r => r.Id).ToList();
+        return rows.Where(r => Effective(r.Permissions, r.Sections, r.Rights).Contains(permission)).Select(r => r.Id).ToList();
     }
 }

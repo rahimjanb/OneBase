@@ -3645,6 +3645,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.PrimitiveCollection<List<string>>("Rights")
+                        .HasColumnType("text[]");
+
                     b.PrimitiveCollection<List<string>>("Sections")
                         .HasColumnType("text[]");
 

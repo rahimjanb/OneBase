@@ -48,8 +48,8 @@ export function UsersSettings({ initial }: { initial: UsersView }) {
             {t(titles.get(key) ?? key)}
           </span>
         ))}
-        {u.sectionsCustom && (
-          <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent-strong" title={t("Разделы отмечены вручную, не как у роли")}>
+        {(u.sectionsCustom || u.rightsCustom) && (
+          <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent-strong" title={t("Разделы или права отмечены вручную, не как у роли")}>
             {t("вручную")}
           </span>
         )}

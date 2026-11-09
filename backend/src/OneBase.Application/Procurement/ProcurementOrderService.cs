@@ -224,12 +224,13 @@ public sealed partial class ProcurementOrderService(
             .ToListAsync(ct);
     }
 
-    /// <summary>Кого можно назначить ответственным: активные сотрудники снабжения (право обработки заявок от роли).</summary>
+    /// <summary>Кого можно назначить ответственным: активные сотрудники с правом обработки заявок (роль или отмечено в карточке).</summary>
     public async Task<List<ProcurementUserOption>> ResponsiblesAsync(ProcurementContext ctx, CancellationToken ct)
     {
         RequireView(ctx);
+        var ids = await db.ActiveUsersWithAsync(Permissions.ProcurementManage, ct);
         return await db.Users.AsNoTracking()
-            .Where(u => u.IsActive && u.Roles.Any(r => r.Role.Permissions.Any(p => p.Code == Permissions.ProcurementManage)))
+            .Where(u => ids.Contains(u.Id))
             .OrderBy(u => u.FullName)
             .Select(u => new ProcurementUserOption(u.Id, u.FullName))
             .ToListAsync(ct);
