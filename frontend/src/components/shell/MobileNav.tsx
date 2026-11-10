@@ -60,6 +60,9 @@ const isCurrent = (pathname: string, s: Section) => {
   return s.exact ? pathname === s.href : under(s.href) || (s.also ?? []).some(under);
 };
 
+/** Экраны во весь рост со своим полем ввода внизу — без нижней панели: открытый диалог в «Диалогах Telegram» подбора. */
+const fullScreen = (pathname: string) => /^\/hr\/recruitment\/telegram\/[^/]+/.test(pathname);
+
 /**
  * Нижняя панель на телефоне, как в нативном приложении: стеклянная панель со скруглённым верхом, четыре вкладки и синяя кнопка меню
  * (четыре квадрата) по центру. Кнопка раскрывает веер круглых кнопок над панелью — остальные разделы (по правам) и «Новая рассылка»; фон затемняется
@@ -141,7 +144,7 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
     <nav
       aria-label={t("Основные разделы")}
       data-open={open || undefined}
-      className={`rnav shrink-0 px-1.5 lg:hidden ${keyboardOpen ? "hidden" : ""}`}
+      className={`rnav shrink-0 px-1.5 lg:hidden ${keyboardOpen || fullScreen(pathname) ? "hidden" : ""}`}
     >
       <div className="rnav-layer" aria-hidden="true">
         <div className="rnav-overlay" onClick={() => close()} />

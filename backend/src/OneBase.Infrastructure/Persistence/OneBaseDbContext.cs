@@ -239,6 +239,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Recruitment.RecruitmentJob> RecruitmentJobs => Set<OneBase.Domain.Recruitment.RecruitmentJob>();
     public DbSet<OneBase.Domain.Recruitment.VacancyInterviewSettings> VacancyInterviewSettings => Set<OneBase.Domain.Recruitment.VacancyInterviewSettings>();
     public DbSet<OneBase.Domain.Recruitment.InterviewFeedback> InterviewFeedback => Set<OneBase.Domain.Recruitment.InterviewFeedback>();
+    public DbSet<OneBase.Domain.Recruitment.DialogRead> DialogReads => Set<OneBase.Domain.Recruitment.DialogRead>();
 
     public async Task<OneBase.Application.Abstractions.IAppTransaction> LockedTransactionAsync(IReadOnlyCollection<long> keys, CancellationToken ct)
     {

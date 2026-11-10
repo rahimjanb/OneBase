@@ -147,6 +147,9 @@ internal static class TelegramModel
             e.Property(x => x.Error).HasMaxLength(1000);
             e.Property(x => x.RelatedType).HasMaxLength(32);
             e.Property(x => x.Author).HasMaxLength(16);
+            e.Property(x => x.FileKey).HasMaxLength(300);
+            e.Property(x => x.FileName).HasMaxLength(255);
+            e.Property(x => x.FileContentType).HasMaxLength(200);
             e.HasOne<TelegramAccount>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => x.IdempotencyKey).IsUnique();
             e.HasIndex(x => new { x.Status, x.NextAttemptAt });

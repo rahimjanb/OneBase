@@ -22,6 +22,7 @@ public sealed record HrMessage(long? Id, string Direction, string? Text, string?
 public sealed record HrConversation(Guid Id, Guid AccountId, string AccountName, long PeerId, Guid? CandidateId, string Name, string? Username, string Mode,
     IReadOnlyList<HrMessage> Messages);
 
+/// <summary>Сообщение HR: текст и ключ нажатия (повтор не дублирует). Файл в запрос не входит — его кладёт в хранилище сам сервер.</summary>
 public sealed record SendInput(string Text, Guid ClientKey);
 
 public sealed record ModeInput(TelegramConversationMode Mode);
@@ -47,7 +48,7 @@ public sealed record LeadConvertInput(Guid? VacancyId);
 /// публикации вакансий в группы и каналы, источники поиска и лиды. Подключение номеров — только в «Настройки → Telegram».
 /// </summary>
 public sealed class RecruitmentTelegramService(IAppDbContext db, TelegramOutbox outbox, TelegramConversationService conversations, ITelegramGateway gateway,
-    IAuditLogger audit, TimeProvider clock, OneBase.Application.Agents.DialogAgentDelivery delivery)
+    IAuditLogger audit, TimeProvider clock, OneBase.Application.Agents.DialogAgentDelivery delivery, RecruitmentExceptions exceptions)
 {
     private static readonly string[] Categories = ["jobs", "professional", "channel", "other"];
 
@@ -159,17 +160,23 @@ public sealed class RecruitmentTelegramService(IAppDbContext db, TelegramOutbox 
     /// Ответ сотрудника из OneBase — через очередь исходящих HR (пауза и лимит номера). Сотрудник взял диалог на себя: AI в диалоге
     /// выключается (вернуть — «Вернуть AI»). Повтор того же нажатия (clientKey) второго сообщения не даёт.
     /// </summary>
-    public async Task<HrConversation> SendAsync(RecruitmentContext ctx, Guid id, SendInput input, CancellationToken ct)
+    public Task<HrConversation> SendAsync(RecruitmentContext ctx, Guid id, SendInput input, CancellationToken ct) => SendAsync(ctx, id, input, null, ct);
+
+    /// <summary>Сообщение с файлом: файл уже сохранён сервером (<see cref="HrDialogService.SendFileAsync"/>), текст — подпись.</summary>
+    public async Task<HrConversation> SendAsync(RecruitmentContext ctx, Guid id, SendInput input, OutboxFile? file, CancellationToken ct)
     {
         Manage(ctx);
         var c = await HrConversationAsync(id, ct);
         await delivery.SupersedeAsync(c.Id, "Ответил сотрудник HR", ct); // неотправленный ответ AI больше не нужен
         await outbox.EnqueueAsync(new OutboxRequest(c.AccountId, c.PeerId, c.Id, TelegramDepartments.Hr, "manual", input.Text ?? string.Empty,
-            $"manual:{input.ClientKey:N}", "user", ctx.UserId), ct);
+            $"manual:{input.ClientKey:N}", "user", ctx.UserId, File: file), ct);
         if (c.Mode == TelegramConversationMode.Ai)
         {
             await conversations.SetModeAsync(c.AccountId, c.PeerId, TelegramConversationMode.Manual, ctx.UserId, ct);
         }
+
+        // «Нужен HR» → «HR ведёт»: человек ответил — то, что ждало его по диалогу, решено.
+        await exceptions.ResolveConversationAsync(c.Id, ctx.UserId, "HR ответил кандидату в диалоге", ct);
 
         return await ConversationAsync(ctx, id, ct);
     }
@@ -181,6 +188,11 @@ public sealed class RecruitmentTelegramService(IAppDbContext db, TelegramOutbox 
         if (mode == TelegramConversationMode.Manual)
         {
             await delivery.SupersedeAsync(c.Id, "Диалог взял сотрудник HR", ct);
+        }
+        else
+        {
+            // Вернули AI — по диалогу больше никто не ждёт человека.
+            await exceptions.ResolveConversationAsync(c.Id, ctx.UserId, "Диалог возвращён AI", ct);
         }
 
         await conversations.SetModeAsync(c.AccountId, c.PeerId, mode, ctx.UserId, ct);

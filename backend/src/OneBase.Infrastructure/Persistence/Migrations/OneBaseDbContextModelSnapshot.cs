@@ -8560,6 +8560,22 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("CandidateSources", "recruitment");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Recruitment.DialogRead", b =>
+                {
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ConversationId", "UserId");
+
+                    b.ToTable("DialogReads", "recruitment");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Recruitment.HhConnection", b =>
                 {
                     b.Property<int>("Id")
@@ -11762,6 +11778,21 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<string>("FileContentType")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FileKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<long?>("FileSize")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -14837,6 +14868,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasOne("OneBase.Domain.Recruitment.Candidate", null)
                         .WithMany("Sources")
                         .HasForeignKey("CandidateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Recruitment.DialogRead", b =>
+                {
+                    b.HasOne("OneBase.Domain.Telegram.TelegramConversation", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -109,6 +109,25 @@ public sealed class RecruitmentExceptions(IAppDbContext db, UserNotifier notifie
     }
 
     /// <summary>Решено человеком; ReturnToAi — диалог снова ведёт AI-рекрутер.</summary>
+    /// <summary>
+    /// HR ответил в диалоге или вернул его AI — всё, что ждало человека по этому диалогу («Нужен HR»), решено: кем и как — в исключении и в аудите.
+    /// Возвращает, сколько закрыто.
+    /// </summary>
+    public async Task<int> ResolveConversationAsync(Guid conversationId, Guid userId, string resolution, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var closed = await db.RecruitmentExceptions.Where(e => e.ConversationId == conversationId && e.Status == RecruitmentExceptionStatus.Open)
+            .ExecuteUpdateAsync(u => u.SetProperty(e => e.Status, RecruitmentExceptionStatus.Resolved).SetProperty(e => e.ResolvedById, userId)
+                .SetProperty(e => e.ResolvedAt, now).SetProperty(e => e.Resolution, resolution), ct);
+        if (closed > 0)
+        {
+            await audit.LogAsync(ActorType.User, userId.ToString(), "recruitment.exception.resolved", "TelegramConversation", conversationId.ToString(),
+                new { closed, resolution }, ct);
+        }
+
+        return closed;
+    }
+
     public async Task<IReadOnlyList<ExceptionView>> ResolveAsync(RecruitmentContext ctx, Guid id, ResolveInput input, CancellationToken ct)
     {
         if (!ctx.CanManage)

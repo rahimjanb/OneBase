@@ -24,6 +24,9 @@ public interface IRecruiterAgent
 
     /// <summary>Резюме кандидата разобрано — продолжить разговор с учётом резюме (в диалоге, который ведёт AI).</summary>
     Task DocumentReadyAsync(Guid resumeId, CancellationToken ct);
+
+    /// <summary>«Черновик AI» для HR: текст следующего сообщения кандидату — не отправляется.</summary>
+    Task<string> DraftAsync(Guid conversationId, CancellationToken ct);
 }
 
 /// <summary>Правила Telegram для подбора: код вакансии, слова поиска работы, ссылка на сообщение.</summary>
@@ -356,7 +359,8 @@ public sealed class RecruitmentOutboxObserver(IAppDbContext db, RecruitmentExcep
                 PeerId = row.PeerId,
                 MessageId = first,
                 Direction = TelegramMessageDirection.Out,
-                Text = row.Text,
+                Text = string.IsNullOrEmpty(row.Text) ? null : row.Text,
+                FileName = row.FileName,
                 Author = row.Author,
                 AuthorUserId = row.CreatedById,
                 SentAt = row.SentAt ?? clock.GetUtcNow(),

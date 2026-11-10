@@ -106,6 +106,25 @@ public static class RecruiterTexts
         "Javoblaringiz uchun rahmat! Anketangizni hamkasblarimga topshiraman — ular shu yerda siz bilan bog'lanishadi.",
         "Жавобларингиз учун раҳмат! Анкетангизни ҳамкасбларимга топшираман — улар шу ерда сиз билан боғланишади.");
 
+    /// <summary>Шаблон HR «Адрес офиса»: адрес и, если есть, что взять с собой.</summary>
+    public static string OfficeAddress(CandidateLang l, string address, string? instructions) =>
+        P(l, $"Наш офис: {address}.", $"Ofisimiz manzili: {address}.", $"Офисимиз манзили: {address}.")
+        + (string.IsNullOrWhiteSpace(instructions) ? string.Empty : $" {instructions.Trim().TrimEnd('.')}.");
+
+    /// <summary>Шаблон HR «Пригласить на собеседование» — без времени: время HR назначает сам или кандидат выбирает из вариантов.</summary>
+    public static string InviteByHr(CandidateLang l, string? vacancy) => P(l,
+        $"Приглашаем вас на собеседование{(vacancy is null ? string.Empty : $" на вакансию «{vacancy}»")}. Подскажите, когда вам удобно?",
+        $"Sizni{(vacancy is null ? string.Empty : $" «{vacancy}» vakansiyasi bo'yicha")} suhbatga taklif qilamiz. Qachon sizga qulay?",
+        $"Сизни{(vacancy is null ? string.Empty : $" «{vacancy}» вакансияси бўйича")} суҳбатга таклиф қиламиз. Қачон сизга қулай?");
+
+    /// <summary>Шаблон HR «Отказ — вежливо».</summary>
+    public static string PoliteRejection(CandidateLang l, string? vacancy) => Cap(P(l,
+        $"Спасибо за интерес{(vacancy is null ? string.Empty : $" к вакансии «{vacancy}»")} и за время, которое вы нам уделили. К сожалению, сейчас мы не готовы предложить вам эту позицию. Желаем удачи в поиске работы!",
+        $"{(vacancy is null ? string.Empty : $"«{vacancy}» vakansiyasiga ")}qiziqishingiz va ajratgan vaqtingiz uchun rahmat. Afsuski, hozircha bu lavozimni taklif qila olmaymiz. Ish qidirishda omad tilaymiz!",
+        $"{(vacancy is null ? string.Empty : $"«{vacancy}» вакансиясига ")}қизиқишингиз ва ажратган вақтингиз учун раҳмат. Афсуски, ҳозирча бу лавозимни таклиф қила олмаймиз. Иш қидиришда омад тилаймиз!"));
+
+    private static string Cap(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+
     public static string Handoff(CandidateLang l) => P(l,
         "Передаю ваш вопрос сотруднику HR — он скоро ответит вам здесь.",
         "Savolingizni HR xodimiga topshiraman — u tez orada shu yerda javob beradi.",

@@ -235,6 +235,7 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Recruitment.RecruitmentJob> RecruitmentJobs { get; }
     DbSet<OneBase.Domain.Recruitment.VacancyInterviewSettings> VacancyInterviewSettings { get; }
     DbSet<OneBase.Domain.Recruitment.InterviewFeedback> InterviewFeedback { get; }
+    DbSet<OneBase.Domain.Recruitment.DialogRead> DialogReads { get; }
 
     /// <summary>
     /// Транзакция с блокировками PostgreSQL на ключи (advisory, до конца транзакции, по возрастанию ключей — без взаимных блокировок): запись

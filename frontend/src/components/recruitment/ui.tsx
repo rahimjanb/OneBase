@@ -75,7 +75,8 @@ const tabs: { href: string; label: string; manageOnly?: boolean }[] = [
   { href: "/hr/recruitment/settings", label: "Настройки" },
 ];
 
-export function RecruitmentNav({ canManage }: { canManage: boolean }) {
+/** badges — число у вкладки (например, диалогов у «Диалоги Telegram»). */
+export function RecruitmentNav({ canManage, badges }: { canManage: boolean; badges?: Record<string, number> }) {
   const t = useT();
   const pathname = usePathname();
   const active = (href: string) =>
@@ -88,9 +89,12 @@ export function RecruitmentNav({ canManage }: { canManage: boolean }) {
           <Link
             key={x.href}
             href={x.href}
-            className={`shrink-0 rounded-t-lg px-3 py-2 text-sm ${active(x.href) ? "border-b-2 border-accent font-semibold text-ink" : "text-ink-2 hover:text-ink"}`}
+            className={`flex shrink-0 items-center gap-1.5 rounded-t-lg px-3 py-2 text-sm ${active(x.href) ? "border-b-2 border-accent font-semibold text-ink" : "text-ink-2 hover:text-ink"}`}
           >
             {t(x.label)}
+            {!!badges?.[x.href] && (
+              <span className="rounded-full bg-muted px-1.5 text-[11px] font-semibold text-ink-3 tabular-nums">{badges[x.href]}</span>
+            )}
           </Link>
         ))}
     </nav>

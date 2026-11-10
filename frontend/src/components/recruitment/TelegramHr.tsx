@@ -1,20 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Loader2, RefreshCw, Send, Sparkles, UserRound } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Send, Sparkles } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Badge, Card, ErrorText, Label, textarea, useAction } from "@/components/recruitment/ui";
 import { useT } from "@/i18n/client";
 import { recruitmentApi, when, type RecruitmentContext, type VacancyRow } from "@/lib/recruitment";
 import {
   flowApi,
-  outboxLabel,
   recruitmentTelegramApi as api,
   sourceCategoryLabel,
   type HrAccount,
-  type HrConversation,
-  type HrConversationRow,
   type Lead,
   type Publication,
   type PublicationChat,
@@ -50,142 +47,6 @@ function AccountsBar({ accounts }: { accounts: HrAccount[] }) {
           · {t("за сутки {n} из {limit}", { n: a.sentToday, limit: a.dailyLimit })}
         </span>
       ))}
-    </div>
-  );
-}
-
-/** Диалоги HR с кандидатами: список, история, ответ через очередь (пауза и лимит номера), AI или человек. */
-export function TelegramDialogsView({ ctx }: { ctx: RecruitmentContext }) {
-  const t = useT();
-  const [accounts, setAccounts] = useState<HrAccount[]>([]);
-  const [rows, setRows] = useState<HrConversationRow[] | null>(null);
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState<HrConversation | null>(null);
-  const [text, setText] = useState("");
-  const keyRef = useRef<string>(crypto.randomUUID());
-  const bottom = useRef<HTMLDivElement>(null);
-  const { busy, error, run } = useAction();
-
-  const load = () =>
-    run("load", async () => {
-      setAccounts(await api.accounts());
-      setRows(await api.conversations(undefined, search));
-    });
-  useEffect(() => {
-    const timer = setTimeout(load, 250);
-    return () => clearTimeout(timer);
-  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!open) return;
-    const timer = setInterval(() => api.conversation(open.id).then(setOpen, () => undefined), 10_000);
-    return () => clearInterval(timer);
-  }, [open?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => bottom.current?.scrollIntoView({ block: "end" }), [open?.messages.length]);
-
-  const select = (id: string) => run("open", async () => setOpen(await api.conversation(id)));
-
-  return (
-    <div className="space-y-3">
-      <AccountsBar accounts={accounts} />
-      <div className="grid min-h-[60vh] gap-3 lg:grid-cols-[320px_1fr]">
-        <div className="rounded-xl border border-line bg-surface p-2">
-          <div className="mb-2 flex gap-2">
-            <input className={field} placeholder={t("Поиск: имя или @username")} value={search} onChange={(e) => setSearch(e.target.value)} />
-            <button className={button} title={t("Обновить")} onClick={load}>
-              <RefreshCw className="size-4" />
-            </button>
-          </div>
-          {rows === null ? (
-            <p className="p-2 text-sm text-ink-3">{t("Загрузка…")}</p>
-          ) : rows.length === 0 ? (
-            <p className="p-2 text-sm text-ink-3">{t("Диалогов пока нет: кандидаты появятся, когда напишут на номер HR.")}</p>
-          ) : (
-            <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
-              {rows.map((r) => (
-                <li key={r.id}>
-                  <button
-                    className={`w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted ${open?.id === r.id ? "bg-accent-soft" : ""}`}
-                    onClick={() => select(r.id)}
-                  >
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="truncate font-medium text-ink">{r.name}</span>
-                      {r.mode === "Ai" ? <Bot className="size-4 shrink-0 text-accent" aria-label={t("ведёт AI")} /> : <UserRound className="size-4 shrink-0 text-ink-3" aria-label={t("ведёт человек")} />}
-                    </span>
-                    <span className="block truncate text-xs text-ink-3">{r.lastText ?? "—"}</span>
-                    <span className="block text-[11px] text-ink-3">{when(r.lastMessageAt)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="flex min-h-[60vh] flex-col rounded-xl border border-line bg-surface">
-          {!open ? (
-            <p className="m-auto p-6 text-sm text-ink-3">{t("Выберите диалог слева.")}</p>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2">
-                <div>
-                  <span className="font-semibold text-ink">{open.name}</span>
-                  {open.username && <span className="ml-1 text-sm text-ink-3">@{open.username}</span>}
-                  <span className="ml-2 text-xs text-ink-3">{open.accountName}</span>
-                  {open.candidateId && (
-                    <Link href={`/hr/recruitment/candidates/${open.candidateId}`} className="ml-2 text-xs text-accent-strong hover:underline">
-                      {t("карточка кандидата")}
-                    </Link>
-                  )}
-                </div>
-                {ctx.canManage && (
-                  <button className={button} disabled={!!busy} onClick={() => run("mode", async () => setOpen(await api.mode(open.id, open.mode === "Ai" ? "Manual" : "Ai")))}>
-                    {open.mode === "Ai" ? <UserRound className="size-4" /> : <Bot className="size-4" />}
-                    {open.mode === "Ai" ? t("Взять на себя (AI не отвечает)") : t("Вернуть AI")}
-                  </button>
-                )}
-              </div>
-              <div className="flex-1 space-y-2 overflow-y-auto p-4">
-                {open.messages.map((m, i) => (
-                  <div key={`${m.id ?? "p"}-${i}`} className={`flex ${m.direction === "In" ? "justify-start" : "justify-end"}`}>
-                    <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.direction === "In" ? "bg-muted text-ink" : "bg-accent-soft text-ink"}`}>
-                      {m.text && <p className="whitespace-pre-line">{m.text}</p>}
-                      {m.fileName && <p className="text-xs text-ink-2">📎 {m.fileName}{m.resumeId && ` · ${t("сохранено как резюме")}`}</p>}
-                      <p className="mt-1 text-[11px] text-ink-3">
-                        {m.direction === "Out" && `${m.author === "ai" ? "AI" : m.author === "phone" ? t("с телефона") : m.authorName ?? t("сотрудник")} · `}
-                        {when(m.at)}
-                        {m.status !== "Sent" && <span className={m.status === "Pending" ? "" : "text-bad"}> · {t(outboxLabel[m.status] ?? m.status)}</span>}
-                        {m.error && <span className="text-bad"> · {t(m.error)}</span>}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                <div ref={bottom} />
-              </div>
-              {ctx.canManage && (
-                <form
-                  className="flex gap-2 border-t border-line p-3"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    run("send", async () => {
-                      setOpen(await api.send(open.id, text, keyRef.current));
-                      setText("");
-                      keyRef.current = crypto.randomUUID();
-                    });
-                  }}
-                >
-                  <textarea className={`${textarea} min-h-10`} rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder={t("Ответ кандидату…")} maxLength={4096} />
-                  <button type="submit" className={primary} disabled={!!busy || !text.trim()}>
-                    {busy === "send" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                  </button>
-                </form>
-              )}
-            </>
-          )}
-          <div className="px-4 pb-2">
-            <ErrorText error={error} />
-            {ctx.canManage && open?.mode === "Ai" && <p className="text-xs text-ink-3">{t("После вашего сообщения AI в этом диалоге выключается — вернуть его можно кнопкой.")}</p>}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -767,6 +767,14 @@ public class RecruitmentException : Entity
     public string? Resolution { get; set; }
 }
 
+/// <summary>Сотрудник HR прочитал диалог Telegram до этого момента: входящие позже — непрочитанные (у каждого сотрудника свои).</summary>
+public class DialogRead
+{
+    public Guid ConversationId { get; set; }
+    public Guid UserId { get; set; }
+    public DateTimeOffset ReadAt { get; set; }
+}
+
 // ---------- Фоновые задания подбора ----------
 
 public enum RecruitmentJobStatus

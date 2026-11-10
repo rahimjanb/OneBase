@@ -88,5 +88,12 @@ public class TelegramOutgoingMessage : Entity
     /// <summary>ai, user, system.</summary>
     public required string Author { get; set; }
 
+    /// <summary>Файл к сообщению (отправил HR из OneBase): ключ в хранилище, имя, тип, размер; текст — подпись (может быть пустым).</summary>
+    public string? FileKey { get; set; }
+
+    public string? FileName { get; set; }
+    public string? FileContentType { get; set; }
+    public long? FileSize { get; set; }
+
     public Guid? CreatedById { get; set; }
 }

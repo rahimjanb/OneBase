@@ -280,6 +280,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Telegram.Routing.ITelegramDepartmentHandler, OneBase.Application.Recruitment.Telegram.RecruitmentTelegramHandler>();
         services.AddScoped<OneBase.Application.Telegram.Routing.ITelegramRouteClaim, OneBase.Application.Recruitment.Telegram.RecruitmentRouteClaim>();
         services.AddScoped<OneBase.Application.Recruitment.Telegram.RecruitmentTelegramService>();
+        services.AddScoped<OneBase.Application.Recruitment.Telegram.HrDialogService>();
         if (isolation.AllowOutbound<Telegram.TelegramOutboxWorker>("Telegram: исходящие подразделений (HR — ответы, публикации, напоминания)"))
         {
             services.AddHostedService<Telegram.TelegramOutboxWorker>();

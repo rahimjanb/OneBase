@@ -811,6 +811,14 @@ public sealed partial class RecruitmentService
         var conversations = await db.TelegramConversations.Where(c => c.RelatedType == CandidateRelation && c.RelatedId == id).Select(c => c.Id).ToListAsync(ct);
         if (conversations.Count > 0)
         {
+            // Файлы, которые HR отправлял кандидату из OneBase, — в хранилище; удаляются вместе с перепиской.
+            var files = await db.TelegramOutgoingMessages.AsNoTracking()
+                .Where(m => m.ConversationId != null && conversations.Contains(m.ConversationId.Value) && m.FileKey != null).Select(m => m.FileKey!).ToListAsync(ct);
+            foreach (var key in files)
+            {
+                await storage.DeleteAsync(key, ct);
+            }
+
             await db.TelegramOutgoingMessages.Where(m => m.ConversationId != null && conversations.Contains(m.ConversationId.Value)).ExecuteDeleteAsync(ct);
             await db.TelegramConversations.Where(c => conversations.Contains(c.Id)).ExecuteDeleteAsync(ct);
         }

@@ -113,6 +113,13 @@ internal static class RecruitmentModel
             e.HasIndex(x => new { x.CandidateId, x.Sha256 }).IsUnique();
         });
 
+        b.Entity<DialogRead>(e =>
+        {
+            e.ToTable("DialogReads", Schema);
+            e.HasKey(x => new { x.ConversationId, x.UserId });
+            e.HasOne<OneBase.Domain.Telegram.TelegramConversation>().WithMany().HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         b.Entity<RecruitmentJob>(e =>
         {
             e.ToTable("Jobs", Schema);

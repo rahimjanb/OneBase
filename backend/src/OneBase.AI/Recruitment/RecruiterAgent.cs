@@ -7,6 +7,7 @@ using OneBase.AI.Consultant;
 using OneBase.AI.DialogAgents;
 using OneBase.AI.Gateway;
 using OneBase.AI.Llm;
+using OneBase.AI.Providers;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Agents;
 using OneBase.Application.Recruitment;
@@ -464,39 +465,7 @@ public sealed class RecruiterAgent(
     private async Task ModelTurnAsync(Turn turn, IReadOnlyList<Vacancy> open, string? systemNote, CancellationToken ct)
     {
         var raw = turn.Raw;
-        var history = await db.TelegramConversationMessages.AsNoTracking().Where(m => m.ConversationId == raw.ConversationId)
-            .OrderByDescending(m => m.SentAt).Take(HistoryMessages).OrderBy(m => m.SentAt).ToListAsync(ct);
-        var fileIds = history.Where(m => m.ResumeId != null).Select(m => m.ResumeId!.Value).ToList();
-        var files = await db.CandidateResumes.AsNoTracking().Where(r => fileIds.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.Status, ct);
-        var answers = await db.DialogAgentAnswers.AsNoTracking().Where(a => a.AgentId == turn.Agent.Id).OrderBy(a => a.SortOrder).ToListAsync(ct);
-        var resume = await db.CandidateResumes.AsNoTracking().Where(r => r.CandidateId == turn.Candidate.Id && r.Text != null)
-            .OrderByDescending(r => r.CreatedAt).Select(r => r.Text).FirstOrDefaultAsync(ct);
-
-        var messages = new List<LlmMessage>
-        {
-            new(LlmRole.System, SystemPrompt(turn.Agent, answers)),
-            new(LlmRole.System, Context(turn.Agent, turn.Candidate, turn.Application, open, resume, clock.GetUtcNow(), turn.Lang,
-                turn.Application is { } a ? await interviews.CurrentAsync(a.Id, ct) : null)),
-        };
-        foreach (var m in history)
-        {
-            var text = (m.Text ?? string.Empty) + (m.FileName is { } f ? $" [файл: {f}{FileNote(m.ResumeId, files)}]" : string.Empty);
-            if (text.Length > 0)
-            {
-                messages.Add(new LlmMessage(m.Direction == TelegramMessageDirection.In ? LlmRole.User : LlmRole.Assistant,
-                    m.Direction == TelegramMessageDirection.In ? DialogAgentPrompt.Wrap(text) : text));
-            }
-        }
-
-        if (systemNote is not null)
-        {
-            messages.Add(new LlmMessage(LlmRole.User, $"[Событие системы, не сообщение кандидата] {systemNote}"));
-        }
-        else if (history.Count == 0 || history[^1].Direction != TelegramMessageDirection.In)
-        {
-            messages.Add(new LlmMessage(LlmRole.User, DialogAgentPrompt.Wrap(raw.Text)));
-        }
-
+        var messages = await PromptAsync(turn, open, systemNote, ct);
         RecruiterDecision? decision;
         AiCallResult result;
         var options = new AiCallOptions
@@ -636,6 +605,102 @@ public sealed class RecruiterAgent(
 
                 return;
         }
+    }
+
+    /// <summary>
+    /// «Черновик AI» для HR: тот же промпт, что у ответа рекрутера (вакансии, резюме, собеседование, язык и графика кандидата, вся переписка), но
+    /// ответ не отправляется и ничего не записывает — текст уходит в поле ввода, HR правит и отправляет сам. Платный вызов «hr.recruiter.draft».
+    /// </summary>
+    public async Task<string> DraftAsync(Guid conversationId, CancellationToken ct)
+    {
+        var conversation = await db.TelegramConversations.AsNoTracking().FirstOrDefaultAsync(c => c.Id == conversationId, ct)
+                           ?? throw new Application.Field.FieldNotFoundException("Диалог не найден.");
+        var candidate = conversation.RelatedType == RecruitmentService.CandidateRelation && conversation.RelatedId is { } cid
+            ? await db.Candidates.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cid, ct)
+            : null;
+        if (candidate is null)
+        {
+            throw new Application.Field.FieldValidationException("В диалоге нет кандидата — черновик недоступен.");
+        }
+
+        var application = await db.CandidateApplications.AsNoTracking().Include(a => a.Vacancy).ThenInclude(v => v!.Department)
+            .Where(a => a.CandidateId == candidate.Id && a.ClosedAt == null).OrderByDescending(a => a.StageChangedAt).FirstOrDefaultAsync(ct);
+        var agent = await agents.RecruiterForAsync(application?.Vacancy?.AgentId, conversation.AccountId, ct)
+                    ?? throw new Application.Field.FieldValidationException("AI-рекрутера нет — создайте его в «Настройки → ИИ-агенты».");
+        var lastIn = await db.TelegramConversationMessages.AsNoTracking().Where(m => m.ConversationId == conversationId && m.Direction == TelegramMessageDirection.In)
+            .OrderByDescending(m => m.SentAt).Select(m => m.Text).FirstOrDefaultAsync(ct);
+        var lang = RecruiterRules.Language(agent.Language, CandidateLanguages.Of(candidate.Language, candidate.PreferredScript), languages.Detect(lastIn));
+        var turn = new Turn(new RecruiterTurn(conversation.AccountId, conversation.PeerId, conversationId, candidate.Id, 0, lastIn ?? string.Empty, clock.GetUtcNow()),
+            agent, candidate, application, lang);
+        var messages = await PromptAsync(turn, await OpenVacanciesAsync(db, ct),
+            "Сотрудник HR просит черновик следующего сообщения кандидату. Напиши его так, как ответил бы сам (тот же JSON); его прочитает, поправит и " +
+            "отправит человек от имени HR. Не приглашай через action — просто текст сообщения.", ct);
+        try
+        {
+            var result = await ai.CompleteAsync(messages, [], new AiCallOptions
+            {
+                Model = DialogAgentPrompt.Model(agent),
+                JsonOutput = true,
+                AllowToolCalls = false,
+                MaxOutputTokens = 1200,
+                CacheConversation = false,
+                Context = new AiCallContext(null, "recruiter", conversationId, "hr.recruiter.draft"),
+            }, ct);
+            var text = Parse(result.Text) is { Messages.Count: > 0 } decision ? string.Join("\n\n", decision.Messages) : null;
+            return text ?? throw new Application.Field.FieldValidationException("AI не предложил ответ — напишите сами.");
+        }
+        catch (LlmNotConfiguredException)
+        {
+            throw new Application.Field.FieldValidationException("AI не настроен — черновик недоступен («Настройки → AI»).");
+        }
+        catch (AiProviderException ex)
+        {
+            // Нет ключа, лимит, сбой провайдера: HR видит, почему черновика нет (по-русски), а не «ошибка сервера»; английский текст провайдера — в журнал.
+            logger.LogWarning(ex, "AI-рекрутер: черновик для диалога {Conversation} не получен", conversationId);
+            throw new Application.Field.FieldValidationException(ex.Transient || !ex.Message.Any(c => c is >= 'А' and <= 'я')
+                ? "AI сейчас не отвечает — попробуйте ещё раз или напишите сами."
+                : $"Черновик недоступен: {ex.Message}");
+        }
+    }
+
+    /// <summary>Промпт хода: неизменная часть агента, меняющаяся (кандидат, вакансии, резюме, собеседование, язык), история переписки, событие или сообщение.</summary>
+    private async Task<List<LlmMessage>> PromptAsync(Turn turn, IReadOnlyList<Vacancy> open, string? systemNote, CancellationToken ct)
+    {
+        var raw = turn.Raw;
+        var history = await db.TelegramConversationMessages.AsNoTracking().Where(m => m.ConversationId == raw.ConversationId)
+            .OrderByDescending(m => m.SentAt).Take(HistoryMessages).OrderBy(m => m.SentAt).ToListAsync(ct);
+        var fileIds = history.Where(m => m.ResumeId != null).Select(m => m.ResumeId!.Value).ToList();
+        var files = await db.CandidateResumes.AsNoTracking().Where(r => fileIds.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.Status, ct);
+        var answers = await db.DialogAgentAnswers.AsNoTracking().Where(a => a.AgentId == turn.Agent.Id).OrderBy(a => a.SortOrder).ToListAsync(ct);
+        var resume = await db.CandidateResumes.AsNoTracking().Where(r => r.CandidateId == turn.Candidate.Id && r.Text != null)
+            .OrderByDescending(r => r.CreatedAt).Select(r => r.Text).FirstOrDefaultAsync(ct);
+
+        var messages = new List<LlmMessage>
+        {
+            new(LlmRole.System, SystemPrompt(turn.Agent, answers)),
+            new(LlmRole.System, Context(turn.Agent, turn.Candidate, turn.Application, open, resume, clock.GetUtcNow(), turn.Lang,
+                turn.Application is { } a ? await interviews.CurrentAsync(a.Id, ct) : null)),
+        };
+        foreach (var m in history)
+        {
+            var text = (m.Text ?? string.Empty) + (m.FileName is { } f ? $" [файл: {f}{FileNote(m.ResumeId, files)}]" : string.Empty);
+            if (text.Length > 0)
+            {
+                messages.Add(new LlmMessage(m.Direction == TelegramMessageDirection.In ? LlmRole.User : LlmRole.Assistant,
+                    m.Direction == TelegramMessageDirection.In ? DialogAgentPrompt.Wrap(text) : text));
+            }
+        }
+
+        if (systemNote is not null)
+        {
+            messages.Add(new LlmMessage(LlmRole.User, $"[Событие системы, не сообщение кандидата] {systemNote}"));
+        }
+        else if (history.Count == 0 || history[^1].Direction != TelegramMessageDirection.In)
+        {
+            messages.Add(new LlmMessage(LlmRole.User, DialogAgentPrompt.Wrap(raw.Text)));
+        }
+
+        return messages;
     }
 
     /// <summary>Что модель знает о файле в истории: резюме получено и обрабатывается (не говорить «изучил»), разобрано или не прочиталось.</summary>

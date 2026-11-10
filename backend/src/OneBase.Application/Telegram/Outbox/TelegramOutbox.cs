@@ -22,7 +22,11 @@ public sealed record OutboxRequest(
     string? RelatedType = null,
     Guid? RelatedId = null,
     DateTimeOffset? NotBefore = null,
-    int TypingSeconds = 0);
+    int TypingSeconds = 0,
+    OutboxFile? File = null);
+
+/// <summary>Файл к сообщению: уже в хранилище (ключ), имя, тип, размер; текст сообщения — подпись к нему.</summary>
+public sealed record OutboxFile(string Key, string FileName, string ContentType, long Size);
 
 /// <summary>После отправки или окончательной ошибки — подразделение обновляет свои записи (история переписки, публикация, исключение для HR).</summary>
 public interface ITelegramOutboxObserver
@@ -44,7 +48,7 @@ public sealed class TelegramOutbox(IAppDbContext db, TimeProvider clock)
         }
 
         var text = r.Text.Trim();
-        if (text.Length == 0)
+        if (text.Length == 0 && r.File is null)
         {
             throw new FieldValidationException("Пустое сообщение.");
         }
@@ -70,6 +74,10 @@ public sealed class TelegramOutbox(IAppDbContext db, TimeProvider clock)
             RelatedId = r.RelatedId,
             TypingSeconds = Math.Clamp(r.TypingSeconds, 0, TelegramOutboxRunner.MaxTypingSeconds),
             NextAttemptAt = r.NotBefore ?? clock.GetUtcNow(),
+            FileKey = r.File?.Key,
+            FileName = r.File?.FileName,
+            FileContentType = r.File?.ContentType,
+            FileSize = r.File?.Size,
         };
         db.TelegramOutgoingMessages.Add(row);
         try
@@ -93,6 +101,7 @@ public sealed class TelegramOutbox(IAppDbContext db, TimeProvider clock)
 public sealed class TelegramOutboxRunner(
     IAppDbContext db,
     ITelegramGateway telegram,
+    IFileStorage storage,
     IEnumerable<ITelegramOutboxObserver> observers,
     TimeProvider clock,
     ILogger<TelegramOutboxRunner> logger)
@@ -188,7 +197,17 @@ public sealed class TelegramOutboxRunner(
 
         try
         {
-            var result = await telegram.SendAsync(row.AccountId, peer, new TelegramOutgoing(row.Text, false, [], row.ReplyToMessageId), ct);
+            IReadOnlyList<TelegramFile> files = [];
+            if (row.FileKey is { } key)
+            {
+                // Файл от HR: из хранилища OneBase; изображение — фото, остальное — документ; текст — подпись.
+                using var buffer = new MemoryStream();
+                await storage.DownloadAsync(key, buffer, ct);
+                var type = row.FileContentType ?? "application/octet-stream";
+                files = [new TelegramFile(row.FileName ?? "file", type, buffer.ToArray(), type is "image/jpeg" or "image/png")];
+            }
+
+            var result = await telegram.SendAsync(row.AccountId, peer, new TelegramOutgoing(row.Text.Length == 0 ? null : row.Text, false, files, row.ReplyToMessageId), ct);
             row.Status = TelegramOutboxStatus.Sent;
             row.SentAt = clock.GetUtcNow();
             row.UpdatedAt = row.SentAt;
