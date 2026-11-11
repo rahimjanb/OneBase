@@ -137,6 +137,8 @@ const dict: Dict = {
   "Сверяю числа ответа с данными OneBase…": "Javobdagi raqamlar OneBase ma'lumotlari bilan solishtirilmoqda…",
   "Числа не подтвердились данными — переписываю ответ…": "Raqamlar ma'lumotlar bilan tasdiqlanmadi — javob qayta yozilmoqda…",
   "Определяю, каких AI-сотрудников привлечь": "Qaysi AI xodimlarni jalb qilish aniqlanmoqda",
+  "Обновляю данные из источников перед ответом": "Javobdan oldin manbalardan ma'lumotlar yangilanmoqda",
+  "Проверил свежесть данных": "Ma'lumotlar yangiligi tekshirildi",
   "Формирую ответ": "Javob tayyorlanmoqda",
   "Вспоминаю прошлые анализы": "Oldingi tahlillar eslanmoqda",
   "Ответ не получен": "Javob olinmadi",

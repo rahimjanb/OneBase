@@ -262,11 +262,65 @@ export type Dashboard = {
   risks: Insight[];
   recommendations: string[];
   forecast: { metric: string; title: string; unit: string; total: number; lower: number; upper: number; steps: number; method: string; reliable: boolean; points: ForecastPoint[] } | null;
-  freshness: { source: string; at: string | null; status: "ok" | "stale"; note: string | null }[];
+  freshness: FreshnessRow[];
   recent: { id: string; title: string; at: string }[];
   scope: string | null;
   errors: string[];
+  gaps: DataGap[];
 };
+
+/** Состояние набора данных: свежие, обновляются, устарели, ошибка источника, интеграция не подключена, планы не заведены. */
+export type ReadinessStatus = "ok" | "updating" | "stale" | "error" | "not_connected" | "missing";
+
+/**
+ * Свежесть набора данных: code — набор (sales, payments, stock, plans, hr, onebase, catalog, risks), origin — откуда (linko, verifix, onebase),
+ * note — почему отстаёт, action — что система уже сделала, canRefresh — можно запустить обновление, href — настройки подключения.
+ */
+export type FreshnessRow = {
+  source: string;
+  at: string | null;
+  status: ReadinessStatus;
+  note: string | null;
+  action: string | null;
+  code: string | null;
+  origin: string | null;
+  canRefresh: boolean;
+  href: string | null;
+};
+
+/** Нехватка данных в выбранном периоде: что не загружено и почему, что уже сделано, где исправить, какой месяц показать вместо. */
+export type DataGap = {
+  source: string;
+  text: string;
+  action: string | null;
+  href: string | null;
+  latest: { label: string; from: string; to: string } | null;
+};
+
+export type Readiness = { rows: FreshnessRow[]; gaps: DataGap[] };
+
+/** Подпись статуса свежести (ok — без подписи). */
+export function readinessLabel(status: ReadinessStatus): string | null {
+  switch (status) {
+    case "updating":
+      return "обновляется";
+    case "stale":
+      return "устарели";
+    case "error":
+      return "ошибка обмена";
+    case "not_connected":
+      return "не подключено";
+    case "missing":
+      return "не заведены";
+    default:
+      return null;
+  }
+}
+
+/** Название источника данных для кнопки и подписи. */
+export function originLabel(origin: string | null): string {
+  return origin === "linko" ? "Linko" : origin === "verifix" ? "Verifix" : "OneBase";
+}
 
 export type HrDivision = { division: string; late: number; lateMinutes: number; earlyLeave: number; absent: number; employees: number };
 export type WorkDepartment = { department: string; open: number; overdue: number; doneInPeriod: number; blocked: number; onTimePercent: number | null };

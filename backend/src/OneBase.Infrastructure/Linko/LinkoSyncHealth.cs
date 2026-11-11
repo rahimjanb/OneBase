@@ -21,9 +21,11 @@ public sealed class LinkoSyncHealth(OneBaseDbContext db, SalesOptions options, T
 
     /// <summary>
     /// Проверяет обмен; true — отправлено уведомление (о проблеме или о восстановлении). <paramref name="since"/> — начало только что
-    /// прошедшей синхронизации: всё, что она не обновила, — проблема; null — проверка по <see cref="StaleAfter"/>.
+    /// прошедшей синхронизации: всё, что она не обновила, — проблема; null — проверка по <see cref="StaleAfter"/>. <paramref name="cause"/> —
+    /// известная причина, по которой обмен сам не пройдёт (Linko не подключён, автоматический обмен выключен): её называет Аналитик, который
+    /// следит за свежестью данных и тогда, когда расписание не работает.
     /// </summary>
-    public async Task<bool> CheckAsync(DateTimeOffset? since = null, CancellationToken ct = default)
+    public async Task<bool> CheckAsync(DateTimeOffset? since = null, CancellationToken ct = default, string? cause = null)
     {
         var now = time.GetUtcNow();
         var states = await db.LinkoSyncStates.ToListAsync(ct);
@@ -46,7 +48,9 @@ public sealed class LinkoSyncHealth(OneBaseDbContext db, SalesOptions options, T
         var recipients = await db.ActiveUsersWithAsync(Permissions.IntegrationsManage, ct);
         var (title, body) = problem is not null
             ? ("Обмен с Linko не работает — данные в отчётах устарели",
-                $"{problem} {NextRunText(now)}Проверьте токен и доступность Linko в «Настройки → Интеграции» и обновите данные кнопкой «Обновить».")
+                cause is not null
+                    ? $"{problem} Причина: {cause} Отчёты продаж и Аналитик показывают данные на дату последней загрузки; после восстановления обмена данные догрузятся."
+                    : $"{problem} {NextRunText(now)}Проверьте токен и доступность Linko в «Настройки → Интеграции» и обновите данные кнопкой «Обновить».")
             : ("Обмен с Linko восстановлен", "Данные снова обновляются автоматически, отчёты пересчитаны.");
         foreach (var recipient in recipients)
         {

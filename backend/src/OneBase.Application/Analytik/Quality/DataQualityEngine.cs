@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Analytik.Catalog;
+using OneBase.Application.Analytik.Readiness;
 using OneBase.Application.Analytik.Risk;
 using OneBase.Application.Security;
 using OneBase.Domain.Production;
@@ -14,12 +15,13 @@ namespace OneBase.Application.Analytik.Quality;
 /// не считается (минимумы, сроки поставки, связь техкарты с товаром продаж). Противоречивые данные не объединяются: владелец показателя —
 /// SourceOfTruth, здесь — только сигнал.
 /// </summary>
-public sealed class DataQualityEngine(IAppDbContext db, CatalogService catalog, IAnalytikSql sql, TimeProvider clock)
+public sealed class DataQualityEngine(IAppDbContext db, CatalogService catalog, IAnalytikSql sql, DataReadiness readiness, TimeProvider clock)
 {
     public static readonly string[] Rules =
     [
         "quality.linko_sync", "quality.verifix_sync", "quality.source_conflicts", "quality.orphans", "quality.future_dates", "quality.negative_stock",
         "quality.duplicate_items", "quality.missing_minimums", "quality.missing_lead_time", "quality.recipe_product_link", "quality.hr_schedule",
+        "quality.sales_plan",
     ];
 
     /// <summary>Находки качества данных и правила, которые удалось проверить (непроверенное правило не закрывает свою прежнюю находку).</summary>
@@ -31,7 +33,18 @@ public sealed class DataQualityEngine(IAppDbContext db, CatalogService catalog, 
 
         // 1. Свежесть Linko: синхронизация каждые 30 минут — больше 3 часов без удачной — предупреждение, больше суток — критично. Одна находка
         //    на все отстающие сущности (а не по находке на каждую): иначе один сбой обмена дал бы десятки рисков и уведомлений.
-        var states = await db.LinkoSyncStates.AsNoTracking().ToListAsync(ct);
+        // Служебные строки обмена (открытая проблема контроля, время сверки) — не данные: их «ошибка» — это текст уведомления.
+        ReadinessReport? report = null;
+        try
+        {
+            report = await readiness.CheckAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            failed.Add("quality.sales_plan"); // без готовности данных планы не проверены — прежняя находка не закрывается
+        }
+
+        var states = (await db.LinkoSyncStates.AsNoTracking().ToListAsync(ct)).Where(s => s.Entity is not ("alert" or "reconcile")).ToList();
         var stale = states
             .Select(s => (State: s, Age: s.LastSuccessAt is { } at ? now - at : (TimeSpan?)null))
             .Where(x => x.State.LastError is { Length: > 0 } || x.Age is null || x.Age > TimeSpan.FromHours(3))
@@ -42,16 +55,27 @@ public sealed class DataQualityEngine(IAppDbContext db, CatalogService catalog, 
             var oldest = stale.Select(x => x.State.LastSuccessAt).Where(x => x is not null).DefaultIfEmpty().Min();
             var errors = stale.Where(x => x.State.LastError is { Length: > 0 }).ToList();
             var critical = stale.Any(x => x.Age is null || x.Age > TimeSpan.FromHours(24));
+            // Причина из подключения (не подключён, обмен выключен) — подтверждённая; что уже сделано — из контроля данных Аналитика.
+            var link = report?.Link(SourceCodes.Linko);
+            var sales = report?.Datasets.FirstOrDefault(d => d.Code == "sales");
+            var linkCause = link is null ? null
+                : !link.Connected ? link.Problem
+                : !link.AutoSync ? "Автоматический обмен с Linko выключен — данные обновляются только кнопкой «Обновить»."
+                : null;
+            var done = sales?.Action;
             found.Add(new InsightCandidate(InsightKinds.Quality, "sales", "quality.linko_sync", "quality.linko_sync", critical ? Severities.Critical : Severities.Warning,
                 $"Данные Linko не обновляются: {stale.Count} из {states.Count} сущностей",
                 (oldest is { } o ? $"Самая старая удачная синхронизация — {o.ToOffset(TimeSpan.FromHours(5)):dd.MM.yyyy HH:mm}. " : "") +
                 "Отстают: " + string.Join(", ", stale.Take(12).Select(x => x.State.Entity)) + (stale.Count > 12 ? $" и ещё {stale.Count - 12}" : "") + ".",
-                Cause: errors.Count > 0 ? $"Ошибка последней попытки ({errors[0].State.Entity}): {Short(errors[0].State.LastError!, 300)}" : null,
-                CauseConfirmed: errors.Count > 0,
-                Hypotheses: errors.Count > 0 ? null : ["Синхронизация Linko выключена или сервер API не запущен", "Нет связи с Linko"],
+                Cause: linkCause ?? (errors.Count > 0 ? $"Ошибка последней попытки ({errors[0].State.Entity}): {Short(errors[0].State.LastError!, 300)}" : null),
+                CauseConfirmed: linkCause is not null || errors.Count > 0,
+                Hypotheses: linkCause is not null || errors.Count > 0 ? null : ["Сервер API с синхронизацией не запущен", "Нет связи с Linko"],
                 Impact: stale.Count, ImpactUnit: "сущностей",
-                Consequences: "Отчёты продаж и Аналитик показывают цифры на дату последней синхронизации.",
-                Recommendations: ["Проверить «Интеграции → Продажи → Linko» и журнал синхронизации."],
+                Consequences: "Отчёты продаж и Аналитик показывают цифры на дату последней синхронизации; вопросы о более поздних днях AI-аналитик " +
+                              "разбирает по последним загруженным данным.",
+                Recommendations: done is null
+                    ? ["Проверить «Настройки → Интеграции → Linko» и журнал синхронизации."]
+                    : ["Проверить «Настройки → Интеграции → Linko» и журнал синхронизации.", $"Уже сделано: {done}"],
                 Evidence: new { Entities = stale.Select(x => new { x.State.Entity, x.State.LastSuccessAt, x.State.LastError }) },
                 Href: "/settings/data-sources", RequiredPermission: Permissions.SalesRead));
         }
@@ -67,6 +91,16 @@ public sealed class DataQualityEngine(IAppDbContext db, CatalogService catalog, 
                 lastHr is { } h ? $"Последняя удачная синхронизация Verifix — {h.ToOffset(TimeSpan.FromHours(5)):dd.MM.yyyy HH:mm}." : "Удачной синхронизации Verifix нет.",
                 Consequences: "Посещаемость и опоздания в HR и Аналитике неполные.", Recommendations: ["Проверить «HR → Настройки → Verifix»."],
                 Href: "/hr", RequiredPermission: Permissions.HrRead));
+        }
+
+        // 2а. Планы продаж на текущий месяц не заведены (а в прошлом были): выполнение плана и его прогноз не считаются.
+        if (report?.Datasets.FirstOrDefault(d => d.Code == "plans" && d.Status == ReadinessStatus.Missing) is { } plans)
+        {
+            found.Add(new InsightCandidate(InsightKinds.Quality, "sales", "quality.sales_plan", "quality.sales_plan", Severities.Warning,
+                $"{plans.Title} нет в OneBase", plans.Reason ?? plans.Title,
+                CauseConfirmed: true, Consequences: "Выполнение плана, прогноз выполнения и отставание регионов от плана в Аналитике и отчётах не считаются.",
+                Recommendations: ["Завести планы месяца в «Продажи → Планы» или проверить загрузку планов из Linko."],
+                Href: plans.Href, RequiredPermission: Permissions.SalesRead));
         }
 
         // 3. Открытые конфликты источников (Linko против Google Sheets и др.), которые требуют решения.

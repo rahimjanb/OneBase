@@ -5,6 +5,7 @@ using OneBase.Application.Analytik;
 using OneBase.Application.Analytik.Business;
 using OneBase.Application.Analytik.Catalog;
 using OneBase.Application.Analytik.Query;
+using OneBase.Application.Analytik.Readiness;
 using OneBase.Application.Analytik.Risk;
 using OneBase.Application.Analytik.Supply;
 using OneBase.Application.Field;
@@ -26,7 +27,13 @@ public sealed record SupplySummary(IReadOnlyDictionary<string, int> Risks, IRead
 public sealed record ForecastSummary(string Metric, string Title, string Unit, decimal Total, decimal Lower, decimal Upper, int Steps, string Granularity, string Method,
     decimal? Wape, bool Reliable, IReadOnlyList<Application.Analytik.Forecasting.ForecastPoint> Points);
 
-public sealed record FreshnessRow(string Source, DateTimeOffset? At, string Status, string? Note = null);
+/// <summary>
+/// Свежесть набора данных: Code — набор (sales, payments, stock, plans, hr, onebase, catalog, risks), Origin — откуда (linko, verifix, onebase),
+/// Status — ReadinessStatus или ok/stale для служебных строк, Note — почему отстаёт, Action — что система уже сделала, CanRefresh — пользователь может
+/// запустить обновление, Href — настройки подключения (только тем, кто может его исправить).
+/// </summary>
+public sealed record FreshnessRow(string Source, DateTimeOffset? At, string Status, string? Note = null, string? Action = null, string? Code = null,
+    string? Origin = null, bool CanRefresh = false, string? Href = null);
 
 public sealed record RecentAnalysis(Guid Id, string Title, DateTimeOffset At);
 
@@ -38,7 +45,7 @@ public sealed record RecentAnalysis(Guid Id, string Title, DateTimeOffset At);
 public sealed record DashboardView(
     AnalytikPeriod Period, DateTimeOffset At, CompanyHealth Health, SalesBlock? Sales, FinanceBlock? Finance, ProductionBlock? Production, SupplySummary? Supply,
     HrBlock? Hr, WorkBlock? Work, IReadOnlyList<InsightView> Risks, IReadOnlyList<string> Recommendations, ForecastSummary? Forecast,
-    IReadOnlyList<FreshnessRow> Freshness, IReadOnlyList<RecentAnalysis> Recent, string? Scope, IReadOnlyList<string> Errors);
+    IReadOnlyList<FreshnessRow> Freshness, IReadOnlyList<RecentAnalysis> Recent, string? Scope, IReadOnlyList<string> Errors, IReadOnlyList<DataGap> Gaps);
 
 public sealed class DashboardService(
     IAppDbContext db,
@@ -50,6 +57,7 @@ public sealed class DashboardService(
     RiskEngine risks,
     ForecastService forecasts,
     CatalogService catalog,
+    DataKeeper keeper,
     TimeProvider clock,
     ILogger<DashboardService> logger)
 {
@@ -76,6 +84,8 @@ public sealed class DashboardService(
             }
         }
 
+        // Сначала — свежесть данных: отстающий источник начинает обновляться сразу, а не ждёт следующего запуска по расписанию.
+        var readiness = await Safe<ReadinessReport>("Свежесть данных", async () => await keeper.RunAsync("dashboard", ct));
         var salesBlock = await Safe("Продажи", () => sales.BlockAsync(period, principal, ct));
         var financeBlock = await Safe("Финансы", () => finance.BlockAsync(period, principal, salesBlock, ct));
         var productionBlock = await Safe("Производство", () => operations.ProductionAsync(period, principal, ct, 10));
@@ -103,8 +113,9 @@ public sealed class DashboardService(
 
         var health = Health(insightList, salesBlock, supplyPlan, productionBlock) with { Coverage = Coverage(principal, salesBlock, financeBlock, productionBlock, supplyPlan, hrBlock) };
         return new DashboardView(period, clock.GetUtcNow(), health, salesBlock, financeBlock, productionBlock,
-            supplySummary, hrBlock, workBlock, top, recommendations, forecast, await FreshnessAsync(principal, ct), await RecentAsync(principal, ct),
-            principal.Sales.Restricted ? principal.Sales.Description : null, errors);
+            supplySummary, hrBlock, workBlock, top, recommendations, forecast, await FreshnessAsync(principal, readiness, ct), await RecentAsync(principal, ct),
+            principal.Sales.Restricted ? principal.Sales.Description : null, errors,
+            readiness is null ? [] : DataReadiness.Gaps(readiness.Visible(principal), period, clock.GetUtcNow(), code => readiness.CanManage(code, principal)));
     }
 
     /// <summary>
@@ -189,28 +200,29 @@ public sealed class DashboardService(
         return full ? null : seen.Count == 0 ? "Оценка без данных разделов: вам не доступен ни один раздел." : $"Только по доступным вам данным: {string.Join(", ", seen)}.";
     }
 
-    private async Task<IReadOnlyList<FreshnessRow>> FreshnessAsync(AnalytikPrincipal principal, CancellationToken ct)
+    private async Task<IReadOnlyList<FreshnessRow>> FreshnessAsync(AnalytikPrincipal principal, ReadinessReport? readiness, CancellationToken ct)
     {
-        var rows = new List<FreshnessRow>();
+        var rows = readiness is null ? [] : Freshness(readiness, principal).ToList();
         var now = clock.GetUtcNow();
-        if (SalesAnalytik.CanView(principal))
-        {
-            var orders = await db.LinkoSyncStates.AsNoTracking().FirstOrDefaultAsync(s => s.Entity == "orders", ct);
-            rows.Add(new FreshnessRow("Linko: заказы", orders?.LastSuccessAt,
-                orders?.LastSuccessAt is { } at && now - at < TimeSpan.FromHours(3) ? "ok" : "stale", orders?.LastError));
-        }
-
-        if (principal.Has(Application.Security.Permissions.HrRead))
-        {
-            var hr = await db.HrSyncRuns.AsNoTracking().Where(r => r.Status == "Succeeded" || r.Status == "Partial").MaxAsync(r => (DateTimeOffset?)r.FinishedAt, ct);
-            rows.Add(new FreshnessRow("Verifix: посещаемость", hr, hr is { } at && now - at < TimeSpan.FromHours(6) ? "ok" : "stale"));
-        }
-
         var model = await catalog.ModelAsync(ct);
-        rows.Add(new FreshnessRow("Каталог базы", model.RefreshedAt, model.RefreshedAt is { } c && now - c < TimeSpan.FromHours(2) ? "ok" : "stale"));
+        rows.Add(new FreshnessRow("Каталог базы", model.RefreshedAt, model.RefreshedAt is { } c && now - c < TimeSpan.FromHours(2) ? "ok" : "stale",
+            Code: "catalog", Origin: SourceCodes.OneBase));
         var hourly = await adb.JobRuns.AsNoTracking().Where(j => j.Job == "hourly" && j.Status == "ok").MaxAsync(j => (DateTimeOffset?)j.FinishedAt, ct);
-        rows.Add(new FreshnessRow("Поиск рисков", hourly, hourly is { } h && now - h < TimeSpan.FromHours(2) ? "ok" : "stale"));
+        rows.Add(new FreshnessRow("Поиск рисков", hourly, hourly is { } h && now - h < TimeSpan.FromHours(2) ? "ok" : "stale", Code: "risks",
+            Origin: SourceCodes.OneBase));
         return rows;
+    }
+
+    /// <summary>Строки свежести по наборам, видимым пользователю; обновить и перейти в настройки — только тем, у кого есть право подключения.</summary>
+    public static IEnumerable<FreshnessRow> Freshness(ReadinessReport readiness, AnalytikPrincipal principal)
+    {
+        foreach (var d in readiness.Visible(principal))
+        {
+            var link = readiness.Link(d.Source);
+            var manage = link is not null && DataReadiness.CanManage(link, principal);
+            yield return new FreshnessRow(d.Title, d.UpdatedAt, d.Status, d.Reason, d.Action, d.Code, d.Source,
+                manage && link!.Connected && !link.Running && d.Code != "plans", manage ? d.Href : null);
+        }
     }
 
     private async Task<IReadOnlyList<RecentAnalysis>> RecentAsync(AnalytikPrincipal principal, CancellationToken ct) =>

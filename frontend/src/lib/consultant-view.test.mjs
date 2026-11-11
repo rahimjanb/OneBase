@@ -128,6 +128,9 @@ test("строка статуса — по шагу, который идёт с�
     agentName: "Sales AI",
   });
   assert.equal(currentStep([{ stage: "compose", agent: null, agentName: null, status: "Running", note: null }]).key, "Формирую ответ");
+  // Аналитик перед ответом ждёт обновления отстающих данных (Linko, Verifix) — пользователь видит, что идёт.
+  assert.equal(currentStep([{ stage: "data", agent: null, agentName: null, status: "Running", note: "обновляю данные: Linko" }]).key,
+    "Обновляю данные из источников перед ответом");
 });
 
 test("числа одинаково на сервере и в браузере: пробел тысяч, запятая, минус", () => {

@@ -12,6 +12,9 @@ using OneBase.AI.Providers;
 using OneBase.AI.Reports;
 using OneBase.AI.Security;
 using OneBase.AI.Tools;
+using OneBase.Application.Analytik;
+using OneBase.Application.Analytik.Query;
+using OneBase.Application.Analytik.Readiness;
 
 namespace OneBase.AI.Analytik;
 
@@ -33,6 +36,9 @@ public sealed partial class AnalytikEngine(
     IToolRegistry tools,
     TimeProvider clock,
     IAiSettingsSource aiSettings,
+    DataKeeper keeper,
+    AnalytikAccess access,
+    AnalytikOptions options,
     ILogger<AnalytikEngine> logger) : IConsultantEngine
 {
     /// <summary>Аналитиков на один вопрос без «по всей компании» — не больше: каждый — отдельный цикл модели.</summary>
@@ -94,13 +100,22 @@ public sealed partial class AnalytikEngine(
             routing.Agents.Count == 0 ? "без аналитиков" : string.Join(", ", routing.Agents.Select(c => names.GetValueOrDefault(c, c)))));
 
         var chosen = available.Where(a => routing.Agents.Contains(a.Code)).ToList();
+
+        // Перед сбором данных — их свежесть: отстающий источник обновляется сейчас, идущее обновление ждём (разговор без аналитиков не ждёт).
+        string? readiness;
+        using (timings?.Stage("data"))
+        {
+            readiness = chosen.Count == 0 ? null : await ReadinessAsync(turn, progress, ct);
+        }
+
         var contexts = new Dictionary<string, string?>();
         var memoryUsed = remembered.Count;
         foreach (var a in chosen)
         {
             var earlier = await memory.AgentAsync(turn.UserId, a.Code, turn.ConversationId, 3, ct);
             memoryUsed += earlier.Count;
-            contexts[a.Code] = AgentContext(turn.History, remembered.Where(m => m.AgentCode == a.Code).ToList(), earlier);
+            contexts[a.Code] = Join(AgentContext(turn.History, remembered.Where(m => m.AgentCode == a.Code).ToList(), earlier),
+                readiness is null ? null : readiness + "\n" + AgentReadinessRules);
         }
 
         var aiConfig = await aiSettings.GetSettingsAsync(ct);
@@ -123,7 +138,7 @@ public sealed partial class AnalytikEngine(
         List<LlmMessage> messages =
         [
             new(LlmRole.System, OrchestratedConsultantEngine.ComposeRules(chief) + "\n" + Format),
-            new(LlmRole.System, ComposePrompt(results, forbidden, rememberedText, asksReport ? created : null, turn.Channel, AnswerLanguages.Of(turn.Question))),
+            new(LlmRole.System, ComposePrompt(results, forbidden, rememberedText, asksReport ? created : null, turn.Channel, AnswerLanguages.Of(turn.Question), readiness)),
             .. turn.History,
             new(LlmRole.User, turn.Question),
         ];
@@ -266,8 +281,56 @@ public sealed partial class AnalytikEngine(
         return sb.Length == 0 ? null : sb.ToString();
     }
 
+    /// <summary>Аналитику: как работать, когда источник отстаёт, — разобрать последние загруженные данные, а не вернуть «нет данных».</summary>
+    internal const string AgentReadinessRules = """
+        Если период задачи позже, чем есть данные источника (поле DataGaps в ответе инструмента), — дополнительно вызови инструмент за последний
+        загруженный период (LatestAvailable: period=custom, from, to) и разбери его; сравнивай равные отрезки. Пока источник отстаёт, не делай вывод
+        «продаж (оплат, отметок) не было»: это отставание загрузки, а не факт.
+        """;
+
+    /// <summary>Итогу: как отвечать при отставании источника — сначала то, что известно, причина и принятые меры — одной строкой.</summary>
+    internal const string ComposeReadinessRules = """
+        Как отвечать, если источник отстаёт:
+        - Не начинай ответ со слов «нельзя», «невозможно», «данных нет». Сначала — что известно: разбор последних загруженных дней этого источника
+          (назови даты) и актуальные данные других разделов.
+        - Одной короткой строкой скажи, по какую дату данные источника, почему (простыми словами, без технических подробностей) и что уже сделано
+          (запущено обновление, уведомлены администраторы); после восстановления обмена данные догрузятся сами, и анализ можно повторить.
+        - Если источник актуален, ноль или пустой результат — это факт («продаж не было»), а не «нет данных».
+        """;
+
+    /// <summary>
+    /// Готовность данных перед ответом: отстающий источник начинает обновляться сразу (DataKeeper), идущее обновление ждём до
+    /// Analytik:FreshWaitSeconds — пользователь видит «обновляю данные». Возвращает описание отставания для аналитиков и итога (null — всё свежее).
+    /// Ошибка контроля не мешает ответу.
+    /// </summary>
+    private async Task<string?> ReadinessAsync(ConsultantTurn turn, Func<ConsultantProgress, Task> progress, CancellationToken ct)
+    {
+        try
+        {
+            var principal = await access.ResolveAsync(turn.UserId, ct);
+            var (report, waited) = await keeper.EnsureFreshAsync(TimeSpan.FromSeconds(Math.Max(0, options.FreshWaitSeconds)),
+                titles => progress(new ConsultantProgress("data", null, null, ProgressStatus.Running, $"обновляю данные: {titles}")), ct);
+            var visible = report.Visible(principal);
+            if (waited)
+            {
+                var still = visible.Where(d => d.Lagging && d.Status == ReadinessStatus.Updating).Select(d => d.Short).ToList();
+                await progress(new ConsultantProgress("data", null, null, ProgressStatus.Done,
+                    still.Count == 0 ? "данные обновлены" : $"обновление ещё идёт: {string.Join(", ", still)}"));
+            }
+
+            return DataReadiness.Describe(visible, report.CheckedAt);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Аналитик: свежесть данных перед ответом не проверена");
+            return null;
+        }
+    }
+
+    private static string? Join(string? a, string? b) => a is null ? b : b is null ? a : a + "\n" + b;
+
     private string ComposePrompt(IReadOnlyList<AgentResult> results, IReadOnlyList<AgentConfig> forbidden, string? remembered, IReadOnlyList<ReportRef>? reportsCreated,
-        ConsultantChannel? channel, AnswerLanguage language)
+        ConsultantChannel? channel, AnswerLanguage language, string? readiness = null)
     {
         var now = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(5));
         var sb = new StringBuilder();
@@ -288,6 +351,13 @@ public sealed partial class AnalytikEngine(
         {
             sb.AppendLine("Результаты аналитиков (единственный источник данных компании для этого ответа; состояние каждого — в поле outcome):");
             sb.AppendLine(OrchestratedConsultantEngine.ComposeData(results, name => tools.Find(name)?.Title, language));
+        }
+
+        if (readiness is not null)
+        {
+            sb.AppendLine();
+            sb.AppendLine(readiness);
+            sb.AppendLine(ComposeReadinessRules);
         }
 
         if (remembered is not null)

@@ -8,6 +8,7 @@ using OneBase.Application.Analytik;
 using OneBase.Application.Analytik.Business;
 using OneBase.Application.Analytik.Catalog;
 using OneBase.Application.Analytik.Query;
+using OneBase.Application.Analytik.Readiness;
 using OneBase.Application.Analytik.Supply;
 using OneBase.Application.Field;
 using OneBase.Domain.Analytik;
@@ -18,7 +19,8 @@ namespace OneBase.AI.Analytik;
 public sealed record AnalytikJob(string Name, string PeriodKey);
 
 /// <summary>
-/// Автономная работа Аналитика 24/7 без платных вызовов: каждые 30 минут — каталог базы (по отпечатку схемы: без изменений — только числа
+/// Автономная работа Аналитика 24/7 без платных вызовов: каждые 5 минут — контроль данных (DataKeeper: отстающие Linko и Verifix обновляются
+/// заранее, ежедневный отчёт ждёт вчерашних продаж до DailyAt + 2 часа); каждые 30 минут — каталог базы (по отпечатку схемы: без изменений — только числа
 /// строк) и дневные агрегаты; каждый час — риски и отклонения (правила кодом) с уведомлениями; ежедневно в Analytik:DailyAt — снимки прогнозов
 /// и сверка прошлых с фактом, ежедневный отчёт; по понедельникам — недельный; 1-го числа — месячный. Каждая задача выполняется один раз за
 /// свой период (уникальный analytik.JobRuns(Job, PeriodKey)) — даже при нескольких экземплярах API; упавшая — повторяется через час.
@@ -40,8 +42,14 @@ internal sealed class AnalytikWorker(IServiceScopeFactory scopes, AnalytikOption
             using var timer = new PeriodicTimer(Tick);
             do
             {
+                await KeepAsync(stoppingToken);
                 foreach (var job in Due(clock.GetUtcNow(), options.DailyAt))
                 {
+                    if (job.Name == "daily" && await HoldDailyAsync(stoppingToken))
+                    {
+                        continue; // вчерашние продажи ещё догружаются — отчёт на следующем тике (не позже DailyAt + 2 часа)
+                    }
+
                     await RunAsync(job, stoppingToken);
                 }
             }
@@ -79,6 +87,34 @@ internal sealed class AnalytikWorker(IServiceScopeFactory scopes, AnalytikOption
         }
 
         return jobs;
+    }
+
+    /// <summary>Контроль данных (DataKeeper): отстающие источники обновляются заранее, не исправимое само — администраторам. Ошибка — в журнал.</summary>
+    private async Task KeepAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<DataKeeper>().RunAsync("schedule", ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Аналитик: контроль данных не выполнен");
+        }
+    }
+
+    private async Task<bool> HoldDailyAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<DataKeeper>().HoldDailyAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Аналитик: проверка данных перед ежедневным отчётом не выполнена");
+            return false;
+        }
     }
 
     public async Task RunAsync(AnalytikJob job, CancellationToken ct)

@@ -159,12 +159,10 @@ public static class SystemRoles
         ("HR", Permissions.HrRecruitmentRead),
         ("HR", Permissions.HrRecruitmentManage),
         (Director, Permissions.HrRecruitmentRead),
-        // «Аналитик» (OneBase Intelligence): директору — раздел и управление каталогом; отделам, аналитику и руководителям продаж — раздел.
-        // Данные в нём — по остальным правам роли и области продаж пользователя.
+        // «Аналитик» (OneBase Intelligence) по умолчанию — только директору (раздел и управление каталогом). Остальным его открывают в окне
+        // пользователя: раздел «Аналитик» (UserSections). Данные в нём — по остальным правам и области продаж пользователя.
         (Director, Permissions.AnalytikUse),
         (Director, Permissions.AnalytikManage),
-        (AnalystRole, Permissions.AnalytikUse),
-        .. new[] { "Продажи", "Финансы", "HR", "Производство", "Снабжение", "Маркетинг", SalesRm, SalesSupervisor }.Select(r => (r, Permissions.AnalytikUse)),
     ];
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>

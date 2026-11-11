@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, CircleAlert, Info, Lightbulb, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, CircleAlert, Clock, Info, Lightbulb, Loader2, RefreshCw, Settings2, Sparkles } from "lucide-react";
 import { useT } from "@/i18n/client";
+import { bff } from "@/lib/bff";
 import {
   change,
   changeTone,
@@ -13,10 +14,14 @@ import {
   kpiValue,
   moduleLabel,
   num,
+  originLabel,
   periodKinds,
   periodQuery,
   polyline,
+  readinessLabel,
   severityLabel,
+  type DataGap,
+  type FreshnessRow,
   type Health,
   type Insight,
   type Kpi,
@@ -495,6 +500,165 @@ export function PeriodPicker({ period, extra }: { period: Period; extra?: Record
       <span className="text-[11px] text-ink-4">
         {period.label} · {t("сравнение")}: {period.previousLabel}
       </span>
+    </div>
+  );
+}
+
+/**
+ * Данные выбранного периода загружены не полностью: что не загружено и почему, что система уже сделала (запустила обновление, уведомила
+ * администраторов), ссылка на настройки подключения (тем, кто может исправить) и кнопка — показать месяц, за который данные есть.
+ */
+export function DataGaps({ gaps }: { gaps: DataGap[] }) {
+  const t = useT();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  if (gaps.length === 0) return null;
+  const rest: Record<string, string | undefined> = {};
+  params.forEach((v, k) => {
+    if (!["period", "from", "to"].includes(k)) rest[k] = v;
+  });
+  return (
+    <div className="space-y-2">
+      {gaps.map((g) => (
+        <div key={g.text} role="status" className="flex flex-col gap-3 rounded-2xl border border-warn/30 bg-warn-soft px-4 py-3 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 gap-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" />
+            <div className="min-w-0 space-y-0.5 text-[12.5px] leading-relaxed">
+              <p className="break-words text-ink">{t(g.text)}</p>
+              {g.action && <p className="break-words text-ink-3">{t(g.action)}</p>}
+            </div>
+          </div>
+          {(g.latest || g.href) && (
+            <div className="flex shrink-0 flex-wrap gap-2 pl-6 sm:pl-0">
+              {g.latest && (
+                <Link
+                  href={`${pathname}${periodQuery("custom", g.latest.from, g.latest.to, rest)}`}
+                  className="inline-flex h-8 items-center rounded-lg bg-accent px-3 text-xs font-medium text-white"
+                >
+                  {t("Показать {period}", { period: g.latest.label })}
+                </Link>
+              )}
+              {g.href && (
+                <Link href={g.href} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-medium text-ink-2 hover:border-line-strong">
+                  <Settings2 className="size-3.5" />
+                  {t("Подключение")}
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const readinessTone: Record<string, string> = {
+  ok: "text-ok",
+  updating: "text-accent-strong",
+  stale: "text-warn",
+  missing: "text-warn",
+  error: "text-bad",
+  not_connected: "text-bad",
+};
+
+/**
+ * Свежесть данных по источникам: наборы (продажи, оплаты, остатки, планы, посещаемость), когда обновлены, почему отстают и что система уже
+ * сделала — один раз на источник; «Обновить» — тем, у кого есть право на подключение (проверяет сервер).
+ */
+export function FreshnessList({ rows }: { rows: FreshnessRow[] }) {
+  const t = useT();
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<Record<string, { text: string; ok: boolean }>>({});
+  const groups = useMemo(() => {
+    const map = new Map<string, FreshnessRow[]>();
+    for (const r of rows) {
+      const key = r.origin ?? "onebase";
+      map.set(key, [...(map.get(key) ?? []), r]);
+    }
+    return [...map.entries()];
+  }, [rows]);
+
+  const refresh = async (origin: string) => {
+    setBusy(origin);
+    try {
+      await bff(`analytik/readiness/${origin}/refresh`, { method: "POST" });
+      setMessage((m) => ({ ...m, [origin]: { text: t("Обновление запущено — данные появятся через минуту-две"), ok: true } }));
+      setTimeout(() => router.refresh(), 20_000);
+    } catch (e) {
+      setMessage((m) => ({ ...m, [origin]: { text: (e as Error).message, ok: false } }));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {groups.map(([origin, items]) => {
+        const notes = [...new Set(items.filter((r) => r.status !== "ok" && r.note).map((r) => r.note as string))];
+        const actions = [...new Set(items.filter((r) => r.action).map((r) => r.action as string))];
+        // «Обновить» — когда данные отстают; свежие обновляются сами по расписанию.
+        const canRefresh = items.some((r) => r.canRefresh && r.status !== "ok");
+        const href = items.find((r) => r.href && r.status !== "ok")?.href;
+        const msg = message[origin];
+        return (
+          <div key={origin} className="space-y-1.5">
+            <ul className="space-y-1.5 text-[12.5px]">
+              {items.map((f) => {
+                const label = readinessLabel(f.status);
+                const value = f.code === "plans" ? (f.status === "ok" ? t("заведены") : null) : f.at ? dateTime(f.at) : t("не было");
+                return (
+                  <li key={f.code ?? f.source} className="flex items-start justify-between gap-3">
+                    <span className="inline-flex min-w-0 items-start gap-1.5 text-ink-2">
+                      {f.status === "updating" ? (
+                        <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin text-accent-strong" />
+                      ) : (
+                        <Clock className={`mt-0.5 size-3.5 shrink-0 ${readinessTone[f.status] ?? "text-warn"}`} />
+                      )}
+                      <span className="min-w-0 break-words">{t(f.source)}</span>
+                    </span>
+                    <span className={`shrink-0 text-right ${f.status === "ok" ? "text-ink-3" : readinessTone[f.status] ?? "text-warn"}`}>
+                      {[value, label ? t(label) : null].filter(Boolean).join(" · ")}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            {(notes.length > 0 || actions.length > 0) && (
+              <div className="space-y-1 rounded-lg bg-muted px-2.5 py-2 text-[11.5px] leading-relaxed text-ink-3">
+                {notes.map((n) => (
+                  <p key={n} className="break-words">{t(n)}</p>
+                ))}
+                {actions.map((a) => (
+                  <p key={a} className="break-words text-ink-4">{t(a)}</p>
+                ))}
+              </div>
+            )}
+            {(canRefresh || href || msg) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {canRefresh && (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => refresh(origin)}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 text-[11.5px] font-medium text-ink-2 hover:border-line-strong disabled:opacity-50"
+                  >
+                    {busy === origin ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                    {t("Обновить {source}", { source: originLabel(origin) })}
+                  </button>
+                )}
+                {href && (
+                  <Link href={href} className="inline-flex h-7 items-center gap-1.5 rounded-lg px-1.5 text-[11.5px] font-medium text-accent-strong hover:underline">
+                    <Settings2 className="size-3.5" />
+                    {t("Подключение")}
+                  </Link>
+                )}
+                {msg && <span className={`text-[11.5px] ${msg.ok ? "text-ok" : "text-bad"}`}>{msg.text}</span>}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

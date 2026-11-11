@@ -6,17 +6,23 @@ using Microsoft.EntityFrameworkCore;
 using OneBase.AI.Analytik;
 using OneBase.AI.Consultant;
 using OneBase.Api.Auth;
+using OneBase.Application.Abstractions;
 using OneBase.Application.Analytik;
 using OneBase.Application.Analytik.Business;
 using OneBase.Application.Analytik.Query;
+using OneBase.Application.Analytik.Readiness;
 using OneBase.Application.Analytik.Risk;
 using OneBase.Application.Analytik.Supply;
 using OneBase.Application.Field;
 using OneBase.Application.Security;
+using OneBase.Domain.Audit;
 
 namespace OneBase.Api.Controllers;
 
 public sealed record AnalytikReportInput(string Kind, string? Period, DateOnly? From, DateOnly? To);
+
+/// <summary>Свежесть данных, видимых пользователю, и нехватка данных выбранного периода (баннер экранов отделов).</summary>
+public sealed record ReadinessView(IReadOnlyList<FreshnessRow> Rows, IReadOnlyList<DataGap> Gaps);
 
 public sealed record JobRunRow(Guid Id, string Job, string PeriodKey, string Status, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, string? Summary, string? Error);
 
@@ -40,6 +46,10 @@ public sealed class AnalytikInsightsController(
     RiskEngine risks,
     AnalytikReportService reports,
     AnalytikJobs jobs,
+    DataKeeper keeper,
+    DataReadiness readiness,
+    IAnalytikSourceSync sources,
+    IAuditLogger audit,
     IAnalytikDb adb) : ControllerBase
 {
     private Task<AnalytikPrincipal> PrincipalAsync(CancellationToken ct) => access.ResolveAsync(User.GetUserId(), ct);
@@ -143,6 +153,59 @@ public sealed class AnalytikInsightsController(
 
         var ok = await jobs.RunAsync(new AnalytikJob(name, $"manual-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}"), ct, force: true);
         return Ok(new { ok });
+    }
+
+    /// <summary>
+    /// Свежесть данных и нехватка данных периода — для экранов отделов (module: sales, finance, hr). Отстающий источник при этом начинает
+    /// обновляться (как при открытии обзора).
+    /// </summary>
+    [HttpGet("readiness")]
+    public async Task<ReadinessView> Readiness([FromQuery] string? period, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? module,
+        CancellationToken ct)
+    {
+        var principal = await PrincipalAsync(ct);
+        var report = await keeper.RunAsync("dashboard", ct);
+        var modules = string.IsNullOrWhiteSpace(module) ? null : module.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        bool In(string m) => modules is null || modules.Contains(m);
+        var codes = report.Visible(principal).Where(d => In(d.Module)).Select(d => d.Code).ToHashSet();
+        return new ReadinessView(DashboardService.Freshness(report, principal).Where(r => r.Code is not null && codes.Contains(r.Code)).ToList(),
+            DataReadiness.Gaps(report.Visible(principal).Where(d => In(d.Module)), Period(period, from, to), report.CheckedAt,
+                code => report.CanManage(code, principal)));
+    }
+
+    /// <summary>
+    /// «Обновить» у источника данных (linko, verifix): запуск обновления в фоне. Право — как у подключения: Linko — управление продажами по всей
+    /// компании или интеграциями, Verifix — интеграциями.
+    /// </summary>
+    [HttpPost("readiness/{source}/refresh")]
+    public async Task<IActionResult> Refresh(string source, CancellationToken ct)
+    {
+        var principal = await PrincipalAsync(ct);
+        if ((await readiness.CheckAsync(ct)).Link(source) is not { } link)
+        {
+            return NotFound(new { error = "Неизвестный источник данных." });
+        }
+
+        if (!DataReadiness.CanManage(link, principal))
+        {
+            return Forbidden($"обновлению данных {link.Title}");
+        }
+
+        if (!link.Connected)
+        {
+            return Problem(link.Problem ?? $"{link.Title} не подключён.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        switch (await sources.StartAsync(link.Code, ct))
+        {
+            case SyncStartResult.AlreadyRunning:
+                return Conflict(new { error = "Обновление уже идёт." });
+            case SyncStartResult.NotConnected:
+                return Problem(link.Problem ?? $"{link.Title} не подключён.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "analytik.data.refresh", data: new { source = link.Code }, cancellationToken: ct);
+        return Accepted();
     }
 
     private ObjectResult Forbidden(string what) => StatusCode(StatusCodes.Status403Forbidden, new { error = $"Нет доступа к {what}." });

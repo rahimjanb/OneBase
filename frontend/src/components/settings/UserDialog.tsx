@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Bot,
+  BrainCircuit,
   Check,
   ClipboardList,
   Copy,
@@ -67,6 +68,7 @@ const icons: Record<string, LucideIcon> = {
   field: MapPinned,
   data: DatabaseZap,
   campaigns: Send,
+  analytik: BrainCircuit,
 };
 
 /** По каким данным отвечает AI, если раздел отмечен (раздела нет — AI-сотрудник и инструменты этих данных молчат). */

@@ -133,7 +133,7 @@ export function titleCase(value: string | null | undefined): string {
 /** Права разделов — их показываем галочками, а не в списке «роль также даёт» (права отделов и настроек — тоже галочками, из каталога). */
 export const sectionPermissions = new Set([
   "sales.read", "finance.read", "hr.read", "work.tasks", "files.read", "files.write", "files.read.all", "files.manage",
-  "ai.agents.run", "field.plan", "field.use", "field.manage", "ai.data.manage", "telegram.campaigns",
+  "ai.agents.run", "field.plan", "field.use", "field.manage", "ai.data.manage", "telegram.campaigns", "analytik.use", "analytik.manage",
 ]);
 
 /**

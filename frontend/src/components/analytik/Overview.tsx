@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, CheckCircle2, Clock, Lightbulb, MessageSquareText, Send, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Lightbulb, MessageSquareText, Send, Sparkles } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import {
@@ -17,7 +17,7 @@ import {
   type ForecastView,
   type Kpi,
 } from "@/lib/analytik";
-import { BarList, Card, Empty, HealthRing, InsightCard, KpiGrid, LineChart, Notes, PeriodPicker, SeverityBadge } from "./ui";
+import { BarList, Card, DataGaps, Empty, FreshnessList, HealthRing, InsightCard, KpiGrid, LineChart, Notes, PeriodPicker, SeverityBadge } from "./ui";
 
 /** Главные показатели панели: из блоков отделов — то, что видно пользователю. */
 function headline(d: Dashboard): Kpi[] {
@@ -92,6 +92,8 @@ export function Overview({ data, canSales }: { data: Dashboard; canSales: boolea
         <PeriodPicker period={data.period} />
         {data.scope && <span className="rounded-lg bg-accent-soft px-2.5 py-1 text-xs text-accent-strong">{t("Ваша область продаж")}: {data.scope}</span>}
       </div>
+
+      <DataGaps gaps={data.gaps ?? []} />
 
       {/* Вопрос аналитику — главный вход раздела. */}
       <form
@@ -234,18 +236,8 @@ export function Overview({ data, canSales }: { data: Dashboard; canSales: boolea
             </ul>
           )}
         </Card>
-        <Card title="Свежесть данных">
-          <ul className="space-y-1.5 text-[12.5px]">
-            {data.freshness.map((f) => (
-              <li key={f.source} className="flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-1.5 text-ink-2">
-                  <Clock className={`size-3.5 ${f.status === "ok" ? "text-ok" : "text-warn"}`} />
-                  {t(f.source)}
-                </span>
-                <span className={f.status === "ok" ? "text-ink-3" : "text-warn"}>{f.at ? dateTime(f.at) : t("не было")}</span>
-              </li>
-            ))}
-          </ul>
+        <Card title="Свежесть данных" subtitle="Аналитик следит за обменом и обновляет отстающие данные сам">
+          <FreshnessList rows={data.freshness} />
         </Card>
         <Card title="Последние исследования" href="/analytik/history">
           {data.recent.length === 0 ? (

@@ -91,4 +91,10 @@ public sealed class AnalytikOptions
 
     /// <summary>Время ежедневного отчёта по Ташкенту (ЧЧ:ММ).</summary>
     public string DailyAt { get; init; } = "07:30";
+
+    /// <summary>
+    /// Сколько секунд AI-аналитик ждёт идущего обновления отстающих данных (Linko, Verifix) перед ответом; не успело — отвечает по тому, что есть,
+    /// и говорит, по какую дату данные. 0 — не ждать.
+    /// </summary>
+    public int FreshWaitSeconds { get; init; } = 45;
 }

@@ -6,6 +6,7 @@ using OneBase.AI.Tools.Data;
 using OneBase.Application.Analytik.Business;
 using OneBase.Application.Analytik.Catalog;
 using OneBase.Application.Analytik.Query;
+using OneBase.Application.Analytik.Readiness;
 using OneBase.Application.Analytik.Risk;
 using OneBase.Application.Analytik.Supply;
 using OneBase.Application.Field;
@@ -47,6 +48,27 @@ public abstract class AnalytikTool(QueryEngine engine) : DataTool
         {
             throw new ToolArgumentException(ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Нехватка данных периода в разделах <paramref name="modules"/>: что не загружено, почему, что система уже сделала и за какой месяц данные
+    /// есть — чтобы аналитик разобрал последние загруженные данные, а не ответил «данных нет». null — данных периода хватает.
+    /// </summary>
+    protected static async Task<object?> GapsAsync(DataReadiness readiness, AnalytikPeriod period, AnalytikPrincipal principal, CancellationToken ct,
+        params string[] modules)
+    {
+        var report = await readiness.CheckAsync(ct);
+        var gaps = DataReadiness.Gaps(report.Visible(principal).Where(d => modules.Contains(d.Module)), period, report.CheckedAt);
+        return gaps.Count == 0
+            ? null
+            : gaps.Select(g => new
+            {
+                g.Text,
+                Done = g.Action,
+                LatestAvailable = g.Latest is { } l
+                    ? new { l.Label, From = l.From.ToString("yyyy-MM-dd"), To = l.To.ToString("yyyy-MM-dd"), Hint = "Вызови этот инструмент с period=custom, from и to — анализ последних загруженных данных." }
+                    : null,
+            }).ToList();
     }
 
     /// <summary>Отказ движка — модели как ошибка с видом (нет доступа или неверный план).</summary>
@@ -324,12 +346,13 @@ public sealed class DashboardTool(QueryEngine engine, DashboardService dashboard
             Risks = d.Risks.Take(10).Select(r => new { r.Severity, r.Module, r.Title, r.Description }),
             d.Recommendations,
             Forecast = d.Forecast is null ? null : new { d.Forecast.Title, d.Forecast.Total, d.Forecast.Lower, d.Forecast.Upper, d.Forecast.Steps, d.Forecast.Method, d.Forecast.Reliable },
-            d.Freshness, d.Scope, Unavailable = d.Errors,
+            Freshness = d.Freshness.Select(f => new { f.Source, f.At, f.Status, f.Note, Done = f.Action }), d.Scope, Unavailable = d.Errors,
+            DataGaps = d.Gaps.Select(g => new { g.Text, Done = g.Action, LatestAvailable = g.Latest }),
         }, new DataSource("OneBase → Аналитик → Обзор", d.Period.Label, "/analytik"));
     }
 }
 
-public sealed class SalesOverviewTool(QueryEngine engine, SalesAnalytik sales) : AnalytikTool(engine)
+public sealed class SalesOverviewTool(QueryEngine engine, SalesAnalytik sales, DataReadiness readiness) : AnalytikTool(engine)
 {
     public override string Name => "analytik_sales_overview";
     public override string Title => "Продажи за период (Аналитик)";
@@ -342,12 +365,14 @@ public sealed class SalesOverviewTool(QueryEngine engine, SalesAnalytik sales) :
 
     protected override async Task<ToolResult> RunAsync(ToolContext context, ToolArgs args, CancellationToken ct)
     {
-        var block = await sales.BlockAsync(PeriodOf(args), await PrincipalAsync(context, ct), ct);
+        var principal = await PrincipalAsync(context, ct);
+        var block = await sales.BlockAsync(PeriodOf(args), principal, ct);
         return block is null
             ? ToolResult.Failure(Name, ToolFailures.Forbidden, "Нет доступа к продажам.")
             : Data(new
             {
                 Period = new { block.Period.Label, Compare = block.Period.PreviousLabel }, block.DataThrough, block.Complete,
+                DataGaps = await GapsAsync(readiness, block.Period, principal, ct, "sales"),
                 Kpis = block.Kpis.Select(k => new { k.Code, k.Title, k.Value, k.Unit, k.Previous, k.ChangePercent, k.Kind }),
                 Regions = args.Top(block.Regions, 30, "regions"), Daily = args.Top(block.Daily, 62, "daily"), block.Plan, block.Scope, block.Notes,
             }, new DataSource("OneBase → Продажи", block.Period.Label, "/sales"));
@@ -469,7 +494,7 @@ public sealed class ProductionTool(QueryEngine engine, OperationsAnalytik operat
 
 }
 
-public sealed class FinanceTool(QueryEngine engine, FinanceAnalytik finance, SalesAnalytik sales) : AnalytikTool(engine)
+public sealed class FinanceTool(QueryEngine engine, FinanceAnalytik finance, SalesAnalytik sales, DataReadiness readiness) : AnalytikTool(engine)
 {
     public override string Name => "analytik_finance";
     public override string Title => "Финансы (Аналитик)";
@@ -487,12 +512,16 @@ public sealed class FinanceTool(QueryEngine engine, FinanceAnalytik finance, Sal
         var block = await finance.BlockAsync(period, principal, await sales.BlockAsync(period, principal, ct), ct);
         return block is null
             ? ToolResult.Failure(Name, ToolFailures.Forbidden, "Нет доступа к финансам.")
-            : Data(new { Period = block.Period.Label, Kpis = block.Kpis.Select(k => new { k.Code, k.Title, k.Value, k.Unit, k.Previous, k.ChangePercent, k.Kind }), block.Payments, block.Notes },
+            : Data(new
+                {
+                    Period = block.Period.Label, Kpis = block.Kpis.Select(k => new { k.Code, k.Title, k.Value, k.Unit, k.Previous, k.ChangePercent, k.Kind }), block.Payments,
+                    block.Notes, DataGaps = await GapsAsync(readiness, period, principal, ct, "finance"),
+                },
                 new DataSource("OneBase → Финансы", block.Period.Label, "/analytik/finance"));
     }
 }
 
-public sealed class HrTool(QueryEngine engine, OperationsAnalytik operations) : AnalytikTool(engine)
+public sealed class HrTool(QueryEngine engine, OperationsAnalytik operations, DataReadiness readiness) : AnalytikTool(engine)
 {
     public override string Name => "analytik_hr";
     public override string Title => "Персонал и задачи (Аналитик)";
@@ -519,6 +548,7 @@ public sealed class HrTool(QueryEngine engine, OperationsAnalytik operations) : 
             Period = period.Label,
             Hr = hr is null ? null : new { Kpis = hr.Kpis.Select(k => new { k.Code, k.Title, k.Value, k.Unit, k.Previous, k.ChangePercent }), Divisions = args.Top(hr.Divisions, 30, "divisions"), hr.Notes },
             Work = work is null ? null : new { Kpis = work.Kpis.Select(k => new { k.Code, k.Title, k.Value, k.Unit }), work.Departments },
+            DataGaps = hr is null ? null : await GapsAsync(readiness, period, principal, ct, "hr"),
         }, new DataSource("OneBase → HR и задачи", period.Label, "/analytik/hr"));
     }
 }

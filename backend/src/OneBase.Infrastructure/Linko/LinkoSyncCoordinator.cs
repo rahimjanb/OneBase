@@ -44,6 +44,11 @@ public sealed class LinkoSyncCoordinator(
             using var scope = scopes.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<LinkoSyncService>();
             LastReport = await service.SyncAsync(mode, run.Token);
+            if (LastReport.Entities is [{ Entity: LinkoSyncService.SourceState, Error: not null }])
+            {
+                return LastReport; // обмен не начался (сменился сервер Linko): данные не менялись — сбрасывать и пересчитывать отчёты нечего
+            }
+
             // Обычное обновление сбрасывает кэш свежих расчётов; если пришло изменение давнего месяца (заказ или возврат старше прошлого
             // месяца — поздняя приёмка, отмена) — и кэш давних месяцев: иначе АКБ с начала года жила бы со старыми цифрами часами.
             if (mode == LinkoSyncMode.Incremental && !LinkoSyncSchedule.TouchesHistory(service.EarliestChanged, time.GetUtcNow()))

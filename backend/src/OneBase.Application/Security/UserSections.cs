@@ -26,6 +26,7 @@ public static class UserSections
     public const string Field = "field";
     public const string DataManager = "data";
     public const string Campaigns = "campaigns";
+    public const string Analytik = "analytik";
 
     public static readonly IReadOnlyList<UserSection> All =
     [
@@ -48,6 +49,9 @@ public static class UserSections
             [Permissions.DataManage], [Permissions.DataManage]),
         new(Campaigns, "Рассылки", "Рассылки в Telegram: создание, запуск и отмена.",
             [Permissions.TelegramCampaigns], [Permissions.TelegramCampaigns]),
+        // Управление Аналитиком (каталог базы, журнал запросов всех) — только у роли с ним (директор): галочка раздела его не выдаёт, снятая — убирает.
+        new(Analytik, "Аналитик", "Панель компании, AI-аналитик, прогнозы, риски и отчёты — только по данным разделов, открытых сотруднику.",
+            [Permissions.AnalytikUse, Permissions.AnalytikManage], [Permissions.AnalytikUse]),
     ];
 
     public static UserSection? Find(string? key) => All.FirstOrDefault(s => s.Key == key);

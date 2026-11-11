@@ -52,7 +52,7 @@ export const navGroups: NavGroup[] = [
     title: "Интеллект",
     items: [
       { href: "/analytik", label: "Аналитик", icon: BrainCircuit, short: "Аналитик", badge: "new", badgeTone: "new" },
-      { href: "/consultant", label: "AI-консультант", icon: Sparkles, also: ["/ai"], short: "AI", badge: "new", badgeTone: "new" },
+      { href: "/consultant", label: "AI-консультант", icon: Sparkles, also: ["/ai"], short: "AI" },
       { href: "/data-manager", label: "AI Data Manager", icon: Database, short: "Данные" },
     ],
   },

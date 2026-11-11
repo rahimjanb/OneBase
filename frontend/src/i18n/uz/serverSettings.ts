@@ -92,6 +92,8 @@ const dict: Dict = {
   "Полевая команда: задачи агентам и супервайзерам, маршруты, визиты.": "Dala jamoasi: agentlar va supervayzerlarga vazifalar, marshrutlar, tashriflar.",
   "Загрузка отчётов и изменение планов, целей и дилеров с подтверждением.": "Hisobotlarni yuklash va rejalar, maqsadlar va dilerlarni tasdiqlash bilan o'zgartirish.",
   "Рассылки в Telegram: создание, запуск и отмена.": "Telegram tarqatmalari: yaratish, ishga tushirish va bekor qilish.",
+  "Панель компании, AI-аналитик, прогнозы, риски и отчёты — только по данным разделов, открытых сотруднику.":
+    "Kompaniya paneli, AI-tahlilchi, prognozlar, xavflar va hisobotlar — faqat xodimga ochiq bo'limlar ma'lumotlari bo'yicha.",
 
   // ---------- Интеграции: Linko ----------
   "Заказы, возвраты, визиты, торговые точки и торговые представители — источник данных раздела «Продажи».":

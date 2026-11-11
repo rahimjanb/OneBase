@@ -59,6 +59,27 @@ public class UserSectionsTests
     }
 
     [Fact]
+    public void Analytik_is_a_section_only_the_director_has_by_default()
+    {
+        // По умолчанию «Аналитик» (раздел и управление) — только у директора; ролям отделов он больше не раздаётся при запуске.
+        Assert.Equal([SystemRoles.Director, SystemRoles.Director],
+            SystemRoles.Upgrades.Where(u => u.Permission is Permissions.AnalytikUse or Permissions.AnalytikManage).Select(u => u.Role));
+
+        // Сотруднику отдела раздел открывают галочкой — только просмотр; снятая галочка убирает и управление у директора.
+        var employee = UserSections.Effective(SalesRole, [UserSections.Sales, UserSections.Analytik]);
+        Assert.Contains(Permissions.AnalytikUse, employee);
+        Assert.DoesNotContain(Permissions.AnalytikManage, employee);
+        Assert.Equal([UserSections.Sales, UserSections.Analytik], UserSections.Of(employee));
+
+        string[] director = [Permissions.SalesRead, Permissions.AnalytikUse, Permissions.AnalytikManage];
+        Assert.Contains(Permissions.AnalytikManage, UserSections.Effective(director, [UserSections.Sales, UserSections.Analytik]));
+        var without = UserSections.Effective(director, [UserSections.Sales]);
+        Assert.DoesNotContain(Permissions.AnalytikUse, without);
+        Assert.DoesNotContain(Permissions.AnalytikManage, without);
+        Assert.DoesNotContain(UserSections.Analytik, UserSections.Of(SalesRole));
+    }
+
+    [Fact]
     public void Normalize_keeps_known_keys_once_in_catalog_order()
     {
         Assert.Equal([UserSections.Sales, UserSections.Hr], UserSections.Normalize([" hr", "sales", "sales", "bogus"]));

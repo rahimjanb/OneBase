@@ -23,6 +23,11 @@ public static class AnalytikRegistration
         services.AddScoped<OneBase.Application.Analytik.Business.OperationsAnalytik>();
         services.AddScoped<OneBase.Application.Analytik.Risk.InsightStore>();
         services.AddScoped<OneBase.Application.Analytik.Quality.DataQualityEngine>();
+        // Готовность данных: свежесть Linko и Verifix, запуск обновлений заранее, предупреждения, ожидание свежих данных перед ответом.
+        services.AddScoped<OneBase.Application.Analytik.Readiness.IAnalytikSourceSync, AnalytikSourceSync>();
+        services.AddSingleton<OneBase.Application.Analytik.Readiness.DataKeeperState>();
+        services.AddScoped<OneBase.Application.Analytik.Readiness.DataReadiness>();
+        services.AddScoped<OneBase.Application.Analytik.Readiness.DataKeeper>();
         return services;
     }
 }

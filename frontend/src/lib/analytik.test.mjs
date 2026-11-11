@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { analytikQuestions, change, changeTone, compact, date, dateTime, kpiValue, num, periodQuery, polyline, severityRank } from "./analytik.ts";
+import { analytikQuestions, change, changeTone, compact, date, dateTime, kpiValue, num, originLabel, periodQuery, polyline, readinessLabel, severityRank } from "./analytik.ts";
 
 const nb = " ";
 
@@ -63,4 +63,18 @@ test("порядок критичности и быстрые вопросы п�
   assert.ok(!hrOnly.some((q) => q.includes("продажи")));
   assert.ok(hrOnly.some((q) => q.includes("всю компанию")));
   assert.ok(analytikQuestions(["analytik.use", "procurement.read"]).some((q) => q.text.includes("закупить")));
+});
+
+test("свежесть данных: подпись статуса (свежие — без подписи) и название источника для кнопки «Обновить»", () => {
+  assert.equal(readinessLabel("ok"), null);
+  assert.equal(readinessLabel("updating"), "обновляется");
+  assert.equal(readinessLabel("stale"), "устарели");
+  assert.equal(readinessLabel("error"), "ошибка обмена");
+  assert.equal(readinessLabel("not_connected"), "не подключено");
+  assert.equal(readinessLabel("missing"), "не заведены");
+  assert.equal(originLabel("linko"), "Linko");
+  assert.equal(originLabel("verifix"), "Verifix");
+  assert.equal(originLabel(null), "OneBase");
+  // «Показать октябрь» из баннера нехватки данных — свой период с датами, остальные параметры страницы сохраняются.
+  assert.equal(periodQuery("custom", "2026-10-01", "2026-10-31", { tab: "regions" }), "?period=custom&from=2026-10-01&to=2026-10-31&tab=regions");
 });
