@@ -26,6 +26,13 @@ public sealed class ResumeAnalysisJob(
 {
     public string Queue => RecruitmentQueues.Analysis;
 
+    /// <summary>
+    /// Резюме старше — разбор для HR как обычно, но кандидату ничего не уходит: ни продолжения разговора, ни автооценки с приглашением на
+    /// собеседование (оценить можно кнопкой в карточке). Так резюме, которые ждали согласия до его отмены или которые HR разобрал заново,
+    /// не превращаются в сообщения кандидатам спустя дни.
+    /// </summary>
+    public static readonly TimeSpan WriteToCandidateWithin = TimeSpan.FromHours(24);
+
     public async Task RunAsync(RecruitmentJob job, CancellationToken ct)
     {
         var resume = await db.CandidateResumes.FirstOrDefaultAsync(r => r.Id == job.RelatedId, ct);
@@ -70,6 +77,12 @@ public sealed class ResumeAnalysisJob(
         var changes = await recruitment.EnrichFromResumeAsync(resume.CandidateId, profile, ct);
         await audit.LogAsync(ActorType.System, "recruitment", "recruitment.document.analyzed", nameof(Candidate), resume.CandidateId.ToString(),
             new { document = resume.Id, status = resume.AnalysisStatus.ToString(), quality, changes }, ct);
+
+        var fresh = resume.CreatedAt > clock.GetUtcNow() - WriteToCandidateWithin;
+        if (!fresh)
+        {
+            return; // давнее резюме — только разбор для HR
+        }
 
         // Оценка под вакансию — по открытому отклику (для приглашения на собеседование).
         var application = resume.ApplicationId is { } a && await db.CandidateApplications.AnyAsync(x => x.Id == a && x.ClosedAt == null, ct)

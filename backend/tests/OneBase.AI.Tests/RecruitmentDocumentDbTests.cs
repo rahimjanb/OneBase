@@ -282,6 +282,39 @@ public class RecruitmentDocumentDbTests(DataManagerDb fixture) : IClassFixture<D
     }
 
     [PostgresFact]
+    public async Task Old_resume_processed_late_is_analyzed_for_hr_but_nothing_is_sent_to_the_candidate()
+    {
+        var (scope, db) = await _hr.StartAsync();
+        using var _ = scope;
+        var vacancy = await _hr.OpenVacancyAsync(scope.ServiceProvider);
+        var number = (await db.Vacancies.AsNoTracking().SingleAsync(v => v.Id == vacancy)).Number;
+        var chat = _hr.NewChat();
+        await _hr.HelloAsync(chat);
+        fixture.Gateway.Script.Clear();
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Спасибо! Пришлите, пожалуйста, резюме.\"],\"vacancy\":\"V" + number + "\"}");
+        await _hr.SayAsync(chat, $"Хочу на #V{number}");
+        var photo = ResumeDocumentTests.Fixture("resume-photo.jpg");
+        await _hr.SayAsync(chat, string.Empty, "photo_old.jpg", photo, "image/jpeg", photo: true);
+        var sent = (await HrHarness.SentAsync(db, chat)).Count;
+
+        // Резюме прислано двое суток назад и только сейчас дошло до разбора (ждало согласия до обновления, HR разобрал заново).
+        var document = Assert.Single((await HrHarness.CandidateAsync(db, chat)).Resumes);
+        await db.CandidateResumes.Where(r => r.Id == document.Id).ExecuteUpdateAsync(u => u.SetProperty(r => r.CreatedAt, DateTimeOffset.UtcNow.AddDays(-2)));
+        fixture.Gateway.Script.Enqueue(_ => Ocr(ResumeText));
+        fixture.Gateway.Script.Enqueue(_ => Analysis());
+        var calls = fixture.Gateway.Calls.Count;
+        await _hr.DrainAsync();
+
+        // HR получил разбор; кандидату — ни слова, автооценки (и автоприглашения) нет, рекрутер не вызывался.
+        var stored = await db.CandidateResumes.AsNoTracking().SingleAsync(r => r.Id == document.Id);
+        Assert.Equal((DocumentStatus.Done, DocumentStepStatus.Done), (stored.Status, stored.AnalysisStatus));
+        Assert.Equal(["hr.resume.read", "hr.resume.analysis"], fixture.Gateway.Calls.Skip(calls).Select(c => c.Options.Context.Purpose));
+        Assert.Equal(sent, (await HrHarness.SentAsync(db, chat)).Count);
+        Assert.False(await db.RecruitmentJobs.AnyAsync(j => j.Queue == RecruitmentQueues.Scoring));
+        Assert.False(await db.CandidateScores.AnyAsync(s => s.CandidateId == stored.CandidateId));
+    }
+
+    [PostgresFact]
     public async Task Ai_reads_documents_at_once_without_consent_and_jobs_survive_a_restart_within_queue_limits()
     {
         var (scope, db) = await _hr.StartAsync(recruiter: false);
