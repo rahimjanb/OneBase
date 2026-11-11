@@ -13,8 +13,10 @@ export async function generateMetadata() {
  * HR → «Подбор» → «Диалоги Telegram». Список и открытый диалог (/hr/recruitment/telegram/{id}) — один экран: переход между диалогами без
  * перезагрузки. Состояние номера приходит с сервера, чтобы баннер «не подключён» не мелькал.
  */
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
   const ctx = await loadRecruitment("/hr/recruitment/telegram");
   const summary = await apiTry<DialogSummary>("/api/hr/recruitment/telegram/dialogs/summary");
-  return <DialogsScreen initialSummary={summary} canManage={ctx.canManage} />;
+  // ?filter=need_hr — из напоминания «Ждут ответа HR»: сразу диалоги, где AI передал кандидата человеку.
+  const { filter } = await searchParams;
+  return <DialogsScreen initialSummary={summary} canManage={ctx.canManage} initialFilter={filter === "need_hr" ? "need_hr" : "all"} />;
 }

@@ -53,7 +53,8 @@ public sealed record AnalyticsView(IReadOnlyList<FunnelRow> Vacancies, IReadOnly
 /// не ответил (одно), напоминания о собеседовании, проверка номеров HR (исключение, если номер отключился или Telegram его ограничил), аналитика.
 /// </summary>
 public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbox, InterviewService interviews, RecruitmentExceptions exceptions,
-    IEnumerable<ICandidateScorer> scorers, Agents.DialogAgentService agents, IAuditLogger audit, TimeProvider clock, ILogger<RecruitmentAutomation> logger)
+    IEnumerable<ICandidateScorer> scorers, Agents.DialogAgentService agents, Telegram.HrWaiting waiting, IAuditLogger audit, TimeProvider clock,
+    ILogger<RecruitmentAutomation> logger)
 {
     private static readonly TimeSpan Tashkent = TimeSpan.FromHours(5);
 
@@ -144,11 +145,15 @@ public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbo
         await audit.LogAsync(ActorType.User, ctx.UserId.ToString(), "recruitment.vacancy.ai", nameof(Vacancy), vacancyId.ToString(), new { input.AiRecruiter, input.AgentId }, ct);
     }
 
-    /// <summary>Один круг автоматики: напоминания о собеседованиях, напоминание не ответившим, проверка номеров HR, автооценка (если включена).</summary>
+    /// <summary>
+    /// Один круг автоматики: напоминания о собеседованиях, диалоги, где HR молчит час, — снова AI, напоминание HR о кандидатах, которые ждут
+    /// ответа, напоминание не ответившим кандидатам, проверка номеров HR, автооценка (если включена).
+    /// </summary>
     public async Task<(int Reminders, int FollowUps, int Scored)> RunAsync(CancellationToken ct)
     {
         var reminders = await interviews.RemindAsync(ct);
         var settings = await SettingsAsync(ct);
+        await waiting.RunAsync(ct);
         var followUps = await FollowUpsAsync(ct);
         await MonitorAsync(ct);
         var scored = settings.AutoScore ? await AutoScoreAsync(ct) : 0;
@@ -205,9 +210,8 @@ public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbo
                 continue; // агент выключен, рано или нерабочее время — напомним позже
             }
 
-            var name = candidate.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() is { Length: > 1 } first && !first.StartsWith('@')
-                       && !first.StartsWith("Telegram", StringComparison.Ordinal) ? first : null;
-            var text = RecruiterTexts.FollowUp(CandidateLanguages.Of(candidate.Language, candidate.PreferredScript) ?? CandidateLang.Ru, name, vacancy.Title);
+            var text = RecruiterTexts.FollowUp(CandidateLanguages.Of(candidate.Language, candidate.PreferredScript) ?? CandidateLang.Ru,
+                CandidateNames.FirstName(candidate.FullName), vacancy.Title);
             await outbox.EnqueueAsync(new OutboxRequest(c.AccountId, c.PeerId, c.Id, TelegramDepartments.Hr, "followup", text, $"followup:{c.Id:N}:{last.Id}", "ai"), ct);
             queued++;
         }

@@ -17,7 +17,8 @@ const button =
 
 /**
  * Календарь: неделя по дням (на компьютере — семь колонок, на телефоне — список дней). Событие открывается окном с подробностями;
- * «Новое событие» и «+» у дня — форма. Сроки задач ведут в карточку задачи. Переход по неделям — адрес ?date, данные — с сервера.
+ * «Новое событие» и «+» у дня — форма (кто ведёт подбор — там же «Собеседование с кандидатом»). Сроки задач ведут в карточку задачи.
+ * Переход по неделям — адрес ?date, данные — с сервера.
  */
 export function CalendarView({
   week,
@@ -26,6 +27,7 @@ export function CalendarView({
   abilities,
   openEvent,
   locale,
+  canInterview = false,
 }: {
   week: string[];
   today: string;
@@ -33,11 +35,13 @@ export function CalendarView({
   abilities: CalendarAbilities | null;
   openEvent: string | null;
   locale: string;
+  canInterview?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
   const [viewing, setViewing] = useState<string | null>(openEvent);
   const [creating, setCreating] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const go = (date: string) => router.push(`/calendar?date=${date}`);
   const byDay = (date: string) => (items ?? []).filter((i) => i.date === date);
@@ -81,6 +85,15 @@ export function CalendarView({
             ))}
           </ul>
         </div>
+
+        {notice && (
+          <p role="status" className="mt-4 flex items-start justify-between gap-3 rounded-xl bg-ok-soft px-4 py-3 text-[14px] text-ok">
+            {notice}
+            <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[12.5px] font-semibold">
+              {t("Скрыть")}
+            </button>
+          </p>
+        )}
 
         {items === null ? (
           <p role="alert" className="mt-5 rounded-xl border border-line bg-surface p-4 text-[14px] text-ink-3">
@@ -162,7 +175,7 @@ export function CalendarView({
       </PageBody>
 
       {viewing && <EventDialog id={viewing} locale={locale} abilities={abilities} onClose={() => setViewing(null)} />}
-      {creating && <EventForm date={creating} abilities={abilities} onClose={() => setCreating(null)} />}
+      {creating && <EventForm date={creating} abilities={abilities} onClose={() => setCreating(null)} canInterview={canInterview} onInterview={setNotice} />}
     </div>
   );
 }

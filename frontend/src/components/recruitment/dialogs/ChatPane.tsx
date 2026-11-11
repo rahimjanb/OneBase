@@ -301,9 +301,9 @@ export function Composer({ dialog, actions, mobile = false }: { dialog: Dialog; 
   const draft = () => run("draft", async () => setText(await actions.draft()));
   const hint =
     dialog.mode === "hr"
-      ? t("Вы ведёте диалог — AI не отвечает. Переключите на «Ведёт AI», чтобы вернуть автоответы.")
+      ? t("Вы ведёте диалог — AI не отвечает. Час без ваших сообщений — диалог сам вернётся к AI; вернуть сразу — «Ведёт AI».")
       : dialog.mode === "need_hr"
-        ? t("AI передал диалог вам ({reason}). Ответьте — AI не будет вмешиваться.", { reason: t(dialog.handoffReason ?? "нужен человек") })
+        ? t("AI передал диалог вам ({reason}). Ответьте в течение часа — иначе диалог вернётся к AI.", { reason: t(dialog.handoffReason ?? "нужен человек") })
         : t("Сейчас отвечает AI. Если напишете сами, диалог перейдёт к вам и AI замолчит.");
 
   return (

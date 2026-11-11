@@ -27,6 +27,12 @@ public interface IRecruiterAgent
 
     /// <summary>«Черновик AI» для HR: текст следующего сообщения кандидату — не отправляется.</summary>
     Task<string> DraftAsync(Guid conversationId, CancellationToken ct);
+
+    /// <summary>
+    /// Диалог вернулся к AI (HR не ответил за час): ответить на сообщения, которые кандидат написал, пока ждал HR, — с учётом всей переписки.
+    /// Последнее сообщение диалога не от кандидата или диалог снова у человека — ничего.
+    /// </summary>
+    Task ResumeAsync(Guid conversationId, CancellationToken ct);
 }
 
 /// <summary>Правила Telegram для подбора: код вакансии, слова поиска работы, ссылка на сообщение.</summary>
@@ -133,7 +139,8 @@ public sealed class RecruitmentTelegramHandler(
         await EnsureChatAsync(m, ct);
         if (m.Outgoing)
         {
-            await SaveMessageAsync(conversationId, m, TelegramMessageDirection.Out, "phone", null, null, ct);
+            var (author, userId) = await OutgoingAuthorAsync(conversationId, m, ct);
+            await SaveMessageAsync(conversationId, m, TelegramMessageDirection.Out, author, (m.File ?? m.Photo)?.FileName, null, ct, userId);
             return;
         }
 
@@ -263,7 +270,28 @@ public sealed class RecruitmentTelegramHandler(
         return result.CandidateId;
     }
 
-    private async Task SaveMessageAsync(Guid conversationId, TelegramIncoming m, TelegramMessageDirection direction, string author, string? fileName, Guid? resumeId, CancellationToken ct)
+    /// <summary>
+    /// Кто написал исходящее: сообщение из очереди OneBase (ответ AI, HR из OneBase, автосообщение) может прийти обратно как исходящее раньше,
+    /// чем очередь запишет его в историю, — тогда автор из очереди; иначе — сотрудник с телефона аккаунта (phone). AI-рекрутер видит сообщения
+    /// HR в переписке как сообщения сотрудника — свой ответ за чужой он принимать не должен.
+    /// </summary>
+    private async Task<(string Author, Guid? UserId)> OutgoingAuthorAsync(Guid conversationId, TelegramIncoming m, CancellationToken ct)
+    {
+        var recent = await db.TelegramOutgoingMessages.AsNoTracking()
+            .Where(o => o.ConversationId == conversationId && o.Status != TelegramOutboxStatus.Pending && o.Status != TelegramOutboxStatus.Cancelled)
+            .OrderByDescending(o => o.CreatedAt).Take(20)
+            .Select(o => new { o.Author, o.CreatedById, o.Text, o.FileName, o.MessageIds }).ToListAsync(ct);
+        var id = m.MessageId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var file = (m.File ?? m.Photo)?.FileName;
+        var match = recent.FirstOrDefault(o => o.MessageIds is { } ids && ids.Split(',').Contains(id))
+                    ?? recent.FirstOrDefault(o => !string.IsNullOrEmpty(m.Text) && o.Text is { } text
+                                                  && (text.Trim() == m.Text.Trim() || m.Text.Length >= 500 && text.Contains(m.Text, StringComparison.Ordinal))) // длинное — частями
+                    ?? recent.FirstOrDefault(o => string.IsNullOrEmpty(m.Text) && file is not null && o.FileName == file);
+        return match is null ? ("phone", null) : (match.Author, match.CreatedById);
+    }
+
+    private async Task SaveMessageAsync(Guid conversationId, TelegramIncoming m, TelegramMessageDirection direction, string author, string? fileName, Guid? resumeId,
+        CancellationToken ct, Guid? authorUserId = null)
     {
         var row = new TelegramConversationMessage
         {
@@ -276,6 +304,7 @@ public sealed class RecruitmentTelegramHandler(
             FileName = fileName,
             ResumeId = resumeId,
             Author = author,
+            AuthorUserId = authorUserId,
             SentAt = m.Date,
         };
         db.TelegramConversationMessages.Add(row);

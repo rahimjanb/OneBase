@@ -295,6 +295,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Recruitment.RecruitmentExceptions>();
         // Собеседования (календарь OneBase) и автоматика подбора: напоминания, касания, проверка номеров HR, автооценка — раз в 5 минут.
         services.AddScoped<OneBase.Application.Recruitment.InterviewService>();
+        services.AddScoped<OneBase.Application.Recruitment.Telegram.HrWaiting>();
         services.AddScoped<OneBase.Application.Recruitment.RecruitmentAutomation>();
         if (isolation.AllowOutbound<Recruitment.RecruitmentJobWorker>("Подбор: скачивание и разбор резюме, приглашения на собеседования"))
         {

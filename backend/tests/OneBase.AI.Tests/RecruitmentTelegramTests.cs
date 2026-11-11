@@ -163,30 +163,49 @@ public class RecruitmentTelegramTests(DataManagerDb fixture) : IClassFixture<Dat
         Assert.Equal(3, await RunOutboxAsync());
         Assert.Equal(["Часть 1", "Часть 2", "Часть 3"], fixture.Telegram.Sent.TakeLast(3).Select(m => m.Message.Text));
 
+        // Части ставятся в очередь по одной: круг, разбуженный первой, отправил её одну. Вторая — следующим кругом сразу, без паузы номера
+        // (а другое сообщение, не из этого ответа, — по-прежнему не раньше чем через 5 с после последнего).
+        var nextReply = Guid.NewGuid();
+        Task Part(int i) => outbox.EnqueueAsync(new OutboxRequest(account, Candidate.PeerId, conversation.Id, "hr", "reply", $"Ответ {i + 1}",
+            $"agent_reply:{nextReply:N}:{i}", "ai", RelatedType: OneBase.Application.Agents.DialogAgentDelivery.RelatedType, RelatedId: nextReply,
+            NotBefore: start.AddSeconds(18).AddMilliseconds(i)), default);
+        fixture.Clock.Now = start.AddSeconds(18);
+        await Part(0);
+        Assert.Equal(1, await RunOutboxAsync());
+        await service.SendAsync(hr, conversation.Id, new SendInput("Другое сообщение", Guid.NewGuid()), default);
+        await Part(1);
+        fixture.Clock.Now = start.AddSeconds(18).AddMilliseconds(300);
+        Assert.Equal(1, await RunOutboxAsync());
+        Assert.Equal(["Ответ 1", "Ответ 2"], fixture.Telegram.Sent.TakeLast(2).Select(m => m.Message.Text));
+        Assert.Equal(0, await RunOutboxAsync());
+        fixture.Clock.Now = start.AddSeconds(24);
+        Assert.Equal(1, await RunOutboxAsync());
+        Assert.Equal("Другое сообщение", fixture.Telegram.Sent[^1].Message.Text);
+
         // FLOOD_WAIT — ждём, попыткой не считается; затем «неизвестно, дошло ли» — без автоповтора.
         var attempt = 0;
         fixture.Telegram.Fail = (_, _) => ++attempt == 1
             ? new TelegramException("FLOOD_WAIT 30", TelegramErrorKind.Flood, 30)
             : new TelegramException("Telegram не подтвердил отправку за 30 с — неизвестно, дошло ли сообщение; проверьте чат.", TelegramErrorKind.Permanent);
         await service.SendAsync(hr, conversation.Id, new SendInput("Когда удобно созвониться?", Guid.NewGuid()), default);
-        fixture.Clock.Now = start.AddSeconds(20);
+        fixture.Clock.Now = start.AddSeconds(40);
         Assert.Equal(0, await RunOutboxAsync());
         var row = await db.TelegramOutgoingMessages.AsNoTracking().SingleAsync(m => m.Text == "Когда удобно созвониться?");
         Assert.Equal((TelegramOutboxStatus.Pending, 0), (row.Status, row.Attempts));
-        fixture.Clock.Now = start.AddSeconds(60);
+        fixture.Clock.Now = start.AddSeconds(80);
         await RunOutboxAsync();
         Assert.Equal(TelegramOutboxStatus.Unknown, (await db.TelegramOutgoingMessages.AsNoTracking().SingleAsync(m => m.Id == row.Id)).Status);
 
         // PEER_FLOOD — отправка HR с номера остановлена на сутки.
         fixture.Telegram.Fail = (_, _) => TelegramRules.Classify(400, "PEER_FLOOD", 0);
         await service.SendAsync(hr, conversation.Id, new SendInput("Ещё вопрос", Guid.NewGuid()), default);
-        fixture.Clock.Now = start.AddSeconds(120);
+        fixture.Clock.Now = start.AddSeconds(140);
         await RunOutboxAsync();
         var settings = await db.TelegramAccountDepartments.AsNoTracking().SingleAsync(d => d.AccountId == account);
-        Assert.Equal(start.AddSeconds(120) + TelegramOutboxRunner.PeerFloodPause, settings.PausedUntil);
+        Assert.Equal(start.AddSeconds(140) + TelegramOutboxRunner.PeerFloodPause, settings.PausedUntil);
         fixture.Telegram.Fail = null;
         await service.SendAsync(hr, conversation.Id, new SendInput("После паузы", Guid.NewGuid()), default);
-        fixture.Clock.Now = start.AddSeconds(200);
+        fixture.Clock.Now = start.AddSeconds(220);
         Assert.Equal(0, await RunOutboxAsync());
         Assert.True((await service.AccountsAsync(hr, default)).Single().PausedUntil > start);
 

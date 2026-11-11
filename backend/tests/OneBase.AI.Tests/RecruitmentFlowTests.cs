@@ -282,7 +282,7 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         await DeliverAsync(Msg(account, 2, "Расскажите про вакансию"));
         var candidateId = (await db.Candidates.AsNoTracking().SingleAsync()).Id;
         Assert.False(await db.CandidateConsents.AnyAsync(c => c.CandidateId == candidateId));
-        Assert.Equal("Здравствуйте! Сколько лет вы работаете водителем?", (await QueuedAsync(db))[^1]);
+        Assert.Equal("Здравствуйте! Сколько лет Вы работаете водителем?", (await QueuedAsync(db))[^1]); // «Вы» — с большой буквы
         Assert.DoesNotContain(await QueuedAsync(db), t => t.Contains("Согласен"));
 
         // Модель решила пригласить — варианты времени из календаря (а не от модели); выбор «1» — запись и событие календаря.
@@ -345,15 +345,27 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
             Assert.Contains("График 2/2", context);
             Assert.DoesNotContain("Главный бухгалтер", context);
             Assert.Contains("не придумывай вакансий", m[0].Content);
-            return "{\"action\":\"reply\",\"messages\":[\"Сейчас открыты водитель-экспедитор и оператор call-центра. Что вам ближе?\"]}";
+            // Вакансии не перечисляет: спрашивает, по какой вакансии пишет кандидат; «какие есть?» — сначала опыт, по нему — подходящая.
+            Assert.Contains("спроси, по какой вакансии он пишет", m[0].Content);
+            Assert.Contains("спроси, в чём у него есть опыт", m[0].Content);
+            Assert.Contains("Зарплату сам не называй", m[0].Content);
+            Assert.Contains("не называй себя виртуальным", m[0].Content);
+            Assert.Contains("не для перечисления", context);
+            return "{\"action\":\"reply\",\"messages\":[\"Здравствуйте! Я рекрутер компании. Расскажите, в чём у вас есть опыт? Подберу подходящую вакансию.\"]}";
         });
         await DeliverAsync(Msg(account, 2, "Здравствуйте, какие у вас есть вакансии?"));
+        Assert.Contains("в чём у Вас есть опыт", (await QueuedAsync(db))[^1]);
+
+        // По опыту — подходящая вакансия (без зарплаты); кандидат пока ни на что не записан.
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Вам подойдёт оператор call-центра в Ташкенте — приём звонков от клиентов. Интересно?\"]}");
+        await DeliverAsync(Msg(account, 3, "2 года продавцом в магазине, много общался с клиентами"));
         Assert.Contains("оператор call-центра", (await QueuedAsync(db))[^1]);
+        Assert.False(await db.CandidateApplications.AnyAsync());
 
         // Кандидат выбрал — модель вернула код вакансии, кандидат записан на неё.
         fixture.Gateway.Script.Enqueue(_ =>
-            $"{{\"action\":\"reply\",\"messages\":[\"Отлично! Есть ли у вас опыт работы с клиентами?\"],\"vacancy\":\"V{numbers[operatorVacancy.Id]}\"}}");
-        await DeliverAsync(Msg(account, 3, "Хочу оператором"));
+            $"{{\"action\":\"reply\",\"messages\":[\"Отлично! Какой график вам удобен?\"],\"vacancy\":\"V{numbers[operatorVacancy.Id]}\"}}");
+        await DeliverAsync(Msg(account, 4, "Да, хочу оператором"));
         Assert.Equal(operatorVacancy.Id, (await db.CandidateApplications.AsNoTracking().SingleAsync()).VacancyId);
 
         // Дальше — его вакансия целиком, остальные открытые — тоже с подробностями.
@@ -366,7 +378,7 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
             Assert.Contains("Права категории C, опыт от 2 лет", m[1].Content);
             return "{\"action\":\"reply\",\"messages\":[\"Понял, спасибо!\"]}";
         });
-        await DeliverAsync(Msg(account, 4, "Да, 2 года в магазине"));
+        await DeliverAsync(Msg(account, 5, "2/2 подходит"));
         Assert.Equal("Понял, спасибо!", (await QueuedAsync(db))[^1]);
     }
 
@@ -376,7 +388,7 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         var db = sp.GetRequiredService<OneBaseDbContext>();
         var id = (await sp.GetRequiredService<DialogAgentService>().EnsureRecruiterAsync(default)).Id;
         var agent = await db.DialogAgents.SingleAsync(a => a.Id == id);
-        (agent.Enabled, agent.WorkFrom, agent.WorkTo, agent.WorkDays, agent.Intro) = (true, null, null, "1,2,3,4,5,6,7", "виртуальный помощник HR");
+        (agent.Enabled, agent.WorkFrom, agent.WorkTo, agent.WorkDays, agent.Intro) = (true, null, null, "1,2,3,4,5,6,7", "рекрутер компании");
         configure?.Invoke(agent);
         await db.SaveChangesAsync();
         return agent;
@@ -389,6 +401,26 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
     [InlineData("Был оператором колл-центра", false)]
     [InlineData("Inson bilan gaplashsam bo'ladimi?", true)]
     public void Only_explicit_requests_for_a_human_hand_off(string text, bool expected) => Assert.Equal(expected, RecruiterRules.AsksForHuman(text));
+
+    [Theory]
+    [InlineData("Можно перенести на другой день?", false)]
+    [InlineData("другое время", false)]
+    [InlineData("Перенесите на четверг после обеда", true)]
+    [InlineData("Можно в 15:00?", true)]
+    [InlineData("Ertaga kelsam bo'ladimi?", true)]
+    [InlineData("Эртага эрталаб бўладими?", true)]
+    public void Named_day_or_time_goes_to_the_model_as_a_wish(string text, bool expected) => Assert.Equal(expected, RecruiterRules.MentionsWhen(text));
+
+    [Fact]
+    public void Time_wish_is_read_from_the_model_json_and_junk_is_dropped()
+    {
+        Assert.Equal(new SlotWish(new DateOnly(2026, 11, 19), null, new TimeOnly(15, 0)),
+            RecruiterAgent.Parse("{\"action\":\"other_time\",\"messages\":[],\"wish\":{\"date\":\"2026-11-19\",\"time\":\"15:00\",\"from\":\"\",\"to\":\"\"}}")!.Wish);
+        Assert.Equal(new SlotWish(new DateOnly(2026, 11, 23), new DateOnly(2026, 11, 27), null, new TimeOnly(9, 0), new TimeOnly(12, 0)),
+            RecruiterAgent.Parse("{\"action\":\"other_time\",\"wish\":{\"date\":\"2026-11-23\",\"date_to\":\"2026-11-27\",\"from\":\"9:00\",\"to\":\"12:00\"}}")!.Wish);
+        Assert.Null(RecruiterAgent.Parse("{\"action\":\"other_time\",\"wish\":{\"date\":\"в четверг\",\"time\":\"утром\"}}")!.Wish);
+        Assert.Null(RecruiterAgent.Parse("{\"action\":\"reply\",\"messages\":[\"Здравствуйте\"]}")!.Wish);
+    }
 
     // ---------- Оценка ----------
 

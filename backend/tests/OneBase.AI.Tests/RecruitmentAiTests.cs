@@ -261,7 +261,7 @@ public class RecruitmentLanguageDbTests(DataManagerDb fixture) : IClassFixture<D
             return "{\"action\":\"reply\",\"messages\":[\"Здравствуйте! Какая работа вам интересна?\"]}";
         });
         await SayAsync(russian, "Здравствуйте, расскажите подробнее о вакансии.");
-        Assert.Equal("Здравствуйте! Какая работа вам интересна?", await LastAsync(db, russian));
+        Assert.Equal("Здравствуйте! Какая работа Вам интересна?", await LastAsync(db, russian));
         Assert.Equal(("ru", "Cyrl"), ((await CandidateAsync(db, russian)).Language, (await CandidateAsync(db, russian)).PreferredScript));
 
         // 4. Неоднозначные короткие сообщения не меняют язык: кириллица остаётся.

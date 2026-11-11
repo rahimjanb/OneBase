@@ -47,6 +47,7 @@ public sealed class RecruitmentExceptions(IAppDbContext db, UserNotifier notifie
             return open;
         }
 
+        var now = clock.GetUtcNow();
         var row = new RecruitmentException
         {
             Kind = Kinds.ContainsKey(kind) ? kind : "technical",
@@ -55,17 +56,25 @@ public sealed class RecruitmentExceptions(IAppDbContext db, UserNotifier notifie
             VacancyId = vacancyId,
             ConversationId = conversationId,
             DedupKey = dedupKey,
+            CreatedAt = now,
         };
         db.RecruitmentExceptions.Add(row);
+        var (title, body, link) = ($"Подбор: {Kinds.GetValueOrDefault(row.Kind, row.Kind)}", row.Message, "/hr/recruitment/exceptions");
         if (conversationId is { } c)
         {
-            await db.TelegramConversations.Where(x => x.Id == c).ExecuteUpdateAsync(u => u.SetProperty(x => x.Mode, TelegramConversationMode.Manual), ct);
+            // Диалог — на человека; с этой минуты идёт час: HR не ответит — диалог вернётся к AI (HrWaiting).
+            await db.TelegramConversations.Where(x => x.Id == c)
+                .ExecuteUpdateAsync(u => u.SetProperty(x => x.Mode, TelegramConversationMode.Manual).SetProperty(x => x.UpdatedAt, now), ct);
+            var name = candidateId is { } cid ? await db.Candidates.AsNoTracking().Where(x => x.Id == cid).Select(x => x.FullName).FirstOrDefaultAsync(ct) : null;
+            var waiting = await Telegram.HrWaiting.CountAsync(db, c, ct) + 1;
+            (title, body, link) = ($"{name ?? "Кандидат"} ждёт ответа HR · {Telegram.HrDialogService.Reason(row.Kind)}",
+                $"{row.Message}\nСейчас ждут ответа HR: {Telegram.HrWaiting.Candidates(waiting)}. Не ответите в течение {Telegram.HrWaiting.HandBackMinutes} минут — " +
+                "диалог вернётся к AI-рекрутеру.", $"/hr/recruitment/telegram/{c}");
         }
 
         foreach (var user in await db.ActiveUsersWithAsync(Permissions.HrRecruitmentManage, ct))
         {
-            notifier.Notify(user, UserNotificationKind.RecruitmentAlert, $"Подбор: {Kinds.GetValueOrDefault(row.Kind, row.Kind)}", row.Message,
-                "/hr/recruitment/exceptions");
+            notifier.Notify(user, UserNotificationKind.RecruitmentAlert, title, body, link, now);
         }
 
         try
@@ -108,12 +117,11 @@ public sealed class RecruitmentExceptions(IAppDbContext db, UserNotifier notifie
             e.ResolvedById is { } r ? users.GetValueOrDefault(r) : null, e.ResolvedAt, e.Resolution)).ToList();
     }
 
-    /// <summary>Решено человеком; ReturnToAi — диалог снова ведёт AI-рекрутер.</summary>
     /// <summary>
-    /// HR ответил в диалоге или вернул его AI — всё, что ждало человека по этому диалогу («Нужен HR»), решено: кем и как — в исключении и в аудите.
-    /// Возвращает, сколько закрыто.
+    /// HR ответил в диалоге или вернул его AI (userId — кто; null — система: HR не ответил за час, диалог вернулся к AI) — всё, что ждало человека
+    /// по этому диалогу («Нужен HR»), решено: кем и как — в исключении и в аудите. Возвращает, сколько закрыто.
     /// </summary>
-    public async Task<int> ResolveConversationAsync(Guid conversationId, Guid userId, string resolution, CancellationToken ct)
+    public async Task<int> ResolveConversationAsync(Guid conversationId, Guid? userId, string resolution, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
         var closed = await db.RecruitmentExceptions.Where(e => e.ConversationId == conversationId && e.Status == RecruitmentExceptionStatus.Open)
@@ -121,12 +129,14 @@ public sealed class RecruitmentExceptions(IAppDbContext db, UserNotifier notifie
                 .SetProperty(e => e.ResolvedAt, now).SetProperty(e => e.Resolution, resolution), ct);
         if (closed > 0)
         {
-            await audit.LogAsync(ActorType.User, userId.ToString(), "recruitment.exception.resolved", "TelegramConversation", conversationId.ToString(),
-                new { closed, resolution }, ct);
+            await audit.LogAsync(userId is null ? ActorType.System : ActorType.User, userId?.ToString() ?? "recruitment", "recruitment.exception.resolved",
+                "TelegramConversation", conversationId.ToString(), new { closed, resolution }, ct);
         }
 
         return closed;
     }
+
+    /// <summary>Решено человеком; ReturnToAi — диалог снова ведёт AI-рекрутер.</summary>
 
     public async Task<IReadOnlyList<ExceptionView>> ResolveAsync(RecruitmentContext ctx, Guid id, ResolveInput input, CancellationToken ct)
     {
@@ -147,7 +157,8 @@ public sealed class RecruitmentExceptions(IAppDbContext db, UserNotifier notifie
         row.Resolution = input.Resolution?.Trim() is { Length: > 0 } r ? (r.Length <= 1000 ? r : r[..1000]) : null;
         if (input.ReturnToAi && row.ConversationId is { } c)
         {
-            await db.TelegramConversations.Where(x => x.Id == c).ExecuteUpdateAsync(u => u.SetProperty(x => x.Mode, TelegramConversationMode.Ai), ct);
+            await db.TelegramConversations.Where(x => x.Id == c)
+                .ExecuteUpdateAsync(u => u.SetProperty(x => x.Mode, TelegramConversationMode.Ai).SetProperty(x => x.UpdatedAt, row.ResolvedAt), ct);
         }
 
         await db.SaveChangesAsync(ct);

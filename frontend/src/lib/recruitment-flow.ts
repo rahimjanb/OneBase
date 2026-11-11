@@ -320,6 +320,29 @@ export const sourceCategoryLabel: Record<string, string> = {
 };
 
 /** Время по Ташкенту: «пн, 10.11, 10:00». */
+/** Отклик для окна «Новое собеседование»: кандидат, вакансия, этап, действующее собеседование (если уже есть) и есть ли диалог в Telegram. */
+export type BookableRow = {
+  applicationId: string;
+  candidateId: string;
+  candidateName: string;
+  phone: string | null;
+  vacancyId: string;
+  vacancyCode: string;
+  vacancyTitle: string;
+  stage: string;
+  interviewId: string | null;
+  interviewStatus: string | null;
+  interviewStartsAt: string | null;
+  hasTelegram: boolean;
+};
+
+/** Время собеседования из дня и часа по Ташкенту («2026-11-13», «15:00») — ISO с поясом +05:00. */
+export const tashkentIso = (date: string, time: string) => `${date}T${time.slice(0, 5)}:00+05:00`;
+
+/** Час по Ташкенту («15:00») из ISO. */
+export const tashkentTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString("ru-RU", { timeZone: "Asia/Tashkent", hour: "2-digit", minute: "2-digit" });
+
 export const slotText = (iso: string) =>
   new Date(iso).toLocaleString("ru-RU", { timeZone: "Asia/Tashkent", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
@@ -388,9 +411,13 @@ export const flowApi = {
   interviewers: (vacancyId: string) => bff<string[]>(`${base}/vacancies/${vacancyId}/interviewers`),
   setInterviewers: (vacancyId: string, userIds: string[]) => bff<string[]>(`${base}/vacancies/${vacancyId}/interviewers`, body("PUT", { userIds })),
   slots: (vacancyId: string) => bff<Slot[]>(`${base}/vacancies/${vacancyId}/slots`),
+  /** Свободное время интервьюеров вакансии на день (все варианты по сетке вакансии). */
+  daySlots: (vacancyId: string, date: string) => bff<Slot[]>(`${base}/vacancies/${vacancyId}/slots${qs({ date })}`),
+  /** Отклики для «Нового собеседования»: поиск по кандидату, телефону, вакансии. */
+  bookable: (search: string) => bff<BookableRow[]>(`${base}/interviews/bookable${qs({ search })}`),
   /** HR назначает время: confirmedByCandidate — кандидат уже подтвердил (по телефону); иначе — ждёт его «да» в Telegram. */
-  book: (applicationId: string, startsAt: string, format: string | null, location: string | null, confirmedByCandidate = false) =>
-    bff<InterviewRow[]>(`${base}/interviews/book`, body("POST", { applicationId, startsAt, format, location, confirmedByCandidate })),
+  book: (applicationId: string, startsAt: string, format: string | null, location: string | null, confirmedByCandidate = false, meetingUrl: string | null = null) =>
+    bff<InterviewRow[]>(`${base}/interviews/book`, body("POST", { applicationId, startsAt, format, location, confirmedByCandidate, meetingUrl })),
   propose: (applicationId: string) => bff<InterviewRow[]>(`${base}/applications/${applicationId}/propose`, body("POST")),
   interviewStatus: (id: string, status: string) => bff<InterviewRow[]>(`${base}/interviews/${id}/status`, body("POST", { status })),
   exceptions: (status?: string) => bff<ExceptionRow[]>(`${base}/exceptions${qs({ status })}`),

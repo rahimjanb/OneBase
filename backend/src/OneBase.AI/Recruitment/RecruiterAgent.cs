@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OneBase.AI.Consultant;
@@ -136,6 +137,23 @@ public static class RecruiterRules
         return DeclinePhrases.Any(p => t.Contains(p, StringComparison.Ordinal)) ? InterviewIntent.Decline : InterviewIntent.None;
     }
 
+    private static readonly string[] WhenWords =
+    [
+        "понедельник", "вторник", "сред", "четверг", "пятниц", "суббот", "воскрес", "завтра", "сегодня", "утр", "вечер", "обед", "после ", "недел",
+        "dushanba", "seshanba", "chorshanba", "payshanba", "juma", "shanba", "yakshanba", "ertaga", "indinga", "bugun", "ertalab", "kechqurun", "tushdan", "hafta",
+        "душанба", "сешанба", "чоршанба", "пайшанба", "жума", "шанба", "якшанба", "эртага", "индинга", "бугун", "эрталаб", "кечқурун", "тушдан", "ҳафта",
+    ];
+
+    /// <summary>
+    /// Кандидат называет день или время («перенесите на четверг после обеда», «можно в 15:00?») — пожелание разбирает модель; просто «другое
+    /// время» — следующие свободные варианты без модели.
+    /// </summary>
+    public static bool MentionsWhen(string text)
+    {
+        var lower = text.ToLowerInvariant();
+        return lower.Any(char.IsAsciiDigit) || WhenWords.Any(w => lower.Contains(w, StringComparison.Ordinal));
+    }
+
     /// <summary>
     /// Язык ответа: настройка агента «русский» — русский; «узбекский» — узбекский той графикой, что у кандидата (латиница, если он пишет
     /// по-русски или ещё не понятно); «как пишет собеседник» — закреплённый язык кандидата, иначе язык этого сообщения, иначе русский.
@@ -146,6 +164,15 @@ public static class RecruiterRules
         "uz" => (preferred ?? message.Lang) == CandidateLang.UzCyrl ? CandidateLang.UzCyrl : CandidateLang.UzLatn,
         _ => preferred ?? message.Lang ?? CandidateLang.Ru,
     };
+
+    private static readonly Regex YouWords = new(@"(?<!\p{L})(вы|вас|вам|вами|ваш|ваша|ваше|ваши|вашего|вашей|вашему|вашим|вашими|вашу|ваших|вашем)(?!\p{L})",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// «Вы» с большой буквы — Вы, Вас, Вам, Ваш… (так компания пишет кандидату по-русски): модель иногда пишет со строчной, шаблоны и правила
+    /// агента — тоже могут. Только для русского ответа.
+    /// </summary>
+    public static string PoliteYou(string text) => YouWords.Replace(text, m => char.ToUpperInvariant(m.Value[0]) + m.Value[1..]);
 
     /// <summary>Сообщения модели не на языке кандидата (уверенно другой язык или графика). Короткие и неоднозначные — не ошибка.</summary>
     public static bool WrongLanguage(LanguageDetectionService languages, CandidateLang expected, IReadOnlyList<string> messages)
@@ -167,11 +194,11 @@ public enum InterviewIntent
 }
 
 /// <summary>
-/// Решение модели: действие, сообщения кандидату, для HR — вид передачи и причина, заметки, ответы на вопросы отбора и код вакансии, которую
-/// выбрал кандидат (V12; кандидат записывается на неё).
+/// Решение модели: действие, сообщения кандидату, для HR — вид передачи и причина, заметки, ответы на вопросы отбора, код вакансии, которую
+/// выбрал кандидат (V12; кандидат записывается на неё), и пожелание ко времени собеседования (день, время или промежуток — из переписки).
 /// </summary>
 public sealed record RecruiterDecision(string Action, IReadOnlyList<string> Messages, string? HandoffKind, string? Reason, string? Notes,
-    IReadOnlyDictionary<string, string> Answers, string? Vacancy = null);
+    IReadOnlyDictionary<string, string> Answers, string? Vacancy = null, SlotWish? Wish = null);
 
 /// <summary>
 /// AI-рекрутер в диалоге HR — ИИ-агент «Рекрутер» из «Настройки → ИИ-агенты» (свой агент вакансии, агент номера или рекрутер HR по умолчанию,
@@ -195,7 +222,10 @@ public sealed class RecruiterAgent(
     TimeProvider clock,
     ILogger<RecruiterAgent> logger) : IRecruiterAgent
 {
-    private const int HistoryMessages = 24;
+    /// <summary>Переписка в промпте — вся (с сообщениями HR), в пределах HistoryChars от последних; не вошедшее — пометкой «ранее ещё N».</summary>
+    private const int HistoryMessages = 200;
+
+    private const int HistoryChars = 30000;
     private const int ResumeChars = 4000;
 
     /// <summary>Открытых вакансий в промпте — не больше; подробности (описание, требования, условия) — у каждой, в пределах VacancyChars.</summary>
@@ -208,7 +238,34 @@ public sealed class RecruiterAgent(
 
     private sealed record Turn(RecruiterTurn Raw, DialogAgent Agent, Candidate Candidate, CandidateApplication? Application, CandidateLang Lang);
 
-    public async Task ReplyAsync(RecruiterTurn raw, CancellationToken ct)
+    public Task ReplyAsync(RecruiterTurn raw, CancellationToken ct) => ReplyAsync(raw, null, ct);
+
+    /// <summary>Что модель знает, когда диалог вернулся к ней после HR (час без ответа).</summary>
+    internal const string ResumeNote =
+        "Сотрудники HR не ответили кандидату за час — диалог снова ведёшь ты. Ответь на сообщения, которые кандидат написал, пока ждал, с учётом " +
+        "всей переписки (в том числе того, что писали сотрудники HR). Коротко извинись за ожидание. Что может решить только HR (торг о зарплате, " +
+        "спорные условия, решение о найме), сам не решай и не обещай — скажи, что коллеги ответят здесь, и помоги с тем, с чем можешь сам.";
+
+    public async Task ResumeAsync(Guid conversationId, CancellationToken ct)
+    {
+        var c = await db.TelegramConversations.AsNoTracking().FirstOrDefaultAsync(x => x.Id == conversationId, ct);
+        if (c is not { Mode: TelegramConversationMode.Ai, RelatedType: RecruitmentService.CandidateRelation, RelatedId: { } candidateId })
+        {
+            return;
+        }
+
+        var last = await db.TelegramConversationMessages.AsNoTracking().Where(m => m.ConversationId == conversationId).OrderByDescending(m => m.SentAt)
+            .FirstOrDefaultAsync(ct);
+        if (last is not { Direction: TelegramMessageDirection.In })
+        {
+            return; // кандидат после передачи не писал — AI ответит на его следующее сообщение
+        }
+
+        await ReplyAsync(new RecruiterTurn(c.AccountId, c.PeerId, c.Id, candidateId, last.MessageId ?? 0, last.Text ?? string.Empty, last.SentAt, last.FileName,
+            last.ResumeId), ResumeNote, ct);
+    }
+
+    private async Task ReplyAsync(RecruiterTurn raw, string? note, CancellationToken ct)
     {
         var candidate = await db.Candidates.AsNoTracking().FirstOrDefaultAsync(c => c.Id == raw.CandidateId, ct);
         if (candidate is null)
@@ -267,7 +324,7 @@ public sealed class RecruiterAgent(
             return;
         }
 
-        await ModelTurnAsync(turn, open, null, ct);
+        await ModelTurnAsync(turn, open, note, ct);
     }
 
     /// <summary>
@@ -348,6 +405,11 @@ public sealed class RecruiterAgent(
 
         if (intent is InterviewIntent.OtherTime or InterviewIntent.Reschedule && (active || current.Status == InterviewStatus.Proposed))
         {
+            if (RecruiterRules.MentionsWhen(text))
+            {
+                return false; // «на четверг после обеда» — пожелание разберёт модель (action other_time, wish) и сверит с календарём
+            }
+
             var after = slots.Count > 0 ? slots.Max(x => x.StartsAt) : current.StartsAt;
             await OfferAsync(turn, application, RecruiterTexts.OtherSlots(turn.Lang), after, ct);
             return true;
@@ -418,6 +480,38 @@ public sealed class RecruiterAgent(
         await SendAsync(turn, "propose_interview",
             [$"{intro}\n{InterviewService.SlotsText(slots, turn.Lang, interview.TimeZone)}\n{RecruiterTexts.ChooseNumber(turn.Lang)} {RecruiterTexts.SlotOptions(turn.Lang)}"],
             template: true, interviewId: interview.Id, ct: ct);
+    }
+
+    /// <summary>
+    /// Пожелание кандидата ко времени (день, время, промежуток) — по свободному времени интервьюера и участников вакансии: ровно это время в
+    /// названный день свободно — сразу запись (или перенос назначенного) и подтверждение; иначе — до трёх свободных вариантов рядом с пожеланием
+    /// (кандидат выбирает номером, назначенное остаётся в силе до выбора); свободного нет — HR. intro — сообщения модели перед вариантами.
+    /// </summary>
+    private async Task WishAsync(Turn turn, CandidateApplication application, Interview? current, SlotWish wish, IReadOnlyList<string>? intro,
+        (string Model, int Input, int Output)? usage, CancellationToken ct)
+    {
+        var active = current is not null && InterviewService.IsActive(current);
+        var found = await interviews.WishSlotsAsync(application.VacancyId, wish, 3, active ? current!.Id : null, ct, active ? current!.StartsAt : null);
+        if (found.Exact)
+        {
+            await (active ? MoveAsync(turn, application, current!, found.Slots[0], ct) : BookAsync(turn, application, found.Slots[0], ct));
+            return;
+        }
+
+        if (found.Slots.Count == 0)
+        {
+            await HandoffAsync(turn, "schedule", "Кандидат просит другое время собеседования, а у интервьюеров вакансии нет свободного времени.",
+                RecruiterTexts.NoSlots(turn.Lang), ct);
+            return;
+        }
+
+        var (interview, slots) = await interviews.ProposeAsync(application.Id, null, ct, offered: found.Slots);
+        var zone = interview.TimeZone;
+        var timeFree = wish.Time is { } time && slots.Any(x => TimeOnly.FromTimeSpan(InterviewService.Local(x.StartsAt, zone).TimeOfDay) == time);
+        var head = wish.Time is not null && !timeFree ? RecruiterTexts.WishBusy(turn.Lang) : RecruiterTexts.WishSlots(turn.Lang);
+        var text = $"{head}\n{InterviewService.SlotsText(slots, turn.Lang, zone)}\n{RecruiterTexts.ChooseNumber(turn.Lang)} {RecruiterTexts.SlotOptions(turn.Lang)}";
+        await SendAsync(turn, "propose_interview", intro is { Count: > 0 } ? [.. intro, text] : [text], template: intro is not { Count: > 0 }, usage,
+            interview.Id, ct);
     }
 
     private async Task ModelTurnAsync(Turn turn, IReadOnlyList<Vacancy> open, string? systemNote, CancellationToken ct)
@@ -503,7 +597,16 @@ public sealed class RecruiterAgent(
                     return;
                 }
 
-                if (await interviews.CurrentAsync(turn.Application.Id, ct) is { } existing && InterviewService.IsActive(existing))
+                var existing = await interviews.CurrentAsync(turn.Application.Id, ct);
+                if (decision.Wish is { } inviteWish)
+                {
+                    // Кандидат сам назвал удобный день или время — по нему (назначенное — перенос на это время).
+                    await WishAsync(turn, turn.Application, existing, inviteWish, existing is not null && InterviewService.IsActive(existing) ? null : decision.Messages,
+                        usage, ct);
+                    return;
+                }
+
+                if (existing is not null && InterviewService.IsActive(existing))
                 {
                     await SendAsync(turn, "reply", decision.Messages.Count > 0 ? decision.Messages : [RecruiterTexts.Booked(turn.Lang, At(existing), null)], template: false, usage, ct: ct);
                     return; // уже назначено — модель просто ответила
@@ -530,6 +633,10 @@ public sealed class RecruiterAgent(
                 await SendAsync(turn, "handoff", decision.Messages.Count > 0 ? decision.Messages : [HandoffText(turn)], template: false, usage, ct: ct);
                 await exceptions.RaiseAsync("review", decision.Reason ?? "Кандидат готов к собеседованию — назначьте время.", turn.Candidate.Id, turn.Application?.VacancyId,
                     raw.ConversationId, $"handoff:{raw.ConversationId:N}:{raw.MessageId}", ct);
+                return;
+
+            case "other_time" when turn.Application is not null && decision.Wish is { } wish && await interviews.CurrentAsync(turn.Application.Id, ct) is { } planned:
+                await WishAsync(turn, turn.Application, planned, wish, null, usage, ct);
                 return;
 
             case "other_time" or "decline_interview" or "cancel_interview" when turn.Application is not null
@@ -605,6 +712,7 @@ public sealed class RecruiterAgent(
                 Context = new AiCallContext(null, "recruiter", conversationId, "hr.recruiter.draft"),
             }, ct);
             var text = Parse(result.Text) is { Messages.Count: > 0 } decision ? string.Join("\n\n", decision.Messages) : null;
+            text = text is not null && lang == CandidateLang.Ru ? RecruiterRules.PoliteYou(text) : text;
             return text ?? throw new Application.Field.FieldValidationException("AI не предложил ответ — напишите сами.");
         }
         catch (LlmNotConfiguredException)
@@ -625,8 +733,30 @@ public sealed class RecruiterAgent(
     private async Task<List<LlmMessage>> PromptAsync(Turn turn, IReadOnlyList<Vacancy> open, string? systemNote, CancellationToken ct)
     {
         var raw = turn.Raw;
-        var history = await db.TelegramConversationMessages.AsNoTracking().Where(m => m.ConversationId == raw.ConversationId)
-            .OrderByDescending(m => m.SentAt).Take(HistoryMessages).OrderBy(m => m.SentAt).ToListAsync(ct);
+        var recent = await db.TelegramConversationMessages.AsNoTracking().Where(m => m.ConversationId == raw.ConversationId)
+            .OrderByDescending(m => m.SentAt).Take(HistoryMessages).ToListAsync(ct);
+        var history = new List<TelegramConversationMessage>();
+        var chars = 0;
+        foreach (var m in recent)
+        {
+            chars += (m.Text?.Length ?? 0) + 60;
+            if (history.Count > 0 && chars > HistoryChars)
+            {
+                break;
+            }
+
+            history.Add(m);
+        }
+
+        history.Reverse();
+        var omitted = recent.Count < HistoryMessages && history.Count == recent.Count ? 0
+            : await db.TelegramConversationMessages.CountAsync(m => m.ConversationId == raw.ConversationId, ct) - history.Count;
+        var hrIds = history.Where(m => IsHr(m) && m.AuthorUserId != null).Select(m => m.AuthorUserId!.Value).Distinct().ToList();
+        var hrNames = await db.Users.AsNoTracking().Where(u => hrIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        var rejected = turn.Application is null
+            ? await db.CandidateApplications.AsNoTracking().Include(a => a.Vacancy)
+                .Where(a => a.CandidateId == turn.Candidate.Id && a.Stage == ApplicationStage.Rejected).OrderByDescending(a => a.StageChangedAt).FirstOrDefaultAsync(ct)
+            : null;
         var fileIds = history.Where(m => m.ResumeId != null).Select(m => m.ResumeId!.Value).ToList();
         var files = await db.CandidateResumes.AsNoTracking().Where(r => fileIds.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.Status, ct);
         var answers = await db.DialogAgentAnswers.AsNoTracking().Where(a => a.AgentId == turn.Agent.Id).OrderBy(a => a.SortOrder).ToListAsync(ct);
@@ -637,15 +767,34 @@ public sealed class RecruiterAgent(
         {
             new(LlmRole.System, SystemPrompt(turn.Agent, answers)),
             new(LlmRole.System, Context(turn.Agent, turn.Candidate, turn.Application, open, resume, clock.GetUtcNow(), turn.Lang,
-                turn.Application is { } a ? await interviews.CurrentAsync(a.Id, ct) : null)),
+                turn.Application is { } a ? await interviews.CurrentAsync(a.Id, ct) : null, rejected)),
         };
+        if (omitted > 0)
+        {
+            messages.Add(new LlmMessage(LlmRole.User, $"[Система: раньше в переписке было ещё {omitted} сообщ. — ниже последние.]"));
+        }
+
         foreach (var m in history)
         {
             var text = (m.Text ?? string.Empty) + (m.FileName is { } f ? $" [файл: {f}{FileNote(m.ResumeId, files)}]" : string.Empty);
-            if (text.Length > 0)
+            if (text.Length == 0)
             {
-                messages.Add(new LlmMessage(m.Direction == TelegramMessageDirection.In ? LlmRole.User : LlmRole.Assistant,
-                    m.Direction == TelegramMessageDirection.In ? DialogAgentPrompt.Wrap(text) : text));
+                continue;
+            }
+
+            if (m.Direction == TelegramMessageDirection.In)
+            {
+                messages.Add(new LlmMessage(LlmRole.User, DialogAgentPrompt.Wrap(text)));
+            }
+            else if (IsHr(m))
+            {
+                // Сотрудник HR писал сам (из OneBase или с телефона номера) — модель знает, что сказано и обещано, но это не её реплика.
+                var who = m.AuthorUserId is { } u && hrNames.TryGetValue(u, out var name) ? $" {name}" : string.Empty;
+                messages.Add(new LlmMessage(LlmRole.User, $"{HrMark}{who} написал кандидату — не сообщение кандидата]\n{text}"));
+            }
+            else
+            {
+                messages.Add(new LlmMessage(LlmRole.Assistant, text));
             }
         }
 
@@ -660,6 +809,11 @@ public sealed class RecruiterAgent(
 
         return messages;
     }
+
+    /// <summary>Пометка сообщения сотрудника HR в переписке для модели.</summary>
+    internal const string HrMark = "[Сотрудник HR";
+
+    private static bool IsHr(TelegramConversationMessage m) => m.Direction == TelegramMessageDirection.Out && m.Author is "user" or "phone";
 
     /// <summary>Что модель знает о файле в истории: резюме получено и обрабатывается (не говорить «изучил»), разобрано или не прочиталось.</summary>
     private static string FileNote(Guid? resumeId, IReadOnlyDictionary<Guid, DocumentStatus> files) =>
@@ -710,7 +864,22 @@ public sealed class RecruiterAgent(
         }
 
         return new RecruiterDecision(action, DialogAgentPrompt.Messages(json), RecruitmentExceptions.Kinds.ContainsKey(kind ?? string.Empty) ? kind : "unclear",
-            JsonText.Str(json, "reason"), JsonText.Str(json, "notes"), answers, JsonText.Str(json, "vacancy"));
+            JsonText.Str(json, "reason"), JsonText.Str(json, "notes"), answers, JsonText.Str(json, "vacancy"), Wish(json));
+    }
+
+    /// <summary>«wish»: {date, date_to — ГГГГ-ММ-ДД; time, from, to — ЧЧ:ММ}; непонятное поле — без него, пустое пожелание — null.</summary>
+    internal static SlotWish? Wish(JsonElement json)
+    {
+        if (!json.TryGetProperty("wish", out var w) || w.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        DateOnly? Day(string name) => DateOnly.TryParseExact(JsonText.Str(w, name)?.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
+        TimeOnly? Time(string name) =>
+            TimeOnly.TryParseExact(JsonText.Str(w, name)?.Trim(), ["HH:mm", "H:mm"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var t) ? t : null;
+        var wish = new SlotWish(Day("date"), Day("date_to"), Time("time"), Time("from"), Time("to"));
+        return wish.IsEmpty ? null : wish;
     }
 
     /// <summary>Неизменная часть промпта агента (кэшируется у провайдера): кто он, как ведёт разговор, стиль, ограничения, готовые ответы.</summary>
@@ -724,22 +893,35 @@ public sealed class RecruiterAgent(
         sb.AppendLine();
         sb.AppendLine("Как вести переписку:");
         sb.AppendLine("- Цель — понять, подходит ли кандидат, ответить на его вопросы о вакансии и, если подходит, пригласить на собеседование.");
-        sb.AppendLine("- Первый ответ в разговоре (твоих сообщений в переписке ещё нет): поздоровайся, коротко представься (имя и роль, если они заданы) и " +
-                      "в том же ответе сразу ответь на вопрос кандидата или задай первый вопрос. Согласия на обработку данных не спрашивай.");
+        sb.AppendLine("- Первый ответ в разговоре (твоих сообщений в переписке ещё нет): поздоровайся, коротко представься — имя (если задано) и роль, " +
+                      "например «я рекрутер компании», без слов «виртуальный», «бот», «ИИ», «помощник», — и в том же ответе ответь на вопрос кандидата " +
+                      "или задай первый вопрос. Согласия на обработку данных не спрашивай.");
+        sb.AppendLine("- В переписке бывают сообщения, которые кандидату писали сотрудники HR сами (пометка «[Сотрудник HR … написал кандидату]»): " +
+                      "это тоже сообщения компании. Учитывай всё, что в них сказано, договорено и обещано, не противоречь им, не переспрашивай то, " +
+                      "на что кандидат уже ответил сотруднику, и не здоровайся заново. Сам такие пометки не пиши.");
         sb.AppendLine("- Вопросы отбора (ниже) задавай по одному, своими словами, в естественном порядке. Не спрашивай то, что уже известно из резюме, переписки " +
                       "или «Что уже известно». Ответы кандидата на вопросы отбора записывай в answers.");
         sb.AppendLine("- Если есть резюме — опирайся на него: можно отметить подходящий опыт кандидата. Резюме не пересказывай.");
-        sb.AppendLine("- Не вываливай всё описание вакансии: отвечай на то, что спросили, и упоминай главное (график, оплата, место), когда это к слову.");
+        sb.AppendLine("- Не вываливай всё описание вакансии: отвечай на то, что спросили, и упоминай главное (чем заниматься, график, место), когда это к слову.");
         sb.AppendLine("- О вакансиях говори только по данным OneBase ниже (вакансия кандидата и открытые вакансии компании): не придумывай вакансий, зарплат, " +
-                      "графиков и условий, которых там нет. Спросили, какие есть вакансии, — коротко назови подходящие (название, город, главное).");
+                      "графиков и условий, которых там нет.");
+        sb.AppendLine("- Кандидат ещё не выбрал вакансию — список открытых вакансий сам не предлагай и не перечисляй. Не ясно, о какой вакансии речь, — " +
+                      "спроси, по какой вакансии он пишет.");
+        sb.AppendLine("- Кандидат спрашивает, какие есть вакансии, или не знает, какая ему нужна, — списком не отвечай: спроси, в чём у него есть опыт " +
+                      "(кем и где работал), и скажи, что по опыту подберёшь подходящую вакансию. Опыт уже понятен из переписки или резюме — не переспрашивай.");
+        sb.AppendLine("- Узнал опыт — предложи одну, самое большее две вакансии из открытых, которые ему подходят: название, город и коротко, чем заниматься. " +
+                      "Подходящей нет — так и скажи и предложи прислать резюме: сотрудник HR свяжется, когда появится подходящая вакансия.");
+        sb.AppendLine("- Кандидат прямо просит перечислить все вакансии, хотя ты уже спросил про опыт, — коротко назови их названия.");
         sb.AppendLine("- Кандидат выбрал вакансию из открытых или назвал её — укажи её код в поле vacancy (например V12): система запишет его на неё.");
+        sb.AppendLine("- Зарплату сам не называй — ни в приветствии, ни когда предлагаешь или описываешь вакансию. О деньгах говори, только когда кандидат " +
+                      "сам спросит о зарплате.");
         sb.AppendLine("- Когда главное выяснено и кандидат соответствует обязательным требованиям — пригласи на собеседование (action propose_interview). " +
                       "Время не называй — варианты из календаря добавит система.");
         sb.AppendLine("- Кандидат не подходит по обязательному требованию — не отказывай сам и не обнадёживай: поблагодари и скажи, что передашь анкету коллегам, " +
                       "они свяжутся (action handoff, handoff_kind review).");
         sb.AppendLine("- Не принимай решений о найме и не обещай работу. Не раскрывай внутренние данные компании, других кандидатов и зарплаты сотрудников.");
         sb.AppendLine(agent.CanDiscussSalary
-            ? "- Зарплату называй только в пределах вилки вакансии. Кандидат торгуется за её пределами — action handoff, handoff_kind salary."
+            ? "- Кандидат спросил о зарплате — называй только в пределах вилки вакансии. Торгуется за её пределами — action handoff, handoff_kind salary."
             : "- Суммы зарплаты не называй: на вопросы о деньгах скажи, что их обсудит сотрудник HR (action handoff, handoff_kind salary).");
         sb.AppendLine("- Спорные условия (график, оформление, место) вне описания вакансии — handoff, handoff_kind conditions.");
         if (!agent.CanScheduleInterviews)
@@ -764,11 +946,18 @@ public sealed class RecruiterAgent(
         sb.AppendLine("- Собеседование уже предложено или назначено (см. «Собеседование» ниже) — отвечай по этим данным (время, формат, место). Кандидат " +
                       "просит другое время — action other_time; отказывается от приглашения — decline_interview; отменяет назначенное — cancel_interview " +
                       "(варианты времени и запись система сделает сама, время не называй сам).");
+        sb.AppendLine("- Кандидат называет удобный день или время собеседования («можно в четверг в 15:00?», «завтра после обеда», «только вечером», " +
+                      "«на следующей неделе») — заполни wish по текущей дате выше: date — день (ГГГГ-ММ-ДД), date_to — последний день, если подходят " +
+                      "несколько дней; time — точное время (ЧЧ:ММ); from и to — промежуток (утром 09:00–12:00, после обеда 13:00–18:00, вечером с 17:00). " +
+                      "Чего кандидат не назвал — пусто. Action — other_time (собеседование уже предложено или назначено) или propose_interview (приглашаешь " +
+                      "сейчас). Свободно ли это время у интервьюеров, проверит система по календарю: свободно — сама запишет, занято — предложит " +
+                      "ближайшие варианты. Сам время не подтверждай и не обещай.");
         sb.AppendLine();
         sb.AppendLine("Ответ — только JSON без пояснений:");
         sb.AppendLine("{\"action\":\"reply|propose_interview|handoff|other_time|decline_interview|cancel_interview\",\"messages\":[\"сообщение кандидату\",\"второе сообщение, если нужно\"]," +
                       $"\"handoff_kind\":\"{HandoffKinds}\",\"reason\":\"для HR, кратко\",\"notes\":\"новое о кандидате (опыт, ожидания), кратко или пусто\"," +
-                      "\"answers\":{\"вопрос отбора\":\"ответ кандидата\"},\"vacancy\":\"код вакансии, которую выбрал кандидат (V12), или пусто\"}");
+                      "\"answers\":{\"вопрос отбора\":\"ответ кандидата\"},\"vacancy\":\"код вакансии, которую выбрал кандидат (V12), или пусто\"," +
+                      "\"wish\":{\"date\":\"\",\"date_to\":\"\",\"time\":\"\",\"from\":\"\",\"to\":\"\"}}");
         return sb.ToString();
     }
 
@@ -777,7 +966,7 @@ public sealed class RecruiterAgent(
     /// с описанием, требованиями и условиями, резюме, текущее время. Агент знает всё это с первого сообщения кандидата.
     /// </summary>
     internal static string Context(DialogAgent agent, Candidate candidate, CandidateApplication? application, IReadOnlyList<Vacancy> open, string? resume,
-        DateTimeOffset now, CandidateLang lang = CandidateLang.Ru, Interview? interview = null)
+        DateTimeOffset now, CandidateLang lang = CandidateLang.Ru, Interview? interview = null, CandidateApplication? rejected = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine(DialogAgentPrompt.Now(agent, now));
@@ -817,11 +1006,20 @@ public sealed class RecruiterAgent(
         }
         else
         {
+            if (rejected?.Vacancy is { } rv)
+            {
+                // Кандидату уже отказали: спросит о результате — отказ в принятом в компании виде, без причин.
+                sb.AppendLine($"Отклик кандидата на вакансию «{rv.Title}» закрыт: компания не готова пригласить его на следующий этап. Спросит о результате — " +
+                              "ответь вежливым отказом по образцу ниже, почти дословно, на языке кандидата; причин отказа не называй и не обсуждай, решение " +
+                              "не пересматривай и не обнадёживай. Заинтересуется другой работой — можно, как обычно, подобрать вакансию по его опыту.");
+                sb.AppendLine($"Образец отказа:\n{RecruiterTexts.PoliteRejection(lang, CandidateNames.Address(candidate.FullName))}");
+            }
+
             if (open.Count > 0)
             {
-                sb.AppendLine("Кандидат ещё не выбрал вакансию. Узнай, какая работа ему интересна, и предложи подходящую из открытых вакансий компании " +
-                              "(кандидат может написать код вакансии):");
-                sb.AppendLine("Открытые вакансии компании (данные OneBase):");
+                sb.AppendLine("Кандидат ещё не выбрал вакансию. Не перечисляй вакансии: спроси, по какой вакансии он пишет; спросит, какие есть, — узнай его " +
+                              "опыт и по нему предложи подходящую (кандидат может написать код вакансии).");
+                sb.AppendLine("Открытые вакансии компании (данные OneBase — чтобы подобрать подходящую, не для перечисления; зарплату — только если спросит):");
                 AppendVacancies(sb, open, agent.CanDiscussSalary, detailed: true);
             }
             else
@@ -885,7 +1083,8 @@ public sealed class RecruiterAgent(
         CandidateLang.UzLatn => $"Язык переписки кандидата: {CandidateLanguages.Label(lang)} ({CandidateLanguages.UzLatn}). Все сообщения кандидату пиши по-узбекски " +
                                 "ЛАТИНИЦЕЙ (o', g', sh, ch), не кириллицей и не по-русски — даже если в истории есть сообщения на другом языке. " +
                                 "Названия вакансий и компаний оставляй как в данных.",
-        _ => $"Язык переписки кандидата: {CandidateLanguages.Label(lang)} ({CandidateLanguages.RuCyrl}). Все сообщения кандидату пиши по-русски.",
+        _ => $"Язык переписки кандидата: {CandidateLanguages.Label(lang)} ({CandidateLanguages.RuCyrl}). Все сообщения кандидату пиши по-русски, " +
+             "на «Вы» с большой буквы: Вы, Вас, Вам, Ваш.",
     };
 
     private static string Stage(ApplicationStage stage) => stage switch
@@ -1027,6 +1226,11 @@ public sealed class RecruiterAgent(
         Guid? interviewId = null, CancellationToken ct = default)
     {
         var raw = turn.Raw;
+        if (turn.Lang == CandidateLang.Ru)
+        {
+            messages = messages.Select(RecruiterRules.PoliteYou).ToList();
+        }
+
         var result = await delivery.DeliverAsync(new AgentReplyDraft(turn.Agent, raw.ConversationId, raw.AccountId, raw.PeerId, turn.Candidate.FullName, raw.MessageId,
             string.IsNullOrEmpty(raw.Text) && raw.FileName is { } file ? $"[файл: {file}]" : raw.Text, action, messages, template, usage?.Model, usage?.Input ?? 0,
             usage?.Output ?? 0, turn.Candidate.Id, interviewId), ct);

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Clock, Loader2, MapPin, Pencil, Trash2, Users, X } from "lucide-react";
 import { Modal } from "@/components/files/Modal";
+import { NewInterviewForm } from "@/components/recruitment/NewInterview";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { KIND_LABELS, timeOf, type CalendarAbilities, type CalendarEventInput, type CalendarEventView, type CalendarKind, type CalendarPerson } from "@/lib/calendar";
@@ -161,13 +162,30 @@ function People({ value, onChange }: { value: CalendarPerson[]; onChange: (v: Ca
 
 /**
  * Новое событие или правка: название, вид (встреча, срок отчёта, важное событие), дата, время или «весь день», место, описание,
- * участники и аудитория — только участники, отдел (свой — руководителю, любой — HR и руководству) или вся компания.
+ * участники и аудитория — только участники, отдел (свой — руководителю, любой — HR и руководству) или вся компания. Кто ведёт подбор
+ * (canInterview), у нового события выбирает вид «Собеседование с кандидатом» — форма собеседования на этот день (запись подбора, а не
+ * просто встреча); onInterview — что получилось.
  */
-export function EventForm({ date, event, abilities, onClose }: { date: string; event?: CalendarEventView; abilities: CalendarAbilities | null; onClose: () => void }) {
+export function EventForm({
+  date,
+  event,
+  abilities,
+  onClose,
+  canInterview = false,
+  onInterview,
+}: {
+  date: string;
+  event?: CalendarEventView;
+  abilities: CalendarAbilities | null;
+  onClose: () => void;
+  canInterview?: boolean;
+  onInterview?: (message: string) => void;
+}) {
   const t = useT();
   const router = useRouter();
   const [title, setTitle] = useState(event?.title ?? "");
   const [kind, setKind] = useState<CalendarKind>(event?.kind ?? "Meeting");
+  const [interview, setInterview] = useState(false);
   const [day, setDay] = useState(event?.date ?? date);
   const [allDay, setAllDay] = useState(event?.allDay ?? false);
   const [start, setStart] = useState(timeOf(event?.start) ?? "10:00");
@@ -213,6 +231,49 @@ export function EventForm({ date, event, abilities, onClose }: { date: string; e
     }
   };
 
+  const kindSelect = (
+    <select
+      id="ev-kind"
+      value={interview ? "interview" : kind}
+      onChange={(e) => {
+        setInterview(e.target.value === "interview");
+        if (e.target.value !== "interview") setKind(e.target.value as CalendarKind);
+      }}
+      className={field}
+    >
+      {(Object.keys(KIND_LABELS) as CalendarKind[]).map((k) => (
+        <option key={k} value={k}>
+          {t(KIND_LABELS[k])}
+        </option>
+      ))}
+      {canInterview && !event && <option value="interview">{t("Собеседование с кандидатом")}</option>}
+    </select>
+  );
+
+  if (interview) {
+    return (
+      <Modal title={t("Новое собеседование")} onClose={onClose}>
+        <div className="me-ui space-y-4 px-5 py-4">
+          <div>
+            <label htmlFor="ev-kind" className={label}>
+              {t("Вид")}
+            </label>
+            {kindSelect}
+          </div>
+          <NewInterviewForm
+            date={day}
+            onCancel={onClose}
+            onDone={(message) => {
+              router.refresh();
+              onInterview?.(message);
+              onClose();
+            }}
+          />
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal title={event ? t("Изменить событие") : t("Новое событие")} onClose={onClose}>
       <form onSubmit={save} className="me-ui space-y-4 px-5 py-4">
@@ -227,13 +288,7 @@ export function EventForm({ date, event, abilities, onClose }: { date: string; e
             <label htmlFor="ev-kind" className={label}>
               {t("Вид")}
             </label>
-            <select id="ev-kind" value={kind} onChange={(e) => setKind(e.target.value as CalendarKind)} className={field}>
-              {(Object.keys(KIND_LABELS) as CalendarKind[]).map((k) => (
-                <option key={k} value={k}>
-                  {t(KIND_LABELS[k])}
-                </option>
-              ))}
-            </select>
+            {kindSelect}
           </div>
           <div>
             <label htmlFor="ev-date" className={label}>

@@ -57,7 +57,15 @@ const selectedFrom = (pathname: string) => (pathname.startsWith(`${DIALOGS_PATH}
  * /hr/recruitment/telegram/{id}, нижняя панель приложения скрыта). Палитра — токены макета (data-palette). Переход между диалогами —
  * без перезагрузки страницы (history), данные — опросом.
  */
-export function DialogsScreen({ initialSummary, canManage }: { initialSummary: DialogSummary | null; canManage: boolean }) {
+export function DialogsScreen({
+  initialSummary,
+  canManage,
+  initialFilter = "all",
+}: {
+  initialSummary: DialogSummary | null;
+  canManage: boolean;
+  initialFilter?: DialogFilter;
+}) {
   const t = useT();
   const pathname = usePathname();
   const selectedId = selectedFrom(pathname);
@@ -69,7 +77,7 @@ export function DialogsScreen({ initialSummary, canManage }: { initialSummary: D
   const [summary, setSummary] = useState<DialogSummary | null>(initialSummary);
   const [rows, setRows] = useState<DialogRow[] | null>(null);
   const [listLoading, setListLoading] = useState(true);
-  const [filter, setFilter] = useState<DialogFilter>("all");
+  const [filter, setFilter] = useState<DialogFilter>(initialFilter);
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [dialogLoading, setDialogLoading] = useState(false);

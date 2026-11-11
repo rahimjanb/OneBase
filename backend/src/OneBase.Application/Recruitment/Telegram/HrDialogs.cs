@@ -273,10 +273,11 @@ public sealed class HrDialogService(
 
         foreach (var m in modes)
         {
-            var to = ModeTo(m.Data);
+            var (to, reason) = ModeTo(m.Data);
             var who = Guid.TryParse(m.ActorId, out var actor) ? Name(actor) : null;
             items.Add(to == "Ai"
-                ? new HrDialogItem("system", "Диалог возвращён AI" + (who is null ? string.Empty : $" · {who}"), m.Timestamp, who, false, "sent", null, null, null, "returned_to_ai")
+                ? new HrDialogItem("system", reason == "hr_timeout" ? "Диалог вернулся к AI — HR не ответил за час"
+                    : "Диалог возвращён AI" + (who is null ? string.Empty : $" · {who}"), m.Timestamp, who, false, "sent", null, null, null, "returned_to_ai")
                 : new HrDialogItem("system", "HR взял диалог" + (who is null ? string.Empty : $" · {who}"), m.Timestamp, who, false, "sent", null, null, null, "hr_took_over"));
         }
 
@@ -293,17 +294,18 @@ public sealed class HrDialogService(
             candidate is null ? [] : await TemplatesAsync(candidate, ct), ctx.CanManage);
     }
 
-    /// <summary>Куда переключили режим (данные аудита — JSON: {"to": "Ai"}).</summary>
-    private static string ModeTo(string? data)
+    /// <summary>Куда переключили режим и почему (данные аудита — JSON: {"to": "Ai", "reason": "hr_timeout"}).</summary>
+    private static (string To, string? Reason) ModeTo(string? data)
     {
         try
         {
             using var json = JsonDocument.Parse(data ?? "{}");
-            return json.RootElement.TryGetProperty("to", out var to) && to.GetString() == "Ai" ? "Ai" : "Manual";
+            var to = json.RootElement.TryGetProperty("to", out var t) && t.GetString() == "Ai" ? "Ai" : "Manual";
+            return (to, json.RootElement.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null);
         }
         catch (JsonException)
         {
-            return "Manual";
+            return ("Manual", null);
         }
     }
 
@@ -388,7 +390,7 @@ public sealed class HrDialogService(
 
         var title = application?.Vacancy?.Title;
         list.Add(new HrDialogTemplate("invite", "Пригласить на собеседование", RecruiterTexts.InviteByHr(lang, title)));
-        list.Add(new HrDialogTemplate("reject", "Отказ — вежливо", RecruiterTexts.PoliteRejection(lang, title)));
+        list.Add(new HrDialogTemplate("reject", "Отказ — вежливо", RecruiterTexts.PoliteRejection(lang, CandidateNames.Address(candidate.FullName))));
         return list;
     }
 

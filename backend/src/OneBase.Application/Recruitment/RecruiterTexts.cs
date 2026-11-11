@@ -22,7 +22,7 @@ public static class RecruiterTexts
     public static string ChooseNumber(CandidateLang l) => P(l, "Напишите номер варианта.", "Variant raqamini yozing.", "Вариант рақамини ёзинг.");
 
     public static string Invitation(CandidateLang l) => P(l,
-        "Ваш опыт заинтересовал нас. Хотели бы пригласить вас на собеседование. Какое из предложенных времён вам удобно?",
+        "Ваш опыт заинтересовал нас. Хотели бы пригласить Вас на собеседование. Какое из предложенных времён Вам удобно?",
         "Sizning nomzodingiz bizni qiziqtirdi. Sizni suhbatga taklif qilmoqchimiz. Quyidagi vaqtlardan qaysi biri sizga qulay?",
         "Сизнинг номзодингиз бизни қизиқтирди. Сизни суҳбатга таклиф қилмоқчимиз. Қуйидаги вақтлардан қайси бири сизга қулай?");
 
@@ -37,13 +37,21 @@ public static class RecruiterTexts
 
     public static string OtherSlots(CandidateLang l) => P(l, "Хорошо, вот другие варианты:", "Mayli, boshqa variantlar:", "Майли, бошқа вариантлар:");
 
+    /// <summary>Названное кандидатом время занято — ближайшие свободные.</summary>
+    public static string WishBusy(CandidateLang l) => P(l, "На это время, к сожалению, уже занято. Ближайшее свободное:",
+        "Afsuski, bu vaqt band. Eng yaqin bo'sh vaqtlar:", "Афсуски, бу вақт банд. Энг яқин бўш вақтлар:");
+
+    /// <summary>Свободное время по пожеланию кандидата (день, промежуток).</summary>
+    public static string WishSlots(CandidateLang l) => P(l, "Есть такое свободное время:", "Bo'sh vaqtlarni ko'rdim — quyidagi variantlar bor:",
+        "Бўш вақтларни кўрдим — қуйидаги вариантлар бор:");
+
     public static string NoSlots(CandidateLang l) => P(l,
-        "Время собеседования с вами согласует сотрудник HR — он напишет здесь.",
+        "Время собеседования с Вами согласует сотрудник HR — он напишет здесь.",
         "Suhbat vaqtini HR xodimi siz bilan kelishadi — u shu yerga yozadi.",
         "Суҳбат вақтини HR ходими сиз билан келишади — у шу ерга ёзади.");
 
     public static string SlotTakenNoOther(CandidateLang l) => P(l,
-        "Это время только что заняли. Сотрудник HR предложит вам другое время.",
+        "Это время только что заняли. Сотрудник HR предложит Вам другое время.",
         "Bu vaqt band bo'lib qoldi. HR xodimi sizga boshqa vaqtni taklif qiladi.",
         "Бу вақт банд бўлиб қолди. HR ходими сизга бошқа вақтни таклиф қилади.");
 
@@ -78,7 +86,7 @@ public static class RecruiterTexts
             " Сизга қулайми? «Ҳа» деб жавоб беринг ёки қайси вақт қулайлигини ёзинг.");
 
     public static string ConfirmedThanks(CandidateLang l, string at) => P(l,
-        $"Спасибо, ждём вас {at} ({TimeZoneNote(l)}).", $"Rahmat, sizni {at} da kutamiz ({TimeZoneNote(l)}).", $"Раҳмат, сизни {at} да кутамиз ({TimeZoneNote(l)}).");
+        $"Спасибо, ждём Вас {at} ({TimeZoneNote(l)}).", $"Rahmat, sizni {at} da kutamiz ({TimeZoneNote(l)}).", $"Раҳмат, сизни {at} да кутамиз ({TimeZoneNote(l)}).");
 
     public static string Cancelled(CandidateLang l, string at) => P(l,
         $"Собеседование {at} отменено. Если захотите выбрать другое время — напишите сюда.",
@@ -102,7 +110,7 @@ public static class RecruiterTexts
 
     /// <summary>Не приглашаем сами (оценка ниже порога вакансии) — без обещаний и без отказа: решают сотрудники.</summary>
     public static string PassToColleagues(CandidateLang l) => P(l,
-        "Спасибо за ответы! Передаю вашу анкету коллегам — они свяжутся с вами здесь.",
+        "Спасибо за ответы! Передаю Вашу анкету коллегам — они свяжутся с Вами здесь.",
         "Javoblaringiz uchun rahmat! Anketangizni hamkasblarimga topshiraman — ular shu yerda siz bilan bog'lanishadi.",
         "Жавобларингиз учун раҳмат! Анкетангизни ҳамкасбларимга топшираман — улар шу ерда сиз билан боғланишади.");
 
@@ -113,26 +121,31 @@ public static class RecruiterTexts
 
     /// <summary>Шаблон HR «Пригласить на собеседование» — без времени: время HR назначает сам или кандидат выбирает из вариантов.</summary>
     public static string InviteByHr(CandidateLang l, string? vacancy) => P(l,
-        $"Приглашаем вас на собеседование{(vacancy is null ? string.Empty : $" на вакансию «{vacancy}»")}. Подскажите, когда вам удобно?",
+        $"Приглашаем Вас на собеседование{(vacancy is null ? string.Empty : $" на вакансию «{vacancy}»")}. Подскажите, когда Вам удобно?",
         $"Sizni{(vacancy is null ? string.Empty : $" «{vacancy}» vakansiyasi bo'yicha")} suhbatga taklif qilamiz. Qachon sizga qulay?",
         $"Сизни{(vacancy is null ? string.Empty : $" «{vacancy}» вакансияси бўйича")} суҳбатга таклиф қиламиз. Қачон сизга қулай?");
 
-    /// <summary>Шаблон HR «Отказ — вежливо».</summary>
-    public static string PoliteRejection(CandidateLang l, string? vacancy) => Cap(P(l,
-        $"Спасибо за интерес{(vacancy is null ? string.Empty : $" к вакансии «{vacancy}»")} и за время, которое вы нам уделили. К сожалению, сейчас мы не готовы предложить вам эту позицию. Желаем удачи в поиске работы!",
-        $"{(vacancy is null ? string.Empty : $"«{vacancy}» vakansiyasiga ")}qiziqishingiz va ajratgan vaqtingiz uchun rahmat. Afsuski, hozircha bu lavozimni taklif qila olmaymiz. Ish qidirishda omad tilaymiz!",
-        $"{(vacancy is null ? string.Empty : $"«{vacancy}» вакансиясига ")}қизиқишингиз ва ажратган вақтингиз учун раҳмат. Афсуски, ҳозирча бу лавозимни таклиф қила олмаймиз. Иш қидиришда омад тилаймиз!"));
-
-    private static string Cap(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+    /// <summary>
+    /// Отказ кандидату (шаблон HR «Отказ — вежливо»; по нему же отвечает AI-рекрутер, если кандидату уже отказали): обращение «Сардор Ака,» —
+    /// <see cref="CandidateNames.Address"/>; имени нет — приветствие. Без причин отказа, с обещанием обратиться, если понадобится его опыт.
+    /// </summary>
+    public static string PoliteRejection(CandidateLang l, string? address) =>
+        (address is null ? P(l, "Здравствуйте!", "Assalomu alaykum!", "Ассалому алайкум!") : $"{address},") + "\n" + P(l,
+            "Большое спасибо за интерес к нашей компании! К сожалению, сейчас мы не готовы пригласить Вас на следующий этап. Ценим Ваше внимание и будем " +
+            "рады взаимодействию в будущем. Наше общение сохранится в нашей базе, и в случае потребности в Вашем опыте мы обязательно обратимся.",
+            "Kompaniyamizga qiziqish bildirganingiz uchun katta rahmat! Afsuski, hozircha Sizni keyingi bosqichga taklif qila olmaymiz. E'tiboringizni " +
+            "qadrlaymiz va kelajakda hamkorlik qilishdan xursand bo'lamiz. Suhbatimiz bazamizda saqlanadi va tajribangizga ehtiyoj tug'ilsa, albatta Siz bilan bog'lanamiz.",
+            "Компаниямизга қизиқиш билдирганингиз учун катта раҳмат! Афсуски, ҳозирча Сизни кейинги босқичга таклиф қила олмаймиз. Эътиборингизни " +
+            "қадрлаймиз ва келажакда ҳамкорлик қилишдан хурсанд бўламиз. Суҳбатимиз базамизда сақланади ва тажрибангизга эҳтиёж туғилса, албатта Сиз билан боғланамиз.");
 
     public static string Handoff(CandidateLang l) => P(l,
-        "Передаю ваш вопрос сотруднику HR — он скоро ответит вам здесь.",
+        "Передаю Ваш вопрос сотруднику HR — он скоро ответит Вам здесь.",
         "Savolingizni HR xodimiga topshiraman — u tez orada shu yerda javob beradi.",
         "Саволингизни HR ходимига топшираман — у тез орада шу ерда жавоб беради.");
 
     /// <summary>Резюме получено и обрабатывается — без обещаний, что его уже изучили.</summary>
     public static string ResumeReceived(CandidateLang l) => P(l,
-        "Спасибо, я получил ваше резюме. Сейчас оно обрабатывается, и мы свяжемся с вами.",
+        "Спасибо, я получил Ваше резюме. Сейчас оно обрабатывается, и мы свяжемся с Вами.",
         "Rezyumeyingizni oldim. Hujjatni ko'rib chiqyapman. Sizga tez orada javob beraman.",
         "Резюмейингизни олдим. Ҳужжатни кўриб чиқяпман. Сизга тез орада жавоб бераман.");
 

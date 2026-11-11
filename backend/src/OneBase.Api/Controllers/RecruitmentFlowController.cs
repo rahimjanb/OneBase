@@ -102,8 +102,9 @@ public sealed class RecruitmentFlowController(RecruitmentService recruitment, In
     public async Task<IReadOnlyList<Guid>> SetInterviewers(Guid id, InterviewersInput input, CancellationToken ct) =>
         await interviews.SetInterviewersAsync(await ContextAsync(ct), id, input, ct);
 
+    /// <summary>Свободное время интервьюеров вакансии: на день (date — все варианты дня) или ближайшие (по одному в день, 2 недели).</summary>
     [HttpGet("vacancies/{id:guid}/slots")]
-    public async Task<IReadOnlyList<SlotView>> Slots(Guid id, CancellationToken ct)
+    public async Task<IReadOnlyList<SlotView>> Slots(Guid id, [FromQuery] DateOnly? date, CancellationToken ct)
     {
         var ctx = await ContextAsync(ct);
         if (!ctx.SeesCandidates)
@@ -111,8 +112,13 @@ public sealed class RecruitmentFlowController(RecruitmentService recruitment, In
             throw new FieldForbiddenException("Нет доступа к подбору.");
         }
 
-        return await interviews.FreeSlotsAsync(id, 12, 14, ct);
+        return date is { } day ? await interviews.DaySlotsAsync(ctx, id, day, ct) : await interviews.FreeSlotsAsync(id, 12, 14, ct);
     }
+
+    /// <summary>Отклики для окна «Новое собеседование» (поиск по кандидату, телефону, вакансии) — с действующим собеседованием, если оно уже есть.</summary>
+    [HttpGet("interviews/bookable")]
+    public async Task<IReadOnlyList<BookableView>> Bookable([FromQuery] string? search, CancellationToken ct) =>
+        await interviews.BookableAsync(await ContextAsync(ct), search, ct);
 
     [HttpPost("interviews/book")]
     public async Task<IReadOnlyList<InterviewView>> Book(BookInput input, CancellationToken ct) => await interviews.BookByHrAsync(await ContextAsync(ct), input, ct);

@@ -15,6 +15,25 @@ namespace OneBase.Application.Recruitment;
 
 public sealed record SlotView(DateTimeOffset StartsAt, DateTimeOffset EndsAt);
 
+/// <summary>
+/// Пожелание ко времени собеседования (кандидат в переписке — разбирает модель; HR — выбранный день): день или дни (Date…DateTo, пояс
+/// собеседования), точное время (Time) или промежуток (From–To). Пустое поле — без условия.
+/// </summary>
+public sealed record SlotWish(DateOnly? Date = null, DateOnly? DateTo = null, TimeOnly? Time = null, TimeOnly? From = null, TimeOnly? To = null)
+{
+    public bool IsEmpty => Date is null && DateTo is null && Time is null && From is null && To is null;
+}
+
+/// <summary>Варианты по пожеланию: Exact — первым идёт ровно то время, что просили, и оно свободно.</summary>
+public sealed record WishSlots(IReadOnlyList<SlotView> Slots, bool Exact);
+
+/// <summary>
+/// Отклик, на который HR может назначить собеседование (окно «Новое собеседование» в «Собеседованиях» и в календаре): кандидат, телефон,
+/// вакансия, этап и действующее собеседование, если оно уже есть (тогда — перенос, а не новое).
+/// </summary>
+public sealed record BookableView(Guid ApplicationId, Guid CandidateId, string CandidateName, string? Phone, Guid VacancyId, string VacancyCode, string VacancyTitle,
+    string Stage, Guid? InterviewId, string? InterviewStatus, DateTimeOffset? InterviewStartsAt, bool HasTelegram);
+
 public sealed record InterviewersInput(IReadOnlyList<Guid> UserIds);
 
 /// <summary>
@@ -350,6 +369,18 @@ public sealed class InterviewService(IAppDbContext db, RecruitmentExceptions exc
     public async Task<IReadOnlyList<SlotView>> FreeSlotsAsync(Guid vacancyId, int count, int days, CancellationToken ct, DateTimeOffset? after = null, bool onePerDay = true)
     {
         var cfg = await ConfigAsync(vacancyId, ct);
+        var today = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), cfg.Zone).Date;
+        return await ScanAsync(cfg, count, today, today.AddDays(Math.Min(days, cfg.HorizonDays)), after, onePerDay, null, null, null, null, ct);
+    }
+
+    /// <summary>
+    /// Перебор сетки вакансии (с начала рабочего дня шагом длительности) в днях [first, last] в пределах горизонта: рабочий день, без перерывов,
+    /// не раньше срока записи и after, внутри промежутка from–to (если задан), все участники свободны (своё собеседование exceptInterview — нет),
+    /// кроме времени skip (текущее время собеседования при переносе).
+    /// </summary>
+    private async Task<List<SlotView>> ScanAsync(InterviewConfig cfg, int count, DateTime first, DateTime last, DateTimeOffset? after, bool onePerDay,
+        TimeOnly? from, TimeOnly? to, Guid? exceptInterview, DateTimeOffset? skip, CancellationToken ct)
+    {
         var zone = cfg.Zone;
         var now = clock.GetUtcNow();
         var earliest = now + TimeSpan.FromHours(cfg.NoticeHours);
@@ -358,31 +389,39 @@ public sealed class InterviewService(IAppDbContext db, RecruitmentExceptions exc
             earliest = a;
         }
 
-        var horizon = Math.Min(days, cfg.HorizonDays);
         var today = TimeZoneInfo.ConvertTime(now, zone).Date;
-        var busy = await BusyAsync(cfg.Users, now, now.AddDays(horizon + 2), zone, null, ct);
+        first = first < today ? today : first.Date;
+        last = last > today.AddDays(cfg.HorizonDays) ? today.AddDays(cfg.HorizonDays) : last.Date;
         var result = new List<SlotView>();
-        for (var d = 0; d <= horizon && result.Count < count; d++)
+        if (first > last || count <= 0)
         {
-            var date = today.AddDays(d);
-            var iso = date.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)date.DayOfWeek;
-            if (!cfg.Days.Contains(iso))
+            return result;
+        }
+
+        var busy = await BusyAsync(cfg.Users, Moment(first, zone), Moment(last.AddDays(2), zone), zone, exceptInterview, ct);
+        for (var date = first; date <= last && result.Count < count; date = date.AddDays(1))
+        {
+            if (!WorkDay(cfg, date))
             {
                 continue;
             }
 
             for (var start = cfg.DayStart.ToTimeSpan(); start + cfg.Length <= cfg.DayEnd.ToTimeSpan() && result.Count < count; start += cfg.Length)
             {
-                var local = date + start;
-                var from = new DateTimeOffset(local, zone.GetUtcOffset(local));
-                var to = from + cfg.Length;
                 var (lf, lt) = (TimeOnly.FromTimeSpan(start), TimeOnly.FromTimeSpan(start + cfg.Length));
-                if (from < earliest || cfg.Breaks.Any(b => b.From < lt && b.To > lf) || Overlaps(busy, from, to))
+                if (from is { } wf && lf < wf || to is { } wt && lt > wt)
                 {
                     continue;
                 }
 
-                result.Add(new SlotView(from.ToUniversalTime(), to.ToUniversalTime()));
+                var at = Moment(date + start, zone);
+                var end = at + cfg.Length;
+                if (at < earliest || cfg.Breaks.Any(b => b.From < lt && b.To > lf) || Overlaps(busy, at, end) || skip is { } x && x == at)
+                {
+                    continue;
+                }
+
+                result.Add(new SlotView(at.ToUniversalTime(), end.ToUniversalTime()));
                 if (onePerDay)
                 {
                     break;
@@ -391,6 +430,90 @@ public sealed class InterviewService(IAppDbContext db, RecruitmentExceptions exc
         }
 
         return result;
+    }
+
+    private static DateTimeOffset Moment(DateTime local, TimeZoneInfo zone) => new(local, zone.GetUtcOffset(local));
+
+    private static bool WorkDay(InterviewConfig cfg, DateTime date) => cfg.Days.Contains(date.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)date.DayOfWeek);
+
+    /// <summary>
+    /// Точное время (не обязательно по сетке): рабочий день и часы вакансии, без перерывов, не раньше срока записи, в пределах горизонта, все
+    /// участники свободны (своё собеседование exceptInterview — не помеха). Свободно — слот, иначе null.
+    /// </summary>
+    private async Task<SlotView?> ExactAsync(InterviewConfig cfg, DateTime local, Guid? exceptInterview, CancellationToken ct)
+    {
+        var zone = cfg.Zone;
+        var now = clock.GetUtcNow();
+        var at = Moment(local, zone);
+        var end = at + cfg.Length;
+        var (lf, lt) = (TimeOnly.FromDateTime(local), TimeOnly.FromDateTime(local + cfg.Length));
+        var today = TimeZoneInfo.ConvertTime(now, zone).Date;
+        if (!WorkDay(cfg, local.Date) || lf < cfg.DayStart || lt > cfg.DayEnd || lt < lf || at < now + TimeSpan.FromHours(cfg.NoticeHours)
+            || local.Date > today.AddDays(cfg.HorizonDays) || cfg.Breaks.Any(b => b.From < lt && b.To > lf))
+        {
+            return null;
+        }
+
+        return Overlaps(await BusyAsync(cfg.Users, at, end, zone, exceptInterview, ct), at, end) ? null : new SlotView(at.ToUniversalTime(), end.ToUniversalTime());
+    }
+
+    /// <summary>
+    /// Варианты по пожеланию (свободное время интервьюера и участников вакансии): точное время свободно — оно первым (Exact), дальше — соседние
+    /// в тот же день; иначе — свободное время в нужные дни и часы, ближайшее к пожеланию (несколько в день); там ничего — ближайшие свободные
+    /// с нужного дня (по одному в день). Время notAt (текущее собеседование) не предлагается; exceptInterview — своё собеседование не занимает время.
+    /// </summary>
+    public async Task<WishSlots> WishSlotsAsync(Guid vacancyId, SlotWish wish, int count, Guid? exceptInterview, CancellationToken ct, DateTimeOffset? notAt = null)
+    {
+        var cfg = await ConfigAsync(vacancyId, ct);
+        var today = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), cfg.Zone).Date;
+        var first = wish.Date?.ToDateTime(TimeOnly.MinValue) ?? today;
+        var last = wish.DateTo?.ToDateTime(TimeOnly.MinValue) ?? wish.Date?.ToDateTime(TimeOnly.MinValue) ?? today.AddDays(cfg.HorizonDays);
+        if (last < first)
+        {
+            (first, last) = (last, first);
+        }
+
+        bool Other(SlotView s) => notAt is not { } n || s.StartsAt != n.ToUniversalTime();
+        var skip = notAt?.ToUniversalTime();
+        if (wish.Time is { } time)
+        {
+            // Точное время — в названный день (сразу запись — только если день один и время свободно); без дня — ближайший день, где оно
+            // свободно, но выбирает кандидат.
+            var single = wish.Date is { } day && (wish.DateTo is null || wish.DateTo == day);
+            for (var date = first < today ? today : first; date <= last && date <= today.AddDays(cfg.HorizonDays); date = date.AddDays(1))
+            {
+                if (await ExactAsync(cfg, date + time.ToTimeSpan(), exceptInterview, ct) is { } exact && Other(exact))
+                {
+                    var near = (await ScanAsync(cfg, 48, date, date, null, false, null, null, exceptInterview, skip, ct))
+                        .Where(s => !(s.StartsAt < exact.EndsAt && s.EndsAt > exact.StartsAt))
+                        .OrderBy(s => Math.Abs((s.StartsAt - exact.StartsAt).TotalMinutes)).Take(count - 1);
+                    return new WishSlots([exact, .. near.OrderBy(s => s.StartsAt)], single);
+                }
+
+                if (single)
+                {
+                    break;
+                }
+            }
+        }
+
+        // Промежуток: точное время ± 3 часа, иначе — from–to пожелания; в каждом дне — ближайшие к пожеланию, дни — по порядку.
+        var (from, to) = wish.Time is { } t
+            ? (wish.From ?? (t.Hour >= 3 ? t.AddHours(-3) : TimeOnly.MinValue), wish.To ?? (t.Hour <= 20 ? t.AddHours(3) : TimeOnly.MaxValue))
+            : (wish.From, wish.To);
+        var inWindow = await ScanAsync(cfg, 200, first, last, null, false, from, to, exceptInterview, skip, ct);
+        if (inWindow.Count > 0)
+        {
+            var target = (wish.Time ?? from)?.ToTimeSpan();
+            var pick = inWindow
+                .GroupBy(s => Local(s.StartsAt, cfg.TimeZoneId).Date)
+                .SelectMany(g => g.OrderBy(s => target is { } x ? Math.Abs((Local(s.StartsAt, cfg.TimeZoneId).TimeOfDay - x).TotalMinutes) : 0).Select((s, i) => (s, i)))
+                .OrderBy(x => x.i).ThenBy(x => x.s.StartsAt)
+                .Take(count).Select(x => x.s).OrderBy(s => s.StartsAt).ToList();
+            return new WishSlots(pick, false);
+        }
+
+        return new WishSlots(await ScanAsync(cfg, count, first, today.AddDays(cfg.HorizonDays), null, true, null, null, exceptInterview, skip, ct), false);
     }
 
     // ---------- Приглашение ----------
@@ -406,9 +529,11 @@ public sealed class InterviewService(IAppDbContext db, RecruitmentExceptions exc
 
     /// <summary>
     /// Варианты времени кандидату (AI-рекрутер или HR): три свободных слота в разные дни; after — «другое время» (позже предложенных). У действующего
-    /// собеседования варианты — для переноса (собеседование остаётся в силе, пока кандидат не выбрал). Слотов нет — исключение «расписание».
+    /// собеседования варианты — для переноса (собеседование остаётся в силе, пока кандидат не выбрал). offered — уже подобранные варианты (по
+    /// пожеланию кандидата, <see cref="WishSlotsAsync"/>). Слотов нет — исключение «расписание».
     /// </summary>
-    public async Task<(Interview Interview, IReadOnlyList<SlotView> Slots)> ProposeAsync(Guid applicationId, Guid? actorId, CancellationToken ct, DateTimeOffset? after = null)
+    public async Task<(Interview Interview, IReadOnlyList<SlotView> Slots)> ProposeAsync(Guid applicationId, Guid? actorId, CancellationToken ct, DateTimeOffset? after = null,
+        IReadOnlyList<SlotView>? offered = null)
     {
         var application = await ApplicationAsync(applicationId, ct);
         if (RecruitmentRules.IsClosed(application.Stage))
@@ -417,7 +542,7 @@ public sealed class InterviewService(IAppDbContext db, RecruitmentExceptions exc
         }
 
         var cfg = await ConfigAsync(application.VacancyId, ct);
-        var slots = await FreeSlotsAsync(application.VacancyId, 3, cfg.HorizonDays, ct, after);
+        var slots = offered ?? await FreeSlotsAsync(application.VacancyId, 3, cfg.HorizonDays, ct, after);
         var interview = await CurrentAsync(applicationId, ct);
         if (interview is null)
         {
@@ -941,6 +1066,54 @@ public sealed class InterviewService(IAppDbContext db, RecruitmentExceptions exc
                     f.Technical, f.Communication, f.Professional, f.Strengths, f.Weaknesses, f.Comments, f.Recommendation, f.NextStage?.ToString(),
                     f.UpdatedAt ?? f.CreatedAt)).ToList());
         }).ToList();
+    }
+
+    /// <summary>
+    /// Отклики для окна «Новое собеседование»: открытые (не закрытые этапом), поиск по имени, телефону или Telegram кандидата, коду или названию
+    /// вакансии; свежие первыми. У каждого — действующее собеседование, если есть, и есть ли диалог в Telegram (куда придут варианты и вопрос).
+    /// </summary>
+    public async Task<IReadOnlyList<BookableView>> BookableAsync(RecruitmentContext ctx, string? search, CancellationToken ct)
+    {
+        Manage(ctx);
+        var q = db.CandidateApplications.AsNoTracking().Where(a => a.ClosedAt == null && a.Stage != ApplicationStage.Hired && a.Stage != ApplicationStage.Rejected
+                                                                   && a.Stage != ApplicationStage.Withdrawn);
+        if (Clean(search, 100) is { } s)
+        {
+            var lower = s.ToLower().TrimStart('#', '@');
+            var digits = new string(s.Where(char.IsAsciiDigit).ToArray());
+            var number = (lower.StartsWith('v') || lower.StartsWith('в')) && int.TryParse(lower[1..], out var n) ? n : (int?)null;
+            q = q.Where(a => a.Candidate!.FullName.ToLower().Contains(lower)
+                             || a.Vacancy!.Title.ToLower().Contains(lower) || (number != null && a.Vacancy!.Number == number)
+                             || db.CandidateContacts.Any(x => x.CandidateId == a.CandidateId && (x.Value.ToLower().Contains(lower) || (digits.Length >= 4 && x.Value.Contains(digits)))));
+        }
+
+        var rows = await q.OrderByDescending(a => a.StageChangedAt).Take(20)
+            .Select(a => new { a.Id, a.CandidateId, a.Candidate!.FullName, a.VacancyId, a.Vacancy!.Number, a.Vacancy.Title, a.Stage }).ToListAsync(ct);
+        var candidateIds = rows.Select(r => r.CandidateId).Distinct().ToList();
+        var applicationIds = rows.Select(r => r.Id).ToList();
+        var phones = await db.CandidateContacts.AsNoTracking().Where(c => candidateIds.Contains(c.CandidateId) && c.Kind == CandidateContactKind.Phone)
+            .OrderByDescending(c => c.Verified).Select(c => new { c.CandidateId, c.Value }).ToListAsync(ct);
+        var current = await db.Interviews.AsNoTracking()
+            .Where(i => applicationIds.Contains(i.ApplicationId) && (Active.Contains(i.Status) || i.Status == InterviewStatus.Proposed))
+            .OrderByDescending(i => i.UpdatedAt ?? i.CreatedAt).Select(i => new { i.ApplicationId, i.Id, i.Status, i.StartsAt }).ToListAsync(ct);
+        var telegram = await db.TelegramConversations.AsNoTracking()
+            .Where(c => c.Department == TelegramDepartments.Hr && c.RelatedType == RecruitmentService.CandidateRelation && c.RelatedId != null && candidateIds.Contains(c.RelatedId.Value))
+            .Select(c => c.RelatedId!.Value).Distinct().ToListAsync(ct);
+        return rows.Select(r =>
+        {
+            var i = current.FirstOrDefault(x => x.ApplicationId == r.Id);
+            return new BookableView(r.Id, r.CandidateId, r.FullName, phones.FirstOrDefault(p => p.CandidateId == r.CandidateId)?.Value, r.VacancyId, "V" + r.Number,
+                r.Title, r.Stage.ToString(), i?.Id, i?.Status.ToString(), i?.StartsAt, telegram.Contains(r.CandidateId));
+        }).ToList();
+    }
+
+    /// <summary>Свободное время интервьюера и участников вакансии на день (все варианты по сетке вакансии) — для выбора времени HR.</summary>
+    public async Task<IReadOnlyList<SlotView>> DaySlotsAsync(RecruitmentContext ctx, Guid vacancyId, DateOnly date, CancellationToken ct)
+    {
+        Read(ctx);
+        var cfg = await ConfigAsync(vacancyId, ct);
+        var day = date.ToDateTime(TimeOnly.MinValue);
+        return await ScanAsync(cfg, 64, day, day, null, false, null, null, null, null, ct);
     }
 
     /// <summary>HR назначает время: кандидат подтвердил (по телефону) — сразу подтверждено; иначе — ждёт его «да» в Telegram.</summary>

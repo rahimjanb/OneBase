@@ -9,7 +9,8 @@ namespace OneBase.Application.Work;
 /// </summary>
 public sealed class UserNotifier(IAppDbContext db)
 {
-    public void Notify(Guid? recipientId, UserNotificationKind kind, string title, string? body = null, string? link = null)
+    /// <summary>Уведомление сотруднику (сохраняется вместе с остальными изменениями). at — время создания по часам службы (по умолчанию — сейчас).</summary>
+    public void Notify(Guid? recipientId, UserNotificationKind kind, string title, string? body = null, string? link = null, DateTimeOffset? at = null)
     {
         if (recipientId is null)
         {
@@ -23,6 +24,7 @@ public sealed class UserNotifier(IAppDbContext db)
             Title = Trim(title, 300)!,
             Body = Trim(body, 2000),
             Link = Trim(link, 500),
+            CreatedAt = at ?? DateTimeOffset.UtcNow,
         });
     }
 

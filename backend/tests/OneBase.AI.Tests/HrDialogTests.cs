@@ -110,7 +110,7 @@ public class HrDialogTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         Assert.Equal(["address", "invite", "reject"], templates.Select(t => t.Key));
         Assert.Equal("Офисимиз манзили: Ташкент, ул. Навои, 1. Возьмите паспорт.", templates[0].Text);
         Assert.All(templates.Skip(1), t => Assert.Equal(CandidateLanguages.UzCyrl, new LanguageDetectionService().Detect(t.Text).Code));
-        Assert.StartsWith("Приглашаем вас на собеседование на вакансию «Водитель-экспедитор»",
+        Assert.StartsWith("Приглашаем Вас на собеседование на вакансию «Водитель-экспедитор»",
             (await dialogs.GetAsync(_hr.Hr, aiId, default)).Templates.Single(t => t.Key == "invite").Text);
 
         // Только просмотр — читать можно, писать и звать AI — нет.
@@ -139,7 +139,7 @@ public class HrDialogTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
             return "{\"action\":\"reply\",\"messages\":[\"Спасибо за ответ!\",\"Когда вам удобно прийти на собеседование?\"]}";
         });
         var draft = await dialogs.DraftAsync(_hr.Hr, id, default);
-        Assert.Equal("Спасибо за ответ!\n\nКогда вам удобно прийти на собеседование?", draft);
+        Assert.Equal("Спасибо за ответ!\n\nКогда Вам удобно прийти на собеседование?", draft);
         Assert.Equal(queued, await db.TelegramOutgoingMessages.CountAsync());
         Assert.Equal("hr.recruiter.draft", fixture.Gateway.Calls[^1].Options.Context.Purpose);
 

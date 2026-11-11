@@ -160,9 +160,16 @@ public sealed class TelegramOutboxRunner(
             }
 
             var interval = TimeSpan.FromSeconds(Math.Max(1, settings?.MinIntervalSeconds ?? 5));
-            var last = await db.TelegramOutgoingMessages.Where(m => m.AccountId == group.Key.AccountId && m.Department == group.Key.Department && m.SentAt != null)
-                .MaxAsync(m => m.SentAt, ct);
-            if (last is { } l && now - l < interval)
+            var last = await db.TelegramOutgoingMessages.AsNoTracking()
+                .Where(m => m.AccountId == group.Key.AccountId && m.Department == group.Key.Department && m.SentAt != null)
+                .OrderByDescending(m => m.SentAt).Select(m => new { m.SentAt, m.RelatedType, m.RelatedId, m.PeerId }).FirstOrDefaultAsync(ct);
+
+            // Части ответа ставятся в очередь по одной: круг, разбуженный первой частью, мог её уже отправить без остальных. Продолжение
+            // начатого ответа тому же собеседнику — первым и без паузы номера (пауза — между разными собеседниками и сообщениями).
+            var continuation = last is { RelatedType: { } lastType, RelatedId: { } lastRelated, PeerId: var lastPeer }
+                ? group.FirstOrDefault(m => m.RelatedType == lastType && m.RelatedId == lastRelated && m.PeerId == lastPeer)
+                : null;
+            if (continuation is null && last?.SentAt is { } l && now - l < interval)
             {
                 continue;
             }
@@ -175,7 +182,7 @@ public sealed class TelegramOutboxRunner(
                 continue;
             }
 
-            var first = group.First();
+            var first = continuation ?? group.First();
             if (!await SendAsync(first.Id, now, ct))
             {
                 continue;
@@ -187,7 +194,7 @@ public sealed class TelegramOutboxRunner(
             if (first.RelatedType is { } relatedType && first.RelatedId is { } related)
             {
                 var left = (settings?.DailyLimit ?? 200) - today - 1;
-                foreach (var next in group.Skip(1).Where(m => m.RelatedType == relatedType && m.RelatedId == related && m.PeerId == first.PeerId))
+                foreach (var next in group.Where(m => m.Id != first.Id && m.RelatedType == relatedType && m.RelatedId == related && m.PeerId == first.PeerId))
                 {
                     if (left-- <= 0 || !await SendAsync(next.Id, clock.GetUtcNow(), ct))
                     {

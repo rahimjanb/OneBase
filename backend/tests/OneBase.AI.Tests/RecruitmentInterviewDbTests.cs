@@ -285,6 +285,75 @@ public class RecruitmentInterviewDbTests(DataManagerDb fixture) : IClassFixture<
     }
 
     [PostgresFact]
+    public async Task Candidate_names_a_day_and_time_and_the_recruiter_checks_the_interviewers_calendar_moves_or_offers_the_nearest_free_time()
+    {
+        var (scope, db, vacancy) = await StartAsync();
+        using var _ = scope;
+        var chat = await CandidateAsync(db, vacancy);
+        var app = await ApplicationOf(db, chat);
+        // У интервьюера в четверг 11:00 планёрка.
+        db.CalendarEvents.Add(new CalendarEvent { Title = "Планёрка", StartsAt = Local(19, 11), EndsAt = Local(19, 12), CreatedById = fixture.AdminId });
+        await db.SaveChangesAsync();
+
+        // Кандидат подходит и сам называет время — оно свободно: запись сразу, без вариантов (оценка 90 ≥ порога 70).
+        fixture.Gateway.Script.Enqueue(m =>
+        {
+            Assert.Contains("заполни wish", m[0].Content);
+            return "{\"action\":\"propose_interview\",\"messages\":[\"Отлично, приглашаем!\"],\"wish\":{\"date\":\"2026-11-17\",\"time\":\"10:00\"}}";
+        });
+        fixture.Gateway.Script.Enqueue(_ => Score(9, 9));
+        await _hr.SayAsync(chat, "5 лет, категория C. Можно во вторник в 10?");
+        var booked = await db.Interviews.AsNoTracking().SingleAsync(i => i.ApplicationId == app.Id);
+        Assert.Equal((InterviewStatus.Confirmed, Local(17, 10)), (booked.Status, booked.StartsAt));
+        Assert.Contains("собеседование назначено на 17.11 10:00", (await HrHarness.SentAsync(db, chat))[^1]);
+        var eventId = booked.CalendarEventId!.Value;
+
+        // «Перенесите на четверг в 10:00» — названо время: не «следующие варианты» без модели, а пожелание; свободно — перенос того же события.
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"other_time\",\"messages\":[\"Сейчас посмотрю\"],\"wish\":{\"date\":\"2026-11-19\",\"time\":\"10:00\"}}");
+        await _hr.SayAsync(chat, "Можно перенести на четверг в 10:00?");
+        var moved = await db.Interviews.AsNoTracking().SingleAsync();
+        Assert.Equal((InterviewStatus.Rescheduled, CandidateConfirmation.Confirmed, Local(19, 10)), (moved.Status, moved.CandidateConfirmation, moved.StartsAt));
+        Assert.Equal(Local(19, 10), (await db.CalendarEvents.AsNoTracking().SingleAsync(e => e.Id == eventId)).StartsAt);
+        Assert.Contains("собеседование назначено на 19.11 10:00", (await HrHarness.SentAsync(db, chat))[^1]);
+
+        // Четверг 11:00 занят планёркой — ближайшее свободное (текущее время не предлагается); назначенное в силе, пока кандидат не выбрал.
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"other_time\",\"messages\":[],\"wish\":{\"date\":\"2026-11-19\",\"time\":\"11:00\"}}");
+        await _hr.SayAsync(chat, "А в четверг в 11:00 получится?");
+        var offer = (await HrHarness.SentAsync(db, chat))[^1];
+        Assert.StartsWith(RecruiterTexts.WishBusy(CandidateLang.Ru), offer);
+        Assert.Contains("1) пт 20.11, 10:00\n2) пн 23.11, 10:00\n3) вт 24.11, 10:00", offer);
+        Assert.Equal(Local(19, 10), (await db.Interviews.AsNoTracking().SingleAsync()).StartsAt);
+        await _hr.SayAsync(chat, "2");
+        Assert.Equal(Local(23, 10), (await db.Interviews.AsNoTracking().SingleAsync()).StartsAt);
+        Assert.Equal(Local(23, 10), (await db.CalendarEvents.AsNoTracking().SingleAsync(e => e.Id == eventId)).StartsAt);
+
+        // Промежуток («в пятницу ближе к обеду») — свободное время в нём (перерыв 12–13 не предлагается).
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"other_time\",\"messages\":[],\"wish\":{\"date\":\"2026-11-20\",\"from\":\"11:00\",\"to\":\"13:00\"}}");
+        await _hr.SayAsync(chat, "А в пятницу ближе к обеду?");
+        Assert.Equal($"{RecruiterTexts.WishSlots(CandidateLang.Ru)}\n1) пт 20.11, 11:00", (await HrHarness.SentAsync(db, chat))[^1].Split("\n" + RecruiterTexts.ChooseNumber(CandidateLang.Ru))[0]);
+        await _hr.SayAsync(chat, "1");
+        Assert.Equal(Local(20, 11), (await db.Interviews.AsNoTracking().SingleAsync()).StartsAt);
+        Assert.Equal(1, await db.CalendarEvents.CountAsync(e => e.Id == eventId));
+
+        // HR: «Новое собеседование» — поиск отклика по вакансии (с действующим собеседованием), свободное время дня, запись второго кандидата.
+        var interviews = scope.ServiceProvider.GetRequiredService<InterviewService>();
+        var number = (await db.Vacancies.AsNoTracking().SingleAsync()).Number;
+        var second = await CandidateAsync(db, vacancy);
+        var b = await ApplicationOf(db, second);
+        var found = await interviews.BookableAsync(_hr.Hr, $"V{number}", default);
+        Assert.Equal(("Rescheduled", Local(20, 11)), (found.Single(r => r.ApplicationId == app.Id).InterviewStatus, found.Single(r => r.ApplicationId == app.Id).InterviewStartsAt));
+        Assert.True(found.Single(r => r.ApplicationId == b.Id) is { InterviewId: null, HasTelegram: true });
+        Assert.Empty(await interviews.BookableAsync(_hr.Hr, "Нет такого кандидата", default));
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => interviews.BookableAsync(new RecruitmentContext(fixture.AdminId, true, false, []), null, default));
+        Assert.Equal([Local(20, 10)], (await interviews.DaySlotsAsync(_hr.Hr, vacancy, new DateOnly(2026, 11, 20), default)).Select(x => x.StartsAt));
+        await interviews.BookByHrAsync(_hr.Hr, new BookInput(b.Id, Local(20, 10), "online", null, true, "https://meet.example/x"), default);
+        var hrBooked = await db.Interviews.AsNoTracking().SingleAsync(i => i.ApplicationId == b.Id);
+        Assert.Equal((InterviewStatus.Confirmed, CandidateConfirmation.ByHr, "https://meet.example/x"), (hrBooked.Status, hrBooked.CandidateConfirmation, hrBooked.MeetingUrl));
+        Assert.NotNull(hrBooked.CalendarEventId);
+        Assert.Empty(await interviews.DaySlotsAsync(_hr.Hr, vacancy, new DateOnly(2026, 11, 20), default));
+    }
+
+    [PostgresFact]
     public async Task Feedback_is_stored_and_moves_the_stage_only_when_hr_chooses()
     {
         var (scope, db, vacancy) = await StartAsync();

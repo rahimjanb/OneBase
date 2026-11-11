@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { CalendarClock, CheckCircle2, ClipboardCheck, FileText, Loader2, XCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { CalendarClock, CalendarPlus, CheckCircle2, ClipboardCheck, FileText, Loader2, XCircle } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
+import { Modal } from "@/components/files/Modal";
+import { NewInterviewForm } from "@/components/recruitment/NewInterview";
 import { Badge, ErrorText, Label, textarea, useAction } from "@/components/recruitment/ui";
 import { useT } from "@/i18n/client";
 import { recruitmentApi, stageLabel, STAGES, when, type RecruitmentContext, type Stage } from "@/lib/recruitment";
@@ -37,12 +39,16 @@ const active = (i: InterviewRow) => ["Awaiting", "Confirmed", "Rescheduled"].inc
 /**
  * HR → «Подбор» → «Собеседования»: сегодня, завтра, неделя, предстоящие, прошедшие, отменённые, перенесённые. У каждого — кандидат и резюме,
  * вакансия и отдел, интервьюер, время, формат, статус, подтверждение кандидатом, оценка AI; действия HR — перенести, отменить, отметить
- * «кандидат подтвердил», «прошло» / «не пришёл», итоги. Собеседование и событие календаря меняются вместе.
+ * «кандидат подтвердил», «прошло» / «не пришёл», итоги. Собеседование и событие календаря меняются вместе. «Новое собеседование» — HR
+ * назначает время сам или отправляет кандидату варианты.
  */
 export function InterviewsBoard({ ctx }: { ctx: RecruitmentContext }) {
   const t = useT();
   const [view, setView] = useState("upcoming");
   const [rows, setRows] = useState<InterviewRow[] | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const close = useCallback(() => setCreating(false), []);
   const { busy, error, run } = useAction();
   const load = () => run("load", async () => setRows(await flowApi.interviewsView(view)));
   useEffect(() => {
@@ -54,13 +60,40 @@ export function InterviewsBoard({ ctx }: { ctx: RecruitmentContext }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-1.5" role="tablist">
-        {interviewViews.map(([key, label]) => (
-          <button key={key} role="tab" aria-selected={view === key} className={view === key ? primary : button} onClick={() => setView(key)}>
-            {t(label)}
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex flex-wrap gap-1.5" role="tablist">
+          {interviewViews.map(([key, label]) => (
+            <button key={key} role="tab" aria-selected={view === key} className={view === key ? primary : button} onClick={() => setView(key)}>
+              {t(label)}
+            </button>
+          ))}
+        </div>
+        {ctx.canManage && (
+          <button className={primary} onClick={() => { setNotice(null); setCreating(true); }}>
+            <CalendarPlus className="size-4" /> {t("Новое собеседование")}
           </button>
-        ))}
+        )}
       </div>
+      {notice && (
+        <p role="status" className="rounded-lg bg-ok-soft px-3 py-2 text-sm text-ok">
+          {notice}
+        </p>
+      )}
+      {creating && (
+        <Modal title={t("Новое собеседование")} onClose={close}>
+          <div className="px-5 py-4">
+            <NewInterviewForm
+              onCancel={close}
+              onDone={(message) => {
+                setCreating(false);
+                setNotice(message);
+                if (view === "upcoming") load();
+                else setView("upcoming");
+              }}
+            />
+          </div>
+        </Modal>
+      )}
       <ErrorText error={error} />
       {!rows ? (
         <p className="text-sm text-ink-3">{busy === "load" ? <Loader2 className="inline size-4 animate-spin" /> : null} {t("Загрузка…")}</p>
