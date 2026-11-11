@@ -25,6 +25,9 @@ public sealed record AgentConfig(
     IReadOnlyList<string> Sources)
 {
     public bool IsConsultant => Code == AgentDefaults.Consultant;
+
+    /// <summary>Команда: consultant (Главный консультант и отделы) или analytik (раздел «Аналитик»).</summary>
+    public string Team => Analytik.AgentTeams.Of(Code);
 }
 
 public sealed class AiAgentStore(IAppDbContext db)

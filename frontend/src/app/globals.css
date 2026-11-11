@@ -247,6 +247,8 @@ body:has([data-palette="sales-secondary"]) :is([data-topbar], [data-sales-bar]) 
   /* Основа фона «Выполнения плана» под градиентом статуса: доля цвета статуса и с чем он смешан (в тёмной — bg, как #1A0E14 макета). */
   --sec-panel-tint: 3%;
   --sec-panel-base: var(--color-surface);
+  /* Тень плавающих кнопок («Технолог»: Техкарты / Смены / Отчёты): в светлой — лёгкая, в тёмной — как в макете (0 4 12 #00000040). */
+  --sec-float-shadow: 0 2px 8px rgb(14 19 34 / 0.06);
 }
 
 :root[data-theme="dark"] :is([data-palette="sales-secondary"], body:has([data-palette="sales-secondary"]) :is([data-topbar], [data-sales-bar])),
@@ -276,6 +278,7 @@ body:has([data-palette="sales-secondary"]) :is([data-topbar], [data-sales-bar]) 
   --color-violet-soft: #8b5cf61f;
   --sec-panel-tint: 7%;
   --sec-panel-base: var(--color-page);
+  --sec-float-shadow: 0 4px 12px rgb(0 0 0 / 0.25);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -305,6 +308,7 @@ body:has([data-palette="sales-secondary"]) :is([data-topbar], [data-sales-bar]) 
     --color-violet-soft: #8b5cf61f;
     --sec-panel-tint: 7%;
     --sec-panel-base: var(--color-page);
+    --sec-float-shadow: 0 4px 12px rgb(0 0 0 / 0.25);
   }
 }
 
@@ -321,6 +325,20 @@ body:has([data-palette="sales-secondary"]) {
   :root:not([data-theme="light"]) body:has([data-palette="sales-secondary"]) {
     background-color: #060a14;
     background-image: radial-gradient(65% 60% at 85% 0%, rgb(27 63 160 / 0.18), rgb(6 9 20 / 0));
+  }
+}
+/* «Технолог» (data-glow="both"): второе свечение — снизу слева, как в макете kPu1u. */
+:root[data-theme="dark"] body:has([data-palette="sales-secondary"][data-glow="both"]),
+:root[data-brand="onebase"]:not([data-theme="light"]) body:has([data-palette="sales-secondary"][data-glow="both"]) {
+  background-image:
+    radial-gradient(65% 30% at 85% 0%, rgb(27 63 160 / 0.18), rgb(6 9 20 / 0)),
+    radial-gradient(60% 45% at 0% 100%, rgb(27 63 160 / 0.25), rgb(6 9 20 / 0));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body:has([data-palette="sales-secondary"][data-glow="both"]) {
+    background-image:
+      radial-gradient(65% 30% at 85% 0%, rgb(27 63 160 / 0.18), rgb(6 9 20 / 0)),
+      radial-gradient(60% 45% at 0% 100%, rgb(27 63 160 / 0.25), rgb(6 9 20 / 0));
   }
 }
 /* Полоса раздела на «Вторичке» — без своей заливки, на фоне экрана (макет); активная вкладка — сплошной акцент с тенью, без градиента

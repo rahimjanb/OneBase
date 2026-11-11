@@ -181,6 +181,68 @@ public class RecruitmentTests(DataManagerDb fixture) : IClassFixture<DataManager
         Assert.Contains(await db.AuditLogs.AsNoTracking().Where(a => a.Action == "recruitment.vacancy.status").Select(a => a.Data!).ToListAsync(), d => d.Contains("\"closed\": 1") || d.Contains("\"closed\":1"));
     }
 
+    // ---------- список вакансий и подписи кнопок разделов ----------
+
+    [PostgresFact]
+    public async Task Vacancy_rows_carry_department_sources_and_section_counters_count_only_what_is_live()
+    {
+        var (scope, service, db, s) = await StartAsync();
+        using var _ = scope;
+        await db.RecruitmentExceptions.ExecuteDeleteAsync();
+        await db.HhConnections.ExecuteDeleteAsync();
+        var cashier = await OpenVacancyAsync(service, s, "Кассир");
+        var accountant = await OpenVacancyAsync(service, s, "Бухгалтер");
+        await service.SetVacancyStatusAsync(Hr(s), accountant, VacancyStatus.Paused, default);
+        var draft = await service.CreateVacancyAsync(Hr(s), VacancyOf(s, "Кладовщик"), default);
+
+        // Кандидаты: один в работе, один с отказом — «в работе» только первый.
+        async Task<Guid> CandidateAsync(string name) =>
+            (await service.CreateCandidateAsync(Hr(s), new CandidateInput(name, null, null, null, [], "manual", null, cashier, null), default)).CandidateId;
+        var working = await CandidateAsync("Алишер Каримов");
+        var rejected = await CandidateAsync("Нодира Азимова");
+        var rejectedApp = await db.CandidateApplications.SingleAsync(a => a.CandidateId == rejected);
+        await service.ChangeStageAsync(Hr(s), rejectedApp.Id, new StageInput(ApplicationStage.Rejected, null, "Не подходит"), default);
+        var workingApp = await db.CandidateApplications.AsNoTracking().SingleAsync(a => a.CandidateId == working);
+
+        // Источники: кассир на HH и опубликован в Telegram; у бухгалтера публикация отменена — не считается.
+        await db.Vacancies.Where(v => v.Id == cashier).ExecuteUpdateAsync(u => u.SetProperty(v => v.HhVacancyId, "123456"));
+        db.VacancyPublications.Add(new VacancyPublication { VacancyId = cashier, AccountId = Guid.NewGuid(), ChatId = Guid.NewGuid(), PeerId = 1, ChatTitle = "Вакансии Ташкент", Text = "Кассир", Status = PublicationStatus.Sent, CreatedById = s.Hr });
+        db.VacancyPublications.Add(new VacancyPublication { VacancyId = accountant, AccountId = Guid.NewGuid(), ChatId = Guid.NewGuid(), PeerId = 2, ChatTitle = "Вакансии Ташкент", Text = "Бухгалтер", Status = PublicationStatus.Cancelled, CreatedById = s.Hr });
+        // Собеседования: одно сегодня, одно завтра, одно сегодня, но отменено.
+        var tashkent = TimeSpan.FromHours(5);
+        var noon = new DateTimeOffset(DateTimeOffset.UtcNow.ToOffset(tashkent).Date.AddHours(12), tashkent).ToUniversalTime();
+        foreach (var (at, status) in new[] { (noon, InterviewStatus.Confirmed), (noon.AddDays(1), InterviewStatus.Confirmed), (noon, InterviewStatus.Cancelled) })
+        {
+            db.Interviews.Add(new Interview { ApplicationId = workingApp.Id, CandidateId = working, VacancyId = cashier, StartsAt = at, EndsAt = at.AddHours(1), Format = "office", Status = status });
+        }
+
+        db.RecruitmentExceptions.Add(new RecruitmentException { Kind = "salary", Message = "Торг о зарплате" });
+        db.RecruitmentExceptions.Add(new RecruitmentException { Kind = "unclear", Message = "Непонятный ответ", Status = RecruitmentExceptionStatus.Resolved });
+        await db.SaveChangesAsync();
+
+        var rows = await service.VacanciesAsync(Hr(s), null, null, default);
+        var row = rows.Single(r => r.Id == cashier);
+        Assert.Equal((s.Sales, true, true, 1, 0), (row.DepartmentId, row.OnHh, row.InTelegram, row.Active, row.Hired));
+        Assert.Equal((false, false), (rows.Single(r => r.Id == accountant).OnHh, rows.Single(r => r.Id == accountant).InTelegram));
+        Assert.True(rows.Single(r => r.Id == draft.Id).UpdatedAt >= rows.Single(r => r.Id == draft.Id).CreatedAt);
+
+        var nav = await service.NavAsync(Hr(s), default);
+        Assert.Equal(new RecruitmentNavView(1, 1, 0, 1, 0, 1, false), nav);
+        var interviews = scope.ServiceProvider.GetRequiredService<InterviewService>();
+        Assert.Equal(1, await interviews.TodayCountAsync(Hr(s), default));
+
+        // HH: подключён — только с токеном и включённым обменом.
+        db.HhConnections.Add(new HhConnection { ProtectedAccessToken = "x", Enabled = false });
+        await db.SaveChangesAsync();
+        Assert.False((await service.NavAsync(Hr(s), default)).HhConnected);
+        await db.HhConnections.ExecuteUpdateAsync(u => u.SetProperty(h => h.Enabled, true));
+        Assert.True((await service.NavAsync(Hr(s), default)).HhConnected);
+
+        // Руководителю отдела без права «Подбор» счётчики не отдаются.
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => service.NavAsync(Head(s), default));
+        await Assert.ThrowsAsync<FieldForbiddenException>(() => interviews.TodayCountAsync(Head(s), default));
+    }
+
     // ---------- дедупликация ----------
 
     [PostgresFact]

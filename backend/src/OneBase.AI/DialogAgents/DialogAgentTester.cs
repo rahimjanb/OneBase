@@ -34,16 +34,7 @@ public sealed class DialogAgentTester(IAppDbContext db, IAiGateway ai, TimeProvi
             notes.Add("Режим «С проверкой»: в настоящем диалоге этот ответ ждал бы проверки сотрудником.");
         }
 
-        if (agent.OffHours == "morning" && !DialogAgentRules.InWork(agent, now))
-        {
-            notes.Add($"Сейчас нерабочее время агента: ответ ушёл бы {DialogAgentRules.NextWorkStart(agent, now).ToOffset(DialogAgentRules.Tashkent):dd.MM HH:mm}.");
-        }
-
         var recruiter = agent.Kind == DialogAgentKinds.Recruiter;
-        if (recruiter)
-        {
-            notes.Add("В настоящем диалоге рекрутер сначала просит согласие на обработку данных — в проверке этот шаг пропущен.");
-        }
 
         var phrase = DialogAgentRules.HandoffIn(last, agent.HandoffPhrases);
         if (phrase is not null || RecruiterRules.AsksForHuman(last))

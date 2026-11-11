@@ -190,6 +190,10 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
     /// <summary>Видит все задачи отдела: руководство, руководитель отдела, сотрудник отдела.</summary>
     public static bool CanSeeDepartment(WorkContext ctx, Guid departmentId) => ctx.Heads(departmentId) || ctx.DepartmentId == departmentId;
 
+    /// <summary>Кнопка отдела открывается: видит задачи отдела или, в «Продажах», работает в Sales Base (задачи и маршруты полевой команды).</summary>
+    public static bool CanOpenDepartment(WorkContext ctx, Guid departmentId, string code) =>
+        CanSeeDepartment(ctx, departmentId) || (code == SalesCode && ctx.HasField);
+
     public static bool CanView(WorkContext ctx, WorkTask t) =>
         CanSeeDepartment(ctx, t.DepartmentId) || t.AssigneeId == ctx.UserId || t.CreatedById == ctx.UserId || ctx.InProject(t.ProjectId);
 
@@ -268,9 +272,20 @@ public sealed partial class WorkTaskService(IAppDbContext db, UserNotifier notif
             {
                 var c = counts.GetValueOrDefault(d.Id);
                 var sees = CanSeeDepartment(ctx, d.Id);
-                return new DepartmentView(d.Id, d.Code, d.Name, sees || (d.Code == SalesCode && ctx.HasField), ctx.DepartmentId == d.Id, sees,
+                return new DepartmentView(d.Id, d.Code, d.Name, CanOpenDepartment(ctx, d.Id, d.Code), ctx.DepartmentId == d.Id, sees,
                     d.Code == SalesCode && ctx.HasField, c?.Open ?? 0, c?.Mine ?? 0, c?.Overdue ?? 0, ctx.Heads(d.Id));
             })
+            .ToList();
+    }
+
+    /// <summary>Коды отделов, которые открываются пользователю (см. <see cref="CanOpenDepartment"/>), — в порядке раздела.</summary>
+    public async Task<List<string>> OpenDepartmentCodesAsync(WorkContext ctx, CancellationToken ct)
+    {
+        var departments = await db.Departments.AsNoTracking().Select(d => new { d.Id, d.Code, d.Name }).ToListAsync(ct);
+        return departments
+            .Where(d => CanOpenDepartment(ctx, d.Id, d.Code))
+            .OrderBy(d => Array.IndexOf(Order, d.Code) is var i and >= 0 ? i : Order.Length).ThenBy(d => d.Name)
+            .Select(d => d.Code)
             .ToList();
     }
 

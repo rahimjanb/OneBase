@@ -50,21 +50,12 @@ public class DialogAgentRulesTests
     }
 
     [Fact]
-    public void Off_hours_reply_waits_for_the_next_working_morning_and_working_hours_reply_after_a_human_pause()
+    public void Working_hours_follow_the_days_and_the_night_shift()
     {
         var agent = Agent(); // 09:00–19:00, пн–сб
-        var saturdayEvening = new DateTimeOffset(2026, 11, 14, 20, 30, 0, DialogAgentRules.Tashkent); // суббота
-        Assert.False(DialogAgentRules.InWork(agent, saturdayEvening));
-        var at = DialogAgentRules.SendAt(agent, saturdayEvening, new Random(1));
-        var monday = new DateTimeOffset(2026, 11, 16, 9, 0, 0, DialogAgentRules.Tashkent);
-        Assert.InRange(at, monday.AddMinutes(1), monday.AddMinutes(10)); // воскресенье — не рабочий день
-
-        var tuesdayNoon = new DateTimeOffset(2026, 11, 17, 12, 0, 0, DialogAgentRules.Tashkent);
-        Assert.InRange(DialogAgentRules.SendAt(agent, tuesdayNoon, new Random(2)), tuesdayNoon.AddSeconds(agent.ReplyDelayMinSeconds),
-            tuesdayNoon.AddSeconds(agent.ReplyDelayMaxSeconds));
-
-        agent.OffHours = "reply";
-        Assert.True(DialogAgentRules.SendAt(agent, saturdayEvening, new Random(3)) < saturdayEvening.AddMinutes(5));
+        Assert.False(DialogAgentRules.InWork(agent, new DateTimeOffset(2026, 11, 14, 20, 30, 0, DialogAgentRules.Tashkent))); // суббота вечером
+        Assert.False(DialogAgentRules.InWork(agent, new DateTimeOffset(2026, 11, 15, 12, 0, 0, DialogAgentRules.Tashkent))); // воскресенье — не рабочий день
+        Assert.True(DialogAgentRules.InWork(agent, new DateTimeOffset(2026, 11, 17, 12, 0, 0, DialogAgentRules.Tashkent))); // вторник днём
         (agent.WorkFrom, agent.WorkTo) = (new TimeOnly(22, 0), new TimeOnly(6, 0)); // ночная смена
         Assert.True(DialogAgentRules.InWork(agent, new DateTimeOffset(2026, 11, 17, 2, 0, 0, DialogAgentRules.Tashkent)));
     }
@@ -87,7 +78,8 @@ public class DialogAgentRulesTests
 
         Assert.Same(first, DialogAgentPick.Recruiter(all, null, number1)); // агент номера — раньше агента по умолчанию
         Assert.Same(main, DialogAgentPick.Recruiter(all, null, Guid.NewGuid())); // на номере без своего агента — агент без номера
-        Assert.Same(main, DialogAgentPick.Recruiter(all, main.Id, number1)); // свой агент вакансии (без номера) отвечает на любом номере
+        Assert.Same(first, DialogAgentPick.Recruiter(all, main.Id, number1)); // у номера свой агент — отвечает он, а не агент вакансии
+        Assert.Same(main, DialogAgentPick.Recruiter(all, main.Id, Guid.NewGuid())); // агент вакансии (без номера) — на номерах без своего агента
         Assert.Same(first, DialogAgentPick.Recruiter(all, second.Id, number1)); // агент вакансии с другим номером здесь не отвечает
         Assert.Same(main, DialogAgentPick.Recruiter(all, null, null)); // номер не известен — по умолчанию, как раньше
         main.AccountId = number2;
@@ -206,8 +198,7 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
         var view = await sp.GetRequiredService<DialogAgentService>().CreateAsync(access, new AgentCreateInput("supply", DialogAgentKinds.Assistant, "Снабжение"), default);
         var db = sp.GetRequiredService<OneBaseDbContext>();
         var agent = await db.DialogAgents.SingleAsync(a => a.Id == view.Id);
-        (agent.Enabled, agent.ReplyDelayMinSeconds, agent.ReplyDelayMaxSeconds, agent.Typing, agent.WorkFrom, agent.WorkTo, agent.WorkDays) =
-            (true, 0, 0, false, null, null, "1,2,3,4,5,6,7");
+        (agent.Enabled, agent.WorkFrom, agent.WorkTo, agent.WorkDays) = (true, null, null, "1,2,3,4,5,6,7");
         agent.DisplayName = "Азиза";
         agent.Intro = "менеджер отдела снабжения";
         configure?.Invoke(agent);
@@ -286,7 +277,9 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
         var sp = scope.ServiceProvider;
         var account = await AccountAsync(sp, "supply");
         var agents = sp.GetRequiredService<DialogAgentService>();
-        var agent = await SupplyAgentAsync(sp, Admin, a => a.ForbiddenPhrases = "бесплатно");
+        // Сегодня у агента нерабочий день — ответ всё равно уходит сразу.
+        var today = fixture.Clock.GetUtcNow().ToOffset(DialogAgentRules.Tashkent).DayOfWeek;
+        var agent = await SupplyAgentAsync(sp, Admin, a => (a.ForbiddenPhrases, a.WorkDays) = ("бесплатно", today == DayOfWeek.Monday ? "2" : "1"));
         // Руководитель снабжения получает уведомления агента своего отдела.
         db.WorkDepartmentHeads.Add(new WorkDepartmentHead { DepartmentId = (await db.Departments.SingleAsync(d => d.Code == "supply")).Id, UserId = fixture.AdminId });
         await db.SaveChangesAsync();
@@ -305,7 +298,9 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
         var queued = await db.TelegramOutgoingMessages.AsNoTracking().OrderBy(m => m.NextAttemptAt).ToListAsync();
         Assert.Equal(["Здравствуйте, Бахтиёр!", "Привозите на склад: ул. Складская 7, приём с 9:00 до 17:00."], queued.Select(m => m.Text));
         Assert.All(queued, m => Assert.Equal(("supply", "ai", DialogAgentDelivery.RelatedType), (m.Department, m.Author, m.RelatedType)));
-        Assert.True(queued[1].NextAttemptAt > queued[0].NextAttemptAt); // второе сообщение — через паузу, как пишет человек
+        // Сразу, без паузы и «печатает…», хотя у агента нерабочий день; части — по порядку, одна за другой.
+        Assert.True(queued[1].NextAttemptAt > queued[0].NextAttemptAt);
+        Assert.All(queued, m => Assert.InRange(m.NextAttemptAt, fixture.Clock.GetUtcNow().AddMinutes(-1), fixture.Clock.GetUtcNow().AddSeconds(1)));
         Assert.Equal("agents.supply.reply", fixture.Gateway.Calls[^1].Options.Context.Purpose);
         Assert.Equal(DialogReplyStatus.Sent, (await db.DialogAgentReplies.AsNoTracking().SingleAsync()).Status);
 
@@ -433,8 +428,7 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
         // Второй агент снабжения со своим номером: на номере 2 отвечает он, на номере 1 — по-прежнему первый.
         var second = await agents.CreateAsync(admin, new AgentCreateInput("supply", DialogAgentKinds.Assistant, "Снабжение — второй номер"), default);
         var secondAgent = await db.DialogAgents.SingleAsync(a => a.Id == second.Id);
-        (secondAgent.Enabled, secondAgent.ReplyDelayMinSeconds, secondAgent.ReplyDelayMaxSeconds, secondAgent.Typing, secondAgent.WorkFrom, secondAgent.WorkTo, secondAgent.WorkDays) =
-            (true, 0, 0, false, null, null, "1,2,3,4,5,6,7");
+        (secondAgent.Enabled, secondAgent.WorkFrom, secondAgent.WorkTo, secondAgent.WorkDays) = (true, null, null, "1,2,3,4,5,6,7");
         secondAgent.DisplayName = "Камола";
         await db.SaveChangesAsync();
         await choose.SetAsync(admin, second.Id, new AgentAccountInput(number2), default);
@@ -522,7 +516,7 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
         await sp.GetRequiredService<TelegramAccountService>().SavePermissionAsync(number, null,
             new TelegramPermissionInput(8402, null, "Иван", TelegramAccessMode.SentOnly, null, false, true), fixture.AdminId);
         var agent = await db.DialogAgents.SingleAsync(a => a.Id == view.Id);
-        (agent.Enabled, agent.ReplyDelayMinSeconds, agent.ReplyDelayMaxSeconds, agent.Typing, agent.WorkFrom, agent.WorkTo) = (true, 0, 0, false, null, null);
+        (agent.Enabled, agent.WorkFrom, agent.WorkTo) = (true, null, null);
         await db.SaveChangesAsync();
         await sp.GetRequiredService<DialogAgentAccounts>().SetAsync(admin, view.Id, new AgentAccountInput(number), default);
         report = await health.GetAsync(admin, view.Id, flags, default);
@@ -549,12 +543,13 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
         var head = await sp.GetRequiredService<DialogAgentService>().AccessAsync(fixture.ViewerId, new HashSet<string>(), default);
         Assert.StartsWith("Собеседник …", (await health.GetAsync(head, view.Id, flags, default)).Dialogs.Single(d => !d.Ours).Name);
 
-        // Режим «С проверкой» и нерабочее время с ответом утром — предупреждения.
-        (agent.Mode, agent.WorkFrom, agent.WorkTo, agent.WorkDays, agent.OffHours) = (DialogAgentMode.Approval, new TimeOnly(0, 0), new TimeOnly(0, 1), "1", "morning");
+        // Режим «С проверкой» — предупреждение; нерабочее время ответ не задерживает — агент отвечает сразу.
+        (agent.Mode, agent.WorkFrom, agent.WorkTo, agent.WorkDays) = (DialogAgentMode.Approval, new TimeOnly(0, 0), new TimeOnly(0, 1), "1");
         await db.SaveChangesAsync();
         report = await health.GetAsync(admin, view.Id, flags, default);
         Assert.Contains(report.Checks, c => c.Status == "warn" && c.Title.StartsWith("Режим «С проверкой»"));
-        Assert.Contains(report.Checks, c => c.Status == "warn" && c.Title.StartsWith("Сейчас нерабочее время") && c.Detail!.Contains("Ответы уйдут"));
+        Assert.Contains(report.Checks, c => c.Status == "ok" && c.Title == "Отвечает сразу, в любое время — без паузы" && c.Detail!.Contains("отвечает так же сразу"));
+        Assert.DoesNotContain(report.Checks, c => c.Title.StartsWith("Сейчас нерабочее время"));
     }
 
     // ---------- Права и настройки ----------
@@ -594,8 +589,8 @@ public class DialogAgentTests(DataManagerDb fixture) : IClassFixture<DataManager
 
     private static AgentInput Input(AgentView v) => new(v.Name, v.Enabled, v.Mode, v.DisplayName, v.Intro, v.Tone, v.Language, v.Length, v.Emoji, v.SplitMessages,
         v.Instructions, v.ScreeningQuestions, v.AllowedTopics, v.ForbiddenTopics, v.ForbiddenPhrases, v.HandoffPhrases, v.MaxReplyChars, v.MaxRepliesPerHour,
-        v.MaxRepliesPerDay, v.CanDiscussSalary, v.CanScheduleInterviews, v.HandoffReply, v.WorkFrom, v.WorkTo, v.WorkDays, v.OffHours, v.ReplyDelayMinSeconds,
-        v.ReplyDelayMaxSeconds, v.Typing, v.FollowUpHours, v.ModelProvider, v.Model);
+        v.MaxRepliesPerDay, v.CanDiscussSalary, v.CanScheduleInterviews, v.HandoffReply, v.WorkFrom, v.WorkTo, v.WorkDays, v.FollowUpHours,
+        v.ModelProvider, v.Model);
 
     [PostgresFact]
     public async Task Test_tab_shows_what_the_agent_would_answer_without_sending_anything()

@@ -155,29 +155,4 @@ public static class RecruiterTexts
         $"Файл больше {maxMb} МБ — пришлите, пожалуйста, файл поменьше или PDF.",
         $"Fayl {maxMb} MB dan katta — iltimos, kichikroq fayl yoki PDF yuboring.",
         $"Файл {maxMb} МБ дан катта — илтимос, кичикроқ файл ёки PDF юборинг.");
-
-    /// <summary>Кто пишет: «Я виртуальный помощник отдела кадров» / имя и роль из настроек агента.</summary>
-    public static string Who(CandidateLang l, string? displayName, string? intro)
-    {
-        if (string.IsNullOrWhiteSpace(displayName))
-        {
-            return string.IsNullOrWhiteSpace(intro)
-                ? P(l, "Я виртуальный помощник отдела кадров", "Men HR bo'limining virtual yordamchisiman", "Мен HR бўлимининг виртуал ёрдамчисиман")
-                : P(l, $"Я — {intro}", $"Men — {intro}", $"Мен — {intro}");
-        }
-
-        return P(l, $"Меня зовут {displayName}, я {intro ?? "виртуальный помощник отдела кадров"}",
-            $"Men {displayName}, {intro ?? "HR bo'limining virtual yordamchisi"}", $"Мен {displayName}, {intro ?? "HR бўлимининг виртуал ёрдамчиси"}");
-    }
-
-    /// <summary>Слово согласия, которое просим написать.</summary>
-    public static string ConsentWord(CandidateLang l) => P(l, "Согласен", "Roziman", "Розиман");
-
-    public static string Consent(CandidateLang l, string? name, string who, string consentText) => P(l,
-        $"Здравствуйте{(name is null ? string.Empty : $", {name}")}! {who}. Спасибо, что написали!\n\n" +
-        $"Прежде чем продолжим, нужно ваше согласие на обработку персональных данных:\n{consentText}\n\nЕсли согласны — ответьте «Согласен», и я сразу отвечу на ваш вопрос.",
-        $"Assalomu alaykum{(name is null ? string.Empty : $", {name}")}! {who}. Yozganingiz uchun rahmat!\n\n" +
-        $"Davom etishdan oldin — ma'lumotlaringizni qayta ishlashga roziligingiz kerak:\n{consentText}\n\nRozi bo'lsangiz, «Roziman» deb javob bering — savolingizga darhol javob beraman.",
-        $"Ассалому алайкум{(name is null ? string.Empty : $", {name}")}! {who}. Ёзганингиз учун раҳмат!\n\n" +
-        $"Давом этишдан олдин — маълумотларингизни қайта ишлашга розилигингиз керак:\n{consentText}\n\nРози бўлсангиз, «Розиман» деб жавоб беринг — саволингизга дарҳол жавоб бераман.");
 }

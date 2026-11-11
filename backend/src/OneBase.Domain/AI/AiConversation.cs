@@ -11,10 +11,20 @@ public class AiConversation : Entity
 
     public DateTimeOffset LastMessageAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Чей чат: consultant — «AI-консультант», analytik — «Аналитик». Истории разделов не смешиваются.</summary>
+    public string Kind { get; set; } = ConversationKinds.Consultant;
+
     /// <summary>Чат убран из истории пользователем. Сообщения сохраняются для журнала AI.</summary>
     public DateTimeOffset? ArchivedAt { get; set; }
 
     public List<AiMessage> Messages { get; set; } = [];
+}
+
+/// <summary>Разделы чатов AI.</summary>
+public static class ConversationKinds
+{
+    public const string Consultant = "consultant";
+    public const string Analytik = "analytik";
 }
 
 public enum AiMessageRole

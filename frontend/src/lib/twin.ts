@@ -239,10 +239,12 @@ export const stateText = (state: TwinState, t: T) =>
 
 // ---------- Сигналы слоя ----------
 
-export type Signal = { tone: Tone; value: string; source: string };
+/** hidden — нет права на источник: такого сигнала в слое нет совсем (не «Нет доступа»). */
+export type Signal = { tone: Tone; value: string; source: string; hidden?: true };
 export type BuildingSignal = { tone: Tone; value: string | null; items: Signal[] };
 
-const missing = (state: TwinState, source: string, t: T): Signal => ({ tone: "nodata", value: stateText(state, t), source });
+const missing = (state: TwinState, source: string, t: T): Signal =>
+  state === "noaccess" ? { tone: "nodata", value: "", source, hidden: true } : { tone: "nodata", value: stateText(state, t), source };
 
 function tasksSignal(d: TwinDepartment, t: T): Signal {
   const p = d.tasks;
@@ -335,7 +337,12 @@ function promoSignal(s: TwinSnapshot, source: string, t: T): Signal {
   return { tone: "info", value: t("Акции {sum}", { sum: sum(p.data.total, t) }), source };
 }
 
+/** Сигналы слоя без закрытых правами источников. */
 function layerItems(c: Contents, s: TwinSnapshot, layer: Exclude<LayerKey, "all">, t: T): Signal[] {
+  return layerSignals(c, s, layer, t).filter((i) => !i.hidden);
+}
+
+function layerSignals(c: Contents, s: TwinSnapshot, layer: Exclude<LayerKey, "all">, t: T): Signal[] {
   const ds = c.departments;
   switch (layer) {
     case "tasks":
@@ -774,17 +781,24 @@ function problemsOf(c: Contents, s: TwinSnapshot, t: T, departmentHref: (code: s
   return list.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "bad" ? -1 : 1));
 }
 
-/** Карточка здания: раздел каждого отдела (свои показатели и показатели его направления), склады и «Проблемы и предупреждения». */
+/**
+ * Карточка здания: раздел каждого отдела (свои показатели и показатели его направления), склады и «Проблемы и предупреждения». Закрытое
+ * правами не показывается: ни строк «Нет доступа», ни разделов, где ничего не осталось, ни раздела отдела, все данные которого закрыты.
+ */
 export function cardOf(object: TwinObject, s: TwinSnapshot, t: T, o: CardOptions): Card {
   const c = contentsOf(object, s);
   const sections: Section[] = [];
+  const add = (section: Section | null) => {
+    const metrics = section?.metrics.filter((m) => m.state !== "noaccess") ?? [];
+    if (section && metrics.length > 0) sections.push({ ...section, metrics });
+  };
   for (const d of c.departments) {
-    const domain = domainSection(d, s, t);
-    if (domain) sections.push(domain);
-    sections.push({ key: `dept-${d.id}`, title: t("Отдел «{name}»", { name: d.name }), kind: "department", href: o.departmentHref(d.code), metrics: departmentMetrics(d, s, t) });
+    add(domainSection(d, s, t));
+    const closed = [d.hr, d.tasks, d.supply, d.spend].every((p) => p.state === "noaccess") && d.users == null;
+    if (!closed) add({ key: `dept-${d.id}`, title: t("Отдел «{name}»", { name: d.name }), kind: "department", href: o.departmentHref(d.code), metrics: departmentMetrics(d, s, t) });
   }
-  for (const l of c.warehouses) sections.push(warehouseSection(l, s, t));
-  for (const l of c.plants) sections.push(plantSection(l, s, t));
+  for (const l of c.warehouses) add(warehouseSection(l, s, t));
+  for (const l of c.plants) add(plantSection(l, s, t));
   return { sections, problems: problemsOf(c, s, t, o.departmentHref) };
 }
 

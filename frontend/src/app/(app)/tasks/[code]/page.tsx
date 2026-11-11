@@ -8,7 +8,7 @@ import { NewTaskButton } from "@/components/tasks/TaskForm";
 import { taskOptions } from "@/components/tasks/TaskListPage";
 import { TaskFilters, TaskTable } from "@/components/tasks/TaskTable";
 import { getT } from "@/i18n/server";
-import { apiGet, apiTry } from "@/lib/server-api";
+import { apiGet, apiOutcome, apiTry } from "@/lib/server-api";
 import type { FieldRouteSummary, FieldTask } from "@/lib/field/types";
 import { routeSourceLabel } from "@/lib/field/labels";
 import { taskFilterKeys, type DepartmentTasks, type PageResult, type WorkTask } from "@/lib/tasks";
@@ -48,15 +48,17 @@ export default async function DepartmentTasksPage({ params, searchParams }: { pa
   if (!department) notFound();
   if (!department.canOpen) redirect(`/no-access?from=${encodeURIComponent(returnTo)}`);
   const t = await getT();
+  // Полевая команда Sales Base — вкладки только при доступе к её задачам и маршрутам (одна область доступа); закрыто — вкладок нет.
+  const field = department.hasField && (await apiOutcome<PageResult<FieldTask>>("/api/field/tasks?pageSize=1")).state !== "forbidden";
 
   const tabs = [
-    ...(department.hasField
+    ...(field
       ? [
           { key: "team", label: t("Агенты и супервайзеры") },
           { key: "routes", label: t("Маршруты") },
         ]
       : []),
-    ...(department.hasTasks ? [{ key: "office", label: department.hasField ? t("Задачи отдела") : t("Задачи") }] : []),
+    ...(department.hasTasks ? [{ key: "office", label: field ? t("Задачи отдела") : t("Задачи") }] : []),
   ];
   const requested = one(sp, "tab");
   const tab = tabs.find((t) => t.key === requested)?.key ?? tabs[0]?.key;
@@ -67,7 +69,7 @@ export default async function DepartmentTasksPage({ params, searchParams }: { pa
     <>
       <PageHeader
         title={department.name}
-        subtitle={department.hasField ? t("Задачи и маршруты полевой команды, задачи отдела") : t("Задачи отдела")}
+        subtitle={field ? t("Задачи и маршруты полевой команды, задачи отдела") : t("Задачи отдела")}
         back="/tasks"
         breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Задачи"), href: "/tasks" }, { label: department.name }]}
       />
@@ -90,6 +92,7 @@ export default async function DepartmentTasksPage({ params, searchParams }: { pa
           {tab === "team" && <TeamTab sp={sp} page={page} today={today} returnTo={returnTo} />}
           {tab === "routes" && <RoutesTab sp={sp} today={today} />}
           {tab === "office" && <OfficeTab code={code} sp={sp} returnTo={returnTo} />}
+          {!tab && <div className="rounded-xl border border-dashed border-line bg-surface/60 px-6 py-10 text-center text-sm text-ink-3">{t("Задач у отдела пока нет")}</div>}
         </div>
       </PageBody>
     </>
@@ -154,7 +157,7 @@ async function TeamTab({ sp, page, today, returnTo }: { sp: SearchParams; page: 
   if (!tasks) {
     return (
       <div className="rounded-xl border border-line bg-surface p-5 text-sm text-ink-2">
-        {t("Нет доступа к задачам Sales Base. Их видят администратор, директор, РМ и супервайзеры.")}
+        {t("Не удалось загрузить задачи полевой команды. Обновите страницу.")}
       </div>
     );
   }
@@ -200,7 +203,7 @@ async function RoutesTab({ sp, today }: { sp: SearchParams; today: string }) {
         <DateSwitch value={date} today={today} />
       </div>
       {!routes ? (
-        <div className="rounded-xl border border-line bg-surface p-5 text-sm text-ink-2">{t("Нет доступа к маршрутам Sales Base.")}</div>
+        <div className="rounded-xl border border-line bg-surface p-5 text-sm text-ink-2">{t("Не удалось загрузить маршруты. Обновите страницу.")}</div>
       ) : routes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-line bg-surface/60 px-6 py-10 text-center text-sm text-ink-3">{t("На этот день маршрутов нет")}</div>
       ) : (

@@ -15,24 +15,25 @@ namespace OneBase.Application.Agents;
 public static class DialogAgentPick
 {
     /// <summary>
-    /// Рекрутер диалога на номере: свой агент вакансии (если он может отвечать на этом номере), иначе агент этого номера (включённый — первым),
-    /// иначе рекрутер HR без номера по умолчанию. Номер не известен (accountId = null) — как раньше: агент вакансии, иначе по умолчанию.
+    /// Рекрутер диалога на номере: агент, к которому привязан этот номер (включённый — первым), — он ведёт все диалоги номера со своими
+    /// настройками, какая бы вакансия ни была у кандидата (вопросы отбора вакансии он всё равно задаёт). Своего агента у номера нет — агент
+    /// вакансии без номера, иначе рекрутер HR без номера по умолчанию. Номер не известен (accountId = null) — агент вакансии, иначе по умолчанию.
     /// </summary>
     public static DialogAgent? Recruiter(IReadOnlyCollection<DialogAgent> recruiters, Guid? vacancyAgentId, Guid? accountId)
     {
-        var usable = accountId is null ? recruiters : recruiters.Where(a => a.AccountId is null || a.AccountId == accountId).ToList();
-        if (vacancyAgentId is { } id && usable.FirstOrDefault(a => a.Id == id) is { } own)
+        if (accountId is not null && recruiters.Where(a => a.AccountId == accountId).OrderByDescending(a => a.Enabled).ThenByDescending(a => a.IsDefault)
+                .ThenBy(a => a.CreatedAt).FirstOrDefault() is { } numberAgent)
         {
-            return own;
+            return numberAgent;
         }
 
-        if (accountId is null)
+        var usable = accountId is null ? recruiters : recruiters.Where(a => a.AccountId is null).ToList();
+        if (vacancyAgentId is { } id && usable.FirstOrDefault(a => a.Id == id) is { } vacancyAgent)
         {
-            return usable.OrderByDescending(a => a.IsDefault).ThenBy(a => a.CreatedAt).FirstOrDefault();
+            return vacancyAgent;
         }
 
-        return usable.Where(a => a.AccountId == accountId).OrderByDescending(a => a.Enabled).ThenByDescending(a => a.IsDefault).ThenBy(a => a.CreatedAt).FirstOrDefault()
-               ?? usable.Where(a => a.AccountId is null).OrderByDescending(a => a.IsDefault).ThenBy(a => a.CreatedAt).FirstOrDefault();
+        return usable.OrderByDescending(a => a.IsDefault).ThenBy(a => a.CreatedAt).FirstOrDefault();
     }
 
     /// <summary>Помощник отдела на номере: включённый агент этого номера, иначе включённый агент отдела без номера (по умолчанию — первым).</summary>

@@ -5,6 +5,7 @@ import { ChevronUp, ClipboardList, Copy, FileText, Loader2, Minus, PackagePlus, 
 import { Button, SearchInput } from "@/components/ui";
 import { TopChip } from "@/components/sales/outstock";
 import { tNow, useT } from "@/i18n/client";
+import { useSalesAccess } from "@/components/sales/SalesAccess";
 import { bff } from "@/lib/bff";
 import { plural } from "@/lib/format";
 import { kg, money, num } from "@/lib/sales/format";
@@ -166,6 +167,7 @@ export function AutoOrder({ initialRegion }: { initialRegion: string | null }) {
 }
 
 function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; loading: boolean; onRegion: (id: string) => void }) {
+  const { canExport } = useSalesAccess();
   const t = useT();
   const [edits, setEdits] = useState<Edits>(loadEdits);
   const [date, setDate] = useState(today);
@@ -501,11 +503,14 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
             <Copy className="size-4" />
             {t("Копировать для Excel")}
           </Button>
-          <Button variant="primary" onClick={download} disabled={busy} className="max-sm:w-full">
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
-            {t("Акт приёма-передачи")}
-            <span className="rounded bg-white/20 px-1.5 py-px text-[10px] font-semibold uppercase">Excel</span>
-          </Button>
+          {/* Акт — выгрузка Excel: только с правом «Выгрузки Excel». */}
+          {canExport && (
+            <Button variant="primary" onClick={download} disabled={busy} className="max-sm:w-full">
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
+              {t("Акт приёма-передачи")}
+              <span className="rounded bg-white/20 px-1.5 py-px text-[10px] font-semibold uppercase">Excel</span>
+            </Button>
+          )}
         </div>
       </div>
     </>

@@ -14,6 +14,7 @@ namespace OneBase.Api.Controllers;
 public sealed class SalesSyncController(IAppDbContext db, LinkoSyncCoordinator coordinator, LinkoSettingsStore linko, LinkoSyncProgress progress, IAuditLogger audit) : ControllerBase
 {
     /// <summary>Когда данные Linko последний раз успешно загружены и нет ли ошибок.</summary>
+    [SalesNoData]
     [HttpGet("status")]
     public async Task<IActionResult> Status(CancellationToken ct)
     {
@@ -36,6 +37,7 @@ public sealed class SalesSyncController(IAppDbContext db, LinkoSyncCoordinator c
     }
 
     /// <summary>Кнопка «Обновить»: запускает синхронизацию в фоне.</summary>
+    [SalesOrganizationOnly]
     [HttpPost("sync")]
     [HasPermission(Permissions.SalesManage)]
     public async Task<IActionResult> Sync([FromQuery] bool full = false, CancellationToken ct = default)
@@ -58,6 +60,7 @@ public sealed class SalesSyncController(IAppDbContext db, LinkoSyncCoordinator c
     /// Кнопка «Отменить»: прерывает идущую синхронизацию (в том числе фоновую). Загруженное до отмены сохраняется,
     /// прерванный шаг повторится со следующей синхронизацией.
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpPost("sync/cancel")]
     [HasPermission(Permissions.SalesManage)]
     public async Task<IActionResult> Cancel(CancellationToken ct)

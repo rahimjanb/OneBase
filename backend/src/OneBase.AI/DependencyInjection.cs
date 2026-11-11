@@ -217,6 +217,10 @@ public static class DependencyInjection
         services.AddScoped<ApprovalService>();
         services.AddScoped<IAiDirector, AiDirector>();
 
+        // «Аналитик» (OneBase Intelligence): аналитика отделов, прогнозы, риски, отчёты, AI-аналитик и его инструменты, фоновые задачи.
+        Analytik.AnalytikAiRegistration.AddAnalytikAi(services,
+            config.GetSection("Analytik").Get<OneBase.Application.Analytik.AnalytikOptions>() ?? new OneBase.Application.Analytik.AnalytikOptions(), isolation);
+
         return services;
     }
 

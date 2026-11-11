@@ -100,6 +100,9 @@ public sealed class AuthController(
     [Authorize]
     public async Task<IActionResult> Me([FromServices] OneBase.Application.Hr.HrService hr, [FromServices] OneBase.Application.Recruitment.RecruitmentService recruitment,
         [FromServices] OneBase.Application.Agents.DialogAgentService agents,
+        [FromServices] OneBase.Application.Sales.Access.SalesAccess salesAccess,
+        [FromServices] OneBase.Application.Sales.Access.SalesScopeAdmin salesScopes,
+        [FromServices] OneBase.Application.Work.WorkTaskService work,
         CancellationToken ct)
     {
         var id = User.GetUserId();
@@ -137,7 +140,22 @@ public sealed class AuthController(
             HrAccess = await hr.HasAccessAsync(id, permissions.ToHashSet(), ct),
             // Заявки на сотрудника (HR → «Подбор»): руководитель отдела или тот, кто ведёт подбор.
             HiringRequests = (await recruitment.ContextAsync(id, permissions.ToHashSet(), ct)).SeesRequests,
+            // Охват «Продаж»: уровень (Organization | Rm | Supervisor | Agent) и своя страница — вкладки раздела и вход в него. Проверяет каждый
+            // запрос всё равно сервер; без раздела «Продажи» — null.
+            SalesScope = permissions.Contains(Permissions.SalesRead) ? await SalesScopeOf(salesAccess, salesScopes, id, ct) : null,
+            // Отделы, задачи которых открываются: свой, те, которыми руководит, у руководства — все (в «Продажах» — и полевая команда Sales Base).
+            // Без раздела «Задачи» — пусто. Вместе со своими разделами отделов решает, какие отделы видны в «Отделах» и на главной.
+            Departments = permissions.Contains(Permissions.WorkTasks)
+                ? await work.OpenDepartmentCodesAsync(await work.ContextAsync(id, permissions.ToHashSet(), ct), ct)
+                : [],
         });
+    }
+
+    private static async Task<object> SalesScopeOf(OneBase.Application.Sales.Access.SalesAccess access, OneBase.Application.Sales.Access.SalesScopeAdmin admin, Guid id,
+        CancellationToken ct)
+    {
+        var scope = await access.ScopeAsync(id, ct);
+        return new { Level = scope.Level?.ToString() ?? "Organization", Home = await admin.HomeAsync(scope, ct) };
     }
 
     /// <summary>

@@ -11,7 +11,7 @@ const levelClass: Record<InsightLevel, { chip: string; dot: string }> = {
 
 /**
  * «Фокус дня» — до трёх инсайтов AI (критично, внимание, возможность) на градиентной панели с градиентной обводкой. Инсайты — только
- * реальные находки проактивного анализа консультанта; available = false — находки недоступны (нет права или сервис не ответил).
+ * реальные находки проактивного анализа консультанта; available = false — сервис не ответил (без права на консультанта блока нет — главная).
  */
 export function AiFocusPanel({ insights, available, departments, tasks, t }: { insights: Insight[]; available: boolean; departments: number; tasks: number; t: T }) {
   return (
@@ -48,7 +48,7 @@ export function AiFocusPanel({ insights, available, departments, tasks, t }: { i
 
         {insights.length === 0 && (
           <p className="rounded-[10px] border border-line bg-muted/50 px-4 py-5 text-center text-[13px] text-ink-3">
-            {available ? t("Проактивный анализ не нашёл проблем в данных OneBase.") : t("Находки консультанта недоступны: нет права на консультанта или сервис не ответил.")}
+            {available ? t("Проактивный анализ не нашёл проблем в данных OneBase.") : t("Не удалось загрузить находки консультанта — обновите страницу.")}
           </p>
         )}
         <div className={insights.length === 0 ? "hidden" : "grid gap-3 md:grid-cols-3"}>

@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, LayoutGrid } from "lucide-react";
 import { useT } from "@/i18n/client";
+import { salesTabAllowed, salesTabHref, type SalesScopeInfo } from "@/lib/sales/access";
 import { arrange, emptyPrefs, fit, pin, prefsKey, readPrefs, reorder, unpin, type NavPrefs } from "@/lib/module-nav";
 import { periodQuery } from "@/lib/sales/query";
 import { readTaskList } from "@/lib/task-list";
@@ -64,7 +65,7 @@ function useNavPrefs(moduleId: string | null, userId: string | null, keys: strin
  * ширины, языка, шрифтов, прав и закреплений. Телефон и планшет: строка чипов с прокруткой и кнопка «Все разделы» — шторка с сеткой и
  * поиском. Нажатая вкладка подсвечивается сразу, а не после загрузки страницы.
  */
-export function ModuleNav({ permissions, userId }: { permissions: string[] | null; userId: string | null }) {
+export function ModuleNav({ permissions, userId, salesScope = null }: { permissions: string[] | null; userId: string | null; salesScope?: SalesScopeInfo | null }) {
   const t = useT();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -109,9 +110,11 @@ export function ModuleNav({ permissions, userId }: { permissions: string[] | nul
         (tab) =>
           (!tab.permission || (Array.isArray(tab.permission) ? tab.permission : [tab.permission]).some((p) => permissions?.includes(p))) &&
           (!tab.headsOnly || work?.heads) &&
-          (!tab.approverOnly || work?.decides || work?.isDirector),
-      ),
-    [section, permissions, work],
+          (!tab.approverOnly || work?.decides || work?.isDirector) &&
+          // «Продажи» с охватом РМ / СВР / ТП: только вкладки своей части оргструктуры, «Вторичка» — своя страница.
+          (sectionId !== "sales" || salesTabAllowed(tab.key, salesScope)),
+      ).map((tab) => (sectionId === "sales" ? { ...tab, href: salesTabHref(tab.key, tab.href, salesScope) } : tab)),
+    [section, sectionId, permissions, work, salesScope],
   );
   const badgeOf = useCallback(
     (key: string): number | undefined => {

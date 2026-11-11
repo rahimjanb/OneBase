@@ -731,13 +731,9 @@ const dict: Dict = {
   "Премии": "Mukofotlar",
   "ТП {tp} · СВР {svr}": "TP {tp} · SVR {svr}",
   "оклад плюс премии по Linko": "oklad va Linko bo'yicha mukofotlar",
-  "Премии и оклады": "Mukofot va okladlar",
-  "видны с правом «Финансы»": "«Moliya» huquqi bilan ko'rinadi",
   "{n} без региона — укажите ниже": "{n} kishi mintaqasiz — quyida ko'rsating",
   "без KPI в Linko: {n}": "Linko'da KPI yo'q: {n}",
   "у всех людей регион определён": "hammaning mintaqasi aniqlangan",
-  "Оклады, бонусы и премии скрыты: нужно право «Финансы». Выполнение и факт видны всем с доступом к продажам.":
-    "Oklad, bonus va mukofotlar yashirin: «Moliya» huquqi kerak. Bajarilish va fakt savdoga kirishi bor hammaga ko'rinadi.",
   "У этих людей в Linko нет филиала, а по продажам, визитам и названиям регион не определился. Укажите регион — он сохранится в профиле и подтянется во всём разделе продаж.":
     "Bu kishilarning Linko'da filiali yo'q, savdo, tashrif va nomlar bo'yicha ham mintaqa aniqlanmadi. Mintaqani ko'rsating — u profilda saqlanadi va butun savdo bo'limida qo'llanadi.",
   "Регионы с продажами, у которых в Linko нет KPI за месяц: {list}. Для них премия не считается.":

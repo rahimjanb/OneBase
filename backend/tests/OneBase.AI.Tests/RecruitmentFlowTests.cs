@@ -106,7 +106,7 @@ public sealed class FakeHh : HttpMessageHandler
 
 /// <summary>
 /// Этапы 4–7: HH.uz (вход по state, синхронизация откликов в единую базу без дублей, платное резюме — исключение, действия только из ответа
-/// HH, обновление токена), AI-рекрутер (выключатель, согласие, просьба о человеке, ответ и выбор времени, неверный формат — человеку), оценка с
+/// HH, обновление токена), AI-рекрутер (выключатель, ответ без вопроса о согласии, просьба о человеке, ответ и выбор времени, неверный формат — человеку), оценка с
 /// проверкой цитат, собеседования (занятость по календарю, запись, напоминание), исключения, напоминание не ответившему, аналитика.
 /// </summary>
 public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
@@ -267,27 +267,23 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         Assert.Empty(await QueuedAsync(db));
         Assert.Empty(fixture.Gateway.Calls);
 
-        // Включили ИИ-агента «Рекрутер» («Настройки → ИИ-агенты»): без паузы и «печатает…», круглосуточно — чтобы тест не ждал.
+        // Включили ИИ-агента «Рекрутер» («Настройки → ИИ-агенты») — отвечает сразу.
         await EnableRecruiterAsync(sp);
 
-        // Без согласия — только текст согласия, без вызова модели.
-        await DeliverAsync(Msg(account, 2, "Расскажите про вакансию"));
-        Assert.Contains("ответьте «Согласен»", (await QueuedAsync(db))[^1]);
-        Assert.Empty(fixture.Gateway.Calls);
-        await SendQueuedAsync();
-
-        // «Согласен» — согласие записано, дальше отвечает модель (JSON: reply).
+        // Согласия на обработку данных не спрашивает: на первое же сообщение отвечает модель (JSON: reply).
         fixture.Gateway.Script.Enqueue(m =>
         {
             Assert.Contains("Права категории C", m[1].Content); // вакансия — в меняющейся части промпта
             Assert.Contains("Есть ли у вас опыт", m[1].Content); // вопросы отбора агента
             Assert.Contains("не выдавай", m[0].Content);
-            return "{\"action\":\"reply\",\"message\":\"Спасибо! Сколько лет вы работаете водителем?\",\"notes\":\"\"}";
+            Assert.Contains("Согласия на обработку данных не спрашивай", m[0].Content);
+            return "{\"action\":\"reply\",\"message\":\"Здравствуйте! Сколько лет вы работаете водителем?\",\"notes\":\"\"}";
         });
-        await DeliverAsync(Msg(account, 3, "Согласен"));
+        await DeliverAsync(Msg(account, 2, "Расскажите про вакансию"));
         var candidateId = (await db.Candidates.AsNoTracking().SingleAsync()).Id;
-        Assert.True(await db.CandidateConsents.AnyAsync(c => c.CandidateId == candidateId && c.Channel == "telegram"));
-        Assert.Equal("Спасибо! Сколько лет вы работаете водителем?", (await QueuedAsync(db))[^1]);
+        Assert.False(await db.CandidateConsents.AnyAsync(c => c.CandidateId == candidateId));
+        Assert.Equal("Здравствуйте! Сколько лет вы работаете водителем?", (await QueuedAsync(db))[^1]);
+        Assert.DoesNotContain(await QueuedAsync(db), t => t.Contains("Согласен"));
 
         // Модель решила пригласить — варианты времени из календаря (а не от модели); выбор «1» — запись и событие календаря.
         fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"propose_interview\",\"message\":\"Вы нам подходите!\",\"notes\":\"Опыт 5 лет, ждёт 7 млн\"}");
@@ -337,14 +333,11 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         var numbers = await db.Vacancies.AsNoTracking().ToDictionaryAsync(v => v.Id, v => v.Number);
         await EnableRecruiterAsync(sp);
 
-        await DeliverAsync(Msg(account, 1, "Здравствуйте, какие у вас есть вакансии?"));
-        Assert.Contains("ответьте «Согласен»", (await QueuedAsync(db))[^1]);
-        await SendQueuedAsync();
-
-        // После согласия модель видит все открытые вакансии OneBase с отделом, занятостью, требованиями и условиями.
+        // С первого сообщения модель видит все открытые вакансии OneBase с отделом, занятостью, требованиями и условиями и вопросы отбора агента.
         fixture.Gateway.Script.Enqueue(m =>
         {
             var context = m[1].Content;
+            Assert.Contains("Есть ли у вас опыт", context);
             Assert.Contains($"V{numbers[driver]} «Водитель-экспедитор» — отдел «Продажи», Ташкент, полная занятость", context);
             Assert.Contains("Права категории C, опыт от 2 лет", context);
             Assert.Contains($"V{numbers[operatorVacancy.Id]} «Оператор call-центра» — отдел «HR», Ташкент, сменный график, зарплата от 4500000 сум", context);
@@ -354,7 +347,7 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
             Assert.Contains("не придумывай вакансий", m[0].Content);
             return "{\"action\":\"reply\",\"messages\":[\"Сейчас открыты водитель-экспедитор и оператор call-центра. Что вам ближе?\"]}";
         });
-        await DeliverAsync(Msg(account, 2, "Согласен"));
+        await DeliverAsync(Msg(account, 2, "Здравствуйте, какие у вас есть вакансии?"));
         Assert.Contains("оператор call-центра", (await QueuedAsync(db))[^1]);
 
         // Кандидат выбрал — модель вернула код вакансии, кандидат записан на неё.
@@ -363,39 +356,30 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         await DeliverAsync(Msg(account, 3, "Хочу оператором"));
         Assert.Equal(operatorVacancy.Id, (await db.CandidateApplications.AsNoTracking().SingleAsync()).VacancyId);
 
-        // Дальше — его вакансия целиком, остальные открытые — списком.
+        // Дальше — его вакансия целиком, остальные открытые — тоже с подробностями.
         fixture.Gateway.Script.Enqueue(m =>
         {
             Assert.Contains($"Вакансия кандидата V{numbers[operatorVacancy.Id]}: Оператор call-центра", m[1].Content);
             Assert.Contains("Занятость: сменный график", m[1].Content);
             Assert.Contains($"Другие открытые вакансии компании", m[1].Content);
             Assert.Contains($"V{numbers[driver]} «Водитель-экспедитор»", m[1].Content);
+            Assert.Contains("Права категории C, опыт от 2 лет", m[1].Content);
             return "{\"action\":\"reply\",\"messages\":[\"Понял, спасибо!\"]}";
         });
         await DeliverAsync(Msg(account, 4, "Да, 2 года в магазине"));
         Assert.Equal("Понял, спасибо!", (await QueuedAsync(db))[^1]);
     }
 
-    /// <summary>Рекрутер HR по умолчанию — включён, отвечает сразу (без паузы и «печатает…»), круглосуточно.</summary>
+    /// <summary>Рекрутер HR по умолчанию — включён, круглосуточно (ответы уходят сразу всегда).</summary>
     internal static async Task<DialogAgent> EnableRecruiterAsync(IServiceProvider sp, Action<DialogAgent>? configure = null)
     {
         var db = sp.GetRequiredService<OneBaseDbContext>();
         var id = (await sp.GetRequiredService<DialogAgentService>().EnsureRecruiterAsync(default)).Id;
         var agent = await db.DialogAgents.SingleAsync(a => a.Id == id);
-        (agent.Enabled, agent.ReplyDelayMinSeconds, agent.ReplyDelayMaxSeconds, agent.Typing) = (true, 0, 0, false);
-        (agent.WorkFrom, agent.WorkTo, agent.WorkDays, agent.Intro) = (null, null, "1,2,3,4,5,6,7", "виртуальный помощник HR");
+        (agent.Enabled, agent.WorkFrom, agent.WorkTo, agent.WorkDays, agent.Intro) = (true, null, null, "1,2,3,4,5,6,7", "виртуальный помощник HR");
         configure?.Invoke(agent);
         await db.SaveChangesAsync();
         return agent;
-    }
-
-    private async Task SendQueuedAsync()
-    {
-        using var scope = fixture.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
-        await db.TelegramAccountDepartments.ExecuteUpdateAsync(u => u.SetProperty(d => d.MinIntervalSeconds, 1));
-        await db.TelegramOutgoingMessages.ExecuteUpdateAsync(u => u.SetProperty(m => m.SentAt, (DateTimeOffset?)null));
-        await scope.ServiceProvider.GetRequiredService<TelegramOutboxRunner>().RunOnceAsync(default);
     }
 
     [Theory]
@@ -405,13 +389,6 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
     [InlineData("Был оператором колл-центра", false)]
     [InlineData("Inson bilan gaplashsam bo'ladimi?", true)]
     public void Only_explicit_requests_for_a_human_hand_off(string text, bool expected) => Assert.Equal(expected, RecruiterRules.AsksForHuman(text));
-
-    [Theory]
-    [InlineData("Согласен", true)]
-    [InlineData("roziman", true)]
-    [InlineData("Не согласен", false)]
-    [InlineData("Согласен, но сначала расскажите о зарплате и графике работы подробнее, пожалуйста, и об оформлении", false)]
-    public void Consent_is_recognized_only_from_a_short_positive_answer(string text, bool expected) => Assert.Equal(expected, RecruiterRules.GivesConsent(text));
 
     // ---------- Оценка ----------
 

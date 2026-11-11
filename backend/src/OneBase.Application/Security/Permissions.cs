@@ -15,6 +15,12 @@ public static class Permissions
     public const string AuditRead = "audit.read";
     public const string SalesRead = "sales.read";
     public const string SalesManage = "sales.manage";
+
+    /// <summary>
+    /// «Продажи»: выгрузки Excel (остатки, акт автозаказа, обзор первички) — только вместе с разделом «Продажи» и в пределах охвата
+    /// пользователя (SalesScope): выгрузки по всей стране — только с охватом «вся организация».
+    /// </summary>
+    public const string SalesExport = "sales.export";
     public const string IntegrationsManage = "integrations.manage";
 
     /// <summary>Финансовые данные (оплаты и др.) — в том числе в ответах AI.</summary>
@@ -98,6 +104,15 @@ public static class Permissions
     /// <summary>Ввод смены (оператор производства): замесы, выпечка, брак по этапам, упаковка, закрыть смену. Рецептуры и нормы не меняет.</summary>
     public const string ProductionOperate = "production.operate";
 
+    /// <summary>
+    /// Раздел «Аналитик»: панель компании, AI-аналитик, аналитика отделов, прогнозы, риски, отчёты. Данные — только в пределах остальных прав
+    /// пользователя (таблицы и показатели отдела без его права не видны, продажи — в пределах области продаж).
+    /// </summary>
+    public const string AnalytikUse = "analytik.use";
+
+    /// <summary>Управление Аналитиком: каталог базы и описания таблиц, журнал запросов всех пользователей, запуск фоновых задач.</summary>
+    public const string AnalytikManage = "analytik.manage";
+
     public static readonly IReadOnlyList<string> All =
     [
         IntegrationsManage,
@@ -114,6 +129,7 @@ public static class Permissions
         AuditRead,
         SalesRead,
         SalesManage,
+        SalesExport,
         FinanceRead,
         HrRead,
         FieldUse,
@@ -134,5 +150,7 @@ public static class Permissions
         HrRecruitmentRead,
         HrRecruitmentManage,
         ProductionOperate,
+        AnalytikUse,
+        AnalytikManage,
     ];
 }

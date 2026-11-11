@@ -33,10 +33,14 @@ public class SystemRolesTests
     [InlineData("marketing")]
     public void Every_department_has_a_role_without_settings(string department)
     {
-        var role = Assert.Single(SystemRoles.All, r => r.DepartmentCode == department && r.Name != SystemRoles.DataAdmin);
-
-        Assert.DoesNotContain(role.Permissions, SystemRoles.SettingsPermissions.Contains);
-        Assert.Contains(Permissions.AgentsRun, role.Permissions);
+        // У отдела продаж ролей несколько: «Продажи», «РМ» и «Супервайзер продаж» (свои регионы) — у всех нет настроек и есть консультант.
+        var roles = SystemRoles.All.Where(r => r.DepartmentCode == department && r.Name != SystemRoles.DataAdmin).ToList();
+        Assert.NotEmpty(roles);
+        Assert.All(roles, role =>
+        {
+            Assert.DoesNotContain(role.Permissions, SystemRoles.SettingsPermissions.Contains);
+            Assert.Contains(Permissions.AgentsRun, role.Permissions);
+        });
     }
 
     [Fact]

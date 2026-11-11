@@ -168,7 +168,9 @@ public class UserRightsTests(DataManagerDb fixture) : IClassFixture<DataManagerD
         var row = list.GetProperty("users").EnumerateArray().Single(u => u.GetProperty("id").GetGuid() == keeper);
         Assert.Equal((true, 2), (row.GetProperty("rightsCustom").GetBoolean(), row.GetProperty("rights").GetArrayLength()));
         Assert.Equal(UserRights.All.Count, list.GetProperty("rights").GetArrayLength());
-        Assert.Equal(3, list.GetProperty("rightGroups").GetArrayLength());
+        // Группы: снабжение и склад, производство, продажи (выгрузки Excel), настройки.
+        Assert.Equal([UserRights.Supply, UserRights.Production, UserRights.Sales, UserRights.Settings],
+            list.GetProperty("rightGroups").EnumerateArray().Select(g => g.GetProperty("key").GetString()).ToArray());
         Assert.Contains("Свои права изменить нельзя",
             Error(await Users(sp, keeper, [Permissions.UsersManage, .. KeeperRole, Permissions.QualityCheck]).Update(keeper,
                 Input(org, $"r-k1-{org.S}", [Permissions.QualityCheck]) with { Password = null }, default)));

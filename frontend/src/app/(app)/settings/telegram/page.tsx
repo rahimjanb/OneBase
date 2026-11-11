@@ -2,7 +2,8 @@ import { TelegramSettings } from "@/components/telegram/TelegramSettings";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
 import type { TelegramOverview } from "@/lib/telegram";
-import { apiGet } from "@/lib/server-api";
+import { apiGet, apiSession } from "@/lib/server-api";
+import type { Me } from "@/lib/users";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -10,7 +11,7 @@ export async function generateMetadata() {
 }
 
 export default async function TelegramSettingsPage() {
-  const overview = await apiGet<TelegramOverview>("/api/settings/telegram", "/settings/telegram");
+  const [overview, me] = await Promise.all([apiGet<TelegramOverview>("/api/settings/telegram", "/settings/telegram"), apiSession<Me>("/api/auth/me")]);
   const t = await getT();
   return (
     <>
@@ -21,7 +22,8 @@ export default async function TelegramSettingsPage() {
         breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Настройки"), href: "/settings" }, { label: "Telegram" }]}
       />
       <PageBody>
-        <TelegramSettings initial={overview} />
+        {/* Автоматические отчёты строятся по данным «Продаж»: без права на них ссылок нет (без ответа API — показываем, страница проверит сама). */}
+        <TelegramSettings initial={overview} reports={!me || me.permissions.includes("sales.read")} />
       </PageBody>
     </>
   );

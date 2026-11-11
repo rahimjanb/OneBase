@@ -102,13 +102,12 @@ public sealed class HrHarness(DataManagerDb fixture, long firstPeer)
         await scope.ServiceProvider.GetServices<ITelegramDepartmentHandler>().Single(h => h.Department == "hr").HandleAsync(m, route, default);
     }
 
-    /// <summary>Согласие дано (как ответ «Согласен» на текст согласия) — чтобы тест шёл сразу к документам.</summary>
-    public async Task ConsentAsync(Chat chat)
+    /// <summary>Кандидат поздоровался, рекрутер сразу ответил (согласия не спрашивает) — тест идёт к документам.</summary>
+    public async Task HelloAsync(Chat chat)
     {
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Здравствуйте! Расскажите, какая работа вам интересна?\"]}");
         await SayAsync(chat, "Здравствуйте, хочу работать у вас");
         await SendQueuedAsync();
-        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Спасибо! Расскажите, какая работа вам интересна?\"]}");
-        await SayAsync(chat, "Согласен");
     }
 
     public async Task SendQueuedAsync()

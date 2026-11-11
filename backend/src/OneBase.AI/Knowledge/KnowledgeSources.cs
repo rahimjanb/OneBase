@@ -98,6 +98,10 @@ public static class KnowledgeSources
         new(AiAlerts, "Находки AI («Фокус дня»)",
             "Что проактивный анализ OneBase нашёл в данных отделов: критичные риски, предупреждения и возможности с рекомендациями, когда найдено и закрыто.",
             "ai.Alerts", "Обзор → Фокус дня; AI → Находки", Permissions.AgentsRun),
+        new(Analytik.AnalytikTools.Source, "OneBase Intelligence (Аналитик)",
+            "Каталог всей базы OneBase и запросы к ней по типизированному плану (только чтение, по правам пользователя), панель компании, план закупок, " +
+            "склад сырья, производство, финансы, персонал, прогнозы, риски, качество данных, управленческие отчёты. Только у команды «Аналитик».",
+            "Все доступные таблицы (каталог analytik.*), analytik.Insights, Forecasts, Reports", "Аналитик", Permissions.AnalytikUse),
         new(Documents, "База знаний", "Документы, загруженные в базу знаний AI: регламенты, отчёты, выгрузки Excel и CSV.",
             "ai.KnowledgeDocuments, ai.KnowledgeChunks", "Настройки → AI → База знаний", Permissions.FilesRead),
     ];

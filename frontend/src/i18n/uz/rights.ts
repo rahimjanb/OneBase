@@ -66,6 +66,11 @@ const dict: Dict = {
   "Право «{name}» выдать нельзя: у вас самих его нет.": "«{name}» huquqini berib bo'lmaydi: sizning o'zingizda u yo'q.",
   "«{name}» действует только вместе с разделом «{section}» — отметьте раздел.": "«{name}» faqat «{section}» bo'limi bilan amal qiladi — bo'limni belgilang.",
   "Свои права изменить нельзя — попросите другого администратора.": "O'z huquqlaringizni o'zgartirib bo'lmaydi — boshqa administratordan so'rang.",
+  // Продажи: выгрузки Excel (право sales.export)
+  "Что сотрудник может делать в разделе «Продажи» сверх просмотра. Что он видит — охват продаж ниже.": "Xodim «Savdo» bo'limida ko'rishdan tashqari nima qila oladi. U nimani ko'rishi — quyidagi savdo qamrovi.",
+  "Выгрузки Excel": "Excel yuklamalari",
+  "Скачивать остатки, акт автозаказа и обзор первички в Excel — только в пределах своего охвата продаж.": "Qoldiqlar, avtobuyurtma dalolatnomasi va birlamchi savdo sharhini Excel'da yuklab olish — faqat o'z savdo qamrovi doirasida.",
+  "Продажи: выгрузки Excel": "Savdo: Excel yuklamalari",
 };
 
 export default dict;

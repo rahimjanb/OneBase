@@ -58,7 +58,7 @@ public sealed partial class OrchestratedConsultantEngine(
         }
 
         var own = await permissions.GetAsync(turn.UserId, ct);
-        var departments = all.Where(a => !a.IsConsultant && a.Enabled).ToList();
+        var departments = all.Where(a => !a.IsConsultant && a.Enabled && a.Team == Analytik.AgentTeams.Consultant).ToList();
         var permitted = departments.Where(a => a.RequiredPermission is null || own.Contains(a.RequiredPermission)).ToList();
         // Сотрудник без единого инструмента данных для пользователя не запускается: иначе он ответил бы «данных нет» вместо «нет доступа».
         var access = await DataAccessAsync(permitted, turn.UserId, ct);

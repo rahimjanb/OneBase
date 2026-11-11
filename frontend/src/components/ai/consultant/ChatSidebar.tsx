@@ -30,7 +30,15 @@ export function ChatSidebar({
   onDelete,
   onNavigate,
   onClose,
+  base = "/consultant",
+  api = "ai",
+  telegram = true,
 }: {
+  /** Раздел чата: адрес страницы и префикс API (консультант или «Аналитик»). */
+  base?: string;
+  api?: string;
+  /** Фильтр «Веб / Telegram» и карточка бота — только там, куда приходят вопросы из Telegram. */
+  telegram?: boolean;
   list: ConversationSummary[];
   activeId: string | null;
   pinned: ReadonlySet<string>;
@@ -62,7 +70,7 @@ export function ChatSidebar({
     let alive = true;
     setSearching(true);
     const timer = setTimeout(() => {
-      bff<ConversationSummary[]>(`ai/conversations?q=${encodeURIComponent(q)}`)
+      bff<ConversationSummary[]>(`${api}/conversations?q=${encodeURIComponent(q)}`)
         .then((r) => alive && setFound(r))
         .catch(() => alive && setFound(list.filter((c) => c.title.toLowerCase().includes(q.toLowerCase()))))
         .finally(() => alive && setSearching(false));
@@ -80,7 +88,7 @@ export function ChatSidebar({
     <div className="flex h-full flex-col gap-3.5 px-3.5 pb-3.5 pt-[18px]">
       <div className="flex items-center gap-2">
         <Link
-          href="/consultant"
+          href={base}
           onClick={onNavigate}
           className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#3d7bff] to-[#5b8cff] p-3 text-sm font-semibold text-white shadow-[0_6px_18px_rgb(61_123_255/0.25)] hover:brightness-110"
         >
@@ -106,6 +114,7 @@ export function ChatSidebar({
         />
       </label>
 
+      {telegram && (
       <div role="radiogroup" aria-label={t("Источник чатов")} className="grid grid-cols-3 gap-1 rounded-[10px] border border-line bg-surface p-1">
         {filters.map((f) => (
           <button
@@ -120,6 +129,7 @@ export function ChatSidebar({
           </button>
         ))}
       </div>
+      )}
 
       <nav aria-label={t("Чаты")} className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
         {source.length === 0 && !searching && <p className="px-2 py-6 text-center text-[13px] text-ink-3">{query.trim() ? t("Ничего не найдено") : t("Чатов пока нет")}</p>}
@@ -131,6 +141,7 @@ export function ChatSidebar({
               {g.items.map((c) => (
                 <ChatRow
                   key={c.id}
+                  base={base}
                   chat={c}
                   active={c.id === activeId}
                   pinned={pinned.has(c.id)}
@@ -162,12 +173,13 @@ export function ChatSidebar({
         ))}
       </nav>
 
-      <TelegramCard />
+      {telegram && <TelegramCard />}
     </div>
   );
 }
 
 function ChatRow({
+  base,
   chat,
   active,
   pinned,
@@ -181,6 +193,7 @@ function ChatRow({
   onDelete,
   onNavigate,
 }: {
+  base: string;
   chat: ConversationSummary;
   active: boolean;
   pinned: boolean;
@@ -225,7 +238,7 @@ function ChatRow({
   return (
     <li className={`group relative rounded-[9px] border ${active ? "border-line-strong bg-surface-2" : "border-transparent hover:bg-surface-2/60"}`}>
       <Link
-        href={`/consultant/${chat.id}`}
+        href={`${base}/${chat.id}`}
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
         className="flex items-center gap-2.5 px-2.5 py-[9px]"

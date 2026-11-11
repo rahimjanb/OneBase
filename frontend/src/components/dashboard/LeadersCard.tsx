@@ -15,24 +15,22 @@ const MEDAL: Record<number, string> = { 2: "bg-ink-3/15 text-ink-2", 3: "bg-warn
 
 /**
  * «Лидеры месяца» (данные Verifix): сотрудники, которые за месяц ни разу не опоздали, — по отработанным часам. Первое место — отдельной
- * плашкой с кубком, второе и третье — с медалями, остальные — компактным списком под чертой. Рейтинг видят HR и руководители отделов
- * (access); data = null при доступе — API не ответил.
+ * плашкой с кубком, второе и третье — с медалями, остальные — компактным списком под чертой. Рейтинг видят HR и руководители отделов —
+ * остальным блок не показывается (главная); data = null — API не ответил.
  */
-export function LeadersCard({ data, access, month, t }: { data: HrLeaders | null; access: boolean; month: string; t: T }) {
+export function LeadersCard({ data, month, t }: { data: HrLeaders | null; month: string; t: T }) {
   const leaders = data?.leaders ?? [];
   const [first, ...rest] = leaders;
   const podium = rest.slice(0, 2);
   const others = rest.slice(2);
-  const empty = !access
-    ? t("Рейтинг виден HR и руководителям отделов")
-    : !data
-      ? t("Не удалось загрузить данные Verifix")
-      : !data.sync.configured
-        ? t("Подключите Verifix, чтобы увидеть лидеров")
-        : t("Пока никто не отработал месяц без опозданий");
+  const empty = !data
+    ? t("Не удалось загрузить данные Verifix")
+    : !data.sync.configured
+      ? t("Подключите Verifix, чтобы увидеть лидеров")
+      : t("Пока никто не отработал месяц без опозданий");
 
   return (
-    <DashCard className="flex flex-col gap-4 p-5 xl:w-[280px]">
+    <DashCard className="flex flex-col gap-4 p-5">
       <CardHeader title={t("Лидеры месяца")} subtitle={t("Без опозданий · часы за {month}", { month })} />
       {!first ? (
         <div className="flex flex-1 items-center justify-center px-2 py-8 text-center text-[13px] text-ink-4">{empty}</div>
@@ -76,11 +74,9 @@ export function LeadersCard({ data, access, month, t }: { data: HrLeaders | null
       {data && first && (
         <p className="text-[11.5px] text-ink-4">{t("Без опозданий: {count} из {total}", { count: data.onTime, total: data.employees })}</p>
       )}
-      {access && (
-        <Link href="/hr/timesheets?sort=worked&dir=desc" className={`${outlineButton} mt-auto h-9 w-full rounded-[9px]`}>
-          {t("Полный рейтинг")} <ArrowRight className="size-3.5" />
-        </Link>
-      )}
+      <Link href="/hr/timesheets?sort=worked&dir=desc" className={`${outlineButton} mt-auto h-9 w-full rounded-[9px]`}>
+        {t("Полный рейтинг")} <ArrowRight className="size-3.5" />
+      </Link>
     </DashCard>
   );
 }

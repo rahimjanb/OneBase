@@ -26,7 +26,8 @@ public sealed partial class UsersController(
     IAppDbContext db,
     IPasswordHasher<User> hasher,
     UserAccessCache access,
-    IAuditLogger audit) : ControllerBase
+    IAuditLogger audit,
+    OneBase.Application.Sales.Access.SalesScopeAdmin? salesScopes = null) : ControllerBase
 {
     public const int MinPasswordLength = 8;
 
@@ -44,7 +45,9 @@ public sealed partial class UsersController(
         Guid? DepartmentId = null,
         Guid? HrEmployeeId = null,
         bool NoVerifix = false,
-        IReadOnlyList<string>? Rights = null);
+        IReadOnlyList<string>? Rights = null,
+        /// <summary>Регионы РМ / супервайзера продаж (роли «РМ», «Супервайзер продаж»): что пользователь видит в «Продажах». Другим ролям не нужны.</summary>
+        IReadOnlyList<Guid>? SalesRegionIds = null);
 
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
@@ -126,6 +129,25 @@ public sealed partial class UsersController(
         });
     }
 
+    /// <summary>Регионы для роли «РМ» / «Супервайзер продаж» — проверка до сохранения пользователя; null — всё в порядке.</summary>
+    private async Task<string?> SalesRegionsErrorAsync(string roleName, IReadOnlyList<Guid>? regionIds, CancellationToken ct)
+    {
+        if (salesScopes is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            await salesScopes.ValidateRoleAsync(roleName, regionIds, ct);
+            return null;
+        }
+        catch (OneBase.Application.Field.FieldValidationException e)
+        {
+            return e.Message;
+        }
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create(UserInput input, CancellationToken ct)
     {
@@ -145,6 +167,11 @@ public sealed partial class UsersController(
             return BadRequest(new { error = "Выберите сотрудника в Verifix или отметьте «Без привязки к Verifix»." });
         }
 
+        if (await SalesRegionsErrorAsync(values.Role.Name, input.SalesRegionIds, ct) is { } regionsError)
+        {
+            return BadRequest(new { error = regionsError });
+        }
+
         var user = new User { Login = values.Login, FullName = string.Empty };
         Apply(user, values);
         user.Sections = values.Sections;
@@ -158,6 +185,11 @@ public sealed partial class UsersController(
         // В журнал — только идентификаторы и роль, без имени, телефона и почты.
         await audit.LogAsync(ActorType.User, User.GetUserId().ToString(), "users.created", "user", user.Id.ToString(),
             new { role = values.Role.Name, sections = values.Sections, rights = values.Rights, verifix = values.HrEmployee }, ct);
+        if (salesScopes is not null)
+        {
+            await salesScopes.ApplyRoleAsync(User.GetUserId(), user.Id, values.Role.Name, input.SalesRegionIds, ct); // регионы РМ / СВР
+        }
+
         return Ok(new { user.Id });
     }
 
@@ -218,6 +250,11 @@ public sealed partial class UsersController(
             return BadRequest(new { error = $"Пароль — не короче {MinPasswordLength} символов." });
         }
 
+        if (await SalesRegionsErrorAsync(values.Role.Name, input.SalesRegionIds, ct) is { } regionsError)
+        {
+            return BadRequest(new { error = regionsError });
+        }
+
         var wasActive = user.IsActive;
         Apply(user, values);
         user.Sections = values.Sections;
@@ -238,6 +275,11 @@ public sealed partial class UsersController(
         var verifixChanged = await LinkAsync(user.Id, values.HrEmployee, input.NoVerifix, ct);
         await db.SaveChangesAsync(ct);
         access.Invalidate(user.Id); // новая роль, разделы или отключение действуют сразу
+        if (salesScopes is not null && (!isMe || roleChanged))
+        {
+            // Регионы РМ / супервайзера продаж — по роли; свои не меняет никто (у себя роль и регионы не правятся).
+            await salesScopes.ApplyRoleAsync(User.GetUserId(), user.Id, values.Role.Name, input.SalesRegionIds, ct);
+        }
         if (passwordChanged)
         {
             // Новый пароль закрывает старые входы на всех устройствах; свой текущий вход администратор сохраняет.

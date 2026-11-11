@@ -16,7 +16,6 @@ import {
   Info,
   LayoutGrid,
   List,
-  Lock,
   Megaphone,
   Package,
   RefreshCw,
@@ -37,7 +36,7 @@ export type BoardCard = DeptCard & { href: string };
 
 /** Иконки отделов (ТЗ); неизвестный отдел — здание. */
 const icons: Record<string, LucideIcon> = { production: Factory, finance: Wallet, sales: ShoppingCart, marketing: Megaphone, supply: Package, hr: Users };
-const detailIcons: Record<DeptDetailIcon, LucideIcon> = { cart: ShoppingCart, attendance: UserCheck, info: Info, lock: Lock };
+const detailIcons: Record<DeptDetailIcon, LucideIcon> = { cart: ShoppingCart, attendance: UserCheck, info: Info };
 
 type Tone = "ok" | "warn" | "bad" | "none";
 

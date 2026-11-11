@@ -7,10 +7,12 @@ using OneBase.Application.Telegram.Outbox;
 namespace OneBase.Infrastructure.Telegram;
 
 /// <summary>
-/// Очередь исходящих подразделений (HR): после запуска «отправляется» — в «неизвестно» (без автоповтора), затем раз в 3 с — круг отправки.
-/// При <c>Telegram:Enabled=false</c> не отправляет ничего (строки ждут). В копии для проверки не регистрируется вовсе.
+/// Очередь исходящих подразделений (HR): после запуска «отправляется» — в «неизвестно» (без автоповтора), затем круг отправки сразу, как только
+/// в очередь встало сообщение (<see cref="TelegramOutboxSignal"/>), и не реже раза в 3 с (отложенные сообщения, повторы). При
+/// <c>Telegram:Enabled=false</c> не отправляет ничего (строки ждут). В копии для проверки не регистрируется вовсе.
 /// </summary>
-internal sealed class TelegramOutboxWorker(IServiceScopeFactory scopes, IConfiguration config, ILogger<TelegramOutboxWorker> logger) : BackgroundService
+internal sealed class TelegramOutboxWorker(IServiceScopeFactory scopes, TelegramOutboxSignal signal, IConfiguration config, ILogger<TelegramOutboxWorker> logger)
+    : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(3);
 
@@ -34,9 +36,9 @@ internal sealed class TelegramOutboxWorker(IServiceScopeFactory scopes, IConfigu
                 }
             }
 
-            using var timer = new PeriodicTimer(Interval);
-            while (await timer.WaitForNextTickAsync(stoppingToken))
+            while (!stoppingToken.IsCancellationRequested)
             {
+                await signal.WaitAsync(Interval, stoppingToken);
                 try
                 {
                     using var scope = scopes.CreateScope();

@@ -26,12 +26,10 @@ public class HrDialogTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
     private async Task<(HrHarness.Chat Chat, Guid Conversation)> CandidateAsync(OneBaseDbContext db, int number, string hello = "Здравствуйте, я по вакансии")
     {
         var chat = _hr.NewChat();
-        await _hr.SayAsync(chat, $"{hello} #V{number}");
-        await _hr.SendQueuedAsync();
         var uzbek = hello.StartsWith("Ассалому", StringComparison.Ordinal);
         var reply = uzbek ? "Раҳмат! Қанча йиллик тажрибангиз бор?" : "Спасибо! Сколько лет вы водите грузовик?";
         fixture.Gateway.Script.Enqueue(_ => $"{{\"action\":\"reply\",\"messages\":[\"{reply}\"]}}");
-        await _hr.SayAsync(chat, uzbek ? "Розиман" : "Согласен");
+        await _hr.SayAsync(chat, $"{hello} #V{number}");
         await _hr.SendQueuedAsync();
         var conversation = await db.TelegramConversations.AsNoTracking().SingleAsync(c => c.PeerId == chat.Peer.PeerId);
         return (chat, conversation.Id);
@@ -61,15 +59,17 @@ public class HrDialogTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
         Assert.Equal("ai", list.Single(r => r.Id == aiId).Mode);
         Assert.Equal("Водитель-экспедитор", list.Single(r => r.Id == aiId).VacancyTitle);
         Assert.Equal("ai", list.Single(r => r.Id == aiId).LastAuthor);
-        Assert.Equal(2, list.Single(r => r.Id == aiId).Unread);
+        Assert.Equal(1, list.Single(r => r.Id == aiId).Unread); // одно сообщение кандидата — согласия больше не спрашивают
         var summary = await dialogs.SummaryAsync(_hr.Hr, false, default);
         Assert.Equal((3, 2, 1, 3), (summary.Counts.Total, summary.Counts.Ai, summary.Counts.NeedHr, summary.Counts.Unread));
+        Assert.Equal(3, await dialogs.UnreadDialogsAsync(_hr.Hr, default)); // подпись кнопки «Диалоги Telegram» — то же число
         Assert.True(summary.Number!.Connected);
 
         // Открыл — прочитано у него; у другого сотрудника — по-прежнему непрочитанные.
         var dialog = await dialogs.GetAsync(_hr.Hr, needHrId, default);
         Assert.Equal(0, (await dialogs.ListAsync(_hr.Hr, null, default)).Single(r => r.Id == needHrId).Unread);
-        Assert.Equal(3, (await dialogs.ListAsync(new RecruitmentContext(fixture.ViewerId, true, false, []), null, default)).Single(r => r.Id == needHrId).Unread);
+        Assert.Equal(2, (await dialogs.ListAsync(new RecruitmentContext(fixture.ViewerId, true, false, []), null, default)).Single(r => r.Id == needHrId).Unread);
+        Assert.Equal((2, 3), (await dialogs.UnreadDialogsAsync(_hr.Hr, default), await dialogs.UnreadDialogsAsync(new RecruitmentContext(fixture.ViewerId, true, false, []), default)));
         Assert.Contains(dialog.Items, i => i is { Kind: "system", Event: "handoff_to_hr" } && i.Text!.Contains("кандидат просит человека"));
         Assert.Contains(dialog.Items, i => i.Kind == "candidate" && i.Text == "Можно поговорить с человеком?");
         Assert.Contains(dialog.Items, i => i.Kind == "ai");

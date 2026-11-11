@@ -354,5 +354,21 @@ internal static class ProductionModel
             e.HasOne<OneBase.Domain.Procurement.ProcurementItem>().WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_ProductionRecipeImportItemMaps_Items_ItemId");
         });
+
+        // Фото продукта: одно на код техкарты (у всех версий одно фото); адрес картинки — по FileId.
+        b.Entity<ProductionRecipePhoto>(e =>
+        {
+            e.ToTable("RecipePhotos", Schema, t => t.HasCheckConstraint("CK_ProductionRecipePhotos_Size", "\"Width\" > 0 AND \"Height\" > 0 AND \"SizeBytes\" > 0"));
+            e.HasKey(x => x.Id).HasName("PK_ProductionRecipePhotos");
+            e.Property(x => x.Code).HasMaxLength(32);
+            e.Property(x => x.ObjectKey).HasMaxLength(200);
+            e.Property(x => x.ThumbKey).HasMaxLength(200);
+            e.Property(x => x.SmallKey).HasMaxLength(200);
+            e.Property(x => x.Tint).HasMaxLength(7);
+            e.HasIndex(x => x.Code).IsUnique().HasDatabaseName("IX_ProductionRecipePhotos_Code");
+            e.HasIndex(x => x.FileId).IsUnique().HasDatabaseName("IX_ProductionRecipePhotos_FileId");
+            e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.UploadedById).OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_ProductionRecipePhotos_Users_UploadedById");
+        });
     }
 }

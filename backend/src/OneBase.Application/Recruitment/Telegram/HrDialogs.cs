@@ -112,6 +112,19 @@ public sealed class HrDialogService(
             rows.Count(r => r.Unread > 0)));
     }
 
+    /// <summary>Сколько диалогов HR с непрочитанными входящими у этого сотрудника — для кнопки «Диалоги Telegram» (как Unread в строке списка).</summary>
+    public async Task<int> UnreadDialogsAsync(RecruitmentContext ctx, CancellationToken ct)
+    {
+        Read(ctx);
+        var conversations = db.TelegramConversations.Where(c => c.Department == TelegramDepartments.Hr && c.ChatType == TelegramChatType.Private).Select(c => c.Id);
+        return await (from m in db.TelegramConversationMessages.AsNoTracking()
+                          .Where(m => conversations.Contains(m.ConversationId) && m.Direction == TelegramMessageDirection.In)
+                      join r in db.DialogReads.AsNoTracking().Where(r => r.UserId == ctx.UserId) on m.ConversationId equals r.ConversationId into reads
+                      from r in reads.DefaultIfEmpty()
+                      where r == null || m.SentAt > r.ReadAt
+                      select m.ConversationId).Distinct().CountAsync(ct);
+    }
+
     /// <summary>Диалоги HR: сначала «нужен HR», затем по последнему сообщению; поиск — по имени и @username.</summary>
     public async Task<IReadOnlyList<HrDialogRow>> ListAsync(RecruitmentContext ctx, string? search, CancellationToken ct)
     {

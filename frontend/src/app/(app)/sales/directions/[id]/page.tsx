@@ -3,6 +3,8 @@ import { GroupPage } from "@/components/sales/GroupPage";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { getT } from "@/i18n/server";
 import { apiGetOrNull } from "@/lib/server-api";
+import { visibleBack, visibleCrumbs } from "@/lib/sales/access";
+import { mySalesScope } from "@/lib/sales/scope-server";
 import { apiQuery, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { GroupView } from "@/lib/sales/types";
 
@@ -14,6 +16,7 @@ export default async function DirectionPage({
   searchParams: Promise<SalesSearchParams>;
 }) {
   const t = await getT();
+  const scope = await mySalesScope(); // крошки и «Назад» — без страниц, закрытых охвату
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const path = `/sales/directions/${id}`;
   const data = await apiGetOrNull<GroupView>(`/api/sales/directions/${id}${apiQuery(sp, ["from", "to", "metric", "category"])}`, path);
@@ -27,8 +30,8 @@ export default async function DirectionPage({
     <SalesFrame
       title={name}
       subtitle={subtitle}
-      crumbs={[{ label: t("Республика"), href: withQuery("/sales/republic", q) }, { label: name }]}
-      back={withQuery("/sales/republic", q)}
+      crumbs={visibleCrumbs([{ label: t("Республика"), href: withQuery("/sales/republic", q) }, { label: name }], scope)}
+      back={visibleBack(withQuery("/sales/republic", q), scope)}
       sp={sp}
       period={data.period}
     >

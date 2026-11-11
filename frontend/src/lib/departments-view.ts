@@ -8,7 +8,7 @@
 import type { T } from "@/i18n/core";
 
 export type DeptStatus = "done" | "ok" | "attention" | "none" | "error";
-export type DeptDetailIcon = "cart" | "attendance" | "info" | "lock";
+export type DeptDetailIcon = "cart" | "attendance" | "info";
 
 export type DeptCard = {
   code: string;
@@ -110,10 +110,13 @@ export function noDataCard(code: DeptCode, ctx: Ctx): DeptCard {
   return { ...base(code, ctx), detail: { icon: "info", text: cap(ctx.t("Нет данных за {month}", { month: ctx.month })) } };
 }
 
-/** Нет доступа к данным раздела — «Нет данных» без числа; ошибка ответа — «Не удалось загрузить» (кнопка «Повторить» — в карточке). */
-function unavailable(code: DeptCode, load: { state: "forbidden" | "error" }, ctx: Ctx, why = "Нет доступа к показателям отдела"): DeptCard {
+/**
+ * Показатели отдела закрыты правами (сам отдел пользователю открыт, иначе карточки нет) — карточка без числа и без пояснений о доступе;
+ * ошибка ответа — «Не удалось загрузить» (кнопка «Повторить» — в карточке).
+ */
+function unavailable(code: DeptCode, load: { state: "forbidden" | "error" }, ctx: Ctx): DeptCard {
   const card = base(code, ctx);
-  return load.state === "error" ? { ...card, status: "error", period: null } : { ...card, period: null, detail: { icon: "lock", text: ctx.t(why) } };
+  return load.state === "error" ? { ...card, status: "error", period: null } : { ...card, period: null };
 }
 
 export type SalesData = {
@@ -208,14 +211,14 @@ export type SupplyData = { requestsAwaitingOrder: number | null; overdueToBuy?: 
 
 /**
  * Снабжение: доля заявок к закупке без просрочки (к закупке ничего — 100%); есть просроченные — «Требует внимания», нет — «В норме». Это
- * показатель на сегодня: за прошлый месяц — «Показатель только на сегодня». Заявки видят снабжение и директор — у остальных «Нет данных».
+ * показатель на сегодня: за прошлый месяц — «Показатель только на сегодня». Заявки видят снабжение и директор — у остальных карточка без числа.
  */
 export function supplyCard(load: Load<SupplyData>, ctx: Ctx): DeptCard {
   const { t } = ctx;
   if (!ctx.current) return { ...base("supply", ctx), period: null, detail: { icon: "info", text: t("Показатель только на сегодня — за прошлые месяцы его нет") } };
   if (load.state !== "ok") return unavailable("supply", load, ctx);
   const p = load.data;
-  if (p.requestsAwaitingOrder == null) return unavailable("supply", { state: "forbidden" }, ctx, "Заявки к закупке видят снабжение и директор");
+  if (p.requestsAwaitingOrder == null) return unavailable("supply", { state: "forbidden" }, ctx);
   const toBuy = p.requestsAwaitingOrder;
   const overdue = Math.min(p.overdueToBuy ?? 0, toBuy);
   const onTime = toBuy > 0 ? Math.round((100 * (toBuy - overdue)) / toBuy) : 100;

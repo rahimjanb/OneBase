@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { VacancyExtras } from "@/components/recruitment/Flow";
@@ -20,7 +19,6 @@ import {
   type RecruitmentContext,
   type Vacancy,
   type VacancyInput,
-  type VacancyRow,
   type VacancyStatus,
 } from "@/lib/recruitment";
 
@@ -36,7 +34,7 @@ export function StatusBadge({ status }: { status: VacancyStatus }) {
   return <Badge className={statusTone[status]}>{t(vacancyStatusLabel[status])}</Badge>;
 }
 
-const emptyInput = (ctx: RecruitmentContext): VacancyInput => ({
+export const emptyInput = (ctx: RecruitmentContext): VacancyInput => ({
   title: "",
   departmentId: ctx.departments[0]?.id ?? "",
   description: null,
@@ -136,116 +134,11 @@ export function VacancyForm({ ctx, initial, onSave, onCancel }: { ctx: Recruitme
   );
 }
 
-/** Список вакансий: открытые сверху, фильтр по статусу и поиск; HR создаёт новую. */
-export function VacanciesView({ ctx }: { ctx: RecruitmentContext }) {
-  const t = useT();
-  const router = useRouter();
-  const [rows, setRows] = useState<VacancyRow[] | null>(null);
-  const [status, setStatus] = useState("");
-  const [search, setSearch] = useState("");
-  const [creating, setCreating] = useState(false);
-  const { error, run } = useAction();
-
-  const load = useCallback(() => run("load", async () => setRows(await recruitmentApi.vacancies(status, search))), [status, search]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const timer = setTimeout(load, 250);
-    return () => clearTimeout(timer);
-  }, [load]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2">
-        <Label label="Поиск">
-          <input className={field} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("Должность или город")} />
-        </Label>
-        <Label label="Статус">
-          <select className={field} value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">{t("Все")}</option>
-            {(Object.keys(vacancyStatusLabel) as VacancyStatus[]).map((s) => (
-              <option key={s} value={s}>
-                {t(vacancyStatusLabel[s])}
-              </option>
-            ))}
-          </select>
-        </Label>
-        {ctx.canManage && (
-          <button className={`${primary} ml-auto`} onClick={() => setCreating(true)}>
-            <Plus className="size-4" />
-            {t("Новая вакансия")}
-          </button>
-        )}
-      </div>
-
-      {creating && (
-        <Card title="Новая вакансия">
-          <VacancyForm
-            ctx={ctx}
-            initial={emptyInput(ctx)}
-            onCancel={() => setCreating(false)}
-            onSave={async (input) => {
-              const created = await recruitmentApi.createVacancy(input);
-              router.push(`/hr/recruitment/vacancies/${created.id}`);
-            }}
-          />
-        </Card>
-      )}
-
-      <ErrorText error={error} />
-      {rows === null ? (
-        <p className="text-sm text-ink-3">{t("Загрузка…")}</p>
-      ) : rows.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-ink-3">{t("Вакансий пока нет.")}</p>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-3">
-                <th className="px-4 py-2.5 font-semibold">{t("Вакансия")}</th>
-                <th className="px-3 py-2.5 font-semibold">{t("Отдел")}</th>
-                <th className="px-3 py-2.5 font-semibold">{t("Статус")}</th>
-                <th className="px-3 py-2.5 font-semibold">{t("Зарплата")}</th>
-                <th className="px-3 py-2.5 text-right font-semibold">{t("В работе")}</th>
-                <th className="px-3 py-2.5 text-right font-semibold">{t("Принято")}</th>
-                <th className="px-4 py-2.5 font-semibold">{t("Рекрутер")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {rows.map((v) => (
-                <tr key={v.id} className="hover:bg-muted/40">
-                  <td className="px-4 py-2.5">
-                    <Link href={`/hr/recruitment/vacancies/${v.id}`} className="font-medium text-ink hover:text-accent-strong">
-                      {v.title}
-                    </Link>
-                    <div className="text-xs text-ink-3">
-                      {v.code}
-                      {v.city && ` · ${v.city}`}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-ink-2">{t(v.department)}</td>
-                  <td className="px-3 py-2.5">
-                    <StatusBadge status={v.status} />
-                  </td>
-                  <td className="px-3 py-2.5 tabular-nums text-ink-2">{salaryText(v.salaryFrom, v.salaryTo)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{v.active}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
-                    {v.hired} / {v.headcount}
-                  </td>
-                  <td className="px-4 py-2.5 text-ink-2">{v.recruiter ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Вакансия: данные (правка), статус, воронка кандидатов по этапам. */
-export function VacancyDetail({ ctx, id }: { ctx: RecruitmentContext; id: string }) {
+export function VacancyDetail({ ctx, id, initialEdit = false }: { ctx: RecruitmentContext; id: string; initialEdit?: boolean }) {
   const t = useT();
   const [v, setV] = useState<Vacancy | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEdit);
   const { busy, error, run } = useAction();
   useEffect(() => {
     run("load", async () => setV(await recruitmentApi.vacancy(id)));

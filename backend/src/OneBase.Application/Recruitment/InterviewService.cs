@@ -852,6 +852,16 @@ public sealed class InterviewService(IAppDbContext db, RecruitmentExceptions exc
 
     // ---------- Для HR ----------
 
+    /// <summary>Сколько действующих собеседований сегодня (день — по времени Ташкента, как вид «today») — для кнопки «Собеседования».</summary>
+    public async Task<int> TodayCountAsync(RecruitmentContext ctx, CancellationToken ct)
+    {
+        Read(ctx);
+        var today = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Tashkent).Date;
+        var from = new DateTimeOffset(today, TimeSpan.FromHours(5)).ToUniversalTime();
+        var to = from.AddDays(1);
+        return await db.Interviews.CountAsync(i => Active.Contains(i.Status) && i.StartsAt >= from && i.StartsAt < to, ct);
+    }
+
     /// <summary>
     /// Список собеседований по виду: today, tomorrow, week, upcoming (действующие впереди и предложения), completed (прошло и не пришёл), cancelled,
     /// rescheduled, past (всё, кроме предложений); дни — по времени Ташкента.

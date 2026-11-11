@@ -41,8 +41,8 @@ public sealed record ReceiveResult(ReceiveOutcome Outcome, Guid? ResumeId);
 /// <item>Получен (Telegram): запись о документе и задание hr.resume.download — ответ кандидату не ждёт скачивания.</item>
 /// <item>Скачан → оригинал в MinIO (<c>recruitment/resumes/{кандидат}/{документ}</c>) → проверка содержимого по сигнатуре: не тот тип,
 /// программа или скрипт — «отклонён», оригинал сохранён, обработки нет.</item>
-/// <item>hr.resume.ocr: текст без AI (PDF, DOCX с таблицами, DOC, RTF, ODT, TXT); фото и сканы — OCR моделью (если включено и есть согласие
-/// кандидата: распознавание — передача данных в Claude).</item>
+/// <item>hr.resume.ocr: текст без AI (PDF, DOCX с таблицами, DOC, RTF, ODT, TXT); фото и сканы — OCR моделью (если включено
+/// «Распознавать фото и сканы»).</item>
 /// <item>hr.resume.analysis: разбор резюме и сводка (<see cref="ResumeAnalysisJob"/>), дополнение карточки, оценка под вакансию.</item>
 /// </list>
 /// Тот же файл второй раз — тот же документ (оригинал один); другая версия — новый документ, прежние остаются.
@@ -295,15 +295,14 @@ public sealed class ResumeDocumentProcessor(
     // ---------- Текст и OCR ----------
 
     /// <summary>
-    /// hr.resume.ocr: текст без AI; нужен OCR (фото, скан) — модель, если «Распознавать фото и сканы» включено и кандидат дал согласие (или
-    /// документ загрузил HR). Повреждённый файл — ошибка документа, оригинал остаётся, HR — исключение, кандидату — просьба прислать в другом
+    /// hr.resume.ocr: текст без AI; нужен OCR (фото, скан) — модель, если «Распознавать фото и сканы» включено. Повреждённый файл — ошибка документа, оригинал остаётся, HR — исключение, кандидату — просьба прислать в другом
     /// формате. forceOcr — «Распознать заново (AI)»: модель читает и PDF с текстовым слоем.
     /// </summary>
     public async Task ExtractAsync(Guid resumeId, bool forceOcr, CancellationToken ct)
     {
         var resume = await db.CandidateResumes.FirstOrDefaultAsync(r => r.Id == resumeId, ct);
         if (resume is null || resume.Status is DocumentStatus.Received or DocumentStatus.Rejected || resume.DetectedType is null
-            || resume.OcrStatus is not (DocumentStepStatus.Pending or DocumentStepStatus.WaitingConsent))
+            || resume.OcrStatus != DocumentStepStatus.Pending)
         {
             return;
         }
@@ -332,15 +331,6 @@ public sealed class ResumeDocumentProcessor(
                 resume.OcrStatus = DocumentStepStatus.Skipped;
                 resume.TextError = read.Text is null ? "Фото и сканы не распознаются: включите «Распознавать фото и сканы» в настройках подбора." : null;
                 await NextAsync(resume, ct);
-                return;
-            }
-
-            if (!await MayUseAiAsync(resume, ct))
-            {
-                // Распознавание моделью — после согласия кандидата (ReleaseConsentAsync); текстовый слой, что есть, — уже сейчас.
-                resume.Text ??= Clip(read.Text, RecruitmentRules.MaxResumeText);
-                resume.OcrStatus = DocumentStepStatus.WaitingConsent;
-                await db.SaveChangesAsync(ct);
                 return;
             }
 
@@ -409,9 +399,8 @@ public sealed class ResumeDocumentProcessor(
     private async Task NextAsync(CandidateResume resume, CancellationToken ct)
     {
         resume.UpdatedAt = clock.GetUtcNow();
-        if (resume.Text is not null && resume.AnalysisStatus is DocumentStepStatus.Pending or DocumentStepStatus.WaitingConsent)
+        if (resume.Text is not null && resume.AnalysisStatus == DocumentStepStatus.Pending)
         {
-            resume.AnalysisStatus = DocumentStepStatus.Pending;
             await db.SaveChangesAsync(ct);
             await jobs.EnqueueAsync(RecruitmentQueues.Analysis, $"analysis:{resume.Id:N}", resume.Id, ct: ct);
             return;
@@ -439,24 +428,6 @@ public sealed class ResumeDocumentProcessor(
         await NotifyCandidateAsync(resume, resume.Sha256 is null ? RecruiterTexts.ResumeLost : RecruiterTexts.ResumeUnreadable, $"doc-failed:{resume.Id:N}", ct);
         await audit.LogAsync(ActorType.System, "recruitment", "recruitment.document.failed", nameof(Candidate), resume.CandidateId.ToString(),
             new { document = resume.Id, reason = Clip(reason, 200) }, ct);
-    }
-
-    /// <summary>Внешний AI читает данные кандидата: можно, если кандидат дал согласие или документ загрузил HR (решение HR).</summary>
-    public async Task<bool> MayUseAiAsync(CandidateResume resume, CancellationToken ct) =>
-        resume.Source == "manual" || await db.CandidateConsents.AnyAsync(c => c.CandidateId == resume.CandidateId && c.WithdrawnAt == null, ct);
-
-    /// <summary>Кандидат дал согласие — документы, ждавшие его, распознаются и разбираются.</summary>
-    public async Task ReleaseConsentAsync(Guid candidateId, CancellationToken ct)
-    {
-        var waiting = await db.CandidateResumes.AsNoTracking()
-            .Where(r => r.CandidateId == candidateId && (r.OcrStatus == DocumentStepStatus.WaitingConsent || r.AnalysisStatus == DocumentStepStatus.WaitingConsent))
-            .Select(r => new { r.Id, r.OcrStatus }).ToListAsync(ct);
-        foreach (var r in waiting)
-        {
-            await (r.OcrStatus == DocumentStepStatus.WaitingConsent
-                ? jobs.EnqueueAsync(RecruitmentQueues.Ocr, $"ocr:{r.Id:N}", r.Id, ct: ct)
-                : jobs.EnqueueAsync(RecruitmentQueues.Analysis, $"analysis:{r.Id:N}", r.Id, ct: ct));
-        }
     }
 
     // ---------- Повторная обработка и сверка ----------

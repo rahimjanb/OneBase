@@ -5,6 +5,7 @@ import { FileSpreadsheet, Loader2 } from "lucide-react";
 import { Modal } from "@/components/files/Modal";
 import { Button } from "@/components/ui";
 import { tNow, useT } from "@/i18n/client";
+import { useSalesAccess } from "@/components/sales/SalesAccess";
 import { date } from "@/lib/sales/format";
 import type { StockView } from "@/lib/sales/types";
 
@@ -72,6 +73,9 @@ function save(value: { columns: string[]; warehouses: boolean }) {
 export function StockExcelButton({ data }: { data: StockView }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const { canExport } = useSalesAccess();
+  // Без права «Выгрузки Excel» кнопки нет (сервер всё равно ответит 403).
+  if (!canExport) return null;
   return (
     <>
       <button

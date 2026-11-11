@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { TelegramReports } from "@/components/telegram/TelegramReports";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
@@ -12,6 +13,8 @@ export async function generateMetadata() {
 export default async function TelegramReportsPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
   const { tab } = await searchParams;
   const overview = await apiGet<ReportOverview>("/api/settings/telegram/reports", "/settings/telegram/reports");
+  // Отчёты строятся по данным «Продаж»: без права на них раздела нет — обратно в настройки Telegram.
+  if (!overview.canUseSales) redirect("/settings/telegram");
   const t = await getT();
   return (
     <>

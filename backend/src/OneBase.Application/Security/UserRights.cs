@@ -21,12 +21,14 @@ public static class UserRights
 {
     public const string Supply = "supply";
     public const string Production = "production";
+    public const string Sales = "sales";
     public const string Settings = "settings";
 
     public static readonly IReadOnlyList<UserRightGroup> Groups =
     [
         new(Supply, "Снабжение и склад", "Заявки, закупки, склад и контроль качества сырья: что сотрудник видит и что может делать."),
         new(Production, "Производство", "Задания на выпуск, техкарты и сменные отчёты."),
+        new(Sales, "Продажи", "Что сотрудник может делать в разделе «Продажи» сверх просмотра. Что он видит — охват продаж ниже."),
         new(Settings, "Настройки", "Какие страницы «Настроек» откроются сотруднику."),
     ];
 
@@ -44,6 +46,8 @@ public static class UserRights
         new(Permissions.ProductionManage, Production, "Задания на выпуск", "Создавать, выпускать и закрывать задания, утверждать смены.", [Permissions.ProductionRead]),
         new(Permissions.ProductionRecipes, Production, "Технолог", "Техкарты: этапы, рецептура, нормы, версии и утверждение.", [Permissions.ProductionRead]),
         new(Permissions.ProductionOperate, Production, "Ввод смен", "Сменные отчёты: замесы, выпечка, брак, упаковка.", [Permissions.ProductionRead]),
+        new(Permissions.SalesExport, Sales, "Выгрузки Excel",
+            "Скачивать остатки, акт автозаказа и обзор первички в Excel — только в пределах своего охвата продаж.", [], Permissions.SalesRead, UserSections.Sales),
         new(Permissions.UsersManage, Settings, "Пользователи и роли", "Сотрудники, роли и доступ; отделы и их руководители.", []),
         new(Permissions.ProcurementSettings, Settings, "Настройки снабжения", "Категории закупок, маршрут согласования, склады, контроль качества.", []),
         new(Permissions.IntegrationsManage, Settings, "Интеграции и источники данных", "Linko, Google Sheets и Verifix: подключения и обновление данных.", []),

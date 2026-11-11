@@ -121,7 +121,7 @@ export function AgentEditor({ initial }: { initial: AgentView }) {
                 <b>{t("Агент включён")}</b>
                 <span className="block text-xs text-ink-3">
                   {recruiter
-                    ? t("Отвечает кандидатам, которые пишут на номер агента, и знает все открытые вакансии OneBase. Сначала просит согласие на обработку данных. Ответы — платные вызовы модели.")
+                    ? t("Отвечает кандидатам, которые пишут на номер агента, сразу с первого сообщения и знает все открытые вакансии OneBase. Ответы — платные вызовы модели.")
                     : t("Отвечает в Telegram на сообщения, которые пришли в отдел «{name}» на номер агента. Ответы — платные вызовы модели.", { name: agent.departmentName })}
                 </span>
               </span>
@@ -325,27 +325,9 @@ export function AgentEditor({ initial }: { initial: AgentView }) {
                 ))}
               </div>
             </div>
-            <Label label="Вне рабочего времени" className="sm:col-span-2">
-              <select className={field} value={s.offHours} onChange={(e) => set("offHours", e.target.value as AgentSettingsInput["offHours"])}>
-                <option value="morning">{t("Ответ уходит в начале рабочего времени")}</option>
-                <option value="reply">{t("Отвечать сразу, в любое время")}</option>
-              </select>
-            </Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Label label="Пауза перед ответом: от, сек">
-                <input className={field} type="number" min={0} max={600} value={s.replyDelayMinSeconds} onChange={num("replyDelayMinSeconds")} />
-              </Label>
-              <Label label="до, сек">
-                <input className={field} type="number" min={0} max={600} value={s.replyDelayMaxSeconds} onChange={num("replyDelayMaxSeconds")} />
-              </Label>
-            </div>
-            <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-accent)]" checked={s.typing} onChange={check("typing")} />
-              <span>
-                {t("Показывать «печатает…» перед ответом")}
-                <span className="block text-xs text-ink-3">{t("Если собеседник пишет ещё до ответа, агент ответит на всё сразу.")}</span>
-              </span>
-            </label>
+            <p className="rounded-lg bg-ok-soft px-3 py-2 text-sm text-ok sm:col-span-2">
+              {t("Агент отвечает сразу — без паузы, в любое время. Рабочее время он учитывает в словах («коллеги ответят утром»).")}
+            </p>
             {recruiter && (
               <Label label="Напомнить не ответившему кандидату через, часов" hint="Одно напоминание, в рабочее время; 0 — не напоминать.">
                 <input className={field} type="number" min={0} max={168} value={s.followUpHours} onChange={num("followUpHours")} />

@@ -20,6 +20,8 @@ namespace OneBase.Api.Controllers;
 public sealed class ProductionController(
     ProcurementRequestService requests,
     ProductionRecipeService recipes,
+    ProductionRecipePhotoService photos,
+    OneBase.Application.Abstractions.IFileStorage storage,
     RecipeImportService imports,
     ProductionOrderService orders,
     ProductionShiftService shifts,
@@ -133,6 +135,42 @@ public sealed class ProductionController(
     /// <summary>Сравнение двух версий одной рецептуры: карта, этапы, компоненты, виды брака.</summary>
     [HttpGet("recipes/{id:guid}/compare/{other:guid}")]
     public async Task<ProductionRecipeComparison> Compare(Guid id, Guid other, CancellationToken ct) => await recipes.CompareAsync(await ContextAsync(ct), id, other, ct);
+
+    // ---------- Фото продукта техкарты (одно на код, у всех версий) ----------
+
+    /// <summary>Загрузить или заменить фото (multipart, поле file): JPEG, PNG, WebP, HEIC до 10 МБ — сервер вырезает 4:3 и готовит превью.</summary>
+    [HttpPost("recipes/{id:guid}/photo")]
+    [RequestSizeLimit(ProductionRecipePhotoService.MaxBytes + 256 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ProductionRecipePhotoService.MaxBytes + 256 * 1024)]
+    public async Task<ProductionRecipePhotoView> UploadRecipePhoto(Guid id, IFormFile? file, CancellationToken ct)
+    {
+        if (file is null)
+        {
+            throw new FieldValidationException("Выберите фото.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        return await photos.SaveAsync(await ContextAsync(ct), id, stream, file.Length, file.ContentType, ct);
+    }
+
+    [HttpDelete("recipes/{id:guid}/photo")]
+    public async Task<IActionResult> DeleteRecipePhoto(Guid id, CancellationToken ct)
+    {
+        await photos.DeleteAsync(await ContextAsync(ct), id, ct);
+        return NoContent();
+    }
+
+    /// <summary>Картинка: 1600 (оригинал), 960 или 480 px. Адрес меняется с каждой загрузкой — кэшируется навсегда.</summary>
+    [HttpGet("recipe-photos/{fileId:guid}/{width:int}")]
+    public async Task<IActionResult> RecipePhoto(Guid fileId, int width, CancellationToken ct)
+    {
+        var key = await photos.KeyAsync(await ContextAsync(ct), fileId, width, ct);
+        var buffer = new MemoryStream();
+        await storage.DownloadAsync(key, buffer, ct);
+        buffer.Position = 0;
+        Response.Headers.CacheControl = "private, max-age=31536000, immutable";
+        return File(buffer, "image/jpeg");
+    }
 
     [HttpPost("recipes/{id:guid}/new-version")]
     public async Task<IActionResult> NewVersion(Guid id, CancellationToken ct) => Ok(new { id = await recipes.NewVersionAsync(await ContextAsync(ct), id, ct) });

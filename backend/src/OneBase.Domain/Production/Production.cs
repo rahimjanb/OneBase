@@ -98,6 +98,25 @@ public class ProductionRecipe : Entity
 }
 
 /// <summary>
+/// Фото продукта техкарты — одно на код, а не на версию: новая версия (в том числе из импорта Excel) показывает то же фото. Хранится уже
+/// подготовленным: центральный кроп 4:3 без EXIF (до 1600 px), превью 960 и 480 px — JPEG в хранилище файлов. FileId меняется при каждой
+/// загрузке — по нему адрес картинки, поэтому браузер кэширует её навсегда. Tint — средний цвет фото (подложка, пока картинка грузится).
+/// </summary>
+public class ProductionRecipePhoto : Entity
+{
+    public required string Code { get; set; }
+    public Guid FileId { get; set; }
+    public required string ObjectKey { get; set; }
+    public required string ThumbKey { get; set; }
+    public required string SmallKey { get; set; }
+    public int Width { get; set; }
+    public int Height { get; set; }
+    public long SizeBytes { get; set; }
+    public string? Tint { get; set; }
+    public Guid? UploadedById { get; set; }
+}
+
+/// <summary>
 /// Этап технологической цепочки версии: порядок (следующий этап — следующий по порядку), название, тип операции, участок; нормативный
 /// выход, % (выход ÷ весь вход этапа с добавленными компонентами; мин. и макс. — допуск факта), база брака, влажность (норма, единица,
 /// допустимое отклонение), можно ли перерабатывать брак. Норматив брака этапа — сумма видов брака продукта этого этапа.

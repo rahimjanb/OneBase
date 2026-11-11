@@ -208,8 +208,7 @@ public sealed class RecruitmentAutomation(IAppDbContext db, TelegramOutbox outbo
             var name = candidate.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() is { Length: > 1 } first && !first.StartsWith('@')
                        && !first.StartsWith("Telegram", StringComparison.Ordinal) ? first : null;
             var text = RecruiterTexts.FollowUp(CandidateLanguages.Of(candidate.Language, candidate.PreferredScript) ?? CandidateLang.Ru, name, vacancy.Title);
-            await outbox.EnqueueAsync(new OutboxRequest(c.AccountId, c.PeerId, c.Id, TelegramDepartments.Hr, "followup", text, $"followup:{c.Id:N}:{last.Id}", "ai",
-                TypingSeconds: agent.Typing ? Agents.DialogAgentRules.TypingSeconds(text) : 0), ct);
+            await outbox.EnqueueAsync(new OutboxRequest(c.AccountId, c.PeerId, c.Id, TelegramDepartments.Hr, "followup", text, $"followup:{c.Id:N}:{last.Id}", "ai"), ct);
             queued++;
         }
 

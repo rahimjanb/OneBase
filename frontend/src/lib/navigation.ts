@@ -8,8 +8,10 @@ export const workspacePermissions = ["ai.agents.run", "sales.read", "finance.rea
 
 export const navPermissions: Record<string, string[]> = {
   "/": workspacePermissions,
-  // «Отделы» — вход и в «Продажи», «Снабжение», HR: виден всем, кто может открыть хотя бы один из них.
-  "/departments": [...workspacePermissions, "procurement.warehouse", "procurement.read", "procurement.manage", "integrations.manage", "hr.department", "hr.requests"],
+  // «Отделы» — вход в разделы отделов: виден, если открывается хотя бы один отдел (departments.open — признак, см. screenPermissions).
+  "/departments": ["departments.open"],
+  // «Продажи» OneBase — право «Продажи» (Sales Base — отдельный продукт, его права сюда не ведут).
+  "/sales": ["sales.read"],
   // Цифровой двойник — общий раздел компании; что видно в карточках, решают права разделов (backend).
   "/twin": workspacePermissions,
   // Задачи — раздел пользователя (галочка «Задачи» в «Пользователях»); что из задач видно, решает backend.
@@ -27,12 +29,14 @@ export const navPermissions: Record<string, string[]> = {
   "/reports": workspacePermissions,
   "/base": ["files.read"],
   "/consultant": ["ai.agents.run"],
+  // «Аналитик» (OneBase Intelligence): раздел по праву analytik.use; данные внутри — по остальным правам (решает backend).
+  "/analytik": ["analytik.use"],
   "/data-manager": ["ai.data.manage"],
   "/campaigns": ["telegram.campaigns"],
 };
 
 /** Порядок разделов в меню — по нему выбирается стартовая страница, если «Обзор» недоступен. */
-const order = ["/", "/twin", "/departments", "/tasks", "/hr", "/base", "/consultant", "/data-manager", "/campaigns", "/requests", "/procurement", "/production"];
+const order = ["/", "/twin", "/departments", "/tasks", "/hr", "/base", "/consultant", "/analytik", "/data-manager", "/campaigns", "/requests", "/procurement", "/production"];
 
 export function canOpen(href: string, permissions: readonly string[]): boolean {
   const need = navPermissions[href];
@@ -51,6 +55,30 @@ export function departmentHref(code: string, permissions: readonly string[]): st
   if (own && canOpen(own, permissions)) return own;
   if (canOpen("/tasks", permissions)) return `/tasks/${code}`;
   return canOpen("/base", permissions) ? `/base/${code}` : (own ?? "/departments");
+}
+
+/** Отделы раздела «Отделы» — в порядке карточек. */
+export const departmentCodes = ["production", "finance", "sales", "marketing", "supply", "hr"] as const;
+
+/**
+ * Отдел доступен пользователю: открывается свой раздел отдела («Продажи», HR, «Снабжение», «Производство») или задачи отдела — свой отдел,
+ * отдел, которым руководит, у руководства — все (departments — коды из /api/auth/me). Недоступные отделы нигде не показываются.
+ */
+export function departmentOpen(code: string, permissions: readonly string[], departments: readonly string[] | null | undefined): boolean {
+  const own = departmentSections[code];
+  return (own !== undefined && canOpen(own, permissions)) || (departments ?? []).includes(code);
+}
+
+/** Что из /api/auth/me меню и страницы проверяют как права. */
+export type MeAccess = { permissions: readonly string[]; hrAccess?: boolean; hiringRequests?: boolean; departments?: readonly string[] | null };
+
+/**
+ * Права экрана: права пользователя и признаки из /api/auth/me — hr.department (руководитель отдела с подразделениями Verifix видит HR),
+ * hr.requests (заявки на сотрудника), departments.open (открывается хотя бы один отдел — пункт «Отделы»).
+ */
+export function screenPermissions(me: MeAccess): string[] {
+  const base = [...me.permissions, ...(me.hrAccess ? ["hr.department"] : []), ...(me.hiringRequests ? ["hr.requests"] : [])];
+  return departmentCodes.some((code) => departmentOpen(code, base, me.departments)) ? [...base, "departments.open"] : base;
 }
 
 /** Первый доступный раздел — куда вести с главной у ролей без общих разделов (например, «Админ 2» → «Файлы»). */

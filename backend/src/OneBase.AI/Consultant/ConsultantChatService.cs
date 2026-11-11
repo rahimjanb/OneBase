@@ -53,6 +53,12 @@ public sealed class ConsultantChatService(
 {
     public const int MaxQuestionLength = 4000;
 
+    /// <summary>
+    /// Чей это чат: consultant (раздел «AI-консультант», по умолчанию) или analytik (раздел «Аналитик» — свой движок и своя история).
+    /// История, создание и открытие чатов — только своего раздела; кэш ответов — только у консультанта (его ключ — по вопросу консультанта).
+    /// </summary>
+    public string Kind { get; init; } = ConversationKinds.Consultant;
+
     /// <summary>Сколько последних сообщений чата передаётся модели как контекст.</summary>
     private const int HistoryMessages = 12;
 
@@ -67,7 +73,7 @@ public sealed class ConsultantChatService(
     /// </summary>
     public async Task<IReadOnlyList<ConversationSummary>> ListAsync(Guid userId, CancellationToken ct, string? query = null)
     {
-        var chats = db.AiConversations.AsNoTracking().Where(c => c.UserId == userId && c.ArchivedAt == null);
+        var chats = db.AiConversations.AsNoTracking().Where(c => c.UserId == userId && c.ArchivedAt == null && c.Kind == Kind);
         if (query?.Trim().ToLowerInvariant() is { Length: > 0 } text)
         {
             text = text.Length > 200 ? text[..200] : text;
@@ -85,7 +91,7 @@ public sealed class ConsultantChatService(
     public async Task<ConversationView?> GetAsync(Guid userId, Guid id, CancellationToken ct)
     {
         var conversation = await db.AiConversations.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId && c.ArchivedAt == null, ct);
+            .FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId && c.ArchivedAt == null && c.Kind == Kind, ct);
         if (conversation is null)
         {
             return null;
@@ -181,12 +187,12 @@ public sealed class ConsultantChatService(
         AiConversation conversation;
         if (conversationId is { } id)
         {
-            conversation = await db.AiConversations.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId && c.ArchivedAt == null, ct)
+            conversation = await db.AiConversations.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId && c.ArchivedAt == null && c.Kind == Kind, ct)
                 ?? throw new KeyNotFoundException("Чат не найден.");
         }
         else
         {
-            conversation = new AiConversation { UserId = userId, Title = channel is null ? TitleOf(question) : TitleOf($"Telegram · {question}") };
+            conversation = new AiConversation { UserId = userId, Title = channel is null ? TitleOf(question) : TitleOf($"Telegram · {question}"), Kind = Kind };
             db.AiConversations.Add(conversation);
         }
 
@@ -218,7 +224,7 @@ public sealed class ConsultantChatService(
             CachedConsultantAnswer? cached = null;
             using (timings.Stage("answer.cache"))
             {
-                cacheKey = await answers.KeyAsync(userId, asked, history.Count, channel, ct);
+                cacheKey = Kind == ConversationKinds.Consultant ? await answers.KeyAsync(userId, asked, history.Count, channel, ct) : null;
                 if (cacheKey is not null)
                 {
                     cached = await answers.GetAsync(cacheKey, ct);
@@ -282,7 +288,7 @@ public sealed class ConsultantChatService(
         var auditWatch = Stopwatch.StartNew();
         try
         {
-            await audit.WriteAsync(channel?.Name ?? "consultant", userId, conversation.Id, reply.Id, asked, startedAt, reply.DurationMs, details,
+            await audit.WriteAsync(channel?.Name ?? Kind, userId, conversation.Id, reply.Id, asked, startedAt, reply.DurationMs, details,
                 reply.Status == AiMessageStatus.Completed ? reply.Content : null, reply.Error, CancellationToken.None, fromCache, view, timings);
         }
         catch (Exception ex)

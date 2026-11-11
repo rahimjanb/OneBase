@@ -233,6 +233,15 @@ internal static class SalesModel
             e.HasOne(x => x.Region).WithMany().HasForeignKey(x => x.RegionId).OnDelete(DeleteBehavior.SetNull);
         });
 
+        b.Entity<SalesUserScope>(e =>
+        {
+            e.ToTable("UserScopes", "sales");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.Level).HasConversion<string>().HasMaxLength(16);
+            e.HasOne<OneBase.Domain.Identity.User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.AgentId);
+        });
+
         b.Entity<SalesRegionPlan>(e =>
         {
             e.ToTable("RegionPlans", "sales");

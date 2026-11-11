@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ChevronRight, Loader2, Lock, MapPin } from "lucide-react";
+import { ChevronRight, Loader2, MapPin } from "lucide-react";
 import { Alert, KpiTile, Note } from "./bits";
 import { CopyButton } from "./DataTable";
 import { useT } from "@/i18n/client";
@@ -72,11 +72,12 @@ export function KpiReport({ data, canAssign }: { data: KpiView; canAssign: boole
         </span>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Деньги (премии, фонд оплаты) — только с правом «Финансы»; без него плиток нет совсем. */}
+      <div className={`mt-4 grid grid-cols-2 gap-3 ${data.money ? "lg:grid-cols-4" : "lg:grid-cols-2"}`}>
         <KpiTile label={t("Факт ТП")} value={kg(mode === "fc" && data.forecastKgTp != null ? data.forecastKgTp : data.factKgTp)} unit={t("кг")}>
           {mode === "fc" ? t("прогноз вторички ТП на месяц") : t("вторичка {n} ТП за месяц", { n: num(data.tpCount) })}
         </KpiTile>
-        {data.money ? (
+        {data.money && (
           <>
             <KpiTile label={t("Премии")} value={sumText(total.premium, t)} tone={total.premium ? "ok" : "muted"}>
               {t("ТП {tp} · СВР {svr}", { tp: sumText(total.premiumTp, t), svr: sumText(total.premiumSvr, t) })}
@@ -85,10 +86,6 @@ export function KpiReport({ data, canAssign }: { data: KpiView; canAssign: boole
               {t("оклад плюс премии по Linko")}
             </KpiTile>
           </>
-        ) : (
-          <KpiTile label={t("Премии и оклады")} value="—" tone="muted">
-            {t("видны с правом «Финансы»")}
-          </KpiTile>
         )}
         <KpiTile label={t("Регионы")} value={num(data.regions.filter((r) => r.id !== "none").length)} tone={unassigned || data.missingRegions.length ? "warn" : "ink"}>
           {unassigned
@@ -98,13 +95,6 @@ export function KpiReport({ data, canAssign }: { data: KpiView; canAssign: boole
               : t("у всех людей регион определён")}
         </KpiTile>
       </div>
-
-      {!data.money && (
-        <p className="mt-3 flex items-center gap-2 text-xs text-ink-3">
-          <Lock className="size-3.5" aria-hidden />
-          {t("Оклады, бонусы и премии скрыты: нужно право «Финансы». Выполнение и факт видны всем с доступом к продажам.")}
-        </p>
-      )}
 
       <RegionSummary data={data} mode={mode} onOpen={openRegion} />
 

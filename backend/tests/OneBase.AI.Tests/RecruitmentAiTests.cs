@@ -194,7 +194,7 @@ public class RecruitmentLanguageDbTests(DataManagerDb fixture) : IClassFixture<D
         await scope.ServiceProvider.GetServices<ITelegramDepartmentHandler>().Single(h => h.Department == "hr").HandleAsync(m, route, default);
     }
 
-    /// <summary>Отправить очередь исходящих (в историю диалога сообщение попадает после отправки — по ней рекрутер видит, что спросил согласие).</summary>
+    /// <summary>Отправить очередь исходящих (в историю диалога сообщение попадает после отправки — рекрутер видит его в переписке).</summary>
     private async Task SendQueuedAsync()
     {
         using var scope = fixture.Services.CreateScope();
@@ -219,31 +219,20 @@ public class RecruitmentLanguageDbTests(DataManagerDb fixture) : IClassFixture<D
         var (scope, db, account) = await StartAsync();
         using var _ = scope;
 
-        // 1. Узбекский латиницей — согласие латиницей, модели велено писать латиницей, ответ — латиницей.
+        // 1. Узбекский латиницей — согласия не спрашивает: сразу ответ модели, ей велено писать латиницей.
         var latin = NewChat(account);
-        await SayAsync(latin, "Assalomu alaykum, ish haqida ma'lumot bersangiz.");
-        var consent = await LastAsync(db, latin);
-        Assert.Contains("Assalomu alaykum", consent);
-        Assert.Contains("«Roziman»", consent);
-        await SendQueuedAsync();
-        Assert.Equal(("uz", "Latn", "auto"), ((await CandidateAsync(db, latin)).Language, (await CandidateAsync(db, latin)).PreferredScript, (await CandidateAsync(db, latin)).LanguageSource));
         fixture.Gateway.Script.Enqueue(m =>
         {
             Assert.Contains("ЛАТИНИЦЕЙ", m[1].Content);
-            return "{\"action\":\"reply\",\"messages\":[\"Rahmat! Hozir haydovchi va operator vakansiyalari bor. Qaysi biri sizga qiziq?\"]}";
+            return "{\"action\":\"reply\",\"messages\":[\"Assalomu alaykum! Hozir haydovchi va operator vakansiyalari bor. Qaysi biri sizga qiziq?\"]}";
         });
-        await SayAsync(latin, "Roziman");
-        Assert.Equal("Rahmat! Hozir haydovchi va operator vakansiyalari bor. Qaysi biri sizga qiziq?", await LastAsync(db, latin));
-
-        // 2. Узбекский кириллицей — согласие кириллицей (без латиницы); модель ответила латиницей — переписывает, уходит кириллица.
-        var cyrillic = NewChat(account);
-        await SayAsync(cyrillic, "Ассалому алайкум, иш ҳақида маълумот берсангиз.");
-        consent = await LastAsync(db, cyrillic);
-        Assert.Contains("Ассалому алайкум", consent);
-        Assert.Contains("«Розиман»", consent);
-        Assert.DoesNotContain("Roziman", consent);
+        await SayAsync(latin, "Assalomu alaykum, ish haqida ma'lumot bersangiz.");
+        Assert.Equal("Assalomu alaykum! Hozir haydovchi va operator vakansiyalari bor. Qaysi biri sizga qiziq?", await LastAsync(db, latin));
+        Assert.Equal(("uz", "Latn", "auto"), ((await CandidateAsync(db, latin)).Language, (await CandidateAsync(db, latin)).PreferredScript, (await CandidateAsync(db, latin)).LanguageSource));
         await SendQueuedAsync();
-        Assert.Equal(("uz", "Cyrl"), ((await CandidateAsync(db, cyrillic)).Language, (await CandidateAsync(db, cyrillic)).PreferredScript));
+
+        // 2. Узбекский кириллицей — модель ответила латиницей — переписывает, уходит кириллица.
+        var cyrillic = NewChat(account);
         var calls = fixture.Gateway.Calls.Count;
         fixture.Gateway.Script.Enqueue(m =>
         {
@@ -255,25 +244,24 @@ public class RecruitmentLanguageDbTests(DataManagerDb fixture) : IClassFixture<D
             Assert.Contains("не на языке кандидата", m[^1].Content);
             return "{\"action\":\"reply\",\"messages\":[\"Раҳмат! Қайси вакансия сизга қизиқ?\"]}";
         });
-        await SayAsync(cyrillic, "Розиман");
+        await SayAsync(cyrillic, "Ассалому алайкум, иш ҳақида маълумот берсангиз.");
         Assert.Equal("Раҳмат! Қайси вакансия сизга қизиқ?", await LastAsync(db, cyrillic));
+        Assert.Equal(("uz", "Cyrl"), ((await CandidateAsync(db, cyrillic)).Language, (await CandidateAsync(db, cyrillic)).PreferredScript));
         Assert.Equal(calls + 2, fixture.Gateway.Calls.Count);
         Assert.Equal("hr.recruiter.language", fixture.Gateway.Calls[^1].Options.Context.Purpose);
         Assert.DoesNotContain(await db.TelegramOutgoingMessages.AsNoTracking().Where(m => m.PeerId == cyrillic.Peer.PeerId).Select(m => m.Text).ToListAsync(),
             t => t.Contains("Qaysi", StringComparison.Ordinal));
+        await SendQueuedAsync();
 
         // 3. Русский — по-русски.
         var russian = NewChat(account);
-        await SayAsync(russian, "Здравствуйте, расскажите подробнее о вакансии.");
-        Assert.Contains("ответьте «Согласен»", await LastAsync(db, russian));
-        await SendQueuedAsync();
         fixture.Gateway.Script.Enqueue(m =>
         {
             Assert.Contains("пиши по-русски", m[1].Content);
-            return "{\"action\":\"reply\",\"messages\":[\"Спасибо! Какая работа вам интересна?\"]}";
+            return "{\"action\":\"reply\",\"messages\":[\"Здравствуйте! Какая работа вам интересна?\"]}";
         });
-        await SayAsync(russian, "Согласен");
-        Assert.Equal("Спасибо! Какая работа вам интересна?", await LastAsync(db, russian));
+        await SayAsync(russian, "Здравствуйте, расскажите подробнее о вакансии.");
+        Assert.Equal("Здравствуйте! Какая работа вам интересна?", await LastAsync(db, russian));
         Assert.Equal(("ru", "Cyrl"), ((await CandidateAsync(db, russian)).Language, (await CandidateAsync(db, russian)).PreferredScript));
 
         // 4. Неоднозначные короткие сообщения не меняют язык: кириллица остаётся.
@@ -302,8 +290,13 @@ public class RecruitmentLanguageDbTests(DataManagerDb fixture) : IClassFixture<D
 
         // 5. Смешанное: приветствие по-русски, суть — узбекской латиницей → латиница.
         var mixed = NewChat(account);
+        fixture.Gateway.Script.Enqueue(m =>
+        {
+            Assert.Contains("ЛАТИНИЦЕЙ", m[1].Content);
+            return "{\"action\":\"reply\",\"messages\":[\"Assalomu alaykum! Qaysi ish sizga qiziq?\"]}";
+        });
         await SayAsync(mixed, "Здравствуйте! Ish haqida ma'lumot bersangiz");
-        Assert.Contains("«Roziman»", await LastAsync(db, mixed));
+        Assert.StartsWith("Assalomu alaykum!", await LastAsync(db, mixed));
         Assert.Equal(("uz", "Latn"), ((await CandidateAsync(db, mixed)).Language, (await CandidateAsync(db, mixed)).PreferredScript));
     }
 
@@ -313,12 +306,9 @@ public class RecruitmentLanguageDbTests(DataManagerDb fixture) : IClassFixture<D
         var (scope, db, account) = await StartAsync();
         using var _ = scope;
         var chat = NewChat(account);
-        await SayAsync(chat, "Ассалому алайкум, иш ҳақида маълумот берсангиз.");
-        Assert.Contains("Мен HR бўлимининг виртуал ёрдамчисиман", await LastAsync(db, chat)); // роль из настроек — по-русски, кандидату — по-узбекски
-        await SendQueuedAsync();
         fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Rahmat! Qaysi vakansiya sizga qiziq?\"]}");
         fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Rahmat! Qaysi ish sizga qiziq?\"]}");
-        await SayAsync(chat, "Розиман");
+        await SayAsync(chat, "Ассалому алайкум, иш ҳақида маълумот берсангиз.");
 
         var sent = await db.TelegramOutgoingMessages.AsNoTracking().Where(m => m.PeerId == chat.Peer.PeerId).Select(m => m.Text).ToListAsync();
         Assert.DoesNotContain(sent, t => t.Contains("Qaysi", StringComparison.Ordinal));

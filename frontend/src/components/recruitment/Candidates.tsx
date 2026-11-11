@@ -118,7 +118,7 @@ function CandidateForm({ vacancies, vacancyId, onDone, onCancel }: { vacancies: 
             ))}
         </select>
       </Label>
-      <Label label="Согласие на обработку данных" hint="Как кандидат дал согласие. Без согласия AI-рекрутер ему не пишет.">
+      <Label label="Согласие на обработку данных" hint="Как кандидат дал согласие, если HR его получил. AI-рекрутер согласия не спрашивает.">
         <select className={field} value={input.consentChannel ?? ""} onChange={(e) => set({ consentChannel: e.target.value || null })}>
           <option value="">{t("Пока нет")}</option>
           {Object.entries(consentLabel).map(([k, label]) => (
@@ -248,7 +248,6 @@ export function CandidatesView({ ctx }: { ctx: RecruitmentContext }) {
                     <div className="flex flex-wrap gap-1 text-xs text-ink-3">
                       {c.phone ?? "—"}
                       {c.city && ` · ${c.city}`}
-                      {!c.hasConsent && <Badge className="bg-warn-soft text-warn">{t("нет согласия")}</Badge>}
                       {c.openDuplicates > 0 && <Badge className="bg-bad-soft text-bad">{t("дубль?")}</Badge>}
                     </div>
                   </td>

@@ -2,7 +2,9 @@ import { Suspense } from "react";
 import { MonthExitProvider } from "@/components/sales/MonthExit";
 import { PlanAvailabilityProvider } from "@/components/sales/PlanAvailability";
 import { SalesNav } from "@/components/sales/SalesNav";
-import { apiGet } from "@/lib/server-api";
+import { SalesAccessProvider } from "@/components/sales/SalesAccess";
+import { apiGet, apiSession } from "@/lib/server-api";
+import type { Me } from "@/lib/users";
 import type { SalesMonth, SyncStatus } from "@/lib/sales/types";
 
 /**
@@ -12,12 +14,14 @@ import type { SalesMonth, SyncStatus } from "@/lib/sales/types";
  * (PlanAvailabilityProvider, MonthExitProvider).
  */
 export default async function SalesLayout({ children }: { children: React.ReactNode }) {
-  const [status, months] = await Promise.all([
+  const [status, months, me] = await Promise.all([
     apiGet<SyncStatus>("/api/sales/status", "/sales"),
     apiGet<SalesMonth[]>("/api/sales/months", "/sales"),
+    apiSession<Me>("/api/auth/me"),
   ]);
 
   return (
+    <SalesAccessProvider canExport={!!me?.permissions.includes("sales.export")}>
     <PlanAvailabilityProvider>
       <MonthExitProvider>
         {/* data-sales-bar — на «Вторичке» полоса в палитре ТЗ (globals.css). */}
@@ -31,5 +35,6 @@ export default async function SalesLayout({ children }: { children: React.ReactN
         {children}
       </MonthExitProvider>
     </PlanAvailabilityProvider>
+    </SalesAccessProvider>
   );
 }

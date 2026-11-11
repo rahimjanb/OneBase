@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Banknote, CalendarDays, ChevronDown, Download, Scale } from "lucide-react";
 import { Sheet } from "@/components/field/Sheet";
 import { useT } from "@/i18n/client";
+import { useSalesAccess } from "@/components/sales/SalesAccess";
 import { choiceQuery, choose, quarterName, quarterOf, rangeLabel, readChoice, type PrimaryChoice, type PrimaryPeriodType } from "@/lib/primary-period";
 import { monthName, monthShort } from "@/lib/sales/format";
 
@@ -178,19 +179,22 @@ export function PrimaryStrip({ years, through }: { years: number[]; through: str
 /** Правая часть полосы на компьютере: единицы и «Excel». */
 export function PrimaryStripActions({ through }: { through: string | null }) {
   const { t, names } = useNames();
+  const { canExport } = useSalesAccess(); // выгрузка Excel — только с правом «Выгрузки Excel»
   const { c, year, month, quarter } = useChoice(through);
   const name = `${t("Первичка")} ${rangeLabel({ period: c.period, year, month, quarter }, null, names)}`;
   return (
     <div className="flex items-center gap-2 max-lg:hidden">
       <Units through={through} />
-      <a
-        href={`/bff/api/sales/primary/overview/xlsx/${encodeURIComponent(name)}.xlsx?${choiceQuery(c, false)}`}
-        download={`${name}.xlsx`}
-        className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-muted"
-      >
-        <Download aria-hidden className="size-4" strokeWidth={1.9} />
-        Excel
-      </a>
+      {canExport && (
+        <a
+          href={`/bff/api/sales/primary/overview/xlsx/${encodeURIComponent(name)}.xlsx?${choiceQuery(c, false)}`}
+          download={`${name}.xlsx`}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-muted"
+        >
+          <Download aria-hidden className="size-4" strokeWidth={1.9} />
+          Excel
+        </a>
+      )}
     </div>
   );
 }

@@ -13,7 +13,19 @@ const selectClass =
  * Панель фильтров: период (сегмент-контрол), отделы и сотрудники (списки), справа — свежесть данных и обновление. Выбор пока
  * хранится в состоянии страницы: данные — из макета, при подключении API период и фильтры уйдут параметрами запроса.
  */
-export function FilterBar({ departments, people = [], updatedMinutesAgo }: { departments: string[]; people?: string[]; updatedMinutesAgo: number }) {
+export function FilterBar({
+  departments,
+  people = [],
+  employees = true,
+  updatedMinutesAgo,
+}: {
+  /** Отделы — только доступные пользователю; нет ни одного — списка нет. */
+  departments: string[];
+  people?: string[];
+  /** Доступ к HR: без него списка сотрудников нет. */
+  employees?: boolean;
+  updatedMinutesAgo: number;
+}) {
   const t = useT();
   const router = useRouter();
   const [period, setPeriod] = useState<PeriodKey>("30d");
@@ -47,28 +59,32 @@ export function FilterBar({ departments, people = [], updatedMinutesAgo }: { dep
         })}
       </div>
 
-      <label className="relative block">
-        <Building2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" strokeWidth={1.75} />
-        <select className={selectClass} aria-label={t("Отдел")} defaultValue="">
-          <option value="">{t("Все отделы")}</option>
-          {departments.map((d) => (
-            <option key={d} value={d}>
-              {t(d)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="relative block">
-        <Users className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" strokeWidth={1.75} />
-        <select className={selectClass} aria-label={t("Сотрудник")} defaultValue="">
-          <option value="">{t("Все сотрудники")}</option>
-          {people.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-      </label>
+      {departments.length > 0 && (
+        <label className="relative block">
+          <Building2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" strokeWidth={1.75} />
+          <select className={selectClass} aria-label={t("Отдел")} defaultValue="">
+            <option value="">{t("Все отделы")}</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {t(d)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {employees && (
+        <label className="relative block">
+          <Users className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" strokeWidth={1.75} />
+          <select className={selectClass} aria-label={t("Сотрудник")} defaultValue="">
+            <option value="">{t("Все сотрудники")}</option>
+            {people.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <div className="ml-auto flex items-center gap-2.5 text-[12.5px] text-ink-3">
         <span aria-hidden className="size-[7px] rounded-full bg-ok shadow-[0_0_8px_var(--color-ok)]" />

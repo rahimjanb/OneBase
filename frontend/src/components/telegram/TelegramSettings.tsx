@@ -26,7 +26,8 @@ const tabs: { key: Tab; label: string; icon: typeof Bot }[] = [
 ];
 
 /** «Настройки → Telegram»: ключи приложения, аккаунты и для выбранного аккаунта — подключение, агент, пользователи, чаты, проверка агента, журнал. */
-export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
+/** reports — есть право на данные «Продаж»: видны ссылки на автоматические и PDF-отчёты (без него их нет). */
+export function TelegramSettings({ initial, reports = true }: { initial: TelegramOverview; reports?: boolean }) {
   const t = useT();
   const [data, setData] = useState(initial);
   const [selected, setSelected] = useState<string | null>(initial.accounts[0]?.id ?? null);
@@ -72,36 +73,40 @@ export function TelegramSettings({ initial }: { initial: TelegramOverview }) {
 
   return (
     <>
-      <Link
-        href="/settings/telegram/reports"
-        className="group mt-6 flex items-center gap-4 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-accent/40 sm:p-5"
-      >
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
-          <CalendarClock className="size-[18px]" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block font-semibold text-ink">{t("Автоматические отчёты")}</span>
-          <span className="block text-sm text-ink-2">
-            {t("Дневной план, клиенты без закупа, ТП без заказов, акции, категории и итоги недели — картинками для РМ, СВ и ТП по расписанию, с историей отправок.")}
-          </span>
-        </span>
-        <ArrowRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />
-      </Link>
-      <Link
-        href="/settings/telegram/reports?tab=pdf"
-        className="group mt-3 flex items-center gap-4 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-accent/40 sm:p-5"
-      >
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
-          <FileText className="size-[18px]" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block font-semibold text-ink">{t("Еженедельные PDF-отчёты")}</span>
-          <span className="block text-sm text-ink-2">
-            {t("PDF за неделю для РОП, РМ, СВ и карточки ТП: предпросмотр, скачивание, тест в чат, формулы целей и «только при полных данных»; отправка — по расписанию документом с подписью.")}
-          </span>
-        </span>
-        <ArrowRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />
-      </Link>
+      {reports && (
+        <>
+          <Link
+            href="/settings/telegram/reports"
+            className="group mt-6 flex items-center gap-4 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-accent/40 sm:p-5"
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
+              <CalendarClock className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-ink">{t("Автоматические отчёты")}</span>
+              <span className="block text-sm text-ink-2">
+                {t("Дневной план, клиенты без закупа, ТП без заказов, акции, категории и итоги недели — картинками для РМ, СВ и ТП по расписанию, с историей отправок.")}
+              </span>
+            </span>
+            <ArrowRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />
+          </Link>
+          <Link
+            href="/settings/telegram/reports?tab=pdf"
+            className="group mt-3 flex items-center gap-4 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-accent/40 sm:p-5"
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
+              <FileText className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-ink">{t("Еженедельные PDF-отчёты")}</span>
+              <span className="block text-sm text-ink-2">
+                {t("PDF за неделю для РОП, РМ, СВ и карточки ТП: предпросмотр, скачивание, тест в чат, формулы целей и «только при полных данных»; отправка — по расписанию документом с подписью.")}
+              </span>
+            </span>
+            <ArrowRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />
+          </Link>
+        </>
+      )}
 
       <Credentials data={data} onSaved={setData} />
 

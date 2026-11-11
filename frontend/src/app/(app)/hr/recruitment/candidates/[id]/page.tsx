@@ -12,7 +12,7 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   const ctx = await loadRecruitment(`/hr/recruitment/candidates/${id}`);
   return (
-    <RecruitmentFrame title="Кандидат" ctx={ctx}>
+    <RecruitmentFrame title="Кандидат" ctx={ctx} parent={{ label: "Кандидаты", href: "/hr/recruitment/candidates" }}>
       <Suspense>
         <CandidateCardView ctx={ctx} id={id} />
       </Suspense>

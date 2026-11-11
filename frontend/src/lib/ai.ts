@@ -134,6 +134,7 @@ export type AiAgentListItem = {
   promptIsDefault: boolean;
 };
 
+/** AI-сотрудник для «AI Dashboard»: только те, к данным которых у пользователя есть право (остальных API не отдаёт); available — включён. */
 export type AiAgentPublic = {
   code: string;
   name: string;

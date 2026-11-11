@@ -3,15 +3,21 @@ namespace OneBase.Application.Sales.Metrics;
 // Раздел «KPI»: KPI-показатели Linko по людям — план, факт, выполнение, премии и фонд оплаты, по регионам и направлениям.
 public sealed partial class SalesAnalytics
 {
-    public KpiView CachedKpi(bool money) => View($"kpi:{money}", () => Kpi(money));
+    /// <summary>«KPI» — люди в охвате пользователя (null — вся организация); итоги, направления и регионы — по ним.</summary>
+    public KpiView CachedKpi(bool money, SalesVisibility? visible = null)
+    {
+        var v = visible ?? SalesVisibility.All;
+        return View(v.IsAll ? $"kpi:{money}" : $"kpi:{money}:{v.Key}", () => Kpi(money, v));
+    }
 
     /// <summary>
     /// Люди с показателями Linko за месяц. ТП — регион агента (профиль, продажи, визиты); СВР (показатель «… Супер») — профиль, затем
     /// «СВР региона» по имени, затем его продажи и визиты, затем регион в названии должности или показателя. Факт ТП — кг вторички агента
     /// за месяц, факт СВР — кг вторички всех ТП региона из раздела (один раз на регион, без удвоения при двух СВР).
     /// </summary>
-    public KpiView Kpi(bool money)
+    public KpiView Kpi(bool money, SalesVisibility? visible = null)
     {
+        var v = visible ?? SalesVisibility.All;
         // Месяц идёт, пока не закрыт (и в свой последний день); 1-го числа полных дней ещё нет — прогноза нет.
         var running = !_d.Closed && _elapsed > 0;
         var share = running ? KpiMath.MonthShare(_elapsed, _d.DaysInMonth) : 1;
@@ -23,7 +29,7 @@ public sealed partial class SalesAnalytics
             var svr = g.Any(i => KpiMath.IsSupervisorIndicator(i.FullName ?? i.Name)) || _d.TeamPlanStaff.Contains(g.Key);
             var (region, source) = svr ? SupervisorRegion(g.Key, g) : AgentRegion(g.Key);
             return (Id: g.Key, Items: g.ToList(), Svr: svr, Region: region, Source: source);
-        }).ToList();
+        }).Where(p => v.Sees(p.Id, p.Region)).ToList();
 
         var regionRows = new List<KpiRegion>();
         foreach (var group in people.GroupBy(p => p.Region))
@@ -97,7 +103,7 @@ public sealed partial class SalesAnalytics
         // Регионы с продажами за месяц, где в Linko нет ни одного KPI: для них премия не считается.
         var withKpi = regionRows.Select(r => r.Id).ToHashSet();
         var missing = _currentByRegion
-            .Where(g => g.Key != NoRegionId && _regions.ContainsKey(g.Key) && !withKpi.Contains(g.Key.ToString()) && g.Sum(l => l.Kg) > 0)
+            .Where(g => g.Key != NoRegionId && _regions.ContainsKey(g.Key) && v.Region(g.Key) && !withKpi.Contains(g.Key.ToString()) && g.Sum(l => l.Kg) > 0)
             .Select(g => _regions[g.Key])
             .Where(r => r.DirectionId is not { } d || !_directions.TryGetValue(d, out var x) || !x.IsChannel)
             .OrderBy(r => r.Name, StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), true))
@@ -127,6 +133,7 @@ public sealed partial class SalesAnalytics
             directions,
             missing,
             _regions.Values
+                .Where(r => v.Region(r.Id))
                 .Where(r => r.DirectionId is not { } d || !_directions.TryGetValue(d, out var x) || !x.IsChannel)
                 .OrderBy(r => r.Name, StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), true))
                 .Select(r => new KpiRegionOption(r.Id.ToString(), r.Name))

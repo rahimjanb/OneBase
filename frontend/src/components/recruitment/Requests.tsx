@@ -228,7 +228,7 @@ export function RecruitmentSettingsView({ ctx }: { ctx: RecruitmentContext }) {
         >
           <input className={`${field} w-32`} type="number" min={1} max={365} value={days} disabled={!ctx.canManage} onChange={(e) => setDays(Number(e.target.value))} />
         </Label>
-        <Label label={t("Текст согласия (версия {n})", { n: s.consentVersion })} hint="Этот текст кандидат видит перед согласием. Изменение — новая версия; у данных согласий остаётся их версия.">
+        <Label label={t("Текст согласия (версия {n})", { n: s.consentVersion })} hint="Для согласий, которые HR записывает вручную (письменно, устно…); AI-рекрутер этот текст кандидатам не отправляет. Изменение — новая версия; у данных согласий остаётся их версия.">
           <textarea className={`${textarea} min-h-32`} value={text} disabled={!ctx.canManage} onChange={(e) => setText(e.target.value)} maxLength={8000} />
         </Label>
         {ctx.canManage && (

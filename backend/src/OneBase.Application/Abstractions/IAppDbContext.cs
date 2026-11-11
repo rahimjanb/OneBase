@@ -80,6 +80,7 @@ public interface IAppDbContext
     DbSet<SalesDirection> SalesDirections { get; }
     DbSet<SalesRegion> SalesRegions { get; }
     DbSet<SalesAgentProfile> SalesAgentProfiles { get; }
+    DbSet<SalesUserScope> SalesUserScopes { get; }
     DbSet<SalesRegionPlan> SalesRegionPlans { get; }
     DbSet<SalesFactoryPlan> SalesFactoryPlans { get; }
     DbSet<SalesAgentPlan> SalesAgentPlans { get; }
@@ -167,6 +168,7 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Production.ProductionRecipeImportRecipe> ProductionRecipeImportRecipes { get; }
     DbSet<OneBase.Domain.Production.ProductionRecipeImportLine> ProductionRecipeImportLines { get; }
     DbSet<OneBase.Domain.Production.ProductionRecipeImportItemMap> ProductionRecipeImportItemMaps { get; }
+    DbSet<OneBase.Domain.Production.ProductionRecipePhoto> ProductionRecipePhotos { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementStockImport> ProcurementStockImports { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementStockImportRow> ProcurementStockImportRows { get; }
     DbSet<OneBase.Domain.Procurement.ProcurementTenderItem> ProcurementTenderItems { get; }

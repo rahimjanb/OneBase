@@ -30,7 +30,6 @@ internal static class DialogAgentModel
             e.Property(x => x.HandoffPhrases).HasMaxLength(2000);
             e.Property(x => x.HandoffReply).HasMaxLength(500);
             e.Property(x => x.WorkDays).HasMaxLength(20);
-            e.Property(x => x.OffHours).HasMaxLength(16);
             e.Property(x => x.ModelProvider).HasMaxLength(32);
             e.Property(x => x.Model).HasMaxLength(200);
             e.HasIndex(x => new { x.Department, x.Kind });

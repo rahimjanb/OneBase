@@ -381,11 +381,32 @@ public sealed partial class RecruitmentService(
         var stages = await db.CandidateApplications.AsNoTracking().Where(a => ids.Contains(a.VacancyId))
             .GroupBy(a => new { a.VacancyId, a.Stage }).Select(g => new { g.Key.VacancyId, g.Key.Stage, Count = g.Count() }).ToListAsync(ct);
         var names = await NamesAsync(rows.Select(v => v.RecruiterId), ct);
+        var telegram = (await db.VacancyPublications.AsNoTracking().Where(p => ids.Contains(p.VacancyId) && p.Status == PublicationStatus.Sent)
+            .Select(p => p.VacancyId).Distinct().ToListAsync(ct)).ToHashSet();
         return rows.Select(v => new VacancyRow(v.Id, v.Code, v.Title, v.Department?.Name ?? "—", v.Status.ToString(), v.Headcount, v.SalaryFrom, v.SalaryTo, v.City,
             v.RecruiterId is { } r ? names.GetValueOrDefault(r) : null,
             stages.Where(x => x.VacancyId == v.Id && !RecruitmentRules.IsClosed(x.Stage)).Sum(x => x.Count),
             stages.Where(x => x.VacancyId == v.Id && x.Stage == ApplicationStage.Hired).Sum(x => x.Count),
-            v.CreatedAt, v.OpenedAt)).ToList();
+            v.CreatedAt, v.OpenedAt, v.DepartmentId, v.UpdatedAt ?? v.CreatedAt, v.HhVacancyId != null, telegram.Contains(v.Id))).ToList();
+    }
+
+    /// <summary>
+    /// Счётчики кнопок разделов (кроме собеседований сегодня и непрочитанных диалогов — их считают InterviewService и HrDialogService):
+    /// открытые вакансии, кандидаты с незакрытым откликом, действующие публикации открытых вакансий, открытые исключения, HH подключён и включён.
+    /// </summary>
+    public async Task<RecruitmentNavView> NavAsync(RecruitmentContext ctx, CancellationToken ct)
+    {
+        RequireRead(ctx);
+        var open = await db.Vacancies.CountAsync(v => v.Status == VacancyStatus.Open, ct);
+        var inWork = await db.CandidateApplications
+            .Where(a => a.Stage != ApplicationStage.Hired && a.Stage != ApplicationStage.Rejected && a.Stage != ApplicationStage.Withdrawn)
+            .Select(a => a.CandidateId).Distinct().CountAsync(ct);
+        var publications = await db.VacancyPublications.CountAsync(p =>
+            (p.Status == PublicationStatus.Scheduled || p.Status == PublicationStatus.Sending || p.Status == PublicationStatus.Sent)
+            && db.Vacancies.Any(v => v.Id == p.VacancyId && v.Status == VacancyStatus.Open), ct);
+        var exceptionsOpen = await db.RecruitmentExceptions.CountAsync(e => e.Status == RecruitmentExceptionStatus.Open, ct);
+        var hh = await db.HhConnections.AnyAsync(h => h.Enabled && h.ProtectedAccessToken != null, ct);
+        return new RecruitmentNavView(open, inWork, 0, publications, 0, exceptionsOpen, hh);
     }
 
     public async Task<VacancyView> VacancyAsync(RecruitmentContext ctx, Guid id, CancellationToken ct)

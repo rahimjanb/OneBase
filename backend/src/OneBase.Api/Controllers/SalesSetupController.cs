@@ -20,6 +20,7 @@ namespace OneBase.Api.Controllers;
 [Route("api/sales/setup")]
 [HasPermission(Permissions.SalesRead)]
 [InvalidateSalesCache]
+[SalesOrganizationOnly]
 public sealed class SalesSetupController(
     IAppDbContext db, SalesOptions salesOptions, IAuditLogger audit, FieldOwnership ownership, SalesDataLoader loader, DataChangeService dataChanges)
     : ControllerBase

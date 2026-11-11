@@ -41,9 +41,14 @@ public sealed record ProductionRecipeInput(string? Code, string? Name, long? Lin
 /// </summary>
 public sealed record ProductionRecipeRow(Guid Id, string Code, int VersionNo, string Name, string OutputName, string OutputUnit, decimal OutputQuantity,
     ProductionRecipeStatus Status, int Lines, DateTimeOffset? ActivatedAt, Guid? DraftId, int Versions, string? TechCardNo = null, string? TechnologistName = null,
-    DateOnly? EffectiveFrom = null, int Stages = 0, ProductionRecipeStatus? DraftStatus = null);
+    DateOnly? EffectiveFrom = null, int Stages = 0, ProductionRecipeStatus? DraftStatus = null, ProductionRecipePhotoView? Photo = null,
+    DateTimeOffset? UpdatedAt = null);
 
-public sealed record ProductionRecipeList(IReadOnlyList<ProductionRecipeRow> Items, int Total, bool CanCreate);
+/// <summary>Сколько карточек в каждом фильтре состояния (с учётом поиска): все, утверждённые, черновики, на утверждении, архив.</summary>
+public sealed record ProductionRecipeCounts(int All, int Active, int Draft, int Pending, int Archived);
+
+/// <summary>Список техкарт; CanCreate — ведёт техкарты (создаёт, импортирует, меняет фото).</summary>
+public sealed record ProductionRecipeList(IReadOnlyList<ProductionRecipeRow> Items, int Total, bool CanCreate, ProductionRecipeCounts? Counts = null);
 
 /// <summary>Единица закупки позиции: 1 UnitCode = Factor единиц склада («мешок = 50 кг»).</summary>
 public sealed record ProductionItemUnit(string UnitCode, decimal Factor);
@@ -70,7 +75,7 @@ public sealed record ProductionRecipeVersionView(Guid Id, int VersionNo, Product
 /// Что можно с версией: править (черновик), на утверждение (черновик), утвердить и вернуть (на утверждении — другой технолог или начальник
 /// производства; вернуть — и автор), новая версия (нет неутверждённой), архивировать (действующую), задание на выпуск.
 /// </summary>
-public sealed record ProductionRecipeAbilities(bool Edit, bool Submit, bool Approve, bool Return, bool NewVersion, bool Archive, bool Order);
+public sealed record ProductionRecipeAbilities(bool Edit, bool Submit, bool Approve, bool Return, bool NewVersion, bool Archive, bool Order, bool Photo = false);
 
 public sealed record ProductionRecipeDetail(
     Guid Id,
@@ -114,7 +119,8 @@ public sealed record ProductionRecipeDetail(
     IReadOnlyList<string>? Approvers = null,
     Guid? OutputItemId = null,
     string? OutputItemName = null,
-    string? OutputItemUnit = null);
+    string? OutputItemUnit = null,
+    ProductionRecipePhotoView? Photo = null);
 
 /// <summary>Потребность на количество выхода: по каждой позиции — норма на выход рецептуры, потери, сколько нужно, доступно на складе и не хватает.</summary>
 public sealed record ProductionRequirementLine(Guid ItemId, string Sku, string Name, string UnitCode, decimal Norm, decimal LossPercent, decimal Required, decimal Available,
@@ -170,15 +176,17 @@ public sealed class ProductionRecipeService(IAppDbContext db, TimeProvider clock
             .Select(r => new
             {
                 r.Id, r.Code, r.VersionNo, r.Name, r.OutputName, r.OutputUnit, r.OutputQuantity, r.Status, r.ActivatedAt, Lines = r.Lines.Count, r.TechCardNo,
-                Technologist = r.Technologist == null ? null : r.Technologist.FullName, r.EffectiveFrom, Stages = r.Stages.Count,
+                Technologist = r.Technologist == null ? null : r.Technologist.FullName, r.EffectiveFrom, Stages = r.Stages.Count, Changed = r.UpdatedAt ?? r.CreatedAt,
             })
             .ToListAsync(ct);
+        var photos = await db.ProductionRecipePhotos.AsNoTracking().ToDictionaryAsync(p => p.Code, ProductionRecipePhotoService.View, ct);
         var rows = all.GroupBy(r => r.Code).Select(g =>
         {
             var shown = g.FirstOrDefault(r => r.Status == ProductionRecipeStatus.Active) ?? g.OrderByDescending(r => r.VersionNo).First();
             var open = g.FirstOrDefault(r => ProductionRules.Open(r.Status));
             return new ProductionRecipeRow(shown.Id, shown.Code, shown.VersionNo, shown.Name, shown.OutputName, shown.OutputUnit, shown.OutputQuantity, shown.Status, shown.Lines,
-                shown.ActivatedAt, open?.Id, g.Count(), shown.TechCardNo, shown.Technologist, shown.EffectiveFrom, shown.Stages, open?.Status);
+                shown.ActivatedAt, open?.Id, g.Count(), shown.TechCardNo, shown.Technologist, shown.EffectiveFrom, shown.Stages, open?.Status,
+                photos.GetValueOrDefault(shown.Code), g.Max(r => r.Changed));
         });
         if (search?.Trim().ToLowerInvariant() is { Length: > 0 } text)
         {
@@ -187,16 +195,20 @@ public sealed class ProductionRecipeService(IAppDbContext db, TimeProvider clock
                                                                                            || (r.TechCardNo?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false));
         }
 
+        var found = rows.ToList();
+        var counts = new ProductionRecipeCounts(found.Count, found.Count(r => r.Status == ProductionRecipeStatus.Active),
+            found.Count(r => r.DraftStatus == ProductionRecipeStatus.Draft), found.Count(r => r.DraftStatus == ProductionRecipeStatus.PendingApproval),
+            found.Count(r => r.Status == ProductionRecipeStatus.Archived));
         rows = status switch
         {
-            "active" => rows.Where(r => r.Status == ProductionRecipeStatus.Active),
-            "draft" => rows.Where(r => r.DraftStatus == ProductionRecipeStatus.Draft),
-            "pending" => rows.Where(r => r.DraftStatus == ProductionRecipeStatus.PendingApproval),
-            "archived" => rows.Where(r => r.Status == ProductionRecipeStatus.Archived),
-            _ => rows,
+            "active" => found.Where(r => r.Status == ProductionRecipeStatus.Active),
+            "draft" => found.Where(r => r.DraftStatus == ProductionRecipeStatus.Draft),
+            "pending" => found.Where(r => r.DraftStatus == ProductionRecipeStatus.PendingApproval),
+            "archived" => found.Where(r => r.Status == ProductionRecipeStatus.Archived),
+            _ => found,
         };
         var list = rows.OrderBy(r => r.Status == ProductionRecipeStatus.Archived).ThenBy(r => r.Name).ThenBy(r => r.Code).ToList();
-        return new ProductionRecipeList(list, list.Count, ctx.Recipes);
+        return new ProductionRecipeList(list, list.Count, ctx.Recipes, counts);
     }
 
     public async Task<ProductionRecipeDetail> GetAsync(ProcurementContext ctx, Guid id, CancellationToken ct)
@@ -234,7 +246,9 @@ public sealed class ProductionRecipeService(IAppDbContext db, TimeProvider clock
             r.Status == ProductionRecipeStatus.PendingApproval && ((approver && r.SubmittedById != ctx.UserId) || (ctx.Recipes && r.SubmittedById == ctx.UserId)),
             ctx.Recipes && !ProductionRules.Open(r.Status) && !hasOpen,
             ctx.Recipes && r.Status == ProductionRecipeStatus.Active,
-            ctx.Produces && r.Status == ProductionRecipeStatus.Active);
+            ctx.Produces && r.Status == ProductionRecipeStatus.Active,
+            ctx.Recipes);
+        var photo = await db.ProductionRecipePhotos.AsNoTracking().FirstOrDefaultAsync(p => p.Code == r.Code, ct);
         return new ProductionRecipeDetail(r.Id, r.Code, r.VersionNo, r.Name, r.LinkoProductId, product?.Name, r.OutputName, r.OutputUnit, r.OutputQuantity, r.Status, r.Comment,
             r.ActivatedAt, r.ActivatedBy?.FullName, r.CreatedAt, r.Version, lines, versions, history, can, orders, r.TechCardNo, r.TechnologistId, r.Technologist?.FullName,
             r.EffectiveFrom, r.SubmittedAt, r.SubmittedBy?.FullName, r.BatchMinKg, r.BatchMaxKg, r.PartialBatches, r.PieceKg, r.PackKg, r.PacksPerBox,
@@ -244,7 +258,7 @@ public sealed class ProductionRecipeService(IAppDbContext db, TimeProvider clock
             r.DefectTypes.OrderBy(d => stages.FindIndex(s => s.Id == d.StageId)).ThenBy(d => d.ItemId != null).ThenBy(d => d.Name)
                 .Select(d => new ProductionDefectTypeView(d.Id, d.StageId, d.Name, d.NormPercent, d.Reworkable, d.ItemId, d.Item?.Name, d.Comment)).ToList(),
             problems, mixing is null ? null : calc.Lines.Where(l => l.StageNo == mixing.StageNo).Sum(l => l.Quantity * (ProductionCalc.MassFactor(l.Unit) ?? l.UnitKg ?? 0)),
-            product?.Code, group, approvers, r.OutputItemId, r.OutputItem?.Name, r.OutputItem?.UnitCode);
+            product?.Code, group, approvers, r.OutputItemId, r.OutputItem?.Name, r.OutputItem?.UnitCode, photo is null ? null : ProductionRecipePhotoService.View(photo));
     }
 
     /// <summary>Новая рецептура — черновик версии 1 с новым кодом.</summary>

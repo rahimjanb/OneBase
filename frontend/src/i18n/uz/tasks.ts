@@ -30,8 +30,7 @@ const dict: Dict = {
   "Назад": "Orqaga",
   "Дальше": "Keyingi",
   "{page} из {pages}": "{page} / {pages}",
-  "Нет доступа к задачам Sales Base. Их видят администратор, директор, РМ и супервайзеры.":
-    "Sales Base vazifalariga ruxsat yo'q. Ularni administrator, direktor, RM va supervayzerlar ko'radi.",
+  "Не удалось загрузить задачи полевой команды. Обновите страницу.": "Dala jamoasi vazifalarini yuklab bo'lmadi. Sahifani yangilang.",
   "Открытые": "Ochiq",
   "Просроченные": "Muddati o'tgan",
   "Закрытые": "Yopilgan",
@@ -43,7 +42,8 @@ const dict: Dict = {
   "Все исполнители": "Barcha ijrochilar",
   "супервайзер": "supervayzer",
   "Найдено: {n}": "Topildi: {n}",
-  "Нет доступа к маршрутам Sales Base.": "Sales Base marshrutlariga ruxsat yo'q.",
+  "Не удалось загрузить маршруты. Обновите страницу.": "Marshrutlarni yuklab bo'lmadi. Sahifani yangilang.",
+  "Задач у отдела пока нет": "Bo'limda hozircha vazifalar yo'q",
   "На этот день маршрутов нет": "Bu kunga marshrutlar yo'q",
   "Агент": "Agent",
   "Команда": "Jamoa",
@@ -150,7 +150,6 @@ const dict: Dict = {
   "Открытых задач нет.": "Ochiq vazifalar yo'q.",
   "Блок": "Blok",
   "вы руководитель": "siz rahbarsiz",
-  "Задачи видят сотрудники отдела, руководитель отдела и руководство": "Vazifalarni bo'lim xodimlari, bo'lim rahbari va rahbariyat ko'radi",
   "Задач отдела по этому фильтру нет.": "Bu filtr bo'yicha bo'lim vazifalari yo'q.",
   "Все задачи · OneBase": "Barcha vazifalar · OneBase",
   "Задачи, доступные вам: ваших отделов, проектов, поставленные вами и назначенные вам":

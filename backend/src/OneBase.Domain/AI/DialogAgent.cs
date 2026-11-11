@@ -113,7 +113,9 @@ public class DialogAgent : Entity
     /// <summary>Что сказать, передавая вопрос сотруднику; пусто — стандартная фраза.</summary>
     public string? HandoffReply { get; set; }
 
-    // ---------- Когда и как быстро отвечает ----------
+    // ---------- Рабочее время ----------
+    // Ответ уходит сразу, в любое время — без паузы и «печатает…». Рабочее время агент учитывает в словах («коллеги ответят утром»),
+    // напоминания кандидатам уходят только в рабочее время.
 
     /// <summary>Рабочее время (Ташкент); null — круглосуточно.</summary>
     public TimeOnly? WorkFrom { get; set; }
@@ -122,17 +124,6 @@ public class DialogAgent : Entity
 
     /// <summary>Рабочие дни: 1 — пн … 7 — вс, через запятую.</summary>
     public string WorkDays { get; set; } = "1,2,3,4,5,6,7";
-
-    /// <summary>Вне рабочего времени: morning — ответ уходит в начале рабочего времени; reply — отвечать сразу.</summary>
-    public string OffHours { get; set; } = "morning";
-
-    /// <summary>Пауза перед ответом, секунд (случайная в этих пределах) — человек тоже не отвечает мгновенно.</summary>
-    public int ReplyDelayMinSeconds { get; set; } = 20;
-
-    public int ReplyDelayMaxSeconds { get; set; } = 90;
-
-    /// <summary>Перед ответом показывать «печатает…».</summary>
-    public bool Typing { get; set; } = true;
 
     /// <summary>Рекрутер: одно напоминание кандидату, который не ответил, через столько часов; 0 — не напоминать.</summary>
     public int FollowUpHours { get; set; } = 24;

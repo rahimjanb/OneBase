@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using OneBase.Api.Auth;
 using OneBase.Application.Sales;
+using OneBase.Application.Sales.Access;
 using OneBase.Application.Sales.Metrics;
 using OneBase.Application.Sales.Primary;
 using OneBase.Application.Sales.SkuSales;
@@ -20,13 +21,15 @@ namespace OneBase.Api.Controllers;
 [ApiController]
 [Route("api/sales")]
 [HasPermission(Permissions.SalesRead)]
-public sealed class SalesController(SalesDataLoader loader) : ControllerBase
+public sealed class SalesController(SalesDataLoader loader, SalesAccess access) : ControllerBase
 {
     public sealed record PeriodQuery(int? Year, int? Month, string? Plan = null);
 
+    [SalesNoData]
     [HttpGet("months")]
     public Task<IReadOnlyList<SalesMonth>> Months(CancellationToken ct) => loader.MonthsAsync(ct);
 
+    [SalesOrganizationOnly]
     [HttpGet("overview")]
     public async Task<OverviewView> Overview([FromQuery] PeriodQuery q, CancellationToken ct) =>
         (await Load(q, ct)).CachedOverview();
@@ -35,6 +38,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// from/to — диапазон дней для календаря визитов (по умолчанию с 1-го по последний день данных; from=to — один день);
     /// metric и category — календарь месяца по регионам, как у региона.
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("republic")]
     public async Task<GroupView> Republic(
         [FromQuery] PeriodQuery q,
@@ -48,6 +52,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         return (await Load(q, ct)).CachedRepublic(from, to, metric, metric == "akb" ? category : null);
     }
 
+    [SalesScoped]
     [HttpGet("directions/{id}")]
     public async Task<ActionResult<GroupView>> Direction(
         string id,
@@ -58,12 +63,19 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         [FromQuery] long? category = null,
         CancellationToken ct = default)
     {
+        // Чужое направление — 404, как будто его нет (РМ видит только свои; СВР и ТП — ни одного).
+        if (!(await ScopeAsync(ct)).CanSeeDirection(GuidOf(id)) && !(await ScopeAsync(ct)).IsOrganization)
+        {
+            return NotFound();
+        }
+
         var analytics = await Load(q, ct);
         metric = metric is "sum" or "akb" ? metric : "kg";
         return analytics.HasDirection(id) ? analytics.CachedDirection(id, from, to, metric, metric == "akb" ? category : null) : NotFound();
     }
 
     /// <summary>metric — календарь месяца: kg | sum | akb; category — для АКБ по категории.</summary>
+    [SalesScoped]
     [HttpGet("regions/{id:guid}")]
     public async Task<ActionResult<RegionView>> Region(
         Guid id,
@@ -74,31 +86,48 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         [FromQuery] long? category = null,
         CancellationToken ct = default)
     {
+        if (!(await ScopeAsync(ct)).CanSeeRegion(id))
+        {
+            return NotFound();
+        }
+
         var analytics = await Load(q, ct);
         metric = metric is "sum" or "akb" ? metric : "kg";
         return analytics.HasRegion(id) ? analytics.CachedRegion(id, from, to, metric, metric == "akb" ? category : null) : NotFound();
     }
 
     /// <summary>«Агенты»: все ТП месяца — выполнение плана, прогноз, выручка, АКБ, визиты, страйк и замечания; фильтры и поиск — на странице.</summary>
+    [SalesScoped]
     [HttpGet("agents")]
-    public async Task<AgentsView> Agents([FromQuery] PeriodQuery q, CancellationToken ct) => (await LoadDefaultPlan(q, ct)).CachedAgents();
+    public async Task<AgentsView> Agents([FromQuery] PeriodQuery q, CancellationToken ct) =>
+        (await LoadDefaultPlan(q, ct)).CachedAgents((await ScopeAsync(ct)).Visibility);
 
+    [SalesScoped]
     [HttpGet("agents/{id:long}")]
     public async Task<ActionResult<AgentView>> Agent(long id, [FromQuery] PeriodQuery q, CancellationToken ct)
     {
         var analytics = await LoadDefaultPlan(q, ct);
-        return analytics.HasAgent(id) ? analytics.CachedAgent(id) : NotFound();
+        if (!analytics.HasAgent(id))
+        {
+            return NotFound();
+        }
+
+        // ТП чужого региона (по региону месяца) или другой ТП — 404.
+        var view = analytics.CachedAgent(id);
+        return (await ScopeAsync(ct)).CanSeeAgent(id, GuidOf(view.RegionId)) ? view : NotFound();
     }
 
     /// <summary>Все планы из Linko (staff_balance) за месяц: агенты по регионам и планы команд (супервайзеров).</summary>
+    [SalesScoped]
     [HttpGet("plans")]
     public async Task<PlansView> Plans([FromQuery] PeriodQuery q, CancellationToken ct) =>
-        (await LoadDefaultPlan(q, ct)).CachedPlans();
+        (await LoadDefaultPlan(q, ct)).CachedPlans((await ScopeAsync(ct)).Visibility);
 
     /// <summary>
     /// «KPI»: показатели Linko по людям — выполнение, премии и фонд оплаты по регионам и направлениям. Оклад, бонусы и премии — только с
     /// правом «Финансы» (finance.read); без него те же цифры выполнения без денег.
     /// </summary>
+    [SalesScoped]
     [HttpGet("kpi")]
     public async Task<KpiView> Kpi(
         [FromQuery] PeriodQuery q,
@@ -106,7 +135,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         CancellationToken ct)
     {
         var money = (await permissions.GetAsync(User.GetUserId(), ct)).Contains(Permissions.FinanceRead);
-        return (await LoadDefaultPlan(q, ct)).CachedKpi(money);
+        return (await LoadDefaultPlan(q, ct)).CachedKpi(money, (await ScopeAsync(ct)).Visibility);
     }
 
     public sealed record KpiRegionInput(long LinkoUserId, Guid? RegionId);
@@ -115,6 +144,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// Регион человека для «KPI» и всего раздела продаж (профиль агента): у СВР в Linko филиала нет. RegionId = null — снять привязку,
     /// регион снова определяется сам.
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpPut("kpi/region")]
     [HasPermission(Permissions.SalesManage)]
     public async Task<IActionResult> KpiRegion(
@@ -150,6 +180,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         return NoContent();
     }
 
+    [SalesScoped]
     [HttpGet("problems")]
     public async Task<ProblemsView> Problems(
         [FromQuery] PeriodQuery q,
@@ -157,28 +188,71 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         [FromQuery] FlagKind? criterion,
         [FromQuery] bool vacancies = false,
         CancellationToken ct = default) =>
-        (await LoadDefaultPlan(q, ct)).CachedProblems(string.IsNullOrEmpty(direction) ? null : direction, criterion, vacancies);
+        (await LoadDefaultPlan(q, ct)).CachedProblems(string.IsNullOrEmpty(direction) ? null : direction, criterion, vacancies, (await ScopeAsync(ct)).Visibility);
 
     /// <summary>Магазин за месяц; agent — только продажи этого ТП в магазин.</summary>
+    [SalesScoped]
     [HttpGet("stores/{id:long}")]
-    public async Task<ActionResult<StoreView>> Store(long id, [FromQuery] PeriodQuery q, [FromQuery] long? agent, CancellationToken ct)
+    public async Task<ActionResult<StoreView>> Store(long id, [FromQuery] PeriodQuery q, [FromQuery] long? agent, CancellationToken ct,
+        [FromServices] OneBase.Application.Abstractions.IAppDbContext? db = null)
     {
         var analytics = await LoadDefaultPlan(q, ct);
-        return analytics.HasMarket(id) ? analytics.CachedStore(id, agent) : NotFound();
+        if (!analytics.HasMarket(id))
+        {
+            return NotFound();
+        }
+
+        var scope = await ScopeAsync(ct);
+        if (scope.IsAgent)
+        {
+            // ТП видит магазин только своими продажами в нём: продавал в этом или прошлом месяце или магазин закреплён за ним в Linko.
+            // Чужие продажи в магазине (agent в запросе) и чужие магазины — 404. (У StoreView.AgentId — запрошенный ТП, не признак.)
+            var mine = analytics.CachedStore(id, scope.AgentId);
+            var sold = mine.Orders > 0 || mine.FactKg != 0 || mine.PrevMonthKg != 0;
+            var responsible = db is not null && await db.LinkoMarkets.AnyAsync(m => m.Id == id && m.ResponsibleAgentId == scope.AgentId, ct);
+            return sold || responsible ? mine : NotFound();
+        }
+
+        var view = analytics.CachedStore(id, agent);
+        return scope.CanSeeRegion(GuidOf(view.RegionId)) ? view : NotFound();
     }
 
     /// <summary>Экспорт и опт — филиал «Завод»: отдельно от вторички.</summary>
+    [SalesOrganizationOnly]
     [HttpGet("export")]
     public async Task<ExportView> Export([FromQuery] PeriodQuery q, CancellationToken ct) => (await LoadDefaultPlan(q, ct)).CachedExport();
 
     /// <summary>Вкладка «Ассортимент»: республика, направление (direction) или регион (region).</summary>
+    [SalesScoped]
     [HttpGet("assortment")]
-    public async Task<AssortmentView> Assortment([FromQuery] PeriodQuery q, [FromQuery] string? direction, [FromQuery] Guid? region, CancellationToken ct) =>
-        (await LoadDefaultPlan(q, ct)).CachedAssortment(string.IsNullOrEmpty(direction) ? null : direction, region);
+    public async Task<ActionResult<AssortmentView>> Assortment([FromQuery] PeriodQuery q, [FromQuery] string? direction, [FromQuery] Guid? region, CancellationToken ct)
+    {
+        // Охват РМ/СВР: без параметров — своё направление (своё первое) или регион; страна и чужое — 404. ТП ассортимента региона не видит.
+        var scope = await ScopeAsync(ct);
+        if (!scope.IsOrganization && string.IsNullOrEmpty(direction) && region is null)
+        {
+            if (scope.IsRm)
+            {
+                direction = scope.DirectionIds.Order().FirstOrDefault().ToString();
+            }
+            else
+            {
+                region = scope.RegionIds.Order().FirstOrDefault();
+            }
+        }
+
+        if (!AllowedCatalog(scope, direction, region, null, false))
+        {
+            return NotFound();
+        }
+
+        return (await LoadDefaultPlan(q, ct)).CachedAssortment(string.IsNullOrEmpty(direction) ? null : direction, region);
+    }
 
     /// <summary>
     /// Категория отчёта (id карточки) в охвате: республика, направление (direction), регион (region), ТП (agent) или экспорт (export=true).
     /// </summary>
+    [SalesScoped]
     [HttpGet("categories/{id}")]
     public async Task<ActionResult<CategoryView>> Category(
         string id,
@@ -189,11 +263,18 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         [FromQuery] bool export = false,
         CancellationToken ct = default)
     {
-        var view = (await LoadDefaultPlan(q, ct)).CachedCategory(id, Scope(direction, region, agent, export));
+        var analytics = await LoadDefaultPlan(q, ct);
+        if (await CatalogScopeAsync(analytics, direction, region, agent, export, ct) is not { } scoped)
+        {
+            return NotFound();
+        }
+
+        var view = analytics.CachedCategory(id, scoped);
         return view is null ? NotFound() : view;
     }
 
     /// <summary>Артикул в охвате (как у категории): где товар идёт, а где нет — по регионам, ТП региона или магазинам.</summary>
+    [SalesScoped]
     [HttpGet("products/{id:long}")]
     public async Task<ActionResult<ProductView>> Product(
         long id,
@@ -204,7 +285,13 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         [FromQuery] bool export = false,
         CancellationToken ct = default)
     {
-        var view = (await LoadDefaultPlan(q, ct)).CachedProduct(id, Scope(direction, region, agent, export));
+        var analytics = await LoadDefaultPlan(q, ct);
+        if (await CatalogScopeAsync(analytics, direction, region, agent, export, ct) is not { } scoped)
+        {
+            return NotFound();
+        }
+
+        var view = analytics.CachedProduct(id, scoped);
         return view is null ? NotFound() : view;
     }
 
@@ -212,6 +299,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// «Акт сверки»: взаиморасчёты с контрагентами за месяц (month=2026-9) — отгрузки и возвраты Linko, оплаты и расходы из реестров Google
     /// Sheets, остаток из акта бухгалтерии. Финансовые данные — нужны права «Продажи» и «Финансы».
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("akt")]
     [HasPermission(Permissions.FinanceRead)]
     public async Task<OneBase.Application.Sales.Settlements.AktView> Akt(
@@ -221,6 +309,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         OneBase.Application.Sales.Settlements.AktCompute.Build(await settlements.BaseAsync(ct), month);
 
     /// <summary>«DSO»: долги дилеров по FIFO, просрочка по норме и прогноз оплат. Права «Продажи» и «Финансы».</summary>
+    [SalesOrganizationOnly]
     [HttpGet("dso")]
     [HasPermission(Permissions.FinanceRead)]
     public async Task<OneBase.Application.Sales.Settlements.DsoView> Dso(
@@ -232,6 +321,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// «Акции»: скидки и бонусы вторички по акциям Linko за месяц года (month=2026-9), РМ (rm) и отмеченные акции (promos=12,-1,-1000 —
     /// id акций, -1 — ручная скидка, меньше -1 — группа неразличимых акций). Нет строк со скидкой за год — 404.
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("promo")]
     public async Task<ActionResult<OneBase.Application.Sales.Promo.PromoView>> Promo(
         [FromServices] OneBase.Application.Sales.Promo.PromoService promo,
@@ -257,6 +347,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// «Система» за месяц (year, month): маршрут — заказы от плана визитов Linko, качество дистрибуции — ядро ассортимента и верхние точки,
     /// деньги и запас дилеров — только с правом «Финансы» (без него Money = null, MoneyHidden = true).
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("system")]
     public async Task<OneBase.Application.Sales.Health.SystemView> SystemHealth(
         [FromQuery] PeriodQuery q,
@@ -268,6 +359,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         return await system.GetAsync(q.Year, q.Month, money, ct);
     }
 
+    [SalesOrganizationOnly]
     [HttpGet("dmp")]
     public async Task<ActionResult<OneBase.Application.Sales.Dmp.DmpView>> Dmp([FromServices] OneBase.Application.Sales.Dmp.DmpService dmp, CancellationToken ct) =>
         await dmp.GetAsync(ct) is { } view ? view : NotFound(new { error = "Стеллажей в Linko нет: товаров типа «Оборудование» не найдено." });
@@ -277,6 +369,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// 24 месяцев, from не позже to), region — id региона (пусто — вся страна), top=all|only|not, abc=all|A|B|C, cat — категории отчёта
     /// через запятую («Кекс,Помадка»). Ошибка в параметрах — 400 с текстом для пользователя.
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("sku-sales")]
     [HasPermission(Permissions.SalesRead)]
     public async Task<ActionResult<SkuSalesView>> SkuSales(
@@ -299,6 +392,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// q — поиск (цифры — точный код без нулей слева, иначе точный код, затем подстрока); cat — категории через запятую; pack — фасовки, кг,
     /// через запятую; top=all|only|not; status=all|deficit|overstock|dead. Итоги и плитки — по отфильтрованным строкам.
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("stock")]
     public Task<StockView> Stock(
         [FromServices] StockService stock,
@@ -322,7 +416,9 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// «Собрать в Excel» на «Рек. остатке»: те же охват и фильтры, что у /stock, колонки — columns (ключи StockExport.Columns через запятую,
     /// пусто — как в таблице), warehouses=true — ещё лист «По складам». Имя файла — в пути, чтобы его взяли iOS и браузеры.
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("stock/xlsx/{fileName}")]
+    [HasPermission(Permissions.SalesExport)]
     public async Task<IActionResult> StockWorkbook(
         [FromServices] StockService stock,
         [FromServices] OneBase.Application.Reports.IReportWorkbookWriter writer,
@@ -351,6 +447,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     }
 
     /// <summary>Автозаказ региона на «Рек. остатке»: товары с коробкой и рекомендация в коробках (без фильтров страницы).</summary>
+    [SalesOrganizationOnly]
     [HttpGet("stock/autoorder")]
     public async Task<ActionResult<AutoOrderView>> AutoOrder([FromServices] StockService stock, [FromQuery] string? region, CancellationToken ct)
     {
@@ -368,7 +465,9 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// «Скачать акт»: акт приёма-передачи «Завод → регион» в Excel по коробкам автозаказа (остатков завода в нём нет). Имя файла — в пути,
     /// чтобы его взяли iOS и браузеры.
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpPost("stock/autoorder/act/{fileName}")]
+    [HasPermission(Permissions.SalesExport)]
     public async Task<IActionResult> AutoOrderAct(
         [FromServices] StockService stock,
         [FromServices] ITransferActWriter writer,
@@ -396,6 +495,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// Аутсток: дни без товара у дилеров за месяц и упущенные продажи — по восстановленному назад от снимка остатку. Без year/month —
     /// последний закрытый месяц; region — область страницы, calendar — регион календаря по дням (итоги при этом по всей области).
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("outstock")]
     public Task<OutstockView> Outstock(
         [FromServices] OutstockService outstock,
@@ -414,6 +514,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// и год, нетто возвратов. Календарь отгрузок: from/to — период «с … по …» (дни месяца; по умолчанию все дни с отгрузкой, перепутанные
     /// границы меняются местами), day и dealer — разбор: что отгрузили в этот день и/или этому контрагенту.
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("primary")]
     public Task<PrimaryView> Primary(
         [FromServices] PrimaryService primary,
@@ -430,6 +531,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// Первичка → Экспорт: заказы филиала «Завод» экспортным точкам (тип EXPORT) за месяц и год, по странам и дням; from/to/day/dealer —
     /// календарь отгрузок, как у первички (dealer — страна).
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("primary/export")]
     public Task<PrimaryView> PrimaryExport(
         [FromServices] PrimaryService primary,
@@ -446,6 +548,7 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
     /// Обзор «Первички»: отгрузка завода всего и два направления (республика, экспорт) за период — period=month (year, month), quarter (year,
     /// quarter) или ytd (с начала года, по умолчанию); тонны, сумма, доли по тоннам и по сумме, контрагенты, страны, заказы, сумма за тонну.
     /// </summary>
+    [SalesOrganizationOnly]
     [HttpGet("primary/overview")]
     public Task<PrimaryOverview> PrimaryOverview(
         [FromServices] PrimaryService primary,
@@ -457,7 +560,9 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
         primary.OverviewAsync(period, year, month, quarter, ct);
 
     /// <summary>«Excel» обзора «Первички» за тот же период: направления и по месяцам. Имя файла — в пути (iOS и браузеры берут его оттуда).</summary>
+    [SalesOrganizationOnly]
     [HttpGet("primary/overview/xlsx/{fileName}")]
+    [HasPermission(Permissions.SalesExport)]
     public async Task<IActionResult> PrimaryOverviewWorkbook(
         [FromServices] PrimaryService primary,
         [FromServices] OneBase.Application.Reports.IReportWorkbookWriter writer,
@@ -484,4 +589,55 @@ public sealed class SalesController(SalesDataLoader loader) : ControllerBase
 
     private static AssortmentScope Scope(string? direction, Guid? region, long? agent, bool export) =>
         new(string.IsNullOrEmpty(direction) ? null : direction, region, agent, export);
+
+    private SalesScope? _scope;
+
+    /// <summary>Охват текущего пользователя (из назначения и оргструктуры, не из запроса) — один раз на запрос.</summary>
+    private async Task<SalesScope> ScopeAsync(CancellationToken ct) => _scope ??= await access.ScopeAsync(User.GetUserId(), ct);
+
+    private static Guid? GuidOf(string? id) => Guid.TryParse(id, out var g) ? g : null;
+
+    /// <summary>
+    /// Охват категории и товара: вся организация — как запрошено; РМ — своё направление, свой регион или ТП своих регионов; СВР — свой регион
+    /// или его ТП; ТП — только он сам. Без параметров у ограниченного охвата — своё (направление, регион, ТП); экспорт «Завода» и страна — нет.
+    /// null — охват не разрешён (404).
+    /// </summary>
+    private async Task<AssortmentScope?> CatalogScopeAsync(SalesAnalytics analytics, string? direction, Guid? region, long? agent, bool export, CancellationToken ct)
+    {
+        var scope = await ScopeAsync(ct);
+        if (!scope.IsOrganization && string.IsNullOrEmpty(direction) && region is null && agent is null && !export)
+        {
+            if (scope.IsAgent) agent = scope.AgentId;
+            else if (scope.IsRm) direction = scope.DirectionIds.Order().FirstOrDefault().ToString();
+            else region = scope.RegionIds.Order().FirstOrDefault();
+        }
+
+        var agentRegion = agent is { } a && analytics.HasAgent(a) ? GuidOf(analytics.CachedAgent(a).RegionId) : null;
+        return AllowedCatalog(scope, direction, region, agent is null ? null : (agent.Value, agentRegion), export) ? Scope(direction, region, agent, export) : null;
+    }
+
+    private static bool AllowedCatalog(SalesScope scope, string? direction, Guid? region, (long Id, Guid? Region)? agent, bool export)
+    {
+        if (scope.IsOrganization)
+        {
+            return true;
+        }
+
+        if (export)
+        {
+            return false;
+        }
+
+        if (agent is { } a)
+        {
+            return scope.CanSeeAgent(a.Id, a.Region);
+        }
+
+        if (region is { } r)
+        {
+            return scope.CanSeeRegion(r);
+        }
+
+        return !string.IsNullOrEmpty(direction) && scope.CanSeeDirection(GuidOf(direction));
+    }
 }

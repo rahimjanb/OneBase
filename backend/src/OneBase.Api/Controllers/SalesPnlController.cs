@@ -13,6 +13,7 @@ namespace OneBase.Api.Controllers;
 [Route("api/sales/pnl")]
 [HasPermission(Permissions.SalesRead)]
 [HasPermission(Permissions.FinanceRead)]
+[SalesOrganizationOnly]
 public sealed class SalesPnlController(PnlService pnl) : ControllerBase
 {
     /// <summary>P&L месяца по дилерам и группам РМ; без year/month — последний месяц с продажами и расходами.</summary>

@@ -148,7 +148,7 @@ public sealed class RoutingEvaluation(
         }
 
         await limits.EnsureBudgetAsync(ct);
-        var available = (await agents.ListAsync(ct)).Where(a => !a.IsConsultant && a.Enabled).ToList();
+        var available = (await agents.ListAsync(ct)).Where(a => !a.IsConsultant && a.Enabled && a.Team == Analytik.AgentTeams.Consultant).ToList();
         var codes = available.Select(a => a.Code).ToHashSet();
         var glossaryText = codes.Contains("sales") ? await glossary.TextAsync(ct) : null;
         var started = DateTimeOffset.UtcNow;

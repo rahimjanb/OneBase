@@ -4,7 +4,7 @@ import { getT } from "@/i18n/server";
 import type { AiAlertsView } from "@/lib/ai";
 import type { HomeFast, HomeTrends } from "@/lib/dashboard-data";
 import { homeDepartments, homeSeries, homeTasks, homeView } from "@/lib/dashboard-home";
-import { DEPARTMENTS, focusOf, weeklyReportOf } from "@/lib/dashboard-mobile";
+import { focusOf, weeklyReportOf } from "@/lib/dashboard-mobile";
 import { homeClock } from "@/lib/dashboardClock";
 import type { WorkOverview } from "@/lib/tasks";
 import { DataStatus, OfflineNote } from "./DataStatus";
@@ -28,6 +28,12 @@ type Props = {
   locale: string;
   /** API ответил на /api/auth/me — иначе внизу «Не удалось обновить». */
   apiOk: boolean;
+  /** Отделы фильтра — только доступные пользователю. */
+  departments: { code: string; name: string }[];
+  /** Есть право на консультанта: без него «Фокуса дня» и AI-отчёта нет. */
+  consultant: boolean;
+  /** Доступ к HR: без него фильтра по сотрудникам нет. */
+  employees: boolean;
   alerts: Promise<AiAlertsView | null>;
   home: Home;
   /** Что ждёт решения пользователя (согласования, «можно получить», принято на склад) — под приветствием; нет дел — ничего. */
@@ -39,7 +45,7 @@ type Props = {
  * данных. Цифры — настоящие (lib/dashboard-data): продажи, HR и задачи. Каждый блок ждёт только свои данные и до тех пор показывает
  * заготовку: медленная динамика (прошлые месяцы продаж) не держит остальную страницу.
  */
-export async function MobileOverview({ name, now, locale, apiOk, alerts, home, attention }: Props) {
+export async function MobileOverview({ name, now, locale, apiOk, departments, consultant, employees, alerts, home, attention }: Props) {
   const t = await getT();
   const loading = t("Загрузка");
   const at = now.toISOString();
@@ -57,14 +63,16 @@ export async function MobileOverview({ name, now, locale, apiOk, alerts, home, a
           <Head name={name} now={now} locale={locale} fast={home.fast} />
         </Suspense>
         {attention}
-        <Filters departments={DEPARTMENTS.map((d) => ({ code: d.code, name: d.name }))} />
+        <Filters departments={departments.map((d) => ({ code: d.code, name: d.name }))} employees={employees} />
         <Suspense fallback={<KpiSkeleton label={loading} />}>
           <Kpi fast={home.fast} />
         </Suspense>
         <QuickActions data={exportData} />
-        <Suspense fallback={<FocusSkeleton label={loading} />}>
-          <Focus alerts={alerts} tasks={home.tasks} />
-        </Suspense>
+        {consultant && (
+          <Suspense fallback={<FocusSkeleton label={loading} />}>
+            <Focus alerts={alerts} tasks={home.tasks} />
+          </Suspense>
+        )}
         <Suspense fallback={<DynamicsSkeleton label={loading} />}>
           <Trends trends={home.trends} />
         </Suspense>
@@ -74,9 +82,11 @@ export async function MobileOverview({ name, now, locale, apiOk, alerts, home, a
         <Suspense fallback={<DepartmentsSkeleton label={loading} />}>
           <Departments home={home} />
         </Suspense>
-        <Suspense fallback={null}>
-          <Report alerts={alerts} now={now} />
-        </Suspense>
+        {consultant && (
+          <Suspense fallback={null}>
+            <Report alerts={alerts} now={now} />
+          </Suspense>
+        )}
         <DataStatus at={at} ok={apiOk} />
       </div>
       <div aria-hidden className={m.fade} />

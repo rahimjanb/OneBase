@@ -16,7 +16,6 @@ namespace OneBase.Application.Recruitment.Documents;
 /// </summary>
 public sealed class ResumeAnalysisJob(
     IAppDbContext db,
-    ResumeDocumentProcessor processor,
     RecruitmentService recruitment,
     IEnumerable<IResumeAnalyzer> analyzers,
     IEnumerable<IRecruiterAgent> agents,
@@ -30,7 +29,7 @@ public sealed class ResumeAnalysisJob(
     public async Task RunAsync(RecruitmentJob job, CancellationToken ct)
     {
         var resume = await db.CandidateResumes.FirstOrDefaultAsync(r => r.Id == job.RelatedId, ct);
-        if (resume is null || resume.Text is null || resume.AnalysisStatus is not (DocumentStepStatus.Pending or DocumentStepStatus.WaitingConsent))
+        if (resume is null || resume.Text is null || resume.AnalysisStatus != DocumentStepStatus.Pending)
         {
             return;
         }
@@ -43,13 +42,6 @@ public sealed class ResumeAnalysisJob(
         {
             profile = ResumeProfiles.ContactsOnly(resume.Text, quality);
             resume.AnalysisStatus = DocumentStepStatus.Skipped;
-        }
-        else if (!await processor.MayUseAiAsync(resume, ct))
-        {
-            resume.AnalysisStatus = DocumentStepStatus.WaitingConsent;
-            resume.Status = DocumentStatus.Processing;
-            await db.SaveChangesAsync(ct);
-            return; // разберём, когда кандидат даст согласие
         }
         else
         {

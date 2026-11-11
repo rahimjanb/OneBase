@@ -27,7 +27,8 @@ public static class AgentDefaults
     /// Все источники данных OneBase. У каждого AI-сотрудника — все: вопрос «не своего» отдела он отвечает по данным, а не «нет доступа».
     /// Что увидит пользователь, по-прежнему решают его права — ToolExecutor проверяет их при каждом вызове инструмента.
     /// </summary>
-    private static readonly IReadOnlyList<string> AllSources = KnowledgeSources.All.Select(s => s.Code).ToList();
+    private static readonly IReadOnlyList<string> AllSources =
+        KnowledgeSources.All.Where(s => s.Code != Analytik.AnalytikTools.Source).Select(s => s.Code).ToList();
 
     private const string HrDescription =
         "HR: сотрудники и подразделения (Verifix), посещаемость, опоздания, ранние уходы, отсутствия, отпуска и больничные, рабочее время и табели, " +
@@ -166,7 +167,8 @@ public static class AgentDefaults
             AllSources),
     ];
 
-    public static readonly IReadOnlyList<AgentDefault> All = [Director, .. Departments];
+    /// <summary>Все AI-сотрудники: команда консультанта и команда «Аналитик» (Analytik.AnalytikAgents) — команды не смешиваются (AgentConfig.Team).</summary>
+    public static readonly IReadOnlyList<AgentDefault> All = [Director, .. Departments, .. Analytik.AnalytikAgents.All];
 
     public static AgentDefault? Find(string code) => All.FirstOrDefault(a => a.Code == code);
 }

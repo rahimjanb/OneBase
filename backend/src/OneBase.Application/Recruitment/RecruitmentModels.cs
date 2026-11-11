@@ -99,7 +99,19 @@ public sealed record VacancyRow(
     int Active,
     int Hired,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? OpenedAt);
+    DateTimeOffset? OpenedAt,
+    Guid DepartmentId,
+    DateTimeOffset UpdatedAt,
+    bool OnHh,
+    bool InTelegram);
+
+/// <summary>
+/// Подписи кнопок разделов подбора — один лёгкий запрос на все кнопки: открытые вакансии, кандидаты в работе (у кого есть незакрытый отклик),
+/// диалоги Telegram с непрочитанными у этого сотрудника, действующие публикации открытых вакансий, собеседования сегодня (Ташкент),
+/// открытые исключения, подключён ли HH.
+/// </summary>
+public sealed record RecruitmentNavView(int OpenVacancies, int CandidatesInWork, int TelegramNew, int ActivePublications, int InterviewsToday, int OpenExceptions,
+    bool HhConnected);
 
 public sealed record VacancyApplicationRow(Guid ApplicationId, Guid CandidateId, string CandidateName, string Stage, string Source,
     DateTimeOffset StageChangedAt, string? Phone);

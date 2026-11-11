@@ -1,4 +1,5 @@
 import { bff } from "./bff";
+import type { NavCounters } from "./recruitment-view";
 
 /** HR → «Подбор»: типы ответов API и вызовы (/api/hr/recruitment). Права проверяет backend; интерфейс только прячет недоступное. */
 
@@ -69,6 +70,12 @@ export type VacancyRow = {
   hired: number;
   createdAt: string;
   openedAt: string | null;
+  departmentId: string;
+  /** Последнее изменение (нет — создание): порядок внутри статуса. */
+  updatedAt: string;
+  /** Источники: связана с вакансией на hh.uz, опубликована в Telegram. */
+  onHh: boolean;
+  inTelegram: boolean;
 };
 
 export type VacancyInput = {
@@ -187,7 +194,7 @@ export type ResumeProfile = {
 };
 
 export type DocumentStatus = "Received" | "Stored" | "Processing" | "Done" | "Failed" | "Rejected";
-export type DocumentStep = "NotNeeded" | "Pending" | "WaitingConsent" | "Done" | "Failed" | "Skipped";
+export type DocumentStep = "NotNeeded" | "Pending" | "Done" | "Failed" | "Skipped";
 
 /** Документ кандидата: оригинал в хранилище OneBase, статусы обработки, текст и разбор. */
 export type CandidateDocument = {
@@ -228,7 +235,6 @@ export const documentStatusLabel: Record<DocumentStatus, string> = {
 export const ocrStatusLabel: Record<DocumentStep, string> = {
   NotNeeded: "из текстового слоя",
   Pending: "ждёт",
-  WaitingConsent: "ждёт согласия кандидата",
   Done: "распознан AI",
   Failed: "не прочитан",
   Skipped: "не распознавался",
@@ -237,16 +243,14 @@ export const ocrStatusLabel: Record<DocumentStep, string> = {
 export const analysisStatusLabel: Record<DocumentStep, string> = {
   NotNeeded: "не нужен",
   Pending: "ждёт",
-  WaitingConsent: "ждёт согласия кандидата",
   Done: "разобран AI",
   Failed: "не удался",
   Skipped: "без AI — только контакты",
 };
 
-/** Документ ещё в работе: карточку стоит обновлять, пока он не готов (кроме ожидания согласия). */
+/** Документ ещё в работе: карточку стоит обновлять, пока он не готов. */
 export function documentBusy(d: CandidateDocument): boolean {
-  if (d.status === "Received" || d.status === "Stored") return true;
-  return d.status === "Processing" && d.ocrStatus !== "WaitingConsent" && d.analysisStatus !== "WaitingConsent";
+  return d.status === "Received" || d.status === "Stored" || d.status === "Processing";
 }
 
 /** Язык и графика переписки с кандидатом. */
@@ -302,7 +306,7 @@ export const stageTone: Record<Stage, string> = {
   Withdrawn: "bg-muted text-ink-3",
 };
 
-export const vacancyStatusLabel: Record<VacancyStatus, string> = { Draft: "Черновик", Open: "Открыта", Paused: "Пауза", Closed: "Закрыта" };
+export const vacancyStatusLabel: Record<VacancyStatus, string> = { Draft: "Черновик", Open: "Активна", Paused: "Пауза", Closed: "Закрыта" };
 
 export const requestStatusLabel: Record<RequestStatus, string> = {
   Submitted: "Ждёт решения",
@@ -356,6 +360,8 @@ const qs = (q: Record<string, string | number | boolean | null | undefined>) => 
 
 export const recruitmentApi = {
   context: () => bff<RecruitmentContext>(`${base}/context`),
+  /** Подписи кнопок разделов подбора: один лёгкий запрос на все кнопки. */
+  nav: () => bff<NavCounters>(`${base}/nav`),
   requests: (status?: string) => bff<HiringRequest[]>(`${base}/requests${qs({ status })}`),
   createRequest: (input: HiringRequestInput) => bff<HiringRequest>(`${base}/requests`, post(input)),
   cancelRequest: (id: string) => bff<HiringRequest>(`${base}/requests/${id}/cancel`, post()),

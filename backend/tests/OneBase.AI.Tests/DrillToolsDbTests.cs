@@ -177,7 +177,9 @@ public class DrillToolsDbTests(DataManagerDb fixture) : IClassFixture<DataManage
     [Fact]
     public void Every_department_ai_employee_has_every_data_source()
     {
-        var all = KnowledgeSources.All.Select(s => s.Code).Order().ToList();
+        // Источник OneBase Intelligence — только у команды «Аналитик»: отделы консультанта получают все остальные.
+        var all = KnowledgeSources.All.Select(s => s.Code).Where(c => c != OneBase.AI.Analytik.AnalytikTools.Source).Order().ToList();
         Assert.All(AgentDefaults.Departments, d => Assert.Equal(all, d.Sources.Order().ToList()));
+        Assert.All(OneBase.AI.Analytik.AnalytikAgents.Analysts, a => Assert.Contains(OneBase.AI.Analytik.AnalytikTools.Source, a.Sources));
     }
 }

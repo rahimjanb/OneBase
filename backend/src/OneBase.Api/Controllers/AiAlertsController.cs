@@ -13,7 +13,8 @@ namespace OneBase.Api.Controllers;
 /// <summary>AI Alerts и AI Dashboard: находки проактивного анализа, видимые пользователю по его правам.</summary>
 [ApiController]
 [Route("api/ai/alerts")]
-public sealed class AiAlertsController(IAppDbContext db, IUserPermissions permissions, ProactiveAnalyzer analyzer, ProactiveStatus status, IAuditLogger audit)
+public sealed class AiAlertsController(
+    IAppDbContext db, IUserPermissions permissions, ProactiveAnalyzer analyzer, ProactiveStatus status, IAuditLogger audit, OneBase.AI.Agents.AiAgentStore agents)
     : ControllerBase
 {
     private static readonly string[] Categories = ["finance", "sales", "marketing", "hr", "production", "supply"];
@@ -35,6 +36,12 @@ public sealed class AiAlertsController(IAppDbContext db, IUserPermissions permis
             .ToList();
         var current = active ? visible : await VisibleActiveAsync(own, ct);
         var problems = current.Where(a => a.Severity != AiAlertSeverity.Opportunity).ToList();
+        // Отделы, данные которых пользователю закрыты (AI-сотруднику отдела — его код совпадает с кодом отдела — нужно право, которого нет), в
+        // сводке не показываются — не «HR · 0».
+        var closed = (await agents.ListAsync(ct))
+            .Where(a => a.Code == a.DepartmentCode && a.RequiredPermission is { } need && !own.Contains(need))
+            .Select(a => a.DepartmentCode!)
+            .ToHashSet();
 
         return Ok(new
         {
@@ -44,7 +51,7 @@ public sealed class AiAlertsController(IAppDbContext db, IUserPermissions permis
                 Critical = problems.Count(a => a.Severity == AiAlertSeverity.Critical),
                 Recommendations = problems.Count(a => a.Recommendation is not null),
                 Opportunities = current.Count(a => a.Severity == AiAlertSeverity.Opportunity),
-                ByCategory = Categories.Select(c => new
+                ByCategory = Categories.Where(c => !closed.Contains(c)).Select(c => new
                 {
                     Category = c,
                     Problems = problems.Count(a => a.Category == c),

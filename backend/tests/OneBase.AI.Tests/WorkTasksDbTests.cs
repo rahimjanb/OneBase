@@ -245,6 +245,40 @@ public class WorkTasksDbTests(DataManagerDb fixture) : IClassFixture<DataManager
     }
 
     [PostgresFact]
+    public async Task Open_departments_are_own_headed_or_all_for_management_and_match_the_departments_list()
+    {
+        var org = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var tasks = sp.GetRequiredService<WorkTaskService>();
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        var everyCode = await db.Departments.AsNoTracking().Select(d => d.Code).ToListAsync();
+
+        // «Отделы» и главная показывают только эти отделы: сотрудник — свой, руководитель — свой и те, которыми руководит, руководство — все.
+        var employee = await tasks.OpenDepartmentCodesAsync(await Ctx(sp, org.Employee), default);
+        Assert.Contains(org.Finance.Code, employee);
+        Assert.DoesNotContain(org.Supply.Code, employee);
+        var outsider = await tasks.OpenDepartmentCodesAsync(await Ctx(sp, org.Outsider), default);
+        Assert.Contains(org.Supply.Code, outsider);
+        Assert.DoesNotContain(org.Finance.Code, outsider);
+        var director = await tasks.OpenDepartmentCodesAsync(await Ctx(sp, org.Director, DirectorPermissions), default);
+        Assert.Equal(everyCode.Order().ToList(), director.Order().ToList());
+
+        await tasks.SetHeadsAsync(await Ctx(sp, org.Director, DirectorPermissions), org.Supply.Code, [org.Head.Id], default);
+        var head = await tasks.OpenDepartmentCodesAsync(await Ctx(sp, org.Head), default);
+        Assert.Contains(org.Finance.Code, head);
+        Assert.Contains(org.Supply.Code, head);
+
+        // Тот же признак, что у кнопок раздела «Задачи» (CanOpen).
+        var buttons = await tasks.DepartmentsAsync(await Ctx(sp, org.Outsider), default);
+        Assert.Equal(buttons.Where(d => d.CanOpen).Select(d => d.Code).Order().ToList(), outsider.Order().ToList());
+
+        // Полевая команда Sales Base без отдела — только «Продажи» (их задачи и маршруты), если такой отдел есть.
+        var field = await tasks.OpenDepartmentCodesAsync(new WorkContext(Guid.NewGuid(), new HashSet<string> { Permissions.FieldUse }, null), default);
+        Assert.Equal(everyCode.Contains(WorkTaskService.SalesCode) ? [WorkTaskService.SalesCode] : [], field);
+    }
+
+    [PostgresFact]
     public async Task Checklist_sets_progress_comments_notify_participants_and_attachments_follow_task_access()
     {
         var org = await SeedAsync();

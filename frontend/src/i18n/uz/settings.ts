@@ -264,7 +264,6 @@ const dict: Dict = {
   // Источники данных: подключения, разделы, владельцы, конфликты, журнал синхронизаций
   "этот раздел": "shu bo'lim",
   "раздел «{name}»": "«{name}» bo'limi",
-  "Синхронизация записывает данные через AI Data Manager: чтобы настраивать и запускать привязки, нужно право «AI Data Manager».": "Sinxronlash ma'lumotlarni AI Data Manager orqali yozadi: bog'lanishlarni sozlash va ishga tushirish uchun «AI Data Manager» huquqi kerak.",
   "Подключения": "Ulanishlar",
   "Откуда OneBase берёт данные: Linko — факт продаж, Google Sheets — таблицы с планами, дилерами и P&L.": "OneBase ma'lumotlarni qayerdan oladi: Linko — savdo fakti, Google Sheets — rejalar, dilerlar va P&L jadvallari.",
   "Добавить Google Sheets": "Google Sheets qo'shish",
@@ -461,7 +460,6 @@ const dict: Dict = {
   "как у роли": "roldagidek",
   "настроены вручную": "qo'lda sozlangan",
   "Как у роли": "Roldagidek",
-  "У вас нет доступа к этому разделу — выдать его может администратор": "Bu bo'limga sizda kirish yo'q — uni administrator bera oladi",
   "AI-сотрудники отвечают только по отмеченным разделам": "AI-xodimlar faqat belgilangan bo'limlar bo'yicha javob beradi",
   "Ответят: {list}.": "Javob beradi: {list}.",
   "Разделов с данными не отмечено — консультант ответит только на общие вопросы.": "Ma'lumotli bo'limlar belgilanmagan — maslahatchi faqat umumiy savollarga javob beradi.",
@@ -512,7 +510,6 @@ const dict: Dict = {
     "Google jadvallari (kalitlarsiz), bog'lanishlar va mintaqa dilerlari — boshqa OneBase uchun fayl",
   "Экспорт настроек": "Sozlamalar eksporti",
   "Перенести таблицы, привязки и дилеров из файла": "Jadvallar, bog'lanishlar va dilerlarni fayldan ko'chirish",
-  "Нужно право «AI Data Manager»": "«AI Data Manager» huquqi kerak",
   "Импорт настроек": "Sozlamalar importi",
   "Другие имена дилера": "Dilerning boshqa nomlari",
   "другие имена — через запятую": "boshqa nomlar — vergul bilan",

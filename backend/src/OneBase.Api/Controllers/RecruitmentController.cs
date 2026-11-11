@@ -5,6 +5,7 @@ using OneBase.Api.Auth;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Field;
 using OneBase.Application.Recruitment;
+using OneBase.Application.Recruitment.Telegram;
 using OneBase.Domain.Recruitment;
 
 namespace OneBase.Api.Controllers;
@@ -26,6 +27,15 @@ public sealed class RecruitmentController(RecruitmentService recruitment, IFileS
 
     [HttpGet("context")]
     public async Task<RecruitmentContextView> Context(CancellationToken ct) => await recruitment.ContextViewAsync(await ContextAsync(ct), ct);
+
+    /// <summary>Подписи кнопок разделов подбора («4 открыто», «5 новых», «3 сегодня»…) — один запрос на все кнопки.</summary>
+    [HttpGet("nav")]
+    public async Task<RecruitmentNavView> Nav([FromServices] InterviewService interviews, [FromServices] HrDialogService dialogs, CancellationToken ct)
+    {
+        var ctx = await ContextAsync(ct);
+        var nav = await recruitment.NavAsync(ctx, ct);
+        return nav with { InterviewsToday = await interviews.TodayCountAsync(ctx, ct), TelegramNew = await dialogs.UnreadDialogsAsync(ctx, ct) };
+    }
 
     // ---------- Заявки на сотрудника ----------
 

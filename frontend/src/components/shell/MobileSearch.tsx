@@ -8,7 +8,7 @@ import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { DEPARTMENTS } from "@/lib/dashboard-mobile";
 import type { HrEmployeeRow } from "@/lib/hr";
-import { canOpen } from "@/lib/navigation";
+import { canOpen, departmentHref } from "@/lib/navigation";
 import type { PageResult } from "@/lib/tasks";
 import { settings, visibleWorkspace } from "./Sidebar";
 
@@ -23,7 +23,8 @@ type Found = { tasks: Hit[]; people: Hit[] };
  * Поиск в шапке телефона (на компьютере — поле с ⌘K): полноэкранное окно — разделы и отделы сразу, задачи и сотрудники — с сервера
  * по мере ввода (от двух букв; нет прав на раздел — его результатов нет). Закрывается «Отмена», Esc или выбором результата.
  */
-export function MobileSearch({ permissions }: { permissions: readonly string[] | null }) {
+/** departments — коды доступных пользователю отделов (null — API не ответил, ищем по всем). */
+export function MobileSearch({ permissions, departments = null }: { permissions: readonly string[] | null; departments?: readonly string[] | null }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   return (
@@ -31,12 +32,20 @@ export function MobileSearch({ permissions }: { permissions: readonly string[] |
       <button type="button" onClick={() => setOpen(true)} aria-label={t("Поиск")} aria-haspopup="dialog" className={`${headerButton} lg:hidden`}>
         <Search aria-hidden className="size-[18px]" strokeWidth={1.9} />
       </button>
-      {open && <SearchPanel permissions={permissions} onClose={() => setOpen(false)} />}
+      {open && <SearchPanel permissions={permissions} departments={departments} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function SearchPanel({ permissions, onClose }: { permissions: readonly string[] | null; onClose: () => void }) {
+function SearchPanel({
+  permissions,
+  departments: openCodes,
+  onClose,
+}: {
+  permissions: readonly string[] | null;
+  departments: readonly string[] | null;
+  onClose: () => void;
+}) {
   const t = useT();
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -92,7 +101,12 @@ function SearchPanel({ permissions, onClose }: { permissions: readonly string[] 
     .filter((i) => match(t(i.label)))
     .map((i) => ({ key: i.href, href: i.href, title: t(i.label), icon: i.icon }));
   const departments: Hit[] = q
-    ? DEPARTMENTS.filter((d) => match(t(d.name))).map((d) => ({ key: d.code, href: d.href, title: t(d.name), icon: Building2 }))
+    ? DEPARTMENTS.filter((d) => (openCodes === null || openCodes.includes(d.code)) && match(t(d.name))).map((d) => ({
+        key: d.code,
+        href: permissions === null ? d.href : departmentHref(d.code, permissions),
+        title: t(d.name),
+        icon: Building2,
+      }))
     : [];
   const groups = [
     { title: t("Разделы"), hits: sections },

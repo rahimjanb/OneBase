@@ -48,9 +48,9 @@ test("продажи: статусы по прежним правилам; за�
   assert.deepEqual([noPlan.status, noPlan.value, noPlan.bar, noPlan.detail.text], ["attention", null, null, "Плана на ноябрь 2026 нет · факт 12 т"]);
 });
 
-test("нет доступа — «Нет данных» без числа, ошибка ответа — «Не удалось загрузить»", () => {
+test("показатели закрыты правами — карточка без числа и без слов о доступе, ошибка ответа — «Не удалось загрузить»", () => {
   const denied = salesCard({ state: "forbidden" }, ctx());
-  assert.deepEqual([denied.status, denied.value, denied.detail.icon], ["none", null, "lock"]);
+  assert.deepEqual([denied.status, denied.value, denied.detail, denied.bar], ["none", null, null, null]);
   assert.equal(salesCard({ state: "error" }, ctx()).status, "error");
   assert.equal(hrCard({ state: "error" }, ctx()).status, "error");
 });
@@ -66,14 +66,15 @@ test("HR: явка за месяц, норма 80%; «Сегодня отмет�
   assert.equal(hrCard(ok({ monthRate: null, presentPct: null }), ctx()).detail.text, "Нет данных за ноябрь 2026");
 });
 
-test("снабжение: на сегодня; за прошлый месяц — «только на сегодня»; заявки видят снабжение и директор", () => {
+test("снабжение: на сегодня; за прошлый месяц — «только на сегодня»; заявки не видны — карточка без числа", () => {
   const clean = supplyCard(ok({ requestsAwaitingOrder: 0, overdueToBuy: 0, onApprovalCount: 0 }), ctx());
   assert.deepEqual([clean.value, clean.status, clean.label, clean.detail.text], [100, "ok", "Согласованное закуплено", "К закупке 0 · просрочено 0"]);
   const late = supplyCard(ok({ requestsAwaitingOrder: 4, overdueToBuy: 1, onApprovalCount: 2 }), ctx());
   assert.deepEqual([late.value, late.status, late.detail.text], [75, "attention", "К закупке 4 · просрочено 1 · на согласовании 2"]);
   assert.equal(supplyCard(ok({ requestsAwaitingOrder: 4 }), ctx(false)).value, null);
   assert.match(supplyCard({ state: "ok", data: {} }, ctx(false)).detail.text, /только на сегодня/);
-  assert.equal(supplyCard(ok({ requestsAwaitingOrder: null }), ctx()).detail.text, "Заявки к закупке видят снабжение и директор");
+  const hidden = supplyCard(ok({ requestsAwaitingOrder: null }), ctx());
+  assert.deepEqual([hidden.value, hidden.detail], [null, null]);
 });
 
 test("производство, финансы, маркетинг — «Нет данных за месяц», без чисел", () => {

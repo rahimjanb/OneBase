@@ -11,7 +11,7 @@ export async function generateMetadata() {
 export default async function HiringRequestsPage() {
   const ctx = await loadRecruitment("/hr/recruitment/requests", false);
   return (
-    <RecruitmentFrame title="Заявки на сотрудника" subtitle="Руководитель отдела просит человека — HR одобряет и открывает вакансию" ctx={ctx}>
+    <RecruitmentFrame title="Заявки на сотрудника" subtitle="Руководитель отдела просит человека — HR одобряет и открывает вакансию" ctx={ctx} nav={false}>
       <RequestsView ctx={ctx} />
     </RecruitmentFrame>
   );

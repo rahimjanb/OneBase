@@ -22,7 +22,6 @@ public sealed record OutboxRequest(
     string? RelatedType = null,
     Guid? RelatedId = null,
     DateTimeOffset? NotBefore = null,
-    int TypingSeconds = 0,
     OutboxFile? File = null);
 
 /// <summary>Файл к сообщению: уже в хранилище (ключ), имя, тип, размер; текст сообщения — подпись к нему.</summary>
@@ -36,8 +35,31 @@ public interface ITelegramOutboxObserver
     Task OnFailedAsync(TelegramOutgoingMessage row, CancellationToken ct);
 }
 
+/// <summary>
+/// Сигнал очереди исходящих: новое сообщение — круг отправки сразу, не дожидаясь очередных 3 секунд (ответ ИИ-агента уходит в тот же миг).
+/// </summary>
+public sealed class TelegramOutboxSignal
+{
+    private readonly SemaphoreSlim _signal = new(0, 1);
+
+    public void Notify()
+    {
+        try
+        {
+            _signal.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // круг уже запрошен
+        }
+    }
+
+    /// <summary>Ждать сигнала, но не дольше timeout (очередь всё равно проверяется регулярно — отложенные сообщения, повторы).</summary>
+    public Task<bool> WaitAsync(TimeSpan timeout, CancellationToken ct) => _signal.WaitAsync(timeout, ct);
+}
+
 /// <summary>Поставить сообщение в очередь исходящих подразделения. Тот же ключ — та же строка (повтор действия дубля не даёт).</summary>
-public sealed class TelegramOutbox(IAppDbContext db, TimeProvider clock)
+public sealed class TelegramOutbox(IAppDbContext db, TimeProvider clock, TelegramOutboxSignal? signal = null)
 {
     public async Task<TelegramOutgoingMessage> EnqueueAsync(OutboxRequest r, CancellationToken ct)
     {
@@ -72,7 +94,6 @@ public sealed class TelegramOutbox(IAppDbContext db, TimeProvider clock)
             CreatedById = r.CreatedById,
             RelatedType = r.RelatedType,
             RelatedId = r.RelatedId,
-            TypingSeconds = Math.Clamp(r.TypingSeconds, 0, TelegramOutboxRunner.MaxTypingSeconds),
             NextAttemptAt = r.NotBefore ?? clock.GetUtcNow(),
             FileKey = r.File?.Key,
             FileName = r.File?.FileName,
@@ -83,6 +104,7 @@ public sealed class TelegramOutbox(IAppDbContext db, TimeProvider clock)
         try
         {
             await db.SaveChangesAsync(ct);
+            signal?.Notify();
             return row;
         }
         catch (DbUpdateException)
@@ -94,7 +116,8 @@ public sealed class TelegramOutbox(IAppDbContext db, TimeProvider clock)
 }
 
 /// <summary>
-/// Отправка очереди исходящих: по одному сообщению на аккаунт и подразделение за круг, с паузой и суточным лимитом подразделения на номере.
+/// Отправка очереди исходящих: по одному сообщению на аккаунт и подразделение за круг (части одного ответа ИИ-агента — подряд), с паузой и
+/// суточным лимитом подразделения на номере.
 /// FLOOD_WAIT — ждём, сколько просит Telegram (попыткой не считается); временная ошибка — до 3 попыток; «неизвестно, дошло ли» — Unknown без
 /// автоповтора; PEER_FLOOD — отправка подразделения с номера останавливается на сутки (продажи этим не останавливаются).
 /// </summary>
@@ -108,8 +131,6 @@ public sealed class TelegramOutboxRunner(
 {
     public static readonly TimeSpan PeerFloodPause = TimeSpan.FromHours(24);
 
-    /// <summary>«Печатает…» перед сообщением ИИ-агента — не дольше (очередь номера не должна стоять).</summary>
-    public const int MaxTypingSeconds = 4;
     private static readonly TimeSpan Tashkent = TimeSpan.FromHours(5);
 
     /// <summary>После запуска сервера: «отправляется» — в Unknown (могло уйти), без автоповтора.</summary>
@@ -154,9 +175,27 @@ public sealed class TelegramOutboxRunner(
                 continue;
             }
 
-            if (await SendAsync(group.First().Id, now, ct))
+            var first = group.First();
+            if (!await SendAsync(first.Id, now, ct))
             {
-                sent++;
+                continue;
+            }
+
+            sent++;
+
+            // Остальные части того же ответа ИИ-агента — сразу следом, без паузы номера: собеседник получает ответ целиком, в тот же миг.
+            if (first.RelatedType is { } relatedType && first.RelatedId is { } related)
+            {
+                var left = (settings?.DailyLimit ?? 200) - today - 1;
+                foreach (var next in group.Skip(1).Where(m => m.RelatedType == relatedType && m.RelatedId == related && m.PeerId == first.PeerId))
+                {
+                    if (left-- <= 0 || !await SendAsync(next.Id, clock.GetUtcNow(), ct))
+                    {
+                        break;
+                    }
+
+                    sent++;
+                }
             }
         }
 
@@ -182,19 +221,6 @@ public sealed class TelegramOutboxRunner(
         }
 
         var peer = new TelegramPeerRef(chat.PeerId, chat.Type, chat.IsChannelPeer, chat.AccessHash);
-        if (row.TypingSeconds > 0)
-        {
-            // ИИ-агент пишет как человек: сначала «печатает…». Не вышло — не беда, сообщение всё равно уходит.
-            try
-            {
-                await telegram.TypingAsync(row.AccountId, peer, ct);
-                await Task.Delay(TimeSpan.FromSeconds(Math.Min(row.TypingSeconds, MaxTypingSeconds)), ct);
-            }
-            catch (TelegramException)
-            {
-            }
-        }
-
         try
         {
             IReadOnlyList<TelegramFile> files = [];

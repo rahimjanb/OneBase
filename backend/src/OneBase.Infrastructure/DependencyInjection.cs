@@ -62,6 +62,7 @@ public static class DependencyInjection
             .WithSSL(minio.UseSsl)
             .Build());
         services.AddSingleton<IFileStorage, MinioFileStorage>();
+        services.AddSingleton<IImageProcessor, SkiaImageProcessor>();
 
         // «Файлы отделов»: сайт и подключение Windows (WebDAV) работают через одни и те же сервисы.
         services.AddSingleton(config.GetSection(OneBase.Application.Files.FilesOptions.Section).Get<OneBase.Application.Files.FilesOptions>()
@@ -109,6 +110,9 @@ public static class DependencyInjection
         services.AddSingleton<Sales.SalesCacheWarmer>();
         services.AddHostedService(sp => sp.GetRequiredService<Sales.SalesCacheWarmer>());
         services.AddScoped<SalesDataLoader>();
+        // Охват пользователя в «Продажах» (РМ / СВР / ТП) и его назначение.
+        services.AddScoped<OneBase.Application.Sales.Access.SalesAccess>();
+        services.AddScoped<OneBase.Application.Sales.Access.SalesScopeAdmin>();
         services.AddScoped<OneBase.Application.Sales.Stock.StockService>();
         services.AddScoped<OneBase.Application.Sales.Stock.OutstockService>();
         services.AddScoped<OneBase.Application.Sales.Primary.PrimaryService>();
@@ -274,6 +278,7 @@ public static class DependencyInjection
 
         // Telegram для HR: обработчик диалогов с кандидатами и признак HR (маршрутизатор), очередь исходящих подразделений и её отправка,
         // публикации, источники и лиды.
+        services.AddSingleton<OneBase.Application.Telegram.Outbox.TelegramOutboxSignal>();
         services.AddScoped<OneBase.Application.Telegram.Outbox.TelegramOutbox>();
         services.AddScoped<OneBase.Application.Telegram.Outbox.TelegramOutboxRunner>();
         services.AddScoped<OneBase.Application.Telegram.Outbox.ITelegramOutboxObserver, OneBase.Application.Recruitment.Telegram.RecruitmentOutboxObserver>();
@@ -333,6 +338,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Procurement.ProcurementArrivalService>();
         services.AddScoped<OneBase.Application.Procurement.ProcurementHomeService>();
         services.AddScoped<OneBase.Application.Production.ProductionRecipeService>();
+        services.AddScoped<OneBase.Application.Production.ProductionRecipePhotoService>();
         services.AddScoped<OneBase.Application.Production.Import.RecipeImportService>();
         services.AddScoped<OneBase.Application.Production.ProductionOrderService>();
         services.AddScoped<OneBase.Application.Production.ProductionShiftService>();
@@ -381,6 +387,9 @@ public static class DependencyInjection
 
         // Проверка восстановленной копии: миграции, ключи, расшифровка секретов, ссылки на файлы (GET /api/recovery/check).
         services.AddScoped<Recovery.RecoveryCheckService>();
+
+        // «Аналитик» (OneBase Intelligence): каталог базы, аналитический движок только на чтение, аналитика отделов, фоновые задачи.
+        Analytik.AnalytikRegistration.AddAnalytik(services, config);
 
         return services;
     }

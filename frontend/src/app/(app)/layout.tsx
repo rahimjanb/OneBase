@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { TopbarFrame } from "@/components/shell/TopbarFrame";
 import { TaskToastHost } from "@/components/tasks/TaskToast";
+import { screenPermissions } from "@/lib/navigation";
 import { apiSession } from "@/lib/server-api";
 import type { Me } from "@/lib/users";
 
@@ -19,7 +20,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Разделы меню — по правам; если API недоступен (me = null), меню не прячем — страницы сами проверят доступ.
   // Руководителю отдела раздел HR открыт без права «HR» — признаком из /api/auth/me (данные backend отдаёт только по его подразделениям).
   // Заявки на сотрудника — признак hr.requests (руководителю отдела вкладка «Заявки на сотрудника» открыта и без права «HR»).
-  const permissions = me ? [...me.permissions, ...(me.hrAccess ? ["hr.department"] : []), ...(me.hiringRequests ? ["hr.requests"] : [])] : null;
+  // «Отделы» — признак departments.open: виден, если открывается хотя бы один отдел.
+  const permissions = me ? screenPermissions(me) : null;
   // Оболочка как у приложения: закреплена на весь экран, верхняя и нижняя панели не двигаются,
   // прокручивается только <main data-app-scroll>. Вид главной (HomeKind) — меню, шапке и макету перехода на «/».
   return (

@@ -78,13 +78,30 @@ test("склад: ниже минимума — жёлтый, нет в нали
   assert.equal(signalOf(building([{ ...wh, id: "wh-2" }]), snapshot(), "warehouse", t).tone, "nodata");
 });
 
-test("«Все» — худший сигнал по слоям; нет доступа — серый с подписью", () => {
+test("«Все» — худший сигнал по слоям; нет доступа — сигнала нет совсем, нет данных — серый с подписью", () => {
   const s = snapshot({ departments: [dept("production", { tasks: ok({ open: 4, overdue: 2, review: 0, blocked: 0 }) })] });
   const sig = signalOf(building([link("id-production")]), s, "all", t);
   assert.equal(sig.tone, "bad");
   assert.equal(sig.value, "Просрочено: 2");
   const hidden = snapshot({ departments: [dept("production", { tasks: no() })] });
-  assert.deepEqual(signalOf(building([link("id-production")]), hidden, "tasks", t).items[0], { tone: "nodata", value: "Нет доступа", source: "Отдел production" });
+  assert.deepEqual(signalOf(building([link("id-production")]), hidden, "tasks", t), { tone: "off", value: null, items: [] });
+  const empty = snapshot({ departments: [dept("production", { tasks: no("nodata") })] });
+  assert.deepEqual(signalOf(building([link("id-production")]), empty, "tasks", t).items[0], { tone: "nodata", value: "Нет данных", source: "Отдел production" });
+  // В «Всех» закрытые правами источники не участвуют и не дают строк «Нет доступа».
+  const all = signalOf(building([link("id-production")]), hidden, "all", t);
+  assert.ok(all.items.every((i) => i.value !== "Нет доступа" && !i.hidden));
+});
+
+test("карточка здания: закрытого правами нет — ни строк «Нет доступа», ни раздела отдела, все данные которого закрыты", () => {
+  const closed = dept("sales", { tasks: no(), hr: no(), supply: no(), spend: no() });
+  const card = cardOf(building([link("id-sales")]), snapshot({ departments: [closed], sales: no() }), t, { departmentHref: () => "/sales" });
+  assert.deepEqual(card.sections, []);
+  const supply = cardOf(building([link("id-supply")]), snapshot({ supply: ok({ readsAll: false, open: 2, approval: 1, urgent: 0, revision: 0, raw: 0, overdueToBuy: null, spendMonth: null }) }), t, {
+    departmentHref: () => "/procurement",
+  });
+  const company = supply.sections.find((x) => x.key === "domain-supply");
+  assert.deepEqual(company.metrics.map((m) => m.label), ["Открытые заявки", "На согласовании"]);
+  assert.ok(supply.sections.flatMap((x) => x.metrics).every((m) => m.state !== "noaccess"));
 });
 
 test("KPI: выпуск всегда «Нет данных», без права — плитки нет", () => {

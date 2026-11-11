@@ -1,6 +1,7 @@
 import type { Dict } from "../core";
 import agents from "./agents";
 import ai from "./ai";
+import analytik from "./analytik";
 import arrivals from "./arrivals";
 import campaigns from "./campaigns";
 import common from "./common";
@@ -14,6 +15,7 @@ import hr from "./hr";
 import lib from "./lib";
 import myDay from "./myDay";
 import production from "./production";
+import recipeCards from "./recipeCards";
 import recruitment from "./recruitment";
 import requests from "./requests";
 import rights from "./rights";
@@ -37,11 +39,15 @@ export const uz: Dict = {
   // «Мой день» и календарь — первыми: тот же текст в словарях разделов перекрывает перевод отсюда.
   ...myDay,
   ...requests,
+  // «Аналитик»: свои термины; общие слова (период, факт, план) ниже перекрывают разделы, где они уже переведены.
+  ...analytik,
   // Цифровой двойник: общие слова переведены так же, как в разделах; разделы ниже перекрывают его.
   ...twin,
   ...production,
   // «Технолог» — после производства: его термины (замес, этап, брак) перекрывают общие.
   ...technologist,
+  // Список техкарт с фото продукта.
+  ...recipeCards,
   // Поставки (приезд машины, качество до склада, приёмка) и главная по ролям.
   ...arrivals,
   // Права пользователя в разделах отделов и настройках.

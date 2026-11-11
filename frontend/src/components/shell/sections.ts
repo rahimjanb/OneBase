@@ -1,6 +1,13 @@
 import {
   Archive,
   ArrowLeftRight,
+  ChartLine,
+  History,
+  MessageSquareText,
+  Network,
+  TrendingUp,
+  TriangleAlert,
+  Wallet,
   FlaskConical,
   ClipboardList,
   Building,
@@ -56,7 +63,7 @@ export type SectionTab = {
  * keepPeriod — переносить период и план между кнопками (только «Продажи»).
  */
 export type SectionDef = {
-  id: "sales" | "hr" | "tasks" | "requests" | "procurement" | "production";
+  id: "sales" | "hr" | "tasks" | "requests" | "procurement" | "production" | "analytik";
   label: string;
   /** Название модуля в верхней панели: «Продажи», «HR»… */
   title: string;
@@ -160,6 +167,26 @@ export const productionTabs: SectionTab[] = [
   { key: "reports", label: "Отчёты", href: "/production/reports", icon: FileBarChart, permission: productionViewers, description: "партии, качество, расход и норма" },
 ];
 
+/**
+ * «Аналитик» (OneBase Intelligence): обзор и AI-аналитик — всем с правом раздела; разделы отделов — тем, кто видит данные отдела (без права
+ * раздел пустой: данные решает backend); «Карта данных», прогнозы, риски, отчёты и история — всем с правом раздела.
+ */
+export const analytikTabs: SectionTab[] = [
+  { key: "overview", label: "Обзор", href: "/analytik", icon: LayoutDashboard, description: "состояние компании, показатели, риски и рекомендации" },
+  { key: "chat", label: "AI-аналитик", short: "AI", href: "/analytik/chat", icon: MessageSquareText, description: "вопросы о любых данных OneBase на обычном языке" },
+  { key: "sales", label: "Продажи", href: "/analytik/sales", icon: ChartLine, permission: "sales.read", description: "выручка, план и прогноз, регионы" },
+  { key: "production", label: "Производство", href: "/analytik/production", icon: Factory, permission: ["production.read", "production.manage", "procurement.read", "procurement.manage"], description: "план и факт, расход и норма, сколько можно произвести" },
+  { key: "warehouse", label: "Склад", href: "/analytik/warehouse", icon: Warehouse, permission: ["procurement.read", "procurement.manage", "procurement.warehouse", "production.read", "production.manage"], description: "остатки сырья, расход, дни запаса, дефицит" },
+  { key: "procurement", label: "Снабжение", href: "/analytik/procurement", icon: Truck, permission: ["procurement.read", "procurement.manage", "procurement.warehouse", "production.read", "production.manage"], description: "что, сколько и когда закупить" },
+  { key: "finance", label: "Финансы", href: "/analytik/finance", icon: Wallet, permission: "finance.read", description: "оплаты, расходы на закупки" },
+  { key: "hr", label: "Персонал", href: "/analytik/hr", icon: Users, permission: ["hr.read", "analytik.manage"], description: "посещаемость, отклонения, задачи отделов" },
+  { key: "forecasts", label: "Прогнозы", href: "/analytik/forecasts", icon: TrendingUp, description: "прогнозы со сценариями и точностью" },
+  { key: "risks", label: "Риски", href: "/analytik/risks", icon: TriangleAlert, description: "риски, отклонения, качество данных" },
+  { key: "reports", label: "Отчёты", href: "/analytik/reports", icon: FileBarChart, description: "управленческие отчёты Excel и PDF" },
+  { key: "data", label: "Карта данных", short: "Данные", href: "/analytik/data", icon: Network, description: "каталог всей базы: таблицы, связи, смысл" },
+  { key: "history", label: "История", href: "/analytik/history", icon: History, description: "исследования и журнал запросов" },
+];
+
 export const sections: SectionDef[] = [
   { id: "sales", label: "Разделы продаж", title: "Продажи", back: toDepartments, tabs: salesTabs, active: activeSalesTab, keepPeriod: true },
   {
@@ -216,9 +243,18 @@ export const sections: SectionDef[] = [
     active: (pathname) =>
       pathname === "/production" ? "overview" : under(pathname, "/production/recipes") ? "recipes" : (productionTabs.find((t) => t.key !== "overview" && under(pathname, t.href))?.key ?? null),
   },
+  {
+    id: "analytik",
+    label: "Разделы Аналитика",
+    title: "Аналитик",
+    tabs: analytikTabs,
+    // Чат (и его история), карточка таблицы и отчёта — внутри своих вкладок.
+    active: (pathname) => (pathname === "/analytik" ? "overview" : (analytikTabs.find((t) => t.key !== "overview" && under(pathname, t.href))?.key ?? null)),
+  },
 ];
 
 const sectionBase: Record<SectionDef["id"], string> = {
+  analytik: "/analytik",
   sales: "/sales",
   hr: "/hr",
   tasks: "/tasks",

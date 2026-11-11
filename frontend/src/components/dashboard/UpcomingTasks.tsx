@@ -17,7 +17,7 @@ const dueChip: Record<UpcomingTask["dueTone"], string> = { bad: "bg-bad/10 text-
 
 /**
  * «Ближайшие дедлайны»: открытые задачи отделов со сроком (реальные, /api/work/tasks) с приоритетом, сроком и исполнителем; чекбокс —
- * отметка на странице, статус меняется в разделе «Задачи». Нет задач или раздел недоступен — пустое состояние.
+ * отметка на странице, статус меняется в разделе «Задачи». Без раздела «Задачи» блока нет (главная); available = false — API не ответил.
  */
 export function UpcomingTasks({ items, total, available }: { items: UpcomingTask[]; total: number; available: boolean }) {
   const t = useT();
@@ -27,7 +27,7 @@ export function UpcomingTasks({ items, total, available }: { items: UpcomingTask
     <DashCard className="flex flex-col p-5">
       <CardHeader
         title={t("Ближайшие дедлайны")}
-        subtitle={available ? t("{n} открытых задач со сроком", { n: total }) : t("Раздел «Задачи» недоступен")}
+        subtitle={available ? t("{n} открытых задач со сроком", { n: total }) : t("Задачи не загрузились")}
         action={
           <Link href="/tasks" className={linkClass}>
             {t("Все задачи")} <ArrowRight className="size-3.5" />
@@ -36,7 +36,7 @@ export function UpcomingTasks({ items, total, available }: { items: UpcomingTask
       />
       {items.length === 0 ? (
         <div className="flex flex-1 items-center justify-center px-4 py-10 text-center text-[13px] text-ink-4">
-          {available ? t("Открытых задач со сроком пока нет") : t("Задачи появятся, когда будет доступ к разделу «Задачи»")}
+          {available ? t("Открытых задач со сроком пока нет") : t("Не удалось загрузить задачи — обновите страницу")}
         </div>
       ) : (
         <ul className="mt-2 flex flex-col">

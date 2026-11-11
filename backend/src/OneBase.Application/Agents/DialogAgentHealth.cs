@@ -117,25 +117,11 @@ public sealed class DialogAgentHealth(IAppDbContext db, DialogAgentService agent
             }
         }
 
-        // Когда отвечает.
-        var pause = agent.ReplyDelayMaxSeconds > 0 ? $" Пауза перед ответом — {agent.ReplyDelayMinSeconds}–{agent.ReplyDelayMaxSeconds} с." : string.Empty;
-        if (agent.WorkFrom is null || agent.WorkTo is null)
-        {
-            checks.Add(new AgentCheck("ok", "Отвечает круглосуточно", pause.Trim()));
-        }
-        else if (DialogAgentRules.InWork(agent, now))
-        {
-            checks.Add(new AgentCheck("ok", $"Сейчас рабочее время агента ({WorkTime(agent)})", pause.Trim()));
-        }
-        else if (agent.OffHours == "morning")
-        {
-            checks.Add(new AgentCheck("warn", $"Сейчас нерабочее время ({WorkTime(agent)})",
-                $"Ответы уйдут в начале рабочего дня — {Local(DialogAgentRules.NextWorkStart(agent, now))}.{pause}"));
-        }
-        else
-        {
-            checks.Add(new AgentCheck("ok", "Нерабочее время, но агент отвечает сразу", pause.Trim()));
-        }
+        // Когда отвечает: сразу, в любое время; рабочее время — только в словах агента и для напоминаний.
+        checks.Add(new AgentCheck("ok", "Отвечает сразу, в любое время — без паузы",
+            agent.WorkFrom is null || agent.WorkTo is null
+                ? null
+                : $"Рабочее время отдела — {WorkTime(agent)}: в нерабочее время агент отвечает так же сразу, а напоминания кандидатам ждут рабочего времени."));
 
         if (agent.Mode == DialogAgentMode.Approval)
         {

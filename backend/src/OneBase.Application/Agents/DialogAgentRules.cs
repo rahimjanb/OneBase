@@ -6,7 +6,7 @@ namespace OneBase.Application.Agents;
 
 /// <summary>
 /// Правила ИИ-агентов отделов без модели: ограничения ответа (запрещённые фразы, длина, без разметки), «сразу к человеку», деление ответа на
-/// короткие сообщения, рабочее время и пауза перед ответом «как у человека».
+/// короткие сообщения, рабочее время.
 /// </summary>
 public static partial class DialogAgentRules
 {
@@ -15,14 +15,12 @@ public static partial class DialogAgentRules
     public static readonly IReadOnlyList<string> Tones = ["friendly", "neutral", "formal"];
     public static readonly IReadOnlyList<string> Languages = ["auto", "ru", "uz"];
     public static readonly IReadOnlyList<string> Lengths = ["short", "normal", "detailed"];
-    public static readonly IReadOnlyList<string> OffHoursModes = ["morning", "reply"];
 
     /// <summary>Сообщений в одном ответе — не больше (люди пишут 1–3 коротких).</summary>
     public const int MaxMessages = 3;
 
     public const int MinReplyChars = 100;
     public const int MaxReplyCharsLimit = 3000;
-    public const int MaxDelaySeconds = 600;
 
     /// <summary>Непустые строки списка (запрещённые фразы, вопросы), без повторов.</summary>
     public static IReadOnlyList<string> Lines(string? text) =>
@@ -139,53 +137,6 @@ public static partial class DialogAgentRules
         var time = TimeOnly.FromDateTime(local.DateTime);
         return from <= to ? time >= from && time < to : time >= from || time < to;
     }
-
-    /// <summary>Ближайшее начало рабочего времени не раньше at (в пределах двух недель; иначе — at).</summary>
-    public static DateTimeOffset NextWorkStart(DialogAgent agent, DateTimeOffset at)
-    {
-        if (InWork(agent, at))
-        {
-            return at;
-        }
-
-        var local = at.ToOffset(Tashkent);
-        var from = agent.WorkFrom ?? TimeOnly.MinValue;
-        for (var i = 0; i <= 14; i++)
-        {
-            var day = local.Date.AddDays(i);
-            var start = new DateTimeOffset(day.Add(from.ToTimeSpan()), Tashkent);
-            if (start >= at && InWork(agent, start))
-            {
-                return start;
-            }
-        }
-
-        return at;
-    }
-
-    /// <summary>
-    /// Когда отправить ответ: через случайную паузу в пределах настроек агента; вне рабочего времени (режим «утром») — в начале рабочего
-    /// времени плюс несколько минут, чтобы ответы не уходили все в одну секунду.
-    /// </summary>
-    public static DateTimeOffset SendAt(DialogAgent agent, DateTimeOffset now, Random random)
-    {
-        var min = Math.Clamp(agent.ReplyDelayMinSeconds, 0, MaxDelaySeconds);
-        var max = Math.Clamp(Math.Max(agent.ReplyDelayMaxSeconds, min), 0, MaxDelaySeconds);
-        var at = now.AddSeconds(random.Next(min, max + 1));
-        if (agent.OffHours == "morning" && !InWork(agent, at))
-        {
-            var start = NextWorkStart(agent, at);
-            return start == at ? at : start.AddSeconds(random.Next(60, 600));
-        }
-
-        return at;
-    }
-
-    /// <summary>Сколько секунд «печатает…» перед сообщением — по его длине (2–4 с).</summary>
-    public static int TypingSeconds(string text) => Math.Clamp(2 + text.Length / 120, 2, 4);
-
-    /// <summary>Пауза между частями одного ответа, секунд: человек дописывает следующее сообщение.</summary>
-    public static int GapSeconds(string next, Random random) => Math.Clamp(3 + next.Length / 40, 3, 12) + random.Next(0, 3);
 
     [GeneratedRegex(@"(?m)^\s{0,3}#{1,6}\s+")]
     private static partial Regex HeadingPattern();

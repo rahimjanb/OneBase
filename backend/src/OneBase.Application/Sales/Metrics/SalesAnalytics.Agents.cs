@@ -46,12 +46,17 @@ public sealed record AgentsView(
 
 public sealed partial class SalesAnalytics
 {
-    public AgentsView CachedAgents() => View("agents", Agents);
+    /// <summary>«Агенты» — ТП, которых видно в охвате пользователя (null — вся организация).</summary>
+    public AgentsView CachedAgents(SalesVisibility? visible = null)
+    {
+        var v = visible ?? SalesVisibility.All;
+        return View(v.IsAll ? "agents" : $"agents:{v.Key}", () => Agents(v));
+    }
 
     /// <summary>ТП месяца: с продажами, визитами или планом, из команды (ТП по должности или справочнику, вакансии).</summary>
-    private AgentsView Agents()
+    private AgentsView Agents(SalesVisibility v)
     {
-        var rows = _roster.Where(InTeam).Select(AgentCard)
+        var rows = _roster.Where(InTeam).Where(a => v.Sees(a, _agentRegion.GetValueOrDefault(a, NoRegionId))).Select(AgentCard)
             .OrderBy(a => a.RegionName, StringComparer.CurrentCulture).ThenByDescending(a => a.FactKg).ThenBy(a => a.Name, StringComparer.CurrentCulture)
             .ToList();
         var directions = rows.Where(r => r.DirectionId is not null).GroupBy(r => r.DirectionId!)

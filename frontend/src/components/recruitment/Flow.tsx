@@ -263,7 +263,7 @@ export function AiSettingsCard({ ctx }: { ctx: RecruitmentContext }) {
           <span>
             {t("Разбирать резюме AI")}
             <span className="block text-xs text-ink-3">
-              {t("ФИО, контакты, опыт, образование, навыки и сводка — с цитатой из резюме; что не найдено в тексте, помечается «не подтверждено». Затем — оценка под вакансию. Выключено — из резюме берутся только телефон и почта. Платный вызов на каждое резюме; из Telegram — только после согласия кандидата.")}
+              {t("ФИО, контакты, опыт, образование, навыки и сводка — с цитатой из резюме; что не найдено в тексте, помечается «не подтверждено». Затем — оценка под вакансию. Выключено — из резюме берутся только телефон и почта. Платный вызов на каждое резюме.")}
             </span>
           </span>
         </label>
@@ -473,7 +473,11 @@ export function VacancyExtras({ ctx, vacancy, onChange }: { ctx: RecruitmentCont
           </span>
         </p>
         {recruiters.length > 1 && (
-          <Label label="Какой AI-рекрутер ведёт вакансию" className="mt-3">
+          <Label
+            label="Какой AI-рекрутер ведёт вакансию"
+            hint="На номере Telegram, привязанном к агенту, всегда отвечает агент этого номера; этот выбор — для номеров без своего агента."
+            className="mt-3"
+          >
             <select className={field} disabled={!ctx.canManage} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
               <option value="">{t("По умолчанию")}</option>
               {recruiters.map((r) => (

@@ -30,6 +30,7 @@ import { button, field, primary } from "@/components/ai/form";
 import { Sheet } from "@/components/field/Sheet";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
+import { SalesRegionsPicker, isSalesRegionRole } from "./SalesRegionsPicker";
 import { rightsWithSections, sectionPermissions, titleCase, toggleRight, type HrCandidate, type UserRow, type UsersView } from "@/lib/users";
 
 type Form = {
@@ -113,11 +114,14 @@ export function UserDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  /** Регионы РМ / супервайзера продаж (null — ещё не загружены); уходят вместе с пользователем. */
+  const [salesRegions, setSalesRegions] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (!target) return;
     setError(null);
     setCopied(false);
+    setSalesRegions(null);
     setForm(
       target === "new"
         ? {
@@ -213,6 +217,10 @@ export function UserDialog({
       setError(t("Выберите сотрудника в Verifix или отметьте «Без привязки к Verifix»."));
       return;
     }
+    if (role && isSalesRegionRole(role.name) && !isMe && (salesRegions ?? []).length === 0) {
+      setError(t(role.name === "РМ" ? "Выберите регионы РМ." : "Выберите регионы супервайзера."));
+      return;
+    }
     if (role?.isEmployee && !form.departmentId) {
       setError(t("Выберите отдел сотрудника."));
       return;
@@ -226,9 +234,12 @@ export function UserDialog({
         password: form.password || null,
         departmentId: role?.departmentId ? null : departmentId || null,
         hrEmployeeId: form.noVerifix ? null : (hrEmployee?.id ?? null),
+        // РМ / супервайзер продаж — его регионы; свои не меняются (null — сервер не трогает охват). Другим ролям не нужны.
+        salesRegionIds: role && isSalesRegionRole(role.name) && !isMe ? (salesRegions ?? []) : null,
       });
       if (isNew) await bff("users", { method: "POST", body });
       else if (user) await bff(`users/${user.id}`, { method: "PUT", body });
+      // Охват продаж — отдельным запросом (проверка, аудит, действует сразу); у нового пользователя — после создания, при следующем открытии.
       const view = await bff<UsersView>("users");
       onSaved(isNew ? t("Пользователь {login} создан.", { login: form.login.trim().toLowerCase() }) : t("Изменения сохранены."), view);
     } catch (e) {
@@ -367,6 +378,10 @@ export function UserDialog({
               ))}
             </select>
           </Field>
+          {/* Роль «РМ» или «Супервайзер продаж» — сразу его регионы (обязательно): по ним «Продажи» показывают данные. */}
+          {role && isSalesRegionRole(role.name) && !isMe && (
+            <SalesRegionsPicker key={user?.id ?? "new"} roleName={role.name} userId={user?.id ?? null} value={salesRegions} onChange={setSalesRegions} />
+          )}
           {role && !role.departmentId && (data.departments?.length ?? 0) > 0 && (
             <Field label={t("Отдел")} required={role.isEmployee} hint={role.isEmployee ? t("По отделу сотрудник видит задачи и файлы отдела") : undefined}>
               <select className={field} value={form.departmentId} onChange={(e) => set("departmentId", e.target.value)} disabled={isMe}>
@@ -415,14 +430,14 @@ export function UserDialog({
                 ))}
             </div>
             <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label={t("Разделы")}>
-              {data.sections.map((s) => {
+              {/* Разделы, которых у пользователя нет и которые редактор выдать не может, не показываются (не «нет доступа»). */}
+              {data.sections.filter((s) => form.sections.includes(s.key) || (!isMe && s.grantable)).map((s) => {
                 const on = form.sections.includes(s.key);
                 const locked = isMe || (!on && !s.grantable);
                 const Icon = icons[s.key] ?? Check;
                 return (
                   <label
                     key={s.key}
-                    title={!isMe && !on && !s.grantable ? t("У вас нет доступа к этому разделу — выдать его может администратор") : undefined}
                     className={`relative flex gap-3 rounded-xl border p-3 transition-colors ${
                       on ? "border-accent/40 bg-accent/10" : "border-line bg-surface"
                     } ${locked ? "cursor-not-allowed opacity-55" : "cursor-pointer hover:border-accent/40"}`}
@@ -551,6 +566,7 @@ export function UserDialog({
             </div>
           )}
         </section>
+
         <button type="submit" hidden aria-hidden tabIndex={-1} />
       </form>
     </Sheet>

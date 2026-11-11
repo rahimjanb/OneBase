@@ -136,9 +136,9 @@ export async function streamChat(
   message: string,
   onEvent: (e: ChatEvent) => void,
   t: T = ru,
-  options: { context?: ChatContext | null; signal?: AbortSignal } = {},
+  options: { context?: ChatContext | null; signal?: AbortSignal; url?: string } = {},
 ): Promise<void> {
-  const response = await fetch("/bff/api/ai/chat", {
+  const response = await fetch(options.url ?? "/bff/api/ai/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(options.context ? { conversationId, message, context: options.context } : { conversationId, message }),
@@ -213,3 +213,29 @@ export function historyGroup(iso: string, now = new Date(), locale = "ru-RU"): s
   if (diff === 1) return "Вчера";
   return formatDate(d, locale, { day: "numeric", month: "long", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
 }
+
+/**
+ * Раздел чата: «AI-консультант» (по умолчанию) или «Аналитик» — адрес страницы, префикс API (свои чаты и поток ответа), название и
+ * быстрые вопросы стартового экрана. Компонент чата один, данные разделов не смешиваются (у каждого свои чаты на сервере).
+ */
+export type ChatMode = {
+  base: string;
+  api: string;
+  title: string;
+  questions?: import("./consultant-view").QuickQuestion[];
+  /** Плашка и поле ввода, когда AI не настроен. */
+  offline?: { title: string; input: string };
+  /** Кнопка в шапке: главная раздела. */
+  home?: { href: string; label: string };
+  /** Фильтр «Веб / Telegram» и карточка Telegram-бота: вопросы из бота идут только в чаты консультанта. */
+  telegram?: boolean;
+};
+
+export const consultantMode: ChatMode = {
+  base: "/consultant",
+  api: "ai",
+  title: "AI-консультант",
+  offline: { title: "Консультант пока не работает", input: "Консультант не настроен" },
+  home: { href: "/ai", label: "AI Dashboard" },
+  telegram: true,
+};

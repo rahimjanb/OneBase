@@ -61,10 +61,6 @@ export type AgentSettingsInput = {
   workFrom: string | null;
   workTo: string | null;
   workDays: string;
-  offHours: "morning" | "reply";
-  replyDelayMinSeconds: number;
-  replyDelayMaxSeconds: number;
-  typing: boolean;
   followUpHours: number;
   modelProvider: string | null;
   model: string | null;
@@ -169,7 +165,7 @@ export const actionLabel: Record<string, string> = {
   reply: "Ответ",
   propose_interview: "Приглашение на собеседование",
   handoff: "Передал сотруднику",
-  consent: "Просьба о согласии",
+  consent: "Просьба о согласии (раньше)",
   booked: "Подтверждение записи",
   error: "Ошибка формата",
 };
@@ -207,12 +203,12 @@ export function settingsOf(v: AgentView): AgentSettingsInput {
   const {
     name, enabled, mode, displayName, intro, tone, language, length, emoji, splitMessages, instructions, screeningQuestions, allowedTopics, forbiddenTopics,
     forbiddenPhrases, handoffPhrases, maxReplyChars, maxRepliesPerHour, maxRepliesPerDay, canDiscussSalary, canScheduleInterviews, handoffReply, workFrom, workTo,
-    workDays, offHours, replyDelayMinSeconds, replyDelayMaxSeconds, typing, followUpHours, modelProvider, model,
+    workDays, followUpHours, modelProvider, model,
   } = v;
   return {
     name, enabled, mode, displayName, intro, tone, language, length, emoji, splitMessages, instructions, screeningQuestions, allowedTopics, forbiddenTopics,
     forbiddenPhrases, handoffPhrases, maxReplyChars, maxRepliesPerHour, maxRepliesPerDay, canDiscussSalary, canScheduleInterviews, handoffReply, workFrom, workTo,
-    workDays, offHours, replyDelayMinSeconds, replyDelayMaxSeconds, typing, followUpHours, modelProvider, model,
+    workDays, followUpHours, modelProvider, model,
   };
 }
 

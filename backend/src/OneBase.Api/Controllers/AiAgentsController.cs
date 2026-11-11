@@ -58,11 +58,14 @@ public sealed class AiAgentsController(
 
     [HttpGet]
     [HasPermission(Permissions.AgentsRun)]
-    public async Task<IActionResult> List(CancellationToken ct)
+    public async Task<IActionResult> List([FromQuery] string? team, CancellationToken ct)
     {
         var own = await permissions.GetAsync(User.GetUserId(), ct);
-        var list = await agents.ListAsync(ct);
-        return Ok(list.Select(a => new
+        // Команда: консультант (по умолчанию) или «Аналитик» — сотрудники одной команды в чате другой не показываются.
+        var wanted = team == OneBase.AI.Analytik.AgentTeams.Analytik ? OneBase.AI.Analytik.AgentTeams.Analytik : OneBase.AI.Analytik.AgentTeams.Consultant;
+        var list = (await agents.ListAsync(ct)).Where(a => a.Team == wanted).ToList();
+        // Агентов отделов, к данным которых у пользователя нет права, в списке нет совсем (не «нет доступа»).
+        return Ok(list.Where(a => a.RequiredPermission is null || own.Contains(a.RequiredPermission)).Select(a => new
         {
             a.Code,
             a.Name,
@@ -70,7 +73,7 @@ public sealed class AiAgentsController(
             a.Description,
             a.Enabled,
             a.IsConsultant,
-            Available = a.Enabled && (a.RequiredPermission is null || own.Contains(a.RequiredPermission)),
+            Available = a.Enabled,
         }));
     }
 

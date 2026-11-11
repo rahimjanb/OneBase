@@ -24,6 +24,7 @@ export function Composer({
   onStop,
   busy,
   disabled,
+  disabledText = "Консультант не настроен",
   inChat,
   context,
   defaultPeriod,
@@ -37,6 +38,8 @@ export function Composer({
   onStop: () => void;
   busy: boolean;
   disabled: boolean;
+  /** Подсказка в поле, когда AI не настроен. */
+  disabledText?: string;
   inChat: boolean;
   context: ChatContext;
   defaultPeriod: string;
@@ -127,7 +130,7 @@ export function Composer({
             aria-label={t("Вопрос консультанту")}
             placeholder={
               disabled
-                ? t("Консультант не настроен")
+                ? t(disabledText)
                 : inChat
                   ? t("Уточните вопрос…")
                   : compact

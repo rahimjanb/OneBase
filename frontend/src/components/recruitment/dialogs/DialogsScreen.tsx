@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { CalendarCheck, ChevronLeft, Gauge, MapPin, X } from "lucide-react";
 import { Sheet } from "@/components/field/Sheet";
-import { RecruitmentNav } from "@/components/recruitment/ui";
+import { RecruitingNav } from "@/components/recruitment/RecruitingNav";
 import { useT } from "@/i18n/client";
 import { DIALOGS_PATH, dialogPath, dialogsApi, type Dialog, type DialogRow, type DialogSummary } from "@/lib/hr-dialogs";
 import { filterCounts, matchesFilter, matchesSearch, sortDialogs, type DialogFilter } from "@/lib/hr-dialogs-view";
@@ -219,6 +219,7 @@ export function DialogsScreen({ initialSummary, canManage }: { initialSummary: D
           {canConfigure ? <SettingsLink compact /> : <span className="size-[40px]" />}
         </header>
         <div className="flex flex-col gap-3 px-4 pb-6 pt-1">
+          <RecruitingNav canManage={canManage} />
           <NumberPill summary={summary} wide />
           {!connected ? (
             <section className="rounded-2xl border border-line bg-surface px-4">
@@ -265,8 +266,8 @@ export function DialogsScreen({ initialSummary, canManage }: { initialSummary: D
           </div>
         </div>
       </div>
-      <div className="px-6 pt-3.5 [&>nav]:mb-0">
-        <RecruitmentNav canManage={canManage} badges={{ "/hr/recruitment/telegram": counts.all }} />
+      <div className="border-b border-line px-6 pb-[18px] pt-3.5">
+        <RecruitingNav canManage={canManage} />
       </div>
       {summary && !connected && <NotConnectedBanner canConfigure={canConfigure} />}
 

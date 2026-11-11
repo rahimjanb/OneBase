@@ -5,11 +5,13 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Boxes,
+  BrainCircuit,
   ChartNoAxesColumn,
   ClipboardList,
   ClipboardPen,
   Database,
   DatabaseZap,
+  FlaskConical,
   Grid3x3,
   House,
   LayoutGrid,
@@ -19,12 +21,15 @@ import {
   Send,
   SlidersHorizontal,
   Sparkles,
+  Truck,
+  UserPlus,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { Sheet } from "@/components/field/Sheet";
 import { LinkTelegramButton } from "@/components/telegram/LinkTelegramButton";
 import { useT } from "@/i18n/client";
+import { roleTab, type RoleTab } from "@/lib/mobile-tabs";
 import { canOpen } from "@/lib/navigation";
 import { initials, type Me } from "@/lib/users";
 import { LogoutLink } from "./AppBridge";
@@ -41,6 +46,13 @@ const consultant: Section = { href: "/consultant", label: "Консультан�
 const sales: Section = { href: "/sales", label: "Продажи", icon: ChartNoAxesColumn };
 const tasksHref = "/tasks";
 
+/** На месте «Продаж» у тех, кому продажи не открыты: раздел своей роли. Техкарты — внутри «Технолога». */
+const roleSections: Record<RoleTab, Section> = {
+  recruitment: { href: "/hr/recruitment", label: "Подбор", icon: UserPlus },
+  technologist: { href: "/production/technologist", label: "Технолог", icon: FlaskConical, also: ["/production/recipes"] },
+  procurement: { href: "/procurement", label: "Снабжение", icon: Truck },
+};
+
 /** Веер слева направо: разделы, которых нет во вкладках, и создание рассылки. Цвета иконок — умеренные, у каждого пункта свой. */
 const fanSections: (FanItem & { allowed: (p: readonly string[]) => boolean })[] = [
   { href: "/departments", label: "Отделы", icon: Grid3x3, color: "#22b573", also: ["/sales", "/procurement", "/production", "/hr"], allowed: (p) => canOpen("/departments", p) },
@@ -51,6 +63,7 @@ const fanSections: (FanItem & { allowed: (p: readonly string[]) => boolean })[] 
   // Последним из разделов: вкладки нижней панели добираются из веера по порядку — у существующих ролей они не меняются.
   { href: "/requests", label: "Заявки", icon: ClipboardPen, color: "#f59e0b", allowed: (p) => canOpen("/requests", p) },
   { href: "/twin", label: "Двойник", icon: Boxes, color: "#6366f1", allowed: (p) => canOpen("/twin", p) },
+  { href: "/analytik", label: "Аналитик", icon: BrainCircuit, color: "#7c3aed", allowed: (p) => canOpen("/analytik", p) },
   { href: "/campaigns?new=1", label: "Новая рассылка", icon: MessageSquarePlus, color: "#f43f5e", action: true, allowed: (p) => canOpen("/campaigns", p) },
 ];
 const settingsItem: FanItem = { href: "/settings", label: "Настройки", icon: SlidersHorizontal, color: "#64748b" };
@@ -68,7 +81,8 @@ const fullScreen = (pathname: string) => /^\/hr\/recruitment\/telegram\/[^/]+/.t
  * (четыре квадрата) по центру. Кнопка раскрывает веер круглых кнопок над панелью — остальные разделы (по правам) и «Новая рассылка»; фон затемняется
  * и размывается. Закрывается повторным нажатием, тапом по фону, Esc или выбором пункта. «Профиль» — шторка с темой и языком, привязкой Telegram
  * и выходом.
- * Вкладки: «Главная», «Консультант» (AI-консультант), «Продажи»; без доступа к какой-то из них — первый доступный раздел из веера
+ * Вкладки: «Главная», «Консультант» (AI-консультант), «Продажи»; без прав на продажи на их месте — раздел роли: HR — «Подбор», технолог —
+ * «Технолог», снабженец — «Снабжение» (lib/mobile-tabs). Нет доступа к вкладке и нет своей роли — первый доступный раздел из веера
  * («Задачи», «Отделы» …). Панель в потоке под областью
  * прокрутки — не двигается при прокрутке; при открытой клавиатуре прячется. Отступ снизу — под полоску «домой» (safe area).
  */
@@ -86,10 +100,12 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
   const { tabs, items } = useMemo(() => {
     // Права: null — API не ответил, меню не прячем (страницы сами проверят доступ).
     const allowed = (check: (p: readonly string[]) => boolean) => permissions === null || check(permissions);
+    const role = permissions ? roleTab(permissions) : null;
     const candidates = [
       ...(allowed((p) => canOpen("/", p)) ? [home] : []),
       ...(allowed((p) => canOpen("/consultant", p)) ? [consultant] : []),
-      ...(allowed((p) => p.includes("sales.read")) ? [sales] : []),
+      // Продажи — или, без прав на них, раздел своей роли (HR, технолог, снабженец).
+      ...(allowed((p) => p.includes("sales.read")) ? [sales] : role ? [roleSections[role]] : []),
     ];
     const sections = fanSections.filter((s) => allowed(s.allowed));
     // Вкладок три (четвёртая — «Профиль»): недостающие берутся из веера, «Задачи» — первыми.

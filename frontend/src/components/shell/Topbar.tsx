@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { ChevronDown } from "lucide-react";
 import { LinkTelegramButton } from "@/components/telegram/LinkTelegramButton";
 import { Tr } from "@/i18n/client";
+import { departmentCodes, departmentOpen } from "@/lib/navigation";
 import { initials, type Me } from "@/lib/users";
 import { LogoutLink } from "./AppBridge";
 import { LanguageToggle } from "./LanguageToggle";
@@ -22,6 +23,8 @@ import { Breadcrumbs, TopbarSearch } from "./TopbarSearch";
  * Слой выше нижней панели (z-40 против z-30): уведомления и меню аватара, открытые вниз, не прячутся под неё.
  */
 export function Topbar({ me, permissions }: { me: Me | null; permissions: readonly string[] | null }) {
+  // Отделы в поиске — только доступные пользователю.
+  const openDepartments = me && permissions ? departmentCodes.filter((code) => departmentOpen(code, permissions, me.departments)) : null;
   return (
     <div data-topbar className="relative z-40 shrink-0 bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-text lg:border-b lg:border-line lg:bg-transparent lg:pt-0 lg:text-ink-2">
       {/* На компьютере — одна строка: не помещающиеся кнопки разделов прокручиваются, а не уезжают отдельной строкой над меню. */}
@@ -32,12 +35,12 @@ export function Topbar({ me, permissions }: { me: Me | null; permissions: readon
         <Breadcrumbs />
         <Suspense fallback={null}>
           {/* Права с признаками из /api/auth/me (hr.department, hr.requests) — вкладки HR и подбора по ним. */}
-          <ModuleNav permissions={permissions ? [...permissions] : (me?.permissions ?? null)} userId={me?.id ?? null} />
+          <ModuleNav permissions={permissions ? [...permissions] : (me?.permissions ?? null)} userId={me?.id ?? null} salesScope={me?.salesScope ?? null} />
         </Suspense>
         <TopbarSearch />
         {/* Справа всегда у края: в разделах с кнопками в шапке (Продажи, HR, Задачи) поиска нет, и без ml-auto блок вставал сразу за кнопками. */}
         <div className="ml-auto flex h-[52px] shrink-0 items-center gap-[6px] lg:h-16 lg:gap-1.5">
-          <MobileSearch permissions={permissions} />
+          <MobileSearch permissions={permissions} departments={openDepartments} />
           <span className="hidden lg:contents">
             <ThemeToggle />
             <LanguageToggle />

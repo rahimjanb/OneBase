@@ -5,12 +5,15 @@ import { ReportMonthExit } from "@/components/sales/MonthExit";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { getT } from "@/i18n/server";
 import { apiGetOrNull } from "@/lib/server-api";
+import { visibleBack, visibleCrumbs } from "@/lib/sales/access";
+import { mySalesScope } from "@/lib/sales/scope-server";
 import { kg, money, num, pct, plural } from "@/lib/sales/format";
 import { apiQuery, param, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { StoreView } from "@/lib/sales/types";
 
 export default async function StorePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<SalesSearchParams> }) {
   const t = await getT();
+  const scope = await mySalesScope(); // крошки и «Назад» — без страниц, закрытых охвату
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const path = `/sales/stores/${id}`;
   const data = await apiGetOrNull<StoreView>(`/api/sales/stores/${id}${apiQuery(sp, ["agent"])}`, path);
@@ -37,8 +40,8 @@ export default async function StorePage({ params, searchParams }: { params: Prom
       ]
         .filter(Boolean)
         .join(" · ")}
-      crumbs={crumbs}
-      back={crumbs[crumbs.length - 2]?.href ?? withQuery("/sales", q)}
+      crumbs={visibleCrumbs(crumbs, scope)}
+      back={visibleBack(crumbs[crumbs.length - 2]?.href ?? withQuery("/sales", q), scope)}
       period={data.period}
       sp={sp}
     >

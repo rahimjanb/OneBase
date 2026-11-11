@@ -1,10 +1,10 @@
 import { requireProduction } from "@/components/production/guard";
 import { TechnologistDashboard } from "@/components/production/TechnologistDashboard";
-import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
 import type { ProductionDashboard } from "@/lib/production";
-import { apiGet } from "@/lib/server-api";
-import { qs } from "@/lib/tasks";
+import { apiOutcome } from "@/lib/server-api";
+import { qs, todayInTashkent } from "@/lib/tasks";
+import { parsePeriod, periodOfRange, periodRange } from "@/lib/technologist-view";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -17,23 +17,21 @@ const one = (sp: SearchParams, key: string) => {
   return (Array.isArray(v) ? v[0] : v) || undefined;
 };
 
-/** «Производство → Технолог»: панель — выпуск, план, брак, расход к норме, выпечка, задания в работе и что требует внимания (по умолчанию — этот месяц). */
+/**
+ * «Производство → Технолог»: выпуск, план, брак, расход к норме, выпечка, задания в работе и что требует внимания. Период — ?period=this_month
+ * (по умолчанию), last_month, 3_months, year; старые ссылки с from/to работают как прежде. Сбой ответа — плашка с «Повторить» на самой странице.
+ */
 export default async function TechnologistPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const path = "/production/technologist";
   await requireProduction(path);
-  const t = await getT();
   const sp = await searchParams;
-  const data = await apiGet<ProductionDashboard>(`/api/production/technologist${qs({ from: one(sp, "from"), to: one(sp, "to"), department: one(sp, "department") })}`, path);
-  return (
-    <>
-      <PageHeader
-        title={t("Технолог")}
-        subtitle={t("Производство по техкартам: выпуск, брак по этапам, расход к норме и выход выпечки — по утверждённым сменам и закрытым заданиям")}
-        breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Отделы"), href: "/departments" }, { label: t("Производство"), href: "/production" }, { label: t("Технолог") }]}
-      />
-      <PageBody>
-        <TechnologistDashboard data={data} />
-      </PageBody>
-    </>
-  );
+  const today = todayInTashkent();
+  const from = one(sp, "from");
+  const to = one(sp, "to");
+  const asked = parsePeriod(one(sp, "period"));
+  const custom = !asked && (from || to);
+  const range = custom ? { from, to } : periodRange(asked ?? "this_month", today);
+  const period = custom ? (from && to ? periodOfRange(from, to, today) : null) : (asked ?? "this_month");
+  const outcome = await apiOutcome<ProductionDashboard>(`/api/production/technologist${qs({ from: range.from, to: range.to, department: one(sp, "department") })}`);
+  return <TechnologistDashboard data={outcome.state === "ok" ? outcome.data : null} period={period} error={outcome.state !== "ok"} />;
 }

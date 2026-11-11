@@ -44,15 +44,13 @@ public class RecruitmentInterviewDbTests(DataManagerDb fixture) : IClassFixture<
         return (scope, db, vacancy);
     }
 
-    /// <summary>Кандидат с согласием и откликом на вакансию.</summary>
+    /// <summary>Кандидат с откликом на вакансию: написал — рекрутер сразу ответил.</summary>
     private async Task<HrHarness.Chat> CandidateAsync(OneBaseDbContext db, Guid vacancy)
     {
         var number = (await db.Vacancies.AsNoTracking().SingleAsync(v => v.Id == vacancy)).Number;
         var chat = _hr.NewChat();
-        await _hr.SayAsync(chat, $"Здравствуйте, я по вакансии #V{number}");
-        await _hr.SendQueuedAsync();
         fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Спасибо! Сколько лет вы водите грузовик?\"]}");
-        await _hr.SayAsync(chat, "Согласен");
+        await _hr.SayAsync(chat, $"Здравствуйте, я по вакансии #V{number}");
         return chat;
     }
 
@@ -274,10 +272,9 @@ public class RecruitmentInterviewDbTests(DataManagerDb fixture) : IClassFixture<
         // Кандидат на узбекской кириллице отказывается от нового приглашения — без модели, ответ кириллицей.
         var uz = _hr.NewChat();
         var number = (await db.Vacancies.AsNoTracking().SingleAsync()).Number;
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Раҳмат! Тажрибангиз қанча?\"]}");
         await _hr.SayAsync(uz, $"Ассалому алайкум, иш ҳақида маълумот берсангиз #V{number}");
         await _hr.SendQueuedAsync();
-        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Раҳмат! Тажрибангиз қанча?\"]}");
-        await _hr.SayAsync(uz, "Розиман");
         var uzApp = await ApplicationOf(db, uz);
         await HrAsync(i => i.InviteAsync(uzApp.Id, fixture.AdminId, default));
         Assert.Contains("1) Ду 16.11, 10:00", (await HrHarness.SentAsync(db, uz))[^1]);

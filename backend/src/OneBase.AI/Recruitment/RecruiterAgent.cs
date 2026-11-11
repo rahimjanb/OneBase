@@ -18,11 +18,9 @@ using OneBase.Domain.Telegram;
 
 namespace OneBase.AI.Recruitment;
 
-/// <summary>Правила AI-рекрутера без модели: согласие, просьба о человеке, выбор времени, язык.</summary>
+/// <summary>Правила AI-рекрутера без модели: просьба о человеке, выбор времени, язык.</summary>
 public static class RecruiterRules
 {
-    public const string ConsentMarker = "Согласен";
-
     // Только явные просьбы: «работал менеджером» или «оператор колл-центра» в рассказе об опыте — не просьба; на «ты бот?» рекрутер честно
     // отвечает сам (виртуальный помощник), без передачи.
     private static readonly string[] HumanPhrases =
@@ -33,20 +31,11 @@ public static class RecruiterRules
         "инсон билан гаплаш", "одам билан гаплаш", "жонли одам", "оператор билан гаплаш", "ходим билан гаплаш",
     ];
 
-    private static readonly string[] ConsentYes = ["согласен", "согласна", "согласны", "даю согласие", "roziman", "rozi man", "rozimiz", "розиман", "agree"];
-
     /// <summary>Кандидат просит человека — передать HR, не спорить.</summary>
     public static bool AsksForHuman(string text)
     {
         var lower = text.ToLowerInvariant();
         return HumanPhrases.Any(p => lower.Contains(p, StringComparison.Ordinal));
-    }
-
-    public static bool GivesConsent(string text)
-    {
-        var lower = text.Trim().ToLowerInvariant();
-        return lower.Length <= 80 && ConsentYes.Any(p => lower.Contains(p, StringComparison.Ordinal)) && !lower.Contains("не ", StringComparison.Ordinal)
-               && !lower.Contains("emas", StringComparison.Ordinal) && !lower.Contains("эмас", StringComparison.Ordinal);
     }
 
     private static readonly string[][] Ordinals =
@@ -188,10 +177,10 @@ public sealed record RecruiterDecision(string Action, IReadOnlyList<string> Mess
 /// AI-рекрутер в диалоге HR — ИИ-агент «Рекрутер» из «Настройки → ИИ-агенты» (свой агент вакансии, агент номера или рекрутер HR по умолчанию,
 /// <see cref="DialogAgentPick"/>). Работает, если агент включён. Знает все открытые вакансии OneBase: название, отдел, город, занятость,
 /// зарплату (если ему можно её называть), описание, требования и условия.
-/// Без модели: согласие на обработку данных, просьба о человеке и фразы «сразу к человеку», лимит ответов, выбор времени собеседования.
-/// Модель ведёт переписку как опытный рекрутер: отвечает на вопросы, задаёт вопросы отбора по одному, опирается на резюме, приглашает на
-/// собеседование (время — из календаря), сложное передаёт HR. Ответ проходит ограничения агента и уходит с паузой «как человек»
-/// (<see cref="DialogAgentDelivery"/>). За человека себя не выдаёт, решений о найме не принимает.
+/// Без модели: просьба о человеке и фразы «сразу к человеку», лимит ответов, выбор времени собеседования. Согласия на обработку данных
+/// не спрашивает — отвечает по существу с первого сообщения. Модель ведёт переписку как опытный рекрутер: отвечает на вопросы, задаёт
+/// вопросы отбора по одному, опирается на резюме, приглашает на собеседование (время — из календаря), сложное передаёт HR. Ответ проходит
+/// ограничения агента и уходит сразу (<see cref="DialogAgentDelivery"/>). За человека себя не выдаёт, решений о найме не принимает.
 /// </summary>
 public sealed class RecruiterAgent(
     IAppDbContext db,
@@ -209,11 +198,11 @@ public sealed class RecruiterAgent(
     private const int HistoryMessages = 24;
     private const int ResumeChars = 4000;
 
-    /// <summary>Открытых вакансий в промпте — не больше; подробности (описание, требования, условия) — в пределах VacancyChars.</summary>
-    internal const int MaxVacancies = 40;
+    /// <summary>Открытых вакансий в промпте — не больше; подробности (описание, требования, условия) — у каждой, в пределах VacancyChars.</summary>
+    internal const int MaxVacancies = 60;
 
-    private const int VacancyChars = 9000;
-    private const int VacancyFieldChars = 400;
+    private const int VacancyChars = 24000;
+    private const int VacancyFieldChars = 1500;
 
     internal const string HandoffKinds = "salary|conditions|unclear|human_requested|review";
 
@@ -258,20 +247,6 @@ public sealed class RecruiterAgent(
             return;
         }
 
-        // Согласие на обработку данных — до любого разговора о вакансии.
-        if (!await recruitment.HasConsentAsync(candidate.Id, ct))
-        {
-            if (RecruiterRules.GivesConsent(raw.Text) && await AskedConsentAsync(raw.ConversationId, ct))
-            {
-                await recruitment.RecordConsentByCandidateAsync(candidate.Id, "telegram", ct);
-            }
-            else
-            {
-                await SendAsync(turn, "consent", [await ConsentTextAsync(turn, ct)], template: true, ct: ct);
-                return;
-            }
-        }
-
         // Собеседование — без модели: выбор варианта, «да», «другое время», «перенести», отказ, отмена.
         if (application is not null && await interviews.CurrentAsync(application.Id, ct) is { } current && await InterviewTurnAsync(turn, application, current, ct))
         {
@@ -296,7 +271,7 @@ public sealed class RecruiterAgent(
     }
 
     /// <summary>
-    /// Резюме разобрано: рекрутер продолжает разговор, теперь видя резюме (в диалоге, который ведёт AI, при согласии и в пределах лимита) —
+    /// Резюме разобрано: рекрутер продолжает разговор, теперь видя резюме (в диалоге, который ведёт AI, в пределах лимита) —
     /// отмечает подходящий опыт, не спрашивает того, что есть в резюме, задаёт следующий вопрос или приглашает на собеседование.
     /// </summary>
     public async Task DocumentReadyAsync(Guid resumeId, CancellationToken ct)
@@ -310,7 +285,7 @@ public sealed class RecruiterAgent(
         var conversation = await db.TelegramConversations.AsNoTracking()
             .FirstOrDefaultAsync(c => c.AccountId == account && c.PeerId == peer && c.Department == OneBase.Application.Telegram.Routing.TelegramDepartments.Hr, ct);
         var candidate = await db.Candidates.AsNoTracking().FirstOrDefaultAsync(c => c.Id == resume.CandidateId, ct);
-        if (conversation is not { Mode: TelegramConversationMode.Ai } || candidate is null || !await recruitment.HasConsentAsync(candidate.Id, ct))
+        if (conversation is not { Mode: TelegramConversationMode.Ai } || candidate is null)
         {
             return;
         }
@@ -336,23 +311,6 @@ public sealed class RecruiterAgent(
     /// <summary>Открытые вакансии OneBase (с отделом) — всё, что рекрутер знает о вакансиях компании.</summary>
     internal static Task<List<Vacancy>> OpenVacanciesAsync(IAppDbContext db, CancellationToken ct) =>
         db.Vacancies.AsNoTracking().Include(v => v.Department).Where(v => v.Status == VacancyStatus.Open).OrderBy(v => v.Number).Take(MaxVacancies).ToListAsync(ct);
-
-    private async Task<string> ConsentTextAsync(Turn turn, CancellationToken ct)
-    {
-        var consent = await db.RecruitmentConsentTexts.AsNoTracking().OrderByDescending(t => t.Version).Select(t => t.Text).FirstOrDefaultAsync(ct)
-                      ?? RecruitmentRules.DefaultConsentText;
-        var name = turn.Candidate.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() is { Length: > 1 } first && !first.StartsWith('@')
-                   && !first.StartsWith("Telegram", StringComparison.Ordinal) ? first : null;
-        // Роль из настроек агента написана на другом языке («виртуальный помощник HR» узбекскому кандидату) — роль по умолчанию на его языке.
-        var intro = turn.Agent.Intro is { Length: > 0 } i && languages.Detect(i).Lang is { } introLang && introLang != turn.Lang ? null : turn.Agent.Intro;
-        return RecruiterTexts.Consent(turn.Lang, name, RecruiterTexts.Who(turn.Lang, turn.Agent.DisplayName, intro), consent);
-    }
-
-    private async Task<bool> AskedConsentAsync(Guid conversationId, CancellationToken ct) =>
-        await db.TelegramConversationMessages.AsNoTracking().Where(m => m.ConversationId == conversationId && m.Direction == TelegramMessageDirection.Out && m.Author == "ai")
-            .OrderByDescending(m => m.SentAt).Select(m => m.Text).FirstOrDefaultAsync(ct) is { } last
-        && (last.Contains($"«{RecruiterRules.ConsentMarker}»", StringComparison.Ordinal) || last.Contains("«Roziman»", StringComparison.Ordinal)
-            || last.Contains("«Розиман»", StringComparison.Ordinal));
 
     /// <summary>
     /// Ход о собеседовании без модели. Выбор варианта: предложение — запись (сразу подтверждено: кандидат выбрал сам), назначенное — перенос.
@@ -766,7 +724,8 @@ public sealed class RecruiterAgent(
         sb.AppendLine();
         sb.AppendLine("Как вести переписку:");
         sb.AppendLine("- Цель — понять, подходит ли кандидат, ответить на его вопросы о вакансии и, если подходит, пригласить на собеседование.");
-        sb.AppendLine("- В первом ответе после согласия коротко поблагодари и сразу продолжи разговор: ответь на вопрос кандидата или задай первый вопрос.");
+        sb.AppendLine("- Первый ответ в разговоре (твоих сообщений в переписке ещё нет): поздоровайся, коротко представься (имя и роль, если они заданы) и " +
+                      "в том же ответе сразу ответь на вопрос кандидата или задай первый вопрос. Согласия на обработку данных не спрашивай.");
         sb.AppendLine("- Вопросы отбора (ниже) задавай по одному, своими словами, в естественном порядке. Не спрашивай то, что уже известно из резюме, переписки " +
                       "или «Что уже известно». Ответы кандидата на вопросы отбора записывай в answers.");
         sb.AppendLine("- Если есть резюме — опирайся на него: можно отметить подходящий опыт кандидата. Резюме не пересказывай.");
@@ -814,8 +773,8 @@ public sealed class RecruiterAgent(
     }
 
     /// <summary>
-    /// Меняющаяся часть: кандидат, его вакансия (целиком), вопросы отбора и ответы на них, открытые вакансии компании (у кандидата без
-    /// вакансии — с описанием, требованиями и условиями; у кандидата с вакансией — списком), резюме, текущее время.
+    /// Меняющаяся часть: кандидат, его вакансия (целиком), вопросы отбора (агента и вакансии) и ответы на них, все открытые вакансии компании
+    /// с описанием, требованиями и условиями, резюме, текущее время. Агент знает всё это с первого сообщения кандидата.
     /// </summary>
     internal static string Context(DialogAgent agent, Candidate candidate, CandidateApplication? application, IReadOnlyList<Vacancy> open, string? resume,
         DateTimeOffset now, CandidateLang lang = CandidateLang.Ru, Interview? interview = null)
@@ -852,21 +811,34 @@ public sealed class RecruiterAgent(
             var others = open.Where(x => x.Id != v.Id).ToList();
             if (others.Count > 0)
             {
-                sb.AppendLine("Другие открытые вакансии компании (данные OneBase; о них — только если кандидат спросит о другой работе):");
-                AppendVacancies(sb, others, agent.CanDiscussSalary, detailed: false);
+                sb.AppendLine("Другие открытые вакансии компании (данные OneBase; о них — если кандидат спросит о другой работе или не подходит под свою):");
+                AppendVacancies(sb, others, agent.CanDiscussSalary, detailed: true);
             }
-        }
-        else if (open.Count > 0)
-        {
-            sb.AppendLine("Кандидат ещё не выбрал вакансию. Узнай, какая работа ему интересна, и предложи подходящую из открытых вакансий компании " +
-                          "(кандидат может написать код вакансии):");
-            sb.AppendLine("Открытые вакансии компании (данные OneBase):");
-            AppendVacancies(sb, open, agent.CanDiscussSalary, detailed: true);
         }
         else
         {
-            sb.AppendLine("Открытых вакансий сейчас нет. Скажи кандидату, что сейчас набора нет, и предложи прислать резюме — сотрудник HR свяжется, " +
-                          "когда появится подходящая вакансия. Вакансий не придумывай.");
+            if (open.Count > 0)
+            {
+                sb.AppendLine("Кандидат ещё не выбрал вакансию. Узнай, какая работа ему интересна, и предложи подходящую из открытых вакансий компании " +
+                              "(кандидат может написать код вакансии):");
+                sb.AppendLine("Открытые вакансии компании (данные OneBase):");
+                AppendVacancies(sb, open, agent.CanDiscussSalary, detailed: true);
+            }
+            else
+            {
+                sb.AppendLine("Открытых вакансий сейчас нет. Скажи кандидату, что сейчас набора нет, и предложи прислать резюме — сотрудник HR свяжется, " +
+                              "когда появится подходящая вакансия. Вакансий не придумывай.");
+            }
+
+            var general = DialogAgentRules.Lines(agent.ScreeningQuestions);
+            if (general.Count > 0)
+            {
+                sb.AppendLine("Вопросы отбора (по одному; когда станет понятно, какая работа интересна кандидату):");
+                foreach (var q in general)
+                {
+                    sb.AppendLine($"- {q}");
+                }
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(candidate.Notes))

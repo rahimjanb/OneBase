@@ -90,8 +90,25 @@ const titles: Record<string, string> = {
   ...Object.fromEntries(requestTabs.filter((tab) => tab.key !== "overview" && tab.key !== "categories").map((tab) => [tab.href, tab.label])),
 };
 
+/** Названия страниц «Аналитика» — как в их PageHeader. */
+const analytikTitles: Record<string, string> = {
+  "/analytik": "Аналитик",
+  "/analytik/sales": "Продажи",
+  "/analytik/production": "Производство",
+  "/analytik/warehouse": "Склад",
+  "/analytik/procurement": "Снабжение",
+  "/analytik/finance": "Финансы",
+  "/analytik/hr": "Персонал",
+  "/analytik/forecasts": "Прогнозы",
+  "/analytik/risks": "Риски и отклонения",
+  "/analytik/reports": "Отчёты",
+  "/analytik/history": "История",
+  "/analytik/data": "Карта данных",
+};
+
 function titleOf(pathname: string): string | undefined {
   if (titles[pathname]) return titles[pathname];
+  if (analytikTitles[pathname]) return analytikTitles[pathname];
   if (pathname.startsWith("/sales/primary/")) return "Первичка";
   if (pathname.startsWith("/settings/ai")) return "AI";
   return undefined;
@@ -106,6 +123,8 @@ function crumbsOf(pathname: string, title: string | undefined): Crumb[] | undefi
   if (pathname.startsWith("/requests/")) return [ONEBASE, { label: "Заявки", href: "/requests" }, ...last];
   if (pathname.startsWith("/procurement")) return [ONEBASE, DEPARTMENTS, { label: "Снабжение", href: "/procurement" }, ...last];
   if (pathname.startsWith("/production")) return [ONEBASE, DEPARTMENTS, { label: "Производство", href: "/production" }, ...last];
+  if (pathname === "/analytik") return [ONEBASE, { label: "Аналитик" }];
+  if (pathname.startsWith("/analytik/")) return [ONEBASE, { label: "Аналитик", href: "/analytik" }, ...last];
   if (pathname === "/settings") return [ONEBASE, { label: "Настройки" }];
   if (pathname.startsWith("/settings")) return [ONEBASE, { label: "Настройки", href: "/settings" }, ...last];
   if (pathname.startsWith("/base")) return [ONEBASE, { label: "Файлы", href: "/base" }];
@@ -735,5 +754,6 @@ export function RouteSkeleton({ inSales = false }: { inSales?: boolean }) {
   )
     return <RequestsSkeleton pathname={pathname} />;
   if (pathname === "/consultant" || pathname.startsWith("/consultant/")) return <ConsultantSkeleton chat={pathname !== "/consultant"} />;
+  if (pathname === "/analytik/chat" || pathname.startsWith("/analytik/chat/")) return <ConsultantSkeleton chat={pathname !== "/analytik/chat"} />;
   return <PageSkeleton pathname={pathname} />;
 }

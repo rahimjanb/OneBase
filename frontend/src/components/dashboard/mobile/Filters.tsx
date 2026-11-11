@@ -46,8 +46,11 @@ const ddmm = (iso: string | null) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 
 
 export type DepartmentOption = { code: string; name: string };
 
-/** Чипы фильтров в одну строку с горизонтальной прокруткой; тап — шторка выбора. */
-export function Filters({ departments }: { departments: DepartmentOption[] }) {
+/**
+ * Чипы фильтров в одну строку с горизонтальной прокруткой; тап — шторка выбора. Отделы — только доступные пользователю (нет ни одного — чипа
+ * нет), сотрудники — только с доступом к HR (employees).
+ */
+export function Filters({ departments, employees = true }: { departments: DepartmentOption[]; employees?: boolean }) {
   const t = useT();
   const [filters, update] = useHomeFilters();
   const [open, setOpen] = useState<"period" | "dept" | "emp" | null>(null);
@@ -73,8 +76,10 @@ export function Filters({ departments }: { departments: DepartmentOption[] }) {
     <>
       <div role="toolbar" aria-label={t("Фильтры")} className="no-scrollbar -mx-[16px] flex gap-[8px] overflow-x-auto px-[16px] py-[2px]">
         <Chip icon={CalendarDays} label={periodLabel} active={filters.period !== "30d"} onClick={() => setOpen("period")} hint={t("Период")} />
-        <Chip icon={Building2} label={deptLabel} active={filters.departments.length > 0} onClick={() => setOpen("dept")} hint={t("Отделы")} />
-        <Chip icon={Users} label={empLabel} active={filters.employees.length > 0} onClick={() => setOpen("emp")} hint={t("Сотрудники")} />
+        {departments.length > 0 && (
+          <Chip icon={Building2} label={deptLabel} active={filters.departments.length > 0} onClick={() => setOpen("dept")} hint={t("Отделы")} />
+        )}
+        {employees && <Chip icon={Users} label={empLabel} active={filters.employees.length > 0} onClick={() => setOpen("emp")} hint={t("Сотрудники")} />}
       </div>
 
       <PeriodSheet open={open === "period"} onClose={() => setOpen(null)} filters={filters} onApply={(f) => update(f)} />

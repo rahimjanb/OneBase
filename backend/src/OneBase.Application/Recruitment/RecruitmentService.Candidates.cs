@@ -172,20 +172,6 @@ public sealed partial class RecruitmentService
     /// <summary>RelatedType диалога Telegram, который ведётся с кандидатом (RelatedId — ID кандидата).</summary>
     public const string CandidateRelation = "candidate";
 
-    /// <summary>Согласие, данное кандидатом в переписке (ответил «согласен» на текст согласия) — записывает система, не сотрудник.</summary>
-    public async Task RecordConsentByCandidateAsync(Guid candidateId, string channel, CancellationToken ct)
-    {
-        if (await db.CandidateConsents.AnyAsync(c => c.CandidateId == candidateId && c.WithdrawnAt == null, ct))
-        {
-            return;
-        }
-
-        await AddConsentAsync(candidateId, channel, null, ct);
-        await db.SaveChangesAsync(ct);
-        await audit.LogAsync(ActorType.Agent, "recruiter", "recruitment.consent.recorded", nameof(Candidate), candidateId.ToString(), new { channel, byCandidate = true }, ct);
-        await documents.ReleaseConsentAsync(candidateId, ct); // документы, ждавшие согласия, — распознать и разобрать
-    }
-
     /// <summary>
     /// Язык переписки после сообщения кандидата (<see cref="LanguageDetectionService.Decide"/>): короткое и неоднозначное сообщение язык не
     /// меняет; меняют явная просьба, длинное уверенное сообщение или два уверенных подряд. Возвращает язык, на котором отвечать (null — ещё
@@ -222,9 +208,6 @@ public sealed partial class RecruitmentService
         await db.SaveChangesAsync(ct);
         return decision.Preferred ?? current;
     }
-
-    public Task<bool> HasConsentAsync(Guid candidateId, CancellationToken ct) =>
-        db.CandidateConsents.AnyAsync(c => c.CandidateId == candidateId && c.WithdrawnAt == null, ct);
 
     /// <summary>Заметка к кандидату (что выяснил AI-рекрутер: опыт, ожидания, когда может выйти) — без повторов.</summary>
     public async Task AppendNotesAsync(Guid candidateId, string text, CancellationToken ct)
@@ -764,7 +747,6 @@ public sealed partial class RecruitmentService
         await db.SaveChangesAsync(ct);
         await RefreshRetentionAsync(id, touch: true, ct);
         await AuditAsync(ctx, "recruitment.consent.recorded", nameof(Candidate), id, new { channel }, ct);
-        await documents.ReleaseConsentAsync(id, ct);
         return await CandidateAsync(ctx, id, ct);
     }
 

@@ -1,3 +1,4 @@
+import type { SalesScopeInfo } from "./sales/access";
 /** Текущий пользователь (GET /api/auth/me). */
 export type Me = {
   id: string;
@@ -21,6 +22,10 @@ export type Me = {
   departmentName?: string | null;
   /** Главная: my_day — «Мой день» (роль «Сотрудник»), overview — «Обзор» компании. */
   home?: "my_day" | "overview" | "work";
+  /** Охват «Продаж» (с разделом «Продажи»): уровень и своя страница — вкладки раздела и вход в него. */
+  salesScope?: SalesScopeInfo | null;
+  /** Отделы, задачи которых открываются (свой, руководимые, у руководства — все); с разделами отделов решает, какие отделы видны. */
+  departments?: string[];
 };
 
 export type UserRow = {

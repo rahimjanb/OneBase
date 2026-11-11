@@ -9,7 +9,7 @@ const icons: Record<ActivityEvent["icon"], LucideIcon> = { check: CircleCheck, f
 /** «Лента активности»: последние уведомления пользователя (задачи поставлены, изменены, выполнены); «Live» — лента обновляется вместе с данными. */
 export function ActivityFeed({ events, available, t }: { events: ActivityEvent[]; available: boolean; t: T }) {
   return (
-    <DashCard className="flex flex-col gap-4 p-5 xl:w-[320px]">
+    <DashCard className="flex flex-col gap-4 p-5">
       <CardHeader
         title={t("Лента активности")}
         subtitle={t("Последние события")}
@@ -23,7 +23,7 @@ export function ActivityFeed({ events, available, t }: { events: ActivityEvent[]
       />
       {events.length === 0 ? (
         <div className="flex flex-1 items-center justify-center px-4 py-10 text-center text-[13px] text-ink-4">
-          {available ? t("Событий пока нет") : t("Уведомления недоступны")}
+          {available ? t("Событий пока нет") : t("Не удалось загрузить уведомления")}
         </div>
       ) : (
         <ul className="flex flex-col gap-4">

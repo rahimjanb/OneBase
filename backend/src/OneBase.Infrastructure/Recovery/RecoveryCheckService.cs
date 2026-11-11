@@ -221,6 +221,9 @@ public sealed class RecoveryCheckService(
                 await db.TelegramMaterials.AsNoTracking().Where(m => m.ObjectKey != null).Select(m => m.ObjectKey!).ToListAsync(ct)),
             ("telegram-campaigns", "Telegram: вложения рассылок", await db.TelegramCampaignAttachments.AsNoTracking().Select(a => a.ObjectKey).ToListAsync(ct)),
             ("field-photos", "Sales Base: фото визитов", await db.FieldVisits.AsNoTracking().Where(v => v.PhotoKey != null).Select(v => v.PhotoKey!).ToListAsync(ct)),
+            ("production-photos", "Производство: фото продуктов техкарт",
+                (await db.ProductionRecipePhotos.AsNoTracking().Select(p => new { p.ObjectKey, p.ThumbKey, p.SmallKey }).ToListAsync(ct))
+                .SelectMany(p => new[] { p.ObjectKey, p.ThumbKey, p.SmallKey }).ToList()),
             ("recruitment-resumes", "Подбор: резюме кандидатов", await db.CandidateResumes.AsNoTracking().Where(r => r.Sha256 != null).Select(r => r.ObjectKey).ToListAsync(ct)),
             ("weekly-pdf", "Telegram: еженедельные PDF", await WeeklyPdfKeysAsync(ct)),
         };

@@ -10,8 +10,8 @@ using OneBase.Domain.Work;
 namespace OneBase.Application.Agents;
 
 /// <summary>
-/// Ответ агента перед отправкой. Template — готовый текст OneBase (просьба о согласии, подтверждение записи, «передаю сотруднику»): без
-/// проверки черновиком и запрещёнными фразами (его написал сотрудник в настройках), но с паузой «как человек».
+/// Ответ агента перед отправкой. Template — готовый текст OneBase (подтверждение записи, варианты времени, «передаю сотруднику»): без
+/// проверки черновиком и запрещёнными фразами (его написал сотрудник в настройках).
 /// </summary>
 public sealed record AgentReplyDraft(
     DialogAgent Agent,
@@ -34,14 +34,12 @@ public sealed record DeliveryResult(Guid ReplyId, DialogReplyStatus Status, stri
 
 /// <summary>
 /// Доставка ответов ИИ-агентов: ограничения (запрещённые фразы, длина, без разметки) → черновик на проверку (режим «С проверкой») или очередь
-/// исходящих с паузой и «печатает…» как у человека, частями по 1–3 сообщения. Новое сообщение собеседника отменяет ещё не ушедший ответ — агент
-/// ответит на всё сразу. Каждый ответ — в журнал агента.
+/// исходящих — сразу, без паузы и «печатает…», в любое время; части ответа (1–3 сообщения) уходят одна за другой. Новое сообщение собеседника
+/// отменяет ещё не ушедший ответ — агент ответит на всё сразу. Каждый ответ — в журнал агента.
 /// </summary>
 public sealed class DialogAgentDelivery(IAppDbContext db, TelegramOutbox outbox, UserNotifier notifier, TimeProvider clock)
 {
     public const string RelatedType = "agent_reply";
-
-    private static readonly Random Random = Random.Shared;
 
     /// <summary>
     /// Собеседник написал ещё или сотрудник взял диалог: ещё не отправленные ответы AI в диалоге отменяются, черновики — «заменён». Ответ,
@@ -144,7 +142,7 @@ public sealed class DialogAgentDelivery(IAppDbContext db, TelegramOutbox outbox,
         switch (reply.Status)
         {
             case DialogReplyStatus.Sent:
-                await EnqueueAsync(reply, agent, parts, humanPause: true, ct);
+                await EnqueueAsync(reply, agent, parts, ct);
                 break;
             case DialogReplyStatus.Draft:
                 await NotifyAsync(agent, $"{agent.Name}: ответ ждёт проверки", $"{d.PeerName}: {Short(d.Incoming, 200)}", ct);
@@ -157,26 +155,24 @@ public sealed class DialogAgentDelivery(IAppDbContext db, TelegramOutbox outbox,
         return new DeliveryResult(reply.Id, reply.Status, reply.BlockReason, parts);
     }
 
-    /// <summary>Отправить ответ из журнала (черновик одобрен или остановленный ответ исправлен сотрудником) — без паузы «как человек».</summary>
+    /// <summary>Отправить ответ из журнала (черновик одобрен или остановленный ответ исправлен сотрудником).</summary>
     public async Task SendReviewedAsync(DialogAgentReply reply, DialogAgent agent, CancellationToken ct)
     {
         var parts = DialogAgentRules.Parts([reply.Text], agent.SplitMessages, DialogAgentRules.MaxReplyCharsLimit);
-        await EnqueueAsync(reply, agent, parts, humanPause: false, ct);
+        await EnqueueAsync(reply, agent, parts, ct);
     }
 
-    private async Task EnqueueAsync(DialogAgentReply reply, DialogAgent agent, IReadOnlyList<string> parts, bool humanPause, CancellationToken ct)
+    /// <summary>
+    /// В очередь — сразу: части ответа стоят подряд (на миллисекунду друг за другом — порядок сохраняется), очередь отправляет их одну за другой
+    /// без паузы между ними (<see cref="TelegramOutboxRunner"/>).
+    /// </summary>
+    private async Task EnqueueAsync(DialogAgentReply reply, DialogAgent agent, IReadOnlyList<string> parts, CancellationToken ct)
     {
-        var at = humanPause ? DialogAgentRules.SendAt(agent, clock.GetUtcNow(), Random) : clock.GetUtcNow();
+        var now = clock.GetUtcNow();
         for (var i = 0; i < parts.Count; i++)
         {
-            if (i > 0)
-            {
-                at = at.AddSeconds(DialogAgentRules.GapSeconds(parts[i], Random));
-            }
-
             await outbox.EnqueueAsync(new OutboxRequest(reply.AccountId, reply.PeerId, reply.ConversationId, agent.Department, "reply", parts[i],
-                $"{RelatedType}:{reply.Id:N}:{reply.Status}:{i}", "ai", RelatedType: RelatedType, RelatedId: reply.Id, NotBefore: at,
-                TypingSeconds: agent.Typing ? DialogAgentRules.TypingSeconds(parts[i]) : 0), ct);
+                $"{RelatedType}:{reply.Id:N}:{reply.Status}:{i}", "ai", RelatedType: RelatedType, RelatedId: reply.Id, NotBefore: now.AddMilliseconds(i)), ct);
         }
     }
 

@@ -89,6 +89,15 @@ export const typicalChain: { name: string; kind: StageKind; yieldPercent: number
   { name: "Упаковка", kind: "Packing", yieldPercent: 100 },
 ];
 
+/**
+ * Фото продукта техкарты — одно на код (у всех версий): id — адрес картинки (/api/production/recipe-photos/{id}/480|960|1600), размер кадра 4:3,
+ * средний цвет — подложка, пока картинка грузится.
+ */
+export type RecipePhoto = { id: string; width: number; height: number; tint: string | null };
+
+/** Сколько карточек в каждом фильтре состояния (с учётом поиска). */
+export type RecipeCounts = { all: number; active: number; draft: number; pending: number; archived: number };
+
 /** Карточка продукта в списке: по коду — действующая версия (а нет — последняя); draftId и draftStatus — неутверждённая версия (черновик или на утверждении). */
 export type RecipeRow = {
   id: string;
@@ -108,9 +117,13 @@ export type RecipeRow = {
   effectiveFrom: string | null;
   stages: number;
   draftStatus: RecipeStatus | null;
+  photo?: RecipePhoto | null;
+  /** Последнее изменение любой версии кода — для «Сначала новые». */
+  updatedAt?: string | null;
 };
 
-export type RecipeList = { items: RecipeRow[]; total: number; canCreate: boolean };
+/** canCreate — ведёт техкарты: создаёт, импортирует, меняет фото. */
+export type RecipeList = { items: RecipeRow[]; total: number; canCreate: boolean; counts?: RecipeCounts | null };
 
 export type RecipeLine = {
   id: string;
@@ -177,7 +190,8 @@ export type RecipeDetail = {
   lines: RecipeLine[];
   versions: RecipeVersion[];
   history: RequestEvent[];
-  can: { edit: boolean; submit: boolean; approve: boolean; return: boolean; newVersion: boolean; archive: boolean; order: boolean };
+  /** photo — менять фото продукта (ведёт техкарты), в любом статусе версии. */
+  can: { edit: boolean; submit: boolean; approve: boolean; return: boolean; newVersion: boolean; archive: boolean; order: boolean; photo?: boolean };
   orders: number;
   techCardNo: string | null;
   technologistId: string | null;
@@ -204,6 +218,7 @@ export type RecipeDetail = {
   outputItemId: string | null;
   outputItemName: string | null;
   outputItemUnit: string | null;
+  photo?: RecipePhoto | null;
 };
 
 /** Форма карты: единицы и технологи. */

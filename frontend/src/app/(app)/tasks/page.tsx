@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, ArrowRight, Ban, CalendarClock, CheckCircle2, ClipboardCheck, ListTodo, Lock, Route as RouteIcon, Sparkles, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowRight, Ban, CalendarClock, CheckCircle2, ClipboardCheck, ListTodo, Route as RouteIcon, Sparkles, UserRound } from "lucide-react";
 import { DepartmentIcon } from "@/components/departments";
 import { PushPrompt } from "@/components/shell/AppBridge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
@@ -34,8 +34,9 @@ export default async function TasksPage() {
   const me = await apiSession<Me>("/api/auth/me");
   if (me && !canOpen("/tasks", me.permissions)) redirect(homeFor(me.permissions));
   const { departments, projects, heads } = await taskOptions("/tasks");
+  const openDepartments = departments.filter((d) => d.canOpen);
   const overview = await apiGet<WorkOverview>("/api/work/overview", "/tasks");
-  // Открытые задачи полевой команды — для карточки «Продажи», если есть доступ к Sales Base.
+  // Открытые задачи полевой команды — для карточки «Продажи», если есть доступ к Sales Base (нет доступа — строки о полевой команде нет).
   const fieldOpen = departments.some((d) => d.hasField) ? await apiTry<PageResult<FieldTask>>("/api/field/tasks?status=open&pageSize=10") : null;
   const t = await getT();
   const today = todayInTashkent();
@@ -157,59 +158,50 @@ export default async function TasksPage() {
           </section>
         </div>
 
-        <h2 className="mb-3 mt-6 text-sm font-semibold text-ink">{t("Отделы")}</h2>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {departments.map((d) => {
-            const body = (
-              <div
-                className={`flex h-full flex-col rounded-xl border bg-surface p-5 transition-colors ${d.canOpen ? "border-line group-hover:border-accent/40" : "border-dashed border-line opacity-70"}`}
-              >
-                <div className="flex items-center gap-3">
-                  <DepartmentIcon code={d.code} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-semibold text-ink">{d.name}</span>
-                    {(d.isMine || d.isHead) && <span className="block text-xs text-ink-3">{d.isHead ? t("вы руководитель") : t("ваш отдел")}</span>}
-                  </span>
-                  {d.canOpen ? (
-                    <ArrowRight className="size-4 text-ink-3 transition-transform group-hover:translate-x-0.5 group-hover:text-accent-strong" />
-                  ) : (
-                    <Lock className="size-4 text-ink-3" aria-label={t("Нет доступа")} />
-                  )}
-                </div>
-                <div className="mt-4 space-y-1.5 border-t border-line pt-3 text-sm">
-                  {!d.canOpen && <p className="text-ink-3">{t("Задачи видят сотрудники отдела, руководитель отдела и руководство")}</p>}
-                  {d.hasTasks && (
-                    <p className="flex flex-wrap gap-x-3 gap-y-1 text-ink-2">
-                      <span>
-                        {d.openTasks} {t(plural(d.openTasks, "открытая задача", "открытые задачи", "открытых задач"))}
+        {/* Только отделы, задачи которых пользователю открыты, — закрытых не показываем. */}
+        {openDepartments.length > 0 && (
+          <>
+            <h2 className="mb-3 mt-6 text-sm font-semibold text-ink">{t("Отделы")}</h2>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {openDepartments.map((d) => (
+                <Link key={d.code} href={`/tasks/${d.code}`} className="group block max-lg:active:opacity-75">
+                  <div className="flex h-full flex-col rounded-xl border border-line bg-surface p-5 transition-colors group-hover:border-accent/40">
+                    <div className="flex items-center gap-3">
+                      <DepartmentIcon code={d.code} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold text-ink">{d.name}</span>
+                        {(d.isMine || d.isHead) && <span className="block text-xs text-ink-3">{d.isHead ? t("вы руководитель") : t("ваш отдел")}</span>}
                       </span>
-                      {d.myTasks > 0 && <span className="text-accent-strong">{t("мне: {n}", { n: d.myTasks })}</span>}
-                      {d.overdueTasks > 0 && <span className="text-bad">{t("просрочено: {n}", { n: d.overdueTasks })}</span>}
-                    </p>
-                  )}
-                  {d.hasField && (
-                    <p className="flex items-start gap-1.5 text-ink-2">
-                      <RouteIcon className="mt-0.5 size-4 shrink-0 text-ink-3" />
-                      <span>
-                        {t("Полевая команда: задачи и маршруты")}
-                        {fieldOpen ? <span className="text-ink-3"> · {t("открыто {n}", { n: fieldOpen.total })}</span> : null}
-                      </span>
-                    </p>
-                  )}
-                </div>
-              </div>
-            );
-            return d.canOpen ? (
-              <Link key={d.code} href={`/tasks/${d.code}`} className="group block max-lg:active:opacity-75">
-                {body}
-              </Link>
-            ) : (
-              <div key={d.code} aria-disabled="true">
-                {body}
-              </div>
-            );
-          })}
-        </div>
+                      <ArrowRight className="size-4 text-ink-3 transition-transform group-hover:translate-x-0.5 group-hover:text-accent-strong" />
+                    </div>
+                    {(d.hasTasks || (d.hasField && fieldOpen)) && (
+                      <div className="mt-4 space-y-1.5 border-t border-line pt-3 text-sm">
+                        {d.hasTasks && (
+                          <p className="flex flex-wrap gap-x-3 gap-y-1 text-ink-2">
+                            <span>
+                              {d.openTasks} {t(plural(d.openTasks, "открытая задача", "открытые задачи", "открытых задач"))}
+                            </span>
+                            {d.myTasks > 0 && <span className="text-accent-strong">{t("мне: {n}", { n: d.myTasks })}</span>}
+                            {d.overdueTasks > 0 && <span className="text-bad">{t("просрочено: {n}", { n: d.overdueTasks })}</span>}
+                          </p>
+                        )}
+                        {d.hasField && fieldOpen && (
+                          <p className="flex items-start gap-1.5 text-ink-2">
+                            <RouteIcon className="mt-0.5 size-4 shrink-0 text-ink-3" />
+                            <span>
+                              {t("Полевая команда: задачи и маршруты")}
+                              <span className="text-ink-3"> · {t("открыто {n}", { n: fieldOpen.total })}</span>
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
       </PageBody>
     </>
   );

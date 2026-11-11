@@ -10,6 +10,8 @@ import { NewMarketsTable, SameDaysTable, SilentMarketsTable } from "@/components
 import { getT } from "@/i18n/server";
 import type { T } from "@/i18n/core";
 import { apiGetOrNull } from "@/lib/server-api";
+import { visibleBack, visibleCrumbs } from "@/lib/sales/access";
+import { mySalesScope } from "@/lib/sales/scope-server";
 import { kg, money, monthGenitive, monthName, num, paceDays, pct, plural } from "@/lib/sales/format";
 import { apiQuery, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { AgentFlag, AgentView } from "@/lib/sales/types";
@@ -59,6 +61,7 @@ export default async function AgentPage({
   searchParams: Promise<SalesSearchParams>;
 }) {
   const t = await getT();
+  const scope = await mySalesScope(); // крошки и «Назад» — без страниц, закрытых охвату
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const path = `/sales/agents/${id}`;
   const data = await apiGetOrNull<AgentView>(`/api/sales/agents/${id}${apiQuery(sp)}`, path);
@@ -82,8 +85,8 @@ export default async function AgentPage({
     <SalesFrame
       title={data.name}
       subtitle={subtitle}
-      crumbs={[...crumbs, { label: data.name }]}
-      back={withQuery(regionHref, q)}
+      crumbs={visibleCrumbs([...crumbs, { label: data.name }], scope)}
+      back={visibleBack(withQuery(regionHref, q), scope)}
       sp={sp}
       period={period}
     >

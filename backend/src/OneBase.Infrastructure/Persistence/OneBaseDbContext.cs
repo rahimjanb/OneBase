@@ -123,6 +123,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<SalesDirection> SalesDirections => Set<SalesDirection>();
     public DbSet<SalesRegion> SalesRegions => Set<SalesRegion>();
     public DbSet<SalesAgentProfile> SalesAgentProfiles => Set<SalesAgentProfile>();
+    public DbSet<SalesUserScope> SalesUserScopes => Set<SalesUserScope>();
     public DbSet<SalesRegionPlan> SalesRegionPlans => Set<SalesRegionPlan>();
     public DbSet<SalesFactoryPlan> SalesFactoryPlans => Set<SalesFactoryPlan>();
     public DbSet<SalesAgentPlan> SalesAgentPlans => Set<SalesAgentPlan>();
@@ -208,6 +209,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Production.ProductionRecipeImportRecipe> ProductionRecipeImportRecipes => Set<OneBase.Domain.Production.ProductionRecipeImportRecipe>();
     public DbSet<OneBase.Domain.Production.ProductionRecipeImportLine> ProductionRecipeImportLines => Set<OneBase.Domain.Production.ProductionRecipeImportLine>();
     public DbSet<OneBase.Domain.Production.ProductionRecipeImportItemMap> ProductionRecipeImportItemMaps => Set<OneBase.Domain.Production.ProductionRecipeImportItemMap>();
+    public DbSet<OneBase.Domain.Production.ProductionRecipePhoto> ProductionRecipePhotos => Set<OneBase.Domain.Production.ProductionRecipePhoto>();
     public DbSet<OneBase.Domain.Production.ProductionOrder> ProductionOrders => Set<OneBase.Domain.Production.ProductionOrder>();
     public DbSet<OneBase.Domain.Production.ProductionOrderLine> ProductionOrderLines => Set<OneBase.Domain.Production.ProductionOrderLine>();
     public DbSet<OneBase.Domain.Procurement.ProcurementStockImport> ProcurementStockImports => Set<OneBase.Domain.Procurement.ProcurementStockImport>();
@@ -296,6 +298,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         TwinModel.Configure(b);
         RecruitmentModel.Configure(b);
         DialogAgentModel.Configure(b);
+        AnalytikModel.Configure(b);
 
         // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.
         b.Entity<DataSourceConnection>(e =>

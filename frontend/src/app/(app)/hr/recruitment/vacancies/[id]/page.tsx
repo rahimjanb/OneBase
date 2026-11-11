@@ -7,12 +7,14 @@ export async function generateMetadata() {
   return { title: t("Вакансия · Подбор · OneBase") };
 }
 
-export default async function VacancyPage({ params }: { params: Promise<{ id: string }> }) {
+/** Вакансия; ?edit=1 — сразу форма правки (пункт «Редактировать» в меню списка вакансий). */
+export default async function VacancyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ edit?: string }> }) {
   const { id } = await params;
+  const { edit } = await searchParams;
   const ctx = await loadRecruitment(`/hr/recruitment/vacancies/${id}`);
   return (
-    <RecruitmentFrame title="Вакансия" ctx={ctx}>
-      <VacancyDetail ctx={ctx} id={id} />
+    <RecruitmentFrame title="Вакансия" ctx={ctx} parent={{ label: "Вакансии", href: "/hr/recruitment" }}>
+      <VacancyDetail ctx={ctx} id={id} initialEdit={edit === "1" && ctx.canManage} />
     </RecruitmentFrame>
   );
 }

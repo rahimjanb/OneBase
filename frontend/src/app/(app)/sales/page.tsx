@@ -5,6 +5,8 @@ import { apiGet, apiSession } from "@/lib/server-api";
 import { apiQuery, periodQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { OverviewView } from "@/lib/sales/types";
 import type { Me } from "@/lib/users";
+import { redirect } from "next/navigation";
+import { isLimited } from "@/lib/sales/access";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -19,6 +21,9 @@ export async function generateMetadata() {
 export default async function SalesPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
   const t = await getT();
   const sp = await searchParams;
+  // РМ / СВР / ТП — сразу на свою страницу (направление, регион, карточку ТП), с тем же месяцем: старт продаж — вся страна.
+  const scope = (await apiSession<Me>("/api/auth/me"))?.salesScope;
+  if (isLimited(scope)) redirect(withQuery(scope!.home, periodQuery(sp)));
   const [data, me] = await Promise.all([apiGet<OverviewView>(`/api/sales/overview${apiQuery(sp)}`, "/sales"), apiSession<Me>("/api/auth/me")]);
   const q = periodQuery(sp);
 

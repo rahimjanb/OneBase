@@ -6,11 +6,13 @@ import { Fragment, useEffect, useState } from "react";
 import { ChevronRight, ListPlus, Loader2, Plus, Save, Trash2, Workflow, X } from "lucide-react";
 import { CatalogPicker } from "@/components/requests/CatalogPicker";
 import { ErrorNote } from "@/components/tasks/TaskBadges";
+import { showTaskToast } from "@/components/tasks/TaskToast";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { parseNumber } from "@/lib/procurement";
 import { basesFor, typicalChain, unitChoices, type ProductOption, type RecipeDetail, type RecipeFormData, type StageKind } from "@/lib/production";
 import { Label, card, field, newKey, primary, secondary } from "./ProdKit";
+import { RecipePhotoBlock, uploadAfterCreate } from "./RecipePhoto";
 import { StageCard, type CardParams, type DefectState, type LineState, type StageState } from "./RecipeStageEditor";
 
 const text = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(n).replace(".", ","));
@@ -58,6 +60,8 @@ export function RecipeForm({ initial, form }: { initial?: RecipeDetail; form: Re
   const router = useRouter();
   const units = form.units;
   const [code, setCode] = useState(initial?.code ?? "");
+  // Новая техкарта: выбранное фото отправляется сразу после создания (у правки — блок фото отправляет сам).
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [name, setName] = useState(initial?.name ?? "");
   const [product, setProduct] = useState<{ id: number; name: string } | null>(
     initial?.linkoProductId ? { id: initial.linkoProductId, name: initial.linkoProductName ?? String(initial.linkoProductId) } : null,
@@ -277,6 +281,8 @@ export function RecipeForm({ initial, form }: { initial?: RecipeDetail; form: Re
         router.push(`/production/recipes/${initial.id}`);
       } else {
         const { id } = await bff<{ id: string }>("production/recipes", { method: "POST", body: JSON.stringify(body) });
+        const photoError = photoFile ? await uploadAfterCreate(id, photoFile) : null;
+        if (photoError) showTaskToast({ tone: "error", text: t("Техкарта создана, но фото не загрузилось: {error}", { error: photoError }) });
         router.push(`/production/recipes/${id}`);
       }
       router.refresh();
@@ -288,7 +294,17 @@ export function RecipeForm({ initial, form }: { initial?: RecipeDetail; form: Re
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <section className={card}>
+      {/* Карточка продукта и фото: на компьютере фото справа (320), на телефоне — сверху во всю ширину. */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+      <RecipePhotoBlock
+        recipeId={initial?.id ?? null}
+        photo={initial?.photo}
+        name={name}
+        canEdit={initial ? !!initial.can.photo : true}
+        pending={initial ? undefined : { file: photoFile, onChange: setPhotoFile }}
+        className={`${card} lg:col-start-2 lg:row-start-1`}
+      />
+      <section className={`${card} min-w-0 lg:col-start-1 lg:row-start-1`}>
         <h2 className="mb-3 text-base font-semibold text-ink">{t("Карточка продукта")}</h2>
         <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
           <label className="block">
@@ -399,6 +415,7 @@ export function RecipeForm({ initial, form }: { initial?: RecipeDetail; form: Re
           </p>
         </div>
       </section>
+      </div>
 
       <section className={card} aria-labelledby="rf-chain">
         <div className="mb-3 flex flex-wrap items-center gap-2">

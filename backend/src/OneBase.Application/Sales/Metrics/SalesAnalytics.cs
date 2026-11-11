@@ -127,10 +127,20 @@ public sealed partial class SalesAnalytics
 
     public AgentView CachedAgent(long id) => View($"agent:{id}", () => Agent(id));
 
-    public PlansView CachedPlans() => View("plans", Plans);
+    /// <summary>«Планы» — по видимым людям (охват пользователя; null — вся организация).</summary>
+    public PlansView CachedPlans(SalesVisibility? visible = null)
+    {
+        var v = visible ?? SalesVisibility.All;
+        return View(v.IsAll ? "plans" : $"plans:{v.Key}", () => Plans(v));
+    }
 
-    public ProblemsView CachedProblems(string? direction, FlagKind? criterion, bool vacancies) =>
-        View($"problems:{direction}:{criterion}:{vacancies}", () => Problems(direction, criterion, vacancies));
+    /// <summary>«Проблемные агенты» — по видимым людям (охват пользователя; null — вся организация).</summary>
+    public ProblemsView CachedProblems(string? direction, FlagKind? criterion, bool vacancies, SalesVisibility? visible = null)
+    {
+        var v = visible ?? SalesVisibility.All;
+        return View(v.IsAll ? $"problems:{direction}:{criterion}:{vacancies}" : $"problems:{direction}:{criterion}:{vacancies}:{v.Key}",
+            () => Problems(direction, criterion, vacancies, v));
+    }
 
     public bool HasRegion(Guid id) => _regions.ContainsKey(id);
 
@@ -320,9 +330,10 @@ public sealed partial class SalesAnalytics
     /// «Проблемные агенты»: ТП с замечаниями, по убыванию тяжести (SalesMath.ProblemScore: 10 за критичное, 4 за риск, плюс (1 − страйк) × 3
     /// у оцениваемых), при равной тяжести — с меньшей выручкой выше; вакансии (без оценки) — после. Номер — место в этом списке.
     /// </summary>
-    public ProblemsView Problems(string? directionId, FlagKind? criterion, bool includeVacancies)
+    public ProblemsView Problems(string? directionId, FlagKind? criterion, bool includeVacancies, SalesVisibility? visible = null)
     {
-        var reps = _roster.Where(IsSalesRep).ToList();
+        var v = visible ?? SalesVisibility.All;
+        var reps = _roster.Where(IsSalesRep).Where(a => v.Sees(a, _agentRegion.GetValueOrDefault(a, NoRegionId))).ToList();
 
         var list = reps
             .Where(a => directionId is null || DirectionIdOf(a) == directionId)
@@ -360,8 +371,10 @@ public sealed partial class SalesAnalytics
             reps.Count(IsVacancy),
             list,
             list.Count(p => !p.IsVacancy && p.Flags.Any(f => f.Severity != FlagSeverity.Info)),
-            DirectionGroups().Where(g => g.Id != NoDirectionId && g.Regions.Count > 0).Select(g => new UnitRef(g.Id, g.Name)).ToList(),
-            new ProblemsFact(fact, unassigned, SalesMath.Ratio(unassigned, fact), fact - unassigned));
+            DirectionGroups().Where(g => g.Id != NoDirectionId && g.Regions.Count > 0 && (v.IsAll || g.Regions.Any(v.Region)))
+                .Select(g => new UnitRef(g.Id, g.Name)).ToList(),
+            // Факт республики (сколько не привязано к ТП) — только всей организации: в охвате РМ/СВР/ТП страны нет.
+            v.IsAll ? new ProblemsFact(fact, unassigned, SalesMath.Ratio(unassigned, fact), fact - unassigned) : null);
     }
 
     // ================= Блоки =================
@@ -532,8 +545,9 @@ public sealed partial class SalesAnalytics
     }
 
     /// <summary>Вкладка «Планы»: все планы Linko за месяц. Факт здесь — по расчёту Linko.</summary>
-    public PlansView Plans()
+    public PlansView Plans(SalesVisibility? visible = null)
     {
+        var v = visible ?? SalesVisibility.All;
         static bool Weight(string t) => t == "product_sales_weight";
         static bool Money(string t) => t == "sales_sum";
         static bool Akb(string t) => t == "active_client_count";
@@ -543,7 +557,10 @@ public sealed partial class SalesAnalytics
             return list.Count == 0 ? null : list.Sum();
         }
 
-        var people = _d.Indicators.GroupBy(i => i.AgentId).Select(g =>
+        // Охват: человек виден по своему региону месяца (СВР с планом команды — по региону, как в «KPI»).
+        var people = _d.Indicators.GroupBy(i => i.AgentId)
+            .Where(g => v.IsAll || v.Sees(g.Key, _d.TeamPlanStaff.Contains(g.Key) ? SupervisorRegion(g.Key, g).Region : _agentRegion.GetValueOrDefault(g.Key, NoRegionId)))
+            .Select(g =>
         {
             var agent = g.Key;
             var list = g.OrderBy(i => Weight(i.PlanType) ? 0 : Money(i.PlanType) ? 1 : 2).ThenByDescending(i => i.Plan).ToList();
@@ -599,7 +616,7 @@ public sealed partial class SalesAnalytics
             SumOrNull(agents.Where(p => p.RevenuePlan != null).Select(p => p.RevenuePlan!.Value)),
             agents.Sum(p => p.RevenueFact),
             agents.Count(p => p.WeightPlan != null || p.RevenuePlan != null),
-            _d.Indicators.Count,
+            v.IsAll ? _d.Indicators.Count : people.Sum(p => p.Indicators.Count),
             regions,
             agents,
             teamPlans,

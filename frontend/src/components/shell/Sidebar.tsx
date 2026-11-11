@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowRight,
+  BrainCircuit,
   Boxes,
   Building2,
   CalendarDays,
@@ -50,6 +51,7 @@ export const navGroups: NavGroup[] = [
   {
     title: "Интеллект",
     items: [
+      { href: "/analytik", label: "Аналитик", icon: BrainCircuit, short: "Аналитик", badge: "new", badgeTone: "new" },
       { href: "/consultant", label: "AI-консультант", icon: Sparkles, also: ["/ai"], short: "AI", badge: "new", badgeTone: "new" },
       { href: "/data-manager", label: "AI Data Manager", icon: Database, short: "Данные" },
     ],
@@ -140,6 +142,7 @@ export function Sidebar({ canOpenSettings, permissions }: { canOpenSettings: boo
   const pathname = usePathname();
   const t = useT();
   const allowed = (item: NavItem) => permissions === null || canOpen(item.href, permissions);
+  const consultant = permissions === null || canOpen("/consultant", permissions);
 
   return (
     <aside className="hidden h-full w-[248px] shrink-0 flex-col gap-7 overflow-y-auto border-r border-line bg-sidebar/80 px-4 py-6 lg:flex">
@@ -165,18 +168,20 @@ export function Sidebar({ canOpenSettings, permissions }: { canOpenSettings: boo
       </div>
 
       <div className="mt-auto flex flex-col gap-5">
-        {/* Промо еженедельного AI-отчёта: ведёт в обзор находок консультанта. */}
-        <Link
-          href="/ai"
-          className="flex flex-col gap-2.5 rounded-xl border border-accent/20 bg-gradient-to-b from-ai-promo/40 to-transparent p-4 transition-colors duration-150 hover:border-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <Sparkles className="size-[18px] text-accent-strong" strokeWidth={1.75} />
-          <span className="text-[13px] font-semibold leading-snug text-sidebar-ink">{t("Еженедельный AI-отчёт готов")}</span>
-          <span className="text-xs leading-[1.45] text-sidebar-text">{t("3 риска и 5 рекомендаций по отделам за неделю.")}</span>
-          <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent-strong">
-            {t("Открыть отчёт")} <ArrowRight className="size-3.5" />
-          </span>
-        </Link>
+        {/* Промо еженедельного AI-отчёта: ведёт в обзор находок консультанта — только тем, кому консультант открыт. Без выдуманных чисел. */}
+        {consultant && (
+          <Link
+            href="/ai"
+            className="flex flex-col gap-2.5 rounded-xl border border-accent/20 bg-gradient-to-b from-ai-promo/40 to-transparent p-4 transition-colors duration-150 hover:border-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <Sparkles className="size-[18px] text-accent-strong" strokeWidth={1.75} />
+            <span className="text-[13px] font-semibold leading-snug text-sidebar-ink">{t("Еженедельный AI-отчёт")}</span>
+            <span className="text-xs leading-[1.45] text-sidebar-text">{t("Риски и рекомендации консультанта по отделам за неделю.")}</span>
+            <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent-strong">
+              {t("Открыть отчёт")} <ArrowRight className="size-3.5" />
+            </span>
+          </Link>
+        )}
 
         <nav className="space-y-0.5" aria-label={t("Настройки")}>
           {canOpenSettings && <NavLink item={settings} active={isActive(pathname, settings)} />}

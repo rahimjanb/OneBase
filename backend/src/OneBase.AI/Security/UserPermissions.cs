@@ -15,7 +15,7 @@ public interface IUserPermissions
     Task<IReadOnlySet<string>> GetAsync(Guid userId, CancellationToken ct = default);
 }
 
-internal sealed class UserPermissions(IAppDbContext db) : IUserPermissions
+internal sealed class UserPermissions(IAppDbContext db, OneBase.Application.Sales.Access.SalesAccess sales) : IUserPermissions
 {
     private readonly Dictionary<Guid, IReadOnlySet<string>> _cache = [];
 
@@ -27,7 +27,28 @@ internal sealed class UserPermissions(IAppDbContext db) : IUserPermissions
         }
 
         IReadOnlySet<string> set = await db.EffectivePermissionsAsync(userId, ct) ?? new HashSet<string>(StringComparer.Ordinal);
+        set = await LimitSalesAsync(userId, set, ct);
         _cache[userId] = set;
         return set;
+    }
+
+    /// <summary>
+    /// Охват продаж РМ / СВР / ТП (Sales.Access): инструменты AI, оповещения и сводки считают по всей стране и охват не применяют — от имени
+    /// такого пользователя AI данных продаж и финансов не получает. Свои цифры он видит на страницах раздела «Продажи», где охват проверяет
+    /// сервер. Ключ кэша ответов консультанта строится по этим же правам — смена охвата не отдаст прежний ответ.
+    /// </summary>
+    private async Task<IReadOnlySet<string>> LimitSalesAsync(Guid userId, IReadOnlySet<string> set, CancellationToken ct)
+    {
+        if (!set.Contains(Permissions.SalesRead) && !set.Contains(Permissions.FinanceRead))
+        {
+            return set;
+        }
+
+        if ((await sales.ScopeAsync(userId, ct)).IsOrganization)
+        {
+            return set;
+        }
+
+        return set.Where(p => p is not (Permissions.SalesRead or Permissions.FinanceRead or Permissions.SalesExport)).ToHashSet(StringComparer.Ordinal);
     }
 }

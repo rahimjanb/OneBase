@@ -9,6 +9,8 @@ import { SalesFrame } from "@/components/sales/SalesFrame";
 import { NotBoughtTable, NotInDirectoryTable, SameDaysTable, TeamTable } from "@/components/sales/tables";
 import { getT } from "@/i18n/server";
 import { apiGetOrNull } from "@/lib/server-api";
+import { visibleBack, visibleCrumbs } from "@/lib/sales/access";
+import { mySalesScope } from "@/lib/sales/scope-server";
 import { monthGenitive, monthName } from "@/lib/sales/format";
 import { apiQuery, param, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
 import type { RegionView } from "@/lib/sales/types";
@@ -21,6 +23,7 @@ export default async function RegionPage({
   searchParams: Promise<SalesSearchParams>;
 }) {
   const t = await getT();
+  const scope = await mySalesScope(); // крошки и «Назад» — без страниц, закрытых охвату
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const path = `/sales/regions/${id}`;
   const data = await apiGetOrNull<RegionView>(`/api/sales/regions/${id}${apiQuery(sp, ["from", "to", "metric", "category"])}`, path);
@@ -46,8 +49,8 @@ export default async function RegionPage({
     <SalesFrame
       title={data.name}
       subtitle={people || (data.isChannel ? undefined : t("СВР и дилер не указаны — их можно задать в настройках продаж"))}
-      crumbs={[republic, ...(parent ? [parent] : []), { label: data.name }]}
-      back={(parent ?? republic).href}
+      crumbs={visibleCrumbs([republic, ...(parent ? [parent] : []), { label: data.name }], scope)}
+      back={visibleBack((parent ?? republic).href, scope)}
       sp={sp}
       period={period}
     >

@@ -52,6 +52,14 @@ public static class SystemRoles
     /// </summary>
     public const string AnalystRole = "Аналитик";
 
+    /// <summary>
+    /// Раздел «Продажи» OneBase по своим регионам: РМ и супервайзер продаж. Регионы выбираются в окне пользователя (обязательно) — охват
+    /// продаж (Sales.Access): в разделе видны только данные этих регионов. С Sales Base (sales.1base.uz) не связаны.
+    /// </summary>
+    public const string SalesRm = "РМ";
+
+    public const string SalesSupervisor = "Супервайзер продаж";
+
     /// <summary>Роли Sales Base (sales.1base.uz).</summary>
     public const string FieldRm = "РМ (Sales Base)";
 
@@ -72,8 +80,8 @@ public static class SystemRoles
         new(Admin, "Полный доступ: все данные, пользователи и роли, интеграции и настройки AI.", null, Permissions.All),
         new(Director, "Все данные отделов, консультант, журнал аудита, пользователи и роли. Интеграции и настройки AI — у администратора.", null,
         [
-            Permissions.UsersManage, Permissions.SalesRead, Permissions.FinanceRead, Permissions.HrRead, Permissions.FilesRead, Permissions.FilesWrite,
-            Permissions.FilesReadAll,
+            Permissions.UsersManage, Permissions.SalesRead, Permissions.SalesExport, Permissions.FinanceRead, Permissions.HrRead, Permissions.FilesRead,
+            Permissions.FilesWrite, Permissions.FilesReadAll,
             Permissions.AgentsRun, Permissions.ApprovalsDecide, Permissions.AuditRead, Permissions.FieldPlan, Permissions.WorkTasks,
             Permissions.ProcurementRequest, Permissions.ProcurementRead, Permissions.ProcurementSettings, Permissions.HrRecruitmentRead,
         ]),
@@ -82,15 +90,15 @@ public static class SystemRoles
             [Permissions.FilesRead, Permissions.FilesWrite, Permissions.DataManage]),
         new(EmployeeRole, "Рядовой сотрудник: «Мой день», свои задачи, календарь, файлы своего отдела, консультант. Отдел — в карточке пользователя.", null,
             Employee),
-        new("Продажи", "Сотрудник отдела продаж: раздел «Продажи», консультант, файлы.", "sales", [Permissions.SalesRead, .. Employee]),
-        new("Финансы", "Сотрудник финансового отдела: оплаты и продажи, консультант, файлы.", "finance", [Permissions.FinanceRead, Permissions.SalesRead, .. Employee]),
+        new("Продажи", "Сотрудник отдела продаж: раздел «Продажи», консультант, файлы.", "sales", [Permissions.SalesRead, Permissions.SalesExport, .. Employee]),
+        new("Финансы", "Сотрудник финансового отдела: оплаты и продажи, консультант, файлы.", "finance", [Permissions.FinanceRead, Permissions.SalesRead, Permissions.SalesExport, .. Employee]),
         new("HR", "Сотрудник HR: кадровые данные, подбор персонала (заявки, вакансии, кандидаты), консультант, файлы.", "hr",
             [Permissions.HrRead, Permissions.HrRecruitmentRead, Permissions.HrRecruitmentManage, .. Employee]),
         new(ProductionRole, "Сотрудник производства: задания на выпуск (создать, выпустить, закрыть), рецептуры и расход сырья — просмотр; остатки и продажи товаров (раздел «Продажи»), консультант, файлы.", "production",
-            [Permissions.SalesRead, Permissions.ProductionRead, Permissions.ProductionManage, .. Employee]),
+            [Permissions.SalesRead, Permissions.SalesExport, Permissions.ProductionRead, Permissions.ProductionManage, .. Employee]),
         new("Снабжение", "Сотрудник снабжения: все заявки на закупку и их обработка, остатки и продажи товаров (раздел «Продажи»), консультант, файлы.", "supply",
-            [Permissions.SalesRead, Permissions.ProcurementRead, Permissions.ProcurementManage, .. Employee]),
-        new("Маркетинг", "Сотрудник маркетинга: продажи, ассортимент и клиенты (раздел «Продажи»), консультант, файлы.", "marketing", [Permissions.SalesRead, .. Employee]),
+            [Permissions.SalesRead, Permissions.SalesExport, Permissions.ProcurementRead, Permissions.ProcurementManage, .. Employee]),
+        new("Маркетинг", "Сотрудник маркетинга: продажи, ассортимент и клиенты (раздел «Продажи»), консультант, файлы.", "marketing", [Permissions.SalesRead, Permissions.SalesExport, .. Employee]),
         new(WarehouseRole, "Склад снабжения: каталог, остатки, приход, выдача отделам и по заявкам, списание, инвентаризация; консультант, файлы.", null,
             [Permissions.ProcurementWarehouse, .. Employee]),
         new(LabRole, "Контроль качества сырья: проверка документов и показателей партий, пробы, спецификации материалов; склад и партии — просмотр; консультант, файлы.", null,
@@ -101,8 +109,12 @@ public static class SystemRoles
             [Permissions.ProductionRecipes, Permissions.ProductionRead, .. Employee]),
         new(OperatorRole, "Ввод сменных отчётов производства: фактические замесы, выпечка, брак по этапам, упаковка, закрытие смены; рецептуры и задания — просмотр; консультант, файлы.", null,
             [Permissions.ProductionOperate, Permissions.ProductionRead, .. Employee]),
-        new(FieldRm, "Sales Base: вся структура полевых продаж — команды, точки, маршруты, задачи, KPI, решения по рекомендациям AI; аналитика продаж и консультант.", null,
-            [Permissions.FieldUse, Permissions.FieldManage, Permissions.SalesRead, Permissions.AgentsRun, Permissions.WorkTasks]),
+        new(SalesRm, "Региональный менеджер: раздел «Продажи» по своим регионам (выбираются в окне пользователя) — СВР, ТП, магазины, продажи, планы и KPI; консультант, файлы.",
+            "sales", [Permissions.SalesRead, .. Employee]),
+        new(SalesSupervisor, "Супервайзер продаж: раздел «Продажи» по своим регионам (выбираются в окне пользователя) — ТП региона, магазины, продажи, планы и KPI; консультант, файлы.",
+            "sales", [Permissions.SalesRead, .. Employee]),
+        new(FieldRm, "Sales Base: вся структура полевых продаж — команды, точки, маршруты, задачи, KPI, решения по рекомендациям AI; консультант.", null,
+            [Permissions.FieldUse, Permissions.FieldManage, Permissions.AgentsRun, Permissions.WorkTasks]),
         new(FieldSupervisor, "Sales Base: своя команда — агенты, точки, маршруты, визиты, задачи и KPI команды.", null, [Permissions.FieldUse]),
         new(FieldAgent, "Sales Base с телефона: свой маршрут, точки, визиты, задачи, продажи и KPI.", null, [Permissions.FieldUse]),
     ];
@@ -114,6 +126,13 @@ public static class SystemRoles
     public static readonly IReadOnlyList<(string Role, string Permission)> Upgrades =
     [
         (Director, Permissions.FieldPlan),
+        // Выгрузки Excel «Продаж» стали отдельным правом — у кого был раздел «Продажи», у того выгрузки остаются.
+        (Director, Permissions.SalesExport),
+        ("Продажи", Permissions.SalesExport),
+        ("Финансы", Permissions.SalesExport),
+        (ProductionRole, Permissions.SalesExport),
+        ("Снабжение", Permissions.SalesExport),
+        ("Маркетинг", Permissions.SalesExport),
         (Director, Permissions.FilesReadAll),
         // «Задачи» стали отдельным правом (раньше их видели все с общими разделами) — у кого раздел был, у того и остаётся.
         (Director, Permissions.WorkTasks),
@@ -140,6 +159,12 @@ public static class SystemRoles
         ("HR", Permissions.HrRecruitmentRead),
         ("HR", Permissions.HrRecruitmentManage),
         (Director, Permissions.HrRecruitmentRead),
+        // «Аналитик» (OneBase Intelligence): директору — раздел и управление каталогом; отделам, аналитику и руководителям продаж — раздел.
+        // Данные в нём — по остальным правам роли и области продаж пользователя.
+        (Director, Permissions.AnalytikUse),
+        (Director, Permissions.AnalytikManage),
+        (AnalystRole, Permissions.AnalytikUse),
+        .. new[] { "Продажи", "Финансы", "HR", "Производство", "Снабжение", "Маркетинг", SalesRm, SalesSupervisor }.Select(r => (r, Permissions.AnalytikUse)),
     ];
 
     /// <summary>Права, с которыми виден раздел «Настройки»; без них раздел скрыт.</summary>
@@ -171,6 +196,7 @@ public static class SystemRoles
         [Permissions.LogsRead] = "Журнал ошибок",
         [Permissions.SalesRead] = "Продажи",
         [Permissions.SalesManage] = "Продажи: настройки и синхронизация",
+        [Permissions.SalesExport] = "Продажи: выгрузки Excel",
         [Permissions.FinanceRead] = "Финансы",
         [Permissions.HrRead] = "HR",
         [Permissions.FilesRead] = "Файлы: просмотр",
@@ -196,5 +222,7 @@ public static class SystemRoles
         [Permissions.HrRecruitmentRead] = "Подбор персонала: просмотр",
         [Permissions.HrRecruitmentManage] = "Подбор персонала: управление",
         [Permissions.ProductionOperate] = "Производство: ввод смены",
+        [Permissions.AnalytikUse] = "Аналитик: панель, AI-аналитик, прогнозы и отчёты",
+        [Permissions.AnalytikManage] = "Аналитик: каталог базы и журнал запросов",
     };
 }

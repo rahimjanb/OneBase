@@ -37,7 +37,7 @@ import { Sheet } from "@/components/field/Sheet";
 import { TaskForm } from "@/components/tasks/TaskForm";
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
-import { streamChat, type AiStatus, type ChatMessage, type ConsultantProgress, type ConversationSummary, type ConversationView, type DraftEvent } from "@/lib/consultant";
+import { consultantMode, streamChat, type AiStatus, type ChatMessage, type ChatMode, type ConsultantProgress, type ConversationSummary, type ConversationView, type DraftEvent } from "@/lib/consultant";
 import {
   answerText,
   chatTitle,
@@ -123,6 +123,8 @@ type Props = {
   /** Контекст из адреса: ?period=2026-10&dept=sales. */
   period?: string | null;
   department?: string | null;
+  /** Раздел чата: консультант (по умолчанию) или «Аналитик» — свои адрес, API, название и быстрые вопросы. */
+  mode?: ChatMode;
 };
 
 function readJson<T>(key: string, fallback: T): T {
@@ -165,7 +167,7 @@ function printElement(el: HTMLElement | null) {
  * AI-консультант (ТЗ ai-consultant): слева — чаты (на телефоне — шторка «История»), справа — шапка чата, лента и поле вопроса снизу.
  * Ответ — карточка отчёта из блоков с сервера (answer), простой ответ — Markdown. Пока ответ готовится — скелетон, строка статуса и «Стоп».
  */
-export function Consultant({ status, conversations: initialList, conversation, canConfigure, initialQuestion, autoSend = false, permissions, period, department }: Props) {
+export function Consultant({ status, conversations: initialList, conversation, canConfigure, initialQuestion, autoSend = false, permissions, period, department, mode = consultantMode }: Props) {
   const t = useT();
   const router = useRouter();
   const [list, setList] = useState(initialList);
@@ -200,7 +202,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
   const textarea = useRef<HTMLTextAreaElement>(null);
   const headerMenuRef = useRef<HTMLDivElement>(null);
 
-  const questions = useMemo(() => quickQuestions(permissions), [permissions]);
+  const questions = useMemo(() => mode.questions ?? quickQuestions(permissions), [mode.questions, permissions]);
   const sources = useMemo(() => sourceLabels(permissions), [permissions]);
   const canTasks = permissions.includes("work.tasks");
 
@@ -423,7 +425,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
               if (!activeId) {
                 setActiveId(e.data.conversationId);
                 setTitle(e.data.title);
-                window.history.replaceState(null, "", `/consultant/${e.data.conversationId}`);
+                window.history.replaceState(null, "", `${mode.base}/${e.data.conversationId}`);
               }
               setList((prev) => [
                 { id: e.data.conversationId, title: e.data.title, createdAt: e.data.userMessage.createdAt, lastMessageAt: e.data.userMessage.createdAt, source: "web" },
@@ -456,7 +458,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
           }
         },
         t,
-        { context: contextPayload(context), signal: controller.signal },
+        { context: contextPayload(context), signal: controller.signal, url: `/bff/api/${mode.api}/chat` },
       );
     } catch (e) {
       if ((e as Error).name === "AbortError") {
@@ -502,7 +504,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
   // ---------- Чаты: переименовать, закрепить, удалить ----------
   const rename = async (id: string, next: string) => {
     try {
-      await bff(`ai/conversations/${id}`, { method: "PATCH", body: JSON.stringify({ title: next }) });
+      await bff(`${mode.api}/conversations/${id}`, { method: "PATCH", body: JSON.stringify({ title: next }) });
       setList((prev) => prev.map((c) => (c.id === id ? { ...c, title: next } : c)));
       if (id === activeId) setTitle(next);
     } catch (e) {
@@ -513,9 +515,9 @@ export function Consultant({ status, conversations: initialList, conversation, c
   const remove = async (id: string) => {
     if (!confirm(t("Убрать чат из истории?"))) return;
     try {
-      await bff(`ai/conversations/${id}`, { method: "DELETE" });
+      await bff(`${mode.api}/conversations/${id}`, { method: "DELETE" });
       setList((prev) => prev.filter((c) => c.id !== id));
-      if (id === activeId) router.push("/consultant");
+      if (id === activeId) router.push(mode.base);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -574,7 +576,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
 
   const rate = async (id: string, rating: "up" | "down", comment?: string) => {
     try {
-      await bff(`ai/messages/${id}/feedback`, { method: "POST", body: JSON.stringify({ rating, comment: comment ?? null }) });
+      await bff(`${mode.api}/messages/${id}/feedback`, { method: "POST", body: JSON.stringify({ rating, comment: comment ?? null }) });
       setFeedback((prev) => {
         const next = { ...prev, [id]: rating };
         writeJson(feedbackKey, next);
@@ -624,11 +626,16 @@ export function Consultant({ status, conversations: initialList, conversation, c
     }
   };
 
-  const titleText = activeId ? chatTitle(title) : t("AI-консультант");
+  const titleText = activeId ? chatTitle(title) : t(mode.title);
+  const offline = mode.offline ?? consultantMode.offline!;
+  const home = mode.home ?? consultantMode.home!;
 
   // ---------- Разметка ----------
   const sidebar = (overlay: boolean) => (
     <ChatSidebar
+      base={mode.base}
+      api={mode.api}
+      telegram={mode.telegram ?? false}
       list={list}
       activeId={activeId}
       pinned={pinned}
@@ -674,7 +681,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
         {/* Шапка чата: на компьютере — 68px с кнопками; на телефоне — вместо глобальной шапки, 56px и круглые кнопки. */}
         <header className="flex shrink-0 items-center gap-3 border-b border-line px-7 lg:h-[68px] max-lg:gap-2.5 max-lg:px-3 max-lg:pb-2 max-lg:pt-[calc(env(safe-area-inset-top)+8px)]">
           {activeId ? (
-            <Link href="/consultant" aria-label={t("Назад к новому чату")} className="grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-2 lg:hidden">
+            <Link href={mode.base} aria-label={t("Назад к новому чату")} className="grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-2 lg:hidden">
               <ChevronLeft className="size-5" aria-hidden />
             </Link>
           ) : (
@@ -730,9 +737,9 @@ export function Consultant({ status, conversations: initialList, conversation, c
 
           <div className="flex shrink-0 items-center gap-2">
             {voiceButton}
-            <Link href="/ai" className="hidden items-center gap-2 rounded-[10px] border border-line bg-surface px-[13px] py-2 text-[13px] font-medium text-ink-2 hover:text-ink lg:inline-flex">
+            <Link href={home.href} className="hidden items-center gap-2 rounded-[10px] border border-line bg-surface px-[13px] py-2 text-[13px] font-medium text-ink-2 hover:text-ink lg:inline-flex">
               <LayoutDashboard className="size-4" aria-hidden />
-              AI Dashboard
+              {t(home.label)}
             </Link>
             <button
               type="button"
@@ -788,7 +795,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
                 </div>
               )}
             </div>
-            <Link href="/consultant" aria-label={t("Новый чат")} className="grid size-10 place-items-center rounded-full border border-line bg-surface text-ink-2 lg:hidden">
+            <Link href={mode.base} aria-label={t("Новый чат")} className="grid size-10 place-items-center rounded-full border border-line bg-surface text-ink-2 lg:hidden">
               <SquarePen className="size-[18px]" aria-hidden />
             </Link>
           </div>
@@ -807,7 +814,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
               <div className="flex items-start gap-3 rounded-xl bg-warn-soft px-4 py-3 text-sm" data-ai-no-print>
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
                 <div>
-                  <div className="font-semibold text-ink">{t("Консультант пока не работает")}</div>
+                  <div className="font-semibold text-ink">{t(offline.title)}</div>
                   <div className="mt-0.5 text-ink-2">{status.message && t(status.message)}</div>
                   {canConfigure && (
                     <Link href="/settings/ai" className="mt-1 inline-block font-medium text-link hover:underline">
@@ -826,6 +833,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
               ) : (
                 <AssistantMessage
                   key={m.id}
+                  assistant={mode.title}
                   message={m}
                   last={i === messages.length - 1 && !streaming}
                   speech={caps.speak ? (speaking?.id === m.id ? speaking.state : "idle") : null}
@@ -913,6 +921,7 @@ export function Consultant({ status, conversations: initialList, conversation, c
                 onStop={stop}
                 busy={streaming}
                 disabled={!status.ready}
+                disabledText={offline.input}
                 inChat={!empty}
                 context={context}
                 defaultPeriod={defaultPeriod}
@@ -1057,6 +1066,7 @@ function ErrorCard({ text, onRetry, id }: { text: string | null; onRetry: (() =>
 }
 
 function AssistantMessage({
+  assistant,
   message,
   last,
   speech,
@@ -1073,6 +1083,8 @@ function AssistantMessage({
   onCreateAll,
   busy,
 }: {
+  /** Подпись автора ответа: «AI-консультант» или «Аналитик». */
+  assistant: string;
   message: ChatMessage;
   last: boolean;
   speech: SpeechState | null;
@@ -1133,7 +1145,7 @@ function AssistantMessage({
         )}
         <div className="flex items-center gap-2 lg:hidden">
           <Avatar small />
-          <span className="text-[13px] font-semibold text-ink">{t("AI-консультант")}</span>
+          <span className="text-[13px] font-semibold text-ink">{t(assistant)}</span>
           {report && meta && (meta.facts > 0 || meta.recommendations > 0) && (
             <span className="truncate text-[12px] text-subtle">
               {meta.facts > 0 && ` · ${t(plural(meta.facts, "{n} факт", "{n} факта", "{n} фактов"), { n: meta.facts })}`}

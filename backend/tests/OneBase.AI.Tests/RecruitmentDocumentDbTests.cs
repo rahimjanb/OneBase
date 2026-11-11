@@ -14,7 +14,7 @@ namespace OneBase.AI.Tests;
 
 /// <summary>
 /// Документы кандидата (сценарии 6–16, 28–30): оригинал сохраняется до любой обработки, ответ кандидату не ждёт разбора, фото и сканы — OCR
-/// моделью после согласия, DOC/DOCX/PDF — без модели, многостраничный PDF, повреждённый файл и сбой OCR — оригинал цел, HR и кандидату
+/// моделью сразу (согласия не ждут), DOC/DOCX/PDF — без модели, многостраничный PDF, повреждённый файл и сбой OCR — оригинал цел, HR и кандидату
 /// сообщено; все версии хранятся, тот же файл — один документ; дубль кандидата по контактам из резюме; задания переживают перезапуск.
 /// </summary>
 public class RecruitmentDocumentDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
@@ -52,7 +52,7 @@ public class RecruitmentDocumentDbTests(DataManagerDb fixture) : IClassFixture<D
         var vacancy = await _hr.OpenVacancyAsync(scope.ServiceProvider);
         var number = (await db.Vacancies.AsNoTracking().SingleAsync(v => v.Id == vacancy)).Number;
         var chat = _hr.NewChat();
-        await _hr.ConsentAsync(chat);
+        await _hr.HelloAsync(chat);
         fixture.Gateway.Script.Clear();
         fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Спасибо! Пришлите, пожалуйста, резюме.\"],\"vacancy\":\"V" + number + "\"}");
         await _hr.SayAsync(chat, $"Хочу на #V{number}");
@@ -137,10 +137,9 @@ public class RecruitmentDocumentDbTests(DataManagerDb fixture) : IClassFixture<D
         var vacancy = await _hr.OpenVacancyAsync(scope.ServiceProvider);
         var number = (await db.Vacancies.AsNoTracking().SingleAsync(v => v.Id == vacancy)).Number;
         var chat = _hr.NewChat();
+        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Rahmat! Tajribangiz haqida aytib bering.\"]}");
         await _hr.SayAsync(chat, $"Assalomu alaykum, #V{number} vakansiyasi bo'yicha yozyapman");
         await _hr.SendQueuedAsync();
-        fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"reply\",\"messages\":[\"Rahmat! Tajribangiz haqida aytib bering.\"]}");
-        await _hr.SayAsync(chat, "Roziman");
 
         // Пример из задания: резюме и вопрос в одном сообщении. Ответ — сразу, моделью, по данным OneBase (собеседование ещё не назначено) и на
         // латинице; про резюме модель знает, что оно ещё обрабатывается. Разбор резюме не начат — он в очереди.
@@ -169,7 +168,6 @@ public class RecruitmentDocumentDbTests(DataManagerDb fixture) : IClassFixture<D
         var chat = _hr.NewChat();
         await _hr.SayAsync(chat, "Здравствуйте");
         var candidateId = (await HrHarness.CandidateAsync(db, chat)).Id;
-        await scope.ServiceProvider.GetRequiredService<RecruitmentService>().RecordConsentByCandidateAsync(candidateId, "telegram", default);
 
         foreach (var (file, mime) in new[]
                  {
@@ -209,7 +207,7 @@ public class RecruitmentDocumentDbTests(DataManagerDb fixture) : IClassFixture<D
         var (scope, db) = await _hr.StartAsync();
         using var _ = scope;
         var chat = _hr.NewChat();
-        await _hr.ConsentAsync(chat);
+        await _hr.HelloAsync(chat);
         fixture.Gateway.Script.Clear();
 
         // 12. Повреждённый DOCX: оригинал сохранён, документ «ошибка», HR — исключение, кандидату — просьба прислать иначе.
@@ -284,7 +282,7 @@ public class RecruitmentDocumentDbTests(DataManagerDb fixture) : IClassFixture<D
     }
 
     [PostgresFact]
-    public async Task Ai_reads_documents_only_after_consent_and_jobs_survive_a_restart_within_queue_limits()
+    public async Task Ai_reads_documents_at_once_without_consent_and_jobs_survive_a_restart_within_queue_limits()
     {
         var (scope, db) = await _hr.StartAsync(recruiter: false);
         using var _ = scope;
@@ -293,20 +291,14 @@ public class RecruitmentDocumentDbTests(DataManagerDb fixture) : IClassFixture<D
         var chat = _hr.NewChat();
         var photo = ResumeDocumentTests.Fixture("resume-photo.jpg");
 
-        // Без согласия: оригинал сохранён, в AI не отправлен.
+        // Согласия не ждём: фото резюме сразу распознаётся моделью, оригинал сохранён.
+        fixture.Gateway.Script.Enqueue(_ => Ocr(ResumeText));
         await _hr.SayAsync(chat, "Резюме", "photo_1.jpg", photo, "image/jpeg", photo: true);
-        var calls = fixture.Gateway.Calls.Count;
         await _hr.DrainAsync();
         var document = await db.CandidateResumes.AsNoTracking().SingleAsync();
-        Assert.Equal((DocumentStatus.Processing, DocumentStepStatus.WaitingConsent), (document.Status, document.OcrStatus));
+        Assert.Equal((DocumentStatus.Done, DocumentStepStatus.Done, true), (document.Status, document.OcrStatus, document.TextByAi));
         Assert.True(_hr.Stored(document.ObjectKey));
-        Assert.Equal(calls, fixture.Gateway.Calls.Count);
-
-        // Согласие — документ распознаётся.
-        fixture.Gateway.Script.Enqueue(_ => Ocr(ResumeText));
-        await scope.ServiceProvider.GetRequiredService<RecruitmentService>().RecordConsentByCandidateAsync(document.CandidateId, "telegram", default);
-        await _hr.DrainAsync();
-        Assert.Equal(DocumentStatus.Done, (await db.CandidateResumes.AsNoTracking().SingleAsync()).Status);
+        Assert.False(await db.CandidateConsents.AnyAsync());
 
         // 30. Сервер упал посреди задания: задание «выполняется», аренда истекла — его берут снова; документ не потерян.
         var queue = scope.ServiceProvider.GetRequiredService<RecruitmentJobQueue>();

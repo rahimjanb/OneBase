@@ -82,9 +82,6 @@ public class TelegramOutgoingMessage : Entity
 
     public Guid? RelatedId { get; set; }
 
-    /// <summary>Перед отправкой показать «печатает…» столько секунд (ИИ-агент пишет как человек); 0 — сразу.</summary>
-    public int TypingSeconds { get; set; }
-
     /// <summary>ai, user, system.</summary>
     public required string Author { get; set; }
 

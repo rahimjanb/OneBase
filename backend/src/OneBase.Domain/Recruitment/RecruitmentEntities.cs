@@ -205,12 +205,11 @@ public enum DocumentStatus
     Rejected,
 }
 
-/// <summary>Шаг обработки: не нужен, ждёт, ждёт согласия кандидата, готово, ошибка, пропущен (выключено в настройках или AI не настроен).</summary>
+/// <summary>Шаг обработки: не нужен, ждёт, готово, ошибка, пропущен (выключено в настройках или AI не настроен).</summary>
 public enum DocumentStepStatus
 {
     NotNeeded,
     Pending,
-    WaitingConsent,
     Done,
     Failed,
     Skipped,

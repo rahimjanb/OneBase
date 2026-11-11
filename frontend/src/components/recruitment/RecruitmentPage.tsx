@@ -1,10 +1,7 @@
 import { redirect } from "next/navigation";
-import { HrHeader } from "@/components/hr/HrPage";
-import { PageBody } from "@/components/shell/PageHeader";
-import { RecruitmentNav } from "@/components/recruitment/ui";
+import { RecruitmentShell } from "@/components/recruitment/RecruitmentShell";
 import type { RecruitmentContext } from "@/lib/recruitment";
 import { apiGet } from "@/lib/server-api";
-import { getT } from "@/i18n/server";
 
 /**
  * Доступ к подбору решает backend: нет доступа — «Нет доступа»; руководитель отдела без права «Подбор» видит только свои заявки на
@@ -16,15 +13,30 @@ export async function loadRecruitment(path: string, candidates = true): Promise<
   return ctx;
 }
 
-export async function RecruitmentFrame({ title, subtitle, ctx, children }: { title: string; subtitle?: string; ctx: RecruitmentContext; children: React.ReactNode }) {
-  const t = await getT();
+/**
+ * Рамка страниц подбора: шапка «Подбор» и кнопки разделов (RecruitmentShell). nav = false — без кнопок (заявки на сотрудника — своя
+ * вкладка HR); кнопки видит только тот, кому открыт подбор.
+ */
+export function RecruitmentFrame({
+  title,
+  subtitle,
+  ctx,
+  nav = true,
+  parent,
+  mobileAction,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  ctx: RecruitmentContext;
+  nav?: boolean;
+  parent?: { label: string; href: string };
+  mobileAction?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <>
-      <HrHeader title={title} subtitle={subtitle} crumb={[{ label: t("Подбор"), href: ctx.canRead ? "/hr/recruitment" : undefined }, { label: t(title) }]} />
-      <PageBody>
-        {ctx.canRead && <RecruitmentNav canManage={ctx.canManage} />}
-        {children}
-      </PageBody>
-    </>
+    <RecruitmentShell title={title} subtitle={subtitle} canManage={ctx.canManage} nav={nav && ctx.canRead} parent={parent} mobileAction={mobileAction}>
+      {children}
+    </RecruitmentShell>
   );
 }

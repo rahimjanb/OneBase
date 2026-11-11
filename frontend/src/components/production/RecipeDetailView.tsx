@@ -24,6 +24,7 @@ import {
 } from "@/lib/production";
 import { Fact, RecipeStatusPill, card, field, primary, secondary } from "./ProdKit";
 import { RecipeCalcResult } from "./RecipeCalcResult";
+import { RecipePhotoBlock } from "./RecipePhoto";
 import { RecipeChain } from "./RecipeChain";
 
 type Dialog = "submit" | "approve" | "return" | "archive" | null;
@@ -52,6 +53,9 @@ export function RecipeDetailView({ recipe, warehouses, base }: { recipe: RecipeD
   const active = warehouses.filter((w) => w.isActive);
   const own = recipe.status === "PendingApproval" && !can.approve && can.return;
   const staged = recipe.stages.length > 0;
+  // Фото одно на код: меняет тот, кто ведёт техкарты, в любом статусе версии; без фото и без права — блок не нужен.
+  const canPhoto = !!can.photo;
+  const showPhoto = canPhoto || !!recipe.photo;
   const perBase = (l: RecipeLine) => base?.lines.find((x) => x.key === l.id);
 
   const act = async (path: string, body?: object) => {
@@ -205,6 +209,8 @@ export function RecipeDetailView({ recipe, warehouses, base }: { recipe: RecipeD
       <PageBody>
         <div className="mx-auto max-w-6xl space-y-4">
           <div className="lg:hidden">{actions}</div>
+          {/* Фото продукта: на телефоне и планшете — сверху во всю ширину, на компьютере — справа над карточкой продукта. */}
+          {showPhoto && <RecipePhotoBlock recipeId={recipe.id} photo={recipe.photo} name={recipe.name} canEdit={canPhoto} className={`${card} lg:hidden`} />}
           {banner}
 
           {staged && (
@@ -382,6 +388,7 @@ export function RecipeDetailView({ recipe, warehouses, base }: { recipe: RecipeD
             </div>
 
             <div className="space-y-4">
+              {showPhoto && <RecipePhotoBlock recipeId={recipe.id} photo={recipe.photo} name={recipe.name} canEdit={canPhoto} className={`${card} max-lg:hidden`} />}
               <section className={card}>
                 <h2 className="mb-1 text-base font-semibold text-ink">{t("Карточка продукта")}</h2>
                 <dl className="divide-y divide-line">

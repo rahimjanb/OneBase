@@ -155,8 +155,8 @@ public sealed class DialogAgentService(
         return new AgentView(agent.Id, agent.Department, department, agent.Kind, agent.Name, agent.Enabled, agent.IsDefault, agent.Mode.ToString(), agent.DisplayName,
             agent.Intro, agent.Tone, agent.Language, agent.Length, agent.Emoji, agent.SplitMessages, agent.Instructions, agent.ScreeningQuestions, agent.AllowedTopics,
             agent.ForbiddenTopics, agent.ForbiddenPhrases, agent.HandoffPhrases, agent.MaxReplyChars, agent.MaxRepliesPerHour, agent.MaxRepliesPerDay,
-            agent.CanDiscussSalary, agent.CanScheduleInterviews, agent.HandoffReply, Time(agent.WorkFrom), Time(agent.WorkTo), agent.WorkDays, agent.OffHours,
-            agent.ReplyDelayMinSeconds, agent.ReplyDelayMaxSeconds, agent.Typing, agent.FollowUpHours, agent.ModelProvider, agent.Model, agent.UpdatedAt ?? agent.CreatedAt,
+            agent.CanDiscussSalary, agent.CanScheduleInterviews, agent.HandoffReply, Time(agent.WorkFrom), Time(agent.WorkTo), agent.WorkDays,
+            agent.FollowUpHours, agent.ModelProvider, agent.Model, agent.UpdatedAt ?? agent.CreatedAt,
             answers, models, vacancies, accounts, drafts, agent.AccountId, options, access.ManageAccounts);
     }
 
@@ -201,13 +201,10 @@ public sealed class DialogAgentService(
         Check(DialogAgentRules.Tones.Contains(input.Tone), "Неизвестный тон.");
         Check(DialogAgentRules.Languages.Contains(input.Language), "Неизвестный язык.");
         Check(DialogAgentRules.Lengths.Contains(input.Length), "Неизвестная длина ответа.");
-        Check(DialogAgentRules.OffHoursModes.Contains(input.OffHours), "Неизвестный режим вне рабочего времени.");
         Check(input.MaxReplyChars is >= DialogAgentRules.MinReplyChars and <= DialogAgentRules.MaxReplyCharsLimit,
             $"Длина ответа — от {DialogAgentRules.MinReplyChars} до {DialogAgentRules.MaxReplyCharsLimit} символов.");
         Check(input.MaxRepliesPerHour is >= 1 and <= 200 && input.MaxRepliesPerDay is >= 1 and <= 1000 && input.MaxRepliesPerDay >= input.MaxRepliesPerHour,
             "Лимит ответов: в час — 1–200, в сутки — 1–1000 и не меньше, чем в час.");
-        Check(input.ReplyDelayMinSeconds is >= 0 and <= DialogAgentRules.MaxDelaySeconds && input.ReplyDelayMaxSeconds is >= 0 and <= DialogAgentRules.MaxDelaySeconds
-              && input.ReplyDelayMaxSeconds >= input.ReplyDelayMinSeconds, $"Пауза перед ответом — 0–{DialogAgentRules.MaxDelaySeconds} секунд, «от» не больше «до».");
         Check(input.FollowUpHours is >= 0 and <= 168, "Напоминание — 0–168 часов.");
 
         TimeOnly? from = null, to = null;
@@ -258,10 +255,6 @@ public sealed class DialogAgentService(
         agent.WorkFrom = from;
         agent.WorkTo = to;
         agent.WorkDays = string.Join(',', days.Order());
-        agent.OffHours = input.OffHours;
-        agent.ReplyDelayMinSeconds = input.ReplyDelayMinSeconds;
-        agent.ReplyDelayMaxSeconds = input.ReplyDelayMaxSeconds;
-        agent.Typing = input.Typing;
         agent.FollowUpHours = input.FollowUpHours;
         agent.ModelProvider = provider;
         agent.Model = model;

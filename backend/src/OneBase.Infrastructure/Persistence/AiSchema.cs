@@ -87,6 +87,7 @@ internal static class AiSchema
         {
             e.ToTable("Conversations", Schema);
             e.Property(x => x.Title).HasMaxLength(200);
+            e.Property(x => x.Kind).HasMaxLength(16).HasDefaultValue(ConversationKinds.Consultant);
             e.HasIndex(x => new { x.UserId, x.LastMessageAt });
         });
 

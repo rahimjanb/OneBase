@@ -55,7 +55,7 @@ export default async function AiPage() {
                   {agent.role && <div className="text-sm text-ink-3">{t(agent.role)}</div>}
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-xs ${agent.available ? "bg-ok-soft text-ok" : "bg-muted text-ink-2"}`}>
-                  {!agent.enabled ? t("выключен") : agent.available ? t("доступен") : t("нет доступа")}
+                  {agent.available ? t("доступен") : t("выключен")}
                 </span>
               </div>
               {agent.description && <p className="mt-2 text-sm text-ink-2">{t(agent.description)}</p>}

@@ -24,7 +24,7 @@ import { loadHome } from "@/lib/dashboard-data";
 import { desktopDepartments, desktopKpis, homeDepartments, homeSeries, homeView, minutesSince } from "@/lib/dashboard-home";
 import { DEPARTMENTS } from "@/lib/dashboard-mobile";
 import { headerClock } from "@/lib/dashboardClock";
-import { canOpen, homeFor } from "@/lib/navigation";
+import { canOpen, departmentOpen, homeFor, screenPermissions } from "@/lib/navigation";
 import { apiSession, apiTry } from "@/lib/server-api";
 import type { DepartmentTasks, PageResult, WorkTask } from "@/lib/tasks";
 import type { Me } from "@/lib/users";
@@ -69,9 +69,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       );
     }
   }
+  // Что пользователю открыто: блоки без доступа на главной не показываются (без ответа API — показываем, разделы проверят сами).
+  const access = accessOf(me);
   // Запросы данных «Обзора» (apiTry не бросает ошибок: нет ответа — null).
-  const alerts = apiTry<AiAlertsView>("/api/ai/alerts");
-  const departments = apiTry<DepartmentTasks[]>("/api/work/departments");
+  const alerts = access.consultant ? apiTry<AiAlertsView>("/api/ai/alerts") : Promise.resolve(null);
+  const departments = access.tasks ? apiTry<DepartmentTasks[]>("/api/work/departments") : Promise.resolve(null);
   const home = loadHome();
   // «Ждут вас» над «Обзором» — одним запросом на обе раскладки.
   const attention = apiTry<HomeView>("/api/procurement/home");
@@ -84,7 +86,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <>
       <div className="max-md:hidden">
         <Suspense fallback={<DesktopOverviewSkeleton />}>
-          <DesktopOverview me={me} name={name} now={now} locale={locale} alerts={alerts} departments={departments} home={home} attention={attention} />
+          <DesktopOverview access={access} name={name} now={now} locale={locale} alerts={alerts} departments={departments} home={home} attention={attention} />
         </Suspense>
       </div>
       <MobileOverview
@@ -92,6 +94,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         now={now}
         locale={locale}
         apiOk={me !== null}
+        departments={access.departments}
+        consultant={access.consultant}
+        employees={access.leaders}
         alerts={alerts}
         home={home}
         attention={
@@ -104,8 +109,31 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   );
 }
 
+/**
+ * Доступ к блокам главной: отделы (фильтры) — доступные пользователю (lib/navigation departmentOpen), находки консультанта — с правом
+ * консультанта, задачи — с разделом «Задачи», лидеры месяца — с доступом к HR. me = null (API не ответил) — всё видно.
+ */
+type HomeAccess = {
+  departments: typeof DEPARTMENTS;
+  consultant: boolean;
+  tasks: boolean;
+  /** Доступ к HR: лидеры месяца и фильтр по сотрудникам. */
+  leaders: boolean;
+};
+
+function accessOf(me: Me | null): HomeAccess {
+  if (!me) return { departments: DEPARTMENTS, consultant: true, tasks: true, leaders: true };
+  const permissions = screenPermissions(me);
+  return {
+    departments: DEPARTMENTS.filter((d) => departmentOpen(d.code, permissions, me.departments)),
+    consultant: canOpen("/consultant", permissions),
+    tasks: canOpen("/tasks", permissions),
+    leaders: Boolean(me.hrAccess),
+  };
+}
+
 async function DesktopOverview({
-  me,
+  access,
   name,
   now,
   locale,
@@ -114,7 +142,7 @@ async function DesktopOverview({
   home,
   attention,
 }: {
-  me: Me | null;
+  access: HomeAccess;
   name: string;
   now: Date;
   locale: string;
@@ -129,8 +157,8 @@ async function DesktopOverview({
     home.fast,
     home.trends,
     apiTry<{ items: NotificationRow[] }>("/api/notifications?take=8"),
-    // Без доступа к HR сервер ответит 403 — блок покажет, кому виден рейтинг.
-    apiTry<HrLeaders>("/api/hr/leaders?take=7"),
+    // Рейтинг — только с доступом к HR (без него блока нет).
+    access.leaders ? apiTry<HrLeaders>("/api/hr/leaders?take=7") : null,
     getT(),
   ]);
   // Месяц рейтинга словом («октябрь»): в первые дни месяца сервер берёт прошлый месяц.
@@ -158,8 +186,10 @@ async function DesktopOverview({
       <Suspense fallback={null}>
         <HomeAttention data={attention} />
       </Suspense>
-      <FilterBar departments={DEPARTMENTS.map((d) => d.name)} updatedMinutesAgo={minutesSince(fast.hr?.syncedAt, now)} />
-      <AiFocusPanel insights={alerts ? insightsOf(alerts, t) : []} available={alerts !== null} departments={units.length} tasks={view.activeTasks ?? 0} t={t} />
+      <FilterBar departments={access.departments.map((d) => d.name)} employees={access.leaders} updatedMinutesAgo={minutesSince(fast.hr?.syncedAt, now)} />
+      {access.consultant && (
+        <AiFocusPanel insights={alerts ? insightsOf(alerts, t) : []} available={alerts !== null} departments={units.length} tasks={view.activeTasks ?? 0} t={t} />
+      )}
 
       {kpis.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -176,11 +206,22 @@ async function DesktopOverview({
 
       {rows.length > 0 && <DepartmentsTable rows={rows} t={t} />}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_280px_320px]">
-        <UpcomingTasks items={upcoming} total={tasks.filter((x) => x.task.status === "New" || x.task.status === "InProgress").length} available={departments !== null} />
-        <LeadersCard data={leaders} access={me?.hrAccess ?? false} month={leadersMonth} t={t} />
+      {/* Нижний ряд — только доступные блоки; колонки — по их числу. */}
+      <div className={`grid grid-cols-1 gap-4 ${bottomColumns(access)}`}>
+        {access.tasks && (
+          <UpcomingTasks items={upcoming} total={tasks.filter((x) => x.task.status === "New" || x.task.status === "InProgress").length} available={departments !== null} />
+        )}
+        {access.leaders && <LeadersCard data={leaders} month={leadersMonth} t={t} />}
         <ActivityFeed events={notifications ? activityOf(notifications.items, now, t) : []} available={notifications !== null} t={t} />
       </div>
     </div>
   );
+}
+
+/** Колонки нижнего ряда (ширину карточкам задают они): дедлайны тянутся, лидеры — 280, лента — 320; одна лента — во всю ширину. */
+function bottomColumns(access: HomeAccess): string {
+  if (access.tasks && access.leaders) return "md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_280px_320px]";
+  if (access.tasks) return "md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_320px]";
+  if (access.leaders) return "md:grid-cols-2 xl:grid-cols-[280px_minmax(0,1fr)]";
+  return "";
 }

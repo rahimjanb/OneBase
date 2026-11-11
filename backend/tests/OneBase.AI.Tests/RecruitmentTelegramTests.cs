@@ -149,6 +149,20 @@ public class RecruitmentTelegramTests(DataManagerDb fixture) : IClassFixture<Dat
         fixture.Clock.Now = start.AddSeconds(6);
         Assert.Equal(1, await RunOutboxAsync());
 
+        // Ответ ИИ-агента из трёх сообщений — весь за один круг, по порядку, без паузы номера между частями.
+        var outbox = scope.ServiceProvider.GetRequiredService<TelegramOutbox>();
+        var replyId = Guid.NewGuid();
+        fixture.Clock.Now = start.AddSeconds(12);
+        for (var i = 0; i < 3; i++)
+        {
+            await outbox.EnqueueAsync(new OutboxRequest(account, Candidate.PeerId, conversation.Id, "hr", "reply", $"Часть {i + 1}", $"agent_reply:{replyId:N}:{i}", "ai",
+                RelatedType: OneBase.Application.Agents.DialogAgentDelivery.RelatedType, RelatedId: replyId, NotBefore: start.AddSeconds(12).AddMilliseconds(i)), default);
+        }
+
+        fixture.Clock.Now = start.AddSeconds(12).AddMilliseconds(5);
+        Assert.Equal(3, await RunOutboxAsync());
+        Assert.Equal(["Часть 1", "Часть 2", "Часть 3"], fixture.Telegram.Sent.TakeLast(3).Select(m => m.Message.Text));
+
         // FLOOD_WAIT — ждём, попыткой не считается; затем «неизвестно, дошло ли» — без автоповтора.
         var attempt = 0;
         fixture.Telegram.Fail = (_, _) => ++attempt == 1

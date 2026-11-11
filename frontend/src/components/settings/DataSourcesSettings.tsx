@@ -79,11 +79,7 @@ export function DataSourcesSettings({ initial }: { initial: DataSourcesOverview 
           {notice.text}
         </div>
       )}
-      {!data.canApply && (
-        <div className="rounded-lg bg-warn-soft px-4 py-2.5 text-sm text-ink">
-          {t("Синхронизация записывает данные через AI Data Manager: чтобы настраивать и запускать привязки, нужно право «AI Data Manager».")}
-        </div>
-      )}
+      {/* Синхронизация пишет данные через AI Data Manager: без его права кнопок настройки и запуска привязок нет (не неактивные с пояснением). */}
 
       <section>
         <div className="mb-3 flex flex-wrap items-end gap-3">
@@ -96,11 +92,12 @@ export function DataSourcesSettings({ initial }: { initial: DataSourcesOverview 
             <Download className="size-3.5" />
             {t("Экспорт настроек")}
           </a>
-          <button type="button" onClick={() => setTransfer(true)} disabled={!data.canApply} className={secondary}
-            title={data.canApply ? t("Перенести таблицы, привязки и дилеров из файла") : t("Нужно право «AI Data Manager»")}>
-            <Upload className="size-3.5" />
-            {t("Импорт настроек")}
-          </button>
+          {data.canApply && (
+            <button type="button" onClick={() => setTransfer(true)} className={secondary} title={t("Перенести таблицы, привязки и дилеров из файла")}>
+              <Upload className="size-3.5" />
+              {t("Импорт настроек")}
+            </button>
+          )}
           <button type="button" onClick={() => setConnectionDialog("new")} className={primary}>
             <Plus className="size-4" />
             {t("Добавить Google Sheets")}
@@ -210,11 +207,11 @@ export function DataSourcesSettings({ initial }: { initial: DataSourcesOverview 
                 <Link href={s.href} className="font-semibold text-ink hover:text-accent-strong">
                   {t(s.name)}
                 </Link>
-                {s.fields.length > 0 && (
+                {s.fields.length > 0 && data.canApply && (
                   <button
                     type="button"
                     className={`${secondary} ml-auto`}
-                    disabled={data.connections.length === 0 || !data.canApply}
+                    disabled={data.connections.length === 0}
                     title={data.connections.length === 0 ? t("Сначала добавьте таблицу Google Sheets") : undefined}
                     onClick={() => setEditing({ section: s, binding: null })}
                   >
@@ -524,18 +521,22 @@ function BindingRow({
       </div>
       {b.lastMessage && <div className={`mt-1 text-xs ${b.lastStatus === "error" || b.lastStatus === "conflicts" ? "text-bad" : "text-ink-2"}`}>{partsText(b.lastMessage, t)}</div>}
       <div className="mt-2.5 flex flex-wrap gap-2">
-        <button type="button" onClick={onSync} disabled={syncing || !canApply} className={secondary}>
-          {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-          {t("Синхронизировать сейчас")}
-        </button>
+        {canApply && (
+          <button type="button" onClick={onSync} disabled={syncing} className={secondary}>
+            {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+            {t("Синхронизировать сейчас")}
+          </button>
+        )}
         <button type="button" onClick={onRuns} className={secondary}>
           <History className="size-3.5" />
           {t("Журнал")}
         </button>
-        <button type="button" onClick={onEdit} disabled={!canApply} className={secondary}>
-          <Pencil className="size-3.5" />
-          {t("Изменить")}
-        </button>
+        {canApply && (
+          <button type="button" onClick={onEdit} className={secondary}>
+            <Pencil className="size-3.5" />
+            {t("Изменить")}
+          </button>
+        )}
         <button type="button" onClick={onDelete} className={`${secondary} hover:text-bad`}>
           <Trash2 className="size-3.5" />
           {t("Удалить")}
