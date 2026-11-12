@@ -6,6 +6,7 @@ import { button, field, primary } from "@/components/ai/form";
 import { Alert, Note } from "@/components/sales/bits";
 import { useT } from "@/i18n/client";
 import {
+  incentiveGifts,
   incentiveImages,
   incentiveStates,
   incentivesApi,
@@ -21,6 +22,7 @@ import {
 import { Switch } from "./TelegramReports";
 import type { ReportsTab } from "./TelegramReportsOverview";
 import { when } from "./TelegramReportsPreview";
+import { PayoutsPanel, PromosPanel, SleepingPanel } from "./TelegramIncentivePromos";
 
 const day = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("ru-RU");
 const kg = (v: number) => v.toLocaleString("ru-RU", { maximumFractionDigits: Math.abs(v) < 100 ? 1 : 0 });
@@ -112,7 +114,7 @@ export function IncentivesPanel({ data, onTab }: { data: ReportOverview; onTab: 
       <div className="text-sm text-ink-2">
         <p>
           {t(
-            "Накопительная акция для ТП: ТП копит кг товаров акции за период, порог — приз. Карточки «9. Накопительная акция» уходят по расписанию автоотчётов: 08:30, 13:00, 18:00 (после «Поля боя»), суббота — неделя и рейтинг, последний рабочий день месяца — итог месяца.",
+            "Накопительная акция для ТП: ТП копит кг товаров акции за период, порог — приз. Карточки «9. Накопительная акция» уходят по расписанию автоотчётов: 08:30, 13:00, 16:00, 18:00 (после «Поля боя»), суббота — неделя и рейтинг, 1-е число — итог прошлого месяца; при акциях ноября — СВР 19:30, РМ в субботу 19:00 и сводка руководства в понедельник 09:00.",
           )}
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -150,6 +152,16 @@ export function IncentivesPanel({ data, onTab }: { data: ReportOverview; onTab: 
           onCreated={(created) => void load(created.code)}
         />
       )}
+      {program && (
+        <PromosPanel
+          key={`promos-${program.code}`}
+          program={program}
+          overview={overview}
+          onSaved={(saved) => setOverview((o) => o && { ...o, programs: o.programs.map((p) => (p.code === saved.code ? saved : p)) })}
+        />
+      )}
+      {program?.promos?.yamelly && <SleepingPanel key={`sleeping-${program.code}`} program={program} />}
+      {program?.promos && <PayoutsPanel key={`payouts-${program.code}`} program={program} canUseSales={data.canUseSales} />}
       {program && <StandingsPanel program={program} canUseSales={data.canUseSales} />}
     </div>
   );
@@ -238,6 +250,8 @@ function ProgramForm({
   const shareSum = Math.round(periodList.reduce((s, [y, m]) => s + share(y, m), 0) * 100);
   const text = (v: string | null) => v ?? "";
   const orNull = (v: string) => (v.trim() ? v : null);
+  // Наборы акций ноября — с кодами: свой редактор (код, сумма, подарок), «закуп от» не нужен.
+  const coded = form.storeSets.some((x) => x.code);
 
   return (
     <div className="rounded-xl border border-line">
@@ -307,12 +321,25 @@ function ProgramForm({
           </div>
         </Block>
 
-        <Block title="Призы" hint="Один ТП — один приз: по самой высокой взятой ступени. «До кого» — как в подписи: «до планшета».">
+        <Block
+          title="Призы"
+          hint="Один ТП — один приз: по самой высокой взятой ступени. «До кого» — как в подписи: «до планшета». «Опт» — порог группы «рынок и опт» (TW-03: 1 600 / 2 500 / 4 100); пусто — как у розницы."
+        >
           <div className="space-y-2">
             {form.tiers.map((tier, i) => (
-              <div key={i} className="grid items-end gap-2 sm:grid-cols-[100px_1fr_1fr_1fr_150px_1fr_1fr_auto]">
+              <div key={i} className="grid items-end gap-2 sm:grid-cols-[100px_100px_1fr_1fr_1fr_150px_1fr_1fr_auto]">
                 <Labeled label="Порог, кг">
                   <input type="number" min={1} className={cell} value={tier.kg} onChange={(e) => setTier(i, { kg: Number(e.target.value) || 0 })} />
+                </Labeled>
+                <Labeled label="Опт, кг">
+                  <input
+                    type="number"
+                    min={1}
+                    className={cell}
+                    value={tier.wholesaleKg ?? ""}
+                    placeholder={String(tier.kg)}
+                    onChange={(e) => setTier(i, { wholesaleKg: Number(e.target.value) || null })}
+                  />
                 </Labeled>
                 <Labeled label="Приз">
                   <input className={cell} value={tier.prize} onChange={(e) => setTier(i, { prize: e.target.value })} />
@@ -373,6 +400,70 @@ function ProgramForm({
           <p className={`mt-1 text-xs ${shareSum > 100 ? "text-bad" : "text-ink-3"}`}>{t("Вместе: {n}%", { n: shareSum })}</p>
         </Block>
 
+        {coded ? (
+          <Block
+            title="Наборы акций ноября (TW-02)"
+            hint="Набор выбирают правила чека из блока «Акции ноября»: пары — тем, кто брал Twizos, старт — новым. Подарок — по сумме Twizos в накладной."
+          >
+            <div className="space-y-2">
+              {form.storeSets.map((set, i) => (
+                <div key={i} className="grid items-end gap-2 sm:grid-cols-[90px_1fr_90px_130px_130px_1fr_1fr_auto]">
+                  <Labeled label="Код">
+                    <input className={cell} value={text(set.code ?? null)} onChange={(e) => setSet(i, { code: orNull(e.target.value.toUpperCase()) })} />
+                  </Labeled>
+                  <Labeled label="Состав">
+                    <input className={cell} value={set.contents} onChange={(e) => setSet(i, { contents: e.target.value })} />
+                  </Labeled>
+                  <Labeled label="Вес, кг">
+                    <input type="number" min={0} step={0.01} className={cell} value={set.kg} onChange={(e) => setSet(i, { kg: Number(e.target.value) || 0 })} />
+                  </Labeled>
+                  <Labeled label="Сумма, сум">
+                    <input type="number" min={0} step={100} className={cell} value={set.sum ?? 0} onChange={(e) => setSet(i, { sum: Number(e.target.value) || 0 })} />
+                  </Labeled>
+                  <Labeled label="Подарок">
+                    <select
+                      className={cell}
+                      value={set.gift ?? ""}
+                      onChange={(e) => setSet(i, { gift: orNull(e.target.value), prize: e.target.value ? incentiveGifts[e.target.value].toLowerCase() : null })}
+                    >
+                      <option value="">—</option>
+                      {Object.entries(incentiveGifts).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {t(label)}
+                        </option>
+                      ))}
+                    </select>
+                  </Labeled>
+                  <Labeled label="Состав (узб.)">
+                    <input className={cell} value={text(set.contentsUz)} onChange={(e) => setSet(i, { contentsUz: orNull(e.target.value) })} />
+                  </Labeled>
+                  <Labeled label="Подарок (узб.)">
+                    <input className={cell} value={text(set.prizeUz)} onChange={(e) => setSet(i, { prizeUz: orNull(e.target.value) })} />
+                  </Labeled>
+                  <button className={button} aria-label={t("Убрать")} onClick={() => edit({ storeSets: form.storeSets.filter((_, j) => j !== i) })}>
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              ))}
+              {form.storeSets.length < 8 && (
+                <button
+                  className={button}
+                  onClick={() =>
+                    edit({
+                      storeSets: [
+                        ...form.storeSets,
+                        { minAvg: 0, contents: "", kg: 1, prize: null, level: null, contentsUz: null, prizeUz: null, code: "", sum: 0, gift: null },
+                      ],
+                    })
+                  }
+                >
+                  <Plus className="size-4" />
+                  {t("Набор")}
+                </button>
+              )}
+            </div>
+          </Block>
+        ) : (
         <Block
           title="Цели магазинов маршрута"
           hint="Набор по среднему закупу ТТ за 4 месяца (как в «Поле боя»). Где «Поле боя» уже поставило Твизос-цель — набор того же уровня. Нужен набор «от 0 сум» — для мелких ТТ."
@@ -430,6 +521,7 @@ function ProgramForm({
             )}
           </div>
         </Block>
+        )}
 
         <Block title="Кто что получает" hint="ТП — только свою карточку. Рейтинг для канала — получатель «РМ · вся страна» с групповым чатом и запуском «рейтинг акции».">
           <div className="grid gap-4 lg:grid-cols-3">

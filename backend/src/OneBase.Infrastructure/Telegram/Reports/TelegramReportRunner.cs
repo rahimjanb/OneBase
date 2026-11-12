@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using OneBase.Application.Abstractions;
 using OneBase.Application.Telegram;
+using OneBase.Application.Telegram.Incentive;
 using OneBase.Application.Telegram.Reports;
 using OneBase.Domain.Telegram;
 using OneBase.Infrastructure.Linko;
@@ -36,9 +37,13 @@ public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvid
     /// <summary>На какой день дневные планы ТП уже подготовлены этим экземпляром (строки в базе — защита от повтора при перезапуске).</summary>
     private DateOnly _dailyPlansPreparedFor;
 
+    /// <summary>За какой день итоги акций ноября уже закрыты этим экземпляром (в базе — защита от повтора при перезапуске).</summary>
+    private DateOnly _incentiveClosedFor;
+
     public async Task<int> TickAsync(CancellationToken ct)
     {
         await PrepareDailyPlansAsync(ct);
+        await CloseIncentiveDayAsync(ct);
         await EnqueueDueAsync(ct);
         var sent = await SendPendingAsync(ct);
         await FinishRunsAsync(ct);
@@ -71,6 +76,39 @@ public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvid
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             logger.LogWarning(ex, "Дневные планы ТП на {Date} не посчитаны — следующий круг", today);
+        }
+    }
+
+    /// <summary>
+    /// Закрытие дня акций ноября: с 19:00 по Ташкенту (пн–сб) один раз в день — итоги ТП оргструктуры и победители TW-01 в историю, в субботу —
+    /// список спящих на следующую неделю. Не зависит от получателей и включённых запусков: работает, пока акция включена. Не вышло — журнал и
+    /// следующий круг.
+    /// </summary>
+    public async Task CloseIncentiveDayAsync(CancellationToken ct)
+    {
+        var local = ReportSchedules.Local(clock.GetUtcNow(), ReportSchedules.DefaultTimeZone);
+        var today = DateOnly.FromDateTime(local.DateTime);
+        if (_incentiveClosedFor == today || today.DayOfWeek == DayOfWeek.Sunday || TimeOnly.FromDateTime(local.DateTime) < IncentiveResultsService.CloseAt)
+        {
+            return;
+        }
+
+        using var scope = scopes.CreateScope();
+        try
+        {
+            var (teams, _) = await scope.ServiceProvider.GetRequiredService<ReportEngine>().StructureAsync(today, ct);
+            var participants = teams.SelectMany(t => t.Agents).Select(a => a.Id).Distinct().ToList();
+            var closed = await scope.ServiceProvider.GetRequiredService<IncentiveResultsService>().CloseDueAsync(today, participants, ct);
+            _incentiveClosedFor = today;
+            if (closed is not null)
+            {
+                logger.LogInformation("Акция {Program}: день {Date} закрыт — итогов ТП {Count}{Sleeping}", closed.Program, closed.Date, closed.Written,
+                    closed.Sleeping is { } r ? $"; спящие на неделю: +{r.Added} −{r.Removed}, в списке {r.Active}" : "");
+            }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Итоги акции за {Date} не закрыты — следующий круг", today);
         }
     }
 

@@ -24,7 +24,7 @@ export const reportTypes: { key: ReportType; title: string; hint: string }[] = [
   { key: "weekly", title: "6. Итоги недели", hint: "Суббота 18:00 — итоги недели пн–сб; понедельник 8:30 — пересчитанные итоги прошлой недели" },
   { key: "battle", title: "7. Поле боя", hint: "Карточки целей ТП по магазинам маршрута: 8:30 — маршрут дня, 13:00 — полдень, 18:00 — итог дня, суббота 18:00 — итог недели; СВ — копии карточек своих ТП" },
   { key: "weekly-pdf", title: "8. Еженедельный PDF", hint: "Понедельник 9:00 — PDF за прошлую неделю пн–сб: РОП — страна, РМ — направление, СВ — регион и команда, ТП — личная карточка. Предпросмотр и формулы — на вкладке «Отчёты PDF»" },
-  { key: "incentive", title: "9. Накопительная акция", hint: "Twizos: 8:30 — маршрут дня с целями в кг, 13:00 — полдень, 18:00 — итог дня (после «Поля боя»), суббота 18:00 — итог недели и 18:30 — рейтинг, последний рабочий день месяца — итог месяца; СВ — сводка команды и копии карточек ТП, РМ — сводка регионов" },
+  { key: "incentive", title: "9. Накопительная акция", hint: "Twizos: 8:30 — маршрут дня с целями в кг, 13:00 — полдень, 16:00 — промежуточный итог, 18:00 — итог дня (после «Поля боя»), суббота 18:00 — итог недели и 18:30 — рейтинг, 1-е число — итог прошлого месяца; СВ — сводка команды и копии карточек ТП, РМ — сводка регионов; акции ноября: СВР 19:30 — итог дня команды, РМ суббота 19:00 — итог недели зоны, понедельник 9:00 — сводка руководства" },
 ];
 
 /** Запуск рисуется PDF-документом, а не картинками: у него своя вкладка, в предпросмотре картинок и «Отправить» его нет. */
@@ -75,8 +75,10 @@ export type ReportJob = {
   lastRun: ReportRunBrief | null;
   recipients: number;
   updatedAt: string | null;
-  /** Только в последний рабочий день месяца (итог месяца акции): дни недели не важны. */
+  /** Только в последний рабочий день месяца: дни недели не важны. */
   monthEnd?: boolean;
+  /** Только 1-го числа (итог прошлого месяца акции): дни недели не важны. */
+  monthStart?: boolean;
 };
 
 export type ReportJobInput = Pick<ReportJob, "enabled" | "time" | "timeZone" | "days" | "catchUpMinutes">;
@@ -549,14 +551,156 @@ export const reportsApi = {
 
 // ---------- Накопительные акции (вкладка «Акции») ----------
 
-/** Ступень акции: порог, кг; приз; коротко («планшет»); «до кого» по-русски («планшета»); картинка; по-узбекски. */
-export type IncentiveTier = { kg: number; prize: string; short: string; image: string; prizeUz: string | null; shortUz: string | null; of: string | null };
+/** Ступень акции: порог, кг; приз; коротко («планшет»); «до кого» по-русски («планшета»); картинка; по-узбекски; порог опта (TW-03; нет — как у розницы). */
+export type IncentiveTier = {
+  kg: number;
+  prize: string;
+  short: string;
+  image: string;
+  prizeUz: string | null;
+  shortUz: string | null;
+  of: string | null;
+  wholesaleKg?: number | null;
+};
 
 /** Ориентир месяца: доля порога (0,35 = 35%). */
 export type IncentiveMonthShare = { year: number; month: number; share: number };
 
-/** Цель магазина: набор для ТТ со средним закупом от minAvg сум/мес, вес, приз клиенту, уровень набора «Поля боя». */
-export type IncentiveStoreSet = { minAvg: number; contents: string; kg: number; prize: string | null; level: string | null; contentsUz: string | null; prizeUz: string | null };
+/**
+ * Цель магазина: набор для ТТ со средним закупом от minAvg сум/мес, вес, приз клиенту, уровень набора «Поля боя». Наборы акций ноября (TW-02) — с
+ * кодом (K35, K140, T, C), суммой по прайсу и картинкой подарка (mug, thermos, kettle): их выбирают правила чека, а не «закуп от».
+ */
+export type IncentiveStoreSet = {
+  minAvg: number;
+  contents: string;
+  kg: number;
+  prize: string | null;
+  level: string | null;
+  contentsUz: string | null;
+  prizeUz: string | null;
+  code?: string | null;
+  sum?: number;
+  gift?: string | null;
+};
+
+/** Подарок клиенту TW-02: заказ с суммой Twizos от minSum — подарок; товары Linko подарка (бонусные строки), выделено штук. */
+export type IncentiveGiftTier = { minSum: number; gift: string; name: string; nameUz: string | null; productIds: number[] | null; stock: number };
+
+/** Пара наборов по среднему чеку ТТ: чек до maxCheck (null — без верхней границы) — наборы по кодам. */
+export type IncentivePairRule = { maxCheck: number | null; sets: string[] };
+
+export type IncentiveTwizosPromo = {
+  gifts: IncentiveGiftTier[] | null;
+  pairs: IncentivePairRule[] | null;
+  startSet: string;
+  smallStartSet: string;
+  smallCheck: number;
+  minCheck: number;
+  pairNewMinCheck: number;
+  reserve: number;
+  conversion: number;
+  extraMax: number;
+  checkDays: number;
+  topDays: number;
+  targetPrize: string | null;
+  extraPairs: IncentivePairRule[] | null;
+};
+
+export type IncentivePacking = { unitKg: number; perBox: number; name: string };
+
+export type IncentiveYamellyPromo = {
+  start: string;
+  end: string;
+  productTypeIds: number[] | null;
+  packings: IncentivePacking[] | null;
+  product: string;
+  discountPercent: number;
+  cashbackPercent: number;
+  minBoxes: number;
+  wakeShare: number;
+  minCashback: number;
+  sleepingFrom: string | null;
+  sleepingSince: string | null;
+};
+
+export type IncentiveBestPromo = { start: string; end: string; retailMinKg: number; wholesaleMinKg: number; prize: number };
+
+export type IncentiveTerritory = { name: string; branches: string[]; planKg: number };
+
+export type IncentiveTerritoryPromo = {
+  start: string;
+  end: string;
+  territories: IncentiveTerritory[] | null;
+  productTypeIds: number[] | null;
+  threshold: number;
+  agentMinKg: number;
+  agentPrize: number;
+  supervisorPrize: number;
+};
+
+export type IncentiveBudget = { cashback: number; best: number; territory: number };
+
+/** Акции ноября вокруг накопительной: раздел null — акции нет. */
+export type IncentivePromos = {
+  twizos: IncentiveTwizosPromo | null;
+  yamelly: IncentiveYamellyPromo | null;
+  best: IncentiveBestPromo | null;
+  territory: IncentiveTerritoryPromo | null;
+  budget: IncentiveBudget | null;
+};
+
+/** Список спящих: в списке, исключено, с какого дня, когда меняли, у активных ТП, правило Linko; computed — снимка ещё нет. */
+export type IncentiveSleepingSummary = {
+  code: string;
+  active: number;
+  removed: number;
+  listedFrom: string | null;
+  changedAt: string | null;
+  withActiveAgent: number;
+  boughtFrom: string | null;
+  notSince: string | null;
+  computed: boolean;
+};
+
+export type IncentiveSleepingRefresh = { added: number; removed: number; restored: number; kept: number; summary: IncentiveSleepingSummary };
+
+export type IncentivePayoutWeek = {
+  monday: string;
+  woken: number;
+  issued: number;
+  confirmed: number;
+  cashbackPaid: number;
+  cashbackToPay: number;
+  bestWins: number;
+  bestPrize: number;
+  bestPaid: number;
+  bestToPay: number;
+  paidOn: string | null;
+  note: string | null;
+};
+
+export type IncentivePayoutRow = {
+  agentId: number;
+  name: string;
+  region: string | null;
+  listed: number;
+  woken: number;
+  issued: number;
+  pending: number;
+  confirmed: number;
+  cashbackPaid: number;
+  cashbackToPay: number;
+  canEarn: number;
+  bestWins: number;
+  bestAccrued: number;
+  bestPaid: number;
+  bestToPay: number;
+  weeks: IncentivePayoutWeek[];
+};
+
+export type IncentivePayouts = { code: string; date: string; dataAsOf: string | null; bestPrize: number; rows: IncentivePayoutRow[] };
+
+export type IncentivePayoutInput = { agentId: number; weekStart: string; kind: "cashback" | "best"; amount: number; paidOn: string | null; note: string | null };
 
 export type IncentiveState = "off" | "upcoming" | "running" | "finished";
 
@@ -582,6 +726,8 @@ export type IncentiveProgram = {
   updatedAt: string | null;
   /** Магазинов с целью на маршруте дня — не больше (1–30). */
   maxStores: number;
+  /** Акции ноября (YM-01…03, TW-01…03); null — нет. Сохраняются отдельно. */
+  promos: IncentivePromos | null;
 };
 
 export type IncentiveOverview = {
@@ -591,7 +737,7 @@ export type IncentiveOverview = {
   images: string[];
 };
 
-export type IncentiveProgramInput = Omit<IncentiveProgram, "code" | "state" | "workDaysLeft" | "updatedAt"> & { code?: string };
+export type IncentiveProgramInput = Omit<IncentiveProgram, "code" | "state" | "workDaysLeft" | "updatedAt" | "promos"> & { code?: string };
 
 export type IncentiveStandingRow = {
   place: number | null;
@@ -626,4 +772,15 @@ export const incentivesApi = {
   create: (input: IncentiveProgramInput) => bff<IncentiveProgram>(`${base}/incentives`, { method: "POST", body: json(input) }),
   /** Накоплено сейчас по оргструктуре «Продаж» (нужно право sales.read). */
   standings: (code: string, date?: string) => bff<IncentiveStandings>(`${base}/incentives/${encodeURIComponent(code)}/standings${date ? `?date=${date}` : ""}`),
+  /** Акции ноября — сохраняются отдельно от основной формы. */
+  savePromos: (code: string, promos: IncentivePromos) =>
+    bff<IncentiveProgram>(`${base}/incentives/${encodeURIComponent(code)}/promos`, { method: "PUT", body: json(promos) }),
+  sleeping: (code: string) => bff<IncentiveSleepingSummary>(`${base}/incentives/${encodeURIComponent(code)}/sleeping`),
+  /** Пересчитать список спящих по Linko на сегодня. */
+  refreshSleeping: (code: string) => bff<IncentiveSleepingRefresh>(`${base}/incentives/${encodeURIComponent(code)}/sleeping/refresh`, { method: "POST" }),
+  payouts: (code: string) => bff<IncentivePayouts>(`${base}/incentives/${encodeURIComponent(code)}/payouts`),
+  setPayout: (code: string, input: IncentivePayoutInput) =>
+    bff<IncentivePayouts>(`${base}/incentives/${encodeURIComponent(code)}/payouts`, { method: "PUT", body: json(input) }),
 };
+
+export const incentiveGifts: Record<string, string> = { mug: "Кружка", thermos: "Термос", kettle: "Чайник" };

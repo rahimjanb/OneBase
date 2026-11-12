@@ -354,7 +354,8 @@ public class IncentiveCardTests
             root = Path.GetDirectoryName(root)!;
         }
 
-        var source = File.ReadAllText(Path.Combine(root, "src", "OneBase.Infrastructure", "Telegram", "Reports", "IncentiveCardRenderer.cs"));
+        var folder = Path.Combine(root, "src", "OneBase.Infrastructure", "Telegram", "Reports");
+        var source = string.Concat(Directory.GetFiles(folder, "IncentiveCardRenderer*.cs").Order().Select(File.ReadAllText));
         var keys = Regex.Matches(source, @"\b[TF]\(""((?:[^""\\]|\\.)*)""").Select(m => Regex.Unescape(m.Groups[1].Value)).Distinct().ToList();
         Assert.NotEmpty(keys);
         var known = ReportTexts.Keys.ToHashSet();

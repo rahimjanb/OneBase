@@ -14,7 +14,7 @@ namespace OneBase.Infrastructure.Telegram.Reports;
 /// меткой полудня и статусами; 18:00 «Итог дня» — статусы, итог, дорога к призам; суббота — «6 полян» и рейтинг; конец месяца — «город героя».
 /// Сводка команды (СВ — ТП списком, РМ — регионы и лучшие ТП) — первой картинкой. Призы — вырезки из флаера акции, пачки — PNG из сборки.
 /// </summary>
-internal static class IncentiveCardRenderer
+internal static partial class IncentiveCardRenderer
 {
     /// <summary>Магазинов на картинке дня у ТП; копии у СВ — вся карточка ТП одной картинкой.</summary>
     private const int StoresPerPage = 12;
@@ -38,11 +38,31 @@ internal static class IncentiveCardRenderer
             pages.Add(painter.Rating(rating));
         }
 
+        if (cards.TeamDay is { } teamDay)
+        {
+            pages.Add(painter.TeamDay(teamDay));
+        }
+
+        if (cards.Zone is { } zone)
+        {
+            pages.AddRange(painter.Zone(zone));
+        }
+
         var copies = cards.Agents.Count > 1 || cards.Team is not null;
         foreach (var card in cards.Agents)
         {
             switch (cards.Slot)
             {
+                // Акции ноября — новые блоки на тех же фигурах; без них — прежние карточки накопительной.
+                case IncentiveSlot.Week when card.Week is not null && card.Promo is not null:
+                    pages.Add(painter.PromoWeek(card));
+                    break;
+                case IncentiveSlot.Month when card.Month is not null && card.Promo is not null:
+                    pages.Add(painter.PromoMonth(card));
+                    break;
+                case var slot when IncentiveSlot.IsDay(slot) && card.Promo is not null:
+                    pages.AddRange(painter.PromoDay(card, copies));
+                    break;
                 case IncentiveSlot.Week when card.Week is not null:
                     pages.Add(painter.Week(card));
                     break;
@@ -67,7 +87,7 @@ internal static class IncentiveCardRenderer
         return pages.Take(MaxPages).ToList();
     }
 
-    private sealed class Painter(IncentiveCards cards, SkiaReportRenderer.Typefaces faces, bool test) : FarmPainter(faces, cards.Language, test)
+    private sealed partial class Painter(IncentiveCards cards, SkiaReportRenderer.Typefaces faces, bool test) : FarmPainter(faces, cards.Language, test)
     {
         private const float HeaderHeight = 170;
         private const float StatsHeight = 124;
@@ -112,7 +132,7 @@ internal static class IncentiveCardRenderer
                 y += RoadHeight + Gap;
             }
 
-            var todayTop = slot == IncentiveSlot.Midday && first ? y : -1f;
+            var todayTop = IncentiveSlot.IsInterim(slot) && first ? y : -1f;
             if (todayTop >= 0)
             {
                 y += 136 + Gap;
@@ -128,7 +148,7 @@ internal static class IncentiveCardRenderer
 
             var footerTop = y;
             using var surface = Surface(footerTop + 92 + Pad, out var c);
-            var title = slot switch { IncentiveSlot.Midday => T("Полдень"), IncentiveSlot.Evening => T("Итог дня"), _ => T("Маршрут дня") };
+            var title = slot switch { IncentiveSlot.Midday => T("Полдень"), IncentiveSlot.Afternoon => T("Итоги 16:00"), IncentiveSlot.Evening => T("Итог дня"), _ => T("Маршрут дня") };
             Header(c, strip, $"{title} · {P.Product}", $"{card.Agent.Name} · {card.Agent.Region ?? ""} · {Weekday(cards.Date)} {DayMonth(cards.Date)}", slot, chunk, chunks);
             StaleBanner(c, strip + HeaderHeight);
             if (first)
@@ -192,7 +212,7 @@ internal static class IncentiveCardRenderer
                     return prizes.Length > 0 ? $"{head}{normText} · {F("приз-набор клиенту: {0}", prizes)}" : head + normText;
                 }
 
-                case IncentiveSlot.Midday:
+                case IncentiveSlot.Midday or IncentiveSlot.Afternoon:
                 {
                     var ahead = route?.Stores.Count(s => s.Status == BattleStoreStatus.Ahead) ?? 0;
                     return norm is { } n
@@ -686,7 +706,7 @@ internal static class IncentiveCardRenderer
             var second = cards.Slot switch
             {
                 IncentiveSlot.Morning => (T("Цель маршрутов сегодня"), Kg(team.RouteKg ?? 0), C.Green, F("{0} ТП", count)),
-                IncentiveSlot.Midday or IncentiveSlot.Evening => (T("Сегодня командой"), team.RouteKg is > 0 ? $"{IncentiveTexts.Kg(team.Today)} / {Kg(team.RouteKg.Value)}" : Kg(team.Today), C.Green,
+                IncentiveSlot.Midday or IncentiveSlot.Afternoon or IncentiveSlot.Evening => (T("Сегодня командой"), team.RouteKg is > 0 ? $"{IncentiveTexts.Kg(team.Today)} / {Kg(team.RouteKg.Value)}" : Kg(team.Today), C.Green,
                     T("из цели маршрутов")),
                 _ => (T("Темп ниже нормы"), F("{0} ТП", team.Behind), team.Behind > 0 ? C.Red : C.Green, F("из {0}", count)),
             };

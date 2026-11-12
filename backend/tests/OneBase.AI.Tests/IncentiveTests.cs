@@ -114,15 +114,31 @@ public class IncentiveTests
     }
 
     [Fact]
-    public void Runs_follow_battle_in_the_catalog_and_month_end_runs_on_the_last_working_day()
+    public void Runs_follow_battle_in_the_catalog_and_the_month_card_goes_on_the_first()
     {
-        Assert.Equal(["incentive.morning", "incentive.midday", "incentive.evening", "incentive.week", "incentive.rating", "incentive.month"],
+        Assert.Equal(
+            ["incentive.morning", "incentive.midday", "incentive.afternoon", "incentive.evening", "incentive.team", "incentive.week", "incentive.rating", "incentive.zone",
+                "incentive.summary", "incentive.month"],
             ReportCatalog.Jobs.Where(j => j.Report == ReportType.Incentive).Select(j => j.Code));
         Assert.True(ReportCatalog.Order("battle.evening") < ReportCatalog.Order("incentive.evening")); // в 18:00 — сначала «Поле боя»
         Assert.Equal([TelegramReportRoles.Rm, TelegramReportRoles.Sv], ReportCatalog.Find("incentive.rating")!.Roles); // ТП чужих цифр не получает
         Assert.Equal(["incentive.morning", "incentive.evening"], ReportCatalog.ForRole(["incentive.morning", "incentive.rating", "incentive.evening"], TelegramReportRoles.Tp));
-        Assert.Equal(("9. Накопительная акция", "итог месяца"), (ReportCatalog.Title(ReportType.Incentive), ReportCatalog.SlotTitle(ReportType.Incentive, "month")));
+        Assert.Equal(("9. Накопительная акция", "итог прошлого месяца"), (ReportCatalog.Title(ReportType.Incentive), ReportCatalog.SlotTitle(ReportType.Incentive, "month")));
         Assert.True(ReportCatalog.Find("incentive.midday")!.IsMidday);
+
+        // Акции ноября: 16:00 — промежуточный срез для всех; СВР — итог команды 19:30; РМ — зона в субботу 19:00 и сводка в понедельник 09:00.
+        var afternoon = ReportCatalog.Find("incentive.afternoon")!;
+        Assert.True(afternoon.IsMidday);
+        Assert.Equal((new TimeOnly(16, 0), ReportSchedules.WorkDays), (afternoon.Time, afternoon.Days));
+        Assert.Equal([TelegramReportRoles.Sv], ReportCatalog.Find("incentive.team")!.Roles);
+        Assert.Equal(new TimeOnly(19, 30), ReportCatalog.Find("incentive.team")!.Time);
+        Assert.Equal([TelegramReportRoles.Rm], ReportCatalog.Find("incentive.zone")!.Roles);
+        Assert.Equal(ReportSchedules.Saturday, ReportCatalog.Find("incentive.zone")!.Days);
+        Assert.Equal([TelegramReportRoles.Rm], ReportCatalog.Find("incentive.summary")!.Roles);
+        Assert.Equal(ReportSchedules.Monday, ReportCatalog.Find("incentive.summary")!.Days);
+        Assert.Empty(ReportCatalog.ForRole(["incentive.team", "incentive.zone", "incentive.summary"], TelegramReportRoles.Tp));
+        // Новые запуски создаются выключенными.
+        Assert.All(["incentive.afternoon", "incentive.team", "incentive.zone", "incentive.summary"], code => Assert.False(ReportCatalog.Default(ReportCatalog.Find(code)!).Enabled));
 
         // Последний рабочий день месяца (пн–сб): 30.11 — понедельник, 31.12 — четверг, 31.05 — воскресенье → суббота 30.05.
         Assert.True(ReportSchedules.IsMonthEnd(new(2026, 11, 30)));
@@ -132,13 +148,14 @@ public class IncentiveTests
         Assert.False(ReportSchedules.IsMonthEnd(new(2026, 5, 31)));
         var job = new TelegramReportJob
         {
-            Code = "incentive.month", Enabled = true, Time = new(18, 0), TimeZone = ReportSchedules.DefaultTimeZone, Days = ReportSchedules.Monday, CatchUpMinutes = 360,
+            Code = "incentive.month", Enabled = true, Time = new(9, 0), TimeZone = ReportSchedules.DefaultTimeZone, Days = ReportSchedules.Monday, CatchUpMinutes = 360,
             ArmedAt = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero),
         };
-        // Дни недели у итога месяца не важны: следующий — 30.11 18:00, 28.11 (суббота) — нет, 30.11 — да.
-        Assert.Equal(new DateTimeOffset(2026, 11, 30, 18, 0, 0, TimeSpan.FromHours(5)), ReportSchedules.Next(job, new DateTimeOffset(2026, 11, 5, 5, 0, 0, TimeSpan.Zero)));
-        Assert.Null(ReportSchedules.Due(job, new DateTimeOffset(2026, 11, 28, 13, 5, 0, TimeSpan.Zero)));
-        Assert.Equal(new DateOnly(2026, 11, 30), ReportSchedules.Due(job, new DateTimeOffset(2026, 11, 30, 13, 5, 0, TimeSpan.Zero))!.Period);
+        // Итог месяца — 1-го числа (ТЗ, раздел 6), дни недели не важны: следующий после 05.11 — 01.12 09:00 (вторник); 30.11 — нет.
+        Assert.True(ReportCatalog.Find("incentive.month")!.MonthStart);
+        Assert.Equal(new DateTimeOffset(2026, 12, 1, 9, 0, 0, TimeSpan.FromHours(5)), ReportSchedules.Next(job, new DateTimeOffset(2026, 11, 5, 5, 0, 0, TimeSpan.Zero)));
+        Assert.Null(ReportSchedules.Due(job, new DateTimeOffset(2026, 11, 30, 4, 5, 0, TimeSpan.Zero)));
+        Assert.Equal(new DateOnly(2026, 12, 1), ReportSchedules.Due(job, new DateTimeOffset(2026, 12, 1, 4, 5, 0, TimeSpan.Zero))!.Period);
         // Обычный запуск — по дням недели, как раньше.
         Assert.NotNull(ReportSchedules.Due(new TelegramReportJob { Code = "incentive.evening", Enabled = true, Time = new(18, 0), TimeZone = ReportSchedules.DefaultTimeZone,
             Days = ReportSchedules.WorkDays, CatchUpMinutes = 180, ArmedAt = job.ArmedAt }, new DateTimeOffset(2026, 11, 28, 13, 5, 0, TimeSpan.Zero)));
@@ -201,8 +218,10 @@ public class IncentiveDbTests(DataManagerDb fixture) : IClassFixture<DataManager
         Assert.Equal(["планшета", "телевизора", "iPhone"], s.Tiers.Select(t => t.Of!));
         Assert.Equal(["planshet", "televizor", "iPhone"], s.Tiers.Select(t => t.ShortUz!));
         Assert.Equal([0.20m, 0.35m, 0.45m], s.Months.Select(m => m.Share));
-        Assert.Equal([7.64m, 4.62m, 3.64m, 0.98m], s.StoreSets.Select(x => x.Kg));
-        Assert.Equal(new string?[] { "600", "400", "300", null }, s.StoreSets.Select(x => x.Level));
+        // С акциями ноября (миграция Incentive3) — наборы без 200 г с подарком по сумме накладной (TW-02), уровней «Поля боя» у них нет.
+        Assert.Equal([2.94m, 3.64m, 4.62m, 6.58m], s.StoreSets.Select(x => x.Kg));
+        Assert.Equal(["K35", "K140", "T", "C"], s.StoreSets.Select(x => x.Code!));
+        Assert.All(s.StoreSets, x => Assert.Null(x.Level));
         Assert.Equal(16, s.Wholesale.Count);
         Assert.True(s.IsWholesale(403) && s.IsWholesale(511) && !s.IsWholesale(468));
         Assert.Equal((IncentiveRmMode.Summary, IncentiveStaleData.Stamp), (s.RmMode, s.StaleData));

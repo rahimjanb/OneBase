@@ -39,8 +39,12 @@ internal static class FarmColors
     public static readonly SKColor TestInk = SKColor.Parse("#1D4ED8");
     public static readonly SKColor PillActiveBg = SKColor.Parse("#FFE9E9");
 
+    /// <summary>Точка без цели и без итога (акции ноября) — серый навес.</summary>
+    public const string PlainStatus = "plain";
+
     public static SKColor Awning(string status) => status switch
     {
+        PlainStatus => SKColor.Parse("#BDB3A6"),
         BattleStoreStatus.Taken => Green,
         BattleStoreStatus.Partial => Amber,
         BattleStoreStatus.Refused => Red,
@@ -134,8 +138,11 @@ internal abstract class FarmPainter(SkiaReportRenderer.Typefaces faces, string l
                 return;
             }
 
-            // Шаги дня: 08:30 старт · 13:00 полдень · 18:00 итог — активный выделен.
-            var pills = new[] { ("08:30", T("старт"), "morning"), ("13:00", T("полдень"), "midday"), ("18:00", T("итог"), "evening") };
+            // Шаги дня: 08:30 старт · 13:00 полдень (16:00 итоги) · 18:00 итог — активный выделен.
+            var pills = new[]
+            {
+                ("08:30", T("старт"), "morning"), slot == "afternoon" ? ("16:00", T("итоги"), "afternoon") : ("13:00", T("полдень"), "midday"), ("18:00", T("итог"), "evening"),
+            };
             var x = Width - Pad - 3 * 110 - 2 * 10;
             foreach (var (time, label, code) in pills)
             {
@@ -163,7 +170,37 @@ internal abstract class FarmPainter(SkiaReportRenderer.Typefaces faces, string l
             using var amber = Fill(C.Amber);
             switch (slot)
             {
-                case "midday":
+                case "team":
+                    // Щит.
+                    using (var shield = new SKPath())
+                    {
+                        shield.MoveTo(x + 27, y);
+                        shield.LineTo(x + 50, y + 8);
+                        shield.LineTo(x + 47, y + 32);
+                        shield.QuadTo(x + 42, y + 48, x + 27, y + 56);
+                        shield.QuadTo(x + 12, y + 48, x + 7, y + 32);
+                        shield.LineTo(x + 4, y + 8);
+                        shield.Close();
+                        using var steel = Fill(SKColor.Parse("#9DB7C9"));
+                        c.DrawPath(shield, steel);
+                        using var rim = Stroke(SKColor.Parse("#5E7C91"), 3);
+                        c.DrawPath(shield, rim);
+                    }
+
+                    break;
+                case "zone" or "summary":
+                    // Карта: три сложенные полосы.
+                    using (var land = Fill(SKColor.Parse("#7CC36A")))
+                    using (var sea = Fill(SKColor.Parse("#5DADE2")))
+                    {
+                        c.DrawRect(x + 2, y + 8, 16, 42, sea);
+                        c.DrawRect(x + 18, y + 4, 17, 42, land);
+                        c.DrawRect(x + 35, y + 8, 17, 42, sea);
+                        c.DrawCircle(x + 26, y + 22, 7, brand);
+                    }
+
+                    break;
+                case "midday" or "afternoon":
                     c.DrawCircle(x + 26, y + 26, 18, amber);
                     using (var ray = Stroke(C.Amber, 4))
                     {
@@ -395,7 +432,7 @@ internal abstract class FarmPainter(SkiaReportRenderer.Typefaces faces, string l
                 if (slot != "morning")
                 {
                     // Пройденный путь — зелёные следы до последнего пройденного магазина.
-                    var lastPassed = points.Select((p, i) => (p, i)).Where(x => stops[x.p.Index].Status != BattleStoreStatus.Ahead).Select(x => x.i).DefaultIfEmpty(-1).Max();
+                    var lastPassed = points.Select((p, i) => (p, i)).Where(x => stops[x.p.Index].Status is not (BattleStoreStatus.Ahead or C.PlainStatus)).Select(x => x.i).DefaultIfEmpty(-1).Max();
                     if (lastPassed >= 0)
                     {
                         using var steps = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 7, Color = C.Green, IsAntialias = true, StrokeCap = SKStrokeCap.Round, PathEffect = SKPathEffect.CreateDash([2, 16], 0) };
@@ -421,9 +458,9 @@ internal abstract class FarmPainter(SkiaReportRenderer.Typefaces faces, string l
 
             // Домики и выноски.
             var heroAt = -1;
-            if (slot == "midday")
+            if (slot is "midday" or "afternoon")
             {
-                heroAt = points.FindIndex(p => stops[p.Index].Status == BattleStoreStatus.Ahead);
+                heroAt = points.FindIndex(p => stops[p.Index].Status is BattleStoreStatus.Ahead or C.PlainStatus);
             }
 
             foreach (var p in points)

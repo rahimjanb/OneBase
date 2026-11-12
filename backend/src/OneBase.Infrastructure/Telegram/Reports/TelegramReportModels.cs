@@ -36,7 +36,8 @@ public sealed record ReportJobView(
     ReportRunBrief? LastRun,
     int Recipients,
     DateTimeOffset? UpdatedAt,
-    bool MonthEnd = false);
+    bool MonthEnd = false,
+    bool MonthStart = false);
 
 public sealed record ReportJobInput(bool Enabled, string? Time, string? TimeZone, IReadOnlyList<int>? Days, int? CatchUpMinutes);
 

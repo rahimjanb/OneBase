@@ -14,7 +14,8 @@ namespace OneBase.Api.Controllers;
 [ApiController]
 [Route("api/settings/telegram/reports")]
 [HasPermission(Permissions.TelegramManage)]
-public sealed class TelegramReportsController(TelegramReportService reports, IncentiveSettingsService incentives) : ControllerBase
+public sealed class TelegramReportsController(TelegramReportService reports, IncentiveSettingsService incentives, IncentiveSleepingService sleeping,
+    IncentivePayoutsService payouts) : ControllerBase
 {
     [HttpGet]
     public Task<IActionResult> Overview(CancellationToken ct) => Run(async () => Ok(await reports.OverviewAsync(CanUseSales, ct)));
@@ -46,6 +47,30 @@ public sealed class TelegramReportsController(TelegramReportService reports, Inc
     [HttpGet("incentives/{code}/standings")]
     public Task<IActionResult> IncentiveStandings(string code, [FromQuery] DateOnly? date, CancellationToken ct) =>
         Run(async () => Ok(await incentives.StandingsAsync(code, date, CanUseSales, ct)));
+
+    /// <summary>Акции ноября акции (YM-01…03, TW-01…03, бюджеты): параметры, которые меняются без программиста (ТЗ, раздел 8).</summary>
+    [HttpPut("incentives/{code}/promos")]
+    public Task<IActionResult> SavePromos(string code, OneBase.Application.Telegram.Incentive.IncentivePromos input, CancellationToken ct) =>
+        Run(async () => Ok(await incentives.SavePromosAsync(code, input, User.GetUserId(), ct)));
+
+    /// <summary>Кэшбек YM-02 и призы TW-01 по ТП и неделям (только с sales.read).</summary>
+    [HttpGet("incentives/{code}/payouts")]
+    public Task<IActionResult> Payouts(string code, [FromQuery] DateOnly? date, CancellationToken ct) =>
+        Run(async () => Ok(await payouts.PayoutsAsync(code, date, CanUseSales, ct)));
+
+    /// <summary>Отметка бухгалтерии «выплачено» за неделю (сумма 0 — снять отметку).</summary>
+    [HttpPut("incentives/{code}/payouts")]
+    public Task<IActionResult> SetPayout(string code, IncentivePayoutInput input, CancellationToken ct) =>
+        Run(async () => Ok(await payouts.SetPayoutAsync(code, input, User.GetUserId(), CanUseSales, ct)));
+
+    /// <summary>Список спящих Yamelly акции (по Linko): сколько точек, с какого дня действует, когда меняли, правило.</summary>
+    [HttpGet("incentives/{code}/sleeping")]
+    public Task<IActionResult> Sleeping(string code, CancellationToken ct) => Run(async () => Ok(await sleeping.SummaryAsync(code, ct)));
+
+    /// <summary>Пересчитать список спящих по Linko на сегодня: новые спящие — в список, больше не спящие и не бравшие Yamelly — исключить.</summary>
+    [HttpPost("incentives/{code}/sleeping/refresh")]
+    public Task<IActionResult> RefreshSleeping(string code, CancellationToken ct) =>
+        Run(async () => Ok(await sleeping.RefreshAsync(code, User.GetUserId(), ct)));
 
     /// <summary>Расписание запуска (code — «daily.midday», «weekly.saturday» …): включение, время, дни, пояс, догон пропущенного.</summary>
     [HttpPut("jobs/{code}")]

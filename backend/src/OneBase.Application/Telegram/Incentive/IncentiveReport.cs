@@ -39,6 +39,7 @@ public static class IncentiveReport
         var monday = BattleRules.Monday(c.Date);
         var period = cards.Slot switch
         {
+            _ when cards.Zone is { } z => Range(z.From, z.To),
             IncentiveSlot.Week => Range(monday, monday.AddDays(5)),
             IncentiveSlot.Month => $"{IncentiveTexts.MonthName(c.Date.Month, c.Language)} {c.Date.Year}",
             _ => Date(c.Date),
@@ -95,6 +96,37 @@ public static class IncentiveReport
             tables.Add(TeamTable(c, team));
         }
 
+        if (cards.TeamDay is { } teamDay)
+        {
+            kpis.Add(new(c.F("{0} команды", cards.Program.Product), $"{IncentiveTexts.Kg(teamDay.Kg)} {c.T("кг")}", c.F("наборов {0}", teamDay.Sets)));
+            kpis.Add(new(c.T("Спящие разбужено"), $"{teamDay.SleepingWoken} / {teamDay.SleepingPlanned}", c.F("кэшбек команды {0}", Number(teamDay.Cashback))));
+            tables.Add(new ReportTable(c.F("{0} · итог дня команды", teamDay.Title),
+                [new(c.T("ТП"), false, 2.2f), new(c.T("Спящие")), new(c.T("Кг")), new(c.T("Цель, кг")), new(c.T("Наборы")), new(c.T("Кэшбек")), new(c.T("Отказов"))],
+                teamDay.Rows.Select(r => (IReadOnlyList<ReportCell>)
+                [
+                    r.Agent.Name, $"{r.SleepingWoken}/{r.SleepingPlanned}", IncentiveTexts.Kg(r.Kg), r.Goal is { } g ? IncentiveTexts.Kg(g) : "—", Number(r.Sets),
+                    new ReportCell(Number(r.Cashback), r.Cashback > 0 ? ReportTone.Good : ReportTone.Normal), Number(r.Refused),
+                ]).ToList()));
+        }
+
+        if (cards.Zone is { } zone)
+        {
+            kpis.Add(new(c.F("{0} за неделю", cards.Program.Product), $"{IncentiveTexts.Kg(zone.WeekKg)} {c.T("кг")}", c.F("наборов с подарком {0}", zone.WeekSets)));
+            kpis.Add(new(c.T("Спящие разбужено"), Number(zone.Woken), zone.WokenShare is { } ws ? Percent(ws) : null));
+            kpis.Add(new(c.T("К выплате ТП"), Number(zone.CashbackToPay + zone.BestToPay), c.F("кэшбек {0} + TW-01 {1}", Number(zone.CashbackToPay), Number(zone.BestToPay))));
+            tables.Add(new ReportTable(c.F("{0} · регионы", zone.Title),
+                [new(c.T("Регион"), false, 1.6f), new(c.T("Спящие")), new(c.T("Разбужено, %")), new(c.T("Кг за неделю")), new(c.T("Подарков")), new("TW-01")],
+                zone.Regions.Select(r => (IReadOnlyList<ReportCell>)
+                [
+                    r.Name, $"{r.Woken}/{r.Listed}", PercentCell(r.WokenShare), IncentiveTexts.Kg(r.WeekKg), Number(r.Gifts.Values.Sum()), Number(r.BestWins),
+                ]).ToList()));
+            if (zone.Territories is { Count: > 0 } territories)
+            {
+                tables.Add(new ReportTable(c.T("YM-03 · план по территориям"), [new(c.T("Территория"), false, 1.6f), new(c.T("План, кг")), new(c.T("Продано, кг")), new(c.T("% плана"))],
+                    territories.Select(t => (IReadOnlyList<ReportCell>)[t.Name, IncentiveTexts.Kg(t.PlanKg), IncentiveTexts.Kg(t.Kg), PercentCell(t.Share)]).ToList()));
+            }
+        }
+
         if (cards.Rating is { } rating)
         {
             tables.Add(RatingTable(c, c.T("Рейтинг акции — розница"), rating.Retail));
@@ -104,7 +136,7 @@ public static class IncentiveReport
             }
         }
 
-        var applies = cards.Agents.Count > 0 || cards.Team is not null || cards.Rating is not null;
+        var applies = cards.Agents.Count > 0 || cards.Team is not null || cards.Rating is not null || cards.TeamDay is not null || cards.Zone is not null;
         var (caption, summary) = IncentiveTexts.Caption(cards);
         return ReportKit.Document(c, ReportKit.Title(c), period, kpis, tables, [], notes, caption, summary, cards.Stale, applies,
             applies ? null : c.T("Карточек нет: в области нет ТП акции.")) with { Incentive = cards };
@@ -129,7 +161,7 @@ public static class IncentiveReport
     {
         var rows = route.Stores.Select(s => (IReadOnlyList<ReportCell>)
         [
-            $"{s.Order}", s.Name, s.Sub == IncentiveTargetSub.Connect ? c.T("подключить") : c.T("дозаказ"),
+            $"{s.Order}", s.Name, s.Sub switch { IncentiveTargetSub.Connect => c.T("подключить"), IncentiveTargetSub.Reorder => c.T("дозаказ"), _ => "" },
             IncentiveTexts.StoreSet(program, s.Set, s.Prize, c.Language).Contents,
             IncentiveTexts.Kg1(s.TargetKg), IncentiveTexts.Kg1(s.Kg), new ReportCell(Status(c, s.Status), Tone(s.Status)),
         ]).ToList();

@@ -4530,6 +4530,136 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("UserSessions");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Incentive.IncentiveDayResult", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("AgentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("BestPlace")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("BestPrize")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("BestWinner")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("Cashback")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Kettles")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Mugs")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("OutOfRouteKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Sets")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SleepingPlanned")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SleepingWoken")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Thermoses")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("TwizosKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Wholesale")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id")
+                        .HasName("PK_IncentiveDayResults");
+
+                    b.HasIndex("ProgramId", "Date")
+                        .HasDatabaseName("IX_IncentiveDayResults_Program_Date");
+
+                    b.HasIndex("ProgramId", "AgentId", "Date")
+                        .IsUnique()
+                        .HasDatabaseName("IX_IncentiveDayResults_Program_Agent_Date");
+
+                    b.ToTable("DayResults", "incentive");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Incentive.IncentivePayout", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("AgentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("PaidById")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("PaidOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("WeekStart")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id")
+                        .HasName("PK_IncentivePayouts");
+
+                    b.HasIndex("ProgramId", "AgentId", "WeekStart", "Kind")
+                        .IsUnique()
+                        .HasDatabaseName("IX_IncentivePayouts_Program_Agent_Week_Kind");
+
+                    b.ToTable("Payouts", "incentive");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Incentive.IncentiveProgram", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4570,6 +4700,12 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.PrimitiveCollection<long[]>("ProductTypeIds")
                         .IsRequired()
                         .HasColumnType("bigint[]");
+
+                    b.Property<string>("PromosJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'{}'::jsonb");
 
                     b.Property<string>("RmMode")
                         .IsRequired()
@@ -4630,6 +4766,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<long>("AgentId")
                         .HasColumnType("bigint");
 
+                    b.Property<decimal>("AvgCheck")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<decimal>("AvgMonth")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -4655,6 +4795,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<int>("Order")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Placement")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("route");
+
+                    b.Property<bool>("PlanAdded")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Prize")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -4671,6 +4821,13 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Sets")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("Sleeping")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Sub")
                         .IsRequired()
@@ -4695,6 +4852,47 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_IncentiveRouteTargets_Program_Agent_Date_Market");
 
                     b.ToTable("RouteTargets", "incentive");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Incentive.IncentiveSleepingMarket", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FilePriority")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateOnly>("ListedOn")
+                        .HasColumnType("date");
+
+                    b.Property<long>("MarketId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("RemovedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UploadedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_IncentiveSleepingMarkets");
+
+                    b.HasIndex("ProgramId", "MarketId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_IncentiveSleepingMarkets_Program_Market");
+
+                    b.ToTable("SleepingMarkets", "incentive");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceBinding", b =>
@@ -14484,7 +14682,34 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Incentive.IncentiveDayResult", b =>
+                {
+                    b.HasOne("OneBase.Domain.Incentive.IncentiveProgram", null)
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Incentive.IncentivePayout", b =>
+                {
+                    b.HasOne("OneBase.Domain.Incentive.IncentiveProgram", null)
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("OneBase.Domain.Incentive.IncentiveRouteTarget", b =>
+                {
+                    b.HasOne("OneBase.Domain.Incentive.IncentiveProgram", null)
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Incentive.IncentiveSleepingMarket", b =>
                 {
                     b.HasOne("OneBase.Domain.Incentive.IncentiveProgram", null)
                         .WithMany()

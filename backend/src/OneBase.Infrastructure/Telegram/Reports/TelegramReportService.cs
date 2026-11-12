@@ -87,7 +87,7 @@ public sealed class TelegramReportService(
             return new ReportJobView(info.Code, ReportCatalog.Key(info.Report), ReportCatalog.Title(info.Report), info.Slot, ReportCatalog.SlotTitle(info.Report, info.Slot), info.Roles,
                 job.Enabled, job.Time.ToString("HH:mm"), job.TimeZone, ReportSchedules.IsoDays(job.Days), job.CatchUpMinutes, ReportSchedules.Next(job, now),
                 run is null ? null : new ReportRunBrief(run.Id, run.Period, run.StartedAt, run.FinishedAt, run.Status, run.Planned, run.Sent, run.Failed, run.Skipped, run.Error),
-                recipients.Count(r => r.Enabled && r.Reports.Contains(info.Code)), job.UpdatedAt, info.MonthEnd);
+                recipients.Count(r => r.Enabled && r.Reports.Contains(info.Code)), job.UpdatedAt, info.MonthEnd, info.MonthStart);
         }).ToList();
     }
 

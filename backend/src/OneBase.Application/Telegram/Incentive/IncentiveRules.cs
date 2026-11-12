@@ -40,14 +40,37 @@ public static class IncentiveRules
 
     /// <summary>
     /// Ход к призам на момент: firstDay — первый день, который ещё можно работать (утром — сегодня, вечером — завтра). Норма — остаток до
-    /// ближайшей невзятой ступени ÷ рабочие дни до конца акции, вверх до целых кг.
+    /// приза для расчёта цели (акции ноября: телефон; взят — следующая ступень) или, без него, до ближайшей невзятой ÷ рабочие дни до конца
+    /// акции, вверх до целых кг. У каждой ступени — кг в день до неё (до 0,1 кг). Оптовые — со своими порогами.
     /// </summary>
-    public static IncentiveProgress Progress(IncentiveSettings s, decimal total, DateOnly firstDay, IReadOnlyDictionary<DateOnly, string> holidays)
+    public static IncentiveProgress Progress(IncentiveSettings s, decimal total, DateOnly firstDay, IReadOnlyDictionary<DateOnly, string> holidays, bool wholesale = false)
     {
-        var next = Next(s.Tiers, total);
+        var tiers = s.TiersFor(wholesale);
+        var next = Next(tiers, total);
         var days = firstDay > s.End ? 0 : WorkDays(firstDay < s.Start ? s.Start : firstDay, s.End, holidays);
-        decimal? norm = next is null || days == 0 ? null : Math.Ceiling((next.Kg - total) / days);
-        return new IncentiveProgress(total, Reached(s.Tiers, total), next, s.Tiers.Select(t => new IncentiveTierLeft(t, Math.Max(0, t.Kg - total))).ToList(), days, norm);
+        var target = TargetTier(tiers, s.Offers.Twizos?.TargetPrize, total);
+        var normTier = target ?? next;
+        decimal? norm = normTier is null || days == 0 ? null : Math.Ceiling((normTier.Kg - total) / days);
+        var lefts = tiers.Select(t =>
+        {
+            var left = Math.Max(0, t.Kg - total);
+            return new IncentiveTierLeft(t, left, left > 0 && days > 0 ? Math.Round(left / days, 1, MidpointRounding.AwayFromZero) : null);
+        }).ToList();
+        return new IncentiveProgress(total, Reached(tiers, total), next, lefts, days, norm, target);
+    }
+
+    /// <summary>
+    /// Приз для расчёта цели (ТЗ 4.1, параметр «Цель для расчёта — приз»): ступень с этой картинкой; уже взята — следующая выше; выше нет —
+    /// null (норма — до ближайшей невзятой). image = null — параметра нет.
+    /// </summary>
+    public static IncentiveTier? TargetTier(IReadOnlyList<IncentiveTier> tiers, string? image, decimal total)
+    {
+        if (image is null || tiers.FirstOrDefault(x => x.Image == image) is not { } tier)
+        {
+            return null;
+        }
+
+        return total < tier.Kg ? tier : tiers.Where(x => x.Kg > tier.Kg && total < x.Kg).MinBy(x => x.Kg);
     }
 
     /// <summary>Ориентир месяца для ступени: порог × доля месяца (нет доли — null).</summary>

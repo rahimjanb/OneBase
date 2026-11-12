@@ -3,7 +3,10 @@ using OneBase.Domain.Incentive;
 
 namespace OneBase.Infrastructure.Persistence;
 
-/// <summary>Схема "incentive": накопительные акции для ТП (Twizos) и цели магазинов маршрута дня в кг.</summary>
+/// <summary>
+/// Схема "incentive": накопительные акции для ТП (Twizos), цели магазинов маршрута дня, список спящих Yamelly (Приложение 1), итоги дня по
+/// акциям и отметки выплат.
+/// </summary>
 internal static class IncentiveModel
 {
     private const string Schema = "incentive";
@@ -23,6 +26,7 @@ internal static class IncentiveModel
             e.Property(x => x.StoreSetsJson).HasColumnType("jsonb");
             e.Property(x => x.RmMode).HasMaxLength(16);
             e.Property(x => x.StaleData).HasMaxLength(16);
+            e.Property(x => x.PromosJson).HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");
         });
 
         b.Entity<IncentiveRouteTarget>(e =>
@@ -40,6 +44,42 @@ internal static class IncentiveModel
             e.Property(x => x.BattleLevel).HasMaxLength(8);
             e.Property(x => x.TargetKg).HasPrecision(18, 3);
             e.Property(x => x.AvgMonth).HasPrecision(18, 2);
+            e.Property(x => x.Sets).HasMaxLength(32);
+            e.Property(x => x.Placement).HasMaxLength(16).HasDefaultValue(IncentivePlacement.Route);
+            e.Property(x => x.AvgCheck).HasPrecision(18, 2);
+        });
+
+        b.Entity<IncentiveSleepingMarket>(e =>
+        {
+            e.ToTable("SleepingMarkets", Schema);
+            e.HasKey(x => x.Id).HasName("PK_IncentiveSleepingMarkets");
+            e.HasIndex(x => new { x.ProgramId, x.MarketId }).IsUnique().HasDatabaseName("IX_IncentiveSleepingMarkets_Program_Market");
+            e.HasOne<IncentiveProgram>().WithMany().HasForeignKey(x => x.ProgramId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.FilePriority).HasMaxLength(100);
+        });
+
+        b.Entity<IncentiveDayResult>(e =>
+        {
+            e.ToTable("DayResults", Schema);
+            e.HasKey(x => x.Id).HasName("PK_IncentiveDayResults");
+            e.HasIndex(x => new { x.ProgramId, x.AgentId, x.Date }).IsUnique().HasDatabaseName("IX_IncentiveDayResults_Program_Agent_Date");
+            e.HasIndex(x => new { x.ProgramId, x.Date }).HasDatabaseName("IX_IncentiveDayResults_Program_Date");
+            e.HasOne<IncentiveProgram>().WithMany().HasForeignKey(x => x.ProgramId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.TwizosKg).HasPrecision(18, 3);
+            e.Property(x => x.OutOfRouteKg).HasPrecision(18, 3);
+            e.Property(x => x.Cashback).HasPrecision(18, 2);
+            e.Property(x => x.BestPrize).HasPrecision(18, 2);
+        });
+
+        b.Entity<IncentivePayout>(e =>
+        {
+            e.ToTable("Payouts", Schema);
+            e.HasKey(x => x.Id).HasName("PK_IncentivePayouts");
+            e.HasIndex(x => new { x.ProgramId, x.AgentId, x.WeekStart, x.Kind }).IsUnique().HasDatabaseName("IX_IncentivePayouts_Program_Agent_Week_Kind");
+            e.HasOne<IncentiveProgram>().WithMany().HasForeignKey(x => x.ProgramId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.Kind).HasMaxLength(16);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.Note).HasMaxLength(500);
         });
     }
 }

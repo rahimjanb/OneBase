@@ -230,6 +230,9 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Battle.BattleGoal> BattleGoals => Set<OneBase.Domain.Battle.BattleGoal>();
     public DbSet<OneBase.Domain.Incentive.IncentiveProgram> IncentivePrograms => Set<OneBase.Domain.Incentive.IncentiveProgram>();
     public DbSet<OneBase.Domain.Incentive.IncentiveRouteTarget> IncentiveRouteTargets => Set<OneBase.Domain.Incentive.IncentiveRouteTarget>();
+    public DbSet<OneBase.Domain.Incentive.IncentiveSleepingMarket> IncentiveSleepingMarkets => Set<OneBase.Domain.Incentive.IncentiveSleepingMarket>();
+    public DbSet<OneBase.Domain.Incentive.IncentiveDayResult> IncentiveDayResults => Set<OneBase.Domain.Incentive.IncentiveDayResult>();
+    public DbSet<OneBase.Domain.Incentive.IncentivePayout> IncentivePayouts => Set<OneBase.Domain.Incentive.IncentivePayout>();
     public DbSet<OneBase.Domain.Twin.TwinObject> TwinObjects => Set<OneBase.Domain.Twin.TwinObject>();
     public DbSet<OneBase.Domain.Twin.TwinObjectLink> TwinObjectLinks => Set<OneBase.Domain.Twin.TwinObjectLink>();
     public DbSet<OneBase.Domain.Recruitment.HiringRequest> HiringRequests => Set<OneBase.Domain.Recruitment.HiringRequest>();

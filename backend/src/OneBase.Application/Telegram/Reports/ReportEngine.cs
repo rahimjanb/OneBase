@@ -153,6 +153,12 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
     private async Task<ReportDocument> BuildIncentiveAsync(ReportJobInfo info, ResolvedScope resolved, IReadOnlyList<ReportRegionTeam> teams, DateOnly date,
         DateTimeOffset now, string language, TimeOnly cutoff, TimeOnly midday, TimeOnly jobTime, CancellationToken ct)
     {
+        if (info.MonthStart && date.Day == 1)
+        {
+            // Итог месяца 1-го числа — за прошлый месяц (его последний день).
+            date = date.AddDays(-1);
+        }
+
         var ordersAsOf = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "orders").Select(s => s.LastSuccessAt).FirstOrDefaultAsync(ct);
         var facts = new ReportFacts
         {
@@ -164,6 +170,11 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
         if (program is null)
         {
             return IncentiveReport.Skip(context, context.T("Накопительной акции в этот день нет: акция выключена или день вне её периода."));
+        }
+
+        if (IncentiveSlot.IsManagers(info.Slot) && program.Offers.Twizos is null && program.Offers.Yamelly is null && program.Offers.Best is null)
+        {
+            return IncentiveReport.Skip(context, context.T("У акции нет акций ноября (YM, TW-01, TW-02) — карточки руководителей не отправляются."));
         }
 
         var stale = IncentiveReport.IsStale(info, date, ordersAsOf);
@@ -180,58 +191,66 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
         string? ratingScope = null;
         HashSet<long>? ratingAgents = null;
         List<IncentiveAgent> Agents(ScopeRegion region) => region.Agents.Select(a => new IncentiveAgent(a.Id, a.Name, region.Name)).ToList();
-        switch (resolved.Scope.Role)
+        if (IncentiveSlot.IsManagers(slot))
         {
-            case TelegramReportRoles.Tp:
-                cards.Add(new IncentiveAgent(resolved.Agent!.Id, resolved.Agent.Name, resolved.Regions[0].Name));
-                break;
-            case TelegramReportRoles.Sv:
+            // Команда СВР, зона РМ, сводка — по регионам области получателя, без карточек ТП.
+            team = new IncentiveTeamSpec(resolved.Scope.Role, resolved.Title, resolved.Regions.Select(r => new IncentiveTeamRegionSpec(r.Name, r.Supervisor, Agents(r))).ToList());
+        }
+        else
+        {
+            switch (resolved.Scope.Role)
             {
-                var region = resolved.Regions[0];
-                var agents = Agents(region);
-                ratingScope = region.Name;
-                ratingAgents = agents.Select(a => a.Id).ToHashSet();
-                if (slot != IncentiveSlot.Rating)
+                case TelegramReportRoles.Tp:
+                    cards.Add(new IncentiveAgent(resolved.Agent!.Id, resolved.Agent.Name, resolved.Regions[0].Name));
+                    break;
+                case TelegramReportRoles.Sv:
                 {
-                    if (program.SvSummary)
-                    {
-                        team = new IncentiveTeamSpec(TelegramReportRoles.Sv, resolved.Title, [new(region.Name, region.Supervisor, agents)]);
-                    }
-
-                    if (program.SvCopies && slot is IncentiveSlot.Morning or IncentiveSlot.Evening)
-                    {
-                        var subscribed = (await db.TelegramReportSubscriptions.AsNoTracking()
-                                .Where(s => s.Enabled && s.Role == TelegramReportRoles.Tp && s.AgentId != null && s.Reports.Contains(ReportCatalog.Incentive + "."))
-                                .Select(s => s.AgentId!.Value).ToListAsync(ct))
-                            .ToHashSet();
-                        var own = agents.Where(a => subscribed.Contains(a.Id)).ToList();
-                        cards.AddRange(own.Count > 0 ? own : agents.Take(10));
-                    }
-                }
-
-                break;
-            }
-
-            default:
-            {
-                var agents = resolved.Regions.SelectMany(Agents).DistinctBy(a => a.Id).ToList();
-                if (resolved.Scope.DirectionId is not null)
-                {
-                    ratingScope = resolved.Title;
+                    var region = resolved.Regions[0];
+                    var agents = Agents(region);
+                    ratingScope = region.Name;
                     ratingAgents = agents.Select(a => a.Id).ToHashSet();
-                }
-
-                if (slot != IncentiveSlot.Rating)
-                {
-                    team = new IncentiveTeamSpec(TelegramReportRoles.Rm, resolved.Title,
-                        resolved.Regions.Select(r => new IncentiveTeamRegionSpec(r.Name, r.Supervisor, Agents(r))).ToList());
-                    if (program.RmMode == IncentiveRmMode.Cards)
+                    if (slot != IncentiveSlot.Rating)
                     {
-                        cards.AddRange(agents.Take(19));
+                        if (program.SvSummary)
+                        {
+                            team = new IncentiveTeamSpec(TelegramReportRoles.Sv, resolved.Title, [new(region.Name, region.Supervisor, agents)]);
+                        }
+
+                        if (program.SvCopies && slot is IncentiveSlot.Morning or IncentiveSlot.Evening)
+                        {
+                            var subscribed = (await db.TelegramReportSubscriptions.AsNoTracking()
+                                    .Where(s => s.Enabled && s.Role == TelegramReportRoles.Tp && s.AgentId != null && s.Reports.Contains(ReportCatalog.Incentive + "."))
+                                    .Select(s => s.AgentId!.Value).ToListAsync(ct))
+                                .ToHashSet();
+                            var own = agents.Where(a => subscribed.Contains(a.Id)).ToList();
+                            cards.AddRange(own.Count > 0 ? own : agents.Take(10));
+                        }
                     }
+
+                    break;
                 }
 
-                break;
+                default:
+                {
+                    var agents = resolved.Regions.SelectMany(Agents).DistinctBy(a => a.Id).ToList();
+                    if (resolved.Scope.DirectionId is not null)
+                    {
+                        ratingScope = resolved.Title;
+                        ratingAgents = agents.Select(a => a.Id).ToHashSet();
+                    }
+
+                    if (slot != IncentiveSlot.Rating)
+                    {
+                        team = new IncentiveTeamSpec(TelegramReportRoles.Rm, resolved.Title,
+                            resolved.Regions.Select(r => new IncentiveTeamRegionSpec(r.Name, r.Supervisor, Agents(r))).ToList());
+                        if (program.RmMode == IncentiveRmMode.Cards)
+                        {
+                            cards.AddRange(agents.Take(19));
+                        }
+                    }
+
+                    break;
+                }
             }
         }
 

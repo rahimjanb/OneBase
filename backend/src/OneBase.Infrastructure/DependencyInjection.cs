@@ -230,6 +230,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Telegram.Battle.BattleGoalService>();
         // Накопительная акция для ТП (Twizos): накопление кг, место, норма, цели магазинов маршрута; настройки акции — в базе (incentive.Programs).
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveService>();
+        services.AddScoped<OneBase.Application.Telegram.Incentive.IncentivePromoService>();
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveRouteService>();
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveCardBuilder>();
         // Еженедельный отчёт (PDF РОП / РМ / СВ / ТП): модель из расчётов «Продаж», KPI, «Акций», «Остатков», DSO; формулы целей — раздел WeeklyReport.
@@ -241,6 +242,9 @@ public static class DependencyInjection
         services.AddScoped<Telegram.Reports.WeeklyPdfService>();
         services.AddScoped<Telegram.Reports.TelegramReportService>();
         services.AddScoped<Telegram.Reports.IncentiveSettingsService>();
+        services.AddScoped<Telegram.Reports.IncentiveSleepingService>();
+        services.AddScoped<Telegram.Reports.IncentivePayoutsService>();
+        services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveResultsService>();
         services.AddSingleton<Telegram.Reports.TelegramReportRunner>();
         if (isolation.AllowOutbound<Telegram.Reports.TelegramReportWorker>("Telegram: автоотчёты по расписанию"))
         {

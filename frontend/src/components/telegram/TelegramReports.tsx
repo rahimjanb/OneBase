@@ -290,8 +290,10 @@ function JobRow({ job, onSaved }: { job: ReportJob; onSaved: (job: ReportJob) =>
         </label>
         <div>
           <span className="mb-1 block text-xs font-medium text-ink-2">{t("Дни")}</span>
-          {job.monthEnd ? (
-            <p className="flex h-9 items-center text-sm text-ink-2">{t("Последний рабочий день месяца (пн–сб)")}</p>
+          {job.monthEnd || job.monthStart ? (
+            <p className="flex h-9 items-center text-sm text-ink-2">
+              {job.monthStart ? t("1-е число месяца (итог прошлого месяца)") : t("Последний рабочий день месяца (пн–сб)")}
+            </p>
           ) : (
             <div className="flex gap-1">
               {weekDays.map((d) => {

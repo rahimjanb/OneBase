@@ -96,6 +96,33 @@ public static class IncentiveTexts
                 $"Рейтинг: 1 — {leader.Agent.Name}, {Kg(leader.Kg)} кг");
         }
 
+        // Карточки руководителей по акциям ноября.
+        if (cards.TeamDay is { } teamDay)
+        {
+            var w = $"{teamDay.SleepingWoken} из {teamDay.SleepingPlanned}";
+            return ($"Итог дня команды: {Kg(teamDay.Kg)} кг {product}, наборов {teamDay.Sets}, разбужено спящих {w}, кэшбек {ReportFormat.Number(teamDay.Cashback)} сум.\n" +
+                    $"Jamoaning kun yakuni: {Kg(teamDay.Kg)} kg {product}, to‘plamlar {teamDay.Sets}, uyg‘otilgan uxlayotganlar {teamDay.SleepingPlanned} dan {teamDay.SleepingWoken}, " +
+                    $"keshbek {ReportFormat.Number(teamDay.Cashback)} so‘m.",
+                $"Команда: {Kg(teamDay.Kg)} кг, разбужено {w}");
+        }
+
+        if (cards.Zone is { } zone)
+        {
+            var period = $"{zone.From:dd.MM}–{zone.To:dd.MM}";
+            var pay = ReportFormat.Number(zone.CashbackToPay + zone.BestToPay);
+            if (cards.Slot == IncentiveSlot.Summary)
+            {
+                var spent = zone.Budget is { } b ? ReportFormat.Number(b.CashbackAccrued + b.BestAccrued) : "0";
+                return ($"Сводка акций за {period}: {Kg(zone.WeekKg)} кг {product}, разбужено спящих {zone.Woken} из {zone.Listed}, расход бюджета {spent} сум.\n" +
+                        $"{period} aksiyalar xulosasi: {Kg(zone.WeekKg)} kg {product}, uyg‘otilgan uxlayotganlar {zone.Listed} dan {zone.Woken}, byudjet sarfi {spent} so‘m.",
+                    $"Сводка {period}: {Kg(zone.WeekKg)} кг, разбужено {zone.Woken}");
+            }
+
+            return ($"Итог недели зоны {period}: {Kg(zone.WeekKg)} кг {product}, разбужено спящих {zone.Woken} из {zone.Listed}, к выплате ТП {pay} сум.\n" +
+                    $"Zona hafta yakuni {period}: {Kg(zone.WeekKg)} kg {product}, uyg‘otilgan uxlayotganlar {zone.Listed} dan {zone.Woken}, TP larga to‘lov {pay} so‘m.",
+                $"Зона {period}: {Kg(zone.WeekKg)} кг, разбужено {zone.Woken}");
+        }
+
         // Сводка команды (СВ, РМ) — подпись о команде, даже если с ней одна копия карточки ТП.
         if (cards.Team is not null || cards.Agents.Count != 1)
         {
@@ -119,7 +146,7 @@ public static class IncentiveTexts
         string ru, uz, summary;
         switch (cards.Slot)
         {
-            case IncentiveSlot.Morning or IncentiveSlot.Midday:
+            case IncentiveSlot.Morning or IncentiveSlot.Midday or IncentiveSlot.Afternoon:
             {
                 var route = me.Route;
                 var stores = route?.Stores.Count ?? 0;
@@ -134,9 +161,10 @@ public static class IncentiveTexts
                 }
                 else
                 {
-                    ru = $"Полдень: сегодня {Kg(me.Today)} из {target} кг {product}. {tailRu}";
-                    uz = $"Tush: bugun {target} kg dan {Kg(me.Today)} kg {product}. {tailUz}";
-                    summary = $"Полдень: сегодня {Kg(me.Today)} из {target} кг · накоплено {x} кг";
+                    var (whenRu, whenUz) = cards.Slot == IncentiveSlot.Afternoon ? ("16:00", "16:00") : ("Полдень", "Tush");
+                    ru = $"{whenRu}: сегодня {Kg(me.Today)} из {target} кг {product}. {tailRu}";
+                    uz = $"{whenUz}: bugun {target} kg dan {Kg(me.Today)} kg {product}. {tailUz}";
+                    summary = $"{whenRu}: сегодня {Kg(me.Today)} из {target} кг · накоплено {x} кг";
                 }
 
                 break;

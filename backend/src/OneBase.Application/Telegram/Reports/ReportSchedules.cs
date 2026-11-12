@@ -48,9 +48,16 @@ public static class ReportSchedules
         return true;
     }
 
-    /// <summary>Идёт ли запуск в этот день: дни недели расписания; запуск «конец месяца» — только в последний рабочий день месяца.</summary>
-    public static bool RunsOn(TelegramReportJob job, DateOnly day) =>
-        ReportCatalog.Find(job.Code)?.MonthEnd == true ? IsMonthEnd(day) : Includes(job.Days, day.DayOfWeek);
+    /// <summary>
+    /// Идёт ли запуск в этот день: дни недели расписания; запуск «конец месяца» — только в последний рабочий день месяца, «начало месяца» —
+    /// только 1-го числа.
+    /// </summary>
+    public static bool RunsOn(TelegramReportJob job, DateOnly day) => ReportCatalog.Find(job.Code) switch
+    {
+        { MonthEnd: true } => IsMonthEnd(day),
+        { MonthStart: true } => day.Day == 1,
+        _ => Includes(job.Days, day.DayOfWeek),
+    };
 
     /// <summary>Дни недели битами из списка 1–7 (пн–вс).</summary>
     public static int DaysOf(IEnumerable<int> isoDays) => isoDays.Where(d => d is >= 1 and <= 7).Distinct().Aggregate(0, (acc, d) => acc | (1 << (d - 1)));

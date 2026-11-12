@@ -190,6 +190,9 @@ public interface IAppDbContext
     // Накопительные акции для ТП (Twizos): настройки акции и цели магазинов маршрута дня в кг.
     DbSet<OneBase.Domain.Incentive.IncentiveProgram> IncentivePrograms { get; }
     DbSet<OneBase.Domain.Incentive.IncentiveRouteTarget> IncentiveRouteTargets { get; }
+    DbSet<OneBase.Domain.Incentive.IncentiveSleepingMarket> IncentiveSleepingMarkets { get; }
+    DbSet<OneBase.Domain.Incentive.IncentiveDayResult> IncentiveDayResults { get; }
+    DbSet<OneBase.Domain.Incentive.IncentivePayout> IncentivePayouts { get; }
 
     // Источники данных: привязки Google Sheets определяют владельца полей OneBase; конфликты — журнал отказов и строк с ошибками.
     DbSet<OneBase.Domain.Integrations.DataSourceConnection> DataSourceConnections { get; }

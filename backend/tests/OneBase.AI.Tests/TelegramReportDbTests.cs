@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OneBase.Application.Field;
 using OneBase.Application.Sales;
 using OneBase.Application.Telegram;
+using OneBase.Application.Telegram.Battle;
 using OneBase.Application.Telegram.Incentive;
 using OneBase.Application.Telegram.Reports;
 using OneBase.Application.Telegram.Weekly;
@@ -693,7 +694,9 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         using var scope = fixture.Services.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<TelegramReportService>();
         // Накопительная акция идёт — её запуски тоже рисуются для каждой роли.
-        await SeedIncentiveAsync(scope.ServiceProvider.GetRequiredService<OneBaseDbContext>(), s.Today, enabled: true, IncentiveStaleData.Stamp);
+        var seeded = scope.ServiceProvider.GetRequiredService<OneBaseDbContext>();
+        await SeedIncentiveAsync(seeded, s.Today, enabled: true, IncentiveStaleData.Stamp);
+        await WithNovemberPromosAsync(seeded, s.Today); // карточки руководителей (команда, зона, сводка) — только при акциях ноября
         fixture.Clock.Now = Utc(s.Today, 18, 5);
         var output = Environment.GetEnvironmentVariable("ONEBASE_REPORT_PNG"); // папка для просмотра картинок; в CI не задана
 
@@ -782,6 +785,21 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Акции ноября у акции теста вокруг сегодняшнего дня: наборы без 200 г, Yamelly, TW-01 (порог розницы 6 кг), без YM-03.</summary>
+    private static async Task WithNovemberPromosAsync(OneBaseDbContext db, DateOnly today)
+    {
+        var november = IncentivePromos.November2026;
+        var promos = november with
+        {
+            Yamelly = november.Yamelly! with { Start = today.AddDays(-5), End = today.AddDays(20) },
+            Best = november.Best! with { Start = today.AddDays(-5), End = today.AddDays(20) },
+            Territory = null,
+        };
+        await db.IncentivePrograms.Where(p => p.Code.StartsWith("test-")).ExecuteUpdateAsync(u => u
+            .SetProperty(p => p.PromosJson, promos.ToJson())
+            .SetProperty(p => p.StoreSetsJson, System.Text.Json.JsonSerializer.Serialize(IncentivePromos.NovemberSets, IncentiveSettings.Json)));
+    }
+
     /// <summary>Убрать данные акции теста: заказы с Twizos не должны попасть в факт других отчётов этой базы.</summary>
     private async Task CleanIncentiveAsync()
     {
@@ -868,6 +886,191 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
     }
 
     [PostgresFact]
+    public async Task November_promos_are_validated_saved_and_payouts_are_marked_by_week()
+    {
+        try
+        {
+            await PromosAndPayoutsAsync();
+        }
+        finally
+        {
+            await CleanIncentiveAsync();
+        }
+    }
+
+    private async Task PromosAndPayoutsAsync()
+    {
+        var s = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        await SeedIncentiveAsync(db, s.Today, enabled: true, IncentiveStaleData.Stamp);
+        await WithNovemberPromosAsync(db, s.Today);
+        db.ChangeTracker.Clear(); // акция теста — после ExecuteUpdate, а не из трекера
+        var settings = sp.GetRequiredService<IncentiveSettingsService>();
+        var program = Assert.Single((await settings.OverviewAsync(default)).Programs, p => p.Code.StartsWith("test-"));
+        Assert.Equal((7m, 10m, 500_000m), (program.Promos!.Yamelly!.DiscountPercent, program.Promos.Yamelly.CashbackPercent, program.Promos.Best!.Prize));
+        // В базе тестов помадки (тип 8) нет — Yamelly теста на типе 22 из справочника; несуществующий тип — ошибка.
+        await Assert.ThrowsAsync<ReportValidationException>(() => settings.SavePromosAsync(program.Code, program.Promos with
+        {
+            Yamelly = program.Promos.Yamelly with { ProductTypeIds = [987_654_321] },
+        }, s.AdminId, default));
+        // Товаров подарков Linko (297, 136, 333) в базе тестов тоже нет — без них.
+        var promos = program.Promos with
+        {
+            Yamelly = program.Promos.Yamelly with { ProductTypeIds = [22] },
+            Twizos = program.Promos.Twizos! with { Gifts = program.Promos.Twizos.GiftTiers.Select(g => g with { ProductIds = null }).ToList() },
+        };
+        Assert.Equal(["K35", "K140", "T", "C"], program.StoreSets.Select(x => x.Code!)); // наборы ноября — по сумме
+
+        // Ошибки — понятной причиной, ничего не сохраняется.
+        var bad = await Assert.ThrowsAsync<ReportValidationException>(() => settings.SavePromosAsync(program.Code, promos with
+        {
+            Yamelly = promos.Yamelly with { DiscountPercent = 150 },
+            Twizos = promos.Twizos! with { Pairs = [new(600_000, ["X", "K140"])] },
+        }, s.AdminId, default));
+        Assert.Contains("Yamelly: скидка", bad.Message);
+        Assert.Contains("Пары и старт", bad.Message);
+        await Assert.ThrowsAsync<ReportValidationException>(() => settings.SavePromosAsync(program.Code, promos with
+        {
+            Best = promos.Best with { Start = program.Start.AddDays(-1) },
+        }, s.AdminId, default));
+        await Assert.ThrowsAsync<ReportValidationException>(() => settings.SaveAsync(program.Code, Input(program) with
+        {
+            StoreSets = program.StoreSets.Select(x => x.Code == "K35" ? x with { Gift = "cup" } : x).ToList(),
+        }, s.AdminId, default));
+
+        // TW-01 только сегодня (заказы прошлых дней теста — не в счёт): порог розницы 1 кг и приз 600 000 — у ТП 61 сегодня 3,64 кг, он победитель дня.
+        var saved = await settings.SavePromosAsync(program.Code, promos with
+        {
+            Best = promos.Best with { Start = s.Today, End = s.Today.AddDays(5), RetailMinKg = 1, Prize = 600_000 }, Budget = new(5_000_000, 1_000_000, 0),
+        }, s.AdminId, default);
+        Assert.Equal((1m, 600_000m, 5_000_000m), (saved.Promos!.Best!.RetailMinKg, saved.Promos.Best.Prize, saved.Promos.Budget!.Cashback));
+        // Основная форма без кодов наборов (как прежде) не затирает наборы ноября и пороги опта.
+        var plain = await settings.SaveAsync(program.Code, Input(saved) with
+        {
+            StoreSets = saved.StoreSets.Select(x => x with { Code = null, Sum = 0, Gift = null }).ToList(),
+            Tiers = saved.Tiers.Select(x => x with { WholesaleKg = null }).ToList(),
+        }, s.AdminId, default);
+        Assert.Equal(["K35", "K140", "T", "C"], plain.StoreSets.Select(x => x.Code!));
+        Assert.Equal(1m, plain.Promos!.Best!.RetailMinKg);
+
+        // Список спящих — правило по умолчанию: брала Yamelly с 1 января, не брала с 1-го числа месяца перед началом Yamelly.
+        var summary = await sp.GetRequiredService<IncentiveSleepingService>().SummaryAsync(program.Code, default);
+        var start = saved.Promos.Yamelly!.Start;
+        Assert.Equal((new DateOnly(start.Year, 1, 1), new DateOnly(start.Year, start.Month, 1).AddMonths(-1)), (summary.BoughtFrom!.Value, summary.NotSince!.Value));
+
+        var payouts = sp.GetRequiredService<IncentivePayoutsService>();
+        await Assert.ThrowsAsync<ReportForbiddenException>(() => payouts.PayoutsAsync(program.Code, s.Today, canUseSales: false, default));
+        var view = await payouts.PayoutsAsync(program.Code, s.Today, canUseSales: true, default);
+        if (s.Today.DayOfWeek == DayOfWeek.Sunday)
+        {
+            Assert.DoesNotContain(view.Rows, r => r.AgentId == 61); // в воскресенье TW-01 не разыгрывается
+            return;
+        }
+
+        var mine = Assert.Single(view.Rows, r => r.AgentId == 61);
+        Assert.Equal((1, 600_000m, 600_000m), (mine.BestWins, mine.BestAccrued, mine.BestToPay));
+        var monday = BattleRules.Monday(s.Today);
+        var week = Assert.Single(mine.Weeks, w => w.Monday == monday);
+        Assert.Equal((1, 600_000m, 0m), (week.BestWins, week.BestToPay, week.BestPaid));
+
+        // Бухгалтерия отметила приз за неделю — к выплате 0; сумма 0 — отметка снята.
+        view = await payouts.SetPayoutAsync(program.Code, new IncentivePayoutInput(61, monday, IncentivePayoutKind.Best, 600_000, s.Today, "наличными"), s.AdminId, true, default);
+        mine = Assert.Single(view.Rows, r => r.AgentId == 61);
+        Assert.Equal((600_000m, 0m), (mine.BestPaid, mine.BestToPay));
+        Assert.Equal("наличными", mine.Weeks.Single(w => w.Monday == monday).Note);
+        await Assert.ThrowsAsync<ReportValidationException>(() =>
+            payouts.SetPayoutAsync(program.Code, new IncentivePayoutInput(61, monday.AddDays(1), IncentivePayoutKind.Best, 1, null, null), s.AdminId, true, default)); // не понедельник
+        view = await payouts.SetPayoutAsync(program.Code, new IncentivePayoutInput(61, monday, IncentivePayoutKind.Best, 0, null, null), s.AdminId, true, default);
+        Assert.Equal(600_000m, Assert.Single(view.Rows, r => r.AgentId == 61).BestToPay);
+
+    }
+
+    private static IncentiveProgramInput Input(IncentiveProgramView p) => new(null, p.Name, p.Product, p.ProductTypeIds, p.Start, p.End, p.Tiers, p.Months, p.StoreSets,
+        p.WholesaleAgentIds, p.SeparateWholesale, p.SvCopies, p.SvSummary, p.RmMode, p.StaleData, p.Enabled, p.MaxStores);
+
+    [PostgresFact]
+    public async Task November_runs_close_the_day_and_send_afternoon_team_zone_and_summary_once()
+    {
+        try
+        {
+            await NovemberRunsAsync();
+        }
+        finally
+        {
+            await CleanIncentiveAsync();
+        }
+    }
+
+    private async Task NovemberRunsAsync()
+    {
+        var s = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var service = sp.GetRequiredService<TelegramReportService>();
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        await SeedIncentiveAsync(db, s.Today, enabled: true, IncentiveStaleData.Stamp);
+        await WithNovemberPromosAsync(db, s.Today);
+
+        // ТП — 16:00; СВР — итог команды в группу; «РМ · вся страна» (руководство) — зона и сводка в личку.
+        await service.SaveRecipientAsync(null, Tp(61, s.OtherChatId, "incentive.afternoon"), true, s.AdminId, default);
+        await service.SaveRecipientAsync(null, Sv(s, [s.GroupChatId], "incentive.team", "incentive.zone"), true, s.AdminId, default);
+        var rm = await service.SaveRecipientAsync(null, new ReportRecipientInput(TelegramReportRoles.Rm, "Руководство", null, null, null, null, [s.PrivateChatId],
+            ["incentive.zone", "incentive.summary", "incentive.team"], true), true, s.AdminId, default);
+        Assert.Equal(["incentive.zone", "incentive.summary"], rm.Reports); // итог команды — только СВР
+        foreach (var (code, time) in new[] { ("incentive.afternoon", "16:00"), ("incentive.zone", "19:00"), ("incentive.team", "19:30"), ("incentive.summary", "09:00") })
+        {
+            await service.SaveJobAsync(code, new ReportJobInput(true, time, "Asia/Tashkent", EveryDay, null), s.AdminId, default);
+        }
+
+        var runner = Runner(sp);
+        IReadOnlyList<string> Captions(long peer, string start) =>
+            fixture.Telegram.Sent.Where(m => m.Peer.PeerId == peer && m.Message.Text?.Contains(start) == true).Select(m => m.Message.Text!).ToList();
+
+        // 16:00 — промежуточный итог ТП: заказы до 16:00 (3,64 кг Twizos).
+        fixture.Clock.Now = Utc(s.Today, 16, 1);
+        await runner.TickAsync(default);
+        Assert.Contains("16:00: сегодня 3,6 из", Assert.Single(Captions(OtherPeer, "9. Накопительная акция")));
+
+        // 19:00 — день закрыт (итоги ТП и TW-01 в историю, один раз) и итог недели зоны ушёл руководству.
+        fixture.Clock.Now = Utc(s.Today, 19, 1);
+        await runner.TickAsync(default);
+        var closed = await db.IncentiveDayResults.AsNoTracking().Where(r => r.Date == s.Today).ToListAsync();
+        if (s.Today.DayOfWeek == DayOfWeek.Sunday)
+        {
+            Assert.Empty(closed); // в воскресенье день не закрывается
+        }
+        else
+        {
+            var row = Assert.Single(closed, r => r.AgentId == 61);
+            Assert.Equal((3.64m, (int?)null, false), (row.TwizosKg, row.BestPlace, row.BestWinner)); // меньше порога TW-01 — без места
+        }
+
+        var zone = Assert.Single(Captions(PrivatePeer, "Итог недели зоны"));
+        Assert.Contains("3,6 кг Twizos", zone);
+
+        // 19:30 — итог дня команды СВР в группу; повторный круг ничего не шлёт и день второй раз не закрывает.
+        fixture.Clock.Now = Utc(s.Today, 19, 31);
+        await runner.TickAsync(default);
+        var team = Assert.Single(fixture.Telegram.Sent, m => m.Peer.PeerId == GroupPeer && m.Message.Text?.Contains("Итог дня команды") == true);
+        Assert.Contains("Итог дня команды: 3,6 кг Twizos", team.Message.Text);
+        Assert.Single(team.Message.Files);
+        Assert.Empty(Captions(GroupPeer, "Итог недели зоны")); // зона — только РМ
+        var stamp = closed.Select(r => r.ClosedAt).DefaultIfEmpty().Max();
+        Assert.Equal(0, await runner.TickAsync(default));
+        Assert.Equal(stamp, (await db.IncentiveDayResults.AsNoTracking().Where(r => r.Date == s.Today).Select(r => r.ClosedAt).ToListAsync()).DefaultIfEmpty().Max());
+
+        // Следующее утро 09:00 — сводка руководства за прошлую неделю.
+        fixture.Clock.Now = Utc(s.Today.AddDays(1), 9, 1);
+        await runner.TickAsync(default);
+        Assert.Contains("Сводка акций за", Assert.Single(Captions(PrivatePeer, "Сводка акций")));
+        var runs = await db.TelegramReportRuns.AsNoTracking().Where(r => r.Job.StartsWith("incentive.")).ToListAsync();
+        Assert.All(runs.Where(r => r.Job != "incentive.summary" || r.Period == s.Today.AddDays(1)), r => Assert.Equal(r.Planned, r.Sent));
+        fixture.Clock.Now = null;
+    }
+
+    [PostgresFact]
     public async Task Incentive_is_skipped_when_off_or_stale_by_settings_and_other_reports_still_go()
     {
         try
@@ -935,7 +1138,9 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         var overview = await settings.OverviewAsync(default);
         var twizos = Assert.Single(overview.Programs, p => p.Code == "twizos-2026q4");
         Assert.Equal(("off", false, 3), (twizos.State, twizos.Enabled, twizos.Tiers.Count));
-        Assert.Equal([0.98m, 3.64m, 4.62m, 7.64m], twizos.StoreSets.Select(x => x.Kg)); // по возрастанию закупа
+        // Наборы ноября (миграция Incentive3): без 200 г, с кодом и подарком по сумме накладной.
+        Assert.Equal([2.94m, 3.64m, 4.62m, 6.58m], twizos.StoreSets.Select(x => x.Kg));
+        Assert.Equal([1600m, 2500m, 4100m], twizos.Tiers.Select(t => t.WholesaleKg!.Value));
         var test = Assert.Single(overview.Programs, p => p.Code.StartsWith("test-") && p.Enabled);
         Assert.Equal("running", test.State);
         Assert.True(test.WorkDaysLeft > 0);
@@ -950,7 +1155,8 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { ProductTypeIds = [999_999] }));
         await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { Tiers = [] }));
         await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { Tiers = [.. twizos.Tiers, twizos.Tiers[0]] })); // два одинаковых порога
-        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { StoreSets = twizos.StoreSets.Where(x => x.MinAvg > 0).ToList() })); // нет набора «от 0»
+        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { StoreSets = [.. twizos.StoreSets, twizos.StoreSets[0]] })); // два набора с одним кодом
+        await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { StoreSets = twizos.StoreSets.Select(x => x with { Sum = 0 }).ToList() })); // без суммы
         await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { Months = [new(2026, 11, 0.7m), new(2026, 12, 0.6m)] })); // больше 100%
         await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { MaxStores = 0 }));
         await Assert.ThrowsAsync<ReportValidationException>(() => Save(input with { MaxStores = 31 }));
@@ -964,6 +1170,14 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
             WholesaleAgentIds = [62, 62, 0], StaleData = IncentiveStaleData.Skip, RmMode = IncentiveRmMode.Cards, MaxStores = 15,
         }, s.AdminId, default);
         Assert.Equal(15, saved.MaxStores);
+        // Форма без кодов наборов и порогов опта (старая вкладка) их не стирает.
+        var kept = await settings.SaveAsync(twizos.Code, input with
+        {
+            StoreSets = twizos.StoreSets.Select(x => x with { Code = null, Sum = 0, Gift = null }).ToList(),
+            Tiers = twizos.Tiers.Select(t => t with { WholesaleKg = null }).ToList(),
+        }, s.AdminId, default);
+        Assert.Equal(["K35", "K140", "T", "C"], kept.StoreSets.Select(x => x.Code!));
+        Assert.Equal([1600m, 2500m, 4100m], kept.Tiers.Select(t => t.WholesaleKg!.Value));
         Assert.Equal([62L], saved.WholesaleAgentIds);
         Assert.Equal((IncentiveStaleData.Skip, IncentiveRmMode.Cards, false), (saved.StaleData, saved.RmMode, saved.Enabled));
 
@@ -980,10 +1194,10 @@ public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         Assert.Null(standings.Rows[2].Place);
         await Assert.ThrowsAsync<ReportForbiddenException>(() => settings.StandingsAsync(test.Code, s.Today, canUseSales: false, default));
 
-        // В расписании итог месяца помечен «конец месяца».
+        // В расписании итог месяца помечен «1-е число».
         var jobs = (await sp.GetRequiredService<TelegramReportService>().OverviewAsync(true, default)).Jobs;
-        Assert.True(jobs.Single(j => j.Code == "incentive.month").MonthEnd);
-        Assert.False(jobs.Single(j => j.Code == "incentive.evening").MonthEnd);
+        Assert.True(jobs.Single(j => j.Code == "incentive.month").MonthStart);
+        Assert.False(jobs.Single(j => j.Code == "incentive.evening").MonthStart);
     }
 
     [PostgresFact]
