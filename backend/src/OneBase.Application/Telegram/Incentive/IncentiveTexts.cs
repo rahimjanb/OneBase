@@ -33,6 +33,30 @@ public static class IncentiveTexts
         return (rounded == Math.Round(rounded) ? rounded.ToString("0", CultureInfo.InvariantCulture) : rounded.ToString("0.0", CultureInfo.InvariantCulture)).Replace('.', ',');
     }
 
+    /// <summary>
+    /// Имя ТП из Linko на карточке одним письмом: на русской и узбекской кириллической карточке в имени, где латиница смешана с кириллицей,
+    /// латинские слова — кириллицей («andijon 1 Олимжон» → «Андижон 1 Олимжон», «Санжар Сатторов (Romitan)» → «… (Ромитан)»); слова
+    /// заглавными («GOOD FOOD», «ZAR») — названия и сокращения — как есть. Имя одним письмом и узбекская латиница — как в Linko.
+    /// </summary>
+    public static string Person(string name, string language)
+    {
+        var trimmed = name.Trim();
+        if (language == UiLanguage.UzbekLatin || !trimmed.Any(char.IsAsciiLetter) || !trimmed.Any(IsCyrillic))
+        {
+            return trimmed;
+        }
+
+        var words = trimmed.Split(' ').Select(w =>
+        {
+            var letters = w.Where(char.IsLetter).ToList();
+            var caps = letters.Count >= 2 && letters.All(char.IsAsciiLetterUpper);
+            return caps || !w.Any(char.IsAsciiLetter) ? w : UzbekCyrillic.Convert(w);
+        });
+        return Upper(string.Join(' ', words));
+    }
+
+    private static bool IsCyrillic(char c) => c is >= 'Ѐ' and <= 'ӿ';
+
     /// <summary>Вес магазина — всегда с десятой: «7,6», «1,0».</summary>
     public static string Kg1(decimal value) => Math.Round(value, 1, MidpointRounding.AwayFromZero).ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',');
 

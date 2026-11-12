@@ -120,6 +120,7 @@ const telegramReports: Dict = {
   "В 08:30 и 18:00 — карточки ТП региона, подписанных на акцию (никого — все ТП региона, до 10).": "08:30 va 18:00 da — aksiyaga obuna bo‘lgan hudud TP lari kartochkalari (hech kim bo‘lmasa — hududning barcha TP lari, 10 tagacha).",
   "Вместе: {n}%": "Jami: {n}%",
   "Во всех запусках: накоплено, сегодня, кто отстаёт от нормы, кто у порога.": "Barcha ishga tushirishlarda: yig‘ilgan, bugungi, kim me’yordan ortda, kim chegarada.",
+  "Всё одной картинкой": "Hammasi bitta rasmda",
   "Выключена": "O‘chirilgan",
   "До кого": "Kimgacha",
   "Добавить ТП…": "TP qo‘shish…",
@@ -128,6 +129,9 @@ const telegramReports: Dict = {
   "Если данные Linko не обновились к отправке": "Agar Linko ma’lumotlari jo‘natishgacha yangilanmasa",
   "Закончилась": "Tugagan",
   "Закуп от, сум/мес": "Xarid, so‘m/oy dan",
+  "Карточка ТП, сводка команды и итог зоны не делятся на несколько фото: длинный маршрут — на одной высокой картинке. Telegram показывает высокие картинки уменьшенными — мелкий текст читается с увеличением. Выключено — что не поместилось, приходит следующей картинкой.":
+    "TP kartochkasi, jamoa xulosasi va zona yakuni bir nechta rasmga bo‘linmaydi: uzun marshrut — bitta baland rasmda. Telegram baland rasmlarni kichraytirib ko‘rsatadi — mayda matn kattalashtirib o‘qiladi. O‘chirilgan bo‘lsa — sig‘magan qismi keyingi rasmda keladi.",
+  "Картинки": "Rasmlar",
   "Как на карточке 18:00: доставлено с начала акции по вчера минус возвраты плюс заказы сегодня. Итог акции — по доставленным накладным после её конца.": "18:00 kartochkasidagidek: aksiya boshidan kechagacha yetkazilgan minus qaytarilgan plyus bugungi buyurtmalar. Aksiya yakuni — tugaganidan keyin yetkazilgan yuk xatlari bo‘yicha.",
   "Код (латиницей)": "Kod (lotincha)",
   "Коротко (узб.)": "Qisqa (o‘zb.)",

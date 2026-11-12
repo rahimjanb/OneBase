@@ -71,8 +71,8 @@ internal static partial class IncentiveCardRenderer
                     break;
                 case var slot when IncentiveSlot.IsDay(slot):
                 {
-                    var perPage = copies ? StoresPerCopy : StoresPerPage;
                     var count = card.Route?.Stores.Count ?? 0;
+                    var perPage = cards.Program.OnePhoto ? Math.Max(1, count) : copies ? StoresPerCopy : StoresPerPage;
                     var chunks = Math.Max(1, (int)Math.Ceiling(count / (double)perPage));
                     for (var i = 0; i < chunks; i++)
                     {
@@ -104,6 +104,15 @@ internal static partial class IncentiveCardRenderer
         private static string Capital(string s) => s.Length == 0 ? s : char.ToUpper(s[0], CultureInfo.CurrentCulture) + s[1..];
         private string StartText => $"{P.Start.Day} {IncentiveTexts.MonthOf(P.Start.Month, Language)}";
         private string EndText => $"{P.End.Day} {IncentiveTexts.MonthOf(P.End.Month, Language)}";
+
+        private string Person(string name) => IncentiveTexts.Person(name, Language);
+
+        /// <summary>ТП в шапке карточки: имя одним письмом (<see cref="IncentiveTexts.Person"/>), регион — если его ещё нет в имени.</summary>
+        private string AgentTitle(IncentiveAgent agent)
+        {
+            var name = Person(agent.Name);
+            return agent.Region is { Length: > 0 } region && !name.Contains(region.Trim(), StringComparison.OrdinalIgnoreCase) ? $"{name} · {region}" : name;
+        }
         private float StaleHeight => cards.Stale ? 60 : 0;
 
         // ---------- Карточка дня ----------
@@ -149,7 +158,7 @@ internal static partial class IncentiveCardRenderer
             var footerTop = y;
             using var surface = Surface(footerTop + 92 + Pad, out var c);
             var title = slot switch { IncentiveSlot.Midday => T("Полдень"), IncentiveSlot.Afternoon => T("Итоги 16:00"), IncentiveSlot.Evening => T("Итог дня"), _ => T("Маршрут дня") };
-            Header(c, strip, $"{title} · {P.Product}", $"{card.Agent.Name} · {card.Agent.Region ?? ""} · {Weekday(cards.Date)} {DayMonth(cards.Date)}", slot, chunk, chunks);
+            Header(c, strip, $"{title} · {P.Product}", $"{AgentTitle(card.Agent)} · {Weekday(cards.Date)} {DayMonth(cards.Date)}", slot, chunk, chunks);
             StaleBanner(c, strip + HeaderHeight);
             if (first)
             {
@@ -174,7 +183,7 @@ internal static partial class IncentiveCardRenderer
                     const float w = 232f;
                     var cx = x < Width / 2 ? Pad + 20 : Width - Pad - 20 - w;
                     Callout(c, cx, cy - CalloutHeight(evaluated) / 2 + 10, w, stores[i], evaluated);
-                });
+                }, all.Count, HeroOnPage(slot, all.Select(s => s.Status).ToList(), chunk * perPage, stores.Count));
             if (evaluated && card.Route is { Stores.Count: > 0 } route)
             {
                 TextFit(c, F("✓ взято {0} · ½ частично {1} · × отказ {2} · подключено {3} · дозаказ {4}", route.Taken, route.Partial, route.Refused, route.Connected,
@@ -345,7 +354,7 @@ internal static partial class IncentiveCardRenderer
             var footerTop = roadTop + RoadHeight + Gap;
             using var surface = Surface(footerTop + 92 + Pad, out var c);
             var weekNo = (week.Monday.Day - 1) / 7 + 1;
-            Header(c, strip, F("Итог недели · {0}", P.Product), $"{card.Agent.Name} · {card.Agent.Region ?? ""} · {DayMonth(week.Monday)}–{DayMonth(week.Saturday)}", IncentiveSlot.Week, 0, 1,
+            Header(c, strip, F("Итог недели · {0}", P.Product), $"{AgentTitle(card.Agent)} · {DayMonth(week.Monday)}–{DayMonth(week.Saturday)}", IncentiveSlot.Week, 0, 1,
                 F("Нед {0}", weekNo), IncentiveTexts.MonthOf(week.Monday.Month, Language));
             StaleBanner(c, strip + HeaderHeight);
 
@@ -452,7 +461,7 @@ internal static partial class IncentiveCardRenderer
 
             var badge = p.Next is { } next ? ReportFormat.Percent(card.Total / next.Kg) : "✓";
             var hint = p.Next is { } n2 ? To(n2) : IncentiveTexts.Short(p.Reached!, Language);
-            Header(c, strip, Capital(F("Итог {0} · {1}", IncentiveTexts.MonthOf(month.Month, Language), P.Product)), $"{card.Agent.Name} · {card.Agent.Region ?? ""}", IncentiveSlot.Month, 0, 1, badge, hint);
+            Header(c, strip, Capital(F("Итог {0} · {1}", IncentiveTexts.MonthOf(month.Month, Language), P.Product)), AgentTitle(card.Agent), IncentiveSlot.Month, 0, 1, badge, hint);
             StaleBanner(c, strip + HeaderHeight);
 
             CardBox(c, Pad, panelTop, Inner, panelHeight);
@@ -639,7 +648,7 @@ internal static partial class IncentiveCardRenderer
                     TextCenter(c, row.Place.ToString(CultureInfo.InvariantCulture), Pad + 56, y + 11, 18, Faces.SemiBold, C.Ink);
                 }
 
-                TextFit(c, row.Agent.Name, Pad + 104, y + 11, 380, 18, face, C.Ink);
+                TextFit(c, Person(row.Agent.Name), Pad + 104, y + 11, 380, 18, face, C.Ink);
                 TextFit(c, row.Agent.Region ?? "", Pad + 500, y + 11, 200, 18, face, C.Ink);
                 TextRight(c, IncentiveTexts.Kg(row.Kg), Pad + 760, y + 11, 19, Faces.Bold, C.Ink);
                 var status = row.Next is { } next
@@ -682,6 +691,12 @@ internal static partial class IncentiveCardRenderer
             }
 
             var agents = team.Agents;
+            if (P.OnePhoto)
+            {
+                yield return TeamSupervisor(team, agents.ToList(), 0, 1);
+                yield break;
+            }
+
             var chunks = Math.Max(1, (int)Math.Ceiling(agents.Count / (double)TeamRowsPerPage));
             for (var i = 0; i < chunks; i++)
             {
@@ -750,7 +765,7 @@ internal static partial class IncentiveCardRenderer
                 var y = header + 32 + i * 42;
                 c.DrawLine(Pad + 20, y, Width - Pad - 20, y, line);
                 TextCenter(c, (chunk * TeamRowsPerPage + i + 1).ToString(CultureInfo.InvariantCulture), Pad + 44, y + 11, 17, Faces.SemiBold, C.Ink2);
-                TextFit(c, row.Agent.Name + (row.Wholesale ? $" · {T("опт")}" : ""), Pad + 76, y + 11, 330, 18, Faces.SemiBold, C.Ink);
+                TextFit(c, Person(row.Agent.Name) + (row.Wholesale ? $" · {T("опт")}" : ""), Pad + 76, y + 11, 330, 18, Faces.SemiBold, C.Ink);
                 TextRight(c, IncentiveTexts.Kg(row.Total), Pad + 500, y + 11, 18, Faces.Bold, C.Ink);
                 var dayValue = cards.Slot == IncentiveSlot.Morning ? row.RouteKg is { } rk ? IncentiveTexts.Kg(rk) : "—"
                     : IncentiveSlot.IsDay(cards.Slot) ? IncentiveTexts.Kg(row.Today) : IncentiveTexts.Kg(row.Pace);
@@ -823,7 +838,7 @@ internal static partial class IncentiveCardRenderer
                 var y = bestHeader + 32 + i * 42;
                 c.DrawLine(Pad + 20, y, Width - Pad - 20, y, line);
                 TextCenter(c, (i + 1).ToString(CultureInfo.InvariantCulture), Pad + 44, y + 11, 17, Faces.SemiBold, C.Ink2);
-                TextFit(c, row.Agent.Region is { Length: > 0 } reg ? $"{row.Agent.Name} · {reg}" : row.Agent.Name, Pad + 76, y + 11, 440, 18, Faces.SemiBold, C.Ink);
+                TextFit(c, AgentTitle(row.Agent), Pad + 76, y + 11, 440, 18, Faces.SemiBold, C.Ink);
                 TextRight(c, IncentiveTexts.Kg(row.Total), Pad + 640, y + 11, 18, Faces.Bold, C.Ink);
                 var prize = row.Progress.Next is { } next ? $"{To(next)} {Kg(row.Progress.ToNext ?? 0)}" : $"{IncentiveTexts.Short(row.Progress.Reached!, Language)} ✓";
                 TextFit(c, prize, Pad + 680, y + 12, Inner - 680 - 24, 16, Faces.Medium, row.Near || row.Reached ? C.Green : C.Ink2);
@@ -838,11 +853,19 @@ internal static partial class IncentiveCardRenderer
 
         // ---------- Общие блоки акции ----------
 
+        /// <summary>
+        /// Фото Telegram: ширина + высота не больше 10 000 px. Картинка выше (только «одной картинкой» с очень длинным маршрутом) рисуется
+        /// целиком в уменьшенном масштабе — ничего не обрезается и не переносится на вторую.
+        /// </summary>
+        private const float MaxPhotoHeight = 10_000 - Width - 20;
+
         private SKSurface Surface(float height, out SKCanvas canvas)
         {
-            var surface = SKSurface.Create(new SKImageInfo(Width, (int)Math.Ceiling(height), SKColorType.Rgba8888, SKAlphaType.Premul));
+            var scale = height > MaxPhotoHeight ? MaxPhotoHeight / height : 1f;
+            var surface = SKSurface.Create(new SKImageInfo((int)Math.Round(Width * scale), (int)Math.Ceiling(height * scale), SKColorType.Rgba8888, SKAlphaType.Premul));
             canvas = surface.Canvas;
             canvas.Clear(C.Background);
+            canvas.Scale(scale);
             if (IsTest)
             {
                 TestStrip(canvas);

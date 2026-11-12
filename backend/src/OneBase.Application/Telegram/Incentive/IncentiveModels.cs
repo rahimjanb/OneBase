@@ -42,7 +42,8 @@ public sealed record IncentiveSettings(
     string StaleData,
     bool Enabled,
     int MaxStores = IncentiveRules.MaxStores,
-    IncentivePromos? Promos = null)
+    IncentivePromos? Promos = null,
+    bool OnePhoto = false)
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -52,7 +53,7 @@ public sealed record IncentiveSettings(
         Parse<IncentiveMonthShare>(p.MonthsJson),
         Parse<IncentiveStoreSet>(p.StoreSetsJson).OrderByDescending(s => s.MinAvg).ToList(),
         p.WholesaleAgentIds.ToHashSet(), p.SeparateWholesale, p.SvCopies, p.SvSummary, p.RmMode, p.StaleData, p.Enabled, p.MaxStores,
-        IncentivePromos.Parse(p.PromosJson));
+        IncentivePromos.Parse(p.PromosJson), p.OnePhoto);
 
     /// <summary>Акции ноября (нет — пусто: только накопительная).</summary>
     public IncentivePromos Offers => Promos ?? IncentivePromos.None;

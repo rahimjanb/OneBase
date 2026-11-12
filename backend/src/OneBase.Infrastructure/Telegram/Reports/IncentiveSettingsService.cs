@@ -31,7 +31,8 @@ public sealed record IncentiveProgramView(
     int WorkDaysLeft,
     DateTimeOffset? UpdatedAt,
     int MaxStores,
-    IncentivePromos? Promos = null);
+    IncentivePromos? Promos = null,
+    bool OnePhoto = false);
 
 public sealed record IncentiveTypeOption(long Id, string Name, long? ParentId);
 
@@ -59,7 +60,8 @@ public sealed record IncentiveProgramInput(
     string? RmMode,
     string? StaleData,
     bool Enabled,
-    int MaxStores = IncentiveRules.MaxStores);
+    int MaxStores = IncentiveRules.MaxStores,
+    bool? OnePhoto = null);
 
 /// <summary>Строка «Накоплено сейчас»: место в своей группе, ТП, регион, опт, накоплено (доставлено, возвраты, заказы сегодня), приз и до следующего.</summary>
 public sealed record IncentiveStandingRow(int? Place, long AgentId, string Name, string? Region, bool Wholesale, decimal Total, decimal Delivered, decimal Returned,
@@ -101,7 +103,7 @@ public sealed class IncentiveSettingsService(IAppDbContext db, IncentiveService 
         program.UpdatedById = userId;
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, userId.ToString(), "telegram.reports.incentive", nameof(IncentiveProgram), program.Code,
-            new { program.Enabled, program.StartDate, program.EndDate, program.ProductTypeIds, program.TiersJson, program.WholesaleAgentIds, program.RmMode, program.StaleData }, ct);
+            new { program.Enabled, program.StartDate, program.EndDate, program.ProductTypeIds, program.TiersJson, program.WholesaleAgentIds, program.RmMode, program.StaleData, program.OnePhoto }, ct);
         return View(program, await HolidaysAsync(ct));
     }
 
@@ -300,7 +302,7 @@ public sealed class IncentiveSettingsService(IAppDbContext db, IncentiveService 
         var promos = s.Offers is { Twizos: null, Yamelly: null, Best: null, Territory: null, Budget: null } ? null : s.Offers;
         return new IncentiveProgramView(p.Code, p.Name, p.Product, p.ProductTypeIds, p.StartDate, p.EndDate, s.Tiers, s.Months,
             s.StoreSets.OrderBy(x => x.MinAvg).ToList(), p.WholesaleAgentIds, p.SeparateWholesale, p.SvCopies, p.SvSummary, p.RmMode,
-            p.StaleData, p.Enabled, state, days, p.UpdatedAt, p.MaxStores, promos);
+            p.StaleData, p.Enabled, state, days, p.UpdatedAt, p.MaxStores, promos, p.OnePhoto);
     }
 
     /// <summary>Проверка и перенос настроек. Ошибка — понятная причина (400), ничего не сохраняется.</summary>
@@ -407,6 +409,8 @@ public sealed class IncentiveSettingsService(IAppDbContext db, IncentiveService 
         p.RmMode = rm;
         p.StaleData = stale;
         p.MaxStores = input.MaxStores;
+        // Старая форма без поля — настройка остаётся прежней.
+        p.OnePhoto = input.OnePhoto ?? p.OnePhoto;
         p.Enabled = input.Enabled;
     }
 

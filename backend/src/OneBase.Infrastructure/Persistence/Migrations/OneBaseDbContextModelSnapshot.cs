@@ -4877,6 +4877,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<bool>("OnePhoto")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Product")
                         .IsRequired()
                         .HasMaxLength(100)

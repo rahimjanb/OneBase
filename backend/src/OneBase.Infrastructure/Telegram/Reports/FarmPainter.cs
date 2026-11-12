@@ -375,9 +375,11 @@ internal abstract class FarmPainter(SkiaReportRenderer.Typefaces faces, string l
         /// <summary>
         /// Поле маршрута: зелёная карта, домики по два в ряд вдоль дороги змейкой, пройденный путь зелёными следами (кроме утра), деревья,
         /// выноски (рисует наследник: индекс магазина и центр домика), герой у старта, следующего магазина или финиша, подпись страницы.
+        /// Маршрут на нескольких картинках: total — магазинов во всём маршруте (подпись «магазины 1–16» и на первой части), hero — герой на
+        /// этой части (<see cref="HeroOnPage"/>: один на весь маршрут, а не в конце каждой картинки).
         /// </summary>
         protected void Farm(SKCanvas c, float top, float height, IReadOnlyList<FarmStop> stops, IReadOnlyList<float> rowHeights, string slot, int offset,
-            Action<int, float, float> callout)
+            Action<int, float, float> callout, int total = 0, bool hero = true)
         {
             using var bg = Fill(C.Map);
             using var edge = Stroke(C.MapBorder, 3);
@@ -470,19 +472,46 @@ internal abstract class FarmPainter(SkiaReportRenderer.Typefaces faces, string l
                 callout(p.Index, p.X, p.Y);
             }
 
-            if (points.Count > 0)
+            if (points.Count > 0 && hero)
             {
                 static (float, float) Beside((float X, float Y, int Index) p) => (p.X + (p.X > Width / 2 ? -96 : 96), p.Y + 6);
-                var hero = slot switch
+                var at = slot switch
                 {
                     "morning" => Beside(points[0]),
                     "evening" => Beside(points[^1]),
                     _ => Beside(heroAt >= 0 ? points[heroAt] : points[^1]),
                 };
-                Hero(c, hero.Item1, hero.Item2);
+                Hero(c, at.Item1, at.Item2);
             }
 
-            TextRight(c, offset > 0 ? F("магазины {0}–{1}", offset + 1, offset + stops.Count) : "", Width - Pad - 20, top + 14, 15, Faces.Medium, C.Ink3);
+            var part = offset > 0 || total > offset + stops.Count;
+            TextRight(c, part ? F("магазины {0}–{1}", offset + 1, offset + stops.Count) : "", Width - Pad - 20, top + 14, 15, Faces.Medium, C.Ink3);
+        }
+
+        /// <summary>
+        /// Герой на части маршрута [from, from + count) из statuses (весь маршрут): утром — у старта (первая часть), вечером — у финиша (последняя),
+        /// днём — у первого непройденного магазина, все пройдены — у финиша.
+        /// </summary>
+        protected static bool HeroOnPage(string slot, IReadOnlyList<string> statuses, int from, int count)
+        {
+            if (statuses.Count == 0 || count <= 0)
+            {
+                return false;
+            }
+
+            var last = from + count >= statuses.Count;
+            if (slot == "morning")
+            {
+                return from == 0;
+            }
+
+            if (slot == "evening")
+            {
+                return last;
+            }
+
+            var next = statuses.ToList().FindIndex(s => s is BattleStoreStatus.Ahead or C.PlainStatus);
+            return next < 0 ? last : next >= from && next < from + count;
         }
 
         protected void House(SKCanvas c, float cx, float cy, float s, string status, string? badgeStatus, int number)

@@ -56,6 +56,12 @@ public class IncentiveProgram : Entity
     /// <summary>Заказы Linko не обновились: stamp — отправить последние данные с отметкой времени, skip — не отправлять (в журнал — причина).</summary>
     public string StaleData { get; set; } = IncentiveStaleData.Stamp;
 
+    /// <summary>
+    /// Карточка — одной картинкой: длинный маршрут, сводка команды и зоны не делятся на несколько фото (картинка выше 2 560 px — Telegram
+    /// показывает её уменьшенной). Выключено — длинное продолжается следующей картинкой.
+    /// </summary>
+    public bool OnePhoto { get; set; }
+
     public bool Enabled { get; set; }
 
     /// <summary>

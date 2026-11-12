@@ -76,7 +76,7 @@ internal static partial class IncentiveCardRenderer
             {
                 c.DrawLine(Pad + 20, y, Width - Pad - 20, y, line);
                 StatusDot(c, Pad + 36, y + 25, row.Status);
-                TextFit(c, row.Agent.Name, Pad + 58, y + 14, sleepX - Pad - 130, 17, Faces.Medium, C.Ink);
+                TextFit(c, Person(row.Agent.Name), Pad + 58, y + 14, sleepX - Pad - 130, 17, Faces.Medium, C.Ink);
                 if (O.Yamelly is not null)
                 {
                     TextRight(c, $"{row.SleepingWoken}/{row.SleepingPlanned}", sleepX, y + 14, 17, Faces.Bold, C.Pink);
@@ -115,7 +115,7 @@ internal static partial class IncentiveCardRenderer
             foreach (var row in rows.OrderByDescending(r => r.Total).ThenBy(r => r.Agent.Name, StringComparer.CurrentCultureIgnoreCase))
             {
                 c.DrawLine(Pad + 20, ty, Width - Pad - 20, ty, line);
-                TextFit(c, row.Agent.Name + (row.Wholesale ? $" · {T("опт")}" : ""), Pad + 24, ty + 11, 440, 17, Faces.Medium, C.Ink);
+                TextFit(c, Person(row.Agent.Name) + (row.Wholesale ? $" · {T("опт")}" : ""), Pad + 24, ty + 11, 440, 17, Faces.Medium, C.Ink);
                 TextRight(c, IncentiveTexts.Kg1(row.Total), Pad + 560, ty + 11, 17, Faces.Bold, C.Ink);
                 var left = tier is null ? null : row.Progress.Tiers.FirstOrDefault(t => t.Tier.Image == tier.Image);
                 TextRight(c, left is null ? "—" : left.Reached ? "✓" : IncentiveTexts.Kg(left.Left), Pad + 780, ty + 11, 17, Faces.Bold, left?.Reached == true ? C.Green : C.Ink);
@@ -211,12 +211,12 @@ internal static partial class IncentiveCardRenderer
                 blocks.Add(regions);
             }
 
-            // Не выше 2 560 px: что не поместилось — следующей картинкой (у сводки по всей стране — таблица регионов).
+            // Не выше 2 560 px: что не поместилось — следующей картинкой (у сводки по всей стране — таблица регионов); «одной картинкой» — всё на одной.
             var pages = new List<List<(float Height, Action<SKCanvas, float> Draw)>> { new() };
             var used = head + Pad + footerHeight;
             foreach (var block in blocks)
             {
-                if (pages[^1].Count > 0 && used + block.Height + Gap > MaxPageHeight)
+                if (!P.OnePhoto && pages[^1].Count > 0 && used + block.Height + Gap > MaxPageHeight)
                 {
                     pages.Add([]);
                     used = head + Pad + footerHeight;

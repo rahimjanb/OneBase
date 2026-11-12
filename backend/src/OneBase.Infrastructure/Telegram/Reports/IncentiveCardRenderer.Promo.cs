@@ -114,7 +114,13 @@ internal static partial class IncentiveCardRenderer
             const float mapChrome = 88 + Gap;
             var emptyHeight = stores.Count == 0 ? 140 + Gap : 0;
             var pages = new List<(int From, int To)>();
-            for (var r = 0; pages.Count < 8;)
+            if (P.OnePhoto)
+            {
+                // «Одной картинкой» (настройка акции): весь маршрут и все блоки — на одной, без продолжения.
+                pages.Add((0, rows.Count));
+            }
+
+            for (var r = 0; !P.OnePhoto && pages.Count < 8;)
             {
                 var budget = MaxPageHeight - head - Pad - (pages.Count == 0 ? topHeight + emptyHeight : 0);
                 var rest = rows.Skip(r).Sum();
@@ -143,7 +149,8 @@ internal static partial class IncentiveCardRenderer
             }
 
             var title = slot switch { IncentiveSlot.Midday => T("Полдень"), IncentiveSlot.Afternoon => T("Итоги 16:00"), IncentiveSlot.Evening => T("Итог дня"), _ => T("Маршрут дня") };
-            var subtitle = $"{card.Agent.Name} · {card.Agent.Region ?? ""} · {Weekday(cards.Date)} {DayMonth(cards.Date)}";
+            var subtitle = $"{AgentTitle(card.Agent)} · {Weekday(cards.Date)} {DayMonth(cards.Date)}";
+            var statuses = stores.Select(StopStatus).ToList();
             for (var p = 0; p < pages.Count; p++)
             {
                 var (from, to) = pages[p];
@@ -184,7 +191,7 @@ internal static partial class IncentiveCardRenderer
                         var h = CalloutHeight(page[i], evaluated);
                         var cx = x < Width / 2 ? Pad + 12 : Width - Pad - 12 - CalloutWidth;
                         PromoCallout(c, cx, cy - h / 2 + 4, page[i], evaluated);
-                    });
+                    }, stores.Count, HeroOnPage(slot, statuses, from * 2, page.Count));
                     y += mapHeight + Gap;
                 }
 
@@ -338,8 +345,8 @@ internal static partial class IncentiveCardRenderer
                     if (promo.Best is { } best && O.Best is { } b && b.Covers(cards.Date))
                     {
                         parts.Add(best.Place is { } place
-                            ? F("TW-01: {0}, сейчас {1}-е место — итог в 19:00", Kg(best.Kg), place)
-                            : F("TW-01: {0} — порог {1}, итог в 19:00", Kg(best.Kg), Kg(best.MinKg)));
+                            ? F("TW-01: {0}, сейчас {1}-е место · итог TW-01 — в 19:00", Kg(best.Kg), place)
+                            : F("TW-01: {0} — порог {1} · итог TW-01 — в 19:00", Kg(best.Kg), Kg(best.MinKg)));
                     }
 
                     if (parts.Count == 0)
@@ -369,14 +376,22 @@ internal static partial class IncentiveCardRenderer
 
         private static bool YamellyShown(IncentiveStore s, bool evaluated) => evaluated && s.YamellyStatus is { } ys && ys != BattleStoreStatus.Ahead;
 
+        /// <summary>Строка названия в выноске (длинное название — следующей строкой, а не мелким шрифтом с «…»).</summary>
+        private const float CalloutNameLine = 20;
+
+        /// <summary>«9. KOZIMAKA OPTOM YANGI DO'KON»: номер и название точки — до трёх строк шириной выноски.</summary>
+        private List<string> CalloutName(IncentiveStore s) =>
+            Wrap($"{s.Order}. {Name(s.Name, s.MarketId)}", Faces.Bold, 16, CalloutWidth - 24, 3);
+
         private float CalloutHeight(IncentiveStore s, bool evaluated)
         {
+            var extra = (CalloutName(s).Count - 1) * CalloutNameLine;
             if (s.Plain)
             {
-                return 66;
+                return 66 + extra;
             }
 
-            var h = 12f + 22;
+            var h = 12f + 22 + extra;
             if (s.Sleeping)
             {
                 h += 6 + 20 + 19 + (YamellyShown(s, evaluated) ? 19 : 0);
@@ -408,12 +423,18 @@ internal static partial class IncentiveCardRenderer
                 using var dash = new SKPaint { Color = PaperEdge, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, PathEffect = SKPathEffect.CreateDash([6, 4], 0) };
                 c.DrawRoundRect(rect, paper);
                 c.DrawRoundRect(rect, dash);
-                TextFit(c, $"{s.Order}. {Name(s.Name, s.MarketId)}", x + 12, y + 10, w - 24, 16, Faces.SemiBold, C.Ink2);
+                var plainName = CalloutName(s);
+                for (var i = 0; i < plainName.Count; i++)
+                {
+                    TextFit(c, plainName[i], x + 12, y + 10 + i * CalloutNameLine, w - 24, 16, Faces.SemiBold, C.Ink2);
+                }
+
+                var ly = y + 36 + (plainName.Count - 1) * CalloutNameLine;
                 var line = s.AvgCheck > 0 ? F("обычный заказ ~{0}", Check(s.AvgCheck)) : T("обычный заказ");
-                TextFit(c, line, x + 12, y + 36, w - 24 - (evaluated && s.HasOrder ? 70 : 0), 13, Faces.Medium, C.Ink3);
+                TextFit(c, line, x + 12, ly, w - 24 - (evaluated && s.HasOrder ? 70 : 0), 13, Faces.Medium, C.Ink3);
                 if (evaluated && s.HasOrder)
                 {
-                    TextRight(c, $"✓ {T("заказ")}", x + w - 12, y + 36, 13, Faces.SemiBold, C.Green);
+                    TextRight(c, $"✓ {T("заказ")}", x + w - 12, ly, 13, Faces.SemiBold, C.Green);
                 }
 
                 return;
@@ -426,8 +447,13 @@ internal static partial class IncentiveCardRenderer
                 c.DrawRoundRect(rect, edge);
             }
 
-            TextFit(c, $"{s.Order}. {Name(s.Name, s.MarketId)}", x + 12, y + 10, w - 24, 16, Faces.Bold, C.Ink);
-            var cy = y + 34;
+            var name = CalloutName(s);
+            for (var i = 0; i < name.Count; i++)
+            {
+                TextFit(c, name[i], x + 12, y + 10 + i * CalloutNameLine, w - 24, 16, Faces.Bold, C.Ink);
+            }
+
+            var cy = y + 34 + (name.Count - 1) * CalloutNameLine;
             var tx = x + 48;
             var tw = w - 60;
             if (s.Sleeping && O.Yamelly is { } ym)
@@ -545,8 +571,8 @@ internal static partial class IncentiveCardRenderer
             return F(form, n);
         }
 
-        /// <summary>Имя точки Linko; пустое — «ТТ 12345».</summary>
-        private string Name(string name, long id) => string.IsNullOrWhiteSpace(name) ? F("ТТ {0}", id) : name;
+        /// <summary>Имя точки Linko заглавными (в Linko — то заглавными, то строчными: на карточке одинаково); пустое — «ТТ 12345».</summary>
+        private string Name(string name, long id) => string.IsNullOrWhiteSpace(name) ? F("ТТ {0}", id) : name.Trim().ToUpperInvariant();
 
         /// <summary>Фасовка из настроек («420 г») на языке карточки.</summary>
         private string Units(string text) => Language == "ru" ? text : text.Replace(" кг", " kg").Replace(" г", " g");
@@ -1079,7 +1105,7 @@ internal static partial class IncentiveCardRenderer
             var footer = PromoWeekFooter(card);
             using var surface = Surface(footerTop + FooterHeight(footer) + Pad + 6, out var c);
             var weekNo = (week.Monday.Day - 1) / 7 + 1;
-            Header(c, strip, T("Итог недели"), $"{card.Agent.Name} · {card.Agent.Region ?? ""} · {DayMonth(week.Monday)}–{DayMonth(week.Saturday)}", IncentiveSlot.Week, 0, 1,
+            Header(c, strip, T("Итог недели"), $"{AgentTitle(card.Agent)} · {DayMonth(week.Monday)}–{DayMonth(week.Saturday)}", IncentiveSlot.Week, 0, 1,
                 F("Нед {0}", weekNo), IncentiveTexts.MonthOf(week.Monday.Month, Language));
             StaleBanner(c, strip + HeaderHeight);
 
@@ -1288,7 +1314,7 @@ internal static partial class IncentiveCardRenderer
             var last = first.AddMonths(1).AddDays(-1);
             var from = O.Yamelly is { } ymp && ymp.Start > first && ymp.Start <= last ? ymp.Start : first;
             var to = P.End < last ? P.End : last;
-            Header(c, strip, month.Final ? T("Итог акции") : T("Итог месяца"), $"{card.Agent.Name} · {card.Agent.Region ?? ""} · {IncentiveTexts.MonthName(month.Month, Language)}",
+            Header(c, strip, month.Final ? T("Итог акции") : T("Итог месяца"), $"{AgentTitle(card.Agent)} · {IncentiveTexts.MonthName(month.Month, Language)}",
                 IncentiveSlot.Month, 0, 1, name, $"{from.Day:00}–{DayMonth(to)}");
             StaleBanner(c, strip + HeaderHeight);
 

@@ -728,6 +728,8 @@ export type IncentiveProgram = {
   maxStores: number;
   /** Акции ноября (YM-01…03, TW-01…03); null — нет. Сохраняются отдельно. */
   promos: IncentivePromos | null;
+  /** Карточка — одной картинкой: длинный маршрут, сводки команды и зоны не делятся на несколько фото. */
+  onePhoto: boolean;
 };
 
 export type IncentiveOverview = {

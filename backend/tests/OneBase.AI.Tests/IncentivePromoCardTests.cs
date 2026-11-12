@@ -186,7 +186,7 @@ public class IncentivePromoCardTests
 
     private static readonly SkiaReportRenderer Renderer = new();
 
-    private static IReadOnlyList<byte[]> Render(IncentiveCards cards, string name)
+    private static IReadOnlyList<byte[]> Render(IncentiveCards cards, string name, int maxHeight = 2560)
     {
         var (caption, summary) = IncentiveTexts.Caption(cards);
         var document = new ReportDocument("incentive." + cards.Slot, ReportType.Battle, "tp", "9. Накопительная акция", "ТП andijon 4 Мухаммаджон · Андижон", null, cards.Date,
@@ -205,7 +205,7 @@ public class IncentivePromoCardTests
         {
             using var bitmap = SKBitmap.Decode(png);
             Assert.Equal(1080, bitmap.Width);
-            Assert.InRange(bitmap.Height, 400, 2560);
+            Assert.InRange(bitmap.Height, 400, maxHeight);
         }
 
         return pages;
@@ -246,6 +246,50 @@ public class IncentivePromoCardTests
         using var b = SKBitmap.Decode(copy[0]);
         Assert.NotEqual(Convert.ToBase64String(own[0]), Convert.ToBase64String(copy[0]));
     }
+
+    private static IncentiveCards OnePhoto(IncentiveCards cards) => cards with { Program = cards.Program with { OnePhoto = true } };
+
+    [Fact]
+    public void One_photo_setting_keeps_each_card_on_a_single_image()
+    {
+        // Без настройки длинный маршрут и сводка по стране продолжаются следующей картинкой; с ней — одна высокая картинка со всем.
+        Assert.True(Render(Sample(IncentiveSlot.Morning), "split-morning").Count > 1);
+        Assert.True(Render(Sample(IncentiveSlot.Evening, stores: 40), "split-evening-40").Count > 1);
+        foreach (var (cards, name) in new[]
+                 {
+                     (Sample(IncentiveSlot.Morning), "one-morning"), (Sample(IncentiveSlot.Midday), "one-midday"), (Sample(IncentiveSlot.Evening, stores: 40), "one-evening-40"),
+                     (Sample(IncentiveSlot.Morning, "uz"), "one-morning-uz"), (Managers(IncentiveSlot.Summary, "ru", 20), "one-summary-20"),
+                 })
+        {
+            var pages = Render(OnePhoto(cards), name, 8_920);
+            Assert.Single(pages);
+            using var bitmap = SKBitmap.Decode(pages[0]);
+            Assert.True(bitmap.Height > 2560 || name.StartsWith("one-summary", StringComparison.Ordinal), $"{name}: {bitmap.Height}");
+            // Фото Telegram — до 10 МБ.
+            Assert.True(pages[0].Length < 10_000_000, $"{name}: {pages[0].Length} байт");
+        }
+
+        // Очень длинный маршрут — всё равно одна картинка: уменьшенная так, чтобы ширина + высота ≤ 10 000 px (предел фото Telegram).
+        var huge = Renderer.Render(Document(OnePhoto(Sample(IncentiveSlot.Morning, stores: 120))));
+        Assert.Single(huge);
+        using var big = SKBitmap.Decode(huge[0]);
+        Assert.True(big.Width + big.Height <= 10_000, $"{big.Width}×{big.Height}");
+    }
+
+    [Theory]
+    [InlineData("andijon 1 Олимжон", "ru", "Андижон 1 Олимжон")]
+    [InlineData("andijon 1 Олимжон", "uz-Cyrl", "Андижон 1 Олимжон")]
+    [InlineData("andijon 1 Олимжон", "uz", "andijon 1 Олимжон")]
+    [InlineData("Санжар Сатторов (Romitan)", "ru", "Санжар Сатторов (Ромитан)")]
+    [InlineData("Озода Иброхимова  GOOD FOOD", "ru", "Озода Иброхимова  GOOD FOOD")]
+    [InlineData("Abdurahmon Sharifov", "ru", "Abdurahmon Sharifov")]
+    [InlineData("ТП4 Сардор Яшнабод 1", "ru", "ТП4 Сардор Яшнабод 1")]
+    public void Agent_name_is_written_in_one_script_on_the_card(string name, string language, string expected) =>
+        Assert.Equal(expected, IncentiveTexts.Person(name, language));
+
+    private static ReportDocument Document(IncentiveCards cards) =>
+        new("incentive." + cards.Slot, ReportType.Battle, "tp", "9. Накопительная акция", "ТП", null, cards.Date, cards.Date.ToString("dd.MM.yyyy"), DateTimeOffset.UtcNow,
+            cards.DataAsOf, cards.Language, [], [], [], [], "", "") { Incentive = cards };
 
     private static IncentiveCards Managers(string slot, string language = "ru", int regions = 4)
     {

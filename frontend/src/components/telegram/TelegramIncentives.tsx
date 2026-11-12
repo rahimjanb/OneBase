@@ -63,6 +63,7 @@ const inputOf = (p: IncentiveProgram): IncentiveProgramInput => ({
   staleData: p.staleData,
   enabled: p.enabled,
   maxStores: p.maxStores,
+  onePhoto: p.onePhoto,
 });
 
 /**
@@ -546,6 +547,20 @@ function ProgramForm({
               </select>
             </Labeled>
           </div>
+        </Block>
+
+        <Block title="Картинки">
+          <label className="flex items-start gap-3 text-sm text-ink">
+            <Switch checked={form.onePhoto} onChange={(v) => edit({ onePhoto: v })} label={t("Всё одной картинкой")} />
+            <span>
+              <span className="font-medium">{t("Всё одной картинкой")}</span>
+              <span className="block text-xs text-ink-3">
+                {t(
+                  "Карточка ТП, сводка команды и итог зоны не делятся на несколько фото: длинный маршрут — на одной высокой картинке. Telegram показывает высокие картинки уменьшенными — мелкий текст читается с увеличением. Выключено — что не поместилось, приходит следующей картинкой.",
+                )}
+              </span>
+            </span>
+          </label>
         </Block>
 
         <Block title="Оптовые ТП" hint="У оптовых ТП объёмы выше — отдельный рейтинг; в рейтинге розницы их нет.">
