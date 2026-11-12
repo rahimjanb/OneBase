@@ -131,6 +131,9 @@ public sealed record UnitRow(
     TargetLevel? ForecastExecutionLevel = null,
     bool IsChannel = false); // направление-канал (Sales:ChannelRegions — «Базар», «КА»): не РМ, в блоке «Региональные менеджеры» не показывается
 
+/// <summary>План региона на месяц и факт, с которым его сравнивают «Продажи» (PlanScope), и откуда план.</summary>
+public sealed record RegionPlanFact(Guid RegionId, decimal? PlanKg, decimal PlanFactKg, string PlanSource);
+
 public static class UnitKinds
 {
     public const string Republic = "republic";

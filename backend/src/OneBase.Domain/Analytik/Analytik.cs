@@ -357,3 +357,64 @@ public class AnalytikMetricSnapshot : Entity
     public string? Unit { get; set; }
     public DateTimeOffset ComputedAt { get; set; }
 }
+
+/// <summary>
+/// Снимок исходных данных сценария What-If (симулятор): кто и когда снял, базовый период, дата данных, разделы автора и его область продаж,
+/// версия формул, источники и их свежесть, данные (jsonb — ScenarioBaselineData), хеш данных. Pinned — снимок сохранён в сценарии (текущий
+/// или прежний расчёт); незакреплённые снимки (черновые расчёты экрана) удаляются через 2 дня.
+/// </summary>
+public class AnalytikScenarioBaseline : Entity
+{
+    public required string Tenant { get; set; }
+    public Guid? CreatedById { get; set; }
+    public DateOnly PeriodFrom { get; set; }
+    public DateOnly PeriodTo { get; set; }
+    public DateOnly AsOf { get; set; }
+    public required string FormulaVersion { get; set; }
+
+    /// <summary>Разделы, вошедшие в снимок (sales, production, materials, finance, workforce), через запятую.</summary>
+    public required string Sections { get; set; }
+
+    /// <summary>Область продаж автора: «организация», регионы или агент — ключ для проверки, покрывают ли права другого пользователя снимок.</summary>
+    public required string ScopeKey { get; set; }
+
+    public string? SalesScope { get; set; }
+    public required string Data { get; set; }
+    public required string Sources { get; set; }
+    public required string Hash { get; set; }
+    public bool Pinned { get; set; }
+}
+
+/// <summary>
+/// Сценарий What-If: название, вид, набор (базовый, оптимистичный, пессимистичный, свой), автор, статус (active, archived), снимок исходных
+/// данных, горизонт, параметры и результат (jsonb), главный вывод, AI-анализ, версия формул, история пересчётов (jsonb), «скопирован из».
+/// Сценарий никогда не меняет бизнес-данные: только читает снимок. Version — xmin.
+/// </summary>
+public class AnalytikScenario : Entity
+{
+    public const string Active = "active";
+    public const string Archived = "archived";
+
+    public required string Tenant { get; set; }
+    public Guid OwnerId { get; set; }
+    public required string Name { get; set; }
+    public required string Kind { get; set; }
+    public required string Preset { get; set; }
+    public string Status { get; set; } = Active;
+    public Guid BaselineId { get; set; }
+    public AnalytikScenarioBaseline? Baseline { get; set; }
+    public int HorizonDays { get; set; }
+    public string? NewRegionName { get; set; }
+    public required string Parameters { get; set; }
+    public string? Result { get; set; }
+    public string? Headline { get; set; }
+    public string? AiAnalysis { get; set; }
+    public DateTimeOffset? AiAt { get; set; }
+    public DateTimeOffset? CalculatedAt { get; set; }
+    public required string FormulaVersion { get; set; }
+    public string History { get; set; } = "[]";
+    public int Revision { get; set; } = 1;
+    public Guid? CopiedFromId { get; set; }
+    public DateTimeOffset? ArchivedAt { get; set; }
+    public uint Version { get; set; }
+}

@@ -9,6 +9,7 @@ import {
   TriangleAlert,
   Wallet,
   FlaskConical,
+  SlidersHorizontal,
   ClipboardList,
   Building,
   Factory,
@@ -174,6 +175,7 @@ export const productionTabs: SectionTab[] = [
 export const analytikTabs: SectionTab[] = [
   { key: "overview", label: "Обзор", href: "/analytik", icon: LayoutDashboard, description: "состояние компании, показатели, риски и рекомендации" },
   { key: "chat", label: "AI-аналитик", short: "AI", href: "/analytik/chat", icon: MessageSquareText, description: "вопросы о любых данных OneBase на обычном языке" },
+  { key: "explore", label: "Срезы", href: "/analytik/explore", icon: Table2, description: "любой показатель по дням, регионам, товарным группам, агентам и точкам" },
   { key: "sales", label: "Продажи", href: "/analytik/sales", icon: ChartLine, permission: "sales.read", description: "выручка, план и прогноз, регионы" },
   { key: "production", label: "Производство", href: "/analytik/production", icon: Factory, permission: ["production.read", "production.manage", "procurement.read", "procurement.manage"], description: "план и факт, расход и норма, сколько можно произвести" },
   { key: "warehouse", label: "Склад", href: "/analytik/warehouse", icon: Warehouse, permission: ["procurement.read", "procurement.manage", "procurement.warehouse", "production.read", "production.manage"], description: "остатки сырья, расход, дни запаса, дефицит" },
@@ -181,6 +183,7 @@ export const analytikTabs: SectionTab[] = [
   { key: "finance", label: "Финансы", href: "/analytik/finance", icon: Wallet, permission: "finance.read", description: "оплаты, расходы на закупки" },
   { key: "hr", label: "Персонал", href: "/analytik/hr", icon: Users, permission: ["hr.read", "analytik.manage"], description: "посещаемость, отклонения, задачи отделов" },
   { key: "forecasts", label: "Прогнозы", href: "/analytik/forecasts", icon: TrendingUp, description: "прогнозы со сценариями и точностью" },
+  { key: "simulator", label: "Симулятор", href: "/analytik/simulator", icon: SlidersHorizontal, description: "сценарии «что если»: продажи, производство, сырьё, закупки, деньги" },
   { key: "risks", label: "Риски", href: "/analytik/risks", icon: TriangleAlert, description: "риски, отклонения, качество данных" },
   { key: "reports", label: "Отчёты", href: "/analytik/reports", icon: FileBarChart, description: "управленческие отчёты Excel и PDF" },
   { key: "data", label: "Карта данных", short: "Данные", href: "/analytik/data", icon: Network, description: "каталог всей базы: таблицы, связи, смысл" },

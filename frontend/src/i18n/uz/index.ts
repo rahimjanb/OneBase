@@ -2,6 +2,8 @@ import type { Dict } from "../core";
 import agents from "./agents";
 import ai from "./ai";
 import analytik from "./analytik";
+import simulator from "./simulator";
+import explore from "./explore";
 import arrivals from "./arrivals";
 import campaigns from "./campaigns";
 import common from "./common";
@@ -41,6 +43,9 @@ export const uz: Dict = {
   ...requests,
   // «Аналитик»: свои термины; общие слова (период, факт, план) ниже перекрывают разделы, где они уже переведены.
   ...analytik,
+  // Симулятор сценариев «Аналитика»: параметры, показатели, ограничения — после Аналитика (свои значения общих слов «База», «Мощность»).
+  ...simulator,
+  ...explore,
   // Цифровой двойник: общие слова переведены так же, как в разделах; разделы ниже перекрывают его.
   ...twin,
   ...production,

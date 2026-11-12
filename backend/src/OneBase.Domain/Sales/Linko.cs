@@ -210,6 +210,34 @@ public class LinkoKpiPlan
     public string? IndicatorName { get; set; }
 }
 
+/// <summary>
+/// История синхронизаций Linko: один запуск — одна строка (режим, время, итог, строки и ошибки по шагам, самая ранняя изменённая дата документов).
+/// SyncState хранит только последнее состояние; история нужна, чтобы видеть пропуски и сбои загрузки (реестр данных Аналитика). Хранится 90 дней.
+/// </summary>
+public class LinkoSyncRun
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+
+    /// <summary>Incremental | Full | Reconcile | Reset.</summary>
+    public required string Mode { get; set; }
+
+    public DateTimeOffset StartedAt { get; set; }
+    public DateTimeOffset FinishedAt { get; set; }
+
+    /// <summary>ok | failed (хотя бы один шаг с ошибкой) | cancelled.</summary>
+    public required string Status { get; set; }
+
+    public int Rows { get; set; }
+
+    /// <summary>Шаги: [{entity, rows, error}] (jsonb).</summary>
+    public string? Entities { get; set; }
+
+    /// <summary>Самая ранняя дата изменённых заказов и возвратов (поздняя приёмка, отмена, правка).</summary>
+    public DateOnly? EarliestChanged { get; set; }
+
+    public string? Error { get; set; }
+}
+
 /// <summary>Состояние синхронизации сущности: курсор last_tm и результат последнего запуска.</summary>
 public class LinkoSyncState
 {

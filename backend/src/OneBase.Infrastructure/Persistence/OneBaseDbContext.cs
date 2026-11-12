@@ -105,6 +105,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<LinkoVisit> LinkoVisits => Set<LinkoVisit>();
     public DbSet<LinkoKpiPlan> LinkoKpiPlans => Set<LinkoKpiPlan>();
     public DbSet<LinkoSyncState> LinkoSyncStates => Set<LinkoSyncState>();
+    public DbSet<LinkoSyncRun> LinkoSyncRuns => Set<LinkoSyncRun>();
     public DbSet<LinkoPromotion> LinkoPromotions => Set<LinkoPromotion>();
     public DbSet<LinkoPromotionProduct> LinkoPromotionProducts => Set<LinkoPromotionProduct>();
     public DbSet<LinkoStock> LinkoStocks => Set<LinkoStock>();

@@ -92,8 +92,7 @@ public static class SupplyPlanMath
             assumptions.Add($"Срок поставки не задан у поставщика и не виден по приездам — принят {defaultLeadTimeDays} дн.");
         }
 
-        var statistical = (decimal)(ServiceZ * sigma * Math.Sqrt(Math.Max(1, leadTime)));
-        var safety = Math.Round(Math.Max(statistical, item.MinQty), 3);
+        var safety = SafetyStock(sigma, leadTime, item.MinQty);
 
         // Задания: прошедшая дата — потребность «сейчас».
         var committed = item.Committed.Select(c => (Day: Math.Max(0, c.Date.DayNumber - today.DayNumber), c.Quantity)).ToList();
@@ -195,21 +194,31 @@ public static class SupplyPlanMath
             need30 == 0 && need90 > 0, reasons, assumptions);
     }
 
+    /// <summary>Страховой запас: max(Z₉₅ · σ дневного расхода · √срока поставки, минимальный остаток) — общий для плана закупок и симулятора.</summary>
+    public static decimal SafetyStock(double sigma, int leadTimeDays, decimal minQty) =>
+        Math.Round(Math.Max((decimal)(ServiceZ * sigma * Math.Sqrt(Math.Max(1, leadTimeDays))), minQty), 3);
+
     /// <summary>Округление вверх: до единицы закупки (мешок 50 кг), штучные — до целых, остальное — до 0,001.</summary>
-    internal static decimal RoundUp(decimal quantity, SupplyItemInput item)
+    internal static decimal RoundUp(decimal quantity, SupplyItemInput item) => RoundUp(quantity, item.PurchaseFactor, item.Unit);
+
+    /// <summary>Округление закупки вверх (общее для плана закупок и симулятора): до единицы закупки, штучные — до целых, остальное — до 0,001.</summary>
+    public static decimal RoundUp(decimal quantity, decimal? purchaseFactor, string unit)
     {
         if (quantity <= 0)
         {
             return 0;
         }
 
-        if (item.PurchaseFactor is > 0 and var factor)
+        if (purchaseFactor is > 0 and var factor)
         {
             return Math.Ceiling(quantity / factor) * factor;
         }
 
-        return CountedUnits.Contains(item.Unit) ? Math.Ceiling(quantity) : Math.Ceiling(quantity * 1000) / 1000;
+        return CountedUnits.Contains(unit) ? Math.Ceiling(quantity) : Math.Ceiling(quantity * 1000) / 1000;
     }
+
+    /// <summary>Стандартное отклонение выборки (n − 1) — разброс дневного расхода.</summary>
+    public static double StdDev(IReadOnlyList<double> values) => values.Count < 2 ? 0 : Std(values.ToArray());
 
     private static double Std(double[] values)
     {

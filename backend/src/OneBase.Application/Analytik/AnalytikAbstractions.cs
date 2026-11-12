@@ -21,6 +21,8 @@ public interface IAnalytikDb
     DbSet<AnalytikReport> Reports { get; }
     DbSet<AnalytikJobRun> JobRuns { get; }
     DbSet<AnalytikMetricSnapshot> MetricSnapshots { get; }
+    DbSet<AnalytikScenarioBaseline> ScenarioBaselines { get; }
+    DbSet<AnalytikScenario> Scenarios { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

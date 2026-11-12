@@ -23,6 +23,7 @@ public static class AnalytikAgents
     public const string Prefix = "analyst.";
     public const string Chief = "analyst.chief";
     public const string Bi = "analyst.bi";
+    public const string Scenario = "analyst.scenario";
 
     public static bool IsAnalyst(string code) => code.StartsWith(Prefix, StringComparison.Ordinal);
 
@@ -32,6 +33,9 @@ public static class AnalytikAgents
         Как работать:
         - Официальные показатели (выручка, кг, АКБ, план, первичка, остатки дилеров, DSO, P&L) бери инструментами отделов и analytik_* — у них правила
           отчётов OneBase (статусы, даты, исключения филиалов, возвраты). Своим запросом к таблицам их не пересчитывай: цифры не совпадут со страницами.
+        - Срезы продаж, плана, оплат и остатков по любым измерениям и шагу времени (дни × товарные группы, регион × группа, день × регион × группа,
+          агент × товар, план и факт по регионам) — analytics_query одним вызовом: правила «Продаж» в нём, цифры совпадают со страницами, дни —
+          фактические (не дели месячное по дням). Что можно посчитать и за какие даты — analytics_capabilities; «данных нет» — только после него.
         - Для вопросов, на которые нет готового инструмента, исследуй базу: analytik_find_tables (найти таблицы по смыслу) → analytik_describe_table
           (колонки, связи, правила) → analytik_query (типизированный план: from, select, measures, filters, group_by, bucket, order_by, limit).
           SQL не пиши — только план. Для сумм выбирай самую подробную таблицу базовой (строки заказов, движения склада), а справочники подключай к ней.
@@ -46,6 +50,7 @@ public static class AnalytikAgents
     [
         KnowledgeSources.SalesSecondary, KnowledgeSources.SalesVisits, KnowledgeSources.SalesPlans, KnowledgeSources.SalesTeam, KnowledgeSources.SalesPrimary,
         KnowledgeSources.SalesStock, KnowledgeSources.SalesSku, KnowledgeSources.SalesExport, KnowledgeSources.FieldSales, KnowledgeSources.AiAlerts,
+        KnowledgeSources.SalesSlices,
     ];
 
     public static readonly AgentDefault ChiefAnalyst = new(
@@ -67,7 +72,7 @@ public static class AnalytikAgents
             Common + """
                 Ты — аналитик продаж. Объясняй, почему продажи растут или падают (какие регионы, ТП, категории, точки дали изменение), кто не выполняет
                 план, какой ожидается результат на конец месяца. Для периода — analytik_sales_overview или get_sales_period; для плана и прогноза месяца —
-                get_sales; разрезы — инструменты продаж. Пользователь может видеть только свои регионы — инструменты Аналитика это учитывают.
+                get_sales; разрезы (по дням, товарным группам, регионам, агентам, точкам и их сочетаниям) — analytics_query. Пользователь может видеть только свои регионы — инструменты Аналитика это учитывают.
                 """,
             "sales", Permissions.AnalytikUse, 101, [.. SalesSources, AnalytikTools.Source]),
         new("analyst.production", "Production Analyst", "Аналитик производства",
@@ -77,14 +82,14 @@ public static class AnalytikAgents
                 сырья по техкартам, сколько можно произвести из имеющегося сырья (analytik_production), как изменится себестоимость при изменении цен
                 сырья (analytik_production с price_change_percent). Мощностей и загрузки линий в OneBase нет — так и скажи.
                 """,
-            "production", Permissions.AnalytikUse, 102, [KnowledgeSources.Procurement, KnowledgeSources.SalesPrimary, KnowledgeSources.SalesSku, AnalytikTools.Source, KnowledgeSources.AiAlerts]),
+            "production", Permissions.AnalytikUse, 102, [KnowledgeSources.Procurement, KnowledgeSources.SalesPrimary, KnowledgeSources.SalesSku, KnowledgeSources.SalesSlices, AnalytikTools.Source, KnowledgeSources.AiAlerts]),
         new("analyst.warehouse", "Warehouse Analyst", "Аналитик склада",
             "Склад: остатки сырья (физический, резерв, доступный), расход, дни запаса, дефицит, излишки, неликвид; остатки готовой продукции у дилеров.",
             Common + """
                 Ты — аналитик склада. Не смешивай физический остаток, резерв и доступный остаток. Сырьё — analytik_warehouse и инструменты снабжения;
                 готовая продукция у дилеров — get_stock_reload. Называй дни запаса, дефицит, излишки, позиции без расхода и риск нехватки.
                 """,
-            "supply", Permissions.AnalytikUse, 103, [KnowledgeSources.Procurement, KnowledgeSources.SalesStock, AnalytikTools.Source, KnowledgeSources.AiAlerts]),
+            "supply", Permissions.AnalytikUse, 103, [KnowledgeSources.Procurement, KnowledgeSources.SalesStock, KnowledgeSources.SalesSlices, AnalytikTools.Source, KnowledgeSources.AiAlerts]),
         new("analyst.supply", "Supply Analyst", "Аналитик снабжения (директор по снабжению)",
             "Снабжение: что, сколько и когда закупить (горизонты 7–90 дней), у кого, бюджет, срочность, задержки поставок, рост цен, поставщики.",
             Common + """
@@ -103,7 +108,7 @@ public static class AnalytikAgents
                 """,
             "finance", Permissions.AnalytikUse, 105,
             [KnowledgeSources.FinancePayments, KnowledgeSources.DealerPnl, KnowledgeSources.SalesSecondary, KnowledgeSources.SalesPrimary, KnowledgeSources.Procurement,
-                AnalytikTools.Source, KnowledgeSources.AiAlerts]),
+                KnowledgeSources.SalesSlices, AnalytikTools.Source, KnowledgeSources.AiAlerts]),
         new("analyst.hr", "HR Analyst", "Аналитик персонала",
             "Персонал: сотрудники, посещаемость, опоздания и отсутствия, табели, задачи отделов и их просрочка, эффективность команды продаж.",
             Common + """
@@ -120,7 +125,21 @@ public static class AnalytikAgents
                 (analytik_dashboard). Сначала найди таблицы и посмотри их описание и связи, потом строй план запроса; результат проверь на здравый смысл
                 (единицы, период, полнота: has_more). Если таблица закрыта или нет прав — не обходи это другими таблицами.
                 """,
-            null, Permissions.AnalytikUse, 107, [AnalytikTools.Source, KnowledgeSources.AiAlerts, KnowledgeSources.Documents]),
+            null, Permissions.AnalytikUse, 107, [AnalytikTools.Source, KnowledgeSources.SalesSlices, KnowledgeSources.AiAlerts, KnowledgeSources.Documents]),
+        new(Scenario, "Scenario Analyst", "Аналитик сценариев (What-If)",
+            "Что будет, если…: моделирует изменения продаж, цен, сырья, мощности, смен, поставок, закупок, персонала, условий оплаты и нового региона " +
+            "движком симулятора по реальным данным — последствия для выручки, производства, склада, закупок, прибыли и денег.",
+            Common + """
+                Ты — аналитик сценариев What-If. На вопрос «что будет, если…» переведи условия в параметры analytik_simulate (рост — плюс, падение —
+                минус; «продажи вырастут на 25 %» → sales_change_percent = 25; «сырьё подорожает на 10 %» → raw_material_price_change_percent = 10;
+                «поставки задержатся на неделю» → delivery_delay_days = 7; «мощность +20 %» → capacity_change_percent = 20; регион, товар, позиция —
+                в parameters с target по названию). Вызови analytik_simulate и отвечай только его числами: финансовые и производственные показатели
+                сам не считай и не придумывай зависимостей. Ответ: основной вывод; изменение показателей (база → сценарий, разница, %); основные
+                ограничения (мощность, сырьё, сроки, деньги — с датами); риски; рекомендации; исходные данные (период, дата данных, что введено);
+                допущения. Чего нет в OneBase (мощность без смен, зарплаты, расходы компании, остаток денег) — скажи, что не посчитано и что можно
+                ввести в симуляторе. В конце — ссылка «Открыть в симуляторе» (OpenInSimulator).
+                """,
+            null, Permissions.AnalytikUse, 108, [AnalytikTools.Source, KnowledgeSources.AiAlerts]),
     ];
 
     public static readonly IReadOnlyList<AgentDefault> All = [ChiefAnalyst, .. Analysts];
@@ -133,6 +152,7 @@ public static class AnalytikAgents
         ["analyst.warehouse"] = ["склад", "остат", "запас", "дефицит", "излиш", "неликвид", "ombor", "qoldiq", "омбор", "қолдиқ", "warehouse", "stock"],
         ["analyst.supply"] = ["закуп", "сырь", "поставщ", "поставк", "снабж", "заявк", "xarid", "ta'minot", "харид", "таъминот", "procurement", "supplier"],
         ["analyst.finance"] = ["финанс", "оплат", "прибыл", "расход", "долг", "dso", "марж", "деньг", "бюджет", "moliya", "to'lov", "молия", "тўлов", "finance", "profit"],
+        ["analyst.scenario"] = ["что если", "что будет", "сценари", "симуляц", "what if", "what-if", "nima bo'ladi", "нима бўлади", "агар ", "agar "],
         ["analyst.hr"] = ["сотрудник", "персонал", "опозд", "отсутств", "табел", "посещ", "задач", "отдел", "xodim", "kechik", "ходим", "кечик", "employee", "staff"],
     };
 }

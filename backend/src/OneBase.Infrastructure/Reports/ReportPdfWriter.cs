@@ -77,6 +77,11 @@ public sealed class ReportPdfWriter : IReportPdfWriter
                 return;
             }
 
+            if (sheet.Chart is { } chart)
+            {
+                column.Item().PaddingBottom(8).Element(e => Chart(e, sheet, chart));
+            }
+
             column.Item().Table(table =>
             {
                 table.ColumnsDefinition(columns =>
@@ -137,6 +142,62 @@ public sealed class ReportPdfWriter : IReportPdfWriter
             {
                 column.Item().PaddingTop(4).Text(sheet.Note).FontSize(7.5f).FontColor(Muted);
             }
+        });
+    }
+
+    private static readonly Color[] SeriesColors = [Color.FromHex("#94A3B8"), Navy, Color.FromHex("#0EA5E9"), Color.FromHex("#F59E0B"), Color.FromHex("#10B981")];
+
+    /// <summary>Горизонтальные столбцы: на строку — подпись и по столбцу на серию (длина — доля от наибольшего модуля), справа — значения.</summary>
+    private static void Chart(IContainer container, AiReportSheet sheet, AiReportChart chart)
+    {
+        static decimal? Value(IReadOnlyList<JsonElement> row, int i) => i < row.Count && row[i].ValueKind == JsonValueKind.Number ? row[i].GetDecimal() : null;
+        var rows = sheet.Rows.Take(chart.MaxRows).ToList();
+        var max = rows.SelectMany(r => chart.ValueColumns.Select(i => Value(r, i))).Where(v => v is not null).Select(v => Math.Abs(v!.Value)).DefaultIfEmpty(0).Max();
+        container.Column(column =>
+        {
+            column.Spacing(3);
+            foreach (var row in rows)
+            {
+                column.Item().Row(line =>
+                {
+                    line.RelativeItem(3).AlignMiddle().PaddingRight(6).Text(Format(chart.LabelColumn < row.Count ? row[chart.LabelColumn] : default, ReportFormats.Text))
+                        .FontSize(7.5f);
+                    line.RelativeItem(6).Column(bars =>
+                    {
+                        bars.Spacing(1.5f);
+                        for (var s = 0; s < chart.ValueColumns.Count; s++)
+                        {
+                            var v = Value(row, chart.ValueColumns[s]);
+                            var share = max > 0 && v is { } x ? (float)Math.Min(1, Math.Abs(x) / max) : 0f;
+                            var color = v is < 0 ? Color.FromHex("#DC2626") : SeriesColors[s % SeriesColors.Length];
+                            bars.Item().Height(6).Row(bar =>
+                            {
+                                if (share > 0.002f)
+                                {
+                                    bar.RelativeItem(share).Background(color);
+                                }
+
+                                if (share < 0.998f)
+                                {
+                                    bar.RelativeItem(1 - share);
+                                }
+                            });
+                        }
+                    });
+                    line.RelativeItem(3).AlignRight().AlignMiddle().Text(string.Join(" → ", chart.ValueColumns.Select(i =>
+                        Format(i < row.Count ? row[i] : default, sheet.Columns[i].Format) is { Length: > 0 } t ? t : "—"))).FontSize(7.5f);
+                });
+            }
+
+            column.Item().PaddingTop(2).Text(text =>
+            {
+                text.DefaultTextStyle(x => x.FontSize(7f).FontColor(Muted));
+                for (var s = 0; s < chart.ValueColumns.Count; s++)
+                {
+                    text.Span("■ ").FontColor(SeriesColors[s % SeriesColors.Length]);
+                    text.Span(sheet.Columns[chart.ValueColumns[s]].Header + "   ");
+                }
+            });
         });
     }
 

@@ -63,6 +63,7 @@ public interface IAppDbContext
     DbSet<LinkoVisit> LinkoVisits { get; }
     DbSet<LinkoKpiPlan> LinkoKpiPlans { get; }
     DbSet<LinkoSyncState> LinkoSyncStates { get; }
+    DbSet<LinkoSyncRun> LinkoSyncRuns { get; }
     DbSet<LinkoPromotion> LinkoPromotions { get; }
     DbSet<LinkoPromotionProduct> LinkoPromotionProducts { get; }
     DbSet<LinkoStock> LinkoStocks { get; }

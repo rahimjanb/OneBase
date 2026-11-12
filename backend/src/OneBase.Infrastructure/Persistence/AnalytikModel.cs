@@ -189,5 +189,42 @@ internal static class AnalytikModel
             e.Property(x => x.Unit).HasMaxLength(16);
             e.HasIndex(x => new { x.Metric, x.Dimension, x.Date }).IsUnique().HasDatabaseName("IX_AnalytikMetricSnapshots_Key");
         });
+
+        b.Entity<AnalytikScenarioBaseline>(e =>
+        {
+            e.ToTable("ScenarioBaselines", Schema);
+            e.HasKey(x => x.Id).HasName("PK_AnalytikScenarioBaselines");
+            e.Property(x => x.Tenant).HasMaxLength(64);
+            e.Property(x => x.FormulaVersion).HasMaxLength(16);
+            e.Property(x => x.Sections).HasMaxLength(200);
+            e.Property(x => x.ScopeKey).HasMaxLength(4000);
+            e.Property(x => x.SalesScope).HasMaxLength(500);
+            e.Property(x => x.Data).HasColumnType("jsonb");
+            e.Property(x => x.Sources).HasColumnType("jsonb");
+            e.Property(x => x.Hash).HasMaxLength(64);
+            e.HasIndex(x => new { x.Tenant, x.CreatedById, x.CreatedAt }).HasDatabaseName("IX_AnalytikScenarioBaselines_Tenant_Author");
+            e.HasIndex(x => new { x.Pinned, x.CreatedAt }).HasDatabaseName("IX_AnalytikScenarioBaselines_Pinned_CreatedAt");
+        });
+
+        b.Entity<AnalytikScenario>(e =>
+        {
+            e.ToTable("Scenarios", Schema);
+            e.HasKey(x => x.Id).HasName("PK_AnalytikScenarios");
+            e.Property(x => x.Tenant).HasMaxLength(64);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Kind).HasMaxLength(32);
+            e.Property(x => x.Preset).HasMaxLength(16);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.NewRegionName).HasMaxLength(200);
+            e.Property(x => x.Parameters).HasColumnType("jsonb");
+            e.Property(x => x.Result).HasColumnType("jsonb");
+            e.Property(x => x.Headline).HasMaxLength(2000);
+            e.Property(x => x.FormulaVersion).HasMaxLength(16);
+            e.Property(x => x.History).HasColumnType("jsonb");
+            e.Property(x => x.Version).IsRowVersion();
+            e.HasIndex(x => new { x.Tenant, x.OwnerId, x.Status }).HasDatabaseName("IX_AnalytikScenarios_Tenant_Owner_Status");
+            e.HasOne(x => x.Baseline).WithMany().HasForeignKey(x => x.BaselineId).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_AnalytikScenarios_AnalytikScenarioBaselines_BaselineId");
+        });
     }
 }

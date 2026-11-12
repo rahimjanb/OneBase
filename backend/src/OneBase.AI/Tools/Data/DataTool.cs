@@ -230,6 +230,36 @@ public sealed class ToolArgs(JsonElement root)
         return value < min || value > max ? throw new ToolArgumentException($"Аргумент {name} — от {min} до {max}.") : value;
     }
 
+    /// <summary>Аргумент как JSON (массив, объект) — для инструментов со списком параметров; нет аргумента — null.</summary>
+    public JsonElement? Element(string name) =>
+        root.ValueKind == JsonValueKind.Object && root.TryGetProperty(name, out var v) && v.ValueKind != JsonValueKind.Null ? v : null;
+
+    /// <summary>Число с дробной частью в пределах; строка с числом тоже принимается.</summary>
+    public decimal? Dec(string name, decimal min, decimal max)
+    {
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty(name, out var v) || v.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        decimal value;
+        if (v.ValueKind == JsonValueKind.Number && v.TryGetDecimal(out var n))
+        {
+            value = n;
+        }
+        else if (v.ValueKind == JsonValueKind.String && decimal.TryParse(v.GetString(), System.Globalization.NumberStyles.Number,
+                     System.Globalization.CultureInfo.InvariantCulture, out var s))
+        {
+            value = s;
+        }
+        else
+        {
+            throw new ToolArgumentException($"Аргумент {name} должен быть числом.");
+        }
+
+        return value < min || value > max ? throw new ToolArgumentException($"Аргумент {name} — от {min} до {max}.") : value;
+    }
+
     public string? Str(string name) =>
         root.ValueKind == JsonValueKind.Object && root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString())
             ? v.GetString()!.Trim()

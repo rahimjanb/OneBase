@@ -107,6 +107,18 @@ internal static class SalesModel
             e.Property(x => x.Entity).HasMaxLength(64);
         });
 
+        b.Entity<LinkoSyncRun>(e =>
+        {
+            // Журнал OneBase, а не копия Linko: в схеме sales, при «Очистить и загрузить заново» не очищается (схема linko — очищается вся).
+            e.ToTable("LinkoSyncRuns", "sales");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Mode).HasMaxLength(16);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.Entities).HasColumnType("jsonb");
+            e.Property(x => x.Error).HasMaxLength(2000);
+            e.HasIndex(x => x.StartedAt);
+        });
+
         b.Entity<LinkoStock>(e =>
         {
             e.ToTable("Stocks", "linko");

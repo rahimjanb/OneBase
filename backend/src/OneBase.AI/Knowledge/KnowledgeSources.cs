@@ -22,6 +22,12 @@ public static class KnowledgeSources
     /// <summary>Продажи по SKU за период: ABC, динамика, регионы и точки товара.</summary>
     public const string SalesSku = "sales.sku";
 
+    /// <summary>
+    /// Универсальный аналитический движок (срезы): любой показатель продаж, плана, оплат и остатков по любым совместимым измерениям и шагу
+    /// времени — день × товарная группа × регион и т.д. Префикс «sales.»: ответы по нему сбрасываются с каждой загрузкой Linko.
+    /// </summary>
+    public const string SalesSlices = "sales.slices";
+
     /// <summary>Экспорт: продажи экспортным точкам по странам и отгрузки завода на экспорт.</summary>
     public const string SalesExport = "sales.export";
 
@@ -78,6 +84,12 @@ public static class KnowledgeSources
             "снабжения. Оплаты поставщикам появятся с модулем «Финансы».",
             "procurement.Requests, RequestItems, Approvals, PurchaseOrders, PurchaseOrderItems, Offers, Suppliers, StockBalances, StockDocuments, ReceiptLines",
             "Заявки; Снабжение: обзор, заказы, поставщики, приёмка, склад, отчёты", Permissions.ProcurementRequest),
+        new(SalesSlices, "Срезы данных (универсальный движок)",
+            "Любой срез продаж, плана, оплат и остатков: показатели (выручка, кг, заказы, АКБ, средний чек, доля, план и выполнение, оплаты, остаток " +
+            "и дни запаса) × измерения (день/неделя/месяц, регион, филиал, направление, РМ, СВР, дилер, канал, агент, точка, товар, товарная группа) " +
+            "с фильтрами и сравнением периодов; с проверкой полноты и источником каждой цифры.",
+            "linko.Orders, OrderLines, OrderReturns, OrderReturnLines, Products, ProductTypes, Payments, ProductBalances; sales.Regions, RegionPlans, StaffPlans",
+            "Аналитик → Срезы", Permissions.SalesRead),
         new(SalesSku, "Продажи по SKU", "Продажи товаров за любой период: кг и выручка, ABC, динамика, сколько регионов и точек берут товар.",
             "linko.Orders, OrderLines, OrderReturns, OrderReturnLines, Products, ProductTypes, sales.Regions", "Продажи: продажи по SKU", Permissions.SalesRead),
         new(SalesExport, "Экспорт", "Экспорт по странам (кг, сумма, точки, динамика, с начала года) и продажи филиала «Завод» (экспорт и опт) по покупателям, агентам и товарам. Плана экспорта в OneBase нет.",

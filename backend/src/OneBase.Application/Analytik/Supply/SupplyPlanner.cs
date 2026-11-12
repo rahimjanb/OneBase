@@ -16,6 +16,9 @@ public sealed record WarehouseItemView(
     Guid ItemId, string Sku, string Name, string Category, string Unit, decimal OnHand, decimal Reserved, decimal Unusable, decimal Available, decimal MinQty,
     decimal AvgDailyConsumption, decimal Consumed30, decimal? DaysOfCover, string Status, decimal? UnitPrice, decimal? Value, DateOnly? LastMovement);
 
+/// <summary>Входы расчёта закупки по активным позициям на дату и заметки о полноте данных (для симулятора What-If).</summary>
+public sealed record SupplyInputs(DateOnly AsOf, IReadOnlyList<SupplyItemInput> Items, IReadOnlyList<string> Notes);
+
 /// <summary>Итог по горизонту: позиций к закупке, известный бюджет, позиций без цены.</summary>
 public sealed record SupplyHorizonTotal(int Days, int Items, decimal Budget, int ItemsWithoutPrice);
 
@@ -59,6 +62,73 @@ public sealed class SupplyPlanner(
             throw new QueryPlanException(QueryErrors.Denied, "План закупок и склад сырья видят снабжение, склад, производство и директор.");
         }
 
+        var data = await LoadAsync(principal, search, ct);
+        var today = data.Today;
+        var notes = data.Notes;
+        var recommendations = new List<SupplyRecommendation>();
+        var warehouse = new List<WarehouseItemView>();
+        foreach (var (item, input) in data.Items)
+        {
+            var plan = SupplyPlanMath.Plan(input, today, options.DefaultLeadTimeDays, HistoryDays);
+            recommendations.Add(plan);
+
+            var consumed30 = input.DailyConsumption.TakeLast(30).Sum(p => p.Value);
+            warehouse.Add(new WarehouseItemView(item.Id, item.Sku, item.Name, item.Category?.Name ?? "", item.UnitCode, input.OnHand, input.Reserved, input.Unusable,
+                plan.Available, item.MinQty, plan.AvgDailyConsumption, consumed30, plan.DaysOfCover,
+                StatusOf(plan, input.OnHand, input.LeadTimeDays ?? options.DefaultLeadTimeDays), input.UnitPrice,
+                input.UnitPrice is { } price ? Math.Round(input.OnHand * price, 0) : null, data.LastMovement.TryGetValue(item.Id, out var lm) ? lm : null));
+        }
+
+        var withoutPrice = recommendations.Count(r => r.UnitPrice is null);
+        if (withoutPrice > 0)
+        {
+            notes.Add($"У {withoutPrice} из {recommendations.Count} позиций нет цены прихода — бюджет посчитан только по позициям с ценой.");
+        }
+
+        if (data.Movements < 30)
+        {
+            notes.Add($"Расход сырья за {HistoryDays} дн. — всего {data.Movements} движений: средний расход и прогноз ориентировочные.");
+        }
+
+        var ordered = recommendations.OrderBy(r => SupplyPlanMath.RiskRank(r.Risk)).ThenBy(r => r.ShortageDate ?? DateOnly.MaxValue)
+            .ThenByDescending(r => r.Horizon(30)?.Required ?? 0).ThenBy(r => r.Name).ToList();
+        var horizons = SupplyPlanMath.HorizonDays.Select(d =>
+        {
+            var need = ordered.Where(r => r.Horizon(d)!.Required > 0).ToList();
+            return new SupplyHorizonTotal(d, need.Count, need.Sum(r => r.Horizon(d)!.Cost ?? 0), need.Count(r => r.UnitPrice is null));
+        }).ToList();
+        var supplierTotals = ordered.Where(r => r.Horizon(30)!.Required > 0)
+            .GroupBy(r => r.Supplier ?? "Поставщик не определён")
+            .Select(g => new SupplySupplierTotal(g.Key, g.Count(), g.Sum(r => r.Horizon(30)!.Cost ?? 0), g.Count(r => r.Risk == "critical")))
+            .OrderByDescending(s => s.Critical).ThenByDescending(s => s.Budget30).ToList();
+        return new SupplyPlanView(today, ordered, horizons,
+            ordered.GroupBy(r => r.Risk).ToDictionary(g => g.Key, g => g.Count()), supplierTotals,
+            warehouse.OrderBy(w => StatusRank(w.Status)).ThenBy(w => w.Name).ToList(),
+            warehouse.GroupBy(w => w.Status).ToDictionary(g => g.Key, g => g.Count()), warehouse.Sum(w => w.Value ?? 0), withoutPrice, notes,
+            ["OneBase → Снабжение → Склад (остатки, движения, партии)", "OneBase → Производство → Задания", "OneBase → Снабжение → Ожидаемые поставки",
+                "OneBase → Снабжение → Поставщики"]);
+    }
+
+    /// <summary>
+    /// Входы расчёта закупки по каждой активной позиции — те же, что у плана закупок (остатки, расход по дням, задания, поставки, срок, цена,
+    /// поставщик, единица закупки): для симулятора What-If. Заметки о полноте данных — в Notes.
+    /// </summary>
+    public async Task<SupplyInputs> InputsAsync(AnalytikPrincipal principal, CancellationToken ct)
+    {
+        if (!CanView(principal))
+        {
+            throw new QueryPlanException(QueryErrors.Denied, "Склад сырья и закупки видят снабжение, склад, производство и директор.");
+        }
+
+        var data = await LoadAsync(principal, null, ct);
+        return new SupplyInputs(data.Today, data.Items.Select(x => x.Input).ToList(), data.Notes);
+    }
+
+    private sealed record SupplyData(DateOnly Today, List<(ProcurementItem Item, SupplyItemInput Input)> Items, Dictionary<Guid, DateOnly> LastMovement,
+        List<string> Notes, int Movements);
+
+    private async Task<SupplyData> LoadAsync(AnalytikPrincipal principal, string? search, CancellationToken ct)
+    {
         var today = ProcurementBatchRules.Today(clock);
         var notes = new List<string>();
         var items = await db.ProcurementItems.AsNoTracking().Include(i => i.Units).Include(i => i.Category)
@@ -165,8 +235,7 @@ public sealed class SupplyPlanner(
             notes.Add("Срок поставки не задан ни у одного поставщика — в расчёте он принят по умолчанию, уточните сроки в карточках поставщиков.");
         }
 
-        var recommendations = new List<SupplyRecommendation>();
-        var warehouse = new List<WarehouseItemView>();
+        var result = new List<(ProcurementItem, SupplyItemInput)>();
         foreach (var item in items)
         {
             var balance = balances.GetValueOrDefault(item.Id);
@@ -189,47 +258,12 @@ public sealed class SupplyPlanner(
             var leadSource = supplier?.LeadTimeDays is not null ? $"у поставщика «{supplier.Name}»"
                 : lead is not null ? $"по факту заказов «{supplier?.Name}»" : null;
             var purchase = item.Units.Where(u => u.Factor > 1).OrderByDescending(u => u.Factor).FirstOrDefault();
-            var input = new SupplyItemInput(item.Id, item.Sku, item.Name, item.UnitCode, onHand, reserved, unusable, item.MinQty, series, committed,
+            result.Add((item, new SupplyItemInput(item.Id, item.Sku, item.Name, item.UnitCode, onHand, reserved, unusable, item.MinQty, series, committed,
                 incoming.GetValueOrDefault(item.Id) ?? [], lead, leadSource, receipt?.UnitCost,
-                receipt is null ? null : $"приход {FieldClock.LocalDate(receipt.CreatedAt):dd.MM.yyyy}", supplier?.Name, purchase?.Factor, purchase?.UnitCode);
-            var plan = SupplyPlanMath.Plan(input, today, options.DefaultLeadTimeDays, HistoryDays);
-            recommendations.Add(plan);
-
-            var consumed30 = series.TakeLast(30).Sum(p => p.Value);
-            warehouse.Add(new WarehouseItemView(item.Id, item.Sku, item.Name, item.Category?.Name ?? "", item.UnitCode, onHand, reserved, unusable, plan.Available,
-                item.MinQty, plan.AvgDailyConsumption, consumed30, plan.DaysOfCover, StatusOf(plan, onHand, lead ?? options.DefaultLeadTimeDays),
-                receipt?.UnitCost, receipt?.UnitCost is { } price ? Math.Round(onHand * price, 0) : null, lastMovement.TryGetValue(item.Id, out var lm) ? lm : null));
+                receipt is null ? null : $"приход {FieldClock.LocalDate(receipt.CreatedAt):dd.MM.yyyy}", supplier?.Name, purchase?.Factor, purchase?.UnitCode)));
         }
 
-        var withoutPrice = recommendations.Count(r => r.UnitPrice is null);
-        if (withoutPrice > 0)
-        {
-            notes.Add($"У {withoutPrice} из {recommendations.Count} позиций нет цены прихода — бюджет посчитан только по позициям с ценой.");
-        }
-
-        var historyMovements = used.Count;
-        if (historyMovements < 30)
-        {
-            notes.Add($"Расход сырья за {HistoryDays} дн. — всего {historyMovements} движений: средний расход и прогноз ориентировочные.");
-        }
-
-        var ordered = recommendations.OrderBy(r => SupplyPlanMath.RiskRank(r.Risk)).ThenBy(r => r.ShortageDate ?? DateOnly.MaxValue)
-            .ThenByDescending(r => r.Horizon(30)?.Required ?? 0).ThenBy(r => r.Name).ToList();
-        var horizons = SupplyPlanMath.HorizonDays.Select(d =>
-        {
-            var need = ordered.Where(r => r.Horizon(d)!.Required > 0).ToList();
-            return new SupplyHorizonTotal(d, need.Count, need.Sum(r => r.Horizon(d)!.Cost ?? 0), need.Count(r => r.UnitPrice is null));
-        }).ToList();
-        var supplierTotals = ordered.Where(r => r.Horizon(30)!.Required > 0)
-            .GroupBy(r => r.Supplier ?? "Поставщик не определён")
-            .Select(g => new SupplySupplierTotal(g.Key, g.Count(), g.Sum(r => r.Horizon(30)!.Cost ?? 0), g.Count(r => r.Risk == "critical")))
-            .OrderByDescending(s => s.Critical).ThenByDescending(s => s.Budget30).ToList();
-        return new SupplyPlanView(today, ordered, horizons,
-            ordered.GroupBy(r => r.Risk).ToDictionary(g => g.Key, g => g.Count()), supplierTotals,
-            warehouse.OrderBy(w => StatusRank(w.Status)).ThenBy(w => w.Name).ToList(),
-            warehouse.GroupBy(w => w.Status).ToDictionary(g => g.Key, g => g.Count()), warehouse.Sum(w => w.Value ?? 0), withoutPrice, notes,
-            ["OneBase → Снабжение → Склад (остатки, движения, партии)", "OneBase → Производство → Задания", "OneBase → Снабжение → Ожидаемые поставки",
-                "OneBase → Снабжение → Поставщики"]);
+        return new SupplyData(today, result, lastMovement, notes, used.Count);
     }
 
     /// <summary>Статус позиции склада: нет (закончилось при расходе), дефицит (запаса меньше срока поставки), ниже минимума, излишек (больше 90 дней), неликвид (90 дней без расхода), норма.</summary>

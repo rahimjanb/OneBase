@@ -74,7 +74,8 @@ const isCurrent = (pathname: string, s: Section) => {
 };
 
 /** Экраны во весь рост со своим полем ввода внизу — без нижней панели: открытый диалог в «Диалогах Telegram» подбора. */
-const fullScreen = (pathname: string) => /^\/hr\/recruitment\/telegram\/[^/]+/.test(pathname);
+// Без нижнего меню: диалог Telegram в подборе и симулятор Аналитика (у него своя закреплённая панель «Параметры / Сохранить»).
+const fullScreen = (pathname: string) => /^\/hr\/recruitment\/telegram\/[^/]+/.test(pathname) || pathname === "/analytik/simulator";
 
 /**
  * Нижняя панель на телефоне, как в нативном приложении: стеклянная панель со скруглённым верхом, четыре вкладки и синяя кнопка меню

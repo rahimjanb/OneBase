@@ -20,8 +20,11 @@ public sealed class AnalytikErrorsAttribute : ExceptionFilterAttribute
         {
             QueryPlanException { Code: QueryErrors.Denied } e => new ObjectResult(new { error = e.Message }) { StatusCode = StatusCodes.Status403Forbidden },
             QueryPlanException e => new BadRequestObjectResult(new { error = e.Message, code = e.Code }),
+            OneBase.Application.Analytik.Semantic.AnalyticsQueryException { Code: "denied" } e => new ObjectResult(new { error = e.Message, code = e.Code }) { StatusCode = StatusCodes.Status403Forbidden },
+            OneBase.Application.Analytik.Semantic.AnalyticsQueryException e => new BadRequestObjectResult(new { error = e.Message, code = e.Code }),
             UnauthorizedAccessException e => new ObjectResult(new { error = e.Message }) { StatusCode = StatusCodes.Status403Forbidden },
             KeyNotFoundException e => new NotFoundObjectResult(new { error = e.Message }),
+            OneBase.AI.Analytik.Simulation.SimulationBusyException e => new ObjectResult(new { error = e.Message }) { StatusCode = StatusCodes.Status429TooManyRequests },
             ArgumentException e => new BadRequestObjectResult(new { error = e.Message }),
             _ => null,
         };

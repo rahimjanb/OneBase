@@ -1478,6 +1478,16 @@ public sealed partial class SalesAnalytics
 
     private decimal? PlanOf(IReadOnlySet<Guid>? scope) => PlanScope(scope).Plan;
 
+    /// <summary>
+    /// План и «факт для плана» по каждому региону вторички — для универсального движка срезов (Аналитик): те же правила, что у страниц,
+    /// включая планы ТП Linko по региону ТП в месяцы без планов регионов. Регион без плана — PlanKg = null.
+    /// </summary>
+    public IReadOnlyList<RegionPlanFact> RegionPlanFacts() =>
+        _regions.Keys.Where(r => r != NoRegionId)
+            .Select(r => (Region: r, Coverage: PlanScope(new HashSet<Guid> { r })))
+            .Select(x => new RegionPlanFact(x.Region, x.Coverage.Plan, x.Coverage.Fact, RegionPlansUsed ? _d.PlanSource : PlanSources.Linko))
+            .ToList();
+
     /// <summary>План месяца — планы регионов (РОП или «Завод»), а не сумма планов ТП из Linko.</summary>
     private bool RegionPlansUsed => _d.PlanSource != PlanSources.Linko;
 

@@ -250,7 +250,17 @@ public sealed class AnalytikJobs(
     {
         var result = await catalog.RefreshAsync("schedule", null, false, ct);
         var snapshots = await SnapshotMetricsAsync(ct);
-        return new { result.Unchanged, result.Tables, result.Added, result.Changed, result.Removed, Snapshots = snapshots };
+        var drafts = await PurgeDraftBaselinesAsync(ct);
+        return new { result.Unchanged, result.Tables, result.Added, result.Changed, result.Removed, Snapshots = snapshots, DraftBaselines = drafts };
+    }
+
+    /// <summary>Черновые снимки симулятора (экран считал, сценарий не сохранили) старше 2 дней — удаляются; снимки сценариев и их истории закреплены.</summary>
+    internal async Task<int> PurgeDraftBaselinesAsync(CancellationToken ct)
+    {
+        var before = clock.GetUtcNow().ToUniversalTime().AddDays(-2);
+        return await adb.ScenarioBaselines
+            .Where(b => !b.Pinned && b.CreatedAt < before && !adb.Scenarios.Any(s => s.BaselineId == b.Id))
+            .ExecuteDeleteAsync(ct);
     }
 
     /// <summary>Дневные агрегаты: продажи последних 3 дней (догружаются синхронизацией) и стоимость склада сырья на сегодня — без пересчёта всей базы.</summary>

@@ -20,6 +20,13 @@ public static class AnalytikRegistration
         services.AddScoped<OneBase.Application.Analytik.Query.AnalytikAccess>();
         services.AddScoped<OneBase.Application.Analytik.Query.QueryEngine>();
         services.AddScoped<OneBase.Application.Analytik.Supply.SupplyPlanner>();
+        services.AddScoped<OneBase.Application.Analytik.Simulation.SimulationSources>();
+        // Universal Analytics Engine: смысловой слой (показатели × измерения × шаг) над движком таблиц — те же права, журнал и SQL только на чтение.
+        services.AddScoped<OneBase.Application.Analytik.Semantic.SemanticContextLoader>();
+        services.AddScoped<OneBase.Application.Analytik.Semantic.SemanticResolver>();
+        services.AddScoped<OneBase.Application.Analytik.Semantic.SemanticPlans>();
+        services.AddScoped<OneBase.Application.Analytik.Semantic.SemanticEngine>();
+        services.AddScoped<OneBase.Application.Analytik.Semantic.CapabilityRegistry>();
         services.AddScoped<OneBase.Application.Analytik.Business.OperationsAnalytik>();
         services.AddScoped<OneBase.Application.Analytik.Risk.InsightStore>();
         services.AddScoped<OneBase.Application.Analytik.Quality.DataQualityEngine>();

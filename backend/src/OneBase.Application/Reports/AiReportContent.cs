@@ -32,7 +32,14 @@ public sealed record AiReportColumn(string Header, string Format, bool Sum = tru
 /// Лист отчёта. Ячейки строк — JSON: число, строка или null. Total — внизу итоговая строка (сумма суммируемых колонок).
 /// Note — пояснение под таблицей (источник, оговорки).
 /// </summary>
-public sealed record AiReportSheet(string Name, IReadOnlyList<AiReportColumn> Columns, IReadOnlyList<IReadOnlyList<JsonElement>> Rows, bool Total = false, string? Note = null);
+public sealed record AiReportSheet(string Name, IReadOnlyList<AiReportColumn> Columns, IReadOnlyList<IReadOnlyList<JsonElement>> Rows, bool Total = false, string? Note = null,
+    AiReportChart? Chart = null);
+
+/// <summary>
+/// График листа (в PDF — над таблицей; в Excel листа данных достаточно): горизонтальные столбцы по строкам — подпись из колонки LabelColumn,
+/// значения серий из колонок ValueColumns (например «База» и «Сценарий»); не больше MaxRows строк.
+/// </summary>
+public sealed record AiReportChart(int LabelColumn, IReadOnlyList<int> ValueColumns, int MaxRows = 12);
 
 /// <summary>Отчёт: название, листы и источники данных (страницы OneBase, из которых взяты цифры).</summary>
 public sealed record AiReportContent(string Title, IReadOnlyList<AiReportSheet> Sheets, IReadOnlyList<string> Sources)

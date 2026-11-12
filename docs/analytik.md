@@ -39,19 +39,35 @@
 Браузер → /bff → /api/analytik/*                         (AnalytikController, AnalytikInsightsController, AnalytikChatController)
    ├─ каталог базы      CatalogService ── ISchemaReader (pg_catalog) ── analytik.CatalogTables/Columns/Relations/Runs/Annotations
    ├─ движок запросов   QueryEngine ── QueryBuilder (типизированный план → SQL) ── IAnalytikSql (READ ONLY транзакция) ── analytik.Queries
+   ├─ срезы             SemanticEngine (показатели × измерения × шаг по правилам «Продаж») ── те же IAnalytikSql, права и журнал; CapabilityRegistry
    ├─ блоки отделов     SalesAnalytik, FinanceAnalytik, OperationsAnalytik (производство, HR, задачи), SupplyPlanner (склад и MRP)
    ├─ прогнозы          ForecastService ── Forecaster (наивный, скользящее среднее, тренд, сезонный, Holt, Holt-Winters)
    ├─ риски             RiskEngine + DataQualityEngine ── InsightStore (analytik.Insights, без повторов) ── уведомления
    ├─ обзор             DashboardService (оценка состояния, KPI, риски, рекомендации, прогноз, свежесть данных)
    ├─ отчёты            AnalytikReportService ── analytik.Reports ── Excel (ClosedXML) / PDF (QuestPDF)
+   ├─ симулятор         ScenarioService ── ScenarioBaselineBuilder (снимок) ── ScenarioEngine ── analytik.Scenarios / ScenarioBaselines
    ├─ фон               AnalytikWorker ── AnalytikJobs (analytik.JobRuns: одна запись на задачу и период)
    └─ чат               ConsultantChatService (ключ "analytik", свои чаты ai.Conversations.Kind = analytik)
-                          └─ AnalytikEngine: Chief Analyst + 7 аналитиков → AgentRunner → 16 инструментов analytik_*
+                          └─ AnalytikEngine: Chief Analyst + 8 аналитиков (с аналитиком сценариев) → AgentRunner → 17 инструментов analytik_*
 ```
 
 Код: `OneBase.Domain/Analytik`, `OneBase.Application/Analytik` (каталог, запросы, периоды, MRP, прогнозы, находки, качество данных),
 `OneBase.Infrastructure/Analytik` (подключение и чтение схемы), `OneBase.AI/Analytik` (продажи, финансы, риски, прогнозы, обзор, отчёты,
 фон, агенты, инструменты), `frontend/src/components/analytik`, `frontend/src/app/(app)/analytik`.
+
+## Срезы (универсальный движок)
+
+`/analytik/explore` и инструмент AI `analytics_query` (у консультанта и у аналитиков): любой показатель продаж, плана, оплат и остатков по
+любым совместимым измерениям и шагу времени — дни × товарные группы, регион × группа, день × регион × группа, план и факт по регионам,
+агент × товар. Цифры — по правилам «Продаж» (совпадают со страницами до сума), с проверкой полноты, источником и временем загрузки каждой
+цифры; реестр того, что есть, — `analytics_capabilities`. История загрузок Linko — `sales.LinkoSyncRuns`. Подробно — `docs/analytik-engine.md`.
+
+## Симулятор сценариев (What-If)
+
+`/analytik/simulator` — «что будет, если…» по реальным данным: продажи, цены и скидки, производство и смены, сырьё и сроки поставки,
+закупки, деньги, персонал, новый регион. Считает детерминированный движок `ScenarioEngine` по снимку исходных данных (только разделы
+пользователя), с графом зависимостей, ограничениями (мощность, сырьё, сроки, партии, склад, деньги), сохранением, историей, сравнением,
+экспортом Excel/PDF и AI-анализом по кнопке. В чате — инструмент `analytik_simulate` и аналитик сценариев. Подробно — `docs/analytik-simulator.md`.
 
 ## Каталог базы
 
@@ -228,7 +244,7 @@
 и своя команда: **Chief Analyst** распределяет вопрос (по `AiRouter`, с запасным подбором по ключевым словам) между аналитиками — продаж,
 производства, склада, снабжения, финансов, HR и BI — и собирает ответ. Агенты Аналитика не попадают в консультанта и наоборот
 (`AgentTeams`). Инструменты — 16 `analytik_*` (каталог, запрос, профиль колонки, карточка записи, обзор, блоки отделов, план закупок,
-прогноз, риски, качество данных, отчёт); общие правила `AgentRunner` — расчёты через `calculate`, источник у каждой цифры, проверка
+прогноз, риски, качество данных, отчёт), срезы `analytics_query` и реестр `analytics_capabilities`; общие правила `AgentRunner` — расчёты через `calculate`, источник у каждой цифры, проверка
 доказательств. Формат ответа: краткий вывод, факты, расчёты, причины (подтверждённые и гипотезы), риски, прогноз, рекомендации,
 источники, ограничения данных, следующие вопросы. Язык — язык вопроса (русский, узбекский латиница/кириллица, английский).
 

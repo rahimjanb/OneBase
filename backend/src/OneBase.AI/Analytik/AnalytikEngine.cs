@@ -206,7 +206,12 @@ public sealed partial class AnalytikEngine(
 
         if (RouteIntent.IsCompanyWide(turn.Question) || CompanyWide().IsMatch(RouteIntent.Normalize(turn.Question)))
         {
-            return routing with { Agents = available.Select(a => a.Code).ToList(), Reason = "Вопрос о компании в целом — все доступные аналитики." };
+            // Аналитик сценариев нужен только для «что будет, если» — в обзор всей компании он не идёт (лишний вызов модели).
+            return routing with
+            {
+                Agents = available.Select(a => a.Code).Where(c => c != AnalytikAgents.Scenario).ToList(),
+                Reason = "Вопрос о компании в целом — все доступные аналитики.",
+            };
         }
 
         var agents = routing.ByKeywords ? [] : routing.Agents.Where(codes.Contains).Distinct().ToList();

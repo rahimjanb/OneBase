@@ -249,7 +249,8 @@ public sealed class AnalytikOperationsDbTests(DataManagerDb fixture) : IClassFix
         Assert.All(AgentDefaults.Departments, d => Assert.Equal(AgentTeams.Consultant, AgentTeams.Of(d.Code)));
         Assert.All(AnalytikAgents.All, a => Assert.Equal(AgentTeams.Analytik, AgentTeams.Of(a.Code)));
         Assert.All(AgentDefaults.Departments, d => Assert.DoesNotContain(AnalytikTools.Source, d.Sources));
-        Assert.Equal(8, AnalytikAgents.All.Count);
+        // Chief Analyst + 7 аналитиков отделов и данных + аналитик сценариев (What-If).
+        Assert.Equal(9, AnalytikAgents.All.Count);
     }
 
     [PostgresFact]

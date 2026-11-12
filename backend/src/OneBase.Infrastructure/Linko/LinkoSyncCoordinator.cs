@@ -38,12 +38,16 @@ public sealed class LinkoSyncCoordinator(
 
         using var run = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _run = run;
+        var started = time.GetUtcNow();
+        DateOnly? earliest = null;
         try
         {
             progress.Start(mode);
             using var scope = scopes.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<LinkoSyncService>();
             LastReport = await service.SyncAsync(mode, run.Token);
+            earliest = service.EarliestChanged;
+            await RecordAsync(mode, started, LastReport, LastReport.Success ? "ok" : "failed", earliest, null);
             if (LastReport.Entities is [{ Entity: LinkoSyncService.SourceState, Error: not null }])
             {
                 return LastReport; // обмен не начался (сменился сервер Linko): данные не менялись — сбрасывать и пересчитывать отчёты нечего
@@ -72,13 +76,52 @@ public sealed class LinkoSyncCoordinator(
                 ? "данные загружены не полностью — догрузятся следующей синхронизацией"
                 : "незавершённый шаг повторится при следующей синхронизации");
             cacheSignal.Invalidate();
+            await RecordAsync(mode, started, null, "cancelled", earliest, "Отменено кнопкой «Отменить»");
             return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await RecordAsync(mode, started, null, "failed", earliest, ex.Message);
+            throw;
         }
         finally
         {
             _run = null;
             progress.Finish();
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Запись в историю синхронизаций (linko.SyncRuns): режим, время, итог, строки и ошибки шагов. Записи старше 90 дней удаляются.
+    /// Сбой записи истории не мешает синхронизации.
+    /// </summary>
+    private async Task RecordAsync(LinkoSyncMode mode, DateTimeOffset started, LinkoSyncReport? report, string status, DateOnly? earliest, string? error)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<OneBase.Infrastructure.Persistence.OneBaseDbContext>();
+            var steps = report?.Entities.Select(e => new { entity = e.Entity, rows = e.Rows, error = e.Error }).ToList();
+            var firstError = error ?? report?.Entities.FirstOrDefault(e => e.Error is not null)?.Error;
+            db.LinkoSyncRuns.Add(new LinkoSyncRun
+            {
+                Mode = mode.ToString(),
+                StartedAt = report?.StartedAt ?? started,
+                FinishedAt = report?.FinishedAt ?? time.GetUtcNow(),
+                Status = status,
+                Rows = report?.Entities.Sum(e => e.Rows) ?? 0,
+                Entities = steps is null ? null : System.Text.Json.JsonSerializer.Serialize(steps),
+                EarliestChanged = earliest,
+                Error = firstError is { Length: > 2000 } ? firstError[..2000] : firstError,
+            });
+            await db.SaveChangesAsync(CancellationToken.None);
+            var cutoff = time.GetUtcNow().AddDays(-90);
+            await db.LinkoSyncRuns.Where(r => r.StartedAt < cutoff).ExecuteDeleteAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "История синхронизации Linko не записана");
         }
     }
 
