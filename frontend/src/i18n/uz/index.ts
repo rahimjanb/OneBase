@@ -32,6 +32,7 @@ import tasks from "./tasks";
 import technologist from "./technologist";
 import telegramReports from "./telegramReports";
 import twin from "./twin";
+import whatsNew from "./whatsNew";
 
 /**
  * Узбекский (латиница): ключ — русский текст интерфейса. Словари по разделам, чтобы их можно было вести независимо;
@@ -48,6 +49,7 @@ export const uz: Dict = {
   ...explore,
   // Цифровой двойник: общие слова переведены так же, как в разделах; разделы ниже перекрывают его.
   ...twin,
+  ...whatsNew,
   ...production,
   // «Технолог» — после производства: его термины (замес, этап, брак) перекрывают общие.
   ...technologist,

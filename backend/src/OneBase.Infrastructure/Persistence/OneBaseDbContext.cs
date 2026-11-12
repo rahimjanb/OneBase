@@ -394,6 +394,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
             e.Property(x => x.Sections).HasColumnType("text[]");
             e.Property(x => x.Rights).HasColumnType("text[]");
             e.Property(x => x.NotificationMutes).HasColumnType("text[]");
+            e.Property(x => x.WhatsNewSeen).HasMaxLength(32);
             e.HasIndex(x => x.Login).IsUnique();
             e.HasIndex(x => x.Email).IsUnique();
             e.HasOne(x => x.Department).WithMany(x => x.Users).HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.SetNull);

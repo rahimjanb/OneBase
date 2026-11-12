@@ -54,5 +54,11 @@ public class User : Entity
     /// </summary>
     public List<string>? NotificationMutes { get; set; }
 
+    /// <summary>
+    /// Окно «Что нового»: последняя просмотренная версия (WhatsNew.Normalize — «2026-11-13»). Окно версии показывается один раз — закрыто на
+    /// одном устройстве, не появляется и на других. null — ещё ни одного не закрывал.
+    /// </summary>
+    public string? WhatsNewSeen { get; set; }
+
     public static string FullNameOf(string firstName, string lastName) => $"{firstName.Trim()} {lastName.Trim()}".Trim();
 }

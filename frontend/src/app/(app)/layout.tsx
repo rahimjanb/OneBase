@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { TopbarFrame } from "@/components/shell/TopbarFrame";
 import { TaskToastHost } from "@/components/tasks/TaskToast";
+import { WhatsNewHost } from "@/components/whats-new/WhatsNew";
 import { screenPermissions } from "@/lib/navigation";
 import { apiSession } from "@/lib/server-api";
 import type { Me } from "@/lib/users";
@@ -48,6 +49,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <AppBridge userId={me?.id ?? null} />
         {/* «Задача создана · Открыть» — после закрытия формы задачи. */}
         <TaskToastHost />
+        {/* «Что нового» после обновления — один раз на версию, только карточки открытых пользователю разделов. */}
+        <WhatsNewHost me={me} permissions={permissions} />
       </div>
     </HomeKindProvider>
   );

@@ -36,6 +36,7 @@ import { LogoutLink } from "./AppBridge";
 import { useKeyboardOpen } from "./AppScroll";
 import { fanLayout, type FanLayout } from "./fan";
 import { ProfileSettings } from "./ProfileSettings";
+import { WhatsNewMenuItem } from "@/components/whats-new/WhatsNew";
 
 /** short — подпись вкладки на узком экране (уже 375px), где полная не помещается. */
 type Section = { href: string; label: string; short?: string; icon: LucideIcon; exact?: boolean; also?: string[] };
@@ -260,6 +261,12 @@ export function MobileNav({ me, canOpenSettings, permissions }: { me: Me | null;
         <ProfileSettings />
         <div className="mt-3 rounded-xl border border-line p-1.5 text-ink">
           {me && <LinkTelegramButton />}
+          <WhatsNewMenuItem
+            me={me}
+            permissions={permissions}
+            onOpen={() => setProfile(false)}
+            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2.5 text-left text-sm text-ink hover:bg-muted"
+          />
           {/* Обычная ссылка: /logout при загрузке закрывает сеанс, заранее его загружать нельзя. */}
           <LogoutLink href="/logout" className="flex items-center gap-2 rounded-md px-2.5 py-2.5 text-sm text-bad hover:bg-muted">
             <LogOut className="size-4" />

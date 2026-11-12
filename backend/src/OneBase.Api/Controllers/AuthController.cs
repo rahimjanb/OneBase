@@ -148,7 +148,42 @@ public sealed class AuthController(
             Departments = permissions.Contains(Permissions.WorkTasks)
                 ? await work.OpenDepartmentCodesAsync(await work.ContextAsync(id, permissions.ToHashSet(), ct), ct)
                 : [],
+            // Окно «Что нового»: последняя закрытая версия и дата создания (новым пользователям окно релиза до их прихода не показывается).
+            user.WhatsNewSeen,
+            user.CreatedAt,
         });
+    }
+
+    public sealed record WhatsNewSeenRequest(string? Version);
+
+    /// <summary>
+    /// Окно «Что нового» закрыто (крестиком, «Готово», Esc, свайпом, переходом по «Где найти»): версия записывается в профиль — окно этой
+    /// версии больше не появится ни здесь, ни на другом устройстве. Более ранняя версия отметку не откатывает.
+    /// </summary>
+    [HttpPost("whats-new")]
+    [Authorize]
+    public async Task<IActionResult> WhatsNewSeen([FromBody] WhatsNewSeenRequest request, CancellationToken ct)
+    {
+        if (WhatsNew.Normalize(request.Version) is not { } version)
+        {
+            return BadRequest(new { error = "Версия окна «Что нового» — дата вида 2026-11-13." });
+        }
+
+        var id = User.GetUserId();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        var next = WhatsNew.Next(user.WhatsNewSeen, version);
+        if (next != user.WhatsNewSeen)
+        {
+            user.WhatsNewSeen = next;
+            await db.SaveChangesAsync(ct);
+        }
+
+        return NoContent();
     }
 
     private static async Task<object> SalesScopeOf(OneBase.Application.Sales.Access.SalesAccess access, OneBase.Application.Sales.Access.SalesScopeAdmin admin, Guid id,

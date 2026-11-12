@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { ChevronDown } from "lucide-react";
 import { LinkTelegramButton } from "@/components/telegram/LinkTelegramButton";
+import { WhatsNewMenuItem } from "@/components/whats-new/WhatsNew";
 import { Tr } from "@/i18n/client";
 import { departmentCodes, departmentOpen } from "@/lib/navigation";
 import { initials, type Me } from "@/lib/users";
@@ -67,6 +68,7 @@ export function Topbar({ me, permissions }: { me: Me | null; permissions: readon
                     <span className="block truncate">{me.position ?? me.roles[0] ?? me.login}</span>
                   </div>
                   <LinkTelegramButton />
+                  <WhatsNewMenuItem me={me} permissions={permissions} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-ink hover:bg-muted" />
                   {/* Обычная ссылка: /logout при загрузке удаляет сессию, заранее его загружать нельзя. */}
                   <LogoutLink href="/logout" className="block rounded-md px-2.5 py-2 text-sm text-ink hover:bg-muted">
                     <Tr>Выйти</Tr>
