@@ -163,6 +163,51 @@ public class SalesScopeApiDbTests(DataManagerDb fixture) : IClassFixture<DataMan
         Assert.True(NotFound(await As(org.Tp, c => c.Product(100, September, null, null, 52, false, default))));
     }
 
+    /// <summary>
+    /// «Мои регионы»: СВР с двумя регионами — оба одним экраном (своя страница), ассортимент, категория и товар без выбора — по обоим, по одному —
+    /// по выбранному. СВР с одним регионом — его регион; вся организация и ТП — 404.
+    /// </summary>
+    [PostgresFact]
+    public async Task Supervisor_with_several_regions_sees_all_of_them_on_my_regions()
+    {
+        var org = await OrgAsync();
+        Guid sv2;
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var sp = scope.ServiceProvider;
+            var db = sp.GetRequiredService<OneBaseDbContext>();
+            var user = db.Users.Add(new User { Login = $"s-sv2-{Guid.NewGuid():N}"[..20], FullName = "s-sv2" }).Entity;
+            await db.SaveChangesAsync();
+            sv2 = user.Id;
+            var admin = sp.GetRequiredService<SalesScopeAdmin>();
+            await admin.SetAsync(org.Admin, sv2, new SalesScopeInput(SalesScopeLevel.Supervisor, null, [fixture.KhorazmId, fixture.BukharaId], null), default);
+            var access = sp.GetRequiredService<SalesAccess>();
+            Assert.Equal("/sales/my", await admin.HomeAsync(await access.ScopeAsync(sv2, default), default));
+            Assert.Equal($"/sales/regions/{fixture.BukharaId}", await admin.HomeAsync(await access.ScopeAsync(org.Sv, default), default));
+        }
+
+        var my = Ok(await As(sv2, c => c.MyRegions(September, null, null, "kg", null, default)));
+        Assert.Equal(new[] { fixture.KhorazmId, fixture.BukharaId }.Select(x => x.ToString()).Order(), my.Cards.Select(x => x.Id).Order());
+        var kh = Ok(await As(sv2, c => c.Region(fixture.KhorazmId, September, null, null)));
+        var bu = Ok(await As(sv2, c => c.Region(fixture.BukharaId, September, null, null)));
+        Assert.Equal(kh.Kpi.FactKg + bu.Kpi.FactKg, my.Kpi.FactKg);
+
+        var assortment = Ok(await As(sv2, c => c.Assortment(September, null, null, default)));
+        Assert.Equal("Мои регионы", assortment.ScopeName);
+        Assert.Contains(assortment.Regions, r => r.Id == fixture.KhorazmId.ToString());
+        Assert.Contains(assortment.Regions, r => r.Id == fixture.BukharaId.ToString());
+        Assert.Equal(1400, Ok(await As(sv2, c => c.Product(100, September, null, null, null, false, default))).FactKg);              // оба региона
+        Assert.Equal(900, Ok(await As(sv2, c => c.Product(100, September, null, fixture.KhorazmId, null, false, default))).FactKg); // один выбран
+        Assert.True(NotFound(await As(sv2, c => c.Product(100, September, null, null, null, true, default))));                     // экспорт — нет
+        Assert.True(NotFound(await As(sv2, c => c.Direction(org.DirKh.ToString(), September, null, null))));                       // направление — уровень РМ
+
+        // Один регион — «Мои регионы» из одного; вся организация и ТП — 404 (у них своя страница).
+        Assert.Equal(fixture.BukharaId.ToString(), Assert.Single(Ok(await As(org.Sv, c => c.MyRegions(September, null, null, "kg", null, default))).Cards).Id);
+        Assert.Equal(500, Ok(await As(org.Sv, c => c.Product(100, September, null, null, null, false, default))).FactKg);
+        Assert.True(NotFound(await As(org.Director, c => c.MyRegions(September, null, null, "kg", null, default))));
+        Assert.True(NotFound(await As(org.Tp, c => c.MyRegions(September, null, null, "kg", null, default))));
+    }
+
     [PostgresFact]
     public async Task Lists_and_totals_contain_only_people_of_the_scope_and_the_organization_keeps_everything()
     {

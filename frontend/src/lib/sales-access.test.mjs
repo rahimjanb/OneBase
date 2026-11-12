@@ -49,9 +49,30 @@ test("крошки и «Назад»: без страны и чужого уро
   assert.deepEqual(visibleCrumbs(crumbs, sv).map((c) => c.label), ["Самарканд", "Азиз"]);
   assert.deepEqual(visibleCrumbs(crumbs, tp).map((c) => c.label), ["Азиз"]);
   assert.deepEqual(visibleCrumbs(crumbs, org).map((c) => c.label), ["Республика", "Восток", "Самарканд", "Азиз"]);
-  assert.equal(visibleBack("/sales/republic?year=2026", rm), "/sales/directions/d1");
+  assert.equal(visibleBack("/sales/republic?year=2026", rm), "/sales/directions/d1?year=2026");
   assert.equal(visibleBack("/sales/regions/r1", tp), "/sales/agents/51");
   assert.equal(visibleBack("/sales/regions/r1", sv), "/sales/regions/r1");
   assert.equal(salesPathAllowed("/sales/directions/d1", sv), false);
   assert.equal(salesPathAllowed("/sales/regions/r1", tp), false);
+});
+
+test("«Мои регионы»: РМ и СВР с несколькими регионами — своя страница, крошка страны заменяется ею", () => {
+  const rmMany = { level: "Rm", home: "/sales/my" };
+  const svMany = { level: "Supervisor", home: "/sales/my" };
+  for (const scope of [rmMany, svMany]) {
+    assert.equal(salesTabHref("analytics", "/sales", scope), "/sales/my");
+    assert.equal(salesPathAllowed("/sales/my", scope), true);
+    assert.equal(salesPathAllowed("/sales/regions/r2", scope), true);
+    assert.equal(salesPathAllowed("/sales/republic", scope), false);
+    assert.equal(visibleBack("/sales/republic?year=2026&month=11", scope), "/sales/my?year=2026&month=11");
+  }
+  assert.equal(salesPathAllowed("/sales/my", tp), false);
+  assert.equal(salesPathAllowed("/sales/my", org), true);
+
+  const crumbs = [{ label: "Республика", href: "/sales/republic?year=2026" }, { label: "Восток", href: "/sales/directions/d1" }, { label: "Самарканд", href: "/sales/regions/r1" }, { label: "Азиз" }];
+  assert.deepEqual(visibleCrumbs(crumbs, svMany, "Мои регионы"), [{ label: "Мои регионы", href: "/sales/my?year=2026" }, { label: "Самарканд", href: "/sales/regions/r1" }, { label: "Азиз" }]);
+  assert.deepEqual(visibleCrumbs(crumbs, rmMany, "Мои регионы").map((c) => c.label), ["Мои регионы", "Восток", "Самарканд", "Азиз"]);
+  // Один регион и вся организация — как раньше: подпись не нужна.
+  assert.deepEqual(visibleCrumbs(crumbs, sv, "Мои регионы").map((c) => c.label), ["Самарканд", "Азиз"]);
+  assert.deepEqual(visibleCrumbs(crumbs, org, "Мои регионы").map((c) => c.label), ["Республика", "Восток", "Самарканд", "Азиз"]);
 });

@@ -7,8 +7,10 @@ import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { ScopeSelect } from "@/components/sales/ScopeSelect";
 import { getT } from "@/i18n/server";
-import { apiGet } from "@/lib/server-api";
+import { apiGet, apiTry } from "@/lib/server-api";
+import { isLimited, MY_REGIONS } from "@/lib/sales/access";
 import { apiQuery, param, periodQuery, queryWith, withQuery, type SalesSearchParams } from "@/lib/sales/query";
+import { mySalesScope } from "@/lib/sales/scope-server";
 import type { AssortmentView, GroupView } from "@/lib/sales/types";
 
 export async function generateMetadata() {
@@ -18,23 +20,31 @@ export async function generateMetadata() {
 
 export default async function AssortmentPage({ searchParams }: { searchParams: Promise<SalesSearchParams> }) {
   const t = await getT();
-  const sp = await searchParams;
-  const [data, republic] = await Promise.all([
+  const [sp, scope] = await Promise.all([searchParams, mySalesScope()]);
+  // РМ и СВР страну не видят: выбор — «Все мои регионы» (по умолчанию) или один свой регион; список — со страницы «Мои регионы».
+  const limited = isLimited(scope);
+  const [data, republic, mine] = await Promise.all([
     apiGet<AssortmentView>(`/api/sales/assortment${apiQuery(sp, ["region", "direction"])}`, "/sales/assortment"),
-    apiGet<GroupView>(`/api/sales/republic${apiQuery(sp)}`, "/sales/assortment"),
+    limited ? null : apiGet<GroupView>(`/api/sales/republic${apiQuery(sp)}`, "/sales/assortment"),
+    limited ? apiTry<GroupView>(`/api/sales/my${apiQuery(sp)}`) : null,
   ]);
   const q = periodQuery(sp);
 
-  const options = [
-    { value: "", label: t("Вся республика") },
-    ...republic.cards.filter((c) => c.kind === "direction" && !c.isChannel).map((c) => ({ value: `direction:${c.id}`, label: t("{name} — целиком", { name: c.name }), group: t("Региональные менеджеры") })),
-    ...republic.regions
-      .filter((r) => r.factKg !== 0 || r.akb > 0)
-      .map((r) => ({ value: `region:${r.id}`, label: r.name, group: t("Регионы") })),
-  ];
-  // Охват — название региона или РМ (данные) либо подпись сервера («Республика», «Направление»): подписи переводятся по словарю.
+  const myRegions = (mine?.cards ?? []).filter((c) => c.kind !== "direction");
+  const options = republic
+    ? [
+        { value: "", label: t("Вся республика") },
+        ...republic.cards.filter((c) => c.kind === "direction" && !c.isChannel).map((c) => ({ value: `direction:${c.id}`, label: t("{name} — целиком", { name: c.name }), group: t("Региональные менеджеры") })),
+        ...republic.regions
+          .filter((r) => r.factKg !== 0 || r.akb > 0)
+          .map((r) => ({ value: `region:${r.id}`, label: r.name, group: t("Регионы") })),
+      ]
+    : [{ value: "", label: t("Все мои регионы") }, ...myRegions.map((r) => ({ value: `region:${r.id}`, label: r.name, group: t("Регионы") }))];
+  // Охват — название региона или РМ (данные) либо подпись сервера («Республика», «Направление», «Мои регионы»): подписи переводятся по словарю.
   const scopeName = t(data.scopeName);
-  const scopeLabel = data.scopeName === "Республика" ? t("республике") : scopeName;
+  const scopeLabel = data.scopeName === "Республика" ? t("республике") : data.scopeName === "Мои регионы" ? t("моих регионах") : scopeName;
+  // Ссылка «подробнее»: у РМ и СВР — своя страница («Мои регионы» или свой регион), у остальных — все регионы страны.
+  const homeLabel = !limited ? t("все регионы") : scope!.home === MY_REGIONS ? t("мои регионы") : (myRegions[0]?.name ?? t("мой регион"));
   const s = data.summary;
 
   return (
@@ -46,7 +56,7 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
       period={data.period}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <ScopeSelect options={options} />
+        {(republic || myRegions.length > 1) && <ScopeSelect options={options} />}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <KpiTile label={t("Факт, кг")} value={kg(s.factKg)} unit={t("кг")}>
@@ -75,8 +85,8 @@ export default async function AssortmentPage({ searchParams }: { searchParams: P
       </CollapsedSections>
       <p className="mt-4 text-xs text-ink-3">
         {t("Регион подробнее — на его странице во «Вторичке»:")}{" "}
-        <a className="text-accent hover:underline" href={withQuery("/sales/republic", q)}>
-          {t("все регионы")}
+        <a className="text-accent hover:underline" href={withQuery(limited ? scope!.home : "/sales/republic", q)}>
+          {homeLabel}
         </a>
         .
       </p>

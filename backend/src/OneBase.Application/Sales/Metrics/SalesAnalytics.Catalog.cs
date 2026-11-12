@@ -3,10 +3,11 @@ namespace OneBase.Application.Sales.Metrics;
 // Уровни «категория» и «артикул» из «Полевого контроля»: все категории → категория → артикул.
 // Охват задаёт страница, с которой пришли: республика, направление, регион, ТП или экспорт («Завод»).
 
-/// <summary>Охват страниц категории и артикула. Всё пустое — республика.</summary>
-public sealed record AssortmentScope(string? Direction, Guid? Region, long? Agent, bool Export)
+/// <summary>Охват страниц категории и артикула: направление, регион, ТП, экспорт или «Мои регионы» РМ и СВР (Regions — несколько регионов). Всё
+/// пустое — республика.</summary>
+public sealed record AssortmentScope(string? Direction, Guid? Region, long? Agent, bool Export, IReadOnlyList<Guid>? Regions = null)
 {
-    public string Key => $"{Direction}:{Region}:{Agent}:{Export}";
+    public string Key => $"{Direction}:{Region}:{Agent}:{Export}:{(Regions is null ? "" : string.Join(",", Regions.Order()))}";
 }
 
 public static class ScopeKinds
@@ -201,6 +202,15 @@ public sealed partial class SalesAnalytics
 
             var set = new HashSet<Guid> { region };
             return new ScopeData(ScopeKinds.Region, info.Name, Lines(set).ToList(), _previousByRegion[region].ToList(), set);
+        }
+
+        if (s.Regions is { } mine)
+        {
+            // «Мои регионы»: группа регионов охвата — как направление (по регионам, если их два и больше).
+            var set = mine.Where(r => r != NoRegionId && _regions.ContainsKey(r)).ToHashSet();
+            return set.Count == 0
+                ? null
+                : new ScopeData(ScopeKinds.Direction, "Мои регионы", Lines(set).ToList(), set.SelectMany(r => _previousByRegion[r]).ToList(), set);
         }
 
         if (s.Direction is { } direction)

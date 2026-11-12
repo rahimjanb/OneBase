@@ -40,7 +40,7 @@ export default async function StorePage({ params, searchParams }: { params: Prom
       ]
         .filter(Boolean)
         .join(" · ")}
-      crumbs={visibleCrumbs(crumbs, scope)}
+      crumbs={visibleCrumbs(crumbs, scope, t("Мои регионы"))}
       back={visibleBack(crumbs[crumbs.length - 2]?.href ?? withQuery("/sales", q), scope)}
       period={data.period}
       sp={sp}

@@ -123,8 +123,12 @@ public sealed partial class SalesAnalytics
 
     public ExportView CachedExport() => View("export", Export);
 
-    public AssortmentView CachedAssortment(string? direction, Guid? region) =>
-        View($"assortment:{direction}:{region}", () => Assortment(direction, region));
+    /// <summary>regions — «Мои регионы» РМ и СВР (несколько регионов одним охватом); иначе — направление, регион или республика.</summary>
+    public AssortmentView CachedAssortment(string? direction, Guid? region, IReadOnlyCollection<Guid>? regions = null)
+    {
+        var set = regions?.Where(_regions.ContainsKey).Order().ToList();
+        return View($"assortment:{direction}:{region}:{(set is null ? "" : string.Join(",", set))}", () => Assortment(direction, region, set));
+    }
 
     public bool HasMarket(long id) => _d.Markets.ContainsKey(id) || _d.Current.Any(l => l.MarketId == id);
 
@@ -238,14 +242,17 @@ public sealed partial class SalesAnalytics
             products.OutsideReport);
     }
 
-    public AssortmentView Assortment(string? direction, Guid? region)
+    public AssortmentView Assortment(string? direction, Guid? region, IReadOnlyCollection<Guid>? regions = null)
     {
         IReadOnlySet<Guid>? scope = region is { } r
             ? new HashSet<Guid> { r }
-            : direction is { } d
-                ? (DirectionGroups().FirstOrDefault(g => g.Id == d)?.Regions ?? []).ToHashSet()
-                : null;
+            : regions is { } mine
+                ? mine.ToHashSet()
+                : direction is { } d
+                    ? (DirectionGroups().FirstOrDefault(g => g.Id == d)?.Regions ?? []).ToHashSet()
+                    : null;
         var scopeName = region is { } rid && _regions.TryGetValue(rid, out var info) ? info.Name
+            : regions is not null ? "Мои регионы"
             : direction is { } did ? DirectionGroups().FirstOrDefault(g => g.Id == did)?.Name ?? "Направление"
             : "Республика";
 

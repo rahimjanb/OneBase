@@ -160,6 +160,13 @@ const dict: Dict = {
   "точек с покупкой за месяц · только один SKU — {n}": "oy davomida xarid qilgan nuqtalar · faqat bitta SKU — {n}",
   "Регион подробнее — на его странице во «Вторичке»:": "Mintaqa haqida batafsil — uning «Ikkilamchi»dagi sahifasida:",
   "все регионы": "barcha mintaqalar",
+  "Все мои регионы": "Barcha mintaqalarim",
+  "мои регионы": "mening mintaqalarim",
+  "мой регион": "mening mintaqam",
+  "Мои регионы": "Mening mintaqalarim",
+  "Мои регионы · Продажи": "Mening mintaqalarim · Savdo",
+  "моих регионах": "mening mintaqalarim",
+  "Регионов: {n}": "Mintaqalar: {n}",
   "Категория · Продажи": "Toifa · Savdo",
   "дистрибуция {pct}": "distributsiya {pct}",
   "В охвате «{scope}» продаж категории «{name}» ни в этом, ни в прошлом месяце нет.":

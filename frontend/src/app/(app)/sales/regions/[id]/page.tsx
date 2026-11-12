@@ -49,7 +49,7 @@ export default async function RegionPage({
     <SalesFrame
       title={data.name}
       subtitle={people || (data.isChannel ? undefined : t("СВР и дилер не указаны — их можно задать в настройках продаж"))}
-      crumbs={visibleCrumbs([republic, ...(parent ? [parent] : []), { label: data.name }], scope)}
+      crumbs={visibleCrumbs([republic, ...(parent ? [parent] : []), { label: data.name }], scope, t("Мои регионы"))}
       back={visibleBack((parent ?? republic).href, scope)}
       sp={sp}
       period={period}

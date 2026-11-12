@@ -30,7 +30,7 @@ export default async function DirectionPage({
     <SalesFrame
       title={name}
       subtitle={subtitle}
-      crumbs={visibleCrumbs([{ label: t("Республика"), href: withQuery("/sales/republic", q) }, { label: name }], scope)}
+      crumbs={visibleCrumbs([{ label: t("Республика"), href: withQuery("/sales/republic", q) }, { label: name }], scope, t("Мои регионы"))}
       back={visibleBack(withQuery("/sales/republic", q), scope)}
       sp={sp}
       period={data.period}

@@ -85,7 +85,7 @@ export default async function AgentPage({
     <SalesFrame
       title={data.name}
       subtitle={subtitle}
-      crumbs={visibleCrumbs([...crumbs, { label: data.name }], scope)}
+      crumbs={visibleCrumbs([...crumbs, { label: data.name }], scope, t("Мои регионы"))}
       back={visibleBack(withQuery(regionHref, q), scope)}
       sp={sp}
       period={period}

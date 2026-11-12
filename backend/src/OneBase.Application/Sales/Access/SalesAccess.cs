@@ -245,14 +245,21 @@ public sealed class SalesScopeAdmin(IAppDbContext db, SalesAccess access, IAudit
     }
 
     /// <summary>
-    /// Домашняя страница раздела «Продажи» по охвату: вся организация — «/sales», РМ — его направление (первое по порядку оргструктуры),
-    /// СВР — его регион (первый по названию), ТП — его карточка. Нет ни одного объекта — «/sales» (сервер всё равно отдаст 403/404).
+    /// Домашняя страница раздела «Продажи» по охвату: вся организация — «/sales», РМ и СВР с несколькими регионами — «/sales/my» («Мои
+    /// регионы»), с одним — его регион (у РМ, если этот регион — всё направление, — страница направления), ТП — его карточка. Нет ни одного
+    /// объекта — «/sales» (сервер всё равно отдаст 403/404).
     /// </summary>
     public async Task<string> HomeAsync(SalesScope scope, CancellationToken ct)
     {
         if (scope.IsAgent)
         {
             return $"/sales/agents/{scope.AgentId}";
+        }
+
+        // РМ и СВР с несколькими регионами — «Мои регионы»: все свои регионы одним экраном (раньше — первое направление или первый регион).
+        if ((scope.IsRm || scope.IsSupervisor) && scope.RegionIds.Count > 1)
+        {
+            return "/sales/my";
         }
 
         if (scope.IsRm && await db.SalesDirections.AsNoTracking().Where(d => scope.DirectionIds.Contains(d.Id)).OrderBy(d => d.SortOrder).ThenBy(d => d.Name)

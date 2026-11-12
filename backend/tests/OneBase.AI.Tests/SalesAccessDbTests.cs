@@ -182,12 +182,12 @@ public class SalesAccessDbTests(DataManagerDb fixture) : IClassFixture<DataManag
         Assert.False(one.CanSeeDirection(org.DirA));
         Assert.Equal($"/sales/regions/{org.A1}", await With(sp => admin(sp).HomeAsync(one, default)));
 
-        // Оба региона «Востока» — страница направления открыта и становится своей страницей.
+        // Оба региона «Востока» — страница направления открыта; своя страница — «Мои регионы» (все свои регионы одним экраном).
         await With(async sp => { await admin(sp).ApplyRoleAsync(org.Admin, org.RmA, Application.Security.SystemRoles.SalesRm, [org.A1, org.A2], default); return true; });
         var both = await ScopeOf(org.RmA);
         Assert.True(both.CanSeeDirection(org.DirA));
         Assert.False(both.CanSeeDirection(org.DirB));
-        Assert.Equal($"/sales/directions/{org.DirA}", await With(sp => admin(sp).HomeAsync(both, default)));
+        Assert.Equal("/sales/my", await With(sp => admin(sp).HomeAsync(both, default)));
         Assert.Equal($"РМ: Джизак {org.S}, Самарканд {org.S}", (await With(sp => admin(sp).GetAsync(org.RmA, default))).Title);
 
         // Повтор тех же регионов — без записи в аудит; смена роли на «Продажи» — охват по регионам снят (вся организация).

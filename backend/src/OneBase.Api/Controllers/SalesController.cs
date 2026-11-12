@@ -74,6 +74,31 @@ public sealed class SalesController(SalesDataLoader loader, SalesAccess access) 
         return analytics.HasDirection(id) ? analytics.CachedDirection(id, from, to, metric, metric == "akb" ? category : null) : NotFound();
     }
 
+    /// <summary>
+    /// «Мои регионы»: РМ и супервайзер — все регионы своего охвата одним экраном (у РМ — и регионы его направлений), как страница направления.
+    /// Вся организация и ТП — 404: у них своя страница (страна, карточка ТП).
+    /// </summary>
+    [SalesScoped]
+    [HttpGet("my")]
+    public async Task<ActionResult<GroupView>> MyRegions(
+        [FromQuery] PeriodQuery q,
+        [FromQuery] int? from,
+        [FromQuery] int? to,
+        [FromQuery] string metric = "kg",
+        [FromQuery] long? category = null,
+        CancellationToken ct = default)
+    {
+        var scope = await ScopeAsync(ct);
+        if (!(scope.IsRm || scope.IsSupervisor) || scope.RegionIds.Count == 0)
+        {
+            return NotFound();
+        }
+
+        var analytics = await Load(q, ct);
+        metric = metric is "sum" or "akb" ? metric : "kg";
+        return analytics.CachedMyRegions(scope.RegionIds.ToList(), from, to, metric, metric == "akb" ? category : null);
+    }
+
     /// <summary>metric — календарь месяца: kg | sum | akb; category — для АКБ по категории.</summary>
     [SalesScoped]
     [HttpGet("regions/{id:guid}")]
@@ -227,26 +252,21 @@ public sealed class SalesController(SalesDataLoader loader, SalesAccess access) 
     [HttpGet("assortment")]
     public async Task<ActionResult<AssortmentView>> Assortment([FromQuery] PeriodQuery q, [FromQuery] string? direction, [FromQuery] Guid? region, CancellationToken ct)
     {
-        // Охват РМ/СВР: без параметров — своё направление (своё первое) или регион; страна и чужое — 404. ТП ассортимента региона не видит.
+        // Охват РМ/СВР: без параметров — все свои регионы («Мои регионы»; один регион — он сам); страна и чужое — 404. ТП ассортимента
+        // региона не видит.
         var scope = await ScopeAsync(ct);
+        IReadOnlyList<Guid>? mine = null;
         if (!scope.IsOrganization && string.IsNullOrEmpty(direction) && region is null)
         {
-            if (scope.IsRm)
-            {
-                direction = scope.DirectionIds.Order().FirstOrDefault().ToString();
-            }
-            else
-            {
-                region = scope.RegionIds.Order().FirstOrDefault();
-            }
+            (region, mine) = OwnRegions(scope);
         }
 
-        if (!AllowedCatalog(scope, direction, region, null, false))
+        if (!AllowedCatalog(scope, direction, region, null, false, mine))
         {
             return NotFound();
         }
 
-        return (await LoadDefaultPlan(q, ct)).CachedAssortment(string.IsNullOrEmpty(direction) ? null : direction, region);
+        return (await LoadDefaultPlan(q, ct)).CachedAssortment(string.IsNullOrEmpty(direction) ? null : direction, region, mine);
     }
 
     /// <summary>
@@ -587,8 +607,19 @@ public sealed class SalesController(SalesDataLoader loader, SalesAccess access) 
     /// </summary>
     private Task<SalesAnalytics> LoadDefaultPlan(PeriodQuery q, CancellationToken ct) => loader.LoadAsync(q.Year, q.Month, ct);
 
-    private static AssortmentScope Scope(string? direction, Guid? region, long? agent, bool export) =>
-        new(string.IsNullOrEmpty(direction) ? null : direction, region, agent, export);
+    private static AssortmentScope Scope(string? direction, Guid? region, long? agent, bool export, IReadOnlyList<Guid>? regions = null) =>
+        new(string.IsNullOrEmpty(direction) ? null : direction, region, agent, export, regions);
+
+    /// <summary>Свои регионы РМ и СВР без выбора: один — он сам (регион), несколько — «Мои регионы»; ТП и вся организация — ничего.</summary>
+    private static (Guid? Region, IReadOnlyList<Guid>? Regions) OwnRegions(SalesScope scope)
+    {
+        if (!(scope.IsRm || scope.IsSupervisor) || scope.RegionIds.Count == 0)
+        {
+            return (scope.IsAgent || scope.IsOrganization ? null : Guid.Empty, null);
+        }
+
+        return scope.RegionIds.Count == 1 ? (scope.RegionIds.First(), null) : (null, scope.RegionIds.Order().ToList());
+    }
 
     private SalesScope? _scope;
 
@@ -605,18 +636,18 @@ public sealed class SalesController(SalesDataLoader loader, SalesAccess access) 
     private async Task<AssortmentScope?> CatalogScopeAsync(SalesAnalytics analytics, string? direction, Guid? region, long? agent, bool export, CancellationToken ct)
     {
         var scope = await ScopeAsync(ct);
+        IReadOnlyList<Guid>? mine = null;
         if (!scope.IsOrganization && string.IsNullOrEmpty(direction) && region is null && agent is null && !export)
         {
             if (scope.IsAgent) agent = scope.AgentId;
-            else if (scope.IsRm) direction = scope.DirectionIds.Order().FirstOrDefault().ToString();
-            else region = scope.RegionIds.Order().FirstOrDefault();
+            else (region, mine) = OwnRegions(scope);
         }
 
         var agentRegion = agent is { } a && analytics.HasAgent(a) ? GuidOf(analytics.CachedAgent(a).RegionId) : null;
-        return AllowedCatalog(scope, direction, region, agent is null ? null : (agent.Value, agentRegion), export) ? Scope(direction, region, agent, export) : null;
+        return AllowedCatalog(scope, direction, region, agent is null ? null : (agent.Value, agentRegion), export, mine) ? Scope(direction, region, agent, export, mine) : null;
     }
 
-    private static bool AllowedCatalog(SalesScope scope, string? direction, Guid? region, (long Id, Guid? Region)? agent, bool export)
+    private static bool AllowedCatalog(SalesScope scope, string? direction, Guid? region, (long Id, Guid? Region)? agent, bool export, IReadOnlyList<Guid>? regions = null)
     {
         if (scope.IsOrganization)
         {
@@ -626,6 +657,11 @@ public sealed class SalesController(SalesDataLoader loader, SalesAccess access) 
         if (export)
         {
             return false;
+        }
+
+        if (regions is { Count: > 0 })
+        {
+            return regions.All(r => scope.CanSeeRegion(r));
         }
 
         if (agent is { } a)
