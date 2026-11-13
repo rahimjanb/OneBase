@@ -561,23 +561,6 @@ export const roleLabel: Record<string, string> = {
   other: "другое",
 };
 
-export const methodLabel: Record<string, string> = {
-  naive: "последнее значение",
-  moving_average: "скользящее среднее",
-  linear_trend: "линейный тренд",
-  seasonal_naive: "сезонный (как неделю/год назад)",
-  holt: "Хольт (уровень и тренд)",
-  holt_winters: "Хольт—Винтерс (тренд и сезонность)",
-};
-
-export const metricOptions: { metric: string; label: string }[] = [
-  { metric: "sales.revenue", label: "Выручка" },
-  { metric: "sales.kg", label: "Продажи, кг" },
-  { metric: "sales.orders", label: "Заказы" },
-  { metric: "finance.payments", label: "Оплаты точек" },
-  { metric: "procurement.consumption", label: "Расход сырья" },
-];
-
 /** Порядок критичности для сортировки: критично → внимание → к сведению. */
 export function severityRank(s: string): number {
   return s === "critical" ? 0 : s === "warning" || s === "high" ? 1 : s === "medium" ? 2 : 3;
