@@ -142,8 +142,13 @@ function Stat({ label, value, hint, strong }: { label: string; value: string; hi
 
 // ---------- Риски ----------
 
-export function RisksView({ active, resolved }: { active: Insight[]; resolved: Insight[] }) {
+export function RisksView({ active, resolved, focus = null }: { active: Insight[]; resolved: Insight[]; focus?: string | null }) {
   const t = useT();
+  // Находка из «Обзора» (?risk=…) — раскрыта и прокручена к себе.
+  useEffect(() => {
+    if (!focus) return;
+    document.getElementById(`risk-${focus}`)?.scrollIntoView({ block: "center" });
+  }, [focus]);
   const [module, setModule] = useState<string>("all");
   const [kind, setKind] = useState<string>("all");
   const [showResolved, setShowResolved] = useState(false);
@@ -186,7 +191,9 @@ export function RisksView({ active, resolved }: { active: Insight[]; resolved: I
       ) : (
         <div className="space-y-2">
           {list.map((i) => (
-            <InsightCard key={i.id} insight={i} />
+            <div key={i.id} id={`risk-${i.id}`} className={i.id === focus ? "scroll-mt-24 rounded-xl ring-2 ring-accent/50" : "scroll-mt-24"}>
+              <InsightCard insight={i} open={i.id === focus} />
+            </div>
           ))}
         </div>
       )}

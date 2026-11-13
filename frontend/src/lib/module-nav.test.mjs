@@ -60,3 +60,13 @@ test("сохранённые настройки: только известные
   assert.deepEqual(readPrefs("{oops", keys), emptyPrefs);
   assert.deepEqual(readPrefs(null, keys), emptyPrefs);
 });
+
+test("редкие разделы — в конце и всегда в «Ещё», закреплённые — в строке", async () => {
+  const { withRare } = await import("./module-nav.ts");
+  const keys = ["overview", "chat", "risks", "sales", "reports"];
+  assert.deepEqual(withRare(keys, ["risks", "reports"], emptyPrefs), { keys: ["overview", "chat", "sales", "risks", "reports"], regular: 3 });
+  assert.deepEqual(withRare(keys, ["risks", "reports"], { order: [], pins: ["risks"] }), { keys: ["overview", "chat", "risks", "sales", "reports"], regular: 4 });
+  // Всё помещается, но «Ещё» нужна под редкие: место под неё оставляется.
+  assert.equal(fit([100, 100, 100], 380, 80, 4), 3);
+  assert.equal(fit([100, 100, 100], 380, 80, 4, true), 2);
+});

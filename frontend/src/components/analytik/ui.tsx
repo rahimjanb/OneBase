@@ -22,7 +22,6 @@ import {
   severityLabel,
   type DataGap,
   type FreshnessRow,
-  type Health,
   type Insight,
   type Kpi,
   type Period,
@@ -249,59 +248,6 @@ export function Empty({ text, hint }: { text: string; hint?: string }) {
     <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center">
       <p className="text-sm text-ink-2">{t(text)}</p>
       {hint && <p className="mt-1 text-xs text-ink-4">{t(hint)}</p>}
-    </div>
-  );
-}
-
-/** Состояние компании: кольцо 0–100 и из чего оно сложилось. */
-export function HealthRing({ health }: { health: Health }) {
-  const t = useT();
-  const color = health.level === "good" ? "var(--color-ok)" : health.level === "attention" ? "var(--color-warn)" : "var(--color-bad)";
-  const r = 42;
-  const length = 2 * Math.PI * r;
-  return (
-    <div className="flex items-center gap-4">
-      <svg viewBox="0 0 100 100" className="size-24 shrink-0" role="img" aria-label={`${t("Состояние компании")}: ${health.score}`}>
-        <circle cx="50" cy="50" r={r} fill="none" stroke="var(--color-line)" strokeWidth="9" />
-        <circle
-          cx="50"
-          cy="50"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="9"
-          strokeLinecap="round"
-          strokeDasharray={`${(health.score / 100) * length} ${length}`}
-          transform="rotate(-90 50 50)"
-        />
-        <text x="50" y="56" textAnchor="middle" className="fill-ink" style={{ fontSize: 24, fontWeight: 700 }}>
-          {health.score}
-        </text>
-      </svg>
-      <div className="min-w-0 text-xs">
-        <p className="text-sm font-semibold" style={{ color }}>
-          {t(
-            health.level === "good"
-              ? health.coverage
-                ? "В ваших разделах всё под контролем"
-                : "Всё под контролем"
-              : health.level === "attention"
-                ? "Требует внимания"
-                : "Критическое состояние",
-          )}
-        </p>
-        {health.components.length === 0 ? (
-          <p className="mt-1 text-ink-3">{t("Рисков и отклонений, снижающих оценку, нет.")}</p>
-        ) : (
-          <ul className="mt-1 space-y-0.5 text-ink-3">
-            {health.components.map((c) => (
-              <li key={c.title}>
-                <span className="font-medium text-bad">{c.points}</span> {t(c.title)} — {c.reason}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ChevronLeft, LayoutGrid } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { salesTabAllowed, salesTabHref, type SalesScopeInfo } from "@/lib/sales/access";
-import { arrange, emptyPrefs, fit, pin, prefsKey, readPrefs, reorder, unpin, type NavPrefs } from "@/lib/module-nav";
+import { arrange, emptyPrefs, fit, pin, prefsKey, readPrefs, reorder, unpin, withRare, type NavPrefs } from "@/lib/module-nav";
 import { periodQuery } from "@/lib/sales/query";
 import { readTaskList } from "@/lib/task-list";
 import { Badge, MoreButton, MoreMenu, TabContextMenu, type NavItem } from "./ModuleNavMenu";
@@ -29,6 +29,8 @@ type WorkNav = {
   open?: number;
   /** «Производство → Задания»: выпущены и в работе. */
   orders?: number;
+  /** «Аналитик»: активные критические риски (/api/analytik/nav). */
+  critical?: number;
 };
 
 /** Закреплённые и порядок вкладок модуля у пользователя — в localStorage (серверных настроек пользователя в OneBase нет). */
@@ -89,7 +91,9 @@ export function ModuleNav({ permissions, userId, salesScope = null }: { permissi
           ? "/bff/api/procurement/nav"
           : sectionId === "production"
             ? "/bff/api/production/nav"
-            : null;
+            : sectionId === "analytik"
+              ? "/bff/api/analytik/nav"
+              : null;
     if (!url) return;
     let live = true;
     fetch(url)
@@ -133,19 +137,27 @@ export function ModuleNav({ permissions, userId, salesScope = null }: { permissi
                     ? work?.open
                     : sectionId === "production" && key === "orders"
                       ? work?.orders
-                      : undefined;
+                      : sectionId === "analytik" && key === "risks"
+                        ? work?.critical
+                        : undefined;
       return n && n > 0 ? n : undefined;
     },
     [sectionId, work],
   );
 
   const [prefs, savePrefs] = useNavPrefs(sectionId, userId, (section?.tabs ?? []).map((tab) => tab.key));
-  const items: NavItem[] = useMemo(() => {
+  // Редкие разделы (rare) — в конце и всегда в «Ещё», если пользователь их не закрепил; regular — сколько обычных.
+  const { items, regular } = useMemo(() => {
     const byKey = new Map(allowed.map((tab) => [tab.key, tab]));
-    return arrange(
-      allowed.map((tab) => tab.key),
+    const order = withRare(
+      arrange(
+        allowed.map((tab) => tab.key),
+        prefs,
+      ),
+      allowed.filter((tab) => tab.rare).map((tab) => tab.key),
       prefs,
-    ).map((key) => {
+    );
+    const list: NavItem[] = order.keys.map((key) => {
       const tab = byKey.get(key)!;
       return {
         key,
@@ -155,9 +167,11 @@ export function ModuleNav({ permissions, userId, salesScope = null }: { permissi
         href: query ? `${tab.href}?${query}` : tab.href,
         icon: tab.icon,
         badge: badgeOf(key),
+        badgeTone: sectionId === "analytik" && key === "risks" ? ("danger" as const) : undefined,
       };
     });
-  }, [allowed, prefs, query, badgeOf, t]);
+    return { items: list, regular: order.regular };
+  }, [allowed, prefs, query, badgeOf, t, sectionId]);
   const activeItem = items.find((i) => i.key === active) ?? null;
 
   // ---------- Компьютер: сколько вкладок помещается ----------
@@ -174,12 +188,15 @@ export function ModuleNav({ permissions, userId, salesScope = null }: { permissi
     const more = cells[items.length]?.offsetWidth ?? 96;
     const moreActive = cells[items.length + 1]?.offsetWidth ?? more;
     const gap = parseFloat(getComputedStyle(box).columnGap) || 4;
-    let n = fit(widths, box.clientWidth, more, gap);
+    // Редкие разделы всегда в «Ещё»: в строку — только обычные, место под «Ещё» — всегда.
+    const rare = regular < items.length;
+    const own = widths.slice(0, regular);
+    let n = fit(own, box.clientWidth, more, gap, rare);
     // Открытый раздел не помещается — кнопка «Ещё» покажет его название, она шире: пересчёт с её шириной.
     const at = items.findIndex((i) => i.key === active);
-    if (n < items.length && at >= n && moreActive > more) n = fit(widths, box.clientWidth, moreActive, gap);
+    if (n < items.length && at >= n && moreActive > more) n = fit(own, box.clientWidth, moreActive, gap, rare);
     setCount(n);
-  }, [items, active]);
+  }, [items, active, regular]);
 
   useIsoLayoutEffect(() => measure(), [signature, measure]);
   useEffect(() => {
@@ -238,6 +255,8 @@ export function ModuleNav({ permissions, userId, salesScope = null }: { permissi
   const shown = count === null ? items : items.slice(0, count);
   const hidden = count === null ? [] : items.slice(count);
   const activeHidden = activeItem && hidden.some((i) => i.key === activeItem.key) ? activeItem : null;
+  // Тревога у скрытых разделов (критические риски Аналитика) — красным счётчиком на «Ещё».
+  const alert = hidden.filter((i) => i.badgeTone === "danger" && i.key !== activeHidden?.key).reduce((sum, i) => sum + (i.badge ?? 0), 0);
   const press = (key: string) => (e: React.MouseEvent) => {
     if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) setPending({ tab: key, from: pathname });
   };
@@ -252,7 +271,7 @@ export function ModuleNav({ permissions, userId, salesScope = null }: { permissi
     <>
       <item.icon aria-hidden className="size-[15px] shrink-0" strokeWidth={1.9} />
       {item.label}
-      {item.badge ? <Badge value={item.badge} on={on} /> : null}
+      {item.badge ? <Badge value={item.badge} on={on} tone={item.badgeTone} /> : null}
     </>
   );
   const tab = (item: NavItem) => {
@@ -289,6 +308,11 @@ export function ModuleNav({ permissions, userId, salesScope = null }: { permissi
             <ChevronLeft aria-hidden className="size-4" />
           </Link>
         )}
+        {section.mark && (
+          <span aria-hidden className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-[linear-gradient(135deg,#5b97ff,#8b5cf6)] text-white">
+            <section.mark className="size-4" strokeWidth={2} />
+          </span>
+        )}
         <span className="shrink-0 whitespace-nowrap text-[15px] font-bold text-ink">{title}</span>
         <span aria-hidden className="h-6 w-px shrink-0 bg-line-strong" />
         <nav
@@ -304,6 +328,7 @@ export function ModuleNav({ permissions, userId, salesScope = null }: { permissi
               active={activeHidden}
               open={menu !== null}
               dot={hidden.some((i) => i.badge && i.key !== activeHidden?.key)}
+              alert={alert || undefined}
               onClick={(keyboard) => setMenu((m) => (m ? null : { keyboard }))}
             />
           )}
@@ -340,7 +365,7 @@ export function ModuleNav({ permissions, userId, salesScope = null }: { permissi
               >
                 <item.icon aria-hidden className="size-3.5 shrink-0" strokeWidth={1.9} />
                 {item.short ?? item.label}
-                {item.badge ? <Badge value={item.badge} on={on} /> : null}
+                {item.badge ? <Badge value={item.badge} on={on} tone={item.badgeTone} /> : null}
               </Link>
             );
           })}

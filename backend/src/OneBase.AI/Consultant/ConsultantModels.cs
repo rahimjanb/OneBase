@@ -93,7 +93,8 @@ public sealed record ConsultantDetails(
     int MemoryUsed = 0,
     IReadOnlyList<ReportRef>? Reports = null,
     GroundingSummary? Grounding = null,
-    CorrectionReview? Correction = null);
+    CorrectionReview? Correction = null,
+    Guid? InvestigationId = null);
 
 public sealed record ConsultantAnswer(string Content, ConsultantDetails Details, AiTokenUsage Usage);
 

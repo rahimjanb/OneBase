@@ -113,6 +113,39 @@ public sealed class ScenarioService(
         return await SimulateAsync(data, new ScenarioDefinition(input.Kind, input.HorizonDays, input.Parameters ?? [], input.NewRegionName), ct);
     }
 
+    /// <summary>Снимок для анализа сценария: сохранённый (id) или новый за период; права — как у расчёта.</summary>
+    public async Task<(Guid Id, ScenarioBaselineData Data)> BaselineDataAsync(AnalytikPrincipal p, Guid? id, DateOnly? from, DateOnly? to, CancellationToken ct)
+    {
+        if (id is { } existing)
+        {
+            var (row, data) = await LoadBaselineAsync(p, existing, ct);
+            return (row.Id, data);
+        }
+
+        var (defaultFrom, defaultTo) = ScenarioBaselineBuilder.DefaultPeriod(FieldClock.LocalDate(clock.GetUtcNow()));
+        var stored = await builder.BuildAsync(p, from ?? defaultFrom, to ?? defaultTo, ct);
+        cache.Set(DataKey(stored.Id), stored.Data, TimeSpan.FromMinutes(30));
+        return (stored.Id, stored.Data);
+    }
+
+    /// <summary>Тяжёлый расчёт по снимку (анализ — много запусков движка) — в общей очереди расчётов сценариев.</summary>
+    public async Task<T> GuardAsync<T>(Func<T> work, CancellationToken ct)
+    {
+        if (!await RunGate.WaitAsync(TimeSpan.FromSeconds(10), ct))
+        {
+            throw new SimulationBusyException("Сейчас считается слишком много сценариев — повторите через несколько секунд.");
+        }
+
+        try
+        {
+            return await Task.Run(work, ct);
+        }
+        finally
+        {
+            RunGate.Release();
+        }
+    }
+
     private async Task<SimulationResult> SimulateAsync(ScenarioBaselineData data, ScenarioDefinition def, CancellationToken ct)
     {
         if (!await RunGate.WaitAsync(TimeSpan.FromSeconds(10), ct))

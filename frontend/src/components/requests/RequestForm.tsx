@@ -75,7 +75,29 @@ const numberText = (n: number | null) => (n === null ? "" : String(n).replace(".
  * комментарий, вложения. Категории и товары каталога — по типу: сырьё только в заявке на сырьё. «Сохранить черновик» — без отправки,
  * «Отправить» — сразу на согласование. Повторное нажатие не создаёт вторую заявку (ключ формы). Сервер проверяет всё ещё раз.
  */
-export function RequestForm({ form, initial, defaultKind = "Regular" }: { form: RequestFormData; initial?: RequestDetail; defaultKind?: RequestKind }) {
+/**
+ * Заполненная новая заявка (из «Аналитика»: «Создать заявку в снабжение»): название, причина, приоритет, желаемая дата и позиция каталога
+ * с количеством и ценой. Всё можно поправить перед отправкой.
+ */
+export type RequestPrefill = {
+  title: string;
+  reason: string;
+  priority: RequestPriority;
+  desiredDate: string;
+  item: { itemId: string | null; sku: string | null; name: string; categoryId: string; unitCode: string; available: number | null; quantity: number; price: number | null };
+};
+
+export function RequestForm({
+  form,
+  initial,
+  defaultKind = "Regular",
+  prefill,
+}: {
+  form: RequestFormData;
+  initial?: RequestDetail;
+  defaultKind?: RequestKind;
+  prefill?: RequestPrefill | null;
+}) {
   const t = useT();
   const router = useRouter();
   const today = todayInTashkent();
@@ -83,11 +105,11 @@ export function RequestForm({ form, initial, defaultKind = "Regular" }: { form: 
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [kind, setKind] = useState<RequestKind>(initial?.kind ?? (form.canCreateRaw ? defaultKind : "Regular"));
-  const [title, setTitle] = useState(initial?.title ?? "");
+  const [title, setTitle] = useState(initial?.title ?? prefill?.title ?? "");
   const [departmentId, setDepartmentId] = useState(initial?.departmentId ?? form.defaultDepartmentId ?? "");
-  const [priority, setPriority] = useState<RequestPriority>(initial?.priority ?? "Normal");
-  const [desiredDate, setDesiredDate] = useState(initial?.desiredDate ?? "");
-  const [reason, setReason] = useState(initial?.reason ?? "");
+  const [priority, setPriority] = useState<RequestPriority>(initial?.priority ?? prefill?.priority ?? "Normal");
+  const [desiredDate, setDesiredDate] = useState(initial?.desiredDate ?? prefill?.desiredDate ?? "");
+  const [reason, setReason] = useState(initial?.reason ?? prefill?.reason ?? "");
   const [comment, setComment] = useState(initial?.comment ?? "");
   const [items, setItems] = useState<ItemDraft[]>(() =>
     initial?.items.length
@@ -109,7 +131,27 @@ export function RequestForm({ form, initial, defaultKind = "Regular" }: { form: 
           purchaseReason: i.purchaseReason ?? "",
           issued: i.issuedQty,
         }))
-      : [blankItem("")],
+      : prefill
+        ? [
+            {
+              key: key(),
+              id: null,
+              name: prefill.item.name,
+              categoryId: prefill.item.categoryId,
+              unitCode: prefill.item.unitCode,
+              quantity: numberText(prefill.item.quantity),
+              price: numberText(prefill.item.price),
+              comment: "",
+              itemId: prefill.item.itemId,
+              sku: prefill.item.sku,
+              available: prefill.item.available,
+              // Количество — нехватка сверх остатка: со склада не берётся (иначе закупка станет меньше нужной).
+              fromStock: "0",
+              fromStockTouched: !!prefill.item.itemId,
+              purchaseReason: prefill.item.itemId && (prefill.item.available ?? 0) > 0 ? prefill.reason : "",
+            },
+          ]
+        : [blankItem("")],
   );
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState<"draft" | "submit" | null>(null);

@@ -26,8 +26,9 @@ public sealed class ToolExecutor(IToolRegistry registry, IAppDbContext db, IUser
         var sources = await OpenSourcesAsync(agentCode, cancellationToken);
         var userPermissions = userId is { } id ? await permissions.GetAsync(id, cancellationToken) : null;
 
+        var max = ToolLevels.MaxFor(agentCode);
         return registry.All
-            .Where(t => granted.Contains(t.Name) && Denial(t, sources, userPermissions) is null)
+            .Where(t => granted.Contains(t.Name) && t.Level <= max && Denial(t, sources, userPermissions) is null)
             .ToList();
     }
 
@@ -54,7 +55,7 @@ public sealed class ToolExecutor(IToolRegistry registry, IAppDbContext db, IUser
             var granted = grants.Where(g => g.AgentCode == code).Select(g => g.ToolName).ToHashSet(StringComparer.Ordinal);
             var sources = open.Where(s => s.AgentCode == code).Select(s => s.SourceCode).ToHashSet(StringComparer.Ordinal);
             return registry.All
-                .Where(t => t.Source is not null && granted.Contains(t.Name) && Denial(t, sources, userPermissions) is null)
+                .Where(t => t.Source is not null && granted.Contains(t.Name) && t.Level <= ToolLevels.MaxFor(code) && Denial(t, sources, userPermissions) is null)
                 .Select(t => t.Source!)
                 .ToHashSet(StringComparer.Ordinal);
         });
@@ -94,7 +95,18 @@ public sealed class ToolExecutor(IToolRegistry registry, IAppDbContext db, IUser
                 : ToolResult.Failure(toolName, ToolFailures.NotConnected, $"Источник данных инструмента «{toolName}» не подключён этому AI-сотруднику.");
         }
 
-        if (tool.IsCritical || grant.RequiresApproval)
+        // Execution Safety: уровень инструмента выше разрешённого сотруднику (аналитикам — не выше «подготовить») — отказ без выполнения.
+        if (tool.Level > ToolLevels.MaxFor(context.AgentCode))
+        {
+            await audit.LogAsync(ActorType.Agent, context.AgentCode, "ai.tool.denied", "tool", toolName,
+                new { context.UserId, reason = "level", level = tool.Level }, cancellationToken);
+            return ToolResult.Failure(toolName, ToolFailures.Forbidden,
+                $"Инструмент «{toolName}» — {ToolLevels.Title(tool.Level)}; этому AI-сотруднику разрешено не выше «{ToolLevels.Title(ToolLevels.MaxFor(context.AgentCode))}». " +
+                "Подготовь рекомендацию или черновик — операцию выполняет человек.");
+        }
+
+        // Выполнение операции (уровень 5) — всегда через подтверждение человеком, даже без пометки «критический».
+        if (tool.IsCritical || tool.Level >= ToolLevels.Execute || grant.RequiresApproval)
         {
             var request = new ApprovalRequest
             {
@@ -144,7 +156,7 @@ public sealed class ToolExecutor(IToolRegistry registry, IAppDbContext db, IUser
         }
 
         await audit.LogAsync(ActorType.Agent, context.AgentCode, "ai.tool.executed", "tool", toolName,
-            new { context.UserId, result.Success }, cancellationToken);
+            new { context.UserId, result.Success, level = tool.Level }, cancellationToken);
         return result;
     }
 

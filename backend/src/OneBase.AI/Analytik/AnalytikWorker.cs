@@ -143,7 +143,8 @@ public sealed class AnalytikJobs(
     SalesAnalytik sales,
     SupplyPlanner supply,
     TimeProvider clock,
-    ILogger<AnalytikJobs> logger)
+    ILogger<AnalytikJobs> logger,
+    OneBase.Application.Analytik.Decisions.DecisionService? decisions = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -312,7 +313,21 @@ public sealed class AnalytikJobs(
     {
         var (saved, evaluated) = await forecasts.SnapshotAsync(ct);
         var report = await reports.CreateAsync("daily", AnalytikPeriod.Of("yesterday", null, null, Today), AnalytikPrincipal.SystemPrincipal, null, runId, ct);
-        return new { ForecastsSaved = saved, ForecastsEvaluated = evaluated, ReportId = report.Id };
+        // Память решений: решения, у которых наступил срок проверки, оцениваются по факту (по правам автора).
+        var decided = 0;
+        if (decisions is not null)
+        {
+            try
+            {
+                decided = await decisions.EvaluateDueAsync(ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Аналитик: решения в срок не оценены");
+            }
+        }
+
+        return new { ForecastsSaved = saved, ForecastsEvaluated = evaluated, ReportId = report.Id, DecisionsEvaluated = decided };
     }
 
     private async Task<object> ReportAsync(string kind, AnalytikPeriod period, Guid runId, CancellationToken ct)

@@ -55,7 +55,7 @@ public sealed record InsightView(
 /// для critical/warning; получатели — у кого есть право находки и раздел «Аналитик»; находки продаж и финансов — только тем, кто видит всю
 /// организацию (иначе через итоги компании утекли бы чужие регионы).
 /// </summary>
-public sealed class InsightStore(IAnalytikDb adb, IAppDbContext db, UserNotifier notifier, TimeProvider clock)
+public sealed class InsightStore(IAnalytikDb adb, IAppDbContext db, UserNotifier notifier, TimeProvider clock, InsightInvestigator? investigator = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -69,6 +69,9 @@ public sealed class InsightStore(IAnalytikDb adb, IAppDbContext db, UserNotifier
         var byKey = active.ToDictionary(i => i.Key, StringComparer.Ordinal);
         int created = 0, updated = 0, resolved = 0;
         var toNotify = new List<AnalytikInsight>();
+        // История находки (analytik.InsightEvents) и что расследовать: новые и выросшие по важности.
+        var events = new List<AnalytikInsightEvent>();
+        var investigate = new List<AnalytikInsight>();
         foreach (var c in found.GroupBy(c => c.Key).Select(g => g.OrderByDescending(x => Severities.Rank(x.Severity)).First()))
         {
             if (!byKey.TryGetValue(c.Key, out var row))
@@ -81,12 +84,27 @@ public sealed class InsightStore(IAnalytikDb adb, IAppDbContext db, UserNotifier
                 adb.Insights.Add(row);
                 byKey[c.Key] = row;
                 created++;
+                var reopened = await adb.Insights.AsNoTracking().AnyAsync(i => i.Key == c.Key && i.ResolvedAt != null, ct);
+                events.Add(Event(row.Id, now, reopened ? "reopened" : "created", c.Severity, c.Impact, reopened ? "Условие вернулось после закрытия." : null));
+                investigate.Add(row);
             }
             else
             {
                 row.Occurrences++;
                 row.UpdatedAt = now;
                 updated++;
+                if (Severities.Rank(c.Severity) != Severities.Rank(row.Severity))
+                {
+                    events.Add(Event(row.Id, now, "severity", c.Severity, c.Impact, $"Важность: {row.Severity} → {c.Severity}."));
+                    if (Severities.Rank(c.Severity) > Severities.Rank(row.Severity))
+                    {
+                        investigate.Add(row);
+                    }
+                }
+                else if (c.Impact is { } ni && row.Impact is { } oi && oi != 0 && Math.Abs((ni - oi) / oi) > 0.1m)
+                {
+                    events.Add(Event(row.Id, now, "impact", c.Severity, c.Impact, $"Масштаб: {oi:N0} → {ni:N0} {c.ImpactUnit}."));
+                }
             }
 
             row.Severity = c.Severity;
@@ -114,7 +132,29 @@ public sealed class InsightStore(IAnalytikDb adb, IAppDbContext db, UserNotifier
         {
             row.ResolvedAt = now;
             resolved++;
+            events.Add(Event(row.Id, now, "resolved", row.Severity, row.Impact, "Условие больше не выполняется."));
         }
+
+        // Авторасследование — до уведомления: открыв находку из колокольчика, человек видит и вклад, и уверенность. Сбой расследования не мешает находкам.
+        if (investigator is not null)
+        {
+            foreach (var row in investigate.Where(r => Severities.Rank(r.Severity) >= Severities.Rank(Severities.Warning)).Take(MaxInvestigations))
+            {
+                try
+                {
+                    if (await investigator.InvestigateAsync(row, now, ct) is { } conclusion)
+                    {
+                        events.Add(Event(row.Id, now, "investigated", row.Severity, row.Impact, conclusion));
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    row.Investigation = JsonSerializer.Serialize(new { error = "Авторасследование не выполнено." }, Json);
+                }
+            }
+        }
+
+        adb.InsightEvents.AddRange(events);
 
         var notified = 0;
         if (toNotify.Count > 0)
@@ -131,6 +171,12 @@ public sealed class InsightStore(IAnalytikDb adb, IAppDbContext db, UserNotifier
     /// видны на экране «Риски», но не должны засыпать колокольчик при каждом обнаружении).
     /// </summary>
     internal static string NotifyFrom(string kind) => kind == InsightKinds.Quality ? Severities.Critical : Severities.Warning;
+
+    /// <summary>Сколько находок за проход расследуется (каждая — несколько срезов движка).</summary>
+    internal const int MaxInvestigations = 5;
+
+    private static AnalytikInsightEvent Event(Guid insight, DateTimeOffset at, string kind, string? severity, decimal? impact, string? note) =>
+        new() { InsightId = insight, At = at, Event = kind, Severity = severity, Impact = impact is { } i ? Math.Round(i, 3) : null, Note = Trim(note, 2000) };
 
     /// <summary>Больше стольких новых находок пользователю за один проход — одно сводное уведомление вместо отдельных.</summary>
     internal const int DigestAfter = 3;

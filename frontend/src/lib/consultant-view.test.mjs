@@ -148,3 +148,11 @@ test("русские формы по числу", () => {
     "рекомендация", "рекомендации", "рекомендаций", "рекомендация", "рекомендаций",
   ]);
 });
+
+test("этапы исследования в строке статуса чата", () => {
+  const step = (stage, status = "Running") => ({ stage, agent: null, agentName: null, status, note: null });
+  assert.equal(currentStep([step("plan")]).key, "Составляю план исследования");
+  assert.equal(currentStep([step("plan", "Done")]).key, "План исследования готов");
+  assert.equal(currentStep([step("hypotheses")]).key, "Проверяю гипотезы расчётом");
+  assert.equal(currentStep([step("review")]).key, "Проверяю выводы");
+});

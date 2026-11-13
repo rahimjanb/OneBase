@@ -27,7 +27,10 @@ public static class AnalytikRegistration
         services.AddScoped<OneBase.Application.Analytik.Semantic.SemanticPlans>();
         services.AddScoped<OneBase.Application.Analytik.Semantic.SemanticEngine>();
         services.AddScoped<OneBase.Application.Analytik.Semantic.CapabilityRegistry>();
+        services.AddScoped<OneBase.Application.Analytik.Compute.ComputeService>();
+        services.AddScoped<OneBase.Application.Analytik.Decisions.DecisionService>();
         services.AddScoped<OneBase.Application.Analytik.Business.OperationsAnalytik>();
+        services.AddScoped<OneBase.Application.Analytik.Risk.InsightInvestigator>();
         services.AddScoped<OneBase.Application.Analytik.Risk.InsightStore>();
         services.AddScoped<OneBase.Application.Analytik.Quality.DataQualityEngine>();
         // Готовность данных: свежесть Linko и Verifix, запуск обновлений заранее, предупреждения, ожидание свежих данных перед ответом.

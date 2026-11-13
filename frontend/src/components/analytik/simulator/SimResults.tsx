@@ -40,6 +40,7 @@ import {
   Wallet,
   Wheat,
 } from "lucide-react";
+import { Calculator as CalculatorIcon } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { date, dateTime, num } from "@/lib/analytik";
 import {
@@ -70,6 +71,7 @@ import {
   type SimulationResult,
 } from "@/lib/simulator";
 import { LineChart } from "../ui";
+import { SimAnalysis, type AnalysisScenario } from "./SimAnalysis";
 
 type Icon = React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 
@@ -554,12 +556,25 @@ export function ConstraintsRow({ result, unchecked }: { result: SimulationResult
 
 // ---------- Подробные результаты ----------
 
-type Tab = "metrics" | "products" | "regions" | "materials" | "expansion" | "charts" | "sources";
+type Tab = "metrics" | "products" | "regions" | "materials" | "expansion" | "charts" | "analysis" | "sources";
 
 const groupIcons: Record<string, Icon> = { sales: ChartLine, production: Factory, materials: Wheat, procurement: ShoppingCart, finance: Wallet, workforce: Users, risks: ShieldAlert };
 const detailGroup: Record<string, string> = { materials: "Сырьё и закупки", procurement: "Сырьё и закупки" };
 
-export function DetailResults({ result, nodes, baseline, history }: { result: SimulationResult; nodes: GraphNode[]; baseline: BaselineView | null; history: ScenarioHistoryEntry[] }) {
+export function DetailResults({
+  result,
+  nodes,
+  baseline,
+  history,
+  scenario,
+}: {
+  result: SimulationResult;
+  nodes: GraphNode[];
+  baseline: BaselineView | null;
+  history: ScenarioHistoryEntry[];
+  /** Сценарий для анализа (чувствительность, безубыточность, риск, оптимальный выпуск); нет снимка — вкладки нет. */
+  scenario?: AnalysisScenario | null;
+}) {
   const t = useT();
   const [tab, setTab] = useState<Tab>("metrics");
   const [onlyChanged, setOnlyChanged] = useState(false);
@@ -570,6 +585,7 @@ export function DetailResults({ result, nodes, baseline, history }: { result: Si
     ...(result.materials.length ? [{ key: "materials" as Tab, label: "Сырьё и закупки", icon: Wheat, count: result.materials.length }] : []),
     ...(result.expansion ? [{ key: "expansion" as Tab, label: "Новый регион", icon: MapPinPlus }] : []),
     ...(result.series.length ? [{ key: "charts" as Tab, label: "Графики", icon: ChartArea, count: result.series.length }] : []),
+    ...(scenario && result.valid ? [{ key: "analysis" as Tab, label: "Анализ", icon: CalculatorIcon }] : []),
     { key: "sources", label: "Источники", icon: FileSearch },
   ];
   const active = tabs.some((x) => x.key === tab) ? tab : "metrics";
@@ -625,6 +641,7 @@ export function DetailResults({ result, nodes, baseline, history }: { result: Si
         {active === "materials" && <MaterialsTable result={result} />}
         {active === "expansion" && result.expansion && <ExpansionView result={result} />}
         {active === "charts" && <SeriesCharts result={result} />}
+        {active === "analysis" && scenario && <SimAnalysis result={result} scenario={scenario} />}
         {active === "sources" && <SourcesView result={result} nodes={nodes} baseline={baseline} history={history} />}
       </div>
     </section>

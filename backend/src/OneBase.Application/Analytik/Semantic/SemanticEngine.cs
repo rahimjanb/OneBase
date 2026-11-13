@@ -1184,11 +1184,14 @@ public sealed class SemanticEngine(
     {
         try
         {
+            log.Origin = log.Origin.Length <= 16 ? log.Origin : log.Origin[..16];
             adb.Queries.Add(log);
             await adb.SaveChangesAsync(ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Неудачная запись не остаётся в контексте: иначе следующие сохранения той же области (журнал расчётов, исследование) упадут вместе с ней.
+            adb.Queries.Entry(log).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
             logger.LogWarning(ex, "Аналитик: срез не записан в журнал");
         }
     }

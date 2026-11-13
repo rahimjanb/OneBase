@@ -96,6 +96,18 @@ public sealed class AnalytikInsightsController(
         [FromQuery] int? scenario, CancellationToken ct) =>
         await forecasts.ForecastAsync(metric, granularity ?? "day", horizon ?? 30, await PrincipalAsync(ct), ct, item, scenario is { } s ? s / 100m : null);
 
+    /// <summary>Счётчик кнопки «Ещё» в шапке Аналитика: активные находки по критичности, видимые пользователю.</summary>
+    [HttpGet("nav")]
+    public async Task<RiskCounts> Nav(CancellationToken ct) => RiskCounts.Of(await risks.ListAsync(await PrincipalAsync(ct), null, false, 300, ct));
+
+    /// <summary>
+    /// «Точность прошлых прогнозов» и линия «Прошлые прогнозы»: прошлые месяцы — прогноз против факта (сохранённый прогноз или проверка на
+    /// истории), прошлые прогнозы по шагу экрана. Права и область — как у прогноза.
+    /// </summary>
+    [HttpGet("forecast/backtest")]
+    public async Task<ForecastBacktestView> ForecastBacktest([FromQuery] string metric, [FromQuery] string? granularity, [FromQuery] Guid? item, CancellationToken ct) =>
+        await forecasts.BacktestAsync(metric, granularity ?? "day", await PrincipalAsync(ct), ct, item);
+
     [HttpGet("risks")]
     public async Task<IReadOnlyList<InsightView>> Risks([FromQuery] string? module, [FromQuery] bool resolved, CancellationToken ct) =>
         await risks.ListAsync(await PrincipalAsync(ct), string.IsNullOrWhiteSpace(module) ? null : module, resolved, 300, ct);

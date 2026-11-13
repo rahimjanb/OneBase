@@ -267,7 +267,11 @@ export type Dashboard = {
   scope: string | null;
   errors: string[];
   gaps: DataGap[];
+  /** Активные находки по критичности (на панели — только первые 12, счётчики — по всем). Нет — старый сервер. */
+  riskCounts?: RiskCounts | null;
 };
+
+export type RiskCounts = { critical: number; warning: number; info: number; total: number };
 
 /** Состояние набора данных: свежие, обновляются, устарели, ошибка источника, интеграция не подключена, планы не заведены. */
 export type ReadinessStatus = "ok" | "updating" | "stale" | "error" | "not_connected" | "missing";
@@ -650,4 +654,193 @@ export function analytikQuestions(permissions: readonly string[]): { text: strin
     { text: "Найди все риски, которые могут привести к финансовым потерям", icon: "wallet" as const, tone: "danger", ok: true },
   ];
   return all.filter((q) => q.ok).slice(0, 6).map(({ text, icon, tone }) => ({ text, icon, tone }));
+}
+
+// ---------- «Обзор» (редизайн по макету «Аналитик · Обзор») ----------
+
+/** Форма слова по числу: 1 позиция, 2 позиции, 5 позиций. */
+export function plural(n: number, one: string, few: string, many: string): string {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  return a >= 11 && a <= 14 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many;
+}
+
+/**
+ * Значение показателя и единица раздельно — крупное число и мелкая подпись по макету: «4,69» + «млрд сум», «124» + «тыс. кг», «24,3» + «%»,
+ * «1» + «позиция». Нет значения — null («Нет данных» с причиной, а не ноль).
+ */
+export function kpiParts(value: number | null | undefined, unit: string): { value: string; unit: string } | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const split = (text: string) => {
+    const i = text.lastIndexOf(nbsp);
+    return i < 0 ? { value: text, unit: "" } : { value: text.slice(0, i), unit: text.slice(i + 1) };
+  };
+  if (unit === "%") return { value: num(value, 1), unit: "%" };
+  if (unit === "сум") return Math.abs(value) >= 1e4 ? (({ value: v, unit: u }) => ({ value: v, unit: `${u}${nbsp}сум` }))(split(compact(value))) : { value: num(value), unit: "сум" };
+  if (unit === "кг") return Math.abs(value) >= 1e4 ? (({ value: v, unit: u }) => ({ value: v, unit: `${u}${nbsp}кг` }))(split(compact(value))) : { value: num(value, 1), unit: "кг" };
+  if (unit === "позиций") return { value: num(value), unit: plural(value, "позиция", "позиции", "позиций") };
+  return { value: num(value, Number.isInteger(value) ? 0 : 1), unit };
+}
+
+/** Сколько дней месяца плана прошло (по дню данных): «прошло 12 из 30 дней», «прошло 40% месяца». */
+export function planDays(plan: Pick<SalesMonthPlan, "year" | "month" | "dataThrough">): { day: number; days: number; percent: number } {
+  const days = new Date(Date.UTC(plan.year, plan.month, 0)).getUTCDate();
+  const [y, m, d] = (plan.dataThrough ?? "").slice(0, 10).split("-").map(Number);
+  const day = y === plan.year && m === plan.month && d ? Math.min(d, days) : y && (y > plan.year || (y === plan.year && m > plan.month)) ? days : 0;
+  return { day, days, percent: Math.round((day / days) * 1000) / 10 };
+}
+
+/** Тон прогноза выполнения плана — по тем же порогам, что снижают «Состояние компании»: от 95 % — норма, 80–95 % — внимание, ниже — плохо. */
+export function planTone(percent: number | null | undefined): "ok" | "warn" | "bad" | "muted" {
+  if (percent == null || !Number.isFinite(percent)) return "muted";
+  return percent >= 95 ? "ok" : percent >= 80 ? "warn" : "bad";
+}
+
+/** Тон запаса сырья в днях: меньше 14 дней — внимание, от 14 — норма; нет данных — нейтральный. */
+export function stockTone(days: number | null | undefined): "ok" | "warn" | "muted" {
+  if (days == null || !Number.isFinite(days)) return "muted";
+  return days < 14 ? "warn" : "ok";
+}
+
+export type HealthFactor = { label: string; sub: string; penalty: number; severity: "danger" | "warning"; share: number; href: string };
+
+/** Что снижает оценку: штраф положительным числом, доля полосы — от самого большого штрафа, куда ведёт строка. */
+export function healthFactors(health: Pick<Health, "components">): HealthFactor[] {
+  const max = Math.max(1, ...health.components.map((c) => Math.abs(c.points)));
+  const hrefOf = (title: string) =>
+    /риск|предупрежд/i.test(title) ? "/analytik/risks" : /план продаж/i.test(title) ? "/analytik/sales" : /сырь/i.test(title) ? "/analytik/procurement" : /производ/i.test(title) ? "/analytik/production" : "/analytik/risks";
+  return health.components.map((c) => ({
+    label: c.title,
+    sub: c.reason,
+    penalty: Math.abs(c.points),
+    severity: /критическ/i.test(c.title) ? "danger" : "warning",
+    share: Math.abs(c.points) / max,
+    href: hrefOf(c.title),
+  }));
+}
+
+/** «Главное влияние — критические риски и план продаж»: два самых больших снижения (названия переводит экран); без снижений — пусто. */
+export function healthLead(health: Pick<Health, "components">): string[] {
+  return [...health.components].sort((a, b) => a.points - b.points).slice(0, 2).map((c) => c.title);
+}
+
+/** Точность прогноза: 100 % минус ошибка — сверенная с фактом (прошлые прогнозы), иначе на отложенной истории; нет — null. */
+export function forecastAccuracy(f: Pick<ForecastView, "past" | "result">): number | null {
+  const wape = f.past?.wape ?? f.result.wape;
+  return wape == null || !Number.isFinite(wape) ? null : Math.max(0, Math.round((1 - wape) * 100));
+}
+
+/**
+ * Время находки коротко (Ташкент): day — «today» / «yesterday» (слово переводит экран) и время «12:16», иначе «09.11 00:36», другой год —
+ * «09.11.2025».
+ */
+export function shortWhen(iso: string | null | undefined, now: Date = new Date()): { day: "today" | "yesterday" | null; text: string } {
+  if (!iso) return { day: null, text: "—" };
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return { day: null, text: iso };
+  const shift = (d: Date) => new Date(d.getTime() + 5 * 3600_000);
+  const a = shift(t);
+  const b = shift(now);
+  const p = (n: number) => String(n).padStart(2, "0");
+  const time = `${p(a.getUTCHours())}:${p(a.getUTCMinutes())}`;
+  const dayKey = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const diff = Math.round((dayKey(b) - dayKey(a)) / 86_400_000);
+  if (diff === 0) return { day: "today", text: time };
+  if (diff === 1) return { day: "yesterday", text: time };
+  const day = `${p(a.getUTCDate())}.${p(a.getUTCMonth() + 1)}`;
+  return { day: null, text: a.getUTCFullYear() === b.getUTCFullYear() ? `${day} ${time}` : `${day}.${a.getUTCFullYear()}` };
+}
+
+/** «1.11» — день и месяц без нулей впереди (подписи «Факт с 1.11»). */
+export function dayMonth(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const [, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return d && m ? `${d}.${String(m).padStart(2, "0")}` : iso;
+}
+
+/** «12.11» — короткая дата оси графика. */
+export function shortDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const [, m, d] = iso.slice(0, 10).split("-");
+  return d && m ? `${d}.${m}` : iso;
+}
+
+/** Ровные деления оси: от 0 до «круглого» максимума, count делений (для 1 234 — 0, 400, 800, 1 200, 1 600). */
+export function niceTicks(max: number, count = 4): number[] {
+  if (!Number.isFinite(max) || max <= 0) return [0, 1];
+  const raw = max / count;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 4, 5, 10].map((k) => k * mag).find((s) => s >= raw) ?? 10 * mag;
+  return Array.from({ length: Math.ceil(max / step) + 1 }, (_, i) => i * step);
+}
+
+/** Сырьё в карточке «Что закупить»: сколько купить на 30 дней, сумма (нет цены — null), дни запаса. */
+export function purchaseOf(r: Pick<SupplyRecommendation, "horizons" | "daysOfCover" | "unitPrice">): { qty: number; sum: number | null; days: number | null } {
+  const need = r.horizons.find((h) => h.days === 30) ?? r.horizons[r.horizons.length - 1];
+  const qty = need?.required ?? 0;
+  return { qty, sum: need?.cost ?? (r.unitPrice != null ? Math.round(qty * r.unitPrice) : null), days: r.daysOfCover };
+}
+
+export type OverviewRecommendation = {
+  id: string;
+  title: string;
+  reason: string;
+  module: string;
+  severity: Severity;
+  impact: string | null;
+  href: string | null;
+  /** Сырьё находки «запас закончится» — для заявки в снабжение с заполненной позицией. */
+  sku: string | null;
+};
+
+/** Рекомендации AI-аналитика: из найденных рисков с рекомендацией (кроме «к сведению»), не больше limit. */
+export function overviewRecommendations(risks: Insight[], limit = 3): OverviewRecommendation[] {
+  return risks
+    .filter((r) => r.recommendations.length > 0 && r.severity !== "info")
+    .slice(0, limit)
+    .map((r) => {
+      const evidence = (r.evidence ?? {}) as { sku?: unknown; Sku?: unknown };
+      const sku = typeof evidence.sku === "string" ? evidence.sku : typeof evidence.Sku === "string" ? evidence.Sku : null;
+      return {
+        id: r.id,
+        title: r.recommendations[0],
+        reason: r.title,
+        module: r.module,
+        severity: r.severity,
+        impact:
+          r.impact == null
+            ? null
+            : r.impactUnit === "сум"
+              ? `${compact(r.impact)}${nbsp}сум`
+              : `${num(r.impact, Math.abs(r.impact) < 10 ? 1 : 0)}${r.impactUnit ? `${nbsp}${r.impactUnit}` : ""}`,
+        href: r.href,
+        sku: r.rule === "supply.stockout" ? sku : null,
+      };
+    });
+}
+
+/**
+ * Адрес новой заявки на сырьё с заполненной позицией, количеством на 30 дней (вверх до сотых), ценой, сроком «заказать до» и причиной
+ * (форма /requests/new?…; всё можно поправить перед отправкой).
+ */
+export function rawRequestHref(r: Pick<SupplyRecommendation, "itemId" | "name" | "unit" | "orderBy" | "unitPrice" | "horizons" | "daysOfCover">, reason: string): string {
+  const { qty } = purchaseOf(r);
+  const params = new URLSearchParams({ kind: "raw", item: r.itemId, name: r.name, unit: r.unit, qty: String(Math.ceil(qty * 100) / 100) });
+  if (r.unitPrice != null) params.set("price", String(r.unitPrice));
+  if (r.orderBy) params.set("by", r.orderBy.slice(0, 10));
+  params.set("reason", reason);
+  return `/requests/new?${params.toString()}`;
+}
+
+/** Диапазон сумм: одна единица — один раз («10,1 – 18,4 млрд»), разные — у каждой («950 млн – 1,2 млрд»). */
+export function compactRange(lo: number | null | undefined, hi: number | null | undefined): string {
+  const a = compact(lo);
+  const b = compact(hi);
+  const unit = (s: string) => {
+    const i = s.lastIndexOf(nbsp);
+    return i >= 0 && /^\D/.test(s.slice(i + 1)) ? { head: s.slice(0, i), unit: s.slice(i + 1) } : { head: s, unit: "" };
+  };
+  const ua = unit(a);
+  const ub = unit(b);
+  return ua.unit && ua.unit === ub.unit ? `${ua.head} – ${b}` : `${a} – ${b}`;
 }

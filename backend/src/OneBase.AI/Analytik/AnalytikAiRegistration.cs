@@ -25,10 +25,14 @@ public static class AnalytikAiRegistration
         services.AddScoped<AnalytikReportService>();
         services.AddScoped<AnalytikJobs>();
         services.AddScoped<AnalytikEngine>();
+        services.AddScoped<Intelligence.InvestigationEngine>();
+        services.AddScoped<Intelligence.QualityService>();
+        services.AddScoped<Intelligence.BenchmarkRunner>();
         services.AddScoped<Simulation.ScenarioBaselineBuilder>();
         services.AddScoped<Simulation.ScenarioService>();
         services.AddScoped<Simulation.ScenarioAnalyst>();
         services.AddScoped<Simulation.ScenarioExport>();
+        services.AddScoped<Simulation.ScenarioAnalysisService>();
         services.AddKeyedScoped<ConsultantChatService>(ChatKey, (sp, _) => new ConsultantChatService(
             sp.GetRequiredService<IAppDbContext>(), sp.GetRequiredService<AnalytikEngine>(), sp.GetRequiredService<AiAuditService>(),
             sp.GetRequiredService<ConsultantAnswerCache>(), sp.GetRequiredService<IAuditLogger>(), sp.GetRequiredService<ILogger<ConsultantChatService>>())
@@ -56,6 +60,12 @@ public static class AnalytikAiRegistration
         // Универсальный движок срезов — у консультанта и у аналитиков (источник sales.slices).
         services.AddScoped<ITool, AnalyticsQueryTool>();
         services.AddScoped<ITool, AnalyticsCapabilitiesTool>();
+        // Advanced Intelligence: вычислительный движок и методы отделов — у аналитиков (источник analytik.intelligence).
+        services.AddScoped<ITool, ComputeTool>();
+        services.AddScoped<ITool, MethodsTool>();
+        services.AddScoped<ITool, Simulation.ScenarioAnalysisTool>();
+        services.AddScoped<ITool, DecisionsTool>();
+        services.AddScoped<ITool, DecisionDraftTool>();
 
         // Копия для проверки восстановления (Recovery:Isolated) не рассылает уведомлений и не пишет отчётов — фоновые задачи выключены.
         if (options.WorkerEnabled && isolation.AllowOutbound<AnalytikWorker>("Аналитик: каталог, риски, прогнозы и отчёты по расписанию"))

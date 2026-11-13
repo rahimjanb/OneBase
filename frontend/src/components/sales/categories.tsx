@@ -7,9 +7,9 @@ import type { T } from "@/i18n/core";
 import { Note, Section, Stat } from "./bits";
 import { DataTable, NameCell, type Column } from "./DataTable";
 import { TopChip } from "./outstock";
-import { delta, kg, money, num, outletsLabel, pct, plural } from "@/lib/sales/format";
+import { delta, kg, money, num, pct } from "@/lib/sales/format";
 import { withQuery } from "@/lib/sales/query";
-import type { AssortmentRegionRow, CategoryCard, CategoryPlanFact, ProductBreakdownRow, ProductView, SkuRow, SkuStatus, TargetLevel } from "@/lib/sales/types";
+import type { AssortmentRegionRow, CategoryCard, CategoryPlanFact, ProductBreakdownRow, ProductView, SkuStatus, TargetLevel } from "@/lib/sales/types";
 
 const chip = "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium";
 
@@ -182,60 +182,6 @@ function WrapName({ name, sub, top = false }: { name: string; sub?: string | nul
       )}
       <NameCell name={name} sub={sub} />
     </span>
-  );
-}
-
-/** Артикулы категории: клик — где товар идёт, а где нет. query — период и охват; mono — «Только он», точек в охвате всего. */
-export function SkuTable({ card, prevLabel, query, mono }: { card: CategoryCard; prevLabel: string; query: string; mono?: number }) {
-  const t = useT();
-  const columns: Column<SkuRow>[] = [
-    {
-      key: "name",
-      label: t("Продукт"),
-      value: (r) => r.name,
-      render: (r) => <WrapName name={r.name} sub={r.code ? t("Артикул {code}", { code: r.code }) : null} top={r.isTop} />,
-    },
-    { key: "status", label: t("Статус"), value: (r) => statusRank[r.status], render: (r) => <SkuStatusChip status={r.status} /> },
-    { key: "fact", label: t("Факт, кг"), align: "right", value: (r) => r.factKg, render: (r) => kg(r.factKg) },
-    { key: "revenue", label: t("Выручка"), align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue, t) },
-    { key: "share", label: t("Доля по весу"), align: "right", value: (r) => r.weightShare, render: (r) => pct(r.weightShare, 1) },
-    { key: "akb", label: t("ТТ"), align: "right", value: (r) => r.akb, render: (r) => num(r.akb) },
-    { key: "dist", label: t("Дистрибуция"), align: "right", value: (r) => r.distribution, render: (r) => pct(r.distribution) },
-    {
-      key: "solo",
-      label: t("Только он"),
-      align: "right",
-      value: (r) => r.solo,
-      render: (r) =>
-        r.solo > 0 ? (
-          <span
-            title={t(plural(r.solo, ["{outlets} купила только этот SKU — {share} его ТТ", "{outlets} купили только этот SKU — {share} его ТТ", "{outlets} купили только этот SKU — {share} его ТТ"]), {
-              outlets: outletsLabel(r.solo, t),
-              share: pct(r.soloShare, 1),
-            })}
-          >
-            {num(r.solo)} <span className="text-ink-3">· {pct(r.soloShare)}</span>
-          </span>
-        ) : (
-          <span className="text-ink-3">—</span>
-        ),
-    },
-    { key: "prev", label: t("{prev}, кг", { prev: t(prevLabel) }), align: "right", value: (r) => r.prevMonthKg, render: (r) => kg(r.prevMonthKg) },
-  ];
-
-  return (
-    <DataTable
-      title={t("Артикулы")}
-      hint={t("клик — где товар идёт, а где нет")}
-      columns={columns}
-      rows={card.skus}
-      rowKey={(r) => String(r.productId)}
-      rowHref={(r) => withQuery(`/sales/assortment/product/${r.productId}`, query)}
-      note={t(
-        "«Продаётся» — есть точка с положительной строкой артикула (кг или сумма больше нуля). «Пропал» — в прошлом месяце здесь продавался, в этом пока ни одной продажи. «Не возят» — здесь ноль, а по республике товар идёт. «Нет продаж» — есть в ассортименте (продавался с начала года), но в этом месяце не продаётся нигде. ТТ — точки с положительной строкой артикула; дистрибуция — их доля от ТТ с покупкой. «Только он» — точки, которые из всех SKU купили только этот, и их доля от ТТ артикула{mono}. «ТОП» — товар из списка ТОП. «{prev}» — прошлый месяц целиком: текущий ещё не закончен, килограммы в лоб не сравнивать.",
-        { mono: mono != null ? t("; всего таких точек {n}", { n: num(mono) }) : "", prev: t(prevLabel) },
-      )}
-    />
   );
 }
 

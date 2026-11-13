@@ -8,8 +8,11 @@ import { useT } from "@/i18n/client";
 import { plural } from "@/lib/format";
 import { search } from "@/lib/module-nav";
 
-/** Раздел модуля для навигации: уже с адресом (период продаж переносится), переведённой подписью и счётчиком. */
-export type NavItem = { key: string; label: string; short?: string; description?: string; href: string; icon: LucideIcon; badge?: number };
+/**
+ * Раздел модуля для навигации: уже с адресом (период продаж переносится), переведённой подписью и счётчиком; badgeTone «danger» — счётчик
+ * тревоги (критические риски Аналитика): красный и у кнопки «Ещё», когда раздел в меню.
+ */
+export type NavItem = { key: string; label: string; short?: string; description?: string; href: string; icon: LucideIcon; badge?: number; badgeTone?: "danger" };
 
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
@@ -22,14 +25,16 @@ export function sectionsCount(n: number, t: (s: string) => string): string {
 }
 
 /**
- * Кнопка «Ещё»: обычная — «… Ещё 6 ⌄» (бейдж — сколько скрыто, точка — у скрытых есть счётчик); если открыт раздел из меню — она
- * подсвечена как активная вкладка и показывает его: «DSO | Ещё 5 ⌄».
+ * Кнопка «Ещё»: обычная — «… Ещё 6 ⌄» (бейдж — сколько скрыто, точка — у скрытых есть счётчик); у скрытых счётчик тревоги (alert —
+ * критические риски Аналитика) — вместо числа разделов красный счётчик тревоги; если открыт раздел из меню — она подсвечена как
+ * активная вкладка и показывает его: «DSO | Ещё 5 ⌄».
  */
 export function MoreButton({
   count,
   active,
   open,
   dot,
+  alert,
   onClick,
   buttonRef,
   measuring,
@@ -38,12 +43,14 @@ export function MoreButton({
   active?: NavItem | null;
   open?: boolean;
   dot?: boolean;
+  alert?: number;
   onClick?: (keyboard: boolean) => void;
   buttonRef?: React.Ref<HTMLButtonElement>;
   measuring?: boolean;
 }) {
   const t = useT();
-  const label = active ? t("{label}, ещё разделов: {n}", { label: active.label, n: count }) : t("Ещё разделов: {n}", { n: count });
+  const base = active ? t("{label}, ещё разделов: {n}", { label: active.label, n: count }) : t("Ещё разделов: {n}", { n: count });
+  const label = alert && !active ? `${base}. ${t("Критических рисков: {n}", { n: alert })}` : base;
   const Icon = active?.icon;
   return (
     <button
@@ -73,18 +80,26 @@ export function MoreButton({
         <>
           <Ellipsis aria-hidden className="size-[15px] shrink-0" strokeWidth={1.9} />
           {t("Ещё")}
-          <span className="rounded-full bg-accent-soft px-1.5 text-[11px] font-bold leading-[18px] text-accent-strong">{count}</span>
+          {alert ? (
+            <span className="rounded-full bg-bad-soft px-1.5 text-[11px] font-bold leading-[18px] text-bad">{alert}</span>
+          ) : (
+            <span className="rounded-full bg-accent-soft px-1.5 text-[11px] font-bold leading-[18px] text-accent-strong">{count}</span>
+          )}
         </>
       )}
       {open ? <ChevronUp aria-hidden className="size-3.5 shrink-0" /> : <ChevronDown aria-hidden className="size-3.5 shrink-0" />}
-      {dot && !active && <span aria-hidden className="absolute right-1 top-1 size-1.5 rounded-full bg-bad" />}
+      {dot && !active && !alert && <span aria-hidden className="absolute right-1 top-1 size-1.5 rounded-full bg-bad" />}
     </button>
   );
 }
 
-/** Счётчик раздела (ждут решения, к выдаче…): на активном — белый, иначе мягкий акцент. */
-export function Badge({ value, on }: { value: number; on?: boolean }) {
-  return <span className={`rounded-full px-1.5 text-[11px] font-bold leading-[18px] ${on ? "bg-white/25 text-white" : "bg-accent-soft text-accent-strong"}`}>{value}</span>;
+/** Счётчик раздела (ждут решения, к выдаче…): на активном — белый, иначе мягкий акцент; тревога (danger) — красный. */
+export function Badge({ value, on, tone }: { value: number; on?: boolean; tone?: "danger" }) {
+  return (
+    <span className={`rounded-full px-1.5 text-[11px] font-bold leading-[18px] ${on ? "bg-white/25 text-white" : tone === "danger" ? "bg-bad-soft text-bad" : "bg-accent-soft text-accent-strong"}`}>
+      {value}
+    </span>
+  );
 }
 
 /**
@@ -247,7 +262,7 @@ export function MoreMenu({
                       {item.description && <span className="block truncate text-[11px] text-ink-4">{item.description}</span>}
                     </span>
                     <span className="flex shrink-0 items-center gap-1.5 group-hover:invisible">
-                      {item.badge ? <Badge value={item.badge} /> : null}
+                      {item.badge ? <Badge value={item.badge} tone={item.badgeTone} /> : null}
                       {on && <Check aria-hidden className="size-4 text-accent-strong" />}
                     </span>
                   </Link>

@@ -557,6 +557,7 @@ public sealed class ForecastTool(QueryEngine engine, ForecastService forecasts) 
 {
     public override string Name => "analytik_forecast";
     public override string Title => "Прогноз";
+    public override int Level => ToolLevels.Analyze;
 
     public override string Description =>
         "Прогноз показателя математикой (не моделью): sales.revenue, sales.kg, sales.orders, finance.payments, procurement.consumption (item_id — одна " +
@@ -656,6 +657,9 @@ public sealed class ManagementReportTool(QueryEngine engine, AnalytikReportServi
 {
     public override string Name => "analytik_management_report";
     public override string Title => "Управленческий отчёт";
+
+    /// <summary>Отчёт сохраняется в «Отчётах» — это документ (подготовка), бизнес-данные не меняются.</summary>
+    public override int Level => ToolLevels.Prepare;
 
     public override string Description =>
         "Сформировать управленческий отчёт (Excel и PDF) по данным OneBase: daily, weekly, monthly, sales, production, inventory, procurement, finance, hr, " +

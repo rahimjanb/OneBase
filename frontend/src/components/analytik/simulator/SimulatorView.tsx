@@ -677,7 +677,13 @@ export function SimulatorView({ catalog, initial, draft }: { catalog: SimulatorC
                   <ShortCard result={result} />
                 </div>
               </div>
-              <DetailResults result={result} nodes={catalog.nodes} baseline={baseline} history={meta.history} />
+              <DetailResults
+                result={result}
+                nodes={catalog.nodes}
+                baseline={baseline}
+                history={meta.history}
+                scenario={baseline ? { baselineId: baseline.id, kind, horizonDays: horizon, parameters, newRegionName: regionName || null } : null}
+              />
               <div className="grid gap-4 max-md:hidden @min-[640px]/res:grid-cols-2">
                 <RisksCard result={result} />
                 <RecommendationsCard result={result} onAction={onAction} />

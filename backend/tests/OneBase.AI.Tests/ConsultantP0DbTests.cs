@@ -189,6 +189,29 @@ internal sealed class BrokenTestTool : ITool
         throw new InvalidOperationException("Npgsql: Host=db;Username=onebase;Password=s3cr3t — connection refused");
 }
 
+/// <summary>
+/// Инструмент уровня «выполнить» (Execution Safety): меняет данные, если его выполнить. Источника нет — сотрудникам в цикле он не предлагается;
+/// грант тесты выдают сами. Executed — сколько раз его действительно выполнили.
+/// </summary>
+internal sealed class ExecuteTestTool : ITool
+{
+    public const string ToolName = "zz_execute_tool";
+    public static int Executed;
+
+    public string Name => ToolName;
+    public string Title => "Провести операцию (тест)";
+    public string Description => "Тестовый инструмент: проводит операцию.";
+    public JsonElement InputSchema { get; } = JsonDocument.Parse("""{"type":"object","properties":{}}""").RootElement.Clone();
+    public bool IsCritical => false;
+    public int Level => ToolLevels.Execute;
+
+    public Task<ToolResult> ExecuteAsync(ToolContext context, JsonElement arguments, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref Executed);
+        return Task.FromResult(ToolResult.Ok("{\"done\":true}"));
+    }
+}
+
 /// <summary>Инструмент с данными продаж.</summary>
 internal sealed class EchoTestTool : ITool
 {
@@ -336,6 +359,7 @@ public sealed class ConsultantDb : IAsyncLifetime
         services.AddScoped<ITool, BrokenTestTool>();
         services.AddScoped<ITool, EchoTestTool>();
         services.AddScoped<ITool, RowsTestTool>();
+        services.AddScoped<ITool, ExecuteTestTool>();
         Services = services.BuildServiceProvider();
 
         using (var scope = Services.CreateScope())

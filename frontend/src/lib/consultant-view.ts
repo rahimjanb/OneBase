@@ -195,6 +195,11 @@ export function currentStep(steps: ProgressStep[]): { key: string; agentName: st
   if (s.stage === "memory") return { key: "Вспоминаю прошлые анализы", agentName: null };
   if (s.stage === "routing") return { key: "Определяю, каких AI-сотрудников привлечь", agentName: null };
   if (s.stage === "data") return { key: s.status === "Running" ? "Обновляю данные из источников перед ответом" : "Проверил свежесть данных", agentName: null };
+  if (s.stage === "plan") return { key: s.status === "Running" ? "Составляю план исследования" : "План исследования готов", agentName: null };
+  if (s.stage === "hypotheses") return { key: "Проверяю гипотезы расчётом", agentName: null };
+  if (s.stage === "replan") return { key: "Дополняю план: пробелы и противоречия", agentName: null };
+  if (s.stage === "skeptic") return { key: "Ищу альтернативные объяснения", agentName: null };
+  if (s.stage === "review") return { key: "Проверяю выводы", agentName: null };
   if (s.agentName && s.status === "Running") return { key: "{agent}: собираю данные", agentName: s.agentName };
   return { key: s.status === "Running" ? "Анализирую" : "Сверяю данные", agentName: null };
 }

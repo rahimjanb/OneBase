@@ -112,13 +112,34 @@ public sealed class AnalyticsQueryTool(SemanticEngine engine) : DataTool
 
         var caller = new QueryCaller(context.UserId, "chat", context.AgentCode, context.ConversationId);
         AnalyticsResult r;
+        string? repaired = null;
         try
         {
             r = await engine.RunAsync(query, caller, ct);
         }
+        catch (AnalyticsQueryException ex) when (ex.Code != "denied")
+        {
+            // Query Repair: исправление строит код. Безопасное (смысл вопроса тот же) выполняется сразу, остальное — подсказкой с готовым запросом.
+            var repair = QueryRepair.Suggest(query, ex);
+            if (repair is not { Safe: true, Queries.Count: 1 })
+            {
+                return RepairFailure(ex, repair);
+            }
+
+            try
+            {
+                query = repair.Queries[0];
+                r = await engine.RunAsync(query, caller, ct);
+                repaired = $"Исходный срез отклонён ({ex.Message}). Исправлено автоматически: {repair.Hint}";
+            }
+            catch (AnalyticsQueryException again)
+            {
+                return RepairFailure(again, QueryRepair.Suggest(query, again));
+            }
+        }
         catch (AnalyticsQueryException ex)
         {
-            return ToolResult.Failure(Name, ex.Code == "denied" ? ToolFailures.Forbidden : ToolFailures.InvalidArguments, ex.Message);
+            return ToolResult.Failure(Name, ToolFailures.Forbidden, ex.Message);
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -146,11 +167,36 @@ public sealed class AnalyticsQueryTool(SemanticEngine engine) : DataTool
             Notes = r.Notes,
             Sources = r.Sources.Select(s => new { s.Title, s.Tables, SyncedAt = s.SyncedAt?.ToString("yyyy-MM-dd HH:mm"), DataThrough = s.DataThrough?.ToString("yyyy-MM-dd"), s.Rules }),
             r.Scope,
+            Repaired = repaired,
             Link = link,
             Instructions = "Числа ответа — только из rows и totals; доли, средние и разницы уже посчитаны. complete=false — назови, чего не хватает (checks). " +
                            "В ответе дай таблицу (первые строки) и вывод; полный список — ссылка link или create_report.",
         }, new DataSource("Аналитик → Срезы", $"{r.From:dd.MM.yyyy} — {r.To:dd.MM.yyyy}", link));
     }
+
+    /// <summary>Отказ среза с исправлением для модели: что не так, что делать и готовые аргументы исправленного вызова (или нескольких).</summary>
+    private ToolResult RepairFailure(AnalyticsQueryException ex, RepairSuggestion? repair)
+    {
+        var kind = ex.Code is "too_heavy" or "timeout" ? ToolFailures.OutOfRange : ToolFailures.InvalidArguments;
+        var payload = new
+        {
+            error = new
+            {
+                tool = Name, kind, code = ex.Code, message = ex.Message, next = ToolFailures.Next(kind),
+                repair = repair is null ? null : new { hint = repair.Hint, calls = repair.Queries.Select(Args).ToList() },
+            },
+        };
+        return new ToolResult(false, JsonSerializer.Serialize(payload, Json), ErrorKind: kind);
+    }
+
+    /// <summary>Запрос движка → аргументы этого инструмента (для подсказки исправленного вызова).</summary>
+    public static object Args(AnalyticsQuery q) => new
+    {
+        metrics = q.Metrics, dimensions = q.Dimensions, grain = q.Grain, date_from = q.DateFrom?.ToString("yyyy-MM-dd"), date_to = q.DateTo?.ToString("yyyy-MM-dd"),
+        filters = q.Filters?.Select(f => new { dimension = f.Dimension, op = f.Op, values = f.Values }), compare = q.Compare,
+        compare_from = q.CompareFrom?.ToString("yyyy-MM-dd"), compare_to = q.CompareTo?.ToString("yyyy-MM-dd"), segment = q.Segment,
+        sort = q.Sort?.Select(s => new { by = s.By, dir = s.Dir }), limit = q.Limit,
+    };
 
     /// <summary>Аргументы инструмента → запрос движка (даты, готовые периоды, фильтры, сортировка, лимит: в чате 200, в отчёте — все).</summary>
     public static AnalyticsQuery Parse(ToolArgs args, DateOnly today)
@@ -212,7 +258,7 @@ public sealed class AnalyticsQueryTool(SemanticEngine engine) : DataTool
         _ => [],
     };
 
-    private static IReadOnlyList<AnalyticsFilter> Filters(JsonElement? e)
+    internal static IReadOnlyList<AnalyticsFilter> Filters(JsonElement? e)
     {
         if (e is not { ValueKind: JsonValueKind.Array } a)
         {

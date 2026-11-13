@@ -344,6 +344,13 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Procurement.ProcurementHomeService>();
         services.AddScoped<OneBase.Application.Production.ProductionRecipeService>();
         services.AddScoped<OneBase.Application.Production.ProductionRecipePhotoService>();
+        services.AddScoped<OneBase.Application.Sales.SalesProductPhotoService>();
+        // Первичный набор фото товаров «Продаж» — в хранилище после запуска (раз на код товара); Sales:ProductPhotos:SeedOnStart=false — не ставить.
+        // В копии для проверки не запускается: пишет в хранилище файлов.
+        if (config.GetValue("Sales:ProductPhotos:SeedOnStart", true) && isolation.AllowOutbound<Sales.SalesProductPhotoSeedWorker>("Фото товаров «Продаж»: первичный набор в хранилище"))
+        {
+            services.AddHostedService<Sales.SalesProductPhotoSeedWorker>();
+        }
         services.AddScoped<OneBase.Application.Production.Import.RecipeImportService>();
         services.AddScoped<OneBase.Application.Production.ProductionOrderService>();
         services.AddScoped<OneBase.Application.Production.ProductionShiftService>();

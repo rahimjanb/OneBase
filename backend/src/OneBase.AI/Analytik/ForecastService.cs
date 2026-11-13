@@ -14,6 +14,13 @@ namespace OneBase.AI.Analytik;
 /// <summary>Точность прошлых прогнозов показателя: сколько прогнозов сверено с фактом и их WAPE.</summary>
 public sealed record ForecastAccuracy(int Evaluated, decimal? Wape, DateOnly? From, DateOnly? To);
 
+/// <summary>
+/// «Точность прошлых прогнозов» и линия «Прошлые прогнозы» (экран «Прогнозы»): прошлые месяцы — прогноз на месяц против факта (сохранённый
+/// прогноз, если он есть, иначе проверка на истории), Past — что ждал прогноз, сделанный в начале месяца, по шагу экрана.
+/// </summary>
+public sealed record ForecastBacktestView(string Metric, string Granularity, string Unit, IReadOnlyList<BacktestMonth> Months, IReadOnlyList<SeriesPoint> Past,
+    string? Scope);
+
 /// <summary>Прогноз показателя: история (на которой он построен), результат с диапазоном и сценариями, точность прошлых прогнозов, область, источники.</summary>
 public sealed record ForecastView(
     string Metric, string Title, string Unit, string Granularity, IReadOnlyList<SeriesPoint> History, ForecastResult Result, ForecastAccuracy? Past,
@@ -53,7 +60,7 @@ public sealed class ForecastService(IAppDbContext db, IAnalytikDb adb, SalesAnal
         var (history, unit, scope) = await HistoryAsync(metric, granularity, p, itemId, ct);
         if (history.Count == 0)
         {
-            throw new QueryPlanException(QueryErrors.Invalid, $"Для «{meta.Title}» нет истории в OneBase — прогноз не строится.");
+            throw new QueryPlanException(QueryErrors.NoData, $"Для «{meta.Title}» нет истории в OneBase — прогноз не строится.");
         }
 
         var result = Forecaster.Forecast(history, granularity, Math.Clamp(horizon, 1, granularity == "day" ? 120 : granularity == "week" ? 26 : 12));
@@ -71,6 +78,48 @@ public sealed class ForecastService(IAppDbContext db, IAnalytikDb adb, SalesAnal
 
         var past = p.Sales.Restricted ? null : await AccuracyAsync(metric, itemId?.ToString() ?? "", granularity, ct);
         return new ForecastView(metric, meta.Title, unit ?? meta.Unit, granularity, history, result, past, scope, SourcesOf(metric));
+    }
+
+    /// <summary>
+    /// Проверка прогноза на прошлых месяцах (ForecastBacktest): три полных месяца и текущий до вчера, по дням, в области пользователя. Месяц, на
+    /// который есть настоящий сохранённый прогноз (сделан до начала месяца и сверен с фактом), берётся из него — только итог организации:
+    /// снимки считаются по всей компании. Линия прошлых прогнозов — по шагу экрана (недели и месяцы — только полные).
+    /// </summary>
+    public async Task<ForecastBacktestView> BacktestAsync(string metric, string granularity, AnalytikPrincipal p, CancellationToken ct, Guid? itemId = null)
+    {
+        if (!Metrics.TryGetValue(metric, out var meta))
+        {
+            throw new QueryPlanException(QueryErrors.Invalid, $"Показатель прогноза: {string.Join(", ", Metrics.Keys)}.");
+        }
+
+        if (granularity is not ("day" or "week" or "month"))
+        {
+            throw new QueryPlanException(QueryErrors.Invalid, "Шаг прогноза: day, week или month.");
+        }
+
+        var today = Today;
+        var end = today.AddDays(-1);
+        var from = new DateOnly(today.Year, today.Month, 1).AddMonths(-3).AddDays(-ForecastBacktest.TrainDays);
+        var (daily, unit, scope) = await DailyAsync(metric, from, end, p, itemId, ct);
+        var result = ForecastBacktest.Run(daily, today);
+        var months = result.Months.ToList();
+        if (itemId is null && !p.Sales.Restricted && months.Count > 0)
+        {
+            var targets = months.Select(m => m.Month).ToList();
+            var saved = await adb.Forecasts.AsNoTracking()
+                .Where(f => f.Metric == metric && f.Dimension == "" && f.Granularity == "month" && f.Actual != null && targets.Contains(f.TargetDate) && f.MadeOn < f.TargetDate)
+                .ToListAsync(ct);
+            foreach (var group in saved.GroupBy(f => f.TargetDate))
+            {
+                var latest = group.OrderByDescending(f => f.MadeOn).First();
+                var i = months.FindIndex(m => m.Month == group.Key);
+                months[i] = new BacktestMonth(group.Key, latest.Predicted, latest.Actual!.Value, ForecastBacktest.Accuracy(latest.Predicted, latest.Actual.Value),
+                    latest.Method, true);
+            }
+        }
+
+        var past = granularity == "day" ? result.Past : Aggregate(result.Past, granularity, end);
+        return new ForecastBacktestView(metric, granularity, unit ?? meta.Unit, months, past, scope);
     }
 
     private static IReadOnlyList<string> SourcesOf(string metric) => metric switch
@@ -92,6 +141,14 @@ public sealed class ForecastService(IAppDbContext db, IAnalytikDb adb, SalesAnal
             "week" => Monday(end).AddDays(-7 * 52),
             _ => new DateOnly(end.Year, end.Month, 1).AddMonths(-24),
         };
+        var (daily, unit, scope) = await DailyAsync(metric, from, end, p, itemId, ct);
+        return (Aggregate(daily, granularity, end), unit, scope);
+    }
+
+    /// <summary>Дневной ряд показателя с from по end без пропусков: продажи — в области пользователя, оплаты и расход сырья — по правам.</summary>
+    private async Task<(IReadOnlyList<SeriesPoint> Daily, string? Unit, string? Scope)> DailyAsync(string metric, DateOnly from, DateOnly end, AnalytikPrincipal p,
+        Guid? itemId, CancellationToken ct)
+    {
         IReadOnlyList<SeriesPoint> daily;
         string? unit = null;
         string? scope = null;
@@ -135,7 +192,7 @@ public sealed class ForecastService(IAppDbContext db, IAnalytikDb adb, SalesAnal
                 throw new QueryPlanException(QueryErrors.Invalid, metric);
         }
 
-        return (Aggregate(daily, granularity, end), unit, scope);
+        return (daily, unit, scope);
     }
 
     private static IReadOnlyList<SeriesPoint> Days(DateOnly from, DateOnly to, Func<DateOnly, decimal> value) =>

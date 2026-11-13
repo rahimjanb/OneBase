@@ -19,6 +19,7 @@ public sealed class SimulateTool(QueryEngine engine, ScenarioBaselineBuilder bui
 {
     public override string Name => "analytik_simulate";
     public override string Title => "Симулятор сценариев (What-If)";
+    public override int Level => ToolLevels.Analyze;
 
     public override string Description =>
         "Что будет, если…: считает сценарий движком What-If по реальным данным OneBase (продажи по товарам и регионам, техкарты, мощность по " +

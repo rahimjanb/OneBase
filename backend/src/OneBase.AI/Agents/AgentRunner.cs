@@ -116,6 +116,12 @@ public sealed class AgentRunner(
 
     private const int MinToolResultChars = 8_000;
 
+    /// <summary>
+    /// Сколько ошибок одного инструмента за анализ допускается: дальше он для этого анализа закрыт (Adaptive Retry без зацикливания —
+    /// модель переходит к другому источнику, а не повторяет безуспешные вызовы до лимита шагов).
+    /// </summary>
+    internal const int MaxToolFailures = 3;
+
     /// <summary>Узбекистан — UTC+5 без перехода на летнее время.</summary>
     private static readonly TimeSpan CompanyOffset = TimeSpan.FromHours(5);
 
@@ -198,6 +204,9 @@ public sealed class AgentRunner(
         // Большие результаты — страницами из сохранённого снимка; used — сколько символов результатов уже в контексте модели.
         var pager = new ToolResultPager();
         var used = 0;
+        // Неудачные вызовы (ключ — инструмент и аргументы) и число ошибок каждого инструмента: тот же неудачный вызов не повторяется.
+        var failedCalls = new Dictionary<string, string>(StringComparer.Ordinal);
+        var failuresByTool = new Dictionary<string, int>(StringComparer.Ordinal);
         var revised = false;
         var shortened = false;
         var reformatted = false;
@@ -338,6 +347,19 @@ public sealed class AgentRunner(
                         // Тот же вызов с теми же аргументами уже был (в этом анализе или в этом же шаге): данные не запрашиваются заново.
                         outcomes[i] = new ToolOutcome(Repeated(earlier), null, start, 0);
                     }
+                    else if (failedCalls.TryGetValue(ToolResultPager.CallKey(call.Name, call.Arguments), out var failedBefore))
+                    {
+                        // Тот же вызов уже завершился ошибкой — повтор ничего не даст (Query Repair: изменить аргументы или источник).
+                        outcomes[i] = new ToolOutcome(ToolResult.Failure(call.Name, ToolFailures.InvalidArguments,
+                            $"Этот вызов с теми же аргументами уже завершился ошибкой ({failedBefore}). Не повторяй его: измени аргументы по подсказке " +
+                            "ошибки или возьми другой инструмент."), null, start, 0);
+                    }
+                    else if (failuresByTool.GetValueOrDefault(call.Name) >= MaxToolFailures)
+                    {
+                        outcomes[i] = new ToolOutcome(ToolResult.Failure(call.Name, ToolFailures.NotConnected,
+                            $"Инструмент «{call.Name}» уже {MaxToolFailures} раза завершился ошибкой в этом анализе — используй другой источник или прямо " +
+                            "скажи, каких данных не удалось получить."), null, start, 0);
+                    }
                     else
                     {
                         io.Add(i);
@@ -428,6 +450,11 @@ public sealed class AgentRunner(
                         else
                         {
                             toolErrors.Add(new AgentToolError(call.Name, ErrorKindOf(result), result.Content.Length > 200 ? result.Content[..200] : result.Content));
+                            if (result.ApprovalRequestId is null)
+                            {
+                                failedCalls[ToolResultPager.CallKey(call.Name, call.Arguments)] = ToolMessage(result.Content) is { Length: > 160 } m ? m[..160] + "…" : ToolMessage(result.Content);
+                                failuresByTool[call.Name] = failuresByTool.GetValueOrDefault(call.Name) + 1;
+                            }
                         }
                     }
 

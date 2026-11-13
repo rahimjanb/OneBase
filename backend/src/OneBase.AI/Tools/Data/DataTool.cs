@@ -45,6 +45,9 @@ public abstract class DataTool : ITool
     /// <summary>Права, любое из которых заменяет RequiredPermission.</summary>
     public virtual IReadOnlyList<string>? AlternativePermissions => null;
     public bool IsCritical => false;
+
+    /// <summary>Инструменты данных только читают; расчёты и сценарии — анализ, отчёты — подготовка (ToolLevels).</summary>
+    public virtual int Level => ToolLevels.Read;
     public abstract JsonElement InputSchema { get; }
 
     /// <summary>Подсказка сотруднику, когда и как вызывать инструмент; попадает в его системный промпт. null — без подсказки.</summary>

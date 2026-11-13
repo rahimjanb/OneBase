@@ -280,6 +280,17 @@ public class AnalytikInsight : Entity
     public int Occurrences { get; set; } = 1;
     public DateTimeOffset? NotifiedAt { get; set; }
     public string? NotifiedSeverity { get; set; }
+
+    /// <summary>Уверенность в причине после авторасследования (0–1); null — не расследовалась.</summary>
+    public decimal? Confidence { get; set; }
+
+    /// <summary>Класс вывода о причине: observed | statistical | tested_causal | assumption.</summary>
+    public string? EvidenceClass { get; set; }
+
+    /// <summary>Авторасследование (jsonb): вклад регионов, групп, агентов, проверки, источники.</summary>
+    public string? Investigation { get; set; }
+
+    public DateTimeOffset? InvestigatedAt { get; set; }
 }
 
 /// <summary>Сделанный прогноз — чтобы потом сравнить с фактом и показать точность прошлых прогнозов.</summary>

@@ -111,7 +111,7 @@ export function AllSectionsSheet({ title, items, activeKey, onClose }: { title: 
                     <span className={`line-clamp-2 text-xs leading-tight ${on ? "font-semibold text-ink" : "text-ink"}`}>{item.label}</span>
                     {item.badge ? (
                       <span className="absolute right-1.5 top-1.5">
-                        <Badge value={item.badge} />
+                        <Badge value={item.badge} tone={item.badgeTone} />
                       </span>
                     ) : null}
                   </Link>

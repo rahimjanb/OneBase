@@ -32,3 +32,6 @@ __pycache__/
 # Наборы резервных копий и ключи восстановления — никогда в git
 onebase-backup-*/
 *recovery-key*.txt
+
+# Исходники фото товаров (565 МБ PNG): в репозиторий — только готовые WebP (frontend/scripts/product-photos.mjs → frontend/public/products).
+/Mockups/

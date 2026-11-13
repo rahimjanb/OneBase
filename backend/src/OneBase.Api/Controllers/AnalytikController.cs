@@ -26,6 +26,7 @@ public sealed class AnalytikErrorsAttribute : ExceptionFilterAttribute
             KeyNotFoundException e => new NotFoundObjectResult(new { error = e.Message }),
             OneBase.AI.Analytik.Simulation.SimulationBusyException e => new ObjectResult(new { error = e.Message }) { StatusCode = StatusCodes.Status429TooManyRequests },
             ArgumentException e => new BadRequestObjectResult(new { error = e.Message }),
+            OneBase.Application.Analytik.Compute.ComputeException e => new BadRequestObjectResult(new { error = e.Message }),
             _ => null,
         };
         if (result is not null)

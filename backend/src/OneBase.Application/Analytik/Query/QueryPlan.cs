@@ -74,6 +74,9 @@ public static class QueryErrors
 
     /// <summary>Запрос слишком тяжёлый — сузить период или условия.</summary>
     public const string TooHeavy = "too_heavy";
+
+    /// <summary>Данных нет (у показателя нет истории): экран показывает «Нет данных», а не ошибку.</summary>
+    public const string NoData = "no_data";
 }
 
 /// <summary>План отклонён: Code — QueryErrors, сообщение безопасно показать пользователю и модели.</summary>

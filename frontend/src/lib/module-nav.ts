@@ -37,6 +37,16 @@ export function arrange(keys: readonly string[], prefs: NavPrefs): string[] {
   return [...pins, ...[...rest].sort((a, b) => rank(a) - rank(b))];
 }
 
+/**
+ * Редкие разделы (sections.ts, rare) — в конец, всегда в «Ещё»: обычные и закреплённые сохраняют свой порядок, редкие — свой. Возвращает
+ * порядок и сколько в нём обычных (столько максимум помещается в строку).
+ */
+export function withRare(keys: readonly string[], rare: readonly string[], prefs: NavPrefs): { keys: string[]; regular: number } {
+  const isRare = (k: string) => rare.includes(k) && !prefs.pins.includes(k);
+  const regular = keys.filter((k) => !isRare(k));
+  return { keys: [...regular, ...keys.filter(isRare)], regular: regular.length };
+}
+
 /** Закрепить: в конец закреплённых — в начало видимой части после ранее закреплённых. */
 export const pin = (prefs: NavPrefs, key: string): NavPrefs => (prefs.pins.includes(key) ? prefs : { ...prefs, pins: [...prefs.pins, key] });
 
@@ -62,11 +72,12 @@ export function move<T>(list: readonly T[], from: number, to: number): T[] {
 
 /**
  * Сколько вкладок помещается в строку шириной available: все (без «Ещё») — если помещаются целиком, иначе столько, чтобы рядом
- * поместилась кнопка «Ещё» шириной more. Хотя бы одна вкладка — не меньше (иначе строка пустая).
+ * поместилась кнопка «Ещё» шириной more. Хотя бы одна вкладка — не меньше (иначе строка пустая). withMore — «Ещё» нужна всегда (есть
+ * редкие разделы): место под неё оставляется, даже если все вкладки помещаются.
  */
-export function fit(widths: readonly number[], available: number, more: number, gap: number): number {
+export function fit(widths: readonly number[], available: number, more: number, gap: number, withMore = false): number {
   const total = widths.reduce((sum, w) => sum + w, 0) + gap * Math.max(0, widths.length - 1);
-  if (total <= available) return widths.length;
+  if (!withMore && total <= available) return widths.length;
   let used = more;
   let count = 0;
   for (const w of widths) {

@@ -52,5 +52,8 @@ public interface ITool
     /// <summary>Название для настроек AI.</summary>
     string Title => Name;
 
+    /// <summary>Уровень возможностей (ToolLevels): чтение, анализ, рекомендация, подготовка, выполнение. Критическое действие — выполнение.</summary>
+    int Level => IsCritical ? ToolLevels.Execute : ToolLevels.Read;
+
     Task<ToolResult> ExecuteAsync(ToolContext context, JsonElement arguments, CancellationToken cancellationToken = default);
 }

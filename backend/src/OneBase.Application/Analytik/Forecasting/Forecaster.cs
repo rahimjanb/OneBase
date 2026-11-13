@@ -10,19 +10,29 @@ public sealed record ForecastPoint(DateOnly Date, decimal Value, decimal Lower, 
 public sealed record MethodScore(string Method, decimal? Wape, decimal? Mape);
 
 /// <summary>
+/// Край месяца в дневном ряде: Kind — last (последний день месяца) или first (1-е число), Factor — во сколько раз этот день отличается от
+/// обычного того же дня недели (медиана по месяцам истории), Months — по скольким месяцам оценено.
+/// </summary>
+public sealed record CalendarEffect(string Kind, double Factor, int Months);
+
+/// <summary>
 /// Итог прогноза: выбранный метод, точки, сценарии (пессимистичный — нижняя граница, реалистичный — оценка, оптимистичный — верхняя),
-/// точность на истории (WAPE, MAPE по отложенной части), все проверенные методы, допущения. Reliable = false — истории мало, прогноз
-/// ориентировочный.
+/// точность на истории (WAPE, MAPE по отложенной части), все проверенные методы, допущения, учтённый край месяца (Calendar). Reliable =
+/// false — истории мало, прогноз ориентировочный.
 /// </summary>
 public sealed record ForecastResult(
     string Granularity, string Method, IReadOnlyList<ForecastPoint> Points, decimal Total, decimal TotalLower, decimal TotalUpper, decimal? Wape, decimal? Mape,
-    int HoldoutPoints, IReadOnlyList<MethodScore> Methods, int History, int Seasonality, double Confidence, bool Reliable, IReadOnlyList<string> Assumptions);
+    int HoldoutPoints, IReadOnlyList<MethodScore> Methods, int History, int Seasonality, double Confidence, bool Reliable, IReadOnlyList<string> Assumptions,
+    IReadOnlyList<CalendarEffect> Calendar);
 
 /// <summary>
 /// Forecasting Engine — математика без модели: наивный, скользящее среднее, линейный тренд, сезонный наивный, Хольт (уровень и тренд),
 /// Хольт—Винтерс (аддитивная сезонность). Метод выбирается по ошибке на отложенной части ряда (последние точки), затем модель
 /// пересчитывается на всём ряде. Диапазон — по ошибкам на отложенной части (или остаткам), растёт с горизонтом как √шаг. Отрицательный
 /// прогноз неотрицательного ряда (продажи, расход) обрезается до нуля. Прогноз — не гарантия: это видно в допущениях и диапазоне.
+/// Край месяца по дням (MonthEdges): если последний день месяца или 1-е число устойчиво отличаются от обычного дня (продажи в конце месяца
+/// почти вдвое выше), ряд сначала выравнивается на этот множитель, методы выбираются и считают по выровненному ряду, а в прогноз и его
+/// диапазон множитель возвращается. Ошибка методов (WAPE) — по исходному ряду.
 /// </summary>
 public static class Forecaster
 {
@@ -62,8 +72,12 @@ public static class Forecaster
             throw new ArgumentException("Нет истории — прогноз не строится.");
         }
 
-        var y = points.Select(p => (double)p.Value).ToArray();
-        var nonNegative = y.All(v => v >= 0);
+        var raw = points.Select(p => (double)p.Value).ToArray();
+        var nonNegative = raw.All(v => v >= 0);
+        // Край месяца: ряд выравнивается (особый день ÷ множитель), прогноз и диапазон — обратно (× множитель).
+        var calendar = granularity == "day" ? MonthEdges.Estimate(points) : [];
+        double Factor(DateOnly d) => MonthEdges.Factor(calendar, d);
+        var y = points.Select(p => (double)p.Value / Factor(p.Date)).ToArray();
         var season = SeasonOf(granularity);
         var usableSeason = season > 1 && y.Length >= 2 * season + 2 ? season : 0;
         var z = Z(confidence);
@@ -85,6 +99,8 @@ public static class Forecaster
         {
             var train = y[..^holdout];
             var test = y[^holdout..];
+            var testRaw = raw[^holdout..];
+            var testFactors = points.Skip(points.Count - holdout).Select(p => Factor(p.Date)).ToArray();
             foreach (var method in candidates)
             {
                 if (!Applicable(method, train.Length, usableSeason))
@@ -98,9 +114,11 @@ public static class Forecaster
                     predicted = predicted.Select(v => Math.Max(0, v)).ToArray();
                 }
 
+                // Ошибка шага для диапазона — по выровненному ряду; WAPE и MAPE — по исходному (с краем месяца на своих днях).
                 var e = test.Select((v, i) => v - predicted[i]).ToArray();
                 errors[method] = e;
-                scores.Add(new MethodScore(method, Wape(test, predicted), Mape(test, predicted)));
+                var back = predicted.Select((v, i) => v * testFactors[i]).ToArray();
+                scores.Add(new MethodScore(method, Wape(testRaw, back), Mape(testRaw, back)));
             }
         }
 
@@ -127,11 +145,14 @@ public static class Forecaster
 
         var result = new List<ForecastPoint>();
         var date = points[^1].Date;
+        var spreadWeights = 0.0;
         for (var i = 0; i < horizon; i++)
         {
             date = Next(date, granularity);
-            var value = forecast[i];
-            var spread = z * sigma * Math.Sqrt(i + 1);
+            var factor = Factor(date);
+            spreadWeights += (i + 1) * factor * factor;
+            var value = forecast[i] * factor;
+            var spread = z * sigma * Math.Sqrt(i + 1) * factor;
             var lower = value - spread;
             var upper = value + spread;
             if (nonNegative)
@@ -153,11 +174,19 @@ public static class Forecaster
                 : "Истории мало — прогноз ориентировочный, диапазон широкий.");
         }
 
-        // Сумма за горизонт: границы суммы — √(Σ дисперсий шагов), а не сумма границ (ошибки шагов частично гасят друг друга).
+        foreach (var effect in calendar)
+        {
+            assumptions.Add(effect.Kind == MonthEdges.Last
+                ? $"Учтён конец месяца: последний день — ×{effect.Factor:0.0#} к обычному дню того же дня недели (по {effect.Months} мес.)."
+                : $"Учтено начало месяца: 1-е число — ×{effect.Factor:0.0#} к обычному дню того же дня недели (по {effect.Months} мес.).");
+        }
+
+        // Сумма за горизонт: границы суммы — √(Σ дисперсий шагов), а не сумма границ (ошибки шагов частично гасят друг друга); у дней края
+        // месяца дисперсия — с их множителем.
         var total = result.Sum(p => p.Value);
-        var totalSpread = (decimal)(z * sigma * Math.Sqrt(Enumerable.Range(1, horizon).Sum(i => (double)i)));
+        var totalSpread = (decimal)(z * sigma * Math.Sqrt(spreadWeights));
         return new ForecastResult(granularity, chosen, result, total, nonNegative ? Math.Max(0, total - totalSpread) : total - totalSpread, total + totalSpread,
-            best?.Wape, best?.Mape, scores.Count > 0 ? holdout : 0, scores, y.Length, usableSeason, confidence, reliable, assumptions);
+            best?.Wape, best?.Mape, scores.Count > 0 ? holdout : 0, scores, y.Length, usableSeason, confidence, reliable, assumptions, calendar);
     }
 
     private static IReadOnlyList<string> Methods(int season) =>

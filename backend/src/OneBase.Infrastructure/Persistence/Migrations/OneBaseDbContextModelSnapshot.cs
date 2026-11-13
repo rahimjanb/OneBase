@@ -1817,6 +1817,300 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("DialogAgentReplies", "ai");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Analytik.AnalytikBenchmarkRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ByCategory")
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal?>("CostUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Passed")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Results")
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("StartedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("Total")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AnalytikBenchmarkRuns");
+
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("IX_AnalytikBenchmarkRuns_StartedAt");
+
+                    b.ToTable("BenchmarkRuns", "analytik");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Analytik.AnalytikComputation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Algorithm")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Domain")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long>("ElapsedMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("EvidenceClass")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Input")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("InvestigationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Limitations")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Parameters")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateOnly?>("PeriodFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("PeriodTo")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Result")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Sources")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AnalytikComputations");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_AnalytikComputations_CreatedAt");
+
+                    b.HasIndex("InvestigationId")
+                        .HasDatabaseName("IX_AnalytikComputations_InvestigationId");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("IX_AnalytikComputations_UserId_CreatedAt");
+
+                    b.ToTable("Computations", "analytik");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Analytik.AnalytikDecision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Actual")
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal?>("ActualValue")
+                        .HasPrecision(24, 4)
+                        .HasColumnType("numeric(24,4)");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Baseline")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateOnly>("BaselineFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("BaselineTo")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("BaselineValue")
+                        .HasPrecision(24, 4)
+                        .HasColumnType("numeric(24,4)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("DecidedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTimeOffset?>("EvaluatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("ExpectedChangePct")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<string>("ExpectedDirection")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("ExpectedText")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Links")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Metric")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("MetricTitle")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateOnly>("ReviewOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Tenant")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AnalytikDecisions");
+
+                    b.HasIndex("AuthorId", "DecidedOn")
+                        .HasDatabaseName("IX_AnalytikDecisions_AuthorId_DecidedOn");
+
+                    b.HasIndex("Tenant", "Status", "ReviewOn")
+                        .HasDatabaseName("IX_AnalytikDecisions_Tenant_Status_ReviewOn");
+
+                    b.ToTable("Decisions", "analytik");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Analytik.AnalytikForecast", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1900,6 +2194,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<bool>("CauseConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("Confidence")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
                     b.Property<string>("Consequences")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -1918,6 +2216,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<string>("Evidence")
                         .HasColumnType("jsonb");
 
+                    b.Property<string>("EvidenceClass")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("Href")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -1932,6 +2234,12 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<string>("ImpactUnit")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("InvestigatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Investigation")
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("Key")
                         .IsRequired()
@@ -2001,6 +2309,180 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_AnalytikInsights_Module_DetectedAt");
 
                     b.ToTable("Insights", "analytik");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Analytik.AnalytikInsightEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Data")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Event")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal?>("Impact")
+                        .HasPrecision(20, 3)
+                        .HasColumnType("numeric(20,3)");
+
+                    b.Property<Guid>("InsightId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Severity")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AnalytikInsightEvents");
+
+                    b.HasIndex("InsightId", "At")
+                        .HasDatabaseName("IX_AnalytikInsightEvents_InsightId_At");
+
+                    b.ToTable("InsightEvents", "analytik");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Analytik.AnalytikInvestigation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Complexity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Contradictions")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("CostUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Depth")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("DurationMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Goal")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Hypotheses")
+                        .HasColumnType("jsonb");
+
+                    b.Property<long>("InputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Limitations")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("LlmCalls")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<long>("OutputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Plan")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("Replans")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReviewRejections")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reviews")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Roles")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("StepCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Steps")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("ToolCalls")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Trace")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("TurnId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AnalytikInvestigations");
+
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("IX_AnalytikInvestigations_StartedAt");
+
+                    b.HasIndex("TurnId")
+                        .HasDatabaseName("IX_AnalytikInvestigations_TurnId");
+
+                    b.HasIndex("UserId", "StartedAt")
+                        .HasDatabaseName("IX_AnalytikInvestigations_UserId_StartedAt");
+
+                    b.ToTable("Investigations", "analytik");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Analytik.AnalytikJobRun", b =>
@@ -12001,6 +12483,75 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("PnlValues", "sales");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Sales.SalesProductPhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("ProductId")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("Similar")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SimilarFrom")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UploadedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileId")
+                        .IsUnique();
+
+                    b.HasIndex("ProductId", "SortOrder");
+
+                    b.ToTable("ProductPhotos", "sales");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Sales.SalesProductPhotoSeed", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Code");
+
+                    b.ToTable("ProductPhotoSeeds", "sales");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Sales.SalesRegion", b =>

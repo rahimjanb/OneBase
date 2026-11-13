@@ -1,9 +1,10 @@
 import {
   Archive,
+  BrainCircuit,
+  FileText,
   ArrowLeftRight,
   ChartLine,
   History,
-  MessageSquareText,
   Network,
   TrendingUp,
   TriangleAlert,
@@ -57,6 +58,8 @@ export type SectionTab = {
   approverOnly?: boolean;
   /** Короткое пояснение — в меню «Ещё» и в поиске разделов. */
   description?: string;
+  /** Редкий раздел — всегда в «Ещё», даже если в строке есть место (закреплённый пользователем — в строке). */
+  rare?: boolean;
 };
 
 /**
@@ -73,6 +76,8 @@ export type SectionDef = {
   tabs: SectionTab[];
   active: (pathname: string) => string | null;
   keepPeriod?: boolean;
+  /** Знак модуля перед названием на компьютере — квадрат с AI-градиентом и иконкой («Аналитик»). */
+  mark?: LucideIcon;
 };
 
 const toDepartments = { href: "/departments", label: "Назад к отделам" };
@@ -173,9 +178,8 @@ export const productionTabs: SectionTab[] = [
  * раздел пустой: данные решает backend); «Карта данных», прогнозы, риски, отчёты и история — всем с правом раздела.
  */
 export const analytikTabs: SectionTab[] = [
-  { key: "overview", label: "Обзор", href: "/analytik", icon: LayoutDashboard, description: "состояние компании, показатели, риски и рекомендации" },
-  { key: "chat", label: "AI-аналитик", short: "AI", href: "/analytik/chat", icon: MessageSquareText, description: "вопросы о любых данных OneBase на обычном языке" },
-  { key: "explore", label: "Срезы", href: "/analytik/explore", icon: Table2, description: "любой показатель по дням, регионам, товарным группам, агентам и точкам" },
+  { key: "overview", label: "Обзор", href: "/analytik", icon: LayoutGrid, description: "состояние компании, показатели, риски и рекомендации" },
+  { key: "chat", label: "AI-аналитик", short: "AI", href: "/analytik/chat", icon: Sparkles, description: "вопросы о любых данных OneBase на обычном языке" },
   { key: "sales", label: "Продажи", href: "/analytik/sales", icon: ChartLine, permission: "sales.read", description: "выручка, план и прогноз, регионы" },
   { key: "production", label: "Производство", href: "/analytik/production", icon: Factory, permission: ["production.read", "production.manage", "procurement.read", "procurement.manage"], description: "план и факт, расход и норма, сколько можно произвести" },
   { key: "warehouse", label: "Склад", href: "/analytik/warehouse", icon: Warehouse, permission: ["procurement.read", "procurement.manage", "procurement.warehouse", "production.read", "production.manage"], description: "остатки сырья, расход, дни запаса, дефицит" },
@@ -183,11 +187,12 @@ export const analytikTabs: SectionTab[] = [
   { key: "finance", label: "Финансы", href: "/analytik/finance", icon: Wallet, permission: "finance.read", description: "оплаты, расходы на закупки" },
   { key: "hr", label: "Персонал", href: "/analytik/hr", icon: Users, permission: ["hr.read", "analytik.manage"], description: "посещаемость, отклонения, задачи отделов" },
   { key: "forecasts", label: "Прогнозы", href: "/analytik/forecasts", icon: TrendingUp, description: "прогнозы со сценариями и точностью" },
-  { key: "simulator", label: "Симулятор", href: "/analytik/simulator", icon: SlidersHorizontal, description: "сценарии «что если»: продажи, производство, сырьё, закупки, деньги" },
-  { key: "risks", label: "Риски", href: "/analytik/risks", icon: TriangleAlert, description: "риски, отклонения, качество данных" },
-  { key: "reports", label: "Отчёты", href: "/analytik/reports", icon: FileBarChart, description: "управленческие отчёты Excel и PDF" },
-  { key: "data", label: "Карта данных", short: "Данные", href: "/analytik/data", icon: Network, description: "каталог всей базы: таблицы, связи, смысл" },
-  { key: "history", label: "История", href: "/analytik/history", icon: History, description: "исследования и журнал запросов" },
+  { key: "risks", label: "Риски", href: "/analytik/risks", icon: TriangleAlert, description: "риски, отклонения, качество данных", rare: true },
+  { key: "reports", label: "Отчёты", href: "/analytik/reports", icon: FileText, description: "управленческие отчёты Excel и PDF", rare: true },
+  { key: "explore", label: "Срезы", href: "/analytik/explore", icon: Table2, description: "любой показатель по дням, регионам, товарным группам, агентам и точкам", rare: true },
+  { key: "simulator", label: "Симулятор", href: "/analytik/simulator", icon: SlidersHorizontal, description: "сценарии «что если»: продажи, производство, сырьё, закупки, деньги", rare: true },
+  { key: "data", label: "Карта данных", short: "Данные", href: "/analytik/data", icon: Network, description: "каталог всей базы: таблицы, связи, смысл", rare: true },
+  { key: "history", label: "История", href: "/analytik/history", icon: History, description: "исследования и журнал запросов", rare: true },
 ];
 
 export const sections: SectionDef[] = [
@@ -250,6 +255,7 @@ export const sections: SectionDef[] = [
     id: "analytik",
     label: "Разделы Аналитика",
     title: "Аналитик",
+    mark: BrainCircuit,
     tabs: analytikTabs,
     // Чат (и его история), карточка таблицы и отчёта — внутри своих вкладок.
     active: (pathname) => (pathname === "/analytik" ? "overview" : (analytikTabs.find((t) => t.key !== "overview" && under(pathname, t.href))?.key ?? null)),

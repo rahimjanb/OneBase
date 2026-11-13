@@ -39,6 +39,7 @@ public sealed partial class AnalytikEngine(
     DataKeeper keeper,
     AnalytikAccess access,
     AnalytikOptions options,
+    Intelligence.InvestigationEngine investigations,
     ILogger<AnalytikEngine> logger) : IConsultantEngine
 {
     /// <summary>Аналитиков на один вопрос без «по всей компании» — не больше: каждый — отдельный цикл модели.</summary>
@@ -86,6 +87,22 @@ public sealed partial class AnalytikEngine(
         var remembered = await memory.ConversationAsync(turn.UserId, turn.ConversationId, available.Select(a => a.Code).ToList(), 8, ct);
         var rememberedText = remembered.Count == 0 ? null : AiMemoryStore.Format(remembered, names);
         contextStage?.Dispose();
+
+        // Сложный вопрос (правила, без вызова модели) — исследование: план, шаги, проверка гипотез расчётом, проверка ответа. Простой — прежний
+        // быстрый путь. Просьба об отчёте Excel — прежним путём (отчёт формирует аналитик в своём цикле).
+        var triage = Intelligence.InvestigationTriage.Assess(turn.Question, turn.History, options.InvestigationMode, options.InvestigationThreshold,
+            options.InvestigationDeepThreshold);
+        if (triage.Investigate && available.Count > 0 && !asksReport)
+        {
+            string? ready;
+            using (timings?.Stage("data"))
+            {
+                ready = await ReadinessAsync(turn, progress, ct);
+            }
+
+            return await investigations.AnswerAsync(new Intelligence.InvestigationRequest(turn, triage, available, forbidden, chief, names, ready, rememberedText,
+                remembered.Count), progress, ct);
+        }
 
         await progress(new ConsultantProgress("routing", null, null, ProgressStatus.Running));
         RoutingDecision routing;

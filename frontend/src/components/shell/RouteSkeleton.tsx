@@ -2,6 +2,7 @@
 
 import { ChevronLeft, Plus, Sparkles } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { AnalytikOverviewSkeleton } from "@/components/analytik/overview/Skeleton";
 import { MobileOverviewSkeleton } from "@/components/dashboard/mobile/Skeletons";
 import { MyDaySkeleton } from "@/components/me/Skeletons";
 import { EmployeeSkeleton } from "@/components/hr/employee/EmployeeView";
@@ -758,5 +759,6 @@ export function RouteSkeleton({ inSales = false }: { inSales?: boolean }) {
     return <RequestsSkeleton pathname={pathname} />;
   if (pathname === "/consultant" || pathname.startsWith("/consultant/")) return <ConsultantSkeleton chat={pathname !== "/consultant"} />;
   if (pathname === "/analytik/chat" || pathname.startsWith("/analytik/chat/")) return <ConsultantSkeleton chat={pathname !== "/analytik/chat"} />;
+  if (pathname === "/analytik") return <AnalytikOverviewSkeleton />;
   return <PageSkeleton pathname={pathname} />;
 }

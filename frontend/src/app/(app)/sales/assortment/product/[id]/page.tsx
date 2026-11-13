@@ -1,12 +1,15 @@
 import { notFound } from "next/navigation";
+import { ProductPhotoPanel } from "@/components/sales/assortment/ProductPhoto";
 import { KpiTile } from "@/components/sales/bits";
 import { ProductBreakdownTable, SkuStatusChip } from "@/components/sales/categories";
 import { TopChip } from "@/components/sales/outstock";
 import { SalesFrame } from "@/components/sales/SalesFrame";
 import { getT } from "@/i18n/server";
-import { apiGetOrNull } from "@/lib/server-api";
+import { apiGetOrNull, apiTry } from "@/lib/server-api";
 import { kg, money, monthName, num, pct } from "@/lib/sales/format";
+import { skuName } from "@/lib/sales/assortment-view";
 import { apiQuery, categoriesHref, scopeKeys, scopedQuery, withQuery, type SalesSearchParams } from "@/lib/sales/query";
+import type { ProductPhotos } from "@/lib/sales/product-photos";
 import type { ProductView } from "@/lib/sales/types";
 
 export async function generateMetadata() {
@@ -14,7 +17,7 @@ export async function generateMetadata() {
   return { title: t("Артикул · Продажи") };
 }
 
-/** Артикул в охвате: факт, ТТ с товаром, цена за кг и где он идёт, а где нет. */
+/** Артикул в охвате: фото, факт, ТТ с товаром, цена за кг и где он идёт, а где нет. Название — без кода Linko в начале (код — в подзаголовке). */
 export default async function ProductPage({
   params,
   searchParams,
@@ -25,7 +28,10 @@ export default async function ProductPage({
   const t = await getT();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const path = `/sales/assortment/product/${id}`;
-  const data = await apiGetOrNull<ProductView>(`/api/sales/products/${encodeURIComponent(id)}${apiQuery(sp, [...scopeKeys])}`, path);
+  const [data, photos] = await Promise.all([
+    apiGetOrNull<ProductView>(`/api/sales/products/${encodeURIComponent(id)}${apiQuery(sp, [...scopeKeys])}`, path),
+    apiTry<ProductPhotos>(`/api/sales/product-photos?ids=${encodeURIComponent(id)}`),
+  ]);
   if (!data) notFound();
 
   const query = scopedQuery(sp);
@@ -35,20 +41,21 @@ export default async function ProductPage({
   const code = data.code ? ` · ${t("Артикул")} ${data.code}` : "";
   // «Без категории» (id none) и охват «Республика» / «Экспорт и опт» — подписи сервера, переводятся; остальное — данные.
   const categoryName = data.categoryId === "none" ? t(data.category) : data.category;
+  const name = skuName(data);
 
   return (
     <SalesFrame
-      title={data.name}
+      title={name}
       subtitle={`${categoryName}${code} · ${t(data.scopeName)}`}
-      crumbs={[{ label: t("Все категории"), href: categoriesHref(data.scope, sp) }, { label: categoryName, href: category }, { label: data.name }]}
+      crumbs={[{ label: t("Все категории"), href: categoriesHref(data.scope, sp) }, { label: categoryName, href: category }, { label: name }]}
       back={category}
       sp={sp}
       period={data.period}
     >
-      <div className="mb-4 flex items-center gap-2 text-sm text-ink-2">
+      <ProductPhotoPanel photos={photos} productId={data.productId} code={data.code} name={name}>
         {t("Статус в охвате:")} <SkuStatusChip status={data.status} />
         {data.isTop && <TopChip title={t("Товар из списка ТОП")} />}
-      </div>
+      </ProductPhotoPanel>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <KpiTile label={t("Факт, кг")} value={kg(data.factKg)} unit={t("кг")}>
           {data.prevMonthKg ? t("прошлый месяц целиком: {kg} кг", { kg: kg(data.prevMonthKg) }) : t("в прошлом месяце продаж не было")}

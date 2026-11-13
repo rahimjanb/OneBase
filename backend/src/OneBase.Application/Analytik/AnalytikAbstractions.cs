@@ -23,6 +23,11 @@ public interface IAnalytikDb
     DbSet<AnalytikMetricSnapshot> MetricSnapshots { get; }
     DbSet<AnalytikScenarioBaseline> ScenarioBaselines { get; }
     DbSet<AnalytikScenario> Scenarios { get; }
+    DbSet<AnalytikComputation> Computations { get; }
+    DbSet<AnalytikInvestigation> Investigations { get; }
+    DbSet<AnalytikInsightEvent> InsightEvents { get; }
+    DbSet<AnalytikDecision> Decisions { get; }
+    DbSet<AnalytikBenchmarkRun> BenchmarkRuns { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
@@ -99,4 +104,26 @@ public sealed class AnalytikOptions
     /// и говорит, по какую дату данные. 0 — не ждать.
     /// </summary>
     public int FreshWaitSeconds { get; init; } = 45;
+
+    /// <summary>
+    /// Исследования сложных вопросов в чате Аналитика (Advanced Intelligence): auto — по сложности вопроса (правила, без вызова модели),
+    /// always — каждый вопрос о данных, off — прежний путь «аналитики → сводка».
+    /// </summary>
+    public string InvestigationMode { get; init; } = "auto";
+
+    /// <summary>С какого балла сложности вопрос исследуется (InvestigationTriage).</summary>
+    public int InvestigationThreshold { get; init; } = 3;
+
+    /// <summary>С какого балла исследование глубокое: скептик и независимая проверка ответа моделью.</summary>
+    public int InvestigationDeepThreshold { get; init; } = 6;
+
+    /// <summary>Шагов в плане, гипотез, перепланирований и циклов проверки ответа — не больше.</summary>
+    public int InvestigationMaxSteps { get; init; } = 8;
+
+    public int InvestigationMaxHypotheses { get; init; } = 6;
+    public int InvestigationMaxReplans { get; init; } = 1;
+    public int InvestigationReviewCycles { get; init; } = 2;
+
+    /// <summary>Шагов одновременно (каждый — цикл модели аналитика).</summary>
+    public int InvestigationParallelSteps { get; init; } = 4;
 }

@@ -346,6 +346,12 @@ body:has([data-palette="sales-secondary"]) {
 body:has([data-palette="sales-secondary"]) [data-sales-bar] {
   background-color: transparent;
 }
+/* Категория ассортимента на телефоне и планшете — своя шапка с месяцем (CategoryScreen): полосы раздела (период, «Обновить») нет, как в макете. */
+@media (max-width: 1023.98px) {
+  body:has([data-sales-own-header]) [data-sales-bar] {
+    display: none;
+  }
+}
 :root[data-brand="onebase"]:not([data-theme="light"]) body:has([data-palette="sales-secondary"]) [data-topbar] .bg-accent.text-white {
   background-image: none;
   box-shadow: 0 4px 12px rgb(61 123 255 / 0.3);

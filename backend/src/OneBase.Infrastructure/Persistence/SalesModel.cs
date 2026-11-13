@@ -245,6 +245,22 @@ internal static class SalesModel
             e.HasOne(x => x.Region).WithMany().HasForeignKey(x => x.RegionId).OnDelete(DeleteBehavior.SetNull);
         });
 
+        b.Entity<SalesProductPhoto>(e =>
+        {
+            e.ToTable("ProductPhotos", "sales");
+            e.Property(x => x.SimilarFrom).HasMaxLength(32);
+            e.Property(x => x.Source).HasMaxLength(16);
+            e.HasIndex(x => new { x.ProductId, x.SortOrder });
+            e.HasIndex(x => x.FileId).IsUnique();
+        });
+
+        b.Entity<SalesProductPhotoSeed>(e =>
+        {
+            e.ToTable("ProductPhotoSeeds", "sales");
+            e.HasKey(x => x.Code);
+            e.Property(x => x.Code).HasMaxLength(32);
+        });
+
         b.Entity<SalesUserScope>(e =>
         {
             e.ToTable("UserScopes", "sales");

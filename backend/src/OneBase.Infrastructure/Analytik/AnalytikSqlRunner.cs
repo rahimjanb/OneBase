@@ -25,6 +25,11 @@ internal sealed class AnalytikDb(OneBaseDbContext db) : IAnalytikDb
     public Microsoft.EntityFrameworkCore.DbSet<AnalytikMetricSnapshot> MetricSnapshots => db.Set<AnalytikMetricSnapshot>();
     public Microsoft.EntityFrameworkCore.DbSet<AnalytikScenarioBaseline> ScenarioBaselines => db.Set<AnalytikScenarioBaseline>();
     public Microsoft.EntityFrameworkCore.DbSet<AnalytikScenario> Scenarios => db.Set<AnalytikScenario>();
+    public Microsoft.EntityFrameworkCore.DbSet<AnalytikComputation> Computations => db.Set<AnalytikComputation>();
+    public Microsoft.EntityFrameworkCore.DbSet<AnalytikInvestigation> Investigations => db.Set<AnalytikInvestigation>();
+    public Microsoft.EntityFrameworkCore.DbSet<AnalytikInsightEvent> InsightEvents => db.Set<AnalytikInsightEvent>();
+    public Microsoft.EntityFrameworkCore.DbSet<AnalytikDecision> Decisions => db.Set<AnalytikDecision>();
+    public Microsoft.EntityFrameworkCore.DbSet<AnalytikBenchmarkRun> BenchmarkRuns => db.Set<AnalytikBenchmarkRun>();
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => db.SaveChangesAsync(cancellationToken);
 }

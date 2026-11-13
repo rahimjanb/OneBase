@@ -27,10 +27,18 @@ public sealed record AiText(string Text);
 [HasPermission(Permissions.AnalytikUse)]
 [AnalytikErrors]
 [Route("api/analytik/simulator")]
-public sealed class AnalytikSimulatorController(AnalytikAccess access, ScenarioService scenarios, ScenarioAnalyst analyst, ScenarioExport export)
-    : ControllerBase
+public sealed class AnalytikSimulatorController(AnalytikAccess access, ScenarioService scenarios, ScenarioAnalyst analyst, ScenarioExport export,
+    ScenarioAnalysisService analysis) : ControllerBase
 {
     private Task<AnalytikPrincipal> PrincipalAsync(CancellationToken ct) => access.ResolveAsync(User.GetUserId(), ct);
+
+    /// <summary>
+    /// Анализ сценария: чувствительность, матрица, подбор под цель, безубыточность, Монте-Карло, худший / базовый / лучший, оптимальный выпуск.
+    /// Исходный сценарий не меняется; анализ — в журнале расчётов.
+    /// </summary>
+    [HttpPost("analyze")]
+    public async Task<AnalysisView> Analyze([FromBody] AnalyzeInput input, CancellationToken ct) =>
+        await analysis.AnalyzeAsync(await PrincipalAsync(ct), input, "api", ct);
 
     [HttpGet("catalog")]
     public SimulatorCatalog Catalog() => new(ScenarioCatalog.Kinds, ScenarioCatalog.Parameters, ScenarioPresets.All, DependencyGraph.Nodes,

@@ -37,6 +37,15 @@ public sealed record FreshnessRow(string Source, DateTimeOffset? At, string Stat
 
 public sealed record RecentAnalysis(Guid Id, string Title, DateTimeOffset At);
 
+/// <summary>Активные находки, видимые пользователю, по критичности: на панели — только первые (Risks), счётчики фильтра — по всем.</summary>
+public sealed record RiskCounts(int Critical, int Warning, int Info)
+{
+    public int Total => Critical + Warning + Info;
+
+    public static RiskCounts Of(IReadOnlyCollection<InsightView> insights) =>
+        new(insights.Count(i => i.Severity == Severities.Critical), insights.Count(i => i.Severity == Severities.Warning), insights.Count(i => i.Severity == Severities.Info));
+}
+
 /// <summary>
 /// Executive Intelligence Dashboard: состояние компании, показатели отделов, критические риски, рекомендации, прогноз, свежесть данных и
 /// последние исследования — только то, что пользователю видно по его правам и области продаж. Errors — блоки, которые не удалось посчитать
@@ -45,7 +54,8 @@ public sealed record RecentAnalysis(Guid Id, string Title, DateTimeOffset At);
 public sealed record DashboardView(
     AnalytikPeriod Period, DateTimeOffset At, CompanyHealth Health, SalesBlock? Sales, FinanceBlock? Finance, ProductionBlock? Production, SupplySummary? Supply,
     HrBlock? Hr, WorkBlock? Work, IReadOnlyList<InsightView> Risks, IReadOnlyList<string> Recommendations, ForecastSummary? Forecast,
-    IReadOnlyList<FreshnessRow> Freshness, IReadOnlyList<RecentAnalysis> Recent, string? Scope, IReadOnlyList<string> Errors, IReadOnlyList<DataGap> Gaps);
+    IReadOnlyList<FreshnessRow> Freshness, IReadOnlyList<RecentAnalysis> Recent, string? Scope, IReadOnlyList<string> Errors, IReadOnlyList<DataGap> Gaps,
+    RiskCounts? RiskCounts = null);
 
 public sealed class DashboardService(
     IAppDbContext db,
@@ -115,7 +125,8 @@ public sealed class DashboardService(
         return new DashboardView(period, clock.GetUtcNow(), health, salesBlock, financeBlock, productionBlock,
             supplySummary, hrBlock, workBlock, top, recommendations, forecast, await FreshnessAsync(principal, readiness, ct), await RecentAsync(principal, ct),
             principal.Sales.Restricted ? principal.Sales.Description : null, errors,
-            readiness is null ? [] : DataReadiness.Gaps(readiness.Visible(principal), period, clock.GetUtcNow(), code => readiness.CanManage(code, principal)));
+            readiness is null ? [] : DataReadiness.Gaps(readiness.Visible(principal), period, clock.GetUtcNow(), code => readiness.CanManage(code, principal)),
+            RiskCounts.Of(insightList));
     }
 
     /// <summary>
