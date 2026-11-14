@@ -97,6 +97,11 @@ export type HhStatus = {
   lastSyncOk: boolean | null;
   lastSyncMessage: string | null;
   linkedVacancies: number;
+  /** Предохранитель Quota Guard: HH ответил, что нужна оплата или лимит исчерпан — автоматическая синхронизация остановлена. */
+  guardTrippedAt: string | null;
+  guardReason: string | null;
+  /** Резюме, полученные через API HH, можно передавать AI (после подтверждения юриста). */
+  aiOnHhData: boolean;
 };
 
 export type HhVacancyLink = { hhVacancyId: string; name: string; area: string | null; vacancyId: string | null; vacancyCode: string | null };
@@ -380,7 +385,7 @@ export const recruitmentTelegramApi = {
 
 export const hhApi = {
   status: () => bff<HhStatus>(hh),
-  save: (input: { clientId: string | null; clientSecret: string | null; redirectUri: string | null; contactEmail: string | null; enabled: boolean }) =>
+  save: (input: { clientId: string | null; clientSecret: string | null; redirectUri: string | null; contactEmail: string | null; enabled: boolean; aiOnHhData?: boolean }) =>
     bff<HhStatus>(`${hh}/settings`, body("PUT", input)),
   connect: () => bff<{ url: string }>(`${hh}/connect`, body("POST")),
   complete: (code: string, state: string) => bff<HhStatus>(`${hh}/complete`, body("POST", { code, state })),

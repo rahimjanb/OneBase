@@ -29,6 +29,15 @@ public sealed record InsightHistory(Guid Id, decimal? Confidence, string? Eviden
 
 public sealed record CancelDecision(string? Note);
 
+/// <summary>Запуск исследования с экрана: шаблон, вопрос, период (даты или последние N дней), главный показатель, фильтры.</summary>
+public sealed record ResearchInput(string Kind, string? Question, DateOnly? From, DateOnly? To, int? Days, string? Metric,
+    IReadOnlyList<OneBase.Application.Analytik.Semantic.AnalyticsFilter>? Filters);
+
+/// <summary>Итог исследования для экрана: результат и текст по разделам (как его получает модель).</summary>
+public sealed record ResearchOutcome(OneBase.Application.Analytik.Research.ResearchResult Result, string Brief);
+
+public sealed record ResearchMatchInput(string Question);
+
 /// <summary>
 /// Advanced Intelligence: исследования (ход и трасса), память решений, история находок. Права — analytik.use; исследование видит его автор и
 /// управляющий Аналитиком; решения — автор и управляющий (DecisionService); данные решений — по правам автора.
@@ -39,7 +48,8 @@ public sealed record CancelDecision(string? Note);
 [AnalytikErrors]
 [Route("api/analytik")]
 public sealed class AnalytikIntelligenceController(AnalytikAccess access, IAnalytikDb adb, OneBase.Application.Abstractions.IAppDbContext db, DecisionService decisions,
-    OneBase.AI.Analytik.Intelligence.QualityService quality, OneBase.AI.Analytik.Intelligence.BenchmarkRunner benchmark) : ControllerBase
+    OneBase.AI.Analytik.Intelligence.QualityService quality, OneBase.AI.Analytik.Intelligence.BenchmarkRunner benchmark,
+    OneBase.Application.Analytik.Research.ResearchService research, OneBase.Application.Analytik.Compute.ComputeService compute) : ControllerBase
 {
     private Task<AnalytikPrincipal> PrincipalAsync(CancellationToken ct) => access.ResolveAsync(User.GetUserId(), ct);
 
@@ -75,10 +85,57 @@ public sealed class AnalytikIntelligenceController(AnalytikAccess access, IAnaly
             Json(r.Trace), Json(r.Limitations), r.Summary, r.InputTokens, r.OutputTokens, r.FailureReason);
     }
 
+    // ---------- исследования-шаблоны (Phase 2) ----------
+
+    /// <summary>Шаблоны исследований: код и название.</summary>
+    [HttpGet("research/kinds")]
+    public IReadOnlyList<object> ResearchKindsList() =>
+        OneBase.Application.Analytik.Research.ResearchKinds.All.Select(k => (object)new { kind = k, title = OneBase.Application.Analytik.Research.ResearchKinds.Title(k) }).ToList();
+
+    /// <summary>Какой шаблон подходит вопросу (правила, без модели); null — вопрос не про исследование.</summary>
+    [HttpPost("research/match")]
+    public OneBase.Application.Analytik.Research.ResearchMatch? ResearchMatch([FromBody] ResearchMatchInput body) =>
+        OneBase.Application.Analytik.Research.ResearchPlanner.Match(body.Question);
+
+    /// <summary>Исследование кодом (без модели, бесплатно): план, параллельные срезы и расчёты, выводы с уровнем доказательности.</summary>
+    [HttpPost("research")]
+    public async Task<ResearchOutcome> Research([FromBody] ResearchInput body, CancellationToken ct)
+    {
+        var r = await research.RunAsync(new OneBase.Application.Analytik.Research.ResearchRequest
+            {
+                Kind = body.Kind, Question = body.Question, From = body.From, To = body.To, Metric = body.Metric, Filters = body.Filters,
+                Params = body.Days is { } d ? new Dictionary<string, string> { ["days"] = d.ToString(System.Globalization.CultureInfo.InvariantCulture) } : null,
+            },
+            new OneBase.Application.Analytik.Research.ResearchCaller(User.GetUserId(), "api"), ct);
+        return new ResearchOutcome(r, OneBase.Application.Analytik.Research.ResearchBrief.Render(r));
+    }
+
+    /// <summary>Остановить идущее исследование (своё; чужое — управляющему).</summary>
+    [HttpPost("research/{id:guid}/cancel")]
+    public async Task<IActionResult> CancelResearch(Guid id, CancellationToken ct) =>
+        await research.CancelAsync(id, User.GetUserId(), ct) ? NoContent() : NotFound(new { error = "Исследование не идёт или недоступно." });
+
+    /// <summary>
+    /// Statistics Engine напрямую: метод и данные — срез, сохранённый срез (queryId) или структурированные ряды (series). Каждый расчёт — в журнале.
+    /// </summary>
+    [HttpPost("statistics")]
+    public async Task<object> Statistics([FromBody] OneBase.Application.Analytik.Compute.ComputeRequest body, CancellationToken ct)
+    {
+        var o = await compute.RunAsync(body, new OneBase.Application.Analytik.Compute.ComputeContext(User.GetUserId(), "api"), ct);
+        return new { outcome = o, level = OneBase.AI.Analytik.ComputeTool.LevelOf(o), levelTitle = OneBase.Application.Analytik.Compute.EvidenceLevels.Title(OneBase.AI.Analytik.ComputeTool.LevelOf(o)) };
+    }
+
     private static InvestigationRow Row(OneBase.Domain.Analytik.AnalytikInvestigation r, IReadOnlyDictionary<Guid, string> names)
     {
         var (total, confirmed, rejected) = (0, 0, 0);
-        if (Json(r.Hypotheses) is { ValueKind: JsonValueKind.Array } h)
+        var hypotheses = Json(r.Hypotheses);
+        // У исследования-шаблона гипотезы — внутри объекта результата (findings, hypotheses, data).
+        if (hypotheses is { ValueKind: JsonValueKind.Object } obj && obj.TryGetProperty("hypotheses", out var inner))
+        {
+            hypotheses = inner;
+        }
+
+        if (hypotheses is { ValueKind: JsonValueKind.Array } h)
         {
             foreach (var x in h.EnumerateArray())
             {
@@ -104,6 +161,23 @@ public sealed class AnalytikIntelligenceController(AnalytikAccess access, IAnaly
     // ---------- набор сложных вопросов ----------
 
     /// <summary>Каталог сценариев (категория, вопрос) и последние прогоны.</summary>
+    /// <summary>
+    /// Почему AI ответил так или не ответил: сбои инструментов, отклонённые срезы, неудачные расчёты и операции исследований разговора. Свой
+    /// разговор — автору, чужой — управляющему Аналитиком.
+    /// </summary>
+    [HttpGet("quality/explain")]
+    public async Task<ActionResult<OneBase.AI.Analytik.Intelligence.AnswerExplanation>> Explain([FromQuery] Guid conversationId, [FromQuery] Guid? messageId, CancellationToken ct)
+    {
+        var p = await PrincipalAsync(ct);
+        var mine = await db.AiAuditLogs.AsNoTracking().AnyAsync(a => a.ConversationId == conversationId && a.UserId == p.UserId, ct);
+        if (!mine && !p.Manager)
+        {
+            return NotFound(new { error = "Разговор не найден." });
+        }
+
+        return await quality.ExplainAsync(conversationId, messageId, ct) is { } e ? e : NotFound(new { error = "Ответов в разговоре не найдено." });
+    }
+
     [HttpGet("benchmark")]
     [HasPermission(Permissions.AnalytikManage)]
     public async Task<object> Benchmark(CancellationToken ct) => new

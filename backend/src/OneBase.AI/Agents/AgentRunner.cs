@@ -694,6 +694,21 @@ public sealed class AgentRunner(
                 $"выдавай среднемесячное за дневное. Прежде чем сказать, что разреза или показателя нет, вызови analytics_capabilities.");
         }
 
+        if (tools.Any(t => t.Name == Analytik.ResearchTool.ToolName))
+        {
+            // Исследование одним серверным вызовом: модель не перебирает десятки срезов и не считает статистику формулами.
+            sb.AppendLine(
+                $"Корреляции во всех показателях, причины снижения продаж, эффективность ТП по визитам и продажам, регионы «визиты растут — продажи падают», " +
+                $"влияние товарных групп, аномалии во всех показателях, эффективность акций, состояние компании — {Analytik.ResearchTool.ToolName} одним вызовом.");
+        }
+
+        if (tools.Any(t => t.Name == Analytik.ComputeTool.ToolName))
+        {
+            sb.AppendLine(
+                $"Статистика по рядам (среднее и разброс, корреляция, регрессия, тренд, сезонность, переломы, аномалии) — {Analytik.ComputeTool.ToolName} по срезу " +
+                $"или query_id, а не формулой в {Calculator.ToolName}: {Calculator.ToolName} — только арифметика нескольких чисел ответа.");
+        }
+
         foreach (var hint in tools.OfType<DataTool>().Select(t => t.UsageHint).OfType<string>())
         {
             sb.AppendLine(hint);

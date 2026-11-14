@@ -898,6 +898,7 @@ public sealed class InterviewService(IAppDbContext db, RecruitmentExceptions exc
             });
             application.Stage = ApplicationStage.Interview;
             application.StageChangedAt = now;
+            application.Mark = ApplicationMark.None; // отметка скрининга — до смены этапа
         }
     }
 

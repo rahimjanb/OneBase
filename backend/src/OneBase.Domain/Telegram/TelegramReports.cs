@@ -174,8 +174,14 @@ public class TelegramReportSubscription : Entity
     /// <summary>Имя получателя для списка («Азиз Каримов»); пусто — по области.</summary>
     public string? Title { get; set; }
 
-    /// <summary>РМ: направление (sales.Directions); null — все направления.</summary>
+    /// <summary>РМ без пользователя: направление (sales.Directions); null — все направления (вся страна).</summary>
     public Guid? DirectionId { get; set; }
+
+    /// <summary>
+    /// РМ: пользователь OneBase с ролью «РМ» — отчёт по регионам из его профиля (охват «Продаж»), на момент отправки. Без ссылки на
+    /// пользователей: удалили или сняли роль — отчёт не уходит с понятной причиной, а не расширяется до всей страны.
+    /// </summary>
+    public Guid? UserId { get; set; }
 
     /// <summary>СВ и ТП: регион OneBase (sales.Regions).</summary>
     public Guid? RegionId { get; set; }
@@ -205,6 +211,18 @@ public class TelegramReportSubscription : Entity
     public bool Evening { get; set; }
 
     public bool Enabled { get; set; } = true;
+
+    /// <summary>Когда получателя выключили («Отключён с 01.11»); включение очищает вместе с причиной и сроком.</summary>
+    public DateTimeOffset? DisabledAt { get; set; }
+
+    /// <summary>Причина отключения («отпуск»); пусто — без причины.</summary>
+    public string? DisabledReason { get; set; }
+
+    /// <summary>
+    /// До какого дня отключён (включительно) — только напоминание: после срока получатель попадает в «Требуют внимания», сам не
+    /// включается (рассылка смотрит только на Enabled).
+    /// </summary>
+    public DateOnly? DisabledUntil { get; set; }
 
     public Guid CreatedById { get; set; }
     public Guid? UpdatedById { get; set; }

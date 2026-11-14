@@ -20,7 +20,10 @@ public sealed record ToolResult(bool Success, string Content, Guid? ApprovalRequ
 
     /// <summary>Сбой инструмента для модели — структурно: какой инструмент, вид сбоя, что случилось и что делать дальше.</summary>
     public static ToolResult Failure(string tool, string kind, string message) =>
-        new(false, JsonSerializer.Serialize(new { error = new { tool, kind, message, next = ToolFailures.Next(kind) } }, ToolFailures.Json), ErrorKind: kind);
+        new(false, JsonSerializer.Serialize(new
+        {
+            error = new { tool, kind, status = ToolFailures.Status(kind), message, next = ToolFailures.Next(kind), alternatives = ToolFailures.Alternatives(tool) },
+        }, ToolFailures.Json), ErrorKind: kind);
     public static ToolResult PendingApproval(Guid requestId) =>
         new(false, $"Действие отправлено на подтверждение человеку (запрос {requestId}). Сообщи пользователю, что нужно одобрение.", requestId);
 }

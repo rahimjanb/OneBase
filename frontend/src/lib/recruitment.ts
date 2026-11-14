@@ -163,7 +163,8 @@ export type CandidateCard = {
     source: string;
     rejectReason: string | null;
     stageChangedAt: string;
-    history: { from: Stage | null; to: Stage; comment: string | null; actor: string | null; at: string }[];
+    /** mark — отметка HR в AI-скрининге (Suitable, Recommended, Reserve; None — снята); у события этапа — null. */
+    history: { from: Stage | null; to: Stage; comment: string | null; actor: string | null; at: string; mark?: "None" | "Suitable" | "Recommended" | "Reserve" | null }[];
     screening: Record<string, string> | null;
   }[];
   consents: { id: string; channel: string; textVersion: number; givenAt: string; withdrawnAt: string | null; recordedBy: string | null }[];

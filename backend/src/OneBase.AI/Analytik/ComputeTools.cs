@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OneBase.AI.Consultant;
+using OneBase.AI.Knowledge;
 using OneBase.AI.Tools;
 using OneBase.AI.Tools.Data;
 using OneBase.Application.Analytik.Compute;
@@ -24,20 +25,24 @@ public sealed class ComputeTool(ComputeService compute, SemanticEngine engine) :
     public override string Name => ToolName;
     public override string Title => "Расчёт (статистика, причины, сегменты)";
     public override int Level => ToolLevels.Analyze;
-    public override string? Source => AnalytikTools.Source;
-    public override string? RequiredPermission => Permissions.AnalytikUse;
+    public override string? Source => KnowledgeSources.SalesStats;
+    public override string? RequiredPermission => Permissions.SalesRead;
+    public override IReadOnlyList<string>? AlternativePermissions => [Permissions.FinanceRead, Permissions.AnalytikUse];
 
     public override string Description =>
-        "Детерминированный расчёт по срезу данных OneBase (код, не модель): " +
+        "Statistics Engine — детерминированный расчёт по срезу данных OneBase (код, не модель): " +
         string.Join("; ", ComputeCatalog.Methods.Select(m => $"{m.Code} — {m.Title}")) + ". " +
-        "Данные задаёшь как срез: metrics, dimension, grain, период, фильтры (как analytics_query); числа не передавай. " +
-        "Результат: summary (вывод кодом), evidence_class (наблюдаемая / статистическая / проверенная причинная / предположение), " +
-        "limitations, computation_id. Причину называй только по evidence_class tested_causal; statistical — «статистически связано», " +
-        "observed — «наблюдается», assumption — «предположение».";
+        "Данные задаёшь как срез: metrics, dimension, grain, период, фильтры (как analytics_query); или query_id — id уже выполненного среза; или " +
+        "series — структурированные ряды (имя, значения, даты), если данные пришли из другого инструмента. Числа формулой не передавай. " +
+        "Результат: summary (вывод кодом), level (FACT, CALCULATED, STATISTICALLY_SUPPORTED, CORRELATION, HYPOTHESIS, FORECAST, UNVERIFIED), " +
+        "evidence_class, limitations, computation_id. Корреляция — «связано», не «из-за»; причину называй только при evidence_class tested_causal.";
 
     public override string? UsageHint =>
         "«Почему изменилось» — сначала drivers (по region, product_group, agent) и pvm, затем проверь гипотезы: before_after / did (есть дата " +
-        "события и контрольная группа), correlation / regression / lag (связь показателей). Сегменты — abc, abc_xyz, rfm, cohorts, clusters, churn.";
+        "события и контрольная группа), correlation / regression / lag (связь показателей). Сегменты — abc, abc_xyz, rfm, cohorts, clusters, churn. " +
+        "Корреляции, регрессии, тренды, сезонность, переломы, аномалии по рядам — только здесь, а не формулами в calculate: correlation_matrix " +
+        "(все пары с поправкой на множественные сравнения; members=product_group — группы против итога и остальных), partial_correlation, " +
+        "rolling_correlation, regression (model=linear | polynomial | ridge | lasso), decomposition, change_points, smoothing, anomaly_scan.";
 
     public override JsonElement InputSchema { get; } = Schema(
         ("method", new
@@ -52,8 +57,9 @@ public sealed class ComputeTool(ComputeService compute, SemanticEngine engine) :
         ("metrics", new
         {
             type = "array",
-            items = new { type = "string", @enum = SemanticCatalog.Metrics.Select(m => m.Code).ToArray() },
-            description = "Показатели среза (первый — главный / отклик регрессии / ведущий ряд lag).",
+            items = new { type = "string" },
+            description = "Показатели среза (первый — главный / отклик регрессии / ведущий ряд lag): " + string.Join(", ", SemanticCatalog.Metrics.Select(m => m.Code)) +
+                          "; при series — имена рядов.",
         }),
         ("dimension", new { type = "string", @enum = SemanticCatalog.Dimensions.Select(d => d.Code).Where(c => c != "date").ToArray(), description = "Измерение участников: region, agent, product_group, product, market…" }),
         ("grain", new { type = "string", @enum = SemanticCatalog.Grains.ToArray(), description = "Шаг времени рядов: day, week, month…" }),
@@ -79,7 +85,26 @@ public sealed class ComputeTool(ComputeService compute, SemanticEngine engine) :
             },
         }),
         ("segment", new { type = "string", @enum = new[] { "secondary", "factory", "all" }, description = "Продажи: secondary (по умолчанию), factory, all." }),
-        ("params", new { type = "object", description = "Параметры метода: change_date, treatment, control, horizon, k, max_lag, window, lead_days…" }));
+        ("query_id", new { type = "string", description = "Id уже выполненного среза (analytics_query → query_id): расчёт по его показателям, шагу, периоду и фильтрам." }),
+        ("series", new
+        {
+            type = "array",
+            description = "Структурированные ряды вместо среза (до 25 рядов, 5 000 значений): [{name, values: [числа или null], dates: [YYYY-MM-DD] — необязательно}]. " +
+                          "Только для статистических методов; metrics тогда — имена рядов (или пусто — все).",
+            items = new
+            {
+                type = "object",
+                properties = new
+                {
+                    name = new { type = "string" },
+                    values = new { type = "array", items = new { type = new[] { "number", "null" } } },
+                    dates = new { type = "array", items = new { type = "string" } },
+                },
+                required = new[] { "name", "values" },
+            },
+        }),
+        ("params", new { type = "object", description = "Параметры метода: method (pearson | spearman | kendall), members, top, model, degree, lambda, window, period, kind, " +
+                                                        "horizon, change_date, treatment, control, k, max_lag, check_last, lead_days…" }));
 
     protected override async Task<ToolResult> RunAsync(ToolContext context, ToolArgs args, CancellationToken ct)
     {
@@ -131,6 +156,8 @@ public sealed class ComputeTool(ComputeService compute, SemanticEngine engine) :
             ["summary"] = o.Summary ?? o.Error,
             ["evidence_class"] = o.EvidenceClass,
             ["evidence_class_title"] = o.EvidenceClass is null ? null : EvidenceClasses.Title(o.EvidenceClass),
+            ["level"] = LevelOf(o),
+            ["level_title"] = EvidenceLevels.Title(LevelOf(o)),
             ["period"] = new JsonObject { ["from"] = o.From.ToString("yyyy-MM-dd"), ["to"] = o.To.ToString("yyyy-MM-dd") },
             ["compare"] = o.CompareFrom is { } cf ? new JsonObject { ["from"] = cf.ToString("yyyy-MM-dd"), ["to"] = o.CompareTo!.Value.ToString("yyyy-MM-dd") } : null,
             ["algorithm"] = o.Algorithm,
@@ -156,6 +183,11 @@ public sealed class ComputeTool(ComputeService compute, SemanticEngine engine) :
         return new ToolResult(true, payload.ToJsonString(DataTool.Json), null,
             [new DataSource($"Аналитик → расчёт «{o.Title}»", $"{o.From:dd.MM.yyyy} — {o.To:dd.MM.yyyy}", null)]);
     }
+
+    /// <summary>Уровень доказательности итога: связи — CORRELATION, прогнозы — FORECAST, описания и разложения — CALCULATED, без результата — UNVERIFIED.</summary>
+    public static string LevelOf(ComputeOutcome o) => o.Status != "ok" ? EvidenceLevels.Unverified
+        : o.Method is "forecast" or "smoothing" ? EvidenceLevels.Forecast
+        : EvidenceLevels.FromClass(o.EvidenceClass, o.Method is "correlation" or "partial_correlation" or "rolling_correlation" or "correlation_matrix" or "lag" or "regression");
 
     /// <summary>Списки длиннее ShownItems — первые строки; что обрезано — в truncated.</summary>
     private static void Trim(JsonNode? node, string path, List<string> truncated)
@@ -205,6 +237,9 @@ public sealed class ComputeTool(ComputeService compute, SemanticEngine engine) :
         var parameters = args.Element("params") is { ValueKind: JsonValueKind.Object } p
             ? p.EnumerateObject().ToDictionary(x => x.Name, x => x.Value.Clone())
             : null;
+        Guid? queryId = args.Str("query_id") is { Length: > 0 } q
+            ? Guid.TryParse(q, out var g) ? g : throw new FormatException("query_id — не id среза (ожидается GUID из результата analytics_query).")
+            : null;
         return new ComputeRequest
         {
             Method = args.Str("method") ?? throw new FormatException("Нужен метод расчёта: method."),
@@ -213,9 +248,35 @@ public sealed class ComputeTool(ComputeService compute, SemanticEngine engine) :
                 Metrics = metrics, Dimension = args.Str("dimension"), Grain = args.Str("grain"), From = from, To = to,
                 CompareFrom = Date(args.Str("compare_from"), "compare_from"), CompareTo = Date(args.Str("compare_to"), "compare_to"),
                 Filters = AnalyticsQueryTool.Filters(args.Element("filters")), Segment = args.Str("segment"),
+                QueryId = queryId, Series = Series(args.Element("series")),
             },
             Params = parameters,
         };
+    }
+
+    /// <summary>Структурированные ряды из аргументов: имя, значения (числа или null), даты (необязательно).</summary>
+    private static IReadOnlyList<InlineSeries>? Series(JsonElement? element)
+    {
+        if (element is not { ValueKind: JsonValueKind.Array } array)
+        {
+            return null;
+        }
+
+        var list = new List<InlineSeries>();
+        foreach (var s in array.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.Object))
+        {
+            var name = s.TryGetProperty("name", out var n) ? n.ToString() : throw new FormatException("У ряда нет имени (name).");
+            var values = s.TryGetProperty("values", out var v) && v.ValueKind == JsonValueKind.Array
+                ? v.EnumerateArray().Select(x => x.ValueKind == JsonValueKind.Number ? x.GetDouble() : x.ValueKind == JsonValueKind.String
+                    && double.TryParse(x.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : (double?)null).ToList()
+                : throw new FormatException($"У ряда «{name}» нет значений (values).");
+            var dates = s.TryGetProperty("dates", out var dt) && dt.ValueKind == JsonValueKind.Array
+                ? dt.EnumerateArray().Select(x => DateOnly.TryParse(x.GetString(), CultureInfo.InvariantCulture, out var day) ? day : throw new FormatException($"Ряд «{name}»: дата «{x}».")).ToList()
+                : null;
+            list.Add(new InlineSeries(name, values, dates));
+        }
+
+        return list;
     }
 }
 

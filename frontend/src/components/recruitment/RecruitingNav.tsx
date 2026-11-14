@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Ban, Briefcase, CalendarCheck, ChartColumn, Globe, Megaphone, Send, Settings, Users, type LucideIcon } from "lucide-react";
+import { Ban, Briefcase, CalendarCheck, ChartColumn, Globe, Megaphone, ScanSearch, Send, Settings, Users, type LucideIcon } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { recruitmentApi } from "@/lib/recruitment";
 import { navBadge, navCaption, type NavCaption, type NavCounters, type NavKey } from "@/lib/recruitment-view";
@@ -11,8 +11,8 @@ import { navBadge, navCaption, type NavCaption, type NavCounters, type NavKey } 
 /*
  * Кнопки разделов «Подбора» (ТЗ prompt-hr-podbor-vakansii.md, раздел 3; образец — кнопки «Технолога»). Компьютер: ряд кнопок по ширине
  * содержимого — цветной квадрат с иконкой, название и подпись-счётчик; страница уже 1340 px — подписи скрыты, не помещается — ряд
- * прокручивается (без полосы, с затуханием справа), активная кнопка — в зоне видимости. Телефон (уже 768): сетка 3 × 3, значок-счётчик у
- * «Telegram» и «Собеседований». Это ссылки — Cmd/Ctrl+клик открывает новую вкладку. Цвета — токены палитры макета (data-palette).
+ * прокручивается (без полосы, с затуханием справа), активная кнопка — в зоне видимости. Телефон (уже 768): сетка в 3 столбца (лишняя
+ * последняя кнопка — во всю ширину), значок-счётчик у «Telegram» и «Собеседований». Это ссылки — Cmd/Ctrl+клик открывает новую вкладку. Цвета — токены палитры макета (data-palette).
  */
 
 type Tone = "accent" | "violet" | "warn" | "ok" | "bad" | "neutral";
@@ -20,6 +20,7 @@ type Tone = "accent" | "violet" | "warn" | "ok" | "bad" | "neutral";
 const SECTIONS: { key: NavKey; href: string; label: string; mobile?: string; icon: LucideIcon; tone: Tone; manageOnly?: boolean }[] = [
   { key: "vacancies", href: "/hr/recruitment", label: "Вакансии", icon: Briefcase, tone: "accent" },
   { key: "candidates", href: "/hr/recruitment/candidates", label: "Кандидаты", icon: Users, tone: "violet" },
+  { key: "screening", href: "/hr/recruitment/screening", label: "AI-скрининг", mobile: "Скрининг", icon: ScanSearch, tone: "ok" },
   { key: "telegram", href: "/hr/recruitment/telegram", label: "Диалоги Telegram", mobile: "Telegram", icon: Send, tone: "accent" },
   { key: "publications", href: "/hr/recruitment/publications", label: "Публикации", icon: Megaphone, tone: "warn" },
   { key: "interviews", href: "/hr/recruitment/interviews", label: "Собеседования", icon: CalendarCheck, tone: "ok" },
@@ -129,19 +130,22 @@ export function RecruitingNav({ canManage, className }: { canManage: boolean; cl
 
   return (
     <nav aria-label={t("Разделы подбора")} className={className}>
-      {/* Телефон: сетка 3 × 3. */}
+      {/* Телефон: сетка в 3 столбца; одна лишняя кнопка в последнем ряду — во всю ширину, строкой. */}
       <ul className="grid grid-cols-3 gap-2 md:hidden">
-        {sections.map((s) => {
+        {sections.map((s, i) => {
           const on = s.key === current;
           const badge = navBadge(s.key, counters);
           const Icon = s.icon;
+          const wide = sections.length % 3 === 1 && i === sections.length - 1;
           return (
-            <li key={s.key} className="min-w-0">
+            <li key={s.key} className={`min-w-0 ${wide ? "col-span-3" : ""}`}>
               <Link
                 href={s.href}
                 aria-current={on ? "page" : undefined}
                 aria-label={label(s, true)}
-                className={`relative flex h-[78px] flex-col items-center justify-center gap-[7px] rounded-[14px] border px-1.5 outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-page active:translate-y-px ${
+                className={`relative flex rounded-[14px] border px-1.5 outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-page active:translate-y-px ${
+                  wide ? "h-[56px] flex-row items-center justify-center gap-2.5" : "h-[78px] flex-col items-center justify-center gap-[7px]"
+                } ${
                   on ? activeButton : "border-line-strong bg-surface active:bg-muted"
                 }`}
               >

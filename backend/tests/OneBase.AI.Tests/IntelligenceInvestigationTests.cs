@@ -130,6 +130,8 @@ public sealed class IntelligenceDb : IAsyncLifetime
             ["Verifix:WorkerEnabled"] = "false",
             ["Analytik:WorkerEnabled"] = "false",
             ["Analytik:FreshWaitSeconds"] = "0",
+            // Эти тесты проверяют исследование моделью (Phase 1): вопросы-шаблоны (Phase 2) не перехватываются исследованием кодом.
+            ["Analytik:ResearchMode"] = "off",
             ["Ai:AnswerCache:Minutes"] = "0",
         }).Build();
         var services = new ServiceCollection();

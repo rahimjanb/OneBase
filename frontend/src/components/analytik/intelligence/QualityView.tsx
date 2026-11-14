@@ -6,7 +6,19 @@ import { CircleAlert, FlaskConical, Loader2, PlayCircle, TriangleAlert } from "l
 import { useT } from "@/i18n/client";
 import { bff } from "@/lib/bff";
 import { dateTime } from "@/lib/analytik";
-import { duration, evidenceClass, hypothesisStatus, reviewIssueLabel, share, usd, type CountItem, type QualityReport } from "@/lib/intelligence";
+import {
+  duration,
+  evidenceClass,
+  hypothesisStatus,
+  operationStatus,
+  researchKinds,
+  reviewIssueLabel,
+  share,
+  usd,
+  type AnswerExplanation,
+  type CountItem,
+  type QualityReport,
+} from "@/lib/intelligence";
 import { Card, Empty } from "../ui";
 
 function Tile({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "ok" | "warn" | "bad" }) {
@@ -138,6 +150,24 @@ export function QualityView({ report, days }: { report: QualityReport; days: num
         </Card>
       </div>
 
+      {report.research && report.research.total > 0 && (
+        <Card title="Исследования без модели" subtitle={`${t("всего")}: ${report.research.total} · ${t("готово")} ${report.research.completed} · ${t("частично")} ${report.research.partial} · ${t("без данных")} ${report.research.failed} · ${t("отменено")} ${report.research.cancelled}`}>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Tile label="Среднее время" value={duration(report.research.avgDurationMs)} hint={`${t("срезы")} ${duration(report.research.avgSqlMs)} · ${t("расчёты")} ${duration(report.research.avgStatisticsMs)}`} />
+            <Tile label="Операций на исследование" value={String(report.research.avgOperations)} />
+            <Tile label="Срезов из кэша" value={share(report.research.cacheHitRatio)} />
+            <Tile label="Повторов операций" value={String(report.research.retries)} />
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <Counts items={report.research.byKind} label={(k) => researchKinds.find((x) => x.kind === k)?.title ?? k} empty="—" />
+            <Counts items={report.research.operationStatuses} label={(k) => operationStatus[k]?.label ?? k} empty="—" />
+            <Counts items={report.research.failedOperations} empty="Сбоев операций не было" />
+          </div>
+        </Card>
+      )}
+
+      <ExplainCard />
+
       <Card title="Набор сложных вопросов" subtitle="104 сценария по 14 категориям: регрессия — бесплатно, на текущих данных; живой прогон — вопросы модели (платно)">
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" disabled={busy !== null} onClick={() => run("regression")} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3 text-sm font-medium text-white hover:bg-accent-strong disabled:opacity-60">
@@ -188,5 +218,60 @@ export function QualityView({ report, days }: { report: QualityReport; days: num
         )}
       </Card>
     </div>
+  );
+}
+
+/** «Почему AI не ответил»: разбор ответа по id разговора — сбои инструментов, отклонённые срезы, расчёты, операции исследований. */
+function ExplainCard() {
+  const t = useT();
+  const [id, setId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<AnswerExplanation | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const run = async () => {
+    const value = id.trim().split("/").pop() ?? "";
+    if (!value) return;
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await bff<AnswerExplanation>(`analytik/quality/explain?conversationId=${encodeURIComponent(value)}`));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card title="Почему AI ответил так" subtitle="Разбор последнего ответа разговора: сбои инструментов и источников, отклонённые срезы, расчёты, операции исследований">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input value={id} onChange={(e) => setId(e.target.value)} placeholder={t("id разговора или ссылка на чат")}
+          className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 text-sm" />
+        <button type="button" disabled={busy || !id.trim()} onClick={run}
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-line px-3 text-sm font-medium text-ink-2 hover:bg-muted disabled:opacity-50">
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <CircleAlert className="size-4" />}
+          {t("Разобрать")}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
+      {result && (
+        <div className="mt-3 grid gap-2 text-sm">
+          <p className="text-ink-3">{dateTime(result.at)} · {result.question}</p>
+          <p className="font-medium text-ink">{result.verdict}</p>
+          {result.items.length > 0 ? (
+            <ul className="grid gap-1.5">
+              {result.items.map((x, i) => (
+                <li key={i} className="flex flex-col gap-0.5 rounded-lg bg-muted/60 px-3 py-1.5 sm:flex-row sm:gap-2">
+                  <span className="shrink-0 text-xs font-medium text-ink-3">{x.area} · {t(operationStatus[x.status]?.label ?? x.status)}</span>
+                  <span className="text-ink-2">{x.text}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-ink-3">{t("Сбоев не найдено")}</p>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }

@@ -452,7 +452,7 @@ public sealed partial class RecruitmentService
             applications.Select(a => new ApplicationView(a.Id, a.VacancyId, a.Vacancy?.Code ?? "—", a.Vacancy?.Title ?? "—", a.Vacancy?.Status.ToString() ?? "—",
                 a.Stage.ToString(), a.Source, a.RejectReason, a.StageChangedAt,
                 events.Where(e => e.ApplicationId == a.Id).Select(e => new ApplicationEventView(e.FromStage?.ToString(), e.ToStage.ToString(), e.Comment,
-                    e.ActorId is { } actor ? names.GetValueOrDefault(actor) : null, e.At)).ToList(), ScreeningAnswers(a.ScreeningAnswers))).ToList(),
+                    e.ActorId is { } actor ? names.GetValueOrDefault(actor) : null, e.At, e.Mark?.ToString())).ToList(), ScreeningAnswers(a.ScreeningAnswers))).ToList(),
             c.Consents.OrderByDescending(x => x.GivenAt).Select(x => new ConsentView(x.Id, x.Channel, x.TextVersion, x.GivenAt, x.WithdrawnAt,
                 x.RecordedById is { } r ? names.GetValueOrDefault(r) : null)).ToList(),
             duplicates.Select(d =>
@@ -630,6 +630,11 @@ public sealed partial class RecruitmentService
             changes.Add("city");
         }
 
+        if (await FillScreeningProfileAsync(candidate, profile, ct))
+        {
+            changes.Add("profile");
+        }
+
         await db.SaveChangesAsync(ct);
         if (changes.Any(c => c is "phone" or "email") && await DetectDuplicatesAsync(candidate.Id, ct) > 0)
         {
@@ -638,6 +643,59 @@ public sealed partial class RecruitmentService
         }
 
         return changes;
+    }
+
+    /// <summary>
+    /// Сводка для AI-скрининга из разбора резюме (последний разбор — главный; пустое прежнее не затирает): желаемая должность, стаж, последнее
+    /// место работы, зарплатные ожидания, образование — подтверждённые цитатой (стаж — и выведенный по датам); навыки — подтверждённые, заменяют
+    /// прежний список. Возвращает, изменилось ли что-то.
+    /// </summary>
+    private async Task<bool> FillScreeningProfileAsync(Candidate candidate, Documents.ResumeProfile profile, CancellationToken ct)
+    {
+        var changed = false;
+        void Set(string? value, int max, Func<string?> get, Action<string> set)
+        {
+            if (Clean(value, max) is { } v && v != get())
+            {
+                set(v);
+                changed = true;
+            }
+        }
+
+        Set(profile.ProfessionalTitle is { Verified: true } t ? t.Value : null, 200, () => candidate.DesiredPosition, v => candidate.DesiredPosition = v);
+        Set(profile.SalaryExpectation is { Verified: true } sal ? sal.Value : null, 100, () => candidate.SalaryExpectation, v => candidate.SalaryExpectation = v);
+        var job = profile.WorkExperience.FirstOrDefault(w => w.Verified && (w.Position ?? w.Company) is not null);
+        Set(job is null ? null : string.Join(" — ", new[] { job.Position, job.Company }.Where(x => !string.IsNullOrWhiteSpace(x))), 300,
+            () => candidate.LastJob, v => candidate.LastJob = v);
+        var school = profile.Education.FirstOrDefault(e => e.Verified && e.Institution is not null);
+        Set(school is null ? null : string.Join(", ", new[] { school.Institution, school.Degree, school.Year }.Where(x => !string.IsNullOrWhiteSpace(x))), 300,
+            () => candidate.Education, v => candidate.Education = v);
+        if (profile.Quality != "poor" && Screening.ScreeningRules.ExperienceMonths(profile.ExperienceYears?.Value) is { } months && months != candidate.ExperienceMonths)
+        {
+            candidate.ExperienceMonths = months;
+            changed = true;
+        }
+
+        var skills = profile.Skills.Where(s => s.Verified && s.Value is not null)
+            .Select(s => (Name: Clean(s.Value, 100)!, Normalized: Screening.ScreeningRules.NormalizeSkill(s.Value)))
+            .Where(s => s.Name is not null && s.Normalized is not null).DistinctBy(s => s.Normalized).Take(40).ToList();
+        if (skills.Count > 0)
+        {
+            var current = await db.CandidateSkills.Where(s => s.CandidateId == candidate.Id).ToListAsync(ct);
+            if (!current.Select(s => s.Normalized).Order().SequenceEqual(skills.Select(s => s.Normalized!).Order()))
+            {
+                db.CandidateSkills.RemoveRange(current);
+                db.CandidateSkills.AddRange(skills.Select(s => new CandidateSkill { CandidateId = candidate.Id, Name = s.Name, Normalized = s.Normalized! }));
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            candidate.ProfileAt = clock.GetUtcNow();
+        }
+
+        return changed;
     }
 
     /// <summary>Имя-заглушка из Telegram: «@ник», «Telegram 123», «Кандидат из Telegram», одно слово.</summary>
@@ -727,6 +785,7 @@ public sealed partial class RecruitmentService
         application.Stage = to;
         application.StageChangedAt = now;
         application.UpdatedAt = now;
+        application.Mark = ApplicationMark.None; // отметка скрининга (подходит, рекомендован, резерв) — до смены этапа
         application.ClosedAt = RecruitmentRules.IsClosed(to) ? now : null;
         application.RejectReason = to == ApplicationStage.Rejected ? Clean(rejectReason, 1000) : null;
     }
@@ -814,6 +873,12 @@ public sealed partial class RecruitmentService
         if (events.Count > 0)
         {
             await db.CalendarEvents.Where(e => events.Contains(e.Id)).ExecuteDeleteAsync(ct);
+        }
+
+        // Сравнения кандидатов, где он есть, — в них его данные (имя, сильные и слабые стороны).
+        foreach (var key in await db.CandidateApplications.AsNoTracking().Where(a => a.CandidateId == id).Select(a => a.Id.ToString()).ToListAsync(ct))
+        {
+            await db.CandidateComparisons.Where(c => c.ApplicationIds.Contains(key)).ExecuteDeleteAsync(ct);
         }
 
         await db.Candidates.Where(c => c.Id == id).ExecuteDeleteAsync(ct);

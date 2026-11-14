@@ -292,6 +292,7 @@ internal static class TelegramModel
             e.Property(x => x.Reports).HasMaxLength(1000);
             e.Property(x => x.PdfLanguage).HasMaxLength(8);
             e.Property(x => x.Language).HasMaxLength(8);
+            e.Property(x => x.DisabledReason).HasMaxLength(200);
             // Регион и направление — без внешнего ключа: схема sales своя (как у остальных ссылок Telegram на данные продаж).
             e.HasIndex(x => x.RegionId);
             e.HasMany(x => x.Chats).WithOne().HasForeignKey(x => x.SubscriptionId).OnDelete(DeleteBehavior.Cascade);

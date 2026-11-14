@@ -36,3 +36,34 @@ test("решения по разделам и счётчики", () => {
   assert.equal(count([{ key: "rejected", count: 3 }], "rejected"), 3);
   assert.equal(count([], "x"), 0);
 });
+
+test("исследование-шаблон из записи: роль research, операции, выводы, таблицы; исследование модели — null", async () => {
+  const { researchOf } = await import("./intelligence.ts");
+  const detail = {
+    roles: ["research", "correlations"],
+    plan: { kind: "correlations", from: "2026-08-03", to: "2026-10-31" },
+    steps: [{ id: "c_sales", status: "SUCCESS", title: "Матрица", dependsOn: [], attempts: 1, fromCache: false, elapsedMs: 120 }],
+    hypotheses: { findings: [{ section: "summary", level: "CORRELATION", text: "Найдено" }], hypotheses: [], data: { tables: [], matrices: [{ id: "c_sales", title: "M", titles: ["a", "b"], r: [[1, 0.8], [0.8, 1]], q: [[null, 0.01], [0.01, null]], n: 90 }] }, timings: { cacheHits: 2 } },
+    limitations: ["Корреляция — не причина."],
+  };
+  const r = researchOf(detail);
+  assert.equal(r.kind, "correlations");
+  assert.equal(r.operations.length, 1);
+  assert.equal(r.findings[0].level, "CORRELATION");
+  assert.equal(r.matrices[0].n, 90);
+  assert.equal(r.timings.cacheHits, 2);
+  assert.equal(researchOf({ roles: ["planner"], plan: null, steps: null, hypotheses: [], limitations: null }), null);
+});
+
+test("ячейка матрицы: знак — цвет, значимость — насыщенность; числа таблицы", async () => {
+  const { matrixCell, cellText } = await import("./intelligence.ts");
+  assert.equal(matrixCell(null, null).background, "transparent");
+  assert.ok(matrixCell(0.9, 0.001).strong);
+  assert.ok(matrixCell(0.9, 0.001).background.includes("--color-accent"));
+  assert.ok(matrixCell(-0.5, 0.2).background.includes("--color-bad"));
+  assert.equal(matrixCell(-0.5, 0.2).strong, false);
+  assert.equal(cellText(1234567.4), "1 234 567");
+  assert.equal(cellText(12.345, "%"), "12,3 %");
+  assert.equal(cellText(0.4567), "0,457");
+  assert.equal(cellText(null), "—");
+});

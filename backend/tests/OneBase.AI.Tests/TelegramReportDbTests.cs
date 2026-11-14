@@ -22,7 +22,7 @@ namespace OneBase.AI.Tests;
 /// получатель той же области дубля не дают); напоминание 17:00 ТП с заказами — «пропущено»; запуск, пропущенный после простоя, — «пропущен»;
 /// тест — только в выбранный чат; «неизвестно, дошёл ли» не повторяется само; повтор неудачных; история с фильтрами.
 /// </summary>
-public class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
+public partial class TelegramReportDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
 {
     private sealed record Seeded(Guid AccountId, Guid AdminId, Guid RegionId, Guid GroupChatId, Guid PrivateChatId, Guid AgentChatId, Guid OtherChatId, DateOnly Today);
 

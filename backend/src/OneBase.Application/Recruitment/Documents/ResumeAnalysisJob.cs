@@ -44,11 +44,17 @@ public sealed class ResumeAnalysisJob(
         var settings = await db.RecruitmentSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Id == 1, ct) ?? new RecruitmentSettings();
         var quality = ResumeProfiles.Quality(resume.Text, resume.TextByAi);
         var analyzer = analyzers.FirstOrDefault();
+        // Резюме, полученное через API HH, — модели только с разрешения (соглашение разработчика HH, п. 4.6: данные сервиса третьим сервисам не передаются).
+        var hhBlocked = resume.Source == "hh" && !await db.HhConnections.AsNoTracking().Where(c => c.Id == 1).Select(c => c.AiOnHhData).FirstOrDefaultAsync(ct);
         ResumeProfile profile;
-        if (!settings.AnalyzeResumes || analyzer is null || resume.DocumentType is "certificate" or "other")
+        if (!settings.AnalyzeResumes || analyzer is null || resume.DocumentType is "certificate" or "other" || hhBlocked)
         {
             profile = ResumeProfiles.ContactsOnly(resume.Text, quality);
             resume.AnalysisStatus = DocumentStepStatus.Skipped;
+            if (hhBlocked)
+            {
+                resume.ProcessingError = "Резюме из API HH не передаётся AI без разрешения («HH.uz → данные HH для AI»).";
+            }
         }
         else
         {
@@ -131,6 +137,9 @@ public sealed class CandidateScoringJob(IEnumerable<ICandidateScorer> scorers, I
 {
     public string Queue => RecruitmentQueues.Scoring;
 
+    /// <summary>Анализ из AI-скрининга (HR поставил в очередь): только анализ, без решения о приглашении кандидату.</summary>
+    public const string NoInvite = "{\"invite\":false}";
+
     public async Task RunAsync(RecruitmentJob job, CancellationToken ct)
     {
         if (scorers.FirstOrDefault() is not { } scorer)
@@ -142,9 +151,19 @@ public sealed class CandidateScoringJob(IEnumerable<ICandidateScorer> scorers, I
         {
             await scorer.ScoreAsync(new RecruitmentContext(Guid.Empty, true, true, []), job.RelatedId, ct);
         }
+        catch (Field.FieldValidationException ex) when (job.Payload == NoInvite)
+        {
+            // Анализ, который HR поставил в очередь: причина — в задании (в списке скрининга — «Анализ не выполнен»), без повторов.
+            throw new RecruitmentJobFailure(ex.Message);
+        }
         catch (Field.FieldValidationException)
         {
             return; // отклик закрыт или нет текста — оценивать нечего
+        }
+
+        if (job.Payload == NoInvite)
+        {
+            return;
         }
 
         foreach (var inviter in inviters)

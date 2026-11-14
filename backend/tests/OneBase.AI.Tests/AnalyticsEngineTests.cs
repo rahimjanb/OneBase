@@ -15,9 +15,11 @@ public sealed class AnalyticsEngineTests
     [Fact]
     public void Catalog_is_consistent_every_calculated_metric_has_sources_and_every_dimension_a_fact()
     {
-        var facts = new[] { SemanticCatalog.Sales, SemanticCatalog.Plan, SemanticCatalog.Payments, SemanticCatalog.Stock };
+        var facts = new[] { SemanticCatalog.Sales, SemanticCatalog.Plan, SemanticCatalog.Payments, SemanticCatalog.Stock, SemanticCatalog.Visits };
         foreach (var m in SemanticCatalog.Metrics)
         {
+            // У каждого показателя движка есть профиль паспорта (смысл, таблица, агрегация) — без «общего» запасного профиля.
+            Assert.True(MetricPassports.Profiles.ContainsKey(m.Code), $"Нет профиля паспорта у {m.Code}");
             Assert.Contains(m.Fact, facts);
             Assert.False(string.IsNullOrWhiteSpace(m.Formula));
             foreach (var r in m.Requires ?? [])

@@ -70,8 +70,20 @@ public sealed record ReportRecipientView(
     string? Problem,
     IReadOnlyList<ReportDeliveryBrief> Last,
     string? PdfLanguage,
-    string? Language = null);
+    string? Language = null,
+    DateTimeOffset? DisabledAt = null,
+    string? DisabledReason = null,
+    DateOnly? DisabledUntil = null,
+    string? Supervisor = null,
+    DateTimeOffset? LastSentAt = null,
+    int FailedWeek = 0,
+    Guid? UserId = null);
 
+/// <summary>
+/// Получатель для сохранения. РМ — UserId (пользователь с ролью «РМ», отчёт по регионам из его профиля) или DirectionId (направление; оба
+/// пусто — вся страна). DisabledReason и DisabledUntil — только у выключенного (у включённого очищаются): причина и срок — напоминание, сам
+/// получатель после срока не включается.
+/// </summary>
 public sealed record ReportRecipientInput(
     string? Role,
     string? Title,
@@ -83,7 +95,15 @@ public sealed record ReportRecipientInput(
     IReadOnlyList<string>? Reports,
     bool Enabled,
     string? PdfLanguage = null,
-    string? Language = null);
+    string? Language = null,
+    string? DisabledReason = null,
+    DateOnly? DisabledUntil = null,
+    Guid? UserId = null);
+
+/// <summary>Массовое действие над получателями («Включить отчёт», «Привязать чат», «Отключить», отмена) — все строки одним сохранением.</summary>
+public sealed record ReportRecipientsBulkInput(IReadOnlyList<ReportRecipientBulkItem>? Items);
+
+public sealed record ReportRecipientBulkItem(Guid Id, ReportRecipientInput Input);
 
 public sealed record ReportPersonOption(long Id, string Name);
 
@@ -93,11 +113,19 @@ public sealed record ReportRegionOption(Guid Id, string Name, Guid? DirectionId,
 
 public sealed record ReportDirectionOption(Guid Id, string Name, string? Manager, int Regions);
 
-/// <summary>Чат аккаунта для выбора получателя; LinkedUser — пользователь OneBase, чей Telegram подтверждён кодом и чей это личный чат.</summary>
-public sealed record ReportChatOption(Guid Id, string Title, string Type, string? Username, long PeerId, bool CanSend, string? Reason, string? LinkedUser);
+/// <summary>Пользователь OneBase с ролью «РМ»: регионы из профиля (охват «Продаж») и сколько у них ТП в этом месяце.</summary>
+public sealed record ReportRmUserOption(Guid Id, string Name, IReadOnlyList<Guid> RegionIds, int Agents);
 
-/// <summary>Отправки за 7 дней — для плитки мониторинга.</summary>
-public sealed record ReportMetrics(int Sent, int Failed, int Skipped, int Unknown, int Pending);
+/// <summary>
+/// Чат аккаунта для выбора получателя; LinkedUser (LinkedUserId) — пользователь OneBase, чей Telegram подтверждён кодом и чей это личный чат.
+/// </summary>
+public sealed record ReportChatOption(Guid Id, string Title, string Type, string? Username, long PeerId, bool CanSend, string? Reason, string? LinkedUser,
+    Guid? LinkedUserId = null);
+
+/// <summary>Отправки за 7 дней — для плитки мониторинга; SkippedBy — пропуски по причинам (ReportSkipReasons), больше — первыми.</summary>
+public sealed record ReportMetrics(int Sent, int Failed, int Skipped, int Unknown, int Pending, IReadOnlyList<ReportSkipCount>? SkippedBy = null);
+
+public sealed record ReportSkipCount(string Key, int Count);
 
 public sealed record ReportOverview(
     ReportSettingsView Settings,
@@ -111,7 +139,8 @@ public sealed record ReportOverview(
     bool TelegramEnabled,
     ReportMetrics Metrics,
     WeeklyPdfSettingsView WeeklyPdf,
-    ReportFreshness Freshness);
+    ReportFreshness Freshness,
+    IReadOnlyList<ReportRmUserOption>? RmUsers = null);
 
 /// <summary>Формулы целей недели и пороги еженедельного PDF (доли — 0,3 = 30%).</summary>
 public sealed record WeeklyPdfFormulas(decimal GoalAkbFactor, decimal GoalPromoFactor, int GoalPromoMin, decimal ReturnShare15To30, decimal ReturnShare30Plus,
@@ -140,7 +169,8 @@ public sealed record ReportPreviewInput(
     Guid? RecipientId,
     DateOnly? Date,
     string? Time,
-    string? Language);
+    string? Language,
+    Guid? UserId = null);
 
 public sealed record ReportPreview(IReadOnlyList<string> Pages, string Title, string Scope, string Caption, string Summary, IReadOnlyList<string> Notes,
     IReadOnlyList<string> Problems, long Bytes, bool Applies, string? SkipReason, bool Incomplete);
@@ -183,8 +213,8 @@ public sealed record ReportDeliveryView(
 /// <summary>PDF отправки в хранилище: номер (для скачивания), вид (team — страницы области, cards — карточки ТП), имя, страниц, байт.</summary>
 public sealed record WeeklyPdfFileView(int Index, string Kind, string Name, int Pages, long Bytes);
 
-/// <summary>Тест еженедельного PDF в выбранный чат: роль (rop, rm, sv, tp), область, любой день недели, язык.</summary>
-public sealed record WeeklyPdfTestInput(string? Role, Guid? DirectionId, Guid? RegionId, long? AgentId, DateOnly? Date, string? Language, Guid ChatId);
+/// <summary>Тест еженедельного PDF в выбранный чат: роль (rop, rm, sv, tp), область (у rm — пользователь или направление), любой день недели, язык.</summary>
+public sealed record WeeklyPdfTestInput(string? Role, Guid? DirectionId, Guid? RegionId, long? AgentId, DateOnly? Date, string? Language, Guid ChatId, Guid? UserId = null);
 
 public sealed record ReportRunView(Guid Id, string Job, string Title, DateOnly Period, DateTimeOffset ScheduledAt, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt,
     string Status, int Planned, int Sent, int Failed, int Skipped, string? Error, DateTimeOffset? DataAsOf);

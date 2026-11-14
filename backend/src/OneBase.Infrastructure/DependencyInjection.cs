@@ -265,6 +265,7 @@ public static class DependencyInjection
         services.AddSingleton<OneBase.Application.Recruitment.LanguageDetectionService>();
         services.AddSingleton<OneBase.Application.Recruitment.Documents.IResumeTextReader, Recruitment.Documents.ResumeTextReader>();
         services.AddScoped<OneBase.Application.Recruitment.RecruitmentService>();
+        services.AddScoped<OneBase.Application.Recruitment.Screening.ScreeningService>();
         // Документы кандидатов и фоновые очереди подбора (hr.resume.*, hr.candidate.scoring, hr.interview.*).
         services.AddScoped<OneBase.Application.Recruitment.Documents.ResumeDocumentProcessor>();
         services.AddScoped<OneBase.Application.Recruitment.Jobs.RecruitmentJobQueue>();
@@ -319,6 +320,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Telegram.Routing.ITelegramDepartmentHandler, OneBase.Application.Agents.AssistantTelegramHandler>();
         services.AddScoped<OneBase.Application.Telegram.Outbox.ITelegramOutboxObserver, OneBase.Application.Agents.DialogAgentOutboxObserver>();
         services.AddHttpClient<OneBase.Application.Recruitment.Hh.IHhApi, Recruitment.HhClient>(c => c.Timeout = TimeSpan.FromSeconds(60));
+        services.AddScoped<Recruitment.HhQuotaGuard>();
         services.AddScoped<Recruitment.HhService>();
         if (isolation.AllowOutbound<Recruitment.HhSyncWorker>("HH.uz: отклики и резюме"))
         {

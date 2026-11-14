@@ -150,11 +150,41 @@ public class Candidate : Entity
 
     public Guid CreatedById { get; set; }
 
+    // ---------- Сводка для AI-скрининга: из последнего разобранного резюме (обновляется при каждом разборе; прежнее не затирается пустым) ----------
+
+    /// <summary>Желаемая должность (из резюме).</summary>
+    public string? DesiredPosition { get; set; }
+
+    /// <summary>Общий стаж, месяцев (сказано в резюме или выведено по датам мест работы).</summary>
+    public int? ExperienceMonths { get; set; }
+
+    /// <summary>Последнее место работы: «должность — компания».</summary>
+    public string? LastJob { get; set; }
+
+    /// <summary>Зарплатные ожидания, как в резюме.</summary>
+    public string? SalaryExpectation { get; set; }
+
+    /// <summary>Образование, кратко: «учебное заведение, степень, год».</summary>
+    public string? Education { get; set; }
+
+    /// <summary>Когда сводка заполнена из резюме.</summary>
+    public DateTimeOffset? ProfileAt { get; set; }
+
     public List<CandidateContact> Contacts { get; set; } = [];
     public List<CandidateSource> Sources { get; set; } = [];
     public List<CandidateResume> Resumes { get; set; } = [];
     public List<CandidateApplication> Applications { get; set; } = [];
     public List<CandidateConsent> Consents { get; set; } = [];
+    public List<CandidateSkill> Skills { get; set; } = [];
+}
+
+/// <summary>Профессиональный навык кандидата из разобранного резюме (для фильтра «навыки»); Normalized — нижний регистр без лишних пробелов.</summary>
+public class CandidateSkill
+{
+    public long Id { get; set; }
+    public Guid CandidateId { get; set; }
+    public required string Name { get; set; }
+    public required string Normalized { get; set; }
 }
 
 public enum CandidateContactKind
@@ -316,6 +346,21 @@ public class CandidateApplication : Entity
 
     /// <summary>Ответы кандидата на вопросы отбора (JSON-объект «вопрос → ответ»), которые узнал AI-рекрутер в переписке.</summary>
     public string? ScreeningAnswers { get; set; }
+
+    /// <summary>
+    /// Отметка HR в AI-скрининге: подходит, рекомендован, в резерве. Это решение человека (AI её не ставит); любая смена этапа её снимает —
+    /// показывается последнее действие. Статус скрининга — из этапа и отметки (<c>ScreeningRules.Status</c>).
+    /// </summary>
+    public ApplicationMark Mark { get; set; } = ApplicationMark.None;
+}
+
+/// <summary>Отметка HR в AI-скрининге.</summary>
+public enum ApplicationMark
+{
+    None,
+    Suitable,
+    Recommended,
+    Reserve,
 }
 
 /// <summary>Переход этапа отклика: с какого на какой, кто и почему.</summary>
@@ -325,6 +370,10 @@ public class ApplicationEvent
     public Guid ApplicationId { get; set; }
     public ApplicationStage? FromStage { get; set; }
     public ApplicationStage ToStage { get; set; }
+
+    /// <summary>Отметка HR, поставленная этим событием (подходит, рекомендован, в резерве, снята — None); null — событие этапа.</summary>
+    public ApplicationMark? Mark { get; set; }
+
     public string? Comment { get; set; }
     public Guid? ActorId { get; set; }
     public DateTimeOffset At { get; set; }
@@ -531,6 +580,53 @@ public class HhConnection
     public bool? LastSyncOk { get; set; }
     public string? LastSyncMessage { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Предохранитель расхода: HH ответил, что операция требует платной услуги или лимит исчерпан (api_access_payment, view_limit_exceeded…).
+    /// Пока стоит — автоматическая синхронизация не ходит в HH; снимает HR («Проверить снова»).
+    /// </summary>
+    public DateTimeOffset? GuardTrippedAt { get; set; }
+
+    public string? GuardReason { get; set; }
+
+    /// <summary>
+    /// Резюме, полученные через API HH, можно передавать AI (разбор и оценка). По умолчанию — нет: соглашение разработчика HH (п. 4.6) запрещает
+    /// передавать полученные через сервис данные третьим сервисам; включает HR после подтверждения юриста. Резюме, загруженные HR файлом, — не про это.
+    /// </summary>
+    public bool AiOnHhData { get; set; }
+}
+
+/// <summary>
+/// Журнал запросов к API HH (HeadHunterApiAuditLogs): каждая попытка — выполнена или заблокирована Quota Guard до отправки, операция и её
+/// стоимость по каталогу, кто запустил (auto — синхронизация, manual — HR), ответ HH. Тело запросов и ответов не хранится (персональные данные).
+/// </summary>
+public class HhApiCall
+{
+    public long Id { get; set; }
+    public DateTimeOffset At { get; set; }
+
+    /// <summary>Операция каталога (<c>HhOperations</c>): token, me, vacancies.active, negotiations.list, resume.view…</summary>
+    public required string Operation { get; set; }
+
+    public required string Method { get; set; }
+
+    /// <summary>Путь без параметров запроса (ID в пути — вакансии, отклика, резюме HH).</summary>
+    public required string Path { get; set; }
+
+    /// <summary>free, paid, unknown — по каталогу операций.</summary>
+    public required string Cost { get; set; }
+
+    /// <summary>auto, manual.</summary>
+    public required string Trigger { get; set; }
+
+    /// <summary>false — заблокирован до отправки (в HH не ушёл).</summary>
+    public bool Allowed { get; set; }
+
+    public string? Reason { get; set; }
+    public int? Status { get; set; }
+    public string? ErrorType { get; set; }
+    public int DurationMs { get; set; }
+    public Guid? ActorId { get; set; }
 }
 
 /// <summary>Отклик HH на вакансию: связь с откликом OneBase, состояние на HH, доступные действия (их URL отдаёт HH), резюме получено ли.</summary>
@@ -556,8 +652,10 @@ public class HhNegotiation : Entity
 // ---------- AI-рекрутер и оценка (этап 5) ----------
 
 /// <summary>
-/// Оценка кандидата на вакансию AI: по каждому критерию — балл 0–10, объяснение и цитата из резюме или переписки (цитата проверяется на
-/// сервере: нет в тексте — «без подтверждения»); итог 0–100. Совет HR, а не решение.
+/// Анализ кандидата под вакансию AI (одна строка — одна версия анализа; история рейтинга — строки по времени). Совет HR, а не решение.
+/// Version 1 — прежняя оценка: критерии вакансии, балл 0–10, итог — среднее × 10. Version 2 — AI-скрининг: шесть критериев с весами
+/// (опыт 25, навыки 25, требования 20, достижения 15, образование 10, преимущества 5), у каждого — баллы, объяснение и цитаты из резюме
+/// (проверяются на сервере: без подтверждённой цитаты балл не выше половины), итог — сумма баллов, считается на сервере.
 /// </summary>
 public class CandidateScore : Entity
 {
@@ -566,12 +664,42 @@ public class CandidateScore : Entity
     public int Overall { get; set; }
     public required string Summary { get; set; }
 
-    /// <summary>JSON: [{ name, score, explanation, evidence, verified }].</summary>
+    /// <summary>JSON: [{ name, score (0–10), explanation, evidence, verified }]; в версии 2 ещё code, points, max, status, quotes, capped.</summary>
     public required string CriteriaJson { get; set; }
 
     public string? Risks { get; set; }
     public string? Model { get; set; }
     public Guid? RequestedById { get; set; }
+
+    /// <summary>Версия схемы анализа: 1 — прежняя оценка, 2 — AI-скрининг.</summary>
+    public int Version { get; set; } = 1;
+
+    /// <summary>
+    /// Версия 2 (JSON): почему подходит, сильные и слабые стороны, недостающие требования, рекомендация AI, вопросы для собеседования,
+    /// покрытие фактами, какое резюме анализировалось.
+    /// </summary>
+    public string? DetailsJson { get; set; }
+
+    /// <summary>Уверенность модели 0–1 — отдельно от оценки соответствия, на итог не влияет.</summary>
+    public decimal? Confidence { get; set; }
+}
+
+/// <summary>
+/// Сравнение до пяти кандидатов одной вакансии: таблица строится на сервере из их анализов (факты, без вызова AI), AI даёт аргументированную
+/// рекомендацию. Хранится, чтобы HR вернулся к нему; удаляется вместе с вакансией не будет — только по сроку хранения кандидатов.
+/// </summary>
+public class CandidateComparison : Entity
+{
+    public Guid VacancyId { get; set; }
+
+    /// <summary>JSON-массив ID откликов в порядке выбора.</summary>
+    public required string ApplicationIds { get; set; }
+
+    /// <summary>JSON: таблица и рекомендация (<c>ComparisonView</c>).</summary>
+    public required string ResultJson { get; set; }
+
+    public string? Model { get; set; }
+    public Guid? CreatedById { get; set; }
 }
 
 // ---------- Собеседования (этап 6) ----------

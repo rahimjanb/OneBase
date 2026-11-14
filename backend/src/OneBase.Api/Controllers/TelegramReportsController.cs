@@ -85,6 +85,11 @@ public sealed class TelegramReportsController(TelegramReportService reports, Inc
     public Task<IActionResult> UpdateRecipient(Guid id, ReportRecipientInput input, CancellationToken ct) =>
         Run(async () => Ok(await reports.SaveRecipientAsync(id, input, CanUseSales, User.GetUserId(), ct)));
 
+    /// <summary>Массовое действие над получателями (включить отчёт, время, чат, отключить, отмена): все строки — одним сохранением.</summary>
+    [HttpPut("recipients")]
+    public Task<IActionResult> UpdateRecipients(ReportRecipientsBulkInput input, CancellationToken ct) =>
+        Run(async () => Ok(await reports.SaveRecipientsAsync(input, CanUseSales, User.GetUserId(), ct)));
+
     [HttpDelete("recipients/{id:guid}")]
     public Task<IActionResult> DeleteRecipient(Guid id, CancellationToken ct) =>
         Run(async () =>
@@ -144,7 +149,7 @@ public sealed class TelegramReportsController(TelegramReportService reports, Inc
         });
 
     /// <summary>
-    /// Еженедельный отчёт — данные без PDF и без отправки (проверка цифр): роль (rm без направления — РОП, rm, sv, tp), область, по какой
+    /// Еженедельный отчёт — данные без PDF и без отправки (проверка цифр): роль (rm без направления и пользователя — РОП, rm, sv, tp), область, по какой
     /// день (пусто — по отчётный день «Продаж»). Нужно право sales.read; деньги КПУ и DSO — только с finance.read.
     /// </summary>
     [HttpPost("weekly/data")]
@@ -157,7 +162,8 @@ public sealed class TelegramReportsController(TelegramReportService reports, Inc
             }
 
             var role = input.Role ?? OneBase.Domain.Telegram.TelegramReportRoles.Sv;
-            var scope = new OneBase.Application.Telegram.Reports.ReportScope(role, DirectionId: input.DirectionId, RegionId: input.RegionId, AgentId: input.AgentId);
+            var scope = new OneBase.Application.Telegram.Reports.ReportScope(role, DirectionId: input.DirectionId, RegionId: input.RegionId, AgentId: input.AgentId,
+                UserId: role == OneBase.Domain.Telegram.TelegramReportRoles.Rm ? input.UserId : null);
             return Ok(await builder.BuildAsync(scope, input.Date, User.FindAll(OneBaseClaims.Permission).Any(c => c.Value == Permissions.FinanceRead), ct));
         });
 
@@ -183,7 +189,8 @@ public sealed class TelegramReportsController(TelegramReportService reports, Inc
             }
 
             var lang = OneBase.Application.Abstractions.UiLanguage.Normalize(language) ?? "ru";
-            var scope = new OneBase.Application.Telegram.Reports.ReportScope(role, DirectionId: input.DirectionId, RegionId: input.RegionId, AgentId: input.AgentId);
+            var scope = new OneBase.Application.Telegram.Reports.ReportScope(role, DirectionId: input.DirectionId, RegionId: input.RegionId, AgentId: input.AgentId,
+                UserId: role == OneBase.Domain.Telegram.TelegramReportRoles.Rm ? input.UserId : null);
             var report = await builder.BuildAsync(scope, input.Date, User.FindAll(OneBaseClaims.Permission).Any(c => c.Value == Permissions.FinanceRead), ct);
             var cards = role == OneBase.Domain.Telegram.TelegramReportRoles.Tp || kind == OneBase.Application.Telegram.Weekly.WeeklyPdfKinds.Cards;
             var fileName = string.Concat($"weekly-{(cards ? "cards" : report.Role)}-{report.ScopeName}-{report.PeriodStart:yyyy-MM-dd}.pdf"
@@ -281,5 +288,5 @@ public sealed class TelegramReportsController(TelegramReportService reports, Inc
     }
 }
 
-/// <summary>Запрос данных еженедельного отчёта: роль (rm/sv/tp), направление (rm; пусто — вся страна), регион (sv), ТП (tp), по какой день.</summary>
-public sealed record WeeklyDataInput(string? Role, Guid? DirectionId, Guid? RegionId, long? AgentId, DateOnly? Date);
+/// <summary>Запрос данных еженедельного отчёта: роль (rm/sv/tp), пользователь-РМ или направление (rm; оба пусто — вся страна), регион (sv), ТП (tp), по какой день.</summary>
+public sealed record WeeklyDataInput(string? Role, Guid? DirectionId, Guid? RegionId, long? AgentId, DateOnly? Date, Guid? UserId = null);

@@ -218,7 +218,8 @@ public sealed record ResumeView(Guid Id, string FileName, long SizeBytes, string
     string AnalysisStatus = "Skipped", string? DetectedType = null, string? ContentType = null, int? PageCount = null, string? ProcessingError = null,
     string? Summary = null, Documents.ResumeProfile? Profile = null, string? VacancyCode = null, bool CanPreview = false, DateTimeOffset? ProcessedAt = null);
 
-public sealed record ApplicationEventView(string? From, string To, string? Comment, string? Actor, DateTimeOffset At);
+/// <summary>Событие отклика: смена этапа или отметка HR в AI-скрининге (Mark: Suitable, Recommended, Reserve, None — снята).</summary>
+public sealed record ApplicationEventView(string? From, string To, string? Comment, string? Actor, DateTimeOffset At, string? Mark = null);
 
 public sealed record ApplicationView(
     Guid Id,

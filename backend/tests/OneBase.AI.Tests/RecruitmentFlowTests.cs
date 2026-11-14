@@ -37,6 +37,9 @@ public sealed class FakeHh : HttpMessageHandler
     public int TokenCalls;
     public string? LastGrant;
 
+    /// <summary>HH отвечает на список откликов «нужна оплата» (api_access_payment).</summary>
+    public bool PaymentRequired;
+
     private static HttpResponseMessage Json(object body, HttpStatusCode code = HttpStatusCode.OK) =>
         new(code) { Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json") };
 
@@ -61,6 +64,8 @@ public sealed class FakeHh : HttpMessageHandler
                 return Json(new { id = "m1", employer = new { id = "777", name = "Тестовый работодатель" } });
             case ("GET", "/employers/777/vacancies/active"):
                 return Json(new { items = new[] { new { id = "9001", name = "Водитель-экспедитор", area = new { name = "Ташкент" } } }, page = 0, pages = 1 });
+            case ("GET", "/negotiations/response") when PaymentRequired:
+                return Json(new { errors = new[] { new { type = "api_access_payment", value = "action_must_be_payed" } } }, HttpStatusCode.Forbidden);
             case ("GET", "/negotiations/response"):
                 return Json(new
                 {
@@ -69,7 +74,12 @@ public sealed class FakeHh : HttpMessageHandler
                         new
                         {
                             id = "n1", state = new { id = "response" }, updated_at = "2026-11-08T10:00:00+0500",
-                            resume = new { id = "r1", first_name = "Иван", last_name = "Иванов", title = "Водитель", url = "https://api.hh.ru/resumes/r1?topic_id=n1" },
+                            resume = new
+                            {
+                                id = "r1", first_name = "Иван", last_name = "Иванов", title = "Водитель", url = "https://api.hh.ru/resumes/r1?topic_id=n1",
+                                alternate_url = "https://hh.uz/resume/r1", area = new { name = "Ташкент" }, salary = new { amount = 7000000, currency = "UZS" },
+                                total_experience = new { months = 70 }, age = 33, gender = new { id = "male" },
+                            },
                             actions = new[] { new { id = "interview", name = "Интервью", method = "PUT", url = "https://api.hh.ru/negotiations/interview/n1" } },
                         },
                         new
@@ -121,6 +131,7 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         await db.RecruitmentExceptions.ExecuteDeleteAsync();
         await db.HhNegotiations.ExecuteDeleteAsync();
         await db.HhConnections.ExecuteDeleteAsync();
+        await db.HhApiCalls.ExecuteDeleteAsync();
         await db.Candidates.ExecuteDeleteAsync();
         await db.Vacancies.ExecuteDeleteAsync();
         await db.RecruitmentSettings.ExecuteDeleteAsync();
@@ -156,14 +167,16 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
     {
         var type = typeof(TelegramAccountService).Assembly.GetType("OneBase.Infrastructure.Recruitment.HhClient")!;
         var api = (IHhApi)Activator.CreateInstance(type, new HttpClient(fake))!;
-        return new HhService(sp.GetRequiredService<OneBaseDbContext>(), api, sp.GetRequiredService<IDataProtectionProvider>(), sp.GetRequiredService<RecruitmentService>(),
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        return new HhService(db, api, new HhQuotaGuard(db, fixture.Clock, NullLogger<HhQuotaGuard>.Instance), sp.GetRequiredService<IDataProtectionProvider>(),
+            sp.GetRequiredService<RecruitmentService>(),
             sp.GetRequiredService<RecruitmentExceptions>(), sp.GetRequiredService<IAuditLogger>(), fixture.Clock, NullLogger<HhService>.Instance);
     }
 
     // ---------- HH.uz ----------
 
     [PostgresFact]
-    public async Task Hh_connects_by_state_syncs_responses_once_and_only_runs_actions_hh_offered()
+    public async Task Hh_connects_by_state_syncs_free_responses_without_spending_limits_and_guard_blocks_paid_operations()
     {
         var (scope, db, hr, sales) = await StartAsync();
         using var _ = scope;
@@ -186,34 +199,45 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         var hhVacancy = Assert.Single(await hh.VacanciesAsync(hr, default));
         await hh.LinkAsync(hr, vacancyId, hhVacancy.HhVacancyId, default);
 
-        // Синхронизация: кандидат с подтверждённым e-mail и резюме; платное резюме — исключение HR, остальное идёт.
+        // Синхронизация: кандидаты — по бесплатному списку откликов (имя, должность, город, зарплата, стаж, ссылка на hh.uz); резюме через API не
+        // загружается — просмотр расходует лимит HH: в журнале Quota Guard — заблокировано, запроса к /resumes нет. Пол и возраст не берутся.
         var result = await hh.SyncAsync(null, default);
-        Assert.Equal((2, 1), (result.Responses, result.Errors));
-        await fixture.Services.GetRequiredService<OneBase.Application.Recruitment.Jobs.RecruitmentJobRunner>().DrainAsync(default); // текст резюме — в фоне
-        var ivan = await db.Candidates.AsNoTracking().Include(c => c.Contacts).Include(c => c.Resumes).Include(c => c.Applications).SingleAsync(c => c.FullName == "Иванов Иван");
-        Assert.Contains(ivan.Contacts, c => c.Kind == CandidateContactKind.Email && c.Value == "ivan.hh@example.com" && c.Verified);
-        Assert.Contains(ivan.Contacts, c => c.Kind == CandidateContactKind.Phone && c.Value == "+998901112233" && !c.Verified);
-        Assert.Contains("Водитель категории C", Assert.Single(ivan.Resumes).Text);
+        Assert.Equal((2, 0), (result.Responses, result.Errors));
+        await fixture.Services.GetRequiredService<OneBase.Application.Recruitment.Jobs.RecruitmentJobRunner>().DrainAsync(default);
+        var ivan = await db.Candidates.AsNoTracking().Include(c => c.Contacts).Include(c => c.Resumes).Include(c => c.Applications).Include(c => c.Sources)
+            .SingleAsync(c => c.FullName == "Иванов Иван");
+        Assert.Empty(ivan.Resumes);
+        Assert.Empty(ivan.Contacts);
+        Assert.Equal(("Водитель", "Ташкент", "7000000 UZS", 70), (ivan.DesiredPosition, ivan.City, ivan.SalaryExpectation, ivan.ExperienceMonths));
+        Assert.Equal("https://hh.uz/resume/r1", Assert.Single(ivan.Sources).Note);
+        Assert.DoesNotContain("33", ivan.Notes ?? string.Empty);
         Assert.Equal(vacancyId, Assert.Single(ivan.Applications).VacancyId);
-        Assert.Contains(await db.RecruitmentExceptions.AsNoTracking().ToListAsync(), e => e.Kind == "hh" && e.Message.Contains("платный доступ"));
+        Assert.DoesNotContain(fake.Requests, r => r.Url.Contains("/resumes/", StringComparison.Ordinal));
+        var calls = await db.HhApiCalls.AsNoTracking().ToListAsync();
+        Assert.Equal(2, calls.Count(c => c.Operation == HhOperations.ResumeView && !c.Allowed && c.Cost == HhOperations.Limit));
+        Assert.All(calls.Where(c => c.Allowed), c => Assert.Equal(HhOperations.Free, c.Cost));
+        Assert.Contains("лимит просмотров", (await db.HhNegotiations.AsNoTracking().FirstAsync(n => n.NegotiationId == "n1")).LastError);
 
-        // Повтор — без дублей и без второго платного просмотра резюме.
-        var resumeViews = fake.Requests.Count(r => r.Url.Contains("/resumes/r1", StringComparison.Ordinal));
+        // Повтор — без дублей и без новых попыток просмотра резюме.
         await hh.SyncAsync(null, default);
         Assert.Equal(1, await db.Candidates.CountAsync(c => c.FullName == "Иванов Иван"));
-        Assert.Equal(resumeViews, fake.Requests.Count(r => r.Url.Contains("/resumes/r1", StringComparison.Ordinal)));
+        Assert.Equal(2, await db.HhApiCalls.CountAsync(c => c.Operation == HhOperations.ResumeView));
 
         // Каждый запрос — с HH-User-Agent и почтой, host=hh.uz, к api.hh.ru; запросы с токеном — Bearer.
         Assert.All(fake.Requests, r => Assert.Equal("OneBase/1.0 (dev@example.com)", r.UserAgent));
         Assert.All(fake.Requests, r => Assert.StartsWith("https://api.hh.ru/", r.Url));
         Assert.All(fake.Requests.Where(r => !r.Url.Contains("/token", StringComparison.Ordinal)), r => Assert.StartsWith("Bearer access-", r.Auth));
 
-        // Действие — только из списка HH; чужое — отказ без запроса.
+        // Действие — только из списка HH и кнопкой HR; с текстом сообщения — заблокировано до отправки (сообщения через HH запрещены).
         var negotiation = Assert.Single(await hh.NegotiationsAsync(hr, ivan.Id, default));
         await Assert.ThrowsAsync<FieldValidationException>(() => hh.ActionAsync(hr, negotiation.Id, "discard", null, default));
-        await hh.ActionAsync(hr, negotiation.Id, "interview", "Приглашаем на собеседование", default);
+        var before = fake.Requests.Count;
+        await Assert.ThrowsAsync<FieldValidationException>(() => hh.ActionAsync(hr, negotiation.Id, "interview", "Приглашаем на собеседование", default));
+        Assert.Equal(before, fake.Requests.Count);
+        Assert.True(await db.HhApiCalls.AnyAsync(c => c.Operation == HhOperations.ActionMessage && !c.Allowed && c.Trigger == "manual"));
+        await hh.ActionAsync(hr, negotiation.Id, "interview", null, default);
         Assert.Contains(fake.Requests, r => r.Method == HttpMethod.Put && r.Url.StartsWith("https://api.hh.ru/negotiations/interview/n1", StringComparison.Ordinal)
-                                            && r.Body.Contains("message=", StringComparison.Ordinal));
+                                            && !r.Body.Contains("message=", StringComparison.Ordinal));
 
         // Токен истёк — обновляется (refresh), затем запрос идёт с новым.
         await db.HhConnections.ExecuteUpdateAsync(u => u.SetProperty(c => c.TokenExpiresAt, DateTimeOffset.UtcNow.AddMinutes(-1)));
@@ -221,6 +245,22 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         await hh.SyncAsync(null, default);
         Assert.Equal("refresh", fake.LastGrant);
         Assert.Equal("Bearer access-2", fake.Requests[^1].Auth);
+
+        // Предохранитель: HH ответил «нужна оплата» — ничего не списано, но синхронизация по расписанию в HH больше не ходит, пока HR не снимет.
+        fake.PaymentRequired = true;
+        var paid = await hh.SyncAsync(null, default);
+        Assert.True(paid.Errors > 0);
+        Assert.NotNull((await db.HhConnections.AsNoTracking().SingleAsync()).GuardTrippedAt);
+        db.ChangeTracker.Clear();
+        var sent = fake.Requests.Count;
+        var stopped = await hh.SyncAsync(null, default);
+        Assert.Equal(sent, fake.Requests.Count);
+        Assert.Contains("предохранител", stopped.Message, StringComparison.OrdinalIgnoreCase);
+        var guard = await hh.GuardAsync(hr, default);
+        Assert.True(guard.FreeCalls30 > 0);
+        Assert.True(guard.BlockedCalls30 >= 3);
+        Assert.Contains(guard.Catalog, o => o.Code == HhOperations.ResumeSearch && !o.Auto && !o.Manual);
+        Assert.Null((await hh.ResetGuardAsync(hr, default)).GuardTrippedAt);
     }
 
     // ---------- AI-рекрутер ----------
@@ -425,7 +465,7 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
     // ---------- Оценка ----------
 
     [PostgresFact]
-    public async Task Scoring_marks_evidence_not_found_in_the_resume_as_unverified()
+    public async Task Screening_scores_six_weighted_criteria_on_the_server_hides_protected_data_and_caps_unverified_points()
     {
         var (scope, db, hr, sales) = await StartAsync();
         using var _ = scope;
@@ -434,29 +474,51 @@ public class RecruitmentFlowTests(DataManagerDb fixture) : IClassFixture<DataMan
         var service = sp.GetRequiredService<RecruitmentService>();
         var candidate = await service.CreateCandidateAsync(hr, new CandidateInput("Ботир Каримов", null, null, null, [], "manual", null, vacancyId, "written"), default);
         await service.UploadResumeAsync(hr, candidate.CandidateId, new RecruitmentUpload("cv.txt", "text/plain", 0,
-            new MemoryStream(Encoding.UTF8.GetBytes("Водитель категории C, стаж 6 лет. Работал в Логистика Плюс."))) with { SizeBytes = 90 }, default);
+            new MemoryStream(Encoding.UTF8.GetBytes("Водитель категории C, стаж 6 лет. Работал в Логистика Плюс.\nДата рождения: 01.01.1990"))) with { SizeBytes = 120 }, default);
         await fixture.Services.GetRequiredService<OneBase.Application.Recruitment.Jobs.RecruitmentJobRunner>().DrainAsync(default); // текст резюме — в фоне
         var applicationId = (await db.CandidateApplications.AsNoTracking().SingleAsync()).Id;
 
         fixture.Gateway.Script.Enqueue(m =>
         {
             Assert.Contains("<resume>", m[1].Content);
+            Assert.Contains("Дата рождения: [скрыто]", m[1].Content); // защищённые признаки — не модели
+            Assert.DoesNotContain("1990", m[1].Content);
             return JsonSerializer.Serialize(new
             {
                 criteria = new object[]
                 {
-                    new { name = "Опыт", score = 9, explanation = "Шесть лет за рулём", evidence = "стаж 6 лет" },
-                    new { name = "Навыки", score = 10, explanation = "Знает город", evidence = "отлично знает весь Ташкент" },
+                    new { code = "experience", status = "met", points = 23, explanation = "Шесть лет за рулём", quotes = new[] { "стаж 6 лет" } },
+                    new { code = "skills", status = "met", points = 24, explanation = "Знает город", quotes = new[] { "отлично знает весь Ташкент" } },
+                    new { code = "requirements", status = "met", points = 18, explanation = "Категория C есть", quotes = new[] { "Водитель категории C" } },
+                    new { code = "achievements", status = "not_stated", points = 0, explanation = "", quotes = Array.Empty<string>() },
+                    new { code = "extras", status = "partial", points = 2, explanation = "Работал в логистике", quotes = Array.Empty<string>() },
                 },
                 summary = "Опытный водитель",
-                risks = "Уточнить график",
+                whyFits = "Стаж и категория C",
+                strengths = new[] { "Стаж 6 лет" },
+                weaknesses = new[] { "Нет данных о маршрутах" },
+                missingRequirements = new[] { "Медицинская книжка" },
+                recommendation = "Пригласить на собеседование",
+                interviewQuestions = Enumerable.Range(1, 12).Select(i => new { question = $"Вопрос {i}", type = i % 2 == 0 ? "technical" : "bogus", reason = "пробел" }),
+                confidence = 1.7,
             });
         });
         var score = await sp.GetRequiredService<ICandidateScorer>().ScoreAsync(hr, applicationId, default);
-        Assert.True(score.Criteria.Single(c => c.Name == "Опыт").Verified);
-        Assert.False(score.Criteria.Single(c => c.Name == "Навыки").Verified);
-        Assert.Equal(0, score.Criteria.Single(c => c.Name == "Образование").Score); // модель не оценила — 0, а не выдумка
-        Assert.Equal((int)Math.Round(new[] { 9, 10, 0, 0, 0, 0 }.Average() * 10), score.Overall);
+        Assert.True(score.Criteria.Single(c => c.Name == "Опыт работы").Verified);
+        Assert.False(score.Criteria.Single(c => c.Name == "Профессиональные навыки").Verified); // цитаты нет в резюме
+        // Баллы на сервере: опыт 23 (подтверждён), навыки 24 → 12,5 (без подтверждения — не выше половины), требования 18, достижения не указаны → 7,5,
+        // образование модель не оценила → 5 (нейтрально), преимущества 2.
+        Assert.Equal(68, score.Overall);
+        var row = await db.CandidateScores.AsNoTracking().SingleAsync();
+        var analysis = OneBase.Application.Recruitment.Screening.ScreeningJson.View(row);
+        Assert.Equal((2, "partial", "partial_match"), (analysis.Version, analysis.Category, analysis.Recommendation));
+        Assert.Equal(12.5m, analysis.Criteria.Single(c => c.Code == "skills").Points);
+        Assert.True(analysis.Criteria.Single(c => c.Code == "skills").Capped);
+        Assert.Equal((7.5m, "Не указано в резюме"), (analysis.Criteria.Single(c => c.Code == "achievements").Points, analysis.Criteria.Single(c => c.Code == "achievements").Explanation));
+        Assert.Equal(10, analysis.Questions.Count);
+        Assert.All(analysis.Questions, q => Assert.Contains(q.Type, new[] { "technical", "experience" }));
+        Assert.Equal((1m, 0.45m), (analysis.Confidence!.Value, analysis.Coverage!.Value)); // уверенность модели — отдельно и не больше 1
+        Assert.Equal("Медицинская книжка", Assert.Single(analysis.Missing));
         Assert.Equal(ApplicationStage.New, (await db.CandidateApplications.AsNoTracking().SingleAsync()).Stage); // оценка этап не меняет
         await Assert.ThrowsAsync<FieldForbiddenException>(() => sp.GetRequiredService<ICandidateScorer>().ScoreAsync(new RecruitmentContext(fixture.AdminId, true, false, []), applicationId, default));
     }

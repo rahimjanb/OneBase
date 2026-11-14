@@ -29,7 +29,7 @@ const day = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("ru-
 
 const pdfRoles: { key: WeeklyPdfRole; label: string; hint: string }[] = [
   { key: "rop", label: "РОП", hint: "Вся страна: регионы, СВР, план и прогноз, дилеры — 3 страницы" },
-  { key: "rm", label: "РМ", hint: "Регионы направления — 3 страницы" },
+  { key: "rm", label: "РМ", hint: "Регионы из профиля РМ или регионы направления — 3 страницы" },
   { key: "sv", label: "СВ", hint: "Регион и команда ТП: динамика, рейтинг, КПУ, линейки, клиенты, акции, ДМП, дилер, цели — 10 страниц; карточки ТП — отдельным файлом" },
   { key: "tp", label: "ТП", hint: "Личная карточка ТП: итоги недели и цели на неделю — 2 страницы, только его цифры" },
 ];
@@ -178,7 +178,8 @@ function WeeklyPdfPreviewPanel({ data }: { data: ReportOverview }) {
   const firstRegion = data.regions[0];
   const [input, setInput] = useState<WeeklyPdfInput>(() => ({
     role: "sv",
-    directionId: data.directions[0]?.id ?? null,
+    userId: data.rmUsers?.[0]?.id ?? null,
+    directionId: data.rmUsers?.length ? null : (data.directions[0]?.id ?? null),
     regionId: firstRegion?.id ?? null,
     agentId: firstRegion?.agents[0]?.id ?? null,
     date: null,
@@ -193,7 +194,7 @@ function WeeklyPdfPreviewPanel({ data }: { data: ReportOverview }) {
   const region = data.regions.find((r) => r.id === input.regionId);
   const shownKind: WeeklyPdfKind = input.role === "tp" ? "cards" : input.role === "sv" ? kind : "team";
   const ready =
-    data.canUseSales && (input.role === "rop" || (input.role === "rm" ? !!input.directionId : input.role === "sv" ? !!input.regionId : !!input.agentId));
+    data.canUseSales && (input.role === "rop" || (input.role === "rm" ? !!input.userId || !!input.directionId : input.role === "sv" ? !!input.regionId : !!input.agentId));
 
   const run = async (action: "preview" | "download" | "test") => {
     if (action === "test") {
@@ -245,15 +246,36 @@ function WeeklyPdfPreviewPanel({ data }: { data: ReportOverview }) {
 
         {input.role === "rm" && (
           <label className="mt-3 block">
-            <span className="mb-1 block text-xs font-medium text-ink-2">{t("Направление")}</span>
-            <select className={field} value={input.directionId ?? ""} onChange={(e) => change({ directionId: e.target.value || null })}>
-              {!input.directionId && <option value="">{t("Выберите направление")}</option>}
-              {data.directions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                  {d.manager ? ` · ${d.manager}` : ""}
-                </option>
-              ))}
+            <span className="mb-1 block text-xs font-medium text-ink-2">{t("РМ")}</span>
+            {/* u:… — пользователь с ролью «РМ» (регионы из профиля), d:… — направление. */}
+            <select
+              className={field}
+              value={input.userId ? `u:${input.userId}` : input.directionId ? `d:${input.directionId}` : ""}
+              onChange={(e) => {
+                const [kind, id] = e.target.value.split(":");
+                change({ userId: kind === "u" ? id : null, directionId: kind === "d" ? id : null });
+              }}
+            >
+              {!input.userId && !input.directionId && <option value="">{t("Выберите РМ")}</option>}
+              {(data.rmUsers ?? []).length > 0 && (
+                <optgroup label={t("Пользователи с ролью «РМ»")}>
+                  {(data.rmUsers ?? []).map((u) => (
+                    <option key={u.id} value={`u:${u.id}`}>
+                      {u.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {data.directions.length > 0 && (
+                <optgroup label={t("Направления")}>
+                  {data.directions.map((d) => (
+                    <option key={d.id} value={`d:${d.id}`}>
+                      {d.name}
+                      {d.manager ? ` · ${d.manager}` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </label>
         )}

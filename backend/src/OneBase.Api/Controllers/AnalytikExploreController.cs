@@ -31,6 +31,20 @@ public sealed class AnalytikExploreController(SemanticEngine engine, CapabilityR
     [HttpGet("capabilities")]
     public async Task<CapabilityView> Capabilities(CancellationToken ct) => await registry.ViewAsync(Caller, ct);
 
+    /// <summary>Паспорта показателей: смысл, формула, таблица и поле, тип, агрегация, шаги, измерения, совместимые факты, диапазон данных, свежесть, доступ.</summary>
+    [HttpGet("passports")]
+    public async Task<IReadOnlyList<MetricPassport>> Passports(CancellationToken ct) => await registry.PassportsAsync(Caller, ct);
+
+    /// <summary>Карта показателей отделов: где считается каждый (движок, расчёт, инструмент) и чего в OneBase нет, с живым наличием данных.</summary>
+    [HttpGet("business")]
+    public async Task<IReadOnlyList<BusinessMetricState>> Business(CancellationToken ct) => await registry.BusinessAsync(Caller, ct);
+
+    /// <summary>Совместимость пары показателей (Data Compatibility Engine): класс, пункты проверки, совет. dims — через запятую.</summary>
+    [HttpGet("compatibility")]
+    public async Task<CompatibilityResult> Compatibility([FromQuery] string a, [FromQuery] string b, [FromQuery] string? dims, [FromQuery] string? grain,
+        [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct) =>
+        await registry.CompatibilityAsync(Caller, a, b, dims?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), grain, from, to, ct);
+
     [HttpPost("query")]
     public async Task<AnalyticsResult> Query([FromBody] AnalyticsQuery query, CancellationToken ct) => await engine.RunAsync(query, Caller, ct);
 

@@ -10,6 +10,7 @@ import {
   evidenceClass,
   hypothesisStatus,
   investigationStatus,
+  researchOf,
   roleTitle,
   stepStatus,
   traceKind,
@@ -21,6 +22,7 @@ import {
   type StepView,
 } from "@/lib/intelligence";
 import { Card, Empty } from "../ui";
+import { ResearchView } from "./ResearchView";
 
 function Pill({ tone, children }: { tone: string; children: React.ReactNode }) {
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${tone}`}>{children}</span>;
@@ -29,7 +31,7 @@ function Pill({ tone, children }: { tone: string; children: React.ReactNode }) {
 /** Строка списка исследований: вопрос, статус, шаги и гипотезы, проверки, стоимость и время. */
 export function InvestigationList({ rows, showAuthor }: { rows: InvestigationRow[]; showAuthor: boolean }) {
   const t = useT();
-  if (!rows.length) return <Empty text="Исследований пока нет" hint="Задайте AI-аналитику сложный вопрос — «почему…», «исследуй…», «проверь гипотезу…»" />;
+  if (!rows.length) return <Empty text="Исследований пока нет" hint="Задайте AI-аналитику сложный вопрос — «почему…», «исследуй…», «проверь гипотезу…» — или запустите исследование без модели" />;
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-surface">
       <ul className="divide-y divide-line">
@@ -66,8 +68,14 @@ export function InvestigationList({ rows, showAuthor }: { rows: InvestigationRow
   );
 }
 
-/** Исследование целиком: цель, роли, план волнами, шаги с промежуточными результатами, гипотезы, противоречия, проверки, трасса, метрики. */
+/** Исследование: исследование-шаблон (без модели) — своим видом (ResearchView), исследование модели — планом, шагами и проверками. */
 export function InvestigationView({ data }: { data: InvestigationDetail }) {
+  const research = researchOf(data);
+  return research ? <ResearchView row={data.row} research={research} /> : <ModelInvestigation data={data} />;
+}
+
+/** Исследование модели целиком: цель, роли, план волнами, шаги с промежуточными результатами, гипотезы, противоречия, проверки, трасса, метрики. */
+function ModelInvestigation({ data }: { data: InvestigationDetail }) {
   const t = useT();
   const { row } = data;
   const st = investigationStatus[row.status] ?? investigationStatus.planned;

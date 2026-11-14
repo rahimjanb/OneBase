@@ -60,8 +60,10 @@ public static class AnalytikAiRegistration
         // Универсальный движок срезов — у консультанта и у аналитиков (источник sales.slices).
         services.AddScoped<ITool, AnalyticsQueryTool>();
         services.AddScoped<ITool, AnalyticsCapabilitiesTool>();
-        // Advanced Intelligence: вычислительный движок и методы отделов — у аналитиков (источник analytik.intelligence).
+        // Statistics Engine и исследования (Phase 2) — у консультанта и у аналитиков (источник sales.stats); методы отделов — у аналитиков.
         services.AddScoped<ITool, ComputeTool>();
+        services.AddScoped<ITool, ResearchTool>();
+        services.AddScoped<ResearchAnswerer>();
         services.AddScoped<ITool, MethodsTool>();
         services.AddScoped<ITool, Simulation.ScenarioAnalysisTool>();
         services.AddScoped<ITool, DecisionsTool>();

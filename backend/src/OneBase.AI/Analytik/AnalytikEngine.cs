@@ -40,7 +40,8 @@ public sealed partial class AnalytikEngine(
     AnalytikAccess access,
     AnalytikOptions options,
     Intelligence.InvestigationEngine investigations,
-    ILogger<AnalytikEngine> logger) : IConsultantEngine
+    ILogger<AnalytikEngine> logger,
+    ResearchAnswerer? researchAnswerer = null) : IConsultantEngine
 {
     /// <summary>Аналитиков на один вопрос без «по всей компании» — не больше: каждый — отдельный цикл модели.</summary>
     private const int MaxAgents = 5;
@@ -87,6 +88,19 @@ public sealed partial class AnalytikEngine(
         var remembered = await memory.ConversationAsync(turn.UserId, turn.ConversationId, available.Select(a => a.Code).ToList(), 8, ct);
         var rememberedText = remembered.Count == 0 ? null : AiMemoryStore.Format(remembered, names);
         contextStage?.Dispose();
+
+        // Вопрос по шаблону исследования (корреляции, причины снижения, эффективность ТП, аномалии, акции, состояние компании) — исследование
+        // кодом одним серверным вызовом, модель только пишет ответ по выводам (Phase 2). Просьба об отчёте Excel — прежним путём.
+        if (researchAnswerer is not null && !asksReport && available.Count > 0 && options.ResearchMode != "off"
+            && Application.Analytik.Research.ResearchPlanner.Match(turn.Question, DateOnly.FromDateTime(clock.GetUtcNow().ToOffset(TimeSpan.FromHours(5)).DateTime)) is { } match)
+        {
+            using (timings?.Stage("data"))
+            {
+                await ReadinessAsync(turn, progress, ct);
+            }
+
+            return await researchAnswerer.AnswerAsync(turn, match, chief, progress, ct);
+        }
 
         // Сложный вопрос (правила, без вызова модели) — исследование: план, шаги, проверка гипотез расчётом, проверка ответа. Простой — прежний
         // быстрый путь. Просьба об отчёте Excel — прежним путём (отчёт формирует аналитик в своём цикле).

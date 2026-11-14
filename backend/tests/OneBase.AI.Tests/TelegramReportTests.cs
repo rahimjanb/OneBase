@@ -232,6 +232,29 @@ public class TelegramReportTests
     // ---------- Области и права ----------
 
     [Fact]
+    public void Rm_user_scope_takes_the_regions_from_the_profile_and_never_widens()
+    {
+        var userId = Guid.Parse("00000000-0000-0000-0000-0000000000b1");
+        var rm = new ReportScope(TelegramReportRoles.Rm, UserId: userId);
+        Assert.Equal($"rm:u:{userId:N}", rm.Key);
+        Assert.Equal(rm, ReportScope.Parse(rm.Key));
+        Assert.NotEqual(new ReportScope(TelegramReportRoles.Rm).Key, rm.Key); // не «вся страна» — у отправки свой ключ
+
+        // Регионы — из профиля: только Бухоро (без Хоразма того же направления); регион без ТП в этом месяце не мешает.
+        IReadOnlyList<ReportRmUser> users = [new(userId, "Рустам Ахмедов", [Bukhara, Guid.NewGuid()])];
+        var resolved = ReportScopes.Resolve(rm, Teams, Directions, s => s, users);
+        Assert.Equal("РМ Рустам Ахмедов", resolved.Title);
+        Assert.Equal("Рустам Ахмедов", resolved.Manager);
+        Assert.Equal([Bukhara], resolved.Regions.Select(r => r.Id));
+        Assert.Equal([64L], resolved.Agents.Select(a => a.Id));
+
+        // Сняли роль РМ или отключили пользователя (его нет в списке), в профиле нет регионов с ТП — область не строится, а не «вся страна».
+        Assert.Throws<KeyNotFoundException>(() => ReportScopes.Resolve(rm, Teams, Directions, s => s, []));
+        Assert.Throws<KeyNotFoundException>(() => ReportScopes.Resolve(rm, Teams, Directions, s => s));
+        Assert.Throws<KeyNotFoundException>(() => ReportScopes.Resolve(rm, Teams, Directions, s => s, [new(userId, "Рустам Ахмедов", [Guid.NewGuid()])]));
+    }
+
+    [Fact]
     public void Scope_keys_round_trip_and_each_role_sees_only_its_own_data()
     {
         foreach (var scope in new[] { Rm, new ReportScope(TelegramReportRoles.Rm), Sv, new ReportScope(TelegramReportRoles.Sv, RegionId: Khorazm), Tp(61) })

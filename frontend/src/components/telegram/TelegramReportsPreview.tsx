@@ -39,13 +39,17 @@ export function RoleChip({ role }: { role: string }) {
   return <span className={`inline-flex h-5 items-center rounded-full px-2 text-[11px] font-bold ${r.className}`}>{t(r.label)}</span>;
 }
 
-/** Область получателя: РМ — направление или вся страна; СВ — регион и супервайзер; ТП — регион и торговый представитель. */
-export type Scope = { role: ReportRole; directionId: string | null; regionId: string | null; supervisorId: number | null; agentId: number | null };
+/**
+ * Область получателя: РМ — пользователь с ролью «РМ» (регионы из профиля), направление или вся страна; СВ — регион и супервайзер; ТП — регион
+ * и торговый представитель.
+ */
+export type Scope = { role: ReportRole; userId: string | null; directionId: string | null; regionId: string | null; supervisorId: number | null; agentId: number | null };
 
 export const defaultScope = (data: ReportOverview, role: ReportRole = "sv"): Scope => {
   const region = data.regions[0];
   return {
     role,
+    userId: role === "rm" ? (data.rmUsers?.[0]?.id ?? null) : null,
     directionId: null,
     regionId: role === "rm" ? null : (region?.id ?? null),
     supervisorId: role === "sv" ? (region?.supervisors[0]?.id ?? null) : null,
@@ -57,6 +61,7 @@ export function ScopePicker({ data, scope, onChange }: { data: ReportOverview; s
   const t = useT();
   const region = data.regions.find((r) => r.id === scope.regionId);
   const direction = data.directions.find((d) => d.id === scope.directionId);
+  const rmUser = data.rmUsers?.find((u) => u.id === scope.userId);
   const setRole = (role: ReportRole) => onChange({ ...defaultScope(data, role), regionId: role === "rm" ? null : (scope.regionId ?? data.regions[0]?.id ?? null) });
   const pickRegion = (regionId: string) => {
     const r = data.regions.find((x) => x.id === regionId);
@@ -85,20 +90,43 @@ export function ScopePicker({ data, scope, onChange }: { data: ReportOverview; s
 
       {scope.role === "rm" ? (
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-ink-2">{t("Направление")}</span>
-          <select className={field} value={scope.directionId ?? ""} onChange={(e) => onChange({ ...scope, directionId: e.target.value || null })}>
+          <span className="mb-1 block text-xs font-medium text-ink-2">{t("РМ")}</span>
+          {/* u:… — пользователь с ролью «РМ», d:… — направление, пусто — вся страна. */}
+          <select
+            className={field}
+            value={scope.userId ? `u:${scope.userId}` : scope.directionId ? `d:${scope.directionId}` : ""}
+            onChange={(e) => {
+              const [kind, id] = e.target.value.split(":");
+              onChange({ ...scope, userId: kind === "u" ? id : null, directionId: kind === "d" ? id : null });
+            }}
+          >
+            {(data.rmUsers ?? []).length > 0 && (
+              <optgroup label={t("Пользователи с ролью «РМ»")}>
+                {(data.rmUsers ?? []).map((u) => (
+                  <option key={u.id} value={`u:${u.id}`}>
+                    {u.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
             <option value="">{t("Вся страна")}</option>
-            {data.directions.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-                {d.manager ? ` · ${d.manager}` : ""}
-              </option>
-            ))}
+            {data.directions.length > 0 && (
+              <optgroup label={t("Направления")}>
+                {data.directions.map((d) => (
+                  <option key={d.id} value={`d:${d.id}`}>
+                    {d.name}
+                    {d.manager ? ` · ${d.manager}` : ""}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
           <span className="mt-1 block text-xs text-ink-3">
-            {direction
-              ? t("Регионов в направлении: {n}", { n: data.regions.filter((r) => r.directionId === direction.id).length })
-              : t("Все регионы: {n}", { n: data.regions.length })}
+            {rmUser
+              ? t("Регионы из профиля: {n}", { n: data.regions.filter((r) => rmUser.regionIds.includes(r.id)).length })
+              : direction
+                ? t("Регионов в направлении: {n}", { n: data.regions.filter((r) => r.directionId === direction.id).length })
+                : t("Все регионы: {n}", { n: data.regions.length })}
           </span>
         </label>
       ) : (
@@ -198,6 +226,7 @@ export function ReportPreviewPanel({ data }: { data: ReportOverview }) {
   const input = (): ReportPreviewInput => ({
     job,
     role: recipient ? null : scope.role,
+    userId: recipient || scope.role !== "rm" ? null : scope.userId,
     directionId: recipient ? null : scope.directionId,
     regionId: recipient ? null : scope.regionId,
     supervisorId: recipient ? null : scope.supervisorId,
@@ -356,11 +385,11 @@ export function ReportPreviewPanel({ data }: { data: ReportOverview }) {
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 /** История: отправки с фильтрами (период, отчёт или запуск, регион, статус), повтор неудачных; ниже — запуски расписания с итогами. */
-export function ReportHistoryPanel({ data, onChanged }: { data: ReportOverview; onChanged: () => Promise<void> }) {
+export function ReportHistoryPanel({ data, onChanged, initialStatus = "" }: { data: ReportOverview; onChanged: () => Promise<void>; initialStatus?: string }) {
   const t = useT();
   const [query, setQuery] = useState<ReportHistoryQuery>(() => {
     const today = new Date();
-    return { from: isoDay(new Date(today.getTime() - 7 * 86_400_000)), to: isoDay(today), report: "", regionId: "", status: "", page: 1 };
+    return { from: isoDay(new Date(today.getTime() - 7 * 86_400_000)), to: isoDay(today), report: "", regionId: "", status: initialStatus, page: 1 };
   });
   const [history, setHistory] = useState<ReportHistory | null>(null);
   const [open, setOpen] = useState<string | null>(null);

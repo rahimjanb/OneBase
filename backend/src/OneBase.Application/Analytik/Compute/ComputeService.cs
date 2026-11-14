@@ -12,9 +12,21 @@ using OneBase.Domain.Analytik;
 
 namespace OneBase.Application.Analytik.Compute;
 
-/// <summary>Данные расчёта — срез движка: показатели, измерение, шаг, период, период сравнения, фильтры, сегмент продаж.</summary>
+/// <summary>
+/// Структурированный ряд, переданный числами (экран, API, результат другого инструмента) — не текстовой формулой: имя, значения (null —
+/// пропуск), даты шагов (необязательно; без дат ряды сопоставляются по номеру шага), единица.
+/// </summary>
+public sealed record InlineSeries(string Name, IReadOnlyList<double?> Values, IReadOnlyList<DateOnly>? Dates = null, string? Unit = null);
+
+/// <summary>
+/// Данные расчёта — срез движка: показатели, измерение, шаг, период, период сравнения, фильтры, сегмент продаж. Вместо среза — QueryId
+/// (сохранённый срез из журнала analytik.Queries: его показатели, шаг, период и фильтры) или Series (структурированные ряды).
+/// </summary>
 public sealed record ComputeData
 {
+    public Guid? QueryId { get; init; }
+    public IReadOnlyList<InlineSeries>? Series { get; init; }
+
     public IReadOnlyList<string> Metrics { get; init; } = [];
     public string? Dimension { get; init; }
     public string? Grain { get; init; }
@@ -35,7 +47,8 @@ public sealed record ComputeRequest
 }
 
 /// <summary>Кто и откуда считает: пользователь (его права), откуда вызов, исследование и чат, агент.</summary>
-public sealed record ComputeContext(Guid? UserId, string Origin, Guid? InvestigationId = null, Guid? ConversationId = null, string? AgentCode = null);
+public sealed record ComputeContext(Guid? UserId, string Origin, Guid? InvestigationId = null, Guid? ConversationId = null, string? AgentCode = null,
+    SliceCache? Cache = null);
 
 /// <summary>
 /// Итог расчёта: запись журнала, метод и алгоритм с версией, период, результат, короткий вывод кодом (Summary), класс вывода, ограничения,
@@ -81,10 +94,11 @@ public sealed partial class ComputeService(SemanticEngine engine, AnalytikAccess
             : context.Origin is "proactive" or "benchmark" or "decision" ? AnalytikPrincipal.SystemPrincipal
             : throw new UnauthorizedAccessException("Расчёт без пользователя — только для фоновых задач Аналитика.");
         var today = engine.Today;
-        var data = Normalize(request.Data, method, today);
+        var source = request.Data.QueryId is { } savedId ? await FromJournalAsync(savedId, request.Data, context, principal, ct) : request.Data;
+        var data = Normalize(source, method, today);
         // Источник в журнале срезов — коротко (колонка 16 символов): chat, api или compute (исследование, фон, повтор).
         var queryOrigin = context.Origin is "chat" or "api" ? context.Origin : context.Origin == "benchmark" ? "bench" : "compute";
-        var loader = new Loader(engine, new QueryCaller(context.UserId, queryOrigin, context.AgentCode, context.ConversationId), principal, data, ct);
+        var loader = new Loader(engine, new QueryCaller(context.UserId, queryOrigin, context.AgentCode, context.ConversationId), principal, data, ct, context.Cache);
         var row = new AnalytikComputation
         {
             UserId = context.UserId, Origin = context.Origin, InvestigationId = context.InvestigationId, ConversationId = context.ConversationId,
@@ -184,6 +198,44 @@ public sealed partial class ComputeService(SemanticEngine engine, AnalytikAccess
         return (outcome, Canonical(row.Result) == Canonical(replayed.Result), oldHash != newHash);
     }
 
+    /// <summary>
+    /// Данные из сохранённого среза (журнал analytik.Queries): показатели, измерение (первое не «дата»), шаг, период, фильтры и сегмент того
+    /// запроса; явно заданное в запросе расчёта важнее. Чужой срез — только руководителю Аналитика.
+    /// </summary>
+    private async Task<ComputeData> FromJournalAsync(Guid id, ComputeData given, ComputeContext context, AnalytikPrincipal principal, CancellationToken ct)
+    {
+        var log = await adb.Queries.AsNoTracking().FirstOrDefaultAsync(q => q.Id == id, ct)
+                  ?? throw new ComputeException("Сохранённый срез не найден в журнале.");
+        if (log.UserId != context.UserId && !principal.Manager && !principal.System)
+        {
+            throw new UnauthorizedAccessException("Сохранённый срез другого пользователя недоступен.");
+        }
+
+        StatMath.Require(log.Status == "ok", "Сохранённый срез завершился ошибкой — повторите срез.");
+        AnalyticsQuery q;
+        try
+        {
+            q = JsonSerializer.Deserialize<AnalyticsQuery>(log.Plan ?? "", Json) ?? throw new ComputeException("Сохранённый срез не читается.");
+        }
+        catch (JsonException)
+        {
+            throw new ComputeException("Сохранённый срез — не запрос движка срезов (другой вид запроса).");
+        }
+
+        var dims = q.Dimensions ?? [];
+        return given with
+        {
+            QueryId = null,
+            Metrics = given.Metrics.Count > 0 ? given.Metrics : q.Metrics,
+            Dimension = given.Dimension ?? dims.FirstOrDefault(x => x != "date"),
+            Grain = given.Grain ?? (dims.Contains("date") ? q.Grain ?? "day" : null),
+            From = given.From ?? q.DateFrom,
+            To = given.To ?? q.DateTo,
+            Filters = given.Filters ?? q.Filters,
+            Segment = given.Segment ?? q.Segment,
+        };
+    }
+
     private static string? Canonical(string? json) => json is null ? null : JsonSerializer.Serialize(JsonDocument.Parse(json).RootElement);
 
     /// <summary>Период по умолчанию — последние 90 дней; сравнение по умолчанию — такой же отрезок перед периодом (для методов со сравнением).</summary>
@@ -211,10 +263,24 @@ public sealed partial class ComputeService(SemanticEngine engine, AnalytikAccess
             throw new ComputeException($"Шаг времени — day, week, month, quarter или year, а не «{data.Grain}».");
         }
 
+        var series = data.Series?.Select(x => x with { Name = x.Name.Trim().ToLowerInvariant() }).ToList();
+        if (series is { Count: > 0 })
+        {
+            StatMath.Require(series.Count <= 25 && series.All(x => x.Values.Count <= 5000) && series.Sum(x => x.Values.Count) <= 20000,
+                "Переданные ряды — не больше 25 рядов, 5 000 значений в ряду и 20 000 всего; больше — берите срез (данные движка).");
+            StatMath.Require(series.Select(x => x.Name).Distinct().Count() == series.Count, "У переданных рядов повторяются имена.");
+        }
+
+        var metrics = data.Metrics.Select(m => m.Trim().ToLowerInvariant()).Where(m => m.Length > 0).Distinct().ToList();
+        if (metrics.Count == 0 && series is { Count: > 0 })
+        {
+            metrics = series.Select(x => x.Name).ToList();
+        }
+
         return data with
         {
-            From = from, To = to, CompareFrom = cf, CompareTo = ctTo, Grain = grain,
-            Metrics = data.Metrics.Select(m => m.Trim().ToLowerInvariant()).Where(m => m.Length > 0).Distinct().ToList(),
+            From = from, To = to, CompareFrom = cf, CompareTo = ctTo, Grain = grain, Series = series,
+            Metrics = metrics,
             Dimension = data.Dimension is { Length: > 0 } d ? SemanticCatalog.Dimension(d)?.Code ?? d.Trim().ToLowerInvariant() : null,
         };
     }
@@ -228,7 +294,7 @@ public sealed partial class ComputeService(SemanticEngine engine, AnalytikAccess
             StatMath.Require(data.Metrics.Count <= method.MaxMetrics, $"Методу «{method.Title}» — не больше {method.MaxMetrics} показателей.");
         }
 
-        foreach (var m in data.Metrics)
+        foreach (var m in data.Metrics.Where(m => data.Series?.Any(x => x.Name == m) != true))
         {
             if (SemanticCatalog.Metric(m) is null)
             {
@@ -313,7 +379,7 @@ public sealed partial class ComputeService(SemanticEngine engine, AnalytikAccess
     /// Загрузка данных расчёта движком срезов: все страницы результата, журнал запросов (id, что, сколько строк), источники, область прав,
     /// полнота, последний день данных (пустые дни позже него — не продажи, а отставание загрузки).
     /// </summary>
-    internal sealed class Loader(SemanticEngine engine, QueryCaller caller, AnalytikPrincipal principal, ComputeData data, CancellationToken ct)
+    internal sealed class Loader(SemanticEngine engine, QueryCaller caller, AnalytikPrincipal principal, ComputeData data, CancellationToken ct, SliceCache? cache = null)
     {
         public List<Guid> QueryIds { get; } = [];
         public List<AnalyticsSource> Sources { get; } = [];
@@ -325,10 +391,18 @@ public sealed partial class ComputeService(SemanticEngine engine, AnalytikAccess
         public DateOnly? DataThrough { get; private set; }
         public ComputeData Data => data;
 
+        /// <summary>Переданные ряды по имени (null — данные из движка срезов).</summary>
+        public IReadOnlyDictionary<string, InlineSeries>? Inline { get; } = data.Series is { Count: > 0 } s ? s.ToDictionary(x => x.Name) : null;
+
         /// <summary>Строки среза: ключи (id) и подписи измерений, значения показателей (null — нет значения).</summary>
         public async Task<IReadOnlyList<SliceRow>> RowsAsync(IReadOnlyList<string> metrics, IReadOnlyList<string> dims, DateOnly from, DateOnly to,
             string? grain = null, bool fillZeros = false, IReadOnlyList<AnalyticsFilter>? filters = null)
         {
+            if (Inline is not null)
+            {
+                throw new ComputeException("Переданные ряды подходят только статистическим методам (корреляция, регрессия, ряды, аномалии); этому методу нужен срез данных.");
+            }
+
             var rows = new List<SliceRow>();
             var offset = 0;
             while (true)
@@ -338,7 +412,9 @@ public sealed partial class ComputeService(SemanticEngine engine, AnalytikAccess
                     Metrics = metrics, Dimensions = dims, DateFrom = from, DateTo = to, Grain = grain, Filters = filters ?? data.Filters, Segment = data.Segment,
                     FillZeros = fillZeros, IncludeTotals = false, Limit = SemanticEngine.MaxLimit, Offset = offset,
                 };
-                var r = await engine.RunAsync(query, caller, ct, principal);
+                var r = cache is null
+                    ? await engine.RunAsync(query, caller, ct, principal)
+                    : await cache.GetAsync(query, $"{principal.UserId}|{principal.Sales.Description}", () => engine.RunAsync(query, caller, ct, principal));
                 QueryIds.Add(r.QueryId);
                 Scope ??= r.Scope;
                 Complete &= r.Complete;
@@ -409,6 +485,14 @@ public sealed partial class ComputeService(SemanticEngine engine, AnalytikAccess
         /// <summary>Ряд по шагу времени: пустые шаги — ноль; шаги позже последнего дня данных и неполный последний шаг отбрасываются (с пометкой).</summary>
         public async Task<IReadOnlyList<(DateOnly Date, double Value)>> SeriesAsync(string metric, string grain, DateOnly from, DateOnly to)
         {
+            if (Inline is not null)
+            {
+                var s = Inline.GetValueOrDefault(metric) ?? throw new ComputeException($"Ряда «{metric}» нет среди переданных рядов.");
+                var last = to;
+                return s.Values.Select((v, i) => (Date: s.Dates is { Count: > 0 } d ? d[i] : Step(last, grain, i - (s.Values.Count - 1)), Value: v ?? 0))
+                    .OrderBy(x => x.Date).ToList();
+            }
+
             var rows = await RowsAsync([metric], ["date"], from, to, grain, fillZeros: true);
             var points = rows.Select(r => (Date: DateOnly.ParseExact(r.Keys[0], "yyyy-MM-dd", CultureInfo.InvariantCulture), Value: r.Values[0] ?? 0))
                 .OrderBy(p => p.Date).ToList();
@@ -426,6 +510,15 @@ public sealed partial class ComputeService(SemanticEngine engine, AnalytikAccess
 
             return complete;
         }
+
+        private static DateOnly Step(DateOnly d, string grain, int k) => grain switch
+        {
+            "week" => d.AddDays(7 * k),
+            "month" => d.AddMonths(k),
+            "quarter" => d.AddMonths(3 * k),
+            "year" => d.AddYears(k),
+            _ => d.AddDays(k),
+        };
 
         public static DateOnly End(DateOnly start, string grain) => grain switch
         {

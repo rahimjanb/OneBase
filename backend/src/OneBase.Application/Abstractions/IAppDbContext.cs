@@ -264,6 +264,9 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Recruitment.HhConnection> HhConnections { get; }
     DbSet<OneBase.Domain.Recruitment.HhNegotiation> HhNegotiations { get; }
     DbSet<OneBase.Domain.Recruitment.CandidateScore> CandidateScores { get; }
+    DbSet<OneBase.Domain.Recruitment.CandidateSkill> CandidateSkills { get; }
+    DbSet<OneBase.Domain.Recruitment.CandidateComparison> CandidateComparisons { get; }
+    DbSet<OneBase.Domain.Recruitment.HhApiCall> HhApiCalls { get; }
     DbSet<OneBase.Domain.Recruitment.VacancyInterviewer> VacancyInterviewers { get; }
     DbSet<OneBase.Domain.Recruitment.Interview> Interviews { get; }
     DbSet<OneBase.Domain.Recruitment.RecruitmentException> RecruitmentExceptions { get; }

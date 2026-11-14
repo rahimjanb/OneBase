@@ -1,141 +1,352 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CalendarClock, CalendarDays, Eye, FileText, Gift, History, LayoutDashboard, Link2, Loader2, Pencil, Plus, Search, Send, Trash2, Users } from "lucide-react";
-import { button, danger, field, primary } from "@/components/ai/form";
-import { Alert, Note, Section } from "@/components/sales/bits";
-import { useT } from "@/i18n/client";
-import { chatTypeLabel } from "@/lib/telegram";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
-  deliveryStatus,
+  ArrowLeft,
+  CalendarClock,
+  CalendarX,
+  ChevronRight,
+  CircleDashed,
+  CircleSlash,
+  CircleX,
+  Eye,
+  FileText,
+  Gift,
+  History,
+  Info,
+  Languages,
+  LayoutGrid,
+  Loader2,
+  Palette,
+  Pencil,
+  RefreshCw,
+  Send,
+  Target,
+  Timer,
+  UserPlus,
+  Users,
+} from "lucide-react";
+import { button, field, primary } from "@/components/ai/form";
+import { Sheet } from "@/components/field/Sheet";
+import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import { Alert, Note } from "@/components/sales/bits";
+import { useT } from "@/i18n/client";
+import { NO_FILTERS, SKIP_LABELS, type RecipientFilters } from "@/lib/telegram-recipients";
+import {
   isPdfJob,
   reportLanguages,
-  reportRoles,
   reportTypes,
   reportsApi,
   runStatus,
-  telegramStatus,
   timeZones,
   weekDays,
   type ReportJob,
   type ReportLanguage,
   type ReportOverview,
-  type ReportRecipient,
-  type ReportRecipientInput,
-  type ReportRole,
 } from "@/lib/telegramReports";
 import { TelegramDailyPlans } from "./TelegramDailyPlans";
 import { IncentivesPanel } from "./TelegramIncentives";
 import { ReportsOverviewPanel, type ReportsTab } from "./TelegramReportsOverview";
-import { ReportHistoryPanel, ReportPreviewPanel, RoleChip, ScopePicker, defaultScope, when, type Scope } from "./TelegramReportsPreview";
+import { ReportHistoryPanel, ReportPreviewPanel, RoleChip, when } from "./TelegramReportsPreview";
 import { WeeklyPdfPanel } from "./TelegramWeeklyPdf";
+import { RecipientsTab } from "./recipients/RecipientsTab";
 
 type Tab = ReportsTab;
 
-const tabs: { key: Tab; label: string; icon: typeof Users }[] = [
-  { key: "overview", label: "Обзор", icon: LayoutDashboard },
+const tabs: { key: Tab; label: string; short?: string; icon: typeof Users }[] = [
+  { key: "overview", label: "Обзор", icon: LayoutGrid },
   { key: "schedule", label: "Расписание", icon: CalendarClock },
   { key: "recipients", label: "Получатели", icon: Users },
-  { key: "preview", label: "Предпросмотр и тест", icon: Eye },
+  { key: "preview", label: "Предпросмотр и тест", short: "Тест", icon: Eye },
   { key: "pdf", label: "Отчёты PDF", icon: FileText },
   { key: "incentives", label: "Акции", icon: Gift },
-  { key: "dailyplan", label: "Дневной план", icon: CalendarDays },
+  { key: "dailyplan", label: "Дневной план", icon: Target },
   { key: "history", label: "История", icon: History },
 ];
 
+/** На телефоне — чипы в другом порядке: сначала то, что открывают каждый день. */
+const mobileOrder: Tab[] = ["recipients", "schedule", "preview", "history", "incentives", "overview", "pdf", "dailyplan"];
+
+/** Рассылка включена: аккаунт выбран и подключён, включён хотя бы один запуск. */
+function sendingState(data: ReportOverview): { on: boolean; label: string } {
+  const account = data.accounts.find((a) => a.id === data.settings.accountId);
+  if (!account) return { on: false, label: "Аккаунт не выбран" };
+  if (account.status !== "Connected") return { on: false, label: "Аккаунт не подключён" };
+  if (!data.jobs.some((j) => j.enabled)) return { on: false, label: "Все запуски выключены" };
+  return { on: true, label: "Рассылка включена" };
+}
+
 /**
- * «Настройки → Telegram → Автоматические отчёты»: аккаунт, язык и параметры; расписание 13 запусков шести отчётов (каждый включается
- * отдельно, сохранение ничего не отправляет); получатели «роль → область → чаты → отчёты»; предпросмотр и тест; история отправок и запусков.
- * Права и области проверяет сервер.
+ * «Настройки → Telegram → Автоматические отчёты»: строка «Отправка» (правка — в окне), счётчики за 7 дней (ведут в историю или к
+ * получателям), вкладки: обзор, расписание запусков, получатели (фильтры, таблица по регионам, массовые действия, панель в 3 шага),
+ * предпросмотр и тест, PDF, акции, дневной план, история. На телефоне — своя шапка, плитки и вкладки чипами. Права и области проверяет сервер.
  */
-export function TelegramReports({ initial, initialTab }: { initial: ReportOverview; initialTab?: string }) {
+export function TelegramReports({ initial, initialTab, initialFilters = NO_FILTERS }: { initial: ReportOverview; initialTab?: string; initialFilters?: RecipientFilters }) {
   const t = useT();
   const [data, setData] = useState(initial);
   const [tab, setTab] = useState<Tab>(() => tabs.find((x) => x.key === initialTab)?.key ?? "overview");
+  const [filters, setFilters] = useState(initialFilters);
+  const [history, setHistory] = useState<{ status: string; key: number }>({ status: "", key: 0 });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [addSignal, setAddSignal] = useState(0);
   const reload = async () => setData(await reportsApi.overview());
-  const problems = data.recipients.filter((r) => r.enabled && r.problem).length;
+  const state = sendingState(data);
+  const account = data.accounts.find((a) => a.id === data.settings.accountId);
+  const enabledJobs = data.jobs.filter((j) => j.enabled).length;
+
+  // Вкладка — в адресе (фильтры «Получателей» дописывает сама вкладка).
+  useEffect(() => {
+    if (tab === "recipients") return;
+    const url = `${window.location.pathname}?tab=${tab}`;
+    if (`${window.location.pathname}${window.location.search}` !== url) window.history.replaceState(window.history.state, "", url);
+  }, [tab]);
+
+  const open = (next: Tab) => {
+    setTab(next);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const toHistory = (status: string) => {
+    setHistory((h) => ({ status, key: h.key + 1 }));
+    open("history");
+  };
+  const toRecipients = (patch: Partial<RecipientFilters>) => {
+    setFilters({ ...NO_FILTERS, ...patch });
+    setHistory((h) => ({ ...h, key: h.key + 1 }));
+    open("recipients");
+  };
+  const badge = (key: Tab) =>
+    key === "recipients" ? String(data.recipients.length) : key === "schedule" ? t("{n} из {total}", { n: enabledJobs, total: data.jobs.length }) : null;
+
+  const content = (
+    <>
+      {tab === "overview" && <ReportsOverviewPanel data={data} onTab={open} />}
+      {tab === "schedule" && <Schedule data={data} onSaved={(job) => setData((d) => ({ ...d, jobs: d.jobs.map((j) => (j.code === job.code ? job : j)) }))} />}
+      {tab === "preview" && <ReportPreviewPanel data={data} />}
+      {tab === "pdf" && <WeeklyPdfPanel data={data} onSaved={(weeklyPdf) => setData((d) => ({ ...d, weeklyPdf }))} />}
+      {tab === "incentives" && <IncentivesPanel data={data} onTab={open} />}
+      {tab === "dailyplan" && <TelegramDailyPlans canUseSales={data.canUseSales} />}
+      {tab === "history" && <ReportHistoryPanel key={history.key} data={data} onChanged={reload} initialStatus={history.status} />}
+    </>
+  );
 
   return (
     <>
-      {!data.telegramEnabled && (
-        <Alert tone="info">
-          {t("Telegram выключен в этой среде (Telegram:Enabled=false): аккаунт работает на сервере OneBase. Здесь можно настроить отчёты и посмотреть картинки, по расписанию отсюда ничего не уходит.")}
-        </Alert>
-      )}
-      {!data.canUseSales && <Alert tone="warn">{t("Нет права на данные продаж (sales.read): регионы, получатели и отчёты на реальных данных недоступны.")}</Alert>}
+      <div className="max-lg:hidden">
+        <PageHeader
+          title={
+            <span className="flex flex-wrap items-center gap-3">
+              {t("Автоматические отчёты")}
+              <span
+                className={`inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold ${state.on ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn"}`}
+              >
+                <span aria-hidden className={`size-1.5 rounded-full ${state.on ? "bg-ok" : "bg-warn"}`} />
+                {t(state.label)}
+              </span>
+            </span>
+          }
+          subtitle={t("Отчёты по расписанию в Telegram для РМ, СВ и ТП по оргструктуре «Продаж»: семь — картинками, восьмой — еженедельный PDF, девятый — накопительная акция")}
+          back="/settings/telegram"
+          breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Настройки"), href: "/settings" }, { label: "Telegram", href: "/settings/telegram" }, { label: t("Автоматические отчёты") }]}
+        />
+      </div>
+      <PageBody>
+        {/* ---------- телефон и планшет: своя шапка ---------- */}
+        <header className="-mx-4 -mt-3.5 mb-3 flex min-h-14 items-center gap-3 px-4 pt-[env(safe-area-inset-top)] sm:-mx-6 sm:px-6 md:-mt-[18px] lg:hidden">
+          <Link href="/settings/telegram" aria-label={t("Назад")} className="grid size-10 shrink-0 place-items-center rounded-full bg-surface text-ink">
+            <ArrowLeft className="size-5" />
+          </Link>
+          <button type="button" onClick={() => setSettingsOpen(true)} className="min-w-0 flex-1 text-center" aria-label={t("Настройки отправки")}>
+            <span className="block text-[15px] font-bold text-ink">{t("Автоотчёты")}</span>
+            <span className="flex items-center justify-center gap-1.5 truncate text-[11px] text-ink-3">
+              <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${state.on ? "bg-ok" : "bg-warn"}`} />
+              {state.on ? t("включены") : t(state.label).toLowerCase()}
+              {account?.username ? ` · @${account.username}` : ""}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTab("recipients");
+              setAddSignal((n) => n + 1);
+            }}
+            disabled={!data.canUseSales || !data.settings.accountId}
+            aria-label={t("Добавить получателя")}
+            className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-white disabled:opacity-40"
+          >
+            <UserPlus className="size-5" />
+          </button>
+        </header>
 
-      <GeneralSettings data={data} onSaved={reload} />
-      <Metrics data={data} />
+        {!data.telegramEnabled && (
+          <Alert tone="info">
+            {t("Telegram выключен в этой среде (Telegram:Enabled=false): аккаунт работает на сервере OneBase. Здесь можно настроить отчёты и посмотреть картинки, по расписанию отсюда ничего не уходит.")}
+          </Alert>
+        )}
+        {!data.canUseSales && <Alert tone="warn">{t("Нет права на данные продаж (sales.read): регионы, получатели и отчёты на реальных данных недоступны.")}</Alert>}
 
-      <section className="mt-6 rounded-xl border border-line bg-surface">
-        <div className="flex flex-wrap gap-1 border-b border-line px-3 pt-3">
-          {tabs.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setTab(item.key)}
-              className={`-mb-px flex items-center gap-2 rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium ${
-                tab === item.key ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"
-              }`}
-            >
-              <item.icon className="size-4" />
-              {t(item.label)}
-              {item.key === "recipients" && (
-                <span className={`text-xs ${problems > 0 ? "text-warn" : "text-ink-3"}`}>
-                  {data.recipients.length}
-                  {problems > 0 ? ` · ${t("проблем: {n}", { n: problems })}` : ""}
-                </span>
-              )}
-              {item.key === "schedule" && <span className="text-xs text-ink-3">{t("{n} из {total}", { n: data.jobs.filter((j) => j.enabled).length, total: data.jobs.length })}</span>}
-            </button>
-          ))}
+        <SendingRow data={data} onEdit={() => setSettingsOpen(true)} />
+        <Counters data={data} onHistory={toHistory} onRecipients={toRecipients} />
+
+        {/* ---------- вкладки ---------- */}
+        <nav aria-label={t("Разделы автоотчётов")} className="mt-5 flex gap-1 overflow-x-auto border-b border-line max-lg:hidden">
+          {tabs.map((item) => {
+            const on = tab === item.key;
+            const b = badge(item.key);
+            return (
+              <button
+                key={item.key}
+                type="button"
+                aria-current={on ? "page" : undefined}
+                onClick={() => open(item.key)}
+                className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2 py-2.5 text-[13px] font-semibold 2xl:gap-2 2xl:px-3 2xl:text-[14px] ${on ? "border-accent text-ink" : "border-transparent text-ink-2 hover:text-ink"}`}
+              >
+                <item.icon aria-hidden className="hidden size-4 2xl:block" />
+                {t(item.label)}
+                {b && <span className={`rounded-md px-1.5 py-px text-[11px] font-bold tabular-nums ${on ? "bg-accent-soft text-accent-strong" : "bg-muted text-ink-3"}`}>{b}</span>}
+              </button>
+            );
+          })}
+        </nav>
+        <nav aria-label={t("Разделы автоотчётов")} className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:hidden">
+          {mobileOrder.map((key) => {
+            const item = tabs.find((x) => x.key === key)!;
+            const on = tab === key;
+            const b = badge(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-current={on ? "page" : undefined}
+                onClick={() => open(key)}
+                className={`flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-[12px] px-3.5 text-[14px] font-semibold ${on ? "bg-accent text-white" : "border border-line bg-surface text-ink"}`}
+              >
+                <item.icon aria-hidden className="size-4" />
+                {t(item.short ?? item.label)}
+                {b && <span className={`text-[12px] tabular-nums ${on ? "text-white/80" : "text-ink-4"}`}>{key === "schedule" ? `${enabledJobs}/${data.jobs.length}` : b}</span>}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="mt-4">
+          {tab === "recipients" ? (
+            <RecipientsTab
+              key={history.key}
+              data={data}
+              setData={setData}
+              reload={reload}
+              initialFilters={filters}
+              onSchedule={() => open("schedule")}
+              addSignal={addSignal}
+            />
+          ) : (
+            <section className="rounded-[16px] border border-line bg-surface p-4 sm:p-5">{content}</section>
+          )}
         </div>
-        <div className="p-4 sm:p-5">
-          {tab === "overview" && <ReportsOverviewPanel data={data} onTab={setTab} />}
-          {tab === "schedule" && <Schedule data={data} onSaved={(job) => setData((d) => ({ ...d, jobs: d.jobs.map((j) => (j.code === job.code ? job : j)) }))} />}
-          {tab === "recipients" && <Recipients data={data} onChanged={reload} />}
-          {tab === "preview" && <ReportPreviewPanel data={data} />}
-          {tab === "pdf" && <WeeklyPdfPanel data={data} onSaved={(weeklyPdf) => setData((d) => ({ ...d, weeklyPdf }))} />}
-          {tab === "incentives" && <IncentivesPanel data={data} onTab={setTab} />}
-          {tab === "dailyplan" && <TelegramDailyPlans canUseSales={data.canUseSales} />}
-          {tab === "history" && <ReportHistoryPanel data={data} onChanged={reload} />}
-        </div>
-      </section>
+      </PageBody>
+      <SettingsSheet data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)} onSaved={reload} />
     </>
   );
 }
 
-/** Аккаунт, язык картинок, порог «без закупа» и обновление данных Linko перед отправкой. */
-function GeneralSettings({ data, onSaved }: { data: ReportOverview; onSaved: () => Promise<void> }) {
+/** Строка «Отправка»: аккаунт и текущие настройки чипами; «Изменить» — окно с полями. */
+function SendingRow({ data, onEdit }: { data: ReportOverview; onEdit: () => void }) {
   const t = useT();
   const s = data.settings;
-  const [form, setForm] = useState({ accountId: s.accountId ?? "", language: s.language, noPurchaseDays: s.noPurchaseDays, refreshBeforeSend: s.refreshBeforeSend });
+  const account = data.accounts.find((a) => a.id === s.accountId);
+  const lang = reportLanguages.find((l) => l.code === s.language)?.label ?? s.language;
+  const chips = [
+    { icon: Languages, text: `${t("Картинки")}: ${t(lang).toLowerCase()}` },
+    { icon: CalendarX, text: t("Без закупа: {n} дн.", { n: s.noPurchaseDays }) },
+    { icon: RefreshCw, text: s.refreshBeforeSend ? t("Обновлять Linko перед отправкой") : t("Без обновления Linko") },
+    { icon: Palette, text: "PNG 1920×1080" },
+  ];
+  return (
+    <div className="mt-4 flex items-center gap-3 rounded-[16px] border border-line bg-surface px-4 py-3 max-lg:hidden">
+      <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-accent-soft text-accent-strong">
+        <Send className="size-[18px]" />
+      </span>
+      <span className="min-w-0 shrink-0">
+        <span className="block text-[11px] text-ink-4">{t("Отправка")}</span>
+        <span className={`block max-w-[240px] truncate text-[14px] font-bold ${account ? "text-ink" : "text-warn"}`}>
+          {account ? `${account.name}${account.username ? ` · @${account.username}` : ""}` : t("Аккаунт не выбран")}
+        </span>
+      </span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        {chips.map((c, i) => (
+          <span
+            key={c.text}
+            className={`h-[30px] items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-muted px-2.5 text-[12px] font-medium text-ink-2 ${i >= 2 ? "hidden 2xl:flex" : "flex"}`}
+          >
+            <c.icon aria-hidden className="size-[13px] shrink-0 text-ink-3" />
+            {c.text}
+          </span>
+        ))}
+        <button type="button" onClick={onEdit} title={chips.slice(2).map((c) => c.text).join(" · ")} className="flex h-[30px] items-center rounded-lg border border-line bg-muted px-2.5 text-[12px] font-semibold text-ink-3 2xl:hidden">
+          +2
+        </button>
+      </span>
+      <button type="button" onClick={onEdit} className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] border border-line-strong bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-muted">
+        <Pencil aria-hidden className="size-4" />
+        {t("Изменить")}
+      </button>
+    </div>
+  );
+}
+
+/** Окно «Отправка»: аккаунт, язык картинок, порог «без закупа», обновление Linko перед отправкой. */
+function SettingsSheet({ data, open, onClose, onSaved }: { data: ReportOverview; open: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
+  const t = useT();
+  const s = data.settings;
+  const pick = () => ({ accountId: s.accountId ?? "", language: s.language, noPurchaseDays: s.noPurchaseDays, refreshBeforeSend: s.refreshBeforeSend });
+  const [form, setForm] = useState(pick);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const dirty =
-    form.accountId !== (s.accountId ?? "") || form.language !== s.language || form.noPurchaseDays !== s.noPurchaseDays || form.refreshBeforeSend !== s.refreshBeforeSend;
+  const [about, setAbout] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setForm(pick());
+      setError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  const dirty = JSON.stringify(form) !== JSON.stringify(pick());
   const account = data.accounts.find((a) => a.id === form.accountId);
-  const changesAccount = !!s.accountId && form.accountId !== s.accountId;
-  const edit = (patch: Partial<typeof form>) => (setForm((f) => ({ ...f, ...patch })), setSaved(false));
-
+  const edit = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const save = async () => {
-    if (changesAccount && data.recipients.length > 0 && !window.confirm(t("Чаты другого аккаунта уберутся у получателей. Сменить аккаунт?"))) return;
+    if (s.accountId && form.accountId !== s.accountId && data.recipients.length > 0 && !window.confirm(t("Чаты другого аккаунта уберутся у получателей. Сменить аккаунт?"))) return;
     setBusy(true);
     setError(null);
     try {
       await reportsApi.saveSettings({ ...form, accountId: form.accountId || null });
       await onSaved();
-      setSaved(true);
+      onClose();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
-
   return (
-    <Section title="Отправка" hint={account?.username ? `@${account.username}` : undefined}>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_200px_170px_minmax(0,1fr)_auto] xl:items-end">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={t("Отправка")}
+      subtitle={t("Аккаунт и параметры автоотчётов")}
+      footer={
+        <div className="flex justify-end gap-2">
+          <button className={button} onClick={onClose} disabled={busy}>
+            {t("Отмена")}
+          </button>
+          <button className={primary} onClick={save} disabled={busy || !dirty}>
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            {t("Сохранить")}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">{t("Аккаунт Telegram")}</span>
           <select className={field} value={form.accountId} onChange={(e) => edit({ accountId: e.target.value })}>
@@ -149,63 +360,124 @@ function GeneralSettings({ data, onSaved }: { data: ReportOverview; onSaved: () 
             ))}
           </select>
         </label>
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-ink">{t("Язык картинок")}</span>
-          <select className={field} value={form.language} onChange={(e) => edit({ language: e.target.value as ReportLanguage })}>
-            {reportLanguages.map((l) => (
-              <option key={l.code} value={l.code}>
-                {t(l.label)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-ink">{t("Без закупа, дней")}</span>
-          <input type="number" min={1} max={365} className={field} value={form.noPurchaseDays} onChange={(e) => edit({ noPurchaseDays: Math.min(365, Math.max(1, Number(e.target.value) || 1)) })} />
-        </label>
-        <label className="flex items-center gap-2 pb-2 text-sm text-ink">
+        {account && account.status !== "Connected" && <p className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{t("Аккаунт не подключён — отчёты не уйдут, пока его не подключить на странице Telegram.")}</p>}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Язык картинок")}</span>
+            <select className={field} value={form.language} onChange={(e) => edit({ language: e.target.value as ReportLanguage })}>
+              {reportLanguages.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {t(l.label)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-ink">{t("Без закупа, дней")}</span>
+            <input type="number" min={1} max={365} className={field} value={form.noPurchaseDays} onChange={(e) => edit({ noPurchaseDays: Math.min(365, Math.max(1, Number(e.target.value) || 1)) })} />
+          </label>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-ink">
           <input type="checkbox" checked={form.refreshBeforeSend} onChange={(e) => edit({ refreshBeforeSend: e.target.checked })} className="size-4 accent-[var(--color-accent)]" />
           {t("Обновлять данные Linko перед отправкой")}
         </label>
-        <button className={primary} onClick={save} disabled={busy || !dirty}>
-          {busy && <Loader2 className="size-4 animate-spin" />}
-          {t("Сохранить")}
+        <button type="button" aria-expanded={about} onClick={() => setAbout((v) => !v)} className="flex items-center gap-1.5 text-[13px] font-semibold text-accent-strong">
+          <Info aria-hidden className="size-4" />
+          {t("Как это работает")}
         </button>
-      </div>
-      {account && account.status !== "Connected" && <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{t("Аккаунт не подключён — отчёты не уйдут, пока его не подключить на странице Telegram.")}</p>}
-      {saved && !dirty && <p className="mt-3 text-sm text-ok">{t("Сохранено.")}</p>}
-      {error && <p className="mt-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
-      <Note>
-        {t(
-          "Отчёты уходят с подключённого аккаунта OneBase. Картинки PNG 16:9 (1920×1080) рисует сервер, полоса и метка роли: РМ — синие, СВ — зелёные, ТП — оранжевые; ниже 80% плана — красным. Перед запуском данные Linko обновляются (если последнее обновление старше 10 минут); не обновились — отчёт уходит с пометкой о времени данных.",
+        {about && (
+          <Note>
+            {t(
+              "Отчёты уходят с подключённого аккаунта OneBase. Картинки PNG 16:9 (1920×1080) рисует сервер, полоса и метка роли: РМ — синие, СВ — зелёные, ТП — оранжевые; ниже 80% плана — красным. Перед запуском данные Linko обновляются (если последнее обновление старше 10 минут); не обновились — отчёт уходит с пометкой о времени данных.",
+            )}
+          </Note>
         )}
-      </Note>
-    </Section>
+        {error && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
+      </div>
+    </Sheet>
   );
 }
 
-/** Отправки за 7 дней — что дошло, что нет. */
-function Metrics({ data }: { data: ReportOverview }) {
+/** Счётчики за 7 дней: клик — история с этим статусом; «Пропущено» из-за чатов — к получателям без чата. */
+function Counters({ data, onHistory, onRecipients }: { data: ReportOverview; onHistory: (status: string) => void; onRecipients: (patch: Partial<RecipientFilters>) => void }) {
   const t = useT();
   const m = data.metrics;
+  const skips = (m.skippedBy ?? []).slice(0, 2).map((x) => `${t(SKIP_LABELS[x.key] ?? x.key)} · ${x.count}`).join(", ");
+  const next = data.jobs.filter((j) => j.enabled && j.nextRunAt).sort((a, b) => a.nextRunAt!.localeCompare(b.nextRunAt!))[0];
+  const noChat = (m.skippedBy ?? []).some((x) => x.key === "no_chat" && x.count > 0);
   const tiles = [
-    { label: "Отправлено", value: m.sent, className: "text-ok" },
-    { label: "Ошибок", value: m.failed, className: m.failed > 0 ? "text-bad" : "text-ink" },
-    { label: "Неизвестно, дошёл ли", value: m.unknown, className: m.unknown > 0 ? "text-warn" : "text-ink" },
-    { label: "Пропущено", value: m.skipped, className: "text-ink" },
-    { label: "В очереди", value: m.pending, className: "text-ink" },
+    { key: "sent", label: "Отправлено", short: "Отправлено", value: m.sent, icon: Send, square: "bg-ok-soft text-ok", tone: "text-ok", hint: t("за 7 дней"), go: () => onHistory("sent") },
+    {
+      key: "failed",
+      label: "Ошибок",
+      short: "Ошибок",
+      value: m.failed,
+      icon: CircleX,
+      square: m.failed > 0 ? "bg-bad-soft text-bad" : "bg-muted text-ink-3",
+      tone: m.failed > 0 ? "text-bad" : "text-ink",
+      hint: m.failed > 0 ? t("{n} — посмотреть", { n: m.failed }) : t("всё доставлено"),
+      go: () => onHistory("failed"),
+    },
+    { key: "unknown", label: "Неизвестно, дошёл ли", short: "Неизвестно", value: m.unknown, icon: CircleDashed, square: "bg-muted text-ink-3", tone: m.unknown > 0 ? "text-warn" : "text-ink", hint: "—", go: () => onHistory("unknown") },
+    {
+      key: "skipped",
+      label: "Пропущено",
+      short: "Пропущено",
+      value: m.skipped,
+      icon: CircleSlash,
+      square: "bg-warn-soft text-warn",
+      tone: "text-warn",
+      hint: skips || "—",
+      go: () => (noChat ? onRecipients({ issues: ["no_chat"] }) : onHistory("skipped")),
+    },
+    {
+      key: "pending",
+      label: "В очереди",
+      short: "В очереди",
+      value: m.pending,
+      icon: Timer,
+      square: "bg-accent-soft text-accent-strong",
+      tone: "text-accent-strong",
+      hint: next ? t("ближайшая — {time}", { time: next.time }) : "—",
+      go: () => onHistory("pending"),
+    },
   ];
   return (
-    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-      {tiles.map((tile) => (
-        <div key={tile.label} className="rounded-xl border border-line bg-surface px-4 py-3">
-          <div className="text-xs text-ink-3">
-            {t(tile.label)} · {t("7 дней")}
-          </div>
-          <div className={`mt-1 text-xl font-semibold ${tile.className}`}>{tile.value}</div>
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="mt-3 grid grid-cols-3 gap-2.5 max-lg:hidden xl:grid-cols-5">
+        {tiles.map((x) => (
+          <button key={x.key} type="button" onClick={x.go} className="group flex items-center gap-3 rounded-[14px] border border-line bg-surface px-3.5 py-3 text-left hover:border-line-strong">
+            <span aria-hidden className={`grid size-9 shrink-0 place-items-center rounded-[10px] ${x.square}`}>
+              <x.icon className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[11px] text-ink-3" title={`${t(x.label)} · ${t("7 дней")}`}>
+                <span className="2xl:hidden">{t(x.short)}</span>
+                <span className="hidden 2xl:inline">
+                  {t(x.label)} · {t("7 дней")}
+                </span>
+              </span>
+              <span className={`block text-[20px] font-bold leading-tight tabular-nums ${x.tone}`}>{x.value.toLocaleString("ru-RU")}</span>
+              <span className="block truncate text-[10px] text-ink-4" title={x.hint}>
+                {x.hint}
+              </span>
+            </span>
+            <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-4 group-hover:text-ink-2" />
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-4 gap-2 lg:hidden">
+        {["sent", "skipped", "pending", "failed"].map((key) => {
+          const x = tiles.find((tile) => tile.key === key)!;
+          return (
+            <button key={key} type="button" onClick={x.go} className="min-w-0 rounded-[14px] border border-line bg-surface px-2.5 py-2 text-left">
+              <span className="block truncate text-[10px] text-ink-3">{t(x.short)}</span>
+              <span className={`block text-[16px] font-bold tabular-nums ${x.key === "failed" ? x.tone : x.tone}`}>{x.value.toLocaleString("ru-RU")}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -385,434 +657,3 @@ export function Switch({ checked, onChange, disabled, label }: { checked: boolea
     </button>
   );
 }
-
-// ---------- Получатели ----------
-
-const inputOf = (r: ReportRecipient): ReportRecipientInput => ({
-  role: r.role,
-  title: r.name !== r.scope ? r.name : null,
-  directionId: r.directionId,
-  regionId: r.regionId,
-  supervisorId: r.supervisorId,
-  agentId: r.agentId,
-  chatIds: r.chats.map((c) => c.id),
-  reports: r.reports,
-  enabled: r.enabled,
-  pdfLanguage: r.pdfLanguage,
-  language: r.language,
-});
-
-/** Отчёты роли по умолчанию: всё, что роли положено, кроме недели в понедельник и еженедельного PDF (их включают отдельно). */
-const defaultReports = (data: ReportOverview, role: ReportRole) =>
-  data.jobs.filter((j) => j.roles.includes(role) && j.code !== "weekly.monday" && !isPdfJob(j) && (role === "tp" || j.code !== "no-orders.reminder")).map((j) => j.code);
-
-const emptyInput = (data: ReportOverview, role: ReportRole = "sv"): ReportRecipientInput => {
-  const scope = defaultScope(data, role);
-  return { ...scope, title: null, chatIds: [], reports: defaultReports(data, role), enabled: true };
-};
-
-/** Получатели: роль и область из оргструктуры «Продаж», чаты Telegram, отчёты; отправить сейчас; почему отчёт не уйдёт. */
-function Recipients({ data, onChanged }: { data: ReportOverview; onChanged: () => Promise<void> }) {
-  const t = useT();
-  const [editing, setEditing] = useState<{ id: string | null; input: ReportRecipientInput } | null>(null);
-  const [role, setRole] = useState<"" | ReportRole>("");
-  const [regionId, setRegionId] = useState("");
-  const [state, setState] = useState<"" | "problem" | "off" | "linked">("");
-  const [search, setSearch] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  const rows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return data.recipients.filter(
-      (r) =>
-        (!role || r.role === role) &&
-        (!regionId || r.regionId === regionId || (r.role === "rm" && data.regions.find((x) => x.id === regionId)?.directionId === r.directionId)) &&
-        (!state || (state === "problem" ? !!r.problem : state === "off" ? !r.enabled : r.telegramStatus === "linked")) &&
-        (!q || r.name.toLowerCase().includes(q) || r.scope.toLowerCase().includes(q) || r.chats.some((c) => c.title.toLowerCase().includes(q))),
-    );
-  }, [data, role, regionId, state, search]);
-
-  const save = async (r: ReportRecipient, patch: Partial<ReportRecipientInput>) => {
-    setBusyId(r.id);
-    setError(null);
-    try {
-      await reportsApi.saveRecipient(r.id, { ...inputOf(r), ...patch });
-      await onChanged();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const remove = async (r: ReportRecipient) => {
-    if (!window.confirm(t("Удалить получателя «{name}»? История отправок сохранится.", { name: r.name }))) return;
-    setBusyId(r.id);
-    try {
-      await reportsApi.deleteRecipient(r.id);
-      await onChanged();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const send = async (r: ReportRecipient, job: string) => {
-    setBusyId(r.id);
-    setError(null);
-    setMessage(null);
-    try {
-      let result = await reportsApi.send(r.id, job, false);
-      if ("conflict" in result) {
-        if (!window.confirm(result.conflict)) return;
-        result = await reportsApi.send(r.id, job, true);
-        if ("conflict" in result) throw new Error(result.conflict);
-      }
-
-      const info = data.jobs.find((j) => j.code === job)!;
-      const sent = result.filter((x) => x.status === "sent").length;
-      const lines = result
-        .filter((x) => x.status !== "sent")
-        .map((x) =>
-          x.status === "pending"
-            ? t("{chat}: временная ошибка Telegram — повторим в {time}", { chat: x.recipientTitle, time: when(x.nextAttemptAt) })
-            : `${x.recipientTitle}: ${t(deliveryStatus[x.status].label)} — ${t(x.error ?? "")}`,
-        );
-      setMessage([t("«{report}»: отправлено в {sent} из {total} чатов.", { report: `${t(info.reportTitle)} · ${info.time}`, sent, total: result.length }), ...lines].join(" "));
-      await onChanged();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const narrow = field.replace("w-full", "w-auto");
-  return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[200px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
-          <input className={`${field} pl-9`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("Имя, область или чат")} />
-        </div>
-        <select className={narrow} value={role} onChange={(e) => setRole(e.target.value as "" | ReportRole)} aria-label={t("Роль")}>
-          <option value="">{t("Все роли")}</option>
-          {reportRoles.map((r) => (
-            <option key={r.key} value={r.key}>
-              {t(r.label)}
-            </option>
-          ))}
-        </select>
-        <select className={narrow} value={regionId} onChange={(e) => setRegionId(e.target.value)} aria-label={t("Регион")}>
-          <option value="">{t("Все регионы")}</option>
-          {data.regions.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </select>
-        <select className={narrow} value={state} onChange={(e) => setState(e.target.value as typeof state)} aria-label={t("Статус")}>
-          <option value="">{t("Все")}</option>
-          <option value="problem">{t("С проблемой")}</option>
-          <option value="linked">{t("Telegram привязан")}</option>
-          <option value="off">{t("Выключены")}</option>
-        </select>
-        <button className={primary} onClick={() => setEditing({ id: null, input: emptyInput(data) })} disabled={!data.canUseSales || !data.settings.accountId}>
-          <Plus className="size-4" />
-          {t("Добавить получателя")}
-        </button>
-      </div>
-      {!data.settings.accountId && <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{t("Сначала выберите аккаунт Telegram выше.")}</p>}
-      {editing && (
-        <RecipientEditor
-          data={data}
-          id={editing.id}
-          initial={editing.input}
-          onCancel={() => setEditing(null)}
-          onSaved={async () => {
-            setEditing(null);
-            await onChanged();
-          }}
-        />
-      )}
-      {message && <p className="mt-3 rounded-lg bg-ok-soft px-3 py-2 text-sm text-ok">{message}</p>}
-      {error && <p className="mt-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
-
-      <div className="mt-4 space-y-3">
-        {rows.length === 0 ? (
-          <p className="text-sm text-ink-3">{data.recipients.length === 0 ? t("Получателей пока нет.") : t("Никого не найдено.")}</p>
-        ) : (
-          rows.map((r) => (
-            <div key={r.id} className={`rounded-xl border border-line p-4 ${r.enabled ? "bg-surface" : "bg-muted/40 opacity-70"}`}>
-              <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
-                <div className="min-w-[240px] flex-1">
-                  <div className="flex items-center gap-2">
-                    <RoleChip role={r.role} />
-                    <span className="font-semibold text-ink">{r.name}</span>
-                  </div>
-                  {r.name !== r.scope && <div className="text-sm text-ink-2">{r.scope}</div>}
-                  <div className="text-xs text-ink-3">
-                    {r.role === "tp" ? r.region : t("ТП в отчёте: {n}", { n: r.agents })}
-                    {r.language && ` · ${t("картинки: {lang}", { lang: t(reportLanguages.find((l) => l.code === r.language)?.label ?? r.language) })}`}
-                  </div>
-                  {r.problem && <div className="mt-1 max-w-[480px] text-xs text-warn">{t(r.problem)}</div>}
-                </div>
-                <div className="min-w-[220px] flex-1">
-                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-                    {t("Куда")}
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium normal-case tracking-normal ${telegramStatus[r.telegramStatus].className}`}>
-                      {t(telegramStatus[r.telegramStatus].label)}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    {r.chats.map((c) => (
-                      <span key={c.id} className={`rounded-full px-2.5 py-0.5 text-xs ${c.canSend ? "bg-accent-soft text-accent-strong" : "bg-bad-soft text-bad"}`} title={c.linked ? t("Telegram подтверждён: {name}", { name: c.linked }) : undefined}>
-                        {c.linked && <Link2 className="mr-1 inline size-3" />}
-                        {c.title}
-                        <span className="opacity-70"> · {t(chatTypeLabel[c.type])}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="min-w-[240px] flex-1">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">{t("Отчёты")}</div>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {data.jobs
-                      .filter((j) => r.reports.includes(j.code))
-                      .map((j) => (
-                        <span key={j.code} className="rounded-md bg-muted px-2 py-0.5 text-xs text-ink-2" title={t(j.slotTitle)}>
-                          {t(j.reportTitle).replace(/^\d+\.\s*/, "")} · {j.time}
-                        </span>
-                      ))}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 self-center">
-                  <Switch checked={r.enabled} disabled={busyId === r.id} onChange={(v) => save(r, { enabled: v })} label={t("Включён")} />
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
-                <div className="text-xs text-ink-3">
-                  {r.last.length === 0
-                    ? t("Ещё не отправлялось.")
-                    : r.last.slice(0, 3).map((d, i) => {
-                        const job = data.jobs.find((j) => j.code === d.report);
-                        return (
-                          <span key={i} className="mr-3 inline-block" title={d.error ? t(d.error) : undefined}>
-                            {job ? `${t(job.reportTitle).replace(/^\d+\.\s*/, "")} ${job.time}` : d.report} → {d.chat}:{" "}
-                            <span className={deliveryStatus[d.status].className}>{t(deliveryStatus[d.status].label)}</span> {when(d.at)}
-                          </span>
-                        );
-                      })}
-                </div>
-                <div className="flex flex-nowrap gap-1">
-                  <SendNow data={data} recipient={r} disabled={busyId === r.id || !!r.problem || !data.canUseSales} busy={busyId === r.id} onSend={(job) => send(r, job)} />
-                  <button className={button} onClick={() => setEditing({ id: r.id, input: inputOf(r) })} aria-label={t("Изменить")} title={t("Изменить")}>
-                    <Pencil className="size-4" />
-                  </button>
-                  <button className={danger} onClick={() => remove(r)} disabled={busyId === r.id} aria-label={t("Удалить")} title={t("Удалить")}>
-                    <Trash2 className="size-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-      <Note>
-        {t(
-          "Получатель — роль и область из оргструктуры «Продаж»: РМ — направление или вся страна, СВ — регион и супервайзер, ТП — торговый представитель (только свои цифры). Чаты — личные чаты и группы аккаунта; «Telegram привязан» — человек подтвердил свой Telegram кодом в OneBase. Пользователи Sales Base здесь не участвуют.",
-        )}
-      </Note>
-    </div>
-  );
-}
-
-/** «Отправить сейчас»: какой запуск — и кнопка. */
-function SendNow({ data, recipient, disabled, busy, onSend }: { data: ReportOverview; recipient: ReportRecipient; disabled: boolean; busy: boolean; onSend: (job: string) => void }) {
-  const t = useT();
-  const jobs = data.jobs.filter((j) => j.roles.includes(recipient.role));
-  const [job, setJob] = useState(recipient.reports.find((code) => jobs.some((j) => j.code === code)) ?? jobs[0]?.code ?? "");
-  return (
-    <span className="inline-flex">
-      <select className={`${field.replace("w-full", "w-auto")} h-9 max-w-[240px] rounded-r-none border-r-0 text-xs`} value={job} onChange={(e) => setJob(e.target.value)} aria-label={t("Какой отчёт")}>
-        {jobs.map((j) => (
-          <option key={j.code} value={j.code}>
-            {t(j.reportTitle)} · {j.time}
-          </option>
-        ))}
-      </select>
-      <button className={`${button} rounded-l-none`} onClick={() => onSend(job)} disabled={disabled || !job} title={t("Отправить сейчас во все чаты получателя (реальные данные)")}>
-        {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-        {t("Отправить")}
-      </button>
-    </span>
-  );
-}
-
-/** Новый получатель или правка: роль → область → чаты → отчёты роли. */
-function RecipientEditor({
-  data,
-  id,
-  initial,
-  onCancel,
-  onSaved,
-}: {
-  data: ReportOverview;
-  id: string | null;
-  initial: ReportRecipientInput;
-  onCancel: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const t = useT();
-  const [input, setInput] = useState(initial);
-  const [search, setSearch] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const scope: Scope = { role: input.role, directionId: input.directionId, regionId: input.regionId, supervisorId: input.supervisorId, agentId: input.agentId };
-  const chats = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const list = data.chats.filter((c) => !q || c.title.toLowerCase().includes(q) || (c.username ?? "").toLowerCase().includes(q) || (c.linkedUser ?? "").toLowerCase().includes(q));
-    // Выбранные и подтверждённые — сверху.
-    return [...list].sort((a, b) => Number(input.chatIds.includes(b.id)) - Number(input.chatIds.includes(a.id)) || Number(!!b.linkedUser) - Number(!!a.linkedUser));
-  }, [data.chats, search, input.chatIds]);
-  const jobs = data.jobs.filter((j) => j.roles.includes(input.role));
-
-  const changeScope = (s: Scope) =>
-    setInput((i) => ({ ...i, ...s, reports: s.role !== i.role ? defaultReports(data, s.role) : i.reports.filter((code) => data.jobs.find((j) => j.code === code)?.roles.includes(s.role)) }));
-  const toggleChat = (chatId: string) => setInput((i) => ({ ...i, chatIds: i.chatIds.includes(chatId) ? i.chatIds.filter((c) => c !== chatId) : [...i.chatIds, chatId] }));
-  const toggleJob = (code: string) => setInput((i) => ({ ...i, reports: i.reports.includes(code) ? i.reports.filter((c) => c !== code) : [...i.reports, code] }));
-
-  const save = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await reportsApi.saveRecipient(id, input);
-      await onSaved();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const ready = input.chatIds.length > 0 && input.reports.length > 0 && (input.role === "rm" || input.regionId) && (input.role !== "tp" || input.agentId);
-
-  return (
-    <div className="mt-4 rounded-xl border border-accent/30 bg-accent-soft/20 p-4">
-      <h3 className="font-semibold text-ink">{id ? t("Получатель") : t("Новый получатель")}</h3>
-      <div className="mt-4 grid gap-5 lg:grid-cols-3">
-        <div className="space-y-3">
-          <ScopePicker data={data} scope={scope} onChange={changeScope} />
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-ink-2">{t("Подпись (необязательно)")}</span>
-            <input className={field} value={input.title ?? ""} onChange={(e) => setInput((i) => ({ ...i, title: e.target.value || null }))} placeholder={t("По умолчанию — область")} maxLength={200} />
-          </label>
-        </div>
-
-        <div>
-          <span className="mb-1.5 block text-sm font-medium text-ink">
-            {t("Чаты")} <span className="font-normal text-ink-3">· {t("выбрано: {n}", { n: input.chatIds.length })}</span>
-          </span>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
-            <input className={`${field} pl-9`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("Название, @username или имя")} />
-          </div>
-          <div className="mt-2 max-h-[340px] overflow-y-auto rounded-lg border border-line bg-surface">
-            {chats.length === 0 ? (
-              <p className="px-3 py-3 text-sm text-ink-3">{t("Чатов нет — обновите их на странице Telegram, вкладка «Чаты».")}</p>
-            ) : (
-              chats.map((c) => (
-                <label key={c.id} className={`flex items-center gap-3 border-b border-line px-3 py-2 text-sm last:border-b-0 ${c.canSend ? "cursor-pointer hover:bg-muted" : "opacity-50"}`}>
-                  <input type="checkbox" checked={input.chatIds.includes(c.id)} disabled={!c.canSend} onChange={() => toggleChat(c.id)} className="size-4 accent-[var(--color-accent)]" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-ink">{c.title}</span>
-                    <span className="text-xs text-ink-3">
-                      {t(chatTypeLabel[c.type])}
-                      {c.username ? ` · @${c.username}` : ""}
-                      {c.linkedUser ? ` · ${t("привязан: {name}", { name: c.linkedUser })}` : ""}
-                      {!c.canSend && c.reason ? ` · ${t(c.reason)}` : ""}
-                    </span>
-                  </span>
-                </label>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div>
-          <span className="mb-1.5 block text-sm font-medium text-ink">{t("Отчёты")}</span>
-          <div className="space-y-3">
-            {reportTypes.map((type) => {
-              const own = jobs.filter((j) => j.report === type.key);
-              if (own.length === 0) return null;
-              return (
-                <div key={type.key}>
-                  <div className="text-xs font-semibold text-ink-2">{t(type.title)}</div>
-                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                    {own.map((j) => (
-                      <label key={j.code} className="flex items-center gap-1.5 text-sm text-ink">
-                        <input type="checkbox" checked={input.reports.includes(j.code)} onChange={() => toggleJob(j.code)} className="size-4 accent-[var(--color-accent)]" />
-                        {j.time}
-                        <span className="text-xs text-ink-3">{t(j.slotTitle)}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {jobs.some((j) => !isPdfJob(j) && input.reports.includes(j.code)) && (
-            <label className="mt-4 block">
-              <span className="mb-1 block text-xs font-medium text-ink-2">{t("Язык картинок")}</span>
-              <select className={field} value={input.language ?? ""} onChange={(e) => setInput((i) => ({ ...i, language: (e.target.value || null) as ReportLanguage | null }))}>
-                <option value="">
-                  {t("Как в общих настройках ({lang})", { lang: t(reportLanguages.find((l) => l.code === data.settings.language)?.label ?? "Русский").toLowerCase() })}
-                </option>
-                {reportLanguages.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {t(l.label)}
-                  </option>
-                ))}
-              </select>
-              <span className="mt-1 block text-xs text-ink-3">{t("Надписи на картинках этого получателя; подпись под картинкой акции — всегда по-русски и по-узбекски.")}</span>
-            </label>
-          )}
-          {jobs.some((j) => isPdfJob(j) && input.reports.includes(j.code)) && (
-            <label className="mt-4 block">
-              <span className="mb-1 block text-xs font-medium text-ink-2">{t("Язык PDF")}</span>
-              <select className={field} value={input.pdfLanguage ?? ""} onChange={(e) => setInput((i) => ({ ...i, pdfLanguage: (e.target.value || null) as ReportLanguage | null }))}>
-                <option value="">
-                  {t("Как в общих настройках ({lang})", { lang: t(reportLanguages.find((l) => l.code === data.settings.language)?.label ?? "Русский").toLowerCase() })}
-                </option>
-                {reportLanguages.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {t(l.label)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <label className="mt-4 flex items-center gap-2 text-sm text-ink">
-            <Switch checked={input.enabled} onChange={(v) => setInput((i) => ({ ...i, enabled: v }))} label={t("Включён")} />
-            {t("Включён")}
-          </label>
-        </div>
-      </div>
-
-      {error && <p className="mt-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
-      <div className="mt-4 flex gap-2">
-        <button className={primary} onClick={save} disabled={busy || !ready}>
-          {busy && <Loader2 className="size-4 animate-spin" />}
-          {t("Сохранить")}
-        </button>
-        <button className={button} onClick={onCancel} disabled={busy}>
-          {t("Отмена")}
-        </button>
-      </div>
-    </div>
-  );
-}
-

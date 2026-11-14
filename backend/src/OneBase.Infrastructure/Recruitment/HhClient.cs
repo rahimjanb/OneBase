@@ -77,16 +77,31 @@ internal sealed class HhClient(HttpClient http) : IHhApi
                 }
             }
 
+            var has = resume.ValueKind == JsonValueKind.Object;
+            string? salary = null;
+            if (has && resume.TryGetProperty("salary", out var sal) && sal.ValueKind == JsonValueKind.Object && Str(sal, "amount") is { } amount)
+            {
+                salary = $"{amount} {Str(sal, "currency")}".Trim();
+            }
+
+            int? months = has && resume.TryGetProperty("total_experience", out var total) && total.ValueKind == JsonValueKind.Object && Int(total, "months") is > 0 and var m
+                ? m
+                : null;
+            var site = has ? Str(resume, "alternate_url") : null;
             return new HhNegotiationItem(Str(item, "id") ?? string.Empty,
                 item.TryGetProperty("state", out var s) && s.ValueKind == JsonValueKind.Object ? Str(s, "id") : null,
                 Date(Str(item, "updated_at")),
-                resume.ValueKind == JsonValueKind.Object ? Str(resume, "id") ?? string.Empty : string.Empty,
-                resume.ValueKind == JsonValueKind.Object ? Str(resume, "url") : null,
-                resume.ValueKind == JsonValueKind.Object ? Str(resume, "first_name") : null,
-                resume.ValueKind == JsonValueKind.Object ? Str(resume, "last_name") : null,
-                resume.ValueKind == JsonValueKind.Object ? Str(resume, "middle_name") : null,
-                resume.ValueKind == JsonValueKind.Object ? Str(resume, "title") : null,
-                actions);
+                has ? Str(resume, "id") ?? string.Empty : string.Empty,
+                has ? Str(resume, "url") : null,
+                has ? Str(resume, "first_name") : null,
+                has ? Str(resume, "last_name") : null,
+                has ? Str(resume, "middle_name") : null,
+                has ? Str(resume, "title") : null,
+                actions,
+                has && resume.TryGetProperty("area", out var area) && area.ValueKind == JsonValueKind.Object ? Str(area, "name") : null,
+                salary,
+                months,
+                HhLinks.IsSite(site) ? site : null);
         });
     }
 

@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { InterviewSettingsCard } from "@/components/recruitment/Interviews";
+import { CandidateScreening } from "@/components/recruitment/screening/CandidateScreening";
+import { HhGuardCard } from "@/components/recruitment/screening/HhGuardCard";
 import { Badge, Card, ErrorText, Label, textarea, useAction } from "@/components/recruitment/ui";
 import { useT } from "@/i18n/client";
 import { stageLabel, when, type CandidateCard, type RecruitmentContext, type Stage, type Vacancy } from "@/lib/recruitment";
@@ -25,7 +27,6 @@ import {
   type InterviewRow,
   type Person,
   type RecruiterBrief,
-  type Score,
   type Slot,
 } from "@/lib/recruitment-flow";
 
@@ -289,14 +290,14 @@ export function AiSettingsCard({ ctx }: { ctx: RecruitmentContext }) {
 export function HhView({ ctx }: { ctx: RecruitmentContext }) {
   const t = useT();
   const [s, setS] = useState<HhStatus | null>(null);
-  const [form, setForm] = useState({ clientId: "", clientSecret: "", redirectUri: "", contactEmail: "", enabled: true });
+  const [form, setForm] = useState({ clientId: "", clientSecret: "", redirectUri: "", contactEmail: "", enabled: true, aiOnHhData: false });
   const [vacancies, setVacancies] = useState<HhVacancyLink[] | null>(null);
   const [own, setOwn] = useState<{ id: string; code: string; title: string }[]>([]);
   const [result, setResult] = useState<string | null>(null);
   const { busy, error, run } = useAction();
   const apply = (x: HhStatus) => {
     setS(x);
-    setForm({ clientId: x.clientId ?? "", clientSecret: "", redirectUri: x.redirectUri ?? `${window.location.origin}/hr/recruitment/hh/callback`, contactEmail: x.contactEmail ?? "", enabled: x.enabled });
+    setForm({ clientId: x.clientId ?? "", clientSecret: "", redirectUri: x.redirectUri ?? `${window.location.origin}/hr/recruitment/hh/callback`, contactEmail: x.contactEmail ?? "", enabled: x.enabled, aiOnHhData: x.aiOnHhData });
   };
   useEffect(() => {
     run("load", async () => apply(await hhApi.status()));
@@ -310,7 +311,7 @@ export function HhView({ ctx }: { ctx: RecruitmentContext }) {
         <p className="mb-3 text-sm text-ink-2">
           {s.connected
             ? t("Подключено: {name}. Отклики по связанным вакансиям загружаются раз в 15 минут.", { name: s.employerName ?? "—" })
-            : t("Работодатель регистрирует приложение на dev.hh.ru и указывает в нём redirect_uri ниже. Отклики и резюме в API HH требуют платного доступа работодателя.")}
+            : t("Работодатель регистрирует приложение на dev.hh.ru и указывает в нём redirect_uri ниже. Список откликов на свои вакансии в API HH бесплатный; резюме через API не загружаются — просмотр расходует лимит HH.")}
         </p>
         {s.lastSyncAt && (
           <p className={`mb-3 text-sm ${s.lastSyncOk ? "text-ok" : "text-bad"}`}>
@@ -335,6 +336,15 @@ export function HhView({ ctx }: { ctx: RecruitmentContext }) {
               <input type="checkbox" className="size-4 accent-[var(--color-accent)]" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
               {t("Загружать отклики")}
             </label>
+            <label className="flex items-start gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-accent)]" checked={form.aiOnHhData} onChange={(e) => setForm({ ...form, aiOnHhData: e.target.checked })} />
+              <span>
+                {t("Передавать AI резюме, полученные через API HH")}
+                <span className="block text-xs text-ink-3">
+                  {t("По умолчанию выключено: соглашение разработчика HH (п. 4.6) запрещает передавать данные, полученные через сервис, третьим сервисам. Включайте после подтверждения юриста. Резюме, загруженные файлом, — не про это.")}
+                </span>
+              </span>
+            </label>
             <div className="flex flex-wrap gap-2 sm:col-span-2">
               <button className={button} disabled={!!busy} onClick={() => run("save", async () => apply(await hhApi.save({ ...form, clientSecret: form.clientSecret || null })))}>
                 {t("Сохранить")}
@@ -355,6 +365,9 @@ export function HhView({ ctx }: { ctx: RecruitmentContext }) {
                     {busy === "sync" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                     {t("Загрузить отклики сейчас")}
                   </button>
+                  <button className={button} disabled={!!busy} onClick={() => run("pause", async () => apply(await hhApi.save({ ...form, clientSecret: null, enabled: !s.enabled })))}>
+                    {s.enabled ? t("Остановить синхронизацию") : t("Возобновить синхронизацию")}
+                  </button>
                   <button className={button} disabled={!!busy} onClick={() => run("disconnect", async () => apply(await hhApi.disconnect()))}>
                     {t("Отключить")}
                   </button>
@@ -366,6 +379,8 @@ export function HhView({ ctx }: { ctx: RecruitmentContext }) {
         {result && <p className="mt-2 text-sm text-ink-2">{t(result)}</p>}
         <ErrorText error={error} />
       </Card>
+
+      {ctx.canManage && <HhGuardCard />}
 
       {s.connected && ctx.canManage && (
         <Card title="Вакансии работодателя на HH" actions={<button className={button} onClick={() => run("hhv", async () => setVacancies(await hhApi.vacancies()))}>{t("Показать")}</button>}>
@@ -513,18 +528,16 @@ export function VacancyExtras({ ctx, vacancy, onChange }: { ctx: RecruitmentCont
   );
 }
 
-// ---------- Кандидат: оценка AI, собеседования, отклик HH ----------
+// ---------- Кандидат: AI-анализ (AI-скрининг), собеседования, отклик HH ----------
 
 export function CandidateExtras({ ctx, card }: { ctx: RecruitmentContext; card: CandidateCard }) {
   const t = useT();
-  const [scores, setScores] = useState<Score[]>([]);
   const [interviews, setInterviews] = useState<InterviewRow[]>([]);
   const [negotiations, setNegotiations] = useState<HhNegotiation[]>([]);
   const [slots, setSlots] = useState<Record<string, Slot[]>>({});
   const [confirmed, setConfirmed] = useState(false);
   const { busy, error, run } = useAction();
   useEffect(() => {
-    flowApi.scores(card.id).then(setScores, () => undefined);
     flowApi.candidateInterviews(card.id).then(setInterviews, () => undefined);
     hhApi.negotiations(card.id).then(setNegotiations, () => undefined);
   }, [card.id]);
@@ -532,45 +545,7 @@ export function CandidateExtras({ ctx, card }: { ctx: RecruitmentContext; card: 
 
   return (
     <>
-      <Card title="Оценка AI">
-        <p className="mb-2 text-xs text-ink-3">{t("Совет для HR, не решение: по каждому критерию — балл, объяснение и цитата. Цитата, которой нет в резюме или переписке, помечена «без подтверждения».")}</p>
-        {ctx.canManage && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {open.map((a) => (
-              <button key={a.id} className={button} disabled={!!busy} onClick={() => run(`score-${a.id}`, async () => {
-                await flowApi.score(a.id);
-                setScores(await flowApi.scores(card.id));
-              })}>
-                {busy === `score-${a.id}` ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                {t("Оценить AI для {code}", { code: a.vacancyCode })}
-              </button>
-            ))}
-          </div>
-        )}
-        {scores.length === 0 && <p className="text-sm text-ink-3">{t("Оценок пока нет.")}</p>}
-        {scores.slice(0, 3).map((s) => (
-          <div key={s.id} className="mb-3 rounded-lg border border-line p-3 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <b>{t("Итог: {n} из 100", { n: s.overall })}</b>
-              <span className="text-xs text-ink-3">{when(s.createdAt)}</span>
-            </div>
-            <p className="mt-1 text-ink-2">{s.summary}</p>
-            <ul className="mt-2 space-y-1">
-              {s.criteria.map((c) => (
-                <li key={c.name}>
-                  <b>{c.name}</b>: {c.score}/10 — {c.explanation}
-                  {c.evidence && (
-                    <span className={`block text-xs ${c.verified ? "text-ink-3" : "text-warn"}`}>
-                      «{c.evidence}» {!c.verified && `— ${t("без подтверждения")}`}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {s.risks && <p className="mt-2 text-xs text-ink-2">{t("Уточнить")}: {s.risks}</p>}
-          </div>
-        ))}
-      </Card>
+      <CandidateScreening candidateId={card.id} canManage={ctx.canManage} hasResume={card.resumes.some((r) => r.hasText)} />
 
       <Card title="Собеседования">
         {interviews.map((i) => (
@@ -619,7 +594,7 @@ export function CandidateExtras({ ctx, card }: { ctx: RecruitmentContext; card: 
               <span className="text-ink-2">
                 {t("Состояние на HH")}: {n.state ?? "—"} · {when(n.hhUpdatedAt)}
               </span>
-              {n.lastError && <p className="text-xs text-bad">{t(n.lastError)}</p>}
+              {n.lastError && <p className="text-xs text-warn">{t(n.lastError)}</p>}
               {ctx.canManage && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {n.actions.map((a) => (

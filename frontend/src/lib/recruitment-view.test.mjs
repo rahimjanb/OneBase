@@ -15,6 +15,7 @@ test("подписи кнопок: число, ноль — «нет …» цв�
   assert.deepEqual(navCaption("hh", counters), { key: "не подключён", tone: "warn" });
   assert.deepEqual(navCaption("hh", { ...counters, hhConnected: true }), { key: "подключён" });
   assert.deepEqual(navCaption("analytics", null), { key: "воронка" });
+  assert.deepEqual(navCaption("screening", null), { key: "рейтинг AI" });
   assert.deepEqual(navCaption("settings", null), { key: "этапы" });
   assert.equal(navCaption("telegram", null), null);
 });

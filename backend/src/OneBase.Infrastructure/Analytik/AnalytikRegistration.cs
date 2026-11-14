@@ -29,6 +29,7 @@ public static class AnalytikRegistration
         services.AddScoped<OneBase.Application.Analytik.Semantic.CapabilityRegistry>();
         services.AddScoped<OneBase.Application.Analytik.Compute.ComputeService>();
         services.AddScoped<OneBase.Application.Analytik.Decisions.DecisionService>();
+        services.AddScoped<OneBase.Application.Analytik.Research.ResearchService>();
         services.AddScoped<OneBase.Application.Analytik.Business.OperationsAnalytik>();
         services.AddScoped<OneBase.Application.Analytik.Risk.InsightInvestigator>();
         services.AddScoped<OneBase.Application.Analytik.Risk.InsightStore>();

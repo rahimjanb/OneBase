@@ -145,7 +145,7 @@ public sealed class ToolExecutor(IToolRegistry registry, IAppDbContext db, IUser
             try
             {
                 await audit.LogAsync(ActorType.Agent, context.AgentCode, "ai.tool.failed", "tool", toolName,
-                    new { context.UserId, kind, error = ex.GetType().Name, message }, cancellationToken);
+                    new { context.UserId, context.ConversationId, kind, error = ex.GetType().Name, message }, cancellationToken);
             }
             catch (Exception auditError) when (auditError is not OperationCanceledException)
             {

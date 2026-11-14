@@ -53,7 +53,8 @@ public static class Calculator
     {
         if (string.IsNullOrWhiteSpace(expression) || expression.Length > MaxLength)
         {
-            throw new FormatException($"Нужно выражение до {MaxLength} символов.");
+            throw new FormatException($"Нужно выражение до {MaxLength} символов. Ряды и статистику (средние, корреляции, тренды по многим числам) " +
+                                      "считай analytik_compute (по срезу, query_id или series) или analytics_research, а не формулой.");
         }
 
         var parser = new Parser(expression.Replace('×', '*').Replace('÷', '/').Replace('−', '-').Replace('–', '-'));

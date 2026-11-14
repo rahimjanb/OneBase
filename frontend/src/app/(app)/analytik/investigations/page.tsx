@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { one, requireAnalytik, type SearchParams } from "@/components/analytik/guard";
 import { InvestigationList } from "@/components/analytik/intelligence/InvestigationView";
+import { ResearchLauncher } from "@/components/analytik/intelligence/ResearchView";
 import { getT } from "@/i18n/server";
 import type { InvestigationRow } from "@/lib/intelligence";
 import { apiGet } from "@/lib/server-api";
@@ -22,10 +23,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<Sea
     <>
       <PageHeader
         title={t("Исследования")}
-        subtitle={t("Сложные вопросы, которые AI-аналитик исследовал по плану: шаги, гипотезы с проверкой расчётом, противоречия, проверка выводов")}
+        subtitle={t("Сложные вопросы, которые AI-аналитик исследовал по плану, и исследования без модели: операции, расчёты, гипотезы, уровень доказательности выводов")}
         breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Аналитик"), href: "/analytik" }, { label: t("Исследования") }]}
       />
       <PageBody>
+        <div className="mb-4">
+          <ResearchLauncher />
+        </div>
         {manager && (
           <div className="mb-3 flex gap-1.5 text-xs">
             <Link href="/analytik/investigations" className={`rounded-full px-3 py-1 font-medium ${all ? "bg-muted text-ink-2" : "bg-accent text-white"}`}>{t("Мои")}</Link>

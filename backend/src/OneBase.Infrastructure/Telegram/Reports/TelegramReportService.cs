@@ -47,19 +47,25 @@ public sealed class TelegramReportService(
                 r.Supervisors.Select(s => new ReportPersonOption(s.Id, s.Name)).ToList(), r.Agents.Select(a => new ReportPersonOption(a.Id, a.Name)).ToList()))
             .ToList();
         var directionOptions = directions.Select(d => new ReportDirectionOption(d.Id, d.Name, d.Manager, teams.Count(t => t.DirectionId == d.Id))).ToList();
+        var rmUsers = canUseSales ? await ReportScopes.RmUsersAsync(db, ct) : [];
+        var rmOptions = rmUsers.Select(u => new ReportRmUserOption(u.Id, u.Name, u.RegionIds,
+            teams.Where(t => u.RegionIds.Contains(t.Id)).SelectMany(t => t.Agents).Select(a => a.Id).Distinct().Count())).ToList();
         var chats = settings.AccountId is { } account ? await ChatsAsync(account, ct) : [];
-        var recipients = await RecipientsAsync(settings.AccountId, teams, directions, chats, ct);
+        var recipients = await RecipientsAsync(settings.AccountId, teams, directions, rmUsers, chats, ct);
         var since = clock.GetUtcNow().AddDays(-7);
         var statuses = await db.TelegramReportDeliveries.AsNoTracking().Where(d => d.CreatedAt >= since && d.Report != null).GroupBy(d => d.Status)
             .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+        var skipped = await db.TelegramReportDeliveries.AsNoTracking().Where(d => d.CreatedAt >= since && d.Report != null && d.Status == TelegramReportSender.Skipped)
+            .GroupBy(d => d.Error).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(ct);
         var metrics = new ReportMetrics(statuses.GetValueOrDefault(TelegramReportSender.Sent), statuses.GetValueOrDefault(TelegramReportSender.Failed),
             statuses.GetValueOrDefault(TelegramReportSender.Skipped), statuses.GetValueOrDefault(TelegramReportSender.Unknown),
-            statuses.GetValueOrDefault(TelegramReportSender.Pending) + statuses.GetValueOrDefault(TelegramReportSender.Sending));
+            statuses.GetValueOrDefault(TelegramReportSender.Pending) + statuses.GetValueOrDefault(TelegramReportSender.Sending),
+            ReportSkipReasons.Count(skipped.Select(x => (x.Key, x.Count))));
         var sync = await db.LinkoSyncStates.AsNoTracking().Where(s => s.Entity == "orders" || s.Entity == "visits").Select(s => new { s.Entity, s.LastSuccessAt })
             .ToListAsync(ct);
         return new ReportOverview(SettingsView(settings), accounts, await JobsAsync(recipients, ct), recipients, directionOptions, regions, chats, canUseSales,
             WTelegramGateway.Enabled(config), metrics, WeeklyPdfView(await db.TelegramWeeklyPdfSettings.AsNoTracking().FirstOrDefaultAsync(ct)),
-            new ReportFreshness(sync.FirstOrDefault(s => s.Entity == "orders")?.LastSuccessAt, sync.FirstOrDefault(s => s.Entity == "visits")?.LastSuccessAt));
+            new ReportFreshness(sync.FirstOrDefault(s => s.Entity == "orders")?.LastSuccessAt, sync.FirstOrDefault(s => s.Entity == "visits")?.LastSuccessAt), rmOptions);
     }
 
     private WeeklyPdfSettingsView WeeklyPdfView(TelegramWeeklyPdfSettings? s) =>
@@ -101,15 +107,17 @@ public sealed class TelegramReportService(
         var linked = await (from p in db.TelegramUserPermissions.AsNoTracking()
                             join u in db.Users.AsNoTracking() on p.UserId equals u.Id
                             where p.AccountId == accountId && p.TelegramUserId != null && p.VerifiedAt != null
-                            select new { p.TelegramUserId, u.FullName })
+                            select new { p.TelegramUserId, u.FullName, UserId = u.Id })
             .ToListAsync(ct);
-        var byPeer = linked.GroupBy(x => x.TelegramUserId!.Value).ToDictionary(g => g.Key, g => g.First().FullName);
-        return chats.Select(c => new ReportChatOption(c.Id, c.Title, c.Type.ToString(), c.Username, c.PeerId, c.CanSend, c.CannotSendReason,
-            c.Type == TelegramChatType.Private ? byPeer.GetValueOrDefault(c.PeerId) : null)).ToList();
+        var byPeer = linked.GroupBy(x => x.TelegramUserId!.Value).ToDictionary(g => g.Key, g => g.First());
+        return chats.Select(c => (Chat: c, User: c.Type == TelegramChatType.Private ? byPeer.GetValueOrDefault(c.PeerId) : null))
+            .Select(x => new ReportChatOption(x.Chat.Id, x.Chat.Title, x.Chat.Type.ToString(), x.Chat.Username, x.Chat.PeerId, x.Chat.CanSend, x.Chat.CannotSendReason,
+                x.User?.FullName, x.User?.UserId))
+            .ToList();
     }
 
     private async Task<List<ReportRecipientView>> RecipientsAsync(Guid? accountId, IReadOnlyList<ReportRegionTeam> teams, IReadOnlyList<ReportDirection> directions,
-        IReadOnlyList<ReportChatOption> accountChats, CancellationToken ct)
+        IReadOnlyList<ReportRmUser> rmUsers, IReadOnlyList<ReportChatOption> accountChats, CancellationToken ct)
     {
         var rows = await db.TelegramReportSubscriptions.AsNoTracking().Include(s => s.Chats).OrderBy(s => s.Role).ThenBy(s => s.CreatedAt).ToListAsync(ct);
         var chatIds = rows.SelectMany(r => r.Chats.Select(c => c.ChatId)).Distinct().ToArray();
@@ -117,6 +125,9 @@ public sealed class TelegramReportService(
         var linkedByChat = accountChats.Where(c => c.LinkedUser is not null).ToDictionary(c => c.Id, c => c.LinkedUser);
         var regionIds = rows.Where(r => r.RegionId != null).Select(r => r.RegionId!.Value).Distinct().ToArray();
         var regionNames = await db.SalesRegions.AsNoTracking().Where(r => regionIds.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.Name, ct);
+        // РМ-пользователь, потерявший роль, — в строке всё равно по имени (область не строится, причина — в Problem).
+        var userIds = rows.Where(r => r.UserId != null).Select(r => r.UserId!.Value).Distinct().ToArray();
+        var userNames = userIds.Length == 0 ? [] : await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
         var ids = rows.Select(r => r.Id).ToArray();
         var last = await db.TelegramReportDeliveries.AsNoTracking()
             .Where(d => d.SubscriptionId != null && ids.Contains(d.SubscriptionId.Value) && d.Report != null)
@@ -124,6 +135,19 @@ public sealed class TelegramReportService(
             .Take(800)
             .Select(d => new { d.SubscriptionId, d.Report, d.RecipientTitle, d.Status, d.CreatedAt, d.SentAt, d.Error })
             .ToListAsync(ct);
+        // «Последние» выше — только самые новые строки журнала (около дня рассылки); последняя доставка и ошибки за 7 дней — по всему журналу.
+        var lastSent = await db.TelegramReportDeliveries.AsNoTracking()
+            .Where(d => d.SubscriptionId != null && ids.Contains(d.SubscriptionId.Value) && d.Report != null && d.Status == TelegramReportSender.Sent)
+            .GroupBy(d => d.SubscriptionId!.Value)
+            .Select(g => new { g.Key, At = g.Max(x => x.SentAt ?? x.CreatedAt) })
+            .ToDictionaryAsync(x => x.Key, x => x.At, ct);
+        var week = clock.GetUtcNow().AddDays(-7);
+        var failedWeek = await db.TelegramReportDeliveries.AsNoTracking()
+            .Where(d => d.SubscriptionId != null && ids.Contains(d.SubscriptionId.Value) && d.Report != null && d.CreatedAt >= week
+                && (d.Status == TelegramReportSender.Failed || d.Status == TelegramReportSender.Unknown))
+            .GroupBy(d => d.SubscriptionId!.Value)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
         string T(string ru) => ru;
 
         var views = new List<ReportRecipientView>();
@@ -136,13 +160,13 @@ public sealed class TelegramReportService(
             string? problem = null;
             try
             {
-                var resolved = teams.Count == 0 ? null : ReportScopes.Resolve(ReportScope.Of(s), teams, directions, T);
-                scopeTitle = resolved?.Title ?? Fallback(s, regionNames);
+                var resolved = teams.Count == 0 ? null : ReportScopes.Resolve(ReportScope.Of(s), teams, directions, T, rmUsers);
+                scopeTitle = resolved?.Title ?? Fallback(s, regionNames, userNames);
                 agents = resolved?.Agents.Count ?? 0;
             }
             catch (KeyNotFoundException ex)
             {
-                scopeTitle = Fallback(s, regionNames);
+                scopeTitle = Fallback(s, regionNames, userNames);
                 agents = 0;
                 problem = ex.Message;
             }
@@ -161,16 +185,26 @@ public sealed class TelegramReportService(
                 : "blocked";
             var recent = last.Where(d => d.SubscriptionId == s.Id).GroupBy(d => (d.Report, d.RecipientTitle)).Select(g => g.First()).Take(6)
                 .Select(d => new ReportDeliveryBrief(d.Report!, d.RecipientTitle, d.Status, d.SentAt ?? d.CreatedAt, d.Error)).ToList();
+            // Супервайзер в строке: у СВ — выбранный (или СВР региона), у ТП — СВР его региона, как на картинке ТП; нет — «без супервайзера».
+            var team = s.RegionId is { } teamId ? teams.FirstOrDefault(x => x.Id == teamId) : null;
+            var supervisor = s.Role switch
+            {
+                TelegramReportRoles.Sv => s.SupervisorName ?? team?.SupervisorName,
+                TelegramReportRoles.Tp => team?.SupervisorName,
+                _ => null,
+            };
             views.Add(new ReportRecipientView(s.Id, s.Role, s.Title ?? scopeTitle, scopeTitle, s.DirectionId, s.RegionId, s.RegionId is { } rid ? regionNames.GetValueOrDefault(rid) : null,
-                s.SupervisorId, s.AgentId, agents, chatRefs, status, reports, s.Enabled, problem, recent, s.PdfLanguage, s.Language));
+                s.SupervisorId, s.AgentId, agents, chatRefs, status, reports, s.Enabled, problem, recent, s.PdfLanguage, s.Language,
+                s.Enabled ? null : s.DisabledAt, s.Enabled ? null : s.DisabledReason, s.Enabled ? null : s.DisabledUntil, string.IsNullOrWhiteSpace(supervisor) ? null : supervisor,
+                lastSent.TryGetValue(s.Id, out var sentAt) ? sentAt : null, failedWeek.GetValueOrDefault(s.Id), s.UserId));
         }
 
         return views;
     }
 
-    private static string Fallback(TelegramReportSubscription s, IReadOnlyDictionary<Guid, string> regions) => s.Role switch
+    private static string Fallback(TelegramReportSubscription s, IReadOnlyDictionary<Guid, string> regions, IReadOnlyDictionary<Guid, string> users) => s.Role switch
     {
-        TelegramReportRoles.Rm => s.Title ?? "РМ",
+        TelegramReportRoles.Rm => s.Title ?? (s.UserId is { } user && users.TryGetValue(user, out var name) ? $"РМ {name}" : "РМ"),
         TelegramReportRoles.Tp => $"ТП {s.AgentName ?? s.AgentId?.ToString()}",
         _ => string.Join(" · ", new[] { s.RegionId is { } r ? regions.GetValueOrDefault(r) : null, s.SupervisorName }.Where(x => !string.IsNullOrWhiteSpace(x))),
     };
@@ -354,7 +388,8 @@ public sealed class TelegramReportService(
         var settings = await SettingsAsync(ct);
         var (teams, directions) = await engine.StructureAsync(Today(), ct);
         var chats = settings.AccountId is { } account ? await ChatsAsync(account, ct) : [];
-        return (await JobsAsync(await RecipientsAsync(settings.AccountId, teams, directions, chats, ct), ct)).First(j => j.Code == code);
+        return (await JobsAsync(await RecipientsAsync(settings.AccountId, teams, directions, await ReportScopes.RmUsersAsync(db, ct), chats, ct), ct))
+            .First(j => j.Code == code);
     }
 
     // ---------- Получатели ----------
@@ -365,11 +400,88 @@ public sealed class TelegramReportService(
     /// </summary>
     public async Task<ReportRecipientView> SaveRecipientAsync(Guid? id, ReportRecipientInput input, bool canUseSales, Guid userId, CancellationToken ct)
     {
+        var context = await RecipientContextAsync(canUseSales, ct);
+        var (row, chatIds) = await ApplyRecipientAsync(id, input, context, userId, ct);
+        if (id is null)
+        {
+            db.TelegramReportSubscriptions.Add(row);
+        }
+
+        await db.SaveChangesAsync(ct);
+        await AuditRecipientAsync(row, id is null, chatIds, userId, ct);
+        var account = context.Settings.AccountId!.Value;
+        return (await RecipientsAsync(account, context.Teams, context.Directions, context.RmUsers, await ChatsAsync(account, ct), ct)).First(s => s.Id == row.Id);
+    }
+
+    /// <summary>
+    /// Массовое действие над получателями: каждая строка проверяется как при обычном сохранении, сохраняются все одним SaveChanges — ошибка в
+    /// любой строке (««Азиз Каримов»: Выберите чат…») не сохраняет ни одной.
+    /// </summary>
+    public async Task<IReadOnlyList<ReportRecipientView>> SaveRecipientsAsync(ReportRecipientsBulkInput input, bool canUseSales, Guid userId, CancellationToken ct)
+    {
+        var items = input.Items ?? [];
+        if (items.Count == 0)
+        {
+            throw new ReportValidationException("Не выбран ни один получатель.");
+        }
+
+        if (items.Count > MaxBulk)
+        {
+            throw new ReportValidationException($"За раз — не больше {MaxBulk} получателей.");
+        }
+
+        if (items.Select(i => i.Id).Distinct().Count() != items.Count)
+        {
+            throw new ReportValidationException("Получатель указан дважды.");
+        }
+
+        var context = await RecipientContextAsync(canUseSales, ct);
+        var saved = new List<(TelegramReportSubscription Row, List<Guid> ChatIds)>();
+        foreach (var item in items)
+        {
+            try
+            {
+                saved.Add(await ApplyRecipientAsync(item.Id, item.Input, context, userId, ct));
+            }
+            catch (ReportValidationException ex)
+            {
+                var name = await db.TelegramReportSubscriptions.AsNoTracking().Where(s => s.Id == item.Id)
+                    .Select(s => s.Title ?? s.AgentName ?? s.SupervisorName).FirstOrDefaultAsync(ct);
+                throw new ReportValidationException(name is { Length: > 0 } ? $"«{name}»: {ex.Message}" : ex.Message);
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        foreach (var (row, chatIds) in saved)
+        {
+            await AuditRecipientAsync(row, created: false, chatIds, userId, ct);
+        }
+
+        var ids = saved.Select(x => x.Row.Id).ToHashSet();
+        var account = context.Settings.AccountId!.Value;
+        return (await RecipientsAsync(account, context.Teams, context.Directions, context.RmUsers, await ChatsAsync(account, ct), ct)).Where(r => ids.Contains(r.Id)).ToList();
+    }
+
+    private const int MaxBulk = 500;
+
+    private sealed record RecipientContext(IReadOnlyList<ReportRegionTeam> Teams, IReadOnlyList<ReportDirection> Directions, TelegramReportSettings Settings,
+        IReadOnlyList<ReportRmUser> RmUsers);
+
+    private async Task<RecipientContext> RecipientContextAsync(bool canUseSales, CancellationToken ct)
+    {
         if (!canUseSales)
         {
             throw new ReportForbiddenException(NoSales);
         }
 
+        var (teams, directions) = await engine.StructureAsync(Today(), ct);
+        return new RecipientContext(teams, directions, await SettingsAsync(ct), await ReportScopes.RmUsersAsync(db, ct));
+    }
+
+    /// <summary>Проверить получателя и перенести в строку (новую — не добавляя в контекст); сохраняет вызывающий.</summary>
+    private async Task<(TelegramReportSubscription Row, List<Guid> ChatIds)> ApplyRecipientAsync(Guid? id, ReportRecipientInput input, RecipientContext context,
+        Guid userId, CancellationToken ct)
+    {
         var role = input.Role?.Trim().ToLowerInvariant() ?? "";
         if (!TelegramReportRoles.All.Contains(role))
         {
@@ -378,15 +490,16 @@ public sealed class TelegramReportService(
 
         var scope = role switch
         {
-            TelegramReportRoles.Rm => new ReportScope(role, DirectionId: input.DirectionId),
+            // РМ — пользователь с ролью «РМ» (регионы из профиля) или направление; пользователь выбран — направление не сохраняется.
+            TelegramReportRoles.Rm => new ReportScope(role, DirectionId: input.UserId is null ? input.DirectionId : null, UserId: input.UserId),
             TelegramReportRoles.Tp => new ReportScope(role, AgentId: input.AgentId ?? throw new ReportValidationException("Выберите ТП.")),
             _ => new ReportScope(role, RegionId: input.RegionId ?? throw new ReportValidationException("Выберите регион."), SupervisorId: input.SupervisorId),
         };
-        var (teams, directions) = await engine.StructureAsync(Today(), ct);
+        var teams = context.Teams;
         ResolvedScope resolved;
         try
         {
-            resolved = ReportScopes.Resolve(scope, teams, directions, ru => ru);
+            resolved = ReportScopes.Resolve(scope, teams, context.Directions, ru => ru, context.RmUsers);
         }
         catch (KeyNotFoundException ex)
         {
@@ -412,8 +525,7 @@ public sealed class TelegramReportService(
             ? null
             : UiLanguage.Normalize(input.Language) ?? throw new ReportValidationException("Язык картинок — ru, uz или uz-Cyrl.");
 
-        var settings = await SettingsAsync(ct);
-        var account = settings.AccountId ?? throw new ReportValidationException("Сначала выберите аккаунт Telegram для автоотчётов.");
+        var account = context.Settings.AccountId ?? throw new ReportValidationException("Сначала выберите аккаунт Telegram для автоотчётов.");
         var chats = await db.TelegramChats.AsNoTracking().Where(c => chatIds.Contains(c.Id)).ToListAsync(ct);
         if (chats.Count != chatIds.Count)
         {
@@ -428,10 +540,31 @@ public sealed class TelegramReportService(
         var row = id is { } existingId
             ? await db.TelegramReportSubscriptions.Include(s => s.Chats).FirstOrDefaultAsync(s => s.Id == existingId, ct) ?? throw new KeyNotFoundException()
             : new TelegramReportSubscription { CreatedById = userId };
+
+        // Отключение: причина и срок — только у выключенного, включение их очищает. Срок — напоминание, сам получатель не включается.
+        if (input.Enabled)
+        {
+            row.DisabledAt = null;
+            row.DisabledReason = null;
+            row.DisabledUntil = null;
+        }
+        else
+        {
+            if (input.DisabledUntil is { } until && until != row.DisabledUntil && until < Today())
+            {
+                throw new ReportValidationException("Срок отключения — не раньше сегодняшнего дня.");
+            }
+
+            row.DisabledAt = row.Enabled ? clock.GetUtcNow() : row.DisabledAt; // выключают сейчас — с этого момента; уже выключен — дата прежняя
+            row.DisabledReason = string.IsNullOrWhiteSpace(input.DisabledReason) ? null : input.DisabledReason.Trim()[..Math.Min(input.DisabledReason.Trim().Length, 200)];
+            row.DisabledUntil = input.DisabledUntil;
+        }
+
         var team = role == TelegramReportRoles.Tp ? teams.First(t => t.Agents.Any(a => a.Id == input.AgentId)) : null;
         row.Role = role;
         row.Title = string.IsNullOrWhiteSpace(input.Title) ? null : input.Title.Trim()[..Math.Min(input.Title.Trim().Length, 200)];
-        row.DirectionId = role == TelegramReportRoles.Rm ? input.DirectionId : null;
+        row.DirectionId = scope.DirectionId;
+        row.UserId = scope.UserId;
         row.RegionId = role switch { TelegramReportRoles.Sv => input.RegionId, TelegramReportRoles.Tp => team!.Id, _ => null };
         row.SupervisorId = role == TelegramReportRoles.Sv ? input.SupervisorId : null;
         row.SupervisorName = role == TelegramReportRoles.Sv && input.SupervisorId is { } sid ? teams.First(t => t.Id == input.RegionId).Supervisors.First(s => s.Id == sid).Name : null;
@@ -447,22 +580,20 @@ public sealed class TelegramReportService(
             row.Chats.Add(new TelegramReportSubscriptionChat { SubscriptionId = row.Id, ChatId = chatId });
         }
 
-        if (id is null)
-        {
-            db.TelegramReportSubscriptions.Add(row);
-        }
-        else
+        if (id is not null)
         {
             row.UpdatedAt = clock.GetUtcNow();
             row.UpdatedById = userId;
         }
 
-        await db.SaveChangesAsync(ct);
-        await audit.LogAsync(ActorType.User, userId.ToString(), id is null ? "telegram.reports.recipient_created" : "telegram.reports.recipient_updated",
-            nameof(TelegramReportSubscription), row.Id.ToString(),
-            new { row.Role, row.DirectionId, row.RegionId, row.SupervisorId, row.AgentId, Chats = chatIds, row.Reports, row.PdfLanguage, row.Language, row.Enabled }, ct);
-        return (await RecipientsAsync(account, teams, directions, await ChatsAsync(account, ct), ct)).First(s => s.Id == row.Id);
+        return (row, chatIds);
     }
+
+    private Task AuditRecipientAsync(TelegramReportSubscription row, bool created, List<Guid> chatIds, Guid userId, CancellationToken ct) =>
+        audit.LogAsync(ActorType.User, userId.ToString(), created ? "telegram.reports.recipient_created" : "telegram.reports.recipient_updated",
+            nameof(TelegramReportSubscription), row.Id.ToString(),
+            new { row.Role, row.UserId, row.DirectionId, row.RegionId, row.SupervisorId, row.AgentId, Chats = chatIds, row.Reports, row.PdfLanguage, row.Language, row.Enabled, row.DisabledReason, row.DisabledUntil },
+            ct);
 
     public async Task DeleteRecipientAsync(Guid id, Guid userId, CancellationToken ct)
     {
@@ -686,7 +817,7 @@ public sealed class TelegramReportService(
             ? null
             : UiLanguage.Normalize(input.Language) ?? throw new ReportValidationException("Язык PDF — ru, uz или uz-Cyrl.");
 
-        var scope = WeeklyScope(input.Role, input.DirectionId, input.RegionId, input.AgentId);
+        var scope = WeeklyScope(input.Role, input.DirectionId, input.RegionId, input.AgentId, input.UserId);
         var delivery = new TelegramReportDelivery
         {
             Report = ReportCatalog.Jobs.First(j => j.Report == ReportType.WeeklyPdf).Code,
@@ -710,15 +841,16 @@ public sealed class TelegramReportService(
         return await weeklyPdf.AttemptAsync(delivery, chat, scope, retry: false, ct, test: true, language: language ?? settings.Language);
     }
 
-    /// <summary>Область еженедельного PDF: rop — вся страна (РМ без направления), rm — направление, sv — регион, tp — ТП.</summary>
-    public static ReportScope WeeklyScope(string? role, Guid? directionId, Guid? regionId, long? agentId) => (role?.Trim().ToLowerInvariant() ?? TelegramReportRoles.Sv) switch
-    {
-        "rop" => new ReportScope(TelegramReportRoles.Rm),
-        TelegramReportRoles.Rm => new ReportScope(TelegramReportRoles.Rm, DirectionId: directionId),
-        TelegramReportRoles.Sv => new ReportScope(TelegramReportRoles.Sv, RegionId: regionId ?? throw new ReportValidationException("Выберите регион.")),
-        TelegramReportRoles.Tp => new ReportScope(TelegramReportRoles.Tp, AgentId: agentId ?? throw new ReportValidationException("Выберите ТП.")),
-        _ => throw new ReportValidationException("Роль — РОП, РМ, СВ или ТП."),
-    };
+    /// <summary>Область еженедельного PDF: rop — вся страна (РМ без направления), rm — пользователь-РМ или направление, sv — регион, tp — ТП.</summary>
+    public static ReportScope WeeklyScope(string? role, Guid? directionId, Guid? regionId, long? agentId, Guid? userId = null) =>
+        (role?.Trim().ToLowerInvariant() ?? TelegramReportRoles.Sv) switch
+        {
+            "rop" => new ReportScope(TelegramReportRoles.Rm),
+            TelegramReportRoles.Rm => new ReportScope(TelegramReportRoles.Rm, DirectionId: userId is null ? directionId : null, UserId: userId),
+            TelegramReportRoles.Sv => new ReportScope(TelegramReportRoles.Sv, RegionId: regionId ?? throw new ReportValidationException("Выберите регион.")),
+            TelegramReportRoles.Tp => new ReportScope(TelegramReportRoles.Tp, AgentId: agentId ?? throw new ReportValidationException("Выберите ТП.")),
+            _ => throw new ReportValidationException("Роль — РОП, РМ, СВ или ТП."),
+        };
 
     /// <summary>Запуск, область, день, момент формирования и язык предпросмотра или теста: явно или по получателю.</summary>
     private async Task<(string Job, ReportScope Scope, DateOnly Date, DateTimeOffset? At, string? Language)> TargetAsync(ReportPreviewInput input, bool canUseSales,
@@ -748,7 +880,7 @@ public sealed class TelegramReportService(
             var role = input.Role?.Trim().ToLowerInvariant() ?? TelegramReportRoles.Sv;
             scope = role switch
             {
-                TelegramReportRoles.Rm => new ReportScope(role, DirectionId: input.DirectionId),
+                TelegramReportRoles.Rm => new ReportScope(role, DirectionId: input.UserId is null ? input.DirectionId : null, UserId: input.UserId),
                 TelegramReportRoles.Tp => new ReportScope(role, AgentId: input.AgentId ?? throw new ReportValidationException("Выберите ТП.")),
                 TelegramReportRoles.Sv => new ReportScope(role, RegionId: input.RegionId ?? throw new ReportValidationException("Выберите регион."), SupervisorId: input.SupervisorId),
                 _ => throw new ReportValidationException("Роль — РМ, СВ или ТП."),

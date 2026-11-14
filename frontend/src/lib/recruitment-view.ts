@@ -21,7 +21,7 @@ export type NavCounters = {
   hhConnected: boolean;
 };
 
-export type NavKey = "vacancies" | "candidates" | "telegram" | "publications" | "interviews" | "exceptions" | "analytics" | "hh" | "settings";
+export type NavKey = "vacancies" | "candidates" | "screening" | "telegram" | "publications" | "interviews" | "exceptions" | "analytics" | "hh" | "settings";
 
 /** Подпись под названием кнопки: текст для перевода и подстановка; tone — цвет (zero — «нет новых» и т. п. цветом subtle, warn — «не подключён»). */
 export type NavCaption = { key: string; vars?: Record<string, number>; tone?: "zero" | "warn" };
@@ -38,6 +38,7 @@ const counted: Partial<Record<NavKey, [keyof NavCounters, string, string]>> = {
 /** Подпись кнопки раздела. null — счётчики ещё не пришли (у разделов со счётчиком на это время — скелетон). */
 export function navCaption(key: NavKey, c: NavCounters | null): NavCaption | null {
   if (key === "analytics") return { key: "воронка" };
+  if (key === "screening") return { key: "рейтинг AI" };
   if (key === "settings") return { key: "этапы" };
   if (!c) return null;
   if (key === "hh") return c.hhConnected ? { key: "подключён" } : { key: "не подключён", tone: "warn" };

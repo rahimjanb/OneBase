@@ -129,6 +129,41 @@ export type QualityReport = {
   reviewIssues: CountItem[];
   benchmarks: { id: string; mode: string; status: string; total: number; passed: number; score: number; startedAt: string; model: string | null; costUsd: number | null }[];
   weakSpots: { area: string; text: string; count: number; severity: string }[];
+  research?: ResearchQuality | null;
+};
+
+/** Исследования без модели за период: итоги, время (всего, срезы, расчёты), операции, кэш, повторы, шаблоны, статусы и падающие операции. */
+export type ResearchQuality = {
+  total: number;
+  completed: number;
+  partial: number;
+  failed: number;
+  cancelled: number;
+  avgDurationMs: number;
+  avgSqlMs: number;
+  avgStatisticsMs: number;
+  avgOperations: number;
+  cacheHitRatio: number;
+  retries: number;
+  byKind: CountItem[];
+  operationStatuses: CountItem[];
+  failedOperations: CountItem[];
+};
+
+/** Разбор ответа: почему AI ответил так или не ответил. */
+export type AnswerExplanation = {
+  conversationId: string | null;
+  messageId: string | null;
+  at: string;
+  question: string;
+  status: string;
+  error: string | null;
+  agents: string | null;
+  tools: string | null;
+  durationMs: number;
+  unsupportedNumbers: number;
+  items: { area: string; status: string; text: string }[];
+  verdict: string;
 };
 
 export const hypothesisStatus: Record<string, { label: string; tone: string }> = {
@@ -293,4 +328,159 @@ export function groupDecisions(list: DecisionView[]): { due: DecisionView[]; act
 /** Счётчик по ключу из списка CountItem (нет — 0). */
 export function count(items: CountItem[] | null | undefined, key: string): number {
   return items?.find((x) => x.key === key)?.count ?? 0;
+}
+
+// ---------- Исследования-шаблоны (Phase 2): план операций, выводы с уровнем доказательности, таблицы и матрицы ----------
+
+export type ResearchOperation = {
+  id: string;
+  type: string;
+  title: string;
+  source: string;
+  query?: { metrics?: string[]; dimensions?: string[] | null; grain?: string | null; dateFrom?: string | null; dateTo?: string | null } | null;
+  compute?: { method: string; data?: { metrics?: string[]; dimension?: string | null; grain?: string | null; from?: string | null; to?: string | null }; params?: Record<string, unknown> | null } | null;
+  dependsOn: string[];
+  optional?: boolean;
+  status: string;
+  resultReference?: string | null;
+  errorReason?: string | null;
+  attempts: number;
+  fromCache: boolean;
+  elapsedMs: number;
+  summary?: string | null;
+  note?: string | null;
+};
+export type ResearchPlanJson = {
+  kind: string;
+  userQuestion: string;
+  objective: string;
+  from: string;
+  to: string;
+  compareFrom?: string | null;
+  compareTo?: string | null;
+  requiredMetrics: string[];
+  requiredSources: string[];
+  expectedResults: string[];
+  validationRules: string[];
+  accessScope: string;
+  executionStatus: string;
+};
+export type ResearchFinding = { section: string; level: string; text: string; value?: number | null; unit?: string | null; evidence?: string[] | null };
+export type ResearchHypothesis = { id: string; statement: string; status: string; level: string; basis: string; evidence: string[] };
+export type ResearchTable = { id: string; title: string; columns: { code: string; title: string; unit?: string | null }[]; rows: (string | number | null)[][] };
+export type ResearchMatrix = { id: string; title: string; titles: string[]; r: (number | null)[][]; q: (number | null)[][]; n: number };
+export type ResearchTimings = {
+  planMs: number;
+  sqlMs: number;
+  statisticsMs: number;
+  evidenceMs: number;
+  totalMs: number;
+  operations: number;
+  queries: number;
+  computations: number;
+  cacheHits: number;
+  retries: number;
+  cacheHitRatio: number;
+};
+export type ResearchDetail = {
+  kind: string;
+  plan: ResearchPlanJson;
+  operations: ResearchOperation[];
+  findings: ResearchFinding[];
+  hypotheses: ResearchHypothesis[];
+  tables: ResearchTable[];
+  matrices: ResearchMatrix[];
+  timings: ResearchTimings | null;
+  sources: { title: string; dataThrough?: string | null; syncedAt?: string | null }[];
+  limitations: string[];
+};
+
+export const researchKinds: { kind: string; title: string; hint: string }[] = [
+  { kind: "correlations", title: "Корреляции и закономерности", hint: "Все пары показателей продаж и визитов, товарные группы и регионы против итога и остальных" },
+  { kind: "decline_drivers", title: "Причины изменения продаж", hint: "Где и за счёт чего: регионы, группы, ТП, точки, цена, объём, ассортимент, отток, визиты" },
+  { kind: "agent_efficiency", title: "Эффективность ТП", hint: "Визиты, маршрут, страйк и выручка на визит по каждому ТП" },
+  { kind: "visits_vs_sales", title: "Визиты и продажи по регионам", hint: "Где визитов больше, а продаж меньше — с проверкой трендов" },
+  { kind: "group_influence", title: "Влияние товарных групп", hint: "Доля, вклад в колебания и в изменение итога, связь с остальными" },
+  { kind: "anomalies", title: "Аномалии показателей", hint: "Все показатели с учётом дня недели, сдвиги уровня" },
+  { kind: "promo_effect", title: "Эффективность акций", hint: "Прирост к контрольной группе, скидки и отдача" },
+  { kind: "company_health", title: "Состояние компании", hint: "Показатели, план, тренд, аномалии, отток, запасы и открытые риски" },
+];
+
+export const evidenceLevel: Record<string, { label: string; tone: string }> = {
+  FACT: { label: "Факт", tone: "bg-muted text-ink-2" },
+  CALCULATED: { label: "Расчёт", tone: "bg-accent-soft text-accent-strong" },
+  STATISTICALLY_SUPPORTED: { label: "Статистически подтверждено", tone: "bg-ok/15 text-ok" },
+  CORRELATION: { label: "Корреляция", tone: "bg-accent/10 text-accent-strong" },
+  HYPOTHESIS: { label: "Гипотеза", tone: "bg-warn/15 text-warn" },
+  FORECAST: { label: "Прогноз", tone: "bg-muted text-ink-3" },
+  UNVERIFIED: { label: "Не проверено", tone: "bg-bad/10 text-bad" },
+};
+
+export const operationStatus: Record<string, { label: string; tone: string }> = {
+  SUCCESS: { label: "готово", tone: "bg-ok/15 text-ok" },
+  PARTIAL_RESULT: { label: "частично", tone: "bg-warn/15 text-warn" },
+  DATA_NOT_FOUND: { label: "данных нет", tone: "bg-muted text-ink-3" },
+  TOOL_UNSUPPORTED: { label: "не поддерживается", tone: "bg-muted text-ink-3" },
+  SOURCE_UNAVAILABLE: { label: "источник недоступен", tone: "bg-bad/15 text-bad" },
+  NO_ACCESS: { label: "нет доступа", tone: "bg-bad/10 text-bad" },
+  INSUFFICIENT_GRANULARITY: { label: "нет детализации", tone: "bg-muted text-ink-3" },
+  CALCULATION_FAILED: { label: "расчёт не выполнен", tone: "bg-bad/15 text-bad" },
+  VALIDATION_FAILED: { label: "проверка не пройдена", tone: "bg-bad/15 text-bad" },
+  SKIPPED: { label: "пропущено", tone: "bg-muted text-ink-3" },
+  CANCELLED: { label: "отменено", tone: "bg-muted text-ink-3" },
+  RUNNING: { label: "выполняется", tone: "bg-accent-soft text-accent-strong" },
+  PENDING: { label: "ожидает", tone: "bg-muted text-ink-3" },
+};
+
+/** Разделы ответа исследования по ТЗ — в этом порядке. */
+export const researchSections: { section: string; title: string }[] = [
+  { section: "summary", title: "Краткий вывод" },
+  { section: "metrics", title: "Основные показатели" },
+  { section: "patterns", title: "Найденные закономерности" },
+  { section: "correlations", title: "Корреляции" },
+  { section: "significance", title: "Статистическая значимость" },
+  { section: "causes", title: "Причины и гипотезы" },
+  { section: "hypotheses", title: "Исследовательские гипотезы" },
+  { section: "differences", title: "Различия" },
+  { section: "risks", title: "Риски" },
+  { section: "recommendations", title: "Рекомендации" },
+  { section: "limitations", title: "Ограничения" },
+];
+
+/** Исследование-шаблон (роль research) — из записи исследования; иначе null (исследование модели показывается прежним видом). */
+export function researchOf(detail: { roles: string[] | null; plan: unknown; steps: unknown; hypotheses: unknown; limitations: string[] | null }): ResearchDetail | null {
+  if (!detail.roles?.includes("research")) return null;
+  const plan = (detail.plan ?? {}) as ResearchPlanJson;
+  const result = (detail.hypotheses ?? {}) as { findings?: ResearchFinding[]; hypotheses?: ResearchHypothesis[]; data?: { tables?: ResearchTable[]; matrices?: ResearchMatrix[] }; timings?: ResearchTimings; sources?: ResearchDetail["sources"] };
+  return {
+    kind: detail.roles[1] ?? plan.kind,
+    plan,
+    operations: Array.isArray(detail.steps) ? (detail.steps as ResearchOperation[]) : [],
+    findings: result.findings ?? [],
+    hypotheses: result.hypotheses ?? [],
+    tables: result.data?.tables ?? [],
+    matrices: result.data?.matrices ?? [],
+    timings: result.timings ?? null,
+    sources: result.sources ?? [],
+    limitations: detail.limitations ?? [],
+  };
+}
+
+/** Цвет ячейки матрицы: положительная связь — акцент, отрицательная — красный; насыщенность — |r|; незначимая (q ≥ 0,05) — бледнее. */
+export function matrixCell(r: number | null | undefined, q: number | null | undefined): { background: string; strong: boolean } {
+  if (r == null || !Number.isFinite(r)) return { background: "transparent", strong: false };
+  const strong = q != null && q < 0.05;
+  const alpha = Math.round(Math.min(1, Math.abs(r)) * (strong ? 70 : 30));
+  const color = r >= 0 ? "var(--color-accent)" : "var(--color-bad)";
+  return { background: `color-mix(in oklab, ${color} ${alpha}%, transparent)`, strong };
+}
+
+/** Число ячейки таблицы исследования: доли и % — один знак, деньги и счётчики — без дробей. */
+export function cellText(value: string | number | null | undefined, unit?: string | null): string {
+  if (value == null) return "—";
+  if (typeof value === "string") return value;
+  if (!Number.isFinite(value)) return "—";
+  const digits = unit === "%" || Math.abs(value) < 10 ? (Math.abs(value) < 1 && value !== 0 ? 3 : 1) : 0;
+  const text = value.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: digits }).replace(/ /g, " ");
+  return unit === "%" ? `${text} %` : text;
 }

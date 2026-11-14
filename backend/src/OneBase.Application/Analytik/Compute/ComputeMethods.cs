@@ -14,8 +14,16 @@ public sealed partial class ComputeService
         "seasonality" => await SeasonalityAsync(d, l),
         "anomalies" => await AnomaliesAsync(d, p, l),
         "forecast" => await ForecastAsync(d, p, l),
-        "correlation" => await CorrelationAsync(d, l),
-        "regression" => await RegressionAsync(d, l),
+        "correlation" => await CorrelationReportAsync(d, p, l),
+        "partial_correlation" => await PartialCorrelationAsync(d, p, l),
+        "rolling_correlation" => await RollingCorrelationAsync(d, p, l),
+        "correlation_matrix" => await CorrelationMatrixAsync(d, p, l),
+        "regression" => await RegressionModelAsync(d, p, l),
+        "smoothing" => await SmoothingAsync(d, p, l),
+        "decomposition" => await DecompositionAsync(d, p, l),
+        "change_points" => await ChangePointsAsync(d, p, l),
+        "rolling_stats" => await RollingStatsAsync(d, p, l),
+        "anomaly_scan" => await AnomalyScanAsync(d, p, l),
         "lag" => await LagAsync(d, p, l),
         "drivers" => await DriversAsync(d, l),
         "pvm" => await PvmAsync(d, p, l),
@@ -149,46 +157,6 @@ public sealed partial class ComputeService
             $"Прогноз «{Title(d.Metrics[0])}» на {horizon} шаг(ов) ({grain}): {N((double)f.Total)} (диапазон {N((double)f.TotalLower)}–{N((double)f.TotalUpper)}), " +
             $"метод {f.Method}{(f.Wape is { } w ? $", WAPE {N((double)w * 100)} %" : "")}{(f.Reliable ? "" : " — ориентировочно")}.",
             EvidenceClasses.Assumption, ["Прогноз — расчёт по истории, а не факт; на него не влияют будущие решения и события."]);
-    }
-
-    private static async Task<MethodResult> CorrelationAsync(ComputeData d, Loader l)
-    {
-        var points = await PointsAsync(d, l, d.Metrics);
-        var y = points.Select(x => x.Values[0]).ToList();
-        var pairs = new List<object>();
-        var best = EvidenceClasses.Observed;
-        var lines = new List<string>();
-        for (var i = 1; i < d.Metrics.Count; i++)
-        {
-            var x = points.Select(v => v.Values[i]).ToList();
-            var pearson = StatMath.Pearson(y, x);
-            var spearman = StatMath.Spearman(y, x);
-            var cls = CausalMath.ForCorrelation(pearson.P, pearson.N);
-            if (EvidenceClasses.Rank(cls) > EvidenceClasses.Rank(best))
-            {
-                best = cls;
-            }
-
-            pairs.Add(new { metric = d.Metrics[i], pearson, spearman, evidenceClass = cls });
-            lines.Add($"с «{Title(d.Metrics[i])}» r = {N(pearson.R, 2)} (p = {P(pearson.P)}, n = {pearson.N})");
-        }
-
-        return new MethodResult(new { metric = d.Metrics[0], by = d.Dimension ?? Grain(d, "week"), pairs },
-            $"Корреляция «{Title(d.Metrics[0])}»: {string.Join("; ", lines)}. Корреляция — не причина.", best,
-            ["Корреляция показывает совместное изменение, но не причину; общий фактор может влиять на оба показателя."]);
-    }
-
-    private static async Task<MethodResult> RegressionAsync(ComputeData d, Loader l)
-    {
-        var points = await PointsAsync(d, l, d.Metrics);
-        var y = points.Select(x => x.Values[0]).ToList();
-        var xs = Enumerable.Range(1, d.Metrics.Count - 1).Select(i => (IReadOnlyList<double>)points.Select(v => v.Values[i]).ToList()).ToList();
-        var reg = RegressionMath.Ols(y, xs, d.Metrics.Skip(1).ToList());
-        var cls = Strength(reg.FP, reg.N);
-        var terms = string.Join("; ", reg.Terms.Skip(1).Select(t => $"{Title(t.Name)}: {N(t.Coefficient, 3)} (p = {P(t.P)})"));
-        return new MethodResult(new { metric = d.Metrics[0], by = d.Dimension ?? Grain(d, "week"), regression = reg with { Fitted = [] } },
-            $"Регрессия «{Title(d.Metrics[0])}»: {terms}; R² = {N(reg.RSquared, 2)}, p(F) = {P(reg.FP)}, n = {reg.N} — {EvidenceClasses.Title(cls)}.", cls,
-            ["Коэффициент — связь при прочих равных в этих данных, а не доказанное влияние."]);
     }
 
     private static async Task<MethodResult> LagAsync(ComputeData d, Params p, Loader l)

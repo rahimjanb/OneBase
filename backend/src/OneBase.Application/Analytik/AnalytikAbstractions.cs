@@ -126,4 +126,10 @@ public sealed class AnalytikOptions
 
     /// <summary>Шагов одновременно (каждый — цикл модели аналитика).</summary>
     public int InvestigationParallelSteps { get; init; } = 4;
+
+    /// <summary>
+    /// Исследования по шаблону (Phase 2): auto — вопрос, совпавший с шаблоном (корреляции, причины снижения, эффективность ТП, аномалии, акции,
+    /// состояние компании…), исследуется кодом одним серверным вызовом, модель только пишет ответ по выводам; off — прежний путь.
+    /// </summary>
+    public string ResearchMode { get; init; } = "auto";
 }

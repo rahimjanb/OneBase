@@ -16,7 +16,7 @@ public sealed record FactSql(string Sql, IReadOnlyList<SqlParam> Parameters, str
 /// по дате реализации (сумма строки в сумах, другой валюты — 0), возвраты по строкам и дате создания, без пропускаемых филиалов,
 /// «Завод» — экспорт и опт (не вторичка), точки-каналы из филиалов первички — в своём регионе в закрытых месяцах.
 /// </summary>
-public sealed class SemanticSql(SemanticContext ctx, SalesOptions options)
+public sealed class SemanticSql(SemanticContext ctx, SalesOptions options, DateOnly? today = null)
 {
     private readonly List<SqlParam> _params = [];
 
@@ -185,6 +185,61 @@ public sealed class SemanticSql(SemanticContext ctx, SalesOptions options)
             """;
     }
 
+    /// <summary>
+    /// Строки визитов x — правила «Календаря визитов» (SalesAnalytics.RouteSplit): визиты с ТП и точкой; «план» — визит маршрута, кроме
+    /// сегодняшних и будущих невыполненных; «не посещено» — визит маршрута прошедшего дня в статусе pending; «с заказом» — выполненный визит,
+    /// у ТП которого в этой точке есть проданный заказ, введённый в день визита (без исключённых и пропускаемых филиалов). Регион — по филиалу точки.
+    /// </summary>
+    private string VisitRows(DateOnly from, DateOnly to, SalesRowScope scope)
+    {
+        var scopeSql = scope.Level switch
+        {
+            SalesRowScope.RegionLevel => $" and mk.\"BranchId\" = any({P(scope.BranchIds.ToArray(), "bigint[]")})",
+            SalesRowScope.AgentLevel => $" and v.\"UserId\" = {P(scope.AgentId ?? -1, "bigint")}",
+            _ => "",
+        };
+        var fromP = P(from, "date");
+        var toP = P(to, "date");
+        var todayP = P(today ?? DateOnly.FromDateTime(DateTime.UtcNow.AddHours(5)), "date");
+        return $$"""
+            vo as (
+                select distinct o."AgentId" agent, o."MarketId" market, o."CreatedDate" d
+                from linko."Orders" o
+                where o."Status" = any({{P(options.SoldStatuses, "text[]")}}) and o."CreatedDate" between {{fromP}} and {{toP}}
+                  and o."AgentId" is not null and o."MarketId" is not null and lower(coalesce(o."BranchName", '')) <> all({{P(options.NotSecondaryBranchesLower(), "text[]")}})
+            ),
+            f as (
+                select v."Day" d, v."UserId" agent, v."MarketId" market, mk."BranchId" branch, mk."MarketTypeName" mtype,
+                       v."Status" = 'done' done, v."IsInPlan" in_plan,
+                       v."IsInPlan" and not (v."Status" = 'pending' and v."Day" >= {{todayP}}) planned,
+                       v."IsInPlan" and v."Status" = 'pending' and v."Day" < {{todayP}} missed,
+                       v."Status" = 'done' and vo.agent is not null with_order
+                from linko."Visits" v
+                left join linko."Markets" mk on mk."Id" = v."MarketId"
+                left join vo on vo.agent = v."UserId" and vo.market = v."MarketId" and vo.d = v."Day"
+                where v."Day" between {{fromP}} and {{toP}} and v."UserId" is not null and v."MarketId" is not null{{scopeSql}}
+            ),
+            x as (
+                select f.*, {{Structure("f.branch")}}
+                from f
+                {{StructureJoins("f.branch")}}
+            )
+            """;
+    }
+
+    /// <summary>Агрегат показателя визитов.</summary>
+    private static string VisitAgg(string metric) => metric switch
+    {
+        "visits_planned" => "count(*) filter (where x.planned)",
+        "visits_done" => "count(*) filter (where x.done)",
+        "visits_done_in_plan" => "count(*) filter (where x.done and x.in_plan)",
+        "visits_off_plan" => "count(*) filter (where x.done and not x.in_plan)",
+        "visits_missed" => "count(*) filter (where x.missed)",
+        "visits_with_order" => "count(*) filter (where x.with_order)",
+        "visited_outlets" => "count(distinct x.market) filter (where x.done)",
+        _ => throw new AnalyticsQueryException("invalid", $"«{metric}» — не показатель визитов."),
+    };
+
     /// <summary>Строки остатков x: текущий снимок linko.ProductBalances (единицы товара) по складам.</summary>
     private string StockRows() => $$"""
         x as (
@@ -231,6 +286,7 @@ public sealed class SemanticSql(SemanticContext ctx, SalesOptions options)
         {
             SemanticCatalog.Sales => SalesRows(from, to, segment, scope, needMarkets),
             SemanticCatalog.Payments => PaymentRows(from, to, scope),
+            SemanticCatalog.Visits => VisitRows(from, to, scope),
             SemanticCatalog.Stock => StockRows(),
             _ => throw new AnalyticsQueryException("invalid", $"Факт «{fact}» не читается SQL."),
         };
@@ -242,6 +298,7 @@ public sealed class SemanticSql(SemanticContext ctx, SalesOptions options)
         {
             SemanticCatalog.Sales => "linko.Orders, linko.OrderLines, linko.OrderReturns, linko.OrderReturnLines, linko.Products" + (needMarkets ? ", linko.Markets" : ""),
             SemanticCatalog.Payments => "linko.Payments, linko.Markets",
+            SemanticCatalog.Visits => "linko.Visits, linko.Markets, linko.Orders",
             _ => "linko.ProductBalances, linko.Products",
         };
 
@@ -261,6 +318,7 @@ public sealed class SemanticSql(SemanticContext ctx, SalesOptions options)
             var aggs = metrics.Select(m => fact switch
             {
                 SemanticCatalog.Sales => $"{SalesAgg(m)} m_{m}",
+                SemanticCatalog.Visits => $"{VisitAgg(m)} m_{m}",
                 SemanticCatalog.Payments => m == "payments" ? "sum(x.amount) m_payments" : m == "other_currency_payments" ? "sum(x.other_amount) m_other_currency_payments" : throw new AnalyticsQueryException("invalid", $"«{m}» — не показатель оплат."),
                 _ => m == "stock_units" ? "sum(x.units) m_stock_units" : throw new AnalyticsQueryException("invalid", $"«{m}» — не показатель остатков."),
             });

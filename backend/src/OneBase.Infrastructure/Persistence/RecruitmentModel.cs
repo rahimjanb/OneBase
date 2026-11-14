@@ -64,8 +64,23 @@ internal static class RecruitmentModel
             e.Property(x => x.LanguageConfidence).HasPrecision(3, 2);
             e.Property(x => x.LanguageSource).HasMaxLength(12);
             e.Property(x => x.Notes).HasMaxLength(4000);
+            e.Property(x => x.DesiredPosition).HasMaxLength(200);
+            e.Property(x => x.LastJob).HasMaxLength(300);
+            e.Property(x => x.SalaryExpectation).HasMaxLength(100);
+            e.Property(x => x.Education).HasMaxLength(300);
             e.HasIndex(x => x.LastActivityAt);
             e.HasIndex(x => x.RetentionFrom);
+        });
+
+        b.Entity<CandidateSkill>(e =>
+        {
+            e.ToTable("CandidateSkills", Schema);
+            e.Property(x => x.Id).UseIdentityAlwaysColumn();
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.Normalized).HasMaxLength(100);
+            e.HasOne<Candidate>().WithMany(c => c.Skills).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.CandidateId, x.Normalized }).IsUnique();
+            e.HasIndex(x => x.Normalized);
         });
 
         b.Entity<CandidateContact>(e =>
@@ -139,6 +154,7 @@ internal static class RecruitmentModel
         {
             e.ToTable("Applications", Schema);
             e.Property(x => x.Stage).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Mark).HasConversion<string>().HasMaxLength(16).HasDefaultValue(ApplicationMark.None).HasSentinel(ApplicationMark.None);
             e.Property(x => x.Source).HasMaxLength(16);
             e.Property(x => x.RejectReason).HasMaxLength(1000);
             e.HasOne(x => x.Candidate).WithMany(c => c.Applications).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
@@ -153,6 +169,7 @@ internal static class RecruitmentModel
             e.Property(x => x.Id).UseIdentityAlwaysColumn();
             e.Property(x => x.FromStage).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.ToStage).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Mark).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.Comment).HasMaxLength(1000);
             e.HasOne<CandidateApplication>().WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.ApplicationId, x.At });
@@ -228,6 +245,22 @@ internal static class RecruitmentModel
             e.Property(x => x.EmployerId).HasMaxLength(50);
             e.Property(x => x.EmployerName).HasMaxLength(200);
             e.Property(x => x.LastSyncMessage).HasMaxLength(1000);
+            e.Property(x => x.GuardReason).HasMaxLength(500);
+        });
+
+        b.Entity<HhApiCall>(e =>
+        {
+            e.ToTable("HhApiCalls", Schema);
+            e.Property(x => x.Id).UseIdentityAlwaysColumn();
+            e.Property(x => x.Operation).HasMaxLength(40);
+            e.Property(x => x.Method).HasMaxLength(8);
+            e.Property(x => x.Path).HasMaxLength(300);
+            e.Property(x => x.Cost).HasMaxLength(8);
+            e.Property(x => x.Trigger).HasMaxLength(8);
+            e.Property(x => x.Reason).HasMaxLength(500);
+            e.Property(x => x.ErrorType).HasMaxLength(80);
+            e.HasIndex(x => x.At);
+            e.HasIndex(x => new { x.Allowed, x.At });
         });
 
         b.Entity<HhNegotiation>(e =>
@@ -250,8 +283,21 @@ internal static class RecruitmentModel
             e.Property(x => x.Summary).HasMaxLength(2000);
             e.Property(x => x.Risks).HasMaxLength(2000);
             e.Property(x => x.Model).HasMaxLength(100);
+            e.Property(x => x.Version).HasDefaultValue(1).HasSentinel(0);
+            e.Property(x => x.DetailsJson).HasColumnType("jsonb");
+            e.Property(x => x.Confidence).HasPrecision(3, 2);
             e.HasOne<CandidateApplication>().WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.ApplicationId, x.CreatedAt });
+        });
+
+        b.Entity<CandidateComparison>(e =>
+        {
+            e.ToTable("CandidateComparisons", Schema);
+            e.Property(x => x.ApplicationIds).HasMaxLength(400);
+            e.Property(x => x.ResultJson).HasColumnType("jsonb");
+            e.Property(x => x.Model).HasMaxLength(100);
+            e.HasOne<Vacancy>().WithMany().HasForeignKey(x => x.VacancyId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.VacancyId, x.CreatedAt });
         });
 
         b.Entity<VacancyInterviewer>(e =>

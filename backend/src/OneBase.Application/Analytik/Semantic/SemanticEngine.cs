@@ -269,6 +269,7 @@ public sealed class SemanticEngine(
         SemanticCatalog.Plan => "План",
         SemanticCatalog.Payments => "Оплаты",
         SemanticCatalog.Stock => "Остатки",
+        SemanticCatalog.Visits => "Визиты",
         _ => "Продажи",
     };
 
@@ -277,6 +278,7 @@ public sealed class SemanticEngine(
         SemanticCatalog.Plan => "план задан по регионам и категориям (Google Sheets) или по ТП (Linko) на месяц.",
         SemanticCatalog.Payments => "оплата привязана к точке, агенту и дате, без товаров.",
         SemanticCatalog.Stock => "остаток — по товару и складу, без дат, регионов и агентов.",
+        SemanticCatalog.Visits => "визит привязан к дню, ТП и точке, без товаров и каналов.",
         _ => "у строк продаж такого признака нет.",
     };
 
@@ -324,6 +326,12 @@ public sealed class SemanticEngine(
         }
 
         var salesThrough = dataThrough.TryGetValue(SemanticCatalog.Sales, out var s) ? s.Last : null;
+
+        // Совместимость фактов среза: каждый факт агрегирован отдельно; оговорки бизнес-смысла (оплаты ≠ выручка, разная атрибуция региона) — в notes.
+        if (facts.Count > 1)
+        {
+            notes.AddRange(DataCompatibility.Notes(n.All, n.Dimensions, n.Grain));
+        }
 
         // Сравнение: строки сопоставляются по измерениям; у даты — по номеру шага от начала периода.
         if (compareRows is not null)
@@ -420,7 +428,7 @@ public sealed class SemanticEngine(
                 continue;
             }
 
-            var built = new SemanticSql(ctx, salesOptions).Build(group.Key, n.Dimensions, metrics, n.Grain, from, to, n.Segment, scope, filters);
+            var built = new SemanticSql(ctx, salesOptions, Today).Build(group.Key, n.Dimensions, metrics, n.Grain, from, to, n.Segment, scope, filters);
             sqlLog?.Add(built.Sql);
             paramLog?.AddRange(built.Parameters);
             foreach (var t in built.Tables.Split(", "))
@@ -568,7 +576,7 @@ public sealed class SemanticEngine(
                 continue;
             }
 
-            var built = new SemanticSql(ctx, salesOptions).Build(group.Key, [], metrics, n.Grain, from, to, n.Segment, scope, filters);
+            var built = new SemanticSql(ctx, salesOptions, Today).Build(group.Key, [], metrics, n.Grain, from, to, n.Segment, scope, filters);
             var result = await sql.QueryAsync(built.Sql, built.Parameters, new SqlLimits(1, options.QueryTimeoutSeconds), ct);
             var row = result.Rows.FirstOrDefault();
             for (var i = 0; i < metrics.Count; i++)
@@ -620,6 +628,11 @@ public sealed class SemanticEngine(
             {
                 var payments = db.LinkoPayments.AsNoTracking().Where(p => !p.IsDelete && p.Status == "accepted");
                 return (await payments.MinAsync(p => p.CreatedDate, ct), await payments.Where(p => p.CreatedDate <= today).MaxAsync(p => p.CreatedDate, ct));
+            }
+            case SemanticCatalog.Visits:
+            {
+                var visits = db.LinkoVisits.AsNoTracking().Where(v => v.UserId != null && v.MarketId != null);
+                return (await visits.MinAsync(v => (DateOnly?)v.Day, ct), await visits.Where(v => v.Day <= today).MaxAsync(v => (DateOnly?)v.Day, ct));
             }
             case SemanticCatalog.Plan:
             {
@@ -702,6 +715,9 @@ public sealed class SemanticEngine(
                 "forecast_kg" => Forecast(v.GetValueOrDefault("kg"), month, through, n.From),
                 "forecast_execution" => Div(Forecast(v.GetValueOrDefault("plan_fact_kg") ?? v.GetValueOrDefault("kg"), month, through, n.From), v.GetValueOrDefault("plan_kg")) * 100,
                 "cover_days" => dailyUnits is > 0 ? v.GetValueOrDefault("stock_units") / dailyUnits : null,
+                "route_execution" => Div(v.GetValueOrDefault("visits_done_in_plan"), v.GetValueOrDefault("visits_planned")) * 100,
+                "visits_without_order" => v.GetValueOrDefault("visits_done") is { } vd ? vd - (v.GetValueOrDefault("visits_with_order") ?? 0) : null,
+                "visit_strike" => Div(v.GetValueOrDefault("visits_with_order"), v.GetValueOrDefault("visits_done")) * 100,
                 "need_units" => dailyUnits is { } du && v.GetValueOrDefault("stock_units") is { } st ? Math.Max(0, du * n.CoverDays - st) : null,
                 _ => v.GetValueOrDefault(m.Code),
             };
@@ -875,7 +891,7 @@ public sealed class SemanticEngine(
         var checks = new List<EvidenceCheck>();
         var today = Today;
         var syncs = await SyncTimesAsync(ct);
-        foreach (var fact in facts.Where(f => f is SemanticCatalog.Sales or SemanticCatalog.Payments))
+        foreach (var fact in facts.Where(f => f is SemanticCatalog.Sales or SemanticCatalog.Payments or SemanticCatalog.Visits))
         {
             var (first, last) = ranges[fact];
             var title = FactTitle(fact);
@@ -922,6 +938,19 @@ public sealed class SemanticEngine(
             if (other is > 0)
             {
                 notes.Add($"Заказы не в сумах ({other:N0} в валюте) в выручку не входят: курса в данных нет.");
+            }
+        }
+
+        if (facts.Contains(SemanticCatalog.Visits))
+        {
+            if (syncs.GetValueOrDefault("visits").Error is { Length: > 0 } visitError)
+            {
+                checks.Add(new EvidenceCheck("visits.sync", false, $"Последняя загрузка визитов Linko завершилась ошибкой: {visitError}"));
+            }
+
+            if (n.To >= today)
+            {
+                notes.Add("План визитов на сегодня и будущие дни не учитывается, пока визит не выполнен (как «Календарь визитов»): сегодняшний день — неполный.");
             }
         }
 
@@ -981,7 +1010,8 @@ public sealed class SemanticEngine(
         }
 
         // Итоги: сумма строк = итог для аддитивных показателей (АКБ и заказы за период не суммируются по строкам).
-        var additive = n.All.Where(m => !m.Calculated && m.Code is not ("outlets" or "orders") && m.Fact is SemanticCatalog.Sales or SemanticCatalog.Payments or SemanticCatalog.Stock).ToList();
+        var additive = n.All.Where(m => !m.Calculated && m.Code is not ("outlets" or "orders" or "visited_outlets")
+            && m.Fact is SemanticCatalog.Sales or SemanticCatalog.Payments or SemanticCatalog.Stock or SemanticCatalog.Visits).ToList();
         var mismatch = additive.Where(m => totals.GetValueOrDefault(m.Code) is { } t && Math.Abs(rows.Where(r => !r.Filled).Sum(r => r.Values.GetValueOrDefault(m.Code) ?? 0) - t) > 0.5m).ToList();
         if (additive.Count > 0)
         {
@@ -1003,6 +1033,11 @@ public sealed class SemanticEngine(
         if (n.Dimensions.Any(regionDims.Contains) && facts.Contains(SemanticCatalog.Sales))
         {
             notes.Add("Регион — по филиалу заказа (как «Продажи по регионам» и «Продажи по SKU»); «Продажи за период» относят продажи агента к его основному региону — суммы регионов там могут отличаться.");
+        }
+
+        if (n.Dimensions.Any(regionDims.Contains) && facts.Contains(SemanticCatalog.Visits))
+        {
+            notes.Add("Регион визита — по филиалу точки; «Календарь визитов» собирает визиты ТП в регион самого ТП — у ТП, работающего в точках другого филиала, суммы регионов могут отличаться (по ТП — совпадают).");
         }
 
         if (n.Segment != "secondary" && facts.Contains(SemanticCatalog.Sales))
@@ -1049,6 +1084,12 @@ public sealed class SemanticEngine(
                 "План РОП (или выбранного вида) регионов по категориям, кг в месяц — Google Sheets / AI Data Manager"));
             list.Add(new AnalyticsSource("linko", "Планы ТП Linko", "sales.StaffPlans", syncs.GetValueOrDefault("staff_balance").At, ranges[SemanticCatalog.Plan].Last,
                 "staff_balance: «Тотал» или сумма показателей ТП, без командных планов СВР; используется в месяцы без планов регионов"));
+        }
+
+        if (facts.Contains(SemanticCatalog.Visits))
+        {
+            list.Add(new AnalyticsSource("linko", "Linko: визиты ТП", "linko.Visits, Markets, Orders", syncs.GetValueOrDefault("visits").At, ranges[SemanticCatalog.Visits].Last,
+                "Визиты с ТП и точкой по дню визита; план — визиты маршрута без сегодняшних и будущих невыполненных; визит с заказом — проданный заказ ТП в точке, введённый в день визита; регион — по филиалу точки"));
         }
 
         if (facts.Contains(SemanticCatalog.Stock))

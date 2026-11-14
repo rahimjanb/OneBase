@@ -81,7 +81,7 @@ public static class AnalytikAgents
                 план, какой ожидается результат на конец месяца. Для периода — analytik_sales_overview или get_sales_period; для плана и прогноза месяца —
                 get_sales; разрезы (по дням, товарным группам, регионам, агентам, точкам и их сочетаниям) — analytics_query. Пользователь может видеть только свои регионы — инструменты Аналитика это учитывают.
                 """,
-            "sales", Permissions.AnalytikUse, 101, [.. SalesSources, AnalytikTools.Source]),
+            "sales", Permissions.AnalytikUse, 101, [.. SalesSources, AnalytikTools.Source, KnowledgeSources.SalesStats]),
         new("analyst.production", "Production Analyst", "Аналитик производства",
             "Производство: план и факт выпуска, задания и смены, расход сырья против нормы, перерасход, брак, себестоимость сырья, сколько можно произвести.",
             Common + """
@@ -89,14 +89,14 @@ public static class AnalytikAgents
                 сырья по техкартам, сколько можно произвести из имеющегося сырья (analytik_production), как изменится себестоимость при изменении цен
                 сырья (analytik_production с price_change_percent). Мощностей и загрузки линий в OneBase нет — так и скажи.
                 """,
-            "production", Permissions.AnalytikUse, 102, [KnowledgeSources.Procurement, KnowledgeSources.SalesPrimary, KnowledgeSources.SalesSku, KnowledgeSources.SalesSlices, AnalytikTools.Source, KnowledgeSources.AiAlerts]),
+            "production", Permissions.AnalytikUse, 102, [KnowledgeSources.Procurement, KnowledgeSources.SalesPrimary, KnowledgeSources.SalesSku, KnowledgeSources.SalesSlices, AnalytikTools.Source, KnowledgeSources.SalesStats, KnowledgeSources.AiAlerts]),
         new("analyst.warehouse", "Warehouse Analyst", "Аналитик склада",
             "Склад: остатки сырья (физический, резерв, доступный), расход, дни запаса, дефицит, излишки, неликвид; остатки готовой продукции у дилеров.",
             Common + """
                 Ты — аналитик склада. Не смешивай физический остаток, резерв и доступный остаток. Сырьё — analytik_warehouse и инструменты снабжения;
                 готовая продукция у дилеров — get_stock_reload. Называй дни запаса, дефицит, излишки, позиции без расхода и риск нехватки.
                 """,
-            "supply", Permissions.AnalytikUse, 103, [KnowledgeSources.Procurement, KnowledgeSources.SalesStock, KnowledgeSources.SalesSlices, AnalytikTools.Source, KnowledgeSources.AiAlerts]),
+            "supply", Permissions.AnalytikUse, 103, [KnowledgeSources.Procurement, KnowledgeSources.SalesStock, KnowledgeSources.SalesSlices, AnalytikTools.Source, KnowledgeSources.SalesStats, KnowledgeSources.AiAlerts]),
         new("analyst.supply", "Supply Analyst", "Аналитик снабжения (директор по снабжению)",
             "Снабжение: что, сколько и когда закупить (горизонты 7–90 дней), у кого, бюджет, срочность, задержки поставок, рост цен, поставщики.",
             Common + """
@@ -105,7 +105,7 @@ public static class AnalytikAgents
                 обоснование. Цены и поставщики — get_purchase_price_history, get_supplier_history, compare_supplier_offers. Нет цены или срока поставки —
                 не придумывай, назови это допущением. Закупки не оформляешь — только рекомендуешь (черновик заявки готовит человек).
                 """,
-            "supply", Permissions.AnalytikUse, 104, [KnowledgeSources.Procurement, KnowledgeSources.SupplyProviders, AnalytikTools.Source, KnowledgeSources.AiAlerts]),
+            "supply", Permissions.AnalytikUse, 104, [KnowledgeSources.Procurement, KnowledgeSources.SupplyProviders, AnalytikTools.Source, KnowledgeSources.SalesStats, KnowledgeSources.AiAlerts]),
         new("analyst.finance", "Finance Analyst", "Финансовый аналитик",
             "Финансы: выручка, оплаты точек, расходы на закупки, P&L дилеров, долги дилеров и DSO, маржа, финансовые риски.",
             Common + """
@@ -115,7 +115,7 @@ public static class AnalytikAgents
                 """,
             "finance", Permissions.AnalytikUse, 105,
             [KnowledgeSources.FinancePayments, KnowledgeSources.DealerPnl, KnowledgeSources.SalesSecondary, KnowledgeSources.SalesPrimary, KnowledgeSources.Procurement,
-                KnowledgeSources.SalesSlices, AnalytikTools.Source, KnowledgeSources.AiAlerts]),
+                KnowledgeSources.SalesSlices, AnalytikTools.Source, KnowledgeSources.SalesStats, KnowledgeSources.AiAlerts]),
         new("analyst.hr", "HR Analyst", "Аналитик персонала",
             "Персонал: сотрудники, посещаемость, опоздания и отсутствия, табели, задачи отделов и их просрочка, эффективность команды продаж.",
             Common + """
@@ -123,7 +123,7 @@ public static class AnalytikAgents
                 инструменты поля и продаж. Соблюдай права на персональные данные: контакты не раскрываются. ФОТ и оценок в OneBase нет.
                 """,
             "hr", Permissions.AnalytikUse, 106,
-            [KnowledgeSources.HrAttendance, KnowledgeSources.WorkTasks, KnowledgeSources.SalesTeam, KnowledgeSources.FieldSales, AnalytikTools.Source, KnowledgeSources.AiAlerts]),
+            [KnowledgeSources.HrAttendance, KnowledgeSources.WorkTasks, KnowledgeSources.SalesTeam, KnowledgeSources.FieldSales, AnalytikTools.Source, KnowledgeSources.SalesStats, KnowledgeSources.AiAlerts]),
         new(Bi, "BI Analyst", "Аналитик данных (вся база OneBase)",
             "Вся база OneBase: найти таблицы по смыслу, связи, исследовать любую сущность и запись, нестандартные срезы, качество данных, риски и прогнозы.",
             Common + """
@@ -132,7 +132,7 @@ public static class AnalytikAgents
                 (analytik_dashboard). Сначала найди таблицы и посмотри их описание и связи, потом строй план запроса; результат проверь на здравый смысл
                 (единицы, период, полнота: has_more). Если таблица закрыта или нет прав — не обходи это другими таблицами.
                 """,
-            null, Permissions.AnalytikUse, 107, [AnalytikTools.Source, KnowledgeSources.SalesSlices, KnowledgeSources.AiAlerts, KnowledgeSources.Documents]),
+            null, Permissions.AnalytikUse, 107, [AnalytikTools.Source, KnowledgeSources.SalesStats, KnowledgeSources.SalesSlices, KnowledgeSources.AiAlerts, KnowledgeSources.Documents]),
         new(Scenario, "Scenario Analyst", "Аналитик сценариев (What-If)",
             "Что будет, если…: моделирует изменения продаж, цен, сырья, мощности, смен, поставок, закупок, персонала, условий оплаты и нового региона " +
             "движком симулятора по реальным данным — последствия для выручки, производства, склада, закупок, прибыли и денег.",
@@ -146,7 +146,7 @@ public static class AnalytikAgents
                 допущения. Чего нет в OneBase (мощность без смен, зарплаты, расходы компании, остаток денег) — скажи, что не посчитано и что можно
                 ввести в симуляторе. В конце — ссылка «Открыть в симуляторе» (OpenInSimulator).
                 """,
-            null, Permissions.AnalytikUse, 108, [AnalytikTools.Source, KnowledgeSources.AiAlerts]),
+            null, Permissions.AnalytikUse, 108, [AnalytikTools.Source, KnowledgeSources.SalesStats, KnowledgeSources.AiAlerts]),
     ];
 
     public static readonly IReadOnlyList<AgentDefault> All = [ChiefAnalyst, .. Analysts];

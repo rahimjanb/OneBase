@@ -48,7 +48,8 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
         var (from, to) = info.Report == ReportType.Weekly ? WeeklyReport.Period(info, date) : (date, date);
 
         var (teams, directions) = await StructureAsync(to, ct);
-        var resolved = ReportScopes.Resolve(scope, teams, directions, ru => ReportTexts.Get(language, ru));
+        var rmUsers = scope.UserId is null ? null : await ReportScopes.RmUsersAsync(db, ct);
+        var resolved = ReportScopes.Resolve(scope, teams, directions, ru => ReportTexts.Get(language, ru), rmUsers);
         var today = DateOnly.FromDateTime(now.DateTime);
         var cutoff = info.IsMidday ? date == today ? TimeOnly.FromDateTime(now.DateTime) : jobTime : TimeOnly.MaxValue;
         if (info.Report == ReportType.Battle)
@@ -233,7 +234,7 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
                 default:
                 {
                     var agents = resolved.Regions.SelectMany(Agents).DistinctBy(a => a.Id).ToList();
-                    if (resolved.Scope.DirectionId is not null)
+                    if (resolved.Scope.DirectionId is not null || resolved.Scope.UserId is not null)
                     {
                         ratingScope = resolved.Title;
                         ratingAgents = agents.Select(a => a.Id).ToHashSet();

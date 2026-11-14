@@ -62,8 +62,8 @@ public sealed class WeeklyReportBuilder(
         var weekEnd = dataThrough < weekTo ? dataThrough : weekTo; // воскресенье в неделю пн–сб не входит
 
         var teams = current.CachedReportTeams();
-        var resolved = ReportScopes.Resolve(scope, teams, current.ReportDirections(), s => s);
-        var role = scope.Role == TelegramReportRoles.Rm && scope.DirectionId is null ? "rop" : scope.Role;
+        var resolved = ReportScopes.Resolve(scope, teams, current.ReportDirections(), s => s, scope.UserId is null ? null : await ReportScopes.RmUsersAsync(db, ct));
+        var role = scope.Role == TelegramReportRoles.Rm && scope.DirectionId is null && scope.UserId is null ? "rop" : scope.Role;
         var regionIds = resolved.Regions.Select(r => r.Id).ToList();
         var regionAgents = resolved.Regions.SelectMany(r => r.Agents).Select(a => a.Id).ToHashSet();
         bool WorksAsRep(long id) => current.HasAgent(id) && current.CachedAgent(id).Visits >= MinRepVisits;
@@ -217,9 +217,12 @@ public sealed class WeeklyReportBuilder(
             return new MonthUnitData(view.Kpi.FactKg, view.Kpi.Revenue, view.Kpi.PlanKg, view.Kpi.PlanSource, view.Kpi.Akb, view.Months);
         }
 
-        var group = scope.DirectionId is { } direction && current.HasDirection(direction.ToString())
-            ? current.CachedDirection(direction.ToString(), null, null)
-            : current.CachedRepublic(null, null);
+        // РМ-пользователь — сумма регионов из профиля (как «Мои регионы» в «Продажах»), РМ направления — направление, РОП — страна.
+        var group = scope.UserId is not null
+            ? current.CachedMyRegions(resolved.Regions.Select(r => r.Id).ToList(), null, null)
+            : scope.DirectionId is { } direction && current.HasDirection(direction.ToString())
+                ? current.CachedDirection(direction.ToString(), null, null)
+                : current.CachedRepublic(null, null);
         return new MonthUnitData(group.Kpi.FactKg, group.Kpi.Revenue, group.Kpi.PlanKg, group.Kpi.PlanSource, group.Kpi.Akb, []);
     }
 

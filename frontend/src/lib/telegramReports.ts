@@ -5,7 +5,7 @@ import { bff } from "./bff";
 export type ReportRole = "rm" | "sv" | "tp";
 
 export const reportRoles: { key: ReportRole; label: string; hint: string; className: string }[] = [
-  { key: "rm", label: "РМ", hint: "Региональный менеджер: регионы направления или вся страна", className: "bg-[#1d4ed8] text-white" },
+  { key: "rm", label: "РМ", hint: "Региональный менеджер: регионы из его профиля, направление или вся страна", className: "bg-[#1d4ed8] text-white" },
   { key: "sv", label: "СВ", hint: "Супервайзер: ТП своего региона", className: "bg-[#15803d] text-white" },
   { key: "tp", label: "ТП", hint: "Торговый представитель: только свои цифры", className: "bg-[#c2410c] text-white" },
 ];
@@ -116,11 +116,27 @@ export type ReportRecipient = {
   pdfLanguage: ReportLanguage | null;
   /** Язык картинок автоотчётов получателя (ТП — по-узбекски, СВ — по-русски); null — из общих настроек. */
   language: ReportLanguage | null;
+  /** Выключенный: с какого момента, причина и до какого дня (напоминание — сам не включается). У включённого — null. */
+  disabledAt?: string | null;
+  disabledReason?: string | null;
+  disabledUntil?: string | null;
+  /** СВ получателя: у СВ — выбранный или СВР региона, у ТП — СВР его региона (как на картинке); null — без супервайзера. */
+  supervisor?: string | null;
+  /** Последняя доставка (статус «отправлен») по всему журналу; null — ни разу. */
+  lastSentAt?: string | null;
+  /** Ошибки и «неизвестно, дошёл ли» за 7 дней. */
+  failedWeek?: number;
+  /** РМ — пользователь OneBase с ролью «РМ»: отчёт по регионам из его профиля; null — РМ по направлению или вся страна. */
+  userId?: string | null;
+  /** Только в интерфейсе: имя для списка (telegram-recipients displayName) — не уходит на сервер. */
+  display?: string;
 };
 
 export type ReportRecipientInput = {
   role: ReportRole;
   title: string | null;
+  /** РМ: пользователь с ролью «РМ» (регионы из профиля); выбран — направление не сохраняется. */
+  userId?: string | null;
   directionId: string | null;
   regionId: string | null;
   supervisorId: number | null;
@@ -130,6 +146,9 @@ export type ReportRecipientInput = {
   enabled: boolean;
   pdfLanguage?: ReportLanguage | null;
   language?: ReportLanguage | null;
+  /** Только у выключенного: причина и срок (yyyy-mm-dd). */
+  disabledReason?: string | null;
+  disabledUntil?: string | null;
 };
 
 export type ReportPerson = { id: number; name: string };
@@ -147,6 +166,9 @@ export type ReportRegion = {
 
 export type ReportDirection = { id: string; name: string; manager: string | null; regions: number };
 
+/** Пользователь OneBase с ролью «РМ»: регионы из профиля (охват «Продаж») и ТП этих регионов в этом месяце. */
+export type ReportRmUser = { id: string; name: string; regionIds: string[]; agents: number };
+
 export type ReportChat = {
   id: string;
   title: string;
@@ -157,9 +179,13 @@ export type ReportChat = {
   reason: string | null;
   /** Пользователь OneBase, чей Telegram подтверждён кодом и чей это личный чат. */
   linkedUser: string | null;
+  linkedUserId?: string | null;
 };
 
-export type ReportMetrics = { sent: number; failed: number; skipped: number; unknown: number; pending: number };
+/** Причина пропуска отправки (сервер, ReportSkipReasons). */
+export type SkipKey = "no_chat" | "disabled" | "not_needed" | "promo" | "stale";
+
+export type ReportMetrics = { sent: number; failed: number; skipped: number; unknown: number; pending: number; skippedBy?: { key: SkipKey; count: number }[] | null };
 
 export type ReportOverview = {
   settings: ReportSettings;
@@ -178,6 +204,8 @@ export type ReportOverview = {
   weeklyPdf: WeeklyPdfSettings;
   /** Когда последний раз обновлялись заказы и визиты Linko. */
   freshness: ReportFreshness;
+  /** Пользователи с ролью «РМ» — выбор получателя-РМ. */
+  rmUsers?: ReportRmUser[] | null;
 };
 
 /** Формулы целей недели и пороги еженедельного PDF (доли: 0.3 = 30%). */
@@ -205,10 +233,18 @@ export type WeeklyPdfSettings = {
 
 export type ReportFreshness = { orders: string | null; visits: string | null };
 
-/** Область PDF: РОП — вся страна (на сервере РМ без направления), РМ — направление, СВ — регион и команда, ТП — личная карточка. */
+/** Область PDF: РОП — вся страна (на сервере РМ без направления), РМ — пользователь или направление, СВ — регион и команда, ТП — личная карточка. */
 export type WeeklyPdfRole = "rop" | "rm" | "sv" | "tp";
 
-export type WeeklyPdfInput = { role: WeeklyPdfRole; directionId: string | null; regionId: string | null; agentId: number | null; date: string | null };
+export type WeeklyPdfInput = {
+  role: WeeklyPdfRole;
+  /** РМ: пользователь с ролью «РМ» (регионы из профиля) — вместо направления. */
+  userId?: string | null;
+  directionId: string | null;
+  regionId: string | null;
+  agentId: number | null;
+  date: string | null;
+};
 
 /** Что показать: страницы РОП / РМ / СВ или карточки ТП (у ТП — всегда карточка). */
 export type WeeklyPdfKind = "team" | "cards";
@@ -253,6 +289,8 @@ export const sourceState: Record<WeeklySourceState, { label: string; className: 
 export type ReportPreviewInput = {
   job: string;
   role: ReportRole | null;
+  /** РМ: пользователь с ролью «РМ» — вместо направления. */
+  userId?: string | null;
   directionId: string | null;
   regionId: string | null;
   supervisorId: number | null;
@@ -473,7 +511,8 @@ export const dailyPlansApi = {
 const weeklyBody = (i: WeeklyPdfInput) =>
   json({
     role: i.role === "rop" ? "rm" : i.role,
-    directionId: i.role === "rm" ? i.directionId : null,
+    userId: i.role === "rm" ? (i.userId ?? null) : null,
+    directionId: i.role === "rm" && !i.userId ? i.directionId : null,
     regionId: i.role === "sv" ? i.regionId : null,
     agentId: i.role === "tp" ? i.agentId : null,
     date: i.date,
@@ -512,7 +551,8 @@ export const weeklyPdfApi = {
   test: (i: WeeklyPdfInput, language: ReportLanguage, chatId: string) =>
     sendOnce<ReportSendResult>("weekly/test", {
       role: i.role,
-      directionId: i.role === "rm" ? i.directionId : null,
+      userId: i.role === "rm" ? (i.userId ?? null) : null,
+      directionId: i.role === "rm" && !i.userId ? i.directionId : null,
       regionId: i.role === "sv" ? i.regionId : null,
       agentId: i.role === "tp" ? i.agentId : null,
       date: i.date,
@@ -532,6 +572,9 @@ export const reportsApi = {
   saveJob: (code: string, input: ReportJobInput) => bff<ReportJob>(`${base}/jobs/${encodeURIComponent(code)}`, { method: "PUT", body: json(input) }),
   saveRecipient: (id: string | null, input: ReportRecipientInput) =>
     bff<ReportRecipient>(id ? `${base}/recipients/${id}` : `${base}/recipients`, { method: id ? "PUT" : "POST", body: json(input) }),
+  /** Массовое действие: все строки одним сохранением — ошибка в любой не сохраняет ни одной. */
+  saveRecipients: (items: { id: string; input: ReportRecipientInput }[]) =>
+    bff<ReportRecipient[]>(`${base}/recipients`, { method: "PUT", body: json({ items }) }),
   deleteRecipient: (id: string) => bff<void>(`${base}/recipients/${id}`, { method: "DELETE" }),
   /** Отправить сейчас во все чаты получателя (реальные данные). */
   send: (id: string, job: string, force: boolean) => sendOnce<ReportSendResult[]>(`recipients/${id}/send`, { job, force }),

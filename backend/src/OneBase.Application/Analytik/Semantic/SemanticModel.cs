@@ -123,7 +123,12 @@ public static class SemanticCatalog
     public const string Payments = "payments";
     public const string Stock = "stock";
 
+    /// <summary>Визиты ТП (Linko): маршрут (план), выполненные визиты по маршруту и вне его, визиты с заказом — правила «Календаря визитов».</summary>
+    public const string Visits = "visits";
+
     public static readonly IReadOnlyList<string> Grains = ["day", "week", "month", "quarter", "year"];
+
+    private const string VisitsSource = "Linko: визиты ТП (linko.Visits: день, ТП, точка, в маршруте или нет, статус done / pending); заказы — для визитов с заказом";
 
     private const string SalesSource = "Linko: заказы и строки заказов (статусы «доставлен» и «выдан», дата приёмки), возвраты по строкам (статус «доставлен», дата создания)";
 
@@ -171,6 +176,26 @@ public static class SemanticCatalog
         new("payments", Payments, "Оплаты", "сум", "Σ принятых оплат точек (без удалённых) по дате создания", "Linko: оплаты (linko.Payments)",
             Permissions.FinanceRead, "Оплаты — деньги, поступившие от точек; это не выручка и не отгрузка"),
 
+        new("visits_planned", Visits, "План визитов (маршрут)", "виз.",
+            "Визиты из плана (маршрута) Linko: выполненные и невыполненные прошедших дней; сегодняшние и будущие невыполненные не входят (как «Календарь визитов»)",
+            VisitsSource, Permissions.SalesRead),
+        new("visits_done", Visits, "Выполнено визитов", "виз.", "Визиты со статусом done — по маршруту и вне его", VisitsSource, Permissions.SalesRead),
+        new("visits_done_in_plan", Visits, "Выполнено по маршруту", "виз.", "Выполненные визиты из плана (маршрута)", VisitsSource, Permissions.SalesRead),
+        new("visits_off_plan", Visits, "Визиты вне маршрута", "виз.", "Выполненные визиты не из плана", VisitsSource, Permissions.SalesRead),
+        new("visits_missed", Visits, "Не посещено по маршруту", "виз.", "Визиты из плана прошедших дней, оставшиеся невыполненными (pending)", VisitsSource,
+            Permissions.SalesRead),
+        new("visits_with_order", Visits, "Визиты с заказом", "виз.",
+            "Выполненные визиты, после которых у этого ТП в этой точке есть проданный заказ, введённый в день визита (как «Визиты с заказом» карточки ТП)",
+            VisitsSource, Permissions.SalesRead, "Заказ сшивается с визитом по дню ввода (created_date), а не по дате приёмки"),
+        new("visited_outlets", Visits, "Посещённые точки", "точек", "Различные точки с выполненным визитом", VisitsSource, Permissions.SalesRead,
+            "За период не суммируется по дням: точка, посещённая в разные дни, — одна"),
+        new("route_execution", Visits, "Выполнение маршрута", "%", "Выполнено по маршруту ÷ план визитов × 100", VisitsSource, Permissions.SalesRead, null,
+            ["visits_planned", "visits_done_in_plan"]),
+        new("visits_without_order", Visits, "Визиты без заказа", "виз.", "Выполненные визиты − визиты с заказом", VisitsSource, Permissions.SalesRead, null,
+            ["visits_done", "visits_with_order"]),
+        new("visit_strike", Visits, "Страйк (визиты с заказом)", "%", "Визиты с заказом ÷ выполненные визиты × 100", VisitsSource, Permissions.SalesRead, null,
+            ["visits_done", "visits_with_order"]),
+
         new("stock_units", Stock, "Остаток", "ед.", "Остаток товара на складах Linko сейчас (снимок, в единице товара)",
             "Linko: остатки (linko.ProductBalances, linko.Stocks)", Permissions.SalesRead, "Истории остатков нет: только текущий снимок"),
         new("cover_days", Stock, "Дней запаса", "дн.", "Остаток ÷ средние продажи в день за последние 30 дней (единицы)", "Остатки и продажи",
@@ -181,21 +206,21 @@ public static class SemanticCatalog
 
     public static readonly IReadOnlyList<DimensionDef> Dimensions =
     [
-        new("date", "Дата", [Sales, Plan, Payments], "Продажа — дата приёмки заказа, возврат — дата создания, оплата — дата создания; план — месяц",
+        new("date", "Дата", [Sales, Plan, Payments, Visits], "Продажа — дата приёмки заказа, возврат — дата создания, оплата — дата создания; визит — день визита; план — месяц",
             ["day", "дата", "день"]),
-        new("region", "Регион", [Sales, Plan, Payments],
+        new("region", "Регион", [Sales, Plan, Payments, Visits],
             "Регион вторички по филиалу заказа (как «Продажи» и «Продажи по SKU»): старые филиалы — в текущем регионе, точки-каналы — в своём регионе " +
-            "в закрытых месяцах; у оплаты — по филиалу точки", ["регион", "область"]),
-        new("branch", "Филиал Linko", [Sales, Payments], "Филиал документа в Linko (без объединения старых филиалов)", ["филиал"]),
-        new("direction", "Направление", [Sales, Plan, Payments], "Направление региона в «Настройках продаж»: РМ 1–4 или канал", ["направление", "рм"]),
-        new("manager", "РМ (менеджер)", [Sales, Plan, Payments], "Руководитель направления региона (РМ)", ["менеджер", "manager"]),
-        new("supervisor", "СВР", [Sales, Plan, Payments], "СВР региона из «Настроек продаж» (в Linko связи агент → СВР нет)", ["супервайзер", "свр"]),
-        new("dealer", "Дилер (контрагент)", [Sales, Plan, Payments], "Дилер региона из «Настроек продаж»", ["контрагент", "дилер", "counterparty"]),
+            "в закрытых месяцах; у оплаты и визита — по филиалу точки", ["регион", "область"]),
+        new("branch", "Филиал Linko", [Sales, Payments, Visits], "Филиал документа в Linko (без объединения старых филиалов)", ["филиал"]),
+        new("direction", "Направление", [Sales, Plan, Payments, Visits], "Направление региона в «Настройках продаж»: РМ 1–4 или канал", ["направление", "рм"]),
+        new("manager", "РМ (менеджер)", [Sales, Plan, Payments, Visits], "Руководитель направления региона (РМ)", ["менеджер", "manager"]),
+        new("supervisor", "СВР", [Sales, Plan, Payments, Visits], "СВР региона из «Настроек продаж» (в Linko связи агент → СВР нет)", ["супервайзер", "свр"]),
+        new("dealer", "Дилер (контрагент)", [Sales, Plan, Payments, Visits], "Дилер региона из «Настроек продаж»", ["контрагент", "дилер", "counterparty"]),
         new("sales_channel", "Канал продаж", [Sales], "Регионы (вторичка), каналы «Настроек продаж» (базар, сети), «Завод» (экспорт и опт)",
             ["канал", "channel"]),
-        new("agent", "Агент (ТП)", [Sales, Plan, Payments], "Торговый представитель документа (Linko)", ["агент", "тп", "торговый представитель"]),
-        new("market", "Торговая точка (клиент)", [Sales, Payments], "Точка (клиент) Linko", ["точка", "клиент", "customer", "outlet"]),
-        new("market_type", "Тип точки", [Sales, Payments], "Тип точки в Linko (например, EXPORT)", ["тип точки"]),
+        new("agent", "Агент (ТП)", [Sales, Plan, Payments, Visits], "Торговый представитель документа (Linko)", ["агент", "тп", "торговый представитель"]),
+        new("market", "Торговая точка (клиент)", [Sales, Payments, Visits], "Точка (клиент) Linko", ["точка", "клиент", "customer", "outlet"]),
+        new("market_type", "Тип точки", [Sales, Payments, Visits], "Тип точки в Linko (например, EXPORT)", ["тип точки"]),
         new("product", "Товар", [Sales, Stock], "Товар Linko", ["товар", "sku_name"]),
         new("sku", "Артикул (SKU)", [Sales, Stock], "Код товара Linko", ["артикул"]),
         new("product_group", "Товарная группа", [Sales, Plan, Stock],
@@ -203,7 +228,7 @@ public static class SemanticCatalog
             ["группа", "товарная группа", "category", "категория"]),
         new("product_type", "Тип товара Linko", [Sales, Stock], "Тип (подгруппа) товара в справочнике Linko, например «Помадка шт»", ["тип", "подгруппа"]),
         new("stock", "Склад", [Stock], "Склад Linko", ["склад"]),
-        new("source", "Источник", [Sales, Plan, Payments, Stock], "Система, из которой взяты данные", ["источник"]),
+        new("source", "Источник", [Sales, Plan, Payments, Stock, Visits], "Система, из которой взяты данные", ["источник"]),
     ];
 
     public static MetricDef? Metric(string code) => Metrics.FirstOrDefault(m => m.Code == code.Trim().ToLowerInvariant());

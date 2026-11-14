@@ -280,6 +280,9 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.Recruitment.HhConnection> HhConnections => Set<OneBase.Domain.Recruitment.HhConnection>();
     public DbSet<OneBase.Domain.Recruitment.HhNegotiation> HhNegotiations => Set<OneBase.Domain.Recruitment.HhNegotiation>();
     public DbSet<OneBase.Domain.Recruitment.CandidateScore> CandidateScores => Set<OneBase.Domain.Recruitment.CandidateScore>();
+    public DbSet<OneBase.Domain.Recruitment.CandidateSkill> CandidateSkills => Set<OneBase.Domain.Recruitment.CandidateSkill>();
+    public DbSet<OneBase.Domain.Recruitment.CandidateComparison> CandidateComparisons => Set<OneBase.Domain.Recruitment.CandidateComparison>();
+    public DbSet<OneBase.Domain.Recruitment.HhApiCall> HhApiCalls => Set<OneBase.Domain.Recruitment.HhApiCall>();
     public DbSet<OneBase.Domain.Recruitment.VacancyInterviewer> VacancyInterviewers => Set<OneBase.Domain.Recruitment.VacancyInterviewer>();
     public DbSet<OneBase.Domain.Recruitment.Interview> Interviews => Set<OneBase.Domain.Recruitment.Interview>();
     public DbSet<OneBase.Domain.Recruitment.RecruitmentException> RecruitmentExceptions => Set<OneBase.Domain.Recruitment.RecruitmentException>();

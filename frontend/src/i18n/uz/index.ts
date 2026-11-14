@@ -19,6 +19,7 @@ import myDay from "./myDay";
 import production from "./production";
 import recipeCards from "./recipeCards";
 import recruitment from "./recruitment";
+import screening from "./screening";
 import requests from "./requests";
 import rights from "./rights";
 import sales from "./sales";
@@ -34,6 +35,7 @@ import telegramReports from "./telegramReports";
 import twin from "./twin";
 import whatsNew from "./whatsNew";
 import forecasts from "./forecasts";
+import telegramRecipients from "./telegramRecipients";
 
 /**
  * Узбекский (латиница): ключ — русский текст интерфейса. Словари по разделам, чтобы их можно было вести независимо;
@@ -52,6 +54,7 @@ export const uz: Dict = {
   ...twin,
   ...whatsNew,
   ...forecasts,
+  ...telegramRecipients,
   ...production,
   // «Технолог» — после производства: его термины (замес, этап, брак) перекрывают общие.
   ...technologist,
@@ -69,6 +72,7 @@ export const uz: Dict = {
   ...serverSettings,
   ...hr,
   ...recruitment,
+  ...screening,
   ...agents,
   ...lib,
   ...common,

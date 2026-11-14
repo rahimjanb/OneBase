@@ -43,7 +43,7 @@ public sealed record CapabilityView(
 /// (считаются при каждом обращении, поэтому реестр всегда после последней синхронизации). Перед ответом «данных нет» AI проверяет здесь:
 /// есть ли показатель, измерение, детализация, период, другой источник или инструмент.
 /// </summary>
-public sealed class CapabilityRegistry(SemanticEngine engine, AnalytikAccess access, IAppDbContext db, TimeProvider clock)
+public sealed class CapabilityRegistry(SemanticEngine engine, AnalytikAccess access, IAppDbContext db, IAnalytikDb adb, TimeProvider clock)
 {
     public static readonly IReadOnlyList<CapabilityTool> OtherTools =
     [
@@ -74,6 +74,73 @@ public sealed class CapabilityRegistry(SemanticEngine engine, AnalytikAccess acc
         "Себестоимости продукции в OneBase нет — маржинальность по продажам не считается (P&L дилеров — отдельный источник).",
     ];
 
+    /// <summary>Паспорта показателей движка: реестр + профиль + диапазон данных и свежесть источника + совместимые факты + доступ пользователя.</summary>
+    public async Task<IReadOnlyList<MetricPassport>> PassportsAsync(QueryCaller caller, CancellationToken ct)
+    {
+        var view = await ViewAsync(caller, ct);
+        var facts = view.Facts.ToDictionary(f => f.Code);
+        var principal = caller.UserId is { } id ? await access.ResolveAsync(id, ct) : AnalytikPrincipal.SystemPrincipal;
+        var list = new List<MetricPassport>();
+        foreach (var m in SemanticCatalog.Metrics)
+        {
+            var p = MetricPassports.Profile(m);
+            var mFacts = SemanticCatalog.FactsOf([m]);
+            var fact = facts.GetValueOrDefault(m.Fact);
+            var dims = SemanticCatalog.Dimensions.Where(d => mFacts.All(f => d.Facts.Contains(f))).Select(d => d.Code).ToList();
+            var compatible = facts.Keys.Where(f => f != m.Fact && f != SemanticCatalog.Stock && m.Fact != SemanticCatalog.Stock
+                                                   && SemanticCatalog.Dimensions.Any(d => d.Code != "source" && d.Facts.Contains(f) && d.Facts.Contains(m.Fact))).ToList();
+            list.Add(new MetricPassport(m.Code, m.Fact, m.Title, p.Meaning, m.Formula, m.Source, p.Tables, p.Field, p.DataType, m.Unit, p.Aggregation, p.Additive,
+                m.Calculated, p.PartOf, p.DependsOn ?? [], fact?.Grains ?? [], dims, compatible, fact?.First, fact?.Last, fact?.SyncedAt, fact?.Status ?? "missing",
+                m.Note ?? fact?.Limits, m.Permission, principal.Has(m.Permission) && (fact?.Allowed ?? false)));
+        }
+
+        return list;
+    }
+
+    /// <summary>
+    /// Карта показателей отделов с живым состоянием: available — в таблицах-источниках есть строки (оценка каталога базы), empty — таблицы
+    /// пусты, missing — источника нет в OneBase.
+    /// </summary>
+    public async Task<IReadOnlyList<BusinessMetricState>> BusinessAsync(QueryCaller caller, CancellationToken ct)
+    {
+        var principal = caller.UserId is { } id ? await access.ResolveAsync(id, ct) : AnalytikPrincipal.SystemPrincipal;
+        var tables = (await adb.CatalogTables.AsNoTracking().Select(t => new { t.Schema, t.Name, t.RowEstimate }).ToListAsync(ct))
+            .GroupBy(t => $"{t.Schema}.{t.Name}", StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.Max(t => t.RowEstimate), StringComparer.OrdinalIgnoreCase);
+        var list = new List<BusinessMetricState>();
+        foreach (var b in MetricPassports.Business)
+        {
+            // Через запятую — нужны все таблицы (строк — по самой малой), через «|» — достаточно любой (по самой большой).
+            var groups = b.Tables.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(g => g.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(t => t.Split(' ')[0]).Where(t => t.Contains('.')).ToList())
+                .Where(g => g.Count > 0).ToList();
+            var rows = groups.Count == 0 ? 0 : groups.Min(g => g.Max(t => tables.GetValueOrDefault(t)));
+            var status = b.Kind == "missing" ? "missing" : rows > 0 ? "available" : "empty";
+            var permission = b.Domain switch
+            {
+                "Финансы" => Permissions.FinanceRead,
+                "HR" => Permissions.HrRead,
+                _ => Permissions.SalesRead,
+            };
+            list.Add(new BusinessMetricState(b, status, rows, principal.Has(permission)));
+        }
+
+        return list;
+    }
+
+    /// <summary>Совместимость пары показателей для пользователя: его права и фактические диапазоны данных фактов.</summary>
+    public async Task<CompatibilityResult> CompatibilityAsync(QueryCaller caller, string metricA, string metricB, IReadOnlyList<string>? dimensions, string? grain,
+        DateOnly? from, DateOnly? to, CancellationToken ct)
+    {
+        var principal = caller.UserId is { } id ? await access.ResolveAsync(id, ct) : AnalytikPrincipal.SystemPrincipal;
+        var ranges = new Dictionary<string, (DateOnly? First, DateOnly? Last)>();
+        foreach (var fact in new[] { SemanticCatalog.Sales, SemanticCatalog.Plan, SemanticCatalog.Payments, SemanticCatalog.Visits })
+        {
+            ranges[fact] = await engine.DataRangeAsync(fact, ct);
+        }
+
+        return DataCompatibility.Check(metricA, metricB, dimensions, grain, principal, ranges, from, to);
+    }
+
     public async Task<CapabilityView> ViewAsync(QueryCaller caller, CancellationToken ct)
     {
         var principal = caller.UserId is { } id ? await access.ResolveAsync(id, ct) : AnalytikPrincipal.SystemPrincipal;
@@ -87,7 +154,7 @@ public sealed class CapabilityRegistry(SemanticEngine engine, AnalytikAccess acc
             var sync = syncKey is null ? (null, null) : syncs.GetValueOrDefault(syncKey);
             var status = last is null ? "missing"
                 : sync.Error is { Length: > 0 } ? "error"
-                : code is SemanticCatalog.Sales or SemanticCatalog.Payments && today.DayNumber - last.Value.DayNumber > 2 ? "stale"
+                : code is SemanticCatalog.Sales or SemanticCatalog.Payments or SemanticCatalog.Visits && today.DayNumber - last.Value.DayNumber > 2 ? "stale"
                 : "ok";
             var metrics = SemanticCatalog.Metrics.Where(m => m.Fact == code).Select(m => m.Code).ToList();
             var dims = SemanticCatalog.Dimensions.Where(d => d.Facts.Contains(code)).Select(d => d.Code).ToList();
@@ -106,6 +173,8 @@ public sealed class CapabilityRegistry(SemanticEngine engine, AnalytikAccess acc
         await Add(SemanticCatalog.Plan, "План продаж", "Google Sheets / AI Data Manager (регионы), Linko (ТП)", "Месяц: регион × категория (кг) или ТП (кг, сумма)",
             Permissions.SalesRead, "staff_balance", "Только помесячно; по дням и неделям не делится");
         await Add(SemanticCatalog.Payments, "Оплаты точек", "Linko", "Оплата, день", Permissions.FinanceRead, "payments", "Без товаров; регион — по филиалу точки");
+        await Add(SemanticCatalog.Visits, "Визиты ТП", "Linko", "Визит: день, ТП, точка, в маршруте или нет, статус", Permissions.SalesRead, "visits",
+            "Регион — по филиалу точки; план визитов — без сегодняшних и будущих невыполненных; визит с заказом — заказ ТП в точке в день визита");
         await Add(SemanticCatalog.Stock, "Остатки готовой продукции", "Linko", "Товар × склад, текущий снимок", Permissions.SalesRead, "product_balances",
             "Истории нет; в единицах товара");
 

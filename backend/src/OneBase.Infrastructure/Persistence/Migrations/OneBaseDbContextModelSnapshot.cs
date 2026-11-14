@@ -9834,6 +9834,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("Mark")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("ToStage")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -9862,6 +9866,17 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CreatedById")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("DesiredPosition")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Education")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int?>("ExperienceMonths")
+                        .HasColumnType("integer");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -9886,6 +9901,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
 
+                    b.Property<string>("LastJob")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
@@ -9894,8 +9913,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasMaxLength(4)
                         .HasColumnType("character varying(4)");
 
+                    b.Property<DateTimeOffset?>("ProfileAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("RetentionFrom")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SalaryExpectation")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -9926,6 +9952,13 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("CreatedById")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Mark")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("None");
 
                     b.Property<string>("RejectReason")
                         .HasMaxLength(1000)
@@ -9961,6 +9994,44 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasIndex("VacancyId", "Stage");
 
                     b.ToTable("Applications", "recruitment");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Recruitment.CandidateComparison", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApplicationIds")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("VacancyId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VacancyId", "CreatedAt");
+
+                    b.ToTable("CandidateComparisons", "recruitment");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Recruitment.CandidateConsent", b =>
@@ -10233,12 +10304,19 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CandidateId")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("Confidence")
+                        .HasPrecision(3, 2)
+                        .HasColumnType("numeric(3,2)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("CriteriaJson")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("DetailsJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("Model")
                         .HasMaxLength(100)
@@ -10262,11 +10340,47 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.HasKey("Id");
 
                     b.HasIndex("ApplicationId", "CreatedAt");
 
                     b.ToTable("CandidateScores", "recruitment");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Recruitment.CandidateSkill", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("CandidateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Normalized")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Normalized");
+
+                    b.HasIndex("CandidateId", "Normalized")
+                        .IsUnique();
+
+                    b.ToTable("CandidateSkills", "recruitment");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Recruitment.CandidateSource", b =>
@@ -10324,10 +10438,78 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("DialogReads", "recruitment");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Recruitment.HhApiCall", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Allowed")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Cost")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorType")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("At");
+
+                    b.HasIndex("Allowed", "At");
+
+                    b.ToTable("HhApiCalls", "recruitment");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Recruitment.HhConnection", b =>
                 {
                     b.Property<int>("Id")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("AiOnHhData")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("ClientId")
                         .HasMaxLength(200)
@@ -10353,6 +10535,13 @@ namespace OneBase.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("GuardReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("GuardTrippedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset?>("LastSyncAt")
                         .HasColumnType("timestamp with time zone");
@@ -14165,6 +14354,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("DirectionId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("DisabledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisabledReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("DisabledUntil")
+                        .HasColumnType("date");
+
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
@@ -14213,6 +14412,9 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
@@ -16762,6 +16964,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Vacancy");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.Recruitment.CandidateComparison", b =>
+                {
+                    b.HasOne("OneBase.Domain.Recruitment.Vacancy", null)
+                        .WithMany()
+                        .HasForeignKey("VacancyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("OneBase.Domain.Recruitment.CandidateConsent", b =>
                 {
                     b.HasOne("OneBase.Domain.Recruitment.Candidate", null)
@@ -16809,6 +17020,15 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.HasOne("OneBase.Domain.Recruitment.CandidateApplication", null)
                         .WithMany()
                         .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("OneBase.Domain.Recruitment.CandidateSkill", b =>
+                {
+                    b.HasOne("OneBase.Domain.Recruitment.Candidate", null)
+                        .WithMany("Skills")
+                        .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -17568,6 +17788,8 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Contacts");
 
                     b.Navigation("Resumes");
+
+                    b.Navigation("Skills");
 
                     b.Navigation("Sources");
                 });

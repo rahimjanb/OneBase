@@ -63,6 +63,14 @@ public sealed class RecruitmentHhController(RecruitmentService recruitment, HhSe
         return await Run(async () => Ok(await hh.SyncAsync(ctx.UserId, ct)));
     }
 
+    /// <summary>Quota Guard: каталог операций HH (что бесплатно, что заблокировано и почему), счётчики за 30 дней, предохранитель, журнал запросов.</summary>
+    [HttpGet("guard")]
+    public async Task<HhGuardView> Guard(CancellationToken ct) => await hh.GuardAsync(await ContextAsync(ct), ct);
+
+    /// <summary>«Проверить снова» — снять предохранитель расхода.</summary>
+    [HttpPost("guard/reset")]
+    public async Task<HhGuardView> ResetGuard(CancellationToken ct) => await hh.ResetGuardAsync(await ContextAsync(ct), ct);
+
     [HttpGet("candidates/{candidateId:guid}/negotiations")]
     public async Task<IReadOnlyList<HhNegotiationView>> Negotiations(Guid candidateId, CancellationToken ct) => await hh.NegotiationsAsync(await ContextAsync(ct), candidateId, ct);
 
@@ -79,6 +87,10 @@ public sealed class RecruitmentHhController(RecruitmentService recruitment, HhSe
         catch (HhApiException ex)
         {
             return new BadRequestObjectResult(new { error = ex.Message, hh = ex.Type });
+        }
+        catch (HhBlockedException ex)
+        {
+            return new BadRequestObjectResult(new { error = ex.Message, hh = "blocked", operation = ex.Operation });
         }
     }
 }

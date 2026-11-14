@@ -29,11 +29,12 @@ public sealed class AnalyticsQueryTool(SemanticEngine engine) : DataTool
     public override IReadOnlyList<string>? AlternativePermissions => [Permissions.FinanceRead, Permissions.AnalytikUse];
 
     public override string Description =>
-        "Любой срез продаж, плана, оплат и остатков: показатели × измерения × шаг времени × период × фильтры — одним вызовом, с итогами, " +
+        "Любой срез продаж, плана, оплат, визитов ТП и остатков: показатели × измерения × шаг времени × период × фильтры — одним вызовом, с итогами, " +
         "сравнением периодов и проверкой полноты. Примеры: выручка по товарным группам за каждый день (metrics=[revenue,kg], dimensions=[date," +
         "product_group], grain=day); регион × товарная группа (dimensions=[region,product_group]); день × регион × группа; топ-10 групп (sort revenue " +
         "desc, limit 10); группы с падением (compare=previous, сортировка по revenue__pct); план и факт по регионам (metrics=[kg,plan_kg," +
-        "plan_execution], dimensions=[region], grain=month); товары к пополнению (metrics=[stock_units,cover_days,need_units], dimensions=[product]). " +
+        "plan_execution], dimensions=[region], grain=month); визиты и продажи ТП (metrics=[visits_done,visits_with_order,visit_strike,route_execution," +
+        "revenue], dimensions=[agent]); товары к пополнению (metrics=[stock_units,cover_days,need_units], dimensions=[product]). " +
         "Числа считает сервер по правилам «Продаж» (дата приёмки, возвраты, валюта, каналы, исключённые филиалы); сам их не пересчитывай и не " +
         "дополняй. Дни — фактические продажи дня: не заменяй их среднемесячными и не делись месячными итогами по дням.";
 
@@ -150,6 +151,7 @@ public sealed class AnalyticsQueryTool(SemanticEngine engine) : DataTool
         var codes = r.Columns.Select(c => c.Code).ToList();
         return Data(new
         {
+            QueryId = r.QueryId,
             Period = new { From = r.From.ToString("yyyy-MM-dd"), To = r.To.ToString("yyyy-MM-dd"), Days = r.To.DayNumber - r.From.DayNumber + 1 },
             Compare = r.CompareFrom is { } cf ? new { From = cf.ToString("yyyy-MM-dd"), To = r.CompareTo!.Value.ToString("yyyy-MM-dd") } : null,
             Grain = query.Dimensions?.Contains("date") == true ? query.Grain ?? "day" : null,
@@ -170,6 +172,7 @@ public sealed class AnalyticsQueryTool(SemanticEngine engine) : DataTool
             Repaired = repaired,
             Link = link,
             Instructions = "Числа ответа — только из rows и totals; доли, средние и разницы уже посчитаны. complete=false — назови, чего не хватает (checks). " +
+                           "Корреляция, тренд, аномалии по этим рядам — analytik_compute с query_id (не формулой в calculate). " +
                            "В ответе дай таблицу (первые строки) и вывод; полный список — ссылка link или create_report.",
         }, new DataSource("Аналитик → Срезы", $"{r.From:dd.MM.yyyy} — {r.To:dd.MM.yyyy}", link));
     }
@@ -177,12 +180,19 @@ public sealed class AnalyticsQueryTool(SemanticEngine engine) : DataTool
     /// <summary>Отказ среза с исправлением для модели: что не так, что делать и готовые аргументы исправленного вызова (или нескольких).</summary>
     private ToolResult RepairFailure(AnalyticsQueryException ex, RepairSuggestion? repair)
     {
-        var kind = ex.Code is "too_heavy" or "timeout" ? ToolFailures.OutOfRange : ToolFailures.InvalidArguments;
+        // Ошибка базы — сбой источника, а не неверные аргументы: модель не должна «исправлять» верный запрос или говорить «данных нет».
+        var kind = ex.Code switch
+        {
+            "too_heavy" or "timeout" => ToolFailures.OutOfRange,
+            "error" => ToolFailures.ToolError,
+            _ => ToolFailures.InvalidArguments,
+        };
         var payload = new
         {
             error = new
             {
-                tool = Name, kind, code = ex.Code, message = ex.Message, next = ToolFailures.Next(kind),
+                tool = Name, kind, status = Application.Analytik.Research.ResearchStatuses.OfQuery(ex.Code, ex.Message), code = ex.Code, message = ex.Message,
+                next = ToolFailures.Next(kind), alternatives = ToolFailures.Alternatives(Name),
                 repair = repair is null ? null : new { hint = repair.Hint, calls = repair.Queries.Select(Args).ToList() },
             },
         };
@@ -303,13 +313,52 @@ public sealed class AnalyticsCapabilitiesTool(CapabilityRegistry registry) : Dat
 
     public override string Description =>
         "Реестр данных OneBase для аналитики: показатели (формула, единица, источник), измерения, шаги времени, за какие даты есть данные и когда " +
-        "они загружены, какие данные отдают готовые инструменты отделов и чего в источниках нет совсем. Вызывай, прежде чем ответить, что данных нет.";
+        "они загружены, какие данные отдают готовые инструменты отделов и чего в источниках нет совсем. Вызывай, прежде чем ответить, что данных нет. " +
+        "section=metrics — паспорт каждого показателя (смысл, таблица, поле, агрегация, часть чего, совместимость, свежесть); section=business — " +
+        "карта показателей отделов (продажи, визиты, промо, финансы, склад, производство, HR): где считается и чего нет; section=compatibility с " +
+        "metric_a, metric_b — можно ли сравнивать и соединять пару (класс, причины, как исследовать правильно).";
 
-    public override JsonElement InputSchema { get; } = Schema();
+    public override JsonElement InputSchema { get; } = Schema(
+        ("section", new { type = "string", @enum = new[] { "overview", "metrics", "business", "compatibility" }, description = "Что показать (по умолчанию overview)." }),
+        ("metric_a", new { type = "string", description = "compatibility: первый показатель (код движка или primary_kg, dealer_debt, promotions, linko_kpi_fact, expenses)." }),
+        ("metric_b", new { type = "string", description = "compatibility: второй показатель." }),
+        ("dimensions", new { type = "array", items = new { type = "string" }, description = "compatibility: по каким измерениям соединять (region, agent, date…)." }),
+        ("grain", new { type = "string", @enum = SemanticCatalog.Grains.ToArray(), description = "compatibility: шаг времени." }));
 
     protected override async Task<ToolResult> RunAsync(ToolContext context, ToolArgs args, CancellationToken ct)
     {
-        var view = await registry.ViewAsync(new QueryCaller(context.UserId, "chat", context.AgentCode, context.ConversationId), ct);
+        var caller = new QueryCaller(context.UserId, "chat", context.AgentCode, context.ConversationId);
+        switch (args.Str("section"))
+        {
+            case "metrics":
+                return Data(new { Passports = await registry.PassportsAsync(caller, ct) }, new DataSource("Аналитик → Срезы: паспорта показателей"));
+            case "business":
+                return Data(new
+                {
+                    Map = (await registry.BusinessAsync(caller, ct)).Select(b => new
+                    {
+                        b.Metric.Domain, b.Metric.Title, How = b.Metric.Kind, b.Metric.Implementation, b.Status, b.Rows, b.Allowed, b.Metric.Module, b.Metric.Note,
+                    }),
+                    Instructions = "Kind: engine — analytics_query; compute — analytik_compute / analytics_research; tool — инструмент отдела; missing — источника нет " +
+                                   "(Module — какой модуль должен его дать). Status empty — таблица есть, но пуста.",
+                }, new DataSource("Аналитик → Срезы: карта показателей отделов"));
+            case "compatibility":
+            {
+                var a = args.Str("metric_a");
+                var b = args.Str("metric_b");
+                if (a is null || b is null)
+                {
+                    return ToolResult.Failure(Name, ToolFailures.InvalidArguments, "Для section=compatibility нужны metric_a и metric_b.");
+                }
+
+                var dims = args.Element("dimensions") is { ValueKind: JsonValueKind.Array } d ? d.EnumerateArray().Select(x => x.ToString()).ToList() : null;
+                var r = await registry.CompatibilityAsync(caller, a, b, dims, args.Str("grain"), null, null, ct);
+                return Data(new { r.MetricA, r.MetricB, r.TitleA, r.TitleB, r.Class, ClassTitle = CompatibilityClasses.Title(r.Class), r.CommonDimensions, r.Grain, r.Dependency,
+                    r.Aspects, r.Advice }, new DataSource("Аналитик → Срезы: совместимость показателей"));
+            }
+        }
+
+        var view = await registry.ViewAsync(caller, ct);
         return Data(new
         {
             Facts = view.Facts.Select(f => new

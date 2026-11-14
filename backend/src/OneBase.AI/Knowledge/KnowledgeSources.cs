@@ -28,6 +28,12 @@ public static class KnowledgeSources
     /// </summary>
     public const string SalesSlices = "sales.slices";
 
+    /// <summary>
+    /// Статистика и исследования (Statistics Engine): корреляции с проверкой значимости, регрессии, ряды, аномалии, разложение изменений и
+    /// исследования одним серверным вызовом. Префикс «sales.»: ответы по нему сбрасываются с каждой загрузкой Linko.
+    /// </summary>
+    public const string SalesStats = "sales.stats";
+
     /// <summary>Экспорт: продажи экспортным точкам по странам и отгрузки завода на экспорт.</summary>
     public const string SalesExport = "sales.export";
 
@@ -85,11 +91,18 @@ public static class KnowledgeSources
             "procurement.Requests, RequestItems, Approvals, PurchaseOrders, PurchaseOrderItems, Offers, Suppliers, StockBalances, StockDocuments, ReceiptLines",
             "Заявки; Снабжение: обзор, заказы, поставщики, приёмка, склад, отчёты", Permissions.ProcurementRequest),
         new(SalesSlices, "Срезы данных (универсальный движок)",
-            "Любой срез продаж, плана, оплат и остатков: показатели (выручка, кг, заказы, АКБ, средний чек, доля, план и выполнение, оплаты, остаток " +
-            "и дни запаса) × измерения (день/неделя/месяц, регион, филиал, направление, РМ, СВР, дилер, канал, агент, точка, товар, товарная группа) " +
+            "Любой срез продаж, плана, оплат, визитов и остатков: показатели (выручка, кг, заказы, АКБ, средний чек, доля, план и выполнение, оплаты, " +
+            "визиты — план маршрута, выполнено, вне маршрута, не посещено, с заказом, страйк, выполнение маршрута — остаток и дни запаса) × измерения (день/неделя/месяц, регион, филиал, направление, РМ, СВР, дилер, канал, агент, точка, товар, товарная группа) " +
             "с фильтрами и сравнением периодов; с проверкой полноты и источником каждой цифры.",
-            "linko.Orders, OrderLines, OrderReturns, OrderReturnLines, Products, ProductTypes, Payments, ProductBalances; sales.Regions, RegionPlans, StaffPlans",
+            "linko.Orders, OrderLines, OrderReturns, OrderReturnLines, Products, ProductTypes, Payments, Visits, Markets, ProductBalances; sales.Regions, RegionPlans, StaffPlans",
             "Аналитик → Срезы", Permissions.SalesRead),
+        new(SalesStats, "Статистика и исследования",
+            "Расчёты кодом по срезам данных: корреляции (Пирсон, Спирмен, Кендалл, частная, скользящая) с p, интервалом и поправкой на множественные " +
+            "сравнения, регрессии с диагностикой, тренды, сезонность, сглаживание, точки перелома, аномалии, вклад в изменение, цена — объём — " +
+            "ассортимент, сегменты; исследования одним вызовом (корреляции, причины снижения, эффективность ТП по визитам, визиты и продажи регионов, " +
+            "влияние товарных групп, аномалии всех показателей, эффект акций, состояние компании) — с уровнем доказательности каждого вывода.",
+            "linko.Orders, OrderLines, OrderReturns, OrderReturnLines, Visits, Payments, ProductBalances, Promotions; sales.RegionPlans, StaffPlans; analytik.Computations, Investigations",
+            "Аналитик → Исследования", Permissions.SalesRead),
         new(SalesSku, "Продажи по SKU", "Продажи товаров за любой период: кг и выручка, ABC, динамика, сколько регионов и точек берут товар.",
             "linko.Orders, OrderLines, OrderReturns, OrderReturnLines, Products, ProductTypes, sales.Regions", "Продажи: продажи по SKU", Permissions.SalesRead),
         new(SalesExport, "Экспорт", "Экспорт по странам (кг, сумма, точки, динамика, с начала года) и продажи филиала «Завод» (экспорт и опт) по покупателям, агентам и товарам. Плана экспорта в OneBase нет.",

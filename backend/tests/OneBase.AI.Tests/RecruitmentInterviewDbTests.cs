@@ -54,15 +54,17 @@ public class RecruitmentInterviewDbTests(DataManagerDb fixture) : IClassFixture<
         return chat;
     }
 
+    /// <summary>Ответ модели AI-скрининга: опыт и навыки — из 10 (как раньше), переводятся в баллы критериев; остальное не указано (нейтрально).</summary>
     private static string Score(int experience, int category) => JsonSerializer.Serialize(new
     {
-        criteria = new[]
+        criteria = new object[]
         {
-            new { name = "Опыт", score = experience, explanation = "стаж", evidence = "5 лет" },
-            new { name = "Категория C", score = category, explanation = "права", evidence = "категория C" },
+            new { code = "experience", status = "met", points = experience * 25 / 10, explanation = "стаж", quotes = new[] { "5 лет" } },
+            new { code = "skills", status = "met", points = category * 25 / 10, explanation = "права", quotes = new[] { "категория C" } },
+            new { code = "requirements", status = "met", points = category * 20 / 10, explanation = "права", quotes = new[] { "категория C" } },
+            new { code = "achievements", status = "not_stated", points = 0, explanation = "", quotes = Array.Empty<string>() },
         },
         summary = "Опытный водитель категории C",
-        risks = "",
     });
 
     private static async Task<Application> ApplicationOf(OneBaseDbContext db, HrHarness.Chat chat)
@@ -87,7 +89,7 @@ public class RecruitmentInterviewDbTests(DataManagerDb fixture) : IClassFixture<
         using var _ = scope;
         var chat = await CandidateAsync(db, vacancy);
 
-        // 17. Модель решила пригласить; оценки нет — система оценивает (90 ≥ 70) и предлагает время из календаря, а не модель.
+        // 17. Модель решила пригласить; оценки нет — система оценивает (77 ≥ 70) и предлагает время из календаря, а не модель.
         fixture.Gateway.Script.Enqueue(_ => "{\"action\":\"propose_interview\",\"messages\":[\"Ваш опыт нам подходит!\"]}");
         fixture.Gateway.Script.Enqueue(_ => Score(9, 9));
         await _hr.SayAsync(chat, "5 лет вожу грузовик, категория C");
@@ -125,7 +127,8 @@ public class RecruitmentInterviewDbTests(DataManagerDb fixture) : IClassFixture<
         Assert.Empty(await interviews.ListAsync(_hr.Hr, "today", default));
         var row = Assert.Single(await interviews.ListAsync(_hr.Hr, "tomorrow", default));
         Assert.Single(await interviews.ListAsync(_hr.Hr, "week", default));
-        Assert.Equal(("Confirmed", "Confirmed", "Продажи", "Администратор", "office", 90), (row.Status, row.CandidateConfirmation, row.Department, row.Interviewer, row.Format, row.AiScore));
+        // Оценка AI-скрининга: опыт 22 + навыки 22 + требования 18 + не указанное нейтрально (7,5 + 5 + 2,5) = 77.
+        Assert.Equal(("Confirmed", "Confirmed", "Продажи", "Администратор", "office", 77), (row.Status, row.CandidateConfirmation, row.Department, row.Interviewer, row.Format, row.AiScore));
         Assert.Contains("Опытный водитель", row.AiSummary);
 
         // 26. Уведомления — после записи, заданием: участникам — в календарь, руководителю отдела — о подборе; кандидату — нет (он выбрал сам).
@@ -295,7 +298,7 @@ public class RecruitmentInterviewDbTests(DataManagerDb fixture) : IClassFixture<
         db.CalendarEvents.Add(new CalendarEvent { Title = "Планёрка", StartsAt = Local(19, 11), EndsAt = Local(19, 12), CreatedById = fixture.AdminId });
         await db.SaveChangesAsync();
 
-        // Кандидат подходит и сам называет время — оно свободно: запись сразу, без вариантов (оценка 90 ≥ порога 70).
+        // Кандидат подходит и сам называет время — оно свободно: запись сразу, без вариантов (оценка 77 ≥ порога 70).
         fixture.Gateway.Script.Enqueue(m =>
         {
             Assert.Contains("заполни wish", m[0].Content);

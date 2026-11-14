@@ -34,6 +34,14 @@ import {
 
 const KINDS: ContactKind[] = ["Phone", "Email", "TelegramUsername", "Telegram"];
 
+/** Отметка HR в AI-скрининге — в истории отклика. */
+const markLabel: Record<"None" | "Suitable" | "Recommended" | "Reserve", string> = {
+  None: "отметка снята",
+  Suitable: "подходит",
+  Recommended: "рекомендован",
+  Reserve: "в резерве",
+};
+
 /** Новый кандидат вручную: имя, контакты, источник, вакансия, согласие. Тот же человек по подтверждённому контакту — откроется его карточка. */
 function CandidateForm({ vacancies, vacancyId, onDone, onCancel }: { vacancies: VacancyRow[]; vacancyId: string | null; onDone: (id: string, note: string | null) => void; onCancel: () => void }) {
   const t = useT();
@@ -614,8 +622,15 @@ export function CandidateCardView({ ctx, id }: { ctx: RecruitmentContext; id: st
                 <ul className="mt-1 space-y-0.5">
                   {a.history.map((h, i) => (
                     <li key={i}>
-                      {when(h.at)} — {h.from ? `${t(stageLabel[h.from])} → ` : ""}
-                      {t(stageLabel[h.to])}
+                      {when(h.at)} —{" "}
+                      {h.mark ? (
+                        t("AI-скрининг: {mark}", { mark: t(markLabel[h.mark]) })
+                      ) : (
+                        <>
+                          {h.from ? `${t(stageLabel[h.from])} → ` : ""}
+                          {t(stageLabel[h.to])}
+                        </>
+                      )}
                       {h.actor && ` · ${h.actor}`}
                       {h.comment && ` · ${h.comment}`}
                     </li>

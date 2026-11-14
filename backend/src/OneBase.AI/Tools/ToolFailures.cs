@@ -59,6 +59,41 @@ public static partial class ToolFailures
     public static string SafeMessage(Exception ex) =>
         KindOf(ex) == ToolError || string.IsNullOrWhiteSpace(ex.Message) || ex is ArgumentNullException ? Internal : ex.Message;
 
+    /// <summary>
+    /// Статус сбоя по ТЗ (Smart Fallback): NO_ACCESS, SOURCE_UNAVAILABLE, DATA_NOT_FOUND, TOOL_UNSUPPORTED — у каждого вида свой; техническая
+    /// ошибка — SOURCE_UNAVAILABLE, а не «данных нет».
+    /// </summary>
+    public static string Status(string kind) => kind switch
+    {
+        Forbidden => "NO_ACCESS",
+        NotConnected => "SOURCE_UNAVAILABLE",
+        NotFound => "DATA_NOT_FOUND",
+        OutOfRange => "TOOL_UNSUPPORTED",
+        InvalidArguments => "TOOL_UNSUPPORTED",
+        _ => "SOURCE_UNAVAILABLE",
+    };
+
+    /// <summary>
+    /// Существующие инструменты, которые дают те же данные другим путём (по реестру возможностей): после сбоя модель пробует их, а не
+    /// заканчивает исследование. Права они не обходят — каждый проверяет права пользователя сам.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string[]> Fallbacks = new Dictionary<string, string[]>
+    {
+        ["get_sales_days"] = ["get_sales_period", "analytics_query"],
+        ["get_sales_period"] = ["analytics_query", "get_sales"],
+        ["get_sales"] = ["analytics_query", "get_sales_period"],
+        ["get_visits"] = ["analytics_query (visits_done, visits_with_order, visit_strike, route_execution)", "get_agent_visits"],
+        ["get_agent_visits"] = ["analytics_query (visits по agent и date)", "get_visits"],
+        ["get_sku_sales"] = ["analytics_query (product, product_group)"],
+        ["get_promo"] = ["analytics_research kind=promo_effect", "analytics_query (discount по product)"],
+        ["analytics_query"] = ["analytics_capabilities", "get_sales_period", "analytik_compute"],
+        ["analytik_compute"] = ["analytics_query", "analytics_research"],
+        ["analytics_research"] = ["analytik_compute", "analytics_query"],
+        ["calculate"] = ["analytik_compute (series или срез)"],
+    };
+
+    public static IReadOnlyList<string> Alternatives(string tool) => Fallbacks.GetValueOrDefault(tool) ?? ["analytics_capabilities"];
+
     /// <summary>Что делать модели после сбоя.</summary>
     public static string Next(string kind) => kind switch
     {
