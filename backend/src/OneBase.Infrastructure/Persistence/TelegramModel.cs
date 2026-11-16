@@ -227,6 +227,7 @@ internal static class TelegramModel
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Language).HasMaxLength(8);
+            e.Property(x => x.CategoryCards).HasMaxLength(500);
             e.HasOne<TelegramAccount>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -293,6 +294,7 @@ internal static class TelegramModel
             e.Property(x => x.PdfLanguage).HasMaxLength(8);
             e.Property(x => x.Language).HasMaxLength(8);
             e.Property(x => x.DisabledReason).HasMaxLength(200);
+            e.Property(x => x.Categories).HasMaxLength(500);
             // Регион и направление — без внешнего ключа: схема sales своя (как у остальных ссылок Telegram на данные продаж).
             e.HasIndex(x => x.RegionId);
             e.HasMany(x => x.Chats).WithOne().HasForeignKey(x => x.SubscriptionId).OnDelete(DeleteBehavior.Cascade);

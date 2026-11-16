@@ -41,14 +41,15 @@ public sealed class TelegramReportSender(
 
     /// <summary>
     /// Отчёт запуска для области на реальных данных. at — момент формирования (предпросмотр «на 13:00»); по умолчанию — сейчас в поясе
-    /// расписания. Язык — из настроек, если не задан.
+    /// расписания. Язык — из настроек, если не задан. categories — категории карточек получателя (отчёт 10; null — выбор по умолчанию).
     /// </summary>
-    public async Task<ReportDocument> BuildAsync(string job, ReportScope scope, DateOnly period, DateTimeOffset? at, string? language, CancellationToken ct)
+    public async Task<ReportDocument> BuildAsync(string job, ReportScope scope, DateOnly period, DateTimeOffset? at, string? language, CancellationToken ct,
+        IReadOnlyList<string>? categories = null)
     {
         var settings = await db.TelegramReportSettings.AsNoTracking().FirstOrDefaultAsync(ct);
         var schedule = await db.TelegramReportJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Code == job, ct);
         var now = at ?? ReportSchedules.Local(clock.GetUtcNow(), schedule?.TimeZone);
-        return await engine.BuildAsync(job, scope, period, now, language ?? settings?.Language ?? "ru", settings?.NoPurchaseDays ?? 30, ct);
+        return await engine.BuildAsync(job, scope, period, now, language ?? settings?.Language ?? "ru", settings?.NoPurchaseDays ?? 30, ct, categories);
     }
 
     /// <summary>

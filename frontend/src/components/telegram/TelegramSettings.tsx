@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Bot, CalendarClock, FileText, FlaskConical, KeyRound, Loader2, MessageSquare, Plus, ScrollText, Smartphone, Users } from "lucide-react";
+import { ArrowRight, Bot, CalendarClock, FileText, FlaskConical, KeyRound, Loader2, MessageSquare, Plus, ScrollText, Shapes, Smartphone, Users } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Note, Section } from "@/components/sales/bits";
 import { useT } from "@/i18n/client";
@@ -101,6 +101,21 @@ export function TelegramSettings({ initial, reports = true }: { initial: Telegra
               <span className="block font-semibold text-ink">{t("Еженедельные PDF-отчёты")}</span>
               <span className="block text-sm text-ink-2">
                 {t("PDF за неделю для РОП, РМ, СВ и карточки ТП: предпросмотр, скачивание, тест в чат, формулы целей и «только при полных данных»; отправка — по расписанию документом с подписью.")}
+              </span>
+            </span>
+            <ArrowRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />
+          </Link>
+          <Link
+            href="/settings/telegram/reports?tab=categories"
+            className="group mt-3 flex items-center gap-4 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-accent/40 sm:p-5"
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
+              <Shapes className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-ink">{t("Карточки категорий")}</span>
+              <span className="block text-sm text-ink-2">
+                {t("Выберите категории — «Придзел», «Помадка» (Могуль) и другие — и по расписанию в Telegram уйдёт картинка с полными данными по каждой: факт и план, прогноз, АКБ, SKU, по дням, регионы или ТП, ТОП артикулов с фото.")}
               </span>
             </span>
             <ArrowRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />

@@ -14308,6 +14308,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("AccountId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CategoryCards")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("Language")
                         .IsRequired()
                         .HasMaxLength(8)
@@ -14344,6 +14348,10 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Property<string>("AgentName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Categories")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");

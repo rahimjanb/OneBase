@@ -607,8 +607,8 @@ public sealed class TelegramReportService(
 
     public async Task<ReportPreview> PreviewAsync(ReportPreviewInput input, bool canUseSales, CancellationToken ct)
     {
-        var (job, scope, date, at, language) = await TargetAsync(input, canUseSales, ct);
-        var report = await sender.BuildAsync(job, scope, date, at, language, ct);
+        var (job, scope, date, at, language, categories) = await TargetAsync(input, canUseSales, ct);
+        var report = await sender.BuildAsync(job, scope, date, at, language, ct, categories);
         var pages = renderer.Render(report);
         return new ReportPreview(pages.Select(p => "data:image/png;base64," + Convert.ToBase64String(p)).ToList(), report.Title, report.Scope, report.Caption,
             report.Summary, report.Notes, report.Problems, pages.Sum(p => (long)p.Length), report.Applies, report.SkipReason, report.Incomplete);
@@ -625,7 +625,7 @@ public sealed class TelegramReportService(
             throw new ReportValidationException(problem);
         }
 
-        var (job, scope, date, at, language) = await TargetAsync(input.Report, canUseSales, ct);
+        var (job, scope, date, at, language, categories) = await TargetAsync(input.Report, canUseSales, ct);
         var delivery = new TelegramReportDelivery
         {
             Report = job,
@@ -647,7 +647,7 @@ public sealed class TelegramReportService(
         await db.SaveChangesAsync(ct);
         await audit.LogAsync(ActorType.User, userId.ToString(), "telegram.reports.test", nameof(TelegramReportDelivery), delivery.Id.ToString(),
             new { job, Scope = scope.Key, chat.Title }, ct);
-        return await sender.AttemptAsync(delivery, chat, token => sender.BuildAsync(job, scope, date, at, language, token), retry: false, ct, test: true);
+        return await sender.AttemptAsync(delivery, chat, token => sender.BuildAsync(job, scope, date, at, language, token, categories), retry: false, ct, test: true);
     }
 
     /// <summary>
@@ -730,7 +730,8 @@ public sealed class TelegramReportService(
 
             results.Add(ReportCatalog.IsPdf(job)
                 ? await weeklyPdf.AttemptAsync(delivery, chat!, scope, retry: true, ct)
-                : await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, recipient.Language, token), retry: true, ct));
+                : await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, recipient.Language, token,
+                    recipient.Categories is { } chosen ? CategoryCardChoice.Parse(chosen) : null), retry: true, ct));
         }
 
         return results;
@@ -775,10 +776,12 @@ public sealed class TelegramReportService(
 
         var settings = await SettingsAsync(ct);
         var chat = await db.TelegramChats.AsNoTracking().FirstOrDefaultAsync(c => c.Id == delivery.ChatId, ct);
-        // Язык получателя (если задан) — как при отправке по расписанию.
-        var language = delivery.SubscriptionId is { } sid
-            ? await db.TelegramReportSubscriptions.AsNoTracking().Where(x => x.Id == sid).Select(x => x.Language).FirstOrDefaultAsync(ct)
+        // Язык и категории карточек получателя (если заданы) — как при отправке по расписанию.
+        var recipient = delivery.SubscriptionId is { } sid
+            ? await db.TelegramReportSubscriptions.AsNoTracking().Where(x => x.Id == sid).Select(x => new { x.Language, x.Categories }).FirstOrDefaultAsync(ct)
             : null;
+        var language = recipient?.Language;
+        var categories = recipient?.Categories is { } chosen ? CategoryCardChoice.Parse(chosen) : null;
         if (TelegramReportSender.ChatProblem(chat, settings.AccountId) is { } problem)
         {
             throw new ReportValidationException(problem);
@@ -791,7 +794,7 @@ public sealed class TelegramReportService(
         var period = delivery.Period;
         return ReportCatalog.IsPdf(job)
             ? await weeklyPdf.AttemptAsync(delivery, chat!, scope, retry: true, ct)
-            : await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, language, token), retry: true, ct);
+            : await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, language, token, categories), retry: true, ct);
     }
 
     /// <summary>
@@ -852,9 +855,11 @@ public sealed class TelegramReportService(
             _ => throw new ReportValidationException("Роль — РОП, РМ, СВ или ТП."),
         };
 
-    /// <summary>Запуск, область, день, момент формирования и язык предпросмотра или теста: явно или по получателю.</summary>
-    private async Task<(string Job, ReportScope Scope, DateOnly Date, DateTimeOffset? At, string? Language)> TargetAsync(ReportPreviewInput input, bool canUseSales,
-        CancellationToken ct)
+    /// <summary>
+    /// Запуск, область, день, момент формирования, язык и категории карточек (отчёт 10) предпросмотра или теста: явно или по получателю.
+    /// </summary>
+    private async Task<(string Job, ReportScope Scope, DateOnly Date, DateTimeOffset? At, string? Language, IReadOnlyList<string>? Categories)> TargetAsync(
+        ReportPreviewInput input, bool canUseSales, CancellationToken ct)
     {
         if (!canUseSales)
         {
@@ -869,11 +874,13 @@ public sealed class TelegramReportService(
 
         ReportScope scope;
         string? recipientLanguage = null;
+        string? recipientCategories = null;
         if (input.RecipientId is { } recipientId)
         {
             var s = await db.TelegramReportSubscriptions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == recipientId, ct) ?? throw new KeyNotFoundException();
             scope = ReportScope.Of(s);
             recipientLanguage = s.Language;
+            recipientCategories = s.Categories;
         }
         else
         {
@@ -911,7 +918,10 @@ public sealed class TelegramReportService(
 
         // Язык: выбранный в предпросмотре, иначе — получателя (если выбран получатель), иначе — из общих настроек.
         var language = UiLanguage.Normalize(input.Language) ?? recipientLanguage;
-        return (info.Code, scope, date, at, language);
+        // Категории карточек: выбранные в предпросмотре, иначе — получателя, иначе — по умолчанию (решает построитель).
+        var categories = input.Categories is { Count: > 0 } picked ? CategoryCardChoice.Parse(string.Join(",", picked))
+            : recipientCategories is { } own ? CategoryCardChoice.Parse(own) : null;
+        return (info.Code, scope, date, at, language, categories);
     }
 
     private DateOnly Today() => DateOnly.FromDateTime(ReportSchedules.Local(clock.GetUtcNow(), ReportSchedules.DefaultTimeZone).DateTime);

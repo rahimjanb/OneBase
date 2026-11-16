@@ -44,6 +44,11 @@ public sealed class SkiaReportRenderer : IReportRenderer
             return IncentiveCardRenderer.Render(incentive, Faces.Value, document.Test);
         }
 
+        if (document.CategorySales is { } categories)
+        {
+            return CategoryCardRenderer.Render(document, categories, Faces.Value);
+        }
+
         var layout = new Layout(document, Faces.Value, compact: false);
         var pages = layout.Paginate(layout.Blocks());
         if (pages.Count > 1)

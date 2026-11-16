@@ -157,7 +157,7 @@ public sealed record ReportFreshness(DateTimeOffset? Orders, DateTimeOffset? Vis
 
 /// <summary>
 /// Предпросмотр и тест: запуск, роль и область (или получатель), день и время формирования (по умолчанию — сейчас), язык (по умолчанию — из
-/// настроек).
+/// настроек), категории карточек (отчёт 10; пусто — получателя или по умолчанию).
 /// </summary>
 public sealed record ReportPreviewInput(
     string? Job,
@@ -170,7 +170,8 @@ public sealed record ReportPreviewInput(
     DateOnly? Date,
     string? Time,
     string? Language,
-    Guid? UserId = null);
+    Guid? UserId = null,
+    IReadOnlyList<string>? Categories = null);
 
 public sealed record ReportPreview(IReadOnlyList<string> Pages, string Title, string Scope, string Caption, string Summary, IReadOnlyList<string> Notes,
     IReadOnlyList<string> Problems, long Bytes, bool Applies, string? SkipReason, bool Incomplete);

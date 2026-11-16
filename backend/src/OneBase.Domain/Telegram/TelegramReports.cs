@@ -33,6 +33,12 @@ public class TelegramReportSettings
     /// <summary>Перед отправкой обновить данные Linko (заказы, визиты), если последнее обновление старше 10 минут.</summary>
     public bool RefreshBeforeSend { get; set; } = true;
 
+    /// <summary>
+    /// «10. Карточки категорий»: категории по умолчанию — названия из «Настроек продаж» через запятую («Придзел,Помадка»), в этом порядке;
+    /// пусто — все категории отчёта. У получателя может быть свой выбор (<see cref="TelegramReportSubscription.Categories"/>).
+    /// </summary>
+    public string? CategoryCards { get; set; }
+
     public DateTimeOffset? UpdatedAt { get; set; }
     public Guid? UpdatedById { get; set; }
 }
@@ -204,6 +210,12 @@ public class TelegramReportSubscription : Entity
 
     /// <summary>Язык картинок автоотчётов этого получателя (ru, uz, uz-Cyrl): ТП — по-узбекски, СВ — по-русски; пусто — язык из общих настроек.</summary>
     public string? Language { get; set; }
+
+    /// <summary>
+    /// «10. Карточки категорий» этого получателя: названия категорий через запятую, в этом порядке; пусто — выбор по умолчанию из настроек
+    /// автоотчётов. Меняется только в разделе «Карточки категорий» (сохранение получателя на вкладке «Получатели» его не трогает).
+    /// </summary>
+    public string? Categories { get; set; }
 
     /// <summary>Прежние флаги дневного отчёта — перенесены в Reports.</summary>
     public bool Morning { get; set; }

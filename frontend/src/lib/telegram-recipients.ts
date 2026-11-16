@@ -2,7 +2,7 @@
 // отчётов 1–9, последняя отправка, шаблоны отчётов панели, ближайшие отправки и «Требуют внимания». Без интерфейса — проверяется тестами.
 import type { ReportChat, ReportJob, ReportMetrics, ReportRecipient, ReportRecipientInput, ReportRegion, ReportRmUser, ReportRole, ReportType, SkipKey } from "./telegramReports";
 
-/** Отчёты 1–9 — номера как в расписании и на картинках; short — для легенды и фильтров. */
+/** Отчёты 1–10 — номера как в расписании и на картинках; short — для легенды и фильтров. */
 export const REPORTS: { type: ReportType; n: number; title: string; short: string }[] = [
   { type: "daily", n: 1, title: "Дневной план", short: "план" },
   { type: "no-purchase", n: 2, title: "Клиенты без закупа", short: "без закупа" },
@@ -13,6 +13,7 @@ export const REPORTS: { type: ReportType; n: number; title: string; short: strin
   { type: "battle", n: 7, title: "Поле боя", short: "поле боя" },
   { type: "weekly-pdf", n: 8, title: "Еженедельный PDF", short: "PDF" },
   { type: "incentive", n: 9, title: "Накопительная акция", short: "накопит." },
+  { type: "category-cards", n: 10, title: "Карточки категорий", short: "карточки" },
 ];
 
 export const reportByN = (n: number) => REPORTS.find((r) => r.n === n) ?? null;
@@ -331,15 +332,20 @@ export function reportSummary(codes: string[], role: ReportRole, jobs: ReportJob
 
 export type Template = "role" | "all" | "evening" | "clear";
 
-/** Отчёты роли по умолчанию: всё, что положено роли, кроме понедельничных итогов недели, PDF и напоминания 17:00 не ТП (как раньше). */
+/**
+ * Отчёты роли по умолчанию: всё, что положено роли, кроме понедельничных итогов недели, PDF, карточек категорий (их включают отдельно — по
+ * картинке на категорию) и напоминания 17:00 не ТП (как раньше).
+ */
 export const defaultCodes = (jobs: ReportJob[], role: ReportRole) =>
-  jobs.filter((j) => j.roles.includes(role) && j.code !== "weekly.monday" && j.report !== "weekly-pdf" && (role === "tp" || j.code !== "no-orders.reminder")).map((j) => j.code);
+  jobs
+    .filter((j) => j.roles.includes(role) && j.code !== "weekly.monday" && j.report !== "weekly-pdf" && j.report !== "category-cards" && (role === "tp" || j.code !== "no-orders.reminder"))
+    .map((j) => j.code);
 
 export function templateCodes(template: Template, jobs: ReportJob[], role: ReportRole): string[] {
   const own = jobs.filter((j) => j.roles.includes(role));
   if (template === "role") return defaultCodes(jobs, role);
   if (template === "all") return own.map((j) => j.code);
-  if (template === "evening") return own.filter((j) => j.slot === "evening").map((j) => j.code);
+  if (template === "evening") return own.filter((j) => j.slot === "evening" && j.report !== "category-cards").map((j) => j.code);
   return [];
 }
 

@@ -89,7 +89,8 @@ public class TelegramReportsMigrationTests
                 Assert.False((await db.TelegramReportJobs.SingleAsync(j => j.Code == "daily.evening")).Enabled);
                 Assert.Equal(2, await db.TelegramReportJobs.CountAsync()); // остальные запуски — по умолчанию (выключены), строк нет
 
-                var settings = await db.TelegramReportSettings.SingleAsync();
+                // Проекция: категории карточек (отчёт 10) добавлены после этой миграции.
+                var settings = await db.TelegramReportSettings.Select(s => new { s.Language, s.NoPurchaseDays, s.RefreshBeforeSend, s.AccountId }).SingleAsync();
                 Assert.Equal(("uz", 30, true), (settings.Language, settings.NoPurchaseDays, settings.RefreshBeforeSend));
 
                 // Проекция: колонки, добавленные после этой миграции (язык PDF), в схеме ещё нет.

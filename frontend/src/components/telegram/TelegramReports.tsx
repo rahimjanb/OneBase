@@ -22,6 +22,7 @@ import {
   Pencil,
   RefreshCw,
   Send,
+  Shapes,
   Target,
   Timer,
   UserPlus,
@@ -46,6 +47,7 @@ import {
   type ReportOverview,
 } from "@/lib/telegramReports";
 import { TelegramDailyPlans } from "./TelegramDailyPlans";
+import { CategoryCardsPanel } from "./TelegramCategoryCards";
 import { IncentivesPanel } from "./TelegramIncentives";
 import { ReportsOverviewPanel, type ReportsTab } from "./TelegramReportsOverview";
 import { ReportHistoryPanel, ReportPreviewPanel, RoleChip, when } from "./TelegramReportsPreview";
@@ -60,13 +62,14 @@ const tabs: { key: Tab; label: string; short?: string; icon: typeof Users }[] = 
   { key: "recipients", label: "Получатели", icon: Users },
   { key: "preview", label: "Предпросмотр и тест", short: "Тест", icon: Eye },
   { key: "pdf", label: "Отчёты PDF", icon: FileText },
+  { key: "categories", label: "Карточки категорий", short: "Категории", icon: Shapes },
   { key: "incentives", label: "Акции", icon: Gift },
   { key: "dailyplan", label: "Дневной план", icon: Target },
   { key: "history", label: "История", icon: History },
 ];
 
 /** На телефоне — чипы в другом порядке: сначала то, что открывают каждый день. */
-const mobileOrder: Tab[] = ["recipients", "schedule", "preview", "history", "incentives", "overview", "pdf", "dailyplan"];
+const mobileOrder: Tab[] = ["recipients", "schedule", "preview", "history", "categories", "incentives", "overview", "pdf", "dailyplan"];
 
 /** Рассылка включена: аккаунт выбран и подключён, включён хотя бы один запуск. */
 function sendingState(data: ReportOverview): { on: boolean; label: string } {
@@ -124,6 +127,9 @@ export function TelegramReports({ initial, initialTab, initialFilters = NO_FILTE
       {tab === "schedule" && <Schedule data={data} onSaved={(job) => setData((d) => ({ ...d, jobs: d.jobs.map((j) => (j.code === job.code ? job : j)) }))} />}
       {tab === "preview" && <ReportPreviewPanel data={data} />}
       {tab === "pdf" && <WeeklyPdfPanel data={data} onSaved={(weeklyPdf) => setData((d) => ({ ...d, weeklyPdf }))} />}
+      {tab === "categories" && (
+        <CategoryCardsPanel data={data} onTab={open} onJob={(job) => setData((d) => ({ ...d, jobs: d.jobs.map((j) => (j.code === job.code ? job : j)) }))} />
+      )}
       {tab === "incentives" && <IncentivesPanel data={data} onTab={open} />}
       {tab === "dailyplan" && <TelegramDailyPlans canUseSales={data.canUseSales} />}
       {tab === "history" && <ReportHistoryPanel key={history.key} data={data} onChanged={reload} initialStatus={history.status} />}
@@ -145,7 +151,7 @@ export function TelegramReports({ initial, initialTab, initialFilters = NO_FILTE
               </span>
             </span>
           }
-          subtitle={t("Отчёты по расписанию в Telegram для РМ, СВ и ТП по оргструктуре «Продаж»: семь — картинками, восьмой — еженедельный PDF, девятый — накопительная акция")}
+          subtitle={t("Отчёты по расписанию в Telegram для РМ, СВ и ТП по оргструктуре «Продаж»: семь — картинками, восьмой — еженедельный PDF, девятый — накопительная акция, десятый — карточки категорий")}
           back="/settings/telegram"
           breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Настройки"), href: "/settings" }, { label: "Telegram", href: "/settings/telegram" }, { label: t("Автоматические отчёты") }]}
         />

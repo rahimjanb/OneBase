@@ -10,8 +10,8 @@ const dict: Dict = {
   "Аккаунт не подключён": "Akkaunt ulanmagan",
   "Все запуски выключены": "Barcha ishga tushirishlar o'chirilgan",
   "Рассылка включена": "Tarqatma yoqilgan",
-  "Отчёты по расписанию в Telegram для РМ, СВ и ТП по оргструктуре «Продаж»: семь — картинками, восьмой — еженедельный PDF, девятый — накопительная акция":
-    "RM, SV va TP uchun «Savdo» tashkiliy tuzilmasi bo'yicha Telegramdagi jadval hisobotlari: yettitasi — rasm, sakkizinchisi — haftalik PDF, to'qqizinchisi — jamg'arma aksiya",
+  "Отчёты по расписанию в Telegram для РМ, СВ и ТП по оргструктуре «Продаж»: семь — картинками, восьмой — еженедельный PDF, девятый — накопительная акция, десятый — карточки категорий":
+    "RM, SV va TP uchun «Savdo» tashkiliy tuzilmasi bo'yicha Telegramdagi jadval hisobotlari: yettitasi — rasm, sakkizinchisi — haftalik PDF, to'qqizinchisi — jamg'arma aksiya, o'ninchisi — toifa kartochkalari",
   "Настройки отправки": "Yuborish sozlamalari",
   "Разделы автоотчётов": "Avtohisobot bo'limlari",
   "Без закупа: {n} дн.": "Xaridsiz: {n} kun",

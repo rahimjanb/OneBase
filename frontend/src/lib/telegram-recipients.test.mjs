@@ -47,6 +47,7 @@ const jobs = [
   job("weekly.monday", "weekly", "monday", "08:30", ["rm", "sv", "tp"], [1]),
   job("battle.evening", "battle", "evening", "18:00", ["sv", "tp"]),
   job("weekly-pdf.monday", "weekly-pdf", "monday", "09:00", ["rm", "sv", "tp"], [1]),
+  job("category-cards.evening", "category-cards", "evening", "18:30", ["rm", "sv", "tp"]),
 ];
 const regions = [
   { id: "nav", name: "Навои", directionId: "d1", manager: null, supervisorName: "Шахзод К.", supervisors: [], agents: [] },
@@ -154,17 +155,20 @@ test("группы по регионам: РМ — в первом регион�
   assert.deepEqual(groupRows(all, { ...NO_FILTERS, flat: true }, ctx).map((g) => g.rows.length), [6]);
 });
 
-test("матрица 1–9, сводка «N из 9 · M в день», шаблоны", () => {
+test("матрица 1–10, сводка «N из 10 · M в день», шаблоны", () => {
   const m = matrix(shahzod, jobs);
-  assert.equal(m.length, 9);
+  assert.equal(m.length, 10);
+  assert.deepEqual(m.find((c) => c.n === 10).slots.map((s) => s.code), ["category-cards.evening"]);
   assert.deepEqual(m.filter((c) => c.on).map((c) => c.n), [1, 7]);
   assert.deepEqual(m.find((c) => c.n === 3).slots.map((s) => s.code), ["no-orders.midday", "no-orders.reminder", "no-orders.evening"]);
   assert.deepEqual(matrix(ilhom, jobs).find((c) => c.n === 7).slots, []); // «Поле боя» РМ не положено
-  assert.deepEqual(reportSummary(shahzod.reports, "sv", jobs), { on: 2, of: 5, perDay: 2 });
+  assert.deepEqual(reportSummary(shahzod.reports, "sv", jobs), { on: 2, of: 6, perDay: 2 }); // отчёт 10 — всем ролям
   assert.deepEqual(templateCodes("role", jobs, "sv"), ["daily.morning", "daily.midday", "daily.evening", "no-orders.midday", "no-orders.evening", "weekly.saturday", "battle.evening"]);
   assert.ok(templateCodes("role", jobs, "tp").includes("no-orders.reminder")); // напоминание 17:00 — только ТП
   assert.ok(!templateCodes("role", jobs, "rm").includes("no-orders.reminder"));
-  assert.deepEqual(templateCodes("evening", jobs, "tp"), ["daily.evening", "battle.evening"]);
+  assert.deepEqual(templateCodes("evening", jobs, "tp"), ["daily.evening", "battle.evening"]); // карточки категорий — только явно
+  assert.ok(!templateCodes("role", jobs, "rm").includes("category-cards.evening"));
+  assert.ok(templateCodes("all", jobs, "rm").includes("category-cards.evening"));
   assert.equal(templateOf(templateCodes("all", jobs, "tp"), jobs, "tp"), "all");
   assert.equal(templateOf(["daily.evening"], jobs, "tp"), null);
   assert.equal(templateOf([], jobs, "tp"), "clear");

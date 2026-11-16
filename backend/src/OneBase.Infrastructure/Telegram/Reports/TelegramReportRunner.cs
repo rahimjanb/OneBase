@@ -411,11 +411,12 @@ public sealed class TelegramReportRunner(IServiceScopeFactory scopes, TimeProvid
             return await sp.GetRequiredService<WeeklyPdfService>().AttemptAsync(delivery, chat!, scope, retry: true, ct);
         }
 
-        // Язык картинок получателя (если задан), иначе — из общих настроек.
-        var language = delivery.SubscriptionId is { } sid
-            ? await db.TelegramReportSubscriptions.AsNoTracking().Where(x => x.Id == sid).Select(x => x.Language).FirstOrDefaultAsync(ct)
+        // Язык картинок и категории карточек получателя (если заданы), иначе — из общих настроек.
+        var recipient = delivery.SubscriptionId is { } sid
+            ? await db.TelegramReportSubscriptions.AsNoTracking().Where(x => x.Id == sid).Select(x => new { x.Language, x.Categories }).FirstOrDefaultAsync(ct)
             : null;
-        return await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, language, token), retry: true, ct);
+        var categories = recipient?.Categories is { } chosen ? CategoryCardChoice.Parse(chosen) : null;
+        return await sender.AttemptAsync(delivery, chat!, token => sender.BuildAsync(job, scope, period, null, recipient?.Language, token, categories), retry: true, ct);
     }
 
     /// <summary>Запуски, у которых не осталось отправок в очереди: итог (done / partial) и счётчики.</summary>

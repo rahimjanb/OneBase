@@ -39,6 +39,13 @@ public enum ReportType
     /// ТП — личная карточка. Строится WeeklyReportBuilder и рисуется WeeklyPdfRenderer — не картинками ReportEngine.
     /// </summary>
     WeeklyPdf,
+
+    /// <summary>
+    /// 10. Карточки категорий: по картинке на каждую выбранную категорию («Придзел», «Помадка» — в планах «Могуль») с данными страницы
+    /// категории «Продаж» в области получателя — факт, план, прогноз, АКБ, SKU, по дням, регионы или ТП, ТОП артикулов с фото. 9:00 — итог
+    /// прошлого рабочего дня, 18:30 — итог дня. Категории — по умолчанию в настройках, у получателя можно свои.
+    /// </summary>
+    CategoryCards,
 }
 
 /// <summary>
@@ -70,6 +77,7 @@ public static class ReportCatalog
     public const string Battle = "battle";
     public const string Incentive = "incentive";
     public const string WeeklyPdf = "weekly-pdf";
+    public const string CategoryCards = "category-cards";
 
     private static readonly IReadOnlyList<string> Everyone = TelegramReportRoles.All;
 
@@ -115,6 +123,8 @@ public static class ReportCatalog
         new("incentive.summary", ReportType.Incentive, "summary", new(9, 0), ReportSchedules.Monday, Directors, 360),
         new("incentive.month", ReportType.Incentive, "month", new(9, 0), ReportSchedules.AllDays, Everyone, 360, MonthStart: true),
         new("weekly-pdf.monday", ReportType.WeeklyPdf, "monday", new(9, 0), ReportSchedules.Monday, Everyone, 360),
+        new("category-cards.morning", ReportType.CategoryCards, "morning", new(9, 0), ReportSchedules.WorkDays, Everyone, 180),
+        new("category-cards.evening", ReportType.CategoryCards, "evening", new(18, 30), ReportSchedules.WorkDays, Everyone, 180),
     ];
 
     /// <summary>Порядок запуска в каталоге: запуски в одно время ставятся в очередь в этом порядке («Поле боя» — раньше акции).</summary>
@@ -146,6 +156,7 @@ public static class ReportCatalog
         ReportType.Battle => Battle,
         ReportType.Incentive => Incentive,
         ReportType.WeeklyPdf => WeeklyPdf,
+        ReportType.CategoryCards => CategoryCards,
         _ => Weekly,
     };
 
@@ -160,6 +171,7 @@ public static class ReportCatalog
         ReportType.Battle => "7. Поле боя",
         ReportType.Incentive => "9. Накопительная акция",
         ReportType.WeeklyPdf => "8. Еженедельный PDF",
+        ReportType.CategoryCards => "10. Карточки категорий",
         _ => "6. Итоги недели",
     };
 
@@ -185,6 +197,8 @@ public static class ReportCatalog
         (ReportType.Incentive, "rating") => "рейтинг акции",
         (ReportType.Incentive, "month") => "итог прошлого месяца",
         (ReportType.WeeklyPdf, "monday") => "PDF за прошлую неделю",
+        (ReportType.CategoryCards, "morning") => "итог прошлого рабочего дня",
+        (ReportType.CategoryCards, "evening") => "итог дня",
         _ => SlotTitle(slot),
     };
 
