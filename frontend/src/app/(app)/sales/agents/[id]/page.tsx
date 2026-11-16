@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CalendarDays } from "lucide-react";
 import { AkbMonthsCard } from "@/components/sales/AkbMonthsCard";
 import { CollapsedSections, FlagPills, KpiTile, Section, levelTone } from "@/components/sales/bits";
 import { CategoryPlanBars, IndicatorBars } from "@/components/sales/blocks";
@@ -92,7 +94,14 @@ export default async function AgentPage({
     >
       {/* Смена месяца уходит к региону ТП (DOC-filters §12). */}
       <ReportMonthExit to={regionHref} />
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+        <Link
+          href={`/sales/agents/${data.agentId}/day`}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-accent/40"
+        >
+          <CalendarDays aria-hidden className="size-4 text-ink-3" />
+          {t("День ТП: визиты и продажи")}
+        </Link>
         <FlagPills flags={data.flags.filter((f) => f.severity !== "Info")} empty={null} />
       </div>
 

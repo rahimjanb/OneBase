@@ -37,6 +37,7 @@ import whatsNew from "./whatsNew";
 import forecasts from "./forecasts";
 import telegramRecipients from "./telegramRecipients";
 import telegramCategoryCards from "./telegramCategoryCards";
+import salesAgentDay from "./salesAgentDay";
 
 /**
  * Узбекский (латиница): ключ — русский текст интерфейса. Словари по разделам, чтобы их можно было вести независимо;
@@ -57,6 +58,7 @@ export const uz: Dict = {
   ...forecasts,
   ...telegramRecipients,
   ...telegramCategoryCards,
+  ...salesAgentDay,
   ...production,
   // «Технолог» — после производства: его термины (замес, этап, брак) перекрывают общие.
   ...technologist,

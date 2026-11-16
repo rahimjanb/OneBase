@@ -110,6 +110,9 @@ public static class DependencyInjection
         services.AddSingleton<Sales.SalesCacheWarmer>();
         services.AddHostedService(sp => sp.GetRequiredService<Sales.SalesCacheWarmer>());
         services.AddScoped<SalesDataLoader>();
+        // Визиты ТП: «на какой по счёту визит приходится заказ» и «День ТП» (куда ходил, что продал и что нет) — зеркало Linko, только чтение.
+        services.AddScoped<OneBase.Application.Sales.Visits.VisitSequenceService>();
+        services.AddScoped<OneBase.Application.Sales.Visits.AgentDayService>();
         // Охват пользователя в «Продажах» (РМ / СВР / ТП) и его назначение.
         services.AddScoped<OneBase.Application.Sales.Access.SalesAccess>();
         services.AddScoped<OneBase.Application.Sales.Access.SalesScopeAdmin>();

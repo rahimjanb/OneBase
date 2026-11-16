@@ -229,6 +229,21 @@ public static class LinkoCheck
                 .Select(v => DateTime.TryParse(Str(v, "date"), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var t) ? t.Hour : -1)
                 .Where(h => h >= 0).ToList();
             Console.WriteLine($"   часы выполненных визитов за {day} ({hours.Count}): {string.Join(" ", Enumerable.Range(0, 24).Select(h => $"{h}:{hours.Count(x => x == h)}"))}");
+
+            // created_mobile_time — когда визит заведён в телефоне; date — отметка выполнения. Разница в минутах по последнему прошедшему дню
+            // месяца (сегодняшний ещё идёт): есть ли у визита начало, то есть время на точке.
+            var probe = D(new[] { month.AddDays(19), monthEnd, DateOnly.FromDateTime(DateTime.Today).AddDays(-1) }.Min());
+            var done = (await client.GetJsonAsync("visits/", new Dictionary<string, string?> { ["begin_date"] = probe, ["end_date"] = probe, ["status"] = "done", ["limit"] = "1000", ["offset"] = "0" }))
+                .GetProperty("results").EnumerateArray().ToList();
+            static DateTime? Time(JsonElement v, string name) =>
+                Str(v, name) is { } s && DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var t) ? t : null;
+            var minutes = done.Select(v => (Time(v, "date"), Time(v, "created_mobile_time"))).Where(x => x.Item1 is not null && x.Item2 is not null)
+                .Select(x => (x.Item1!.Value - x.Item2!.Value).TotalMinutes).Order().ToList();
+            double Q(double q) => minutes.Count == 0 ? double.NaN : minutes[(int)Math.Min(minutes.Count - 1, Math.Floor(q * minutes.Count))];
+            Console.WriteLine($"   created_mobile_time за {probe}: формат {Shape(done.Select(v => Str(v, "created_mobile_time")).FirstOrDefault(s => s is not null))}; " +
+                              $"заполнено {done.Count(v => Str(v, "created_mobile_time") is not null)} из {done.Count}");
+            Console.WriteLine($"   date − created_mobile_time, мин: p10 {Q(0.1):0.#}, p25 {Q(0.25):0.#}, медиана {Q(0.5):0.#}, p75 {Q(0.75):0.#}, p90 {Q(0.9):0.#}; " +
+                              $"меньше 0 — {minutes.Count(x => x < 0)}, ровно 0 — {minutes.Count(x => x == 0)}, больше 60 — {minutes.Count(x => x > 60)}");
         });
 
         await Step("Остатки (product_balances)", async () =>

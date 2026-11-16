@@ -142,6 +142,64 @@ public sealed class SalesController(SalesDataLoader loader, SalesAccess access) 
         return (await ScopeAsync(ct)).CanSeeAgent(id, GuidOf(view.RegionId)) ? view : NotFound();
     }
 
+    /// <summary>
+    /// «День ТП»: куда ходил (визиты Linko по порядку отметок, пропущенные и предстоящие точки маршрута), что продал (заказы со строками), что не
+    /// продал, минуты между отметками. date — YYYY-MM-DD, по умолчанию сегодня. Охват — как у страницы ТП (регион ТП — по месяцу дня).
+    /// </summary>
+    [SalesScoped]
+    [HttpGet("agents/{id:long}/day")]
+    public async Task<ActionResult<OneBase.Application.Sales.Visits.AgentDayView>> AgentDay(
+        long id,
+        [FromQuery] DateOnly? date,
+        [FromServices] OneBase.Application.Sales.Visits.AgentDayService days,
+        CancellationToken ct)
+    {
+        var day = date ?? OneBase.Application.Field.FieldClock.Today;
+        var scope = await ScopeAsync(ct);
+        if (!scope.IsOrganization)
+        {
+            var analytics = await loader.LoadAsync(day.Year, day.Month, ct);
+            if (!analytics.HasAgent(id) || !scope.CanSeeAgent(id, GuidOf(analytics.CachedAgent(id).RegionId)))
+            {
+                return NotFound();
+            }
+        }
+
+        var view = await days.BuildAsync(id, day, ct);
+        return view is null ? NotFound() : view;
+    }
+
+    /// <summary>
+    /// На какой по счёту визит ТП в точку приходится заказ: распределение (1-й…5+), конверсия по номеру визита, итог, регионы, ТП. Период — from/to
+    /// (по умолчанию 90 дней до вчера), region и agent — необязательно. Область — как у ИИ-инструмента sales_visit_sequence (охват «Продаж»).
+    /// </summary>
+    [SalesScoped]
+    [HttpGet("visit-sequence")]
+    public async Task<ActionResult<OneBase.Application.Sales.Visits.VisitSequenceReport>> VisitSequence(
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] Guid? region,
+        [FromQuery] long? agent,
+        [FromServices] OneBase.Application.Sales.Visits.VisitSequenceService sequences,
+        [FromServices] OneBase.Application.Analytik.Query.QueryEngine engine,
+        CancellationToken ct)
+    {
+        var end = to ?? OneBase.Application.Field.FieldClock.Today.AddDays(-1);
+        var principal = await engine.PrincipalAsync(new OneBase.Application.Analytik.Query.QueryCaller(User.GetUserId(), "api"), ct);
+        try
+        {
+            return await sequences.BuildAsync(principal.Sales, from ?? end.AddDays(-89), end, region, agent, ct);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return NotFound();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     /// <summary>Все планы из Linko (staff_balance) за месяц: агенты по регионам и планы команд (супервайзеров).</summary>
     [SalesScoped]
     [HttpGet("plans")]

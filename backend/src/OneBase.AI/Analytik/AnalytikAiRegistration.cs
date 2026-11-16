@@ -63,6 +63,9 @@ public static class AnalytikAiRegistration
         // Statistics Engine и исследования (Phase 2) — у консультанта и у аналитиков (источник sales.stats); методы отделов — у аналитиков.
         services.AddScoped<ITool, ComputeTool>();
         services.AddScoped<ITool, ResearchTool>();
+        // Визиты ТП: номер визита, на котором заказ, и «День ТП» (источник sales.stats — у консультанта и у аналитиков).
+        services.AddScoped<ITool, VisitSequenceTool>();
+        services.AddScoped<ITool, AgentDayTool>();
         services.AddScoped<ResearchAnswerer>();
         services.AddScoped<ITool, MethodsTool>();
         services.AddScoped<ITool, Simulation.ScenarioAnalysisTool>();
