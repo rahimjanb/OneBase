@@ -289,6 +289,26 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.AI.DialogAgent> DialogAgents => Set<OneBase.Domain.AI.DialogAgent>();
     public DbSet<OneBase.Domain.AI.DialogAgentAnswer> DialogAgentAnswers => Set<OneBase.Domain.AI.DialogAgentAnswer>();
     public DbSet<OneBase.Domain.AI.DialogAgentReply> DialogAgentReplies => Set<OneBase.Domain.AI.DialogAgentReply>();
+    public DbSet<OneBase.Domain.OneC.OneCOrganization> OneCOrganizations => Set<OneBase.Domain.OneC.OneCOrganization>();
+    public DbSet<OneBase.Domain.OneC.OneCAccount> OneCAccounts => Set<OneBase.Domain.OneC.OneCAccount>();
+    public DbSet<OneBase.Domain.OneC.OneCCounterparty> OneCCounterparties => Set<OneBase.Domain.OneC.OneCCounterparty>();
+    public DbSet<OneBase.Domain.OneC.OneCContract> OneCContracts => Set<OneBase.Domain.OneC.OneCContract>();
+    public DbSet<OneBase.Domain.OneC.OneCCurrency> OneCCurrencies => Set<OneBase.Domain.OneC.OneCCurrency>();
+    public DbSet<OneBase.Domain.OneC.OneCExchangeRate> OneCExchangeRates => Set<OneBase.Domain.OneC.OneCExchangeRate>();
+    public DbSet<OneBase.Domain.OneC.OneCReference> OneCReferences => Set<OneBase.Domain.OneC.OneCReference>();
+    public DbSet<OneBase.Domain.OneC.OneCItem> OneCItems => Set<OneBase.Domain.OneC.OneCItem>();
+    public DbSet<OneBase.Domain.OneC.OneCDocument> OneCDocuments => Set<OneBase.Domain.OneC.OneCDocument>();
+    public DbSet<OneBase.Domain.OneC.OneCDocumentLine> OneCDocumentLines => Set<OneBase.Domain.OneC.OneCDocumentLine>();
+    public DbSet<OneBase.Domain.OneC.OneCEntry> OneCEntries => Set<OneBase.Domain.OneC.OneCEntry>();
+    public DbSet<OneBase.Domain.OneC.OneCBalance> OneCBalances => Set<OneBase.Domain.OneC.OneCBalance>();
+    public DbSet<OneBase.Domain.OneC.OneCChange> OneCChanges => Set<OneBase.Domain.OneC.OneCChange>();
+    public DbSet<OneBase.Domain.OneC.OneCSyncRun> OneCSyncRuns => Set<OneBase.Domain.OneC.OneCSyncRun>();
+    public DbSet<OneBase.Domain.OneC.OneCSyncCheckpoint> OneCSyncCheckpoints => Set<OneBase.Domain.OneC.OneCSyncCheckpoint>();
+    public DbSet<OneBase.Domain.OneC.OneCImportBatch> OneCImportBatches => Set<OneBase.Domain.OneC.OneCImportBatch>();
+    public DbSet<OneBase.Domain.OneC.OneCSyncFailure> OneCSyncFailures => Set<OneBase.Domain.OneC.OneCSyncFailure>();
+    public DbSet<OneBase.Domain.OneC.OneCHistoricalImport> OneCHistoricalImports => Set<OneBase.Domain.OneC.OneCHistoricalImport>();
+    public DbSet<OneBase.Domain.OneC.OneCWorkerCommand> OneCWorkerCommands => Set<OneBase.Domain.OneC.OneCWorkerCommand>();
+    public DbSet<OneBase.Domain.OneC.OneCWorkerState> OneCWorkerStates => Set<OneBase.Domain.OneC.OneCWorkerState>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -308,6 +328,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         RecruitmentModel.Configure(b);
         DialogAgentModel.Configure(b);
         AnalytikModel.Configure(b);
+        OneCModel.Configure(b);
 
         // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.
         b.Entity<DataSourceConnection>(e =>

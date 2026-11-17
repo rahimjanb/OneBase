@@ -19,6 +19,9 @@ public static class KnowledgeSources
     public const string FieldSales = "field.sales";
     public const string FinancePayments = "finance.payments";
 
+    /// <summary>Бухгалтерия 1С (факт): P&L, деньги, расчёты, счета и проводки, запасы, себестоимость, отклонения — только чтение.</summary>
+    public const string FinanceAccounting = "finance.accounting";
+
     /// <summary>Продажи по SKU за период: ABC, динамика, регионы и точки товара.</summary>
     public const string SalesSku = "sales.sku";
 
@@ -82,6 +85,11 @@ public static class KnowledgeSources
         new(FinancePayments, "Оплаты",
             "Оплаты торговых точек из Linko: наличные и банк, принятые и нет. Расходов, прибыли и бюджетов в OneBase нет.",
             "linko.Payments", "—", Permissions.FinanceRead),
+        new(FinanceAccounting, "Бухгалтерия 1С",
+            "Факт из 1С:Бухгалтерии: доходы, расходы и прибыль (P&L), движение и остатки денег, дебиторская и кредиторская задолженность с просрочкой, " +
+            "оборотно-сальдовая ведомость, проводки и документы, продажи, закупки, себестоимость, запасы по складам, выпуск, курсы валют, отклонения. " +
+            "Суммы — в валюте учёта 1С, без пересчёта. Бюджетов и планов OneBase здесь нет. Доступ AI включает администратор в настройках интеграции 1С.",
+            "onec.Entries, Documents, DocumentLines, Balances, Accounts, Counterparties, Contracts, ExchangeRates", "Финансы: обзор, доходы и расходы, деньги, расчёты, счета", Permissions.FinanceRead),
         new(SupplyProviders, "Поставщики Linko", "Справочник поставщиков Linko (только названия). Поставщики снабжения с заказами и ценами — источник «Снабжение».",
             "linko.Providers", "—", Permissions.SalesRead),
         new(Procurement, "Снабжение: закупки и склад",

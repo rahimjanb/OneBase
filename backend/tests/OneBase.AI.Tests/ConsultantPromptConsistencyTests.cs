@@ -242,7 +242,7 @@ public class ConsultantPromptConsistencyTests
         Assert.StartsWith(department.Prompt.Trim(), AgentPrompt(department));
         var key = code switch
         {
-            "finance" => "Бюджетов, начальных сальдо и общего P&L компании в OneBase нет",
+            "finance" => "Бюджетов и планов P&L в OneBase нет",
             "sales" => "Воронки сделок и потерянных сделок в OneBase нет",
             "marketing" => "Данных о кампаниях, лидах и рекламных расходах в OneBase сейчас нет",
             "hr" => "ФОТ, зарплат, кандидатов, оценок и обучения в OneBase нет",

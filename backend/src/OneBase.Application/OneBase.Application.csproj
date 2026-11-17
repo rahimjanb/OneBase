@@ -2,6 +2,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\OneBase.Domain\OneBase.Domain.csproj" />
+        <ProjectReference Include="..\OneBase.Finance.Integration.Contracts\OneBase.Finance.Integration.Contracts.csproj" />
     </ItemGroup>
 
     <ItemGroup>

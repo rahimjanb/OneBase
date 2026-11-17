@@ -131,6 +131,43 @@ services:
       - api
       - web
 
+  # Служба интеграции 1С:Бухгалтерия → OneBase: читает 1С (только GET) и пишет пакеты во внутренний API (api:8080/api/internal/onec).
+  # Не запускается без явного включения: профиль «onec» (COMPOSE_PROFILES=onec или docker compose --profile onec up -d onec-worker).
+  # Пароль 1С — только здесь (переменные ONEC_*), в OneBase не передаётся. Порт наружу не публикуется.
+  onec-worker:
+    build:
+      context: ./backend
+      dockerfile: src/OneBase.Finance.Integration.Worker/Dockerfile
+    restart: unless-stopped
+    profiles: ["onec"]
+    environment:
+      TZ: Asia/Tashkent
+      DOTNET_ENVIRONMENT: Production
+      OneC__Enabled: ${ONEC_ENABLED:-false}
+      OneC__Provider: ${ONEC_PROVIDER:-http}
+      OneC__AllowMockInProduction: ${ONEC_ALLOW_MOCK:-false}
+      OneC__BaseUrl: ${ONEC_BASE_URL:-}
+      OneC__Username: ${ONEC_USERNAME:-}
+      OneC__Password: ${ONEC_PASSWORD:-}
+      OneC__Token: ${ONEC_TOKEN:-}
+      OneC__TimeoutSeconds: ${ONEC_TIMEOUT_SECONDS:-60}
+      OneC__CaCertificatePath: ${ONEC_CA_CERT_PATH:-}
+      OneBase__InternalApiUrl: http://api:8080
+      OneBase__IntegrationToken: ${ONEC_INTEGRATION_TOKEN:-}
+      Integration__IntervalMinutes: ${ONEC_INTERVAL_MINUTES:-30}
+      Integration__BatchSize: ${ONEC_BATCH_SIZE:-500}
+      Integration__WorkerId: onec-worker
+    volumes:
+      # Сертификат 1С (внутренний ЦС), если он не из публичного центра: deploy/onec/onec-ca.crt → ONEC_CA_CERT_PATH=/etc/onebase/onec/onec-ca.crt
+      - ./deploy/onec:/etc/onebase/onec:ro
+    healthcheck:
+      test: ["CMD", "dotnet", "OneBase.Finance.Integration.Worker.dll", "health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - api
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped

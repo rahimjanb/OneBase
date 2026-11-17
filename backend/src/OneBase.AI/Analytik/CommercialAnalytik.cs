@@ -268,7 +268,7 @@ public sealed class FinanceAnalytik(IAppDbContext db, ProcurementRequestService 
 
         var notes = new List<string>
         {
-            "Расходов компании, бюджетов, кредиторской задолженности и денежного потока в OneBase нет (модуль «Финансы» не построен) — чистая прибыль и кассовые разрывы не считаются.",
+            "Расходы компании, деньги, кредиторка и P&L — в разделе «Финансы» по данным 1С:Бухгалтерии (если подключена); здесь — оплаты точек и закупки, бюджетов нет.",
         };
         var kpis = new List<Kpi>();
         var paymentRows = new List<PaymentTypeRow>();

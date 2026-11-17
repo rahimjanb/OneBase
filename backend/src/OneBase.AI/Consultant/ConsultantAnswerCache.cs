@@ -40,7 +40,8 @@ public sealed partial class ConsultantAnswerCache(
     SalesCacheSignal salesSignal,
     AnswerCacheOptions options,
     TimeProvider time,
-    ILogger<ConsultantAnswerCache> logger)
+    ILogger<ConsultantAnswerCache> logger,
+    OneBase.Application.Finance.IOneCSettingsStore oneC)
 {
     /// <summary>Источники, данные которых обновляются только синхронизацией и правками, меняющими версию данных: ответ по ним можно повторить.</summary>
     private static readonly string[] VersionedSources = ["sales.", "field.", "finance.", "supply."];
@@ -68,13 +69,16 @@ public sealed partial class ConsultantAnswerCache(
         var sheets = await db.DataSourceBindings.AsNoTracking().MaxAsync(b => (DateTimeOffset?)(b.LastRunAt ?? b.UpdatedAt ?? b.CreatedAt), ct);
         var settings = await db.AiSettings.AsNoTracking().Select(s => s.UpdatedAt).FirstOrDefaultAsync(ct);
         var agents = await db.AiAgents.AsNoTracking().MaxAsync(a => a.UpdatedAt, ct);
+        // Данные 1С меняются только синхронизацией; доступ AI к ним включает администратор — оба входят в ключ.
+        var oneCSync = await db.OneCSyncRuns.AsNoTracking().Where(r => r.FinishedAt != null).MaxAsync(r => r.FinishedAt, ct);
+        var oneCAi = (await oneC.GetAsync(ct)).AiEnabled;
         var today = time.GetUtcNow().ToOffset(TimeSpan.FromHours(5)).ToString("yyyy-MM-dd");
         var parts = new[]
         {
             userId.ToString("N"), user.DepartmentId?.ToString("N") ?? "-", user.UpdatedAt?.UtcTicks.ToString() ?? "-", Hash(rights),
             channel is null ? "web" : $"{channel.Name}|{channel.Model}|{channel.AgentModel}|{channel.MaxOutputTokens}|{channel.AllowReports}|{Hash(channel.Instructions ?? "")}",
             today, linko?.UtcTicks.ToString() ?? "-", sheets?.UtcTicks.ToString() ?? "-", salesSignal.Version, settings?.UtcTicks.ToString() ?? "-",
-            agents?.UtcTicks.ToString() ?? "-", normalized,
+            agents?.UtcTicks.ToString() ?? "-", $"{oneCSync?.UtcTicks.ToString() ?? "-"}|{oneCAi}", normalized,
         };
         return "ai:answer:" + Hash(string.Join("\n", parts));
     }

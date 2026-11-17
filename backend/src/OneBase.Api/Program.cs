@@ -19,6 +19,8 @@ builder.Services.AddJwtAuth(builder.Configuration);
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
+// Вход службы интеграции 1С во внутренний API (/api/internal/onec): ключ службы вместо пользователя.
+builder.Services.AddScoped<OneBase.Api.Controllers.OneCTokenFilter>();
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddDbContextCheck<OneBaseDbContext>("postgres");
 

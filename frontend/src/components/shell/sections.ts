@@ -67,7 +67,7 @@ export type SectionTab = {
  * keepPeriod — переносить период и план между кнопками (только «Продажи»).
  */
 export type SectionDef = {
-  id: "sales" | "hr" | "tasks" | "requests" | "procurement" | "production" | "analytik";
+  id: "sales" | "hr" | "tasks" | "requests" | "procurement" | "production" | "analytik" | "finance";
   label: string;
   /** Название модуля в верхней панели: «Продажи», «HR»… */
   title: string;
@@ -195,6 +195,18 @@ export const analytikTabs: SectionTab[] = [
   { key: "history", label: "История", href: "/analytik/history", icon: History, description: "исследования и журнал запросов", rare: true },
 ];
 
+/** «Финансы»: факт из 1С:Бухгалтерии — обзор, доходы и расходы, деньги, расчёты, счета, проводки, продажи и склад, отклонения. */
+export const financeTabs: SectionTab[] = [
+  { key: "overview", label: "Обзор", href: "/finance", icon: LayoutGrid, description: "выручка, прибыль, деньги, долги, запасы" },
+  { key: "pnl", label: "Доходы и расходы", short: "P&L", href: "/finance/pnl", icon: ChartColumn, description: "отчёт о финансовых результатах по месяцам" },
+  { key: "cash", label: "Деньги", href: "/finance/cash", icon: Wallet, description: "поступления, выплаты, остатки на счетах" },
+  { key: "settlements", label: "Расчёты", href: "/finance/settlements", icon: Users, description: "дебиторка, кредиторка, просрочка" },
+  { key: "accounts", label: "Счета", href: "/finance/accounts", icon: Table2, description: "оборотно-сальдовая ведомость" },
+  { key: "operations", label: "Продажи и склад", short: "Продажи", href: "/finance/operations", icon: Factory, description: "продажи, закупки, себестоимость, запасы, производство" },
+  { key: "entries", label: "Проводки", href: "/finance/entries", icon: ListChecks, description: "проводки и документы 1С", rare: true },
+  { key: "anomalies", label: "Отклонения", href: "/finance/anomalies", icon: TriangleAlert, description: "что проверить: рост расходов, крупные и исправленные проводки", rare: true },
+];
+
 export const sections: SectionDef[] = [
   { id: "sales", label: "Разделы продаж", title: "Продажи", back: toDepartments, tabs: salesTabs, active: activeSalesTab, keepPeriod: true },
   {
@@ -252,6 +264,16 @@ export const sections: SectionDef[] = [
       pathname === "/production" ? "overview" : under(pathname, "/production/recipes") ? "recipes" : (productionTabs.find((t) => t.key !== "overview" && under(pathname, t.href))?.key ?? null),
   },
   {
+    id: "finance",
+    label: "Разделы финансов",
+    title: "Финансы",
+    back: toDepartments,
+    tabs: financeTabs,
+    // Карточка счёта — «Счета», документ — «Проводки».
+    active: (pathname) =>
+      pathname === "/finance" ? "overview" : under(pathname, "/finance/documents") ? "entries" : (financeTabs.find((t) => t.key !== "overview" && under(pathname, t.href))?.key ?? null),
+  },
+  {
     id: "analytik",
     label: "Разделы Аналитика",
     title: "Аналитик",
@@ -264,6 +286,7 @@ export const sections: SectionDef[] = [
 
 const sectionBase: Record<SectionDef["id"], string> = {
   analytik: "/analytik",
+  finance: "/finance",
   sales: "/sales",
   hr: "/hr",
   tasks: "/tasks",

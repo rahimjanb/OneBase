@@ -5893,6 +5893,1892 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.ToTable("Integrations", (string)null);
                 });
 
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsCurrency")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsQuantity")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<bool>("OffBalance")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ParentCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Subconto")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCAccounts");
+
+                    b.HasIndex("Code")
+                        .HasDatabaseName("IX_OneCAccounts_Code");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCAccounts_Source");
+
+                    b.ToTable("Accounts", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCBalance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Account")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("ClosingCredit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal?>("ClosingCurrencyCredit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal?>("ClosingCurrencyDebit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal>("ClosingDebit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal?>("ClosingQuantityCredit")
+                        .HasPrecision(20, 3)
+                        .HasColumnType("numeric(20,3)");
+
+                    b.Property<decimal?>("ClosingQuantityDebit")
+                        .HasPrecision(20, 3)
+                        .HasColumnType("numeric(20,3)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CounterpartyId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ItemId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("OpeningCredit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal?>("OpeningCurrencyCredit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal?>("OpeningCurrencyDebit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal>("OpeningDebit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal?>("OpeningQuantityCredit")
+                        .HasPrecision(20, 3)
+                        .HasColumnType("numeric(20,3)");
+
+                    b.Property<decimal?>("OpeningQuantityDebit")
+                        .HasPrecision(20, 3)
+                        .HasColumnType("numeric(20,3)");
+
+                    b.Property<DateOnly>("Period")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Subconto")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal>("TurnoverCredit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal?>("TurnoverCurrencyCredit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal?>("TurnoverCurrencyDebit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal>("TurnoverDebit")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal?>("TurnoverQuantityCredit")
+                        .HasPrecision(20, 3)
+                        .HasColumnType("numeric(20,3)");
+
+                    b.Property<decimal?>("TurnoverQuantityDebit")
+                        .HasPrecision(20, 3)
+                        .HasColumnType("numeric(20,3)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WarehouseId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCBalances");
+
+                    b.HasIndex("CounterpartyId")
+                        .HasDatabaseName("IX_OneCBalances_Counterparty");
+
+                    b.HasIndex("SourceOrganizationId", "Period", "Account")
+                        .HasDatabaseName("IX_OneCBalances_Organization_Period_Account");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCBalances_Source");
+
+                    b.ToTable("Balances", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BatchKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Changes")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<Guid?>("RecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCChanges");
+
+                    b.HasIndex("At")
+                        .HasDatabaseName("IX_OneCChanges_At");
+
+                    b.HasIndex("EntityType", "SourceEntityId")
+                        .HasDatabaseName("IX_OneCChanges_Entity");
+
+                    b.ToTable("Changes", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCContract", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CounterpartySourceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateOnly?>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Number")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("PaymentTermDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("ValidTo")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCContracts");
+
+                    b.HasIndex("CounterpartySourceId")
+                        .HasDatabaseName("IX_OneCContracts_Counterparty");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCContracts_Source");
+
+                    b.ToTable("Contracts", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCCounterparty", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("BankAccounts")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FullName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Inn")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsGroup")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LegalForm")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ParentSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCCounterparties");
+
+                    b.HasIndex("Inn")
+                        .HasDatabaseName("IX_OneCCounterparties_Inn");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCCounterparties_Source");
+
+                    b.ToTable("Counterparties", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCCurrency", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NumericCode")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCCurrencies");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCCurrencies_Source");
+
+                    b.ToTable("Currencies", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal>("AmountAccounting")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<string>("BankAccountSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("BasisSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CashDeskSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CashFlowItemSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ContractSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CounterpartySourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateTimeOffset>("Date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DepartmentSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateOnly>("DocumentDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("Posted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Purpose")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateOnly?>("RateDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("RateMultiplier")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RateSource")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("RateValue")
+                        .HasPrecision(20, 6)
+                        .HasColumnType("numeric(20,6)");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("VatAmount")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<string>("WarehouseSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCDocuments");
+
+                    b.HasIndex("CounterpartySourceId")
+                        .HasDatabaseName("IX_OneCDocuments_Counterparty");
+
+                    b.HasIndex("SourceOrganizationId", "DocumentDate")
+                        .HasDatabaseName("IX_OneCDocuments_Organization_Date");
+
+                    b.HasIndex("Type", "DocumentDate")
+                        .HasDatabaseName("IX_OneCDocuments_Type_Date");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCDocuments_Source");
+
+                    b.ToTable("Documents", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCDocumentLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Account")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<string>("BatchSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<decimal?>("CostAmount")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ItemSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("LineNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("Price")
+                        .HasPrecision(20, 4)
+                        .HasColumnType("numeric(20,4)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(20, 3)
+                        .HasColumnType("numeric(20,3)");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal?>("VatAmount")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<decimal?>("VatRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("WarehouseSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCDocumentLines");
+
+                    b.HasIndex("ItemSourceId")
+                        .HasDatabaseName("IX_OneCDocumentLines_Item");
+
+                    b.HasIndex("DocumentId", "LineNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCDocumentLines_Document_Line");
+
+                    b.ToTable("DocumentLines", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<string>("Content")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CreditAccount")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("CreditCounterpartyId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CreditCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<decimal?>("CreditCurrencyAmount")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<string>("CreditItemId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<decimal?>("CreditQuantity")
+                        .HasPrecision(20, 3)
+                        .HasColumnType("numeric(20,3)");
+
+                    b.Property<string>("CreditSubconto")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("CreditWarehouseId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DebitAccount")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("DebitCounterpartyId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DebitCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<decimal?>("DebitCurrencyAmount")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<string>("DebitItemId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<decimal?>("DebitQuantity")
+                        .HasPrecision(20, 3)
+                        .HasColumnType("numeric(20,3)");
+
+                    b.Property<string>("DebitSubconto")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("DebitWarehouseId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DepartmentSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LineNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("Period")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("PeriodDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("RateDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("RateMultiplier")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RateSource")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("RateValue")
+                        .HasPrecision(20, 6)
+                        .HasColumnType("numeric(20,6)");
+
+                    b.Property<DateTimeOffset?>("RegistrarDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RegistrarNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("RegistrarSourceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RegistrarSourceType")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("RegistrarType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCEntries");
+
+                    b.HasIndex("CreditCounterpartyId")
+                        .HasDatabaseName("IX_OneCEntries_CreditCounterparty");
+
+                    b.HasIndex("DebitCounterpartyId")
+                        .HasDatabaseName("IX_OneCEntries_DebitCounterparty");
+
+                    b.HasIndex("RegistrarSourceId")
+                        .HasDatabaseName("IX_OneCEntries_Registrar");
+
+                    b.HasIndex("CreditAccount", "PeriodDate")
+                        .HasDatabaseName("IX_OneCEntries_Credit_Period");
+
+                    b.HasIndex("DebitAccount", "PeriodDate")
+                        .HasDatabaseName("IX_OneCEntries_Debit_Period");
+
+                    b.HasIndex("SourceOrganizationId", "PeriodDate")
+                        .HasDatabaseName("IX_OneCEntries_Organization_Period");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCEntries_Source");
+
+                    b.ToTable("Entries", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCExchangeRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Multiplier")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Rate")
+                        .HasPrecision(20, 6)
+                        .HasColumnType("numeric(20,6)");
+
+                    b.Property<string>("RateSource")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCExchangeRates");
+
+                    b.HasIndex("Currency", "Date")
+                        .HasDatabaseName("IX_OneCExchangeRates_Currency_Date");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCExchangeRates_Source");
+
+                    b.ToTable("ExchangeRates", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCHistoricalImport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BatchSize")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ChecksJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("From")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("PeriodsDone")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PeriodsTotal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PositionCursor")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("PositionOrganization")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("PositionPeriod")
+                        .HasColumnType("date");
+
+                    b.Property<string>("PositionStream")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long>("Records")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("ReferencesDone")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RequestedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateOnly>("To")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCHistoricalImports");
+
+                    b.HasIndex("Status")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCHistoricalImports_SingleActive")
+                        .HasFilter("\"Status\" IN ('Pending', 'Running')");
+
+                    b.ToTable("HistoricalImports", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BatchKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Created")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Deleted")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Records")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Rejected")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RejectionsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Stream")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Unchanged")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Updated")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCImportBatches");
+
+                    b.HasIndex("BatchKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCImportBatches_BatchKey");
+
+                    b.HasIndex("RunId")
+                        .HasDatabaseName("IX_OneCImportBatches_RunId");
+
+                    b.ToTable("ImportBatches", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Article")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Barcode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FullName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Ikpu")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsGroup")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ParentSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("VatRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCItems");
+
+                    b.HasIndex("Code")
+                        .HasDatabaseName("IX_OneCItems_Code");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCItems_Source");
+
+                    b.ToTable("Items", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCOrganization", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccountingCurrency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FullName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Inn")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VatCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCOrganizations");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCOrganizations_Source");
+
+                    b.ToTable("Organizations", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCReference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Attributes")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsGroup")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ParentSourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceEntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("SourceOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCReferences");
+
+                    b.HasIndex("SourceSystem", "SourceOrganizationId", "SourceEntityType", "SourceEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCReferences_Source");
+
+                    b.ToTable("References", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCSyncCheckpoint", b =>
+                {
+                    b.Property<string>("Stream")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("OrganizationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("BatchKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Cursor")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<long>("Rows")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Stream", "OrganizationId")
+                        .HasName("PK_OneCSyncCheckpoints");
+
+                    b.ToTable("SyncCheckpoints", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCSyncFailure", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Cursor")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("Error")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("FirstAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("LastAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OrganizationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Payload")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateOnly?>("Period")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceEntityId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Stream")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCSyncFailures");
+
+                    b.HasIndex("Fingerprint")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCSyncFailures_OpenFingerprint")
+                        .HasFilter("\"Status\" IN ('Open', 'Retrying')");
+
+                    b.HasIndex("Status", "LastAt")
+                        .HasDatabaseName("IX_OneCSyncFailures_Status_LastAt");
+
+                    b.ToTable("SyncFailures", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCSyncRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Batches")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("CommandId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Created")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Deleted")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Errors")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("HeartbeatAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("HistoricalImportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("InfobaseId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("Rejected")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("RetryOfId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("StartedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Step")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("StepsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("Unchanged")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Updated")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("WorkerId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCSyncRuns");
+
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("IX_OneCSyncRuns_StartedAt");
+
+                    b.HasIndex("Status")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OneCSyncRuns_SingleRunning")
+                        .HasFilter("\"Status\" = 'Running'");
+
+                    b.ToTable("SyncRuns", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCWorkerCommand", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DoneAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("PayloadJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RequestedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ResultMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("TakenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OneCWorkerCommands");
+
+                    b.HasIndex("Status", "RequestedAt")
+                        .HasDatabaseName("IX_OneCWorkerCommands_Status_RequestedAt");
+
+                    b.ToTable("WorkerCommands", "onec");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCWorkerState", b =>
+                {
+                    b.Property<string>("WorkerId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("BaseUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("Busy")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("ConnectionCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConnectionJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("CurrentRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("NextSyncAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Version")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("WorkerId")
+                        .HasName("PK_OneCWorkerStates");
+
+                    b.ToTable("WorkerStates", "onec");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementApproval", b =>
                 {
                     b.Property<Guid>("Id")
@@ -15751,6 +17637,16 @@ namespace OneBase.Infrastructure.Persistence.Migrations
                     b.Navigation("Binding");
                 });
 
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCDocumentLine", b =>
+                {
+                    b.HasOne("OneBase.Domain.OneC.OneCDocument", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_OneCDocumentLines_OneCDocuments_DocumentId");
+                });
+
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementApproval", b =>
                 {
                     b.HasOne("OneBase.Domain.Identity.User", "Decider")
@@ -17700,6 +19596,11 @@ namespace OneBase.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("OneBase.Domain.Integrations.DataSourceBinding", b =>
                 {
                     b.Navigation("Runs");
+                });
+
+            modelBuilder.Entity("OneBase.Domain.OneC.OneCDocument", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("OneBase.Domain.Procurement.ProcurementArrival", b =>

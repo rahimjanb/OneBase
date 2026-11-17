@@ -274,6 +274,28 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.AI.DialogAgentAnswer> DialogAgentAnswers { get; }
     DbSet<OneBase.Domain.AI.DialogAgentReply> DialogAgentReplies { get; }
 
+    // 1С:Бухгалтерия → OneBase (схема onec): факты 1С и состояние синхронизации.
+    DbSet<OneBase.Domain.OneC.OneCOrganization> OneCOrganizations { get; }
+    DbSet<OneBase.Domain.OneC.OneCAccount> OneCAccounts { get; }
+    DbSet<OneBase.Domain.OneC.OneCCounterparty> OneCCounterparties { get; }
+    DbSet<OneBase.Domain.OneC.OneCContract> OneCContracts { get; }
+    DbSet<OneBase.Domain.OneC.OneCCurrency> OneCCurrencies { get; }
+    DbSet<OneBase.Domain.OneC.OneCExchangeRate> OneCExchangeRates { get; }
+    DbSet<OneBase.Domain.OneC.OneCReference> OneCReferences { get; }
+    DbSet<OneBase.Domain.OneC.OneCItem> OneCItems { get; }
+    DbSet<OneBase.Domain.OneC.OneCDocument> OneCDocuments { get; }
+    DbSet<OneBase.Domain.OneC.OneCDocumentLine> OneCDocumentLines { get; }
+    DbSet<OneBase.Domain.OneC.OneCEntry> OneCEntries { get; }
+    DbSet<OneBase.Domain.OneC.OneCBalance> OneCBalances { get; }
+    DbSet<OneBase.Domain.OneC.OneCChange> OneCChanges { get; }
+    DbSet<OneBase.Domain.OneC.OneCSyncRun> OneCSyncRuns { get; }
+    DbSet<OneBase.Domain.OneC.OneCSyncCheckpoint> OneCSyncCheckpoints { get; }
+    DbSet<OneBase.Domain.OneC.OneCImportBatch> OneCImportBatches { get; }
+    DbSet<OneBase.Domain.OneC.OneCSyncFailure> OneCSyncFailures { get; }
+    DbSet<OneBase.Domain.OneC.OneCHistoricalImport> OneCHistoricalImports { get; }
+    DbSet<OneBase.Domain.OneC.OneCWorkerCommand> OneCWorkerCommands { get; }
+    DbSet<OneBase.Domain.OneC.OneCWorkerState> OneCWorkerStates { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Отслеживаемые сущности — чтобы отбросить несохранённые строки после конфликта уникального индекса (второй экземпляр службы).</summary>

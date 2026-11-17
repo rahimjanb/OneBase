@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- Формат обмена «служба интеграции 1С ↔ внутренний API OneBase». Без зависимостей: его подключают и служба, и API. -->
+    <PropertyGroup>
+        <RootNamespace>OneBase.Finance.Integration.Contracts</RootNamespace>
+    </PropertyGroup>
+
+</Project>

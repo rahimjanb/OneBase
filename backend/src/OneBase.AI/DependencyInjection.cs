@@ -210,6 +210,16 @@ public static class DependencyInjection
         services.AddScoped<ITool, GetPromoTool>();
         services.AddScoped<ITool, GetAktTool>();
         services.AddScoped<ITool, GetDsoTool>();
+        // Бухгалтерия 1С (факт): только чтение, право «Финансы» и доступ AI, включённый администратором.
+        services.AddScoped<ITool, Tools.Data.FinanceOverviewTool>();
+        services.AddScoped<ITool, Tools.Data.FinancePnlTool>();
+        services.AddScoped<ITool, Tools.Data.FinanceCompareTool>();
+        services.AddScoped<ITool, Tools.Data.FinanceCashFlowTool>();
+        services.AddScoped<ITool, Tools.Data.FinanceSettlementsTool>();
+        services.AddScoped<ITool, Tools.Data.FinanceAccountsTool>();
+        services.AddScoped<ITool, Tools.Data.FinanceOperationsTool>();
+        services.AddScoped<ITool, Tools.Data.FinanceAnomaliesTool>();
+        services.AddScoped<ITool, Tools.Data.FinanceEntriesTool>();
 
         // База знаний: документы, фрагменты, полнотекстовый и семантический поиск.
         services.AddScoped<OneBase.AI.Knowledge.KnowledgeService>();

@@ -4,6 +4,7 @@ import ai from "./ai";
 import analytik from "./analytik";
 import simulator from "./simulator";
 import explore from "./explore";
+import finance from "./finance";
 import arrivals from "./arrivals";
 import campaigns from "./campaigns";
 import common from "./common";
@@ -52,6 +53,8 @@ export const uz: Dict = {
   // Симулятор сценариев «Аналитика»: параметры, показатели, ограничения — после Аналитика (свои значения общих слов «База», «Мощность»).
   ...simulator,
   ...explore,
+  // «Финансы» (факт 1С) и страница интеграции 1С: общие слова ниже перекрывают его.
+  ...finance,
   // Цифровой двойник: общие слова переведены так же, как в разделах; разделы ниже перекрывают его.
   ...twin,
   ...whatsNew,

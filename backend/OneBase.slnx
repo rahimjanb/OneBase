@@ -5,10 +5,13 @@
         <Project Path="src/OneBase.AI/OneBase.AI.csproj" />
         <Project Path="src/OneBase.Infrastructure/OneBase.Infrastructure.csproj" />
         <Project Path="src/OneBase.Api/OneBase.Api.csproj" />
+        <Project Path="src/OneBase.Finance.Integration.Contracts/OneBase.Finance.Integration.Contracts.csproj" />
+        <Project Path="src/OneBase.Finance.Integration.Worker/OneBase.Finance.Integration.Worker.csproj" />
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/OneBase.AI.Tests/OneBase.AI.Tests.csproj" />
         <Project Path="tests/OneBase.Files.Tests/OneBase.Files.Tests.csproj" />
+        <Project Path="tests/OneBase.Finance.Tests/OneBase.Finance.Tests.csproj" />
         <Project Path="tests/OneBase.Sales.Tests/OneBase.Sales.Tests.csproj" />
     </Folder>
 </Solution>

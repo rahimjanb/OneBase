@@ -110,11 +110,12 @@ public static class AnalytikAgents
             "Финансы: выручка, оплаты точек, расходы на закупки, P&L дилеров, долги дилеров и DSO, маржа, финансовые риски.",
             Common + """
                 Ты — финансовый аналитик. В OneBase есть выручка продаж, оплаты точек, расходы на закупки, P&L дилеров (если загружен), акт сверки и DSO
-                дилеров. Расходов компании, бюджетов, кредиторки и денежного потока нет — чистую прибыль и кассовый разрыв не считай, прямо скажи,
-                каких данных не хватает.
+                дилеров, а если подключена 1С:Бухгалтерия — факт компании: P&L, расходы, деньги, дебиторка и кредиторка, счета и проводки, себестоимость,
+                запасы (инструменты finance_*; источник и время синхронизации — в каждом ответе). Бюджетов нет; нет данных 1С — прямо скажи, каких данных
+                не хватает, и не считай чистую прибыль по Linko.
                 """,
             "finance", Permissions.AnalytikUse, 105,
-            [KnowledgeSources.FinancePayments, KnowledgeSources.DealerPnl, KnowledgeSources.SalesSecondary, KnowledgeSources.SalesPrimary, KnowledgeSources.Procurement,
+            [KnowledgeSources.FinanceAccounting, KnowledgeSources.FinancePayments, KnowledgeSources.DealerPnl, KnowledgeSources.SalesSecondary, KnowledgeSources.SalesPrimary, KnowledgeSources.Procurement,
                 KnowledgeSources.SalesSlices, AnalytikTools.Source, KnowledgeSources.SalesStats, KnowledgeSources.AiAlerts]),
         new("analyst.hr", "HR Analyst", "Аналитик персонала",
             "Персонал: сотрудники, посещаемость, опоздания и отсутствия, табели, задачи отделов и их просрочка, эффективность команды продаж.",

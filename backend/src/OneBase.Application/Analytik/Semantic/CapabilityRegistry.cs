@@ -58,6 +58,9 @@ public sealed class CapabilityRegistry(SemanticEngine engine, AnalytikAccess acc
         new("Производство", "Задания, смены, выпуск, брак, техкарты", "analytik_production", "Производство OneBase"),
         new("Персонал", "Сотрудники, посещаемость, опоздания, табели", "analytik_hr, get_hr_employees, get_hr_timesheet", "Verifix"),
         new("Финансы", "P&L дилеров, дебиторка, DSO, оплаты", "analytik_finance, get_pnl, get_dso", "P&L — из Google Sheets / AI Data Manager"),
+        new("Бухгалтерия 1С", "P&L компании, деньги, дебиторка и кредиторка, счета и проводки, себестоимость, запасы, курсы, отклонения",
+            "finance_overview, finance_pnl, finance_compare, finance_cash_flow, finance_settlements, finance_accounts, finance_operations, finance_anomalies, finance_entries",
+            "Факт 1С (служба интеграции); доступ AI включает администратор"),
         new("Прогнозы и риски", "Прогнозы продаж, найденные риски и отклонения", "analytik_forecast, analytik_risks", "Аналитик"),
         new("Любая таблица", "Каталог всей базы и запрос по типизированному плану", "analytik_find_tables, analytik_query",
             "Когда в реестре нет готового показателя: таблицы и колонки — из каталога, правила отбора задаёт запрос"),
@@ -65,13 +68,13 @@ public sealed class CapabilityRegistry(SemanticEngine engine, AnalytikAccess acc
 
     public static readonly IReadOnlyList<string> Missing =
     [
-        "1С не подключена; факты продаж из Excel или CSV в OneBase не загружаются — единственный источник фактов продаж — Linko.",
+        "Бухгалтерия 1С — отдельный источник (инструменты finance_*), в срезы продаж не входит; факты продаж из Excel или CSV не загружаются — единственный источник фактов продаж — Linko.",
         "История остатков не загружается (в Linko есть balances_by_date): остатки — только текущий снимок.",
         "Удаление заказов в Linko не передаётся (Linko не отдаёт признак удаления) — удалённый в Linko заказ остаётся до ручной очистки; отмена (статус) учитывается.",
         "Планы регионов — только в кг (Google Sheets); денежный план есть только у ТП (Linko).",
         "Связи строк заказа с акциями Linko нет (API её не отдаёт).",
         "Территории Linko (borders) ни с точками, ни с заказами не связаны — измерение «территория» недоступно.",
-        "Себестоимости продукции в OneBase нет — маржинальность по продажам не считается (P&L дилеров — отдельный источник).",
+        "Себестоимость продукции есть только в бухгалтерии 1С (finance_operations, finance_pnl), в срезах продаж Linko её нет — маржинальность по SKU срезами не считается.",
     ];
 
     /// <summary>Паспорта показателей движка: реестр + профиль + диапазон данных и свежесть источника + совместимые факты + доступ пользователя.</summary>

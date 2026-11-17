@@ -359,6 +359,12 @@ public static class DependencyInjection
         {
             services.AddHostedService<Sales.SalesProductPhotoSeedWorker>();
         }
+        // 1С:Бухгалтерия → OneBase: данные пишет только внутренний API по пакетам от службы интеграции (отдельный контейнер), сам API в 1С не ходит.
+        services.AddSingleton<OneBase.Application.Finance.IOneCSettingsStore, OneC.OneCSettingsStore>();
+        services.AddScoped<OneBase.Application.Finance.OneCImportService>();
+        services.AddScoped<OneBase.Application.Finance.OneCSyncService>();
+        services.AddScoped<OneBase.Application.Finance.OneCAdminService>();
+        services.AddScoped<OneBase.Application.Finance.FinanceReportService>();
         services.AddScoped<OneBase.Application.Production.Import.RecipeImportService>();
         services.AddScoped<OneBase.Application.Production.ProductionOrderService>();
         services.AddScoped<OneBase.Application.Production.ProductionShiftService>();

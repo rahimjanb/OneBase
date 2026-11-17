@@ -29,6 +29,8 @@ export const navPermissions: Record<string, string[]> = {
   "/reports": workspacePermissions,
   "/base": ["files.read"],
   "/consultant": ["ai.agents.run"],
+  // «Финансы»: факт из 1С:Бухгалтерии — право «Финансы» (finance.read).
+  "/finance": ["finance.read"],
   // «Аналитик» (OneBase Intelligence): раздел по праву analytik.use; данные внутри — по остальным правам (решает backend).
   "/analytik": ["analytik.use"],
   "/data-manager": ["ai.data.manage"],
@@ -44,7 +46,7 @@ export function canOpen(href: string, permissions: readonly string[]): boolean {
 }
 
 /** Свой раздел отдела в OneBase; у остальных отделов рабочий раздел — их задачи. Производство — задания на выпуск, рецептуры, качество сырья. */
-const departmentSections: Record<string, string> = { sales: "/sales", hr: "/hr", supply: "/procurement", production: "/production" };
+const departmentSections: Record<string, string> = { sales: "/sales", hr: "/hr", supply: "/procurement", production: "/production", finance: "/finance" };
 
 /**
  * Куда ведёт кнопка отдела: свой раздел («Продажи», HR, «Снабжение»), иначе задачи отдела; нет доступа — следующий доступный, и только в крайнем случае —

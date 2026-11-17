@@ -27,6 +27,7 @@
     <ProjectReference Include="..\..\src\OneBase.AI\OneBase.AI.csproj" />
     <ProjectReference Include="..\..\src\OneBase.Infrastructure\OneBase.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\OneBase.Api\OneBase.Api.csproj" />
+    <ProjectReference Include="..\..\src\OneBase.Finance.Integration.Worker\OneBase.Finance.Integration.Worker.csproj" />
   </ItemGroup>
 
 </Project>

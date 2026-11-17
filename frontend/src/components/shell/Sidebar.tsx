@@ -41,7 +41,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { href: "/", label: "Обзор", icon: LayoutGrid, also: ["/me"] },
       { href: "/twin", label: "Цифровой двойник", icon: Boxes, short: "Двойник" },
-      { href: "/departments", label: "Отделы", icon: Building2, also: ["/sales", "/procurement", "/production", "/hr"] },
+      { href: "/departments", label: "Отделы", icon: Building2, also: ["/sales", "/procurement", "/production", "/hr", "/finance"] },
       { href: "/tasks", label: "Задачи", icon: ListChecks },
       { href: "/requests", label: "Заявки", icon: ClipboardPen },
       { href: "/reports", label: "Отчёты", icon: ChartColumn, soon: true, badge: "скоро" },
