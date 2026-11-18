@@ -94,7 +94,8 @@ internal static partial class IncentiveCardRenderer
                 bottom.Add(new Block(height, (c, y) => OutOfRoute(c, y, height, late)));
             }
 
-            if (slot == IncentiveSlot.Evening && card.Promo?.Cashback is { } balance)
+            // «Мой кэшбек YM-02» — на каждой карточке дня (08:30, 13:00, 16:00, 18:00) и в копиях у СВ; нет списка спящих и кэшбека — блока нет.
+            if (card.Promo?.Cashback is { } balance && (balance.Listed > 0 || balance.Issued > 0 || balance.Paid > 0))
             {
                 bottom.Add(new Block(176, (c, y) => CashbackDay(c, y, card, balance)));
             }
@@ -1016,7 +1017,7 @@ internal static partial class IncentiveCardRenderer
             }
         }
 
-        private void CashbackTitle(SKCanvas c, float top, string note)
+        private void CashbackTitle(SKCanvas c, float top, string note, string? title = null)
         {
             using (var coin = Fill(C.Amber))
             {
@@ -1024,7 +1025,7 @@ internal static partial class IncentiveCardRenderer
             }
 
             TextCenter(c, "$", Pad + 36, top + 22, 17, Faces.Bold, SKColors.White);
-            Text(c, T("Кэшбек YM-02 · баланс"), Pad + 60, top + 18, 24, Faces.Bold, C.Ink);
+            Text(c, title ?? T("Кэшбек YM-02 · баланс"), Pad + 60, top + 18, 24, Faces.Bold, C.Ink);
             TextRight(c, note, Width - Pad - 24, top + 24, 16, Faces.SemiBold, C.Ink2);
         }
 
@@ -1045,16 +1046,39 @@ internal static partial class IncentiveCardRenderer
             }
         }
 
+        /// <summary>
+        /// Мой кэшбек YM-02 на карточке дня: сегодня (кроме 08:30 — заказов дня ещё нет), заработано всего (ждёт доставки + подтверждено),
+        /// подтверждено (доставлено, за вычетом возвратов), выплачено, к выплате пн–вт (подтверждено за прошедшие недели − выплачено); справа —
+        /// сколько ждёт доставки и сколько можно ещё заработать на неразбуженных спящих.
+        /// </summary>
         private void CashbackDay(SKCanvas c, float top, IncentiveAgentCard card, IncentiveCashbackBalance balance)
         {
             CardBox(c, Pad, top, Inner, 176);
-            CashbackTitle(c, top, T("выплата пн–вт за прошлую неделю"));
             var remaining = Math.Max(0, balance.Listed - balance.Woken);
-            CashbackCells(c, top + 66,
-                (T("Оформлено сегодня"), Money(card.Promo!.CashbackToday), C.Ink, false),
-                (T("Ждёт доставки"), Money(balance.Pending), C.Ink, false),
-                (T("Выплачено"), Money(balance.Paid), C.Ink, false),
-                (F("Можно ещё · {0}", Points(remaining)), Money(balance.CanEarn), C.Ink, true));
+            var notes = new List<string>();
+            if (balance.Pending > 0)
+            {
+                notes.Add(F("ждёт доставки {0}", Money(balance.Pending)));
+            }
+
+            if (remaining > 0 && balance.CanEarn > 0)
+            {
+                notes.Add(F("можно ещё {0} · {1}", Money(balance.CanEarn), Points(remaining)));
+            }
+
+            CashbackTitle(c, top, notes.Count > 0 ? string.Join(" · ", notes) : T("выплата пн–вт за прошлую неделю"), T("Мой кэшбек YM-02"));
+            var today = card.Promo!.CashbackToday;
+            var cells = new List<(string Label, string Value, SKColor Ink, bool Yellow)>();
+            if (cards.Slot != IncentiveSlot.Morning)
+            {
+                cells.Add((T("Сегодня"), today > 0 ? $"+{Money(today)}" : "0", today > 0 ? C.Green : C.Ink, false));
+            }
+
+            cells.Add((T("Заработано всего"), Money(balance.Pending + balance.Confirmed), C.Ink, false));
+            cells.Add((T("Подтверждено"), Money(balance.Confirmed), C.Ink, false));
+            cells.Add((T("Выплачено"), Money(balance.Paid), C.Ink, false));
+            cells.Add((T("К выплате пн–вт"), Money(balance.ToPay), C.Green, true));
+            CashbackCells(c, top + 66, cells.ToArray());
         }
 
         private List<string> FooterLines(string text) =>

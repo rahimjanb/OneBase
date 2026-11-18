@@ -3,7 +3,8 @@ namespace OneBase.Infrastructure.Telegram.Reports;
 /// <summary>
 /// Причина пропуска отправки — для разбивки «Пропущено · 7 дней» («нет чата · 412, нет акции · 76»). Текст причины пишет код отправки:
 /// не про чат — только перечисленные ниже (получатель выключен, условие отчёта, акция, несвежие или неполные данные); всё остальное —
-/// ChatProblem (чат удалён, другой аккаунт, писать нельзя — причина из Telegram), то есть «нет чата».
+/// ChatProblem (чат удалён, другой аккаунт, писать нельзя — причина из Telegram), то есть «нет чата». Узбекская причина (латиница или
+/// кириллица) сначала переводится обратно на русский по словарю отчётов.
 /// </summary>
 public static class ReportSkipReasons
 {
@@ -15,7 +16,8 @@ public static class ReportSkipReasons
 
     public static string Key(string? error)
     {
-        var text = error?.Trim() ?? "";
+        // Причину пишут на языке получателя (картинки — по-узбекски): разбираем русский оригинал из словаря отчётов.
+        var text = Application.Telegram.Reports.ReportTexts.Russian(error?.Trim() ?? "");
         if (text.Length == 0)
         {
             return NotNeeded;
@@ -31,9 +33,14 @@ public static class ReportSkipReasons
             return Stale; // заказы Linko не обновились к карточке акции; неполные данные еженедельного PDF
         }
 
+        if (text.Contains("ничего не положено", StringComparison.Ordinal))
+        {
+            return NotNeeded; // роли в этот запуск акции ничего не положено (копии и сводка выключены; с акциями ноября — прежняя сводка не уходит)
+        }
+
         if (text.Contains("акци", StringComparison.OrdinalIgnoreCase))
         {
-            return Promo; // акция выключена или день вне её периода, нет акций ноября, роли в этот запуск ничего не положено
+            return Promo; // акция выключена или день вне её периода, нет акций ноября
         }
 
         return text.StartsWith("Условие отчёта", StringComparison.Ordinal) ? NotNeeded : NoChat;

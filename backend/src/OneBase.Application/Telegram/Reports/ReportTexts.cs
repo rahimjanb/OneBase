@@ -440,6 +440,8 @@ public static class ReportTexts
         ["Рейтинг акции — розница"] = "Aksiya reytingi — chakana",
         ["Цель, кг"] = "Maqsad, kg",
         ["Этой роли в этот запуск акции ничего не положено: копии и сводка выключены в настройках акции."] = "Bu rolga aksiyaning ushbu ishga tushirishida hech narsa yuborilmaydi: nusxalar va xulosa aksiya sozlamalarida o‘chirilgan.",
+        ["Этой роли в этот запуск ничего не положено: с акциями ноября прежняя сводка команды не отправляется — у СВ итог команды в 19:30, у РМ итог недели зоны (сб 19:00) и сводка (пн 09:00)."] =
+            "Bu rolga ushbu ishga tushirishda hech narsa yuborilmaydi: noyabr aksiyalari bilan avvalgi jamoa xulosasi yuborilmaydi — SVga 19:30 da jamoa kuni yakuni, RMga zona haftasi yakuni (sha 19:00) va xulosa (du 09:00).",
         ["все призы взяты"] = "barcha sovg‘alar olindi",
         ["да"] = "ha",
         ["дозаказ"] = "qayta buyurtma",
@@ -608,6 +610,11 @@ public static class ReportTexts
         ["К выплате пн–вт: кэшбек {0} + TW-01 {1} = {2} сум"] = "Du–se to‘lovga: keshbek {0} + TW-01 {1} = {2} so‘m",
         ["Как собраны цели на сегодня"] = "Bugungi maqsadlar qanday tuzilgan",
         ["Кэшбек YM-02 · баланс"] = "YM-02 keshbek · balans",
+        ["Мой кэшбек YM-02"] = "Mening YM-02 keshbekim",
+        ["Заработано всего"] = "Jami ishlab topildi",
+        ["К выплате пн–вт"] = "Du–se to‘lovga",
+        ["ждёт доставки {0}"] = "yetkazishni kutmoqda {0}",
+        ["можно ещё {0} · {1}"] = "yana mumkin {0} · {1}",
         ["Месяцы накопительной"] = "Jamg‘arma aksiya oylari",
         ["Можно ещё · {0}"] = "Yana mumkin · {0}",
         ["Мой заработок за {0}"] = "{0} oyidagi daromadim",
@@ -828,4 +835,22 @@ public static class ReportTexts
 
     /// <summary>Ключи словаря — для проверки, что у каждой подписи кода есть перевод.</summary>
     public static IReadOnlyCollection<string> Keys => Uz.Keys;
+
+    /// <summary>
+    /// Русский оригинал подписи по её переводу (узбекская латиница или кириллица); не перевод — текст как есть. Причины пропуска пишутся в
+    /// журнал на языке получателя — разбор причин (ReportSkipReasons) идёт по русскому оригиналу.
+    /// </summary>
+    public static string Russian(string text) => Reverse.Value.TryGetValue(text, out var ru) ? ru : text;
+
+    private static readonly Lazy<Dictionary<string, string>> Reverse = new(() =>
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (ru, latin) in Uz)
+        {
+            map.TryAdd(latin, ru);
+            map.TryAdd(Get(UiLanguage.UzbekCyrillicCode, ru), ru);
+        }
+
+        return map;
+    });
 }

@@ -711,6 +711,16 @@ public partial class TelegramReportDbTests(DataManagerDb fixture) : IClassFixtur
 
                 var preview = await service.PreviewAsync(
                     new ReportPreviewInput(job.Code, role, null, region, role == "sv" ? SupervisorId : null, agent, null, s.Today, job.Time.ToString("HH:mm"), null), true, default);
+                // С акциями ноября прежней сводки команды нет: РМ со «сводкой регионов» в дневных, недельной и месячной ничего не получает, СВ —
+                // только копии карточек ТП в 08:30 и 18:00; запуск для них — «пропущено» с причиной.
+                if (job.Report == ReportType.Incentive && !IncentiveSlot.IsManagers(job.Slot) && job.Slot != IncentiveSlot.Rating
+                    && (role == "rm" || (role == "sv" && job.Slot is not (IncentiveSlot.Morning or IncentiveSlot.Evening))))
+                {
+                    Assert.False(preview.Applies);
+                    Assert.Contains("прежняя сводка команды не отправляется", preview.SkipReason);
+                    continue;
+                }
+
                 Assert.NotEmpty(preview.Pages);
                 if (!string.IsNullOrEmpty(output))
                 {

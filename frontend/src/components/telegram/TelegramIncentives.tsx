@@ -210,6 +210,8 @@ function ProgramForm({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const dirty = JSON.stringify(form) !== JSON.stringify(inputOf(program));
+  // Акции ноября — новая версия карточек: прежняя сводка команды СВ и РМ не отправляется (сервер, ReportEngine).
+  const promoted = !!(program?.promos && (program.promos.twizos || program.promos.yamelly || program.promos.best));
   const edit = (patch: Partial<IncentiveProgramInput>) => (setForm((f) => ({ ...f, ...patch })), setSaved(false));
 
   const types = useMemo(() => new Map(overview.productTypes.map((x) => [x.id, x])), [overview.productTypes]);
@@ -537,14 +539,23 @@ function ProgramForm({
               <Switch checked={form.svSummary} onChange={(v) => edit({ svSummary: v })} label={t("СВ — сводка команды")} />
               <span>
                 <span className="font-medium">{t("СВ — сводка команды")}</span>
-                <span className="block text-xs text-ink-3">{t("Во всех запусках: накоплено, сегодня, кто отстаёт от нормы, кто у порога.")}</span>
+                <span className="block text-xs text-ink-3">
+                  {promoted
+                    ? t("С акциями ноября не отправляется — вместо неё новая карточка «Итог дня команды» в 19:30.")
+                    : t("Во всех запусках: накоплено, сегодня, кто отстаёт от нормы, кто у порога.")}
+                </span>
               </span>
             </label>
             <Labeled label="РМ получает">
               <select className={field} value={form.rmMode} onChange={(e) => edit({ rmMode: e.target.value as IncentiveProgramInput["rmMode"] })}>
-                <option value="summary">{t("Сводку регионов")}</option>
-                <option value="cards">{t("Сводку и карточки ТП")}</option>
+                <option value="summary">{promoted ? t("Итог зоны и сводку акций") : t("Сводку регионов")}</option>
+                <option value="cards">{promoted ? t("Итог зоны, сводку и карточки ТП") : t("Сводку и карточки ТП")}</option>
               </select>
+              {promoted && (
+                <span className="mt-1 block text-xs text-ink-3">
+                  {t("С акциями ноября прежняя сводка регионов не отправляется: итог недели зоны — сб 19:00, сводка акций — пн 09:00.")}
+                </span>
+              )}
             </Labeled>
           </div>
         </Block>

@@ -154,7 +154,9 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
     /// 9. «Накопительная акция» (действующая включённая акция дня; нет — «пропущено»). ТП — своя карточка; СВ — сводка команды региона и в 08:30
     /// и 18:00 копии карточек ТП региона, подписанных на акцию (никого — все ТП региона, до десяти), по настройкам акции; РМ — сводка регионов
     /// направления (по настройке — и карточки ТП); рейтинг — у РМ по направлению (без направления — вся акция, это рейтинг для канала), у СВ —
-    /// по региону. Место считается среди всех ТП оргструктуры. Заказы Linko не обновились к отправке — отметка «данные на …» или пропуск (настройка).
+    /// по региону. С акциями ноября — только новая версия карточек: прежняя сводка команды (СВ и РМ) не отправляется, у СВ — копии новых
+    /// карточек ТП и итог команды 19:30, у РМ — итог недели зоны и сводка пн 09:00 (по настройке — и карточки ТП). Место считается среди всех ТП
+    /// оргструктуры. Заказы Linko не обновились к отправке — отметка «данные на …» или пропуск (настройка).
     /// У участников «Поля боя» его цели на день ставятся раньше целей акции: набор Твизос-цели «Поля боя» переносится в карточку акции.
     /// </summary>
     private async Task<ReportDocument> BuildIncentiveAsync(ReportJobInfo info, ResolvedScope resolved, IReadOnlyList<ReportRegionTeam> teams, DateOnly date,
@@ -190,6 +192,9 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
             return IncentiveReport.Skip(context, context.T("Заказы Linko не обновились к отправке — карточка акции не отправлена (в настройках акции: при несвежих данных пропускать)."));
         }
 
+        // Акции ноября — новая версия карточек: прежняя сводка «Команда · Twizos» (СВ и РМ) рядом с новыми карточками не уходит.
+        var promoted = program.Offers.Twizos is not null || program.Offers.Yamelly is not null || program.Offers.Best is not null;
+
         // Участники — все ТП оргструктуры месяца (место — среди них).
         var participants = teams.SelectMany(t => t.Agents.Select(a => new IncentiveAgent(a.Id, a.Name, t.Name))).DistinctBy(a => a.Id).ToList();
         var slot = info.Slot;
@@ -218,7 +223,7 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
                     ratingAgents = agents.Select(a => a.Id).ToHashSet();
                     if (slot != IncentiveSlot.Rating)
                     {
-                        if (program.SvSummary)
+                        if (program.SvSummary && !promoted)
                         {
                             team = new IncentiveTeamSpec(TelegramReportRoles.Sv, resolved.Title, [new(region.Name, region.Supervisor, agents)]);
                         }
@@ -248,8 +253,10 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
 
                     if (slot != IncentiveSlot.Rating)
                     {
-                        team = new IncentiveTeamSpec(TelegramReportRoles.Rm, resolved.Title,
-                            resolved.Regions.Select(r => new IncentiveTeamRegionSpec(r.Name, r.Supervisor, Agents(r))).ToList());
+                        team = promoted
+                            ? null
+                            : new IncentiveTeamSpec(TelegramReportRoles.Rm, resolved.Title,
+                                resolved.Regions.Select(r => new IncentiveTeamRegionSpec(r.Name, r.Supervisor, Agents(r))).ToList());
                         if (program.RmMode == IncentiveRmMode.Cards)
                         {
                             cards.AddRange(agents.Take(19));
@@ -263,7 +270,9 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
 
         if (slot != IncentiveSlot.Rating && cards.Count == 0 && team is null)
         {
-            return IncentiveReport.Skip(context, context.T("Этой роли в этот запуск акции ничего не положено: копии и сводка выключены в настройках акции."));
+            return IncentiveReport.Skip(context, context.T(promoted
+                ? "Этой роли в этот запуск ничего не положено: с акциями ноября прежняя сводка команды не отправляется — у СВ итог команды в 19:30, у РМ итог недели зоны (сб 19:00) и сводка (пн 09:00)."
+                : "Этой роли в этот запуск акции ничего не положено: копии и сводка выключены в настройках акции."));
         }
 
         var today = DateOnly.FromDateTime(now.DateTime);
