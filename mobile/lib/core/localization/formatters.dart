@@ -55,6 +55,13 @@ class Fmt {
     return '${decimal(t, digits: digits)} ${l10n.unitTon}';
   }
 
+  /// Подпись оси: «15 т», «2,5 т», «500 кг».
+  String weightAxis(num kg) {
+    if (kg.abs() < 1000) return '${count(kg)} ${l10n.unitKg}';
+    final t = kg / 1000;
+    return '${decimal(t, digits: t.abs() < 10 ? 1 : 0)} ${l10n.unitTon}';
+  }
+
   /// Доля 0–1 → «76%», малые — с десятой: 0,042 → «4,2%».
   String percent(double ratio) {
     final p = ratio * 100;
@@ -91,6 +98,22 @@ class Fmt {
     if (diff.inHours < 12) return l10n.syncedHours(diff.inHours);
     return l10n.syncedAt('${dayMonth(at)}, ${time(at)}');
   }
+
+  /// Когда было событие: «только что», «5 мин назад», «2 ч назад», «вчера, 21:31», иначе «12 ноября».
+  String ago(DateTime at, DateTime now) {
+    final local = at.toLocal();
+    final diff = now.difference(local);
+    if (diff.inSeconds < 60) return l10n.agoJustNow;
+    if (diff.inMinutes < 60) return l10n.agoMinutes(diff.inMinutes);
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(local.year, local.month, local.day);
+    if (day == today) return l10n.agoHours(diff.inHours);
+    if (today.difference(day).inDays == 1) return l10n.agoYesterday(time(local));
+    return dayMonth(local);
+  }
+
+  /// «Четверг, 19 ноября».
+  String weekdayDate(DateTime d) => _capitalize(DateFormat('EEEE, d MMMM', _locale).format(d));
 
   static String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }

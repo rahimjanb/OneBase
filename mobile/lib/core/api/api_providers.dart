@@ -25,6 +25,9 @@ final retryDelaysProvider = Provider<List<Duration>>(
   (ref) => const [Duration(milliseconds: 500), Duration(milliseconds: 1500)],
 );
 
+/// Разбор тяжёлых ответов в фоновом изоляте (в виджет-тестах выключается).
+final backgroundParsingProvider = Provider<bool>((ref) => true);
+
 final apiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(appConfigProvider);
   final tokens = ref.watch(tokenHolderProvider);
@@ -41,7 +44,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     retryDelays: ref.watch(retryDelaysProvider),
   );
   ref.onDispose(dio.close);
-  return ApiClient(dio);
+  return ApiClient(dio, parseInBackground: ref.watch(backgroundParsingProvider));
 });
 
 /// Dio для OneBase API: таймауты под мобильную сеть, перехватчики — сеанс, журнал (debug), повтор GET.

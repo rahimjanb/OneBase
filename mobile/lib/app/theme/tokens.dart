@@ -21,6 +21,8 @@ class ObColors extends ThemeExtension<ObColors> {
     required this.warnSoft,
     required this.bad,
     required this.badSoft,
+    required this.series1,
+    required this.series2,
   });
 
   static const light = ObColors(
@@ -41,6 +43,8 @@ class ObColors extends ThemeExtension<ObColors> {
     warnSoft: Color(0xFFFDF2E3),
     bad: Color(0xFFDC4C4C),
     badSoft: Color(0xFFFDECEC),
+    series1: Color(0xFF3B76F6),
+    series2: Color(0xFFEB6834),
   );
 
   static const dark = ObColors(
@@ -61,6 +65,8 @@ class ObColors extends ThemeExtension<ObColors> {
     warnSoft: Color(0xFF3A2A12),
     bad: Color(0xFFF07070),
     badSoft: Color(0xFF3A1818),
+    series1: Color(0xFF5B8CFF),
+    series2: Color(0xFFD95926),
   );
 
   final Color page;
@@ -80,6 +86,11 @@ class ObColors extends ThemeExtension<ObColors> {
   final Color warnSoft;
   final Color bad;
   final Color badSoft;
+
+  /// Ряды графиков (категориальные слоты 1 и 2). Пара проверена валидатором палитры (dataviz) на поверхности обеих тем:
+  /// различимость при дальтонизме ΔE ≥ 29, контраст ≥ 3:1. Статусные цвета (ok / warn / bad) для рядов не используются.
+  final Color series1;
+  final Color series2;
 
   /// Цвет уровня с сервера («Good» / «Warning» / «Bad» — от 90% зелёный, от 60% оранжевый, ниже красный).
   Color level(String? level) => switch (level) {
@@ -115,6 +126,8 @@ class ObColors extends ThemeExtension<ObColors> {
         warnSoft: warnSoft,
         bad: bad,
         badSoft: badSoft,
+        series1: series1,
+        series2: series2,
       );
 
   @override
@@ -139,6 +152,8 @@ class ObColors extends ThemeExtension<ObColors> {
       warnSoft: l(warnSoft, other.warnSoft),
       bad: l(bad, other.bad),
       badSoft: l(badSoft, other.badSoft),
+      series1: l(series1, other.series1),
+      series2: l(series2, other.series2),
     );
   }
 }

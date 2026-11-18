@@ -11,6 +11,7 @@ import 'package:onebase_mobile/core/config/app_config.dart';
 import 'package:onebase_mobile/core/core_providers.dart';
 import 'package:onebase_mobile/core/database/app_database.dart';
 import 'package:onebase_mobile/core/network/connectivity.dart';
+import 'package:onebase_mobile/core/storage/settings_store.dart';
 import 'package:onebase_mobile/l10n/gen/app_localizations.dart';
 
 import 'test_db.dart';
@@ -26,15 +27,21 @@ List<Override> baseOverrides({
   DateTime Function()? clock,
   AppConfig config = testConfig,
   TokenStorage? tokens,
+  Stream<bool>? onlineStream,
+  bool freshInstall = false,
 }) =>
     [
       tokenStorageProvider.overrideWithValue(tokens ?? MemoryTokenStorage()),
       appConfigProvider.overrideWithValue(config),
       appDatabaseProvider.overrideWithValue(db),
-      initialSettingsProvider.overrideWithValue(settings),
+      initialSettingsProvider.overrideWithValue({
+        if (!freshInstall) SettingsStore.installedKey: '2026-11-01T00:00:00Z',
+        ...settings,
+      }),
       httpAdapterProvider.overrideWithValue(adapter),
       retryDelaysProvider.overrideWithValue(const [Duration.zero, Duration.zero]),
-      isOnlineProvider.overrideWith((ref) => Stream.value(online)),
+      backgroundParsingProvider.overrideWithValue(false),
+      isOnlineProvider.overrideWith((ref) => onlineStream ?? Stream.value(online)),
       if (clock != null) clockProvider.overrideWithValue(clock),
     ];
 

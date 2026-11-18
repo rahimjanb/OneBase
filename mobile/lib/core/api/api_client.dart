@@ -17,9 +17,12 @@ typedef Decode<T> = T Function(Object? json);
 /// - [CancelToken] вызывающего снимает его ожидание. Общий запрос отменяется, когда его больше никто не ждёт.
 /// - [getExtract] — для тяжёлых ответов: JSON разбирается в фоновом изоляте, в интерфейс приходит только нужный срез.
 class ApiClient {
-  ApiClient(this.dio);
+  ApiClient(this.dio, {this.parseInBackground = true});
 
   final Dio dio;
+
+  /// Разбирать тяжёлые ответы в фоновом изоляте. В виджет-тестах выключено: там время фейковое, а изолят — настоящий.
+  final bool parseInBackground;
   final Map<String, _Shared> _inflight = {};
 
   /// Сколько общих запросов сейчас в работе — для тестов.
@@ -50,7 +53,7 @@ class ApiClient {
     );
     if (text is! String) throw const ApiException(ApiErrorKind.invalidResponse);
     try {
-      return await _parseInBackground(text, extract);
+      return parseInBackground ? await _parseInBackground(text, extract) : extract(jsonDecode(text));
     } on Object catch (e, s) {
       Log.e('api', 'Ответ $path не того вида', e, s);
       throw ApiException(ApiErrorKind.invalidResponse, cause: e);

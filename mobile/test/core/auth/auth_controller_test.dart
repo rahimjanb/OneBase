@@ -7,6 +7,7 @@ import 'package:onebase_mobile/core/auth/auth_repository.dart';
 import 'package:onebase_mobile/core/auth/token_storage.dart';
 import 'package:onebase_mobile/core/cache/cache_store.dart';
 import 'package:onebase_mobile/core/database/app_database.dart';
+import 'package:onebase_mobile/core/storage/settings_store.dart';
 
 import '../../helpers/fake_adapter.dart';
 import '../../helpers/fake_server.dart';
@@ -200,6 +201,19 @@ void main() {
     now = now.add(const Duration(seconds: 31));
     await c.read(authControllerProvider.notifier).refreshProfile();
     expect(server.count('GET', '/api/auth/me'), 3);
+  });
+
+  test('свежая установка: токен, оставшийся в Keychain от удалённого приложения, не используется', () async {
+    tokens.value = stored;
+    server.json('GET', '/api/auth/me', profileJson());
+    final c = ProviderContainer.test(
+      retry: (_, _) => null,
+      overrides: baseOverrides(db: db, adapter: server.adapter, tokens: tokens, clock: () => now, freshInstall: true),
+    );
+    expect(await settle(c), isA<AuthSignedOut>().having((s) => s.reason, 'reason', isNull));
+    expect(tokens.value, isNull);
+    expect(server.requests, isEmpty);
+    expect(await SettingsStore(db).readAll(), contains(SettingsStore.installedKey));
   });
 
   test('id пользователя из токена', () {

@@ -457,6 +457,612 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Нет связи с сервером — профиль сохранён на телефоне.'**
   String get offlineProfile;
+
+  /// No description provided for @actionDetails.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подробнее'**
+  String get actionDetails;
+
+  /// No description provided for @actionOpen.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть'**
+  String get actionOpen;
+
+  /// No description provided for @periodRange.
+  ///
+  /// In ru, this message translates to:
+  /// **'{from} — {to}'**
+  String periodRange(String from, String to);
+
+  /// No description provided for @greetingMorning.
+  ///
+  /// In ru, this message translates to:
+  /// **'Доброе утро'**
+  String get greetingMorning;
+
+  /// No description provided for @greetingDay.
+  ///
+  /// In ru, this message translates to:
+  /// **'Добрый день'**
+  String get greetingDay;
+
+  /// No description provided for @greetingEvening.
+  ///
+  /// In ru, this message translates to:
+  /// **'Добрый вечер'**
+  String get greetingEvening;
+
+  /// No description provided for @greetingNight.
+  ///
+  /// In ru, this message translates to:
+  /// **'Доброй ночи'**
+  String get greetingNight;
+
+  /// No description provided for @greetingName.
+  ///
+  /// In ru, this message translates to:
+  /// **'{greeting}, {name}'**
+  String greetingName(String greeting, String name);
+
+  /// No description provided for @periodTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Период'**
+  String get periodTitle;
+
+  /// No description provided for @periodLatest.
+  ///
+  /// In ru, this message translates to:
+  /// **'Последние данные'**
+  String get periodLatest;
+
+  /// No description provided for @periodLatestHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Месяц последних данных продаж; финансы — с начала месяца'**
+  String get periodLatestHint;
+
+  /// No description provided for @organizationTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Организация 1С'**
+  String get organizationTitle;
+
+  /// No description provided for @organizationAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все организации'**
+  String get organizationAll;
+
+  /// No description provided for @dashboardNothing.
+  ///
+  /// In ru, this message translates to:
+  /// **'Для вашей роли на главной пока только события. Разделы открывает администратор.'**
+  String get dashboardNothing;
+
+  /// No description provided for @salesTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи'**
+  String get salesTitle;
+
+  /// No description provided for @salesTitleMonth.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи · {month}'**
+  String salesTitleMonth(String month);
+
+  /// No description provided for @kpiRevenue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выручка'**
+  String get kpiRevenue;
+
+  /// No description provided for @kpiSold.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продано'**
+  String get kpiSold;
+
+  /// No description provided for @kpiClients.
+  ///
+  /// In ru, this message translates to:
+  /// **'Клиенты (АКБ)'**
+  String get kpiClients;
+
+  /// No description provided for @kpiPlan.
+  ///
+  /// In ru, this message translates to:
+  /// **'План месяца'**
+  String get kpiPlan;
+
+  /// No description provided for @kpiNoPlan.
+  ///
+  /// In ru, this message translates to:
+  /// **'План не задан'**
+  String get kpiNoPlan;
+
+  /// No description provided for @kpiThrough.
+  ///
+  /// In ru, this message translates to:
+  /// **'данные по {date}'**
+  String kpiThrough(String date);
+
+  /// No description provided for @kpiForecast.
+  ///
+  /// In ru, this message translates to:
+  /// **'прогноз {value}'**
+  String kpiForecast(String value);
+
+  /// No description provided for @kpiPerAgent.
+  ///
+  /// In ru, this message translates to:
+  /// **'{value} на ТП · цель {target}'**
+  String kpiPerAgent(String value, String target);
+
+  /// No description provided for @vsSameDays.
+  ///
+  /// In ru, this message translates to:
+  /// **'к тем же дням прошлого месяца'**
+  String get vsSameDays;
+
+  /// No description provided for @vsSameDaysTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'К тем же дням прошлого месяца'**
+  String get vsSameDaysTitle;
+
+  /// No description provided for @salesTrendTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Динамика продаж'**
+  String get salesTrendTitle;
+
+  /// No description provided for @salesTrendCaption.
+  ///
+  /// In ru, this message translates to:
+  /// **'{month}: {total} по дням'**
+  String salesTrendCaption(String month, String total);
+
+  /// No description provided for @salesTrendSemantics.
+  ///
+  /// In ru, this message translates to:
+  /// **'График продаж по дням за {month}, всего {total}'**
+  String salesTrendSemantics(String month, String total);
+
+  /// No description provided for @salesTrendToday.
+  ///
+  /// In ru, this message translates to:
+  /// **'Светлый столбик — сегодняшний неполный день.'**
+  String get salesTrendToday;
+
+  /// No description provided for @salesTrendEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продаж за период нет.'**
+  String get salesTrendEmpty;
+
+  /// No description provided for @detailVolume.
+  ///
+  /// In ru, this message translates to:
+  /// **'Объём и план'**
+  String get detailVolume;
+
+  /// No description provided for @detailMoney.
+  ///
+  /// In ru, this message translates to:
+  /// **'Деньги'**
+  String get detailMoney;
+
+  /// No description provided for @detailClients.
+  ///
+  /// In ru, this message translates to:
+  /// **'Клиенты и визиты'**
+  String get detailClients;
+
+  /// No description provided for @detailByDay.
+  ///
+  /// In ru, this message translates to:
+  /// **'По дням'**
+  String get detailByDay;
+
+  /// No description provided for @rowPlan.
+  ///
+  /// In ru, this message translates to:
+  /// **'План'**
+  String get rowPlan;
+
+  /// No description provided for @rowForecast.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прогноз на конец месяца'**
+  String get rowForecast;
+
+  /// No description provided for @rowForecastPlan.
+  ///
+  /// In ru, this message translates to:
+  /// **'{value} плана'**
+  String rowForecastPlan(String value);
+
+  /// No description provided for @rowPace.
+  ///
+  /// In ru, this message translates to:
+  /// **'Темп в день'**
+  String get rowPace;
+
+  /// No description provided for @rowRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нужно в день до плана'**
+  String get rowRequired;
+
+  /// No description provided for @rowRevenuePerOutlet.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выручка на точку'**
+  String get rowRevenuePerOutlet;
+
+  /// No description provided for @rowAgents.
+  ///
+  /// In ru, this message translates to:
+  /// **'Активные ТП'**
+  String get rowAgents;
+
+  /// No description provided for @rowAkbPerAgent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Клиенты на ТП'**
+  String get rowAkbPerAgent;
+
+  /// No description provided for @rowVisits.
+  ///
+  /// In ru, this message translates to:
+  /// **'Визиты'**
+  String get rowVisits;
+
+  /// No description provided for @rowVisitsNoOrder.
+  ///
+  /// In ru, this message translates to:
+  /// **'Визиты без заказа'**
+  String get rowVisitsNoOrder;
+
+  /// No description provided for @rowConversion.
+  ///
+  /// In ru, this message translates to:
+  /// **'Конверсия визитов'**
+  String get rowConversion;
+
+  /// No description provided for @rowFlags.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сигналы по ТП'**
+  String get rowFlags;
+
+  /// No description provided for @rowFlagsHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'{critical} критичных · {risk} с риском'**
+  String rowFlagsHint(int critical, int risk);
+
+  /// No description provided for @rowTarget.
+  ///
+  /// In ru, this message translates to:
+  /// **'цель {value}'**
+  String rowTarget(String value);
+
+  /// No description provided for @rowOfTarget.
+  ///
+  /// In ru, this message translates to:
+  /// **'{value} от цели'**
+  String rowOfTarget(String value);
+
+  /// No description provided for @financeTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Финансы · 1С'**
+  String get financeTitle;
+
+  /// No description provided for @financeNoData.
+  ///
+  /// In ru, this message translates to:
+  /// **'Данных 1С пока нет'**
+  String get financeNoData;
+
+  /// No description provided for @financeNetRevenue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Чистая выручка'**
+  String get financeNetRevenue;
+
+  /// No description provided for @financeExpenses.
+  ///
+  /// In ru, this message translates to:
+  /// **'Расходы'**
+  String get financeExpenses;
+
+  /// No description provided for @financeNetProfit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Чистая прибыль'**
+  String get financeNetProfit;
+
+  /// No description provided for @financeTrendTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выручка и расходы за 12 месяцев'**
+  String get financeTrendTitle;
+
+  /// No description provided for @financePnl.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прибыли и убытки'**
+  String get financePnl;
+
+  /// No description provided for @financePrevious.
+  ///
+  /// In ru, this message translates to:
+  /// **'прошлый период: {value}'**
+  String financePrevious(String value);
+
+  /// No description provided for @financeBalances.
+  ///
+  /// In ru, this message translates to:
+  /// **'Деньги и долги'**
+  String get financeBalances;
+
+  /// No description provided for @financeCash.
+  ///
+  /// In ru, this message translates to:
+  /// **'Деньги на счетах и в кассе'**
+  String get financeCash;
+
+  /// No description provided for @financeReceivables.
+  ///
+  /// In ru, this message translates to:
+  /// **'Дебиторская задолженность'**
+  String get financeReceivables;
+
+  /// No description provided for @financePayables.
+  ///
+  /// In ru, this message translates to:
+  /// **'Кредиторская задолженность'**
+  String get financePayables;
+
+  /// No description provided for @financeByMonth.
+  ///
+  /// In ru, this message translates to:
+  /// **'По месяцам'**
+  String get financeByMonth;
+
+  /// No description provided for @deptTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подразделения'**
+  String get deptTitle;
+
+  /// No description provided for @hrAttendance.
+  ///
+  /// In ru, this message translates to:
+  /// **'Явка сегодня'**
+  String get hrAttendance;
+
+  /// No description provided for @hrPresentOf.
+  ///
+  /// In ru, this message translates to:
+  /// **'{present} из {scheduled} по графику'**
+  String hrPresentOf(String present, String scheduled);
+
+  /// No description provided for @hrLate.
+  ///
+  /// In ru, this message translates to:
+  /// **'Опоздали'**
+  String get hrLate;
+
+  /// No description provided for @hrAbsent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет на месте'**
+  String get hrAbsent;
+
+  /// No description provided for @hrOnLeave.
+  ///
+  /// In ru, this message translates to:
+  /// **'В отпуске'**
+  String get hrOnLeave;
+
+  /// No description provided for @hrCompare.
+  ///
+  /// In ru, this message translates to:
+  /// **'В прошлый рабочий день в это время — {value}'**
+  String hrCompare(String value);
+
+  /// No description provided for @hrNoSchedule.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сегодня по графику никого нет.'**
+  String get hrNoSchedule;
+
+  /// No description provided for @hrDivisionsAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все подразделения'**
+  String get hrDivisionsAll;
+
+  /// No description provided for @hrSynced.
+  ///
+  /// In ru, this message translates to:
+  /// **'Verifix: {when}'**
+  String hrSynced(String when);
+
+  /// No description provided for @tasksOpen.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыто'**
+  String get tasksOpen;
+
+  /// No description provided for @tasksInProgress.
+  ///
+  /// In ru, this message translates to:
+  /// **'В работе'**
+  String get tasksInProgress;
+
+  /// No description provided for @tasksReview.
+  ///
+  /// In ru, this message translates to:
+  /// **'На проверке'**
+  String get tasksReview;
+
+  /// No description provided for @tasksOverdue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Просрочено'**
+  String get tasksOverdue;
+
+  /// No description provided for @tasksMine.
+  ///
+  /// In ru, this message translates to:
+  /// **'Мои ближайшие'**
+  String get tasksMine;
+
+  /// No description provided for @tasksNoUpcoming.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ближайших задач нет.'**
+  String get tasksNoUpcoming;
+
+  /// No description provided for @tasksDue.
+  ///
+  /// In ru, this message translates to:
+  /// **'до {date}'**
+  String tasksDue(String date);
+
+  /// No description provided for @tasksDepartments.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отделы'**
+  String get tasksDepartments;
+
+  /// No description provided for @tasksDeptLine.
+  ///
+  /// In ru, this message translates to:
+  /// **'{open} открыто · {overdue} просрочено'**
+  String tasksDeptLine(int open, int overdue);
+
+  /// No description provided for @aiTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Фокус дня · AI'**
+  String get aiTitle;
+
+  /// No description provided for @aiCritical.
+  ///
+  /// In ru, this message translates to:
+  /// **'Критично'**
+  String get aiCritical;
+
+  /// No description provided for @aiProblems.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проблемы'**
+  String get aiProblems;
+
+  /// No description provided for @aiOpportunities.
+  ///
+  /// In ru, this message translates to:
+  /// **'Возможности'**
+  String get aiOpportunities;
+
+  /// No description provided for @aiNone.
+  ///
+  /// In ru, this message translates to:
+  /// **'AI не нашёл проблем.'**
+  String get aiNone;
+
+  /// No description provided for @aiChecked.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверено {when}'**
+  String aiChecked(String when);
+
+  /// No description provided for @aiWhatToDo.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что сделать'**
+  String get aiWhatToDo;
+
+  /// No description provided for @aiAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все находки AI'**
+  String get aiAll;
+
+  /// No description provided for @severityCritical.
+  ///
+  /// In ru, this message translates to:
+  /// **'Критично'**
+  String get severityCritical;
+
+  /// No description provided for @severityWarning.
+  ///
+  /// In ru, this message translates to:
+  /// **'Внимание'**
+  String get severityWarning;
+
+  /// No description provided for @severityOpportunity.
+  ///
+  /// In ru, this message translates to:
+  /// **'Возможность'**
+  String get severityOpportunity;
+
+  /// No description provided for @eventsTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Последние события'**
+  String get eventsTitle;
+
+  /// No description provided for @eventsEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Событий пока нет.'**
+  String get eventsEmpty;
+
+  /// No description provided for @eventsUnread.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} непрочитанных'**
+  String eventsUnread(int n);
+
+  /// No description provided for @agoJustNow.
+  ///
+  /// In ru, this message translates to:
+  /// **'только что'**
+  String get agoJustNow;
+
+  /// No description provided for @agoMinutes.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} мин назад'**
+  String agoMinutes(int n);
+
+  /// No description provided for @agoHours.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} ч назад'**
+  String agoHours(int n);
+
+  /// No description provided for @agoYesterday.
+  ///
+  /// In ru, this message translates to:
+  /// **'вчера, {time}'**
+  String agoYesterday(String time);
+
+  /// No description provided for @rowExecution.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выполнение плана'**
+  String get rowExecution;
 }
 
 class _AppLocalizationsDelegate

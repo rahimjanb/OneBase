@@ -94,5 +94,291 @@
   "logout": "Выйти",
   "logoutConfirmTitle": "Выйти из OneBase?",
   "logoutConfirmMessage": "Сеанс на этом телефоне закроется, сохранённые данные удалятся.",
-  "offlineProfile": "Нет связи с сервером — профиль сохранён на телефоне."
+  "offlineProfile": "Нет связи с сервером — профиль сохранён на телефоне.",
+  "actionDetails": "Подробнее",
+  "actionOpen": "Открыть",
+  "periodRange": "{from} — {to}",
+  "@periodRange": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "greetingMorning": "Доброе утро",
+  "greetingDay": "Добрый день",
+  "greetingEvening": "Добрый вечер",
+  "greetingNight": "Доброй ночи",
+  "greetingName": "{greeting}, {name}",
+  "@greetingName": {
+    "placeholders": {
+      "greeting": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "periodTitle": "Период",
+  "periodLatest": "Последние данные",
+  "periodLatestHint": "Месяц последних данных продаж; финансы — с начала месяца",
+  "organizationTitle": "Организация 1С",
+  "organizationAll": "Все организации",
+  "dashboardNothing": "Для вашей роли на главной пока только события. Разделы открывает администратор.",
+  "salesTitle": "Продажи",
+  "salesTitleMonth": "Продажи · {month}",
+  "@salesTitleMonth": {
+    "placeholders": {
+      "month": {
+        "type": "String"
+      }
+    }
+  },
+  "kpiRevenue": "Выручка",
+  "kpiSold": "Продано",
+  "kpiClients": "Клиенты (АКБ)",
+  "kpiPlan": "План месяца",
+  "kpiNoPlan": "План не задан",
+  "kpiThrough": "данные по {date}",
+  "@kpiThrough": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "kpiForecast": "прогноз {value}",
+  "@kpiForecast": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "kpiPerAgent": "{value} на ТП · цель {target}",
+  "@kpiPerAgent": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      },
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "vsSameDays": "к тем же дням прошлого месяца",
+  "vsSameDaysTitle": "К тем же дням прошлого месяца",
+  "salesTrendTitle": "Динамика продаж",
+  "salesTrendCaption": "{month}: {total} по дням",
+  "@salesTrendCaption": {
+    "placeholders": {
+      "month": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "salesTrendSemantics": "График продаж по дням за {month}, всего {total}",
+  "@salesTrendSemantics": {
+    "placeholders": {
+      "month": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "salesTrendToday": "Светлый столбик — сегодняшний неполный день.",
+  "salesTrendEmpty": "Продаж за период нет.",
+  "detailVolume": "Объём и план",
+  "detailMoney": "Деньги",
+  "detailClients": "Клиенты и визиты",
+  "detailByDay": "По дням",
+  "rowPlan": "План",
+  "rowForecast": "Прогноз на конец месяца",
+  "rowForecastPlan": "{value} плана",
+  "@rowForecastPlan": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "rowPace": "Темп в день",
+  "rowRequired": "Нужно в день до плана",
+  "rowRevenuePerOutlet": "Выручка на точку",
+  "rowAgents": "Активные ТП",
+  "rowAkbPerAgent": "Клиенты на ТП",
+  "rowVisits": "Визиты",
+  "rowVisitsNoOrder": "Визиты без заказа",
+  "rowConversion": "Конверсия визитов",
+  "rowFlags": "Сигналы по ТП",
+  "rowFlagsHint": "{critical} критичных · {risk} с риском",
+  "@rowFlagsHint": {
+    "placeholders": {
+      "critical": {
+        "type": "int"
+      },
+      "risk": {
+        "type": "int"
+      }
+    }
+  },
+  "rowTarget": "цель {value}",
+  "@rowTarget": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "rowOfTarget": "{value} от цели",
+  "@rowOfTarget": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "financeTitle": "Финансы · 1С",
+  "financeNoData": "Данных 1С пока нет",
+  "financeNetRevenue": "Чистая выручка",
+  "financeExpenses": "Расходы",
+  "financeNetProfit": "Чистая прибыль",
+  "financeTrendTitle": "Выручка и расходы за 12 месяцев",
+  "financePnl": "Прибыли и убытки",
+  "financePrevious": "прошлый период: {value}",
+  "@financePrevious": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "financeBalances": "Деньги и долги",
+  "financeCash": "Деньги на счетах и в кассе",
+  "financeReceivables": "Дебиторская задолженность",
+  "financePayables": "Кредиторская задолженность",
+  "financeByMonth": "По месяцам",
+  "deptTitle": "Подразделения",
+  "hrAttendance": "Явка сегодня",
+  "hrPresentOf": "{present} из {scheduled} по графику",
+  "@hrPresentOf": {
+    "placeholders": {
+      "present": {
+        "type": "String"
+      },
+      "scheduled": {
+        "type": "String"
+      }
+    }
+  },
+  "hrLate": "Опоздали",
+  "hrAbsent": "Нет на месте",
+  "hrOnLeave": "В отпуске",
+  "hrCompare": "В прошлый рабочий день в это время — {value}",
+  "@hrCompare": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "hrNoSchedule": "Сегодня по графику никого нет.",
+  "hrDivisionsAll": "Все подразделения",
+  "hrSynced": "Verifix: {when}",
+  "@hrSynced": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "tasksOpen": "Открыто",
+  "tasksInProgress": "В работе",
+  "tasksReview": "На проверке",
+  "tasksOverdue": "Просрочено",
+  "tasksMine": "Мои ближайшие",
+  "tasksNoUpcoming": "Ближайших задач нет.",
+  "tasksDue": "до {date}",
+  "@tasksDue": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "tasksDepartments": "Отделы",
+  "tasksDeptLine": "{open} открыто · {overdue} просрочено",
+  "@tasksDeptLine": {
+    "placeholders": {
+      "open": {
+        "type": "int"
+      },
+      "overdue": {
+        "type": "int"
+      }
+    }
+  },
+  "aiTitle": "Фокус дня · AI",
+  "aiCritical": "Критично",
+  "aiProblems": "Проблемы",
+  "aiOpportunities": "Возможности",
+  "aiNone": "AI не нашёл проблем.",
+  "aiChecked": "Проверено {when}",
+  "@aiChecked": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "aiWhatToDo": "Что сделать",
+  "aiAll": "Все находки AI",
+  "severityCritical": "Критично",
+  "severityWarning": "Внимание",
+  "severityOpportunity": "Возможность",
+  "eventsTitle": "Последние события",
+  "eventsEmpty": "Событий пока нет.",
+  "eventsUnread": "{n} непрочитанных",
+  "@eventsUnread": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "agoJustNow": "только что",
+  "agoMinutes": "{n} мин назад",
+  "@agoMinutes": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "agoHours": "{n} ч назад",
+  "@agoHours": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "agoYesterday": "вчера, {time}",
+  "@agoYesterday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "rowExecution": "Выполнение плана"
 }

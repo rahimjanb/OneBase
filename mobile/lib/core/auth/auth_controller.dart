@@ -9,6 +9,7 @@ import '../cache/cache_store.dart';
 import '../core_providers.dart';
 import '../errors/app_failure.dart';
 import '../logging/log.dart';
+import '../storage/settings_store.dart';
 import 'auth_repository.dart';
 import 'token_holder.dart';
 import 'token_storage.dart';
@@ -64,6 +65,7 @@ class AuthController extends Notifier<AuthState> {
   static const refreshEvery = Duration(seconds: 60);
 
   DateTime? _lastRefresh;
+  bool _installChecked = false;
 
   TokenStorage get _storage => ref.read(tokenStorageProvider);
   TokenHolder get _tokens => ref.read(tokenHolderProvider);
@@ -82,6 +84,7 @@ class AuthController extends Notifier<AuthState> {
   /// Проверить сохранённый вход.
   Future<void> restore() async {
     state = const AuthChecking();
+    await _forgetPreviousInstall();
     StoredToken? stored;
     try {
       stored = await _storage.read();
@@ -164,6 +167,21 @@ class AuthController extends Notifier<AuthState> {
     } on ApiException catch (e) {
       // 401 обработает сигнал «сеанс закрыт»; сеть — остаёмся на прежнем профиле.
       Log.d('auth', 'Профиль не обновлён: ${e.kind.name}');
+    }
+  }
+
+  /// Свежая установка (в базе приложения нет отметки): на iOS Keychain переживает удаление приложения, и без этого после
+  /// переустановки подхватился бы старый вход. Старый токен удаляется — нужен новый вход.
+  Future<void> _forgetPreviousInstall() async {
+    if (_installChecked) return;
+    _installChecked = true;
+    if (ref.read(initialSettingsProvider).containsKey(SettingsStore.installedKey)) return;
+    Log.i('auth', 'Первый запуск после установки — прежний вход с этого устройства не используется');
+    await _safeClearStorage();
+    try {
+      await ref.read(settingsStoreProvider).write(SettingsStore.installedKey, _now().toUtc().toIso8601String());
+    } on Object catch (e, s) {
+      Log.e('auth', 'Отметка установки не записана', e, s);
     }
   }
 

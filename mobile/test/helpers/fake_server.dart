@@ -57,6 +57,7 @@ Map<String, Object?> profileJson({
     'production.read',
   ],
   List<String> roles = const ['Директор'],
+  bool hrAccess = true,
 }) =>
     {
       'id': id,
@@ -72,7 +73,7 @@ Map<String, Object?> profileJson({
       'permissions': permissions,
       'canOpenSettings': true,
       'agentDepartments': <String>[],
-      'hrAccess': true,
+      'hrAccess': hrAccess,
       'hiringRequests': false,
       'salesScope': {'level': 'Organization', 'home': '/sales'},
       'departments': ['sales'],

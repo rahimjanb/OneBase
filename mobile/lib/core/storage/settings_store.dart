@@ -9,6 +9,9 @@ class SettingsStore {
   static const themeKey = 'theme_mode';
   static const localeKey = 'locale';
 
+  /// Отметка «приложение уже запускалось на этой установке» (нет — свежая установка).
+  static const installedKey = 'installed_at';
+
   Future<Map<String, String>> readAll() async {
     final rows = await _db.select(_db.appSettings).get();
     return {for (final r in rows) r.key: r.value};
