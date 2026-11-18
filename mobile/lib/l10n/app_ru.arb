@@ -1,0 +1,82 @@
+{
+  "@@locale": "ru",
+  "appTitle": "OneBase",
+  "navHome": "Главная",
+  "navAnalytics": "Аналитика",
+  "navTasks": "Задачи",
+  "navAi": "AI",
+  "navProfile": "Профиль",
+  "actionRetry": "Повторить",
+  "actionRefresh": "Обновить",
+  "actionAll": "Все",
+  "actionClose": "Закрыть",
+  "actionCancel": "Отмена",
+  "stateLoading": "Загрузка…",
+  "stateEmpty": "Нет данных",
+  "offlineBanner": "Нет сети — показаны сохранённые данные",
+  "syncedJustNow": "Обновлено только что",
+  "syncedMinutes": "Обновлено {n} мин назад",
+  "@syncedMinutes": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "syncedHours": "Обновлено {n} ч назад",
+  "@syncedHours": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "syncedAt": "Обновлено {date}",
+  "@syncedAt": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "comingSoonTitle": "Раздел в разработке",
+  "comingSoonMessage": "Появится на этапе {stage} плана мобильного приложения.",
+  "@comingSoonMessage": {
+    "placeholders": {
+      "stage": {
+        "type": "int"
+      }
+    }
+  },
+  "errorNetwork": "Нет соединения с сервером. Проверьте интернет.",
+  "errorTimeout": "Сервер долго не отвечает. Попробуйте ещё раз.",
+  "errorUnauthorized": "Сеанс закрыт. Войдите снова.",
+  "errorForbidden": "Нет доступа к этому разделу.",
+  "errorNotFound": "Не найдено.",
+  "errorRateLimited": "Слишком много попыток. Подождите минуту.",
+  "errorServer": "Ошибка на сервере. Попробуйте позже.",
+  "errorInvalidResponse": "Сервер ответил неожиданно. Обновите приложение.",
+  "errorUnknown": "Что-то пошло не так.",
+  "errorNotConfigured": "Адрес сервера не задан при сборке приложения.",
+  "profileAppearance": "Оформление",
+  "themeSystem": "Как в системе",
+  "themeLight": "Светлая",
+  "themeDark": "Тёмная",
+  "language": "Язык",
+  "profileAbout": "О приложении",
+  "profileVersion": "Версия {version}",
+  "@profileVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "profileServer": "Сервер",
+  "unitThousand": "тыс.",
+  "unitMillion": "млн",
+  "unitBillion": "млрд",
+  "unitSum": "сум",
+  "unitKg": "кг",
+  "unitTon": "т"
+}

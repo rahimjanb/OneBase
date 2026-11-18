@@ -1,0 +1,49 @@
+name: onebase_mobile
+description: "OneBase Mobile — мобильный клиент OneBase (тот же бэкенд, что у веба)."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Состояние и навигация
+  flutter_riverpod: ^3.5.0
+  go_router: ^18.1.4
+
+  # Сеть и модели
+  dio: ^5.11.1
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.12.0
+
+  # Локальные данные
+  drift: ^2.35.4
+  drift_flutter: ^0.3.1
+  path_provider: ^2.1.6
+  flutter_secure_storage: ^11.2.0
+
+  # Интерфейс
+  fl_chart: ^1.3.1
+  connectivity_plus: ^7.3.2
+  intl: ^0.20.3
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.17.1
+  freezed: ^4.0.3
+  json_serializable: ^6.15.2
+  drift_dev: ^2.35.3
+
+flutter:
+  uses-material-design: true
+  generate: true

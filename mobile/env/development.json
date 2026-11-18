@@ -1,0 +1,5 @@
+{
+  "APP_ENV": "development",
+  "API_BASE_URL": "http://localhost:5081",
+  "API_BASE_URL_ANDROID": "http://10.0.2.2:5081"
+}
