@@ -115,7 +115,8 @@ export function TelegramSettings({ initial, reports = true }: { initial: Telegra
             <span className="min-w-0 flex-1">
               <span className="block font-semibold text-ink">{t("Карточки категорий")}</span>
               <span className="block text-sm text-ink-2">
-                {t("Выберите категории — «Придзел», «Помадка» (Могуль) и другие — и по расписанию в Telegram уйдёт картинка с полными данными по каждой: факт и план, прогноз, АКБ, SKU, по дням, регионы или ТП, ТОП артикулов с фото.")}
+                {t("Выберите категории — «Придзел», «Помадка» (Могуль) и другие — и по расписанию в Telegram уйдёт картинка с полными данными по каждой: факт и план, прогноз, АКБ, SKU, по дням, регионы или ТП, ТОП артикулов с фото.")}{" "}
+                {t("Итоги дня по категориям — продажи за день по тем же категориям.")}
               </span>
             </span>
             <ArrowRight className="size-4 shrink-0 text-ink-3 group-hover:text-accent-strong" />

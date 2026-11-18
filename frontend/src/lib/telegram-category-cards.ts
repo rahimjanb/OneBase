@@ -1,8 +1,14 @@
-// «Настройки → Telegram → Автоматические отчёты → Карточки категорий» (отчёт 10): выбор категорий по умолчанию и у получателя, кто подписан,
-// какие категории ему уйдут. Без интерфейса — проверяется тестами (telegram-category-cards.test.mjs).
+// «Настройки → Telegram → Автоматические отчёты → Карточки категорий» (отчёты 10 и 11): выбор категорий по умолчанию и у получателя, кто
+// подписан, какие категории ему уйдут. Без интерфейса — проверяется тестами (telegram-category-cards.test.mjs).
 import type { ReportJob, ReportRecipient } from "./telegramReports";
 
+/** «10. Карточки категорий» — месяц категории. */
 export const CARD_REPORT = "category-cards";
+
+/** «11. Итоги дня по категориям» — продажи за день; категории — тот же выбор, что у карточек. */
+export const DAY_REPORT = "category-day";
+
+const REPORTS = [CARD_REPORT, DAY_REPORT];
 
 /** Категория для выбора: название из «Настроек продаж» и второе название («Помадка» — «Могуль»). */
 export type CategoryCardOption = { name: string; alias: string | null };
@@ -23,11 +29,15 @@ export type CategoryCardsView = {
 /** «Помадка · Могуль». */
 export const categoryLabel = (c: CategoryCardOption) => (c.alias ? `${c.name} · ${c.alias}` : c.name);
 
-/** Запуски карточек категорий (утро и вечер) в порядке расписания. */
-export const cardJobs = (jobs: ReportJob[]) => jobs.filter((j) => j.report === CARD_REPORT);
+/** Запуски карточек категорий и итогов дня (утро и вечер каждого) в порядке каталога. */
+export const cardJobs = (jobs: ReportJob[]) => jobs.filter((j) => REPORTS.includes(j.report));
 
-/** Получатели, подписанные хотя бы на один запуск карточек. */
-export const cardRecipients = (recipients: ReportRecipient[]) => recipients.filter((r) => r.reports.some((code) => code.startsWith(`${CARD_REPORT}.`)));
+/** Получатели, подписанные хотя бы на один запуск карточек или итогов дня (выбор категорий — общий). */
+export const cardRecipients = (recipients: ReportRecipient[]) => recipients.filter((r) => r.reports.some((code) => REPORTS.some((x) => code.startsWith(`${x}.`))));
+
+/** На что из двух подписан получатель: «10», «11» или «10, 11». */
+export const cardReportsOf = (recipient: Pick<ReportRecipient, "reports">) =>
+  [CARD_REPORT, DAY_REPORT].filter((x) => recipient.reports.some((code) => code.startsWith(`${x}.`))).map((x) => (x === CARD_REPORT ? "10" : "11")).join(", ");
 
 /**
  * Включить или выключить категорию: порядок — как в «Настройках продаж» (так и на картинках), больше max — не добавляется (вернётся тот же

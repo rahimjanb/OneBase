@@ -9,6 +9,7 @@ import { chatTypeLabel } from "@/lib/telegram";
 import {
   cardJobs,
   cardRecipients,
+  cardReportsOf,
   categoryLabel,
   choiceText,
   effectiveCategories,
@@ -86,9 +87,9 @@ const daysText = (days: number[], t: (s: string) => string) =>
   days.length === 7 ? t("каждый день") : days.length === 6 && !days.includes(7) ? t("пн–сб") : days.map((d) => t(weekDays.find((w) => w.day === d)?.label ?? "")).join(", ");
 
 /**
- * «Карточки категорий» (отчёт 10): какие категории уходят по умолчанию, расписание двух запусков (9:00 — итог прошлого рабочего дня, 18:30 — итог
- * дня), кто подписан и его категории, предпросмотр картинок и тест в выбранный чат. Подписка получателя — на вкладке «Получатели» (отчёт 10);
- * данные и права проверяет сервер.
+ * «Карточки категорий» (отчёты 10 и 11): какие категории уходят по умолчанию — общий выбор для карточек месяца и итогов дня, расписание
+ * запусков обоих отчётов (9:00 — итог прошлого рабочего дня; 18:30 и 19:00 — итог дня), кто подписан, на что и его категории, предпросмотр
+ * картинок и тест в выбранный чат. Подписка получателя — на вкладке «Получатели» (отчёты 10 и 11); данные и права проверяет сервер.
  */
 export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOverview; onTab: (tab: ReportsTab) => void; onJob: (job: ReportJob) => void }) {
   const t = useT();
@@ -167,6 +168,11 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
             "Отдельная картинка на каждую выбранную категорию с полными данными страницы категории «Продаж» в области получателя: факт и план месяца, прогноз, АКБ и дистрибуция, SKU, продажи по дням, регионы (РМ) или ТП (СВ), ТОП артикулов с фото и пропавшие артикулы. Все картинки — одним альбомом.",
           )}
         </p>
+        <p className="text-sm text-ink-2">
+          {t(
+            "Отчёт 11 «Итоги дня по категориям» — те же категории, но продажи за один день: кг, сумма, точки и заказы, план дня и выполнение, к прошлому рабочему дню и неделе назад, две недели по дням, регионы или ТП за день, артикулы дня с фото и что за день не продавалось.",
+          )}
+        </p>
         {error && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
 
         <Card title="Категории по умолчанию" icon={Shapes}>
@@ -205,21 +211,26 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
           }
         >
           <ul className="flex flex-col gap-3">
-            {jobs.map((job) => (
-              <li key={job.code} className="flex items-center gap-3">
-                <Toggle
-                  checked={job.enabled}
-                  disabled={busy !== null}
-                  onChange={(v) => toggleJob(job, v)}
-                  label={job.enabled ? t("Выключить «{name}»", { name: t(job.slotTitle) }) : t("Включить «{name}»", { name: t(job.slotTitle) })}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-ink">
-                    {job.time} — {t(job.slotTitle)}
-                  </span>
-                  <span className="block text-xs text-ink-3">
-                    {daysText(job.days, t)} · {t("получателей: {n}", { n: job.recipients })}
-                    {job.enabled && job.nextRunAt ? ` · ${t("следующая {at}", { at: when(job.nextRunAt) })}` : ""}
+            {jobs.map((job, i) => (
+              <li key={job.code} className="flex flex-col gap-2">
+                {jobs[i - 1]?.report !== job.report && (
+                  <span className={`text-xs font-semibold uppercase tracking-wide text-ink-3 ${i > 0 ? "mt-2" : ""}`}>{t(job.reportTitle)}</span>
+                )}
+                <span className="flex items-center gap-3">
+                  <Toggle
+                    checked={job.enabled}
+                    disabled={busy !== null}
+                    onChange={(v) => toggleJob(job, v)}
+                    label={t(job.enabled ? "Выключить «{name}»" : "Включить «{name}»", { name: `${t(job.reportTitle)} — ${t(job.slotTitle)}` })}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-ink">
+                      {job.time} — {t(job.slotTitle)}
+                    </span>
+                    <span className="block text-xs text-ink-3">
+                      {daysText(job.days, t)} · {t("получателей: {n}", { n: job.recipients })}
+                      {job.enabled && job.nextRunAt ? ` · ${t("следующая {at}", { at: when(job.nextRunAt) })}` : ""}
+                    </span>
                   </span>
                 </span>
               </li>
@@ -239,7 +250,7 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
         >
           {subscribed.length === 0 ? (
             <p className="text-sm text-ink-3">
-              {t("Пока никто не подписан. На вкладке «Получатели» откройте получателя (или добавьте нового) и включите отчёт 10 «Карточки категорий».")}
+              {t("Пока никто не подписан. На вкладке «Получатели» откройте получателя (или добавьте нового) и включите отчёт 10 «Карточки категорий» или 11 «Итоги дня по категориям».")}
             </p>
           ) : (
             <ul className="flex flex-col divide-y divide-line">
@@ -253,7 +264,7 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium text-ink">{r.name}</span>
                         <span className="block text-xs text-ink-3">
-                          {own ? t(choiceText(own, total)) : `${t("по умолчанию")}: ${t(choiceText(effectiveCategories(null, view), total))}`}
+                          {t("отчёт {list}", { list: cardReportsOf(r) })} · {own ? t(choiceText(own, total)) : `${t("по умолчанию")}: ${t(choiceText(effectiveCategories(null, view), total))}`}
                           {!r.enabled && ` · ${t("выключен")}`}
                         </span>
                       </span>
@@ -312,7 +323,7 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
 function PreviewCard({ data, view, jobs }: { data: ReportOverview; view: CategoryCardsView; jobs: ReportJob[] }) {
   const t = useT();
   const [categories, setCategories] = useState<string[]>(() => effectiveCategories(null, view).slice(0, 3));
-  const [job, setJob] = useState(jobs.at(-1)?.code ?? "category-cards.evening");
+  const [job, setJob] = useState(jobs.at(-1)?.code ?? "category-day.evening");
   const [recipientId, setRecipientId] = useState("");
   const [scope, setScope] = useState<Scope>(() => defaultScope(data, "rm"));
   const [language, setLanguage] = useState<ReportLanguage>(data.settings.language);
@@ -380,7 +391,7 @@ function PreviewCard({ data, view, jobs }: { data: ReportOverview; view: Categor
             <select className={field} value={job} onChange={(e) => setJob(e.target.value)}>
               {jobs.map((j) => (
                 <option key={j.code} value={j.code}>
-                  {j.time} — {t(j.slotTitle)}
+                  {t(j.reportTitle)} · {j.time} — {t(j.slotTitle)}
                 </option>
               ))}
             </select>

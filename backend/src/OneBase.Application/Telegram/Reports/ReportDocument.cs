@@ -67,6 +67,9 @@ public sealed record ReportDocument(
     /// <summary>Карточки категорий (вертикальные 1080 px, по картинке на категорию) — свой рисовальщик; null — другой отчёт.</summary>
     public CategorySalesCards? CategorySales { get; init; }
 
+    /// <summary>Итоги дня по категориям (вертикальные 1080 px, по картинке на категорию) — свой рисовальщик; null — другой отчёт.</summary>
+    public CategoryDayCards? CategoryDay { get; init; }
+
     /// <summary>Текст для Telegram-агента («что было в отчёте?») и резервной отправки без картинки.</summary>
     public string Plain()
     {

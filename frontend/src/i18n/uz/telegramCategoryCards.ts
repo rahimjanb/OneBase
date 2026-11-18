@@ -34,6 +34,18 @@ const dict: Dict = {
   "Данные — как на странице категории «Продаж», в области получателя: ТП видит только свои цифры, СВ — свой регион, РМ — свои регионы. Тест записывается в историю.":
     "Ma'lumotlar — «Savdo» toifa sahifasidagidek, qabul qiluvchi doirasida: TP faqat o'z raqamlarini, SV — o'z hududini, RM — o'z hududlarini ko'radi. Sinov tarixga yoziladi.",
   "Карточка {n}": "Kartochka {n}",
+  // Отчёт 11 «Итоги дня по категориям» — в той же вкладке.
+  "11. Итоги дня по категориям": "11. Toifalar bo'yicha kun yakunlari",
+  "Итоги дня по категориям": "Toifalar bo'yicha kun yakunlari",
+  "итог кат.": "toifa yak.",
+  "9:00 — итог прошлого рабочего дня, 19:00 — итог дня: по картинке на каждую выбранную категорию — продажи за день (кг, сумма, точки, заказы), план дня и выполнение, к прошлому рабочему дню и неделе назад, по дням за две недели, регионы или ТП за день, артикулы дня с фото и что за день не продавалось. Категории — те же, что в «Карточках категорий»":
+    "9:00 — oldingi ish kuni yakuni, 19:00 — kun yakuni: har bir tanlangan toifaga bittadan rasm — kunlik savdo (kg, summa, nuqtalar, buyurtmalar), kunlik reja va bajarilishi, oldingi ish kuni va bir hafta oldingiga nisbatan, ikki hafta kunlar bo'yicha, kun bo'yicha hududlar yoki TP, rasmli kun artikullari va kun davomida sotilmaganlar. Toifalar — «Toifa kartochkalari»dagi bilan bir xil",
+  "Отчёт 11 «Итоги дня по категориям» — те же категории, но продажи за один день: кг, сумма, точки и заказы, план дня и выполнение, к прошлому рабочему дню и неделе назад, две недели по дням, регионы или ТП за день, артикулы дня с фото и что за день не продавалось.":
+    "11-hisobot «Toifalar bo'yicha kun yakunlari» — o'sha toifalar, lekin bir kunlik savdo: kg, summa, nuqtalar va buyurtmalar, kunlik reja va bajarilishi, oldingi ish kuni va bir hafta oldingiga nisbatan, ikki hafta kunlar bo'yicha, kun bo'yicha hududlar yoki TP, rasmli kun artikullari va kun davomida sotilmaganlar.",
+  "Пока никто не подписан. На вкладке «Получатели» откройте получателя (или добавьте нового) и включите отчёт 10 «Карточки категорий» или 11 «Итоги дня по категориям».":
+    "Hozircha hech kim obuna bo'lmagan. «Qabul qiluvchilar» bo'limida qabul qiluvchini oching (yoki yangisini qo'shing) va 10-hisobot «Toifa kartochkalari» yoki 11-hisobot «Toifalar bo'yicha kun yakunlari»ni yoqing.",
+  "отчёт {list}": "hisobot {list}",
+  "Итоги дня по категориям — продажи за день по тем же категориям.": "Toifalar bo'yicha kun yakunlari — o'sha toifalar bo'yicha kunlik savdo.",
   "Выберите категории и нажмите «Предпросмотр» — карточки появятся здесь.": "Toifalarni tanlang va «Oldindan ko'rish»ni bosing — kartochkalar shu yerda chiqadi.",
 };
 

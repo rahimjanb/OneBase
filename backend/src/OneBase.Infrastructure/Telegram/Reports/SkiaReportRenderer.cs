@@ -49,6 +49,11 @@ public sealed class SkiaReportRenderer : IReportRenderer
             return CategoryCardRenderer.Render(document, categories, Faces.Value);
         }
 
+        if (document.CategoryDay is { } day)
+        {
+            return CategoryDayRenderer.Render(document, day, Faces.Value);
+        }
+
         var layout = new Layout(document, Faces.Value, compact: false);
         var pages = layout.Paginate(layout.Blocks());
         if (pages.Count > 1)

@@ -46,6 +46,13 @@ public enum ReportType
     /// прошлого рабочего дня, 18:30 — итог дня. Категории — по умолчанию в настройках, у получателя можно свои.
     /// </summary>
     CategoryCards,
+
+    /// <summary>
+    /// 11. Итоги дня по категориям: по картинке на каждую категорию из выбора «Карточек категорий» — продажи за день в области получателя:
+    /// кг, сумма, ТТ, заказы, план дня и выполнение, к прошлому рабочему дню и неделе назад, по дням, регионы или ТП за день, артикулы дня с
+    /// фото и что за день не продавалось. 9:00 — итог прошлого рабочего дня, 19:00 — итог дня.
+    /// </summary>
+    CategoryDay,
 }
 
 /// <summary>
@@ -78,6 +85,7 @@ public static class ReportCatalog
     public const string Incentive = "incentive";
     public const string WeeklyPdf = "weekly-pdf";
     public const string CategoryCards = "category-cards";
+    public const string CategoryDay = "category-day";
 
     private static readonly IReadOnlyList<string> Everyone = TelegramReportRoles.All;
 
@@ -125,6 +133,8 @@ public static class ReportCatalog
         new("weekly-pdf.monday", ReportType.WeeklyPdf, "monday", new(9, 0), ReportSchedules.Monday, Everyone, 360),
         new("category-cards.morning", ReportType.CategoryCards, "morning", new(9, 0), ReportSchedules.WorkDays, Everyone, 180),
         new("category-cards.evening", ReportType.CategoryCards, "evening", new(18, 30), ReportSchedules.WorkDays, Everyone, 180),
+        new("category-day.morning", ReportType.CategoryDay, "morning", new(9, 0), ReportSchedules.WorkDays, Everyone, 180),
+        new("category-day.evening", ReportType.CategoryDay, "evening", new(19, 0), ReportSchedules.WorkDays, Everyone, 180),
     ];
 
     /// <summary>Порядок запуска в каталоге: запуски в одно время ставятся в очередь в этом порядке («Поле боя» — раньше акции).</summary>
@@ -157,6 +167,7 @@ public static class ReportCatalog
         ReportType.Incentive => Incentive,
         ReportType.WeeklyPdf => WeeklyPdf,
         ReportType.CategoryCards => CategoryCards,
+        ReportType.CategoryDay => CategoryDay,
         _ => Weekly,
     };
 
@@ -172,6 +183,7 @@ public static class ReportCatalog
         ReportType.Incentive => "9. Накопительная акция",
         ReportType.WeeklyPdf => "8. Еженедельный PDF",
         ReportType.CategoryCards => "10. Карточки категорий",
+        ReportType.CategoryDay => "11. Итоги дня по категориям",
         _ => "6. Итоги недели",
     };
 
@@ -199,6 +211,8 @@ public static class ReportCatalog
         (ReportType.WeeklyPdf, "monday") => "PDF за прошлую неделю",
         (ReportType.CategoryCards, "morning") => "итог прошлого рабочего дня",
         (ReportType.CategoryCards, "evening") => "итог дня",
+        (ReportType.CategoryDay, "morning") => "итог прошлого рабочего дня",
+        (ReportType.CategoryDay, "evening") => "итог дня",
         _ => SlotTitle(slot),
     };
 
