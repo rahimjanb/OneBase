@@ -20,6 +20,11 @@ final unauthorizedSignalProvider = Provider<UnauthorizedSignal>((ref) {
 /// Адаптер HTTP — подменяется в тестах фейковым.
 final httpAdapterProvider = Provider<HttpClientAdapter?>((ref) => null);
 
+/// Паузы перед повторами GET (в тестах — нулевые).
+final retryDelaysProvider = Provider<List<Duration>>(
+  (ref) => const [Duration(milliseconds: 500), Duration(milliseconds: 1500)],
+);
+
 final apiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(appConfigProvider);
   final tokens = ref.watch(tokenHolderProvider);
@@ -33,13 +38,19 @@ final apiClientProvider = Provider<ApiClient>((ref) {
       onUnauthorized: signal.emit,
     ),
     adapter: ref.watch(httpAdapterProvider),
+    retryDelays: ref.watch(retryDelaysProvider),
   );
   ref.onDispose(dio.close);
   return ApiClient(dio);
 });
 
 /// Dio для OneBase API: таймауты под мобильную сеть, перехватчики — сеанс, журнал (debug), повтор GET.
-Dio buildDio({required AppConfig config, required ic.SessionInterceptor session, HttpClientAdapter? adapter, bool retry = true}) {
+Dio buildDio({
+  required AppConfig config,
+  required ic.SessionInterceptor session,
+  HttpClientAdapter? adapter,
+  List<Duration>? retryDelays,
+}) {
   final dio = Dio(
     BaseOptions(
       baseUrl: config.apiBaseUrl,
@@ -53,7 +64,11 @@ Dio buildDio({required AppConfig config, required ic.SessionInterceptor session,
   if (adapter != null) dio.httpClientAdapter = adapter;
   dio.interceptors.add(session);
   if (kDebugMode) dio.interceptors.add(ic.LogInterceptor());
-  if (retry) dio.interceptors.add(ic.RetryInterceptor(dio));
+  if (retryDelays == null) {
+    dio.interceptors.add(ic.RetryInterceptor(dio));
+  } else if (retryDelays.isNotEmpty) {
+    dio.interceptors.add(ic.RetryInterceptor(dio, delays: retryDelays));
+  }
   return dio;
 }
 

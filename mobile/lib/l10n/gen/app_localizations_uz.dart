@@ -154,4 +154,55 @@ class AppLocalizationsUz extends AppLocalizations {
 
   @override
   String get unitTon => 't';
+
+  @override
+  String get loginTitle => 'OneBase\'ga kirish';
+
+  @override
+  String get loginSubtitle => 'OneBase saytidagi hisob bilan bir xil.';
+
+  @override
+  String get loginField => 'Login yoki pochta';
+
+  @override
+  String get passwordField => 'Parol';
+
+  @override
+  String get loginButton => 'Kirish';
+
+  @override
+  String get loginInvalid => 'Login yoki parol noto\'g\'ri.';
+
+  @override
+  String get loginRequired => 'Login va parolni kiriting.';
+
+  @override
+  String get showPassword => 'Parolni ko\'rsatish';
+
+  @override
+  String get hidePassword => 'Parolni yashirish';
+
+  @override
+  String get sessionExpired =>
+      'Seans yopildi: boshqa qurilmada chiqdingiz, parolni o\'zgartirdingiz yoki kirish o\'chirildi. Qaytadan kiring.';
+
+  @override
+  String get splashChecking => 'Kirish tekshirilmoqda…';
+
+  @override
+  String get restoreFailedTitle => 'Kirishni tekshirib bo\'lmadi';
+
+  @override
+  String get logout => 'Chiqish';
+
+  @override
+  String get logoutConfirmTitle => 'OneBase\'dan chiqasizmi?';
+
+  @override
+  String get logoutConfirmMessage =>
+      'Bu telefondagi seans yopiladi, saqlangan ma\'lumotlar o\'chiriladi.';
+
+  @override
+  String get offlineProfile =>
+      'Server bilan aloqa yo\'q — profil telefonda saqlangan.';
 }

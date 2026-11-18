@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebase_mobile/app/theme/theme.dart';
 import 'package:onebase_mobile/core/api/api_providers.dart';
+import 'package:onebase_mobile/core/auth/auth_controller.dart';
+import 'package:onebase_mobile/core/auth/token_storage.dart';
 import 'package:onebase_mobile/core/config/app_config.dart';
 import 'package:onebase_mobile/core/core_providers.dart';
 import 'package:onebase_mobile/core/database/app_database.dart';
@@ -23,12 +25,15 @@ List<Override> baseOverrides({
   Map<String, String> settings = const {},
   DateTime Function()? clock,
   AppConfig config = testConfig,
+  TokenStorage? tokens,
 }) =>
     [
+      tokenStorageProvider.overrideWithValue(tokens ?? MemoryTokenStorage()),
       appConfigProvider.overrideWithValue(config),
       appDatabaseProvider.overrideWithValue(db),
       initialSettingsProvider.overrideWithValue(settings),
       httpAdapterProvider.overrideWithValue(adapter),
+      retryDelaysProvider.overrideWithValue(const [Duration.zero, Duration.zero]),
       isOnlineProvider.overrideWith((ref) => Stream.value(online)),
       if (clock != null) clockProvider.overrideWithValue(clock),
     ];

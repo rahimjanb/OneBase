@@ -43,5 +43,21 @@
   "unitBillion": "mlrd",
   "unitSum": "so'm",
   "unitKg": "kg",
-  "unitTon": "t"
+  "unitTon": "t",
+  "loginTitle": "OneBase'ga kirish",
+  "loginSubtitle": "OneBase saytidagi hisob bilan bir xil.",
+  "loginField": "Login yoki pochta",
+  "passwordField": "Parol",
+  "loginButton": "Kirish",
+  "loginInvalid": "Login yoki parol noto'g'ri.",
+  "loginRequired": "Login va parolni kiriting.",
+  "showPassword": "Parolni ko'rsatish",
+  "hidePassword": "Parolni yashirish",
+  "sessionExpired": "Seans yopildi: boshqa qurilmada chiqdingiz, parolni o'zgartirdingiz yoki kirish o'chirildi. Qaytadan kiring.",
+  "splashChecking": "Kirish tekshirilmoqda…",
+  "restoreFailedTitle": "Kirishni tekshirib bo'lmadi",
+  "logout": "Chiqish",
+  "logoutConfirmTitle": "OneBase'dan chiqasizmi?",
+  "logoutConfirmMessage": "Bu telefondagi seans yopiladi, saqlangan ma'lumotlar o'chiriladi.",
+  "offlineProfile": "Server bilan aloqa yo'q — profil telefonda saqlangan."
 }

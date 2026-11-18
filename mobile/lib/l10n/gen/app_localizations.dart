@@ -361,6 +361,102 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'т'**
   String get unitTon;
+
+  /// No description provided for @loginTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вход в OneBase'**
+  String get loginTitle;
+
+  /// No description provided for @loginSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Та же учётная запись, что и на сайте OneBase.'**
+  String get loginSubtitle;
+
+  /// No description provided for @loginField.
+  ///
+  /// In ru, this message translates to:
+  /// **'Логин или почта'**
+  String get loginField;
+
+  /// No description provided for @passwordField.
+  ///
+  /// In ru, this message translates to:
+  /// **'Пароль'**
+  String get passwordField;
+
+  /// No description provided for @loginButton.
+  ///
+  /// In ru, this message translates to:
+  /// **'Войти'**
+  String get loginButton;
+
+  /// No description provided for @loginInvalid.
+  ///
+  /// In ru, this message translates to:
+  /// **'Неверный логин или пароль.'**
+  String get loginInvalid;
+
+  /// No description provided for @loginRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Введите логин и пароль.'**
+  String get loginRequired;
+
+  /// No description provided for @showPassword.
+  ///
+  /// In ru, this message translates to:
+  /// **'Показать пароль'**
+  String get showPassword;
+
+  /// No description provided for @hidePassword.
+  ///
+  /// In ru, this message translates to:
+  /// **'Скрыть пароль'**
+  String get hidePassword;
+
+  /// No description provided for @sessionExpired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сеанс закрыт: вы вышли на другом устройстве, сменили пароль или доступ отключили. Войдите снова.'**
+  String get sessionExpired;
+
+  /// No description provided for @splashChecking.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверяем вход…'**
+  String get splashChecking;
+
+  /// No description provided for @restoreFailedTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось проверить вход'**
+  String get restoreFailedTitle;
+
+  /// No description provided for @logout.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выйти'**
+  String get logout;
+
+  /// No description provided for @logoutConfirmTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выйти из OneBase?'**
+  String get logoutConfirmTitle;
+
+  /// No description provided for @logoutConfirmMessage.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сеанс на этом телефоне закроется, сохранённые данные удалятся.'**
+  String get logoutConfirmMessage;
+
+  /// No description provided for @offlineProfile.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет связи с сервером — профиль сохранён на телефоне.'**
+  String get offlineProfile;
 }
 
 class _AppLocalizationsDelegate

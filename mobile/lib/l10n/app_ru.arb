@@ -78,5 +78,21 @@
   "unitBillion": "млрд",
   "unitSum": "сум",
   "unitKg": "кг",
-  "unitTon": "т"
+  "unitTon": "т",
+  "loginTitle": "Вход в OneBase",
+  "loginSubtitle": "Та же учётная запись, что и на сайте OneBase.",
+  "loginField": "Логин или почта",
+  "passwordField": "Пароль",
+  "loginButton": "Войти",
+  "loginInvalid": "Неверный логин или пароль.",
+  "loginRequired": "Введите логин и пароль.",
+  "showPassword": "Показать пароль",
+  "hidePassword": "Скрыть пароль",
+  "sessionExpired": "Сеанс закрыт: вы вышли на другом устройстве, сменили пароль или доступ отключили. Войдите снова.",
+  "splashChecking": "Проверяем вход…",
+  "restoreFailedTitle": "Не удалось проверить вход",
+  "logout": "Выйти",
+  "logoutConfirmTitle": "Выйти из OneBase?",
+  "logoutConfirmMessage": "Сеанс на этом телефоне закроется, сохранённые данные удалятся.",
+  "offlineProfile": "Нет связи с сервером — профиль сохранён на телефоне."
 }

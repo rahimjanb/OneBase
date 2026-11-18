@@ -3,24 +3,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebase_mobile/app/app.dart';
 import 'package:onebase_mobile/app/theme/tokens.dart';
+import 'package:onebase_mobile/core/auth/token_storage.dart';
 import 'package:onebase_mobile/core/config/app_config.dart';
 import 'package:onebase_mobile/core/database/app_database.dart';
 import 'package:onebase_mobile/core/storage/settings_store.dart';
 
+import '../helpers/fake_server.dart';
 import '../helpers/harness.dart';
 import '../helpers/test_db.dart';
 
 void main() {
   late AppDatabase db;
+  late FakeServer server;
 
-  setUp(() => db = memoryDb());
+  setUp(() {
+    db = memoryDb();
+    server = FakeServer()..json('GET', '/api/auth/me', profileJson());
+  });
   tearDown(() => db.close());
 
+  /// Приложение с сохранённым входом: проверка входа проходит, открывается оболочка.
   Future<void> pumpApp(WidgetTester tester, {Map<String, String> settings = const {}}) async {
     await tester.pumpWidget(
       ProviderScope(
         retry: (_, _) => null,
-        overrides: baseOverrides(db: db, settings: settings),
+        overrides: baseOverrides(
+          db: db,
+          settings: settings,
+          adapter: server.adapter,
+          tokens: MemoryTokenStorage(StoredToken(fakeJwt('u-1'), DateTime(2036))),
+        ),
         child: const OneBaseApp(),
       ),
     );
@@ -35,6 +47,8 @@ void main() {
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Профиль')));
     await tester.pumpAndSettle();
     expect(find.text('Оформление'), findsOneWidget);
+    expect(find.text('Иван Петров'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('http://onebase.test'), 200);
     expect(find.text('http://onebase.test'), findsOneWidget);
   });
 

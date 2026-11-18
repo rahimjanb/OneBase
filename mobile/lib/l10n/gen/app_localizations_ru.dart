@@ -152,4 +152,55 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get unitTon => 'т';
+
+  @override
+  String get loginTitle => 'Вход в OneBase';
+
+  @override
+  String get loginSubtitle => 'Та же учётная запись, что и на сайте OneBase.';
+
+  @override
+  String get loginField => 'Логин или почта';
+
+  @override
+  String get passwordField => 'Пароль';
+
+  @override
+  String get loginButton => 'Войти';
+
+  @override
+  String get loginInvalid => 'Неверный логин или пароль.';
+
+  @override
+  String get loginRequired => 'Введите логин и пароль.';
+
+  @override
+  String get showPassword => 'Показать пароль';
+
+  @override
+  String get hidePassword => 'Скрыть пароль';
+
+  @override
+  String get sessionExpired =>
+      'Сеанс закрыт: вы вышли на другом устройстве, сменили пароль или доступ отключили. Войдите снова.';
+
+  @override
+  String get splashChecking => 'Проверяем вход…';
+
+  @override
+  String get restoreFailedTitle => 'Не удалось проверить вход';
+
+  @override
+  String get logout => 'Выйти';
+
+  @override
+  String get logoutConfirmTitle => 'Выйти из OneBase?';
+
+  @override
+  String get logoutConfirmMessage =>
+      'Сеанс на этом телефоне закроется, сохранённые данные удалятся.';
+
+  @override
+  String get offlineProfile =>
+      'Нет связи с сервером — профиль сохранён на телефоне.';
 }

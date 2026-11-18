@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/auth/auth_controller.dart';
 import '../core/core_providers.dart';
 import '../core/storage/preferences.dart';
 import '../l10n/gen/app_localizations.dart';
@@ -55,9 +56,40 @@ class OneBaseApp extends ConsumerWidget {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       localeResolutionCallback: resolve,
       routerConfig: ref.watch(routerProvider),
-      builder: scale,
+      builder: (context, child) => _SessionLifecycle(child: scale(context, child)),
     );
   }
+}
+
+/// Возврат приложения из фона → перечитать профиль и права (не чаще раза в минуту): у сервера права меняются без повторного входа.
+class _SessionLifecycle extends ConsumerStatefulWidget {
+  const _SessionLifecycle({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_SessionLifecycle> createState() => _SessionLifecycleState();
+}
+
+class _SessionLifecycleState extends ConsumerState<_SessionLifecycle> {
+  late final AppLifecycleListener _listener = AppLifecycleListener(
+    onResume: () => ref.read(authControllerProvider.notifier).refreshProfile(),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _listener;
+  }
+
+  @override
+  void dispose() {
+    _listener.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _NotConfigured extends StatelessWidget {
