@@ -2451,4 +2451,49 @@ class AppLocalizationsUz extends AppLocalizations {
 
   @override
   String get hrDays => 'Kunlar';
+
+  @override
+  String get ntAll => 'Hammasi';
+
+  @override
+  String get ntUnread => 'O\'qilmagan';
+
+  @override
+  String get ntTasks => 'Vazifalar';
+
+  @override
+  String get ntAi => 'AI';
+
+  @override
+  String get ntHr => 'HR';
+
+  @override
+  String get ntReadAll => 'Hammasini o\'qilgan qilish';
+
+  @override
+  String get ntToday => 'Bugun';
+
+  @override
+  String get ntYesterday => 'Kecha';
+
+  @override
+  String get ntEarlier => 'Avvalroq';
+
+  @override
+  String get ntEmpty => 'Bildirishnomalar yo\'q';
+
+  @override
+  String get ntMarkRead => 'O\'qildi';
+
+  @override
+  String get ntMarkUnread => 'O\'qilmagan';
+
+  @override
+  String get ntExtendDue => 'Muddatni uzaytirish';
+
+  @override
+  String get ntExtended => 'Muddat uzaytirildi';
+
+  @override
+  String get ntQueued => 'Belgi tarmoq paydo bo\'lganda yuboriladi';
 }

@@ -16,18 +16,20 @@ String appRouteForWeb(String? href) {
         'agents' when id(2) != null => '/analytics/sales/agents/${id(2)}$q',
         'directions' when id(2) != null => '/analytics/sales/directions/${id(2)}$q',
         'supervisors' when id(2) != null => '/analytics/sales/supervisors/${id(2)}$q',
-        'points' || 'clients' when id(2) != null => '/home/sales/points/${id(2)}',
+        'points' || 'clients' || 'stores' when id(2) != null => '/home/sales/points/${id(2)}',
         'points' || 'clients' => '/home/sales',
         _ => '/analytics/sales$q',
       };
     case 'tasks':
       final first = id(1);
       if (first == null) return '/tasks';
+      if (first == 'task' && id(2) != null) return '/tasks/${id(2)}';
       if (first == 'all' || first == 'my' || first == 'department' || first == 'archive' || first == 'board') return '/tasks$q';
       if (RegExp(r'^[0-9a-f-]{36}$').hasMatch(first)) return '/tasks/$first';
       return '/tasks';
     case 'hr':
       if (id(1) == 'employees' && id(2) != null) return '/home/hr/employees/${id(2)}';
+      if (id(1) == 'employees') return '/home/hr?tab=employees';
       return '/home/hr';
     case 'finance':
       return '/home/finance';

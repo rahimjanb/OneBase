@@ -2503,4 +2503,49 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get hrDays => 'Дни';
+
+  @override
+  String get ntAll => 'Все';
+
+  @override
+  String get ntUnread => 'Непрочитанные';
+
+  @override
+  String get ntTasks => 'Задачи';
+
+  @override
+  String get ntAi => 'AI';
+
+  @override
+  String get ntHr => 'HR';
+
+  @override
+  String get ntReadAll => 'Прочитать все';
+
+  @override
+  String get ntToday => 'Сегодня';
+
+  @override
+  String get ntYesterday => 'Вчера';
+
+  @override
+  String get ntEarlier => 'Ранее';
+
+  @override
+  String get ntEmpty => 'Уведомлений нет';
+
+  @override
+  String get ntMarkRead => 'Прочитано';
+
+  @override
+  String get ntMarkUnread => 'Не прочитано';
+
+  @override
+  String get ntExtendDue => 'Продлить срок';
+
+  @override
+  String get ntExtended => 'Срок продлён';
+
+  @override
+  String get ntQueued => 'Отметка уйдёт, когда появится сеть';
 }

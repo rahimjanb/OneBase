@@ -729,5 +729,20 @@
   "hrSummaryLate": "Kechikishlar",
   "hrSummaryAbsent": "Yo'qliklar",
   "hrWorked": "Ishlangan",
-  "hrDays": "Kunlar"
+  "hrDays": "Kunlar",
+  "ntAll": "Hammasi",
+  "ntUnread": "O'qilmagan",
+  "ntTasks": "Vazifalar",
+  "ntAi": "AI",
+  "ntHr": "HR",
+  "ntReadAll": "Hammasini o'qilgan qilish",
+  "ntToday": "Bugun",
+  "ntYesterday": "Kecha",
+  "ntEarlier": "Avvalroq",
+  "ntEmpty": "Bildirishnomalar yo'q",
+  "ntMarkRead": "O'qildi",
+  "ntMarkUnread": "O'qilmagan",
+  "ntExtendDue": "Muddatni uzaytirish",
+  "ntExtended": "Muddat uzaytirildi",
+  "ntQueued": "Belgi tarmoq paydo bo'lganda yuboriladi"
 }

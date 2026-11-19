@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/finance/presentation/finance_screens.dart';
 import '../features/hr/presentation/hr_screens.dart';
+import '../features/notifications/presentation/notifications_screen.dart';
 import '../features/production/presentation/production_screens.dart';
 import '../features/sales/presentation/clients_screens.dart';
 import '../features/warehouse/presentation/warehouse_screens.dart';
@@ -56,6 +57,7 @@ final List<RouteBase> moduleRoutes = [
     builder: (context, state) => HrScreen(employees: state.uri.queryParameters['tab'] == 'employees'),
     routes: [GoRoute(path: 'employees/:id', builder: (context, state) => EmployeeScreen(id: state.pathParameters['id']!))],
   ),
-  for (final m in AppModule.values.where((m) => !const [AppModule.sales, AppModule.finance, AppModule.production, AppModule.warehouse, AppModule.requests, AppModule.hr].contains(m)))
+  GoRoute(path: AppModule.notifications.segment, builder: (context, state) => const NotificationsScreen()),
+  for (final m in AppModule.values.where((m) => !const [AppModule.sales, AppModule.finance, AppModule.production, AppModule.warehouse, AppModule.requests, AppModule.hr, AppModule.notifications].contains(m)))
     GoRoute(path: m.segment, builder: (context, state) => ComingSoonScreen(title: m.label(context.l10n), stage: 5)),
 ];

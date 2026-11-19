@@ -13,6 +13,7 @@ import '../../../app/theme/tokens.dart';
 import '../../../core/auth/auth_controller.dart';
 import '../../../shared/extensions/context_ext.dart';
 import '../../../shared/widgets/pills.dart';
+import '../../notifications/presentation/notifications_screen.dart';
 import 'dashboard_providers.dart';
 import 'widgets/home_body.dart';
 import 'widgets/home_extras.dart';
@@ -128,7 +129,7 @@ class _HomeTopBar extends ConsumerWidget {
     final c = context.ob;
     final l10n = context.l10n;
     final profile = ref.watch(currentProfileProvider);
-    final unread = ref.watch(eventsBlock.select((s) => s.data?.unread ?? 0));
+    final int unread = ref.watch(unreadProvider)?.unread ?? ref.watch(eventsBlock.select<int>((s) => s.data?.unread ?? 0));
     final bg = c.isDark ? c.page.withValues(alpha: scrolled ? 0.82 : 0) : c.header;
     return ClipRect(
       child: BackdropFilter(

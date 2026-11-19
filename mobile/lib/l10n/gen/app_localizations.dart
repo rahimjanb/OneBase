@@ -4477,6 +4477,96 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Дни'**
   String get hrDays;
+
+  /// No description provided for @ntAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все'**
+  String get ntAll;
+
+  /// No description provided for @ntUnread.
+  ///
+  /// In ru, this message translates to:
+  /// **'Непрочитанные'**
+  String get ntUnread;
+
+  /// No description provided for @ntTasks.
+  ///
+  /// In ru, this message translates to:
+  /// **'Задачи'**
+  String get ntTasks;
+
+  /// No description provided for @ntAi.
+  ///
+  /// In ru, this message translates to:
+  /// **'AI'**
+  String get ntAi;
+
+  /// No description provided for @ntHr.
+  ///
+  /// In ru, this message translates to:
+  /// **'HR'**
+  String get ntHr;
+
+  /// No description provided for @ntReadAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прочитать все'**
+  String get ntReadAll;
+
+  /// No description provided for @ntToday.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сегодня'**
+  String get ntToday;
+
+  /// No description provided for @ntYesterday.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вчера'**
+  String get ntYesterday;
+
+  /// No description provided for @ntEarlier.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ранее'**
+  String get ntEarlier;
+
+  /// No description provided for @ntEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Уведомлений нет'**
+  String get ntEmpty;
+
+  /// No description provided for @ntMarkRead.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прочитано'**
+  String get ntMarkRead;
+
+  /// No description provided for @ntMarkUnread.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не прочитано'**
+  String get ntMarkUnread;
+
+  /// No description provided for @ntExtendDue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продлить срок'**
+  String get ntExtendDue;
+
+  /// No description provided for @ntExtended.
+  ///
+  /// In ru, this message translates to:
+  /// **'Срок продлён'**
+  String get ntExtended;
+
+  /// No description provided for @ntQueued.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отметка уйдёт, когда появится сеть'**
+  String get ntQueued;
 }
 
 class _AppLocalizationsDelegate

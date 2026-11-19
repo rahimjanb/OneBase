@@ -1624,5 +1624,20 @@
   "hrSummaryLate": "Опозданий",
   "hrSummaryAbsent": "Отсутствий",
   "hrWorked": "Отработано",
-  "hrDays": "Дни"
+  "hrDays": "Дни",
+  "ntAll": "Все",
+  "ntUnread": "Непрочитанные",
+  "ntTasks": "Задачи",
+  "ntAi": "AI",
+  "ntHr": "HR",
+  "ntReadAll": "Прочитать все",
+  "ntToday": "Сегодня",
+  "ntYesterday": "Вчера",
+  "ntEarlier": "Ранее",
+  "ntEmpty": "Уведомлений нет",
+  "ntMarkRead": "Прочитано",
+  "ntMarkUnread": "Не прочитано",
+  "ntExtendDue": "Продлить срок",
+  "ntExtended": "Срок продлён",
+  "ntQueued": "Отметка уйдёт, когда появится сеть"
 }
