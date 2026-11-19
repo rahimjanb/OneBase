@@ -67,7 +67,8 @@ mobile/lib/
   features/
     auth/                      экран входа
     dashboard/  data/ domain/ presentation/
-    analytics/  ai_consultant/  sales/  finance/  production/  warehouse/  hr/  tasks/  notifications/  profile/  settings/
+    analytics/  ai_consultant/  sales/  finance/  production/  warehouse/  hr/  tasks/  notifications/  profile/
+    departments/  insights/  search/   разделы веера: «Отделы», «AI-находки», поиск (настройки → «Профиль»)
 ```
 
 Внутри модуля:
@@ -75,7 +76,9 @@ mobile/lib/
 - `domain/` — то, что нужно экрану (период, сводки), без Flutter;
 - `presentation/` — провайдеры Riverpod, экраны, виджеты.
 
-Модули не импортируют друг друга. Общее лежит в `core/` и `shared/`.
+Общее лежит в `core/` и `shared/`. Модули берут друг у друга модели, провайдеры и помощники экрана, чтобы данные и кэш не
+дублировались: «Отделы» — сводку продаж и явку из `dashboard/`, поиск — правила отделов из `departments/`, разделы — `blockView` из
+`analytics/`, главная — счётчик непрочитанных из `notifications/`. Кандидат на вынос в `shared/` при следующей правке — `blockView`.
 
 ## Ключевые механизмы
 
