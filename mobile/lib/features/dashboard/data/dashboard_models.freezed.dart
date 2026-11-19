@@ -6619,7 +6619,8 @@ as int,
 /// @nodoc
 mixin _$AlertsSummary {
 
- int get problems; int get critical; int get recommendations; int get opportunities;
+ int get problems; int get critical; int get recommendations; int get opportunities;/// По отделам (только открытые пользователю).
+ List<AlertsCategory> get byCategory;
 /// Create a copy of AlertsSummary
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -6633,20 +6634,20 @@ $AlertsSummaryCopyWith<AlertsSummary> get copyWith => _$AlertsSummaryCopyWithImp
 @override
 bool operator ==(Object other) {
   final _this = this as AlertsSummary;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AlertsSummary&&(identical(other.problems, _this.problems) || other.problems == _this.problems)&&(identical(other.critical, _this.critical) || other.critical == _this.critical)&&(identical(other.recommendations, _this.recommendations) || other.recommendations == _this.recommendations)&&(identical(other.opportunities, _this.opportunities) || other.opportunities == _this.opportunities));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AlertsSummary&&(identical(other.problems, _this.problems) || other.problems == _this.problems)&&(identical(other.critical, _this.critical) || other.critical == _this.critical)&&(identical(other.recommendations, _this.recommendations) || other.recommendations == _this.recommendations)&&(identical(other.opportunities, _this.opportunities) || other.opportunities == _this.opportunities)&&const DeepCollectionEquality().equals(other.byCategory, _this.byCategory));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as AlertsSummary;
-  return Object.hash(runtimeType,_this.problems,_this.critical,_this.recommendations,_this.opportunities);
+  return Object.hash(runtimeType,_this.problems,_this.critical,_this.recommendations,_this.opportunities,const DeepCollectionEquality().hash(_this.byCategory));
 }
 
 @override
 String toString() {
   final _this = this as AlertsSummary;
-  return 'AlertsSummary(problems: ${_this.problems}, critical: ${_this.critical}, recommendations: ${_this.recommendations}, opportunities: ${_this.opportunities})';
+  return 'AlertsSummary(problems: ${_this.problems}, critical: ${_this.critical}, recommendations: ${_this.recommendations}, opportunities: ${_this.opportunities}, byCategory: ${_this.byCategory})';
 }
 
 
@@ -6657,7 +6658,7 @@ abstract mixin class $AlertsSummaryCopyWith<$Res>  {
   factory $AlertsSummaryCopyWith(AlertsSummary value, $Res Function(AlertsSummary) _then) = _$AlertsSummaryCopyWithImpl;
 @useResult
 $Res call({
- int problems, int critical, int recommendations, int opportunities
+ int problems, int critical, int recommendations, int opportunities, List<AlertsCategory> byCategory
 });
 
 
@@ -6674,13 +6675,14 @@ class _$AlertsSummaryCopyWithImpl<$Res>
 
 /// Create a copy of AlertsSummary
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? problems = null,Object? critical = null,Object? recommendations = null,Object? opportunities = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? problems = null,Object? critical = null,Object? recommendations = null,Object? opportunities = null,Object? byCategory = null,}) {
   return _then(AlertsSummary(
 problems: null == problems ? _self.problems : problems // ignore: cast_nullable_to_non_nullable
 as int,critical: null == critical ? _self.critical : critical // ignore: cast_nullable_to_non_nullable
 as int,recommendations: null == recommendations ? _self.recommendations : recommendations // ignore: cast_nullable_to_non_nullable
 as int,opportunities: null == opportunities ? _self.opportunities : opportunities // ignore: cast_nullable_to_non_nullable
-as int,
+as int,byCategory: null == byCategory ? _self.byCategory : byCategory // ignore: cast_nullable_to_non_nullable
+as List<AlertsCategory>,
   ));
 }
 
@@ -6765,10 +6767,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int problems,  int critical,  int recommendations,  int opportunities)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int problems,  int critical,  int recommendations,  int opportunities,  List<AlertsCategory> byCategory)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _AlertsSummary() when $default != null:
-return $default(_that.problems,_that.critical,_that.recommendations,_that.opportunities);case _:
+return $default(_that.problems,_that.critical,_that.recommendations,_that.opportunities,_that.byCategory);case _:
   return orElse();
 
 }
@@ -6786,10 +6788,10 @@ return $default(_that.problems,_that.critical,_that.recommendations,_that.opport
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int problems,  int critical,  int recommendations,  int opportunities)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int problems,  int critical,  int recommendations,  int opportunities,  List<AlertsCategory> byCategory)  $default,) {final _that = this;
 switch (_that) {
 case _AlertsSummary():
-return $default(_that.problems,_that.critical,_that.recommendations,_that.opportunities);case _:
+return $default(_that.problems,_that.critical,_that.recommendations,_that.opportunities,_that.byCategory);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -6806,10 +6808,10 @@ return $default(_that.problems,_that.critical,_that.recommendations,_that.opport
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int problems,  int critical,  int recommendations,  int opportunities)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int problems,  int critical,  int recommendations,  int opportunities,  List<AlertsCategory> byCategory)?  $default,) {final _that = this;
 switch (_that) {
 case _AlertsSummary() when $default != null:
-return $default(_that.problems,_that.critical,_that.recommendations,_that.opportunities);case _:
+return $default(_that.problems,_that.critical,_that.recommendations,_that.opportunities,_that.byCategory);case _:
   return null;
 
 }
@@ -6821,13 +6823,22 @@ return $default(_that.problems,_that.critical,_that.recommendations,_that.opport
 @JsonSerializable()
 
 class _AlertsSummary implements AlertsSummary {
-  const _AlertsSummary({this.problems = 0, this.critical = 0, this.recommendations = 0, this.opportunities = 0});
+  const _AlertsSummary({this.problems = 0, this.critical = 0, this.recommendations = 0, this.opportunities = 0,  List<AlertsCategory> byCategory = const <AlertsCategory>[]}): _byCategory = byCategory;
   factory _AlertsSummary.fromJson(Map<String, dynamic> json) => _$AlertsSummaryFromJson(json);
 
 @override@JsonKey() final  int problems;
 @override@JsonKey() final  int critical;
 @override@JsonKey() final  int recommendations;
 @override@JsonKey() final  int opportunities;
+/// По отделам (только открытые пользователю).
+ final  List<AlertsCategory> _byCategory;
+/// По отделам (только открытые пользователю).
+@override@JsonKey() List<AlertsCategory> get byCategory {
+  if (_byCategory is EqualUnmodifiableListView) return _byCategory;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_byCategory);
+}
+
 
 /// Create a copy of AlertsSummary
 /// with the given fields replaced by the non-null parameter values.
@@ -6842,18 +6853,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AlertsSummary&&(identical(other.problems, problems) || other.problems == problems)&&(identical(other.critical, critical) || other.critical == critical)&&(identical(other.recommendations, recommendations) || other.recommendations == recommendations)&&(identical(other.opportunities, opportunities) || other.opportunities == opportunities));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AlertsSummary&&(identical(other.problems, problems) || other.problems == problems)&&(identical(other.critical, critical) || other.critical == critical)&&(identical(other.recommendations, recommendations) || other.recommendations == recommendations)&&(identical(other.opportunities, opportunities) || other.opportunities == opportunities)&&const DeepCollectionEquality().equals(other.byCategory, _byCategory));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,problems,critical,recommendations,opportunities);
+    return Object.hash(runtimeType,problems,critical,recommendations,opportunities,const DeepCollectionEquality().hash(_byCategory));
 }
 
 @override
 String toString() {
-    return 'AlertsSummary(problems: $problems, critical: $critical, recommendations: $recommendations, opportunities: $opportunities)';
+    return 'AlertsSummary(problems: $problems, critical: $critical, recommendations: $recommendations, opportunities: $opportunities, byCategory: $byCategory)';
 }
 
 
@@ -6864,7 +6875,7 @@ abstract mixin class _$AlertsSummaryCopyWith<$Res> implements $AlertsSummaryCopy
   factory _$AlertsSummaryCopyWith(_AlertsSummary value, $Res Function(_AlertsSummary) _then) = __$AlertsSummaryCopyWithImpl;
 @override @useResult
 $Res call({
- int problems, int critical, int recommendations, int opportunities
+ int problems, int critical, int recommendations, int opportunities, List<AlertsCategory> byCategory
 });
 
 
@@ -6881,11 +6892,291 @@ class __$AlertsSummaryCopyWithImpl<$Res>
 
 /// Create a copy of AlertsSummary
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? problems = null,Object? critical = null,Object? recommendations = null,Object? opportunities = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? problems = null,Object? critical = null,Object? recommendations = null,Object? opportunities = null,Object? byCategory = null,}) {
   return _then(_AlertsSummary(
 problems: null == problems ? _self.problems : problems // ignore: cast_nullable_to_non_nullable
 as int,critical: null == critical ? _self.critical : critical // ignore: cast_nullable_to_non_nullable
 as int,recommendations: null == recommendations ? _self.recommendations : recommendations // ignore: cast_nullable_to_non_nullable
+as int,opportunities: null == opportunities ? _self.opportunities : opportunities // ignore: cast_nullable_to_non_nullable
+as int,byCategory: null == byCategory ? _self._byCategory : byCategory // ignore: cast_nullable_to_non_nullable
+as List<AlertsCategory>,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$AlertsCategory {
+
+ String get category; int get problems; int get critical; int get opportunities;
+/// Create a copy of AlertsCategory
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$AlertsCategoryCopyWith<AlertsCategory> get copyWith => _$AlertsCategoryCopyWithImpl<AlertsCategory>(this as AlertsCategory, _$identity);
+
+  /// Serializes this AlertsCategory to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  final _this = this as AlertsCategory;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AlertsCategory&&(identical(other.category, _this.category) || other.category == _this.category)&&(identical(other.problems, _this.problems) || other.problems == _this.problems)&&(identical(other.critical, _this.critical) || other.critical == _this.critical)&&(identical(other.opportunities, _this.opportunities) || other.opportunities == _this.opportunities));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode {
+  final _this = this as AlertsCategory;
+  return Object.hash(runtimeType,_this.category,_this.problems,_this.critical,_this.opportunities);
+}
+
+@override
+String toString() {
+  final _this = this as AlertsCategory;
+  return 'AlertsCategory(category: ${_this.category}, problems: ${_this.problems}, critical: ${_this.critical}, opportunities: ${_this.opportunities})';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $AlertsCategoryCopyWith<$Res>  {
+  factory $AlertsCategoryCopyWith(AlertsCategory value, $Res Function(AlertsCategory) _then) = _$AlertsCategoryCopyWithImpl;
+@useResult
+$Res call({
+ String category, int problems, int critical, int opportunities
+});
+
+
+
+
+}
+/// @nodoc
+class _$AlertsCategoryCopyWithImpl<$Res>
+    implements $AlertsCategoryCopyWith<$Res> {
+  _$AlertsCategoryCopyWithImpl(this._self, this._then);
+
+  final AlertsCategory _self;
+  final $Res Function(AlertsCategory) _then;
+
+/// Create a copy of AlertsCategory
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? category = null,Object? problems = null,Object? critical = null,Object? opportunities = null,}) {
+  return _then(AlertsCategory(
+category: null == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
+as String,problems: null == problems ? _self.problems : problems // ignore: cast_nullable_to_non_nullable
+as int,critical: null == critical ? _self.critical : critical // ignore: cast_nullable_to_non_nullable
+as int,opportunities: null == opportunities ? _self.opportunities : opportunities // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [AlertsCategory].
+extension AlertsCategoryPatterns on AlertsCategory {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _AlertsCategory value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _AlertsCategory() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _AlertsCategory value)  $default,){
+final _that = this;
+switch (_that) {
+case _AlertsCategory():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _AlertsCategory value)?  $default,){
+final _that = this;
+switch (_that) {
+case _AlertsCategory() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String category,  int problems,  int critical,  int opportunities)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _AlertsCategory() when $default != null:
+return $default(_that.category,_that.problems,_that.critical,_that.opportunities);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String category,  int problems,  int critical,  int opportunities)  $default,) {final _that = this;
+switch (_that) {
+case _AlertsCategory():
+return $default(_that.category,_that.problems,_that.critical,_that.opportunities);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String category,  int problems,  int critical,  int opportunities)?  $default,) {final _that = this;
+switch (_that) {
+case _AlertsCategory() when $default != null:
+return $default(_that.category,_that.problems,_that.critical,_that.opportunities);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _AlertsCategory implements AlertsCategory {
+  const _AlertsCategory({required this.category, this.problems = 0, this.critical = 0, this.opportunities = 0});
+  factory _AlertsCategory.fromJson(Map<String, dynamic> json) => _$AlertsCategoryFromJson(json);
+
+@override final  String category;
+@override@JsonKey() final  int problems;
+@override@JsonKey() final  int critical;
+@override@JsonKey() final  int opportunities;
+
+/// Create a copy of AlertsCategory
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$AlertsCategoryCopyWith<_AlertsCategory> get copyWith => __$AlertsCategoryCopyWithImpl<_AlertsCategory>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$AlertsCategoryToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AlertsCategory&&(identical(other.category, category) || other.category == category)&&(identical(other.problems, problems) || other.problems == problems)&&(identical(other.critical, critical) || other.critical == critical)&&(identical(other.opportunities, opportunities) || other.opportunities == opportunities));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode {
+    return Object.hash(runtimeType,category,problems,critical,opportunities);
+}
+
+@override
+String toString() {
+    return 'AlertsCategory(category: $category, problems: $problems, critical: $critical, opportunities: $opportunities)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$AlertsCategoryCopyWith<$Res> implements $AlertsCategoryCopyWith<$Res> {
+  factory _$AlertsCategoryCopyWith(_AlertsCategory value, $Res Function(_AlertsCategory) _then) = __$AlertsCategoryCopyWithImpl;
+@override @useResult
+$Res call({
+ String category, int problems, int critical, int opportunities
+});
+
+
+
+
+}
+/// @nodoc
+class __$AlertsCategoryCopyWithImpl<$Res>
+    implements _$AlertsCategoryCopyWith<$Res> {
+  __$AlertsCategoryCopyWithImpl(this._self, this._then);
+
+  final _AlertsCategory _self;
+  final $Res Function(_AlertsCategory) _then;
+
+/// Create a copy of AlertsCategory
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? category = null,Object? problems = null,Object? critical = null,Object? opportunities = null,}) {
+  return _then(_AlertsCategory(
+category: null == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
+as String,problems: null == problems ? _self.problems : problems // ignore: cast_nullable_to_non_nullable
+as int,critical: null == critical ? _self.critical : critical // ignore: cast_nullable_to_non_nullable
 as int,opportunities: null == opportunities ? _self.opportunities : opportunities // ignore: cast_nullable_to_non_nullable
 as int,
   ));
@@ -6898,7 +7189,7 @@ as int,
 /// @nodoc
 mixin _$AlertsRun {
 
- String? get at;
+ String? get at; List<String> get errors;
 /// Create a copy of AlertsRun
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -6912,20 +7203,20 @@ $AlertsRunCopyWith<AlertsRun> get copyWith => _$AlertsRunCopyWithImpl<AlertsRun>
 @override
 bool operator ==(Object other) {
   final _this = this as AlertsRun;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AlertsRun&&(identical(other.at, _this.at) || other.at == _this.at));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AlertsRun&&(identical(other.at, _this.at) || other.at == _this.at)&&const DeepCollectionEquality().equals(other.errors, _this.errors));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as AlertsRun;
-  return Object.hash(runtimeType,_this.at);
+  return Object.hash(runtimeType,_this.at,const DeepCollectionEquality().hash(_this.errors));
 }
 
 @override
 String toString() {
   final _this = this as AlertsRun;
-  return 'AlertsRun(at: ${_this.at})';
+  return 'AlertsRun(at: ${_this.at}, errors: ${_this.errors})';
 }
 
 
@@ -6936,7 +7227,7 @@ abstract mixin class $AlertsRunCopyWith<$Res>  {
   factory $AlertsRunCopyWith(AlertsRun value, $Res Function(AlertsRun) _then) = _$AlertsRunCopyWithImpl;
 @useResult
 $Res call({
- String? at
+ String? at, List<String> errors
 });
 
 
@@ -6953,10 +7244,11 @@ class _$AlertsRunCopyWithImpl<$Res>
 
 /// Create a copy of AlertsRun
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? at = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? at = freezed,Object? errors = null,}) {
   return _then(AlertsRun(
 at: freezed == at ? _self.at : at // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,errors: null == errors ? _self.errors : errors // ignore: cast_nullable_to_non_nullable
+as List<String>,
   ));
 }
 
@@ -7041,10 +7333,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? at)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? at,  List<String> errors)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _AlertsRun() when $default != null:
-return $default(_that.at);case _:
+return $default(_that.at,_that.errors);case _:
   return orElse();
 
 }
@@ -7062,10 +7354,10 @@ return $default(_that.at);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? at)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? at,  List<String> errors)  $default,) {final _that = this;
 switch (_that) {
 case _AlertsRun():
-return $default(_that.at);case _:
+return $default(_that.at,_that.errors);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -7082,10 +7374,10 @@ return $default(_that.at);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? at)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? at,  List<String> errors)?  $default,) {final _that = this;
 switch (_that) {
 case _AlertsRun() when $default != null:
-return $default(_that.at);case _:
+return $default(_that.at,_that.errors);case _:
   return null;
 
 }
@@ -7097,10 +7389,17 @@ return $default(_that.at);case _:
 @JsonSerializable()
 
 class _AlertsRun implements AlertsRun {
-  const _AlertsRun({this.at});
+  const _AlertsRun({this.at,  List<String> errors = const <String>[]}): _errors = errors;
   factory _AlertsRun.fromJson(Map<String, dynamic> json) => _$AlertsRunFromJson(json);
 
 @override final  String? at;
+ final  List<String> _errors;
+@override@JsonKey() List<String> get errors {
+  if (_errors is EqualUnmodifiableListView) return _errors;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_errors);
+}
+
 
 /// Create a copy of AlertsRun
 /// with the given fields replaced by the non-null parameter values.
@@ -7115,18 +7414,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AlertsRun&&(identical(other.at, at) || other.at == at));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AlertsRun&&(identical(other.at, at) || other.at == at)&&const DeepCollectionEquality().equals(other.errors, _errors));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,at);
+    return Object.hash(runtimeType,at,const DeepCollectionEquality().hash(_errors));
 }
 
 @override
 String toString() {
-    return 'AlertsRun(at: $at)';
+    return 'AlertsRun(at: $at, errors: $errors)';
 }
 
 
@@ -7137,7 +7436,7 @@ abstract mixin class _$AlertsRunCopyWith<$Res> implements $AlertsRunCopyWith<$Re
   factory _$AlertsRunCopyWith(_AlertsRun value, $Res Function(_AlertsRun) _then) = __$AlertsRunCopyWithImpl;
 @override @useResult
 $Res call({
- String? at
+ String? at, List<String> errors
 });
 
 
@@ -7154,10 +7453,11 @@ class __$AlertsRunCopyWithImpl<$Res>
 
 /// Create a copy of AlertsRun
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? at = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? at = freezed,Object? errors = null,}) {
   return _then(_AlertsRun(
 at: freezed == at ? _self.at : at // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,errors: null == errors ? _self._errors : errors // ignore: cast_nullable_to_non_nullable
+as List<String>,
   ));
 }
 

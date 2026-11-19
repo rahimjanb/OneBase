@@ -26,6 +26,9 @@ String appRouteForWeb(String? href) {
       if (first == 'task' && id(2) != null) return '/tasks/${id(2)}';
       if (first == 'all' || first == 'my' || first == 'department' || first == 'archive' || first == 'board') return '/tasks$q';
       if (RegExp(r'^[0-9a-f-]{36}$').hasMatch(first)) return '/tasks/$first';
+      // `/tasks/{код отдела}` — задачи отдела.
+      if (first == 'new') return '/tasks/new';
+      if (RegExp(r'^[a-z_]+$').hasMatch(first)) return '/tasks?department=$first';
       return '/tasks';
     case 'hr':
       if (id(1) == 'employees' && id(2) != null) return '/home/hr/employees/${id(2)}';
@@ -40,7 +43,7 @@ String appRouteForWeb(String? href) {
       if (id(1) == 'items' && id(2) != null) return '/home/warehouse/items/${id(2)}';
       return '/home/warehouse';
     case 'requests':
-      if (id(1) != null && RegExp(r'^[0-9a-f-]{36}$').hasMatch(id(1)!)) return '/home/requests/${id(1)}';
+      // Отдельной карточки заявки в приложении нет — список заявок.
       return '/home/requests';
     case 'consultant':
       return id(1) == null ? '/ai' : '/ai/c/${id(1)}';
@@ -49,7 +52,7 @@ String appRouteForWeb(String? href) {
     case 'notifications':
       return '/home/notifications';
     case 'departments':
-      return '/home/departments';
+      return '/home/departments$q';
     case 'settings' || 'me':
       return '/profile';
     default:

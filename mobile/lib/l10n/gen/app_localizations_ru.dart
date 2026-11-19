@@ -2713,4 +2713,231 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get aiTelegram => 'Telegram';
+
+  @override
+  String get dpProduction => 'Производство';
+
+  @override
+  String get dpFinance => 'Финансы';
+
+  @override
+  String get dpSales => 'Продажи';
+
+  @override
+  String get dpMarketing => 'Маркетинг';
+
+  @override
+  String get dpSupply => 'Снабжение';
+
+  @override
+  String get dpHr => 'HR';
+
+  @override
+  String get dpLabelProduction => 'Выпуск продукции';
+
+  @override
+  String get dpLabelFinance => 'Платёжная дисциплина';
+
+  @override
+  String get dpLabelSalesForecast => 'Прогноз выполнения плана';
+
+  @override
+  String get dpLabelSalesDone => 'Выполнение плана';
+
+  @override
+  String get dpLabelMarketing => 'Квалифицированные лиды';
+
+  @override
+  String get dpLabelSupply => 'Согласованное закуплено';
+
+  @override
+  String get dpLabelSupplyOnTime => 'Заявки к закупке без просрочки';
+
+  @override
+  String get dpLabelHrMonthToDate => 'Явка с начала месяца';
+
+  @override
+  String get dpLabelHrMonth => 'Явка за месяц';
+
+  @override
+  String get dpLabelHrToday => 'Явка сегодня';
+
+  @override
+  String get dpStatusDone => 'План выполнен';
+
+  @override
+  String get dpStatusOk => 'В норме';
+
+  @override
+  String get dpStatusAttention => 'Внимание';
+
+  @override
+  String get dpStatusNone => 'Нет данных';
+
+  @override
+  String get dpStatusError => 'Ошибка';
+
+  @override
+  String dpNoData(String month) {
+    return 'Нет данных за $month';
+  }
+
+  @override
+  String dpNoPlan(String month, String fact) {
+    return 'Плана на $month нет · факт $fact т';
+  }
+
+  @override
+  String dpFact(String fact, String plan, String pct) {
+    return 'Факт $fact из $plan т ($pct)';
+  }
+
+  @override
+  String dpFactForecast(String fact, String plan, String pct, String forecast) {
+    return 'Факт $fact из $plan т ($pct) · прогноз $forecast';
+  }
+
+  @override
+  String dpHrToday(String pct) {
+    return 'Явка сегодня: $pct';
+  }
+
+  @override
+  String get dpHrNoMarks => 'Сегодня отметок пока нет';
+
+  @override
+  String get dpSupplyTodayOnly =>
+      'Показатель только на сегодня — за прошлые месяцы его нет';
+
+  @override
+  String dpSupplyDetail(int a, int b) {
+    return 'К закупке $a · просрочено $b';
+  }
+
+  @override
+  String dpSupplyDetailApproval(int a, int b, int c) {
+    return 'К закупке $a · просрочено $b · на согласовании $c';
+  }
+
+  @override
+  String get dpLoadFailed => 'Не удалось загрузить показатели отдела.';
+
+  @override
+  String get dpNone => 'Вам не открыт ни один отдел.';
+
+  @override
+  String get inSubtitle =>
+      'Что AI нашёл в данных компании и кто из AI-сотрудников работает';
+
+  @override
+  String get inCritical => 'Критично';
+
+  @override
+  String get inWarning => 'Внимание';
+
+  @override
+  String get inOpportunity => 'Возможность';
+
+  @override
+  String inSince(String date) {
+    return 'с $date';
+  }
+
+  @override
+  String get inRecommendation => 'Рекомендация:';
+
+  @override
+  String get inOpenData => 'Открыть данные';
+
+  @override
+  String get inAsk => 'Спросить консультанта';
+
+  @override
+  String get inProblems => 'Обнаружено проблем';
+
+  @override
+  String get inCriticalCount => 'Критических';
+
+  @override
+  String get inRecommendations => 'Рекомендаций';
+
+  @override
+  String get inOpportunities => 'Новых возможностей';
+
+  @override
+  String get inAll => 'Все';
+
+  @override
+  String inCritShort(int n) {
+    return '($n крит.)';
+  }
+
+  @override
+  String get inSchedule => 'Проверка по расписанию — раз в час';
+
+  @override
+  String get inRunNow => 'Проверить сейчас';
+
+  @override
+  String inChecked(String date) {
+    return 'Проверено $date';
+  }
+
+  @override
+  String inPartial(String errors) {
+    return 'Не всё проверено: $errors';
+  }
+
+  @override
+  String get inNoneInDept => 'В этом отделе находок нет.';
+
+  @override
+  String get inNone =>
+      'Находок нет: проверка не нашла отклонений или ещё не запускалась.';
+
+  @override
+  String get inNote =>
+      'Находки ищут правила по данным OneBase (без модели — цифры точные): снижение продаж к тем же дням прошлого месяца, план, дефицит и неликвид на складах, проблемные агенты, ассортимент. Для финансов, маркетинга, HR и производства данных в OneBase пока нет — находок по ним не будет.';
+
+  @override
+  String inAskText(String title, String message) {
+    return 'Разбери находку: «$title». $message Что делать?';
+  }
+
+  @override
+  String get inAskConsultant => 'Задать вопрос';
+
+  @override
+  String get inAgents => 'AI-сотрудники отделов';
+
+  @override
+  String get inAgentsNote =>
+      'Получают данные OneBase только через разрешённые инструменты и только в пределах ваших прав';
+
+  @override
+  String get inAgentOn => 'доступен';
+
+  @override
+  String get inAgentOff => 'выключен';
+
+  @override
+  String get srHint => 'Поиск по задачам, отделам, сотрудникам…';
+
+  @override
+  String get srSections => 'Разделы';
+
+  @override
+  String get srDepartments => 'Отделы';
+
+  @override
+  String get srTasks => 'Задачи';
+
+  @override
+  String get srPeople => 'Сотрудники';
+
+  @override
+  String get srNothing => 'Ничего не найдено';
+
+  @override
+  String get srClear => 'Очистить';
 }

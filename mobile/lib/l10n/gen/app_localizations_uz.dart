@@ -2663,4 +2663,231 @@ class AppLocalizationsUz extends AppLocalizations {
 
   @override
   String get aiTelegram => 'Telegram';
+
+  @override
+  String get dpProduction => 'Ishlab chiqarish';
+
+  @override
+  String get dpFinance => 'Moliya';
+
+  @override
+  String get dpSales => 'Savdo';
+
+  @override
+  String get dpMarketing => 'Marketing';
+
+  @override
+  String get dpSupply => 'Ta\'minot';
+
+  @override
+  String get dpHr => 'HR';
+
+  @override
+  String get dpLabelProduction => 'Mahsulot ishlab chiqarish';
+
+  @override
+  String get dpLabelFinance => 'To\'lov intizomi';
+
+  @override
+  String get dpLabelSalesForecast => 'Reja bajarilishi prognozi';
+
+  @override
+  String get dpLabelSalesDone => 'Reja bajarilishi';
+
+  @override
+  String get dpLabelMarketing => 'Malakali lidlar';
+
+  @override
+  String get dpLabelSupply => 'Kelishilgani xarid qilingan';
+
+  @override
+  String get dpLabelSupplyOnTime => 'Xarid uchun arizalar muddati o\'tmagan';
+
+  @override
+  String get dpLabelHrMonthToDate => 'Oy boshidan davomat';
+
+  @override
+  String get dpLabelHrMonth => 'Oylik davomat';
+
+  @override
+  String get dpLabelHrToday => 'Bugungi davomat';
+
+  @override
+  String get dpStatusDone => 'Reja bajarildi';
+
+  @override
+  String get dpStatusOk => 'Me\'yorda';
+
+  @override
+  String get dpStatusAttention => 'E\'tibor';
+
+  @override
+  String get dpStatusNone => 'Ma\'lumot yo\'q';
+
+  @override
+  String get dpStatusError => 'Xato';
+
+  @override
+  String dpNoData(String month) {
+    return '$month uchun ma\'lumot yo\'q';
+  }
+
+  @override
+  String dpNoPlan(String month, String fact) {
+    return '$month uchun reja yo\'q · fakt $fact t';
+  }
+
+  @override
+  String dpFact(String fact, String plan, String pct) {
+    return 'Fakt $plan t dan $fact t ($pct)';
+  }
+
+  @override
+  String dpFactForecast(String fact, String plan, String pct, String forecast) {
+    return 'Fakt $plan t dan $fact t ($pct) · prognoz $forecast';
+  }
+
+  @override
+  String dpHrToday(String pct) {
+    return 'Bugungi davomat: $pct';
+  }
+
+  @override
+  String get dpHrNoMarks => 'Bugun hali belgilar yo\'q';
+
+  @override
+  String get dpSupplyTodayOnly =>
+      'Ko\'rsatkich faqat bugun uchun — o\'tgan oylar uchun yo\'q';
+
+  @override
+  String dpSupplyDetail(int a, int b) {
+    return 'Xaridga $a · muddati o\'tgan $b';
+  }
+
+  @override
+  String dpSupplyDetailApproval(int a, int b, int c) {
+    return 'Xaridga $a · muddati o\'tgan $b · kelishuvda $c';
+  }
+
+  @override
+  String get dpLoadFailed => 'Bo\'lim ko\'rsatkichlarini yuklab bo\'lmadi.';
+
+  @override
+  String get dpNone => 'Sizga hech bir bo\'lim ochilmagan.';
+
+  @override
+  String get inSubtitle =>
+      'AI kompaniya ma\'lumotlarida nimani topdi va qaysi AI xodimlar ishlayapti';
+
+  @override
+  String get inCritical => 'Jiddiy';
+
+  @override
+  String get inWarning => 'E\'tibor';
+
+  @override
+  String get inOpportunity => 'Imkoniyat';
+
+  @override
+  String inSince(String date) {
+    return '$date dan';
+  }
+
+  @override
+  String get inRecommendation => 'Tavsiya:';
+
+  @override
+  String get inOpenData => 'Ma\'lumotlarni ochish';
+
+  @override
+  String get inAsk => 'Maslahatchidan so\'rash';
+
+  @override
+  String get inProblems => 'Aniqlangan muammolar';
+
+  @override
+  String get inCriticalCount => 'Jiddiylari';
+
+  @override
+  String get inRecommendations => 'Tavsiyalar';
+
+  @override
+  String get inOpportunities => 'Yangi imkoniyatlar';
+
+  @override
+  String get inAll => 'Hammasi';
+
+  @override
+  String inCritShort(int n) {
+    return '($n jiddiy)';
+  }
+
+  @override
+  String get inSchedule => 'Jadval bo\'yicha tekshiruv — soatiga bir marta';
+
+  @override
+  String get inRunNow => 'Hozir tekshirish';
+
+  @override
+  String inChecked(String date) {
+    return 'Tekshirildi: $date';
+  }
+
+  @override
+  String inPartial(String errors) {
+    return 'Hammasi tekshirilmadi: $errors';
+  }
+
+  @override
+  String get inNoneInDept => 'Bu bo\'limda topilmalar yo\'q.';
+
+  @override
+  String get inNone =>
+      'Topilmalar yo\'q: tekshiruv og\'ish topmadi yoki hali ishga tushmagan.';
+
+  @override
+  String get inNote =>
+      'Topilmalarni OneBase ma\'lumotlari bo\'yicha qoidalar izlaydi (modelsiz — raqamlar aniq): o\'tgan oyning shu kunlariga nisbatan savdo pasayishi, reja, omborlardagi taqchillik va likvidsiz tovar, muammoli agentlar, assortiment. Moliya, marketing, HR va ishlab chiqarish bo\'yicha OneBase da hozircha ma\'lumot yo\'q — ular bo\'yicha topilmalar bo\'lmaydi.';
+
+  @override
+  String inAskText(String title, String message) {
+    return 'Topilmani tahlil qiling: «$title». $message Nima qilish kerak?';
+  }
+
+  @override
+  String get inAskConsultant => 'Savol berish';
+
+  @override
+  String get inAgents => 'Bo\'limlarning AI xodimlari';
+
+  @override
+  String get inAgentsNote =>
+      'OneBase ma\'lumotlarini faqat ruxsat etilgan vositalar orqali va faqat sizning huquqlaringiz doirasida oladi';
+
+  @override
+  String get inAgentOn => 'mavjud';
+
+  @override
+  String get inAgentOff => 'o\'chirilgan';
+
+  @override
+  String get srHint => 'Vazifalar, bo\'limlar, xodimlar bo\'yicha qidirish…';
+
+  @override
+  String get srSections => 'Bo\'limlar';
+
+  @override
+  String get srDepartments => 'Bo\'limlar';
+
+  @override
+  String get srTasks => 'Vazifalar';
+
+  @override
+  String get srPeople => 'Xodimlar';
+
+  @override
+  String get srNothing => 'Hech narsa topilmadi';
+
+  @override
+  String get srClear => 'Tozalash';
 }

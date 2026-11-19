@@ -147,10 +147,13 @@ String actionLabel(AppLocalizations l10n, String from, String to) => switch ((fr
 
 /// «Задачи»: мои / все / отдела / архив, статусы (открытые, просроченные, заблокированные, закрытые), поиск по паузе ввода; подгрузка.
 class TasksScreen extends ConsumerStatefulWidget {
-  const TasksScreen({super.key, this.initialStatus, this.initialView});
+  const TasksScreen({super.key, this.initialStatus, this.initialView, this.initialDepartment});
 
   final String? initialStatus;
   final String? initialView;
+
+  /// Задачи отдела (код отдела) — вход из «Отделов», когда своего раздела у отдела нет.
+  final String? initialDepartment;
 
   @override
   ConsumerState<TasksScreen> createState() => _TasksScreenState();
@@ -159,10 +162,12 @@ class TasksScreen extends ConsumerStatefulWidget {
 class _TasksScreenState extends ConsumerState<TasksScreen> {
   late TaskQuery _q = TaskQuery(
     scope: switch (widget.initialView) {
+      _ when widget.initialDepartment != null => 'department',
       'all' => 'all',
       'archive' => 'archive',
       _ => widget.initialStatus != null ? 'all' : 'my',
     },
+    department: widget.initialDepartment,
     status: switch (widget.initialStatus) {
       null => 'open',
       'overdue' => 'overdue',

@@ -4867,6 +4867,402 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Telegram'**
   String get aiTelegram;
+
+  /// No description provided for @dpProduction.
+  ///
+  /// In ru, this message translates to:
+  /// **'Производство'**
+  String get dpProduction;
+
+  /// No description provided for @dpFinance.
+  ///
+  /// In ru, this message translates to:
+  /// **'Финансы'**
+  String get dpFinance;
+
+  /// No description provided for @dpSales.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи'**
+  String get dpSales;
+
+  /// No description provided for @dpMarketing.
+  ///
+  /// In ru, this message translates to:
+  /// **'Маркетинг'**
+  String get dpMarketing;
+
+  /// No description provided for @dpSupply.
+  ///
+  /// In ru, this message translates to:
+  /// **'Снабжение'**
+  String get dpSupply;
+
+  /// No description provided for @dpHr.
+  ///
+  /// In ru, this message translates to:
+  /// **'HR'**
+  String get dpHr;
+
+  /// No description provided for @dpLabelProduction.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выпуск продукции'**
+  String get dpLabelProduction;
+
+  /// No description provided for @dpLabelFinance.
+  ///
+  /// In ru, this message translates to:
+  /// **'Платёжная дисциплина'**
+  String get dpLabelFinance;
+
+  /// No description provided for @dpLabelSalesForecast.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прогноз выполнения плана'**
+  String get dpLabelSalesForecast;
+
+  /// No description provided for @dpLabelSalesDone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выполнение плана'**
+  String get dpLabelSalesDone;
+
+  /// No description provided for @dpLabelMarketing.
+  ///
+  /// In ru, this message translates to:
+  /// **'Квалифицированные лиды'**
+  String get dpLabelMarketing;
+
+  /// No description provided for @dpLabelSupply.
+  ///
+  /// In ru, this message translates to:
+  /// **'Согласованное закуплено'**
+  String get dpLabelSupply;
+
+  /// No description provided for @dpLabelSupplyOnTime.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заявки к закупке без просрочки'**
+  String get dpLabelSupplyOnTime;
+
+  /// No description provided for @dpLabelHrMonthToDate.
+  ///
+  /// In ru, this message translates to:
+  /// **'Явка с начала месяца'**
+  String get dpLabelHrMonthToDate;
+
+  /// No description provided for @dpLabelHrMonth.
+  ///
+  /// In ru, this message translates to:
+  /// **'Явка за месяц'**
+  String get dpLabelHrMonth;
+
+  /// No description provided for @dpLabelHrToday.
+  ///
+  /// In ru, this message translates to:
+  /// **'Явка сегодня'**
+  String get dpLabelHrToday;
+
+  /// No description provided for @dpStatusDone.
+  ///
+  /// In ru, this message translates to:
+  /// **'План выполнен'**
+  String get dpStatusDone;
+
+  /// No description provided for @dpStatusOk.
+  ///
+  /// In ru, this message translates to:
+  /// **'В норме'**
+  String get dpStatusOk;
+
+  /// No description provided for @dpStatusAttention.
+  ///
+  /// In ru, this message translates to:
+  /// **'Внимание'**
+  String get dpStatusAttention;
+
+  /// No description provided for @dpStatusNone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет данных'**
+  String get dpStatusNone;
+
+  /// No description provided for @dpStatusError.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ошибка'**
+  String get dpStatusError;
+
+  /// No description provided for @dpNoData.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет данных за {month}'**
+  String dpNoData(String month);
+
+  /// No description provided for @dpNoPlan.
+  ///
+  /// In ru, this message translates to:
+  /// **'Плана на {month} нет · факт {fact} т'**
+  String dpNoPlan(String month, String fact);
+
+  /// No description provided for @dpFact.
+  ///
+  /// In ru, this message translates to:
+  /// **'Факт {fact} из {plan} т ({pct})'**
+  String dpFact(String fact, String plan, String pct);
+
+  /// No description provided for @dpFactForecast.
+  ///
+  /// In ru, this message translates to:
+  /// **'Факт {fact} из {plan} т ({pct}) · прогноз {forecast}'**
+  String dpFactForecast(String fact, String plan, String pct, String forecast);
+
+  /// No description provided for @dpHrToday.
+  ///
+  /// In ru, this message translates to:
+  /// **'Явка сегодня: {pct}'**
+  String dpHrToday(String pct);
+
+  /// No description provided for @dpHrNoMarks.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сегодня отметок пока нет'**
+  String get dpHrNoMarks;
+
+  /// No description provided for @dpSupplyTodayOnly.
+  ///
+  /// In ru, this message translates to:
+  /// **'Показатель только на сегодня — за прошлые месяцы его нет'**
+  String get dpSupplyTodayOnly;
+
+  /// No description provided for @dpSupplyDetail.
+  ///
+  /// In ru, this message translates to:
+  /// **'К закупке {a} · просрочено {b}'**
+  String dpSupplyDetail(int a, int b);
+
+  /// No description provided for @dpSupplyDetailApproval.
+  ///
+  /// In ru, this message translates to:
+  /// **'К закупке {a} · просрочено {b} · на согласовании {c}'**
+  String dpSupplyDetailApproval(int a, int b, int c);
+
+  /// No description provided for @dpLoadFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось загрузить показатели отдела.'**
+  String get dpLoadFailed;
+
+  /// No description provided for @dpNone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вам не открыт ни один отдел.'**
+  String get dpNone;
+
+  /// No description provided for @inSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что AI нашёл в данных компании и кто из AI-сотрудников работает'**
+  String get inSubtitle;
+
+  /// No description provided for @inCritical.
+  ///
+  /// In ru, this message translates to:
+  /// **'Критично'**
+  String get inCritical;
+
+  /// No description provided for @inWarning.
+  ///
+  /// In ru, this message translates to:
+  /// **'Внимание'**
+  String get inWarning;
+
+  /// No description provided for @inOpportunity.
+  ///
+  /// In ru, this message translates to:
+  /// **'Возможность'**
+  String get inOpportunity;
+
+  /// No description provided for @inSince.
+  ///
+  /// In ru, this message translates to:
+  /// **'с {date}'**
+  String inSince(String date);
+
+  /// No description provided for @inRecommendation.
+  ///
+  /// In ru, this message translates to:
+  /// **'Рекомендация:'**
+  String get inRecommendation;
+
+  /// No description provided for @inOpenData.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть данные'**
+  String get inOpenData;
+
+  /// No description provided for @inAsk.
+  ///
+  /// In ru, this message translates to:
+  /// **'Спросить консультанта'**
+  String get inAsk;
+
+  /// No description provided for @inProblems.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обнаружено проблем'**
+  String get inProblems;
+
+  /// No description provided for @inCriticalCount.
+  ///
+  /// In ru, this message translates to:
+  /// **'Критических'**
+  String get inCriticalCount;
+
+  /// No description provided for @inRecommendations.
+  ///
+  /// In ru, this message translates to:
+  /// **'Рекомендаций'**
+  String get inRecommendations;
+
+  /// No description provided for @inOpportunities.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новых возможностей'**
+  String get inOpportunities;
+
+  /// No description provided for @inAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все'**
+  String get inAll;
+
+  /// No description provided for @inCritShort.
+  ///
+  /// In ru, this message translates to:
+  /// **'({n} крит.)'**
+  String inCritShort(int n);
+
+  /// No description provided for @inSchedule.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверка по расписанию — раз в час'**
+  String get inSchedule;
+
+  /// No description provided for @inRunNow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверить сейчас'**
+  String get inRunNow;
+
+  /// No description provided for @inChecked.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверено {date}'**
+  String inChecked(String date);
+
+  /// No description provided for @inPartial.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не всё проверено: {errors}'**
+  String inPartial(String errors);
+
+  /// No description provided for @inNoneInDept.
+  ///
+  /// In ru, this message translates to:
+  /// **'В этом отделе находок нет.'**
+  String get inNoneInDept;
+
+  /// No description provided for @inNone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Находок нет: проверка не нашла отклонений или ещё не запускалась.'**
+  String get inNone;
+
+  /// No description provided for @inNote.
+  ///
+  /// In ru, this message translates to:
+  /// **'Находки ищут правила по данным OneBase (без модели — цифры точные): снижение продаж к тем же дням прошлого месяца, план, дефицит и неликвид на складах, проблемные агенты, ассортимент. Для финансов, маркетинга, HR и производства данных в OneBase пока нет — находок по ним не будет.'**
+  String get inNote;
+
+  /// No description provided for @inAskText.
+  ///
+  /// In ru, this message translates to:
+  /// **'Разбери находку: «{title}». {message} Что делать?'**
+  String inAskText(String title, String message);
+
+  /// No description provided for @inAskConsultant.
+  ///
+  /// In ru, this message translates to:
+  /// **'Задать вопрос'**
+  String get inAskConsultant;
+
+  /// No description provided for @inAgents.
+  ///
+  /// In ru, this message translates to:
+  /// **'AI-сотрудники отделов'**
+  String get inAgents;
+
+  /// No description provided for @inAgentsNote.
+  ///
+  /// In ru, this message translates to:
+  /// **'Получают данные OneBase только через разрешённые инструменты и только в пределах ваших прав'**
+  String get inAgentsNote;
+
+  /// No description provided for @inAgentOn.
+  ///
+  /// In ru, this message translates to:
+  /// **'доступен'**
+  String get inAgentOn;
+
+  /// No description provided for @inAgentOff.
+  ///
+  /// In ru, this message translates to:
+  /// **'выключен'**
+  String get inAgentOff;
+
+  /// No description provided for @srHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Поиск по задачам, отделам, сотрудникам…'**
+  String get srHint;
+
+  /// No description provided for @srSections.
+  ///
+  /// In ru, this message translates to:
+  /// **'Разделы'**
+  String get srSections;
+
+  /// No description provided for @srDepartments.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отделы'**
+  String get srDepartments;
+
+  /// No description provided for @srTasks.
+  ///
+  /// In ru, this message translates to:
+  /// **'Задачи'**
+  String get srTasks;
+
+  /// No description provided for @srPeople.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сотрудники'**
+  String get srPeople;
+
+  /// No description provided for @srNothing.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ничего не найдено'**
+  String get srNothing;
+
+  /// No description provided for @srClear.
+  ///
+  /// In ru, this message translates to:
+  /// **'Очистить'**
+  String get srClear;
 }
 
 class _AppLocalizationsDelegate

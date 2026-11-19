@@ -415,14 +415,25 @@ abstract class AlertsSummary with _$AlertsSummary {
     @Default(0) int critical,
     @Default(0) int recommendations,
     @Default(0) int opportunities,
+
+    /// По отделам (только открытые пользователю).
+    @Default(<AlertsCategory>[]) List<AlertsCategory> byCategory,
   }) = _AlertsSummary;
 
   factory AlertsSummary.fromJson(Map<String, Object?> json) => _$AlertsSummaryFromJson(json);
 }
 
 @freezed
+abstract class AlertsCategory with _$AlertsCategory {
+  const factory AlertsCategory({required String category, @Default(0) int problems, @Default(0) int critical, @Default(0) int opportunities}) =
+      _AlertsCategory;
+
+  factory AlertsCategory.fromJson(Map<String, Object?> json) => _$AlertsCategoryFromJson(json);
+}
+
+@freezed
 abstract class AlertsRun with _$AlertsRun {
-  const factory AlertsRun({String? at}) = _AlertsRun;
+  const factory AlertsRun({String? at, @Default(<String>[]) List<String> errors}) = _AlertsRun;
 
   factory AlertsRun.fromJson(Map<String, Object?> json) => _$AlertsRunFromJson(json);
 }

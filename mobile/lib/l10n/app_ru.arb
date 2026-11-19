@@ -1740,5 +1740,185 @@
       }
     }
   },
-  "aiTelegram": "Telegram"
+  "aiTelegram": "Telegram",
+  "dpProduction": "Производство",
+  "dpFinance": "Финансы",
+  "dpSales": "Продажи",
+  "dpMarketing": "Маркетинг",
+  "dpSupply": "Снабжение",
+  "dpHr": "HR",
+  "dpLabelProduction": "Выпуск продукции",
+  "dpLabelFinance": "Платёжная дисциплина",
+  "dpLabelSalesForecast": "Прогноз выполнения плана",
+  "dpLabelSalesDone": "Выполнение плана",
+  "dpLabelMarketing": "Квалифицированные лиды",
+  "dpLabelSupply": "Согласованное закуплено",
+  "dpLabelSupplyOnTime": "Заявки к закупке без просрочки",
+  "dpLabelHrMonthToDate": "Явка с начала месяца",
+  "dpLabelHrMonth": "Явка за месяц",
+  "dpLabelHrToday": "Явка сегодня",
+  "dpStatusDone": "План выполнен",
+  "dpStatusOk": "В норме",
+  "dpStatusAttention": "Внимание",
+  "dpStatusNone": "Нет данных",
+  "dpStatusError": "Ошибка",
+  "dpNoData": "Нет данных за {month}",
+  "@dpNoData": {
+    "placeholders": {
+      "month": {
+        "type": "String"
+      }
+    }
+  },
+  "dpNoPlan": "Плана на {month} нет · факт {fact} т",
+  "@dpNoPlan": {
+    "placeholders": {
+      "month": {
+        "type": "String"
+      },
+      "fact": {
+        "type": "String"
+      }
+    }
+  },
+  "dpFact": "Факт {fact} из {plan} т ({pct})",
+  "@dpFact": {
+    "placeholders": {
+      "fact": {
+        "type": "String"
+      },
+      "plan": {
+        "type": "String"
+      },
+      "pct": {
+        "type": "String"
+      }
+    }
+  },
+  "dpFactForecast": "Факт {fact} из {plan} т ({pct}) · прогноз {forecast}",
+  "@dpFactForecast": {
+    "placeholders": {
+      "fact": {
+        "type": "String"
+      },
+      "plan": {
+        "type": "String"
+      },
+      "pct": {
+        "type": "String"
+      },
+      "forecast": {
+        "type": "String"
+      }
+    }
+  },
+  "dpHrToday": "Явка сегодня: {pct}",
+  "@dpHrToday": {
+    "placeholders": {
+      "pct": {
+        "type": "String"
+      }
+    }
+  },
+  "dpHrNoMarks": "Сегодня отметок пока нет",
+  "dpSupplyTodayOnly": "Показатель только на сегодня — за прошлые месяцы его нет",
+  "dpSupplyDetail": "К закупке {a} · просрочено {b}",
+  "@dpSupplyDetail": {
+    "placeholders": {
+      "a": {
+        "type": "int"
+      },
+      "b": {
+        "type": "int"
+      }
+    }
+  },
+  "dpSupplyDetailApproval": "К закупке {a} · просрочено {b} · на согласовании {c}",
+  "@dpSupplyDetailApproval": {
+    "placeholders": {
+      "a": {
+        "type": "int"
+      },
+      "b": {
+        "type": "int"
+      },
+      "c": {
+        "type": "int"
+      }
+    }
+  },
+  "dpLoadFailed": "Не удалось загрузить показатели отдела.",
+  "dpNone": "Вам не открыт ни один отдел.",
+  "inSubtitle": "Что AI нашёл в данных компании и кто из AI-сотрудников работает",
+  "inCritical": "Критично",
+  "inWarning": "Внимание",
+  "inOpportunity": "Возможность",
+  "inSince": "с {date}",
+  "@inSince": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "inRecommendation": "Рекомендация:",
+  "inOpenData": "Открыть данные",
+  "inAsk": "Спросить консультанта",
+  "inProblems": "Обнаружено проблем",
+  "inCriticalCount": "Критических",
+  "inRecommendations": "Рекомендаций",
+  "inOpportunities": "Новых возможностей",
+  "inAll": "Все",
+  "inCritShort": "({n} крит.)",
+  "@inCritShort": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inSchedule": "Проверка по расписанию — раз в час",
+  "inRunNow": "Проверить сейчас",
+  "inChecked": "Проверено {date}",
+  "@inChecked": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "inPartial": "Не всё проверено: {errors}",
+  "@inPartial": {
+    "placeholders": {
+      "errors": {
+        "type": "String"
+      }
+    }
+  },
+  "inNoneInDept": "В этом отделе находок нет.",
+  "inNone": "Находок нет: проверка не нашла отклонений или ещё не запускалась.",
+  "inNote": "Находки ищут правила по данным OneBase (без модели — цифры точные): снижение продаж к тем же дням прошлого месяца, план, дефицит и неликвид на складах, проблемные агенты, ассортимент. Для финансов, маркетинга, HR и производства данных в OneBase пока нет — находок по ним не будет.",
+  "inAskText": "Разбери находку: «{title}». {message} Что делать?",
+  "@inAskText": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "inAskConsultant": "Задать вопрос",
+  "inAgents": "AI-сотрудники отделов",
+  "inAgentsNote": "Получают данные OneBase только через разрешённые инструменты и только в пределах ваших прав",
+  "inAgentOn": "доступен",
+  "inAgentOff": "выключен",
+  "srHint": "Поиск по задачам, отделам, сотрудникам…",
+  "srSections": "Разделы",
+  "srDepartments": "Отделы",
+  "srTasks": "Задачи",
+  "srPeople": "Сотрудники",
+  "srNothing": "Ничего не найдено",
+  "srClear": "Очистить"
 }

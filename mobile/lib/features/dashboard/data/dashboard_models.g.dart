@@ -493,6 +493,11 @@ _AlertsSummary _$AlertsSummaryFromJson(Map<String, dynamic> json) =>
       critical: (json['critical'] as num?)?.toInt() ?? 0,
       recommendations: (json['recommendations'] as num?)?.toInt() ?? 0,
       opportunities: (json['opportunities'] as num?)?.toInt() ?? 0,
+      byCategory:
+          (json['byCategory'] as List<dynamic>?)
+              ?.map((e) => AlertsCategory.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const <AlertsCategory>[],
     );
 
 Map<String, dynamic> _$AlertsSummaryToJson(_AlertsSummary instance) =>
@@ -501,13 +506,34 @@ Map<String, dynamic> _$AlertsSummaryToJson(_AlertsSummary instance) =>
       'critical': instance.critical,
       'recommendations': instance.recommendations,
       'opportunities': instance.opportunities,
+      'byCategory': instance.byCategory.map((e) => e.toJson()).toList(),
     };
 
-_AlertsRun _$AlertsRunFromJson(Map<String, dynamic> json) =>
-    _AlertsRun(at: json['at'] as String?);
+_AlertsCategory _$AlertsCategoryFromJson(Map<String, dynamic> json) =>
+    _AlertsCategory(
+      category: json['category'] as String,
+      problems: (json['problems'] as num?)?.toInt() ?? 0,
+      critical: (json['critical'] as num?)?.toInt() ?? 0,
+      opportunities: (json['opportunities'] as num?)?.toInt() ?? 0,
+    );
+
+Map<String, dynamic> _$AlertsCategoryToJson(_AlertsCategory instance) =>
+    <String, dynamic>{
+      'category': instance.category,
+      'problems': instance.problems,
+      'critical': instance.critical,
+      'opportunities': instance.opportunities,
+    };
+
+_AlertsRun _$AlertsRunFromJson(Map<String, dynamic> json) => _AlertsRun(
+  at: json['at'] as String?,
+  errors:
+      (json['errors'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+      const <String>[],
+);
 
 Map<String, dynamic> _$AlertsRunToJson(_AlertsRun instance) =>
-    <String, dynamic>{'at': ?instance.at};
+    <String, dynamic>{'at': ?instance.at, 'errors': instance.errors};
 
 _AiAlert _$AiAlertFromJson(Map<String, dynamic> json) => _AiAlert(
   id: json['id'] as String,

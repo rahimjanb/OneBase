@@ -1,18 +1,21 @@
 import 'package:go_router/go_router.dart';
 
+import '../features/departments/presentation/departments_screen.dart';
 import '../features/finance/presentation/finance_screens.dart';
 import '../features/hr/presentation/hr_screens.dart';
+import '../features/insights/presentation/insights_screen.dart';
 import '../features/notifications/presentation/notifications_screen.dart';
 import '../features/production/presentation/production_screens.dart';
 import '../features/sales/presentation/clients_screens.dart';
+import '../features/search/presentation/search_screen.dart';
 import '../features/warehouse/presentation/warehouse_screens.dart';
-import '../shared/extensions/context_ext.dart';
-import '../shared/widgets/coming_soon.dart';
 import 'shell/app_tab.dart';
 
 /// Разделы из веера и с главной — внутри ветки «Главная» (`/home/<раздел>`): нижняя панель остаётся, «назад» ведёт на главную.
 final List<RouteBase> moduleRoutes = [
-  GoRoute(path: 'search', builder: (context, state) => ComingSoonScreen(title: context.l10n.searchTitle, stage: 4)),
+  GoRoute(path: 'search', builder: (context, state) => const SearchScreen()),
+  // Настройки приложения — в «Профиле» (тема, язык, уведомления, Telegram, безопасность).
+  GoRoute(path: AppModule.settings.segment, redirect: (context, state) => '/profile'),
   GoRoute(
     path: AppModule.sales.segment,
     builder: (context, state) => const ClientsScreen(),
@@ -58,6 +61,6 @@ final List<RouteBase> moduleRoutes = [
     routes: [GoRoute(path: 'employees/:id', builder: (context, state) => EmployeeScreen(id: state.pathParameters['id']!))],
   ),
   GoRoute(path: AppModule.notifications.segment, builder: (context, state) => const NotificationsScreen()),
-  for (final m in AppModule.values.where((m) => !const [AppModule.sales, AppModule.finance, AppModule.production, AppModule.warehouse, AppModule.requests, AppModule.hr, AppModule.notifications].contains(m)))
-    GoRoute(path: m.segment, builder: (context, state) => ComingSoonScreen(title: m.label(context.l10n), stage: 5)),
+  GoRoute(path: AppModule.departments.segment, builder: (context, state) => DepartmentsScreen(month: state.uri.queryParameters['month'])),
+  GoRoute(path: AppModule.insights.segment, builder: (context, state) => const InsightsScreen()),
 ];
