@@ -1674,4 +1674,497 @@ class AppLocalizationsUz extends AppLocalizations {
   String anWas(String value) {
     return 'edi $value';
   }
+
+  @override
+  String get finTabOverview => 'Sharh';
+
+  @override
+  String get finTabPnl => 'Daromad va xarajatlar';
+
+  @override
+  String get finTabCash => 'Pul';
+
+  @override
+  String get finTabDebts => 'Qarzlar';
+
+  @override
+  String get finTabAnomalies => 'Og\'ishlar';
+
+  @override
+  String get finPeriodMtd => 'Shu oy';
+
+  @override
+  String get finPeriodPrev => 'O\'tgan oy';
+
+  @override
+  String get finPeriodQuarter => 'Chorak';
+
+  @override
+  String get finPeriodYear => 'Yil boshidan';
+
+  @override
+  String get finAllOrgs => 'Barcha tashkilotlar';
+
+  @override
+  String get finDemo => '1C test manbasining demo ma\'lumotlari';
+
+  @override
+  String finDataThrough(String date) {
+    return '$date gacha provodkalar';
+  }
+
+  @override
+  String get finGrossProfit => 'Yalpi foyda';
+
+  @override
+  String finVsPrev(String value) {
+    return 'o\'tgan davrga $value';
+  }
+
+  @override
+  String get finMonths => '12 oy';
+
+  @override
+  String get finCashTotal => 'Hisob va kassadagi pul';
+
+  @override
+  String get finReceivables => 'Bizga qarz';
+
+  @override
+  String get finPayables => 'Biz qarzmiz';
+
+  @override
+  String get finInventory => 'Zaxiralar';
+
+  @override
+  String get finExpenseGrowth => 'O\'sgan xarajatlar';
+
+  @override
+  String get finExpensesByAccount => 'Moddalar bo\'yicha xarajatlar';
+
+  @override
+  String get finExpensesByDepartment => 'Bo\'linmalar bo\'yicha xarajatlar';
+
+  @override
+  String get finInflow => 'Tushumlar';
+
+  @override
+  String get finOutflow => 'To\'lovlar';
+
+  @override
+  String get finBalances => 'Qoldiqlar';
+
+  @override
+  String get finOverdue => 'Muddati o\'tgan';
+
+  @override
+  String get finAdvances => 'Avanslar';
+
+  @override
+  String get finBucket_not_due => 'Muddat kelmagan';
+
+  @override
+  String get finBucket_1_30 => '1–30 kun kechikish';
+
+  @override
+  String get finBucket_31_60 => '31–60 kun';
+
+  @override
+  String get finBucket_61_90 => '61–90 kun';
+
+  @override
+  String get finBucket_over_90 => '90 kundan ko\'p';
+
+  @override
+  String get finBucket_no_term => 'Muddat belgilanmagan';
+
+  @override
+  String finOverdueDays(int n) {
+    return '$n kungacha kechikish';
+  }
+
+  @override
+  String get finChecks => 'Nima tekshirildi';
+
+  @override
+  String get finNoAnomalies => 'Og\'ishlar topilmadi';
+
+  @override
+  String get finEntries => 'Provodkalar';
+
+  @override
+  String finEntriesTotal(int n, String sum) {
+    return '$sum ga $n ta provodka';
+  }
+
+  @override
+  String get finDocument => '1C hujjati';
+
+  @override
+  String get finPosted => 'O\'tkazilgan';
+
+  @override
+  String get finNotPosted => 'O\'tkazilmagan';
+
+  @override
+  String get finCounterparty => 'Kontragent';
+
+  @override
+  String get finContract => 'Shartnoma';
+
+  @override
+  String get finWarehouse => 'Ombor';
+
+  @override
+  String get finPurpose => 'Maqsad';
+
+  @override
+  String get finLines => 'Qatorlar';
+
+  @override
+  String get finVat => 'QQS';
+
+  @override
+  String get finAccounts => 'Hisoblar (AOV)';
+
+  @override
+  String get finOpening => 'Boshi';
+
+  @override
+  String get finTurnover => 'Aylanmalar';
+
+  @override
+  String get finClosing => 'Oxiri';
+
+  @override
+  String get finDebit => 'Dt';
+
+  @override
+  String get finCredit => 'Kt';
+
+  @override
+  String get prTabOverview => 'Sharh';
+
+  @override
+  String get prTabOrders => 'Topshiriqlar';
+
+  @override
+  String get prTabShifts => 'Smenalar';
+
+  @override
+  String get prGood => 'Yaroqli mahsulot';
+
+  @override
+  String get prPlan => 'Reja';
+
+  @override
+  String get prOpenShifts => 'Ochiq smenalar';
+
+  @override
+  String get prClosedShifts => 'Tasdiqlashni kutmoqda';
+
+  @override
+  String get prNormDev => 'Me\'yordan og\'ish';
+
+  @override
+  String get prByProduct => 'Mahsulotlar bo\'yicha';
+
+  @override
+  String get prIssues => 'Muammolar';
+
+  @override
+  String get prStockValue => 'Ombordagi xomashyo';
+
+  @override
+  String get prExpiring => '30 kunda muddati tugaydi';
+
+  @override
+  String get prExpired => 'Muddati o\'tgan';
+
+  @override
+  String get prBelowMin => 'Minimumdan past';
+
+  @override
+  String get prOverdueOrders => 'Muddati o\'tgan topshiriqlar';
+
+  @override
+  String get prLowDays => 'Eng kam zaxira';
+
+  @override
+  String prDaysLeft(String n) {
+    return '$n kun';
+  }
+
+  @override
+  String get prStatus_Draft => 'Qoralama';
+
+  @override
+  String get prStatus_Released => 'Chiqarilgan';
+
+  @override
+  String get prStatus_InProgress => 'Jarayonda';
+
+  @override
+  String get prStatus_Completed => 'Yopilgan';
+
+  @override
+  String get prStatus_Cancelled => 'Bekor qilingan';
+
+  @override
+  String get prFilterOpen => 'Ochiq';
+
+  @override
+  String get prFilterDone => 'Yopilgan';
+
+  @override
+  String get prFilterAll => 'Hammasi';
+
+  @override
+  String prPlanned(String qty, String date) {
+    return 'Reja $qty · $date ga';
+  }
+
+  @override
+  String get prOutput => 'Ishlab chiqarish';
+
+  @override
+  String get prMaterials => 'Xomashyo va materiallar';
+
+  @override
+  String prRequired(String v) {
+    return 'kerak $v';
+  }
+
+  @override
+  String prIssued(String v) {
+    return 'berilgan $v';
+  }
+
+  @override
+  String prLeft(String v) {
+    return 'berish qoldi $v';
+  }
+
+  @override
+  String prAvailable(String v) {
+    return 'omborda $v';
+  }
+
+  @override
+  String get prOverconsumed => 'ortiqcha sarf';
+
+  @override
+  String get prHistory => 'Tarix';
+
+  @override
+  String get prRelease => 'Topshiriqni chiqarish';
+
+  @override
+  String get prComplete => 'Topshiriqni yopish';
+
+  @override
+  String get prCancel => 'Topshiriqni bekor qilish';
+
+  @override
+  String get prReceive => 'Mahsulotni kirim qilish';
+
+  @override
+  String prOutputQty(String unit) {
+    return 'Haqiqiy ishlab chiqarish, $unit';
+  }
+
+  @override
+  String get prReason => 'Sabab';
+
+  @override
+  String get prConfirmTitle => 'Operatsiyani tasdiqlang';
+
+  @override
+  String get prConfirmRelease =>
+      'Topshiriq ishga yuboriladi; xomashyo yetishmasligi belgilanadi, ta\'minot xabardor qilinadi.';
+
+  @override
+  String prConfirmComplete(String qty) {
+    return '$qty ishlab chiqarish qayd etiladi va me\'yor bo\'yicha sarf hisoblanadi. Yopishni bekor qilib bo\'lmaydi.';
+  }
+
+  @override
+  String get prConfirmReceive => 'Mahsulot omborga kirim qilinadi.';
+
+  @override
+  String prDone(String what) {
+    return 'Tayyor: $what';
+  }
+
+  @override
+  String get prConflict =>
+      'Topshiriq o\'zgartirildi — ma\'lumotlar yangilandi, tekshirib qaytadan urinib ko\'ring.';
+
+  @override
+  String prShift(int n, String date) {
+    return '$n-smena · $date';
+  }
+
+  @override
+  String get prShiftStatus_Draft => 'Kiritish';
+
+  @override
+  String get prShiftStatus_Closed => 'Tasdiqlashni kutmoqda';
+
+  @override
+  String get prShiftStatus_Approved => 'Tasdiqlangan';
+
+  @override
+  String get prShiftStatus_Superseded => 'Almashtirilgan';
+
+  @override
+  String get prShiftStatus_Cancelled => 'Bekor qilingan';
+
+  @override
+  String get whTabStock => 'Qoldiqlar';
+
+  @override
+  String get whTabMoves => 'Harakatlar';
+
+  @override
+  String get whSearch => 'Artikul, nom yoki shtrix-kod';
+
+  @override
+  String get whFilterAll => 'Hammasi';
+
+  @override
+  String get whFilterLow => 'Minimumdan past';
+
+  @override
+  String get whFilterReserved => 'Rezervda';
+
+  @override
+  String get whFilterEmpty => 'Qoldiq yo\'q';
+
+  @override
+  String get whFilterExpiring => 'Muddati tugayapti';
+
+  @override
+  String get whFilterExpired => 'Muddati o\'tgan';
+
+  @override
+  String get whOnHand => 'Qoldiq';
+
+  @override
+  String get whReserved => 'Rezerv';
+
+  @override
+  String get whAvailable => 'Bo\'sh';
+
+  @override
+  String get whMin => 'Minimum';
+
+  @override
+  String get whReservations => 'Arizalar bo\'yicha rezervlar';
+
+  @override
+  String get whMovements => 'Oxirgi harakatlar';
+
+  @override
+  String get whOperation => 'Operatsiya';
+
+  @override
+  String get whOpReceipt => 'Kirim';
+
+  @override
+  String get whOpIssue => 'Bo\'limga berish';
+
+  @override
+  String get whOpWriteOff => 'Hisobdan chiqarish';
+
+  @override
+  String get whItem => 'Pozitsiya';
+
+  @override
+  String get whPickItem => 'Pozitsiyani tanlang';
+
+  @override
+  String whQuantity(String unit) {
+    return 'Miqdor, $unit';
+  }
+
+  @override
+  String get whUnitCost => 'Birlik narxi, so\'m';
+
+  @override
+  String get whDepartment => 'Bo\'lim';
+
+  @override
+  String get whReceiver => 'Kim oldi';
+
+  @override
+  String get whComment => 'Izoh';
+
+  @override
+  String get whReference => 'Yuk xati';
+
+  @override
+  String get whReasonRequired => 'Hisobdan chiqarish sababini kiriting';
+
+  @override
+  String get whPost => 'O\'tkazish';
+
+  @override
+  String whConfirm(String op, String item, String qty) {
+    return '$op: $item — $qty. Ombordagi qoldiq o\'zgaradi.';
+  }
+
+  @override
+  String get whPosted => 'Hujjat o\'tkazildi';
+
+  @override
+  String get whNoPosts =>
+      'Omborda operatsiyalarni faqat shu omborning omborchisi o\'tkaza oladi.';
+
+  @override
+  String get whWarehouse => 'Ombor';
+
+  @override
+  String get whOnline =>
+      'Ombor operatsiyalari faqat server bilan aloqa bo\'lganda o\'tkaziladi.';
+
+  @override
+  String get mvReceipt => 'Kirim';
+
+  @override
+  String get mvIssue => 'Berish';
+
+  @override
+  String get mvWriteOff => 'Hisobdan chiqarish';
+
+  @override
+  String get mvAdjustment => 'Inventarizatsiya';
+
+  @override
+  String get mvTransfer => 'Ko\'chirish';
+
+  @override
+  String get mvReversal => 'Storno';
+
+  @override
+  String get mvProduction => 'Ishlab chiqarish';
+
+  @override
+  String get rqScopeMy => 'Meniki';
+
+  @override
+  String get rqScopeDepartment => 'Bo\'lim';
+
+  @override
+  String get rqScopeAll => 'Hammasi';
+
+  @override
+  String rqItems(int n) {
+    return '$n poz.';
+  }
+
+  @override
+  String rqDesired(String date) {
+    return '$date ga kerak';
+  }
 }

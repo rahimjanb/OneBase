@@ -29,14 +29,15 @@ class ObSliverAppBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ob;
-    final canPop = showBack ?? GoRouter.of(context).canPop();
+    final router = GoRouter.maybeOf(context);
+    final canPop = showBack ?? (router?.canPop() ?? Navigator.of(context).canPop());
     final lead = leading ??
         (canPop
             ? Center(
                 child: HeaderButton(
                   icon: LucideIcons.chevronLeft,
                   semanticLabel: MaterialLocalizations.of(context).backButtonTooltip,
-                  onTap: () => context.pop(),
+                  onTap: () => router != null ? context.pop() : Navigator.of(context).maybePop(),
                 ),
               )
             : null);

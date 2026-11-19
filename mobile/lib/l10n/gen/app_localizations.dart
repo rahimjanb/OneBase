@@ -3019,6 +3019,912 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'было {value}'**
   String anWas(String value);
+
+  /// No description provided for @finTabOverview.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обзор'**
+  String get finTabOverview;
+
+  /// No description provided for @finTabPnl.
+  ///
+  /// In ru, this message translates to:
+  /// **'Доходы и расходы'**
+  String get finTabPnl;
+
+  /// No description provided for @finTabCash.
+  ///
+  /// In ru, this message translates to:
+  /// **'Деньги'**
+  String get finTabCash;
+
+  /// No description provided for @finTabDebts.
+  ///
+  /// In ru, this message translates to:
+  /// **'Долги'**
+  String get finTabDebts;
+
+  /// No description provided for @finTabAnomalies.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отклонения'**
+  String get finTabAnomalies;
+
+  /// No description provided for @finPeriodMtd.
+  ///
+  /// In ru, this message translates to:
+  /// **'Этот месяц'**
+  String get finPeriodMtd;
+
+  /// No description provided for @finPeriodPrev.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прошлый месяц'**
+  String get finPeriodPrev;
+
+  /// No description provided for @finPeriodQuarter.
+  ///
+  /// In ru, this message translates to:
+  /// **'Квартал'**
+  String get finPeriodQuarter;
+
+  /// No description provided for @finPeriodYear.
+  ///
+  /// In ru, this message translates to:
+  /// **'С начала года'**
+  String get finPeriodYear;
+
+  /// No description provided for @finAllOrgs.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все организации'**
+  String get finAllOrgs;
+
+  /// No description provided for @finDemo.
+  ///
+  /// In ru, this message translates to:
+  /// **'Демо-данные тестового источника 1С'**
+  String get finDemo;
+
+  /// No description provided for @finDataThrough.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проводки по {date}'**
+  String finDataThrough(String date);
+
+  /// No description provided for @finGrossProfit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Валовая прибыль'**
+  String get finGrossProfit;
+
+  /// No description provided for @finVsPrev.
+  ///
+  /// In ru, this message translates to:
+  /// **'к прошлому периоду {value}'**
+  String finVsPrev(String value);
+
+  /// No description provided for @finMonths.
+  ///
+  /// In ru, this message translates to:
+  /// **'12 месяцев'**
+  String get finMonths;
+
+  /// No description provided for @finCashTotal.
+  ///
+  /// In ru, this message translates to:
+  /// **'Деньги на счетах и в кассе'**
+  String get finCashTotal;
+
+  /// No description provided for @finReceivables.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нам должны'**
+  String get finReceivables;
+
+  /// No description provided for @finPayables.
+  ///
+  /// In ru, this message translates to:
+  /// **'Мы должны'**
+  String get finPayables;
+
+  /// No description provided for @finInventory.
+  ///
+  /// In ru, this message translates to:
+  /// **'Запасы'**
+  String get finInventory;
+
+  /// No description provided for @finExpenseGrowth.
+  ///
+  /// In ru, this message translates to:
+  /// **'Расходы, которые выросли'**
+  String get finExpenseGrowth;
+
+  /// No description provided for @finExpensesByAccount.
+  ///
+  /// In ru, this message translates to:
+  /// **'Расходы по статьям'**
+  String get finExpensesByAccount;
+
+  /// No description provided for @finExpensesByDepartment.
+  ///
+  /// In ru, this message translates to:
+  /// **'Расходы по подразделениям'**
+  String get finExpensesByDepartment;
+
+  /// No description provided for @finInflow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Поступления'**
+  String get finInflow;
+
+  /// No description provided for @finOutflow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Платежи'**
+  String get finOutflow;
+
+  /// No description provided for @finBalances.
+  ///
+  /// In ru, this message translates to:
+  /// **'Остатки'**
+  String get finBalances;
+
+  /// No description provided for @finOverdue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Просрочено'**
+  String get finOverdue;
+
+  /// No description provided for @finAdvances.
+  ///
+  /// In ru, this message translates to:
+  /// **'Авансы'**
+  String get finAdvances;
+
+  /// No description provided for @finBucket_not_due.
+  ///
+  /// In ru, this message translates to:
+  /// **'Срок не наступил'**
+  String get finBucket_not_due;
+
+  /// No description provided for @finBucket_1_30.
+  ///
+  /// In ru, this message translates to:
+  /// **'Просрочка 1–30 дней'**
+  String get finBucket_1_30;
+
+  /// No description provided for @finBucket_31_60.
+  ///
+  /// In ru, this message translates to:
+  /// **'31–60 дней'**
+  String get finBucket_31_60;
+
+  /// No description provided for @finBucket_61_90.
+  ///
+  /// In ru, this message translates to:
+  /// **'61–90 дней'**
+  String get finBucket_61_90;
+
+  /// No description provided for @finBucket_over_90.
+  ///
+  /// In ru, this message translates to:
+  /// **'Больше 90 дней'**
+  String get finBucket_over_90;
+
+  /// No description provided for @finBucket_no_term.
+  ///
+  /// In ru, this message translates to:
+  /// **'Срок не задан'**
+  String get finBucket_no_term;
+
+  /// No description provided for @finOverdueDays.
+  ///
+  /// In ru, this message translates to:
+  /// **'просрочка до {n} дн.'**
+  String finOverdueDays(int n);
+
+  /// No description provided for @finChecks.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что проверено'**
+  String get finChecks;
+
+  /// No description provided for @finNoAnomalies.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отклонений не найдено'**
+  String get finNoAnomalies;
+
+  /// No description provided for @finEntries.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проводки'**
+  String get finEntries;
+
+  /// No description provided for @finEntriesTotal.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} проводок на {sum}'**
+  String finEntriesTotal(int n, String sum);
+
+  /// No description provided for @finDocument.
+  ///
+  /// In ru, this message translates to:
+  /// **'Документ 1С'**
+  String get finDocument;
+
+  /// No description provided for @finPosted.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проведён'**
+  String get finPosted;
+
+  /// No description provided for @finNotPosted.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не проведён'**
+  String get finNotPosted;
+
+  /// No description provided for @finCounterparty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Контрагент'**
+  String get finCounterparty;
+
+  /// No description provided for @finContract.
+  ///
+  /// In ru, this message translates to:
+  /// **'Договор'**
+  String get finContract;
+
+  /// No description provided for @finWarehouse.
+  ///
+  /// In ru, this message translates to:
+  /// **'Склад'**
+  String get finWarehouse;
+
+  /// No description provided for @finPurpose.
+  ///
+  /// In ru, this message translates to:
+  /// **'Назначение'**
+  String get finPurpose;
+
+  /// No description provided for @finLines.
+  ///
+  /// In ru, this message translates to:
+  /// **'Строки'**
+  String get finLines;
+
+  /// No description provided for @finVat.
+  ///
+  /// In ru, this message translates to:
+  /// **'НДС'**
+  String get finVat;
+
+  /// No description provided for @finAccounts.
+  ///
+  /// In ru, this message translates to:
+  /// **'Счета (ОСВ)'**
+  String get finAccounts;
+
+  /// No description provided for @finOpening.
+  ///
+  /// In ru, this message translates to:
+  /// **'Начало'**
+  String get finOpening;
+
+  /// No description provided for @finTurnover.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обороты'**
+  String get finTurnover;
+
+  /// No description provided for @finClosing.
+  ///
+  /// In ru, this message translates to:
+  /// **'Конец'**
+  String get finClosing;
+
+  /// No description provided for @finDebit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Дт'**
+  String get finDebit;
+
+  /// No description provided for @finCredit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Кт'**
+  String get finCredit;
+
+  /// No description provided for @prTabOverview.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обзор'**
+  String get prTabOverview;
+
+  /// No description provided for @prTabOrders.
+  ///
+  /// In ru, this message translates to:
+  /// **'Задания'**
+  String get prTabOrders;
+
+  /// No description provided for @prTabShifts.
+  ///
+  /// In ru, this message translates to:
+  /// **'Смены'**
+  String get prTabShifts;
+
+  /// No description provided for @prGood.
+  ///
+  /// In ru, this message translates to:
+  /// **'Годный выпуск'**
+  String get prGood;
+
+  /// No description provided for @prPlan.
+  ///
+  /// In ru, this message translates to:
+  /// **'План'**
+  String get prPlan;
+
+  /// No description provided for @prOpenShifts.
+  ///
+  /// In ru, this message translates to:
+  /// **'Смены открыты'**
+  String get prOpenShifts;
+
+  /// No description provided for @prClosedShifts.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ждут утверждения'**
+  String get prClosedShifts;
+
+  /// No description provided for @prNormDev.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отклонение от нормы'**
+  String get prNormDev;
+
+  /// No description provided for @prByProduct.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выпуск по продуктам'**
+  String get prByProduct;
+
+  /// No description provided for @prIssues.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проблемы'**
+  String get prIssues;
+
+  /// No description provided for @prStockValue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сырьё на складах'**
+  String get prStockValue;
+
+  /// No description provided for @prExpiring.
+  ///
+  /// In ru, this message translates to:
+  /// **'Истекает за 30 дней'**
+  String get prExpiring;
+
+  /// No description provided for @prExpired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Просрочено'**
+  String get prExpired;
+
+  /// No description provided for @prBelowMin.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ниже минимума'**
+  String get prBelowMin;
+
+  /// No description provided for @prOverdueOrders.
+  ///
+  /// In ru, this message translates to:
+  /// **'Просрочено заданий'**
+  String get prOverdueOrders;
+
+  /// No description provided for @prLowDays.
+  ///
+  /// In ru, this message translates to:
+  /// **'Запаса меньше всего'**
+  String get prLowDays;
+
+  /// No description provided for @prDaysLeft.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} дн.'**
+  String prDaysLeft(String n);
+
+  /// No description provided for @prStatus_Draft.
+  ///
+  /// In ru, this message translates to:
+  /// **'Черновик'**
+  String get prStatus_Draft;
+
+  /// No description provided for @prStatus_Released.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выпущено'**
+  String get prStatus_Released;
+
+  /// No description provided for @prStatus_InProgress.
+  ///
+  /// In ru, this message translates to:
+  /// **'В работе'**
+  String get prStatus_InProgress;
+
+  /// No description provided for @prStatus_Completed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Закрыто'**
+  String get prStatus_Completed;
+
+  /// No description provided for @prStatus_Cancelled.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отменено'**
+  String get prStatus_Cancelled;
+
+  /// No description provided for @prFilterOpen.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открытые'**
+  String get prFilterOpen;
+
+  /// No description provided for @prFilterDone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Закрытые'**
+  String get prFilterDone;
+
+  /// No description provided for @prFilterAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все'**
+  String get prFilterAll;
+
+  /// No description provided for @prPlanned.
+  ///
+  /// In ru, this message translates to:
+  /// **'План {qty} · на {date}'**
+  String prPlanned(String qty, String date);
+
+  /// No description provided for @prOutput.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выпуск'**
+  String get prOutput;
+
+  /// No description provided for @prMaterials.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сырьё и материалы'**
+  String get prMaterials;
+
+  /// No description provided for @prRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'нужно {v}'**
+  String prRequired(String v);
+
+  /// No description provided for @prIssued.
+  ///
+  /// In ru, this message translates to:
+  /// **'выдано {v}'**
+  String prIssued(String v);
+
+  /// No description provided for @prLeft.
+  ///
+  /// In ru, this message translates to:
+  /// **'осталось выдать {v}'**
+  String prLeft(String v);
+
+  /// No description provided for @prAvailable.
+  ///
+  /// In ru, this message translates to:
+  /// **'на складе {v}'**
+  String prAvailable(String v);
+
+  /// No description provided for @prOverconsumed.
+  ///
+  /// In ru, this message translates to:
+  /// **'перерасход'**
+  String get prOverconsumed;
+
+  /// No description provided for @prHistory.
+  ///
+  /// In ru, this message translates to:
+  /// **'История'**
+  String get prHistory;
+
+  /// No description provided for @prRelease.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выпустить задание'**
+  String get prRelease;
+
+  /// No description provided for @prComplete.
+  ///
+  /// In ru, this message translates to:
+  /// **'Закрыть задание'**
+  String get prComplete;
+
+  /// No description provided for @prCancel.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отменить задание'**
+  String get prCancel;
+
+  /// No description provided for @prReceive.
+  ///
+  /// In ru, this message translates to:
+  /// **'Оприходовать выпуск'**
+  String get prReceive;
+
+  /// No description provided for @prOutputQty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Фактический выпуск, {unit}'**
+  String prOutputQty(String unit);
+
+  /// No description provided for @prReason.
+  ///
+  /// In ru, this message translates to:
+  /// **'Причина'**
+  String get prReason;
+
+  /// No description provided for @prConfirmTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подтвердите операцию'**
+  String get prConfirmTitle;
+
+  /// No description provided for @prConfirmRelease.
+  ///
+  /// In ru, this message translates to:
+  /// **'Задание уйдёт в работу; нехватка сырья будет отмечена, снабжение получит уведомление.'**
+  String get prConfirmRelease;
+
+  /// No description provided for @prConfirmComplete.
+  ///
+  /// In ru, this message translates to:
+  /// **'Будет зафиксирован выпуск {qty} и посчитан расход по норме. Отменить закрытие нельзя.'**
+  String prConfirmComplete(String qty);
+
+  /// No description provided for @prConfirmReceive.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выпуск будет оприходован на склад.'**
+  String get prConfirmReceive;
+
+  /// No description provided for @prDone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Готово: {what}'**
+  String prDone(String what);
+
+  /// No description provided for @prConflict.
+  ///
+  /// In ru, this message translates to:
+  /// **'Задание изменили — обновили данные, проверьте и повторите.'**
+  String get prConflict;
+
+  /// No description provided for @prShift.
+  ///
+  /// In ru, this message translates to:
+  /// **'Смена {n} · {date}'**
+  String prShift(int n, String date);
+
+  /// No description provided for @prShiftStatus_Draft.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ввод'**
+  String get prShiftStatus_Draft;
+
+  /// No description provided for @prShiftStatus_Closed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ждёт утверждения'**
+  String get prShiftStatus_Closed;
+
+  /// No description provided for @prShiftStatus_Approved.
+  ///
+  /// In ru, this message translates to:
+  /// **'Утверждена'**
+  String get prShiftStatus_Approved;
+
+  /// No description provided for @prShiftStatus_Superseded.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заменена'**
+  String get prShiftStatus_Superseded;
+
+  /// No description provided for @prShiftStatus_Cancelled.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отменена'**
+  String get prShiftStatus_Cancelled;
+
+  /// No description provided for @whTabStock.
+  ///
+  /// In ru, this message translates to:
+  /// **'Остатки'**
+  String get whTabStock;
+
+  /// No description provided for @whTabMoves.
+  ///
+  /// In ru, this message translates to:
+  /// **'Движения'**
+  String get whTabMoves;
+
+  /// No description provided for @whSearch.
+  ///
+  /// In ru, this message translates to:
+  /// **'Артикул, название или штрихкод'**
+  String get whSearch;
+
+  /// No description provided for @whFilterAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все'**
+  String get whFilterAll;
+
+  /// No description provided for @whFilterLow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ниже минимума'**
+  String get whFilterLow;
+
+  /// No description provided for @whFilterReserved.
+  ///
+  /// In ru, this message translates to:
+  /// **'В резерве'**
+  String get whFilterReserved;
+
+  /// No description provided for @whFilterEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет остатка'**
+  String get whFilterEmpty;
+
+  /// No description provided for @whFilterExpiring.
+  ///
+  /// In ru, this message translates to:
+  /// **'Истекают'**
+  String get whFilterExpiring;
+
+  /// No description provided for @whFilterExpired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Просрочены'**
+  String get whFilterExpired;
+
+  /// No description provided for @whOnHand.
+  ///
+  /// In ru, this message translates to:
+  /// **'Остаток'**
+  String get whOnHand;
+
+  /// No description provided for @whReserved.
+  ///
+  /// In ru, this message translates to:
+  /// **'Резерв'**
+  String get whReserved;
+
+  /// No description provided for @whAvailable.
+  ///
+  /// In ru, this message translates to:
+  /// **'Свободно'**
+  String get whAvailable;
+
+  /// No description provided for @whMin.
+  ///
+  /// In ru, this message translates to:
+  /// **'Минимум'**
+  String get whMin;
+
+  /// No description provided for @whReservations.
+  ///
+  /// In ru, this message translates to:
+  /// **'Резервы по заявкам'**
+  String get whReservations;
+
+  /// No description provided for @whMovements.
+  ///
+  /// In ru, this message translates to:
+  /// **'Последние движения'**
+  String get whMovements;
+
+  /// No description provided for @whOperation.
+  ///
+  /// In ru, this message translates to:
+  /// **'Операция'**
+  String get whOperation;
+
+  /// No description provided for @whOpReceipt.
+  ///
+  /// In ru, this message translates to:
+  /// **'Приход'**
+  String get whOpReceipt;
+
+  /// No description provided for @whOpIssue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выдача отделу'**
+  String get whOpIssue;
+
+  /// No description provided for @whOpWriteOff.
+  ///
+  /// In ru, this message translates to:
+  /// **'Списание'**
+  String get whOpWriteOff;
+
+  /// No description provided for @whItem.
+  ///
+  /// In ru, this message translates to:
+  /// **'Позиция'**
+  String get whItem;
+
+  /// No description provided for @whPickItem.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выберите позицию'**
+  String get whPickItem;
+
+  /// No description provided for @whQuantity.
+  ///
+  /// In ru, this message translates to:
+  /// **'Количество, {unit}'**
+  String whQuantity(String unit);
+
+  /// No description provided for @whUnitCost.
+  ///
+  /// In ru, this message translates to:
+  /// **'Цена за единицу, сум'**
+  String get whUnitCost;
+
+  /// No description provided for @whDepartment.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отдел'**
+  String get whDepartment;
+
+  /// No description provided for @whReceiver.
+  ///
+  /// In ru, this message translates to:
+  /// **'Кто получил'**
+  String get whReceiver;
+
+  /// No description provided for @whComment.
+  ///
+  /// In ru, this message translates to:
+  /// **'Комментарий'**
+  String get whComment;
+
+  /// No description provided for @whReference.
+  ///
+  /// In ru, this message translates to:
+  /// **'Накладная'**
+  String get whReference;
+
+  /// No description provided for @whReasonRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Укажите причину списания'**
+  String get whReasonRequired;
+
+  /// No description provided for @whPost.
+  ///
+  /// In ru, this message translates to:
+  /// **'Провести'**
+  String get whPost;
+
+  /// No description provided for @whConfirm.
+  ///
+  /// In ru, this message translates to:
+  /// **'{op}: {item} — {qty}. Остаток на складе изменится.'**
+  String whConfirm(String op, String item, String qty);
+
+  /// No description provided for @whPosted.
+  ///
+  /// In ru, this message translates to:
+  /// **'Документ проведён'**
+  String get whPosted;
+
+  /// No description provided for @whNoPosts.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проводить операции на складе может только кладовщик этого склада.'**
+  String get whNoPosts;
+
+  /// No description provided for @whWarehouse.
+  ///
+  /// In ru, this message translates to:
+  /// **'Склад'**
+  String get whWarehouse;
+
+  /// No description provided for @whOnline.
+  ///
+  /// In ru, this message translates to:
+  /// **'Операции склада проводятся только при связи с сервером.'**
+  String get whOnline;
+
+  /// No description provided for @mvReceipt.
+  ///
+  /// In ru, this message translates to:
+  /// **'Приход'**
+  String get mvReceipt;
+
+  /// No description provided for @mvIssue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выдача'**
+  String get mvIssue;
+
+  /// No description provided for @mvWriteOff.
+  ///
+  /// In ru, this message translates to:
+  /// **'Списание'**
+  String get mvWriteOff;
+
+  /// No description provided for @mvAdjustment.
+  ///
+  /// In ru, this message translates to:
+  /// **'Инвентаризация'**
+  String get mvAdjustment;
+
+  /// No description provided for @mvTransfer.
+  ///
+  /// In ru, this message translates to:
+  /// **'Перемещение'**
+  String get mvTransfer;
+
+  /// No description provided for @mvReversal.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сторно'**
+  String get mvReversal;
+
+  /// No description provided for @mvProduction.
+  ///
+  /// In ru, this message translates to:
+  /// **'Производство'**
+  String get mvProduction;
+
+  /// No description provided for @rqScopeMy.
+  ///
+  /// In ru, this message translates to:
+  /// **'Мои'**
+  String get rqScopeMy;
+
+  /// No description provided for @rqScopeDepartment.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отдела'**
+  String get rqScopeDepartment;
+
+  /// No description provided for @rqScopeAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все'**
+  String get rqScopeAll;
+
+  /// No description provided for @rqItems.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} поз.'**
+  String rqItems(int n);
+
+  /// No description provided for @rqDesired.
+  ///
+  /// In ru, this message translates to:
+  /// **'нужно к {date}'**
+  String rqDesired(String date);
 }
 
 class _AppLocalizationsDelegate

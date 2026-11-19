@@ -1209,5 +1209,297 @@
         "type": "String"
       }
     }
+  },
+  "finTabOverview": "Обзор",
+  "finTabPnl": "Доходы и расходы",
+  "finTabCash": "Деньги",
+  "finTabDebts": "Долги",
+  "finTabAnomalies": "Отклонения",
+  "finPeriodMtd": "Этот месяц",
+  "finPeriodPrev": "Прошлый месяц",
+  "finPeriodQuarter": "Квартал",
+  "finPeriodYear": "С начала года",
+  "finAllOrgs": "Все организации",
+  "finDemo": "Демо-данные тестового источника 1С",
+  "finDataThrough": "Проводки по {date}",
+  "@finDataThrough": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "finGrossProfit": "Валовая прибыль",
+  "finVsPrev": "к прошлому периоду {value}",
+  "@finVsPrev": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "finMonths": "12 месяцев",
+  "finCashTotal": "Деньги на счетах и в кассе",
+  "finReceivables": "Нам должны",
+  "finPayables": "Мы должны",
+  "finInventory": "Запасы",
+  "finExpenseGrowth": "Расходы, которые выросли",
+  "finExpensesByAccount": "Расходы по статьям",
+  "finExpensesByDepartment": "Расходы по подразделениям",
+  "finInflow": "Поступления",
+  "finOutflow": "Платежи",
+  "finBalances": "Остатки",
+  "finOverdue": "Просрочено",
+  "finAdvances": "Авансы",
+  "finBucket_not_due": "Срок не наступил",
+  "finBucket_1_30": "Просрочка 1–30 дней",
+  "finBucket_31_60": "31–60 дней",
+  "finBucket_61_90": "61–90 дней",
+  "finBucket_over_90": "Больше 90 дней",
+  "finBucket_no_term": "Срок не задан",
+  "finOverdueDays": "просрочка до {n} дн.",
+  "@finOverdueDays": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "finChecks": "Что проверено",
+  "finNoAnomalies": "Отклонений не найдено",
+  "finEntries": "Проводки",
+  "finEntriesTotal": "{n} проводок на {sum}",
+  "@finEntriesTotal": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "sum": {
+        "type": "String"
+      }
+    }
+  },
+  "finDocument": "Документ 1С",
+  "finPosted": "Проведён",
+  "finNotPosted": "Не проведён",
+  "finCounterparty": "Контрагент",
+  "finContract": "Договор",
+  "finWarehouse": "Склад",
+  "finPurpose": "Назначение",
+  "finLines": "Строки",
+  "finVat": "НДС",
+  "finAccounts": "Счета (ОСВ)",
+  "finOpening": "Начало",
+  "finTurnover": "Обороты",
+  "finClosing": "Конец",
+  "finDebit": "Дт",
+  "finCredit": "Кт",
+  "prTabOverview": "Обзор",
+  "prTabOrders": "Задания",
+  "prTabShifts": "Смены",
+  "prGood": "Годный выпуск",
+  "prPlan": "План",
+  "prOpenShifts": "Смены открыты",
+  "prClosedShifts": "Ждут утверждения",
+  "prNormDev": "Отклонение от нормы",
+  "prByProduct": "Выпуск по продуктам",
+  "prIssues": "Проблемы",
+  "prStockValue": "Сырьё на складах",
+  "prExpiring": "Истекает за 30 дней",
+  "prExpired": "Просрочено",
+  "prBelowMin": "Ниже минимума",
+  "prOverdueOrders": "Просрочено заданий",
+  "prLowDays": "Запаса меньше всего",
+  "prDaysLeft": "{n} дн.",
+  "@prDaysLeft": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "prStatus_Draft": "Черновик",
+  "prStatus_Released": "Выпущено",
+  "prStatus_InProgress": "В работе",
+  "prStatus_Completed": "Закрыто",
+  "prStatus_Cancelled": "Отменено",
+  "prFilterOpen": "Открытые",
+  "prFilterDone": "Закрытые",
+  "prFilterAll": "Все",
+  "prPlanned": "План {qty} · на {date}",
+  "@prPlanned": {
+    "placeholders": {
+      "qty": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "prOutput": "Выпуск",
+  "prMaterials": "Сырьё и материалы",
+  "prRequired": "нужно {v}",
+  "@prRequired": {
+    "placeholders": {
+      "v": {
+        "type": "String"
+      }
+    }
+  },
+  "prIssued": "выдано {v}",
+  "@prIssued": {
+    "placeholders": {
+      "v": {
+        "type": "String"
+      }
+    }
+  },
+  "prLeft": "осталось выдать {v}",
+  "@prLeft": {
+    "placeholders": {
+      "v": {
+        "type": "String"
+      }
+    }
+  },
+  "prAvailable": "на складе {v}",
+  "@prAvailable": {
+    "placeholders": {
+      "v": {
+        "type": "String"
+      }
+    }
+  },
+  "prOverconsumed": "перерасход",
+  "prHistory": "История",
+  "prRelease": "Выпустить задание",
+  "prComplete": "Закрыть задание",
+  "prCancel": "Отменить задание",
+  "prReceive": "Оприходовать выпуск",
+  "prOutputQty": "Фактический выпуск, {unit}",
+  "@prOutputQty": {
+    "placeholders": {
+      "unit": {
+        "type": "String"
+      }
+    }
+  },
+  "prReason": "Причина",
+  "prConfirmTitle": "Подтвердите операцию",
+  "prConfirmRelease": "Задание уйдёт в работу; нехватка сырья будет отмечена, снабжение получит уведомление.",
+  "prConfirmComplete": "Будет зафиксирован выпуск {qty} и посчитан расход по норме. Отменить закрытие нельзя.",
+  "@prConfirmComplete": {
+    "placeholders": {
+      "qty": {
+        "type": "String"
+      }
+    }
+  },
+  "prConfirmReceive": "Выпуск будет оприходован на склад.",
+  "prDone": "Готово: {what}",
+  "@prDone": {
+    "placeholders": {
+      "what": {
+        "type": "String"
+      }
+    }
+  },
+  "prConflict": "Задание изменили — обновили данные, проверьте и повторите.",
+  "prShift": "Смена {n} · {date}",
+  "@prShift": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "prShiftStatus_Draft": "Ввод",
+  "prShiftStatus_Closed": "Ждёт утверждения",
+  "prShiftStatus_Approved": "Утверждена",
+  "prShiftStatus_Superseded": "Заменена",
+  "prShiftStatus_Cancelled": "Отменена",
+  "whTabStock": "Остатки",
+  "whTabMoves": "Движения",
+  "whSearch": "Артикул, название или штрихкод",
+  "whFilterAll": "Все",
+  "whFilterLow": "Ниже минимума",
+  "whFilterReserved": "В резерве",
+  "whFilterEmpty": "Нет остатка",
+  "whFilterExpiring": "Истекают",
+  "whFilterExpired": "Просрочены",
+  "whOnHand": "Остаток",
+  "whReserved": "Резерв",
+  "whAvailable": "Свободно",
+  "whMin": "Минимум",
+  "whReservations": "Резервы по заявкам",
+  "whMovements": "Последние движения",
+  "whOperation": "Операция",
+  "whOpReceipt": "Приход",
+  "whOpIssue": "Выдача отделу",
+  "whOpWriteOff": "Списание",
+  "whItem": "Позиция",
+  "whPickItem": "Выберите позицию",
+  "whQuantity": "Количество, {unit}",
+  "@whQuantity": {
+    "placeholders": {
+      "unit": {
+        "type": "String"
+      }
+    }
+  },
+  "whUnitCost": "Цена за единицу, сум",
+  "whDepartment": "Отдел",
+  "whReceiver": "Кто получил",
+  "whComment": "Комментарий",
+  "whReference": "Накладная",
+  "whReasonRequired": "Укажите причину списания",
+  "whPost": "Провести",
+  "whConfirm": "{op}: {item} — {qty}. Остаток на складе изменится.",
+  "@whConfirm": {
+    "placeholders": {
+      "op": {
+        "type": "String"
+      },
+      "item": {
+        "type": "String"
+      },
+      "qty": {
+        "type": "String"
+      }
+    }
+  },
+  "whPosted": "Документ проведён",
+  "whNoPosts": "Проводить операции на складе может только кладовщик этого склада.",
+  "whWarehouse": "Склад",
+  "whOnline": "Операции склада проводятся только при связи с сервером.",
+  "mvReceipt": "Приход",
+  "mvIssue": "Выдача",
+  "mvWriteOff": "Списание",
+  "mvAdjustment": "Инвентаризация",
+  "mvTransfer": "Перемещение",
+  "mvReversal": "Сторно",
+  "mvProduction": "Производство",
+  "rqScopeMy": "Мои",
+  "rqScopeDepartment": "Отдела",
+  "rqScopeAll": "Все",
+  "rqItems": "{n} поз.",
+  "@rqItems": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "rqDesired": "нужно к {date}",
+  "@rqDesired": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
   }
 }

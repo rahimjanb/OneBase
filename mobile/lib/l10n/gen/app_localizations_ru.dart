@@ -1726,4 +1726,497 @@ class AppLocalizationsRu extends AppLocalizations {
   String anWas(String value) {
     return 'было $value';
   }
+
+  @override
+  String get finTabOverview => 'Обзор';
+
+  @override
+  String get finTabPnl => 'Доходы и расходы';
+
+  @override
+  String get finTabCash => 'Деньги';
+
+  @override
+  String get finTabDebts => 'Долги';
+
+  @override
+  String get finTabAnomalies => 'Отклонения';
+
+  @override
+  String get finPeriodMtd => 'Этот месяц';
+
+  @override
+  String get finPeriodPrev => 'Прошлый месяц';
+
+  @override
+  String get finPeriodQuarter => 'Квартал';
+
+  @override
+  String get finPeriodYear => 'С начала года';
+
+  @override
+  String get finAllOrgs => 'Все организации';
+
+  @override
+  String get finDemo => 'Демо-данные тестового источника 1С';
+
+  @override
+  String finDataThrough(String date) {
+    return 'Проводки по $date';
+  }
+
+  @override
+  String get finGrossProfit => 'Валовая прибыль';
+
+  @override
+  String finVsPrev(String value) {
+    return 'к прошлому периоду $value';
+  }
+
+  @override
+  String get finMonths => '12 месяцев';
+
+  @override
+  String get finCashTotal => 'Деньги на счетах и в кассе';
+
+  @override
+  String get finReceivables => 'Нам должны';
+
+  @override
+  String get finPayables => 'Мы должны';
+
+  @override
+  String get finInventory => 'Запасы';
+
+  @override
+  String get finExpenseGrowth => 'Расходы, которые выросли';
+
+  @override
+  String get finExpensesByAccount => 'Расходы по статьям';
+
+  @override
+  String get finExpensesByDepartment => 'Расходы по подразделениям';
+
+  @override
+  String get finInflow => 'Поступления';
+
+  @override
+  String get finOutflow => 'Платежи';
+
+  @override
+  String get finBalances => 'Остатки';
+
+  @override
+  String get finOverdue => 'Просрочено';
+
+  @override
+  String get finAdvances => 'Авансы';
+
+  @override
+  String get finBucket_not_due => 'Срок не наступил';
+
+  @override
+  String get finBucket_1_30 => 'Просрочка 1–30 дней';
+
+  @override
+  String get finBucket_31_60 => '31–60 дней';
+
+  @override
+  String get finBucket_61_90 => '61–90 дней';
+
+  @override
+  String get finBucket_over_90 => 'Больше 90 дней';
+
+  @override
+  String get finBucket_no_term => 'Срок не задан';
+
+  @override
+  String finOverdueDays(int n) {
+    return 'просрочка до $n дн.';
+  }
+
+  @override
+  String get finChecks => 'Что проверено';
+
+  @override
+  String get finNoAnomalies => 'Отклонений не найдено';
+
+  @override
+  String get finEntries => 'Проводки';
+
+  @override
+  String finEntriesTotal(int n, String sum) {
+    return '$n проводок на $sum';
+  }
+
+  @override
+  String get finDocument => 'Документ 1С';
+
+  @override
+  String get finPosted => 'Проведён';
+
+  @override
+  String get finNotPosted => 'Не проведён';
+
+  @override
+  String get finCounterparty => 'Контрагент';
+
+  @override
+  String get finContract => 'Договор';
+
+  @override
+  String get finWarehouse => 'Склад';
+
+  @override
+  String get finPurpose => 'Назначение';
+
+  @override
+  String get finLines => 'Строки';
+
+  @override
+  String get finVat => 'НДС';
+
+  @override
+  String get finAccounts => 'Счета (ОСВ)';
+
+  @override
+  String get finOpening => 'Начало';
+
+  @override
+  String get finTurnover => 'Обороты';
+
+  @override
+  String get finClosing => 'Конец';
+
+  @override
+  String get finDebit => 'Дт';
+
+  @override
+  String get finCredit => 'Кт';
+
+  @override
+  String get prTabOverview => 'Обзор';
+
+  @override
+  String get prTabOrders => 'Задания';
+
+  @override
+  String get prTabShifts => 'Смены';
+
+  @override
+  String get prGood => 'Годный выпуск';
+
+  @override
+  String get prPlan => 'План';
+
+  @override
+  String get prOpenShifts => 'Смены открыты';
+
+  @override
+  String get prClosedShifts => 'Ждут утверждения';
+
+  @override
+  String get prNormDev => 'Отклонение от нормы';
+
+  @override
+  String get prByProduct => 'Выпуск по продуктам';
+
+  @override
+  String get prIssues => 'Проблемы';
+
+  @override
+  String get prStockValue => 'Сырьё на складах';
+
+  @override
+  String get prExpiring => 'Истекает за 30 дней';
+
+  @override
+  String get prExpired => 'Просрочено';
+
+  @override
+  String get prBelowMin => 'Ниже минимума';
+
+  @override
+  String get prOverdueOrders => 'Просрочено заданий';
+
+  @override
+  String get prLowDays => 'Запаса меньше всего';
+
+  @override
+  String prDaysLeft(String n) {
+    return '$n дн.';
+  }
+
+  @override
+  String get prStatus_Draft => 'Черновик';
+
+  @override
+  String get prStatus_Released => 'Выпущено';
+
+  @override
+  String get prStatus_InProgress => 'В работе';
+
+  @override
+  String get prStatus_Completed => 'Закрыто';
+
+  @override
+  String get prStatus_Cancelled => 'Отменено';
+
+  @override
+  String get prFilterOpen => 'Открытые';
+
+  @override
+  String get prFilterDone => 'Закрытые';
+
+  @override
+  String get prFilterAll => 'Все';
+
+  @override
+  String prPlanned(String qty, String date) {
+    return 'План $qty · на $date';
+  }
+
+  @override
+  String get prOutput => 'Выпуск';
+
+  @override
+  String get prMaterials => 'Сырьё и материалы';
+
+  @override
+  String prRequired(String v) {
+    return 'нужно $v';
+  }
+
+  @override
+  String prIssued(String v) {
+    return 'выдано $v';
+  }
+
+  @override
+  String prLeft(String v) {
+    return 'осталось выдать $v';
+  }
+
+  @override
+  String prAvailable(String v) {
+    return 'на складе $v';
+  }
+
+  @override
+  String get prOverconsumed => 'перерасход';
+
+  @override
+  String get prHistory => 'История';
+
+  @override
+  String get prRelease => 'Выпустить задание';
+
+  @override
+  String get prComplete => 'Закрыть задание';
+
+  @override
+  String get prCancel => 'Отменить задание';
+
+  @override
+  String get prReceive => 'Оприходовать выпуск';
+
+  @override
+  String prOutputQty(String unit) {
+    return 'Фактический выпуск, $unit';
+  }
+
+  @override
+  String get prReason => 'Причина';
+
+  @override
+  String get prConfirmTitle => 'Подтвердите операцию';
+
+  @override
+  String get prConfirmRelease =>
+      'Задание уйдёт в работу; нехватка сырья будет отмечена, снабжение получит уведомление.';
+
+  @override
+  String prConfirmComplete(String qty) {
+    return 'Будет зафиксирован выпуск $qty и посчитан расход по норме. Отменить закрытие нельзя.';
+  }
+
+  @override
+  String get prConfirmReceive => 'Выпуск будет оприходован на склад.';
+
+  @override
+  String prDone(String what) {
+    return 'Готово: $what';
+  }
+
+  @override
+  String get prConflict =>
+      'Задание изменили — обновили данные, проверьте и повторите.';
+
+  @override
+  String prShift(int n, String date) {
+    return 'Смена $n · $date';
+  }
+
+  @override
+  String get prShiftStatus_Draft => 'Ввод';
+
+  @override
+  String get prShiftStatus_Closed => 'Ждёт утверждения';
+
+  @override
+  String get prShiftStatus_Approved => 'Утверждена';
+
+  @override
+  String get prShiftStatus_Superseded => 'Заменена';
+
+  @override
+  String get prShiftStatus_Cancelled => 'Отменена';
+
+  @override
+  String get whTabStock => 'Остатки';
+
+  @override
+  String get whTabMoves => 'Движения';
+
+  @override
+  String get whSearch => 'Артикул, название или штрихкод';
+
+  @override
+  String get whFilterAll => 'Все';
+
+  @override
+  String get whFilterLow => 'Ниже минимума';
+
+  @override
+  String get whFilterReserved => 'В резерве';
+
+  @override
+  String get whFilterEmpty => 'Нет остатка';
+
+  @override
+  String get whFilterExpiring => 'Истекают';
+
+  @override
+  String get whFilterExpired => 'Просрочены';
+
+  @override
+  String get whOnHand => 'Остаток';
+
+  @override
+  String get whReserved => 'Резерв';
+
+  @override
+  String get whAvailable => 'Свободно';
+
+  @override
+  String get whMin => 'Минимум';
+
+  @override
+  String get whReservations => 'Резервы по заявкам';
+
+  @override
+  String get whMovements => 'Последние движения';
+
+  @override
+  String get whOperation => 'Операция';
+
+  @override
+  String get whOpReceipt => 'Приход';
+
+  @override
+  String get whOpIssue => 'Выдача отделу';
+
+  @override
+  String get whOpWriteOff => 'Списание';
+
+  @override
+  String get whItem => 'Позиция';
+
+  @override
+  String get whPickItem => 'Выберите позицию';
+
+  @override
+  String whQuantity(String unit) {
+    return 'Количество, $unit';
+  }
+
+  @override
+  String get whUnitCost => 'Цена за единицу, сум';
+
+  @override
+  String get whDepartment => 'Отдел';
+
+  @override
+  String get whReceiver => 'Кто получил';
+
+  @override
+  String get whComment => 'Комментарий';
+
+  @override
+  String get whReference => 'Накладная';
+
+  @override
+  String get whReasonRequired => 'Укажите причину списания';
+
+  @override
+  String get whPost => 'Провести';
+
+  @override
+  String whConfirm(String op, String item, String qty) {
+    return '$op: $item — $qty. Остаток на складе изменится.';
+  }
+
+  @override
+  String get whPosted => 'Документ проведён';
+
+  @override
+  String get whNoPosts =>
+      'Проводить операции на складе может только кладовщик этого склада.';
+
+  @override
+  String get whWarehouse => 'Склад';
+
+  @override
+  String get whOnline =>
+      'Операции склада проводятся только при связи с сервером.';
+
+  @override
+  String get mvReceipt => 'Приход';
+
+  @override
+  String get mvIssue => 'Выдача';
+
+  @override
+  String get mvWriteOff => 'Списание';
+
+  @override
+  String get mvAdjustment => 'Инвентаризация';
+
+  @override
+  String get mvTransfer => 'Перемещение';
+
+  @override
+  String get mvReversal => 'Сторно';
+
+  @override
+  String get mvProduction => 'Производство';
+
+  @override
+  String get rqScopeMy => 'Мои';
+
+  @override
+  String get rqScopeDepartment => 'Отдела';
+
+  @override
+  String get rqScopeAll => 'Все';
+
+  @override
+  String rqItems(int n) {
+    return '$n поз.';
+  }
+
+  @override
+  String rqDesired(String date) {
+    return 'нужно к $date';
+  }
 }
