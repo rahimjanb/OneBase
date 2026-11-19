@@ -506,8 +506,8 @@ class AppLocalizationsUz extends AppLocalizations {
   String get aiNone => 'AI muammo topmadi.';
 
   @override
-  String aiChecked(String when) {
-    return '$when tekshirildi';
+  String aiChecked(int n, int all) {
+    return 'Ma\'lumotlar bilan solishtirilgan raqamlar: $all dan $n';
   }
 
   @override
@@ -2496,4 +2496,171 @@ class AppLocalizationsUz extends AppLocalizations {
 
   @override
   String get ntQueued => 'Belgi tarmoq paydo bo\'lganda yuboriladi';
+
+  @override
+  String get aiTitle2 => 'AI-konsultant';
+
+  @override
+  String get aiConnected => 'OneBase ma\'lumotlariga ulangan';
+
+  @override
+  String get aiNotReady => 'Konsultant mavjud emas';
+
+  @override
+  String get aiStartTitle => 'Biznesga qanday yordam beray?';
+
+  @override
+  String get aiStartSubtitle =>
+      'Oddiy tilda so\'rang — OneBase ma\'lumotlari asosida javob beraman va faktlarni tavsiyalardan ajrataman.';
+
+  @override
+  String get aiQuick => 'Tezkor savollar';
+
+  @override
+  String get aiQ1 => 'Oy davomida savdo qanday o\'tdi?';
+
+  @override
+  String get aiQ2 => 'Qaysi hududlar rejani bajarmayapti?';
+
+  @override
+  String get aiQ3 => 'Nima eng yomon sotilmoqda?';
+
+  @override
+  String get aiQ4 => 'O\'tgan oy bilan solishtiring';
+
+  @override
+  String get aiQ5 => 'Qayerda qoldiqlar tugayapti?';
+
+  @override
+  String get aiQ6 => 'Kim eng ko\'p kechikadi?';
+
+  @override
+  String get aiQ7 => 'Qaysi debitorlik qarzi muddati o\'tgan?';
+
+  @override
+  String get aiQ8 => 'Savdoni oshirish uchun nima qilish kerak?';
+
+  @override
+  String get aiQ9 => 'Qaysi yetkazib berishlar kechikmoqda?';
+
+  @override
+  String get aiQ10 => 'Xarid arizalarim qanday holatda?';
+
+  @override
+  String get aiInputHint => 'Savdo, ombor, moliya haqida so\'rang…';
+
+  @override
+  String get aiInputFollow => 'Savolni aniqlashtiring…';
+
+  @override
+  String get aiSend => 'Yuborish';
+
+  @override
+  String get aiStop => 'Javobni to\'xtatish';
+
+  @override
+  String get aiPaidNote => 'Har bir savol — AI modeliga so\'rov';
+
+  @override
+  String get aiStepMemory => 'Avvalgi tahlillarni eslayapman';
+
+  @override
+  String get aiStepRouting => 'Qaysi AI-xodimlarni jalb qilishni aniqlayapman';
+
+  @override
+  String aiStepAgent(String agent) {
+    return '$agent: ma\'lumot yig\'yapman';
+  }
+
+  @override
+  String get aiStepCompose => 'Javob tayyorlayapman';
+
+  @override
+  String get aiStepCheck => 'Ma\'lumotlarni tekshiryapman';
+
+  @override
+  String get aiDraftWriting =>
+      'Javob qoralamasi — raqamlar hali tekshirilmagan';
+
+  @override
+  String get aiDraftChecking =>
+      'Javob raqamlarini OneBase ma\'lumotlari bilan solishtiryapman…';
+
+  @override
+  String get aiDraftRevising =>
+      'Raqamlar tasdiqlanmadi — javobni qayta yozyapman…';
+
+  @override
+  String get aiStopped =>
+      'Javob to\'xtatildi. Server uni yozib tugatishi mumkin — u holda chatda paydo bo\'ladi.';
+
+  @override
+  String get aiRecovering => 'Aloqa uzildi — serverdan javob kutilmoqda…';
+
+  @override
+  String get aiRetry => 'Savolni takrorlash';
+
+  @override
+  String aiMeta(int facts, int recs) {
+    return 'AI-konsultant · $facts ta fakt · $recs ta tavsiya';
+  }
+
+  @override
+  String get aiSummary => 'Asosiy';
+
+  @override
+  String get aiFacts => 'Faktlar';
+
+  @override
+  String get aiDeviations => 'Og\'ishlar';
+
+  @override
+  String get aiRecommendations => 'Nima qilish kerak';
+
+  @override
+  String get aiSources => 'Ma\'lumot manbalari';
+
+  @override
+  String get aiHowGot => 'Javob qanday olindi';
+
+  @override
+  String aiDuration(String s) {
+    return '$s s';
+  }
+
+  @override
+  String get aiHistory => 'Tarix';
+
+  @override
+  String get aiNewChat => 'Yangi chat';
+
+  @override
+  String get aiNoHistory => 'Hozircha chatlar yo\'q';
+
+  @override
+  String get aiSearchChats => 'Chatlar bo\'yicha qidiruv';
+
+  @override
+  String get aiCopied => 'Javob nusxalandi';
+
+  @override
+  String get aiThanks => 'Baholaganingiz uchun rahmat';
+
+  @override
+  String aiPlan(String fact, String plan) {
+    return 'Reja $plan dan $fact';
+  }
+
+  @override
+  String aiOwner(String name) {
+    return 'Mas\'ul: $name';
+  }
+
+  @override
+  String aiDue(String date) {
+    return '$date gacha';
+  }
+
+  @override
+  String get aiTelegram => 'Telegram';
 }

@@ -983,8 +983,8 @@ abstract class AppLocalizations {
   /// No description provided for @aiChecked.
   ///
   /// In ru, this message translates to:
-  /// **'Проверено {when}'**
-  String aiChecked(String when);
+  /// **'Чисел сверено с данными: {n} из {all}'**
+  String aiChecked(int n, int all);
 
   /// No description provided for @aiWhatToDo.
   ///
@@ -4567,6 +4567,306 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Отметка уйдёт, когда появится сеть'**
   String get ntQueued;
+
+  /// No description provided for @aiTitle2.
+  ///
+  /// In ru, this message translates to:
+  /// **'AI-консультант'**
+  String get aiTitle2;
+
+  /// No description provided for @aiConnected.
+  ///
+  /// In ru, this message translates to:
+  /// **'подключён к данным OneBase'**
+  String get aiConnected;
+
+  /// No description provided for @aiNotReady.
+  ///
+  /// In ru, this message translates to:
+  /// **'Консультант недоступен'**
+  String get aiNotReady;
+
+  /// No description provided for @aiStartTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Чем помочь бизнесу?'**
+  String get aiStartTitle;
+
+  /// No description provided for @aiStartSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Спросите обычным языком — отвечу по данным OneBase и отделю факты от рекомендаций.'**
+  String get aiStartSubtitle;
+
+  /// No description provided for @aiQuick.
+  ///
+  /// In ru, this message translates to:
+  /// **'Быстрые вопросы'**
+  String get aiQuick;
+
+  /// No description provided for @aiQ1.
+  ///
+  /// In ru, this message translates to:
+  /// **'Как прошли продажи за месяц?'**
+  String get aiQ1;
+
+  /// No description provided for @aiQ2.
+  ///
+  /// In ru, this message translates to:
+  /// **'Какие регионы не выполняют план?'**
+  String get aiQ2;
+
+  /// No description provided for @aiQ3.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что продаётся хуже всего?'**
+  String get aiQ3;
+
+  /// No description provided for @aiQ4.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сравни с прошлым месяцем'**
+  String get aiQ4;
+
+  /// No description provided for @aiQ5.
+  ///
+  /// In ru, this message translates to:
+  /// **'Где заканчиваются остатки?'**
+  String get aiQ5;
+
+  /// No description provided for @aiQ6.
+  ///
+  /// In ru, this message translates to:
+  /// **'Кто чаще всех опаздывает?'**
+  String get aiQ6;
+
+  /// No description provided for @aiQ7.
+  ///
+  /// In ru, this message translates to:
+  /// **'Какая дебиторка просрочена?'**
+  String get aiQ7;
+
+  /// No description provided for @aiQ8.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что сделать, чтобы увеличить продажи?'**
+  String get aiQ8;
+
+  /// No description provided for @aiQ9.
+  ///
+  /// In ru, this message translates to:
+  /// **'Какие поставки поставщиков просрочены?'**
+  String get aiQ9;
+
+  /// No description provided for @aiQ10.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что с моими заявками на закупку?'**
+  String get aiQ10;
+
+  /// No description provided for @aiInputHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Спросите о продажах, складе, финансах…'**
+  String get aiInputHint;
+
+  /// No description provided for @aiInputFollow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Уточните вопрос…'**
+  String get aiInputFollow;
+
+  /// No description provided for @aiSend.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отправить'**
+  String get aiSend;
+
+  /// No description provided for @aiStop.
+  ///
+  /// In ru, this message translates to:
+  /// **'Остановить ответ'**
+  String get aiStop;
+
+  /// No description provided for @aiPaidNote.
+  ///
+  /// In ru, this message translates to:
+  /// **'Каждый вопрос — запрос к AI-модели'**
+  String get aiPaidNote;
+
+  /// No description provided for @aiStepMemory.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вспоминаю прошлые анализы'**
+  String get aiStepMemory;
+
+  /// No description provided for @aiStepRouting.
+  ///
+  /// In ru, this message translates to:
+  /// **'Определяю, каких AI-сотрудников привлечь'**
+  String get aiStepRouting;
+
+  /// No description provided for @aiStepAgent.
+  ///
+  /// In ru, this message translates to:
+  /// **'{agent}: собираю данные'**
+  String aiStepAgent(String agent);
+
+  /// No description provided for @aiStepCompose.
+  ///
+  /// In ru, this message translates to:
+  /// **'Формирую ответ'**
+  String get aiStepCompose;
+
+  /// No description provided for @aiStepCheck.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сверяю данные'**
+  String get aiStepCheck;
+
+  /// No description provided for @aiDraftWriting.
+  ///
+  /// In ru, this message translates to:
+  /// **'Черновик ответа — числа ещё не проверены'**
+  String get aiDraftWriting;
+
+  /// No description provided for @aiDraftChecking.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сверяю числа ответа с данными OneBase…'**
+  String get aiDraftChecking;
+
+  /// No description provided for @aiDraftRevising.
+  ///
+  /// In ru, this message translates to:
+  /// **'Числа не подтвердились данными — переписываю ответ…'**
+  String get aiDraftRevising;
+
+  /// No description provided for @aiStopped.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ответ остановлен. Сервер может дописать его — тогда он появится в чате.'**
+  String get aiStopped;
+
+  /// No description provided for @aiRecovering.
+  ///
+  /// In ru, this message translates to:
+  /// **'Связь прервалась — ждём ответ с сервера…'**
+  String get aiRecovering;
+
+  /// No description provided for @aiRetry.
+  ///
+  /// In ru, this message translates to:
+  /// **'Повторить вопрос'**
+  String get aiRetry;
+
+  /// No description provided for @aiMeta.
+  ///
+  /// In ru, this message translates to:
+  /// **'AI-консультант · {facts} фактов · {recs} рекомендаций'**
+  String aiMeta(int facts, int recs);
+
+  /// No description provided for @aiSummary.
+  ///
+  /// In ru, this message translates to:
+  /// **'Главное'**
+  String get aiSummary;
+
+  /// No description provided for @aiFacts.
+  ///
+  /// In ru, this message translates to:
+  /// **'Факты'**
+  String get aiFacts;
+
+  /// No description provided for @aiDeviations.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отклонения'**
+  String get aiDeviations;
+
+  /// No description provided for @aiRecommendations.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что сделать'**
+  String get aiRecommendations;
+
+  /// No description provided for @aiSources.
+  ///
+  /// In ru, this message translates to:
+  /// **'Источники данных'**
+  String get aiSources;
+
+  /// No description provided for @aiHowGot.
+  ///
+  /// In ru, this message translates to:
+  /// **'Как получен ответ'**
+  String get aiHowGot;
+
+  /// No description provided for @aiDuration.
+  ///
+  /// In ru, this message translates to:
+  /// **'{s} с'**
+  String aiDuration(String s);
+
+  /// No description provided for @aiHistory.
+  ///
+  /// In ru, this message translates to:
+  /// **'История'**
+  String get aiHistory;
+
+  /// No description provided for @aiNewChat.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новый чат'**
+  String get aiNewChat;
+
+  /// No description provided for @aiNoHistory.
+  ///
+  /// In ru, this message translates to:
+  /// **'Чатов пока нет'**
+  String get aiNoHistory;
+
+  /// No description provided for @aiSearchChats.
+  ///
+  /// In ru, this message translates to:
+  /// **'Поиск по чатам'**
+  String get aiSearchChats;
+
+  /// No description provided for @aiCopied.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ответ скопирован'**
+  String get aiCopied;
+
+  /// No description provided for @aiThanks.
+  ///
+  /// In ru, this message translates to:
+  /// **'Спасибо за оценку'**
+  String get aiThanks;
+
+  /// No description provided for @aiPlan.
+  ///
+  /// In ru, this message translates to:
+  /// **'План {fact} из {plan}'**
+  String aiPlan(String fact, String plan);
+
+  /// No description provided for @aiOwner.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ответственный: {name}'**
+  String aiOwner(String name);
+
+  /// No description provided for @aiDue.
+  ///
+  /// In ru, this message translates to:
+  /// **'до {date}'**
+  String aiDue(String date);
+
+  /// No description provided for @aiTelegram.
+  ///
+  /// In ru, this message translates to:
+  /// **'Telegram'**
+  String get aiTelegram;
 }
 
 class _AppLocalizationsDelegate

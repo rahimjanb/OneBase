@@ -332,11 +332,14 @@
   "aiProblems": "Проблемы",
   "aiOpportunities": "Возможности",
   "aiNone": "AI не нашёл проблем.",
-  "aiChecked": "Проверено {when}",
+  "aiChecked": "Чисел сверено с данными: {n} из {all}",
   "@aiChecked": {
     "placeholders": {
-      "when": {
-        "type": "String"
+      "n": {
+        "type": "int"
+      },
+      "all": {
+        "type": "int"
       }
     }
   },
@@ -1639,5 +1642,103 @@
   "ntMarkUnread": "Не прочитано",
   "ntExtendDue": "Продлить срок",
   "ntExtended": "Срок продлён",
-  "ntQueued": "Отметка уйдёт, когда появится сеть"
+  "ntQueued": "Отметка уйдёт, когда появится сеть",
+  "aiTitle2": "AI-консультант",
+  "aiConnected": "подключён к данным OneBase",
+  "aiNotReady": "Консультант недоступен",
+  "aiStartTitle": "Чем помочь бизнесу?",
+  "aiStartSubtitle": "Спросите обычным языком — отвечу по данным OneBase и отделю факты от рекомендаций.",
+  "aiQuick": "Быстрые вопросы",
+  "aiQ1": "Как прошли продажи за месяц?",
+  "aiQ2": "Какие регионы не выполняют план?",
+  "aiQ3": "Что продаётся хуже всего?",
+  "aiQ4": "Сравни с прошлым месяцем",
+  "aiQ5": "Где заканчиваются остатки?",
+  "aiQ6": "Кто чаще всех опаздывает?",
+  "aiQ7": "Какая дебиторка просрочена?",
+  "aiQ8": "Что сделать, чтобы увеличить продажи?",
+  "aiQ9": "Какие поставки поставщиков просрочены?",
+  "aiQ10": "Что с моими заявками на закупку?",
+  "aiInputHint": "Спросите о продажах, складе, финансах…",
+  "aiInputFollow": "Уточните вопрос…",
+  "aiSend": "Отправить",
+  "aiStop": "Остановить ответ",
+  "aiPaidNote": "Каждый вопрос — запрос к AI-модели",
+  "aiStepMemory": "Вспоминаю прошлые анализы",
+  "aiStepRouting": "Определяю, каких AI-сотрудников привлечь",
+  "aiStepAgent": "{agent}: собираю данные",
+  "@aiStepAgent": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "aiStepCompose": "Формирую ответ",
+  "aiStepCheck": "Сверяю данные",
+  "aiDraftWriting": "Черновик ответа — числа ещё не проверены",
+  "aiDraftChecking": "Сверяю числа ответа с данными OneBase…",
+  "aiDraftRevising": "Числа не подтвердились данными — переписываю ответ…",
+  "aiStopped": "Ответ остановлен. Сервер может дописать его — тогда он появится в чате.",
+  "aiRecovering": "Связь прервалась — ждём ответ с сервера…",
+  "aiRetry": "Повторить вопрос",
+  "aiMeta": "AI-консультант · {facts} фактов · {recs} рекомендаций",
+  "@aiMeta": {
+    "placeholders": {
+      "facts": {
+        "type": "int"
+      },
+      "recs": {
+        "type": "int"
+      }
+    }
+  },
+  "aiSummary": "Главное",
+  "aiFacts": "Факты",
+  "aiDeviations": "Отклонения",
+  "aiRecommendations": "Что сделать",
+  "aiSources": "Источники данных",
+  "aiHowGot": "Как получен ответ",
+  "aiDuration": "{s} с",
+  "@aiDuration": {
+    "placeholders": {
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "aiHistory": "История",
+  "aiNewChat": "Новый чат",
+  "aiNoHistory": "Чатов пока нет",
+  "aiSearchChats": "Поиск по чатам",
+  "aiCopied": "Ответ скопирован",
+  "aiThanks": "Спасибо за оценку",
+  "aiPlan": "План {fact} из {plan}",
+  "@aiPlan": {
+    "placeholders": {
+      "fact": {
+        "type": "String"
+      },
+      "plan": {
+        "type": "String"
+      }
+    }
+  },
+  "aiOwner": "Ответственный: {name}",
+  "@aiOwner": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "aiDue": "до {date}",
+  "@aiDue": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "aiTelegram": "Telegram"
 }

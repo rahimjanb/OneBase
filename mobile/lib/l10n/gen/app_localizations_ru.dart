@@ -504,8 +504,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get aiNone => 'AI не нашёл проблем.';
 
   @override
-  String aiChecked(String when) {
-    return 'Проверено $when';
+  String aiChecked(int n, int all) {
+    return 'Чисел сверено с данными: $n из $all';
   }
 
   @override
@@ -2548,4 +2548,169 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get ntQueued => 'Отметка уйдёт, когда появится сеть';
+
+  @override
+  String get aiTitle2 => 'AI-консультант';
+
+  @override
+  String get aiConnected => 'подключён к данным OneBase';
+
+  @override
+  String get aiNotReady => 'Консультант недоступен';
+
+  @override
+  String get aiStartTitle => 'Чем помочь бизнесу?';
+
+  @override
+  String get aiStartSubtitle =>
+      'Спросите обычным языком — отвечу по данным OneBase и отделю факты от рекомендаций.';
+
+  @override
+  String get aiQuick => 'Быстрые вопросы';
+
+  @override
+  String get aiQ1 => 'Как прошли продажи за месяц?';
+
+  @override
+  String get aiQ2 => 'Какие регионы не выполняют план?';
+
+  @override
+  String get aiQ3 => 'Что продаётся хуже всего?';
+
+  @override
+  String get aiQ4 => 'Сравни с прошлым месяцем';
+
+  @override
+  String get aiQ5 => 'Где заканчиваются остатки?';
+
+  @override
+  String get aiQ6 => 'Кто чаще всех опаздывает?';
+
+  @override
+  String get aiQ7 => 'Какая дебиторка просрочена?';
+
+  @override
+  String get aiQ8 => 'Что сделать, чтобы увеличить продажи?';
+
+  @override
+  String get aiQ9 => 'Какие поставки поставщиков просрочены?';
+
+  @override
+  String get aiQ10 => 'Что с моими заявками на закупку?';
+
+  @override
+  String get aiInputHint => 'Спросите о продажах, складе, финансах…';
+
+  @override
+  String get aiInputFollow => 'Уточните вопрос…';
+
+  @override
+  String get aiSend => 'Отправить';
+
+  @override
+  String get aiStop => 'Остановить ответ';
+
+  @override
+  String get aiPaidNote => 'Каждый вопрос — запрос к AI-модели';
+
+  @override
+  String get aiStepMemory => 'Вспоминаю прошлые анализы';
+
+  @override
+  String get aiStepRouting => 'Определяю, каких AI-сотрудников привлечь';
+
+  @override
+  String aiStepAgent(String agent) {
+    return '$agent: собираю данные';
+  }
+
+  @override
+  String get aiStepCompose => 'Формирую ответ';
+
+  @override
+  String get aiStepCheck => 'Сверяю данные';
+
+  @override
+  String get aiDraftWriting => 'Черновик ответа — числа ещё не проверены';
+
+  @override
+  String get aiDraftChecking => 'Сверяю числа ответа с данными OneBase…';
+
+  @override
+  String get aiDraftRevising =>
+      'Числа не подтвердились данными — переписываю ответ…';
+
+  @override
+  String get aiStopped =>
+      'Ответ остановлен. Сервер может дописать его — тогда он появится в чате.';
+
+  @override
+  String get aiRecovering => 'Связь прервалась — ждём ответ с сервера…';
+
+  @override
+  String get aiRetry => 'Повторить вопрос';
+
+  @override
+  String aiMeta(int facts, int recs) {
+    return 'AI-консультант · $facts фактов · $recs рекомендаций';
+  }
+
+  @override
+  String get aiSummary => 'Главное';
+
+  @override
+  String get aiFacts => 'Факты';
+
+  @override
+  String get aiDeviations => 'Отклонения';
+
+  @override
+  String get aiRecommendations => 'Что сделать';
+
+  @override
+  String get aiSources => 'Источники данных';
+
+  @override
+  String get aiHowGot => 'Как получен ответ';
+
+  @override
+  String aiDuration(String s) {
+    return '$s с';
+  }
+
+  @override
+  String get aiHistory => 'История';
+
+  @override
+  String get aiNewChat => 'Новый чат';
+
+  @override
+  String get aiNoHistory => 'Чатов пока нет';
+
+  @override
+  String get aiSearchChats => 'Поиск по чатам';
+
+  @override
+  String get aiCopied => 'Ответ скопирован';
+
+  @override
+  String get aiThanks => 'Спасибо за оценку';
+
+  @override
+  String aiPlan(String fact, String plan) {
+    return 'План $fact из $plan';
+  }
+
+  @override
+  String aiOwner(String name) {
+    return 'Ответственный: $name';
+  }
+
+  @override
+  String aiDue(String date) {
+    return 'до $date';
+  }
+
+  @override
+  String get aiTelegram => 'Telegram';
 }

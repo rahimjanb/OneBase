@@ -43,7 +43,8 @@ Future<void> signInIfNeeded(WidgetTester tester, Finder signedIn) async {
   if (screen == 1) {
     await tester.enterText(find.byType(TextField).at(0), login);
     await tester.enterText(find.byType(TextField).at(1), password);
-    await tester.tap(find.text('Войти'));
+    // «Готово» на клавиатуре пароля отправляет форму — надёжнее нажатия по кнопке, которую может перекрыть клавиатура.
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await pumpUntil(tester, signedIn, timeout: const Duration(seconds: 60));
   }
 }
