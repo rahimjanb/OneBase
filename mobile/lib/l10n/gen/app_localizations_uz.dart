@@ -1172,4 +1172,506 @@ class AppLocalizationsUz extends AppLocalizations {
 
   @override
   String get langSystem => 'Tizimdagidek';
+
+  @override
+  String get anSales => 'Savdo';
+
+  @override
+  String get anPlanCard => 'Reja bajarilishi';
+
+  @override
+  String get anPlanNone => 'Reja yo\'q';
+
+  @override
+  String get anPlanOnTrack => 'Reja bo\'yicha';
+
+  @override
+  String get anPlanClose => 'Sur\'atga yaqin';
+
+  @override
+  String get anPlanBehind => 'Sur\'atdan orqada';
+
+  @override
+  String get anPlanDone => 'Reja bajarildi ✓';
+
+  @override
+  String get anPlanAlmost => 'Deyarli bajarildi';
+
+  @override
+  String get anPlanFailed => 'Reja bajarilmadi';
+
+  @override
+  String anFactFor(String month) {
+    return '$month uchun fakt';
+  }
+
+  @override
+  String get anPace => 'Joriy sur\'at';
+
+  @override
+  String anPerDay(String value) {
+    return '$value/kun';
+  }
+
+  @override
+  String get anRequired => 'Kuniga kerak';
+
+  @override
+  String get anForecast => 'Oy oxiriga prognoz';
+
+  @override
+  String get anShouldBe => 'bo\'lishi kerak';
+
+  @override
+  String anPlanOf(String fact, String plan) {
+    return '$plan dan $fact';
+  }
+
+  @override
+  String get anConversion => 'Tashrif konversiyasi';
+
+  @override
+  String get anRevenuePerOutlet => 'Savdo nuqtasiga tushum';
+
+  @override
+  String get anAkbPerAgent => 'Agentga AKB';
+
+  @override
+  String anTarget(String value) {
+    return 'maqsad $value';
+  }
+
+  @override
+  String anOfTarget(String pct) {
+    return 'maqsadning $pct';
+  }
+
+  @override
+  String get anVisitsNoOrder => 'Buyurtmasiz tashriflar';
+
+  @override
+  String anVisitsNoOrderOf(String n) {
+    return 'savdo vakillarining $n ta tashrifidan';
+  }
+
+  @override
+  String anAgentsAttention(int bad, int all) {
+    return '$all savdo vakilidan $bad tasi — e\'tibor';
+  }
+
+  @override
+  String get anCritical => 'Jiddiy';
+
+  @override
+  String get anRisk => 'Xavf';
+
+  @override
+  String get anNormal => 'Me\'yorda';
+
+  @override
+  String get anRepublic => 'Respublika';
+
+  @override
+  String get anMyRegions => 'Mening hududlarim';
+
+  @override
+  String get anDirections => 'Yo\'nalishlar';
+
+  @override
+  String get anRegions => 'Hududlar';
+
+  @override
+  String get anAgents => 'Agentlar';
+
+  @override
+  String get anPlanKg => 'Reja, kg';
+
+  @override
+  String get anFact => 'Fakt';
+
+  @override
+  String get anForecastShort => 'Prognoz';
+
+  @override
+  String get anStrike => 'Strayk';
+
+  @override
+  String get anExecution => 'Bajarilish';
+
+  @override
+  String get anSameDays => 'O\'tgan oyning shu kunlariga';
+
+  @override
+  String get anByDays => 'Kunlar bo\'yicha savdo';
+
+  @override
+  String get anCategories => 'Kategoriyalar';
+
+  @override
+  String anSkuSold(int sold, int total) {
+    return '$total SKU dan $sold tasi sotilmoqda';
+  }
+
+  @override
+  String anWeightShare(String pct) {
+    return 'umumiy vaznning $pct';
+  }
+
+  @override
+  String anSilent(int n) {
+    return 'jim $n';
+  }
+
+  @override
+  String anLost(int n) {
+    return 'yo\'qolgan $n';
+  }
+
+  @override
+  String get anTeam => 'Jamoa';
+
+  @override
+  String get anPlanFactMonths => 'Oylar bo\'yicha reja va fakt';
+
+  @override
+  String get anRevenueMix => 'Tushum tarkibi';
+
+  @override
+  String anSupervisor(String name) {
+    return 'Supervayzer: $name';
+  }
+
+  @override
+  String anDealer(String name) {
+    return 'diler: $name';
+  }
+
+  @override
+  String get anVacancy => 'vakansiya';
+
+  @override
+  String get anNoRemarks => 'Izohlar yo\'q';
+
+  @override
+  String get anSearchAgents => 'Ism, ID yoki hudud';
+
+  @override
+  String get anFilterAll => 'Hammasi';
+
+  @override
+  String get anFilterPlanOk => 'Rejani bajarmoqda';
+
+  @override
+  String get anFilterBelow => 'Rejadan past';
+
+  @override
+  String get anFilterNoPlan => 'Rejasiz';
+
+  @override
+  String get anFilterRemarks => 'Izohlar bilan';
+
+  @override
+  String get anFilterVacancy => 'Vakansiyalar';
+
+  @override
+  String get anSortExecution => 'Bajarilish bo\'yicha';
+
+  @override
+  String get anSortFact => 'Fakt bo\'yicha, kg';
+
+  @override
+  String get anSortRevenue => 'Tushum bo\'yicha';
+
+  @override
+  String get anSortName => 'Ism bo\'yicha';
+
+  @override
+  String anShown(int n, int all) {
+    return '$all savdo vakilidan $n tasi ko\'rsatilgan';
+  }
+
+  @override
+  String anAgentNoPlan(String fact) {
+    return 'Fakt $fact · Linko\'da oylik reja yo\'q';
+  }
+
+  @override
+  String get anRevenue => 'Tushum';
+
+  @override
+  String get anVisits => 'Tashriflar';
+
+  @override
+  String anWithOrder(int n) {
+    return '$n ta buyurtma bilan';
+  }
+
+  @override
+  String get anOrders => 'Buyurtmalar';
+
+  @override
+  String get anTempo => 'Sur\'at';
+
+  @override
+  String anCategoriesN(int n) {
+    return '$n ta kategoriya';
+  }
+
+  @override
+  String anMedian(String value) {
+    return 'hudud medianasi $value';
+  }
+
+  @override
+  String get anSumPerVisit => 'Tashrifdan so\'m';
+
+  @override
+  String get anAvgCheck => 'O\'rtacha chek';
+
+  @override
+  String get anKgPerOutlet => 'Nuqtaga vazn';
+
+  @override
+  String get anFindings => 'Nima topildi';
+
+  @override
+  String get anStores => 'Oy savdo nuqtalari';
+
+  @override
+  String get anSilentMarkets => 'Hali sotib olmagan';
+
+  @override
+  String get anNewMarkets => 'Yangi nuqtalar';
+
+  @override
+  String anPrevMonth(String value) {
+    return 'o\'tgan oy $value';
+  }
+
+  @override
+  String get anStore => 'Savdo nuqtasi';
+
+  @override
+  String get anStoreAgents => 'Sotgan';
+
+  @override
+  String get anProducts => 'Artikullar';
+
+  @override
+  String get anCompare => 'Davrlarni taqqoslash';
+
+  @override
+  String anCompareWith(String label) {
+    return '$label ga nisbatan';
+  }
+
+  @override
+  String get anPeriodWeek => 'Hafta';
+
+  @override
+  String get anPeriodMonth => 'Oy';
+
+  @override
+  String get anPeriodQuarter => 'Chorak';
+
+  @override
+  String get anPeriodYear => 'Yil';
+
+  @override
+  String get anModSales => 'Savdo';
+
+  @override
+  String get anModFinance => 'Moliya';
+
+  @override
+  String get anModProduction => 'Ishlab chiqarish';
+
+  @override
+  String get anModHr => 'Xodimlar';
+
+  @override
+  String get anNoData => 'ma\'lumot yo\'q';
+
+  @override
+  String get anIncomplete => 'Ma\'lumotlar to\'liq emas';
+
+  @override
+  String get anSlow => 'Hisoblanmoqda — bir necha soniyagacha';
+
+  @override
+  String get anProductionToday => 'Bugungi ishlab chiqarish';
+
+  @override
+  String get anCompletion => 'Reja bajarilishi';
+
+  @override
+  String get anDefect => 'Brak';
+
+  @override
+  String get anActiveOrders => 'Ishdagi topshiriqlar';
+
+  @override
+  String get anFindingsTitle => 'Analitik topilmalari';
+
+  @override
+  String anFindingsLine(int critical, int warning, int info) {
+    return '$critical jiddiy · $warning e\'tibor · $info ma\'lumot uchun';
+  }
+
+  @override
+  String get anMonthPick => 'Oy';
+
+  @override
+  String get anOpenAll => 'Ochish';
+
+  @override
+  String anScopeNote(String scope) {
+    return 'Savdo qamrovingiz: $scope';
+  }
+
+  @override
+  String get crmSearch => 'Nuqta nomi, manzili yoki ID';
+
+  @override
+  String get crmAttAll => 'Hammasi';
+
+  @override
+  String get crmAttDecline => 'Savdo pasaygan';
+
+  @override
+  String get crmAttLost => 'Sotib olishni to\'xtatgan';
+
+  @override
+  String get crmAttNotVisited => 'Uzoq vaqt borilmagan';
+
+  @override
+  String get crmAttNew => 'Xaridsiz';
+
+  @override
+  String get crmStatusActive => 'Faol';
+
+  @override
+  String get crmStatusProblem => 'Muammoli';
+
+  @override
+  String get crmStatusInactive => 'Nofaol';
+
+  @override
+  String get crmPriorityLow => 'Past';
+
+  @override
+  String get crmPriorityMedium => 'O\'rta';
+
+  @override
+  String get crmPriorityHigh => 'Yuqori';
+
+  @override
+  String get crmPriorityUrgent => 'Shoshilinch';
+
+  @override
+  String get crmSortSales => '30 kunlik savdo bo\'yicha';
+
+  @override
+  String get crmSortTrend => 'Ko\'proq pasayganlar';
+
+  @override
+  String get crmSortLastVisit => 'Uzoq vaqt tashrifsiz';
+
+  @override
+  String get crmSortName => 'Nomi bo\'yicha';
+
+  @override
+  String crmSales30(String value) {
+    return '30 kunda $value';
+  }
+
+  @override
+  String crmLastVisit(String date) {
+    return 'tashrif $date';
+  }
+
+  @override
+  String get crmNoAccess =>
+      'Mijozlar ro\'yxati Sales Base\'da yuritiladi. Siz hali Sales Base\'ga qo\'shilmagansiz — savdo vakillaringiz nuqtalari «Tahlil»dagi savdo vakili kartasidan ochiladi.';
+
+  @override
+  String get crmMonthToDate => 'Oy boshidan';
+
+  @override
+  String get crmOrders30 => 'Buyurtmalar, 30 kun';
+
+  @override
+  String get crmVisits30 => 'Tashriflar, 30 kun';
+
+  @override
+  String get crmTrend => 'Trend';
+
+  @override
+  String get crmResponsible => 'Mas\'ul savdo vakili';
+
+  @override
+  String get crmContact => 'Aloqa';
+
+  @override
+  String get crmPhone => 'Telefon';
+
+  @override
+  String get crmNote => 'Izoh';
+
+  @override
+  String get crmTarget => 'Oylik reja';
+
+  @override
+  String get crmMonths => 'Oylar bo\'yicha jo\'natmalar';
+
+  @override
+  String get crmOrders => 'Buyurtmalar';
+
+  @override
+  String get crmVisits => 'Tashriflar';
+
+  @override
+  String get crmHistory => 'O\'zgarishlar tarixi';
+
+  @override
+  String get crmMonthSales => 'Oylik savdo';
+
+  @override
+  String get crmEdit => 'O\'zgartirish';
+
+  @override
+  String get crmEditTitle => 'Nuqta kartasi';
+
+  @override
+  String get crmSaved => 'Saqlandi';
+
+  @override
+  String get crmStatus => 'Holat';
+
+  @override
+  String get crmPriority => 'Ustuvorlik';
+
+  @override
+  String get crmLinkoReadonly =>
+      'Linko ma\'lumotlari faqat o\'qish uchun: Sales Base kartasi o\'zgaradi (holat, ustuvorlik, reja, kontaktlar).';
+
+  @override
+  String get actionSave => 'Saqlash';
+
+  @override
+  String get auditUpdated => 'Karta o\'zgartirildi';
+
+  @override
+  String get auditAgent => 'Agent almashtirildi';
+
+  @override
+  String get crm30d => '30 kunda';
+
+  @override
+  String get crm90d => '90 kunda';
+
+  @override
+  String anWas(String value) {
+    return 'edi $value';
+  }
 }

@@ -2119,6 +2119,906 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Как в системе'**
   String get langSystem;
+
+  /// No description provided for @anSales.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи'**
+  String get anSales;
+
+  /// No description provided for @anPlanCard.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выполнение плана'**
+  String get anPlanCard;
+
+  /// No description provided for @anPlanNone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Плана нет'**
+  String get anPlanNone;
+
+  /// No description provided for @anPlanOnTrack.
+  ///
+  /// In ru, this message translates to:
+  /// **'Идём по плану'**
+  String get anPlanOnTrack;
+
+  /// No description provided for @anPlanClose.
+  ///
+  /// In ru, this message translates to:
+  /// **'Близко к темпу'**
+  String get anPlanClose;
+
+  /// No description provided for @anPlanBehind.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отстаём от темпа'**
+  String get anPlanBehind;
+
+  /// No description provided for @anPlanDone.
+  ///
+  /// In ru, this message translates to:
+  /// **'План выполнен ✓'**
+  String get anPlanDone;
+
+  /// No description provided for @anPlanAlmost.
+  ///
+  /// In ru, this message translates to:
+  /// **'Почти выполнен'**
+  String get anPlanAlmost;
+
+  /// No description provided for @anPlanFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'План не выполнен'**
+  String get anPlanFailed;
+
+  /// No description provided for @anFactFor.
+  ///
+  /// In ru, this message translates to:
+  /// **'факт за {month}'**
+  String anFactFor(String month);
+
+  /// No description provided for @anPace.
+  ///
+  /// In ru, this message translates to:
+  /// **'Текущий темп'**
+  String get anPace;
+
+  /// No description provided for @anPerDay.
+  ///
+  /// In ru, this message translates to:
+  /// **'{value}/день'**
+  String anPerDay(String value);
+
+  /// No description provided for @anRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нужно в день'**
+  String get anRequired;
+
+  /// No description provided for @anForecast.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прогноз на конец месяца'**
+  String get anForecast;
+
+  /// No description provided for @anShouldBe.
+  ///
+  /// In ru, this message translates to:
+  /// **'должно быть'**
+  String get anShouldBe;
+
+  /// No description provided for @anPlanOf.
+  ///
+  /// In ru, this message translates to:
+  /// **'{fact} из {plan}'**
+  String anPlanOf(String fact, String plan);
+
+  /// No description provided for @anConversion.
+  ///
+  /// In ru, this message translates to:
+  /// **'Конверсия визита'**
+  String get anConversion;
+
+  /// No description provided for @anRevenuePerOutlet.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выручка на ТТ'**
+  String get anRevenuePerOutlet;
+
+  /// No description provided for @anAkbPerAgent.
+  ///
+  /// In ru, this message translates to:
+  /// **'АКБ на агента'**
+  String get anAkbPerAgent;
+
+  /// No description provided for @anTarget.
+  ///
+  /// In ru, this message translates to:
+  /// **'цель {value}'**
+  String anTarget(String value);
+
+  /// No description provided for @anOfTarget.
+  ///
+  /// In ru, this message translates to:
+  /// **'{pct} цели'**
+  String anOfTarget(String pct);
+
+  /// No description provided for @anVisitsNoOrder.
+  ///
+  /// In ru, this message translates to:
+  /// **'Визиты без заказа'**
+  String get anVisitsNoOrder;
+
+  /// No description provided for @anVisitsNoOrderOf.
+  ///
+  /// In ru, this message translates to:
+  /// **'из {n} визитов ТП'**
+  String anVisitsNoOrderOf(String n);
+
+  /// No description provided for @anAgentsAttention.
+  ///
+  /// In ru, this message translates to:
+  /// **'{bad} из {all} ТП — внимание'**
+  String anAgentsAttention(int bad, int all);
+
+  /// No description provided for @anCritical.
+  ///
+  /// In ru, this message translates to:
+  /// **'Критично'**
+  String get anCritical;
+
+  /// No description provided for @anRisk.
+  ///
+  /// In ru, this message translates to:
+  /// **'Риск'**
+  String get anRisk;
+
+  /// No description provided for @anNormal.
+  ///
+  /// In ru, this message translates to:
+  /// **'В норме'**
+  String get anNormal;
+
+  /// No description provided for @anRepublic.
+  ///
+  /// In ru, this message translates to:
+  /// **'Республика'**
+  String get anRepublic;
+
+  /// No description provided for @anMyRegions.
+  ///
+  /// In ru, this message translates to:
+  /// **'Мои регионы'**
+  String get anMyRegions;
+
+  /// No description provided for @anDirections.
+  ///
+  /// In ru, this message translates to:
+  /// **'Направления'**
+  String get anDirections;
+
+  /// No description provided for @anRegions.
+  ///
+  /// In ru, this message translates to:
+  /// **'Регионы'**
+  String get anRegions;
+
+  /// No description provided for @anAgents.
+  ///
+  /// In ru, this message translates to:
+  /// **'Агенты'**
+  String get anAgents;
+
+  /// No description provided for @anPlanKg.
+  ///
+  /// In ru, this message translates to:
+  /// **'План, кг'**
+  String get anPlanKg;
+
+  /// No description provided for @anFact.
+  ///
+  /// In ru, this message translates to:
+  /// **'Факт'**
+  String get anFact;
+
+  /// No description provided for @anForecastShort.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прогноз'**
+  String get anForecastShort;
+
+  /// No description provided for @anStrike.
+  ///
+  /// In ru, this message translates to:
+  /// **'Страйк'**
+  String get anStrike;
+
+  /// No description provided for @anExecution.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выполнение'**
+  String get anExecution;
+
+  /// No description provided for @anSameDays.
+  ///
+  /// In ru, this message translates to:
+  /// **'К прошлому месяцу за те же дни'**
+  String get anSameDays;
+
+  /// No description provided for @anByDays.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи по дням'**
+  String get anByDays;
+
+  /// No description provided for @anCategories.
+  ///
+  /// In ru, this message translates to:
+  /// **'Категории'**
+  String get anCategories;
+
+  /// No description provided for @anSkuSold.
+  ///
+  /// In ru, this message translates to:
+  /// **'продаётся {sold} из {total} SKU'**
+  String anSkuSold(int sold, int total);
+
+  /// No description provided for @anWeightShare.
+  ///
+  /// In ru, this message translates to:
+  /// **'{pct} от общего веса'**
+  String anWeightShare(String pct);
+
+  /// No description provided for @anSilent.
+  ///
+  /// In ru, this message translates to:
+  /// **'молчат {n}'**
+  String anSilent(int n);
+
+  /// No description provided for @anLost.
+  ///
+  /// In ru, this message translates to:
+  /// **'пропало {n}'**
+  String anLost(int n);
+
+  /// No description provided for @anTeam.
+  ///
+  /// In ru, this message translates to:
+  /// **'Команда'**
+  String get anTeam;
+
+  /// No description provided for @anPlanFactMonths.
+  ///
+  /// In ru, this message translates to:
+  /// **'План и факт по месяцам'**
+  String get anPlanFactMonths;
+
+  /// No description provided for @anRevenueMix.
+  ///
+  /// In ru, this message translates to:
+  /// **'Из чего складывается выручка'**
+  String get anRevenueMix;
+
+  /// No description provided for @anSupervisor.
+  ///
+  /// In ru, this message translates to:
+  /// **'СВР: {name}'**
+  String anSupervisor(String name);
+
+  /// No description provided for @anDealer.
+  ///
+  /// In ru, this message translates to:
+  /// **'дилер: {name}'**
+  String anDealer(String name);
+
+  /// No description provided for @anVacancy.
+  ///
+  /// In ru, this message translates to:
+  /// **'вакансия'**
+  String get anVacancy;
+
+  /// No description provided for @anNoRemarks.
+  ///
+  /// In ru, this message translates to:
+  /// **'Замечаний нет'**
+  String get anNoRemarks;
+
+  /// No description provided for @anSearchAgents.
+  ///
+  /// In ru, this message translates to:
+  /// **'Имя, ID или регион'**
+  String get anSearchAgents;
+
+  /// No description provided for @anFilterAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все'**
+  String get anFilterAll;
+
+  /// No description provided for @anFilterPlanOk.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выполняют план'**
+  String get anFilterPlanOk;
+
+  /// No description provided for @anFilterBelow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ниже плана'**
+  String get anFilterBelow;
+
+  /// No description provided for @anFilterNoPlan.
+  ///
+  /// In ru, this message translates to:
+  /// **'Без плана'**
+  String get anFilterNoPlan;
+
+  /// No description provided for @anFilterRemarks.
+  ///
+  /// In ru, this message translates to:
+  /// **'С замечаниями'**
+  String get anFilterRemarks;
+
+  /// No description provided for @anFilterVacancy.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вакансии'**
+  String get anFilterVacancy;
+
+  /// No description provided for @anSortExecution.
+  ///
+  /// In ru, this message translates to:
+  /// **'По выполнению'**
+  String get anSortExecution;
+
+  /// No description provided for @anSortFact.
+  ///
+  /// In ru, this message translates to:
+  /// **'По факту, кг'**
+  String get anSortFact;
+
+  /// No description provided for @anSortRevenue.
+  ///
+  /// In ru, this message translates to:
+  /// **'По выручке'**
+  String get anSortRevenue;
+
+  /// No description provided for @anSortName.
+  ///
+  /// In ru, this message translates to:
+  /// **'По имени'**
+  String get anSortName;
+
+  /// No description provided for @anShown.
+  ///
+  /// In ru, this message translates to:
+  /// **'Показано {n} из {all} ТП'**
+  String anShown(int n, int all);
+
+  /// No description provided for @anAgentNoPlan.
+  ///
+  /// In ru, this message translates to:
+  /// **'Факт {fact} · плана ТП в Linko на месяц нет'**
+  String anAgentNoPlan(String fact);
+
+  /// No description provided for @anRevenue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выручка'**
+  String get anRevenue;
+
+  /// No description provided for @anVisits.
+  ///
+  /// In ru, this message translates to:
+  /// **'Визиты'**
+  String get anVisits;
+
+  /// No description provided for @anWithOrder.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} с заказом'**
+  String anWithOrder(int n);
+
+  /// No description provided for @anOrders.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заказы'**
+  String get anOrders;
+
+  /// No description provided for @anTempo.
+  ///
+  /// In ru, this message translates to:
+  /// **'Темп'**
+  String get anTempo;
+
+  /// No description provided for @anCategoriesN.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} категорий'**
+  String anCategoriesN(int n);
+
+  /// No description provided for @anMedian.
+  ///
+  /// In ru, this message translates to:
+  /// **'медиана региона {value}'**
+  String anMedian(String value);
+
+  /// No description provided for @anSumPerVisit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сум с визита'**
+  String get anSumPerVisit;
+
+  /// No description provided for @anAvgCheck.
+  ///
+  /// In ru, this message translates to:
+  /// **'Средний чек'**
+  String get anAvgCheck;
+
+  /// No description provided for @anKgPerOutlet.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вес на точку'**
+  String get anKgPerOutlet;
+
+  /// No description provided for @anFindings.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что нашлось'**
+  String get anFindings;
+
+  /// No description provided for @anStores.
+  ///
+  /// In ru, this message translates to:
+  /// **'Точки месяца'**
+  String get anStores;
+
+  /// No description provided for @anSilentMarkets.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ещё не купили'**
+  String get anSilentMarkets;
+
+  /// No description provided for @anNewMarkets.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новые точки'**
+  String get anNewMarkets;
+
+  /// No description provided for @anPrevMonth.
+  ///
+  /// In ru, this message translates to:
+  /// **'прошлый месяц {value}'**
+  String anPrevMonth(String value);
+
+  /// No description provided for @anStore.
+  ///
+  /// In ru, this message translates to:
+  /// **'Точка'**
+  String get anStore;
+
+  /// No description provided for @anStoreAgents.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продавали'**
+  String get anStoreAgents;
+
+  /// No description provided for @anProducts.
+  ///
+  /// In ru, this message translates to:
+  /// **'Артикулы'**
+  String get anProducts;
+
+  /// No description provided for @anCompare.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сравнение периодов'**
+  String get anCompare;
+
+  /// No description provided for @anCompareWith.
+  ///
+  /// In ru, this message translates to:
+  /// **'к {label}'**
+  String anCompareWith(String label);
+
+  /// No description provided for @anPeriodWeek.
+  ///
+  /// In ru, this message translates to:
+  /// **'Неделя'**
+  String get anPeriodWeek;
+
+  /// No description provided for @anPeriodMonth.
+  ///
+  /// In ru, this message translates to:
+  /// **'Месяц'**
+  String get anPeriodMonth;
+
+  /// No description provided for @anPeriodQuarter.
+  ///
+  /// In ru, this message translates to:
+  /// **'Квартал'**
+  String get anPeriodQuarter;
+
+  /// No description provided for @anPeriodYear.
+  ///
+  /// In ru, this message translates to:
+  /// **'Год'**
+  String get anPeriodYear;
+
+  /// No description provided for @anModSales.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи'**
+  String get anModSales;
+
+  /// No description provided for @anModFinance.
+  ///
+  /// In ru, this message translates to:
+  /// **'Финансы'**
+  String get anModFinance;
+
+  /// No description provided for @anModProduction.
+  ///
+  /// In ru, this message translates to:
+  /// **'Производство'**
+  String get anModProduction;
+
+  /// No description provided for @anModHr.
+  ///
+  /// In ru, this message translates to:
+  /// **'Персонал'**
+  String get anModHr;
+
+  /// No description provided for @anNoData.
+  ///
+  /// In ru, this message translates to:
+  /// **'нет данных'**
+  String get anNoData;
+
+  /// No description provided for @anIncomplete.
+  ///
+  /// In ru, this message translates to:
+  /// **'Данные неполные'**
+  String get anIncomplete;
+
+  /// No description provided for @anSlow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Считаем — до нескольких секунд'**
+  String get anSlow;
+
+  /// No description provided for @anProductionToday.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выпуск сегодня'**
+  String get anProductionToday;
+
+  /// No description provided for @anCompletion.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выполнение плана'**
+  String get anCompletion;
+
+  /// No description provided for @anDefect.
+  ///
+  /// In ru, this message translates to:
+  /// **'Брак'**
+  String get anDefect;
+
+  /// No description provided for @anActiveOrders.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заданий в работе'**
+  String get anActiveOrders;
+
+  /// No description provided for @anFindingsTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Находки Аналитика'**
+  String get anFindingsTitle;
+
+  /// No description provided for @anFindingsLine.
+  ///
+  /// In ru, this message translates to:
+  /// **'{critical} критично · {warning} внимание · {info} к сведению'**
+  String anFindingsLine(int critical, int warning, int info);
+
+  /// No description provided for @anMonthPick.
+  ///
+  /// In ru, this message translates to:
+  /// **'Месяц'**
+  String get anMonthPick;
+
+  /// No description provided for @anOpenAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть'**
+  String get anOpenAll;
+
+  /// No description provided for @anScopeNote.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ваш охват продаж: {scope}'**
+  String anScopeNote(String scope);
+
+  /// No description provided for @crmSearch.
+  ///
+  /// In ru, this message translates to:
+  /// **'Название, адрес или ID точки'**
+  String get crmSearch;
+
+  /// No description provided for @crmAttAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все'**
+  String get crmAttAll;
+
+  /// No description provided for @crmAttDecline.
+  ///
+  /// In ru, this message translates to:
+  /// **'Падение продаж'**
+  String get crmAttDecline;
+
+  /// No description provided for @crmAttLost.
+  ///
+  /// In ru, this message translates to:
+  /// **'Перестали покупать'**
+  String get crmAttLost;
+
+  /// No description provided for @crmAttNotVisited.
+  ///
+  /// In ru, this message translates to:
+  /// **'Давно не были'**
+  String get crmAttNotVisited;
+
+  /// No description provided for @crmAttNew.
+  ///
+  /// In ru, this message translates to:
+  /// **'Без покупок'**
+  String get crmAttNew;
+
+  /// No description provided for @crmStatusActive.
+  ///
+  /// In ru, this message translates to:
+  /// **'Активная'**
+  String get crmStatusActive;
+
+  /// No description provided for @crmStatusProblem.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проблемная'**
+  String get crmStatusProblem;
+
+  /// No description provided for @crmStatusInactive.
+  ///
+  /// In ru, this message translates to:
+  /// **'Неактивная'**
+  String get crmStatusInactive;
+
+  /// No description provided for @crmPriorityLow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Низкий'**
+  String get crmPriorityLow;
+
+  /// No description provided for @crmPriorityMedium.
+  ///
+  /// In ru, this message translates to:
+  /// **'Средний'**
+  String get crmPriorityMedium;
+
+  /// No description provided for @crmPriorityHigh.
+  ///
+  /// In ru, this message translates to:
+  /// **'Высокий'**
+  String get crmPriorityHigh;
+
+  /// No description provided for @crmPriorityUrgent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Срочно'**
+  String get crmPriorityUrgent;
+
+  /// No description provided for @crmSortSales.
+  ///
+  /// In ru, this message translates to:
+  /// **'По продажам за 30 дней'**
+  String get crmSortSales;
+
+  /// No description provided for @crmSortTrend.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сильнее упали'**
+  String get crmSortTrend;
+
+  /// No description provided for @crmSortLastVisit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Давно без визита'**
+  String get crmSortLastVisit;
+
+  /// No description provided for @crmSortName.
+  ///
+  /// In ru, this message translates to:
+  /// **'По названию'**
+  String get crmSortName;
+
+  /// No description provided for @crmSales30.
+  ///
+  /// In ru, this message translates to:
+  /// **'за 30 дней {value}'**
+  String crmSales30(String value);
+
+  /// No description provided for @crmLastVisit.
+  ///
+  /// In ru, this message translates to:
+  /// **'визит {date}'**
+  String crmLastVisit(String date);
+
+  /// No description provided for @crmNoAccess.
+  ///
+  /// In ru, this message translates to:
+  /// **'Список клиентов ведётся в Sales Base. Вас ещё не добавили в Sales Base — точки ваших ТП открываются из карточки ТП в «Аналитике».'**
+  String get crmNoAccess;
+
+  /// No description provided for @crmMonthToDate.
+  ///
+  /// In ru, this message translates to:
+  /// **'С начала месяца'**
+  String get crmMonthToDate;
+
+  /// No description provided for @crmOrders30.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заказы, 30 дн.'**
+  String get crmOrders30;
+
+  /// No description provided for @crmVisits30.
+  ///
+  /// In ru, this message translates to:
+  /// **'Визиты, 30 дн.'**
+  String get crmVisits30;
+
+  /// No description provided for @crmTrend.
+  ///
+  /// In ru, this message translates to:
+  /// **'Тренд'**
+  String get crmTrend;
+
+  /// No description provided for @crmResponsible.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ответственный ТП'**
+  String get crmResponsible;
+
+  /// No description provided for @crmContact.
+  ///
+  /// In ru, this message translates to:
+  /// **'Контакт'**
+  String get crmContact;
+
+  /// No description provided for @crmPhone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Телефон'**
+  String get crmPhone;
+
+  /// No description provided for @crmNote.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заметка'**
+  String get crmNote;
+
+  /// No description provided for @crmTarget.
+  ///
+  /// In ru, this message translates to:
+  /// **'План на месяц'**
+  String get crmTarget;
+
+  /// No description provided for @crmMonths.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отгрузки по месяцам'**
+  String get crmMonths;
+
+  /// No description provided for @crmOrders.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заказы'**
+  String get crmOrders;
+
+  /// No description provided for @crmVisits.
+  ///
+  /// In ru, this message translates to:
+  /// **'Визиты'**
+  String get crmVisits;
+
+  /// No description provided for @crmHistory.
+  ///
+  /// In ru, this message translates to:
+  /// **'История изменений'**
+  String get crmHistory;
+
+  /// No description provided for @crmMonthSales.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи за месяц'**
+  String get crmMonthSales;
+
+  /// No description provided for @crmEdit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Изменить'**
+  String get crmEdit;
+
+  /// No description provided for @crmEditTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Карточка точки'**
+  String get crmEditTitle;
+
+  /// No description provided for @crmSaved.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сохранено'**
+  String get crmSaved;
+
+  /// No description provided for @crmStatus.
+  ///
+  /// In ru, this message translates to:
+  /// **'Статус'**
+  String get crmStatus;
+
+  /// No description provided for @crmPriority.
+  ///
+  /// In ru, this message translates to:
+  /// **'Приоритет'**
+  String get crmPriority;
+
+  /// No description provided for @crmLinkoReadonly.
+  ///
+  /// In ru, this message translates to:
+  /// **'Данные Linko только для чтения: меняется карточка Sales Base (статус, приоритет, план, контакты).'**
+  String get crmLinkoReadonly;
+
+  /// No description provided for @actionSave.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сохранить'**
+  String get actionSave;
+
+  /// No description provided for @auditUpdated.
+  ///
+  /// In ru, this message translates to:
+  /// **'Изменена карточка'**
+  String get auditUpdated;
+
+  /// No description provided for @auditAgent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сменён агент'**
+  String get auditAgent;
+
+  /// No description provided for @crm30d.
+  ///
+  /// In ru, this message translates to:
+  /// **'За 30 дней'**
+  String get crm30d;
+
+  /// No description provided for @crm90d.
+  ///
+  /// In ru, this message translates to:
+  /// **'За 90 дней'**
+  String get crm90d;
+
+  /// No description provided for @anWas.
+  ///
+  /// In ru, this message translates to:
+  /// **'было {value}'**
+  String anWas(String value);
 }
 
 class _AppLocalizationsDelegate

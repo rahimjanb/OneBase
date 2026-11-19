@@ -1224,4 +1224,506 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get langSystem => 'Как в системе';
+
+  @override
+  String get anSales => 'Продажи';
+
+  @override
+  String get anPlanCard => 'Выполнение плана';
+
+  @override
+  String get anPlanNone => 'Плана нет';
+
+  @override
+  String get anPlanOnTrack => 'Идём по плану';
+
+  @override
+  String get anPlanClose => 'Близко к темпу';
+
+  @override
+  String get anPlanBehind => 'Отстаём от темпа';
+
+  @override
+  String get anPlanDone => 'План выполнен ✓';
+
+  @override
+  String get anPlanAlmost => 'Почти выполнен';
+
+  @override
+  String get anPlanFailed => 'План не выполнен';
+
+  @override
+  String anFactFor(String month) {
+    return 'факт за $month';
+  }
+
+  @override
+  String get anPace => 'Текущий темп';
+
+  @override
+  String anPerDay(String value) {
+    return '$value/день';
+  }
+
+  @override
+  String get anRequired => 'Нужно в день';
+
+  @override
+  String get anForecast => 'Прогноз на конец месяца';
+
+  @override
+  String get anShouldBe => 'должно быть';
+
+  @override
+  String anPlanOf(String fact, String plan) {
+    return '$fact из $plan';
+  }
+
+  @override
+  String get anConversion => 'Конверсия визита';
+
+  @override
+  String get anRevenuePerOutlet => 'Выручка на ТТ';
+
+  @override
+  String get anAkbPerAgent => 'АКБ на агента';
+
+  @override
+  String anTarget(String value) {
+    return 'цель $value';
+  }
+
+  @override
+  String anOfTarget(String pct) {
+    return '$pct цели';
+  }
+
+  @override
+  String get anVisitsNoOrder => 'Визиты без заказа';
+
+  @override
+  String anVisitsNoOrderOf(String n) {
+    return 'из $n визитов ТП';
+  }
+
+  @override
+  String anAgentsAttention(int bad, int all) {
+    return '$bad из $all ТП — внимание';
+  }
+
+  @override
+  String get anCritical => 'Критично';
+
+  @override
+  String get anRisk => 'Риск';
+
+  @override
+  String get anNormal => 'В норме';
+
+  @override
+  String get anRepublic => 'Республика';
+
+  @override
+  String get anMyRegions => 'Мои регионы';
+
+  @override
+  String get anDirections => 'Направления';
+
+  @override
+  String get anRegions => 'Регионы';
+
+  @override
+  String get anAgents => 'Агенты';
+
+  @override
+  String get anPlanKg => 'План, кг';
+
+  @override
+  String get anFact => 'Факт';
+
+  @override
+  String get anForecastShort => 'Прогноз';
+
+  @override
+  String get anStrike => 'Страйк';
+
+  @override
+  String get anExecution => 'Выполнение';
+
+  @override
+  String get anSameDays => 'К прошлому месяцу за те же дни';
+
+  @override
+  String get anByDays => 'Продажи по дням';
+
+  @override
+  String get anCategories => 'Категории';
+
+  @override
+  String anSkuSold(int sold, int total) {
+    return 'продаётся $sold из $total SKU';
+  }
+
+  @override
+  String anWeightShare(String pct) {
+    return '$pct от общего веса';
+  }
+
+  @override
+  String anSilent(int n) {
+    return 'молчат $n';
+  }
+
+  @override
+  String anLost(int n) {
+    return 'пропало $n';
+  }
+
+  @override
+  String get anTeam => 'Команда';
+
+  @override
+  String get anPlanFactMonths => 'План и факт по месяцам';
+
+  @override
+  String get anRevenueMix => 'Из чего складывается выручка';
+
+  @override
+  String anSupervisor(String name) {
+    return 'СВР: $name';
+  }
+
+  @override
+  String anDealer(String name) {
+    return 'дилер: $name';
+  }
+
+  @override
+  String get anVacancy => 'вакансия';
+
+  @override
+  String get anNoRemarks => 'Замечаний нет';
+
+  @override
+  String get anSearchAgents => 'Имя, ID или регион';
+
+  @override
+  String get anFilterAll => 'Все';
+
+  @override
+  String get anFilterPlanOk => 'Выполняют план';
+
+  @override
+  String get anFilterBelow => 'Ниже плана';
+
+  @override
+  String get anFilterNoPlan => 'Без плана';
+
+  @override
+  String get anFilterRemarks => 'С замечаниями';
+
+  @override
+  String get anFilterVacancy => 'Вакансии';
+
+  @override
+  String get anSortExecution => 'По выполнению';
+
+  @override
+  String get anSortFact => 'По факту, кг';
+
+  @override
+  String get anSortRevenue => 'По выручке';
+
+  @override
+  String get anSortName => 'По имени';
+
+  @override
+  String anShown(int n, int all) {
+    return 'Показано $n из $all ТП';
+  }
+
+  @override
+  String anAgentNoPlan(String fact) {
+    return 'Факт $fact · плана ТП в Linko на месяц нет';
+  }
+
+  @override
+  String get anRevenue => 'Выручка';
+
+  @override
+  String get anVisits => 'Визиты';
+
+  @override
+  String anWithOrder(int n) {
+    return '$n с заказом';
+  }
+
+  @override
+  String get anOrders => 'Заказы';
+
+  @override
+  String get anTempo => 'Темп';
+
+  @override
+  String anCategoriesN(int n) {
+    return '$n категорий';
+  }
+
+  @override
+  String anMedian(String value) {
+    return 'медиана региона $value';
+  }
+
+  @override
+  String get anSumPerVisit => 'Сум с визита';
+
+  @override
+  String get anAvgCheck => 'Средний чек';
+
+  @override
+  String get anKgPerOutlet => 'Вес на точку';
+
+  @override
+  String get anFindings => 'Что нашлось';
+
+  @override
+  String get anStores => 'Точки месяца';
+
+  @override
+  String get anSilentMarkets => 'Ещё не купили';
+
+  @override
+  String get anNewMarkets => 'Новые точки';
+
+  @override
+  String anPrevMonth(String value) {
+    return 'прошлый месяц $value';
+  }
+
+  @override
+  String get anStore => 'Точка';
+
+  @override
+  String get anStoreAgents => 'Продавали';
+
+  @override
+  String get anProducts => 'Артикулы';
+
+  @override
+  String get anCompare => 'Сравнение периодов';
+
+  @override
+  String anCompareWith(String label) {
+    return 'к $label';
+  }
+
+  @override
+  String get anPeriodWeek => 'Неделя';
+
+  @override
+  String get anPeriodMonth => 'Месяц';
+
+  @override
+  String get anPeriodQuarter => 'Квартал';
+
+  @override
+  String get anPeriodYear => 'Год';
+
+  @override
+  String get anModSales => 'Продажи';
+
+  @override
+  String get anModFinance => 'Финансы';
+
+  @override
+  String get anModProduction => 'Производство';
+
+  @override
+  String get anModHr => 'Персонал';
+
+  @override
+  String get anNoData => 'нет данных';
+
+  @override
+  String get anIncomplete => 'Данные неполные';
+
+  @override
+  String get anSlow => 'Считаем — до нескольких секунд';
+
+  @override
+  String get anProductionToday => 'Выпуск сегодня';
+
+  @override
+  String get anCompletion => 'Выполнение плана';
+
+  @override
+  String get anDefect => 'Брак';
+
+  @override
+  String get anActiveOrders => 'Заданий в работе';
+
+  @override
+  String get anFindingsTitle => 'Находки Аналитика';
+
+  @override
+  String anFindingsLine(int critical, int warning, int info) {
+    return '$critical критично · $warning внимание · $info к сведению';
+  }
+
+  @override
+  String get anMonthPick => 'Месяц';
+
+  @override
+  String get anOpenAll => 'Открыть';
+
+  @override
+  String anScopeNote(String scope) {
+    return 'Ваш охват продаж: $scope';
+  }
+
+  @override
+  String get crmSearch => 'Название, адрес или ID точки';
+
+  @override
+  String get crmAttAll => 'Все';
+
+  @override
+  String get crmAttDecline => 'Падение продаж';
+
+  @override
+  String get crmAttLost => 'Перестали покупать';
+
+  @override
+  String get crmAttNotVisited => 'Давно не были';
+
+  @override
+  String get crmAttNew => 'Без покупок';
+
+  @override
+  String get crmStatusActive => 'Активная';
+
+  @override
+  String get crmStatusProblem => 'Проблемная';
+
+  @override
+  String get crmStatusInactive => 'Неактивная';
+
+  @override
+  String get crmPriorityLow => 'Низкий';
+
+  @override
+  String get crmPriorityMedium => 'Средний';
+
+  @override
+  String get crmPriorityHigh => 'Высокий';
+
+  @override
+  String get crmPriorityUrgent => 'Срочно';
+
+  @override
+  String get crmSortSales => 'По продажам за 30 дней';
+
+  @override
+  String get crmSortTrend => 'Сильнее упали';
+
+  @override
+  String get crmSortLastVisit => 'Давно без визита';
+
+  @override
+  String get crmSortName => 'По названию';
+
+  @override
+  String crmSales30(String value) {
+    return 'за 30 дней $value';
+  }
+
+  @override
+  String crmLastVisit(String date) {
+    return 'визит $date';
+  }
+
+  @override
+  String get crmNoAccess =>
+      'Список клиентов ведётся в Sales Base. Вас ещё не добавили в Sales Base — точки ваших ТП открываются из карточки ТП в «Аналитике».';
+
+  @override
+  String get crmMonthToDate => 'С начала месяца';
+
+  @override
+  String get crmOrders30 => 'Заказы, 30 дн.';
+
+  @override
+  String get crmVisits30 => 'Визиты, 30 дн.';
+
+  @override
+  String get crmTrend => 'Тренд';
+
+  @override
+  String get crmResponsible => 'Ответственный ТП';
+
+  @override
+  String get crmContact => 'Контакт';
+
+  @override
+  String get crmPhone => 'Телефон';
+
+  @override
+  String get crmNote => 'Заметка';
+
+  @override
+  String get crmTarget => 'План на месяц';
+
+  @override
+  String get crmMonths => 'Отгрузки по месяцам';
+
+  @override
+  String get crmOrders => 'Заказы';
+
+  @override
+  String get crmVisits => 'Визиты';
+
+  @override
+  String get crmHistory => 'История изменений';
+
+  @override
+  String get crmMonthSales => 'Продажи за месяц';
+
+  @override
+  String get crmEdit => 'Изменить';
+
+  @override
+  String get crmEditTitle => 'Карточка точки';
+
+  @override
+  String get crmSaved => 'Сохранено';
+
+  @override
+  String get crmStatus => 'Статус';
+
+  @override
+  String get crmPriority => 'Приоритет';
+
+  @override
+  String get crmLinkoReadonly =>
+      'Данные Linko только для чтения: меняется карточка Sales Base (статус, приоритет, план, контакты).';
+
+  @override
+  String get actionSave => 'Сохранить';
+
+  @override
+  String get auditUpdated => 'Изменена карточка';
+
+  @override
+  String get auditAgent => 'Сменён агент';
+
+  @override
+  String get crm30d => 'За 30 дней';
+
+  @override
+  String get crm90d => 'За 90 дней';
+
+  @override
+  String anWas(String value) {
+    return 'было $value';
+  }
 }

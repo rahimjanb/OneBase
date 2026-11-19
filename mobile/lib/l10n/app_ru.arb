@@ -866,5 +866,348 @@
   "organization1c": "Организация 1С",
   "langRu": "Русский",
   "langUz": "O'zbekcha",
-  "langSystem": "Как в системе"
+  "langSystem": "Как в системе",
+  "anSales": "Продажи",
+  "anPlanCard": "Выполнение плана",
+  "anPlanNone": "Плана нет",
+  "anPlanOnTrack": "Идём по плану",
+  "anPlanClose": "Близко к темпу",
+  "anPlanBehind": "Отстаём от темпа",
+  "anPlanDone": "План выполнен ✓",
+  "anPlanAlmost": "Почти выполнен",
+  "anPlanFailed": "План не выполнен",
+  "anFactFor": "факт за {month}",
+  "@anFactFor": {
+    "placeholders": {
+      "month": {
+        "type": "String"
+      }
+    }
+  },
+  "anPace": "Текущий темп",
+  "anPerDay": "{value}/день",
+  "@anPerDay": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "anRequired": "Нужно в день",
+  "anForecast": "Прогноз на конец месяца",
+  "anShouldBe": "должно быть",
+  "anPlanOf": "{fact} из {plan}",
+  "@anPlanOf": {
+    "placeholders": {
+      "fact": {
+        "type": "String"
+      },
+      "plan": {
+        "type": "String"
+      }
+    }
+  },
+  "anConversion": "Конверсия визита",
+  "anRevenuePerOutlet": "Выручка на ТТ",
+  "anAkbPerAgent": "АКБ на агента",
+  "anTarget": "цель {value}",
+  "@anTarget": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "anOfTarget": "{pct} цели",
+  "@anOfTarget": {
+    "placeholders": {
+      "pct": {
+        "type": "String"
+      }
+    }
+  },
+  "anVisitsNoOrder": "Визиты без заказа",
+  "anVisitsNoOrderOf": "из {n} визитов ТП",
+  "@anVisitsNoOrderOf": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "anAgentsAttention": "{bad} из {all} ТП — внимание",
+  "@anAgentsAttention": {
+    "placeholders": {
+      "bad": {
+        "type": "int"
+      },
+      "all": {
+        "type": "int"
+      }
+    }
+  },
+  "anCritical": "Критично",
+  "anRisk": "Риск",
+  "anNormal": "В норме",
+  "anRepublic": "Республика",
+  "anMyRegions": "Мои регионы",
+  "anDirections": "Направления",
+  "anRegions": "Регионы",
+  "anAgents": "Агенты",
+  "anPlanKg": "План, кг",
+  "anFact": "Факт",
+  "anForecastShort": "Прогноз",
+  "anStrike": "Страйк",
+  "anExecution": "Выполнение",
+  "anSameDays": "К прошлому месяцу за те же дни",
+  "anByDays": "Продажи по дням",
+  "anCategories": "Категории",
+  "anSkuSold": "продаётся {sold} из {total} SKU",
+  "@anSkuSold": {
+    "placeholders": {
+      "sold": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "anWeightShare": "{pct} от общего веса",
+  "@anWeightShare": {
+    "placeholders": {
+      "pct": {
+        "type": "String"
+      }
+    }
+  },
+  "anSilent": "молчат {n}",
+  "@anSilent": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "anLost": "пропало {n}",
+  "@anLost": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "anTeam": "Команда",
+  "anPlanFactMonths": "План и факт по месяцам",
+  "anRevenueMix": "Из чего складывается выручка",
+  "anSupervisor": "СВР: {name}",
+  "@anSupervisor": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "anDealer": "дилер: {name}",
+  "@anDealer": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "anVacancy": "вакансия",
+  "anNoRemarks": "Замечаний нет",
+  "anSearchAgents": "Имя, ID или регион",
+  "anFilterAll": "Все",
+  "anFilterPlanOk": "Выполняют план",
+  "anFilterBelow": "Ниже плана",
+  "anFilterNoPlan": "Без плана",
+  "anFilterRemarks": "С замечаниями",
+  "anFilterVacancy": "Вакансии",
+  "anSortExecution": "По выполнению",
+  "anSortFact": "По факту, кг",
+  "anSortRevenue": "По выручке",
+  "anSortName": "По имени",
+  "anShown": "Показано {n} из {all} ТП",
+  "@anShown": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "all": {
+        "type": "int"
+      }
+    }
+  },
+  "anAgentNoPlan": "Факт {fact} · плана ТП в Linko на месяц нет",
+  "@anAgentNoPlan": {
+    "placeholders": {
+      "fact": {
+        "type": "String"
+      }
+    }
+  },
+  "anRevenue": "Выручка",
+  "anVisits": "Визиты",
+  "anWithOrder": "{n} с заказом",
+  "@anWithOrder": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "anOrders": "Заказы",
+  "anTempo": "Темп",
+  "anCategoriesN": "{n} категорий",
+  "@anCategoriesN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "anMedian": "медиана региона {value}",
+  "@anMedian": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "anSumPerVisit": "Сум с визита",
+  "anAvgCheck": "Средний чек",
+  "anKgPerOutlet": "Вес на точку",
+  "anFindings": "Что нашлось",
+  "anStores": "Точки месяца",
+  "anSilentMarkets": "Ещё не купили",
+  "anNewMarkets": "Новые точки",
+  "anPrevMonth": "прошлый месяц {value}",
+  "@anPrevMonth": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "anStore": "Точка",
+  "anStoreAgents": "Продавали",
+  "anProducts": "Артикулы",
+  "anCompare": "Сравнение периодов",
+  "anCompareWith": "к {label}",
+  "@anCompareWith": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "anPeriodWeek": "Неделя",
+  "anPeriodMonth": "Месяц",
+  "anPeriodQuarter": "Квартал",
+  "anPeriodYear": "Год",
+  "anModSales": "Продажи",
+  "anModFinance": "Финансы",
+  "anModProduction": "Производство",
+  "anModHr": "Персонал",
+  "anNoData": "нет данных",
+  "anIncomplete": "Данные неполные",
+  "anSlow": "Считаем — до нескольких секунд",
+  "anProductionToday": "Выпуск сегодня",
+  "anCompletion": "Выполнение плана",
+  "anDefect": "Брак",
+  "anActiveOrders": "Заданий в работе",
+  "anFindingsTitle": "Находки Аналитика",
+  "anFindingsLine": "{critical} критично · {warning} внимание · {info} к сведению",
+  "@anFindingsLine": {
+    "placeholders": {
+      "critical": {
+        "type": "int"
+      },
+      "warning": {
+        "type": "int"
+      },
+      "info": {
+        "type": "int"
+      }
+    }
+  },
+  "anMonthPick": "Месяц",
+  "anOpenAll": "Открыть",
+  "anScopeNote": "Ваш охват продаж: {scope}",
+  "@anScopeNote": {
+    "placeholders": {
+      "scope": {
+        "type": "String"
+      }
+    }
+  },
+  "crmSearch": "Название, адрес или ID точки",
+  "crmAttAll": "Все",
+  "crmAttDecline": "Падение продаж",
+  "crmAttLost": "Перестали покупать",
+  "crmAttNotVisited": "Давно не были",
+  "crmAttNew": "Без покупок",
+  "crmStatusActive": "Активная",
+  "crmStatusProblem": "Проблемная",
+  "crmStatusInactive": "Неактивная",
+  "crmPriorityLow": "Низкий",
+  "crmPriorityMedium": "Средний",
+  "crmPriorityHigh": "Высокий",
+  "crmPriorityUrgent": "Срочно",
+  "crmSortSales": "По продажам за 30 дней",
+  "crmSortTrend": "Сильнее упали",
+  "crmSortLastVisit": "Давно без визита",
+  "crmSortName": "По названию",
+  "crmSales30": "за 30 дней {value}",
+  "@crmSales30": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "crmLastVisit": "визит {date}",
+  "@crmLastVisit": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "crmNoAccess": "Список клиентов ведётся в Sales Base. Вас ещё не добавили в Sales Base — точки ваших ТП открываются из карточки ТП в «Аналитике».",
+  "crmMonthToDate": "С начала месяца",
+  "crmOrders30": "Заказы, 30 дн.",
+  "crmVisits30": "Визиты, 30 дн.",
+  "crmTrend": "Тренд",
+  "crmResponsible": "Ответственный ТП",
+  "crmContact": "Контакт",
+  "crmPhone": "Телефон",
+  "crmNote": "Заметка",
+  "crmTarget": "План на месяц",
+  "crmMonths": "Отгрузки по месяцам",
+  "crmOrders": "Заказы",
+  "crmVisits": "Визиты",
+  "crmHistory": "История изменений",
+  "crmMonthSales": "Продажи за месяц",
+  "crmEdit": "Изменить",
+  "crmEditTitle": "Карточка точки",
+  "crmSaved": "Сохранено",
+  "crmStatus": "Статус",
+  "crmPriority": "Приоритет",
+  "crmLinkoReadonly": "Данные Linko только для чтения: меняется карточка Sales Base (статус, приоритет, план, контакты).",
+  "actionSave": "Сохранить",
+  "auditUpdated": "Изменена карточка",
+  "auditAgent": "Сменён агент",
+  "crm30d": "За 30 дней",
+  "crm90d": "За 90 дней",
+  "anWas": "было {value}",
+  "@anWas": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  }
 }

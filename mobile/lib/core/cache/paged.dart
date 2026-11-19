@@ -55,6 +55,11 @@ abstract class PagedController<T> extends Notifier<PagedState<T>> {
 
   @override
   PagedState<T> build() {
+    // Пересборка (сменился фильтр) — список с начала.
+    _cancel?.cancel('Новый запрос');
+    _page = 0;
+    _cursor = null;
+    _inflight = null;
     ref.onDispose(() => _cancel?.cancel('Список закрыт'));
     Future.microtask(loadMore);
     return PagedState<T>(loading: true);

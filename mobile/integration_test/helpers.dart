@@ -1,3 +1,4 @@
+import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -51,4 +52,11 @@ Future<void> signInIfNeeded(WidgetTester tester, Finder signedIn) async {
 Future<void> scrollBy(WidgetTester tester, double dy) async {
   await tester.drag(find.byType(Scrollable).first, Offset(0, -dy));
   await settle(tester, const Duration(milliseconds: 900));
+}
+
+/// Перейти по адресу приложения (как по ссылке) и подождать загрузку.
+Future<void> goTo(WidgetTester tester, String location, {Duration wait = const Duration(seconds: 4)}) async {
+  final context = tester.element(find.byType(Scaffold).first);
+  GoRouter.of(context).go(location);
+  await settle(tester, wait);
 }
