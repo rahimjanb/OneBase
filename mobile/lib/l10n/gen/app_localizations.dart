@@ -893,8 +893,8 @@ abstract class AppLocalizations {
   /// No description provided for @hrSynced.
   ///
   /// In ru, this message translates to:
-  /// **'Verifix: {when}'**
-  String hrSynced(String when);
+  /// **'Verifix: {time}'**
+  String hrSynced(String time);
 
   /// No description provided for @tasksOpen.
   ///
@@ -3925,6 +3925,558 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'нужно к {date}'**
   String rqDesired(String date);
+
+  /// No description provided for @tkScopeMy.
+  ///
+  /// In ru, this message translates to:
+  /// **'Мои'**
+  String get tkScopeMy;
+
+  /// No description provided for @tkScopeAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все'**
+  String get tkScopeAll;
+
+  /// No description provided for @tkScopeDepartment.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отдел'**
+  String get tkScopeDepartment;
+
+  /// No description provided for @tkScopeArchive.
+  ///
+  /// In ru, this message translates to:
+  /// **'Архив'**
+  String get tkScopeArchive;
+
+  /// No description provided for @tkStatusOpen.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открытые'**
+  String get tkStatusOpen;
+
+  /// No description provided for @tkStatusOverdue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Просрочены'**
+  String get tkStatusOverdue;
+
+  /// No description provided for @tkStatusBlocked.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заблокированы'**
+  String get tkStatusBlocked;
+
+  /// No description provided for @tkStatusClosed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Закрытые'**
+  String get tkStatusClosed;
+
+  /// No description provided for @tkSearch.
+  ///
+  /// In ru, this message translates to:
+  /// **'Название, описание или исполнитель'**
+  String get tkSearch;
+
+  /// No description provided for @tkNew.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новая задача'**
+  String get tkNew;
+
+  /// No description provided for @tkSt_New.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новая'**
+  String get tkSt_New;
+
+  /// No description provided for @tkSt_InProgress.
+  ///
+  /// In ru, this message translates to:
+  /// **'В работе'**
+  String get tkSt_InProgress;
+
+  /// No description provided for @tkSt_Review.
+  ///
+  /// In ru, this message translates to:
+  /// **'На проверке'**
+  String get tkSt_Review;
+
+  /// No description provided for @tkSt_Done.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выполнена'**
+  String get tkSt_Done;
+
+  /// No description provided for @tkSt_Cancelled.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отменена'**
+  String get tkSt_Cancelled;
+
+  /// No description provided for @tkBlocked.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заблокирована'**
+  String get tkBlocked;
+
+  /// No description provided for @tkPr_Low.
+  ///
+  /// In ru, this message translates to:
+  /// **'Низкий'**
+  String get tkPr_Low;
+
+  /// No description provided for @tkPr_Medium.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обычный'**
+  String get tkPr_Medium;
+
+  /// No description provided for @tkPr_High.
+  ///
+  /// In ru, this message translates to:
+  /// **'Высокий'**
+  String get tkPr_High;
+
+  /// No description provided for @tkPr_Urgent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Критический'**
+  String get tkPr_Urgent;
+
+  /// No description provided for @tkNoDue.
+  ///
+  /// In ru, this message translates to:
+  /// **'без срока'**
+  String get tkNoDue;
+
+  /// No description provided for @tkDue.
+  ///
+  /// In ru, this message translates to:
+  /// **'срок {date}'**
+  String tkDue(String date);
+
+  /// No description provided for @tkToday.
+  ///
+  /// In ru, this message translates to:
+  /// **'сегодня'**
+  String get tkToday;
+
+  /// No description provided for @tkTomorrow.
+  ///
+  /// In ru, this message translates to:
+  /// **'завтра'**
+  String get tkTomorrow;
+
+  /// No description provided for @tkAnyone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Любой сотрудник отдела'**
+  String get tkAnyone;
+
+  /// No description provided for @tkAct_InProgress.
+  ///
+  /// In ru, this message translates to:
+  /// **'В работу'**
+  String get tkAct_InProgress;
+
+  /// No description provided for @tkAct_Review.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отправить на проверку'**
+  String get tkAct_Review;
+
+  /// No description provided for @tkAct_Done.
+  ///
+  /// In ru, this message translates to:
+  /// **'Завершить'**
+  String get tkAct_Done;
+
+  /// No description provided for @tkAct_Accept.
+  ///
+  /// In ru, this message translates to:
+  /// **'Принять результат'**
+  String get tkAct_Accept;
+
+  /// No description provided for @tkAct_Return.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вернуть на доработку'**
+  String get tkAct_Return;
+
+  /// No description provided for @tkAct_Reopen.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вернуть в работу'**
+  String get tkAct_Reopen;
+
+  /// No description provided for @tkAct_Cancelled.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отменить'**
+  String get tkAct_Cancelled;
+
+  /// No description provided for @tkCommentRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Напишите, что доработать'**
+  String get tkCommentRequired;
+
+  /// No description provided for @tkResult.
+  ///
+  /// In ru, this message translates to:
+  /// **'Итог (необязательно)'**
+  String get tkResult;
+
+  /// No description provided for @tkDescription.
+  ///
+  /// In ru, this message translates to:
+  /// **'Описание'**
+  String get tkDescription;
+
+  /// No description provided for @tkChecklist.
+  ///
+  /// In ru, this message translates to:
+  /// **'Чек-лист'**
+  String get tkChecklist;
+
+  /// No description provided for @tkProgress.
+  ///
+  /// In ru, this message translates to:
+  /// **'Готово {n}%'**
+  String tkProgress(int n);
+
+  /// No description provided for @tkComments.
+  ///
+  /// In ru, this message translates to:
+  /// **'Комментарии'**
+  String get tkComments;
+
+  /// No description provided for @tkCommentHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Написать комментарий'**
+  String get tkCommentHint;
+
+  /// No description provided for @tkSend.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отправить'**
+  String get tkSend;
+
+  /// No description provided for @tkAttachments.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вложения'**
+  String get tkAttachments;
+
+  /// No description provided for @tkAttach.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прикрепить файл'**
+  String get tkAttach;
+
+  /// No description provided for @tkTooBig.
+  ///
+  /// In ru, this message translates to:
+  /// **'Файл больше 20 МБ'**
+  String get tkTooBig;
+
+  /// No description provided for @tkHistory.
+  ///
+  /// In ru, this message translates to:
+  /// **'История'**
+  String get tkHistory;
+
+  /// No description provided for @tkBlock.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заблокировать'**
+  String get tkBlock;
+
+  /// No description provided for @tkUnblock.
+  ///
+  /// In ru, this message translates to:
+  /// **'Снять блок'**
+  String get tkUnblock;
+
+  /// No description provided for @tkBlockReason.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что мешает'**
+  String get tkBlockReason;
+
+  /// No description provided for @tkAssignee.
+  ///
+  /// In ru, this message translates to:
+  /// **'Исполнитель'**
+  String get tkAssignee;
+
+  /// No description provided for @tkAuthor.
+  ///
+  /// In ru, this message translates to:
+  /// **'Постановщик'**
+  String get tkAuthor;
+
+  /// No description provided for @tkDepartment.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отдел'**
+  String get tkDepartment;
+
+  /// No description provided for @tkProject.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проект'**
+  String get tkProject;
+
+  /// No description provided for @tkTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Название'**
+  String get tkTitle;
+
+  /// No description provided for @tkPriority.
+  ///
+  /// In ru, this message translates to:
+  /// **'Приоритет'**
+  String get tkPriority;
+
+  /// No description provided for @tkDueDate.
+  ///
+  /// In ru, this message translates to:
+  /// **'Срок'**
+  String get tkDueDate;
+
+  /// No description provided for @tkDueTime.
+  ///
+  /// In ru, this message translates to:
+  /// **'Время'**
+  String get tkDueTime;
+
+  /// No description provided for @tkCreate.
+  ///
+  /// In ru, this message translates to:
+  /// **'Поставить задачу'**
+  String get tkCreate;
+
+  /// No description provided for @tkCreated.
+  ///
+  /// In ru, this message translates to:
+  /// **'Задача поставлена'**
+  String get tkCreated;
+
+  /// No description provided for @tkTitleRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Введите название'**
+  String get tkTitleRequired;
+
+  /// No description provided for @tkDeptRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выберите отдел'**
+  String get tkDeptRequired;
+
+  /// No description provided for @tkCommentAdded.
+  ///
+  /// In ru, this message translates to:
+  /// **'Комментарий добавлен'**
+  String get tkCommentAdded;
+
+  /// No description provided for @tkAttachmentAdded.
+  ///
+  /// In ru, this message translates to:
+  /// **'Файл прикреплён'**
+  String get tkAttachmentAdded;
+
+  /// No description provided for @tkOpenFile.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть'**
+  String get tkOpenFile;
+
+  /// No description provided for @tkOnlineOnly.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нужна связь с сервером'**
+  String get tkOnlineOnly;
+
+  /// No description provided for @hrTabOverview.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обзор'**
+  String get hrTabOverview;
+
+  /// No description provided for @hrTabEmployees.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сотрудники'**
+  String get hrTabEmployees;
+
+  /// No description provided for @hrOnTime.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вовремя'**
+  String get hrOnTime;
+
+  /// No description provided for @hrLateN.
+  ///
+  /// In ru, this message translates to:
+  /// **'Опоздали'**
+  String get hrLateN;
+
+  /// No description provided for @hrAbsentN.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отсутствуют'**
+  String get hrAbsentN;
+
+  /// No description provided for @hrLeaveN.
+  ///
+  /// In ru, this message translates to:
+  /// **'По документу'**
+  String get hrLeaveN;
+
+  /// No description provided for @hrExpectedN.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ожидаются'**
+  String get hrExpectedN;
+
+  /// No description provided for @hrUnknownN.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не ясно'**
+  String get hrUnknownN;
+
+  /// No description provided for @hrActive.
+  ///
+  /// In ru, this message translates to:
+  /// **'Штат'**
+  String get hrActive;
+
+  /// No description provided for @hrAvgArrival.
+  ///
+  /// In ru, this message translates to:
+  /// **'Средний приход'**
+  String get hrAvgArrival;
+
+  /// No description provided for @hrAttention.
+  ///
+  /// In ru, this message translates to:
+  /// **'Требует внимания'**
+  String get hrAttention;
+
+  /// No description provided for @hrDivisions.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подразделения'**
+  String get hrDivisions;
+
+  /// No description provided for @hrByHour.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проходы по часам'**
+  String get hrByHour;
+
+  /// No description provided for @hrSearchEmp.
+  ///
+  /// In ru, this message translates to:
+  /// **'ФИО, телефон или ID Verifix'**
+  String get hrSearchEmp;
+
+  /// No description provided for @hrDay_Present.
+  ///
+  /// In ru, this message translates to:
+  /// **'Пришёл'**
+  String get hrDay_Present;
+
+  /// No description provided for @hrDay_Absent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отсутствует'**
+  String get hrDay_Absent;
+
+  /// No description provided for @hrDay_OnLeave.
+  ///
+  /// In ru, this message translates to:
+  /// **'По документу'**
+  String get hrDay_OnLeave;
+
+  /// No description provided for @hrDay_DayOff.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выходной'**
+  String get hrDay_DayOff;
+
+  /// No description provided for @hrDay_Expected.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ожидается'**
+  String get hrDay_Expected;
+
+  /// No description provided for @hrDay_NoSchedule.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет графика'**
+  String get hrDay_NoSchedule;
+
+  /// No description provided for @hrDay_Unknown.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не ясно'**
+  String get hrDay_Unknown;
+
+  /// No description provided for @hrDay_NotEmployed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не работал'**
+  String get hrDay_NotEmployed;
+
+  /// No description provided for @hrLateMin.
+  ///
+  /// In ru, this message translates to:
+  /// **'опоздание {n} мин'**
+  String hrLateMin(int n);
+
+  /// No description provided for @hrPeriod14.
+  ///
+  /// In ru, this message translates to:
+  /// **'14 дней'**
+  String get hrPeriod14;
+
+  /// No description provided for @hrSummaryPresent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Пришёл {n} из {plan}'**
+  String hrSummaryPresent(int n, int plan);
+
+  /// No description provided for @hrSummaryLate.
+  ///
+  /// In ru, this message translates to:
+  /// **'Опозданий'**
+  String get hrSummaryLate;
+
+  /// No description provided for @hrSummaryAbsent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отсутствий'**
+  String get hrSummaryAbsent;
+
+  /// No description provided for @hrWorked.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отработано'**
+  String get hrWorked;
+
+  /// No description provided for @hrDays.
+  ///
+  /// In ru, this message translates to:
+  /// **'Дни'**
+  String get hrDays;
 }
 
 class _AppLocalizationsDelegate

@@ -1,6 +1,6 @@
-import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 /// Ждать, пока на экране не появится [finder] (живой сервер отвечает не мгновенно; бесконечные анимации не дают pumpAndSettle).
 Future<void> pumpUntil(WidgetTester tester, Finder finder, {Duration timeout = const Duration(seconds: 30)}) async {

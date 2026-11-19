@@ -293,10 +293,10 @@
   },
   "hrNoSchedule": "Сегодня по графику никого нет.",
   "hrDivisionsAll": "Все подразделения",
-  "hrSynced": "Verifix: {when}",
+  "hrSynced": "Verifix: {time}",
   "@hrSynced": {
     "placeholders": {
-      "when": {
+      "time": {
         "type": "String"
       }
     }
@@ -1501,5 +1501,128 @@
         "type": "String"
       }
     }
-  }
+  },
+  "tkScopeMy": "Мои",
+  "tkScopeAll": "Все",
+  "tkScopeDepartment": "Отдел",
+  "tkScopeArchive": "Архив",
+  "tkStatusOpen": "Открытые",
+  "tkStatusOverdue": "Просрочены",
+  "tkStatusBlocked": "Заблокированы",
+  "tkStatusClosed": "Закрытые",
+  "tkSearch": "Название, описание или исполнитель",
+  "tkNew": "Новая задача",
+  "tkSt_New": "Новая",
+  "tkSt_InProgress": "В работе",
+  "tkSt_Review": "На проверке",
+  "tkSt_Done": "Выполнена",
+  "tkSt_Cancelled": "Отменена",
+  "tkBlocked": "Заблокирована",
+  "tkPr_Low": "Низкий",
+  "tkPr_Medium": "Обычный",
+  "tkPr_High": "Высокий",
+  "tkPr_Urgent": "Критический",
+  "tkNoDue": "без срока",
+  "tkDue": "срок {date}",
+  "@tkDue": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "tkToday": "сегодня",
+  "tkTomorrow": "завтра",
+  "tkAnyone": "Любой сотрудник отдела",
+  "tkAct_InProgress": "В работу",
+  "tkAct_Review": "Отправить на проверку",
+  "tkAct_Done": "Завершить",
+  "tkAct_Accept": "Принять результат",
+  "tkAct_Return": "Вернуть на доработку",
+  "tkAct_Reopen": "Вернуть в работу",
+  "tkAct_Cancelled": "Отменить",
+  "tkCommentRequired": "Напишите, что доработать",
+  "tkResult": "Итог (необязательно)",
+  "tkDescription": "Описание",
+  "tkChecklist": "Чек-лист",
+  "tkProgress": "Готово {n}%",
+  "@tkProgress": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "tkComments": "Комментарии",
+  "tkCommentHint": "Написать комментарий",
+  "tkSend": "Отправить",
+  "tkAttachments": "Вложения",
+  "tkAttach": "Прикрепить файл",
+  "tkTooBig": "Файл больше 20 МБ",
+  "tkHistory": "История",
+  "tkBlock": "Заблокировать",
+  "tkUnblock": "Снять блок",
+  "tkBlockReason": "Что мешает",
+  "tkAssignee": "Исполнитель",
+  "tkAuthor": "Постановщик",
+  "tkDepartment": "Отдел",
+  "tkProject": "Проект",
+  "tkTitle": "Название",
+  "tkPriority": "Приоритет",
+  "tkDueDate": "Срок",
+  "tkDueTime": "Время",
+  "tkCreate": "Поставить задачу",
+  "tkCreated": "Задача поставлена",
+  "tkTitleRequired": "Введите название",
+  "tkDeptRequired": "Выберите отдел",
+  "tkCommentAdded": "Комментарий добавлен",
+  "tkAttachmentAdded": "Файл прикреплён",
+  "tkOpenFile": "Открыть",
+  "tkOnlineOnly": "Нужна связь с сервером",
+  "hrTabOverview": "Обзор",
+  "hrTabEmployees": "Сотрудники",
+  "hrOnTime": "Вовремя",
+  "hrLateN": "Опоздали",
+  "hrAbsentN": "Отсутствуют",
+  "hrLeaveN": "По документу",
+  "hrExpectedN": "Ожидаются",
+  "hrUnknownN": "Не ясно",
+  "hrActive": "Штат",
+  "hrAvgArrival": "Средний приход",
+  "hrAttention": "Требует внимания",
+  "hrDivisions": "Подразделения",
+  "hrByHour": "Проходы по часам",
+  "hrSearchEmp": "ФИО, телефон или ID Verifix",
+  "hrDay_Present": "Пришёл",
+  "hrDay_Absent": "Отсутствует",
+  "hrDay_OnLeave": "По документу",
+  "hrDay_DayOff": "Выходной",
+  "hrDay_Expected": "Ожидается",
+  "hrDay_NoSchedule": "Нет графика",
+  "hrDay_Unknown": "Не ясно",
+  "hrDay_NotEmployed": "Не работал",
+  "hrLateMin": "опоздание {n} мин",
+  "@hrLateMin": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "hrPeriod14": "14 дней",
+  "hrSummaryPresent": "Пришёл {n} из {plan}",
+  "@hrSummaryPresent": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "plan": {
+        "type": "int"
+      }
+    }
+  },
+  "hrSummaryLate": "Опозданий",
+  "hrSummaryAbsent": "Отсутствий",
+  "hrWorked": "Отработано",
+  "hrDays": "Дни"
 }

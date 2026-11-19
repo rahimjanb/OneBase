@@ -455,8 +455,8 @@ class AppLocalizationsUz extends AppLocalizations {
   String get hrDivisionsAll => 'Barcha bo\'linmalar';
 
   @override
-  String hrSynced(String when) {
-    return 'Verifix: $when';
+  String hrSynced(String time) {
+    return 'Verifix: $time';
   }
 
   @override
@@ -2167,4 +2167,288 @@ class AppLocalizationsUz extends AppLocalizations {
   String rqDesired(String date) {
     return '$date ga kerak';
   }
+
+  @override
+  String get tkScopeMy => 'Meniki';
+
+  @override
+  String get tkScopeAll => 'Hammasi';
+
+  @override
+  String get tkScopeDepartment => 'Bo\'lim';
+
+  @override
+  String get tkScopeArchive => 'Arxiv';
+
+  @override
+  String get tkStatusOpen => 'Ochiq';
+
+  @override
+  String get tkStatusOverdue => 'Muddati o\'tgan';
+
+  @override
+  String get tkStatusBlocked => 'Bloklangan';
+
+  @override
+  String get tkStatusClosed => 'Yopilgan';
+
+  @override
+  String get tkSearch => 'Nomi, tavsif yoki ijrochi';
+
+  @override
+  String get tkNew => 'Yangi vazifa';
+
+  @override
+  String get tkSt_New => 'Yangi';
+
+  @override
+  String get tkSt_InProgress => 'Jarayonda';
+
+  @override
+  String get tkSt_Review => 'Tekshiruvda';
+
+  @override
+  String get tkSt_Done => 'Bajarildi';
+
+  @override
+  String get tkSt_Cancelled => 'Bekor qilindi';
+
+  @override
+  String get tkBlocked => 'Bloklangan';
+
+  @override
+  String get tkPr_Low => 'Past';
+
+  @override
+  String get tkPr_Medium => 'Oddiy';
+
+  @override
+  String get tkPr_High => 'Yuqori';
+
+  @override
+  String get tkPr_Urgent => 'Jiddiy';
+
+  @override
+  String get tkNoDue => 'muddatsiz';
+
+  @override
+  String tkDue(String date) {
+    return 'muddat $date';
+  }
+
+  @override
+  String get tkToday => 'bugun';
+
+  @override
+  String get tkTomorrow => 'ertaga';
+
+  @override
+  String get tkAnyone => 'Bo\'limning istalgan xodimi';
+
+  @override
+  String get tkAct_InProgress => 'Ishga olish';
+
+  @override
+  String get tkAct_Review => 'Tekshiruvga yuborish';
+
+  @override
+  String get tkAct_Done => 'Yakunlash';
+
+  @override
+  String get tkAct_Accept => 'Natijani qabul qilish';
+
+  @override
+  String get tkAct_Return => 'Qayta ishlashga qaytarish';
+
+  @override
+  String get tkAct_Reopen => 'Ishga qaytarish';
+
+  @override
+  String get tkAct_Cancelled => 'Bekor qilish';
+
+  @override
+  String get tkCommentRequired => 'Nimani qayta ishlash kerakligini yozing';
+
+  @override
+  String get tkResult => 'Natija (ixtiyoriy)';
+
+  @override
+  String get tkDescription => 'Tavsif';
+
+  @override
+  String get tkChecklist => 'Nazorat ro\'yxati';
+
+  @override
+  String tkProgress(int n) {
+    return '$n% tayyor';
+  }
+
+  @override
+  String get tkComments => 'Izohlar';
+
+  @override
+  String get tkCommentHint => 'Izoh yozish';
+
+  @override
+  String get tkSend => 'Yuborish';
+
+  @override
+  String get tkAttachments => 'Ilovalar';
+
+  @override
+  String get tkAttach => 'Fayl biriktirish';
+
+  @override
+  String get tkTooBig => 'Fayl 20 MB dan katta';
+
+  @override
+  String get tkHistory => 'Tarix';
+
+  @override
+  String get tkBlock => 'Bloklash';
+
+  @override
+  String get tkUnblock => 'Blokni olib tashlash';
+
+  @override
+  String get tkBlockReason => 'Nima xalaqit bermoqda';
+
+  @override
+  String get tkAssignee => 'Ijrochi';
+
+  @override
+  String get tkAuthor => 'Topshiriq beruvchi';
+
+  @override
+  String get tkDepartment => 'Bo\'lim';
+
+  @override
+  String get tkProject => 'Loyiha';
+
+  @override
+  String get tkTitle => 'Nomi';
+
+  @override
+  String get tkPriority => 'Ustuvorlik';
+
+  @override
+  String get tkDueDate => 'Muddat';
+
+  @override
+  String get tkDueTime => 'Vaqt';
+
+  @override
+  String get tkCreate => 'Vazifa qo\'yish';
+
+  @override
+  String get tkCreated => 'Vazifa qo\'yildi';
+
+  @override
+  String get tkTitleRequired => 'Nomini kiriting';
+
+  @override
+  String get tkDeptRequired => 'Bo\'limni tanlang';
+
+  @override
+  String get tkCommentAdded => 'Izoh qo\'shildi';
+
+  @override
+  String get tkAttachmentAdded => 'Fayl biriktirildi';
+
+  @override
+  String get tkOpenFile => 'Ochish';
+
+  @override
+  String get tkOnlineOnly => 'Server bilan aloqa kerak';
+
+  @override
+  String get hrTabOverview => 'Sharh';
+
+  @override
+  String get hrTabEmployees => 'Xodimlar';
+
+  @override
+  String get hrOnTime => 'O\'z vaqtida';
+
+  @override
+  String get hrLateN => 'Kechikdi';
+
+  @override
+  String get hrAbsentN => 'Yo\'q';
+
+  @override
+  String get hrLeaveN => 'Hujjat bo\'yicha';
+
+  @override
+  String get hrExpectedN => 'Kutilmoqda';
+
+  @override
+  String get hrUnknownN => 'Noaniq';
+
+  @override
+  String get hrActive => 'Shtat';
+
+  @override
+  String get hrAvgArrival => 'O\'rtacha kelish';
+
+  @override
+  String get hrAttention => 'E\'tibor talab qiladi';
+
+  @override
+  String get hrDivisions => 'Bo\'linmalar';
+
+  @override
+  String get hrByHour => 'Soatlar bo\'yicha o\'tishlar';
+
+  @override
+  String get hrSearchEmp => 'F.I.Sh., telefon yoki Verifix ID';
+
+  @override
+  String get hrDay_Present => 'Keldi';
+
+  @override
+  String get hrDay_Absent => 'Yo\'q';
+
+  @override
+  String get hrDay_OnLeave => 'Hujjat bo\'yicha';
+
+  @override
+  String get hrDay_DayOff => 'Dam olish';
+
+  @override
+  String get hrDay_Expected => 'Kutilmoqda';
+
+  @override
+  String get hrDay_NoSchedule => 'Jadval yo\'q';
+
+  @override
+  String get hrDay_Unknown => 'Noaniq';
+
+  @override
+  String get hrDay_NotEmployed => 'Ishlamagan';
+
+  @override
+  String hrLateMin(int n) {
+    return '$n daq kechikish';
+  }
+
+  @override
+  String get hrPeriod14 => '14 kun';
+
+  @override
+  String hrSummaryPresent(int n, int plan) {
+    return '$plan dan $n kun keldi';
+  }
+
+  @override
+  String get hrSummaryLate => 'Kechikishlar';
+
+  @override
+  String get hrSummaryAbsent => 'Yo\'qliklar';
+
+  @override
+  String get hrWorked => 'Ishlangan';
+
+  @override
+  String get hrDays => 'Kunlar';
 }

@@ -453,8 +453,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get hrDivisionsAll => 'Все подразделения';
 
   @override
-  String hrSynced(String when) {
-    return 'Verifix: $when';
+  String hrSynced(String time) {
+    return 'Verifix: $time';
   }
 
   @override
@@ -2219,4 +2219,288 @@ class AppLocalizationsRu extends AppLocalizations {
   String rqDesired(String date) {
     return 'нужно к $date';
   }
+
+  @override
+  String get tkScopeMy => 'Мои';
+
+  @override
+  String get tkScopeAll => 'Все';
+
+  @override
+  String get tkScopeDepartment => 'Отдел';
+
+  @override
+  String get tkScopeArchive => 'Архив';
+
+  @override
+  String get tkStatusOpen => 'Открытые';
+
+  @override
+  String get tkStatusOverdue => 'Просрочены';
+
+  @override
+  String get tkStatusBlocked => 'Заблокированы';
+
+  @override
+  String get tkStatusClosed => 'Закрытые';
+
+  @override
+  String get tkSearch => 'Название, описание или исполнитель';
+
+  @override
+  String get tkNew => 'Новая задача';
+
+  @override
+  String get tkSt_New => 'Новая';
+
+  @override
+  String get tkSt_InProgress => 'В работе';
+
+  @override
+  String get tkSt_Review => 'На проверке';
+
+  @override
+  String get tkSt_Done => 'Выполнена';
+
+  @override
+  String get tkSt_Cancelled => 'Отменена';
+
+  @override
+  String get tkBlocked => 'Заблокирована';
+
+  @override
+  String get tkPr_Low => 'Низкий';
+
+  @override
+  String get tkPr_Medium => 'Обычный';
+
+  @override
+  String get tkPr_High => 'Высокий';
+
+  @override
+  String get tkPr_Urgent => 'Критический';
+
+  @override
+  String get tkNoDue => 'без срока';
+
+  @override
+  String tkDue(String date) {
+    return 'срок $date';
+  }
+
+  @override
+  String get tkToday => 'сегодня';
+
+  @override
+  String get tkTomorrow => 'завтра';
+
+  @override
+  String get tkAnyone => 'Любой сотрудник отдела';
+
+  @override
+  String get tkAct_InProgress => 'В работу';
+
+  @override
+  String get tkAct_Review => 'Отправить на проверку';
+
+  @override
+  String get tkAct_Done => 'Завершить';
+
+  @override
+  String get tkAct_Accept => 'Принять результат';
+
+  @override
+  String get tkAct_Return => 'Вернуть на доработку';
+
+  @override
+  String get tkAct_Reopen => 'Вернуть в работу';
+
+  @override
+  String get tkAct_Cancelled => 'Отменить';
+
+  @override
+  String get tkCommentRequired => 'Напишите, что доработать';
+
+  @override
+  String get tkResult => 'Итог (необязательно)';
+
+  @override
+  String get tkDescription => 'Описание';
+
+  @override
+  String get tkChecklist => 'Чек-лист';
+
+  @override
+  String tkProgress(int n) {
+    return 'Готово $n%';
+  }
+
+  @override
+  String get tkComments => 'Комментарии';
+
+  @override
+  String get tkCommentHint => 'Написать комментарий';
+
+  @override
+  String get tkSend => 'Отправить';
+
+  @override
+  String get tkAttachments => 'Вложения';
+
+  @override
+  String get tkAttach => 'Прикрепить файл';
+
+  @override
+  String get tkTooBig => 'Файл больше 20 МБ';
+
+  @override
+  String get tkHistory => 'История';
+
+  @override
+  String get tkBlock => 'Заблокировать';
+
+  @override
+  String get tkUnblock => 'Снять блок';
+
+  @override
+  String get tkBlockReason => 'Что мешает';
+
+  @override
+  String get tkAssignee => 'Исполнитель';
+
+  @override
+  String get tkAuthor => 'Постановщик';
+
+  @override
+  String get tkDepartment => 'Отдел';
+
+  @override
+  String get tkProject => 'Проект';
+
+  @override
+  String get tkTitle => 'Название';
+
+  @override
+  String get tkPriority => 'Приоритет';
+
+  @override
+  String get tkDueDate => 'Срок';
+
+  @override
+  String get tkDueTime => 'Время';
+
+  @override
+  String get tkCreate => 'Поставить задачу';
+
+  @override
+  String get tkCreated => 'Задача поставлена';
+
+  @override
+  String get tkTitleRequired => 'Введите название';
+
+  @override
+  String get tkDeptRequired => 'Выберите отдел';
+
+  @override
+  String get tkCommentAdded => 'Комментарий добавлен';
+
+  @override
+  String get tkAttachmentAdded => 'Файл прикреплён';
+
+  @override
+  String get tkOpenFile => 'Открыть';
+
+  @override
+  String get tkOnlineOnly => 'Нужна связь с сервером';
+
+  @override
+  String get hrTabOverview => 'Обзор';
+
+  @override
+  String get hrTabEmployees => 'Сотрудники';
+
+  @override
+  String get hrOnTime => 'Вовремя';
+
+  @override
+  String get hrLateN => 'Опоздали';
+
+  @override
+  String get hrAbsentN => 'Отсутствуют';
+
+  @override
+  String get hrLeaveN => 'По документу';
+
+  @override
+  String get hrExpectedN => 'Ожидаются';
+
+  @override
+  String get hrUnknownN => 'Не ясно';
+
+  @override
+  String get hrActive => 'Штат';
+
+  @override
+  String get hrAvgArrival => 'Средний приход';
+
+  @override
+  String get hrAttention => 'Требует внимания';
+
+  @override
+  String get hrDivisions => 'Подразделения';
+
+  @override
+  String get hrByHour => 'Проходы по часам';
+
+  @override
+  String get hrSearchEmp => 'ФИО, телефон или ID Verifix';
+
+  @override
+  String get hrDay_Present => 'Пришёл';
+
+  @override
+  String get hrDay_Absent => 'Отсутствует';
+
+  @override
+  String get hrDay_OnLeave => 'По документу';
+
+  @override
+  String get hrDay_DayOff => 'Выходной';
+
+  @override
+  String get hrDay_Expected => 'Ожидается';
+
+  @override
+  String get hrDay_NoSchedule => 'Нет графика';
+
+  @override
+  String get hrDay_Unknown => 'Не ясно';
+
+  @override
+  String get hrDay_NotEmployed => 'Не работал';
+
+  @override
+  String hrLateMin(int n) {
+    return 'опоздание $n мин';
+  }
+
+  @override
+  String get hrPeriod14 => '14 дней';
+
+  @override
+  String hrSummaryPresent(int n, int plan) {
+    return 'Пришёл $n из $plan';
+  }
+
+  @override
+  String get hrSummaryLate => 'Опозданий';
+
+  @override
+  String get hrSummaryAbsent => 'Отсутствий';
+
+  @override
+  String get hrWorked => 'Отработано';
+
+  @override
+  String get hrDays => 'Дни';
 }
