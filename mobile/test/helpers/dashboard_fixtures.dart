@@ -195,5 +195,13 @@ void serveDashboard(FakeServer s, {List<String>? permissions}) {
     ..json('GET', '/api/hr/overview', hrJson())
     ..json('GET', '/api/work/overview', workJson())
     ..json('GET', '/api/notifications', eventsJson())
-    ..json('GET', '/api/ai/alerts', alertsJson());
+    ..json('GET', '/api/ai/alerts', alertsJson())
+    ..json('GET', '/api/hr/reports', {'attendanceRate': 84.6, 'punctuality': 60.1})
+    ..json('GET', '/api/procurement/home', {
+      'roles': {'director': false, 'financier': false},
+      'requests': {'awaitingMe': 0, 'approvals': <Object?>[], 'departmentToPickUp': 0, 'mineToPickUp': 2},
+      'accepted': <Object?>[],
+      'acceptedCount': 0,
+      'acceptedAmount': 0,
+    });
 }

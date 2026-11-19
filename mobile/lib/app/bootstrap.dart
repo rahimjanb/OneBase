@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/cache/cache_store.dart';
 import '../core/config/app_config.dart';
 import '../core/core_providers.dart';
 import '../core/database/app_database.dart';
@@ -29,6 +30,8 @@ Future<void> bootstrap() async {
   var settings = const <String, String>{};
   try {
     settings = await SettingsStore(db).readAll();
+    // Кэш не растёт бесконечно: ответы старше 30 дней удаляются при запуске.
+    await CacheStore(db).trim(const Duration(days: 30));
   } on Object catch (e, s) {
     Log.e('app', 'Настройки не прочитаны — по умолчанию', e, s);
   }

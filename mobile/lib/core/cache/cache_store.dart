@@ -55,6 +55,28 @@ class CacheStore {
     await q.go();
   }
 
+  /// Сбросить кэш по началу ключа (`dashboard/` …) — после изменения данных, которые в нём лежат.
+  Future<void> invalidate(String prefix) async {
+    try {
+      await (_db.delete(_db.cacheEntries)..where((t) => t.key.like('${_escape(prefix)}%', escapeChar: r'\'))).go();
+    } on Object catch (e, s) {
+      Log.e('cache', 'Не сброшен $prefix*', e, s);
+    }
+  }
+
+  /// Удалить записи старше [maxAge] — кэш не растёт бесконечно (вызывается при запуске).
+  Future<int> trim(Duration maxAge, {DateTime? now}) async {
+    try {
+      final edge = (now ?? DateTime.now()).subtract(maxAge);
+      return await (_db.delete(_db.cacheEntries)..where((t) => t.savedAt.isSmallerThanValue(edge))).go();
+    } on Object catch (e, s) {
+      Log.e('cache', 'Не очищен старый кэш', e, s);
+      return 0;
+    }
+  }
+
+  static String _escape(String s) => s.replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');
+
   Future<int> count() async {
     final c = _db.cacheEntries.key.count();
     return (await (_db.selectOnly(_db.cacheEntries)..addColumns([c])).getSingle()).read(c) ?? 0;

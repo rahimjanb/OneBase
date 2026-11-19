@@ -96,6 +96,14 @@ abstract class CachedBlock<T> extends Notifier<BlockState<T>> {
     await refresh();
   }
 
+  /// Показать изменение сразу, не дожидаясь сервера (оптимистичный интерфейс для безопасных операций). Кэш не трогается, пока
+  /// сервер не подтвердит; [failure] — откат с причиной.
+  @protected
+  void setOptimistic(T data, {AppFailure? failure}) {
+    if (!ref.mounted) return;
+    state = BlockState<T>(data: data, syncedAt: state.syncedAt, failure: failure, fromCache: state.fromCache);
+  }
+
   /// Обновить с сервера (pull-to-refresh, «Повторить», возвращение сети).
   Future<void> refresh() => _inflight ??= _refresh().whenComplete(() => _inflight = null);
 

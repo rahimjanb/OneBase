@@ -37,6 +37,39 @@ Future<void> showDetailSheet(
       ),
     );
 
+/// Шторка выбора по размеру содержимого (как `Sheet` веба): заголовок, подзаголовок и содержимое; длинное — прокручивается.
+Future<T?> showObSheet<T>(
+  BuildContext context, {
+  required String title,
+  String? subtitle,
+  required Widget Function(BuildContext context) builder,
+}) =>
+    showModalBottomSheet<T>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.85),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(ObSpace.page, 0, ObSpace.page, ObSpace.xxl + MediaQuery.viewInsetsOf(context).bottom),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Semantics(header: true, child: Text(title, style: context.text.titleLarge)),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(subtitle, style: context.text.bodySmall),
+              ],
+              const SizedBox(height: ObSpace.lg),
+              builder(context),
+            ],
+          ),
+        ),
+      ),
+    );
+
 /// Строка детализации: подпись слева, значение справа (цифры одинаковой ширины), пояснение под подписью.
 class DetailRow extends StatelessWidget {
   const DetailRow({super.key, required this.label, required this.value, this.hint, this.valueColor, this.trailing});

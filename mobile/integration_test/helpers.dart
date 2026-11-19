@@ -31,4 +31,24 @@ Future<void> settle(WidgetTester tester, [Duration d = const Duration(millisecon
   }
 }
 
-Finder navItem(String label) => find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+/// Вкладка нижней панели по подписи.
+Finder navItem(String label) => find.bySemanticsLabel(label);
+
+/// Вход тестовым пользователем, если сеанса нет (`--dart-define=E2E_LOGIN/E2E_PASSWORD`).
+Future<void> signInIfNeeded(WidgetTester tester, Finder signedIn) async {
+  const login = String.fromEnvironment('E2E_LOGIN');
+  const password = String.fromEnvironment('E2E_PASSWORD');
+  final screen = await pumpUntilAny(tester, [signedIn, find.text('Войти')], timeout: const Duration(seconds: 60));
+  if (screen == 1) {
+    await tester.enterText(find.byType(TextField).at(0), login);
+    await tester.enterText(find.byType(TextField).at(1), password);
+    await tester.tap(find.text('Войти'));
+    await pumpUntil(tester, signedIn, timeout: const Duration(seconds: 60));
+  }
+}
+
+/// Прокрутить главный список экрана на [dy] и подождать.
+Future<void> scrollBy(WidgetTester tester, double dy) async {
+  await tester.drag(find.byType(Scrollable).first, Offset(0, -dy));
+  await settle(tester, const Duration(milliseconds: 900));
+}

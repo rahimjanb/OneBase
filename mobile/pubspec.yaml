@@ -32,6 +32,8 @@ dependencies:
   connectivity_plus: ^7.3.2
   intl: ^0.20.3
   cupertino_icons: ^1.0.8
+  lucide_icons_flutter: ^4.0.3
+  share_plus: ^13.3.1
 
 dev_dependencies:
   flutter_test:
@@ -49,3 +51,16 @@ flutter:
   generate: true
   assets:
     - assets/brand/
+  fonts:
+    - family: Onest
+      fonts:
+        - asset: assets/fonts/Onest-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Onest-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Onest-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Onest-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Onest-ExtraBold.ttf
+          weight: 800

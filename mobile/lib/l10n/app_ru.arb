@@ -4,7 +4,7 @@
   "navHome": "Главная",
   "navAnalytics": "Аналитика",
   "navTasks": "Задачи",
-  "navAi": "AI",
+  "navAi": "Консультант",
   "navProfile": "Профиль",
   "actionRetry": "Повторить",
   "actionRefresh": "Обновить",
@@ -267,7 +267,7 @@
   "financeReceivables": "Дебиторская задолженность",
   "financePayables": "Кредиторская задолженность",
   "financeByMonth": "По месяцам",
-  "deptTitle": "Подразделения",
+  "deptTitle": "Отделы",
   "hrAttendance": "Явка сегодня",
   "hrPresentOf": "{present} из {scheduled} по графику",
   "@hrPresentOf": {
@@ -380,5 +380,491 @@
       }
     }
   },
-  "rowExecution": "Выполнение плана"
+  "rowExecution": "Выполнение плана",
+  "moduleDepartments": "Отделы",
+  "moduleSales": "Клиенты",
+  "moduleFinance": "Финансы",
+  "moduleProduction": "Производство",
+  "moduleWarehouse": "Склад",
+  "moduleRequests": "Заявки",
+  "moduleHr": "HR",
+  "moduleInsights": "AI-отчёт",
+  "moduleNotifications": "Уведомления",
+  "moduleSettings": "Настройки",
+  "navOpenMenu": "Открыть меню разделов",
+  "navCloseMenu": "Закрыть меню",
+  "navSections": "Основные разделы",
+  "searchTitle": "Поиск",
+  "notificationsUnread": "Уведомления: {n} непрочитанных",
+  "@notificationsUnread": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "homePlanDone": "План выполнен на",
+  "homeAttendanceToday": "Явка сегодня",
+  "homeAllDeptsOk": "все отделы в норме",
+  "homeDeptsAttention": "{n, plural, one{{n} отдел — внимание} few{{n} отдела — внимание} many{{n} отделов — внимание} other{{n} отдела — внимание}}",
+  "@homeDeptsAttention": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "homeWaiting": "Ждут вас",
+  "homeAwaitingApproval": "Ждут вашего согласования: {n}",
+  "@homeAwaitingApproval": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "homePickUp": "Можно получить на складе: {n}",
+  "@homePickUp": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "homePickUpDept": "Товар по заявкам отдела ждёт на складе — заберите у кладовщика.",
+  "homePickUpMine": "Товар по вашим заявкам ждёт на складе — заберите у кладовщика.",
+  "homeAcceptedWeek": "Принято на склад за неделю: {sum}",
+  "@homeAcceptedWeek": {
+    "placeholders": {
+      "sum": {
+        "type": "String"
+      }
+    }
+  },
+  "filterPeriod7d": "7 дней",
+  "filterPeriod30d": "30 дней",
+  "filterPeriodQuarter": "Квартал",
+  "filterPeriodYear": "Год",
+  "filterAllDepartments": "Все отделы",
+  "filterDepartmentsN": "Отделы: {n}",
+  "@filterDepartmentsN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "filterApply": "Применить",
+  "filterReset": "Сбросить",
+  "heroSalesPlan": "Выполнение плана продаж",
+  "heroVsSameDays": "к тем же дням прошлого месяца",
+  "heroVsPrevDay": "к прошлому рабочему дню",
+  "heroGoal": "цель",
+  "heroNorm": "норма",
+  "unitPp": "п.п.",
+  "statForecast": "Прогноз",
+  "statToMonthEnd": "к концу месяца",
+  "statOverdueN": "{n} просрочено",
+  "@statOverdueN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "statDueWeekN": "{n} срок на неделе",
+  "@statDueWeekN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "statAttendanceMonth": "Явка за месяц",
+  "statPerMonth": "за месяц",
+  "quickTask": "Задача",
+  "quickAskAi": "Спросить AI",
+  "quickExport": "Экспорт",
+  "quickReportAi": "Отчёт AI",
+  "focusTitle": "Фокус дня",
+  "focusDepartments": "{n, plural, one{{n} отдел} few{{n} отдела} many{{n} отделов} other{{n} отдела}}",
+  "@focusDepartments": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "focusActiveTasks": "{n, plural, one{{n} активная задача} few{{n} активные задачи} many{{n} активных задач} other{{n} активной задачи}}",
+  "@focusActiveTasks": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "focusFallback": "Находки AI-консультанта",
+  "focusCalm": "Сегодня всё спокойно",
+  "focusMore": "Ещё {n}",
+  "@focusMore": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "focusAskQuestion": "Разбери находки «Фокуса дня» и подскажи, что сделать сегодня: {list}",
+  "@focusAskQuestion": {
+    "placeholders": {
+      "list": {
+        "type": "String"
+      }
+    }
+  },
+  "focusAskEmpty": "Что сегодня стоит проверить в компании?",
+  "homeAskQuestion": "Разбери показатели компании за период «{period}»{scope}: что сейчас требует внимания и что сделать в первую очередь?",
+  "@homeAskQuestion": {
+    "placeholders": {
+      "period": {
+        "type": "String"
+      },
+      "scope": {
+        "type": "String"
+      }
+    }
+  },
+  "catFinance": "Финансы",
+  "catSales": "Продажи",
+  "catMarketing": "Маркетинг",
+  "catHr": "HR",
+  "catProduction": "Производство",
+  "catSupply": "Снабжение",
+  "dynTitle": "Динамика",
+  "dynMore": "Подробнее",
+  "dynSales": "Продажи",
+  "dynRevenue": "Выручка",
+  "dynAttendance": "Явка",
+  "dynAverage": "Среднее",
+  "dynBest": "Лучшая неделя",
+  "dynAbove": "Выше цели",
+  "dynOfTotal": "{n} из {total}",
+  "@dynOfTotal": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "dynForWeeks": "За {n} нед.",
+  "@dynForWeeks": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "dynGoal": "цель {n}%",
+  "@dynGoal": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "dynWeekValue": "Нед. {w} · {value}",
+  "@dynWeekValue": {
+    "placeholders": {
+      "w": {
+        "type": "int"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "dynCaption": "Нед. {w} — текущая, данные за {days}",
+  "@dynCaption": {
+    "placeholders": {
+      "w": {
+        "type": "int"
+      },
+      "days": {
+        "type": "String"
+      }
+    }
+  },
+  "daysN": "{n, plural, one{{n} день} few{{n} дня} many{{n} дней} other{{n} дня}}",
+  "@daysN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "dynEmpty": "Нет данных за период",
+  "dynSemantics": "{name} по неделям: среднее {avg}, лучшая неделя {best}",
+  "@dynSemantics": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "avg": {
+        "type": "String"
+      },
+      "best": {
+        "type": "String"
+      }
+    }
+  },
+  "tasksAllN": "Все {n}",
+  "@tasksAllN": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "tasksNone": "Нет задач за период",
+  "tasksDonePct": "выполнено",
+  "tasksDone": "Выполнено",
+  "tasksInWork": "В работе",
+  "tasksOnReview": "На проверке",
+  "tasksOverdueLabel": "Просрочено",
+  "tasksOverdueBanner": "{n, plural, one{{n} задача просрочена} few{{n} задачи просрочены} many{{n} задач просрочено} other{{n} задачи просрочено}}",
+  "@tasksOverdueBanner": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "tasksOverdueIn": " — {n} в отделе «{name}»",
+  "@tasksOverdueIn": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deptOkN": "{n} в норме",
+  "@deptOkN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "deptAttentionN": "{n} внимание",
+  "@deptAttentionN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "deptNone": "Нет данных по отделам",
+  "deptSalesMetric": "Выполнение плана месяца",
+  "deptHrMetric": "Явка с начала месяца",
+  "deptWeekTrend": "{n} нед.",
+  "@deptWeekTrend": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "statusAttention": "Внимание",
+  "statusOk": "В норме",
+  "reportTitle": "Еженедельный AI-отчёт",
+  "reportLine": "{risks} и {recs} по отделам",
+  "@reportLine": {
+    "placeholders": {
+      "risks": {
+        "type": "String"
+      },
+      "recs": {
+        "type": "String"
+      }
+    }
+  },
+  "risksN": "{n, plural, one{{n} риск} few{{n} риска} many{{n} рисков} other{{n} риска}}",
+  "@risksN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "recsN": "{n, plural, one{{n} рекомендация} few{{n} рекомендации} many{{n} рекомендаций} other{{n} рекомендации}}",
+  "@recsN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "dataUpdatedNow": "Данные обновлены только что",
+  "dataUpdatedMin": "Данные обновлены {n} мин назад",
+  "@dataUpdatedMin": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "dataPullHint": "потяните, чтобы обновить",
+  "dataFailed": "Не удалось обновить",
+  "dataUpdating": "Обновляем…",
+  "offlineSince": "Нет соединения · данные на {time}",
+  "@offlineSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "exportTitle": "Экспорт обзора",
+  "exportCsv": "Excel (CSV)",
+  "exportCsvHint": "Показатели, задачи и отделы таблицей",
+  "homeMoreSales": "Продажи месяца",
+  "homeMoreFinance": "Финансы 1С",
+  "homeKeyMetric": "Ключевая метрика",
+  "homeAgentsN": "{n} ТП в работе",
+  "@homeAgentsN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "homeSearchHint": "Разделы, сотрудники, клиенты",
+  "profileOpen": "Открыть профиль",
+  "myDayTitle": "Мой день",
+  "myDayShift": "Смена {from}–{to}",
+  "@myDayShift": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "myDayArrival": "Пришли",
+  "myDayDeparture": "Ушли",
+  "myDayWorked": "Отработано",
+  "myDayLateWeek": "Опозданий за неделю",
+  "myDayHoursMinutes": "{h} ч {m} мин",
+  "@myDayHoursMinutes": {
+    "placeholders": {
+      "h": {
+        "type": "int"
+      },
+      "m": {
+        "type": "int"
+      }
+    }
+  },
+  "dayStatus_not_started": "Рабочий день не начат",
+  "dayStatus_at_work": "На работе",
+  "dayStatus_on_break": "На перерыве",
+  "dayStatus_out": "Вышли",
+  "dayStatus_finished": "Рабочий день завершён",
+  "dayStatus_day_off": "Выходной",
+  "dayStatus_on_leave": "Отсутствие по документу",
+  "dayStatus_absent": "Нет прихода",
+  "dayStatus_other": "Нет данных",
+  "dayLate": "Опоздание {n} мин",
+  "@dayLate": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "myTasksTitle": "Мои задачи",
+  "myTasksNew": "Новые",
+  "myTasksWaiting": "Ждут",
+  "prefsTitle": "Что присылать",
+  "prefsHint": "Отключённые разделы исчезают из уведомлений и счётчиков на всех устройствах.",
+  "prefCat_tasks": "Задачи",
+  "prefCat_ai": "AI",
+  "prefCat_hr": "HR",
+  "prefCat_sales": "Продажи",
+  "prefCat_system": "Система",
+  "prefsQueued": "Сохранится, когда появится сеть",
+  "prefsRejected": "Не удалось сохранить: {error}",
+  "@prefsRejected": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "telegramTitle": "Telegram",
+  "telegramNone": "Telegram не привязан. Привяжите аккаунт, чтобы AI-агент отвечал вам в Telegram с вашими правами.",
+  "telegramFull": "полный доступ",
+  "telegramLimited": "только отправленные данные",
+  "telegramLink": "Привязать Telegram",
+  "telegramUnlink": "Отвязать",
+  "telegramUnlinkConfirm": "Агент перестанет отвечать вам с вашими правами до новой привязки.",
+  "telegramCodeTitle": "Код привязки",
+  "telegramCodeHint": "Отправьте этот код в Telegram: {to}. Код действует 15 минут.",
+  "@telegramCodeHint": {
+    "placeholders": {
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "actionCopy": "Скопировать",
+  "copied": "Скопировано",
+  "securityTitle": "Безопасность",
+  "securityPassword": "Пароль",
+  "securityPasswordHint": "Пароль меняет администратор OneBase",
+  "securitySession": "Сеанс",
+  "securitySessionHint": "Выход закрывает сеанс только на этом телефоне",
+  "securityStorage": "Данные на телефоне",
+  "securityStorageHint": "Токен — в защищённом хранилище, сводки — в кэше приложения ({n} записей)",
+  "@securityStorageHint": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "securityClearCache": "Очистить кэш",
+  "cacheCleared": "Кэш очищен",
+  "syncTitle": "Синхронизация",
+  "syncPending": "Ждут отправки: {n}",
+  "@syncPending": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "syncAllSent": "Все изменения отправлены",
+  "syncFailed": "Сервер отказал: {error}",
+  "@syncFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNow": "Отправить сейчас",
+  "profileRoles": "Роли",
+  "profileDepartment": "Отдел",
+  "organization1c": "Организация 1С",
+  "langRu": "Русский",
+  "langUz": "O'zbekcha",
+  "langSystem": "Как в системе"
 }

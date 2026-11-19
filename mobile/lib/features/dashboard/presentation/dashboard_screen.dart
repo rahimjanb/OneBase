@@ -1,102 +1,172 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
+import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/shell/bottom_nav.dart';
+import '../../../app/theme/decor.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../core/auth/auth_controller.dart';
-import '../../../core/core_providers.dart';
-import '../../../l10n/gen/app_localizations.dart';
 import '../../../shared/extensions/context_ext.dart';
-import '../../../shared/widgets/ob_app_bar.dart';
-import '../../../shared/widgets/offline_banner.dart';
-import '../domain/dashboard_period.dart';
+import '../../../shared/widgets/pills.dart';
 import 'dashboard_providers.dart';
-import 'widgets/departments_section.dart';
-import 'widgets/events_section.dart';
-import 'widgets/filter_bar.dart';
-import 'widgets/finance_section.dart';
-import 'widgets/insights_section.dart';
-import 'widgets/sales_section.dart';
-import 'widgets/tasks_section.dart';
+import 'widgets/home_body.dart';
+import 'widgets/home_extras.dart';
+import 'widgets/home_head.dart';
 
-/// Главная — Dashboard на данных OneBase. Каждый блок грузится сам по себе и показывает последнее успешное состояние (с временем
-/// синхронизации), если сеть или сервер подвели; медленный или упавший блок не держит остальные. Какие блоки видны — по правам
-/// пользователя. Потянуть вниз — обновить все.
+/// Главная — мобильный «Обзор» веба: приветствие, «Ждут вас», фильтры, главный показатель, быстрые действия, «Фокус дня», динамика,
+/// задачи, отделы; ниже — продажи месяца, финансы 1С и события; AI-отчёт и свежесть данных. Каждый блок грузится сам по себе и
+/// показывает последнее успешное состояние; без права блок не запрашивается.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = context.l10n;
     final access = ref.watch(dashboardAccessProvider);
-    final filter = ref.watch(dashboardFilterProvider);
+    keepBlocksAlive(ref, access);
     final profile = ref.watch(currentProfileProvider);
-    final now = ref.watch(clockProvider)();
     final name = (profile?.firstName?.trim().isNotEmpty ?? false) ? profile!.firstName!.trim() : (profile?.name ?? '');
-    final nothing = !access.sales && !access.finance && !access.hr && !access.tasks && !access.ai;
-    keepBlocksAlive(ref, access, filter);
+    final top = MediaQuery.paddingOf(context).top;
 
-    return Scaffold(
-      body: RefreshIndicator.adaptive(
-        onRefresh: () => refreshDashboard(ref),
-        edgeOffset: 120,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          slivers: [
-            ObSliverAppBar(
-              title: l10n.navHome,
-              subtitle: Text('${l10n.greetingName(greeting(l10n, now), name)} · ${context.fmt.weekdayDate(now)}'),
+    final children = <Widget>[
+      const OfflineNote(),
+      HomeGreeting(name: name),
+      if (access.procurement) const HomeAttention(),
+      const HomeFiltersBar(),
+      const KpiHero(),
+      const QuickActions(),
+      if (access.ai) const FocusCard(),
+      if (access.sales || access.hr) const DynamicsCard(),
+      if (access.tasks) const TasksCard(),
+      const DepartmentsCard(),
+      if (access.sales) const SalesMonthCard(),
+      if (access.finance) const FinanceCard(),
+      const EventsCard(),
+      if (access.ai) const ReportBanner(),
+      DataStatus(onRetry: () => refreshHome(ref)),
+    ];
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: ObBackground(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: RefreshIndicator.adaptive(
+            edgeOffset: top + _HomeTopBar.height,
+            onRefresh: () => refreshHome(ref),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverPersistentHeader(pinned: true, delegate: _HomeTopBarDelegate(top: top)),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(ObSpace.page, 8, ObSpace.page, navContentInset(context)),
+                  sliver: SliverList.separated(
+                    itemCount: children.length,
+                    itemBuilder: (context, i) => children[i],
+                    separatorBuilder: (context, i) => _gapAfter(children[i]),
+                  ),
+                ),
+              ],
             ),
-            const SliverToBoxAdapter(child: OfflineBanner()),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(ObSpace.page, 0, ObSpace.page, 32),
-              sliver: SliverList.list(
-                children: [
-                  if (access.sales || access.finance) const DashboardFilterBar(),
-                  if (access.sales) SalesSection(period: filter.period),
-                  if (access.ai) const InsightsSection(),
-                  if (access.finance) FinanceSection(args: (period: filter.period, organization: filter.organizationId)),
-                  if (access.hr) const DepartmentsSection(),
-                  if (access.tasks) const TasksSection(),
-                  if (nothing)
-                    Padding(
-                      padding: const EdgeInsets.only(top: ObSpace.lg),
-                      child: Text(l10n.dashboardNothing, style: context.text.bodyMedium),
-                    ),
-                  const EventsSection(),
-                ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Пустые блоки (нет доступа или данных) не оставляют двойного отступа: у них нулевая высота, отступ остаётся один.
+  static Widget _gapAfter(Widget w) => const SizedBox(height: ObSpace.block);
+}
+
+/// Блоки живут, пока открыт экран, а не пока секция видна: иначе ленивый список закрывал бы ушедшую за край секцию, и прокрутка
+/// запускала бы загрузку заново.
+void keepBlocksAlive(WidgetRef ref, DashboardAccess access) {
+  void keep<T>(ProviderListenable<T> p) => ref.listen<T>(p, (_, _) {});
+  if (access.sales) keep(homeSalesBlock);
+  if (access.hr) keep(homeHrBlock);
+  if (access.sales || access.hr) keep(homeTrendsBlock);
+  if (access.tasks) keep(workBlock);
+  if (access.ai) keep(alertsBlock);
+  if (access.procurement) keep(procurementHomeBlock);
+  if (access.finance) keep(homeFinanceBlock);
+  keep(eventsBlock);
+}
+
+class _HomeTopBarDelegate extends SliverPersistentHeaderDelegate {
+  _HomeTopBarDelegate({required this.top});
+
+  final double top;
+
+  @override
+  double get minExtent => top + _HomeTopBar.height;
+
+  @override
+  double get maxExtent => top + _HomeTopBar.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) =>
+      SizedBox.expand(child: _HomeTopBar(top: top, scrolled: overlapsContent || shrinkOffset > 0));
+
+  @override
+  bool shouldRebuild(_HomeTopBarDelegate old) => old.top != top;
+}
+
+/// Шапка главной как у веба на телефоне: логотип 1Base, поиск, уведомления со счётчиком, профиль. Тёмная в обеих темах.
+class _HomeTopBar extends ConsumerWidget {
+  const _HomeTopBar({required this.top, required this.scrolled});
+
+  static const height = 60.0;
+  final double top;
+  final bool scrolled;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.ob;
+    final l10n = context.l10n;
+    final profile = ref.watch(currentProfileProvider);
+    final unread = ref.watch(eventsBlock.select((s) => s.data?.unread ?? 0));
+    final bg = c.isDark ? c.page.withValues(alpha: scrolled ? 0.82 : 0) : c.header;
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: c.isDark && scrolled ? 18 : 0, sigmaY: c.isDark && scrolled ? 18 : 0),
+        child: Container(
+          color: bg,
+          padding: EdgeInsets.only(top: top, left: ObSpace.page, right: 12),
+          child: Row(
+            children: [
+              Semantics(
+                label: 'OneBase',
+                image: true,
+                child: Image.asset('assets/brand/logo-light.png', height: 26, filterQuality: FilterQuality.medium),
               ),
-            ),
-          ],
+              const Spacer(),
+              HeaderButton(onDark: true, icon: LucideIcons.search, semanticLabel: l10n.searchTitle, onTap: () => context.go('/home/search')),
+              const SizedBox(width: 4),
+              HeaderButton(
+                onDark: true,
+                icon: LucideIcons.bell,
+                badge: unread,
+                semanticLabel: unread > 0 ? l10n.notificationsUnread(unread) : l10n.moduleNotifications,
+                onTap: () => context.go('/home/notifications'),
+              ),
+              const SizedBox(width: 4),
+              HeaderButton(
+                onDark: true,
+                semanticLabel: l10n.profileOpen,
+                onTap: () => context.go('/profile'),
+                child: Text(
+                  profile?.initials ?? '?',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFFEEF1F7)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
-/// Блоки живут, пока открыт Dashboard, а не пока секция на экране: ленивый список закрывает ушедшие за край секции, и без этого
-/// блок грузился бы заново при каждой прокрутке. `listen` не перестраивает экран — перестраиваются только сами секции.
-void keepBlocksAlive(WidgetRef ref, DashboardAccess access, DashboardFilter filter) {
-  void keep<T>(ProviderListenable<T> p) => ref.listen<T>(p, (_, _) {});
-  if (access.sales) {
-    keep(salesOverviewBlock(filter.period));
-    keep(salesDailyBlock(filter.period));
-    keep(salesMonthsBlock);
-  }
-  if (access.finance) {
-    keep(financeBlock((period: filter.period, organization: filter.organizationId)));
-    keep(financeOrganizationsBlock);
-  }
-  if (access.hr) keep(hrBlock);
-  if (access.tasks) keep(workBlock);
-  if (access.ai) keep(alertsBlock);
-  keep(eventsBlock);
-}
-
-/// Приветствие по времени суток.
-String greeting(AppLocalizations l10n, DateTime now) => switch (now.hour) {
-      >= 5 && < 12 => l10n.greetingMorning,
-      >= 12 && < 18 => l10n.greetingDay,
-      >= 18 && < 23 => l10n.greetingEvening,
-      _ => l10n.greetingNight,
-    };

@@ -875,7 +875,8 @@ mixin _$SalesKpi {
 
  double get factKg; double? get planKg; double? get execution; double? get forecastKg; double? get forecastExecution; double get revenue;/// АКБ — точки, которые купили в месяце (клиенты).
  int get akb; TargetValue? get conversion; TargetValue? get revenuePerOutlet; TargetValue? get akbPerAgent; int get visitsWithoutOrder; int get visitsDone; int get activeAgents;/// Откуда план: rop | factory | linko.
- String? get planSource; String? get executionLevel; SalesPace? get pace;
+ String? get planSource; String? get executionLevel; SalesPace? get pace;/// Факт в охвате плана (кг): у недель продаж факт приводится к нему, чтобы недели сходились с выполнением месяца.
+ double? get planFactKg;
 /// Create a copy of SalesKpi
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -889,20 +890,20 @@ $SalesKpiCopyWith<SalesKpi> get copyWith => _$SalesKpiCopyWithImpl<SalesKpi>(thi
 @override
 bool operator ==(Object other) {
   final _this = this as SalesKpi;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SalesKpi&&(identical(other.factKg, _this.factKg) || other.factKg == _this.factKg)&&(identical(other.planKg, _this.planKg) || other.planKg == _this.planKg)&&(identical(other.execution, _this.execution) || other.execution == _this.execution)&&(identical(other.forecastKg, _this.forecastKg) || other.forecastKg == _this.forecastKg)&&(identical(other.forecastExecution, _this.forecastExecution) || other.forecastExecution == _this.forecastExecution)&&(identical(other.revenue, _this.revenue) || other.revenue == _this.revenue)&&(identical(other.akb, _this.akb) || other.akb == _this.akb)&&(identical(other.conversion, _this.conversion) || other.conversion == _this.conversion)&&(identical(other.revenuePerOutlet, _this.revenuePerOutlet) || other.revenuePerOutlet == _this.revenuePerOutlet)&&(identical(other.akbPerAgent, _this.akbPerAgent) || other.akbPerAgent == _this.akbPerAgent)&&(identical(other.visitsWithoutOrder, _this.visitsWithoutOrder) || other.visitsWithoutOrder == _this.visitsWithoutOrder)&&(identical(other.visitsDone, _this.visitsDone) || other.visitsDone == _this.visitsDone)&&(identical(other.activeAgents, _this.activeAgents) || other.activeAgents == _this.activeAgents)&&(identical(other.planSource, _this.planSource) || other.planSource == _this.planSource)&&(identical(other.executionLevel, _this.executionLevel) || other.executionLevel == _this.executionLevel)&&(identical(other.pace, _this.pace) || other.pace == _this.pace));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SalesKpi&&(identical(other.factKg, _this.factKg) || other.factKg == _this.factKg)&&(identical(other.planKg, _this.planKg) || other.planKg == _this.planKg)&&(identical(other.execution, _this.execution) || other.execution == _this.execution)&&(identical(other.forecastKg, _this.forecastKg) || other.forecastKg == _this.forecastKg)&&(identical(other.forecastExecution, _this.forecastExecution) || other.forecastExecution == _this.forecastExecution)&&(identical(other.revenue, _this.revenue) || other.revenue == _this.revenue)&&(identical(other.akb, _this.akb) || other.akb == _this.akb)&&(identical(other.conversion, _this.conversion) || other.conversion == _this.conversion)&&(identical(other.revenuePerOutlet, _this.revenuePerOutlet) || other.revenuePerOutlet == _this.revenuePerOutlet)&&(identical(other.akbPerAgent, _this.akbPerAgent) || other.akbPerAgent == _this.akbPerAgent)&&(identical(other.visitsWithoutOrder, _this.visitsWithoutOrder) || other.visitsWithoutOrder == _this.visitsWithoutOrder)&&(identical(other.visitsDone, _this.visitsDone) || other.visitsDone == _this.visitsDone)&&(identical(other.activeAgents, _this.activeAgents) || other.activeAgents == _this.activeAgents)&&(identical(other.planSource, _this.planSource) || other.planSource == _this.planSource)&&(identical(other.executionLevel, _this.executionLevel) || other.executionLevel == _this.executionLevel)&&(identical(other.pace, _this.pace) || other.pace == _this.pace)&&(identical(other.planFactKg, _this.planFactKg) || other.planFactKg == _this.planFactKg));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as SalesKpi;
-  return Object.hash(runtimeType,_this.factKg,_this.planKg,_this.execution,_this.forecastKg,_this.forecastExecution,_this.revenue,_this.akb,_this.conversion,_this.revenuePerOutlet,_this.akbPerAgent,_this.visitsWithoutOrder,_this.visitsDone,_this.activeAgents,_this.planSource,_this.executionLevel,_this.pace);
+  return Object.hash(runtimeType,_this.factKg,_this.planKg,_this.execution,_this.forecastKg,_this.forecastExecution,_this.revenue,_this.akb,_this.conversion,_this.revenuePerOutlet,_this.akbPerAgent,_this.visitsWithoutOrder,_this.visitsDone,_this.activeAgents,_this.planSource,_this.executionLevel,_this.pace,_this.planFactKg);
 }
 
 @override
 String toString() {
   final _this = this as SalesKpi;
-  return 'SalesKpi(factKg: ${_this.factKg}, planKg: ${_this.planKg}, execution: ${_this.execution}, forecastKg: ${_this.forecastKg}, forecastExecution: ${_this.forecastExecution}, revenue: ${_this.revenue}, akb: ${_this.akb}, conversion: ${_this.conversion}, revenuePerOutlet: ${_this.revenuePerOutlet}, akbPerAgent: ${_this.akbPerAgent}, visitsWithoutOrder: ${_this.visitsWithoutOrder}, visitsDone: ${_this.visitsDone}, activeAgents: ${_this.activeAgents}, planSource: ${_this.planSource}, executionLevel: ${_this.executionLevel}, pace: ${_this.pace})';
+  return 'SalesKpi(factKg: ${_this.factKg}, planKg: ${_this.planKg}, execution: ${_this.execution}, forecastKg: ${_this.forecastKg}, forecastExecution: ${_this.forecastExecution}, revenue: ${_this.revenue}, akb: ${_this.akb}, conversion: ${_this.conversion}, revenuePerOutlet: ${_this.revenuePerOutlet}, akbPerAgent: ${_this.akbPerAgent}, visitsWithoutOrder: ${_this.visitsWithoutOrder}, visitsDone: ${_this.visitsDone}, activeAgents: ${_this.activeAgents}, planSource: ${_this.planSource}, executionLevel: ${_this.executionLevel}, pace: ${_this.pace}, planFactKg: ${_this.planFactKg})';
 }
 
 
@@ -913,7 +914,7 @@ abstract mixin class $SalesKpiCopyWith<$Res>  {
   factory $SalesKpiCopyWith(SalesKpi value, $Res Function(SalesKpi) _then) = _$SalesKpiCopyWithImpl;
 @useResult
 $Res call({
- double factKg, double? planKg, double? execution, double? forecastKg, double? forecastExecution, double revenue, int akb, TargetValue? conversion, TargetValue? revenuePerOutlet, TargetValue? akbPerAgent, int visitsWithoutOrder, int visitsDone, int activeAgents, String? planSource, String? executionLevel, SalesPace? pace
+ double factKg, double? planKg, double? execution, double? forecastKg, double? forecastExecution, double revenue, int akb, TargetValue? conversion, TargetValue? revenuePerOutlet, TargetValue? akbPerAgent, int visitsWithoutOrder, int visitsDone, int activeAgents, String? planSource, String? executionLevel, SalesPace? pace, double? planFactKg
 });
 
 
@@ -930,7 +931,7 @@ class _$SalesKpiCopyWithImpl<$Res>
 
 /// Create a copy of SalesKpi
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? factKg = null,Object? planKg = freezed,Object? execution = freezed,Object? forecastKg = freezed,Object? forecastExecution = freezed,Object? revenue = null,Object? akb = null,Object? conversion = freezed,Object? revenuePerOutlet = freezed,Object? akbPerAgent = freezed,Object? visitsWithoutOrder = null,Object? visitsDone = null,Object? activeAgents = null,Object? planSource = freezed,Object? executionLevel = freezed,Object? pace = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? factKg = null,Object? planKg = freezed,Object? execution = freezed,Object? forecastKg = freezed,Object? forecastExecution = freezed,Object? revenue = null,Object? akb = null,Object? conversion = freezed,Object? revenuePerOutlet = freezed,Object? akbPerAgent = freezed,Object? visitsWithoutOrder = null,Object? visitsDone = null,Object? activeAgents = null,Object? planSource = freezed,Object? executionLevel = freezed,Object? pace = freezed,Object? planFactKg = freezed,}) {
   return _then(SalesKpi(
 factKg: null == factKg ? _self.factKg : factKg // ignore: cast_nullable_to_non_nullable
 as double,planKg: freezed == planKg ? _self.planKg : planKg // ignore: cast_nullable_to_non_nullable
@@ -948,7 +949,8 @@ as int,activeAgents: null == activeAgents ? _self.activeAgents : activeAgents //
 as int,planSource: freezed == planSource ? _self.planSource : planSource // ignore: cast_nullable_to_non_nullable
 as String?,executionLevel: freezed == executionLevel ? _self.executionLevel : executionLevel // ignore: cast_nullable_to_non_nullable
 as String?,pace: freezed == pace ? _self.pace : pace // ignore: cast_nullable_to_non_nullable
-as SalesPace?,
+as SalesPace?,planFactKg: freezed == planFactKg ? _self.planFactKg : planFactKg // ignore: cast_nullable_to_non_nullable
+as double?,
   ));
 }
 /// Create a copy of SalesKpi
@@ -1081,10 +1083,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( double factKg,  double? planKg,  double? execution,  double? forecastKg,  double? forecastExecution,  double revenue,  int akb,  TargetValue? conversion,  TargetValue? revenuePerOutlet,  TargetValue? akbPerAgent,  int visitsWithoutOrder,  int visitsDone,  int activeAgents,  String? planSource,  String? executionLevel,  SalesPace? pace)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( double factKg,  double? planKg,  double? execution,  double? forecastKg,  double? forecastExecution,  double revenue,  int akb,  TargetValue? conversion,  TargetValue? revenuePerOutlet,  TargetValue? akbPerAgent,  int visitsWithoutOrder,  int visitsDone,  int activeAgents,  String? planSource,  String? executionLevel,  SalesPace? pace,  double? planFactKg)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SalesKpi() when $default != null:
-return $default(_that.factKg,_that.planKg,_that.execution,_that.forecastKg,_that.forecastExecution,_that.revenue,_that.akb,_that.conversion,_that.revenuePerOutlet,_that.akbPerAgent,_that.visitsWithoutOrder,_that.visitsDone,_that.activeAgents,_that.planSource,_that.executionLevel,_that.pace);case _:
+return $default(_that.factKg,_that.planKg,_that.execution,_that.forecastKg,_that.forecastExecution,_that.revenue,_that.akb,_that.conversion,_that.revenuePerOutlet,_that.akbPerAgent,_that.visitsWithoutOrder,_that.visitsDone,_that.activeAgents,_that.planSource,_that.executionLevel,_that.pace,_that.planFactKg);case _:
   return orElse();
 
 }
@@ -1102,10 +1104,10 @@ return $default(_that.factKg,_that.planKg,_that.execution,_that.forecastKg,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( double factKg,  double? planKg,  double? execution,  double? forecastKg,  double? forecastExecution,  double revenue,  int akb,  TargetValue? conversion,  TargetValue? revenuePerOutlet,  TargetValue? akbPerAgent,  int visitsWithoutOrder,  int visitsDone,  int activeAgents,  String? planSource,  String? executionLevel,  SalesPace? pace)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( double factKg,  double? planKg,  double? execution,  double? forecastKg,  double? forecastExecution,  double revenue,  int akb,  TargetValue? conversion,  TargetValue? revenuePerOutlet,  TargetValue? akbPerAgent,  int visitsWithoutOrder,  int visitsDone,  int activeAgents,  String? planSource,  String? executionLevel,  SalesPace? pace,  double? planFactKg)  $default,) {final _that = this;
 switch (_that) {
 case _SalesKpi():
-return $default(_that.factKg,_that.planKg,_that.execution,_that.forecastKg,_that.forecastExecution,_that.revenue,_that.akb,_that.conversion,_that.revenuePerOutlet,_that.akbPerAgent,_that.visitsWithoutOrder,_that.visitsDone,_that.activeAgents,_that.planSource,_that.executionLevel,_that.pace);case _:
+return $default(_that.factKg,_that.planKg,_that.execution,_that.forecastKg,_that.forecastExecution,_that.revenue,_that.akb,_that.conversion,_that.revenuePerOutlet,_that.akbPerAgent,_that.visitsWithoutOrder,_that.visitsDone,_that.activeAgents,_that.planSource,_that.executionLevel,_that.pace,_that.planFactKg);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -1122,10 +1124,10 @@ return $default(_that.factKg,_that.planKg,_that.execution,_that.forecastKg,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( double factKg,  double? planKg,  double? execution,  double? forecastKg,  double? forecastExecution,  double revenue,  int akb,  TargetValue? conversion,  TargetValue? revenuePerOutlet,  TargetValue? akbPerAgent,  int visitsWithoutOrder,  int visitsDone,  int activeAgents,  String? planSource,  String? executionLevel,  SalesPace? pace)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( double factKg,  double? planKg,  double? execution,  double? forecastKg,  double? forecastExecution,  double revenue,  int akb,  TargetValue? conversion,  TargetValue? revenuePerOutlet,  TargetValue? akbPerAgent,  int visitsWithoutOrder,  int visitsDone,  int activeAgents,  String? planSource,  String? executionLevel,  SalesPace? pace,  double? planFactKg)?  $default,) {final _that = this;
 switch (_that) {
 case _SalesKpi() when $default != null:
-return $default(_that.factKg,_that.planKg,_that.execution,_that.forecastKg,_that.forecastExecution,_that.revenue,_that.akb,_that.conversion,_that.revenuePerOutlet,_that.akbPerAgent,_that.visitsWithoutOrder,_that.visitsDone,_that.activeAgents,_that.planSource,_that.executionLevel,_that.pace);case _:
+return $default(_that.factKg,_that.planKg,_that.execution,_that.forecastKg,_that.forecastExecution,_that.revenue,_that.akb,_that.conversion,_that.revenuePerOutlet,_that.akbPerAgent,_that.visitsWithoutOrder,_that.visitsDone,_that.activeAgents,_that.planSource,_that.executionLevel,_that.pace,_that.planFactKg);case _:
   return null;
 
 }
@@ -1137,7 +1139,7 @@ return $default(_that.factKg,_that.planKg,_that.execution,_that.forecastKg,_that
 @JsonSerializable()
 
 class _SalesKpi implements SalesKpi {
-  const _SalesKpi({this.factKg = 0, this.planKg, this.execution, this.forecastKg, this.forecastExecution, this.revenue = 0, this.akb = 0, this.conversion, this.revenuePerOutlet, this.akbPerAgent, this.visitsWithoutOrder = 0, this.visitsDone = 0, this.activeAgents = 0, this.planSource, this.executionLevel, this.pace});
+  const _SalesKpi({this.factKg = 0, this.planKg, this.execution, this.forecastKg, this.forecastExecution, this.revenue = 0, this.akb = 0, this.conversion, this.revenuePerOutlet, this.akbPerAgent, this.visitsWithoutOrder = 0, this.visitsDone = 0, this.activeAgents = 0, this.planSource, this.executionLevel, this.pace, this.planFactKg});
   factory _SalesKpi.fromJson(Map<String, dynamic> json) => _$SalesKpiFromJson(json);
 
 @override@JsonKey() final  double factKg;
@@ -1158,6 +1160,8 @@ class _SalesKpi implements SalesKpi {
 @override final  String? planSource;
 @override final  String? executionLevel;
 @override final  SalesPace? pace;
+/// Факт в охвате плана (кг): у недель продаж факт приводится к нему, чтобы недели сходились с выполнением месяца.
+@override final  double? planFactKg;
 
 /// Create a copy of SalesKpi
 /// with the given fields replaced by the non-null parameter values.
@@ -1172,18 +1176,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SalesKpi&&(identical(other.factKg, factKg) || other.factKg == factKg)&&(identical(other.planKg, planKg) || other.planKg == planKg)&&(identical(other.execution, execution) || other.execution == execution)&&(identical(other.forecastKg, forecastKg) || other.forecastKg == forecastKg)&&(identical(other.forecastExecution, forecastExecution) || other.forecastExecution == forecastExecution)&&(identical(other.revenue, revenue) || other.revenue == revenue)&&(identical(other.akb, akb) || other.akb == akb)&&(identical(other.conversion, conversion) || other.conversion == conversion)&&(identical(other.revenuePerOutlet, revenuePerOutlet) || other.revenuePerOutlet == revenuePerOutlet)&&(identical(other.akbPerAgent, akbPerAgent) || other.akbPerAgent == akbPerAgent)&&(identical(other.visitsWithoutOrder, visitsWithoutOrder) || other.visitsWithoutOrder == visitsWithoutOrder)&&(identical(other.visitsDone, visitsDone) || other.visitsDone == visitsDone)&&(identical(other.activeAgents, activeAgents) || other.activeAgents == activeAgents)&&(identical(other.planSource, planSource) || other.planSource == planSource)&&(identical(other.executionLevel, executionLevel) || other.executionLevel == executionLevel)&&(identical(other.pace, pace) || other.pace == pace));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SalesKpi&&(identical(other.factKg, factKg) || other.factKg == factKg)&&(identical(other.planKg, planKg) || other.planKg == planKg)&&(identical(other.execution, execution) || other.execution == execution)&&(identical(other.forecastKg, forecastKg) || other.forecastKg == forecastKg)&&(identical(other.forecastExecution, forecastExecution) || other.forecastExecution == forecastExecution)&&(identical(other.revenue, revenue) || other.revenue == revenue)&&(identical(other.akb, akb) || other.akb == akb)&&(identical(other.conversion, conversion) || other.conversion == conversion)&&(identical(other.revenuePerOutlet, revenuePerOutlet) || other.revenuePerOutlet == revenuePerOutlet)&&(identical(other.akbPerAgent, akbPerAgent) || other.akbPerAgent == akbPerAgent)&&(identical(other.visitsWithoutOrder, visitsWithoutOrder) || other.visitsWithoutOrder == visitsWithoutOrder)&&(identical(other.visitsDone, visitsDone) || other.visitsDone == visitsDone)&&(identical(other.activeAgents, activeAgents) || other.activeAgents == activeAgents)&&(identical(other.planSource, planSource) || other.planSource == planSource)&&(identical(other.executionLevel, executionLevel) || other.executionLevel == executionLevel)&&(identical(other.pace, pace) || other.pace == pace)&&(identical(other.planFactKg, planFactKg) || other.planFactKg == planFactKg));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,factKg,planKg,execution,forecastKg,forecastExecution,revenue,akb,conversion,revenuePerOutlet,akbPerAgent,visitsWithoutOrder,visitsDone,activeAgents,planSource,executionLevel,pace);
+    return Object.hash(runtimeType,factKg,planKg,execution,forecastKg,forecastExecution,revenue,akb,conversion,revenuePerOutlet,akbPerAgent,visitsWithoutOrder,visitsDone,activeAgents,planSource,executionLevel,pace,planFactKg);
 }
 
 @override
 String toString() {
-    return 'SalesKpi(factKg: $factKg, planKg: $planKg, execution: $execution, forecastKg: $forecastKg, forecastExecution: $forecastExecution, revenue: $revenue, akb: $akb, conversion: $conversion, revenuePerOutlet: $revenuePerOutlet, akbPerAgent: $akbPerAgent, visitsWithoutOrder: $visitsWithoutOrder, visitsDone: $visitsDone, activeAgents: $activeAgents, planSource: $planSource, executionLevel: $executionLevel, pace: $pace)';
+    return 'SalesKpi(factKg: $factKg, planKg: $planKg, execution: $execution, forecastKg: $forecastKg, forecastExecution: $forecastExecution, revenue: $revenue, akb: $akb, conversion: $conversion, revenuePerOutlet: $revenuePerOutlet, akbPerAgent: $akbPerAgent, visitsWithoutOrder: $visitsWithoutOrder, visitsDone: $visitsDone, activeAgents: $activeAgents, planSource: $planSource, executionLevel: $executionLevel, pace: $pace, planFactKg: $planFactKg)';
 }
 
 
@@ -1194,7 +1198,7 @@ abstract mixin class _$SalesKpiCopyWith<$Res> implements $SalesKpiCopyWith<$Res>
   factory _$SalesKpiCopyWith(_SalesKpi value, $Res Function(_SalesKpi) _then) = __$SalesKpiCopyWithImpl;
 @override @useResult
 $Res call({
- double factKg, double? planKg, double? execution, double? forecastKg, double? forecastExecution, double revenue, int akb, TargetValue? conversion, TargetValue? revenuePerOutlet, TargetValue? akbPerAgent, int visitsWithoutOrder, int visitsDone, int activeAgents, String? planSource, String? executionLevel, SalesPace? pace
+ double factKg, double? planKg, double? execution, double? forecastKg, double? forecastExecution, double revenue, int akb, TargetValue? conversion, TargetValue? revenuePerOutlet, TargetValue? akbPerAgent, int visitsWithoutOrder, int visitsDone, int activeAgents, String? planSource, String? executionLevel, SalesPace? pace, double? planFactKg
 });
 
 
@@ -1211,7 +1215,7 @@ class __$SalesKpiCopyWithImpl<$Res>
 
 /// Create a copy of SalesKpi
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? factKg = null,Object? planKg = freezed,Object? execution = freezed,Object? forecastKg = freezed,Object? forecastExecution = freezed,Object? revenue = null,Object? akb = null,Object? conversion = freezed,Object? revenuePerOutlet = freezed,Object? akbPerAgent = freezed,Object? visitsWithoutOrder = null,Object? visitsDone = null,Object? activeAgents = null,Object? planSource = freezed,Object? executionLevel = freezed,Object? pace = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? factKg = null,Object? planKg = freezed,Object? execution = freezed,Object? forecastKg = freezed,Object? forecastExecution = freezed,Object? revenue = null,Object? akb = null,Object? conversion = freezed,Object? revenuePerOutlet = freezed,Object? akbPerAgent = freezed,Object? visitsWithoutOrder = null,Object? visitsDone = null,Object? activeAgents = null,Object? planSource = freezed,Object? executionLevel = freezed,Object? pace = freezed,Object? planFactKg = freezed,}) {
   return _then(_SalesKpi(
 factKg: null == factKg ? _self.factKg : factKg // ignore: cast_nullable_to_non_nullable
 as double,planKg: freezed == planKg ? _self.planKg : planKg // ignore: cast_nullable_to_non_nullable
@@ -1229,7 +1233,8 @@ as int,activeAgents: null == activeAgents ? _self.activeAgents : activeAgents //
 as int,planSource: freezed == planSource ? _self.planSource : planSource // ignore: cast_nullable_to_non_nullable
 as String?,executionLevel: freezed == executionLevel ? _self.executionLevel : executionLevel // ignore: cast_nullable_to_non_nullable
 as String?,pace: freezed == pace ? _self.pace : pace // ignore: cast_nullable_to_non_nullable
-as SalesPace?,
+as SalesPace?,planFactKg: freezed == planFactKg ? _self.planFactKg : planFactKg // ignore: cast_nullable_to_non_nullable
+as double?,
   ));
 }
 
@@ -2169,7 +2174,8 @@ mixin _$SalesDaily {
 
  int get year; int get month; String get dataThrough; String? get today; int get daysInMonth; bool get closed;/// Кг за каждый день месяца; null — дня ещё нет или данных нет.
  List<double?> get days; List<bool> get sundays; double get total;/// Сумма строк «те же дни» по регионам: сейчас и в прошлом месяце (по ту же дату).
- double get sameNowKg; double get sameBeforeKg; String? get previousCutoff;
+ double get sameNowKg; double get sameBeforeKg; String? get previousCutoff;/// План и факт месяца (кг) и прошедшие дни — для недель «Динамики» главной.
+ double? get planKg; double? get planFactKg; double get factKg; int get workedDays; double? get elapsedDays;
 /// Create a copy of SalesDaily
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -2183,20 +2189,20 @@ $SalesDailyCopyWith<SalesDaily> get copyWith => _$SalesDailyCopyWithImpl<SalesDa
 @override
 bool operator ==(Object other) {
   final _this = this as SalesDaily;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SalesDaily&&(identical(other.year, _this.year) || other.year == _this.year)&&(identical(other.month, _this.month) || other.month == _this.month)&&(identical(other.dataThrough, _this.dataThrough) || other.dataThrough == _this.dataThrough)&&(identical(other.today, _this.today) || other.today == _this.today)&&(identical(other.daysInMonth, _this.daysInMonth) || other.daysInMonth == _this.daysInMonth)&&(identical(other.closed, _this.closed) || other.closed == _this.closed)&&const DeepCollectionEquality().equals(other.days, _this.days)&&const DeepCollectionEquality().equals(other.sundays, _this.sundays)&&(identical(other.total, _this.total) || other.total == _this.total)&&(identical(other.sameNowKg, _this.sameNowKg) || other.sameNowKg == _this.sameNowKg)&&(identical(other.sameBeforeKg, _this.sameBeforeKg) || other.sameBeforeKg == _this.sameBeforeKg)&&(identical(other.previousCutoff, _this.previousCutoff) || other.previousCutoff == _this.previousCutoff));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SalesDaily&&(identical(other.year, _this.year) || other.year == _this.year)&&(identical(other.month, _this.month) || other.month == _this.month)&&(identical(other.dataThrough, _this.dataThrough) || other.dataThrough == _this.dataThrough)&&(identical(other.today, _this.today) || other.today == _this.today)&&(identical(other.daysInMonth, _this.daysInMonth) || other.daysInMonth == _this.daysInMonth)&&(identical(other.closed, _this.closed) || other.closed == _this.closed)&&const DeepCollectionEquality().equals(other.days, _this.days)&&const DeepCollectionEquality().equals(other.sundays, _this.sundays)&&(identical(other.total, _this.total) || other.total == _this.total)&&(identical(other.sameNowKg, _this.sameNowKg) || other.sameNowKg == _this.sameNowKg)&&(identical(other.sameBeforeKg, _this.sameBeforeKg) || other.sameBeforeKg == _this.sameBeforeKg)&&(identical(other.previousCutoff, _this.previousCutoff) || other.previousCutoff == _this.previousCutoff)&&(identical(other.planKg, _this.planKg) || other.planKg == _this.planKg)&&(identical(other.planFactKg, _this.planFactKg) || other.planFactKg == _this.planFactKg)&&(identical(other.factKg, _this.factKg) || other.factKg == _this.factKg)&&(identical(other.workedDays, _this.workedDays) || other.workedDays == _this.workedDays)&&(identical(other.elapsedDays, _this.elapsedDays) || other.elapsedDays == _this.elapsedDays));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as SalesDaily;
-  return Object.hash(runtimeType,_this.year,_this.month,_this.dataThrough,_this.today,_this.daysInMonth,_this.closed,const DeepCollectionEquality().hash(_this.days),const DeepCollectionEquality().hash(_this.sundays),_this.total,_this.sameNowKg,_this.sameBeforeKg,_this.previousCutoff);
+  return Object.hash(runtimeType,_this.year,_this.month,_this.dataThrough,_this.today,_this.daysInMonth,_this.closed,const DeepCollectionEquality().hash(_this.days),const DeepCollectionEquality().hash(_this.sundays),_this.total,_this.sameNowKg,_this.sameBeforeKg,_this.previousCutoff,_this.planKg,_this.planFactKg,_this.factKg,_this.workedDays,_this.elapsedDays);
 }
 
 @override
 String toString() {
   final _this = this as SalesDaily;
-  return 'SalesDaily(year: ${_this.year}, month: ${_this.month}, dataThrough: ${_this.dataThrough}, today: ${_this.today}, daysInMonth: ${_this.daysInMonth}, closed: ${_this.closed}, days: ${_this.days}, sundays: ${_this.sundays}, total: ${_this.total}, sameNowKg: ${_this.sameNowKg}, sameBeforeKg: ${_this.sameBeforeKg}, previousCutoff: ${_this.previousCutoff})';
+  return 'SalesDaily(year: ${_this.year}, month: ${_this.month}, dataThrough: ${_this.dataThrough}, today: ${_this.today}, daysInMonth: ${_this.daysInMonth}, closed: ${_this.closed}, days: ${_this.days}, sundays: ${_this.sundays}, total: ${_this.total}, sameNowKg: ${_this.sameNowKg}, sameBeforeKg: ${_this.sameBeforeKg}, previousCutoff: ${_this.previousCutoff}, planKg: ${_this.planKg}, planFactKg: ${_this.planFactKg}, factKg: ${_this.factKg}, workedDays: ${_this.workedDays}, elapsedDays: ${_this.elapsedDays})';
 }
 
 
@@ -2207,7 +2213,7 @@ abstract mixin class $SalesDailyCopyWith<$Res>  {
   factory $SalesDailyCopyWith(SalesDaily value, $Res Function(SalesDaily) _then) = _$SalesDailyCopyWithImpl;
 @useResult
 $Res call({
- int year, int month, String dataThrough, String? today, int daysInMonth, bool closed, List<double?> days, List<bool> sundays, double total, double sameNowKg, double sameBeforeKg, String? previousCutoff
+ int year, int month, String dataThrough, String? today, int daysInMonth, bool closed, List<double?> days, List<bool> sundays, double total, double sameNowKg, double sameBeforeKg, String? previousCutoff, double? planKg, double? planFactKg, double factKg, int workedDays, double? elapsedDays
 });
 
 
@@ -2224,7 +2230,7 @@ class _$SalesDailyCopyWithImpl<$Res>
 
 /// Create a copy of SalesDaily
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? year = null,Object? month = null,Object? dataThrough = null,Object? today = freezed,Object? daysInMonth = null,Object? closed = null,Object? days = null,Object? sundays = null,Object? total = null,Object? sameNowKg = null,Object? sameBeforeKg = null,Object? previousCutoff = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? year = null,Object? month = null,Object? dataThrough = null,Object? today = freezed,Object? daysInMonth = null,Object? closed = null,Object? days = null,Object? sundays = null,Object? total = null,Object? sameNowKg = null,Object? sameBeforeKg = null,Object? previousCutoff = freezed,Object? planKg = freezed,Object? planFactKg = freezed,Object? factKg = null,Object? workedDays = null,Object? elapsedDays = freezed,}) {
   return _then(SalesDaily(
 year: null == year ? _self.year : year // ignore: cast_nullable_to_non_nullable
 as int,month: null == month ? _self.month : month // ignore: cast_nullable_to_non_nullable
@@ -2238,7 +2244,12 @@ as List<bool>,total: null == total ? _self.total : total // ignore: cast_nullabl
 as double,sameNowKg: null == sameNowKg ? _self.sameNowKg : sameNowKg // ignore: cast_nullable_to_non_nullable
 as double,sameBeforeKg: null == sameBeforeKg ? _self.sameBeforeKg : sameBeforeKg // ignore: cast_nullable_to_non_nullable
 as double,previousCutoff: freezed == previousCutoff ? _self.previousCutoff : previousCutoff // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,planKg: freezed == planKg ? _self.planKg : planKg // ignore: cast_nullable_to_non_nullable
+as double?,planFactKg: freezed == planFactKg ? _self.planFactKg : planFactKg // ignore: cast_nullable_to_non_nullable
+as double?,factKg: null == factKg ? _self.factKg : factKg // ignore: cast_nullable_to_non_nullable
+as double,workedDays: null == workedDays ? _self.workedDays : workedDays // ignore: cast_nullable_to_non_nullable
+as int,elapsedDays: freezed == elapsedDays ? _self.elapsedDays : elapsedDays // ignore: cast_nullable_to_non_nullable
+as double?,
   ));
 }
 
@@ -2323,10 +2334,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int year,  int month,  String dataThrough,  String? today,  int daysInMonth,  bool closed,  List<double?> days,  List<bool> sundays,  double total,  double sameNowKg,  double sameBeforeKg,  String? previousCutoff)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int year,  int month,  String dataThrough,  String? today,  int daysInMonth,  bool closed,  List<double?> days,  List<bool> sundays,  double total,  double sameNowKg,  double sameBeforeKg,  String? previousCutoff,  double? planKg,  double? planFactKg,  double factKg,  int workedDays,  double? elapsedDays)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SalesDaily() when $default != null:
-return $default(_that.year,_that.month,_that.dataThrough,_that.today,_that.daysInMonth,_that.closed,_that.days,_that.sundays,_that.total,_that.sameNowKg,_that.sameBeforeKg,_that.previousCutoff);case _:
+return $default(_that.year,_that.month,_that.dataThrough,_that.today,_that.daysInMonth,_that.closed,_that.days,_that.sundays,_that.total,_that.sameNowKg,_that.sameBeforeKg,_that.previousCutoff,_that.planKg,_that.planFactKg,_that.factKg,_that.workedDays,_that.elapsedDays);case _:
   return orElse();
 
 }
@@ -2344,10 +2355,10 @@ return $default(_that.year,_that.month,_that.dataThrough,_that.today,_that.daysI
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int year,  int month,  String dataThrough,  String? today,  int daysInMonth,  bool closed,  List<double?> days,  List<bool> sundays,  double total,  double sameNowKg,  double sameBeforeKg,  String? previousCutoff)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int year,  int month,  String dataThrough,  String? today,  int daysInMonth,  bool closed,  List<double?> days,  List<bool> sundays,  double total,  double sameNowKg,  double sameBeforeKg,  String? previousCutoff,  double? planKg,  double? planFactKg,  double factKg,  int workedDays,  double? elapsedDays)  $default,) {final _that = this;
 switch (_that) {
 case _SalesDaily():
-return $default(_that.year,_that.month,_that.dataThrough,_that.today,_that.daysInMonth,_that.closed,_that.days,_that.sundays,_that.total,_that.sameNowKg,_that.sameBeforeKg,_that.previousCutoff);case _:
+return $default(_that.year,_that.month,_that.dataThrough,_that.today,_that.daysInMonth,_that.closed,_that.days,_that.sundays,_that.total,_that.sameNowKg,_that.sameBeforeKg,_that.previousCutoff,_that.planKg,_that.planFactKg,_that.factKg,_that.workedDays,_that.elapsedDays);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -2364,10 +2375,10 @@ return $default(_that.year,_that.month,_that.dataThrough,_that.today,_that.daysI
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int year,  int month,  String dataThrough,  String? today,  int daysInMonth,  bool closed,  List<double?> days,  List<bool> sundays,  double total,  double sameNowKg,  double sameBeforeKg,  String? previousCutoff)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int year,  int month,  String dataThrough,  String? today,  int daysInMonth,  bool closed,  List<double?> days,  List<bool> sundays,  double total,  double sameNowKg,  double sameBeforeKg,  String? previousCutoff,  double? planKg,  double? planFactKg,  double factKg,  int workedDays,  double? elapsedDays)?  $default,) {final _that = this;
 switch (_that) {
 case _SalesDaily() when $default != null:
-return $default(_that.year,_that.month,_that.dataThrough,_that.today,_that.daysInMonth,_that.closed,_that.days,_that.sundays,_that.total,_that.sameNowKg,_that.sameBeforeKg,_that.previousCutoff);case _:
+return $default(_that.year,_that.month,_that.dataThrough,_that.today,_that.daysInMonth,_that.closed,_that.days,_that.sundays,_that.total,_that.sameNowKg,_that.sameBeforeKg,_that.previousCutoff,_that.planKg,_that.planFactKg,_that.factKg,_that.workedDays,_that.elapsedDays);case _:
   return null;
 
 }
@@ -2379,7 +2390,7 @@ return $default(_that.year,_that.month,_that.dataThrough,_that.today,_that.daysI
 @JsonSerializable()
 
 class _SalesDaily extends SalesDaily {
-  const _SalesDaily({required this.year, required this.month, required this.dataThrough, this.today, required this.daysInMonth, this.closed = false, required  List<double?> days,  List<bool> sundays = const <bool>[], this.total = 0, this.sameNowKg = 0, this.sameBeforeKg = 0, this.previousCutoff}): _days = days,_sundays = sundays,super._();
+  const _SalesDaily({required this.year, required this.month, required this.dataThrough, this.today, required this.daysInMonth, this.closed = false, required  List<double?> days,  List<bool> sundays = const <bool>[], this.total = 0, this.sameNowKg = 0, this.sameBeforeKg = 0, this.previousCutoff, this.planKg, this.planFactKg, this.factKg = 0, this.workedDays = 0, this.elapsedDays}): _days = days,_sundays = sundays,super._();
   factory _SalesDaily.fromJson(Map<String, dynamic> json) => _$SalesDailyFromJson(json);
 
 @override final  int year;
@@ -2409,6 +2420,12 @@ class _SalesDaily extends SalesDaily {
 @override@JsonKey() final  double sameNowKg;
 @override@JsonKey() final  double sameBeforeKg;
 @override final  String? previousCutoff;
+/// План и факт месяца (кг) и прошедшие дни — для недель «Динамики» главной.
+@override final  double? planKg;
+@override final  double? planFactKg;
+@override@JsonKey() final  double factKg;
+@override@JsonKey() final  int workedDays;
+@override final  double? elapsedDays;
 
 /// Create a copy of SalesDaily
 /// with the given fields replaced by the non-null parameter values.
@@ -2423,18 +2440,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SalesDaily&&(identical(other.year, year) || other.year == year)&&(identical(other.month, month) || other.month == month)&&(identical(other.dataThrough, dataThrough) || other.dataThrough == dataThrough)&&(identical(other.today, today) || other.today == today)&&(identical(other.daysInMonth, daysInMonth) || other.daysInMonth == daysInMonth)&&(identical(other.closed, closed) || other.closed == closed)&&const DeepCollectionEquality().equals(other.days, _days)&&const DeepCollectionEquality().equals(other.sundays, _sundays)&&(identical(other.total, total) || other.total == total)&&(identical(other.sameNowKg, sameNowKg) || other.sameNowKg == sameNowKg)&&(identical(other.sameBeforeKg, sameBeforeKg) || other.sameBeforeKg == sameBeforeKg)&&(identical(other.previousCutoff, previousCutoff) || other.previousCutoff == previousCutoff));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SalesDaily&&(identical(other.year, year) || other.year == year)&&(identical(other.month, month) || other.month == month)&&(identical(other.dataThrough, dataThrough) || other.dataThrough == dataThrough)&&(identical(other.today, today) || other.today == today)&&(identical(other.daysInMonth, daysInMonth) || other.daysInMonth == daysInMonth)&&(identical(other.closed, closed) || other.closed == closed)&&const DeepCollectionEquality().equals(other.days, _days)&&const DeepCollectionEquality().equals(other.sundays, _sundays)&&(identical(other.total, total) || other.total == total)&&(identical(other.sameNowKg, sameNowKg) || other.sameNowKg == sameNowKg)&&(identical(other.sameBeforeKg, sameBeforeKg) || other.sameBeforeKg == sameBeforeKg)&&(identical(other.previousCutoff, previousCutoff) || other.previousCutoff == previousCutoff)&&(identical(other.planKg, planKg) || other.planKg == planKg)&&(identical(other.planFactKg, planFactKg) || other.planFactKg == planFactKg)&&(identical(other.factKg, factKg) || other.factKg == factKg)&&(identical(other.workedDays, workedDays) || other.workedDays == workedDays)&&(identical(other.elapsedDays, elapsedDays) || other.elapsedDays == elapsedDays));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,year,month,dataThrough,today,daysInMonth,closed,const DeepCollectionEquality().hash(_days),const DeepCollectionEquality().hash(_sundays),total,sameNowKg,sameBeforeKg,previousCutoff);
+    return Object.hash(runtimeType,year,month,dataThrough,today,daysInMonth,closed,const DeepCollectionEquality().hash(_days),const DeepCollectionEquality().hash(_sundays),total,sameNowKg,sameBeforeKg,previousCutoff,planKg,planFactKg,factKg,workedDays,elapsedDays);
 }
 
 @override
 String toString() {
-    return 'SalesDaily(year: $year, month: $month, dataThrough: $dataThrough, today: $today, daysInMonth: $daysInMonth, closed: $closed, days: $days, sundays: $sundays, total: $total, sameNowKg: $sameNowKg, sameBeforeKg: $sameBeforeKg, previousCutoff: $previousCutoff)';
+    return 'SalesDaily(year: $year, month: $month, dataThrough: $dataThrough, today: $today, daysInMonth: $daysInMonth, closed: $closed, days: $days, sundays: $sundays, total: $total, sameNowKg: $sameNowKg, sameBeforeKg: $sameBeforeKg, previousCutoff: $previousCutoff, planKg: $planKg, planFactKg: $planFactKg, factKg: $factKg, workedDays: $workedDays, elapsedDays: $elapsedDays)';
 }
 
 
@@ -2445,7 +2462,7 @@ abstract mixin class _$SalesDailyCopyWith<$Res> implements $SalesDailyCopyWith<$
   factory _$SalesDailyCopyWith(_SalesDaily value, $Res Function(_SalesDaily) _then) = __$SalesDailyCopyWithImpl;
 @override @useResult
 $Res call({
- int year, int month, String dataThrough, String? today, int daysInMonth, bool closed, List<double?> days, List<bool> sundays, double total, double sameNowKg, double sameBeforeKg, String? previousCutoff
+ int year, int month, String dataThrough, String? today, int daysInMonth, bool closed, List<double?> days, List<bool> sundays, double total, double sameNowKg, double sameBeforeKg, String? previousCutoff, double? planKg, double? planFactKg, double factKg, int workedDays, double? elapsedDays
 });
 
 
@@ -2462,7 +2479,7 @@ class __$SalesDailyCopyWithImpl<$Res>
 
 /// Create a copy of SalesDaily
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? year = null,Object? month = null,Object? dataThrough = null,Object? today = freezed,Object? daysInMonth = null,Object? closed = null,Object? days = null,Object? sundays = null,Object? total = null,Object? sameNowKg = null,Object? sameBeforeKg = null,Object? previousCutoff = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? year = null,Object? month = null,Object? dataThrough = null,Object? today = freezed,Object? daysInMonth = null,Object? closed = null,Object? days = null,Object? sundays = null,Object? total = null,Object? sameNowKg = null,Object? sameBeforeKg = null,Object? previousCutoff = freezed,Object? planKg = freezed,Object? planFactKg = freezed,Object? factKg = null,Object? workedDays = null,Object? elapsedDays = freezed,}) {
   return _then(_SalesDaily(
 year: null == year ? _self.year : year // ignore: cast_nullable_to_non_nullable
 as int,month: null == month ? _self.month : month // ignore: cast_nullable_to_non_nullable
@@ -2476,7 +2493,12 @@ as List<bool>,total: null == total ? _self.total : total // ignore: cast_nullabl
 as double,sameNowKg: null == sameNowKg ? _self.sameNowKg : sameNowKg // ignore: cast_nullable_to_non_nullable
 as double,sameBeforeKg: null == sameBeforeKg ? _self.sameBeforeKg : sameBeforeKg // ignore: cast_nullable_to_non_nullable
 as double,previousCutoff: freezed == previousCutoff ? _self.previousCutoff : previousCutoff // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,planKg: freezed == planKg ? _self.planKg : planKg // ignore: cast_nullable_to_non_nullable
+as double?,planFactKg: freezed == planFactKg ? _self.planFactKg : planFactKg // ignore: cast_nullable_to_non_nullable
+as double?,factKg: null == factKg ? _self.factKg : factKg // ignore: cast_nullable_to_non_nullable
+as double,workedDays: null == workedDays ? _self.workedDays : workedDays // ignore: cast_nullable_to_non_nullable
+as int,elapsedDays: freezed == elapsedDays ? _self.elapsedDays : elapsedDays // ignore: cast_nullable_to_non_nullable
+as double?,
   ));
 }
 
@@ -6017,7 +6039,8 @@ mixin _$NotificationItem {
 
  String get id;/// tasks | hr | ai | system …
  String? get category; String? get kind; String get title; String? get body; String get createdAt; bool get read;/// info | warning | critical
- String? get severity;
+ String? get severity;/// Вид события («task_assigned» …) и ссылка — путь веба.
+ String? get type; String? get href;
 /// Create a copy of NotificationItem
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -6031,20 +6054,20 @@ $NotificationItemCopyWith<NotificationItem> get copyWith => _$NotificationItemCo
 @override
 bool operator ==(Object other) {
   final _this = this as NotificationItem;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is NotificationItem&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.category, _this.category) || other.category == _this.category)&&(identical(other.kind, _this.kind) || other.kind == _this.kind)&&(identical(other.title, _this.title) || other.title == _this.title)&&(identical(other.body, _this.body) || other.body == _this.body)&&(identical(other.createdAt, _this.createdAt) || other.createdAt == _this.createdAt)&&(identical(other.read, _this.read) || other.read == _this.read)&&(identical(other.severity, _this.severity) || other.severity == _this.severity));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is NotificationItem&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.category, _this.category) || other.category == _this.category)&&(identical(other.kind, _this.kind) || other.kind == _this.kind)&&(identical(other.title, _this.title) || other.title == _this.title)&&(identical(other.body, _this.body) || other.body == _this.body)&&(identical(other.createdAt, _this.createdAt) || other.createdAt == _this.createdAt)&&(identical(other.read, _this.read) || other.read == _this.read)&&(identical(other.severity, _this.severity) || other.severity == _this.severity)&&(identical(other.type, _this.type) || other.type == _this.type)&&(identical(other.href, _this.href) || other.href == _this.href));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as NotificationItem;
-  return Object.hash(runtimeType,_this.id,_this.category,_this.kind,_this.title,_this.body,_this.createdAt,_this.read,_this.severity);
+  return Object.hash(runtimeType,_this.id,_this.category,_this.kind,_this.title,_this.body,_this.createdAt,_this.read,_this.severity,_this.type,_this.href);
 }
 
 @override
 String toString() {
   final _this = this as NotificationItem;
-  return 'NotificationItem(id: ${_this.id}, category: ${_this.category}, kind: ${_this.kind}, title: ${_this.title}, body: ${_this.body}, createdAt: ${_this.createdAt}, read: ${_this.read}, severity: ${_this.severity})';
+  return 'NotificationItem(id: ${_this.id}, category: ${_this.category}, kind: ${_this.kind}, title: ${_this.title}, body: ${_this.body}, createdAt: ${_this.createdAt}, read: ${_this.read}, severity: ${_this.severity}, type: ${_this.type}, href: ${_this.href})';
 }
 
 
@@ -6055,7 +6078,7 @@ abstract mixin class $NotificationItemCopyWith<$Res>  {
   factory $NotificationItemCopyWith(NotificationItem value, $Res Function(NotificationItem) _then) = _$NotificationItemCopyWithImpl;
 @useResult
 $Res call({
- String id, String? category, String? kind, String title, String? body, String createdAt, bool read, String? severity
+ String id, String? category, String? kind, String title, String? body, String createdAt, bool read, String? severity, String? type, String? href
 });
 
 
@@ -6072,7 +6095,7 @@ class _$NotificationItemCopyWithImpl<$Res>
 
 /// Create a copy of NotificationItem
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? category = freezed,Object? kind = freezed,Object? title = null,Object? body = freezed,Object? createdAt = null,Object? read = null,Object? severity = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? category = freezed,Object? kind = freezed,Object? title = null,Object? body = freezed,Object? createdAt = null,Object? read = null,Object? severity = freezed,Object? type = freezed,Object? href = freezed,}) {
   return _then(NotificationItem(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,category: freezed == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
@@ -6082,6 +6105,8 @@ as String,body: freezed == body ? _self.body : body // ignore: cast_nullable_to_
 as String?,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as String,read: null == read ? _self.read : read // ignore: cast_nullable_to_non_nullable
 as bool,severity: freezed == severity ? _self.severity : severity // ignore: cast_nullable_to_non_nullable
+as String?,type: freezed == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
+as String?,href: freezed == href ? _self.href : href // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -6167,10 +6192,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? category,  String? kind,  String title,  String? body,  String createdAt,  bool read,  String? severity)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? category,  String? kind,  String title,  String? body,  String createdAt,  bool read,  String? severity,  String? type,  String? href)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _NotificationItem() when $default != null:
-return $default(_that.id,_that.category,_that.kind,_that.title,_that.body,_that.createdAt,_that.read,_that.severity);case _:
+return $default(_that.id,_that.category,_that.kind,_that.title,_that.body,_that.createdAt,_that.read,_that.severity,_that.type,_that.href);case _:
   return orElse();
 
 }
@@ -6188,10 +6213,10 @@ return $default(_that.id,_that.category,_that.kind,_that.title,_that.body,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? category,  String? kind,  String title,  String? body,  String createdAt,  bool read,  String? severity)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? category,  String? kind,  String title,  String? body,  String createdAt,  bool read,  String? severity,  String? type,  String? href)  $default,) {final _that = this;
 switch (_that) {
 case _NotificationItem():
-return $default(_that.id,_that.category,_that.kind,_that.title,_that.body,_that.createdAt,_that.read,_that.severity);case _:
+return $default(_that.id,_that.category,_that.kind,_that.title,_that.body,_that.createdAt,_that.read,_that.severity,_that.type,_that.href);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -6208,10 +6233,10 @@ return $default(_that.id,_that.category,_that.kind,_that.title,_that.body,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? category,  String? kind,  String title,  String? body,  String createdAt,  bool read,  String? severity)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? category,  String? kind,  String title,  String? body,  String createdAt,  bool read,  String? severity,  String? type,  String? href)?  $default,) {final _that = this;
 switch (_that) {
 case _NotificationItem() when $default != null:
-return $default(_that.id,_that.category,_that.kind,_that.title,_that.body,_that.createdAt,_that.read,_that.severity);case _:
+return $default(_that.id,_that.category,_that.kind,_that.title,_that.body,_that.createdAt,_that.read,_that.severity,_that.type,_that.href);case _:
   return null;
 
 }
@@ -6223,7 +6248,7 @@ return $default(_that.id,_that.category,_that.kind,_that.title,_that.body,_that.
 @JsonSerializable()
 
 class _NotificationItem implements NotificationItem {
-  const _NotificationItem({required this.id, this.category, this.kind, required this.title, this.body, required this.createdAt, this.read = false, this.severity});
+  const _NotificationItem({required this.id, this.category, this.kind, required this.title, this.body, required this.createdAt, this.read = false, this.severity, this.type, this.href});
   factory _NotificationItem.fromJson(Map<String, dynamic> json) => _$NotificationItemFromJson(json);
 
 @override final  String id;
@@ -6236,6 +6261,9 @@ class _NotificationItem implements NotificationItem {
 @override@JsonKey() final  bool read;
 /// info | warning | critical
 @override final  String? severity;
+/// Вид события («task_assigned» …) и ссылка — путь веба.
+@override final  String? type;
+@override final  String? href;
 
 /// Create a copy of NotificationItem
 /// with the given fields replaced by the non-null parameter values.
@@ -6250,18 +6278,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _NotificationItem&&(identical(other.id, id) || other.id == id)&&(identical(other.category, category) || other.category == category)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.title, title) || other.title == title)&&(identical(other.body, body) || other.body == body)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.read, read) || other.read == read)&&(identical(other.severity, severity) || other.severity == severity));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _NotificationItem&&(identical(other.id, id) || other.id == id)&&(identical(other.category, category) || other.category == category)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.title, title) || other.title == title)&&(identical(other.body, body) || other.body == body)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.read, read) || other.read == read)&&(identical(other.severity, severity) || other.severity == severity)&&(identical(other.type, type) || other.type == type)&&(identical(other.href, href) || other.href == href));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,id,category,kind,title,body,createdAt,read,severity);
+    return Object.hash(runtimeType,id,category,kind,title,body,createdAt,read,severity,type,href);
 }
 
 @override
 String toString() {
-    return 'NotificationItem(id: $id, category: $category, kind: $kind, title: $title, body: $body, createdAt: $createdAt, read: $read, severity: $severity)';
+    return 'NotificationItem(id: $id, category: $category, kind: $kind, title: $title, body: $body, createdAt: $createdAt, read: $read, severity: $severity, type: $type, href: $href)';
 }
 
 
@@ -6272,7 +6300,7 @@ abstract mixin class _$NotificationItemCopyWith<$Res> implements $NotificationIt
   factory _$NotificationItemCopyWith(_NotificationItem value, $Res Function(_NotificationItem) _then) = __$NotificationItemCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String? category, String? kind, String title, String? body, String createdAt, bool read, String? severity
+ String id, String? category, String? kind, String title, String? body, String createdAt, bool read, String? severity, String? type, String? href
 });
 
 
@@ -6289,7 +6317,7 @@ class __$NotificationItemCopyWithImpl<$Res>
 
 /// Create a copy of NotificationItem
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? category = freezed,Object? kind = freezed,Object? title = null,Object? body = freezed,Object? createdAt = null,Object? read = null,Object? severity = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? category = freezed,Object? kind = freezed,Object? title = null,Object? body = freezed,Object? createdAt = null,Object? read = null,Object? severity = freezed,Object? type = freezed,Object? href = freezed,}) {
   return _then(_NotificationItem(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,category: freezed == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
@@ -6299,6 +6327,8 @@ as String,body: freezed == body ? _self.body : body // ignore: cast_nullable_to_
 as String?,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as String,read: null == read ? _self.read : read // ignore: cast_nullable_to_non_nullable
 as bool,severity: freezed == severity ? _self.severity : severity // ignore: cast_nullable_to_non_nullable
+as String?,type: freezed == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
+as String?,href: freezed == href ? _self.href : href // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -7140,7 +7170,9 @@ mixin _$AiAlert {
 
  String get id;/// sales | finance | hr | production | supply | marketing
  String get category;/// Critical | Warning | Opportunity
- String get severity; String get title; String? get message; String? get recommendation; String? get detectedAt;
+ String get severity; String get title; String? get message; String? get recommendation; String? get detectedAt;/// Правило, которое нашло проблему («sales.region.drop»).
+ String? get rule;/// Куда ведёт находка — путь веба («/sales/regions/…»), приложение переводит его в свой экран.
+ String? get href;
 /// Create a copy of AiAlert
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -7154,20 +7186,20 @@ $AiAlertCopyWith<AiAlert> get copyWith => _$AiAlertCopyWithImpl<AiAlert>(this as
 @override
 bool operator ==(Object other) {
   final _this = this as AiAlert;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AiAlert&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.category, _this.category) || other.category == _this.category)&&(identical(other.severity, _this.severity) || other.severity == _this.severity)&&(identical(other.title, _this.title) || other.title == _this.title)&&(identical(other.message, _this.message) || other.message == _this.message)&&(identical(other.recommendation, _this.recommendation) || other.recommendation == _this.recommendation)&&(identical(other.detectedAt, _this.detectedAt) || other.detectedAt == _this.detectedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AiAlert&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.category, _this.category) || other.category == _this.category)&&(identical(other.severity, _this.severity) || other.severity == _this.severity)&&(identical(other.title, _this.title) || other.title == _this.title)&&(identical(other.message, _this.message) || other.message == _this.message)&&(identical(other.recommendation, _this.recommendation) || other.recommendation == _this.recommendation)&&(identical(other.detectedAt, _this.detectedAt) || other.detectedAt == _this.detectedAt)&&(identical(other.rule, _this.rule) || other.rule == _this.rule)&&(identical(other.href, _this.href) || other.href == _this.href));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as AiAlert;
-  return Object.hash(runtimeType,_this.id,_this.category,_this.severity,_this.title,_this.message,_this.recommendation,_this.detectedAt);
+  return Object.hash(runtimeType,_this.id,_this.category,_this.severity,_this.title,_this.message,_this.recommendation,_this.detectedAt,_this.rule,_this.href);
 }
 
 @override
 String toString() {
   final _this = this as AiAlert;
-  return 'AiAlert(id: ${_this.id}, category: ${_this.category}, severity: ${_this.severity}, title: ${_this.title}, message: ${_this.message}, recommendation: ${_this.recommendation}, detectedAt: ${_this.detectedAt})';
+  return 'AiAlert(id: ${_this.id}, category: ${_this.category}, severity: ${_this.severity}, title: ${_this.title}, message: ${_this.message}, recommendation: ${_this.recommendation}, detectedAt: ${_this.detectedAt}, rule: ${_this.rule}, href: ${_this.href})';
 }
 
 
@@ -7178,7 +7210,7 @@ abstract mixin class $AiAlertCopyWith<$Res>  {
   factory $AiAlertCopyWith(AiAlert value, $Res Function(AiAlert) _then) = _$AiAlertCopyWithImpl;
 @useResult
 $Res call({
- String id, String category, String severity, String title, String? message, String? recommendation, String? detectedAt
+ String id, String category, String severity, String title, String? message, String? recommendation, String? detectedAt, String? rule, String? href
 });
 
 
@@ -7195,7 +7227,7 @@ class _$AiAlertCopyWithImpl<$Res>
 
 /// Create a copy of AiAlert
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? category = null,Object? severity = null,Object? title = null,Object? message = freezed,Object? recommendation = freezed,Object? detectedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? category = null,Object? severity = null,Object? title = null,Object? message = freezed,Object? recommendation = freezed,Object? detectedAt = freezed,Object? rule = freezed,Object? href = freezed,}) {
   return _then(AiAlert(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,category: null == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
@@ -7204,6 +7236,8 @@ as String,title: null == title ? _self.title : title // ignore: cast_nullable_to
 as String,message: freezed == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
 as String?,recommendation: freezed == recommendation ? _self.recommendation : recommendation // ignore: cast_nullable_to_non_nullable
 as String?,detectedAt: freezed == detectedAt ? _self.detectedAt : detectedAt // ignore: cast_nullable_to_non_nullable
+as String?,rule: freezed == rule ? _self.rule : rule // ignore: cast_nullable_to_non_nullable
+as String?,href: freezed == href ? _self.href : href // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -7289,10 +7323,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String category,  String severity,  String title,  String? message,  String? recommendation,  String? detectedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String category,  String severity,  String title,  String? message,  String? recommendation,  String? detectedAt,  String? rule,  String? href)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _AiAlert() when $default != null:
-return $default(_that.id,_that.category,_that.severity,_that.title,_that.message,_that.recommendation,_that.detectedAt);case _:
+return $default(_that.id,_that.category,_that.severity,_that.title,_that.message,_that.recommendation,_that.detectedAt,_that.rule,_that.href);case _:
   return orElse();
 
 }
@@ -7310,10 +7344,10 @@ return $default(_that.id,_that.category,_that.severity,_that.title,_that.message
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String category,  String severity,  String title,  String? message,  String? recommendation,  String? detectedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String category,  String severity,  String title,  String? message,  String? recommendation,  String? detectedAt,  String? rule,  String? href)  $default,) {final _that = this;
 switch (_that) {
 case _AiAlert():
-return $default(_that.id,_that.category,_that.severity,_that.title,_that.message,_that.recommendation,_that.detectedAt);case _:
+return $default(_that.id,_that.category,_that.severity,_that.title,_that.message,_that.recommendation,_that.detectedAt,_that.rule,_that.href);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -7330,10 +7364,10 @@ return $default(_that.id,_that.category,_that.severity,_that.title,_that.message
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String category,  String severity,  String title,  String? message,  String? recommendation,  String? detectedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String category,  String severity,  String title,  String? message,  String? recommendation,  String? detectedAt,  String? rule,  String? href)?  $default,) {final _that = this;
 switch (_that) {
 case _AiAlert() when $default != null:
-return $default(_that.id,_that.category,_that.severity,_that.title,_that.message,_that.recommendation,_that.detectedAt);case _:
+return $default(_that.id,_that.category,_that.severity,_that.title,_that.message,_that.recommendation,_that.detectedAt,_that.rule,_that.href);case _:
   return null;
 
 }
@@ -7345,7 +7379,7 @@ return $default(_that.id,_that.category,_that.severity,_that.title,_that.message
 @JsonSerializable()
 
 class _AiAlert implements AiAlert {
-  const _AiAlert({required this.id, required this.category, required this.severity, required this.title, this.message, this.recommendation, this.detectedAt});
+  const _AiAlert({required this.id, required this.category, required this.severity, required this.title, this.message, this.recommendation, this.detectedAt, this.rule, this.href});
   factory _AiAlert.fromJson(Map<String, dynamic> json) => _$AiAlertFromJson(json);
 
 @override final  String id;
@@ -7357,6 +7391,10 @@ class _AiAlert implements AiAlert {
 @override final  String? message;
 @override final  String? recommendation;
 @override final  String? detectedAt;
+/// Правило, которое нашло проблему («sales.region.drop»).
+@override final  String? rule;
+/// Куда ведёт находка — путь веба («/sales/regions/…»), приложение переводит его в свой экран.
+@override final  String? href;
 
 /// Create a copy of AiAlert
 /// with the given fields replaced by the non-null parameter values.
@@ -7371,18 +7409,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AiAlert&&(identical(other.id, id) || other.id == id)&&(identical(other.category, category) || other.category == category)&&(identical(other.severity, severity) || other.severity == severity)&&(identical(other.title, title) || other.title == title)&&(identical(other.message, message) || other.message == message)&&(identical(other.recommendation, recommendation) || other.recommendation == recommendation)&&(identical(other.detectedAt, detectedAt) || other.detectedAt == detectedAt));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AiAlert&&(identical(other.id, id) || other.id == id)&&(identical(other.category, category) || other.category == category)&&(identical(other.severity, severity) || other.severity == severity)&&(identical(other.title, title) || other.title == title)&&(identical(other.message, message) || other.message == message)&&(identical(other.recommendation, recommendation) || other.recommendation == recommendation)&&(identical(other.detectedAt, detectedAt) || other.detectedAt == detectedAt)&&(identical(other.rule, rule) || other.rule == rule)&&(identical(other.href, href) || other.href == href));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,id,category,severity,title,message,recommendation,detectedAt);
+    return Object.hash(runtimeType,id,category,severity,title,message,recommendation,detectedAt,rule,href);
 }
 
 @override
 String toString() {
-    return 'AiAlert(id: $id, category: $category, severity: $severity, title: $title, message: $message, recommendation: $recommendation, detectedAt: $detectedAt)';
+    return 'AiAlert(id: $id, category: $category, severity: $severity, title: $title, message: $message, recommendation: $recommendation, detectedAt: $detectedAt, rule: $rule, href: $href)';
 }
 
 
@@ -7393,7 +7431,7 @@ abstract mixin class _$AiAlertCopyWith<$Res> implements $AiAlertCopyWith<$Res> {
   factory _$AiAlertCopyWith(_AiAlert value, $Res Function(_AiAlert) _then) = __$AiAlertCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String category, String severity, String title, String? message, String? recommendation, String? detectedAt
+ String id, String category, String severity, String title, String? message, String? recommendation, String? detectedAt, String? rule, String? href
 });
 
 
@@ -7410,7 +7448,7 @@ class __$AiAlertCopyWithImpl<$Res>
 
 /// Create a copy of AiAlert
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? category = null,Object? severity = null,Object? title = null,Object? message = freezed,Object? recommendation = freezed,Object? detectedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? category = null,Object? severity = null,Object? title = null,Object? message = freezed,Object? recommendation = freezed,Object? detectedAt = freezed,Object? rule = freezed,Object? href = freezed,}) {
   return _then(_AiAlert(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,category: null == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
@@ -7419,6 +7457,8 @@ as String,title: null == title ? _self.title : title // ignore: cast_nullable_to
 as String,message: freezed == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
 as String?,recommendation: freezed == recommendation ? _self.recommendation : recommendation // ignore: cast_nullable_to_non_nullable
 as String?,detectedAt: freezed == detectedAt ? _self.detectedAt : detectedAt // ignore: cast_nullable_to_non_nullable
+as String?,rule: freezed == rule ? _self.rule : rule // ignore: cast_nullable_to_non_nullable
+as String?,href: freezed == href ? _self.href : href // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }

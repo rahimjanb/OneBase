@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebase_mobile/app/app.dart';
+import 'package:onebase_mobile/app/shell/bottom_nav.dart';
 import 'package:onebase_mobile/app/theme/tokens.dart';
 import 'package:onebase_mobile/core/auth/token_storage.dart';
 import 'package:onebase_mobile/core/config/app_config.dart';
@@ -39,39 +40,52 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('оболочка: пять вкладок, переход по вкладкам', (tester) async {
+  Finder nav(String label) => find.descendant(of: find.byType(ObNavScaffold), matching: find.text(label));
+
+  testWidgets('оболочка как у веба: три вкладки по правам, «Профиль» и синяя кнопка; веер — остальные разделы', (tester) async {
     await pumpApp(tester, settings: {SettingsStore.localeKey: 'ru'});
-    for (final label in ['Главная', 'Аналитика', 'Задачи', 'AI', 'Профиль']) {
-      expect(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)), findsOneWidget);
+    for (final label in ['Главная', 'Консультант', 'Аналитика', 'Профиль']) {
+      expect(nav(label), findsOneWidget);
     }
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Профиль')));
+    // «Задачи» не помещаются в три вкладки — они в веере.
+    expect(nav('Задачи'), findsNothing);
+    await tester.tap(find.bySemanticsLabel('Открыть меню разделов'));
+    await tester.pumpAndSettle();
+    expect(find.text('Задачи'), findsOneWidget);
+    expect(find.text('Финансы'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Закрыть меню'));
+    await tester.pumpAndSettle();
+    expect(find.text('Финансы'), findsNothing);
+
+    await tester.tap(nav('Профиль'));
     await tester.pumpAndSettle();
     expect(find.text('Оформление'), findsOneWidget);
     expect(find.text('Иван Петров'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('http://onebase.test'), 200);
-    expect(find.text('http://onebase.test'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('onebase.test'), 200, scrollable: find.byType(Scrollable).hitTestable().first);
+    expect(find.text('onebase.test'), findsOneWidget);
   });
 
   testWidgets('тема из настроек и переключение на тёмную сохраняется', (tester) async {
     await pumpApp(tester, settings: {SettingsStore.localeKey: 'ru', SettingsStore.themeKey: 'light'});
-    BuildContext ctx() => tester.element(find.byType(NavigationBar));
+    BuildContext ctx() => tester.element(find.byType(ObNavScaffold));
     expect(Theme.of(ctx()).extension<ObColors>()!.page, ObColors.light.page);
 
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Профиль')));
+    await tester.tap(nav('Профиль'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Тёмная'));
     await tester.pumpAndSettle();
     expect(Theme.of(ctx()).brightness, Brightness.dark);
-    expect(await SettingsStore(db).readAll(), containsPair(SettingsStore.themeKey, 'dark'));
+    // Тёмная — тема по умолчанию (как у веба): в настройках не хранится.
+    expect(await SettingsStore(db).readAll(), isNot(contains(SettingsStore.themeKey)));
   });
 
   testWidgets('язык: переключение на узбекский меняет подписи', (tester) async {
     await pumpApp(tester, settings: {SettingsStore.localeKey: 'ru'});
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Профиль')));
+    await tester.tap(nav('Профиль'));
     await tester.pumpAndSettle();
     await tester.tap(find.text("O'zbekcha"));
     await tester.pumpAndSettle();
-    expect(find.descendant(of: find.byType(NavigationBar), matching: find.text('Bosh sahifa')), findsOneWidget);
+    expect(nav('Bosh sahifa'), findsOneWidget);
     expect(find.text('Ko\'rinish'), findsOneWidget);
   });
 

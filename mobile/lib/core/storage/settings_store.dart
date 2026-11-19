@@ -17,6 +17,9 @@ class SettingsStore {
     return {for (final r in rows) r.key: r.value};
   }
 
+  Future<String?> read(String key) async =>
+      (await (_db.select(_db.appSettings)..where((t) => t.key.equals(key))).getSingleOrNull())?.value;
+
   Future<void> write(String key, String? value) async {
     if (value == null) {
       await (_db.delete(_db.appSettings)..where((t) => t.key.equals(key))).go();

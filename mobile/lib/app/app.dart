@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/auth/auth_controller.dart';
 import '../core/core_providers.dart';
 import '../core/storage/preferences.dart';
+import '../core/synchronization/outbox.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../shared/extensions/context_ext.dart';
 import '../shared/widgets/states.dart';
@@ -61,7 +62,8 @@ class OneBaseApp extends ConsumerWidget {
   }
 }
 
-/// Возврат приложения из фона → перечитать профиль и права (не чаще раза в минуту): у сервера права меняются без повторного входа.
+/// Возврат приложения из фона → перечитать профиль и права (не чаще раза в минуту): у сервера права меняются без повторного входа;
+/// отправить операции из очереди.
 class _SessionLifecycle extends ConsumerStatefulWidget {
   const _SessionLifecycle({required this.child});
 
@@ -73,7 +75,11 @@ class _SessionLifecycle extends ConsumerStatefulWidget {
 
 class _SessionLifecycleState extends ConsumerState<_SessionLifecycle> {
   late final AppLifecycleListener _listener = AppLifecycleListener(
-    onResume: () => ref.read(authControllerProvider.notifier).refreshProfile(),
+    onResume: () {
+      // Возврат из фона: права и профиль (не чаще раза в минуту) и отправка операций, ждавших сети.
+      ref.read(authControllerProvider.notifier).refreshProfile();
+      if (ref.read(currentProfileProvider) != null) ref.read(outboxProvider).flush();
+    },
   );
 
   @override

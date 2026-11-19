@@ -125,7 +125,7 @@ abstract class AppLocalizations {
   /// No description provided for @navAi.
   ///
   /// In ru, this message translates to:
-  /// **'AI'**
+  /// **'Консультант'**
   String get navAi;
 
   /// No description provided for @navProfile.
@@ -839,7 +839,7 @@ abstract class AppLocalizations {
   /// No description provided for @deptTitle.
   ///
   /// In ru, this message translates to:
-  /// **'Подразделения'**
+  /// **'Отделы'**
   String get deptTitle;
 
   /// No description provided for @hrAttendance.
@@ -1063,6 +1063,1062 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Выполнение плана'**
   String get rowExecution;
+
+  /// No description provided for @moduleDepartments.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отделы'**
+  String get moduleDepartments;
+
+  /// No description provided for @moduleSales.
+  ///
+  /// In ru, this message translates to:
+  /// **'Клиенты'**
+  String get moduleSales;
+
+  /// No description provided for @moduleFinance.
+  ///
+  /// In ru, this message translates to:
+  /// **'Финансы'**
+  String get moduleFinance;
+
+  /// No description provided for @moduleProduction.
+  ///
+  /// In ru, this message translates to:
+  /// **'Производство'**
+  String get moduleProduction;
+
+  /// No description provided for @moduleWarehouse.
+  ///
+  /// In ru, this message translates to:
+  /// **'Склад'**
+  String get moduleWarehouse;
+
+  /// No description provided for @moduleRequests.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заявки'**
+  String get moduleRequests;
+
+  /// No description provided for @moduleHr.
+  ///
+  /// In ru, this message translates to:
+  /// **'HR'**
+  String get moduleHr;
+
+  /// No description provided for @moduleInsights.
+  ///
+  /// In ru, this message translates to:
+  /// **'AI-отчёт'**
+  String get moduleInsights;
+
+  /// No description provided for @moduleNotifications.
+  ///
+  /// In ru, this message translates to:
+  /// **'Уведомления'**
+  String get moduleNotifications;
+
+  /// No description provided for @moduleSettings.
+  ///
+  /// In ru, this message translates to:
+  /// **'Настройки'**
+  String get moduleSettings;
+
+  /// No description provided for @navOpenMenu.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть меню разделов'**
+  String get navOpenMenu;
+
+  /// No description provided for @navCloseMenu.
+  ///
+  /// In ru, this message translates to:
+  /// **'Закрыть меню'**
+  String get navCloseMenu;
+
+  /// No description provided for @navSections.
+  ///
+  /// In ru, this message translates to:
+  /// **'Основные разделы'**
+  String get navSections;
+
+  /// No description provided for @searchTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Поиск'**
+  String get searchTitle;
+
+  /// No description provided for @notificationsUnread.
+  ///
+  /// In ru, this message translates to:
+  /// **'Уведомления: {n} непрочитанных'**
+  String notificationsUnread(int n);
+
+  /// No description provided for @homePlanDone.
+  ///
+  /// In ru, this message translates to:
+  /// **'План выполнен на'**
+  String get homePlanDone;
+
+  /// No description provided for @homeAttendanceToday.
+  ///
+  /// In ru, this message translates to:
+  /// **'Явка сегодня'**
+  String get homeAttendanceToday;
+
+  /// No description provided for @homeAllDeptsOk.
+  ///
+  /// In ru, this message translates to:
+  /// **'все отделы в норме'**
+  String get homeAllDeptsOk;
+
+  /// No description provided for @homeDeptsAttention.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n, plural, one{{n} отдел — внимание} few{{n} отдела — внимание} many{{n} отделов — внимание} other{{n} отдела — внимание}}'**
+  String homeDeptsAttention(int n);
+
+  /// No description provided for @homeWaiting.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ждут вас'**
+  String get homeWaiting;
+
+  /// No description provided for @homeAwaitingApproval.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ждут вашего согласования: {n}'**
+  String homeAwaitingApproval(int n);
+
+  /// No description provided for @homePickUp.
+  ///
+  /// In ru, this message translates to:
+  /// **'Можно получить на складе: {n}'**
+  String homePickUp(int n);
+
+  /// No description provided for @homePickUpDept.
+  ///
+  /// In ru, this message translates to:
+  /// **'Товар по заявкам отдела ждёт на складе — заберите у кладовщика.'**
+  String get homePickUpDept;
+
+  /// No description provided for @homePickUpMine.
+  ///
+  /// In ru, this message translates to:
+  /// **'Товар по вашим заявкам ждёт на складе — заберите у кладовщика.'**
+  String get homePickUpMine;
+
+  /// No description provided for @homeAcceptedWeek.
+  ///
+  /// In ru, this message translates to:
+  /// **'Принято на склад за неделю: {sum}'**
+  String homeAcceptedWeek(String sum);
+
+  /// No description provided for @filterPeriod7d.
+  ///
+  /// In ru, this message translates to:
+  /// **'7 дней'**
+  String get filterPeriod7d;
+
+  /// No description provided for @filterPeriod30d.
+  ///
+  /// In ru, this message translates to:
+  /// **'30 дней'**
+  String get filterPeriod30d;
+
+  /// No description provided for @filterPeriodQuarter.
+  ///
+  /// In ru, this message translates to:
+  /// **'Квартал'**
+  String get filterPeriodQuarter;
+
+  /// No description provided for @filterPeriodYear.
+  ///
+  /// In ru, this message translates to:
+  /// **'Год'**
+  String get filterPeriodYear;
+
+  /// No description provided for @filterAllDepartments.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все отделы'**
+  String get filterAllDepartments;
+
+  /// No description provided for @filterDepartmentsN.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отделы: {n}'**
+  String filterDepartmentsN(int n);
+
+  /// No description provided for @filterApply.
+  ///
+  /// In ru, this message translates to:
+  /// **'Применить'**
+  String get filterApply;
+
+  /// No description provided for @filterReset.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сбросить'**
+  String get filterReset;
+
+  /// No description provided for @heroSalesPlan.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выполнение плана продаж'**
+  String get heroSalesPlan;
+
+  /// No description provided for @heroVsSameDays.
+  ///
+  /// In ru, this message translates to:
+  /// **'к тем же дням прошлого месяца'**
+  String get heroVsSameDays;
+
+  /// No description provided for @heroVsPrevDay.
+  ///
+  /// In ru, this message translates to:
+  /// **'к прошлому рабочему дню'**
+  String get heroVsPrevDay;
+
+  /// No description provided for @heroGoal.
+  ///
+  /// In ru, this message translates to:
+  /// **'цель'**
+  String get heroGoal;
+
+  /// No description provided for @heroNorm.
+  ///
+  /// In ru, this message translates to:
+  /// **'норма'**
+  String get heroNorm;
+
+  /// No description provided for @unitPp.
+  ///
+  /// In ru, this message translates to:
+  /// **'п.п.'**
+  String get unitPp;
+
+  /// No description provided for @statForecast.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прогноз'**
+  String get statForecast;
+
+  /// No description provided for @statToMonthEnd.
+  ///
+  /// In ru, this message translates to:
+  /// **'к концу месяца'**
+  String get statToMonthEnd;
+
+  /// No description provided for @statOverdueN.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} просрочено'**
+  String statOverdueN(int n);
+
+  /// No description provided for @statDueWeekN.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} срок на неделе'**
+  String statDueWeekN(int n);
+
+  /// No description provided for @statAttendanceMonth.
+  ///
+  /// In ru, this message translates to:
+  /// **'Явка за месяц'**
+  String get statAttendanceMonth;
+
+  /// No description provided for @statPerMonth.
+  ///
+  /// In ru, this message translates to:
+  /// **'за месяц'**
+  String get statPerMonth;
+
+  /// No description provided for @quickTask.
+  ///
+  /// In ru, this message translates to:
+  /// **'Задача'**
+  String get quickTask;
+
+  /// No description provided for @quickAskAi.
+  ///
+  /// In ru, this message translates to:
+  /// **'Спросить AI'**
+  String get quickAskAi;
+
+  /// No description provided for @quickExport.
+  ///
+  /// In ru, this message translates to:
+  /// **'Экспорт'**
+  String get quickExport;
+
+  /// No description provided for @quickReportAi.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отчёт AI'**
+  String get quickReportAi;
+
+  /// No description provided for @focusTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Фокус дня'**
+  String get focusTitle;
+
+  /// No description provided for @focusDepartments.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n, plural, one{{n} отдел} few{{n} отдела} many{{n} отделов} other{{n} отдела}}'**
+  String focusDepartments(int n);
+
+  /// No description provided for @focusActiveTasks.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n, plural, one{{n} активная задача} few{{n} активные задачи} many{{n} активных задач} other{{n} активной задачи}}'**
+  String focusActiveTasks(int n);
+
+  /// No description provided for @focusFallback.
+  ///
+  /// In ru, this message translates to:
+  /// **'Находки AI-консультанта'**
+  String get focusFallback;
+
+  /// No description provided for @focusCalm.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сегодня всё спокойно'**
+  String get focusCalm;
+
+  /// No description provided for @focusMore.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ещё {n}'**
+  String focusMore(int n);
+
+  /// No description provided for @focusAskQuestion.
+  ///
+  /// In ru, this message translates to:
+  /// **'Разбери находки «Фокуса дня» и подскажи, что сделать сегодня: {list}'**
+  String focusAskQuestion(String list);
+
+  /// No description provided for @focusAskEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что сегодня стоит проверить в компании?'**
+  String get focusAskEmpty;
+
+  /// No description provided for @homeAskQuestion.
+  ///
+  /// In ru, this message translates to:
+  /// **'Разбери показатели компании за период «{period}»{scope}: что сейчас требует внимания и что сделать в первую очередь?'**
+  String homeAskQuestion(String period, String scope);
+
+  /// No description provided for @catFinance.
+  ///
+  /// In ru, this message translates to:
+  /// **'Финансы'**
+  String get catFinance;
+
+  /// No description provided for @catSales.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи'**
+  String get catSales;
+
+  /// No description provided for @catMarketing.
+  ///
+  /// In ru, this message translates to:
+  /// **'Маркетинг'**
+  String get catMarketing;
+
+  /// No description provided for @catHr.
+  ///
+  /// In ru, this message translates to:
+  /// **'HR'**
+  String get catHr;
+
+  /// No description provided for @catProduction.
+  ///
+  /// In ru, this message translates to:
+  /// **'Производство'**
+  String get catProduction;
+
+  /// No description provided for @catSupply.
+  ///
+  /// In ru, this message translates to:
+  /// **'Снабжение'**
+  String get catSupply;
+
+  /// No description provided for @dynTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Динамика'**
+  String get dynTitle;
+
+  /// No description provided for @dynMore.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подробнее'**
+  String get dynMore;
+
+  /// No description provided for @dynSales.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи'**
+  String get dynSales;
+
+  /// No description provided for @dynRevenue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выручка'**
+  String get dynRevenue;
+
+  /// No description provided for @dynAttendance.
+  ///
+  /// In ru, this message translates to:
+  /// **'Явка'**
+  String get dynAttendance;
+
+  /// No description provided for @dynAverage.
+  ///
+  /// In ru, this message translates to:
+  /// **'Среднее'**
+  String get dynAverage;
+
+  /// No description provided for @dynBest.
+  ///
+  /// In ru, this message translates to:
+  /// **'Лучшая неделя'**
+  String get dynBest;
+
+  /// No description provided for @dynAbove.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выше цели'**
+  String get dynAbove;
+
+  /// No description provided for @dynOfTotal.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} из {total}'**
+  String dynOfTotal(int n, int total);
+
+  /// No description provided for @dynForWeeks.
+  ///
+  /// In ru, this message translates to:
+  /// **'За {n} нед.'**
+  String dynForWeeks(int n);
+
+  /// No description provided for @dynGoal.
+  ///
+  /// In ru, this message translates to:
+  /// **'цель {n}%'**
+  String dynGoal(String n);
+
+  /// No description provided for @dynWeekValue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нед. {w} · {value}'**
+  String dynWeekValue(int w, String value);
+
+  /// No description provided for @dynCaption.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нед. {w} — текущая, данные за {days}'**
+  String dynCaption(int w, String days);
+
+  /// No description provided for @daysN.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n, plural, one{{n} день} few{{n} дня} many{{n} дней} other{{n} дня}}'**
+  String daysN(int n);
+
+  /// No description provided for @dynEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет данных за период'**
+  String get dynEmpty;
+
+  /// No description provided for @dynSemantics.
+  ///
+  /// In ru, this message translates to:
+  /// **'{name} по неделям: среднее {avg}, лучшая неделя {best}'**
+  String dynSemantics(String name, String avg, String best);
+
+  /// No description provided for @tasksAllN.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все {n}'**
+  String tasksAllN(String n);
+
+  /// No description provided for @tasksNone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет задач за период'**
+  String get tasksNone;
+
+  /// No description provided for @tasksDonePct.
+  ///
+  /// In ru, this message translates to:
+  /// **'выполнено'**
+  String get tasksDonePct;
+
+  /// No description provided for @tasksDone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выполнено'**
+  String get tasksDone;
+
+  /// No description provided for @tasksInWork.
+  ///
+  /// In ru, this message translates to:
+  /// **'В работе'**
+  String get tasksInWork;
+
+  /// No description provided for @tasksOnReview.
+  ///
+  /// In ru, this message translates to:
+  /// **'На проверке'**
+  String get tasksOnReview;
+
+  /// No description provided for @tasksOverdueLabel.
+  ///
+  /// In ru, this message translates to:
+  /// **'Просрочено'**
+  String get tasksOverdueLabel;
+
+  /// No description provided for @tasksOverdueBanner.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n, plural, one{{n} задача просрочена} few{{n} задачи просрочены} many{{n} задач просрочено} other{{n} задачи просрочено}}'**
+  String tasksOverdueBanner(int n);
+
+  /// No description provided for @tasksOverdueIn.
+  ///
+  /// In ru, this message translates to:
+  /// **' — {n} в отделе «{name}»'**
+  String tasksOverdueIn(int n, String name);
+
+  /// No description provided for @deptOkN.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} в норме'**
+  String deptOkN(int n);
+
+  /// No description provided for @deptAttentionN.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} внимание'**
+  String deptAttentionN(int n);
+
+  /// No description provided for @deptNone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет данных по отделам'**
+  String get deptNone;
+
+  /// No description provided for @deptSalesMetric.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выполнение плана месяца'**
+  String get deptSalesMetric;
+
+  /// No description provided for @deptHrMetric.
+  ///
+  /// In ru, this message translates to:
+  /// **'Явка с начала месяца'**
+  String get deptHrMetric;
+
+  /// No description provided for @deptWeekTrend.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} нед.'**
+  String deptWeekTrend(String n);
+
+  /// No description provided for @statusAttention.
+  ///
+  /// In ru, this message translates to:
+  /// **'Внимание'**
+  String get statusAttention;
+
+  /// No description provided for @statusOk.
+  ///
+  /// In ru, this message translates to:
+  /// **'В норме'**
+  String get statusOk;
+
+  /// No description provided for @reportTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Еженедельный AI-отчёт'**
+  String get reportTitle;
+
+  /// No description provided for @reportLine.
+  ///
+  /// In ru, this message translates to:
+  /// **'{risks} и {recs} по отделам'**
+  String reportLine(String risks, String recs);
+
+  /// No description provided for @risksN.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n, plural, one{{n} риск} few{{n} риска} many{{n} рисков} other{{n} риска}}'**
+  String risksN(int n);
+
+  /// No description provided for @recsN.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n, plural, one{{n} рекомендация} few{{n} рекомендации} many{{n} рекомендаций} other{{n} рекомендации}}'**
+  String recsN(int n);
+
+  /// No description provided for @dataUpdatedNow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Данные обновлены только что'**
+  String get dataUpdatedNow;
+
+  /// No description provided for @dataUpdatedMin.
+  ///
+  /// In ru, this message translates to:
+  /// **'Данные обновлены {n} мин назад'**
+  String dataUpdatedMin(int n);
+
+  /// No description provided for @dataPullHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'потяните, чтобы обновить'**
+  String get dataPullHint;
+
+  /// No description provided for @dataFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось обновить'**
+  String get dataFailed;
+
+  /// No description provided for @dataUpdating.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обновляем…'**
+  String get dataUpdating;
+
+  /// No description provided for @offlineSince.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет соединения · данные на {time}'**
+  String offlineSince(String time);
+
+  /// No description provided for @exportTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Экспорт обзора'**
+  String get exportTitle;
+
+  /// No description provided for @exportCsv.
+  ///
+  /// In ru, this message translates to:
+  /// **'Excel (CSV)'**
+  String get exportCsv;
+
+  /// No description provided for @exportCsvHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Показатели, задачи и отделы таблицей'**
+  String get exportCsvHint;
+
+  /// No description provided for @homeMoreSales.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи месяца'**
+  String get homeMoreSales;
+
+  /// No description provided for @homeMoreFinance.
+  ///
+  /// In ru, this message translates to:
+  /// **'Финансы 1С'**
+  String get homeMoreFinance;
+
+  /// No description provided for @homeKeyMetric.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ключевая метрика'**
+  String get homeKeyMetric;
+
+  /// No description provided for @homeAgentsN.
+  ///
+  /// In ru, this message translates to:
+  /// **'{n} ТП в работе'**
+  String homeAgentsN(int n);
+
+  /// No description provided for @homeSearchHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Разделы, сотрудники, клиенты'**
+  String get homeSearchHint;
+
+  /// No description provided for @profileOpen.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть профиль'**
+  String get profileOpen;
+
+  /// No description provided for @myDayTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Мой день'**
+  String get myDayTitle;
+
+  /// No description provided for @myDayShift.
+  ///
+  /// In ru, this message translates to:
+  /// **'Смена {from}–{to}'**
+  String myDayShift(String from, String to);
+
+  /// No description provided for @myDayArrival.
+  ///
+  /// In ru, this message translates to:
+  /// **'Пришли'**
+  String get myDayArrival;
+
+  /// No description provided for @myDayDeparture.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ушли'**
+  String get myDayDeparture;
+
+  /// No description provided for @myDayWorked.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отработано'**
+  String get myDayWorked;
+
+  /// No description provided for @myDayLateWeek.
+  ///
+  /// In ru, this message translates to:
+  /// **'Опозданий за неделю'**
+  String get myDayLateWeek;
+
+  /// No description provided for @myDayHoursMinutes.
+  ///
+  /// In ru, this message translates to:
+  /// **'{h} ч {m} мин'**
+  String myDayHoursMinutes(int h, int m);
+
+  /// No description provided for @dayStatus_not_started.
+  ///
+  /// In ru, this message translates to:
+  /// **'Рабочий день не начат'**
+  String get dayStatus_not_started;
+
+  /// No description provided for @dayStatus_at_work.
+  ///
+  /// In ru, this message translates to:
+  /// **'На работе'**
+  String get dayStatus_at_work;
+
+  /// No description provided for @dayStatus_on_break.
+  ///
+  /// In ru, this message translates to:
+  /// **'На перерыве'**
+  String get dayStatus_on_break;
+
+  /// No description provided for @dayStatus_out.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вышли'**
+  String get dayStatus_out;
+
+  /// No description provided for @dayStatus_finished.
+  ///
+  /// In ru, this message translates to:
+  /// **'Рабочий день завершён'**
+  String get dayStatus_finished;
+
+  /// No description provided for @dayStatus_day_off.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выходной'**
+  String get dayStatus_day_off;
+
+  /// No description provided for @dayStatus_on_leave.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отсутствие по документу'**
+  String get dayStatus_on_leave;
+
+  /// No description provided for @dayStatus_absent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет прихода'**
+  String get dayStatus_absent;
+
+  /// No description provided for @dayStatus_other.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет данных'**
+  String get dayStatus_other;
+
+  /// No description provided for @dayLate.
+  ///
+  /// In ru, this message translates to:
+  /// **'Опоздание {n} мин'**
+  String dayLate(int n);
+
+  /// No description provided for @myTasksTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Мои задачи'**
+  String get myTasksTitle;
+
+  /// No description provided for @myTasksNew.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новые'**
+  String get myTasksNew;
+
+  /// No description provided for @myTasksWaiting.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ждут'**
+  String get myTasksWaiting;
+
+  /// No description provided for @prefsTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Что присылать'**
+  String get prefsTitle;
+
+  /// No description provided for @prefsHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отключённые разделы исчезают из уведомлений и счётчиков на всех устройствах.'**
+  String get prefsHint;
+
+  /// No description provided for @prefCat_tasks.
+  ///
+  /// In ru, this message translates to:
+  /// **'Задачи'**
+  String get prefCat_tasks;
+
+  /// No description provided for @prefCat_ai.
+  ///
+  /// In ru, this message translates to:
+  /// **'AI'**
+  String get prefCat_ai;
+
+  /// No description provided for @prefCat_hr.
+  ///
+  /// In ru, this message translates to:
+  /// **'HR'**
+  String get prefCat_hr;
+
+  /// No description provided for @prefCat_sales.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продажи'**
+  String get prefCat_sales;
+
+  /// No description provided for @prefCat_system.
+  ///
+  /// In ru, this message translates to:
+  /// **'Система'**
+  String get prefCat_system;
+
+  /// No description provided for @prefsQueued.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сохранится, когда появится сеть'**
+  String get prefsQueued;
+
+  /// No description provided for @prefsRejected.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось сохранить: {error}'**
+  String prefsRejected(String error);
+
+  /// No description provided for @telegramTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Telegram'**
+  String get telegramTitle;
+
+  /// No description provided for @telegramNone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Telegram не привязан. Привяжите аккаунт, чтобы AI-агент отвечал вам в Telegram с вашими правами.'**
+  String get telegramNone;
+
+  /// No description provided for @telegramFull.
+  ///
+  /// In ru, this message translates to:
+  /// **'полный доступ'**
+  String get telegramFull;
+
+  /// No description provided for @telegramLimited.
+  ///
+  /// In ru, this message translates to:
+  /// **'только отправленные данные'**
+  String get telegramLimited;
+
+  /// No description provided for @telegramLink.
+  ///
+  /// In ru, this message translates to:
+  /// **'Привязать Telegram'**
+  String get telegramLink;
+
+  /// No description provided for @telegramUnlink.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отвязать'**
+  String get telegramUnlink;
+
+  /// No description provided for @telegramUnlinkConfirm.
+  ///
+  /// In ru, this message translates to:
+  /// **'Агент перестанет отвечать вам с вашими правами до новой привязки.'**
+  String get telegramUnlinkConfirm;
+
+  /// No description provided for @telegramCodeTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Код привязки'**
+  String get telegramCodeTitle;
+
+  /// No description provided for @telegramCodeHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отправьте этот код в Telegram: {to}. Код действует 15 минут.'**
+  String telegramCodeHint(String to);
+
+  /// No description provided for @actionCopy.
+  ///
+  /// In ru, this message translates to:
+  /// **'Скопировать'**
+  String get actionCopy;
+
+  /// No description provided for @copied.
+  ///
+  /// In ru, this message translates to:
+  /// **'Скопировано'**
+  String get copied;
+
+  /// No description provided for @securityTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Безопасность'**
+  String get securityTitle;
+
+  /// No description provided for @securityPassword.
+  ///
+  /// In ru, this message translates to:
+  /// **'Пароль'**
+  String get securityPassword;
+
+  /// No description provided for @securityPasswordHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Пароль меняет администратор OneBase'**
+  String get securityPasswordHint;
+
+  /// No description provided for @securitySession.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сеанс'**
+  String get securitySession;
+
+  /// No description provided for @securitySessionHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выход закрывает сеанс только на этом телефоне'**
+  String get securitySessionHint;
+
+  /// No description provided for @securityStorage.
+  ///
+  /// In ru, this message translates to:
+  /// **'Данные на телефоне'**
+  String get securityStorage;
+
+  /// No description provided for @securityStorageHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Токен — в защищённом хранилище, сводки — в кэше приложения ({n} записей)'**
+  String securityStorageHint(int n);
+
+  /// No description provided for @securityClearCache.
+  ///
+  /// In ru, this message translates to:
+  /// **'Очистить кэш'**
+  String get securityClearCache;
+
+  /// No description provided for @cacheCleared.
+  ///
+  /// In ru, this message translates to:
+  /// **'Кэш очищен'**
+  String get cacheCleared;
+
+  /// No description provided for @syncTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Синхронизация'**
+  String get syncTitle;
+
+  /// No description provided for @syncPending.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ждут отправки: {n}'**
+  String syncPending(int n);
+
+  /// No description provided for @syncAllSent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все изменения отправлены'**
+  String get syncAllSent;
+
+  /// No description provided for @syncFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сервер отказал: {error}'**
+  String syncFailed(String error);
+
+  /// No description provided for @syncNow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отправить сейчас'**
+  String get syncNow;
+
+  /// No description provided for @profileRoles.
+  ///
+  /// In ru, this message translates to:
+  /// **'Роли'**
+  String get profileRoles;
+
+  /// No description provided for @profileDepartment.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отдел'**
+  String get profileDepartment;
+
+  /// No description provided for @organization1c.
+  ///
+  /// In ru, this message translates to:
+  /// **'Организация 1С'**
+  String get organization1c;
+
+  /// No description provided for @langRu.
+  ///
+  /// In ru, this message translates to:
+  /// **'Русский'**
+  String get langRu;
+
+  /// No description provided for @langUz.
+  ///
+  /// In ru, this message translates to:
+  /// **'O\'zbekcha'**
+  String get langUz;
+
+  /// No description provided for @langSystem.
+  ///
+  /// In ru, this message translates to:
+  /// **'Как в системе'**
+  String get langSystem;
 }
 
 class _AppLocalizationsDelegate

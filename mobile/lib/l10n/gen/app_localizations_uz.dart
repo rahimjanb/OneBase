@@ -22,7 +22,7 @@ class AppLocalizationsUz extends AppLocalizations {
   String get navTasks => 'Vazifalar';
 
   @override
-  String get navAi => 'AI';
+  String get navAi => 'Konsultant';
 
   @override
   String get navProfile => 'Profil';
@@ -424,7 +424,7 @@ class AppLocalizationsUz extends AppLocalizations {
   String get financeByMonth => 'Oylar bo\'yicha';
 
   @override
-  String get deptTitle => 'Bo\'linmalar';
+  String get deptTitle => 'Bo\'limlar';
 
   @override
   String get hrAttendance => 'Bugungi kelish';
@@ -556,4 +556,620 @@ class AppLocalizationsUz extends AppLocalizations {
 
   @override
   String get rowExecution => 'Reja bajarilishi';
+
+  @override
+  String get moduleDepartments => 'Bo\'limlar';
+
+  @override
+  String get moduleSales => 'Mijozlar';
+
+  @override
+  String get moduleFinance => 'Moliya';
+
+  @override
+  String get moduleProduction => 'Ishlab chiqarish';
+
+  @override
+  String get moduleWarehouse => 'Ombor';
+
+  @override
+  String get moduleRequests => 'Arizalar';
+
+  @override
+  String get moduleHr => 'HR';
+
+  @override
+  String get moduleInsights => 'AI hisobot';
+
+  @override
+  String get moduleNotifications => 'Bildirishnomalar';
+
+  @override
+  String get moduleSettings => 'Sozlamalar';
+
+  @override
+  String get navOpenMenu => 'Bo\'limlar menyusini ochish';
+
+  @override
+  String get navCloseMenu => 'Menyuni yopish';
+
+  @override
+  String get navSections => 'Asosiy bo\'limlar';
+
+  @override
+  String get searchTitle => 'Qidiruv';
+
+  @override
+  String notificationsUnread(int n) {
+    return 'Bildirishnomalar: $n ta o\'qilmagan';
+  }
+
+  @override
+  String get homePlanDone => 'Reja bajarildi';
+
+  @override
+  String get homeAttendanceToday => 'Bugungi davomat';
+
+  @override
+  String get homeAllDeptsOk => 'barcha bo\'limlar me\'yorda';
+
+  @override
+  String homeDeptsAttention(int n) {
+    return '$n ta bo\'lim — e\'tibor';
+  }
+
+  @override
+  String get homeWaiting => 'Sizni kutmoqda';
+
+  @override
+  String homeAwaitingApproval(int n) {
+    return 'Tasdiqlashingizni kutmoqda: $n';
+  }
+
+  @override
+  String homePickUp(int n) {
+    return 'Omborda olish mumkin: $n';
+  }
+
+  @override
+  String get homePickUpDept =>
+      'Bo\'lim arizalari bo\'yicha tovar omborda kutmoqda — omborchidan oling.';
+
+  @override
+  String get homePickUpMine =>
+      'Arizalaringiz bo\'yicha tovar omborda kutmoqda — omborchidan oling.';
+
+  @override
+  String homeAcceptedWeek(String sum) {
+    return 'Hafta davomida omborga qabul qilindi: $sum';
+  }
+
+  @override
+  String get filterPeriod7d => '7 kun';
+
+  @override
+  String get filterPeriod30d => '30 kun';
+
+  @override
+  String get filterPeriodQuarter => 'Chorak';
+
+  @override
+  String get filterPeriodYear => 'Yil';
+
+  @override
+  String get filterAllDepartments => 'Barcha bo\'limlar';
+
+  @override
+  String filterDepartmentsN(int n) {
+    return 'Bo\'limlar: $n';
+  }
+
+  @override
+  String get filterApply => 'Qo\'llash';
+
+  @override
+  String get filterReset => 'Tozalash';
+
+  @override
+  String get heroSalesPlan => 'Savdo rejasining bajarilishi';
+
+  @override
+  String get heroVsSameDays => 'o\'tgan oyning shu kunlariga';
+
+  @override
+  String get heroVsPrevDay => 'oldingi ish kuniga';
+
+  @override
+  String get heroGoal => 'maqsad';
+
+  @override
+  String get heroNorm => 'me\'yor';
+
+  @override
+  String get unitPp => 'f.p.';
+
+  @override
+  String get statForecast => 'Prognoz';
+
+  @override
+  String get statToMonthEnd => 'oy oxiriga';
+
+  @override
+  String statOverdueN(int n) {
+    return '$n ta muddati o\'tgan';
+  }
+
+  @override
+  String statDueWeekN(int n) {
+    return '$n ta shu hafta muddati';
+  }
+
+  @override
+  String get statAttendanceMonth => 'Oylik davomat';
+
+  @override
+  String get statPerMonth => 'oy uchun';
+
+  @override
+  String get quickTask => 'Vazifa';
+
+  @override
+  String get quickAskAi => 'AI dan so\'rash';
+
+  @override
+  String get quickExport => 'Eksport';
+
+  @override
+  String get quickReportAi => 'AI hisobot';
+
+  @override
+  String get focusTitle => 'Kun diqqati';
+
+  @override
+  String focusDepartments(int n) {
+    return '$n ta bo\'lim';
+  }
+
+  @override
+  String focusActiveTasks(int n) {
+    return '$n ta faol vazifa';
+  }
+
+  @override
+  String get focusFallback => 'AI-konsultant topilmalari';
+
+  @override
+  String get focusCalm => 'Bugun hammasi tinch';
+
+  @override
+  String focusMore(int n) {
+    return 'Yana $n';
+  }
+
+  @override
+  String focusAskQuestion(String list) {
+    return '«Kun diqqati» topilmalarini tahlil qilib, bugun nima qilish kerakligini ayting: $list';
+  }
+
+  @override
+  String get focusAskEmpty => 'Bugun kompaniyada nimani tekshirish kerak?';
+
+  @override
+  String homeAskQuestion(String period, String scope) {
+    return 'Kompaniya ko\'rsatkichlarini «$period» davri uchun tahlil qiling$scope: hozir nimaga e\'tibor berish va birinchi navbatda nima qilish kerak?';
+  }
+
+  @override
+  String get catFinance => 'Moliya';
+
+  @override
+  String get catSales => 'Savdo';
+
+  @override
+  String get catMarketing => 'Marketing';
+
+  @override
+  String get catHr => 'HR';
+
+  @override
+  String get catProduction => 'Ishlab chiqarish';
+
+  @override
+  String get catSupply => 'Ta\'minot';
+
+  @override
+  String get dynTitle => 'Dinamika';
+
+  @override
+  String get dynMore => 'Batafsil';
+
+  @override
+  String get dynSales => 'Savdo';
+
+  @override
+  String get dynRevenue => 'Tushum';
+
+  @override
+  String get dynAttendance => 'Davomat';
+
+  @override
+  String get dynAverage => 'O\'rtacha';
+
+  @override
+  String get dynBest => 'Eng yaxshi hafta';
+
+  @override
+  String get dynAbove => 'Maqsaddan yuqori';
+
+  @override
+  String dynOfTotal(int n, int total) {
+    return '$total dan $n';
+  }
+
+  @override
+  String dynForWeeks(int n) {
+    return '$n haftada';
+  }
+
+  @override
+  String dynGoal(String n) {
+    return 'maqsad $n%';
+  }
+
+  @override
+  String dynWeekValue(int w, String value) {
+    return '$w-hafta · $value';
+  }
+
+  @override
+  String dynCaption(int w, String days) {
+    return '$w-hafta — joriy, $days ma\'lumoti';
+  }
+
+  @override
+  String daysN(int n) {
+    return '$n kun';
+  }
+
+  @override
+  String get dynEmpty => 'Davr uchun ma\'lumot yo\'q';
+
+  @override
+  String dynSemantics(String name, String avg, String best) {
+    return '$name haftalar bo\'yicha: o\'rtacha $avg, eng yaxshi hafta $best';
+  }
+
+  @override
+  String tasksAllN(String n) {
+    return 'Hammasi $n';
+  }
+
+  @override
+  String get tasksNone => 'Davr uchun vazifalar yo\'q';
+
+  @override
+  String get tasksDonePct => 'bajarildi';
+
+  @override
+  String get tasksDone => 'Bajarildi';
+
+  @override
+  String get tasksInWork => 'Jarayonda';
+
+  @override
+  String get tasksOnReview => 'Tekshiruvda';
+
+  @override
+  String get tasksOverdueLabel => 'Muddati o\'tgan';
+
+  @override
+  String tasksOverdueBanner(int n) {
+    return '$n ta vazifa muddati o\'tgan';
+  }
+
+  @override
+  String tasksOverdueIn(int n, String name) {
+    return ' — «$name» bo\'limida $n ta';
+  }
+
+  @override
+  String deptOkN(int n) {
+    return '$n me\'yorda';
+  }
+
+  @override
+  String deptAttentionN(int n) {
+    return '$n e\'tibor';
+  }
+
+  @override
+  String get deptNone => 'Bo\'limlar bo\'yicha ma\'lumot yo\'q';
+
+  @override
+  String get deptSalesMetric => 'Oylik reja bajarilishi';
+
+  @override
+  String get deptHrMetric => 'Oy boshidan davomat';
+
+  @override
+  String deptWeekTrend(String n) {
+    return '$n hafta';
+  }
+
+  @override
+  String get statusAttention => 'E\'tibor';
+
+  @override
+  String get statusOk => 'Me\'yorda';
+
+  @override
+  String get reportTitle => 'Haftalik AI hisobot';
+
+  @override
+  String reportLine(String risks, String recs) {
+    return 'bo\'limlar bo\'yicha $risks va $recs';
+  }
+
+  @override
+  String risksN(int n) {
+    return '$n ta xavf';
+  }
+
+  @override
+  String recsN(int n) {
+    return '$n ta tavsiya';
+  }
+
+  @override
+  String get dataUpdatedNow => 'Ma\'lumotlar hozirgina yangilandi';
+
+  @override
+  String dataUpdatedMin(int n) {
+    return 'Ma\'lumotlar $n daqiqa oldin yangilandi';
+  }
+
+  @override
+  String get dataPullHint => 'yangilash uchun torting';
+
+  @override
+  String get dataFailed => 'Yangilab bo\'lmadi';
+
+  @override
+  String get dataUpdating => 'Yangilanmoqda…';
+
+  @override
+  String offlineSince(String time) {
+    return 'Aloqa yo\'q · $time holatidagi ma\'lumotlar';
+  }
+
+  @override
+  String get exportTitle => 'Sharhni eksport qilish';
+
+  @override
+  String get exportCsv => 'Excel (CSV)';
+
+  @override
+  String get exportCsvHint =>
+      'Ko\'rsatkichlar, vazifalar va bo\'limlar jadvalda';
+
+  @override
+  String get homeMoreSales => 'Oy savdosi';
+
+  @override
+  String get homeMoreFinance => '1C moliya';
+
+  @override
+  String get homeKeyMetric => 'Asosiy ko\'rsatkich';
+
+  @override
+  String homeAgentsN(int n) {
+    return '$n ta savdo vakili';
+  }
+
+  @override
+  String get homeSearchHint => 'Bo\'limlar, xodimlar, mijozlar';
+
+  @override
+  String get profileOpen => 'Profilni ochish';
+
+  @override
+  String get myDayTitle => 'Mening kunim';
+
+  @override
+  String myDayShift(String from, String to) {
+    return 'Smena $from–$to';
+  }
+
+  @override
+  String get myDayArrival => 'Keldingiz';
+
+  @override
+  String get myDayDeparture => 'Ketdingiz';
+
+  @override
+  String get myDayWorked => 'Ishlangan';
+
+  @override
+  String get myDayLateWeek => 'Haftadagi kechikishlar';
+
+  @override
+  String myDayHoursMinutes(int h, int m) {
+    return '$h soat $m daq';
+  }
+
+  @override
+  String get dayStatus_not_started => 'Ish kuni boshlanmagan';
+
+  @override
+  String get dayStatus_at_work => 'Ishda';
+
+  @override
+  String get dayStatus_on_break => 'Tanaffusda';
+
+  @override
+  String get dayStatus_out => 'Chiqib ketdingiz';
+
+  @override
+  String get dayStatus_finished => 'Ish kuni tugadi';
+
+  @override
+  String get dayStatus_day_off => 'Dam olish kuni';
+
+  @override
+  String get dayStatus_on_leave => 'Hujjat bo\'yicha yo\'qlik';
+
+  @override
+  String get dayStatus_absent => 'Kelmagan';
+
+  @override
+  String get dayStatus_other => 'Ma\'lumot yo\'q';
+
+  @override
+  String dayLate(int n) {
+    return '$n daqiqa kechikish';
+  }
+
+  @override
+  String get myTasksTitle => 'Mening vazifalarim';
+
+  @override
+  String get myTasksNew => 'Yangi';
+
+  @override
+  String get myTasksWaiting => 'Kutmoqda';
+
+  @override
+  String get prefsTitle => 'Nimalarni yuborish';
+
+  @override
+  String get prefsHint =>
+      'O\'chirilgan bo\'limlar barcha qurilmalarda bildirishnomalar va hisoblagichlardan yo\'qoladi.';
+
+  @override
+  String get prefCat_tasks => 'Vazifalar';
+
+  @override
+  String get prefCat_ai => 'AI';
+
+  @override
+  String get prefCat_hr => 'HR';
+
+  @override
+  String get prefCat_sales => 'Savdo';
+
+  @override
+  String get prefCat_system => 'Tizim';
+
+  @override
+  String get prefsQueued => 'Tarmoq paydo bo\'lganda saqlanadi';
+
+  @override
+  String prefsRejected(String error) {
+    return 'Saqlab bo\'lmadi: $error';
+  }
+
+  @override
+  String get telegramTitle => 'Telegram';
+
+  @override
+  String get telegramNone =>
+      'Telegram bog\'lanmagan. AI-agent sizga Telegramda sizning huquqlaringiz bilan javob berishi uchun akkauntni bog\'lang.';
+
+  @override
+  String get telegramFull => 'to\'liq kirish';
+
+  @override
+  String get telegramLimited => 'faqat yuborilgan ma\'lumotlar';
+
+  @override
+  String get telegramLink => 'Telegramni bog\'lash';
+
+  @override
+  String get telegramUnlink => 'Uzish';
+
+  @override
+  String get telegramUnlinkConfirm =>
+      'Agent qayta bog\'lamaguningizcha sizga huquqlaringiz bilan javob bermaydi.';
+
+  @override
+  String get telegramCodeTitle => 'Bog\'lash kodi';
+
+  @override
+  String telegramCodeHint(String to) {
+    return 'Ushbu kodni Telegramga yuboring: $to. Kod 15 daqiqa amal qiladi.';
+  }
+
+  @override
+  String get actionCopy => 'Nusxalash';
+
+  @override
+  String get copied => 'Nusxalandi';
+
+  @override
+  String get securityTitle => 'Xavfsizlik';
+
+  @override
+  String get securityPassword => 'Parol';
+
+  @override
+  String get securityPasswordHint =>
+      'Parolni OneBase administratori o\'zgartiradi';
+
+  @override
+  String get securitySession => 'Seans';
+
+  @override
+  String get securitySessionHint =>
+      'Chiqish faqat shu telefondagi seansni yopadi';
+
+  @override
+  String get securityStorage => 'Telefondagi ma\'lumotlar';
+
+  @override
+  String securityStorageHint(int n) {
+    return 'Token himoyalangan xotirada, hisobotlar ilova keshida ($n ta yozuv)';
+  }
+
+  @override
+  String get securityClearCache => 'Keshni tozalash';
+
+  @override
+  String get cacheCleared => 'Kesh tozalandi';
+
+  @override
+  String get syncTitle => 'Sinxronlash';
+
+  @override
+  String syncPending(int n) {
+    return 'Yuborishni kutmoqda: $n';
+  }
+
+  @override
+  String get syncAllSent => 'Barcha o\'zgarishlar yuborildi';
+
+  @override
+  String syncFailed(String error) {
+    return 'Server rad etdi: $error';
+  }
+
+  @override
+  String get syncNow => 'Hozir yuborish';
+
+  @override
+  String get profileRoles => 'Rollar';
+
+  @override
+  String get profileDepartment => 'Bo\'lim';
+
+  @override
+  String get organization1c => '1C tashkiloti';
+
+  @override
+  String get langRu => 'Ruscha';
+
+  @override
+  String get langUz => 'O\'zbekcha';
+
+  @override
+  String get langSystem => 'Tizimdagidek';
 }

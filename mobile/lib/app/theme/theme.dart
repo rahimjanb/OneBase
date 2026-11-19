@@ -4,18 +4,22 @@ import 'package:flutter/services.dart';
 
 import 'tokens.dart';
 
-/// Тема OneBase на Material 3: сдержанная, «как iOS» — ровные поверхности, тонкие линии вместо теней, системный шрифт
-/// (SF Pro / Roboto), крупные цифры. Цвета — из [ObColors].
+/// Шрифт веба OneBase (Onest, кириллица и латиница; веса 400–800 — статические начертания в `assets/fonts`).
+const obFont = 'Onest';
+
+/// Тема OneBase на Material 3 по мобильному дизайну веба: карточки с тонкой рамкой без теней, скругления 20, шрифт Onest,
+/// крупные цифры с плотным трекингом. Цвета — из [ObColors].
 abstract final class ObTheme {
-  static ThemeData light({TargetPlatform? platform}) => _build(ObColors.light, Brightness.light, platform);
+  static ThemeData light({TargetPlatform? platform}) => _build(ObColors.light, platform);
 
-  static ThemeData dark({TargetPlatform? platform}) => _build(ObColors.dark, Brightness.dark, platform);
+  static ThemeData dark({TargetPlatform? platform}) => _build(ObColors.dark, platform);
 
-  static ThemeData _build(ObColors c, Brightness brightness, TargetPlatform? platform) {
-    final isDark = brightness == Brightness.dark;
+  static ThemeData _build(ObColors c, TargetPlatform? platform) {
+    final brightness = c.brightness;
+    final isDark = c.isDark;
     final scheme = ColorScheme(
       brightness: brightness,
-      primary: c.accent,
+      primary: c.accentFill,
       onPrimary: Colors.white,
       primaryContainer: c.accentSoft,
       onPrimaryContainer: c.accentStrong,
@@ -23,7 +27,7 @@ abstract final class ObTheme {
       onSecondary: Colors.white,
       secondaryContainer: c.accentSoft,
       onSecondaryContainer: c.accentStrong,
-      tertiary: c.ok,
+      tertiary: c.violet,
       onTertiary: Colors.white,
       error: c.bad,
       onError: Colors.white,
@@ -40,9 +44,9 @@ abstract final class ObTheme {
       outline: c.lineStrong,
       outlineVariant: c.line,
       shadow: Colors.black,
-      scrim: Colors.black54,
-      inverseSurface: c.ink,
-      onInverseSurface: c.surface,
+      scrim: c.nav.overlay,
+      inverseSurface: c.popBg,
+      onInverseSurface: c.popText,
       inversePrimary: c.accentSoft,
     );
 
@@ -51,13 +55,14 @@ abstract final class ObTheme {
       brightness: brightness,
       colorScheme: scheme,
       platform: platform,
+      fontFamily: obFont,
       visualDensity: VisualDensity.standard,
     );
     final text = _text(base.textTheme, c);
     final isApple = (platform ?? base.platform) == TargetPlatform.iOS || (platform ?? base.platform) == TargetPlatform.macOS;
     final field = OutlineInputBorder(
       borderRadius: BorderRadius.circular(ObRadius.md),
-      borderSide: BorderSide.none,
+      borderSide: BorderSide(color: c.line),
     );
 
     return base.copyWith(
@@ -88,81 +93,56 @@ abstract final class ObTheme {
           side: BorderSide(color: c.line),
         ),
       ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: c.surface,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        height: 64,
-        indicatorColor: c.accentSoft,
-        indicatorShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ObRadius.md)),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        iconTheme: WidgetStateProperty.resolveWith(
-          (s) => IconThemeData(size: 24, color: s.contains(WidgetState.selected) ? c.accentStrong : c.ink3),
-        ),
-        labelTextStyle: WidgetStateProperty.resolveWith(
-          (s) => text.labelSmall!.copyWith(
-            fontSize: 11,
-            fontWeight: s.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w500,
-            color: s.contains(WidgetState.selected) ? c.accentStrong : c.ink3,
-          ),
-        ),
-      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: c.muted,
+        fillColor: c.surface,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
         border: field,
         enabledBorder: field,
         focusedBorder: field.copyWith(borderSide: BorderSide(color: c.accent, width: 1.5)),
         errorBorder: field.copyWith(borderSide: BorderSide(color: c.bad, width: 1.2)),
         focusedErrorBorder: field.copyWith(borderSide: BorderSide(color: c.bad, width: 1.5)),
-        hintStyle: text.bodyLarge!.copyWith(color: c.ink3),
-        labelStyle: text.bodyMedium!.copyWith(color: c.ink2),
+        hintStyle: text.bodyLarge!.copyWith(color: c.subtle),
+        labelStyle: text.bodyMedium!.copyWith(color: c.ink3),
         errorStyle: text.bodySmall!.copyWith(color: c.bad),
+        prefixIconColor: c.ink3,
+        suffixIconColor: c.ink3,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: c.accent,
+          backgroundColor: c.accentFill,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: c.accent.withValues(alpha: 0.4),
+          disabledBackgroundColor: c.accentFill.withValues(alpha: 0.4),
           disabledForegroundColor: Colors.white.withValues(alpha: 0.8),
           minimumSize: const Size(64, 52),
           textStyle: text.titleSmall!.copyWith(fontWeight: FontWeight.w600, fontSize: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ObRadius.md)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ObRadius.tile)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: c.ink,
+          backgroundColor: c.surface,
           minimumSize: const Size(64, 48),
           side: BorderSide(color: c.line),
           textStyle: text.titleSmall!.copyWith(fontWeight: FontWeight.w600),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ObRadius.md)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ObRadius.tile)),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: c.accentStrong,
-          textStyle: text.titleSmall!.copyWith(fontWeight: FontWeight.w600),
+          textStyle: text.titleSmall!.copyWith(fontWeight: FontWeight.w600, fontSize: 13),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ObRadius.sm)),
         ),
       ),
-      segmentedButtonTheme: SegmentedButtonThemeData(
-        style: SegmentedButton.styleFrom(
-          backgroundColor: c.muted,
-          foregroundColor: c.ink2,
-          selectedBackgroundColor: c.surface,
-          selectedForegroundColor: c.ink,
-          side: BorderSide(color: c.line),
-          textStyle: text.labelLarge,
-        ),
-      ),
+      iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: c.ink2)),
       chipTheme: ChipThemeData(
-        backgroundColor: c.muted,
+        backgroundColor: c.surface,
         selectedColor: c.accentSoft,
-        side: BorderSide.none,
+        side: BorderSide(color: c.line),
         labelStyle: text.labelLarge!.copyWith(color: c.ink),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ObRadius.sm)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
       ),
       dividerTheme: DividerThemeData(color: c.line, thickness: 1, space: 1),
       listTileTheme: ListTileThemeData(
@@ -172,24 +152,39 @@ abstract final class ObTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ObRadius.md)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: c.surface,
+        backgroundColor: isDark ? const Color(0xFF0E1629) : c.surface,
         surfaceTintColor: Colors.transparent,
         showDragHandle: true,
         dragHandleColor: c.lineStrong,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(ObRadius.xl))),
+        modalBarrierColor: c.nav.overlay,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(ObRadius.sheet))),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: c.surface,
+        backgroundColor: isDark ? const Color(0xFF0E1629) : c.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ObRadius.xl)),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: c.ink,
-        contentTextStyle: text.bodyMedium!.copyWith(color: c.surface),
+        backgroundColor: c.popBg,
+        contentTextStyle: text.bodyMedium!.copyWith(color: c.popText),
+        actionTextColor: isDark ? c.accentStrong : const Color(0xFF8DB0FF),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ObRadius.md)),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(color: c.accent, linearTrackColor: c.muted),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: c.accent, linearTrackColor: c.track, circularTrackColor: c.track),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : c.ink3),
+        trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accentFill : c.muted),
+        trackOutlineColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.transparent : c.lineStrong),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: c.ink,
+        unselectedLabelColor: c.ink3,
+        indicatorColor: c.accent,
+        dividerColor: c.line,
+        labelStyle: text.titleSmall!.copyWith(fontWeight: FontWeight.w600),
+        unselectedLabelStyle: text.titleSmall!.copyWith(fontWeight: FontWeight.w500),
+      ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
@@ -200,22 +195,24 @@ abstract final class ObTheme {
     );
   }
 
-  /// Шкала текста: крупные заголовки с плотным трекингом, спокойный основной текст.
+  /// Шкала текста по мобильному «Обзору» веба: приветствие 26/700, заголовок секции 17/700, основной текст 14–15, подписи 11–12.
   static TextTheme _text(TextTheme base, ObColors c) {
     TextStyle? s(TextStyle? t, double size, FontWeight w, Color color, {double? spacing, double? height}) =>
-        t?.copyWith(fontSize: size, fontWeight: w, color: color, letterSpacing: spacing, height: height);
+        t?.copyWith(fontFamily: obFont, fontSize: size, fontWeight: w, color: color, letterSpacing: spacing, height: height);
     return base.copyWith(
-      displaySmall: s(base.displaySmall, 34, FontWeight.w700, c.ink, spacing: -0.8, height: 1.1),
-      headlineMedium: s(base.headlineMedium, 28, FontWeight.w700, c.ink, spacing: -0.6, height: 1.15),
+      displayLarge: s(base.displayLarge, 44, FontWeight.w700, c.ink, spacing: -1.5, height: 1),
+      displayMedium: s(base.displayMedium, 36, FontWeight.w700, c.ink, spacing: -1, height: 1.05),
+      displaySmall: s(base.displaySmall, 30, FontWeight.w700, c.ink, spacing: -0.8, height: 1.1),
+      headlineMedium: s(base.headlineMedium, 26, FontWeight.w700, c.ink, spacing: -0.5, height: 1.15),
       headlineSmall: s(base.headlineSmall, 22, FontWeight.w700, c.ink, spacing: -0.4, height: 1.2),
-      titleLarge: s(base.titleLarge, 18, FontWeight.w600, c.ink, spacing: -0.2),
-      titleMedium: s(base.titleMedium, 16, FontWeight.w600, c.ink, spacing: -0.1),
-      titleSmall: s(base.titleSmall, 14, FontWeight.w600, c.ink),
-      bodyLarge: s(base.bodyLarge, 16, FontWeight.w400, c.ink, height: 1.35),
-      bodyMedium: s(base.bodyMedium, 14, FontWeight.w400, c.ink2, height: 1.35),
-      bodySmall: s(base.bodySmall, 12, FontWeight.w400, c.ink3, height: 1.3),
-      labelLarge: s(base.labelLarge, 14, FontWeight.w500, c.ink),
-      labelMedium: s(base.labelMedium, 12, FontWeight.w500, c.ink2),
+      titleLarge: s(base.titleLarge, 17, FontWeight.w700, c.ink, spacing: -0.2, height: 1.25),
+      titleMedium: s(base.titleMedium, 15, FontWeight.w600, c.ink, height: 1.3),
+      titleSmall: s(base.titleSmall, 14, FontWeight.w600, c.ink, height: 1.3),
+      bodyLarge: s(base.bodyLarge, 15, FontWeight.w400, c.ink, height: 1.4),
+      bodyMedium: s(base.bodyMedium, 14, FontWeight.w400, c.ink2, height: 1.4),
+      bodySmall: s(base.bodySmall, 12, FontWeight.w400, c.ink3, height: 1.35),
+      labelLarge: s(base.labelLarge, 13, FontWeight.w600, c.ink),
+      labelMedium: s(base.labelMedium, 12, FontWeight.w500, c.ink3),
       labelSmall: s(base.labelSmall, 11, FontWeight.w500, c.ink3, spacing: 0.1),
     );
   }

@@ -9,17 +9,17 @@ import 'settings_store.dart';
 /// Языки интерфейса: русский и узбекский (латиница) — как у веба.
 const supportedLocales = [Locale('ru'), Locale('uz')];
 
-/// Тема: как в системе, светлая или тёмная. Сохраняется на устройстве.
+/// Тема: тёмная (по умолчанию — как у веба OneBase), светлая или как в системе. Сохраняется на устройстве.
 class ThemeModeController extends Notifier<ThemeMode> {
   @override
   ThemeMode build() {
     final saved = ref.watch(initialSettingsProvider)[SettingsStore.themeKey];
-    return ThemeMode.values.firstWhere((m) => m.name == saved, orElse: () => ThemeMode.system);
+    return ThemeMode.values.firstWhere((m) => m.name == saved, orElse: () => ThemeMode.dark);
   }
 
   Future<void> set(ThemeMode mode) async {
     state = mode;
-    await ref.read(settingsStoreProvider).write(SettingsStore.themeKey, mode == ThemeMode.system ? null : mode.name);
+    await ref.read(settingsStoreProvider).write(SettingsStore.themeKey, mode == ThemeMode.dark ? null : mode.name);
   }
 }
 

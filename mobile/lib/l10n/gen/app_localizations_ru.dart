@@ -22,7 +22,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get navTasks => 'Задачи';
 
   @override
-  String get navAi => 'AI';
+  String get navAi => 'Консультант';
 
   @override
   String get navProfile => 'Профиль';
@@ -422,7 +422,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get financeByMonth => 'По месяцам';
 
   @override
-  String get deptTitle => 'Подразделения';
+  String get deptTitle => 'Отделы';
 
   @override
   String get hrAttendance => 'Явка сегодня';
@@ -554,4 +554,674 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get rowExecution => 'Выполнение плана';
+
+  @override
+  String get moduleDepartments => 'Отделы';
+
+  @override
+  String get moduleSales => 'Клиенты';
+
+  @override
+  String get moduleFinance => 'Финансы';
+
+  @override
+  String get moduleProduction => 'Производство';
+
+  @override
+  String get moduleWarehouse => 'Склад';
+
+  @override
+  String get moduleRequests => 'Заявки';
+
+  @override
+  String get moduleHr => 'HR';
+
+  @override
+  String get moduleInsights => 'AI-отчёт';
+
+  @override
+  String get moduleNotifications => 'Уведомления';
+
+  @override
+  String get moduleSettings => 'Настройки';
+
+  @override
+  String get navOpenMenu => 'Открыть меню разделов';
+
+  @override
+  String get navCloseMenu => 'Закрыть меню';
+
+  @override
+  String get navSections => 'Основные разделы';
+
+  @override
+  String get searchTitle => 'Поиск';
+
+  @override
+  String notificationsUnread(int n) {
+    return 'Уведомления: $n непрочитанных';
+  }
+
+  @override
+  String get homePlanDone => 'План выполнен на';
+
+  @override
+  String get homeAttendanceToday => 'Явка сегодня';
+
+  @override
+  String get homeAllDeptsOk => 'все отделы в норме';
+
+  @override
+  String homeDeptsAttention(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n отдела — внимание',
+      many: '$n отделов — внимание',
+      few: '$n отдела — внимание',
+      one: '$n отдел — внимание',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeWaiting => 'Ждут вас';
+
+  @override
+  String homeAwaitingApproval(int n) {
+    return 'Ждут вашего согласования: $n';
+  }
+
+  @override
+  String homePickUp(int n) {
+    return 'Можно получить на складе: $n';
+  }
+
+  @override
+  String get homePickUpDept =>
+      'Товар по заявкам отдела ждёт на складе — заберите у кладовщика.';
+
+  @override
+  String get homePickUpMine =>
+      'Товар по вашим заявкам ждёт на складе — заберите у кладовщика.';
+
+  @override
+  String homeAcceptedWeek(String sum) {
+    return 'Принято на склад за неделю: $sum';
+  }
+
+  @override
+  String get filterPeriod7d => '7 дней';
+
+  @override
+  String get filterPeriod30d => '30 дней';
+
+  @override
+  String get filterPeriodQuarter => 'Квартал';
+
+  @override
+  String get filterPeriodYear => 'Год';
+
+  @override
+  String get filterAllDepartments => 'Все отделы';
+
+  @override
+  String filterDepartmentsN(int n) {
+    return 'Отделы: $n';
+  }
+
+  @override
+  String get filterApply => 'Применить';
+
+  @override
+  String get filterReset => 'Сбросить';
+
+  @override
+  String get heroSalesPlan => 'Выполнение плана продаж';
+
+  @override
+  String get heroVsSameDays => 'к тем же дням прошлого месяца';
+
+  @override
+  String get heroVsPrevDay => 'к прошлому рабочему дню';
+
+  @override
+  String get heroGoal => 'цель';
+
+  @override
+  String get heroNorm => 'норма';
+
+  @override
+  String get unitPp => 'п.п.';
+
+  @override
+  String get statForecast => 'Прогноз';
+
+  @override
+  String get statToMonthEnd => 'к концу месяца';
+
+  @override
+  String statOverdueN(int n) {
+    return '$n просрочено';
+  }
+
+  @override
+  String statDueWeekN(int n) {
+    return '$n срок на неделе';
+  }
+
+  @override
+  String get statAttendanceMonth => 'Явка за месяц';
+
+  @override
+  String get statPerMonth => 'за месяц';
+
+  @override
+  String get quickTask => 'Задача';
+
+  @override
+  String get quickAskAi => 'Спросить AI';
+
+  @override
+  String get quickExport => 'Экспорт';
+
+  @override
+  String get quickReportAi => 'Отчёт AI';
+
+  @override
+  String get focusTitle => 'Фокус дня';
+
+  @override
+  String focusDepartments(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n отдела',
+      many: '$n отделов',
+      few: '$n отдела',
+      one: '$n отдел',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String focusActiveTasks(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n активной задачи',
+      many: '$n активных задач',
+      few: '$n активные задачи',
+      one: '$n активная задача',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get focusFallback => 'Находки AI-консультанта';
+
+  @override
+  String get focusCalm => 'Сегодня всё спокойно';
+
+  @override
+  String focusMore(int n) {
+    return 'Ещё $n';
+  }
+
+  @override
+  String focusAskQuestion(String list) {
+    return 'Разбери находки «Фокуса дня» и подскажи, что сделать сегодня: $list';
+  }
+
+  @override
+  String get focusAskEmpty => 'Что сегодня стоит проверить в компании?';
+
+  @override
+  String homeAskQuestion(String period, String scope) {
+    return 'Разбери показатели компании за период «$period»$scope: что сейчас требует внимания и что сделать в первую очередь?';
+  }
+
+  @override
+  String get catFinance => 'Финансы';
+
+  @override
+  String get catSales => 'Продажи';
+
+  @override
+  String get catMarketing => 'Маркетинг';
+
+  @override
+  String get catHr => 'HR';
+
+  @override
+  String get catProduction => 'Производство';
+
+  @override
+  String get catSupply => 'Снабжение';
+
+  @override
+  String get dynTitle => 'Динамика';
+
+  @override
+  String get dynMore => 'Подробнее';
+
+  @override
+  String get dynSales => 'Продажи';
+
+  @override
+  String get dynRevenue => 'Выручка';
+
+  @override
+  String get dynAttendance => 'Явка';
+
+  @override
+  String get dynAverage => 'Среднее';
+
+  @override
+  String get dynBest => 'Лучшая неделя';
+
+  @override
+  String get dynAbove => 'Выше цели';
+
+  @override
+  String dynOfTotal(int n, int total) {
+    return '$n из $total';
+  }
+
+  @override
+  String dynForWeeks(int n) {
+    return 'За $n нед.';
+  }
+
+  @override
+  String dynGoal(String n) {
+    return 'цель $n%';
+  }
+
+  @override
+  String dynWeekValue(int w, String value) {
+    return 'Нед. $w · $value';
+  }
+
+  @override
+  String dynCaption(int w, String days) {
+    return 'Нед. $w — текущая, данные за $days';
+  }
+
+  @override
+  String daysN(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n дня',
+      many: '$n дней',
+      few: '$n дня',
+      one: '$n день',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get dynEmpty => 'Нет данных за период';
+
+  @override
+  String dynSemantics(String name, String avg, String best) {
+    return '$name по неделям: среднее $avg, лучшая неделя $best';
+  }
+
+  @override
+  String tasksAllN(String n) {
+    return 'Все $n';
+  }
+
+  @override
+  String get tasksNone => 'Нет задач за период';
+
+  @override
+  String get tasksDonePct => 'выполнено';
+
+  @override
+  String get tasksDone => 'Выполнено';
+
+  @override
+  String get tasksInWork => 'В работе';
+
+  @override
+  String get tasksOnReview => 'На проверке';
+
+  @override
+  String get tasksOverdueLabel => 'Просрочено';
+
+  @override
+  String tasksOverdueBanner(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n задачи просрочено',
+      many: '$n задач просрочено',
+      few: '$n задачи просрочены',
+      one: '$n задача просрочена',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksOverdueIn(int n, String name) {
+    return ' — $n в отделе «$name»';
+  }
+
+  @override
+  String deptOkN(int n) {
+    return '$n в норме';
+  }
+
+  @override
+  String deptAttentionN(int n) {
+    return '$n внимание';
+  }
+
+  @override
+  String get deptNone => 'Нет данных по отделам';
+
+  @override
+  String get deptSalesMetric => 'Выполнение плана месяца';
+
+  @override
+  String get deptHrMetric => 'Явка с начала месяца';
+
+  @override
+  String deptWeekTrend(String n) {
+    return '$n нед.';
+  }
+
+  @override
+  String get statusAttention => 'Внимание';
+
+  @override
+  String get statusOk => 'В норме';
+
+  @override
+  String get reportTitle => 'Еженедельный AI-отчёт';
+
+  @override
+  String reportLine(String risks, String recs) {
+    return '$risks и $recs по отделам';
+  }
+
+  @override
+  String risksN(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n риска',
+      many: '$n рисков',
+      few: '$n риска',
+      one: '$n риск',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String recsN(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n рекомендации',
+      many: '$n рекомендаций',
+      few: '$n рекомендации',
+      one: '$n рекомендация',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get dataUpdatedNow => 'Данные обновлены только что';
+
+  @override
+  String dataUpdatedMin(int n) {
+    return 'Данные обновлены $n мин назад';
+  }
+
+  @override
+  String get dataPullHint => 'потяните, чтобы обновить';
+
+  @override
+  String get dataFailed => 'Не удалось обновить';
+
+  @override
+  String get dataUpdating => 'Обновляем…';
+
+  @override
+  String offlineSince(String time) {
+    return 'Нет соединения · данные на $time';
+  }
+
+  @override
+  String get exportTitle => 'Экспорт обзора';
+
+  @override
+  String get exportCsv => 'Excel (CSV)';
+
+  @override
+  String get exportCsvHint => 'Показатели, задачи и отделы таблицей';
+
+  @override
+  String get homeMoreSales => 'Продажи месяца';
+
+  @override
+  String get homeMoreFinance => 'Финансы 1С';
+
+  @override
+  String get homeKeyMetric => 'Ключевая метрика';
+
+  @override
+  String homeAgentsN(int n) {
+    return '$n ТП в работе';
+  }
+
+  @override
+  String get homeSearchHint => 'Разделы, сотрудники, клиенты';
+
+  @override
+  String get profileOpen => 'Открыть профиль';
+
+  @override
+  String get myDayTitle => 'Мой день';
+
+  @override
+  String myDayShift(String from, String to) {
+    return 'Смена $from–$to';
+  }
+
+  @override
+  String get myDayArrival => 'Пришли';
+
+  @override
+  String get myDayDeparture => 'Ушли';
+
+  @override
+  String get myDayWorked => 'Отработано';
+
+  @override
+  String get myDayLateWeek => 'Опозданий за неделю';
+
+  @override
+  String myDayHoursMinutes(int h, int m) {
+    return '$h ч $m мин';
+  }
+
+  @override
+  String get dayStatus_not_started => 'Рабочий день не начат';
+
+  @override
+  String get dayStatus_at_work => 'На работе';
+
+  @override
+  String get dayStatus_on_break => 'На перерыве';
+
+  @override
+  String get dayStatus_out => 'Вышли';
+
+  @override
+  String get dayStatus_finished => 'Рабочий день завершён';
+
+  @override
+  String get dayStatus_day_off => 'Выходной';
+
+  @override
+  String get dayStatus_on_leave => 'Отсутствие по документу';
+
+  @override
+  String get dayStatus_absent => 'Нет прихода';
+
+  @override
+  String get dayStatus_other => 'Нет данных';
+
+  @override
+  String dayLate(int n) {
+    return 'Опоздание $n мин';
+  }
+
+  @override
+  String get myTasksTitle => 'Мои задачи';
+
+  @override
+  String get myTasksNew => 'Новые';
+
+  @override
+  String get myTasksWaiting => 'Ждут';
+
+  @override
+  String get prefsTitle => 'Что присылать';
+
+  @override
+  String get prefsHint =>
+      'Отключённые разделы исчезают из уведомлений и счётчиков на всех устройствах.';
+
+  @override
+  String get prefCat_tasks => 'Задачи';
+
+  @override
+  String get prefCat_ai => 'AI';
+
+  @override
+  String get prefCat_hr => 'HR';
+
+  @override
+  String get prefCat_sales => 'Продажи';
+
+  @override
+  String get prefCat_system => 'Система';
+
+  @override
+  String get prefsQueued => 'Сохранится, когда появится сеть';
+
+  @override
+  String prefsRejected(String error) {
+    return 'Не удалось сохранить: $error';
+  }
+
+  @override
+  String get telegramTitle => 'Telegram';
+
+  @override
+  String get telegramNone =>
+      'Telegram не привязан. Привяжите аккаунт, чтобы AI-агент отвечал вам в Telegram с вашими правами.';
+
+  @override
+  String get telegramFull => 'полный доступ';
+
+  @override
+  String get telegramLimited => 'только отправленные данные';
+
+  @override
+  String get telegramLink => 'Привязать Telegram';
+
+  @override
+  String get telegramUnlink => 'Отвязать';
+
+  @override
+  String get telegramUnlinkConfirm =>
+      'Агент перестанет отвечать вам с вашими правами до новой привязки.';
+
+  @override
+  String get telegramCodeTitle => 'Код привязки';
+
+  @override
+  String telegramCodeHint(String to) {
+    return 'Отправьте этот код в Telegram: $to. Код действует 15 минут.';
+  }
+
+  @override
+  String get actionCopy => 'Скопировать';
+
+  @override
+  String get copied => 'Скопировано';
+
+  @override
+  String get securityTitle => 'Безопасность';
+
+  @override
+  String get securityPassword => 'Пароль';
+
+  @override
+  String get securityPasswordHint => 'Пароль меняет администратор OneBase';
+
+  @override
+  String get securitySession => 'Сеанс';
+
+  @override
+  String get securitySessionHint =>
+      'Выход закрывает сеанс только на этом телефоне';
+
+  @override
+  String get securityStorage => 'Данные на телефоне';
+
+  @override
+  String securityStorageHint(int n) {
+    return 'Токен — в защищённом хранилище, сводки — в кэше приложения ($n записей)';
+  }
+
+  @override
+  String get securityClearCache => 'Очистить кэш';
+
+  @override
+  String get cacheCleared => 'Кэш очищен';
+
+  @override
+  String get syncTitle => 'Синхронизация';
+
+  @override
+  String syncPending(int n) {
+    return 'Ждут отправки: $n';
+  }
+
+  @override
+  String get syncAllSent => 'Все изменения отправлены';
+
+  @override
+  String syncFailed(String error) {
+    return 'Сервер отказал: $error';
+  }
+
+  @override
+  String get syncNow => 'Отправить сейчас';
+
+  @override
+  String get profileRoles => 'Роли';
+
+  @override
+  String get profileDepartment => 'Отдел';
+
+  @override
+  String get organization1c => 'Организация 1С';
+
+  @override
+  String get langRu => 'Русский';
+
+  @override
+  String get langUz => 'O\'zbekcha';
+
+  @override
+  String get langSystem => 'Как в системе';
 }

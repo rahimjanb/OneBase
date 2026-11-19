@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebase_mobile/app/app.dart';
+import 'package:onebase_mobile/app/shell/bottom_nav.dart';
 import 'package:onebase_mobile/core/auth/token_storage.dart';
 import 'package:onebase_mobile/core/database/app_database.dart';
 import 'package:onebase_mobile/core/storage/settings_store.dart';
@@ -34,7 +35,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Finder nav(String label) => find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+  Finder nav(String label) => find.descendant(of: find.byType(ObNavScaffold), matching: find.text(label));
 
   testWidgets('без входа — экран входа; пустые поля — подсказка', (tester) async {
     await pumpApp(tester);
@@ -65,7 +66,7 @@ void main() {
     expect(nav('Главная'), findsOneWidget);
     expect(nav('Аналитика'), findsOneWidget);
     expect(nav('Задачи'), findsOneWidget);
-    expect(nav('AI'), findsNothing);
+    expect(nav('Консультант'), findsNothing);
     expect(tokens.value, isNotNull);
   });
 
@@ -85,7 +86,7 @@ void main() {
     await pumpApp(tester);
     await tester.tap(nav('Профиль'));
     await tester.pumpAndSettle();
-    final logout = find.widgetWithText(OutlinedButton, 'Выйти');
+    final logout = find.text('Выйти');
     await tester.scrollUntilVisible(logout, 200, scrollable: find.byType(Scrollable).hitTestable().first);
     await tester.ensureVisible(logout);
     await tester.pumpAndSettle();

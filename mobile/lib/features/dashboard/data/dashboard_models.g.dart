@@ -88,6 +88,7 @@ _SalesKpi _$SalesKpiFromJson(Map<String, dynamic> json) => _SalesKpi(
   pace: json['pace'] == null
       ? null
       : SalesPace.fromJson(json['pace'] as Map<String, dynamic>),
+  planFactKg: (json['planFactKg'] as num?)?.toDouble(),
 );
 
 Map<String, dynamic> _$SalesKpiToJson(_SalesKpi instance) => <String, dynamic>{
@@ -107,6 +108,7 @@ Map<String, dynamic> _$SalesKpiToJson(_SalesKpi instance) => <String, dynamic>{
   'planSource': ?instance.planSource,
   'executionLevel': ?instance.executionLevel,
   'pace': ?instance.pace?.toJson(),
+  'planFactKg': ?instance.planFactKg,
 };
 
 _FlagCounts _$FlagCountsFromJson(Map<String, dynamic> json) => _FlagCounts(
@@ -160,6 +162,11 @@ _SalesDaily _$SalesDailyFromJson(Map<String, dynamic> json) => _SalesDaily(
   sameNowKg: (json['sameNowKg'] as num?)?.toDouble() ?? 0,
   sameBeforeKg: (json['sameBeforeKg'] as num?)?.toDouble() ?? 0,
   previousCutoff: json['previousCutoff'] as String?,
+  planKg: (json['planKg'] as num?)?.toDouble(),
+  planFactKg: (json['planFactKg'] as num?)?.toDouble(),
+  factKg: (json['factKg'] as num?)?.toDouble() ?? 0,
+  workedDays: (json['workedDays'] as num?)?.toInt() ?? 0,
+  elapsedDays: (json['elapsedDays'] as num?)?.toDouble(),
 );
 
 Map<String, dynamic> _$SalesDailyToJson(_SalesDaily instance) =>
@@ -176,6 +183,11 @@ Map<String, dynamic> _$SalesDailyToJson(_SalesDaily instance) =>
       'sameNowKg': instance.sameNowKg,
       'sameBeforeKg': instance.sameBeforeKg,
       'previousCutoff': ?instance.previousCutoff,
+      'planKg': ?instance.planKg,
+      'planFactKg': ?instance.planFactKg,
+      'factKg': instance.factKg,
+      'workedDays': instance.workedDays,
+      'elapsedDays': ?instance.elapsedDays,
     };
 
 _FinanceMeta _$FinanceMetaFromJson(Map<String, dynamic> json) => _FinanceMeta(
@@ -441,6 +453,8 @@ _NotificationItem _$NotificationItemFromJson(Map<String, dynamic> json) =>
       createdAt: json['createdAt'] as String,
       read: json['read'] as bool? ?? false,
       severity: json['severity'] as String?,
+      type: json['type'] as String?,
+      href: json['href'] as String?,
     );
 
 Map<String, dynamic> _$NotificationItemToJson(_NotificationItem instance) =>
@@ -453,6 +467,8 @@ Map<String, dynamic> _$NotificationItemToJson(_NotificationItem instance) =>
       'createdAt': instance.createdAt,
       'read': instance.read,
       'severity': ?instance.severity,
+      'type': ?instance.type,
+      'href': ?instance.href,
     };
 
 _NotificationPage _$NotificationPageFromJson(Map<String, dynamic> json) =>
@@ -501,6 +517,8 @@ _AiAlert _$AiAlertFromJson(Map<String, dynamic> json) => _AiAlert(
   message: json['message'] as String?,
   recommendation: json['recommendation'] as String?,
   detectedAt: json['detectedAt'] as String?,
+  rule: json['rule'] as String?,
+  href: json['href'] as String?,
 );
 
 Map<String, dynamic> _$AiAlertToJson(_AiAlert instance) => <String, dynamic>{
@@ -511,6 +529,8 @@ Map<String, dynamic> _$AiAlertToJson(_AiAlert instance) => <String, dynamic>{
   'message': ?instance.message,
   'recommendation': ?instance.recommendation,
   'detectedAt': ?instance.detectedAt,
+  'rule': ?instance.rule,
+  'href': ?instance.href,
 };
 
 _AiAlerts _$AiAlertsFromJson(Map<String, dynamic> json) => _AiAlerts(

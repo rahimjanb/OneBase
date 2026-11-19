@@ -10,6 +10,7 @@ import '../core_providers.dart';
 import '../errors/app_failure.dart';
 import '../logging/log.dart';
 import '../storage/settings_store.dart';
+import '../synchronization/outbox.dart';
 import 'auth_repository.dart';
 import 'token_holder.dart';
 import 'token_storage.dart';
@@ -129,6 +130,7 @@ class AuthController extends Notifier<AuthState> {
     await _storage.write(stored);
     // Вошёл другой пользователь — чужой кэш на телефоне не остаётся.
     await _cache.clear(keepUserId: profile.id);
+    await clearPendingOps(ref.read(appDatabaseProvider), keepUserId: profile.id);
     await _remember(profile);
     _lastRefresh = _now();
     _set(AuthSignedIn(profile));
@@ -209,6 +211,7 @@ class AuthController extends Notifier<AuthState> {
     _lastRefresh = null;
     await _safeClearStorage();
     await _cache.clear();
+    await clearPendingOps(ref.read(appDatabaseProvider));
   }
 
   Future<void> _safeClearStorage() async {

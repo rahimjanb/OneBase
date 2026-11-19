@@ -25,6 +25,20 @@ class Fmt {
             .format(v),
       );
 
+  /// Ровно [digits] знаков после запятой, как `fmt` веба: 92,1 → «92,1», 0 → «0,0».
+  String fixed(num v, [int digits = 0]) => _fix(
+        (NumberFormat.decimalPattern(_locale)
+              ..minimumFractionDigits = digits
+              ..maximumFractionDigits = digits)
+            .format(v),
+      );
+
+  /// Со знаком: «+4,2», «−3», «0».
+  String signed(num v, [int digits = 0]) => '${v > 0 ? '+' : v < 0 ? _minus : ''}${fixed(v.abs(), digits)}';
+
+  /// Процент с одной десятой: «81,9%».
+  String pct1(num v) => '${fixed(v, 1)}%';
+
   /// Сумма кратко: 4 535 279 646 → «4,54 млрд сум», 584 970 → «585 тыс. сум», 950 → «950 сум».
   String money(num v, {bool withUnit = true}) {
     final s = compact(v);

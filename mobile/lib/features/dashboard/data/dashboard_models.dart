@@ -77,6 +77,9 @@ abstract class SalesKpi with _$SalesKpi {
     String? planSource,
     String? executionLevel,
     SalesPace? pace,
+
+    /// Факт в охвате плана (кг): у недель продаж факт приводится к нему, чтобы недели сходились с выполнением месяца.
+    double? planFactKg,
   }) = _SalesKpi;
 
   factory SalesKpi.fromJson(Map<String, Object?> json) => _$SalesKpiFromJson(json);
@@ -131,6 +134,13 @@ abstract class SalesDaily with _$SalesDaily {
     @Default(0) double sameNowKg,
     @Default(0) double sameBeforeKg,
     String? previousCutoff,
+
+    /// План и факт месяца (кг) и прошедшие дни — для недель «Динамики» главной.
+    double? planKg,
+    double? planFactKg,
+    @Default(0) double factKg,
+    @Default(0) int workedDays,
+    double? elapsedDays,
   }) = _SalesDaily;
 
   const SalesDaily._();
@@ -146,6 +156,7 @@ SalesDaily salesDailyOf(Object? json) {
   final root = json! as Map<String, Object?>;
   final period = root['period']! as Map<String, Object?>;
   final calendar = root['calendar']! as Map<String, Object?>;
+  final kpi = root['kpi'] as Map<String, Object?>? ?? const {};
   final same = (root['sameDays'] as List<Object?>? ?? const []).cast<Map<String, Object?>>();
   double sum(String key) => same.fold(0, (a, r) => a + ((r[key] as num?)?.toDouble() ?? 0));
   return SalesDaily(
@@ -161,6 +172,11 @@ SalesDaily salesDailyOf(Object? json) {
     total: (calendar['total'] as num?)?.toDouble() ?? 0,
     sameNowKg: sum('kgNow'),
     sameBeforeKg: sum('kgBefore'),
+    planKg: (kpi['planKg'] as num?)?.toDouble(),
+    planFactKg: (kpi['planFactKg'] as num?)?.toDouble(),
+    factKg: (kpi['factKg'] as num?)?.toDouble() ?? 0,
+    workedDays: period['workedDays'] as int? ?? 0,
+    elapsedDays: (period['elapsedDays'] as num?)?.toDouble(),
   );
 }
 
@@ -371,6 +387,10 @@ abstract class NotificationItem with _$NotificationItem {
 
     /// info | warning | critical
     String? severity,
+
+    /// Вид события («task_assigned» …) и ссылка — путь веба.
+    String? type,
+    String? href,
   }) = _NotificationItem;
 
   factory NotificationItem.fromJson(Map<String, Object?> json) => _$NotificationItemFromJson(json);
@@ -421,6 +441,12 @@ abstract class AiAlert with _$AiAlert {
     String? message,
     String? recommendation,
     String? detectedAt,
+
+    /// Правило, которое нашло проблему («sales.region.drop»).
+    String? rule,
+
+    /// Куда ведёт находка — путь веба («/sales/regions/…»), приложение переводит его в свой экран.
+    String? href,
   }) = _AiAlert;
 
   factory AiAlert.fromJson(Map<String, Object?> json) => _$AiAlertFromJson(json);
