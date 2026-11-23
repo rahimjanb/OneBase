@@ -157,7 +157,7 @@ public sealed record ReportFreshness(DateTimeOffset? Orders, DateTimeOffset? Vis
 
 /// <summary>
 /// Предпросмотр и тест: запуск, роль и область (или получатель), день и время формирования (по умолчанию — сейчас), язык (по умолчанию — из
-/// настроек), категории карточек (отчёт 10; пусто — получателя или по умолчанию).
+/// настроек), категории карточек (отчёт 11; пусто — получателя или по умолчанию).
 /// </summary>
 public sealed record ReportPreviewInput(
     string? Job,

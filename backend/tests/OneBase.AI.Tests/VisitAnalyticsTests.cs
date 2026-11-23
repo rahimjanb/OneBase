@@ -59,6 +59,68 @@ public class VisitSequenceCounterTests
 }
 
 /// <summary>
+/// Что было после заказа (без базы): циклы «заказ → следующий заказ» пары, размер относительно обычного заказа пары, группы и корреляция.
+/// Дни: 0 — визит и заказ 10 кг, 1–2 — визиты, 3 — визит и заказ 30 кг (3× обычного), 4 — заказ 10 кг без визита, 5 — визит, 6 — визит и заказ
+/// 10 кг, 7 — визит. Обычный заказ — медиана 10, 10, 10, 30 = 10 кг.
+/// </summary>
+public class OrderCyclesTests
+{
+    private static readonly DateOnly From = new(2025, 3, 3);
+
+    private static VisitDay V(int day, decimal orderKg = 0) => new(From.AddDays(day), true, orderKg > 0, orderKg);
+
+    private static VisitDay O(int day, decimal kg) => new(From.AddDays(day), false, true, kg);
+
+    private static readonly VisitDay[] Days = [V(0, 10), V(1), V(2), V(3, 30), O(4, 10), V(5), V(6, 10), V(7)];
+
+    [Fact]
+    public void Each_order_starts_a_cycle_counted_until_the_next_order()
+    {
+        var cycles = OrderCycles.Of(Days, From, From.AddDays(7));
+
+        Assert.Equal(4, cycles.Count);
+        Assert.Equal(new OrderCycle(From, 10, 1.0, 3, true, true, 3), cycles[0]); // заказ на 3-м визите после заказа, через 3 дня
+        Assert.Equal(new OrderCycle(From.AddDays(3), 30, 3.0, 0, true, false, 1), cycles[1]); // крупный: следующий — без визита, через день
+        Assert.Equal(new OrderCycle(From.AddDays(4), 10, 1.0, 2, true, true, 2), cycles[2]);
+        Assert.Equal(new OrderCycle(From.AddDays(6), 10, 1.0, 1, false, false, null), cycles[3]); // ещё ждёт: один визит без заказа
+
+        // Заказы до периода начинают цикл только в периоде; меньше трёх заказов — «обычного» размера нет.
+        var late = OrderCycles.Of(Days, From.AddDays(4), From.AddDays(7));
+        Assert.Equal([From.AddDays(4), From.AddDays(6)], late.Select(c => c.Start));
+        Assert.All(OrderCycles.Of([V(0, 10), V(1), V(2, 40)], From, From.AddDays(2)), c => Assert.Null(c.Ratio));
+    }
+
+    [Fact]
+    public void Groups_by_size_show_conversion_after_order_visits_and_days_to_next()
+    {
+        var report = OrderCycles.Report(OrderCycles.Of(Days, From, From.AddDays(7)));
+
+        var typical = report.Relative.Single(g => g.Id == "typical");
+        Assert.Equal((3, 2, 2, 0, 1), (typical.Orders, typical.NextOrders, typical.NextOnVisit, typical.NextWithoutVisit, typical.Waiting));
+        Assert.Equal([3, 2, 1, 0, 0], typical.Buckets.Select(b => b.Reached));
+        Assert.Equal([0, 1, 1, 0, 0], typical.Buckets.Select(b => b.Orders));
+        Assert.Equal((0.5, 1.0), (typical.Buckets[1].Conversion!.Value, typical.Buckets[2].Conversion!.Value));
+        Assert.Equal((2.5, 2.5, 0.0, 2.5), (typical.AverageVisitsToNext!.Value, typical.MedianVisitsToNext!.Value, typical.NextOnFirstVisitShare!.Value,
+            typical.AverageDaysToNext!.Value));
+
+        var big = report.Relative.Single(g => g.Id == "ge_2");
+        Assert.Equal((1, 1, 0, 1, 1.0), (big.Orders, big.NextOrders, big.NextOnVisit, big.NextWithoutVisit, big.AverageDaysToNext!.Value));
+        Assert.Equal(0, report.WithoutTypical);
+        Assert.Equal(4, report.Absolute.Sum(g => g.Orders));
+        Assert.Null(report.RatioVisitsSpearman); // две пары — мало для корреляции
+    }
+
+    [Fact]
+    public void Spearman_uses_ranks_with_ties()
+    {
+        Assert.Equal(1.0, OrderCycles.Spearman([1, 2, 3, 4], [10, 20, 30, 400])!.Value, 6);
+        Assert.Equal(-1.0, OrderCycles.Spearman([1, 2, 3, 4], [4, 3, 2, 1])!.Value, 6);
+        Assert.Equal(0.9486833, OrderCycles.Spearman([1, 2, 3, 4], [1, 2, 2, 3])!.Value, 6);
+        Assert.Null(OrderCycles.Spearman([1, 1, 1], [1, 2, 3]));
+    }
+}
+
+/// <summary>
 /// Визиты ТП на PostgreSQL: номер визита по паре «ТП × точка» с днями до периода, заказы без визита и отменённые, область пользователя
 /// (ТП — только свои точки, регион — точки своих филиалов), «День ТП» (точки по порядку отметок, заказы со строками, пропущенная точка
 /// маршрута, номер визита, что точка обычно берёт), инструменты ИИ с правами.
@@ -148,6 +210,10 @@ public class VisitAnalyticsDbTests(DataManagerDb fixture) : IClassFixture<DataMa
             var streak = Assert.Single(report.OpenStreaks);
             Assert.Equal((AgentA, "Тест Агент А", MarketM, "Магазин «М»", 1, Mar3.AddDays(3), (DateOnly?)Mar3.AddDays(2), 1),
                 (streak.AgentId, streak.Agent, streak.MarketId, streak.Market, streak.Visits, streak.LastVisit, streak.LastOrder, report.OpenStreaksTotal));
+
+            // Размер заказа: в периоде три заказа (М 05.03 — 20 кг, Н 03.03 — 10 кг, Н 04.03 — 5 кг); у пар меньше трёх заказов — «обычного» нет.
+            Assert.Equal(3, report.OrderSize.WithoutTypical);
+            Assert.All(report.OrderSize.Relative, g => Assert.Equal(0, g.Orders));
 
             // Период по 05.03: у М серии нет, у Н — тоже (заказ 03.03 на визите, дальше визитов нет).
             Assert.Empty((await service.BuildAsync(SalesRowScope.Organization, Mar3, Mar3.AddDays(2), null, AgentA, default)).OpenStreaks);

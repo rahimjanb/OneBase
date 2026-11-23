@@ -75,7 +75,47 @@ export type KpiTiles = {
   altPlan?: { source: PlanSource; planKg: number; execution: number | null } | null;
   /** Темп месяца для «Выполнения плана» (сервер, SalesMath.Pace); нет в ответе — блок темпа не показывается. */
   pace?: PlanPace | null;
+  /** План АКБ из Linko (показатель АКБ ТП); null — ни у одного ТП охвата его нет: тогда «АКБ на агента» сравнивается с целью. */
+  akbPlan?: AkbPlanTile | null;
 };
+
+/**
+ * План АКБ из Linko: plan — сумма планов АКБ ТП, fact — АКБ по продажам этих ТП (точки с чистой покупкой > 0), execution = fact ÷ plan;
+ * forecast — прогноз АКБ на конец идущего месяца (у закрытого — null); agents — ТП с планом АКБ из allAgents; level — цвет (сервер).
+ */
+export type AkbPlanTile = {
+  plan: number;
+  fact: number;
+  execution: number | null;
+  forecast: number | null;
+  forecastExecution: number | null;
+  agents: number;
+  allAgents: number;
+  level: TargetLevel | null;
+};
+
+/**
+ * Строка «Из чего складывается объём»: доля категории в кг региона, план и факт в кг, выполнение, прогноз по темпу и прогноз к плану,
+ * план АКБ категории (показатели Linko «АКБ Twizos»), АКБ категории и охват АКБ = АКБ категории ÷ АКБ региона. null — нет данных.
+ */
+export type VolumeRow = {
+  categoryId: number | null;
+  name: string;
+  share: number | null;
+  planKg: number | null;
+  factKg: number;
+  execution: number | null;
+  forecastKg: number | null;
+  forecastExecution: number | null;
+  akbPlan: number | null;
+  akb: number;
+  akbCoverage: number | null;
+  executionLevel: TargetLevel | null;
+  forecastLevel: TargetLevel | null;
+};
+
+/** «Из чего складывается объём» региона: категории, планы Linko на несколько категорий (planGroups) и итог по региону. */
+export type VolumeTable = { rows: VolumeRow[]; planGroups: VolumeRow[]; total: VolumeRow; planSource: PlanSource };
 
 /**
  * Темп месяца — на той же базе дней, что прогноз: expected — где должно быть выполнение к отчётному дню (доля плана; у закрытого месяца — 1),
@@ -165,6 +205,8 @@ export type UnitRow = {
   forecastExecutionLevel: TargetLevel | null;
   /** Направление-канал (Sales:ChannelRegions — «Базар», «КА»): не региональный менеджер. */
   isChannel?: boolean;
+  /** План АКБ из Linko — сумма планов АКБ ТП; null — его нет. */
+  akbPlan?: AkbPlanTile | null;
 };
 
 /**
@@ -351,6 +393,11 @@ export type TeamRow = {
   job: string | null;
   executionLevel: TargetLevel | null;
   forecastExecutionLevel: TargetLevel | null;
+  /** АКБ ТП в регионе за месяц (точки с чистой покупкой). */
+  akb?: number;
+  /** План АКБ ТП из Linko и выполнение (akb ÷ план); null — плана нет. */
+  akbPlan?: number | null;
+  akbExecution?: number | null;
 };
 
 export type MonthCalendar = {
@@ -392,6 +439,8 @@ export type RegionView = {
   notBoughtTotal: NotBoughtRow;
   /** Итог «План и факт по категориям» по строкам с планом — с сервера; null — строк с планом нет. */
   categoryPlanTotal: CategoryPlanFact | null;
+  /** «Из чего складывается объём» по категориям; null — в регионе ни продаж, ни плана (старый ответ — нет поля). */
+  volume?: VolumeTable | null;
 };
 
 export type MedianValue = { value: number | null; regionMedian: number | null };
@@ -440,6 +489,8 @@ export type AgentView = {
   kgPerOutlet: number | null;
   executionLevel: TargetLevel | null;
   revenueExecutionLevel: TargetLevel | null;
+  /** План АКБ ТП из Linko и его выполнение; null — плана нет. */
+  akbPlan?: AkbPlanTile | null;
 };
 
 /** score — тяжесть замечаний (сервер): список отсортирован по ней, rank — место в списке. */
@@ -847,7 +898,7 @@ export type StockCell = {
   orderSum: number | null;
   /** Статус клетки по доступному остатку и скорости; у экспорта — none. */
   status: StockStatus;
-  /** Бронь склада — неотгруженные заказы и перемещения и перемещения в пути («Забронировано» и «В пути» в Linko); доступно = остаток − бронь. */
+  /** Бронь склада — подтверждённые, ещё не отданные перемещения со склада; доступно = остаток − бронь. */
   reservedKg: number;
   reservedBoxes: number | null;
   reservedSum: number | null;
@@ -893,7 +944,7 @@ export type StockItem = {
   status: StockStatus;
   regions: Record<string, StockCell>;
   factory: StockCell | null;
-  /** Бронь склада — неотгруженные заказы и перемещения и перемещения в пути («Забронировано» и «В пути» в Linko); доступно = остаток − бронь. */
+  /** Бронь склада — подтверждённые, ещё не отданные перемещения со склада; доступно = остаток − бронь. */
   reservedKg: number;
   reservedBoxes: number | null;
   reservedSum: number | null;
@@ -1338,7 +1389,12 @@ export type AutoOrderItem = {
   freeKg: number | null;
   factoryKg: number | null;
   factoryFreeKg: number | null;
+  /** Бронь дилера: товар подтверждённых, ещё не отданных перемещений на склад региона (рекомендация уже уменьшена на неё). */
+  dealerReservedKg: number;
 };
+
+/** Документ брони дилера: подтверждённое перемещение на склад региона. */
+export type AutoOrderTransfer = { id: number; number: string | null; date: string | null; from: string; weightKg: number };
 
 export type AutoOrderView = {
   regionId: string;
@@ -1350,6 +1406,7 @@ export type AutoOrderView = {
   items: AutoOrderItem[];
   withoutBox: number;
   reservedAt?: string | null;
+  dealerTransfers?: AutoOrderTransfer[] | null;
 };
 
 /** «KPI»: деньги (оклад, бонусы, премии, фонд оплаты) — только с правом «Финансы», иначе null (money = false). */

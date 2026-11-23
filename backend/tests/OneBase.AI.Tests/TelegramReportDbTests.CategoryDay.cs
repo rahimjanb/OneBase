@@ -31,7 +31,6 @@ public partial class TelegramReportDbTests
         var sv = await engine.BuildAsync("category-day.evening", new ReportScope(TelegramReportRoles.Sv, RegionId: s.RegionId, SupervisorId: SupervisorId), yesterday,
             Local(yesterday, 19), "ru", 30, default, ["кекс", "Бамбук"]);
         Assert.True(sv.Applies);
-        Assert.Null(sv.CategorySales);
         var payload = Assert.IsType<CategoryDayCards>(sv.CategoryDay);
         Assert.Equal(["Кекс", "Бамбук"], payload.Cards.Select(c => c.Name));
         Assert.Equal(yesterday, payload.Day);
@@ -39,18 +38,16 @@ public partial class TelegramReportDbTests
         Assert.Equal((90m, 1), (cake.Kg, cake.Akb)); // три ТП по 30 кг «Кекс 1 кг» в одной точке
         Assert.True(cake.Orders >= 1);
         Assert.True(cake.Skus >= 1);
-        Assert.Contains(cake.Top, x => x.Kg > 0 && x.MonthKg >= x.Kg);
-        Assert.Equal(14, cake.Days.Count);
-        Assert.Contains(cake.Days, d => d.Day == yesterday && d.Kg == 90);
-        Assert.Equal(CategorySalesCards.Agents, cake.BreakdownKind);
+        Assert.Contains(cake.Top, x => x.Kg > 0);
+        Assert.Equal(90m, cake.Top.Sum(x => x.Kg)); // артикулы — только продажи дня итога
+        Assert.Equal(CategoryDayCards.Agents, cake.BreakdownKind);
         Assert.Equal(["Бахтиёр Юлдашев", "Дилшод Рахимов", "Отабек Назаров"], cake.Breakdown.Select(r => r.Name).Order());
         Assert.All(cake.Breakdown, r => Assert.Equal(30m, r.Kg));
-        Assert.True(cake.MonthKg >= cake.Kg);
         if (planned)
         {
             // План дня — остаток плана месяца (26 000 + 21 000 + 13 000) ÷ рабочие дни с дня итога; выполнение — факт дня к нему.
-            Assert.Equal(60_000m, cake.MonthPlanKg);
             Assert.NotNull(cake.DayPlanKg);
+            Assert.True(cake.DayPlanKg < 60_000m);
             Assert.Equal(cake.Kg / cake.DayPlanKg!.Value, cake.DayExecution);
             Assert.NotNull(cake.Breakdown.Single(r => r.Name == "Бахтиёр Юлдашев").DayPlanKg);
         }
@@ -69,7 +66,7 @@ public partial class TelegramReportDbTests
 
         var country = await engine.BuildAsync("category-day.evening", new ReportScope(TelegramReportRoles.Rm), yesterday, Local(yesterday, 19), "ru", 30, default, ["Кекс"]);
         var all = Assert.Single(country.CategoryDay!.Cards);
-        Assert.Equal(CategorySalesCards.Regions, all.BreakdownKind);
+        Assert.Equal(CategoryDayCards.Regions, all.BreakdownKind);
         Assert.Contains(all.Breakdown, r => r.Name == "Хоразм" && r.Kg == 90);
         var morning = await engine.BuildAsync("category-day.morning", new ReportScope(TelegramReportRoles.Rm), s.Today, Local(s.Today, 9), "ru", 30, default, ["Кекс"]);
         Assert.Equal(CategoryCardChoice.PreviousWorkDay(s.Today), morning.CategoryDay!.Day);

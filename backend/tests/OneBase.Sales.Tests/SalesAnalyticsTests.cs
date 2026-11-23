@@ -4,7 +4,7 @@ using OneBase.Domain.Sales;
 
 namespace OneBase.Sales.Tests;
 
-public class SalesAnalyticsTests
+public partial class SalesAnalyticsTests
 {
     private static readonly Guid North = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly Guid South = Guid.Parse("00000000-0000-0000-0000-000000000002");
@@ -48,9 +48,11 @@ public class SalesAnalyticsTests
         IReadOnlyList<string>? akbHidden = null,
         DateOnly? today = null,
         IReadOnlyList<StaffIndicator>? indicators = null,
-        IReadOnlyDictionary<long, Guid>? kpiRegions = null) => new()
+        IReadOnlyDictionary<long, Guid>? kpiRegions = null,
+        IReadOnlyList<AkbPlanRow>? akbPlans = null) => new()
     {
         Today = today ?? DateOnly.MaxValue,
+        AkbPlans = akbPlans ?? [],
         Indicators = indicators ?? [],
         KpiRegions = kpiRegions ?? new Dictionary<long, Guid>(),
         PlanSource = planSource,
@@ -887,7 +889,7 @@ public class SalesAnalyticsTests
     /// Север: ТП 1 — Помадка 60 + 30 кг, Шоколад 30, Песочный 20; без агента — Помадка 10. Юг: ТП 3 — Помадка 50.
     /// План РОП по типам Linko: Север — 1: 100, 2: 50, 3: 40, 4: 30; Юг — 1: 80. У ТП 1 в Linko — свои планы.
     /// </summary>
-    private static MonthData RegionCategoryPlanData(DateOnly dataThrough) => Data(
+    private static MonthData RegionCategoryPlanData(DateOnly dataThrough, IReadOnlyList<AkbPlanRow>? akbPlans = null) => Data(
         current:
         [
             Sku(100, 1, market: 10, kg: 60), Sku(101, 2, market: 11, kg: 30), Sku(102, 3, market: 12, kg: 30), Sku(103, 5, market: 13, kg: 20),
@@ -904,7 +906,8 @@ public class SalesAnalyticsTests
             new PlanRow(South, null, 9, 1, 80),
             new PlanRow(null, 1, 9, null, 500),
         ],
-        categoryPlans: [new CategoryPlanRow(1, 2026, 9, [SalesCategories.Build(PlanReport, PlanTypes).GroupByName("Шоколад")!.Value], 999)]);
+        categoryPlans: [new CategoryPlanRow(1, 2026, 9, [SalesCategories.Build(PlanReport, PlanTypes).GroupByName("Шоколад")!.Value], 999)],
+        akbPlans: akbPlans);
 
     [Fact]
     public void Category_plan_is_the_sum_of_region_category_plans_and_its_fact_is_all_category_sales_of_the_scope()

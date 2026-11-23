@@ -9,7 +9,6 @@ import { chatTypeLabel } from "@/lib/telegram";
 import {
   cardJobs,
   cardRecipients,
-  cardReportsOf,
   categoryLabel,
   choiceText,
   effectiveCategories,
@@ -87,9 +86,9 @@ const daysText = (days: number[], t: (s: string) => string) =>
   days.length === 7 ? t("каждый день") : days.length === 6 && !days.includes(7) ? t("пн–сб") : days.map((d) => t(weekDays.find((w) => w.day === d)?.label ?? "")).join(", ");
 
 /**
- * «Карточки категорий» (отчёты 10 и 11): какие категории уходят по умолчанию — общий выбор для карточек месяца и итогов дня, расписание
- * запусков обоих отчётов (9:00 — итог прошлого рабочего дня; 18:30 и 19:00 — итог дня), кто подписан, на что и его категории, предпросмотр
- * картинок и тест в выбранный чат. Подписка получателя — на вкладке «Получатели» (отчёты 10 и 11); данные и права проверяет сервер.
+ * «Карточки категорий» (отчёт 11 «Итоги дня по категориям», только день итога): какие категории уходят по умолчанию, расписание запусков
+ * (9:00 — итог прошлого рабочего дня, 19:00 — итог дня), кто подписан и его категории, предпросмотр картинок и тест в выбранный чат.
+ * Подписка получателя — на вкладке «Получатели» (отчёт 11); данные и права проверяет сервер. Прежний отчёт 10 с месяцем категории убран.
  */
 export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOverview; onTab: (tab: ReportsTab) => void; onJob: (job: ReportJob) => void }) {
   const t = useT();
@@ -165,12 +164,7 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
       <div className="flex min-w-0 flex-col gap-4">
         <p className="text-sm text-ink-2">
           {t(
-            "Отдельная картинка на каждую выбранную категорию с полными данными страницы категории «Продаж» в области получателя: факт и план месяца, прогноз, АКБ и дистрибуция, SKU, продажи по дням, регионы (РМ) или ТП (СВ), ТОП артикулов с фото и пропавшие артикулы. Все картинки — одним альбомом.",
-          )}
-        </p>
-        <p className="text-sm text-ink-2">
-          {t(
-            "Отчёт 11 «Итоги дня по категориям» — те же категории, но продажи за один день: кг, сумма, точки и заказы, план дня и выполнение, к прошлому рабочему дню и неделе назад, две недели по дням, регионы или ТП за день, артикулы дня с фото и что за день не продавалось.",
+            "Отдельная картинка на каждую выбранную категорию — только за один день, без месяца, в области получателя: кг, сумма, точки и заказы, артикулы, цена за кг, план дня и выполнение, регионы (РМ) или ТП (СВ) за день, артикулы дня с фото. Все картинки — одним альбомом.",
           )}
         </p>
         {error && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
@@ -250,7 +244,7 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
         >
           {subscribed.length === 0 ? (
             <p className="text-sm text-ink-3">
-              {t("Пока никто не подписан. На вкладке «Получатели» откройте получателя (или добавьте нового) и включите отчёт 10 «Карточки категорий» или 11 «Итоги дня по категориям».")}
+              {t("Пока никто не подписан. На вкладке «Получатели» откройте получателя (или добавьте нового) и включите отчёт 11 «Итоги дня по категориям».")}
             </p>
           ) : (
             <ul className="flex flex-col divide-y divide-line">
@@ -264,7 +258,7 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium text-ink">{r.name}</span>
                         <span className="block text-xs text-ink-3">
-                          {t("отчёт {list}", { list: cardReportsOf(r) })} · {own ? t(choiceText(own, total)) : `${t("по умолчанию")}: ${t(choiceText(effectiveCategories(null, view), total))}`}
+                          {own ? t(choiceText(own, total)) : `${t("по умолчанию")}: ${t(choiceText(effectiveCategories(null, view), total))}`}
                           {!r.enabled && ` · ${t("выключен")}`}
                         </span>
                       </span>

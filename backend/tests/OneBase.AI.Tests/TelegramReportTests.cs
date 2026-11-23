@@ -103,7 +103,6 @@ public class TelegramReportTests
             ReportType.Promo => PromoReport.Build(context),
             ReportType.Categories => CategoriesReport.Build(context),
             ReportType.Battle => BattleReport.Build(context, BattleTests.SampleCards(info.Slot, language, resolved.Agents.Select(a => (a.Id, a.Name)).ToList(), date)),
-            ReportType.CategoryCards => CategorySalesReport.Document(info, resolved, date, CategoryCardSamples.Cards(info.Slot, date, scope.Role), now, null, language),
             ReportType.CategoryDay => CategoryDayReport.Document(info, resolved, date, CategoryDaySamples.Cards(info.Slot, date, scope.Role), now, null, language),
             _ => WeeklyReport.Build(context),
         };
@@ -118,9 +117,9 @@ public class TelegramReportTests
     [Fact]
     public void Catalog_has_thirteen_runs_of_six_reports_at_the_specified_times()
     {
-        Assert.Equal(32, ReportCatalog.Jobs.Count); // 13 запусков шести отчётов + 4 запуска «Поля боя» + еженедельный PDF + 10 запусков накопительной акции + 2 карточек категорий + 2 итогов дня по категориям
+        Assert.Equal(30, ReportCatalog.Jobs.Count); // 13 запусков шести отчётов + 4 запуска «Поля боя» + еженедельный PDF + 10 запусков накопительной акции + 2 итогов дня по категориям
         Assert.Equal(ReportCatalog.Jobs.Count, ReportCatalog.Jobs.Select(j => j.Code).Distinct().Count());
-        Assert.Equal(11, ReportCatalog.Jobs.Select(j => j.Report).Distinct().Count());
+        Assert.Equal(10, ReportCatalog.Jobs.Select(j => j.Report).Distinct().Count()); // «10. Карточки категорий» убран
         var pdf = Assert.Single(ReportCatalog.Jobs, j => j.Report == ReportType.WeeklyPdf);
         Assert.Equal(("weekly-pdf.monday", "09:00", ReportSchedules.Monday, "weekly-pdf"), (pdf.Code, pdf.Time.ToString("HH:mm"), pdf.Days, ReportCatalog.Key(pdf.Report)));
         Assert.Equal(TelegramReportRoles.All, pdf.Roles);
@@ -530,8 +529,8 @@ public class TelegramReportTests
     [Fact]
     public void Every_report_renders_as_16_by_9_png_pages_within_telegram_limits()
     {
-        // Карточки «Поля боя», категорий и итогов дня по категориям — вертикальные 1080 px (свои тесты), PDF — документ.
-        foreach (var job in ReportCatalog.Jobs.Where(j => j.Report is not (ReportType.Battle or ReportType.WeeklyPdf or ReportType.CategoryCards or ReportType.CategoryDay)))
+        // Карточки «Поля боя» и итогов дня по категориям — вертикальные 1080 px (свои тесты), PDF — документ.
+        foreach (var job in ReportCatalog.Jobs.Where(j => j.Report is not (ReportType.Battle or ReportType.WeeklyPdf or ReportType.CategoryDay)))
         {
             foreach (var scope in new[] { Rm, Sv, Tp(61) }.Where(s => job.Roles.Contains(s.Role)))
             {

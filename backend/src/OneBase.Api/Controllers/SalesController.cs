@@ -64,14 +64,15 @@ public sealed class SalesController(SalesDataLoader loader, SalesAccess access) 
         CancellationToken ct = default)
     {
         // Чужое направление — 404, как будто его нет (РМ видит только свои; СВР и ТП — ни одного).
-        if (!(await ScopeAsync(ct)).CanSeeDirection(GuidOf(id)) && !(await ScopeAsync(ct)).IsOrganization)
+        var scope = await ScopeAsync(ct);
+        if (!scope.CanSeeDirection(GuidOf(id)) && !scope.IsOrganization)
         {
             return NotFound();
         }
 
         var analytics = await Load(q, ct);
         metric = metric is "sum" or "akb" ? metric : "kg";
-        return analytics.HasDirection(id) ? analytics.CachedDirection(id, from, to, metric, metric == "akb" ? category : null) : NotFound();
+        return analytics.HasDirection(id) ? OwnQuality(analytics.CachedDirection(id, from, to, metric, metric == "akb" ? category : null), scope) : NotFound();
     }
 
     /// <summary>
@@ -96,8 +97,13 @@ public sealed class SalesController(SalesDataLoader loader, SalesAccess access) 
 
         var analytics = await Load(q, ct);
         metric = metric is "sum" or "akb" ? metric : "kg";
-        return analytics.CachedMyRegions(scope.RegionIds.ToList(), from, to, metric, metric == "akb" ? category : null);
+        return OwnQuality(analytics.CachedMyRegions(scope.RegionIds.ToList(), from, to, metric, metric == "akb" ? category : null), scope);
     }
+
+    /// <summary>Ответ кэшируется один на всех; РМ, СВР и ТП получают его без счётчиков качества всей выгрузки (DataQualityView.ScopeOnly).</summary>
+    private static GroupView OwnQuality(GroupView view, SalesScope scope) => scope.IsOrganization ? view : view with { Quality = view.Quality.ScopeOnly() };
+
+    private static RegionView OwnQuality(RegionView view, SalesScope scope) => scope.IsOrganization ? view : view with { Quality = view.Quality.ScopeOnly() };
 
     /// <summary>metric — календарь месяца: kg | sum | akb; category — для АКБ по категории.</summary>
     [SalesScoped]
@@ -111,14 +117,15 @@ public sealed class SalesController(SalesDataLoader loader, SalesAccess access) 
         [FromQuery] long? category = null,
         CancellationToken ct = default)
     {
-        if (!(await ScopeAsync(ct)).CanSeeRegion(id))
+        var scope = await ScopeAsync(ct);
+        if (!scope.CanSeeRegion(id))
         {
             return NotFound();
         }
 
         var analytics = await Load(q, ct);
         metric = metric is "sum" or "akb" ? metric : "kg";
-        return analytics.HasRegion(id) ? analytics.CachedRegion(id, from, to, metric, metric == "akb" ? category : null) : NotFound();
+        return analytics.HasRegion(id) ? OwnQuality(analytics.CachedRegion(id, from, to, metric, metric == "akb" ? category : null), scope) : NotFound();
     }
 
     /// <summary>«Агенты»: все ТП месяца — выполнение плана, прогноз, выручка, АКБ, визиты, страйк и замечания; фильтры и поиск — на странице.</summary>

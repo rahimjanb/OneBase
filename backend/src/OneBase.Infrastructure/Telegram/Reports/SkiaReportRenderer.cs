@@ -44,11 +44,6 @@ public sealed class SkiaReportRenderer : IReportRenderer
             return IncentiveCardRenderer.Render(incentive, Faces.Value, document.Test);
         }
 
-        if (document.CategorySales is { } categories)
-        {
-            return CategoryCardRenderer.Render(document, categories, Faces.Value);
-        }
-
         if (document.CategoryDay is { } day)
         {
             return CategoryDayRenderer.Render(document, day, Faces.Value);

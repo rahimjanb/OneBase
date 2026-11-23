@@ -236,8 +236,7 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentivePromoService>();
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveRouteService>();
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveCardBuilder>();
-        // Карточки категорий (отчёт 10): данные страницы категории «Продаж» в области получателя; выбор категорий — CategoryCardService.
-        services.AddScoped<OneBase.Application.Telegram.Reports.CategoryCardsBuilder>();
+        // Итоги дня по категориям (отчёт 11): продажи дня категории в области получателя; выбор категорий — CategoryCardService.
         services.AddScoped<OneBase.Application.Telegram.Reports.CategoryDayBuilder>();
         services.AddScoped<Telegram.Reports.CategoryCardService>();
         // Еженедельный отчёт (PDF РОП / РМ / СВ / ТП): модель из расчётов «Продаж», KPI, «Акций», «Остатков», DSO; формулы целей — раздел WeeklyReport.

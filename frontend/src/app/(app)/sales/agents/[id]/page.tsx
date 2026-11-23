@@ -122,8 +122,21 @@ export default async function AgentPage({
         <KpiTile label={t("Сум с визита")} value={money(data.sumPerVisit.value, t)}>
           {t("медиана региона {value}", { value: money(data.sumPerVisit.regionMedian, t) })}
         </KpiTile>
-        <KpiTile label={t("АКБ — точек с отгрузкой")} value={num(data.akb)}>
-          {data.revenuePerOutlet != null ? t("{sum} сум с точки", { sum: money(data.revenuePerOutlet, t) }) : t("покупок за месяц нет")}
+        {/* План АКБ ТП из Linko — рядом с фактом: выполнение и цвет по нему (в идущем месяце — по прогнозу). */}
+        <KpiTile
+          label={t("АКБ — точек с отгрузкой")}
+          value={num(data.akb)}
+          unit={data.akbPlan ? t("из {n}", { n: num(data.akbPlan.plan) }) : undefined}
+          tone={data.akbPlan?.level ? levelTone(data.akbPlan.level) : "ink"}
+          title={data.akbPlan ? t("План АКБ ТП из Linko: {pct}", { pct: pct(data.akbPlan.execution) }) : undefined}
+        >
+          {data.akbPlan
+            ? !period.closed && data.akbPlan.forecast != null
+              ? t("{pct} плана · прогноз {value} ({fpct})", { pct: pct(data.akbPlan.execution), value: num(data.akbPlan.forecast), fpct: pct(data.akbPlan.forecastExecution) })
+              : t("{pct} плана АКБ", { pct: pct(data.akbPlan.execution) })
+            : data.revenuePerOutlet != null
+              ? t("{sum} сум с точки", { sum: money(data.revenuePerOutlet, t) })
+              : t("покупок за месяц нет")}
         </KpiTile>
         <KpiTile label={t("Средний чек")} value={money(data.avgCheck.value, t)} unit={t("сум")}>
           {t("медиана региона {value}", { value: money(data.avgCheck.regionMedian, t) })}

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   cardJobs,
   cardRecipients,
-  cardReportsOf,
   categoryLabel,
   choiceText,
   effectiveCategories,
@@ -36,30 +35,13 @@ test("какие категории уйдут: свой выбор → по у�
   assert.ok(!sameChoice(["a", "b"], ["b", "a"])); // порядок — порядок картинок
 });
 
-test("запуски и подписчики карточек категорий", () => {
+test("запуски и подписчики — только итоги дня по категориям (отчёт 10 убран)", () => {
   const job = (code, report) => ({ code, report });
   assert.deepEqual(
-    cardJobs([job("daily.evening", "daily"), job("category-cards.morning", "category-cards"), job("category-cards.evening", "category-cards")]).map((j) => j.code),
-    ["category-cards.morning", "category-cards.evening"],
+    cardJobs([job("daily.evening", "daily"), job("category-day.morning", "category-day"), job("category-day.evening", "category-day")]).map((j) => j.code),
+    ["category-day.morning", "category-day.evening"],
   );
   const r = (id, reports) => ({ id, reports });
-  assert.deepEqual(cardRecipients([r("a", ["daily.evening"]), r("b", ["category-cards.evening"]), r("c", [])]).map((x) => x.id), ["b"]);
-});
-
-test("итоги дня по категориям — в той же вкладке: запуски, подписчики, номер отчёта", () => {
-  const job = (code, report) => ({ code, report });
-  assert.deepEqual(
-    cardJobs([
-      job("category-cards.morning", "category-cards"),
-      job("category-cards.evening", "category-cards"),
-      job("category-day.morning", "category-day"),
-      job("category-day.evening", "category-day"),
-      job("daily.evening", "daily"),
-    ]).map((j) => j.code),
-    ["category-cards.morning", "category-cards.evening", "category-day.morning", "category-day.evening"],
-  );
-  const r = (id, reports) => ({ id, reports });
-  const list = [r("a", ["category-day.evening"]), r("b", ["category-cards.morning", "category-day.morning"]), r("c", ["daily.evening"])];
-  assert.deepEqual(cardRecipients(list).map((x) => x.id), ["a", "b"]);
-  assert.deepEqual(list.map(cardReportsOf), ["11", "10, 11", ""]);
+  const list = [r("a", ["category-day.evening"]), r("b", ["daily.evening", "category-day.morning"]), r("c", ["daily.evening"]), r("d", ["category-cards.evening"])];
+  assert.deepEqual(cardRecipients(list).map((x) => x.id), ["a", "b"]); // старый код 10 — не подписка (миграция переносит его в 11)
 });

@@ -8,8 +8,8 @@ import { tNow, useT } from "@/i18n/client";
 import { useSalesAccess } from "@/components/sales/SalesAccess";
 import { bff } from "@/lib/bff";
 import { plural } from "@/lib/format";
-import { kg, money, num } from "@/lib/sales/format";
-import type { AutoOrderItem, AutoOrderView } from "@/lib/sales/types";
+import { date as dateText, kg, money, num } from "@/lib/sales/format";
+import type { AutoOrderItem, AutoOrderTransfer, AutoOrderView } from "@/lib/sales/types";
 
 // Автозаказ на «Рек. остатке»: регион → рекомендуемый заказ в коробках (сервер, StockService.AutoOrderAsync) → правка коробок → акт
 // приёма-передачи в Excel (сервер собирает его по коробкам, названия, единицы и цены — свои; остатков завода в акте нет). Правки держатся
@@ -366,6 +366,8 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
         )}
       </div>
 
+      <DealerReservation view={view} />
+
       <div className="mt-3 max-h-[600px] overflow-auto">
         <table className="w-full min-w-max border-collapse text-sm">
           <thead className="sticky top-0 z-[2] bg-surface-solid shadow-[inset_0_-1px_0_var(--color-line)]">
@@ -373,15 +375,21 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
               <th className={`${th} sticky left-0 z-[1] bg-surface-solid pl-4 text-left sm:pl-5`}>{t("Товар")}</th>
               <th
                 className={`${th} text-right max-lg:hidden`}
-                title={t("Доступно на складе завода: остаток минус бронь (заказы и перемещения, которые ещё не отгружены, и перемещения в пути к дилерам). В акт не попадает.")}
+                title={t("Доступно на складе завода: остаток минус бронь (подтверждённые перемещения к дилерам, которые ещё не отданы). В акт не попадает.")}
               >
                 {t("Завод, доступно, {unit}", { unit: unitShort })}
               </th>
               <th
                 className={`${th} text-right max-lg:hidden`}
-                title={t("Доступно на складе региона: остаток минус бронь (заказы магазинов, которые ещё не отгружены, и перемещения в пути); от него считается рекомендация")}
+                title={t("Доступно на складе региона: остаток минус бронь (подтверждённые перемещения со склада, которые ещё не отданы); от него считается рекомендация")}
               >
                 {t("Склад, доступно, {unit}", { unit: unitShort })}
+              </th>
+              <th
+                className={`${th} text-right max-lg:hidden`}
+                title={t("Бронь дилера: товар подтверждённых перемещений на склад региона — уже забронирован для дилера на заводе и ещё не отдан. Рекомендация уменьшена на неё.")}
+              >
+                {t("Бронь дилера, {unit}", { unit: unitShort })}
               </th>
               <th className={`${th} text-right max-lg:hidden`}>{t("Рекомендация")}</th>
               <th className={`${th} text-center`}>{t("Коробки")}</th>
@@ -394,7 +402,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-ink-3">
+                <td colSpan={10} className="px-4 py-8 text-center text-sm text-ink-3">
                   {needle
                     ? t("Ничего не найдено")
                     : show === "edited"
@@ -429,6 +437,15 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
                   </td>
                   <td className={`${td} text-right tabular-nums max-lg:hidden`}>
                     <Stock it={it} unit={unit} />
+                  </td>
+                  <td className={`${td} text-right tabular-nums max-lg:hidden`}>
+                    {it.dealerReservedKg > 0 ? (
+                      <span className="font-medium text-accent-strong" title={t("Подтверждено на склад региона {kg} кг — рекомендация уменьшена на эту бронь", { kg: kg(it.dealerReservedKg) })}>
+                        <UnitValue it={it} value={kgIn(it, it.dealerReservedKg, unit)} unit={unit} />
+                      </span>
+                    ) : (
+                      <span className="text-ink-3">—</span>
+                    )}
                   </td>
                   <td className={`${td} text-right tabular-nums max-lg:hidden`}>
                     <Recommendation it={it} unit={unit} changed={changed} onReset={() => resetRow(it)} />
@@ -491,7 +508,7 @@ function AutoOrderPanel({ view, loading, onRegion }: { view: AutoOrderView; load
 
       <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3.5 sm:px-5">
         <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-3 max-lg:basis-full">
-          {t("Рекомендация — заказ, который доводит доступный остаток склада (остаток − бронь: заказы магазинов, которые ещё не отгружены, и перемещения в пути) до запаса на {days} дн. продаж, в целых коробках. Цена — прайс «{priceList}».", {
+          {t("Рекомендация — заказ, который доводит доступный остаток склада (остаток − бронь: подтверждённые перемещения со склада, которые ещё не отданы) до запаса на {days} дн. продаж, минус бронь дилера (подтверждённые перемещения на склад региона), в целых коробках. Цена — прайс «{priceList}».", {
             days: view.coverDays,
             priceList: view.priceList ?? "Дилерга кириш нарх",
           })}
@@ -535,6 +552,12 @@ function Stock({ it, unit, inline = false }: { it: AutoOrderItem; unit: Unit; in
             · {t("на заводе")} {v(it.factoryFreeKg ?? it.factoryKg)}
           </>
         )}
+        {it.dealerReservedKg > 0 && (
+          <>
+            {" "}
+            · <span className="font-medium text-accent-strong">{t("бронь дилера")} {v(it.dealerReservedKg)}</span>
+          </>
+        )}
       </>
     );
   }
@@ -576,6 +599,45 @@ function Recommendation({ it, unit, changed, onReset, short = false }: { it: Aut
   }
 
   return <span className="text-ink-3">{short ? (it.recBoxes ? t("рек. {n}", { n: boxes }) : null) : value}</span>;
+}
+
+/**
+ * Бронь дилера — подтверждённые в Linko и ещё не отданные перемещения на склад региона: сколько товара уже забронировано для дилера на
+ * заводе и какими документами. Рекомендация уже уменьшена на неё (сервер).
+ */
+function DealerReservation({ view }: { view: AutoOrderView }) {
+  const t = useT();
+  const docs: AutoOrderTransfer[] = view.dealerTransfers ?? [];
+  const total = docs.reduce((a, d) => a + d.weightKg, 0);
+  if (docs.length === 0) {
+    return (
+      <p className="mx-4 mt-3 text-xs text-ink-3 sm:mx-5">
+        {t("Бронь дилера: подтверждённых перемещений на склад «{region}» нет.", { region: view.regionName })}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mx-4 mt-3 rounded-lg border border-accent/30 bg-accent-soft px-4 py-3 text-sm sm:mx-5">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="font-semibold text-ink">{t("Бронь дилера")}</span>
+        <span className="font-semibold tabular-nums text-accent-strong">
+          {kg(total)} {t("кг")}
+        </span>
+        <span className="text-xs text-ink-3">
+          {t("подтверждено в Linko на склад «{region}», ещё не отдано — рекомендация уже уменьшена на эту бронь", { region: view.regionName })}
+        </span>
+      </div>
+      <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
+        {docs.map((d) => (
+          <li key={d.id} className="tabular-nums">
+            {t("№{n} от {date}", { n: d.number ?? String(d.id), date: dateText(d.date) })} · {d.from} → {view.regionName} ·{" "}
+            <span className="font-medium text-ink">{d.weightKg > 0 ? `${kg(d.weightKg)} ${t("кг")}` : t("без веса")}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function Fact({ label, value }: { label: string; value: string }) {

@@ -15,8 +15,7 @@ namespace OneBase.Application.Telegram.Reports;
 /// настройки устарели.
 /// </summary>
 public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, ReportDataService data, BattleGoalService battle, BattleOptions battleOptions,
-    IncentiveService incentive, IncentiveCardBuilder incentiveCards, CategoryCardsBuilder categoryCards,
-    CategoryDayBuilder categoryDay)
+    IncentiveService incentive, IncentiveCardBuilder incentiveCards, CategoryDayBuilder categoryDay)
 {
     /// <summary>Регионы месяца с супервайзерами и ТП и направления РМ (кэш раздела «Продажи»).</summary>
     public async Task<(IReadOnlyList<ReportRegionTeam> Teams, IReadOnlyList<ReportDirection> Directions)> StructureAsync(DateOnly date, CancellationToken ct)
@@ -27,8 +26,8 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
 
     /// <summary>
     /// Отчёт запуска job за день date. now — момент формирования в часовом поясе расписания: у промежуточных запусков (13:00, 17:00) за
-    /// сегодня факт — заказы до этого момента, за прошлый день — до времени запуска. categories — категории карточек получателя (отчёты 10
-    /// и 11; null — выбор по умолчанию).
+    /// сегодня факт — заказы до этого момента, за прошлый день — до времени запуска. categories — категории карточек получателя (отчёт 11;
+    /// null — выбор по умолчанию).
     /// </summary>
     public async Task<ReportDocument> BuildAsync(string job, ReportScope scope, DateOnly date, DateTimeOffset now, string language, int noPurchaseDays,
         CancellationToken ct, IReadOnlyList<string>? categories = null)
@@ -62,11 +61,6 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
         if (info.Report == ReportType.Incentive)
         {
             return await BuildIncentiveAsync(info, resolved, teams, date, now, language, cutoff, midday, jobTime, ct);
-        }
-
-        if (info.Report == ReportType.CategoryCards)
-        {
-            return await categoryCards.BuildAsync(info, resolved, date, now, language, categories, jobTime, ct);
         }
 
         if (info.Report == ReportType.CategoryDay)

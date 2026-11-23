@@ -283,8 +283,8 @@ const dict: Dict = {
   " · без цены {n} SKU": " · narxsiz {n} SKU",
   "Скорость завода — продажи всей страны": "Zavod tezligi — butun mamlakat savdosi",
   " · бронь {kg} кг": " · bron {kg} kg",
-  "Бронь (неотгруженные заказы и перемещения, перемещения в пути) — на {time}.":
-    "Bron (jo'natilmagan buyurtmalar va ko'chirishlar, yo'ldagi ko'chirishlar) — {time} holatiga.",
+  "Бронь (подтверждённые перемещения, ещё не отданные со склада) — на {time}.":
+    "Bron (tasdiqlangan, ombordan hali berilmagan ko'chirishlar) — {time} holatiga.",
   "Доступный остаток (остаток − бронь) ÷ продажи в день с поправкой на аутсток": "Mavjud qoldiq (qoldiq − bron) ÷ autstokka tuzatilgan kunlik savdo",
   "у экспорта своей скорости продаж нет": "eksportning o'z savdo tezligi yo'q",
   "{kg} кг в день": "kuniga {kg} kg",
@@ -372,8 +372,8 @@ const dict: Dict = {
   "кор.": "quti",
   "Остатки завода и склада и рекомендация: кг, коробки (по весу коробки), штуки (единицы Linko) или деньги (по прайсу)": "Zavod va ombor qoldiqlari hamda tavsiya: kg, qutilar (quti vazni bo'yicha), dona (Linko birliklari) yoki pul (prays bo'yicha)",
   "Остаток завода не загружен": "Zavod qoldig'i yuklanmagan",
-  "Доступно на складе завода: остаток минус бронь (заказы и перемещения, которые ещё не отгружены, и перемещения в пути к дилерам). В акт не попадает.": "Zavod omborida mavjud: qoldiq minus bron (hali jo'natilmagan buyurtmalar va ko'chirishlar hamda dilerlarga yo'ldagi ko'chirishlar). Dalolatnomaga kirmaydi.",
-  "Доступно на складе региона: остаток минус бронь (заказы магазинов, которые ещё не отгружены, и перемещения в пути); от него считается рекомендация": "Mintaqa omborida mavjud: qoldiq minus bron (hali jo'natilmagan do'kon buyurtmalari va yo'ldagi ko'chirishlar); tavsiya shundan hisoblanadi",
+  "Доступно на складе завода: остаток минус бронь (подтверждённые перемещения к дилерам, которые ещё не отданы). В акт не попадает.": "Zavod omborida mavjud: qoldiq minus bron (dilerlarga tasdiqlangan, hali berilmagan ko'chirishlar). Dalolatnomaga kirmaydi.",
+  "Доступно на складе региона: остаток минус бронь (подтверждённые перемещения со склада, которые ещё не отданы); от него считается рекомендация": "Mintaqa omborida mavjud: qoldiq minus bron (ombordan tasdiqlangan, hali berilmagan ko'chirishlar); tavsiya shundan hisoblanadi",
   "Завод, доступно, {unit}": "Zavod, mavjud, {unit}",
   "Склад, доступно, {unit}": "Ombor, mavjud, {unit}",
   "Остаток {stock} кг, бронь {reserved} кг": "Qoldiq {stock} kg, bron {reserved} kg",
@@ -384,8 +384,20 @@ const dict: Dict = {
   "Меньше на коробку": "Bir quti kamroq",
   "Больше на коробку": "Bir quti ko'proq",
   "Коробок: {name}": "Qutilar: {name}",
-  "Рекомендация — заказ, который доводит доступный остаток склада (остаток − бронь: заказы магазинов, которые ещё не отгружены, и перемещения в пути) до запаса на {days} дн. продаж, в целых коробках. Цена — прайс «{priceList}».":
-    "Tavsiya — omborning mavjud qoldig'ini (qoldiq − bron: hali jo'natilmagan do'kon buyurtmalari va yo'ldagi ko'chirishlar) {days} kunlik savdo zaxirasigacha butun qutilarda yetkazadigan buyurtma. Narx — «{priceList}» prays-varag'i.",
+  "Рекомендация — заказ, который доводит доступный остаток склада (остаток − бронь: подтверждённые перемещения со склада, которые ещё не отданы) до запаса на {days} дн. продаж, минус бронь дилера (подтверждённые перемещения на склад региона), в целых коробках. Цена — прайс «{priceList}».":
+    "Tavsiya — omborning mavjud qoldig'ini (qoldiq − bron: ombordan tasdiqlangan, hali berilmagan ko'chirishlar) {days} kunlik savdo zaxirasigacha yetkazadigan buyurtma, diler broni (mintaqa omboriga tasdiqlangan ko'chirishlar) ayirilgan holda, butun qutilarda. Narx — «{priceList}» prays-varag'i.",
+  // Автозаказ: бронь дилера — подтверждённые перемещения на склад региона (20.11.2026)
+  "Бронь дилера": "Diler broni",
+  "бронь дилера": "diler broni",
+  "Бронь дилера, {unit}": "Diler broni, {unit}",
+  "Бронь дилера: товар подтверждённых перемещений на склад региона — уже забронирован для дилера на заводе и ещё не отдан. Рекомендация уменьшена на неё.":
+    "Diler broni: mintaqa omboriga tasdiqlangan ko'chirishlardagi tovar — zavodda diler uchun allaqachon bron qilingan va hali berilmagan. Tavsiya shunga kamaytirilgan.",
+  "Подтверждено на склад региона {kg} кг — рекомендация уменьшена на эту бронь": "Mintaqa omboriga {kg} kg tasdiqlangan — tavsiya shu bronga kamaytirilgan",
+  "Бронь дилера: подтверждённых перемещений на склад «{region}» нет.": "Diler broni: «{region}» omboriga tasdiqlangan ko'chirishlar yo'q.",
+  "подтверждено в Linko на склад «{region}», ещё не отдано — рекомендация уже уменьшена на эту бронь":
+    "Linkoda «{region}» omboriga tasdiqlangan, hali berilmagan — tavsiya allaqachon shu bronga kamaytirilgan",
+  "№{n} от {date}": "№{n}, {date}",
+  "без веса": "vaznsiz",
   "Без веса коробки и потому без автозаказа: {n} {products}.": "Quti vazni yo'qligi sababli avtobuyurtmasiz: {n} {products}.",
   "на заводе доступно {n} кг": "zavodda mavjud {n} kg",
   "Остаток завода {stock} кг, из них в брони {reserved} кг": "Zavod qoldig'i {stock} kg, shundan bronda {reserved} kg",
@@ -471,8 +483,8 @@ const dict: Dict = {
   "Итого · {n} SKU": "Jami · {n} SKU",
   "бронь {n}": "bron {n}",
   "бронь {r} кг · доступно {f} кг": "bron {r} kg · mavjud {f} kg",
-  "Клетка — склад: остаток в выбранной единице (под ним — бронь: заказы и перемещения, которые ещё не отгружены, и перемещения в пути), продажи в день (звёздочка — с поправкой на аутсток), на сколько дней хватит доступного (остаток − бронь), запас на 15 дней и рекомендуемый заказ от доступного (пусто — докупать не нужно). Завод в «Всего» не входит: это тот же товар до отгрузки; его заказ — заказы всех дилеров минус весь остаток на заводе. Итоги считает сервер по отфильтрованным строкам. «—» в сортировке всегда внизу.":
-    "Katak — ombor: tanlangan birlikdagi qoldiq (ostida — bron: hali jo'natilmagan buyurtmalar va ko'chirishlar hamda yo'ldagi ko'chirishlar), kunlik savdo (yulduzcha — autstokka tuzatilgan), mavjud qoldiq (qoldiq − bron) necha kunga yetadi, 15 kunlik zaxira va mavjud qoldiqdan tavsiya buyurtma (bo'sh — qo'shimcha xarid kerak emas). Zavod «Jami»ga kirmaydi: bu jo'natilgunga qadar o'sha tovar; uning buyurtmasi — barcha dilerlar buyurtmalari minus zavoddagi butun qoldiq. Jamilarni server filtrlangan qatorlar bo'yicha hisoblaydi. Saralashda «—» doim pastda.",
+  "Клетка — склад: остаток в выбранной единице (под ним — бронь: подтверждённые перемещения со склада, которые ещё не отданы), продажи в день (звёздочка — с поправкой на аутсток), на сколько дней хватит доступного (остаток − бронь), запас на 15 дней и рекомендуемый заказ от доступного (пусто — докупать не нужно). Завод в «Всего» не входит: это тот же товар до отгрузки; его заказ — заказы всех дилеров минус весь остаток на заводе. Итоги считает сервер по отфильтрованным строкам. «—» в сортировке всегда внизу.":
+    "Katak — ombor: tanlangan birlikdagi qoldiq (ostida — bron: ombordan tasdiqlangan, hali berilmagan ko'chirishlar), kunlik savdo (yulduzcha — autstokka tuzatilgan), mavjud qoldiq (qoldiq − bron) necha kunga yetadi, 15 kunlik zaxira va mavjud qoldiqdan tavsiya buyurtma (bo'sh — qo'shimcha xarid kerak emas). Zavod «Jami»ga kirmaydi: bu jo'natilgunga qadar o'sha tovar; uning buyurtmasi — barcha dilerlar buyurtmalari minus zavoddagi butun qoldiq. Jamilarni server filtrlangan qatorlar bo'yicha hisoblaydi. Saralashda «—» doim pastda.",
   "вне категорий отчёта": "hisobot toifalaridan tashqari",
   "нет веса единицы": "birlik vazni yo'q",
   "Тип Linko": "Linko turi",
@@ -586,8 +598,8 @@ const dict: Dict = {
   "Нет плана выбранного вида на месяц": "Oyga tanlangan turdagi reja yo'q",
   "— план региона и республики берётся из Linko: сумма весовых планов ТП (staff_balance, product_sales_weight), факт — продажи этих ТП; плитка выполнения пишет «плана РОП на этот месяц нет — план ТП из Linko» (или «плана «Завод» …»). Переключатель предлагает только планы, заведённые на месяц. Два источника в одном месяце не смешиваются: регион без плана РОП в месяце с планом РОП остаётся без плана, его факт входит в выполнение РМ и республики. В «Плане и факте по месяцам» у каждого месяца свой источник.":
     "— mintaqa va respublika rejasi Linko'dan olinadi: TP vazn rejalari yig'indisi (staff_balance, product_sales_weight), fakt — shu TP lar savdosi; bajarilish plitkasida «bu oyga ROP rejasi yo'q — TP rejasi Linko'dan» (yoki ««Zavod» rejasi …») yoziladi. Almashtirgich faqat oyga kiritilgan rejalarni taklif qiladi. Bir oyda ikki manba aralashmaydi: ROP rejasi bor oyda ROP rejasi yo'q mintaqa rejasiz qoladi, uning fakti RM va respublika bajarilishiga kiradi. «Oylar bo'yicha reja va fakt»da har oyning o'z manbasi bor.",
-  "— сумма плана «регион × категория» по регионам охвата: типы товаров Linko в плане сводятся к категориям отчёта (фасовки помадки — одна категория, «Снек» — Придзел). Факт — все продажи категории в охвате. Выполнение, «осталось», прогноз к плану (от 100% — зелёный, от 90% — оранжевый, ниже — красный) и итог считает сервер. Без планов регионов — по весовым показателям ТП в Linko: «Могуль + Шоколад» — Помадка + Шоколад одной строкой. Серая строка «плана нет» — категория продаётся, а плана на неё нет.":
-    "— qamrov mintaqalari bo'yicha «mintaqa × toifa» rejasi yig'indisi: rejadagi Linko tovar turlari hisobot toifalariga keltiriladi (помадка qadoqlari — bitta toifa, «Снек» — Придзел). Fakt — qamrovdagi toifaning barcha savdosi. Bajarilish, «qoldi», rejaga prognoz (100% dan — yashil, 90% dan — to'q sariq, pastroq — qizil) va jamini server hisoblaydi. Mintaqa rejalari bo'lmasa — Linko'dagi TP vazn ko'rsatkichlari bo'yicha: «Могуль + Шоколад» — Помадка + Шоколад bitta qatorda. Kulrang «reja yo'q» qatori — toifa sotilmoqda, lekin unga reja yo'q.",
+  "— сумма плана «регион × категория» по регионам охвата: типы товаров Linko в плане сводятся к категориям отчёта (фасовки помадки — одна категория, «Снек» — Придзел). Факт — все продажи категории в охвате. Выполнение, «осталось», прогноз к плану (от 100% — зелёный, от 90% — оранжевый, ниже — красный) и итог считает сервер. Без планов регионов — по весовым показателям ТП в Linko: «Могуль + Шоколад» — Помадка + Шоколад одной строкой. «Тотал» ТП уже включает его Могуль и Twizos, поэтому в категориях он не складывается с ними: Помадка — план «Могуль», Придзел — план «Twizos», а строка «Остальные категории (без разбивки)» — остаток «Тотал − Могуль − Twizos», её факт — продажи всех остальных категорий; итог равен «Тоталу». Серая строка «плана нет» — категория продаётся, а плана на неё нет.":
+    "— qamrov mintaqalari bo'yicha «mintaqa × toifa» rejasi yig'indisi: rejadagi Linko tovar turlari hisobot toifalariga keltiriladi (помадка qadoqlari — bitta toifa, «Снек» — Придзел). Fakt — qamrovdagi toifaning barcha savdosi. Bajarilish, «qoldi», rejaga prognoz (100% dan — yashil, 90% dan — to'q sariq, pastroq — qizil) va jamini server hisoblaydi. Mintaqa rejalari bo'lmasa — Linko'dagi TP vazn ko'rsatkichlari bo'yicha: «Могуль + Шоколад» — Помадка + Шоколад bitta qatorda. TP «Тотал»i uning Могуль va Twizos'ini allaqachon o'z ichiga oladi, shuning uchun toifalarda ular bilan qo'shilmaydi: Помадка — «Могуль» rejasi, Придзел — «Twizos» rejasi, «Boshqa toifalar (bo'linmagan)» qatori esa — «Тотал − Могуль − Twizos» qoldig'i, uning fakti — qolgan barcha toifalar savdosi; jami «Тотал»ga teng. Kulrang «reja yo'q» qatori — toifa sotilmoqda, lekin unga reja yo'q.",
   "План ТП": "TP rejasi",
   "— в карточке ТП и в команде региона всегда его весовые показатели в Linko; плана ТП по категориям из планов регионов нет.":
     "— TP kartasida va mintaqa jamoasida doim uning Linko'dagi vazn ko'rsatkichlari; mintaqa rejalaridan toifalar bo'yicha TP rejasi yo'q.",
@@ -1015,6 +1027,15 @@ const dict: Dict = {
   "Фото — до 15 МБ.": "Rasm — 15 MB gacha.",
   "Товар не найден.": "Mahsulot topilmadi.",
   "Это фото уже удалили — обновите страницу.": "Bu rasm allaqachon o'chirilgan — sahifani yangilang.",
+  // ---------- «Как считается»: план АКБ, «Из чего складывается объём», нулевые строки (ТЗ 18.11.2026) ----------
+  "План АКБ": "AKB rejasi",
+  "— показатель АКБ ТП в Linko (active_client_count): без категории в названии («Октябрь АКБ Ташкент») — план АКБ ТП, с категорией («АКБ Twizos», «АКБ план Помадка») — план АКБ этой категории; две версии одного плана у ТП не складываются — берётся больший. План АКБ региона, РМ и республики — сумма планов АКБ их ТП (командные планы СВР не входят); факт — точки с чистой покупкой больше нуля по продажам этих ТП, точка, купившая у двух ТП, — одна. Выполнение = факт ÷ план, прогноз — как у «АКБ на агента». Пока план АКБ есть, плитка «АКБ к плану» заменяет «АКБ на агента» с целью компании, а в «Агентах» у ТП вместо цели — его план.":
+    "— Linko'dagi TP AKB ko'rsatkichi (active_client_count): nomida toifa bo'lmasa («Октябрь АКБ Ташкент») — TP AKB rejasi, toifa bilan («АКБ Twizos», «АКБ план Помадка») — shu toifaning AKB rejasi; TP'dagi bitta rejaning ikki versiyasi qo'shilmaydi — kattasi olinadi. Mintaqa, RM va respublika AKB rejasi — ularning TP AKB rejalari yig'indisi (SVR jamoa rejalari kirmaydi); fakt — shu TP savdosi bo'yicha sof xaridi noldan katta nuqtalar, ikki TP'dan xarid qilgan nuqta — bitta. Bajarilish = fakt ÷ reja, prognoz — «Agentga AKB»dagi kabi. AKB rejasi bor ekan, «AKB rejaga» plitkasi kompaniya maqsadi bilan «Agentga AKB» o'rnini egallaydi, «Agentlar»da esa TP'da maqsad o'rniga — uning rejasi.",
+  "— таблица региона по категориям: доля категории в кг региона; план, факт, выполнение, прогноз по темпу и прогноз к плану (кг); план АКБ категории, АКБ категории и охват АКБ = АКБ категории ÷ АКБ региона; итог — регион целиком. Планы Linko на несколько категорий — отдельными строками курсивом.":
+    "— mintaqaning toifalar bo'yicha jadvali: toifaning mintaqa kg'idagi ulushi; reja, fakt, bajarilish, sur'at bo'yicha prognoz va rejaga prognoz (kg); toifa AKB rejasi, toifa AKB va AKB qamrovi = toifa AKB ÷ mintaqa AKB; jami — butun mintaqa. Bir nechta toifaga Linko rejalari — kursivda alohida qatorlar.",
+  "Строки из одних нулей": "Faqat nollardan iborat qatorlar",
+  "— регион без плана, продаж, точек, ТП и визитов (регион-канал в идущем месяце, филиал без продаж) в «Все регионы» и «к прошлому месяцу» не показывается. В «Ассортименте» не показывается категория, которую по всей республике не продают ни в этом, ни в прошлом месяце и на которую нет плана месяца (снятая, как «Песочный»).":
+    "— rejasi, savdosi, nuqtalari, TP va tashriflari yo'q mintaqa (joriy oydagi kanal-mintaqa, savdosiz filial) «Barcha mintaqalar» va «o'tgan oyga» bo'limlarida ko'rsatilmaydi. «Assortiment»da butun respublikada na shu, na o'tgan oyda sotilmagan va oy rejasi bo'lmagan toifa (olib tashlangan, «Песочный» kabi) ko'rsatilmaydi.",
 };
 
 export default dict;

@@ -291,12 +291,22 @@ function AgentCard({ agent: a, href, targets, t }: { agent: AgentCardRow; href: 
 
       <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 border-t border-line pt-3 text-xs">
         <Metric label={t("Выручка")} value={money(a.revenue, t)} sub={a.revenueExecution != null ? t("{pct} плана", { pct: pct(a.revenueExecution) }) : null} />
-        <Metric
-          label={t("АКБ")}
-          value={num(a.akb)}
-          sub={t("цель {n}", { n: num(targets.akbPerAgent) })}
-          tone={a.akb >= targets.akbPerAgent ? "text-ok" : undefined}
-        />
+        {/* План АКБ ТП из Linko важнее общей цели «АКБ на агента»: цель — только пока плана нет. */}
+        {a.akbPlan ? (
+          <Metric
+            label={t("АКБ")}
+            value={num(a.akb)}
+            sub={t("план {n} · {pct}", { n: num(a.akbPlan.plan), pct: pct(a.akbPlan.execution) })}
+            tone={a.akbPlan.level ? levelClass(a.akbPlan.level) : undefined}
+          />
+        ) : (
+          <Metric
+            label={t("АКБ")}
+            value={num(a.akb)}
+            sub={t("цель {n}", { n: num(targets.akbPerAgent) })}
+            tone={a.akb >= targets.akbPerAgent ? "text-ok" : undefined}
+          />
+        )}
         <Metric
           label={t("Страйк")}
           value={pct(a.conversion)}

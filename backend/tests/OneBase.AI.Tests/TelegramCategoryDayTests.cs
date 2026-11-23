@@ -10,18 +10,32 @@ namespace OneBase.AI.Tests;
 /// <summary>Образцовые итоги дня по категориям для тестов без базы (каталог, подпись, картинки, переводы).</summary>
 public static class CategoryDaySamples
 {
+    /// <summary>Маленькое фото товара (webp, как в хранилище фото товаров).</summary>
+    public static byte[] Photo()
+    {
+        using var bitmap = new SKBitmap(160, 160);
+        using (var canvas = new SKCanvas(bitmap))
+        {
+            canvas.Clear(SKColors.SandyBrown);
+            using var paint = new SKPaint { Color = SKColors.DarkRed, IsAntialias = true };
+            canvas.DrawCircle(80, 80, 50, paint);
+        }
+
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Webp, 80);
+        return data.ToArray();
+    }
+
     /// <summary>
     /// Две категории: «Кекс» с планом дня, разбивкой (rows строк; последняя — без продаж за день) и артикулами дня, «Бамбук» без плана и без
     /// продаж за день. Имена — как у категорий отчёта (данные, они не переводятся).
     /// </summary>
     public static CategoryDayCards Cards(string slot, DateOnly day, string role, int rows = 4, bool photos = true, DateOnly? through = null, string? holiday = null)
     {
-        var days = Enumerable.Range(0, 14).Select(i => day.AddDays(i - 13))
-            .Select((d, i) => new CategoryDayPoint(d, d.DayOfWeek == DayOfWeek.Sunday ? 0 : i == 13 ? 640.5m : 380 + i * 22 + (i % 3) * 1_400)).ToList();
         var kind = role switch
         {
-            TelegramReportRoles.Rm => CategorySalesCards.Regions,
-            TelegramReportRoles.Sv => CategorySalesCards.Agents,
+            TelegramReportRoles.Rm => CategoryDayCards.Regions,
+            TelegramReportRoles.Sv => CategoryDayCards.Agents,
             _ => null,
         };
         IReadOnlyList<CategoryDayRow> breakdown = kind is null
@@ -30,23 +44,19 @@ public static class CategoryDaySamples
             {
                 var kg = i == rows - 1 ? 0 : 260m - i * 40;
                 decimal? plan = i % 3 == 2 ? null : 220;
-                return new CategoryDayRow(kind == CategorySalesCards.Regions ? $"Регион {i + 1}" : $"Агент {i + 1}", kg, plan, plan is { } p ? kg / p : null,
+                return new CategoryDayRow(kind == CategoryDayCards.Regions ? $"Регион {i + 1}" : $"Агент {i + 1}", kg, plan, plan is { } p ? kg / p : null,
                     kg * 33_000, Math.Max(0, 40 - i * 5), Math.Max(0, 44 - i * 5));
             }).ToList();
-        var photo = photos ? CategoryCardSamples.Photo() : null;
-        var prev = CategoryDayBuilder.PreviousWorkDay(day, new Dictionary<DateOnly, string>());
-        var cake = new CategoryDayCard("Кекс", null, 640.5m, 21_300_000, 96, 104, 12, 14, 610, 640.5m / 610, null, false, 12_345.6m, 15_000, 12_345.6m / 15_000,
-            prev, 580, day.AddDays(-7), 702, 598.3m, days, kind, breakdown,
+        var photo = photos ? Photo() : null;
+        var cake = new CategoryDayCard("Кекс", null, 640.5m, 21_300_000, 96, 104, 12, 610, 640.5m / 610, null, false, kind, breakdown,
             Enumerable.Range(0, 8).Select(i => new CategoryDaySku(100 + i, $"Кекс «Nillo» шоколадный с начинкой {i + 1}, 1,5 кг", $"51{i}", 120 - i * 11,
-                4_000_000 - i * 300_000, 30 - i * 2, 1_800 - i * 120, i < 3, i == 5 ? null : photo)).ToList(),
-            ["Кекс «Мини» 0,3 кг", "Кекс «Классик» 2 кг"], 1);
-        var bamboo = new CategoryDayCard("Бамбук", null, 0, 0, 0, 0, 0, 6, null, null, null, false, 0, null, null, prev, 0, day.AddDays(-7), 0, null,
-            days.Select(d => d with { Kg = 0 }).ToList(), null, [], [], [], 0);
+                4_000_000 - i * 300_000, 30 - i * 2, i < 3, i == 5 ? null : photo)).ToList());
+        var bamboo = new CategoryDayCard("Бамбук", null, 0, 0, 0, 0, 0, null, null, null, false, null, [], []);
         return new CategoryDayCards(slot, day, through ?? day, holiday, [cake, bamboo]);
     }
 }
 
-/// <summary>«11. Итоги дня по категориям» без базы: каталог, прошлый рабочий день, документ и подпись, картинки 1080 px, переводы подписей.</summary>
+/// <summary>«11. Итоги дня по категориям» без базы: каталог, документ и подпись, картинки 1080 px (только день итога), переводы подписей.</summary>
 public class TelegramCategoryDayTests
 {
     private static readonly DateOnly Day = new(2026, 11, 16);
@@ -73,21 +83,36 @@ public class TelegramCategoryDayTests
         Assert.Equal("category-day", ReportCatalog.Key(ReportType.CategoryDay));
         Assert.Equal("11. Итоги дня по категориям", ReportCatalog.Title(ReportType.CategoryDay));
         Assert.Equal("итог прошлого рабочего дня", ReportCatalog.SlotTitle(ReportType.CategoryDay, "morning"));
-        // Итоги дня — после карточек категорий того же утра (очередь — в порядке каталога).
-        Assert.True(ReportCatalog.Order("category-day.morning") > ReportCatalog.Order("category-cards.morning"));
     }
 
     [Fact]
-    public void Previous_work_day_skips_sundays_and_holidays_and_change_needs_a_base()
+    public void Month_category_cards_report_is_gone_and_its_old_rows_keep_a_readable_title()
     {
-        var none = new Dictionary<DateOnly, string>();
-        Assert.Equal(new DateOnly(2026, 11, 14), CategoryDayBuilder.PreviousWorkDay(new DateOnly(2026, 11, 16), none)); // понедельник → суббота
-        Assert.Equal(new DateOnly(2026, 11, 17), CategoryDayBuilder.PreviousWorkDay(new DateOnly(2026, 11, 18), none));
-        var holidays = new Dictionary<DateOnly, string> { [new DateOnly(2026, 11, 14)] = "Праздник" };
-        Assert.Equal(new DateOnly(2026, 11, 13), CategoryDayBuilder.PreviousWorkDay(new DateOnly(2026, 11, 16), holidays));
-        Assert.Equal(0.1m, CategoryDayReport.Change(110, 100));
-        Assert.Equal(-0.25m, CategoryDayReport.Change(75, 100));
-        Assert.Null(CategoryDayReport.Change(5, 0));
+        // «10. Карточки категорий» убран: запусков нет, коды из старых подписок не принимаются (их переносит миграция в category-day.*).
+        Assert.DoesNotContain(ReportCatalog.Jobs, j => j.Code.StartsWith("category-cards.", StringComparison.Ordinal));
+        Assert.Null(ReportCatalog.Find("category-cards.evening"));
+        Assert.Equal(["category-day.evening"], ReportCatalog.Parse("category-cards.evening,category-day.evening,unknown.job"));
+        Assert.DoesNotContain(Enum.GetNames<ReportType>(), n => n == "CategoryCards");
+
+        // Журнал и история прежних отправок — с понятным названием, а не кодом.
+        Assert.Equal("10. Карточки категорий (отчёт убран)", ReportCatalog.ReportTitle("category-cards.evening"));
+        Assert.Equal("10. Карточки категорий (отчёт убран) · итог прошлого рабочего дня", ReportCatalog.Describe("category-cards.morning"));
+        Assert.Equal("11. Итоги дня по категориям", ReportCatalog.ReportTitle("category-day.evening"));
+        Assert.Equal("11. Итоги дня по категориям · итог дня", ReportCatalog.Describe("category-day.evening"));
+        Assert.Equal("unknown.job", ReportCatalog.Describe("unknown.job"));
+    }
+
+    [Fact]
+    public void Choice_keeps_order_drops_duplicates_and_morning_reports_the_previous_work_day()
+    {
+        Assert.Equal(["Придзел", "помадка"], CategoryCardChoice.Parse(" Придзел, помадка ,Помадка,,")); // повтор в другом регистре — тот же
+        Assert.Null(CategoryCardChoice.Format([" ", ""]));
+        Assert.Equal("Придзел,Помадка", CategoryCardChoice.Format(["Придзел", "придзел", "Помадка"]));
+        Assert.Equal("Могуль", CategoryCardChoice.AliasOf("помадка"));
+        Assert.Null(CategoryCardChoice.AliasOf("Кекс"));
+        Assert.Equal(new DateOnly(2026, 11, 14), CategoryCardChoice.PreviousWorkDay(new DateOnly(2026, 11, 16))); // понедельник → суббота
+        Assert.Equal(new DateOnly(2026, 11, 17), CategoryCardChoice.PreviousWorkDay(new DateOnly(2026, 11, 18)));
+        Assert.Equal(new DateOnly(2026, 10, 31), CategoryCardChoice.PreviousWorkDay(new DateOnly(2026, 11, 2)));
     }
 
     [Fact]
@@ -105,12 +130,11 @@ public class TelegramCategoryDayTests
         Assert.Equal((ReportTone.Good, ReportTone.Normal), (doc.Kpis[0].Tone, doc.Kpis[1].Tone));
         Assert.Equal("плана дня нет", doc.Kpis[1].Hint);
         Assert.NotNull(doc.CategoryDay);
-        Assert.Null(doc.CategorySales);
 
         // День итога позже отчётного дня «Продаж» — пометка «неполные» и замечание; праздник — замечание, плана дня нет.
         var late = Document("category-day.morning", CategoryDaySamples.Cards("morning", Day, TelegramReportRoles.Rm, through: Day.AddDays(-2), holiday: "Новый год"));
         Assert.True(late.Incomplete);
-        Assert.Contains(late.Notes, n => n.Contains("Продаж за 16.11.2026 в данных ещё нет — месяц по 14.11", StringComparison.Ordinal));
+        Assert.Contains(late.Notes, n => n.Contains("Продаж за 16.11.2026 в данных ещё нет — последние продажи за 14.11", StringComparison.Ordinal));
         Assert.Contains(late.Notes, n => n.Contains("16.11 — праздник «Новый год»: план дня не считается", StringComparison.Ordinal));
         Assert.Equal(2, Renderer.Render(late).Count);
 
@@ -132,7 +156,7 @@ public class TelegramCategoryDayTests
             {
                 using var bitmap = SKBitmap.Decode(png);
                 Assert.Equal(1080, bitmap.Width);
-                Assert.InRange(bitmap.Height, 900, 4_000);
+                Assert.InRange(bitmap.Height, 560, 4_000); // «Бамбук» без продаж и плана — только шапка, «Продано за день» и плитки
                 Assert.True(bitmap.Width + bitmap.Height <= 10_000); // предел фото Telegram
                 Assert.True(png.Length < 10 * 1024 * 1024);
             }
@@ -170,6 +194,7 @@ public class TelegramCategoryDayTests
             Assert.NotEmpty(Renderer.Render(uz));
 
             var cyr = Document(job, CategoryDaySamples.Cards("evening", Day, TelegramReportRoles.Rm), "uz-Cyrl");
+            Assert.DoesNotMatch("[A-Za-z]", ReportTexts.Get("uz-Cyrl", "ИТОГ ДНЯ КАТЕГОРИИ")); // шапка картинки — без латиницы («KUN» оставалось)
             Assert.DoesNotContain(new[] { cyr.Title, cyr.Caption, cyr.Summary }, t => Regex.IsMatch(t, "[A-Za-z]{2,}"));
             Assert.NotEmpty(Renderer.Render(cyr));
         }
@@ -190,6 +215,8 @@ public class TelegramCategoryDayTests
         keys.AddRange([ReportCatalog.Title(ReportType.CategoryDay), ReportCatalog.SlotTitle(ReportType.CategoryDay, "morning"),
             ReportCatalog.SlotTitle(ReportType.CategoryDay, "evening")]);
         Assert.True(keys.Count > 30);
+        // Карточка дня — только этот день: ни одной подписи про месяц, неделю, средний день или ряд по дням.
+        Assert.DoesNotContain(keys, k => Regex.IsMatch(k, "месяц|недел|средн|по дням|две недели", RegexOptions.IgnoreCase));
         var missing = keys.Where(k => !ReportTexts.Keys.Contains(k)).ToList();
         Assert.True(missing.Count == 0, "Нет перевода:" + Environment.NewLine + string.Join(Environment.NewLine, missing));
     }

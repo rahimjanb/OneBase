@@ -64,9 +64,6 @@ public sealed record ReportDocument(
     /// <summary>Карточки накопительной акции (вертикальные 1080 px) — свой рисовальщик; null — не акция.</summary>
     public Incentive.IncentiveCards? Incentive { get; init; }
 
-    /// <summary>Карточки категорий (вертикальные 1080 px, по картинке на категорию) — свой рисовальщик; null — другой отчёт.</summary>
-    public CategorySalesCards? CategorySales { get; init; }
-
     /// <summary>Итоги дня по категориям (вертикальные 1080 px, по картинке на категорию) — свой рисовальщик; null — другой отчёт.</summary>
     public CategoryDayCards? CategoryDay { get; init; }
 

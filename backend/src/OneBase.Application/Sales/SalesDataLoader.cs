@@ -334,13 +334,19 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
         var linkoTypes = typeTree.Names;
         var categoryMap = SalesCategories.Build(options.Categories, typeTree);
 
-        // План ТП по категориям — по названию весового показателя Linko; текущий и следующий месяц.
+        // План ТП по категориям — по названию весового показателя Linko; текущий и следующий месяц. «Тотал» включает Могуль и Twizos:
+        // его строка — остаток на остальные категории, а не ещё один план поверх частей (SalesPlans.LinkoCategoryPlans).
         var categoryPlans = weight
             .Where(s => s.PlanAmount > 0 && ((s.Year == year && s.Month == month) || (s.Year == next.Year && s.Month == next.Month)))
-            .Select(s => new CategoryPlanRow(s.LinkoUserId, s.Year, s.Month,
-                options.PlanCategoriesOf(s.IndicatorName).Select(categoryMap.GroupByName).OfType<long>().Distinct().ToList(),
-                s.PlanAmount))
+            .GroupBy(s => (s.LinkoUserId, s.Year, s.Month))
+            .SelectMany(g => SalesPlans.LinkoCategoryPlans(g.Key.LinkoUserId, g.Key.Year, g.Key.Month, g.Select(s => ((string?)s.IndicatorName, s.PlanAmount)),
+                name => options.PlanCategoriesOf(name).Select(categoryMap.GroupByName).OfType<long>().Distinct().ToList()))
             .ToList();
+        // План АКБ ТП из Linko (active_client_count) за месяц: без категории — АКБ ТП, с категорией — АКБ категории; командные планы СВР — не планы ТП.
+        var akbPlans = SalesPlans.LinkoAkbPlans(
+            staff.Where(s => s.Year == year && s.Month == month && s.PlanType == StaffPlanTypes.ActiveClients && !TeamPlan(s))
+                .Select(s => (s.LinkoUserId, (string?)s.IndicatorName, s.PlanAmount)),
+            name => options.PlanCategoriesOf(name).Select(categoryMap.GroupByName).OfType<long>().Distinct().ToList());
         var yearStart = new DateOnly(year, 1, 1);
         var akbHistoryTo = previousStart.AddDays(-1); // прошлый и текущий месяц считаются из строк продаж
         timer.Lap("справочники");
@@ -410,6 +416,7 @@ public sealed class SalesDataLoader(IAppDbContext db, SalesOptions options, IMem
             PlanSource = plans.Source,
             YearAgentPlans = yearAgentPlans,
             CategoryPlans = categoryPlans,
+            AkbPlans = akbPlans,
             NextMonth = (next.Year, next.Month),
             NextPlans = nextPlans,
             Indicators = staff

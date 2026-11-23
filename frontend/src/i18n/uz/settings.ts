@@ -15,8 +15,8 @@ const dict: Dict = {
   "Склады": "Omborlar",
   "Остатки (штуки)": "Qoldiqlar (dona)",
   "Перемещения между складами": "Omborlar orasida ko'chirish",
-  "Бронь складов (неотгруженные заказы и перемещения, перемещения в пути)":
-    "Omborlar broni (jo'natilmagan buyurtmalar va ko'chirishlar, yo'ldagi ko'chirishlar)",
+  "Бронь складов (подтверждённые перемещения)":
+    "Omborlar broni (tasdiqlangan ko'chirishlar)",
   "Платежи": "To'lovlar",
   "Прайс-листы": "Narxnomalar",
   "Цены прайс-листов": "Narxnoma narxlari",

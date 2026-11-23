@@ -856,7 +856,7 @@ public sealed class TelegramReportService(
         };
 
     /// <summary>
-    /// Запуск, область, день, момент формирования, язык и категории карточек (отчёт 10) предпросмотра или теста: явно или по получателю.
+    /// Запуск, область, день, момент формирования, язык и категории карточек (отчёт 11) предпросмотра или теста: явно или по получателю.
     /// </summary>
     private async Task<(string Job, ReportScope Scope, DateOnly Date, DateTimeOffset? At, string? Language, IReadOnlyList<string>? Categories)> TargetAsync(
         ReportPreviewInput input, bool canUseSales, CancellationToken ct)
@@ -1053,7 +1053,7 @@ public sealed class TelegramReportService(
         var rows = await q.OrderByDescending(d => d.CreatedAt).Skip((page - 1) * PageSize).Take(PageSize).ToListAsync(ct);
         var userIds = rows.Where(r => r.CreatedById != null && r.Trigger != "schedule").Select(r => r.CreatedById!.Value).Distinct().ToArray();
         var names = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
-        var items = rows.Select(d => new ReportDeliveryView(d.Id, d.CreatedAt, d.Report!, ReportCatalog.Find(d.Report) is { } info ? ReportCatalog.Title(info.Report) : d.Report!,
+        var items = rows.Select(d => new ReportDeliveryView(d.Id, d.CreatedAt, d.Report!, ReportCatalog.ReportTitle(d.Report),
             d.Period, d.Trigger, d.Role, d.RecipientTitle, d.ScopeTitle, d.RegionId, d.Status, d.Attempts, d.SentAt, d.NextAttemptAt, d.Error, d.Pages, d.Bytes, d.Summary,
             d.DataAsOf, d.DurationMs, d.Trigger != "schedule" && d.CreatedById is { } u ? names.GetValueOrDefault(u) : null,
             d.Trigger != "test" && d.Status is TelegramReportSender.Failed or TelegramReportSender.Unknown && ReportScope.Parse(d.ScopeKey) is not null,
@@ -1071,7 +1071,7 @@ public sealed class TelegramReportService(
         }
 
         var runRows = await runs.OrderByDescending(r => r.StartedAt).Take(40).ToListAsync(ct);
-        var runViews = runRows.Select(r => new ReportRunView(r.Id, r.Job, ReportCatalog.Find(r.Job) is { } info ? $"{ReportCatalog.Title(info.Report)} · {ReportCatalog.SlotTitle(info.Report, info.Slot)}" : r.Job,
+        var runViews = runRows.Select(r => new ReportRunView(r.Id, r.Job, ReportCatalog.Describe(r.Job),
             r.Period, r.ScheduledAt, r.StartedAt, r.FinishedAt, r.Status, r.Planned, r.Sent, r.Failed, r.Skipped, r.Error, r.DataAsOf)).ToList();
         return new ReportHistory(items, total, page, PageSize, runViews);
     }

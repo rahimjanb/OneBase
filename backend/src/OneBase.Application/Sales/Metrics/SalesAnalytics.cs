@@ -20,6 +20,12 @@ public sealed partial class SalesAnalytics
     private readonly ILookup<Guid, SaleLine> _previousByRegion;
     private readonly ILookup<long, SaleLine> _currentByAgent;
     private readonly ILookup<long, SaleLine> _previousByAgent;
+
+    /// <summary>План АКБ ТП из Linko (показатель АКБ без категории) по агентам.</summary>
+    private readonly IReadOnlyDictionary<long, decimal> _akbPlanByAgent;
+
+    /// <summary>Категории, которые идут (LiveCategories): считаются один раз на месяц.</summary>
+    private readonly Lazy<HashSet<long?>> _liveCategories;
     private readonly ILookup<long, VisitRecord> _visitsByAgent;
     private readonly Dictionary<long, Guid> _agentRegion = [];
     private readonly Dictionary<long, Guid> _marketRegion = [];
@@ -62,6 +68,8 @@ public sealed partial class SalesAnalytics
         _previousByRegion = data.Previous.ToLookup(RegionOf);
         _currentByAgent = data.Current.Where(l => l.AgentId != null).ToLookup(l => l.AgentId!.Value);
         _previousByAgent = data.Previous.Where(l => l.AgentId != null).ToLookup(l => l.AgentId!.Value);
+        _akbPlanByAgent = data.AkbPlans.Where(p => p.Group is null).GroupBy(p => p.AgentId).ToDictionary(g => g.Key, g => g.Max(p => p.Plan));
+        _liveCategories = new Lazy<HashSet<long?>>(LiveCategories, LazyThreadSafetyMode.ExecutionAndPublication);
         _visitsByAgent = data.Visits.ToLookup(v => v.AgentId);
         _visitByAgent = data.VisitLines.Where(l => l.AgentId != null).ToLookup(l => l.AgentId!.Value);
         var done = data.Visits.Where(v => v.Status == VisitStatus.Done).ToList();
@@ -205,6 +213,7 @@ public sealed partial class SalesAnalytics
         var categories = CategoryCardsOf(scope);
         var notBought = AgentNotBought(id);
         var categoryPlans = CategoryPlansOf(scope);
+        var kpi = Kpi(scope);
 
         return new RegionView(
             Period,
@@ -214,7 +223,7 @@ public sealed partial class SalesAnalytics
             direction?.Name,
             region.Supervisor,
             region.Dealer,
-            Kpi(scope),
+            kpi,
             Unassigned(scope),
             MonthsOf(region),
             CategoriesOf(id),
@@ -234,7 +243,8 @@ public sealed partial class SalesAnalytics
             NextMonthOf(scope, byCategory: true),
             NotBoughtTotal(region.Name, notBought),
             CategoryPlanTotal(categoryPlans),
-            SalesOptions.IsChannelBranch(region.BranchId));
+            SalesOptions.IsChannelBranch(region.BranchId),
+            VolumeOf(scope, categoryPlans, kpi));
     }
 
     public AgentView Agent(long id)
@@ -323,7 +333,8 @@ public sealed partial class SalesAnalytics
             SalesMath.Ratio(stats.Revenue, akb),
             SalesMath.Ratio(stats.Kg, akb),
             SalesMath.ExecutionLevelOf(execution),
-            SalesMath.ExecutionLevelOf(revenueExecution));
+            SalesMath.ExecutionLevelOf(revenueExecution),
+            AgentAkbPlan(id, akb));
     }
 
     /// <summary>
@@ -400,9 +411,11 @@ public sealed partial class SalesAnalytics
             Kpi(set),
             Unassigned(set),
             cards,
-            regionIds.Select(RegionUnit).OrderBy(r => r.Name).ToList(),
+            // Строки из одних нулей (регион-канал в идущем месяце, филиал без продаж и ТП) — не показываются (UnitRow.HasData).
+            regionIds.Select(RegionUnit).Where(r => r.HasData).OrderBy(r => r.Name).ToList(),
             visitRows,
             regionIds.Select(r => Compare(r.ToString(), _regions[r].Name, DirectionName(r), _currentByRegion[r], _previousByRegion[r]))
+                .Where(r => r.KgNow != 0 || r.KgBefore != 0 || r.SumNow != 0 || r.SumBefore != 0)
                 .OrderBy(r => r.Name).ToList(),
             notBought,
             categories,
@@ -467,7 +480,39 @@ public sealed partial class SalesAnalytics
             SalesMath.Pace(plan is null ? fact : coverage.Fact, plan, _elapsed, _d.DaysInMonth, _d.Closed) with
             {
                 Level = _d.Closed ? SalesMath.ExecutionLevelOf(execution) : SalesMath.ForecastLevelOf(planForecastExecution),
-            });
+            },
+            AkbPlanOf(scope));
+    }
+
+    /// <summary>
+    /// План АКБ подразделения из Linko: сумма планов АКБ его ТП (показатель АКБ без категории), факт — АКБ по продажам этих ТП в подразделении
+    /// (точки с чистой покупкой больше нуля; точка, купившая у двух ТП, — одна), прогноз — как у «АКБ на агента». null — ни у одного ТП
+    /// подразделения плана АКБ в Linko нет.
+    /// </summary>
+    private AkbPlanTile? AkbPlanOf(IReadOnlySet<Guid>? scope)
+    {
+        var agents = AgentsIn(scope).Where(_akbPlanByAgent.ContainsKey).ToHashSet();
+        if (agents.Count == 0)
+        {
+            return null;
+        }
+
+        bool Own(SaleLine l) => l.AgentId is { } a && agents.Contains(a);
+        var fact = SalesMath.Akb(Lines(scope).Where(Own));
+        var forecast = AkbForecast(fact, PreviousLines(scope).Where(Own).ToList());
+        return AkbTile(agents.Sum(a => _akbPlanByAgent[a]), fact, forecast, agents.Count, ActiveReps(scope));
+    }
+
+    /// <summary>План АКБ ТП из Linko и его выполнение по АКБ ТП (все его продажи месяца); null — плана АКБ у ТП нет.</summary>
+    private AkbPlanTile? AgentAkbPlan(long agent, int akb) =>
+        _akbPlanByAgent.TryGetValue(agent, out var plan) ? AkbTile(plan, akb, AkbForecast(akb, _previousByAgent[agent].ToList()), 1, 1) : null;
+
+    private AkbPlanTile AkbTile(decimal plan, int fact, decimal? forecast, int agents, int allAgents)
+    {
+        var execution = SalesMath.Ratio(fact, plan);
+        var forecastExecution = forecast is null ? null : SalesMath.Ratio(forecast.Value, plan);
+        return new AkbPlanTile(plan, fact, execution, forecast, forecastExecution, agents, Math.Max(agents, allAgents),
+            _d.Closed ? SalesMath.ExecutionLevelOf(execution) : SalesMath.ForecastLevelOf(forecastExecution));
     }
 
     /// <summary>Второй план регионов охвата (AltPlanTile); null — на месяц его нет или у охвата нет ни одного региона с ним.</summary>
@@ -641,7 +686,8 @@ public sealed partial class SalesAnalytics
 
         return new UnitRow(id, name, subtitle, kpi.PlanKg, kpi.FactKg, kpi.Execution, kpi.ForecastKg, kpi.ForecastExecution,
             kpi.Revenue, kpi.Akb, kpi.Conversion.Value, kpi.VisitsWithoutOrder, agents.Count(a => !IsVacancy(a) && IsSalesRep(a)),
-            regionNames.Count, regionNames, FlagCountsOf(agents), kpi.PlanFactKg, kind, kpi.ExecutionLevel, SalesMath.ExecutionLevelOf(kpi.ForecastExecution));
+            regionNames.Count, regionNames, FlagCountsOf(agents), kpi.PlanFactKg, kind, kpi.ExecutionLevel, SalesMath.ExecutionLevelOf(kpi.ForecastExecution),
+            AkbPlan: kpi.AkbPlan);
     }
 
     private UnassignedFact Unassigned(IReadOnlySet<Guid>? scope)
@@ -1163,7 +1209,9 @@ public sealed partial class SalesAnalytics
         return new TeamRow(agent, AgentName(agent), plan, fact, execution, forecast, forecastExecution, lines.Sum(l => l.Revenue),
             stats.Visits.Done, stats.Orders, stats.Conversion, stats.SumPerVisit, stats.Categories,
             IsVacancy(agent), _d.Agents.TryGetValue(agent, out var info) && info.InDirectory, FlagsOf(agent), IsSalesRep(agent), info?.Job,
-            SalesMath.ExecutionLevelOf(execution), SalesMath.ExecutionLevelOf(forecastExecution), SalesMath.Akb(lines));
+            SalesMath.ExecutionLevelOf(execution), SalesMath.ExecutionLevelOf(forecastExecution), SalesMath.Akb(lines),
+            _akbPlanByAgent.TryGetValue(agent, out var akbPlan) ? akbPlan : null,
+            _akbPlanByAgent.TryGetValue(agent, out var p) ? SalesMath.Ratio(SalesMath.Akb(lines), p) : null);
     };
 
     private List<NotInDirectoryRow> NotInDirectory(Guid region) =>
@@ -1249,16 +1297,19 @@ public sealed partial class SalesAnalytics
     private List<CategoryPlanFact> PlanFacts(IReadOnlyList<CategoryPlanRow> rows, IReadOnlyList<SaleLine> lines)
     {
         var result = new List<CategoryPlanFact>();
-        foreach (var g in rows.GroupBy(r => string.Join(",", r.Groups)))
+        foreach (var g in rows.GroupBy(r => r.Key))
         {
-            var groups = g.First().Groups;
+            var first = g.First();
+            var groups = first.Groups;
             var agents = g.Select(r => r.AgentId).ToHashSet();
-            var inGroups = groups.Count == 0 ? lines : lines.Where(l => GroupOf(l.CategoryId) is { } c && groups.Contains(c)).ToList();
+            // Остаток «Тотала» — все категории, кроме тех, что в плане отдельными показателями; без разбивки — все строки.
+            var inGroups = first.Except is { } except
+                ? lines.Where(l => GroupOf(l.CategoryId) is not { } c || !except.Contains(c)).ToList()
+                : groups.Count == 0 ? lines : lines.Where(l => GroupOf(l.CategoryId) is { } c && groups.Contains(c)).ToList();
             var own = inGroups.Where(l => l.AgentId is { } a && agents.Contains(a)).ToList();
             var plan = g.Sum(r => r.PlanKg);
             var fact = own.Sum(l => l.Kg);
-            var name = groups.Count == 0 ? "Без разбивки по категориям" : string.Join(" + ", groups.Select(x => _cats.NameOf(x)));
-            result.Add(PlanFact(groups.Count == 1 ? groups[0] : null, name, plan, fact, own.Sum(l => l.Revenue), inGroups.Sum(l => l.Kg)));
+            result.Add(PlanFact(groups.Count == 1 ? groups[0] : null, CategoryPlanName(first), plan, fact, own.Sum(l => l.Revenue), inGroups.Sum(l => l.Kg)));
         }
 
         var planned = rows.SelectMany(r => r.Groups).ToHashSet();
@@ -1276,6 +1327,15 @@ public sealed partial class SalesAnalytics
             .ThenByDescending(x => x.PlanKg ?? x.FactKg)
             .ToList();
     }
+
+    /// <summary>
+    /// Название строки плана ТП по категориям: категории показателя («Помадка + Шоколад»), «Без разбивки по категориям» или остаток «Тотала»
+    /// после показателей с категориями — «Остальные категории (без разбивки)».
+    /// </summary>
+    private string CategoryPlanName(CategoryPlanRow row) =>
+        row.Except is not null ? "Остальные категории (без разбивки)"
+        : row.Groups.Count == 0 ? "Без разбивки по категориям"
+        : string.Join(" + ", row.Groups.Select(x => _cats.NameOf(x)));
 
     /// <summary>
     /// План на следующий месяц: планы регионов выбранного вида (РОП или «Завод»), если на него они уже есть, иначе — планы ТП из Linko.
@@ -1351,13 +1411,11 @@ public sealed partial class SalesAnalytics
             var (year, month) = _d.NextMonth;
             var nextRows = _d.CategoryPlans.Where(p => p.Year == year && p.Month == month && InScope(p.AgentId)).ToList();
             var currentRows = CurrentCategoryPlans().Where(p => InScope(p.AgentId)).ToList();
-            rows = nextRows.GroupBy(r => string.Join(",", r.Groups))
+            rows = nextRows.GroupBy(r => r.Key)
                 .Select(g =>
                 {
-                    var groups = g.First().Groups;
-                    var name = groups.Count == 0 ? "Без разбивки по категориям" : string.Join(" + ", groups.Select(x => _cats.NameOf(x)));
-                    var was = currentRows.Where(r => string.Join(",", r.Groups) == g.Key).ToList();
-                    return NextRow(g.Key, name, g.Sum(r => r.PlanKg), was.Count == 0 ? null : was.Sum(r => r.PlanKg));
+                    var was = currentRows.Where(r => r.Key == g.Key).ToList();
+                    return NextRow(g.Key, CategoryPlanName(g.First()), g.Sum(r => r.PlanKg), was.Count == 0 ? null : was.Sum(r => r.PlanKg));
                 })
                 .OrderByDescending(r => r.PlanKg)
                 .ToList();

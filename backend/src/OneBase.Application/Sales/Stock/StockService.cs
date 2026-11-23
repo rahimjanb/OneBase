@@ -8,10 +8,9 @@ namespace OneBase.Application.Sales.Stock;
 /// Остаток SKU на одном складе: штуки как в Linko, кг, коробки и стоимость; скорость без поправки (RawKgPerDay) и с поправкой на аутсток
 /// (KgPerDay; ZeroDays — зачтённые дни в нуле закрытого месяца), та же скорость в коробках и деньгах (BoxesPerDay, SumPerDay — для матрицы
 /// в выбранной единице); запас на 15 дней в кг, коробках и деньгах; рекомендуемый заказ (OrderKg — вверх до целой коробки; у завода —
-/// заказ у завода). Бронь (Reserved…) — товар неотгруженных заказов и перемещений склада и перемещений в пути («Забронировано» и «В пути»
-/// в Linko), FreeKg — доступно
-/// (остаток − бронь): «хватит, дн.», статус и заказ дилера считаются от доступного; заказ у завода — от всего остатка (бронь завода — это
-/// отгрузки по тем же заказам дилеров, иначе её заказали бы дважды). Все переводы в коробки, штуки и деньги сделаны здесь — страница ничего
+/// заказ у завода). Бронь (Reserved…) — товар подтверждённых перемещений со склада, которые ещё не отданы (Sales:ReservedTransferStatuses),
+/// FreeKg — доступно (остаток − бронь): «хватит, дн.», статус и заказ дилера считаются от доступного; заказ у завода — от всего остатка
+/// (бронь завода — это отгрузки дилерам, иначе её заказали бы дважды). Все переводы в коробки, штуки и деньги сделаны здесь — страница ничего
 /// не пересчитывает.
 /// </summary>
 public sealed record StockCell(
@@ -286,8 +285,8 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
 
     /// <summary>
     /// Автозаказ региона — без фильтров страницы: все товары, у которых известна коробка (единица Linko и сколько единиц в коробке),
-    /// рекомендация — рекомендуемый заказ склада региона в коробках (от доступного остатка: бронь уже продана магазинам). Регион не задан или
-    /// не найден — первый по алфавиту.
+    /// рекомендация — рекомендуемый заказ склада региона в коробках (от доступного остатка: остаток − бронь подтверждённых перемещений) минус
+    /// бронь дилера (подтверждённые перемещения на склад региона). Регион не задан или не найден — первый по алфавиту.
     /// </summary>
     public static AutoOrderView ComposeAutoOrder(StockBase b, string? regionId)
     {
@@ -308,13 +307,27 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
             }
 
             var cell = i.Regions.GetValueOrDefault(region.Id);
-            var rec = cell is null ? 0 : (int)Math.Round(cell.OrderKg / p.BoxKg.Value);
+            var dealerReserved = StockMath.Kg(s.IncomingOf(p.Id, region.StockId), p.UnitKg) ?? 0;
+            var rec = cell is null ? 0 : AutoOrderMath.RecBoxes(cell.OrderKg, dealerReserved, p.BoxKg.Value);
             items.Add(new AutoOrderItem(p.Id, p.Code, p.Name, i.Category, i.Top, unit, perBox, p.BoxKg, p.Price, rec, cell?.Kg ?? 0, cell?.KgPerDay,
-                cell?.ReservedKg ?? 0, cell?.FreeKg, i.Factory?.Kg, i.Factory?.FreeKg));
+                cell?.ReservedKg ?? 0, cell?.FreeKg, i.Factory?.Kg, i.Factory?.FreeKg, dealerReserved));
         }
 
+        var stockNames = new Dictionary<long, string>();
+        foreach (var (id, name) in s.Regions.Select(r => (r.StockId, r.Name))
+                     .Concat(s.OtherStocks.Select(o => (o.StockId, o.Name)))
+                     .Concat(new[] { s.Factory, s.Export }.Where(x => x is not null).Select(x => (x!.StockId, x.Name))))
+        {
+            stockNames.TryAdd(id, name);
+        }
+
+        var transfers = (s.IncomingTransfers ?? [])
+            .Where(x => x.ToStockId == region.StockId)
+            .Select(x => new AutoOrderTransfer(x.Id, x.Number, x.CreatedDate, x.FromStockId is { } from ? stockNames.GetValueOrDefault(from, $"#{from}") : "—", x.WeightKg))
+            .ToList();
         return new AutoOrderView(region.Id, region.Name, regions, s.SnapshotDate, s.PriceList, StockMath.OrderCoverDays,
-            items.OrderByDescending(x => x.RecBoxes > 0).ThenBy(x => x.Category, Russian).ThenBy(x => x.Name, Russian).ToList(), withoutBox, s.ReservedAt);
+            items.OrderByDescending(x => x.RecBoxes > 0).ThenBy(x => x.Category, Russian).ThenBy(x => x.Name, Russian).ToList(), withoutBox, s.ReservedAt,
+            transfers);
     }
 
     /// <summary>
@@ -706,9 +719,9 @@ public sealed class StockService(IAppDbContext db, SalesOptions options, Outstoc
     }
 
     /// <summary>
-    /// Клетка склада: у дилера заказ — до запаса на 15 дней по скорости с поправкой (orderSpeed) от доступного остатка (остаток − бронь: бронь
-    /// дилера уже продана магазинам), у завода — заказы дилеров минус весь его остаток (dealerOrdersKg; бронь завода — отгрузки по тем же заказам
-    /// дилеров), у экспорта ни скорости, ни заказа. Дни запаса и статус — от доступного.
+    /// Клетка склада: у дилера заказ — до запаса на 15 дней по скорости с поправкой (orderSpeed) от доступного остатка (остаток − бронь
+    /// подтверждённых перемещений со склада), у завода — заказы дилеров минус весь его остаток (dealerOrdersKg; бронь завода — подтверждённые
+    /// отгрузки дилерам), у экспорта ни скорости, ни заказа. Дни запаса и статус — от доступного.
     /// </summary>
     public static StockCell Cell(StockSnapshot s, StockProduct p, long stockId, decimal? kgPerDay, decimal? rawKgPerDay, int zeroDays, decimal? orderSpeed, decimal? dealerOrdersKg,
         bool top = false)

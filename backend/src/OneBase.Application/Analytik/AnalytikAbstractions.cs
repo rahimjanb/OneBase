@@ -44,6 +44,12 @@ public sealed record SqlResult(IReadOnlyList<string> Columns, IReadOnlyList<stri
 /// <summary>Запрос не уложился в лимит времени (statement_timeout).</summary>
 public sealed class AnalytikTimeoutException(string message, Exception? inner = null) : Exception(message, inner);
 
+/// <summary>PostgreSQL отклонил запрос (синтаксис, нет колонки, деление на ноль…): текст ошибки — для исправления свободного запроса.</summary>
+public sealed class AnalytikSqlException(string message, string sqlState, Exception? inner = null) : Exception(message, inner)
+{
+    public string SqlState { get; } = sqlState;
+}
+
 /// <summary>
 /// Выполнение SQL аналитического движка: только чтение (транзакция READ ONLY), statement_timeout и lock_timeout на каждый запрос, предел строк,
 /// своё подключение (ConnectionStrings:AnalytikReadOnly — отдельная роль PostgreSQL только на чтение; без неё — основное) и не больше
@@ -81,6 +87,12 @@ public sealed class AnalytikOptions
 
     /// <summary>Предел оценки стоимости запроса PostgreSQL (EXPLAIN): тяжелее — отказ с советом сузить условия, без выполнения.</summary>
     public double MaxQueryCost { get; init; } = 5_000_000;
+
+    /// <summary>Свободный запрос (analytik_sql): предел оценки стоимости — цепочки с оконными функциями по заказам и визитам за год.</summary>
+    public double MaxSqlCost { get; init; } = 20_000_000;
+
+    /// <summary>Свободный запрос: секунд выполнения (statement_timeout).</summary>
+    public int SqlTimeoutSeconds { get; init; } = 30;
 
     /// <summary>До какой оценки строк таблица считается точно (count(*)) при обновлении каталога.</summary>
     public long ExactCountThreshold { get; init; } = 200_000;

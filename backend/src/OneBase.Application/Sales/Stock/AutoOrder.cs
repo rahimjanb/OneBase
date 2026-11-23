@@ -3,9 +3,11 @@ namespace OneBase.Application.Sales.Stock;
 /// <summary>
 /// Товар автозаказа региона: единица Linko («кг» или «шт»), сколько единиц в коробке, вес коробки, цена за единицу (прайс
 /// Sales:StockPriceList — «Дилерга кириш нарх», по нему Linko печатает передачи) и рекомендация в коробках — рекомендуемый заказ
-/// «Рек. остатка» (до запаса на 15 дней от доступного остатка, вверх до коробки; ТОП-товару без остатка и продаж — 10 коробок). StockKg —
-/// остаток склада региона, ReservedKg — его бронь (неотгруженные заказы магазинов и перемещения), FreeKg — доступно; FactoryKg и FactoryFreeKg —
-/// остаток завода и доступное на нём (без брони): больше заказывать нечего.
+/// «Рек. остатка» (до запаса на 15 дней от доступного остатка, вверх до коробки; ТОП-товару без остатка и продаж — 10 коробок) минус бронь
+/// дилера, вверх до коробки. StockKg — остаток склада региона, ReservedKg — его бронь (подтверждённые, ещё не отданные перемещения со склада),
+/// FreeKg — доступно; FactoryKg и FactoryFreeKg — остаток завода и доступное на нём (без брони): больше заказывать нечего. DealerReservedKg —
+/// бронь дилера: товар подтверждённых, ещё не отданных перемещений на склад региона (уже забронирован для него на заводе и придёт — второй
+/// раз его не заказывают).
 /// </summary>
 public sealed record AutoOrderItem(
     long ProductId,
@@ -23,11 +25,15 @@ public sealed record AutoOrderItem(
     decimal ReservedKg = 0,
     decimal? FreeKg = null,
     decimal? FactoryKg = null,
-    decimal? FactoryFreeKg = null);
+    decimal? FactoryFreeKg = null,
+    decimal DealerReservedKg = 0);
+
+/// <summary>Документ брони дилера: подтверждённое, ещё не отданное перемещение на склад региона (номер Linko, дата, откуда, вес по строкам).</summary>
+public sealed record AutoOrderTransfer(long Id, string? Number, DateOnly? Date, string From, decimal WeightKg);
 
 /// <summary>
 /// Автозаказ региона: склады дилеров для выбора, товары с известной коробкой; WithoutBox — сколько товаров без коробки (в автозаказ не попали);
-/// ReservedAt — когда загружена бронь (null — не загружалась).
+/// ReservedAt — когда загружена бронь (null — не загружалась); DealerTransfers — бронь дилера: подтверждённые перемещения на склад региона.
 /// </summary>
 public sealed record AutoOrderView(
     string RegionId,
@@ -38,7 +44,8 @@ public sealed record AutoOrderView(
     int CoverDays,
     IReadOnlyList<AutoOrderItem> Items,
     int WithoutBox,
-    DateTimeOffset? ReservedAt = null);
+    DateTimeOffset? ReservedAt = null,
+    IReadOnlyList<AutoOrderTransfer>? DealerTransfers = null);
 
 public sealed record AutoOrderActLine(long ProductId, int Boxes);
 
@@ -91,6 +98,16 @@ public static class AutoOrderMath
     {
         var unit = measurement?.Trim().ToLowerInvariant();
         return unit is Kg or Pieces ? unit : unitKg is { } u && StockMath.IsByWeight(u) ? Kg : Pieces;
+    }
+
+    /// <summary>
+    /// Рекомендация в коробках: заказ склада региона (orderKg, кратен коробке) минус бронь дилера (уже подтверждённые перемещения на этот
+    /// склад), не меньше нуля, вверх до целой коробки.
+    /// </summary>
+    public static int RecBoxes(decimal orderKg, decimal dealerReservedKg, decimal boxKg)
+    {
+        var need = orderKg - Math.Max(0, dealerReservedKg);
+        return need <= 0 || boxKg <= 0 ? 0 : (int)Math.Ceiling(need / boxKg - 0.0001m);
     }
 
     /// <summary>Строка акта: количество = коробки × единиц в коробке (до граммов), сумма = количество × цена за единицу, целыми сумами.</summary>

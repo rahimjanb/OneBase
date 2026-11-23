@@ -41,16 +41,10 @@ public enum ReportType
     WeeklyPdf,
 
     /// <summary>
-    /// 10. Карточки категорий: по картинке на каждую выбранную категорию («Придзел», «Помадка» — в планах «Могуль») с данными страницы
-    /// категории «Продаж» в области получателя — факт, план, прогноз, АКБ, SKU, по дням, регионы или ТП, ТОП артикулов с фото. 9:00 — итог
-    /// прошлого рабочего дня, 18:30 — итог дня. Категории — по умолчанию в настройках, у получателя можно свои.
-    /// </summary>
-    CategoryCards,
-
-    /// <summary>
-    /// 11. Итоги дня по категориям: по картинке на каждую категорию из выбора «Карточек категорий» — продажи за день в области получателя:
-    /// кг, сумма, ТТ, заказы, план дня и выполнение, к прошлому рабочему дню и неделе назад, по дням, регионы или ТП за день, артикулы дня с
-    /// фото и что за день не продавалось. 9:00 — итог прошлого рабочего дня, 19:00 — итог дня.
+    /// 11. Итоги дня по категориям: по картинке на каждую категорию из выбора «Карточек категорий» — продажи только за день в области
+    /// получателя, без месяца: кг, сумма, ТТ, заказы, артикулы, цена за кг, план дня и выполнение, регионы или ТП за день, артикулы дня с
+    /// фото. 9:00 — итог прошлого рабочего дня, 19:00 — итог дня. Прежний отчёт 10 «Карточки категорий» (месяц категории) убран 20.11.2026:
+    /// его получатели и включённые запуски перенесены сюда миграцией TelegramCategoryCardsRetired.
     /// </summary>
     CategoryDay,
 }
@@ -84,7 +78,6 @@ public static class ReportCatalog
     public const string Battle = "battle";
     public const string Incentive = "incentive";
     public const string WeeklyPdf = "weekly-pdf";
-    public const string CategoryCards = "category-cards";
     public const string CategoryDay = "category-day";
 
     private static readonly IReadOnlyList<string> Everyone = TelegramReportRoles.All;
@@ -131,8 +124,6 @@ public static class ReportCatalog
         new("incentive.summary", ReportType.Incentive, "summary", new(9, 0), ReportSchedules.Monday, Directors, 360),
         new("incentive.month", ReportType.Incentive, "month", new(9, 0), ReportSchedules.AllDays, Everyone, 360, MonthStart: true),
         new("weekly-pdf.monday", ReportType.WeeklyPdf, "monday", new(9, 0), ReportSchedules.Monday, Everyone, 360),
-        new("category-cards.morning", ReportType.CategoryCards, "morning", new(9, 0), ReportSchedules.WorkDays, Everyone, 180),
-        new("category-cards.evening", ReportType.CategoryCards, "evening", new(18, 30), ReportSchedules.WorkDays, Everyone, 180),
         new("category-day.morning", ReportType.CategoryDay, "morning", new(9, 0), ReportSchedules.WorkDays, Everyone, 180),
         new("category-day.evening", ReportType.CategoryDay, "evening", new(19, 0), ReportSchedules.WorkDays, Everyone, 180),
     ];
@@ -156,6 +147,27 @@ public static class ReportCatalog
 
     public static ReportJobInfo? Find(string? code) => Jobs.FirstOrDefault(j => j.Code == code);
 
+    /// <summary>
+    /// Запуски убранных отчётов (код → момент) — только для журнала и истории запусков, строк до удаления: «10. Карточки категорий» (месяц
+    /// категории) убран 20.11.2026, получатели переведены на «11. Итоги дня по категориям». В подписках и расписании этих кодов больше нет.
+    /// </summary>
+    private static readonly Dictionary<string, string> Retired = new()
+    {
+        ["category-cards.morning"] = "итог прошлого рабочего дня",
+        ["category-cards.evening"] = "итог дня",
+    };
+
+    private const string RetiredTitle = "10. Карточки категорий (отчёт убран)";
+
+    /// <summary>Название отчёта для журнала: «1. Дневной план»; убранный — с пометкой; неизвестный код — как есть.</summary>
+    public static string ReportTitle(string? code) =>
+        Find(code) is { } info ? Title(info.Report) : code is not null && Retired.ContainsKey(code) ? RetiredTitle : code ?? "";
+
+    /// <summary>Подпись запуска для истории: «1. Дневной план · итог дня»; убранный — с пометкой; неизвестный код — как есть.</summary>
+    public static string Describe(string? code) =>
+        Find(code) is { } info ? $"{Title(info.Report)} · {SlotTitle(info.Report, info.Slot)}"
+        : code is not null && Retired.TryGetValue(code, out var slot) ? $"{RetiredTitle} · {slot}" : code ?? "";
+
     public static string Key(ReportType type) => type switch
     {
         ReportType.Daily => Daily,
@@ -166,7 +178,6 @@ public static class ReportCatalog
         ReportType.Battle => Battle,
         ReportType.Incentive => Incentive,
         ReportType.WeeklyPdf => WeeklyPdf,
-        ReportType.CategoryCards => CategoryCards,
         ReportType.CategoryDay => CategoryDay,
         _ => Weekly,
     };
@@ -182,7 +193,6 @@ public static class ReportCatalog
         ReportType.Battle => "7. Поле боя",
         ReportType.Incentive => "9. Накопительная акция",
         ReportType.WeeklyPdf => "8. Еженедельный PDF",
-        ReportType.CategoryCards => "10. Карточки категорий",
         ReportType.CategoryDay => "11. Итоги дня по категориям",
         _ => "6. Итоги недели",
     };
@@ -209,8 +219,6 @@ public static class ReportCatalog
         (ReportType.Incentive, "rating") => "рейтинг акции",
         (ReportType.Incentive, "month") => "итог прошлого месяца",
         (ReportType.WeeklyPdf, "monday") => "PDF за прошлую неделю",
-        (ReportType.CategoryCards, "morning") => "итог прошлого рабочего дня",
-        (ReportType.CategoryCards, "evening") => "итог дня",
         (ReportType.CategoryDay, "morning") => "итог прошлого рабочего дня",
         (ReportType.CategoryDay, "evening") => "итог дня",
         _ => SlotTitle(slot),

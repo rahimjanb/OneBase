@@ -40,6 +40,7 @@ public sealed record VisitSequenceReport(
     IReadOnlyList<VisitSequenceGroup> Agents,
     IReadOnlyList<VisitOpenStreak> OpenStreaks,
     int OpenStreaksTotal,
+    OrderSizeReport OrderSize,
     IReadOnlyList<string> Notes);
 
 /// <summary>
@@ -48,8 +49,233 @@ public sealed record VisitSequenceReport(
 /// </summary>
 public sealed record VisitOpenStreak(long AgentId, string Agent, long MarketId, string Market, string Region, int Visits, DateOnly LastVisit, DateOnly? LastOrder);
 
-/// <summary>Отметки пары «ТП × точка» по дням: был ли выполненный визит и был ли заказ этого ТП в этой точке (по дню ввода).</summary>
-public sealed record VisitDay(DateOnly Day, bool Visited, bool Ordered);
+/// <summary>Отметки пары «ТП × точка» по дням: был ли выполненный визит и был ли заказ этого ТП в этой точке (по дню ввода), кг заказов дня.</summary>
+public sealed record VisitDay(DateOnly Day, bool Visited, bool Ordered, decimal Kg = 0);
+
+/// <summary>
+/// Что было после одного заказа пары «ТП × точка»: размер (кг) и во сколько раз он больше обычного заказа этой пары (Ratio; null — у пары
+/// меньше трёх заказов с весом), сколько выполненных визитов до следующего заказа, был ли следующий заказ до конца периода (Closed), на
+/// визите ли он, через сколько дней.
+/// </summary>
+public sealed record OrderCycle(DateOnly Start, decimal Kg, double? Ratio, int Visits, bool Closed, bool NextOnVisit, int? Days);
+
+/// <summary>
+/// Группа заказов по размеру и что было после них: заказов, сколько из них дождались следующего заказа в периоде (на визите и без), сколько
+/// ещё ждут; конверсия визитов после заказа по номеру (1-й, 2-й… 5+), среднее и медиана визитов и дней до следующего заказа.
+/// </summary>
+public sealed record OrderSizeGroup(
+    string Id,
+    string Label,
+    int Orders,
+    double? AverageKg,
+    int NextOrders,
+    int NextOnVisit,
+    int NextWithoutVisit,
+    int Waiting,
+    IReadOnlyList<VisitSequenceBucket> Buckets,
+    double? AverageVisitsToNext,
+    double? MedianVisitsToNext,
+    double? NextOnFirstVisitShare,
+    double? AverageDaysToNext,
+    double? MedianDaysToNext);
+
+/// <summary>
+/// «Связь размера заказа и следующих заказов»: группы по размеру относительно обычного заказа пары (Relative) и по кг (Absolute, квартили),
+/// ранговая корреляция Спирмена «во сколько раз больше обычного» ↔ визитов и ↔ дней до следующего заказа.
+/// </summary>
+public sealed record OrderSizeReport(
+    string Rule,
+    IReadOnlyList<OrderSizeGroup> Relative,
+    IReadOnlyList<OrderSizeGroup> Absolute,
+    int WithoutTypical,
+    double? RatioVisitsSpearman,
+    int RatioVisitsPairs,
+    double? RatioDaysSpearman,
+    int RatioDaysPairs);
+
+/// <summary>Циклы «заказ → следующий заказ» пары (без базы — проверяется тестами).</summary>
+public static class OrderCycles
+{
+    public const int MinOrdersForTypical = 3;
+
+    /// <summary>
+    /// days — по возрастанию дня. Цикл начинается каждым заказом в [from, to]; визиты после него (в день следующего заказа — тоже, если визит
+    /// был) считаются до следующего заказа; нет следующего заказа до конца данных — цикл ждёт (Closed = false). Обычный заказ пары — медиана кг
+    /// всех её заказов в загруженном окне.
+    /// </summary>
+    public static IReadOnlyList<OrderCycle> Of(IReadOnlyList<VisitDay> days, DateOnly from, DateOnly to)
+    {
+        var weights = days.Where(d => d.Ordered && d.Kg > 0).Select(d => d.Kg).Order().ToList();
+        decimal? typical = weights.Count >= MinOrdersForTypical
+            ? weights.Count % 2 == 1 ? weights[weights.Count / 2] : (weights[weights.Count / 2 - 1] + weights[weights.Count / 2]) / 2
+            : null;
+        double? Ratio(VisitDay d) => typical is > 0 && d.Kg > 0 ? (double)(d.Kg / typical.Value) : null;
+
+        var cycles = new List<OrderCycle>();
+        VisitDay? start = null;
+        var k = 0;
+        foreach (var d in days)
+        {
+            if (start is not null && d.Visited)
+            {
+                k++;
+            }
+
+            if (!d.Ordered)
+            {
+                continue;
+            }
+
+            if (start is not null)
+            {
+                cycles.Add(new OrderCycle(start.Day, start.Kg, Ratio(start), k, true, d.Visited, d.Day.DayNumber - start.Day.DayNumber));
+            }
+
+            start = d.Day >= from && d.Day <= to ? d : null;
+            k = 0;
+        }
+
+        if (start is not null)
+        {
+            cycles.Add(new OrderCycle(start.Day, start.Kg, Ratio(start), k, false, false, null));
+        }
+
+        return cycles;
+    }
+
+    /// <summary>Группа циклов: конверсия визитов по номеру после заказа, визиты и дни до следующего заказа.</summary>
+    public static OrderSizeGroup Group(string id, string label, IReadOnlyList<OrderCycle> cycles)
+    {
+        var orders = new int[VisitSequenceCounter.Buckets];
+        var reached = new int[VisitSequenceCounter.Buckets];
+        foreach (var c in cycles)
+        {
+            for (var v = 1; v <= c.Visits; v++)
+            {
+                reached[VisitSequenceCounter.Bucket(v)]++;
+            }
+
+            if (c.Closed && c.NextOnVisit && c.Visits > 0)
+            {
+                orders[VisitSequenceCounter.Bucket(c.Visits)]++;
+            }
+        }
+
+        var onVisit = cycles.Where(c => c.Closed && c.NextOnVisit && c.Visits > 0).Select(c => (double)c.Visits).ToList();
+        var days = cycles.Where(c => c.Closed && c.Days is not null).Select(c => (double)c.Days!.Value).ToList();
+        var buckets = Enumerable.Range(0, VisitSequenceCounter.Buckets).Select(i => new VisitSequenceBucket(
+            i == VisitSequenceCounter.Buckets - 1 ? $"{VisitSequenceCounter.Buckets}+" : (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            orders[i], onVisit.Count == 0 ? null : (double)orders[i] / onVisit.Count, reached[i], reached[i] == 0 ? null : (double)orders[i] / reached[i])).ToList();
+        var closed = cycles.Count(c => c.Closed);
+        return new OrderSizeGroup(id, label, cycles.Count, cycles.Count == 0 ? null : (double)cycles.Average(c => c.Kg), closed,
+            onVisit.Count, closed - onVisit.Count, cycles.Count - closed, buckets,
+            onVisit.Count == 0 ? null : onVisit.Average(), Median(onVisit), onVisit.Count == 0 ? null : (double)orders[0] / onVisit.Count,
+            days.Count == 0 ? null : days.Average(), Median(days));
+    }
+
+    public static readonly (double Below, string Id, string Label)[] RelativeBands =
+    [
+        (0.5, "lt_0_5", "меньше 0,5× обычного"),
+        (0.8, "0_5_0_8", "0,5–0,8× обычного"),
+        (1.25, "typical", "обычный (0,8–1,25×)"),
+        (2.0, "1_25_2", "крупнее: 1,25–2× обычного"),
+        (double.PositiveInfinity, "ge_2", "крупный: 2× обычного и больше"),
+    ];
+
+    public static OrderSizeReport Report(IReadOnlyList<OrderCycle> cycles)
+    {
+        var withRatio = cycles.Where(c => c.Ratio is not null).ToList();
+        var relative = new List<OrderSizeGroup>();
+        var lower = 0.0;
+        foreach (var (below, id, label) in RelativeBands)
+        {
+            var low = lower;
+            relative.Add(Group(id, label, withRatio.Where(c => c.Ratio >= low && c.Ratio < below).ToList()));
+            lower = below;
+        }
+
+        var weighted = cycles.Where(c => c.Kg > 0).OrderBy(c => c.Kg).ToList();
+        var absolute = new List<OrderSizeGroup>();
+        if (weighted.Count >= 4)
+        {
+            var bounds = new[] { 0.25, 0.5, 0.75 }.Select(q => weighted[(int)Math.Floor(q * (weighted.Count - 1))].Kg).ToArray();
+            static string Kg(decimal v) => Math.Round(v, v < 10 ? 1 : 0).ToString("0.#", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
+            absolute.Add(Group("q1", $"до {Kg(bounds[0])} кг (мелкие 25%)", weighted.Where(c => c.Kg <= bounds[0]).ToList()));
+            absolute.Add(Group("q2", $"{Kg(bounds[0])}–{Kg(bounds[1])} кг", weighted.Where(c => c.Kg > bounds[0] && c.Kg <= bounds[1]).ToList()));
+            absolute.Add(Group("q3", $"{Kg(bounds[1])}–{Kg(bounds[2])} кг", weighted.Where(c => c.Kg > bounds[1] && c.Kg <= bounds[2]).ToList()));
+            absolute.Add(Group("q4", $"больше {Kg(bounds[2])} кг (крупные 25%)", weighted.Where(c => c.Kg > bounds[2]).ToList()));
+        }
+
+        var visits = withRatio.Where(c => c.Closed && c.NextOnVisit && c.Visits > 0).ToList();
+        var days = withRatio.Where(c => c.Closed && c.Days is not null).ToList();
+        return new OrderSizeReport(
+            "Каждый заказ пары «ТП × точка» в периоде начинает цикл: визиты этого ТП в эту точку после заказа считаются до следующего заказа (заказ в " +
+            "день визита — «на k-м визите после заказа»). Размер — кг заказов дня; «обычный» — медиана кг заказов этой пары за период и 60 дней до " +
+            "него (нужно не меньше 3 заказов). Waiting — следующего заказа до конца периода ещё нет (у заказов в конце периода цикл не успел закончиться).",
+            relative, absolute, cycles.Count - withRatio.Count,
+            Spearman(visits.Select(c => c.Ratio!.Value).ToList(), visits.Select(c => (double)c.Visits).ToList()), visits.Count,
+            Spearman(days.Select(c => c.Ratio!.Value).ToList(), days.Select(c => (double)c.Days!.Value).ToList()), days.Count);
+    }
+
+    private static double? Median(List<double> values)
+    {
+        if (values.Count == 0)
+        {
+            return null;
+        }
+
+        var sorted = values.Order().ToList();
+        return sorted.Count % 2 == 1 ? sorted[sorted.Count / 2] : (sorted[sorted.Count / 2 - 1] + sorted[sorted.Count / 2]) / 2;
+    }
+
+    /// <summary>Ранговая корреляция Спирмена (средние ранги при равных значениях); меньше 3 пар или нет разброса — null.</summary>
+    public static double? Spearman(IReadOnlyList<double> x, IReadOnlyList<double> y)
+    {
+        if (x.Count != y.Count || x.Count < 3)
+        {
+            return null;
+        }
+
+        var rx = Ranks(x);
+        var ry = Ranks(y);
+        var mx = rx.Average();
+        var my = ry.Average();
+        double sxy = 0, sxx = 0, syy = 0;
+        for (var i = 0; i < rx.Length; i++)
+        {
+            sxy += (rx[i] - mx) * (ry[i] - my);
+            sxx += (rx[i] - mx) * (rx[i] - mx);
+            syy += (ry[i] - my) * (ry[i] - my);
+        }
+
+        return sxx == 0 || syy == 0 ? null : sxy / Math.Sqrt(sxx * syy);
+    }
+
+    private static double[] Ranks(IReadOnlyList<double> values)
+    {
+        var order = Enumerable.Range(0, values.Count).OrderBy(i => values[i]).ToArray();
+        var ranks = new double[values.Count];
+        var i = 0;
+        while (i < order.Length)
+        {
+            var j = i;
+            while (j + 1 < order.Length && values[order[j + 1]] == values[order[i]])
+            {
+                j++;
+            }
+
+            var rank = (i + j) / 2.0 + 1;
+            for (var t = i; t <= j; t++)
+            {
+                ranks[order[t]] = rank;
+            }
+
+            i = j + 1;
+        }
+
+        return ranks;
+    }
+}
 
 /// <summary>
 /// Счёт номера визита (без базы — проверяется тестами). По дням пары: выполненный визит увеличивает счёт; заказ в день визита — «заказ на k-м
@@ -219,38 +445,41 @@ public sealed class VisitSequenceService(IAppDbContext db, SalesOptions options,
         var visits = await VisitsAsync(start, to, agentId, branches, ct);
         var orders = await OrdersAsync(start, to, agentId, branches, ct);
 
-        var byPair = new Dictionary<(long Agent, long Market), SortedDictionary<DateOnly, (bool Visited, bool Ordered)>>();
+        var byPair = new Dictionary<(long Agent, long Market), SortedDictionary<DateOnly, (bool Visited, bool Ordered, decimal Kg)>>();
         var branchOf = new Dictionary<long, long?>();
-        void Mark(long agent, long market, DateOnly day, long? branch, bool visited, bool ordered)
+        void Mark(long agent, long market, DateOnly day, long? branch, bool visited, bool ordered, decimal kg)
         {
             if (!byPair.TryGetValue((agent, market), out var days))
             {
-                byPair[(agent, market)] = days = new SortedDictionary<DateOnly, (bool, bool)>();
+                byPair[(agent, market)] = days = new SortedDictionary<DateOnly, (bool, bool, decimal)>();
             }
 
             var cur = days.GetValueOrDefault(day);
-            days[day] = (cur.Visited || visited, cur.Ordered || ordered);
+            days[day] = (cur.Visited || visited, cur.Ordered || ordered, cur.Kg + kg);
             branchOf.TryAdd(market, branch);
         }
 
         foreach (var v in visits)
         {
-            Mark(v.Agent, v.Market, v.Day, v.Branch, true, false);
+            Mark(v.Agent, v.Market, v.Day, v.Branch, true, false, 0);
         }
 
         foreach (var o in orders)
         {
-            Mark(o.Agent, o.Market, o.Day, o.Branch, false, true);
+            Mark(o.Agent, o.Market, o.Day, o.Branch, false, true, o.Kg);
         }
 
         var total = new VisitSequenceCounter();
         var regions = new Dictionary<Guid, VisitSequenceCounter>();
         var agents = new Dictionary<long, VisitSequenceCounter>();
         var streaks = new List<(long Agent, long Market, Guid Region, int Visits, DateOnly LastVisit, DateOnly? LastOrder)>();
+        var cycles = new List<OrderCycle>();
         foreach (var ((agent, market), days) in byPair)
         {
             var counter = new VisitSequenceCounter();
-            var open = counter.Add(days.Select(d => new VisitDay(d.Key, d.Value.Visited, d.Value.Ordered)).ToList(), from);
+            var series = days.Select(d => new VisitDay(d.Key, d.Value.Visited, d.Value.Ordered, d.Value.Kg)).ToList();
+            var open = counter.Add(series, from);
+            cycles.AddRange(OrderCycles.Of(series, from, to));
             if (counter.Pairs == 0 && counter.OrdersWithoutVisit == 0)
             {
                 continue;
@@ -300,10 +529,10 @@ public sealed class VisitSequenceService(IAppDbContext db, SalesOptions options,
         notes.Add("«Визит» — день, когда ТП отметил выполненный визит в точке (несколько отметок за день — один визит).");
         notes.Add($"Серия без заказа считает и визиты за {LookbackDays} дней до начала периода; «последнего заказа нет» — не было с {start:dd.MM.yyyy}.");
         return new VisitSequenceReport(from, to, LookbackDays, RuleText, total.Result("all", scope.Restricted ? scope.Description : "Вся организация"), regionRows,
-            agentRows, streakRows, streaks.Count, notes);
+            agentRows, streakRows, streaks.Count, OrderCycles.Report(cycles), notes);
     }
 
-    private sealed record Row(long Agent, long Market, DateOnly Day, long? Branch);
+    private sealed record Row(long Agent, long Market, DateOnly Day, long? Branch, decimal Kg = 0);
 
     private async Task<List<Row>> VisitsAsync(DateOnly from, DateOnly to, long? agentId, IReadOnlyList<long>? branches, CancellationToken ct)
     {
@@ -343,13 +572,16 @@ public sealed class VisitSequenceService(IAppDbContext db, SalesOptions options,
         var rows = from o in orders
                    join m in db.LinkoMarkets.AsNoTracking() on o.MarketId equals (long?)m.Id into mm
                    from m in mm.DefaultIfEmpty()
-                   select new { Agent = o.AgentId!.Value, Market = o.MarketId!.Value, Day = o.CreatedDate, Branch = m == null ? null : m.BranchId };
+                   select new { Agent = o.AgentId!.Value, Market = o.MarketId!.Value, Day = o.CreatedDate, Branch = m == null ? null : m.BranchId, Kg = o.TotalWeight };
         if (branches is not null)
         {
             var list = branches.ToArray();
             rows = rows.Where(x => x.Branch != null && list.Contains(x.Branch.Value));
         }
 
-        return (await rows.Distinct().ToListAsync(ct)).Select(x => new Row(x.Agent, x.Market, x.Day, x.Branch)).ToList();
+        // Заказы пары за день — одной строкой с суммой кг (размер заказа дня).
+        var grouped = rows.GroupBy(x => new { x.Agent, x.Market, x.Day, x.Branch })
+            .Select(g => new { g.Key.Agent, g.Key.Market, g.Key.Day, g.Key.Branch, Kg = g.Sum(x => x.Kg) });
+        return (await grouped.ToListAsync(ct)).Select(x => new Row(x.Agent, x.Market, x.Day, x.Branch, x.Kg)).ToList();
     }
 }

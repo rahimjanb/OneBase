@@ -34,6 +34,7 @@ import { dayMonth, delta, kg, money, monthName, num, pct, regionsLabel } from "@
 import { queryWith, withQuery } from "@/lib/sales/query";
 import {
   agentsSplit,
+  akbPlanTarget,
   monthDays,
   planBlock,
   planLink,
@@ -47,7 +48,7 @@ import {
   type Tone,
 } from "@/lib/sales-secondary";
 import type { ExcludedSummary, FlagCounts, KpiTiles, Period, TargetLevel, UnitRow } from "@/lib/sales/types";
-import { planSourceText, planTileLabel } from "./blocks";
+import { akbPlanTitle, planSourceText, planTileLabel } from "./blocks";
 
 /**
  * Экран «Продажи → Вторичка» (ТЗ «Вторичка», макеты Laptop и Mobile): главный блок «Выполнение плана» с темпом, пять KPI с полосой
@@ -402,6 +403,8 @@ export function KpiCards({ kpi, period, href }: { kpi: KpiTiles; period: Period;
   const conversion = targetKpi(kpi.conversion, closed);
   const perOutlet = targetKpi(kpi.revenuePerOutlet, closed);
   const akb = targetKpi(kpi.akbPerAgent, closed);
+  // План АКБ из Linko есть — плитка АКБ сравнивает с ним (факт и прогноз к плану), цель «АКБ на агента» не показывается.
+  const akbPlan = kpi.akbPlan ? targetKpi(akbPlanTarget(kpi.akbPlan), closed) : null;
   const visits = visitsNoOrder(kpi);
   const barLabel = (name: string, x: { share: number | null; forecastShare: number | null }) =>
     x.forecastShare != null
@@ -491,23 +494,46 @@ export function KpiCards({ kpi, period, href }: { kpi: KpiTiles; period: Period;
               : t("в начале месяца прогноза ещё нет · цель {value} сум", { value: money(kpi.revenuePerOutlet.target, t) })
         }
       />
-      <KpiCard
-        label={t("АКБ на агента")}
-        icon={Users}
-        value={num(kpi.akbPerAgent.value, 1)}
-        tone={akb.tone}
-        bar={akb.bar}
-        barLabel={barLabel(t("АКБ на агента"), akb)}
-        caption={akbCaption}
-        href={href}
-        title={
-          closed
-            ? t("{pct} от цели", { pct: pct(kpi.akbPerAgent.ratio) })
-            : kpi.akbPerAgent.forecast != null
-              ? t("прогноз на конец месяца — {pct} от цели: АКБ растёт так же, как в прошлом месяце от тех же дней до конца", { pct: pct(kpi.akbPerAgent.ratio) })
-              : t("в начале месяца прогноза ещё нет")
-        }
-      />
+      {kpi.akbPlan && akbPlan ? (
+        <KpiCard
+          label={t("АКБ к плану")}
+          icon={Users}
+          value={num(kpi.akbPlan.fact)}
+          tone={akbPlan.tone}
+          bar={akbPlan.bar}
+          barLabel={barLabel(t("АКБ к плану"), akbPlan)}
+          caption={
+            akbPlan.forecastShare != null && kpi.akbPlan.forecast != null ? (
+              <Responsive
+                full={t("план {plan} · {pct} · прогноз {value} ({fpct})", { plan: num(kpi.akbPlan.plan), pct: pct(akbPlan.share), value: num(kpi.akbPlan.forecast), fpct: pct(akbPlan.forecastShare) })}
+                short={t("план {plan} · прогноз {fpct}", { plan: num(kpi.akbPlan.plan), fpct: pct(akbPlan.forecastShare) })}
+              />
+            ) : (
+              t("план {plan} · {pct}", { plan: num(kpi.akbPlan.plan), pct: pct(akbPlan.share) })
+            )
+          }
+          href={href}
+          title={akbPlanTitle(kpi, t)}
+        />
+      ) : (
+        <KpiCard
+          label={t("АКБ на агента")}
+          icon={Users}
+          value={num(kpi.akbPerAgent.value, 1)}
+          tone={akb.tone}
+          bar={akb.bar}
+          barLabel={barLabel(t("АКБ на агента"), akb)}
+          caption={akbCaption}
+          href={href}
+          title={
+            closed
+              ? t("{pct} от цели", { pct: pct(kpi.akbPerAgent.ratio) })
+              : kpi.akbPerAgent.forecast != null
+                ? t("прогноз на конец месяца — {pct} от цели: АКБ растёт так же, как в прошлом месяце от тех же дней до конца", { pct: pct(kpi.akbPerAgent.ratio) })
+                : t("в начале месяца прогноза ещё нет")
+          }
+        />
+      )}
       {/* «Визиты без заказа»: на компьютере — карточка в ряду, на телефоне — строка во всю ширину (подписи слева, число и доля справа). */}
       <Link href={href} title={visitsTitle} className="group col-span-2 block min-w-0 max-lg:active:opacity-75 md:col-span-1">
         <div className={`flex h-full flex-col px-[18px] py-4 transition-colors group-hover:border-accent/40 max-md:p-3.5 ${card}`}>

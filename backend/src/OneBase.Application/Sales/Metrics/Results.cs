@@ -82,7 +82,17 @@ public sealed record KpiTiles(
     string PlanSource = PlanSources.Linko,
     TargetLevel? ExecutionLevel = null,
     AltPlanTile? AltPlan = null,
-    PlanPace? Pace = null);
+    PlanPace? Pace = null,
+    AkbPlanTile? AkbPlan = null);
+
+/// <summary>
+/// План АКБ из Linko — показатель АКБ (active_client_count) ТП без категории в названии. Plan — сумма планов АКБ ТП охвата, Fact — АКБ
+/// (точки с чистой покупкой больше нуля) по продажам этих ТП в охвате, Execution = Fact ÷ Plan. Forecast — прогноз АКБ на конец идущего
+/// месяца (так же, как у «АКБ на агента»: по росту АКБ в прошлом месяце), у закрытого — null. Agents — ТП с планом АКБ, AllAgents — ТП
+/// охвата. Level — цвет: в идущем месяце по прогнозу, в закрытом — по выполнению. Пока план есть, «АКБ на агента» не сравнивается с целью.
+/// </summary>
+public sealed record AkbPlanTile(decimal Plan, int Fact, decimal? Execution, decimal? Forecast, decimal? ForecastExecution, int Agents, int AllAgents,
+    TargetLevel? Level);
 
 /// <summary>
 /// Темп месяца (SalesMath.Pace): Expected — где должно быть выполнение к отчётному дню (доля плана), PaceKg — текущий темп, кг в день,
@@ -129,7 +139,15 @@ public sealed record UnitRow(
     string Kind = UnitKinds.Region,
     TargetLevel? ExecutionLevel = null,
     TargetLevel? ForecastExecutionLevel = null,
-    bool IsChannel = false); // направление-канал (Sales:ChannelRegions — «Базар», «КА»): не РМ, в блоке «Региональные менеджеры» не показывается
+    bool IsChannel = false, // направление-канал (Sales:ChannelRegions — «Базар», «КА»): не РМ, в блоке «Региональные менеджеры» не показывается
+    AkbPlanTile? AkbPlan = null) // план АКБ из Linko — сумма планов АКБ ТП (KpiTiles.AkbPlan)
+{
+    /// <summary>
+    /// В строке есть что показать: план, продажи, точки, ТП или визиты. Строки из одних нулей (регион-канал в идущем месяце — его продажи
+    /// считаются по закрытому месяцу; филиал без продаж и ТП) в списках регионов не показываются.
+    /// </summary>
+    public bool HasData => PlanKg is > 0 || FactKg != 0 || Revenue != 0 || Akb > 0 || Agents > 0 || VisitsWithoutOrder > 0;
+}
 
 /// <summary>План региона на месяц и факт, с которым его сравнивают «Продажи» (PlanScope), и откуда план.</summary>
 public sealed record RegionPlanFact(Guid RegionId, decimal? PlanKg, decimal PlanFactKg, string PlanSource);
@@ -249,7 +267,23 @@ public sealed record DataQualityView(
     decimal ReturnsWithoutLinesHeaderKg,
     IReadOnlyList<UncategorizedType> Uncategorized,
     int AcceptedInFuture = 0,
-    IReadOnlyList<CurrencyTotal>? OtherCurrency = null);
+    IReadOnlyList<CurrencyTotal>? OtherCurrency = null)
+{
+    /// <summary>
+    /// Только проверки охвата: счётчики выгрузки (заказы без приёмки, возвраты без строк и с нулевой шапкой, принятые позже, другие валюты)
+    /// считаются по всей республике — РМ, СВР и ТП их не получают (п. 10 ТЗ: ни одной цифры по чужим регионам). Типы вне категорий — по охвату.
+    /// </summary>
+    public DataQualityView ScopeOnly() => this with
+    {
+        DeliveredWithoutAcceptance = 0,
+        ZeroHeaderReturns = 0,
+        ZeroHeaderReturnsKg = 0,
+        ReturnsWithoutLines = 0,
+        ReturnsWithoutLinesHeaderKg = 0,
+        AcceptedInFuture = 0,
+        OtherCurrency = null,
+    };
+}
 
 /// <summary>
 /// Исключённые из вторички филиалы («Завод» — экспорт и опт): факт отдельной строкой. VsPrevMonth — прогноз месяца к факту прошлого месяца:
@@ -382,7 +416,9 @@ public sealed record TeamRow(
     string? Job = null,
     TargetLevel? ExecutionLevel = null,
     TargetLevel? ForecastExecutionLevel = null,
-    int Akb = 0);
+    int Akb = 0,
+    decimal? AkbPlan = null,
+    decimal? AkbExecution = null);
 
 public sealed record NotInDirectoryRow(long AgentId, string Name, decimal Kg, decimal Revenue);
 
@@ -412,7 +448,36 @@ public sealed record RegionView(
     NextMonthPlan? NextMonth,
     NotBoughtRow NotBoughtTotal,
     CategoryPlanFact? CategoryPlanTotal,
-    bool IsChannel = false); // регион-канал (Sales:ChannelRegions): СВР и дилера у него нет и в «Настройках продаж» их не задать
+    bool IsChannel = false, // регион-канал (Sales:ChannelRegions): СВР и дилера у него нет и в «Настройках продаж» их не задать
+    VolumeTable? Volume = null);
+
+/// <summary>
+/// Строка «Из чего складывается объём»: категория (CategoryId — группа категорий; null — «Без категории» или план на несколько категорий),
+/// доля в кг региона, план и факт в кг, выполнение, прогноз на конец месяца по темпу и прогноз к плану; план АКБ категории (показатели
+/// Linko «АКБ Twizos», «АКБ план Помадка»), АКБ категории и охват АКБ = АКБ категории ÷ АКБ региона. Нет плана — null.
+/// </summary>
+public sealed record VolumeRow(
+    long? CategoryId,
+    string Name,
+    decimal? Share,
+    decimal? PlanKg,
+    decimal FactKg,
+    decimal? Execution,
+    decimal? ForecastKg,
+    decimal? ForecastExecution,
+    decimal? AkbPlan,
+    int Akb,
+    decimal? AkbCoverage,
+    TargetLevel? ExecutionLevel,
+    TargetLevel? ForecastLevel);
+
+/// <summary>
+/// «Из чего складывается объём» региона по категориям (как вкладка региона в «Полевом контроле»): Rows — категории с продажами или планом,
+/// по доле; PlanGroups — планы Linko не на одну категорию (остаток «Тотала» после Могуля и Twizos, «Помадка + Шоколад»): факт — все продажи
+/// этих категорий в регионе; Total — регион целиком: весь факт, план региона, АКБ региона и сумма планов АКБ его ТП. PlanSource — откуда план
+/// (PlanSources).
+/// </summary>
+public sealed record VolumeTable(IReadOnlyList<VolumeRow> Rows, IReadOnlyList<VolumeRow> PlanGroups, VolumeRow Total, string PlanSource);
 
 public sealed record MedianValue(decimal? Value, decimal? RegionMedian);
 
@@ -502,7 +567,8 @@ public sealed record AgentView(
     decimal? RevenuePerOutlet = null,
     decimal? KgPerOutlet = null,
     TargetLevel? ExecutionLevel = null,
-    TargetLevel? RevenueExecutionLevel = null);
+    TargetLevel? RevenueExecutionLevel = null,
+    AkbPlanTile? AkbPlan = null);
 
 /// <summary>
 /// «Проблемный агент». Score — тяжесть (SalesMath.ProblemScore: 10 за критичное, 4 за риск, плюс (1 − страйк) × 3 у оцениваемых),

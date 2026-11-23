@@ -122,6 +122,13 @@ public sealed class AgentRunner(
     /// </summary>
     internal const int MaxToolFailures = 3;
 
+    /// <summary>
+    /// Шаг, на котором все вызовы данных вернули исправимую ошибку (аргументы, текст запроса), данных не дал — он не съедает шаги исследования:
+    /// ещё шаг сверх MaxSteps, не больше стольких за анализ. Иначе после двух-трёх исправлений свободного запроса последний шаг уже без
+    /// инструментов, и вместо данных — «не удалось получить».
+    /// </summary>
+    internal const int MaxRepairSteps = 3;
+
     /// <summary>Узбекистан — UTC+5 без перехода на летнее время.</summary>
     private static readonly TimeSpan CompanyOffset = TimeSpan.FromHours(5);
 
@@ -210,6 +217,7 @@ public sealed class AgentRunner(
         var revised = false;
         var shortened = false;
         var reformatted = false;
+        var repairs = 0;
         var reported = false;
         string? model = null;
         var settings = await aiSettings.GetSettingsAsync(ct);
@@ -354,11 +362,12 @@ public sealed class AgentRunner(
                             $"Этот вызов с теми же аргументами уже завершился ошибкой ({failedBefore}). Не повторяй его: измени аргументы по подсказке " +
                             "ошибки или возьми другой инструмент."), null, start, 0);
                     }
-                    else if (failuresByTool.GetValueOrDefault(call.Name) >= MaxToolFailures)
+                    else if ((tools.FirstOrDefault(t => t.Name == call.Name)?.MaxFailures ?? MaxToolFailures) is var limit
+                             && failuresByTool.GetValueOrDefault(call.Name) >= limit)
                     {
                         outcomes[i] = new ToolOutcome(ToolResult.Failure(call.Name, ToolFailures.NotConnected,
-                            $"Инструмент «{call.Name}» уже {MaxToolFailures} раза завершился ошибкой в этом анализе — используй другой источник или прямо " +
-                            "скажи, каких данных не удалось получить."), null, start, 0);
+                            $"Инструмент «{call.Name}» уже {limit} {(limit is >= 2 and <= 4 ? "раза" : "раз")} завершился ошибкой в этом анализе — используй " +
+                            "другой источник или прямо скажи, каких данных не удалось получить."), null, start, 0);
                     }
                     else
                     {
@@ -498,6 +507,15 @@ public sealed class AgentRunner(
 
                     used += content.Length;
                     messages.Add(new LlmMessage(LlmRole.Tool, result.Success ? content : $"ОШИБКА: {content}", ToolCallId: call.Id));
+                }
+
+                // Все вызовы данных шага — исправимые ошибки (MaxRepairSteps): шаг на исправление сверх лимита.
+                if (repairs < MaxRepairSteps && io.Count > 0
+                    && io.All(i => !outcomes[i].Result.Success && outcomes[i].Result.ApprovalRequestId is null
+                                   && outcomes[i].Result.ErrorKind == ToolFailures.InvalidArguments))
+                {
+                    repairs++;
+                    steps++;
                 }
             }
         }

@@ -163,7 +163,8 @@ public sealed class AnalytikCatalogDbTests(DataManagerDb fixture) : IClassFixtur
         var read = await sql.QueryAsync("SELECT count(*) FROM linko.\"Orders\"", [], new SqlLimits(10, 5), CancellationToken.None);
         Assert.Equal(2L, Convert.ToInt64(read.Rows[0][0]));
 
-        // Каждая запись отклоняется самим PostgreSQL: транзакция READ ONLY (25006 read_only_sql_transaction).
+        // Каждая запись отклоняется самим PostgreSQL: транзакция READ ONLY (25006 read_only_sql_transaction); ошибку базы движок отдаёт
+        // как AnalytikSqlException с кодом PostgreSQL (исходная ошибка — внутри).
         foreach (var write in new[]
                  {
                      "INSERT INTO linko.\"Currencies\" (\"Id\", \"Name\") VALUES (999, 'x')",
@@ -175,8 +176,9 @@ public sealed class AnalytikCatalogDbTests(DataManagerDb fixture) : IClassFixtur
                      "CREATE TABLE public.zz_hack (id int)",
                  })
         {
-            var error = await Assert.ThrowsAsync<PostgresException>(() => sql.QueryAsync(write, [], new SqlLimits(10, 5), CancellationToken.None));
+            var error = await Assert.ThrowsAsync<AnalytikSqlException>(() => sql.QueryAsync(write, [], new SqlLimits(10, 5), CancellationToken.None));
             Assert.Equal("25006", error.SqlState);
+            Assert.Equal("25006", Assert.IsType<PostgresException>(error.InnerException).SqlState);
         }
 
         // Несколько команд в одном тексте — данные всё равно не меняются.
@@ -184,7 +186,7 @@ public sealed class AnalytikCatalogDbTests(DataManagerDb fixture) : IClassFixtur
         {
             await sql.QueryAsync("SELECT 1; DELETE FROM linko.\"Orders\"", [], new SqlLimits(10, 5), CancellationToken.None);
         }
-        catch (PostgresException)
+        catch (AnalytikSqlException)
         {
         }
 

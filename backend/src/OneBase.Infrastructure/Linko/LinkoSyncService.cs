@@ -129,7 +129,7 @@ public sealed class LinkoSyncService(
             SyncProductBalancesAsync(full || state.LastTm is null, state.LastTm, ct), ct));
         results.Add(await RunStepAsync("stock_transfers", phase, accumulate: false, state =>
             SyncStockTransfersAsync(full || state.LastTm is null, state.LastTm, ct), ct));
-        // Бронь — снимок целиком при каждой загрузке, рядом с остатками: неотгруженные заказы и одобренные перемещения («Забронировано»).
+        // Бронь — снимок целиком при каждой загрузке, рядом с остатками: только подтверждённые (ещё не отданные) перемещения.
         results.Add(await RunStepAsync(ReservationsState, phase, accumulate: false, _ => SyncReservationsAsync(ct), ct));
         results.Add(await RunStepAsync("payments", phase, accumulate: false, state =>
             SyncPaymentsAsync(full || state.LastTm is null ? Window(recentFrom, recentTo) : Since(state.LastTm), ct), ct));
@@ -745,10 +745,10 @@ public sealed class LinkoSyncService(
     }
 
     /// <summary>
-    /// Бронь складов («Забронировано» и «В пути» в Linko) — снимок целиком: строки заказов в Sales:ReservedOrderStatuses (по складу заказа)
-    /// и перемещений в Sales:ReservedTransferStatuses (по складу-отправителю), сумма по складу и товару. Висящие заказы прошлых месяцев тоже в
-    /// снимке — Linko держит под них бронь так же. Сервер вернул документ другого статуса — фильтр не применён: шаг падает (читать все заказы
-    /// нельзя), прежний снимок остаётся.
+    /// Бронь складов — снимок целиком на каждой синхронизации: строки перемещений в Sales:ReservedTransferStatuses (по умолчанию только
+    /// подтверждённые, approved; по складу-отправителю) и заказов в Sales:ReservedOrderStatuses (по умолчанию ни одного; по складу заказа), сумма
+    /// по складу и товару. Сервер вернул документ другого статуса — фильтр не применён: шаг падает (читать все документы нельзя), прежний
+    /// снимок остаётся.
     /// </summary>
     private async Task<(int, decimal?)> SyncReservationsAsync(CancellationToken ct)
     {

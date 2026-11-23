@@ -19,6 +19,8 @@ public static class AnalytikRegistration
         services.AddScoped<CatalogService>();
         services.AddScoped<OneBase.Application.Analytik.Query.AnalytikAccess>();
         services.AddScoped<OneBase.Application.Analytik.Query.QueryEngine>();
+        // Свободный запрос на чтение (analytik_sql): SELECT/WITH с оконными функциями — проверка плана по каталогу и правам, только чтение.
+        services.AddScoped<OneBase.Application.Analytik.Query.SqlQueryService>();
         services.AddScoped<OneBase.Application.Analytik.Supply.SupplyPlanner>();
         services.AddScoped<OneBase.Application.Analytik.Simulation.SimulationSources>();
         // Universal Analytics Engine: смысловой слой (показатели × измерения × шаг) над движком таблиц — те же права, журнал и SQL только на чтение.

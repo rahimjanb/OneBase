@@ -25,7 +25,7 @@ public sealed record CategoryCardsInput(IReadOnlyList<string>? Categories);
 
 /// <summary>
 /// «Настройки → Telegram → Автоматические отчёты → Карточки категорий»: какие категории уходят по умолчанию и свой выбор получателя. Сами
-/// отправки — обычный конвейер автоотчётов (запуски category-cards.*, получатели, предпросмотр, тест, история).
+/// отправки — обычный конвейер автоотчётов (запуски category-day.* отчёта «11. Итоги дня по категориям», получатели, предпросмотр, тест, история).
 /// </summary>
 public sealed class CategoryCardService(IAppDbContext db, SalesOptions sales, IAuditLogger audit, TimeProvider clock)
 {

@@ -2,7 +2,7 @@ namespace OneBase.Application.Sales.Metrics;
 
 /// <summary>
 /// Карточка ТП в разделе «Агенты» — те же цифры, что в карточке агента (Agent): план ТП из Linko и выполнение по весу, прогноз (у идущего
-/// месяца), выручка и её план, АКБ, визиты, заказы, страйк, сумма на визит, категории, темп к своему среднему и замечания. Регион, РМ и
+/// месяца), выручка и её план, АКБ и план АКБ из Linko, визиты, заказы, страйк, сумма на визит, категории, темп к своему среднему и замечания. Регион, РМ и
 /// супервайзер — по региону ТП (профиль или продажи).
 /// </summary>
 public sealed record AgentCardRow(
@@ -34,7 +34,8 @@ public sealed record AgentCardRow(
     decimal? Tempo,
     IReadOnlyList<AgentFlag> Flags,
     TargetLevel? ExecutionLevel,
-    TargetLevel? ForecastExecutionLevel);
+    TargetLevel? ForecastExecutionLevel,
+    AkbPlanTile? AkbPlan = null);
 
 /// <summary>«Агенты»: все ТП команд регионов за месяц (и вакансии) и справочники для фильтров — РМ и регионы с ТП. Targets — цели компании.</summary>
 public sealed record AgentsView(
@@ -113,6 +114,7 @@ public sealed partial class SalesAnalytics
             stats.Tempo,
             FlagsOf(id),
             SalesMath.ExecutionLevelOf(execution),
-            SalesMath.ExecutionLevelOf(forecastExecution));
+            SalesMath.ExecutionLevelOf(forecastExecution),
+            AgentAkbPlan(id, stats.Akb));
     }
 }

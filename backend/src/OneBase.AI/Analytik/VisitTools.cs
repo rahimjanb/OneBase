@@ -85,11 +85,13 @@ public sealed class VisitSequenceTool(QueryEngine engine, IAppDbContext db, Sema
         "На какой по счёту визит ТП в торговую точку приходится заказ (например, «ТП был в точке 4 раза, заказ — на третьем»): распределение " +
         "заказов по номеру визита после прошлого заказа (1-й, 2-й, 3-й, 4-й, 5+), конверсия визита по номеру (сколько визитов с таким номером " +
         "закончились заказом), среднее и медиана визитов до заказа, заказы без визита; итог, регионы и ТП, а также список пар «ТП × точка» " +
-        "с самыми длинными сериями визитов без заказа (сколько визитов подряд, последний визит и последний заказ). Сервер считает по всем точкам периода (до 366 дней) по визитам и заказам Linko.";
+        "с самыми длинными сериями визитов без заказа (сколько визитов подряд, последний визит и последний заказ), и что бывает после крупного " +
+        "или мелкого заказа: визиты и дни до следующего заказа и конверсия визитов по группам размера заказа, корреляция размера и паузы. Сервер считает по всем точкам периода (до 366 дней) по визитам и заказам Linko.";
 
     public override string? UsageHint =>
-        "«На какой визит приходится заказ», «с какого визита точка заказывает», «сколько визитов до заказа», «конверсия первого/второго визита» — " +
-        "sales_visit_sequence одним вызовом (а не дневные срезы «день × ТП × точка»). Отвечай по его цифрам и правилу подсчёта.";
+        "«На какой визит приходится заказ», «с какого визита точка заказывает», «сколько визитов до заказа», «конверсия первого/второго визита», " +
+        "«что бывает после крупного заказа», «связь суммы заказа и следующих заказов» — sales_visit_sequence одним вызовом (а не дневные срезы " +
+        "«день × ТП × точка»); размер заказа — его раздел OrderSize. Отвечай по его цифрам и правилу подсчёта.";
 
     public override JsonElement InputSchema { get; } = Schema(
         ("date_from", new { type = "string", description = "Начало периода YYYY-MM-DD (по умолчанию — 90 дней до вчера)." }),
@@ -129,13 +131,31 @@ public sealed class VisitSequenceTool(QueryEngine engine, IAppDbContext db, Sema
                     LastOrder = x.LastOrder?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 }),
                 report.OpenStreaksTotal,
+                OrderSize = new
+                {
+                    report.OrderSize.Rule,
+                    BySizeVsUsual = report.OrderSize.Relative.Select(Size),
+                    ByKg = report.OrderSize.Absolute.Select(Size),
+                    OrdersWithoutUsualSize = report.OrderSize.WithoutTypical,
+                    Correlation = new
+                    {
+                        SizeVsVisitsToNext = Round(report.OrderSize.RatioVisitsSpearman), SizeVsVisitsPairs = report.OrderSize.RatioVisitsPairs,
+                        SizeVsDaysToNext = Round(report.OrderSize.RatioDaysSpearman), SizeVsDaysPairs = report.OrderSize.RatioDaysPairs,
+                        Method = "Ранговая корреляция Спирмена: «во сколько раз заказ больше обычного для пары» и визитов (дней) до следующего заказа. " +
+                                 "|ρ| < 0,1 — связи практически нет, 0,1–0,3 — слабая, 0,3–0,5 — умеренная, больше 0,5 — сильная.",
+                    },
+                },
                 report.Notes,
                 Instructions = "Главное — распределение заказов по номеру визита (SharePct) и конверсия по номеру (ConversionPct): «из визитов, которые были " +
                                "третьими по счёту, заказом закончились N%». Reached — сколько раз дошли до этого номера. Правило подсчёта — коротко в ответе. " +
                                "OrdersWithoutVisit — заказы в дни без визита (в номера не входят). OpenStreaks — пары «ТП × точка», где после " +
                                "последнего заказа идут визиты без заказа (самые длинные серии; LastOrder null — заказа не было с начала окна): это " +
                                "ответ на «куда ходят без результата». Agents — ТП, больше заказов на визитах — выше; все строки — all_rows. " +
-                               "Это наблюдение, а не причина.",
+                               "OrderSize — «после крупного заказа», «связь суммы заказа и следующих заказов», «взяли много — потом не заказывают»: " +
+                               "по группам размера (относительно обычного заказа пары и по кг) — сколько визитов и дней до следующего заказа, " +
+                               "конверсия визитов после заказа по номеру (ConversionPct), сколько ещё ждут (Waiting), и корреляция. Сравни " +
+                               "крупные с обычными цифрами. Другой разрез (по сумме, категориям, регионам, типам точек) — analytik_sql по " +
+                               "linko.Orders и linko.Visits. Это наблюдение, а не причина.",
             };
             return new ToolResult(true, JsonSerializer.Serialize(payload, Json), null,
                 [new DataSource("Linko — визиты и заказы ТП", $"{report.From:dd.MM.yyyy} — {report.To:dd.MM.yyyy}", null)]);
@@ -151,6 +171,14 @@ public sealed class VisitSequenceTool(QueryEngine engine, IAppDbContext db, Sema
     }
 
     private static double? Pct(double? share) => share is { } s ? Math.Round(s * 100, 1) : null;
+
+    private static object Size(OrderSizeGroup g) => new
+    {
+        g.Label, g.Orders, AverageKg = Round(g.AverageKg), g.NextOrders, g.NextOnVisit, g.NextWithoutVisit, g.Waiting,
+        ByVisitAfterOrder = g.Buckets.Select(b => new { Visit = b.Label, Orders = b.Orders, Reached = b.Reached, ConversionPct = Pct(b.Conversion), SharePct = Pct(b.Share) }),
+        AverageVisitsToNext = Round(g.AverageVisitsToNext), MedianVisitsToNext = g.MedianVisitsToNext, NextOnFirstVisitPct = Pct(g.NextOnFirstVisitShare),
+        AverageDaysToNext = Round(g.AverageDaysToNext), MedianDaysToNext = g.MedianDaysToNext,
+    };
 
     private static double? Round(double? v) => v is { } x ? Math.Round(x, 2) : null;
 }

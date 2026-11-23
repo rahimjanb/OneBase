@@ -1,4 +1,4 @@
-import type { AgentFlag, Period, TargetLevel } from "./types";
+import type { AgentFlag, AkbPlanTile, Period, TargetLevel } from "./types";
 
 /** Карточка ТП в «Агентах» (GET /api/sales/agents) — те же цифры, что в карточке агента. */
 export type AgentCardRow = {
@@ -36,6 +36,8 @@ export type AgentCardRow = {
   flags: AgentFlag[];
   executionLevel: TargetLevel | null;
   forecastExecutionLevel: TargetLevel | null;
+  /** План АКБ ТП из Linko; null — плана нет, тогда АКБ сравнивается с целью компании «АКБ на агента». */
+  akbPlan?: AkbPlanTile | null;
 };
 
 export type AgentsView = {

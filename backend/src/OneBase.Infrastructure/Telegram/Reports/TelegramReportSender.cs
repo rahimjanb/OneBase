@@ -41,7 +41,7 @@ public sealed class TelegramReportSender(
 
     /// <summary>
     /// Отчёт запуска для области на реальных данных. at — момент формирования (предпросмотр «на 13:00»); по умолчанию — сейчас в поясе
-    /// расписания. Язык — из настроек, если не задан. categories — категории карточек получателя (отчёт 10; null — выбор по умолчанию).
+    /// расписания. Язык — из настроек, если не задан. categories — категории карточек получателя (отчёт 11; null — выбор по умолчанию).
     /// </summary>
     public async Task<ReportDocument> BuildAsync(string job, ReportScope scope, DateOnly period, DateTimeOffset? at, string? language, CancellationToken ct,
         IReadOnlyList<string>? categories = null)

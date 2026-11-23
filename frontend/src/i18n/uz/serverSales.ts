@@ -53,6 +53,7 @@ const dict: Dict = {
   "ОКБ {okb} · в маршруте {route}": "OKB {okb} · marshrutda {route}",
   "Итого с планом": "Rejali qatorlar jami",
   "Без разбивки по категориям": "Toifalarga bo'linmagan",
+  "Остальные категории (без разбивки)": "Boshqa toifalar (bo'linmagan)",
   "Без направления": "Yo'nalishsiz",
   "Регионы, не назначенные РМ": "RMga biriktirilmagan mintaqalar",
   "Без агента": "Agentsiz",

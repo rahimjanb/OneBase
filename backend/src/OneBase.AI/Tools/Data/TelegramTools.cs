@@ -68,7 +68,7 @@ internal sealed class GetTelegramTool(IAppDbContext db, IUserPermissions permiss
         var deliveries = await db.TelegramReportDeliveries.AsNoTracking().Where(d => d.CreatedAt >= since && d.Report != null)
             .OrderByDescending(d => d.CreatedAt).ToListAsync(ct);
 
-        string Title(string code) => ReportCatalog.Find(code) is { } info ? $"{ReportCatalog.Title(info.Report)} · {info.Time:HH\\:mm} — {ReportCatalog.SlotTitle(info.Report, info.Slot)}" : code;
+        string Title(string code) => ReportCatalog.Find(code) is { } info ? $"{ReportCatalog.Title(info.Report)} · {info.Time:HH\\:mm} — {ReportCatalog.SlotTitle(info.Report, info.Slot)}" : ReportCatalog.Describe(code);
 
         return new
         {

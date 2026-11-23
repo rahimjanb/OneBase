@@ -151,7 +151,7 @@ export function TelegramReports({ initial, initialTab, initialFilters = NO_FILTE
               </span>
             </span>
           }
-          subtitle={t("Отчёты по расписанию в Telegram для РМ, СВ и ТП по оргструктуре «Продаж»: семь — картинками, восьмой — еженедельный PDF, девятый — накопительная акция, десятый — карточки категорий")}
+          subtitle={t("Отчёты по расписанию в Telegram для РМ, СВ и ТП по оргструктуре «Продаж»: семь — картинками, восьмой — еженедельный PDF, девятый — накопительная акция, одиннадцатый — итоги дня по категориям")}
           back="/settings/telegram"
           breadcrumbs={[{ label: "OneBase", href: "/" }, { label: t("Настройки"), href: "/settings" }, { label: "Telegram", href: "/settings/telegram" }, { label: t("Автоматические отчёты") }]}
         />

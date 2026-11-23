@@ -6,11 +6,8 @@ public sealed record CategoryDayTotals(decimal Kg, decimal Revenue, int Akb, int
 /// <summary>Артикул категории за день в охвате: кг, сумма, ТТ с покупкой.</summary>
 public sealed record CategoryDaySkuSales(long ProductId, string Name, string? Code, decimal Kg, decimal Revenue, int Akb);
 
-/// <summary>Продажи категории за день месяца (для столбиков карточки).</summary>
-public sealed record CategoryDayPoint(DateOnly Day, decimal Kg);
-
-// Данные для карточек категорий автоотчётов Telegram («10. Карточки категорий»): те же строки и правила, что у страницы категории
-// «Продажи → Ассортимент → категория» (охват — AssortmentScope), плюс план категории охвата, итог дня и ряд по дням месяца.
+// Данные для итогов дня по категориям автоотчётов Telegram («11. Итоги дня по категориям»): те же строки и правила, что у страницы
+// категории «Продажи → Ассортимент → категория» (охват — AssortmentScope), плюс план категории охвата и продажи одного дня.
 public sealed partial class SalesAnalytics
 {
     /// <summary>Категории отчёта в порядке «Настроек продаж»: группа (отрицательный id) и название.</summary>
@@ -88,23 +85,6 @@ public sealed partial class SalesAnalytics
             .ToList();
     }
 
-    /// <summary>
-    /// Килограммы категории в охвате за count дней по day включительно (через границу месяца — из строк прошлого месяца; дни раньше прошлого
-    /// месяца — нули); охвата нет — пусто.
-    /// </summary>
-    public IReadOnlyList<CategoryDayPoint> CategoryRecentDays(long group, AssortmentScope s, DateOnly day, int count)
-    {
-        if (ScopeOf(s) is not { } scope)
-        {
-            return [];
-        }
-
-        var first = day.AddDays(1 - count);
-        var byDay = scope.Now.Concat(scope.Before).Where(l => l.Date >= first && l.Date <= day && GroupOf(l.CategoryId) == group)
-            .GroupBy(l => l.Date).ToDictionary(g => g.Key, g => g.Sum(l => l.Kg));
-        return Enumerable.Range(0, count).Select(i => first.AddDays(i)).Select(d => new CategoryDayPoint(d, byDay.GetValueOrDefault(d))).ToList();
-    }
-
     /// <summary>Строки категории охвата за день: этот месяц — его строки, прошлый — строки прошлого месяца, другие — пусто.</summary>
     private List<SaleLine> DayLines(ScopeData scope, long group, DateOnly day)
     {
@@ -112,23 +92,5 @@ public sealed partial class SalesAnalytics
             : day.AddMonths(1) is var next && (next.Year, next.Month) == (_d.Year, _d.Month) ? scope.Before
             : [];
         return source.Where(l => l.Date == day && GroupOf(l.CategoryId) == group).ToList();
-    }
-
-    /// <summary>Килограммы категории по дням месяца с 1-го по отчётный день (дни без продаж — ноль); охвата нет — пусто.</summary>
-    public IReadOnlyList<CategoryDayPoint> CategoryDailyKg(long group, AssortmentScope s)
-    {
-        if (ScopeOf(s) is not { } scope)
-        {
-            return [];
-        }
-
-        var first = new DateOnly(_d.Year, _d.Month, 1);
-        var last = new DateOnly(_d.Year, _d.Month, _d.DaysInMonth);
-        var through = _d.DataThrough < first ? first : _d.DataThrough > last ? last : _d.DataThrough;
-        var byDay = scope.Now.Where(l => GroupOf(l.CategoryId) == group).GroupBy(l => l.Date).ToDictionary(g => g.Key, g => g.Sum(l => l.Kg));
-        return Enumerable.Range(0, through.DayNumber - first.DayNumber + 1)
-            .Select(i => first.AddDays(i))
-            .Select(d => new CategoryDayPoint(d, byDay.GetValueOrDefault(d)))
-            .ToList();
     }
 }

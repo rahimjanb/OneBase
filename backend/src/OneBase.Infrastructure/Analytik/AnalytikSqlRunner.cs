@@ -77,12 +77,14 @@ internal sealed class AnalytikSqlRunner : IAnalytikSql, IDisposable
             var timeoutMs = Math.Clamp(limits.TimeoutSeconds, 1, 120) * 1000;
             await using (var setup = new NpgsqlCommand(
                              $"SET TRANSACTION READ ONLY; SET LOCAL statement_timeout = {timeoutMs}; SET LOCAL lock_timeout = 2000; " +
-                             "SET LOCAL idle_in_transaction_session_timeout = 60000;", connection, tx))
+                             "SET LOCAL idle_in_transaction_session_timeout = 60000; SET LOCAL standard_conforming_strings = on;", connection, tx))
             {
                 await setup.ExecuteNonQueryAsync(ct);
             }
 
-            await using var command = new NpgsqlCommand(sql, connection, tx);
+            // Клиентский предел — позже серверного statement_timeout этого запроса (у свободного запроса он больше QueryTimeoutSeconds): иначе
+            // Npgsql обрывает чтение раньше PostgreSQL, и вместо «не уложился в N с» — непонятный сбой.
+            await using var command = new NpgsqlCommand(sql, connection, tx) { CommandTimeout = timeoutMs / 1000 + 10 };
             foreach (var p in parameters)
             {
                 command.Parameters.AddWithValue(p.Name, p.Value ?? DBNull.Value);
@@ -121,6 +123,16 @@ internal sealed class AnalytikSqlRunner : IAnalytikSql, IDisposable
         {
             _logger.LogInformation("Аналитик: запрос остановлен по лимиту времени ({Seconds} с)", limits.TimeoutSeconds);
             throw new AnalytikTimeoutException($"Запрос не уложился в {limits.TimeoutSeconds} с — сузьте период или условия.", ex);
+        }
+        catch (NpgsqlException ex) when (ex.InnerException is TimeoutException && !ct.IsCancellationRequested)
+        {
+            _logger.LogInformation("Аналитик: запрос оборван по клиентскому лимиту времени ({Seconds} с)", limits.TimeoutSeconds);
+            throw new AnalytikTimeoutException($"Запрос не уложился в {limits.TimeoutSeconds} с — сузьте период или условия.", ex);
+        }
+        catch (PostgresException ex) when (ex.SqlState != PostgresErrorCodes.QueryCanceled)
+        {
+            // Синтаксис, нет колонки, деление на ноль: текст PostgreSQL без строк данных (Detail не передаём) — модель исправит запрос.
+            throw new AnalytikSqlException($"{ex.SqlState}: {ex.MessageText}", ex.SqlState, ex);
         }
         finally
         {

@@ -1,7 +1,7 @@
 // «Продажи → Вторичка» (lib/sales-secondary.ts): node --test src/lib/sales-secondary.test.mjs.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { agentsSplit, monthDays, planBlock, planLink, planNote, targetKpi, visitsNoOrder } from "./sales-secondary.ts";
+import { agentsSplit, akbPlanTarget, monthDays, planBlock, planLink, planNote, targetKpi, visitsNoOrder } from "./sales-secondary.ts";
 
 // Как на макете: ноябрь 2026, данные по 07.11 — 52 991 из 437 410 кг, прогноз 52%, план ТП из Linko.
 const kpi = (over = {}) => ({
@@ -114,4 +114,17 @@ test("в ответе нет темпа (API старее интерфейса):
   const old = planBlock(kpi({ pace: undefined }), open);
   assert.deepEqual([old.tone, old.label, old.short, old.bar.expected, old.bar.forecast], ["none", null, null, null, 0.52]);
   assert.deepEqual(old.rows.map((r) => r.key), ["forecast"]);
+});
+
+test("план АКБ из Linko — показатель с целью: факт к плану, прогноз к плану, цвет сервера", () => {
+  const plan = { plan: 1500, fact: 900, execution: 0.6, forecast: 1350, forecastExecution: 0.9, agents: 12, allAgents: 14, level: "Warning" };
+  const tv = akbPlanTarget(plan);
+  assert.deepEqual(tv, { value: 900, target: 1500, ratio: 0.9, level: "Warning", forecast: 1350 });
+  const running = targetKpi(tv, false);
+  assert.equal(running.share, 0.6);
+  assert.equal(running.forecastShare, 0.9);
+  assert.equal(running.tone, "warn");
+  // Закрытый месяц: прогноза нет — доля по факту.
+  const closed = targetKpi(akbPlanTarget({ ...plan, forecast: null, forecastExecution: null, level: "Bad" }), true);
+  assert.deepEqual([closed.share, closed.forecastShare, closed.tone], [0.6, null, "bad"]);
 });

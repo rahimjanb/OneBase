@@ -212,6 +212,31 @@ internal sealed class ExecuteTestTool : ITool
     }
 }
 
+/// <summary>
+/// Инструмент, который всегда отвечает исправимой ошибкой аргументов (как свободный запрос с опечаткой) и допускает 5 ошибок за анализ.
+/// Executed — сколько раз его действительно выполнили.
+/// </summary>
+internal sealed class ShakyTestTool : ITool
+{
+    public const string ToolName = "zz_shaky_query";
+    public static int Executed;
+
+    public string Name => ToolName;
+    public string Title => "Запрос с ошибкой (тест)";
+    public string Description => "Тестовый инструмент: запрос, который каждый раз надо исправить.";
+    public JsonElement InputSchema { get; } = JsonDocument.Parse("""{"type":"object","properties":{"x":{"type":"integer"}}}""").RootElement.Clone();
+    public bool IsCritical => false;
+    public string? RequiredPermission => Permissions.SalesRead;
+    public string? Source => KnowledgeSources.SalesSecondary;
+    public int MaxFailures => 5;
+
+    public Task<ToolResult> ExecuteAsync(ToolContext context, JsonElement arguments, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref Executed);
+        return Task.FromResult(ToolResult.Failure(ToolName, ToolFailures.InvalidArguments, "PostgreSQL не принял запрос: колонки x нет. Исправьте запрос."));
+    }
+}
+
 /// <summary>Инструмент с данными продаж.</summary>
 internal sealed class EchoTestTool : ITool
 {
@@ -360,6 +385,7 @@ public sealed class ConsultantDb : IAsyncLifetime
         services.AddScoped<ITool, EchoTestTool>();
         services.AddScoped<ITool, RowsTestTool>();
         services.AddScoped<ITool, ExecuteTestTool>();
+        services.AddScoped<ITool, ShakyTestTool>();
         Services = services.BuildServiceProvider();
 
         using (var scope = Services.CreateScope())

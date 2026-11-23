@@ -26,6 +26,22 @@ export const planTileLabel: Record<PlanSource, string> = {
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /**
+ * Подсказка плитки «АКБ к плану»: откуда план (сумма планов АКБ ТП из Linko, у скольких ТП он есть), факт и прогноз к плану, АКБ на агента —
+ * для сравнения с прежней целью. Пустая строка — плана АКБ нет.
+ */
+export function akbPlanTitle(kpi: KpiTiles, t: T): string {
+  const p = kpi.akbPlan;
+  if (!p) return "";
+  const who =
+    p.agents < p.allAgents
+      ? t("План АКБ — сумма планов АКБ ТП из Linko (план есть у {n} ТП из {all}): факт — их точки с чистой покупкой", { n: num(p.agents), all: num(p.allAgents) })
+      : t("План АКБ — сумма планов АКБ ТП из Linko: факт — их точки с чистой покупкой");
+  const fact = t("{fact} из {plan} ({pct})", { fact: num(p.fact), plan: num(p.plan), pct: pct(p.execution) });
+  const forecast = p.forecast != null ? t(" · прогноз на конец месяца {value} ({pct})", { value: num(p.forecast), pct: pct(p.forecastExecution) }) : "";
+  return `${who} · ${fact}${forecast} · ${t("АКБ на агента {value}", { value: num(kpi.akbPerAgent.value, 1) })}`;
+}
+
+/**
  * Шесть плиток KPI — одинаковые на всех уровнях (вторичка, направление, регион); на широком экране — в один ряд.
  * Значение окрашено по уровню цели, под ним одна строка пояснения; подробности (прогноз, источник плана) — во всплывающей подсказке.
  * План — РОП или «Завод» (переключатель в полосе раздела); если выбранного плана на месяц нет — сумма планов ТП из Linko, и плитка пишет,
@@ -114,22 +130,31 @@ export function KpiRow({ kpi, period }: { kpi: KpiTiles; period: Period }) {
             ? t("сум · прогноз {value} — {pct} от цели", { value: money(kpi.revenuePerOutlet.forecast, t), pct: pct(kpi.revenuePerOutlet.ratio) })
             : t("сум · цель {value}", { value: money(kpi.revenuePerOutlet.target, t) })}
       </KpiTile>
-      <KpiTile
-        label={t("АКБ на агента")}
-        value={num(kpi.akbPerAgent.value, 1)}
-        tone={targetTone(kpi.akbPerAgent)}
-        title={
-          period.closed
-            ? t("{pct} от цели", { pct: pct(kpi.akbPerAgent.ratio) })
-            : kpi.akbPerAgent.forecast != null
-              ? t("прогноз на конец месяца — {pct} от цели: АКБ растёт так же, как в прошлом месяце от тех же дней до конца", { pct: pct(kpi.akbPerAgent.ratio) })
-              : t("в начале месяца прогноза ещё нет")
-        }
-      >
-        {!period.closed && kpi.akbPerAgent.forecast != null
-          ? t("прогноз {value} · цель {target}", { value: num(kpi.akbPerAgent.forecast, 1), target: num(kpi.akbPerAgent.target) })
-          : t("цель {value}", { value: num(kpi.akbPerAgent.target) })}
-      </KpiTile>
+      {/* План АКБ ТП из Linko есть — плитка сравнивает АКБ с ним; цель «АКБ на агента» (125) — только пока плана нет. */}
+      {kpi.akbPlan ? (
+        <KpiTile label={t("АКБ к плану")} value={pct(kpi.akbPlan.execution)} tone={kpi.akbPlan.level ? levelTone(kpi.akbPlan.level) : "ink"} title={akbPlanTitle(kpi, t)}>
+          {!period.closed && kpi.akbPlan.forecast != null
+            ? t("{fact} из {plan} · прогноз {pct}", { fact: num(kpi.akbPlan.fact), plan: num(kpi.akbPlan.plan), pct: pct(kpi.akbPlan.forecastExecution) })
+            : t("{fact} из {plan}", { fact: num(kpi.akbPlan.fact), plan: num(kpi.akbPlan.plan) })}
+        </KpiTile>
+      ) : (
+        <KpiTile
+          label={t("АКБ на агента")}
+          value={num(kpi.akbPerAgent.value, 1)}
+          tone={targetTone(kpi.akbPerAgent)}
+          title={
+            period.closed
+              ? t("{pct} от цели", { pct: pct(kpi.akbPerAgent.ratio) })
+              : kpi.akbPerAgent.forecast != null
+                ? t("прогноз на конец месяца — {pct} от цели: АКБ растёт так же, как в прошлом месяце от тех же дней до конца", { pct: pct(kpi.akbPerAgent.ratio) })
+                : t("в начале месяца прогноза ещё нет")
+          }
+        >
+          {!period.closed && kpi.akbPerAgent.forecast != null
+            ? t("прогноз {value} · цель {target}", { value: num(kpi.akbPerAgent.forecast, 1), target: num(kpi.akbPerAgent.target) })
+            : t("цель {value}", { value: num(kpi.akbPerAgent.target) })}
+        </KpiTile>
+      )}
       <KpiTile
         label={t("Визиты без заказа")}
         value={num(kpi.visitsWithoutOrder)}

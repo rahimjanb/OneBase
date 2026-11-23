@@ -66,6 +66,7 @@ public static class AnalytikAiRegistration
         // Визиты ТП: номер визита, на котором заказ, и «День ТП» (источник sales.stats — у консультанта и у аналитиков).
         services.AddScoped<ITool, VisitSequenceTool>();
         services.AddScoped<ITool, AgentDayTool>();
+        services.AddScoped<ITool, SqlTool>();
         services.AddScoped<ResearchAnswerer>();
         services.AddScoped<ITool, MethodsTool>();
         services.AddScoped<ITool, Simulation.ScenarioAnalysisTool>();

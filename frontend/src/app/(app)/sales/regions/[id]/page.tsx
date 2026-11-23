@@ -6,6 +6,7 @@ import { CategoryPlanCard } from "@/components/sales/category-plan";
 import { MonthCalendarTable, VisitCalendarTable } from "@/components/sales/calendars";
 import { CategoryCards } from "@/components/sales/categories";
 import { SalesFrame } from "@/components/sales/SalesFrame";
+import { VolumeTable } from "@/components/sales/volume";
 import { NotBoughtTable, NotInDirectoryTable, SameDaysTable, TeamTable } from "@/components/sales/tables";
 import { getT } from "@/i18n/server";
 import { apiGetOrNull } from "@/lib/server-api";
@@ -58,7 +59,8 @@ export default async function RegionPage({
       <UnassignedWarning kgValue={data.unassigned.kg} share={data.unassigned.share} />
 
       <PlanFactMonths months={data.months} current={period.month} />
-      <VolumeMix categories={data.categories} />
+      {/* «Из чего складывается объём» — таблица по категориям (план, факт, АКБ, охват); старый ответ без неё — доли выручки полосой. */}
+      {data.volume ? <VolumeTable volume={data.volume} closed={period.closed} /> : <VolumeMix categories={data.categories} />}
       {data.nextMonth && <NextMonthCard plan={data.nextMonth} rowsTitle={t("Категория")} />}
       <CategoryCards cards={data.categoryCards} scope={t("регионе")} query={queryWith(q, { region: id })} plans={data.categoryPlans} />
 

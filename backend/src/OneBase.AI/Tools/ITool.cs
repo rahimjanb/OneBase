@@ -58,5 +58,11 @@ public interface ITool
     /// <summary>Уровень возможностей (ToolLevels): чтение, анализ, рекомендация, подготовка, выполнение. Критическое действие — выполнение.</summary>
     int Level => IsCritical ? ToolLevels.Execute : ToolLevels.Read;
 
+    /// <summary>
+    /// Сколько ошибок инструмента за один анализ сотрудника допускается, дальше он для этого анализа закрыт. Свободный запрос исправляют по тексту
+    /// ошибки (колонка, тип, тяжесть) — ему больше попыток.
+    /// </summary>
+    int MaxFailures => 3;
+
     Task<ToolResult> ExecuteAsync(ToolContext context, JsonElement arguments, CancellationToken cancellationToken = default);
 }

@@ -226,15 +226,15 @@ public class StockTests
             new Dictionary<(long, long), decimal> { [(1, 15)] = 40, [(1, 14)] = 30, [(1, 5)] = 100 }, DateTimeOffset.Parse("2026-10-22T12:05:00Z"));
 
     /// <summary>
-    /// Бронь = «Забронировано» + «В пути» Linko: заказы «не доставлен», перемещения одобренные, но не отданные, и отданные, но не принятые
-    /// получателем (решение 23.10.2026) — всё это уже не свободный товар склада-отправителя.
+    /// Бронь — только подтверждённые перемещения (решение 20.11.2026): заказы «не доставлен» (экспорт завода, висящие заказы) и перемещения
+    /// «в пути» (Linko уже списал их с остатка отправителя) бронью не считаются.
     /// </summary>
     [Fact]
-    public void Reservation_includes_reserved_and_in_transit_documents()
+    public void Reservation_is_only_confirmed_transfers()
     {
         var options = new SalesOptions();
-        Assert.Equal(["not_delivered"], options.ReservedOrderStatuses);
-        Assert.Equal(["approved", "given"], options.ReservedTransferStatuses);
+        Assert.Empty(options.ReservedOrderStatuses);
+        Assert.Equal(["approved"], options.ReservedTransferStatuses);
     }
 
     /// <summary>
@@ -283,6 +283,39 @@ public class StockTests
         var line = Assert.Single(order.Items);
         Assert.Equal((30m, 30m, 0m, 50, 100m, 0m), (line.StockKg, line.ReservedKg, line.FreeKg!.Value, line.RecBoxes, line.FactoryKg!.Value, line.FactoryFreeKg!.Value));
         Assert.Equal(s.ReservedAt, order.ReservedAt);
+    }
+
+    /// <summary>
+    /// Бронь дилера (20.11.2026): подтверждённые перемещения на склад региона показываются в автозаказе с документами и уменьшают рекомендацию —
+    /// товар уже забронирован для дилера на заводе, второй раз его не заказывают. Чужие склады в бронь дилера не попадают.
+    /// </summary>
+    [Fact]
+    public void Dealer_reservation_lowers_the_auto_order_and_lists_documents()
+    {
+        var s = WithReservations() with
+        {
+            Incoming = new Dictionary<(long, long), decimal> { [(1, Bukhara.StockId)] = 25, [(1, Denov.StockId)] = 6 },
+            IncomingTransfers =
+            [
+                new ConfirmedTransfer(2492, Factory.StockId, Bukhara.StockId, new DateOnly(2026, 11, 17), "П-17", 25m),
+                new ConfirmedTransfer(2507, Factory.StockId, Denov.StockId, new DateOnly(2026, 11, 20), null, 6m),
+            ],
+        };
+        var item = new StockBaseItem(Bambuk, "Бамбук", true, false,
+            new Dictionary<string, StockCell> { ["r1"] = StockService.Cell(s, Bambuk, Bukhara.StockId, 10, 10, 0, 10, null) },
+            StockService.Cell(s, Bambuk, Factory.StockId, 20, 20, 0, null, 90), null);
+        var b = new StockBase(s, 87, new DateOnly(2026, 7, 27), new DateOnly(2026, 10, 21), false, [], [item], [], new StockCorrection(2026, 9, 20, 20, 0, 0));
+
+        // Бухоро: заказ 90 кг (30 коробок по 3 кг), из них 25 кг уже подтверждено → 65 кг → 22 коробки (вверх до коробки).
+        var order = StockService.ComposeAutoOrder(b, "r1");
+        var line = Assert.Single(order.Items);
+        Assert.Equal((25m, 22), (line.DealerReservedKg, line.RecBoxes));
+        var doc = Assert.Single(order.DealerTransfers!);
+        Assert.Equal((2492L, "П-17", new DateOnly(2026, 11, 17), "Завод", 25m), (doc.Id, doc.Number, doc.Date, doc.From, doc.WeightKg));
+
+        Assert.Equal(10, AutoOrderMath.RecBoxes(30m, 0, 3m));
+        Assert.Equal(0, AutoOrderMath.RecBoxes(30m, 45m, 3m)); // забронировано больше заказа — заказывать нечего
+        Assert.Equal(1, AutoOrderMath.RecBoxes(30m, 29.5m, 3m));
     }
 
     [Fact]

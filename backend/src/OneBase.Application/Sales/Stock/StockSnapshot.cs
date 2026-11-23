@@ -29,12 +29,15 @@ public sealed record StockProduct(
     decimal? Price,
     string? Measurement = null);
 
+/// <summary>Подтверждённое (ещё не отданное) перемещение на склад: бронь дилера. WeightKg — вес по строкам Linko.</summary>
+public sealed record ConfirmedTransfer(long Id, long? FromStockId, long ToStockId, DateOnly? CreatedDate, string? Number, decimal WeightKg);
+
 /// <summary>
 /// Снимок остатков Linko (product_balances, штуки) на момент последней загрузки: склады дилеров (по одному на регион), завод, экспорт,
 /// прочие склады; у товаров — вес единицы, коробка и цена. Один снимок кормит и рекомендуемый остаток, и аутсток, поэтому их кг совпадают.
-/// Reserved — бронь склада в штуках («Забронировано» и «В пути» в Linko: неотгруженные заказы, одобренные и отданные, но не принятые
-/// перемещения), ReservedAt — когда загружена
-/// (null — бронь не загружалась: страница её не показывает).
+/// Reserved — бронь склада в штуках (подтверждённые, ещё не отданные перемещения со склада — Sales:ReservedTransferStatuses), ReservedAt — когда
+/// загружена (null — бронь не загружалась: страница её не показывает). Incoming — бронь дилера: те же подтверждённые перемещения, но по складу-
+/// получателю (штуки товара, уже забронированные для склада на заводе), IncomingTransfers — сами документы.
 /// </summary>
 public sealed record StockSnapshot(
     DateTimeOffset? SyncedAt,
@@ -54,12 +57,17 @@ public sealed record StockSnapshot(
     IReadOnlyList<RegionInfo> KeptRegions,
     IReadOnlyDictionary<long, Guid> BranchAliases,
     IReadOnlyDictionary<(long ProductId, long StockId), decimal>? Reserved = null,
-    DateTimeOffset? ReservedAt = null)
+    DateTimeOffset? ReservedAt = null,
+    IReadOnlyDictionary<(long ProductId, long StockId), decimal>? Incoming = null,
+    IReadOnlyList<ConfirmedTransfer>? IncomingTransfers = null)
 {
     public decimal PiecesOf(long productId, long stockId) => Pieces.GetValueOrDefault((productId, stockId));
 
     /// <summary>Бронь товара на складе, штуки.</summary>
     public decimal ReservedOf(long productId, long stockId) => Reserved?.GetValueOrDefault((productId, stockId)) ?? 0;
+
+    /// <summary>Бронь дилера: штуки товара в подтверждённых перемещениях на склад.</summary>
+    public decimal IncomingOf(long productId, long stockId) => Incoming?.GetValueOrDefault((productId, stockId)) ?? 0;
 
     /// <summary>Остаток в кг: штуки × вес единицы; null — веса нет.</summary>
     public decimal? KgOf(long productId, long stockId) => StockMath.Kg(PiecesOf(productId, stockId), Products.GetValueOrDefault(productId)?.UnitKg);
@@ -123,6 +131,27 @@ public static class StockSnapshotBuilder
         var reservedAt = (await db.LinkoSyncStates.AsNoTracking().FirstOrDefaultAsync(s => s.Entity == ReservationsState, ct))?.LastSuccessAt;
         var reserved = (await db.LinkoReservations.AsNoTracking().Where(r => r.Amount > 0).ToListAsync(ct))
             .ToDictionary(r => (r.ProductId, r.StockId), r => r.Amount);
+
+        // Бронь дилера — подтверждённые перемещения (те же статусы, что у брони) по складу-получателю: таблица перемещений обновляется каждой
+        // синхронизацией по last_tm, смена статуса (отдано, принято, отменено) убирает документ отсюда.
+        var reservedStatuses = options.ReservedTransferStatuses;
+        var confirmed = await db.LinkoStockTransfers.AsNoTracking()
+            .Where(t => reservedStatuses.Contains(t.Status) && t.ToStockId != null)
+            .Select(t => new
+            {
+                t.Id, t.FromStockId, ToStockId = t.ToStockId!.Value, t.CreatedDate, t.InvoiceNumber,
+                Lines = t.Lines.Where(l => l.ProductId != null).Select(l => new { ProductId = l.ProductId!.Value, l.Amount, l.TotalWeight }).ToList(),
+            })
+            .ToListAsync(ct);
+        var incoming = confirmed.SelectMany(t => t.Lines.Select(l => (l.ProductId, t.ToStockId, l.Amount)))
+            .GroupBy(x => (x.ProductId, x.ToStockId))
+            .Where(g => g.Sum(x => x.Amount) > 0)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+        var incomingTransfers = confirmed
+            .Select(t => new ConfirmedTransfer(t.Id, t.FromStockId, t.ToStockId, t.CreatedDate, string.IsNullOrWhiteSpace(t.InvoiceNumber) ? null : t.InvoiceNumber.Trim(),
+                t.Lines.Sum(l => l.TotalWeight)))
+            .OrderBy(t => t.CreatedDate).ThenBy(t => t.Id)
+            .ToList();
 
         var sold = options.SoldStatuses;
         var yearFrom = snapshotDate.AddDays(-UnitWeightYearDays);
@@ -197,7 +226,7 @@ public static class StockSnapshotBuilder
             .ToList();
 
         return new StockSnapshot(syncedAt, snapshotDate, snapshotLocal, closedYear, closedMonth, unitFrom, priceAsOf, priceList?.Name.Trim(),
-            regions, factory, export, others, products, pieces, kept, aliases, reserved, reservedAt);
+            regions, factory, export, others, products, pieces, kept, aliases, reserved, reservedAt, incoming, incomingTransfers);
     }
 
     /// <summary>

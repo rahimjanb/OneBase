@@ -153,6 +153,31 @@ public sealed class IntelligenceSafetyTests(ConsultantDb fixture) : IClassFixtur
         Assert.Contains(messages, m => m.Role == LlmRole.Tool && m.Content.Contains($"уже {AgentRunner.MaxToolFailures} раза"));
         Assert.Equal(3, run.ToolErrors!.Count);
     }
+
+    [PostgresFact]
+    public async Task Fixable_errors_get_repair_steps_and_the_failure_limit_comes_from_the_tool()
+    {
+        await GrantAsync("sales", ShakyTestTool.ToolName);
+        var before = ShakyTestTool.Executed;
+        var model = fixture.Model.Reset();
+        // Каждый шаг — новый вызов с исправимой ошибкой. Первые три таких шага — сверх лимита (8 + 3 = 11 шагов); после пяти ошибок
+        // (MaxFailures инструмента, не общие 3) вызов отклоняется без выполнения и шагов больше не добавляет.
+        for (var i = 0; i < 10; i++)
+        {
+            model.Then([new LlmToolCall($"s{i}", ShakyTestTool.ToolName, Args(new { x = i }))]);
+        }
+
+        model.Then("""{"agent":"sales","status":"no_data","summary":"Запрос не удалось исправить.","findings":[],"metrics":[],"problems":[],"recommendations":[],"data_sources":[]}""");
+
+        using var scope = fixture.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<AgentRunner>().RunAsync(new AgentTask("sales", "Свой запрос", fixture.AdminId), null, default);
+
+        Assert.Equal(5, ShakyTestTool.Executed - before);
+        Assert.Equal(AgentRunner.MaxRepairSteps + 8, model.Calls.Count);
+        Assert.True(model.Options[9].AllowToolCalls);
+        Assert.False(model.Options[^1].AllowToolCalls);
+        Assert.Contains(model.Calls[^1], m => m.Role == LlmRole.Tool && m.Content.Contains("уже 5 раз завершился"));
+    }
 }
 
 /// <summary>Query Repair и расчёт через инструменты AI на настоящем движке срезов (мир IntelligenceWorld).</summary>

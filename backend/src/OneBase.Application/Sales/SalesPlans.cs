@@ -40,6 +40,51 @@ public sealed record MonthPlans(
 public static class SalesPlans
 {
     /// <summary>
+    /// Планы одного ТП за месяц по категориям — из его весовых показателей Linko (name — название показателя, groups — категории по названию).
+    /// «Тотал» уже включает показатели с категориями (Могуль, Twizos — как и план ТП, KpiMath.PlanParts): показатели с категориями — строки
+    /// своих категорий, а «Тотал» — только остаток «Тотал − они» на остальные категории (Except — их категории). Без частей с категориями
+    /// «Тотал» — план без разбивки, как и раньше; остаток ≤ 0 строки не даёт. Показатели без категорий при «Тотале» — его же части неизвестных
+    /// категорий: отдельно не считаются. Без «Тотала» — каждый показатель своей строкой. Сумма строк = план ТП (если части не больше «Тотала»).
+    /// </summary>
+    public static IReadOnlyList<CategoryPlanRow> LinkoCategoryPlans(long agentId, int year, int month,
+        IEnumerable<(string? Name, decimal PlanKg)> indicators, Func<string?, IReadOnlyList<long>> groups)
+    {
+        var list = indicators.Where(i => i.PlanKg > 0).Select(i => (i.Name, i.PlanKg, Groups: groups(i.Name))).ToList();
+        var totals = list.Where(i => KpiMath.IsTotalIndicator(i.Name)).ToList();
+        if (totals.Count == 0)
+        {
+            return list.Select(i => new CategoryPlanRow(agentId, year, month, i.Groups, i.PlanKg)).ToList();
+        }
+
+        var parts = list.Where(i => !KpiMath.IsTotalIndicator(i.Name) && i.Groups.Count > 0).ToList();
+        var rows = parts.Select(i => new CategoryPlanRow(agentId, year, month, i.Groups, i.PlanKg)).ToList();
+        var rest = totals.Sum(i => i.PlanKg) - parts.Sum(i => i.PlanKg);
+        if (rest > 0)
+        {
+            var except = parts.SelectMany(i => i.Groups).Distinct().Order().ToList();
+            rows.Add(new CategoryPlanRow(agentId, year, month, [], rest, except.Count == 0 ? null : except));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Планы АКБ ТП из показателей Linko active_client_count за месяц (name — название показателя, groups — категории по названию). Без
+    /// категории («Октябрь АКБ Ташкент») — план АКБ ТП, с одной категорией («Сентябрь АКБ Twizos …», «С завода Март АКБ план Помадка») — план
+    /// АКБ категории; показатели на несколько категорий не берутся. Несколько показателей одного вида у ТП — разные версии одного плана (АКБ
+    /// не складывается из частей, как кг): берётся больший.
+    /// </summary>
+    public static IReadOnlyList<AkbPlanRow> LinkoAkbPlans(IEnumerable<(long AgentId, string? Name, decimal Plan)> indicators,
+        Func<string?, IReadOnlyList<long>> groups) =>
+        indicators.Where(i => i.Plan > 0)
+            .Select(i => (i.AgentId, i.Plan, Groups: groups(i.Name)))
+            .Where(i => i.Groups.Count <= 1)
+            .GroupBy(i => (i.AgentId, Group: i.Groups.Count == 1 ? i.Groups[0] : (long?)null))
+            .Select(g => new AkbPlanRow(g.Key.AgentId, g.Key.Group, g.Max(i => i.Plan)))
+            .OrderBy(p => p.AgentId).ThenBy(p => p.Group)
+            .ToList();
+
+    /// <summary>
     /// Планы регионов вместе с планом «Завод», разложенным из итогов страны, — на каждый месяц итогов, у которого плана «Завод» по регионам нет.
     /// Остальные строки не меняются; дальше их берут Select и Available как обычные строки «Завода».
     /// </summary>

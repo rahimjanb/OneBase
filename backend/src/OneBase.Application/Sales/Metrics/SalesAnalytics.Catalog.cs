@@ -377,6 +377,8 @@ public sealed partial class SalesAnalytics
     /// есть SKU в ассортименте (ActiveSkus — продажи по республике с 1 января), в этом или в прошлом месяце. Знаменатель «из M SKU» от охвата
     /// не зависит; категория без продаж в охвате не пропадает — «продаётся 0 из M», её SKU — «не возят» (по республике идут) или «нет продаж».
     /// Карточки вторички (CategoryCardsOf) категорий без продаж не показывают (DOC-filters §1); здесь они — после карточек с продажами.
+    /// Категория, которую по всей республике не продают ни в этом, ни в прошлом месяце и на которую нет плана месяца («Песочный»), — не
+    /// показывается: это не пробел охвата, а снятая категория (как в «Полевом контроле»).
     /// </summary>
     private List<CategoryCard> CatalogCardsFor(IReadOnlyList<SaleLine> lines, IReadOnlyList<SaleLine> previousLines, bool republic)
     {
@@ -391,12 +393,24 @@ public sealed partial class SalesAnalytics
 
         var missing = assortment.Select(g => g.Key).Concat(current.Select(g => g.Key)).Concat(previous.Select(g => g.Key))
             .Distinct()
-            .Where(c => InReport(c) && !shown.Contains(c?.ToString() ?? "none"))
+            .Where(c => InReport(c) && !shown.Contains(c?.ToString() ?? "none") && _liveCategories.Value.Contains(c))
             .Select(c => CategoryCardOf(c, assortment[c], current[c].ToList(), previous[c].ToList(), republic, totalKg, akb, solo))
             .OrderByDescending(c => c.SkuTotal)
             .ThenBy(c => c.Name)
             .ToList();
         return cards.Concat(missing).ToList();
+    }
+
+    /// <summary>
+    /// Категории, которые идут: продажи по республике в этом или прошлом месяце либо план месяца на категорию (план региона по категории
+    /// или показатель Linko с категорией). Остальные — сняты: нулевыми карточками в «Ассортименте» не показываются.
+    /// </summary>
+    private HashSet<long?> LiveCategories()
+    {
+        var live = _d.Current.Concat(_d.Previous).Where(l => l.Kg != 0 || l.Revenue != 0).Select(l => GroupOf(l.CategoryId)).ToHashSet();
+        live.UnionWith(_d.Plans.Where(p => p.CategoryId is not null && p.PlanKg > 0).Select(p => GroupOf(p.CategoryId)));
+        live.UnionWith(CurrentCategoryPlans().SelectMany(p => p.Groups).Select(g => (long?)g));
+        return live;
     }
 
     /// <summary>

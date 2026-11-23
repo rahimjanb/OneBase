@@ -239,8 +239,8 @@ const dict: Dict = {
   // ---------- Таблицы вторички ----------
   "Факт в плане, кг": "Rejadagi fakt, kg",
   "Факт всего, кг": "Jami fakt, kg",
-  "План — РОП или «Завод» (переключатель «План» вверху), «факт в плане» — все продажи региона; если планов регионов на месяц нет — план и факт ТП с планом в Linko. Выполнение считается по «факту в плане». «Факт всего» — все продажи региона. Прогноз — факт всего, растянутый на месяц по текущему темпу; у закрытого месяца прогноза нет. Страйк — заказы ТП региона, принятые в месяце ÷ их выполненные визиты (бывает больше 100%); «без заказа» — визиты минус заказы.":
-    "Reja — ROP yoki «Zavod» (yuqoridagi «Reja» almashtirgichi), «rejadagi fakt» — mintaqaning barcha sotuvi; agar oyga mintaqa rejalari bo'lmasa — Linko'da rejasi bor TP reja va fakti. Bajarilish «rejadagi fakt» bo'yicha hisoblanadi. «Jami fakt» — mintaqaning barcha sotuvi. Prognoz — jami fakt joriy sur'atda butun oyga cho'zilgan; yopilgan oyda prognoz yo'q. Strayk — oy ichida qabul qilingan mintaqa TP buyurtmalari ÷ ularning bajarilgan tashriflari (100% dan oshishi mumkin); «buyurtmasiz» — tashriflar minus buyurtmalar.",
+  "План — РОП или «Завод» (переключатель «План» вверху), «факт в плане» — все продажи региона; если планов регионов на месяц нет — план и факт ТП с планом в Linko. Выполнение считается по «факту в плане». «Факт всего» — все продажи региона. Прогноз — факт всего, растянутый на месяц по текущему темпу; у закрытого месяца прогноза нет. Страйк — заказы ТП региона, принятые в месяце ÷ их выполненные визиты (бывает больше 100%); «без заказа» — визиты минус заказы. АКБ / план — точки с чистой покупкой и сумма планов АКБ ТП из Linko (процент — по АКБ ТП с планом). Строки из одних нулей (канал в идущем месяце, филиал без продаж и ТП) не показываются.":
+    "Reja — ROP yoki «Zavod» (yuqoridagi «Reja» almashtirgichi), «rejadagi fakt» — mintaqaning barcha sotuvi; agar oyga mintaqa rejalari bo'lmasa — Linko'da rejasi bor TP reja va fakti. Bajarilish «rejadagi fakt» bo'yicha hisoblanadi. «Jami fakt» — mintaqaning barcha sotuvi. Prognoz — jami fakt joriy sur'atda butun oyga cho'zilgan; yopilgan oyda prognoz yo'q. Strayk — oy ichida qabul qilingan mintaqa TP buyurtmalari ÷ ularning bajarilgan tashriflari (100% dan oshishi mumkin); «buyurtmasiz» — tashriflar minus buyurtmalar. AKB / reja — sof xaridli nuqtalar va Linko'dagi TP AKB rejalari yig'indisi (foiz — rejali TP AKB bo'yicha). Faqat nollardan iborat qatorlar (joriy oydagi kanal, savdosi va TP'si yo'q filial) ko'rsatilmaydi.",
   "Прошлый месяц урезан до тех же чисел — иначе неполный текущий месяц выглядел бы как обвал. Сравниваются одни и те же числа месяца, поэтому выходные совпадают. ТТ — активная клиентская база (АКБ).":
     "O'tgan oy o'sha kunlargacha qisqartirilgan — aks holda to'liq bo'lmagan joriy oy keskin tushishdek ko'rinardi. Oyning bir xil kunlari solishtiriladi, shuning uchun dam olish kunlari mos keladi. Nuqta — faol mijozlar bazasi (AKB).",
   "Все точки уже купили.": "Barcha nuqtalar allaqachon xarid qildi.",
@@ -934,6 +934,34 @@ const dict: Dict = {
   "Супервайзер продаж": "Savdo supervayzeri",
   "Региональный менеджер: раздел «Продажи» по своим регионам (выбираются в окне пользователя) — СВР, ТП, магазины, продажи, планы и KPI; консультант, файлы.": "Hududiy menejer: o'z hududlari bo'yicha «Savdo» bo'limi (foydalanuvchi oynasida tanlanadi) — SVR, SV, do'konlar, savdo, rejalar va KPI; maslahatchi, fayllar.",
   "Супервайзер продаж: раздел «Продажи» по своим регионам (выбираются в окне пользователя) — ТП региона, магазины, продажи, планы и KPI; консультант, файлы.": "Savdo supervayzeri: o'z hududlari bo'yicha «Savdo» bo'limi (foydalanuvchi oynasida tanlanadi) — hudud SV, do'konlar, savdo, rejalar va KPI; maslahatchi, fayllar.",
+  // ---------- План АКБ из Linko, «Из чего складывается объём» (ТЗ 18.11.2026) ----------
+  "АКБ к плану": "AKB rejaga",
+  "План АКБ — сумма планов АКБ ТП из Linko (план есть у {n} ТП из {all}): факт — их точки с чистой покупкой":
+    "AKB rejasi — Linko'dagi TP AKB rejalari yig'indisi (reja {all} TP'dan {n} tasida bor): fakt — ularning sof xaridli nuqtalari",
+  "План АКБ — сумма планов АКБ ТП из Linko: факт — их точки с чистой покупкой": "AKB rejasi — Linko'dagi TP AKB rejalari yig'indisi: fakt — ularning sof xaridli nuqtalari",
+  "{fact} из {plan} ({pct})": "{plan} dan {fact} ({pct})",
+  " · прогноз на конец месяца {value} ({pct})": " · oy oxiriga prognoz {value} ({pct})",
+  "АКБ на агента {value}": "Agentga AKB {value}",
+  "{fact} из {plan} · прогноз {pct}": "{plan} dan {fact} · prognoz {pct}",
+  "{fact} из {plan}": "{plan} dan {fact}",
+  "план {plan} · {pct} · прогноз {value} ({fpct})": "reja {plan} · {pct} · prognoz {value} ({fpct})",
+  "план {plan} · прогноз {fpct}": "reja {plan} · prognoz {fpct}",
+  "план {plan} · {pct}": "reja {plan} · {pct}",
+  "план {n} · {pct}": "reja {n} · {pct}",
+  "из {n}": "{n} dan",
+  "План АКБ ТП из Linko: {pct}": "Linko'dagi TP AKB rejasi: {pct}",
+  "{pct} плана · прогноз {value} ({fpct})": "rejaning {pct} · prognoz {value} ({fpct})",
+  "{pct} плана АКБ": "AKB rejasining {pct}",
+  "АКБ / план": "AKB / reja",
+  "План АКБ ТП из Linko: {fact} из {plan} ({pct})": "Linko'dagi TP AKB rejasi: {plan} dan {fact} ({pct})",
+  "план Linko на несколько категорий": "bir nechta toifaga Linko rejasi",
+  "категории за месяц: доля в кг, план и факт, АКБ и охват": "oy bo'yicha toifalar: kg ulushi, reja va fakt, AKB va qamrov",
+  "Объём, кг": "Hajm, kg",
+  "План АКБ": "AKB rejasi",
+  "Охват АКБ": "AKB qamrovi",
+  " (у закрытого месяца прогноза нет)": " (yopilgan oyda prognoz yo'q)",
+  "Доля — кг категории ÷ все кг региона. План — {source}; факт — все продажи категории в регионе, выполнение = факт ÷ план. Прогноз — факт по текущему темпу на конец месяца{closed}. План АКБ категории — показатели АКБ ТП из Linko по категории («АКБ Twizos»), в итоге — сумма планов АКБ ТП. АКБ — точки с чистой покупкой; охват АКБ = АКБ категории ÷ АКБ региона. Курсивом — планы Linko на несколько категорий: «Тотал» без Могуля и Twizos и планы вида «Могуль + Шоколад»; их факт — все продажи этих категорий.":
+    "Ulush — toifa kg ÷ mintaqaning barcha kg. Reja — {source}; fakt — mintaqadagi toifaning barcha savdosi, bajarilish = fakt ÷ reja. Prognoz — joriy sur'atdagi fakt oy oxiriga{closed}. Toifa AKB rejasi — Linko'dagi toifa bo'yicha TP AKB ko'rsatkichlari («АКБ Twizos»), jamida — TP AKB rejalari yig'indisi. AKB — sof xaridli nuqtalar; AKB qamrovi = toifa AKB ÷ mintaqa AKB. Kursivda — bir nechta toifaga Linko rejalari: Могуль va Twizos'siz «Тотал» va «Могуль + Шоколад» ko'rinishidagi rejalar; ularning fakti — shu toifalarning barcha savdosi.",
 };
 
 export default dict;

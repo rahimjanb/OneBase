@@ -5,7 +5,7 @@
  * Подписи — русские ключи словаря, переводит компонент. Проверяется тестами (sales-secondary.test.mjs).
  */
 
-import type { KpiTiles, Period, PlanKind, TargetLevel, TargetValue } from "@/lib/sales/types";
+import type { AkbPlanTile, KpiTiles, Period, PlanKind, TargetLevel, TargetValue } from "@/lib/sales/types";
 
 export type Tone = "ok" | "warn" | "bad" | "none";
 
@@ -163,6 +163,18 @@ export function targetKpi(tv: TargetValue, closed: boolean): { tone: Tone; bar: 
     forecastShare,
   };
 }
+
+/**
+ * План АКБ из Linko как показатель с целью: значение — АКБ ТП с планом, цель — сумма их планов АКБ, прогноз — АКБ на конец месяца.
+ * Пока план есть, плитка АКБ сравнивает с ним, а не с общей целью «АКБ на агента» (ТЗ: цель 125 — только без плана).
+ */
+export const akbPlanTarget = (p: AkbPlanTile): TargetValue => ({
+  value: p.fact,
+  target: p.plan,
+  ratio: p.forecastExecution ?? p.execution,
+  level: p.level,
+  forecast: p.forecast,
+});
 
 /** Доля визитов без заказа, выше которой — предупреждение (ТЗ «Вторички»). */
 export const VISITS_NO_ORDER_WARN = 0.4;

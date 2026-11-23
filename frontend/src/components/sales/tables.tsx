@@ -30,7 +30,22 @@ export function RegionsTable({ rows, query, title, hint }: { rows: UnitRow[]; qu
       render: (r) => <span className={levelClass(r.forecastExecutionLevel)}>{pct(r.forecastExecution)}</span>,
     },
     { key: "revenue", label: t("Выручка"), align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue, t) },
-    { key: "akb", label: t("АКБ"), align: "right", value: (r) => r.akb, render: (r) => num(r.akb) },
+    {
+      key: "akb",
+      label: t("АКБ / план"),
+      align: "right",
+      value: (r) => r.akb,
+      // План АКБ из Linko — сумма планов АКБ ТП региона: процент — по АКБ этих ТП (подсказка), цвет — уровень сервера.
+      render: (r) =>
+        r.akbPlan ? (
+          <span className="whitespace-nowrap" title={t("План АКБ ТП из Linko: {fact} из {plan} ({pct})", { fact: num(r.akbPlan.fact), plan: num(r.akbPlan.plan), pct: pct(r.akbPlan.execution) })}>
+            {num(r.akb)} <span className="text-ink-3">/ {num(r.akbPlan.plan)}</span>{" "}
+            <span className={r.akbPlan.level ? levelClass(r.akbPlan.level) : "text-ink-3"}>{pct(r.akbPlan.execution)}</span>
+          </span>
+        ) : (
+          num(r.akb)
+        ),
+    },
     { key: "strike", label: t("Страйк"), align: "right", value: (r) => r.strike, render: (r) => pct(r.strike) },
     { key: "noOrder", label: t("Без заказа"), align: "right", value: (r) => r.visitsWithoutOrder, render: (r) => num(r.visitsWithoutOrder) },
     {
@@ -49,7 +64,7 @@ export function RegionsTable({ rows, query, title, hint }: { rows: UnitRow[]; qu
       rows={rows}
       rowKey={(r) => r.id}
       rowHref={(r) => (r.id === NO_REGION ? null : withQuery(`/sales/regions/${r.id}`, query))}
-      note={t("План — РОП или «Завод» (переключатель «План» вверху), «факт в плане» — все продажи региона; если планов регионов на месяц нет — план и факт ТП с планом в Linko. Выполнение считается по «факту в плане». «Факт всего» — все продажи региона. Прогноз — факт всего, растянутый на месяц по текущему темпу; у закрытого месяца прогноза нет. Страйк — заказы ТП региона, принятые в месяце ÷ их выполненные визиты (бывает больше 100%); «без заказа» — визиты минус заказы.")}
+      note={t("План — РОП или «Завод» (переключатель «План» вверху), «факт в плане» — все продажи региона; если планов регионов на месяц нет — план и факт ТП с планом в Linko. Выполнение считается по «факту в плане». «Факт всего» — все продажи региона. Прогноз — факт всего, растянутый на месяц по текущему темпу; у закрытого месяца прогноза нет. Страйк — заказы ТП региона, принятые в месяце ÷ их выполненные визиты (бывает больше 100%); «без заказа» — визиты минус заказы. АКБ / план — точки с чистой покупкой и сумма планов АКБ ТП из Linko (процент — по АКБ ТП с планом). Строки из одних нулей (канал в идущем месяце, филиал без продаж и ТП) не показываются.")}
     />
   );
 }
@@ -242,6 +257,21 @@ export function TeamTable({ rows, query }: { rows: TeamRow[]; query: string }) {
       render: (r) => <span className={levelClass(r.forecastExecutionLevel)}>{pct(r.forecastExecution)}</span>,
     },
     { key: "revenue", label: t("Выручка"), align: "right", value: (r) => r.revenue, render: (r) => money(r.revenue, t) },
+    {
+      key: "akb",
+      label: t("АКБ / план"),
+      align: "right",
+      value: (r) => r.akb ?? 0,
+      // План АКБ ТП из Linko: «факт / план» и процент; без плана — только факт.
+      render: (r) =>
+        r.akbPlan != null ? (
+          <span className="whitespace-nowrap" title={t("{pct} плана АКБ", { pct: pct(r.akbExecution) })}>
+            {num(r.akb ?? 0)} <span className="text-ink-3">/ {num(r.akbPlan)}</span>
+          </span>
+        ) : (
+          num(r.akb ?? 0)
+        ),
+    },
     { key: "visits", label: t("Визиты"), align: "right", value: (r) => r.visits, render: (r) => num(r.visits) },
     { key: "orders", label: t("Заказы"), align: "right", value: (r) => r.orders, render: (r) => num(r.orders) },
     { key: "strike", label: t("Страйк"), align: "right", value: (r) => r.strike, render: (r) => pct(r.strike) },

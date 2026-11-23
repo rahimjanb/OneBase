@@ -50,11 +50,20 @@ public sealed record MonthlyAkb(int Year, int Month, bool ByBranch, long? Branch
 
 public sealed record PlanRow(Guid? RegionId, long? AgentId, int Month, long? CategoryId, decimal PlanKg);
 
+/// <summary>План АКБ ТП из Linko на месяц: Group = null — АКБ ТП («Октябрь АКБ Ташкент»), иначе — АКБ категории («АКБ Twizos»).</summary>
+public sealed record AkbPlanRow(long AgentId, long? Group, decimal Plan);
+
 /// <summary>
 /// План ТП по весу из показателя Linko, отнесённый к категориям отчёта по названию показателя:
-/// «Сентябрь Бамбук Бухоро» — одна категория, «Могуль + Шоколад …» — две (Groups — id групп категорий).
+/// «Сентябрь Бамбук Бухоро» — одна категория, «Могуль + Шоколад …» — две (Groups — id групп категорий). Except — строка-остаток «Тотала»
+/// (Groups пуст): «Тотал» включает показатели с категориями (Могуль, Twizos), и его строка — план остальных категорий, кроме этих
+/// (SalesPlans.LinkoCategoryPlans); null — обычная строка.
 /// </summary>
-public sealed record CategoryPlanRow(long AgentId, int Year, int Month, IReadOnlyList<long> Groups, decimal PlanKg);
+public sealed record CategoryPlanRow(long AgentId, int Year, int Month, IReadOnlyList<long> Groups, decimal PlanKg, IReadOnlyList<long>? Except = null)
+{
+    /// <summary>Ключ строки «План и факт по категориям»: категории показателя, у остатка «Тотала» — категории, которых в нём нет.</summary>
+    public string Key => Except is null ? string.Join(",", Groups) : "rest:" + string.Join(",", Except);
+}
 
 /// <summary>KPI-показатель агента из Linko (staff_balance): план и факт так, как их считает Linko.</summary>
 /// <summary>KPI-показатель человека из Linko: план и факт; для раздела «KPI» — продажи, возвраты, уровень, оклад и начисленная премия.</summary>
@@ -142,6 +151,12 @@ public sealed class MonthData
     public (int Year, int Month) NextMonth { get; init; }
 
     public IReadOnlyList<PlanRow> NextPlans { get; init; } = [];
+
+    /// <summary>
+    /// Планы АКБ ТП из Linko за выбранный месяц (SalesPlans.LinkoAkbPlans): Group = null — план АКБ ТП, группа категории — план АКБ категории.
+    /// Командные планы СВР сюда не входят.
+    /// </summary>
+    public IReadOnlyList<AkbPlanRow> AkbPlans { get; init; } = [];
 
     /// <summary>KPI-показатели агентов из Linko за выбранный месяц (включая супервайзеров).</summary>
     public IReadOnlyList<StaffIndicator> Indicators { get; init; } = [];

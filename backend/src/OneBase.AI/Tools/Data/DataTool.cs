@@ -48,6 +48,9 @@ public abstract class DataTool : ITool
 
     /// <summary>Инструменты данных только читают; расчёты и сценарии — анализ, отчёты — подготовка (ToolLevels).</summary>
     public virtual int Level => ToolLevels.Read;
+
+    /// <summary>Сколько ошибок за анализ сотрудника допускается (ITool.MaxFailures).</summary>
+    public virtual int MaxFailures => 3;
     public abstract JsonElement InputSchema { get; }
 
     /// <summary>Подсказка сотруднику, когда и как вызывать инструмент; попадает в его системный промпт. null — без подсказки.</summary>

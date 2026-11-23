@@ -6,10 +6,10 @@ using C = OneBase.Infrastructure.Telegram.Reports.FarmColors;
 namespace OneBase.Infrastructure.Telegram.Reports;
 
 /// <summary>
-/// «11. Итоги дня по категориям»: по картинке 1080 px на категорию, в стиле карточек Candy Gold. Сверху вниз: категория и её второе
-/// название, область и день итога; продано за день, выполнение плана дня и полоса «факт — план дня»; плитки (ТТ и заказы, артикулы, цена
-/// за кг, к прошлому рабочему дню, к тому же дню неделю назад, средний рабочий день); килограммы за 14 дней с подписями; регионы (РМ) или ТП
-/// (СВ) за день с планом дня; артикулы дня с фото; артикулы месяца, которых за день не было. Высота — по содержимому.
+/// «11. Итоги дня по категориям»: по картинке 1080 px на категорию, в стиле карточек Candy Gold, — только день итога, без месяца и других
+/// дней. Сверху вниз: категория и её второе название, область и день итога; продано за день, выполнение плана дня и полоса «факт — план
+/// дня»; плитки (ТТ и заказы, артикулы, цена за кг); регионы (РМ) или ТП (СВ) за день с планом дня; артикулы дня с фото. Высота — по
+/// содержимому.
 /// </summary>
 internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, string language, bool test) : FarmPainter(faces, language, test)
 {
@@ -17,12 +17,11 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
     private const float HeaderHeight = 176;
     private const float NoteHeight = 54;
     private const float HeroHeight = 254;
-    private const float CountersHeight = 108 * 2 + 16;
-    private const float ChartHeight = 270;
+    private const float HeroShort = 190;
+    private const float CountersHeight = 108;
     private const float TableRow = 46;
     private const int TableMax = 24;
     private const float SkuRow = 104;
-    private const float SilentRow = 34;
     private const float FooterHeight = 64;
     private const float CardInner = 28;
 
@@ -33,13 +32,12 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
     {
         var rows = card.Breakdown.Take(TableMax).ToList();
         var more = card.Breakdown.Count - rows.Count;
-        var silentCount = card.Silent.Count + card.SilentMore;
         var notes = doc.Notes.Take(2).ToList();
         var top = IsTest ? 52f : 0f;
-        var height = top + 24 + HeaderHeight + notes.Count * (NoteHeight + Gap) + HeroHeight + Gap + CountersHeight + Gap + ChartHeight + Gap
+        var hero = HeroOf(card);
+        var height = top + 24 + HeaderHeight + notes.Count * (NoteHeight + Gap) + hero + Gap + CountersHeight + Gap
                      + (rows.Count > 0 ? TableHeight(rows.Count, more) + Gap : 0)
                      + (card.Top.Count > 0 ? TopHeight(card.Top.Count) + Gap : 0)
-                     + (silentCount > 0 ? SilentHeight(card) + Gap : 0)
                      + FooterHeight;
 
         using var surface = SKSurface.Create(new SKImageInfo(Width, (int)Math.Ceiling(height)));
@@ -59,12 +57,10 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
             y += NoteHeight + Gap;
         }
 
-        DrawHero(c, y, card);
-        y += HeroHeight + Gap;
+        DrawHero(c, y, card, hero);
+        y += hero + Gap;
         DrawCounters(c, y, card);
         y += CountersHeight + Gap;
-        DrawChart(c, y, cards, card);
-        y += ChartHeight + Gap;
         if (rows.Count > 0)
         {
             DrawTable(c, y, card, rows, more);
@@ -77,24 +73,17 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
             y += TopHeight(card.Top.Count) + Gap;
         }
 
-        if (silentCount > 0)
-        {
-            DrawSilent(c, y, card, silentCount);
-            y += SilentHeight(card) + Gap;
-        }
-
-        var source = doc.DataAsOf is { } at
-            ? F("OneBase · данные Linko на {0} · месяц по {1}", at.ToString("dd.MM HH:mm", CultureInfo.InvariantCulture), DayMonth(cards.DataThrough))
-            : F("OneBase · месяц по {0}", DayMonth(cards.DataThrough));
+        var source = doc.DataAsOf is { } at ? F("OneBase · данные Linko на {0}", at.ToString("dd.MM HH:mm", CultureInfo.InvariantCulture)) : "OneBase";
         TextCenter(c, source, Width / 2f, y + 6, 18, Faces.Medium, C.Ink3);
         return Png(surface);
     }
 
+    /// <summary>Блок «Продано за день»: с планом дня — с полосой «факт — план дня», без него — короче.</summary>
+    private static float HeroOf(CategoryDayCard card) => card.DayExecution is null ? HeroShort : HeroHeight;
+
     private static float TableHeight(int rows, int more) => 70 + 40 + rows * TableRow + (more > 0 ? TableRow : 0) + 14;
 
     private static float TopHeight(int count) => 70 + count * SkuRow + 10;
-
-    private static float SilentHeight(CategoryDayCard card) => 100 + card.Silent.Count * SilentRow + (card.SilentMore > 0 ? SilentRow : 0);
 
     // ---------- Шапка ----------
 
@@ -122,9 +111,9 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
 
     // ---------- Продано за день и план дня ----------
 
-    private void DrawHero(SKCanvas c, float top, CategoryDayCard card)
+    private void DrawHero(SKCanvas c, float top, CategoryDayCard card, float height)
     {
-        CardBox(c, Pad, top, Inner, HeroHeight);
+        CardBox(c, Pad, top, Inner, height);
         var left = Pad + CardInner;
         var right = Width - Pad - CardInner;
         Text(c, T("Продано за день"), left, top + 24, 22, Faces.Medium, C.Ink2);
@@ -132,49 +121,50 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
         Text(c, card.Kg != 0 || card.Revenue != 0 ? $"{ReportFormat.Number(card.Revenue)} {T("сум")}" : T("За день продаж категории нет"), left, top + 134, 26,
             Faces.Medium, C.Ink2);
 
-        if (card.DayExecution is { } execution)
+        if (card.DayExecution is not { } execution)
         {
-            TextRight(c, ReportFormat.Percent(execution), right, top + 52, 62, Faces.Bold, Tone(execution));
-            TextRight(c, T("плана дня"), right, top + 130, 22, Faces.Medium, C.Ink3);
+            // Плана дня нет: план уже выполнен (план дня 0), план общий на несколько категорий — какой, или плана нет.
+            var label = card.PlanDone ? T("план уже выполнен") : card.PlanShared is null ? T("плана дня нет") : T("план общий");
+            TextRight(c, label, right, top + 60, 30, Faces.SemiBold, card.PlanDone ? C.Green : C.Ink3);
+            if (!card.PlanDone && card.PlanShared is { } shared)
+            {
+                TextRight(c, "«" + shared + "»", right, top + 104, 20, Faces.Medium, C.Ink3);
+            }
+
+            return;
         }
-        else
-        {
-            var label = card.PlanDone ? T("план месяца выполнен") : card.PlanShared is null ? T("плана дня нет") : T("план общий");
-            TextRight(c, label, right, top + 70, 30, Faces.SemiBold, card.PlanDone ? C.Green : C.Ink3);
-        }
+
+        TextRight(c, ReportFormat.Percent(execution), right, top + 52, 62, Faces.Bold, Tone(execution));
+        TextRight(c, T("плана дня"), right, top + 130, 22, Faces.Medium, C.Ink3);
 
         // Полоса: факт дня к плану дня, отметка плана (100%); шкала — до 150%, если факт выше плана.
         var barX = left;
         var barW = right - left;
         var barY = top + 182;
-        var scale = (double)Math.Clamp(Math.Max(1m, card.DayExecution ?? 0), 1m, 1.5m);
+        var scale = (double)Math.Clamp(Math.Max(1m, execution), 1m, 1.5m);
         using (var track = Fill(C.Track))
         {
             c.DrawRoundRect(new SKRoundRect(new SKRect(barX, barY, barX + barW, barY + 16), 8), track);
         }
 
-        if (card.DayExecution is { } e && e > 0)
+        if (execution > 0)
         {
-            using var fill = Fill(Tone(e));
-            var w = (float)(barW * Math.Min(1, (double)e / scale));
+            using var fill = Fill(Tone(execution));
+            var w = (float)(barW * Math.Min(1, (double)execution / scale));
             c.DrawRoundRect(new SKRoundRect(new SKRect(barX, barY, barX + Math.Max(w, 16), barY + 16), 8), fill);
-            var planX = (float)(barX + barW / scale);
-            using var mark = Stroke(C.Ink, 3);
+        }
+
+        var planX = (float)(barX + barW / scale);
+        using (var mark = Stroke(C.Ink, 3))
+        {
             c.DrawLine(planX, barY - 8, planX, barY + 24, mark);
         }
 
-        var month = card.MonthPlanKg is { } plan
-            ? F("Месяц {0} из {1} кг · {2}", ReportFormat.Kg(card.MonthKg), ReportFormat.Kg(plan), ReportFormat.Percent(card.MonthExecution))
-            : card.PlanShared is { } shared ? F("Месяц {0} кг · план общий «{1}»", ReportFormat.Kg(card.MonthKg), shared)
-            : F("Месяц {0} кг", ReportFormat.Kg(card.MonthKg));
-        var planText = card.DayPlanKg is { } dayPlan && !card.PlanDone ? F("План дня {0} кг", ReportFormat.Kg(dayPlan)) + " · " + month : month;
-        TextFit(c, planText, left, barY + 30, barW * 0.66f, 20, Faces.Medium, C.Ink2);
-        if (card.DayPlanKg is > 0 && !card.PlanDone)
-        {
-            var gap = card.Kg - card.DayPlanKg.Value;
-            TextRight(c, gap >= 0 ? F("сверх плана {0} кг", ReportFormat.Kg(gap)) : F("не хватило {0} кг", ReportFormat.Kg(-gap)), right, barY + 30, 20,
-                Faces.SemiBold, gap >= 0 ? C.Green : C.Red);
-        }
+        var dayPlan = card.DayPlanKg ?? 0;
+        Text(c, F("План дня {0} кг", ReportFormat.Kg(dayPlan)), left, barY + 30, 20, Faces.Medium, C.Ink2);
+        var gap = card.Kg - dayPlan;
+        TextRight(c, gap >= 0 ? F("сверх плана {0} кг", ReportFormat.Kg(gap)) : F("не хватило {0} кг", ReportFormat.Kg(-gap)), right, barY + 30, 20,
+            Faces.SemiBold, gap >= 0 ? C.Green : C.Red);
     }
 
     // ---------- Плитки ----------
@@ -184,113 +174,8 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
         var price = card.Kg > 0 ? card.Revenue / card.Kg : (decimal?)null;
         Counters(c, top,
             (T("АКБ дня, точек"), ReportFormat.Number(card.Akb), C.Ink, card.Orders > 0 ? F("заказов {0}", card.Orders) : null),
-            (T("Артикулов за день"), card.SkusInMonth > 0 ? $"{card.Skus} / {card.SkusInMonth}" : ReportFormat.Number(card.Skus), C.Ink,
-                card.SkusInMonth > 0 ? T("из идущих в месяце") : null),
+            (T("Артикулов за день"), ReportFormat.Number(card.Skus), C.Ink, null),
             (T("Цена, сум/кг"), ReportFormat.Number(price), C.Ink, null));
-        var toPrev = CategoryDayReport.Change(card.Kg, card.PrevDayKg);
-        var toWeek = CategoryDayReport.Change(card.Kg, card.WeekAgoKg);
-        var toAverage = card.AverageKg is { } avg ? CategoryDayReport.Change(card.Kg, avg) : null;
-        Counters(c, top + 108 + 16,
-            (F("К {0} {1}", Weekday(card.PrevDay), DayMonth(card.PrevDay)), Signed(toPrev), ChangeColor(toPrev), F("{0} кг", ReportFormat.Kg(card.PrevDayKg))),
-            (F("К {0} {1}", Weekday(card.WeekAgo), DayMonth(card.WeekAgo)), Signed(toWeek), ChangeColor(toWeek), F("{0} кг", ReportFormat.Kg(card.WeekAgoKg))),
-            (T("К среднему дню"), Signed(toAverage), ChangeColor(toAverage), card.AverageKg is { } a ? F("{0} кг", ReportFormat.Kg(a)) : null));
-    }
-
-    /// <summary>+12% / −8% / 0%; сравнить не с чем — «—».</summary>
-    private static string Signed(decimal? change)
-    {
-        if (change is not { } v)
-        {
-            return "—";
-        }
-
-        var percent = Math.Round(v * 100, 0, MidpointRounding.AwayFromZero);
-        return percent switch
-        {
-            > 0 => "+" + percent.ToString(CultureInfo.InvariantCulture) + "%",
-            < 0 => "−" + (-percent).ToString(CultureInfo.InvariantCulture) + "%",
-            _ => "0%",
-        };
-    }
-
-    private static SKColor ChangeColor(decimal? change) => change switch
-    {
-        null => C.Ink3,
-        >= 0 => C.Green,
-        > -0.2m => C.Orange,
-        _ => C.Red,
-    };
-
-    // ---------- По дням ----------
-
-    private void DrawChart(SKCanvas c, float top, CategoryDayCards cards, CategoryDayCard card)
-    {
-        CardBox(c, Pad, top, Inner, ChartHeight);
-        var left = Pad + CardInner;
-        var right = Width - Pad - CardInner;
-        Text(c, T("По дням, кг"), left, top + 22, 24, Faces.Bold, C.Ink);
-        var days = card.Days;
-        if (days.Count == 0 || days.All(d => d.Kg <= 0))
-        {
-            TextCenter(c, T("За две недели продаж категории нет"), Width / 2f, top + 130, 22, Faces.Medium, C.Ink3);
-            return;
-        }
-
-        if (card.AverageKg is { } average)
-        {
-            TextRight(c, F("средний рабочий день {0} кг", ReportFormat.Kg(average)), right, top + 26, 20, Faces.Medium, C.Ink2);
-        }
-
-        var max = (float)Math.Max(1, days.Max(d => d.Kg));
-        var areaTop = top + 100;
-        var areaH = 110f;
-        var step = (right - left) / days.Count;
-        var barW = Math.Max(4, step * 0.62f);
-        if (card.AverageKg is { } avg && avg > 0)
-        {
-            var ay = areaTop + areaH - (float)avg / max * areaH;
-            using var dash = Stroke(C.Ink3, 2);
-            dash.PathEffect = SKPathEffect.CreateDash([8, 6], 0);
-            c.DrawLine(left, ay, right, ay, dash);
-        }
-
-        for (var i = 0; i < days.Count; i++)
-        {
-            var d = days[i];
-            var current = d.Day == cards.Day;
-            var h = d.Kg <= 0 ? 0 : Math.Max(3, (float)d.Kg / max * areaH);
-            var x = left + i * step + (step - barW) / 2;
-            var color = current ? C.Brand : d.Day.DayOfWeek == DayOfWeek.Sunday ? C.Track : C.Amber;
-            using (var paint = Fill(color))
-            {
-                c.DrawRoundRect(new SKRoundRect(new SKRect(x, areaTop + areaH - h, x + barW, areaTop + areaH), Math.Min(4, barW / 2)), paint);
-            }
-
-            if (d.Kg != 0)
-            {
-                TextCenterFit(c, Compact(d.Kg), x + barW / 2, areaTop + areaH - h - 24, step - 4, 16, current ? Faces.Bold : Faces.Medium, current ? C.Brand : C.Ink2);
-            }
-
-            TextCenter(c, d.Day.Day.ToString(CultureInfo.InvariantCulture), x + barW / 2, areaTop + areaH + 10, 17, current ? Faces.Bold : Faces.Medium,
-                current ? C.Brand : C.Ink3);
-            TextCenter(c, Weekday(d.Day), x + barW / 2, areaTop + areaH + 32, 14, Faces.Medium, current ? C.Brand : C.Ink3);
-        }
-    }
-
-    /// <summary>Подпись столбика: до 10 тонн — килограммы, больше — «12,3т».</summary>
-    private string Compact(decimal kg) => Math.Abs(kg) < 10_000
-        ? ReportFormat.Kg(kg)
-        : F("{0}т", Math.Round(kg / 1000, 1, MidpointRounding.AwayFromZero).ToString("0.#", CultureInfo.InvariantCulture).Replace('.', ','));
-
-    private void TextCenterFit(SKCanvas c, string text, float cx, float top, float width, float size, SKTypeface face, SKColor color)
-    {
-        var fit = size;
-        while (fit > 11 && Measure(text, face, fit) > width)
-        {
-            fit -= 1;
-        }
-
-        TextCenter(c, text, cx, top + (size - fit), fit, face, color);
     }
 
     // ---------- Регионы или ТП ----------
@@ -300,7 +185,7 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
         CardBox(c, Pad, top, Inner, TableHeight(rows.Count, more));
         var left = Pad + CardInner;
         var right = Width - Pad - CardInner;
-        Text(c, card.BreakdownKind == CategorySalesCards.Regions ? T("Регионы за день") : T("ТП за день"), left, top + 22, 24, Faces.Bold, C.Ink);
+        Text(c, card.BreakdownKind == CategoryDayCards.Regions ? T("Регионы за день") : T("ТП за день"), left, top + 22, 24, Faces.Bold, C.Ink);
         var planned = rows.Any(r => r.DayPlanKg is not null);
         if (planned)
         {
@@ -331,7 +216,7 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
 
         var nameWidth = x - left - 12;
         var head = top + 70;
-        Text(c, card.BreakdownKind == CategorySalesCards.Regions ? T("Регион") : T("ТП"), left, head, 18, Faces.SemiBold, C.Ink3);
+        Text(c, card.BreakdownKind == CategoryDayCards.Regions ? T("Регион") : T("ТП"), left, head, 18, Faces.SemiBold, C.Ink3);
         for (var i = 0; i < columns.Count; i++)
         {
             // Заголовок не шире колонки («Buyurtmalar» на узбекском) — мельче, а не поверх соседнего.
@@ -415,7 +300,6 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
 
             TextRight(c, $"{ReportFormat.Kg(sku.Kg)} {T("кг")}", right, y + 6, 28, Faces.Bold, C.Ink);
             TextRight(c, F("{0} ТТ · {1}", ReportFormat.Number(sku.Akb), ReportFormat.Short(sku.Revenue, Language)), right, y + 44, 18, Faces.Medium, C.Ink2);
-            TextRight(c, F("в месяце {0} кг", ReportFormat.Kg(sku.MonthKg)), right, y + 70, 16, Faces.Medium, C.Ink3);
             y += SkuRow;
         }
     }
@@ -439,27 +323,6 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
         c.ClipRoundRect(rect, antialias: true);
         DrawPack(c, bitmap, x + 4, y + 4, size - 8, size - 8);
         c.Restore();
-    }
-
-    // ---------- Не продавались за день ----------
-
-    private void DrawSilent(SKCanvas c, float top, CategoryDayCard card, int count)
-    {
-        CardBox(c, Pad, top, Inner, SilentHeight(card));
-        var left = Pad + CardInner;
-        Text(c, F("Не продавались за день: {0}", count), left, top + 22, 24, Faces.Bold, C.Orange);
-        Text(c, T("продаются в этом месяце, за день — ни одной продажи"), left, top + 56, 18, Faces.Medium, C.Ink3);
-        var y = top + 90;
-        foreach (var name in card.Silent)
-        {
-            TextFit(c, "• " + name, left, y, Inner - 2 * CardInner, 21, Faces.Medium, C.Ink);
-            y += SilentRow;
-        }
-
-        if (card.SilentMore > 0)
-        {
-            Text(c, F("и ещё {0}", card.SilentMore), left, y, 20, Faces.Medium, C.Ink3);
-        }
     }
 
     /// <summary>Цвет выполнения: от 100% — зелёный, 80–99% — оранжевый, ниже 80% — красный (порог ТЗ).</summary>

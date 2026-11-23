@@ -2,7 +2,7 @@
 // отчётов 1–9, последняя отправка, шаблоны отчётов панели, ближайшие отправки и «Требуют внимания». Без интерфейса — проверяется тестами.
 import type { ReportChat, ReportJob, ReportMetrics, ReportRecipient, ReportRecipientInput, ReportRegion, ReportRmUser, ReportRole, ReportType, SkipKey } from "./telegramReports";
 
-/** Отчёты 1–11 — номера как в расписании и на картинках; short — для легенды и фильтров. */
+/** Отчёты 1–9 и 11 — номера как в расписании и на картинках (10 «Карточки категорий» убран); short — для легенды и фильтров. */
 export const REPORTS: { type: ReportType; n: number; title: string; short: string }[] = [
   { type: "daily", n: 1, title: "Дневной план", short: "план" },
   { type: "no-purchase", n: 2, title: "Клиенты без закупа", short: "без закупа" },
@@ -13,7 +13,6 @@ export const REPORTS: { type: ReportType; n: number; title: string; short: strin
   { type: "battle", n: 7, title: "Поле боя", short: "поле боя" },
   { type: "weekly-pdf", n: 8, title: "Еженедельный PDF", short: "PDF" },
   { type: "incentive", n: 9, title: "Накопительная акция", short: "накопит." },
-  { type: "category-cards", n: 10, title: "Карточки категорий", short: "карточки" },
   { type: "category-day", n: 11, title: "Итоги дня по категориям", short: "итог кат." },
 ];
 
@@ -333,8 +332,8 @@ export function reportSummary(codes: string[], role: ReportRole, jobs: ReportJob
 
 export type Template = "role" | "all" | "evening" | "clear";
 
-/** Отчёты по категориям (10 — карточки месяца, 11 — итоги дня): их включают отдельно — по картинке на категорию. */
-const CATEGORY_REPORTS: ReportType[] = ["category-cards", "category-day"];
+/** Отчёт по категориям (11 — итоги дня): его включают отдельно — по картинке на категорию. */
+const CATEGORY_REPORTS: ReportType[] = ["category-day"];
 
 /**
  * Отчёты роли по умолчанию: всё, что положено роли, кроме понедельничных итогов недели, PDF, отчётов по категориям (их включают отдельно —
