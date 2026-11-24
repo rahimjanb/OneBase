@@ -99,11 +99,11 @@ public sealed class IncentivePromoService(IAppDbContext db, SalesOptions sales, 
 {
     private static readonly string[] NotTaken = LinkoMirrorSalesProvider.NotTaken;
 
-    /// <summary>Товары по типам Linko с подтипами.</summary>
+    /// <summary>Товары по типам Linko с подтипами (кроме подтипов — своих категорий «Продаж», как Cripzel внутри «Снек»).</summary>
     public async Task<long[]> ProductsOfTypesAsync(IEnumerable<long> typeIds, CancellationToken ct)
     {
         var tree = await LinkoTypeTree.LoadAsync(db, ct);
-        var types = SalesCategories.WithDescendants(typeIds.ToArray(), tree.Parents).ToArray();
+        var types = SalesCategories.WithDescendants(typeIds.ToArray(), tree.Parents, SalesCategories.Build(sales.Categories, tree)).ToArray();
         return types.Length == 0
             ? []
             : await db.LinkoProducts.AsNoTracking().Where(p => p.TypeId != null && types.Contains(p.TypeId.Value)).Select(p => p.Id).ToArrayAsync(ct);

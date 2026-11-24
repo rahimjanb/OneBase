@@ -1,21 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, Eye, Loader2, Pencil, Send, Shapes, Users } from "lucide-react";
+import { CalendarClock, Eye, Loader2, Pencil, Search, Send, Shapes, Users } from "lucide-react";
 import { button, field, primary } from "@/components/ai/form";
 import { Note } from "@/components/sales/bits";
 import { useT } from "@/i18n/client";
 import { chatTypeLabel } from "@/lib/telegram";
 import {
+  allProducts,
   cardJobs,
   cardRecipients,
   categoryLabel,
   choiceText,
   effectiveCategories,
+  effectiveProducts,
+  keepProducts,
+  pickedProducts,
   sameChoice,
+  sameProducts,
   toggleCategory,
+  toggleProduct,
   type CategoryCardOption,
   type CategoryCardsView,
+  type ProductChoice,
 } from "@/lib/telegram-category-cards";
 import {
   categoryCardsApi,
@@ -82,6 +89,111 @@ function CategoryChips({ options, selected, max, onToggle, disabled }: { options
   );
 }
 
+/**
+ * Товары выбранных категорий: у каждой — «все товары (N)» или «выбрано k из N», раскрытая — флажки товаров (код и название) с поиском.
+ * Отмечены все — снова вся категория (и новые товары в ней тоже попадут); последний отмеченный товар снять нельзя. onChange — функция
+ * обновления от предыдущего выбора, как у категорий.
+ */
+function ProductChoices({
+  options,
+  names,
+  products,
+  onChange,
+  disabled,
+}: {
+  options: CategoryCardOption[];
+  names: string[];
+  products: ProductChoice;
+  onChange: (update: (prev: ProductChoice) => ProductChoice) => void;
+  disabled?: boolean;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const chosen = names.map((n) => options.find((o) => o.name === n)).filter((o): o is CategoryCardOption => !!o && (o.products?.length ?? 0) > 0);
+  if (chosen.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <span className="mb-1.5 block text-xs font-medium text-ink-2">{t("Товары в карточках")}</span>
+      <ul className="flex flex-col divide-y divide-line rounded-lg border border-line">
+        {chosen.map((o) => {
+          const list = o.products ?? [];
+          const own = products[o.name];
+          const expanded = open === o.name;
+          const picked = pickedProducts(products, o);
+          const q = search.trim().toLowerCase();
+          const visible = expanded ? list.filter((p) => !q || p.name.toLowerCase().includes(q) || (p.code ?? "").toLowerCase().includes(q)) : [];
+          return (
+            <li key={o.name} className="px-3 py-2">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="min-w-0 flex-1 text-sm">
+                  <span className="font-medium text-ink">{o.name}</span>
+                  <span className={`ml-2 ${own ? "font-medium text-accent-strong" : "text-ink-3"}`}>
+                    {own ? t("выбрано {n} из {total}", { n: own.length, total: list.length }) : t("все товары ({total})", { total: list.length })}
+                  </span>
+                </span>
+                {own && (
+                  <button type="button" className="text-[13px] font-semibold text-ink-2 hover:underline" onClick={() => onChange((prev) => allProducts(prev, o.name))} disabled={disabled}>
+                    {t("Все товары")}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  className="text-[13px] font-semibold text-accent-strong hover:underline"
+                  onClick={() => {
+                    setOpen(expanded ? null : o.name);
+                    setSearch("");
+                  }}
+                  disabled={disabled}
+                >
+                  {expanded ? t("Скрыть") : t("Выбрать товары")}
+                </button>
+              </div>
+              {expanded && (
+                <div className="mt-2">
+                  {list.length > 8 && (
+                    <div className="relative mb-2">
+                      <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
+                      <input className={`${field} pl-9`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("Название или код товара")} />
+                    </div>
+                  )}
+                  <ul className="max-h-64 overflow-y-auto" aria-label={t("Товары: {name}", { name: o.name })}>
+                    {visible.map((p) => {
+                      const on = picked.includes(p.id);
+                      return (
+                        <li key={p.id}>
+                          <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              disabled={disabled || (on && picked.length === 1)}
+                              onChange={() => onChange((prev) => toggleProduct(prev, o, p.id))}
+                              className="mt-0.5 size-4 shrink-0 accent-[var(--color-accent)]"
+                            />
+                            <span className="min-w-0 flex-1 text-sm text-ink">
+                              {/* Код — если его нет в начале названия (в Linko обычно «603 «Twizos» …»). */}
+                              {p.code && !p.name.startsWith(p.code) && <span className="mr-1.5 tabular-nums text-ink-3">{p.code}</span>}
+                              {p.name}
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                    {visible.length === 0 && <li className="px-2 py-1.5 text-sm text-ink-3">{t("Ничего не найдено")}</li>}
+                  </ul>
+                  <p className="mt-1.5 text-xs text-ink-3">{t("Цифры карточки — только по отмеченным товарам; план дня — только у всей категории.")}</p>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 const daysText = (days: number[], t: (s: string) => string) =>
   days.length === 7 ? t("каждый день") : days.length === 6 && !days.includes(7) ? t("пн–сб") : days.map((d) => t(weekDays.find((w) => w.day === d)?.label ?? "")).join(", ");
 
@@ -94,7 +206,8 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
   const t = useT();
   const [view, setView] = useState<CategoryCardsView | null>(null);
   const [draft, setDraft] = useState<string[]>([]);
-  const [editing, setEditing] = useState<{ id: string; own: boolean; names: string[] } | null>(null);
+  const [draftProducts, setDraftProducts] = useState<ProductChoice>({});
+  const [editing, setEditing] = useState<{ id: string; own: boolean; names: string[]; products: ProductChoice } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const jobs = cardJobs(data.jobs);
@@ -108,6 +221,7 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
         if (!alive) return;
         setView(v);
         setDraft(v.defaults);
+        setDraftProducts(v.defaultProducts ?? {});
       })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
@@ -129,15 +243,16 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
 
   const saveDefaults = () =>
     run("defaults", async () => {
-      const next = await categoryCardsApi.saveDefaults(draft);
+      const next = await categoryCardsApi.saveDefaults(draft, keepProducts(draftProducts, draft));
       setView(next);
       setDraft(next.defaults);
+      setDraftProducts(next.defaultProducts ?? {});
     });
 
   const saveRecipient = () =>
     editing &&
     run(`r:${editing.id}`, async () => {
-      setView(await categoryCardsApi.saveRecipient(editing.id, editing.own ? editing.names : null));
+      setView(await categoryCardsApi.saveRecipient(editing.id, editing.own ? editing.names : null, editing.own ? keepProducts(editing.products, editing.names) : null));
       setEditing(null);
     });
 
@@ -157,7 +272,10 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
   }
 
   const total = view.categories.length;
-  const ownOf = (id: string) => view.recipients.find((r) => r.id === id)?.categories ?? null;
+  const ownOf = (id: string) => view.recipients.find((r) => r.id === id) ?? null;
+  const defaultProducts = view.defaultProducts ?? {};
+  const changed = !sameChoice(draft, view.defaults) || !sameProducts(keepProducts(draftProducts, draft), defaultProducts);
+  const label = (n: number) => t("товаров: {n}", { n });
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
@@ -166,6 +284,9 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
           {t(
             "Отдельная картинка на каждую выбранную категорию — только за один день, без месяца, в области получателя: кг, сумма, точки и заказы, артикулы, цена за кг, план дня и выполнение, регионы (РМ) или ТП (СВ) за день, артикулы дня с фото. Все картинки — одним альбомом.",
           )}
+        </p>
+        <p className="text-sm text-ink-2">
+          {t("В выбранной категории можно оставить все товары или отметить только нужные (кнопка «Выбрать товары») — тогда все цифры карточки будут только по ним.")}
         </p>
         {error && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
 
@@ -177,18 +298,26 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
             onToggle={(name) => setDraft((d) => toggleCategory(d, name, view.categories, view.max))}
             disabled={busy !== null}
           />
+          <ProductChoices options={view.categories} names={draft} products={draftProducts} onChange={setDraftProducts} disabled={busy !== null} />
           <p className="mt-3 text-xs text-ink-3">
             {draft.length === 0
               ? t("Ничего не выбрано — уйдут все {n} категорий.", { n: Math.min(total, view.max) })
-              : t("Уйдут: {list}. Получателям без своего выбора.", { list: draft.join(", ") })}
+              : t("Уйдут: {list}. Получателям без своего выбора.", { list: choiceText(draft, -1, keepProducts(draftProducts, draft), label) })}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button className={primary} onClick={saveDefaults} disabled={busy !== null || sameChoice(draft, view.defaults)}>
+            <button className={primary} onClick={saveDefaults} disabled={busy !== null || !changed}>
               {busy === "defaults" && <Loader2 aria-hidden className="size-4 animate-spin" />}
               {t("Сохранить")}
             </button>
-            {!sameChoice(draft, view.defaults) && (
-              <button className={button} onClick={() => setDraft(view.defaults)} disabled={busy !== null}>
+            {changed && (
+              <button
+                className={button}
+                onClick={() => {
+                  setDraft(view.defaults);
+                  setDraftProducts(defaultProducts);
+                }}
+                disabled={busy !== null}
+              >
                 {t("Отменить")}
               </button>
             )}
@@ -249,7 +378,8 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
           ) : (
             <ul className="flex flex-col divide-y divide-line">
               {subscribed.map((r) => {
-                const own = ownOf(r.id);
+                const mine = ownOf(r.id);
+                const own = mine?.categories ?? null;
                 const open = editing?.id === r.id;
                 return (
                   <li key={r.id} className="py-3 first:pt-0 last:pb-0">
@@ -258,14 +388,23 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium text-ink">{r.name}</span>
                         <span className="block text-xs text-ink-3">
-                          {own ? t(choiceText(own, total)) : `${t("по умолчанию")}: ${t(choiceText(effectiveCategories(null, view), total))}`}
+                          {own
+                            ? t(choiceText(own, total, mine?.products ?? {}, label))
+                            : `${t("по умолчанию")}: ${t(choiceText(effectiveCategories(null, view), total, effectiveProducts(null, null, view), label))}`}
                           {!r.enabled && ` · ${t("выключен")}`}
                         </span>
                       </span>
                       {!open && (
                         <button
                           className="inline-flex items-center gap-1 text-[13px] font-semibold text-accent-strong hover:underline"
-                          onClick={() => setEditing({ id: r.id, own: own !== null, names: own ?? effectiveCategories(null, view) })}
+                          onClick={() =>
+                            setEditing({
+                              id: r.id,
+                              own: own !== null,
+                              names: own ?? effectiveCategories(null, view),
+                              products: effectiveProducts(own, mine?.products, view),
+                            })
+                          }
                           aria-label={t("Категории: {name}", { name: r.name })}
                         >
                           <Pencil aria-hidden className="size-3.5" />
@@ -286,6 +425,12 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
                               selected={editing.names}
                               max={view.max}
                               onToggle={(name) => setEditing((e) => (e ? { ...e, names: toggleCategory(e.names, name, view.categories, view.max) } : e))}
+                            />
+                            <ProductChoices
+                              options={view.categories}
+                              names={editing.names}
+                              products={editing.products}
+                              onChange={(update) => setEditing((e) => (e ? { ...e, products: update(e.products) } : e))}
                             />
                           </div>
                         )}
@@ -317,6 +462,7 @@ export function CategoryCardsPanel({ data, onTab, onJob }: { data: ReportOvervie
 function PreviewCard({ data, view, jobs }: { data: ReportOverview; view: CategoryCardsView; jobs: ReportJob[] }) {
   const t = useT();
   const [categories, setCategories] = useState<string[]>(() => effectiveCategories(null, view).slice(0, 3));
+  const [products, setProducts] = useState<ProductChoice>(() => effectiveProducts(null, null, view));
   const [job, setJob] = useState(jobs.at(-1)?.code ?? "category-day.evening");
   const [recipientId, setRecipientId] = useState("");
   const [scope, setScope] = useState<Scope>(() => defaultScope(data, "rm"));
@@ -341,6 +487,7 @@ function PreviewCard({ data, view, jobs }: { data: ReportOverview; view: Categor
     time: null,
     language,
     categories,
+    products: keepProducts(products, categories),
   });
 
   const act = async (kind: "preview" | "test") => {
@@ -379,6 +526,7 @@ function PreviewCard({ data, view, jobs }: { data: ReportOverview; view: Categor
             onToggle={(name) => setCategories((d) => toggleCategory(d, name, view.categories, view.max))}
             disabled={busy !== null}
           />
+          <ProductChoices options={view.categories} names={categories} products={products} onChange={setProducts} disabled={busy !== null} />
 
           <label className="mt-4 block">
             <span className="mb-1.5 block text-sm font-medium text-ink">{t("Запуск")}</span>

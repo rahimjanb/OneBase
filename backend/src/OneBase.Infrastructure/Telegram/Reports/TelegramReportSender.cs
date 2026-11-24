@@ -44,7 +44,7 @@ public sealed class TelegramReportSender(
     /// расписания. Язык — из настроек, если не задан. categories — категории карточек получателя (отчёт 11; null — выбор по умолчанию).
     /// </summary>
     public async Task<ReportDocument> BuildAsync(string job, ReportScope scope, DateOnly period, DateTimeOffset? at, string? language, CancellationToken ct,
-        IReadOnlyList<string>? categories = null)
+        IReadOnlyList<CategoryCardPick>? categories = null)
     {
         var settings = await db.TelegramReportSettings.AsNoTracking().FirstOrDefaultAsync(ct);
         var schedule = await db.TelegramReportJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Code == job, ct);

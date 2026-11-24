@@ -23,11 +23,14 @@ public sealed class IncentiveService(IAppDbContext db, SalesOptions sales)
         await db.IncentivePrograms.AsNoTracking().Where(p => p.Enabled && p.StartDate <= day && p.EndDate >= day)
             .OrderBy(p => p.StartDate).ThenBy(p => p.Code).FirstOrDefaultAsync(ct) is { } p ? IncentiveSettings.From(p) : null;
 
-    /// <summary>Товары акции: типы из настроек и все их подтипы Linko («Снек» → «Снек 140 г», «Снек 200 г», «Снек 35 г»).</summary>
+    /// <summary>
+    /// Товары акции: типы из настроек и все их подтипы Linko («Снек» → «Снек 140 г», «Снек 200 г», «Снек 35 г»), кроме подтипов — своих
+    /// категорий «Продаж» (Cripzel — «Снек кг» — в акцию Twizos не входит, считается отдельно).
+    /// </summary>
     public async Task<long[]> ProductIdsAsync(IncentiveSettings s, CancellationToken ct)
     {
         var tree = await LinkoTypeTree.LoadAsync(db, ct);
-        var types = SalesCategories.WithDescendants(s.ProductTypeIds, tree.Parents).ToArray();
+        var types = SalesCategories.WithDescendants(s.ProductTypeIds, tree.Parents, SalesCategories.Build(sales.Categories, tree)).ToArray();
         return await db.LinkoProducts.AsNoTracking().Where(p => p.TypeId != null && types.Contains(p.TypeId.Value)).Select(p => p.Id).ToArrayAsync(ct);
     }
 

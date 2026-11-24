@@ -134,7 +134,7 @@ const defaults = (p: IncentiveProgram) => {
   return { twizos, yamelly, best, territory, budget };
 };
 
-/** Типы товаров Linko: выбранные — плашками, добавить — из списка (подтипы входят сами). */
+/** Типы товаров Linko: выбранные — плашками, добавить — из списка (подтипы входят сами, кроме своих категорий «Продаж» — Cripzel). */
 function TypePicker({ ids, overview, onChange }: { ids: number[]; overview: IncentiveOverview; onChange: (ids: number[]) => void }) {
   const t = useT();
   const names = new Map(overview.productTypes.map((x) => [x.id, x.name]));

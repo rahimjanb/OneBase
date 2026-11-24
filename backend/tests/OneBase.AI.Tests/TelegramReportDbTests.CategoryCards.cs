@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OneBase.Application.Telegram.Reports;
+using OneBase.Domain.Sales;
 using OneBase.Domain.Telegram;
 using OneBase.Infrastructure.Persistence;
 using OneBase.Infrastructure.Persistence.Migrations;
@@ -53,6 +54,78 @@ public partial class TelegramReportDbTests
         var picked = await service.PreviewAsync(new ReportPreviewInput("category-day.evening", "rm", null, null, null, null, null, s.Today, null, null,
             Categories: ["Кекс", "Помадка", "Шоколад"]), true, default);
         Assert.Equal(3, picked.Pages.Count);
+    }
+
+    /// <summary>Второй товар «Кекса» для выбора товаров (за день не продавался).</summary>
+    private const long OtherCake = 9_720_001;
+
+    [PostgresFact]
+    public async Task Category_cards_count_only_the_picked_products_of_a_category()
+    {
+        var s = await SeedAsync();
+        using var scope = fixture.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var engine = sp.GetRequiredService<ReportEngine>();
+        var service = sp.GetRequiredService<TelegramReportService>();
+        var cards = sp.GetRequiredService<CategoryCardService>();
+        var db = sp.GetRequiredService<OneBaseDbContext>();
+        if (!await db.LinkoProducts.AnyAsync(p => p.Id == OtherCake))
+        {
+            db.LinkoProducts.Add(new LinkoProduct { Id = OtherCake, Name = "Тест Кекс 2,5 кг", Code = "9720", TypeId = 10 });
+            await db.SaveChangesAsync();
+        }
+
+        // Товары категории — из справочника Linko по типу товара; Cripzel — своя категория (тип «Снек кг»), не внутри «Придзел».
+        var view = await cards.GetAsync(default);
+        var cake = view.Categories.Single(c => c.Name == "Кекс");
+        Assert.Contains(cake.Products, p => p.Id == 100 && p.Name == "Кекс 1 кг");
+        Assert.Contains(cake.Products, p => p.Id == OtherCake && p.Code == "9720");
+        Assert.DoesNotContain(cake.Products, p => p.Id == 200); // «Бамбук 400 г» — другая категория
+        Assert.Contains(view.Categories, c => c.Name == "Cripzel");
+
+        // Товар не из категории — отказ; выбраны все товары категории — это «вся категория» (новые товары тоже попадут).
+        var foreign = await Assert.ThrowsAsync<ReportValidationException>(() =>
+            cards.SaveDefaultsAsync(new CategoryCardsInput(["Кекс"], new Dictionary<string, long[]> { ["Кекс"] = [200] }), s.AdminId, default));
+        Assert.Contains("Товары не из категории «Кекс»: 200", foreign.Message);
+        view = await cards.SaveDefaultsAsync(new CategoryCardsInput(["Кекс", "Бамбук"],
+            new Dictionary<string, long[]> { ["кекс"] = cake.Products.Select(p => p.Id).ToArray() }), s.AdminId, default);
+        Assert.Empty(view.DefaultProducts!);
+        Assert.Equal("Кекс,Бамбук", await db.TelegramReportSettings.Select(x => x.CategoryCards).SingleAsync());
+
+        // Один товар: хранится JSON, товары невыбранной категории отбрасываются; карточка — только по нему и без плана дня.
+        view = await cards.SaveDefaultsAsync(new CategoryCardsInput(["Кекс", "Бамбук"],
+            new Dictionary<string, long[]> { ["Кекс"] = [OtherCake], ["Помадка"] = [1] }), s.AdminId, default);
+        Assert.Equal(["Кекс", "Бамбук"], view.Defaults);
+        Assert.Equal([OtherCake], view.DefaultProducts!["Кекс"]);
+        Assert.False(view.DefaultProducts.ContainsKey("Помадка"));
+        Assert.StartsWith("[", await db.TelegramReportSettings.Select(x => x.CategoryCards).SingleAsync());
+        var yesterday = s.Today.AddDays(-1);
+        var sv = new ReportScope(TelegramReportRoles.Sv, RegionId: s.RegionId, SupervisorId: SupervisorId);
+        var other = (await engine.BuildAsync("category-day.evening", sv, yesterday, Local(yesterday, 19), "ru", 30, default)).CategoryDay!.Cards;
+        Assert.Equal(["Кекс", "Бамбук"], other.Select(c => c.Name));
+        Assert.Equal((0m, 1, (decimal?)null), (other[0].Kg, other[0].Picked, other[0].DayPlanKg));
+        Assert.Empty(other[0].Top);
+        Assert.Empty(other[0].Breakdown); // ни продаж выбранного товара, ни плана — строк нет
+        Assert.Null(other[1].Picked);
+
+        // «Кекс 1 кг»: 90 кг за день — все продажи категории за день, но плана дня нет (план — у всей категории).
+        var one = await engine.BuildAsync("category-day.evening", sv, yesterday, Local(yesterday, 19), "ru", 30, default, [new CategoryCardPick("Кекс", [100])]);
+        var card = Assert.Single(one.CategoryDay!.Cards);
+        Assert.Equal((90m, 1, (decimal?)null), (card.Kg, card.Picked, card.DayPlanKg));
+        Assert.All(card.Breakdown, r => Assert.Equal((30m, (decimal?)null), (r.Kg, r.DayPlanKg)));
+        Assert.Contains("Кекс (товаров: 1): 90 кг за день; 1 ТТ", one.Caption);
+
+        // Свой выбор получателя с товарами — в карточках и в предпросмотре; в предпросмотре можно выбрать товары явно.
+        var recipient = await service.SaveRecipientAsync(null, Sv(s, [s.GroupChatId], "category-day.evening"), true, s.AdminId, default);
+        view = await cards.SaveRecipientAsync(recipient.Id, new CategoryCardsInput(["Кекс"], new Dictionary<string, long[]> { ["Кекс"] = [100] }), s.AdminId, default);
+        var own = view.Recipients.Single(r => r.Id == recipient.Id);
+        Assert.Equal(["Кекс"], own.Categories);
+        Assert.Equal([100L], own.Products!["Кекс"]);
+        var preview = await service.PreviewAsync(new ReportPreviewInput("category-day.evening", null, null, null, null, null, recipient.Id, yesterday, null, null), true, default);
+        Assert.Contains("Кекс (товаров: 1): 90 кг за день", preview.Caption);
+        var picked = await service.PreviewAsync(new ReportPreviewInput("category-day.evening", "sv", null, s.RegionId, SupervisorId, null, null, yesterday, null, null,
+            Categories: ["Кекс"], Products: new Dictionary<string, long[]> { ["Кекс"] = [OtherCake] }), true, default);
+        Assert.Contains("Кекс (товаров: 1): 0 кг за день", picked.Caption);
     }
 
     [PostgresFact]

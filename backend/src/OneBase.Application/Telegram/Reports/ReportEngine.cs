@@ -30,7 +30,7 @@ public sealed class ReportEngine(IAppDbContext db, SalesDataLoader loader, Repor
     /// null — выбор по умолчанию).
     /// </summary>
     public async Task<ReportDocument> BuildAsync(string job, ReportScope scope, DateOnly date, DateTimeOffset now, string language, int noPurchaseDays,
-        CancellationToken ct, IReadOnlyList<string>? categories = null)
+        CancellationToken ct, IReadOnlyList<CategoryCardPick>? categories = null)
     {
         var info = ReportCatalog.Find(job) ?? throw new ArgumentException($"Неизвестный отчёт «{job}».");
         if (info.Report == ReportType.WeeklyPdf)

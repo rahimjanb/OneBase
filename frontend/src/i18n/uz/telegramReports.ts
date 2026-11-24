@@ -176,7 +176,7 @@ const telegramReports: Dict = {
   "ТП нет.": "TP yo‘q.",
   "ТП — только свою карточку. Рейтинг для канала — получатель «РМ · вся страна» с групповым чатом и запуском «рейтинг акции».": "TP — faqat o‘z kartochkasini. Kanal uchun reyting — guruh chati va «aksiya reytingi» ishga tushirishi bilan «RM · butun mamlakat» qabul qiluvchisi.",
   "Телевизор": "Televizor",
-  "Типы товаров Linko, которые копятся: доставленные кг минус возвраты; подтипы (140 г, 200 г, 35 г) входят сами.": "Yig‘iladigan Linko mahsulot turlari: yetkazilgan kg minus qaytarilganlar; kichik turlar (140 g, 200 g, 35 g) o‘zi kiradi.",
+  "Типы товаров Linko, которые копятся: доставленные кг минус возвраты; подтипы (140 г, 200 г, 35 г) входят сами, кроме выделенных в свою категорию «Продаж» (Cripzel — «Снек кг» — считается отдельно).": "Yig‘iladigan Linko mahsulot turlari: yetkazilgan kg minus qaytarilganlar; kichik turlar (140 g, 200 g, 35 g) o‘zi kiradi, «Savdo»da alohida toifaga ajratilganlaridan tashqari (Cripzel — «Снек кг» — alohida hisoblanadi).",
   "Товар на карточках": "Kartochkalardagi mahsulot",
   "Товары акции": "Aksiya mahsulotlari",
   "У оптовых ТП объёмы выше — отдельный рейтинг; в рейтинге розницы их нет.": "Ulgurji TP larning hajmi kattaroq — alohida reyting; chakana reytingida ular yo‘q.",

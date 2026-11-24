@@ -297,7 +297,7 @@ function ProgramForm({
           </div>
         </Block>
 
-        <Block title="Товары акции" hint="Типы товаров Linko, которые копятся: доставленные кг минус возвраты; подтипы (140 г, 200 г, 35 г) входят сами.">
+        <Block title="Товары акции" hint="Типы товаров Linko, которые копятся: доставленные кг минус возвраты; подтипы (140 г, 200 г, 35 г) входят сами, кроме выделенных в свою категорию «Продаж» (Cripzel — «Снек кг» — считается отдельно).">
           <div className="flex flex-wrap items-center gap-2">
             {form.productTypeIds.map((id) => (
               <span key={id} className="inline-flex items-center gap-1 rounded-lg bg-muted px-2 py-1 text-sm text-ink">

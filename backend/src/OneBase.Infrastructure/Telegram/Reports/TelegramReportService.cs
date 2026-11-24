@@ -858,7 +858,7 @@ public sealed class TelegramReportService(
     /// <summary>
     /// Запуск, область, день, момент формирования, язык и категории карточек (отчёт 11) предпросмотра или теста: явно или по получателю.
     /// </summary>
-    private async Task<(string Job, ReportScope Scope, DateOnly Date, DateTimeOffset? At, string? Language, IReadOnlyList<string>? Categories)> TargetAsync(
+    private async Task<(string Job, ReportScope Scope, DateOnly Date, DateTimeOffset? At, string? Language, IReadOnlyList<CategoryCardPick>? Categories)> TargetAsync(
         ReportPreviewInput input, bool canUseSales, CancellationToken ct)
     {
         if (!canUseSales)
@@ -918,8 +918,8 @@ public sealed class TelegramReportService(
 
         // Язык: выбранный в предпросмотре, иначе — получателя (если выбран получатель), иначе — из общих настроек.
         var language = UiLanguage.Normalize(input.Language) ?? recipientLanguage;
-        // Категории карточек: выбранные в предпросмотре, иначе — получателя, иначе — по умолчанию (решает построитель).
-        var categories = input.Categories is { Count: > 0 } picked ? CategoryCardChoice.Parse(string.Join(",", picked))
+        // Категории карточек (и их товары): выбранные в предпросмотре, иначе — получателя, иначе — по умолчанию (решает построитель).
+        var categories = input.Categories is { Count: > 0 } picked ? CategoryCardService.Picks(picked, input.Products)
             : recipientCategories is { } own ? CategoryCardChoice.Parse(own) : null;
         return (info.Code, scope, date, at, language, categories);
     }

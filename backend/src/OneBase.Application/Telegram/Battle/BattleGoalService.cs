@@ -323,10 +323,12 @@ public sealed class BattleGoalService(IAppDbContext db, SalesOptions sales, Batt
             return [];
         }
 
-        // Типы из настройки и все их подтипы Linko («Снек» → «Снек 140 г», «Помадка» → «Помадка 0,5 кг»).
+        // Типы из настройки и все их подтипы Linko («Снек» → «Снек 140 г», «Помадка» → «Помадка 0,5 кг»), кроме подтипов — своих категорий
+        // «Продаж»: Cripzel («Снек кг») — не Твизос.
         var tree = await LinkoTypeTree.LoadAsync(db, ct);
-        var twizosTypes = SalesCategories.WithDescendants(options.TwizosTypeIds, tree.Parents).ToArray();
-        var mogulTypes = SalesCategories.WithDescendants(options.MogulTypeIds, tree.Parents).ToArray();
+        var categories = SalesCategories.Build(sales.Categories, tree);
+        var twizosTypes = SalesCategories.WithDescendants(options.TwizosTypeIds, tree.Parents, categories).ToArray();
+        var mogulTypes = SalesCategories.WithDescendants(options.MogulTypeIds, tree.Parents, categories).ToArray();
         var rows = await (from l in db.LinkoOrderLines.AsNoTracking()
                 join p in db.LinkoProducts.AsNoTracking() on l.ProductId equals p.Id
                 where orderIds.Contains(l.OrderId) && p.TypeId != null && (twizosTypes.Contains(p.TypeId.Value) || mogulTypes.Contains(p.TypeId.Value))

@@ -30,6 +30,18 @@ const dict: Dict = {
   "Данные — как на странице категории «Продаж», в области получателя: ТП видит только свои цифры, СВ — свой регион, РМ — свои регионы. Тест записывается в историю.":
     "Ma'lumotlar — «Savdo» toifa sahifasidagidek, qabul qiluvchi doirasida: TP faqat o'z raqamlarini, SV — o'z hududini, RM — o'z hududlarini ko'radi. Sinov tarixga yoziladi.",
   "Карточка {n}": "Kartochka {n}",
+  // Выбор товаров категории (24.11.2026).
+  "В выбранной категории можно оставить все товары или отметить только нужные (кнопка «Выбрать товары») — тогда все цифры карточки будут только по ним.":
+    "Tanlangan toifada barcha tovarlarni qoldirish yoki faqat keraklilarini belgilash mumkin («Tovarlarni tanlash» tugmasi) — shunda kartochkaning barcha raqamlari faqat ular bo'yicha bo'ladi.",
+  "Товары в карточках": "Kartochkalardagi tovarlar",
+  "выбрано {n} из {total}": "{total} tadan {n} tasi tanlangan",
+  "все товары ({total})": "barcha tovarlar ({total})",
+  "Выбрать товары": "Tovarlarni tanlash",
+  "Название или код товара": "Tovar nomi yoki kodi",
+  "Товары: {name}": "Tovarlar: {name}",
+  "Цифры карточки — только по отмеченным товарам; план дня — только у всей категории.":
+    "Kartochka raqamlari — faqat belgilangan tovarlar bo'yicha; kunlik reja — faqat butun toifada.",
+  "товаров: {n}": "tovarlar: {n}",
   // Отчёт 11 «Итоги дня по категориям».
   "11. Итоги дня по категориям": "11. Toifalar bo'yicha kun yakunlari",
   "Итоги дня по категориям": "Toifalar bo'yicha kun yakunlari",

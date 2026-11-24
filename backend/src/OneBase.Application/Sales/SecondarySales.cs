@@ -337,8 +337,12 @@ public sealed class SalesCategories
         return null;
     }
 
-    /// <summary>Типы и все их подтипы (для правил по типам товаров, например «Поле боя»: Твизос — «Снек» и «Снек 140 г»).</summary>
-    public static HashSet<long> WithDescendants(IEnumerable<long> roots, IReadOnlyDictionary<long, long?> parents)
+    /// <summary>
+    /// Типы и все их подтипы (для правил по типам товаров, например «Поле боя»: Твизос — «Снек» и «Снек 140 г»). categories задан — подтип,
+    /// который в «Настройках продаж» своя категория, не та, что у родителя (Cripzel — «Снек кг» внутри «Снек», 24.11.2026), не входит вместе со
+    /// своими подтипами: такой товар считается отдельно; явно выбранный тип входит всегда.
+    /// </summary>
+    public static HashSet<long> WithDescendants(IEnumerable<long> roots, IReadOnlyDictionary<long, long?> parents, SalesCategories? categories = null)
     {
         var result = roots.ToHashSet();
         bool added;
@@ -347,8 +351,9 @@ public sealed class SalesCategories
             added = false;
             foreach (var (type, parent) in parents)
             {
-                if (parent is { } p && result.Contains(p) && result.Add(type))
+                if (parent is { } p && result.Contains(p) && !result.Contains(type) && categories?.SplitsFrom(type, p) != true)
                 {
+                    result.Add(type);
                     added = true;
                 }
             }
@@ -357,6 +362,9 @@ public sealed class SalesCategories
 
         return result;
     }
+
+    /// <summary>Подтип — своя категория из настройки, отличная от категории родителя (Cripzel — «Снек кг» внутри «Снек» — Придзел).</summary>
+    public bool SplitsFrom(long type, long parent) => GroupOf(type) is { } g && IsConfigured(g) && g != GroupOf(parent);
 
     /// <summary>Категория отчёта для типа товара; null — у товара нет типа.</summary>
     public long? GroupOf(long? type) => type is { } t ? _groupOfType.GetValueOrDefault(t, t) : null;

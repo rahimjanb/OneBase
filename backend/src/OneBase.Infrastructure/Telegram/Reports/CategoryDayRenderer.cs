@@ -9,7 +9,7 @@ namespace OneBase.Infrastructure.Telegram.Reports;
 /// «11. Итоги дня по категориям»: по картинке 1080 px на категорию, в стиле карточек Candy Gold, — только день итога, без месяца и других
 /// дней. Сверху вниз: категория и её второе название, область и день итога; продано за день, выполнение плана дня и полоса «факт — план
 /// дня»; плитки (ТТ и заказы, артикулы, цена за кг); регионы (РМ) или ТП (СВ) за день с планом дня; артикулы дня с фото. Высота — по
-/// содержимому.
+/// содержимому. Выбраны товары категории — в шапке «выбрано товаров: N», плана дня нет (план — у всей категории).
 /// </summary>
 internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, string language, bool test) : FarmPainter(faces, language, test)
 {
@@ -97,7 +97,8 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
             TextFit(c, "· " + alias, Pad + nameWidth + 16, top + 64, Inner - 220 - nameWidth - 16, 32, Faces.SemiBold, C.Ink3);
         }
 
-        TextFit(c, doc.Scope, Pad, top + 122, Inner - 220, 26, Faces.Medium, C.Ink2);
+        var scope = card.Picked is { } picked ? $"{doc.Scope} · {F("выбрано товаров: {0}", picked)}" : doc.Scope;
+        TextFit(c, scope, Pad, top + 122, Inner - 220, 26, Faces.Medium, C.Ink2);
         // Дата и день недели — за какой день итог (утром в понедельник — суббота).
         Pill(c, Width - Pad - 190, top + 34, 190, 76, DayMonth(cards.Day), Weekday(cards.Day) + " · " + T("итог дня"), active: true);
     }
@@ -123,8 +124,10 @@ internal sealed class CategoryDayRenderer(SkiaReportRenderer.Typefaces faces, st
 
         if (card.DayExecution is not { } execution)
         {
-            // Плана дня нет: план уже выполнен (план дня 0), план общий на несколько категорий — какой, или плана нет.
-            var label = card.PlanDone ? T("план уже выполнен") : card.PlanShared is null ? T("плана дня нет") : T("план общий");
+            // Плана дня нет: выбраны товары (план — у всей категории), план уже выполнен (план дня 0), план общий на несколько категорий —
+            // какой, или плана нет.
+            var label = card.Picked is not null ? T("план — у всей категории")
+                : card.PlanDone ? T("план уже выполнен") : card.PlanShared is null ? T("плана дня нет") : T("план общий");
             TextRight(c, label, right, top + 60, 30, Faces.SemiBold, card.PlanDone ? C.Green : C.Ink3);
             if (!card.PlanDone && card.PlanShared is { } shared)
             {

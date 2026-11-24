@@ -22,7 +22,7 @@ public sealed class DmpService(IAppDbContext db, SalesOptions options, SalesData
         var roots = types.Names
             .Where(t => options.DmpProductTypes.Any(n => string.Equals(n.Trim(), t.Value.Trim(), StringComparison.OrdinalIgnoreCase)))
             .Select(t => t.Key);
-        var shelfTypes = SalesCategories.WithDescendants(roots, types.Parents);
+        var shelfTypes = SalesCategories.WithDescendants(roots, types.Parents, SalesCategories.Build(options.Categories, types));
         var shelfProducts = await db.LinkoProducts.AsNoTracking()
             .Where(p => p.TypeId != null && shelfTypes.Contains(p.TypeId.Value))
             .Select(p => new { p.Id, p.Name })

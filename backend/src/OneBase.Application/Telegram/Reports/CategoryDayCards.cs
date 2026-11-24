@@ -18,6 +18,7 @@ public sealed record CategoryDayRow(string Name, decimal Kg, decimal? DayPlanKg,
 /// Итог дня одной категории в охвате получателя — только этот день, без месяца и других дней: продано за день (кг, сумма, ТТ, заказы,
 /// артикулы), план дня (остаток плана месяца ÷ рабочие дни с дня итога, как «Дневной план»; PlanShared — план общий на несколько
 /// категорий, PlanDone — план уже выполнен, план дня 0), разбивка за день (BreakdownKind: regions, agents, null) и артикулы дня с фото.
+/// Picked — сколько товаров категории выбрано: цифры карточки только по ним, плана дня нет (план — на всю категорию); null — вся категория.
 /// </summary>
 public sealed record CategoryDayCard(
     string Name,
@@ -33,7 +34,8 @@ public sealed record CategoryDayCard(
     bool PlanDone,
     string? BreakdownKind,
     IReadOnlyList<CategoryDayRow> Breakdown,
-    IReadOnlyList<CategoryDaySku> Top);
+    IReadOnlyList<CategoryDaySku> Top,
+    int? Picked = null);
 
 /// <summary>
 /// Итоги дня по категориям одного отчёта: момент («morning» — прошлый рабочий день, «evening» — день запуска), день итога, отчётный день
@@ -81,9 +83,10 @@ public static class CategoryDayReport
                 head, "", incomplete, Applies: false, SkipReason: skip) { CategoryDay = cards };
         }
 
+        string Name(CategoryDayCard c) => c.Picked is { } n ? F("{0} (товаров: {1})", c.Name, n) : c.Name;
         var lines = cards.Cards.Select(c => c.DayExecution is { } e
-                ? F("{0}: {1} кг за день — {2} плана дня; {3} ТТ", c.Name, ReportFormat.Kg(c.Kg), ReportFormat.Percent(e), ReportFormat.Number(c.Akb))
-                : F("{0}: {1} кг за день; {2} ТТ", c.Name, ReportFormat.Kg(c.Kg), ReportFormat.Number(c.Akb)))
+                ? F("{0}: {1} кг за день — {2} плана дня; {3} ТТ", Name(c), ReportFormat.Kg(c.Kg), ReportFormat.Percent(e), ReportFormat.Number(c.Akb))
+                : F("{0}: {1} кг за день; {2} ТТ", Name(c), ReportFormat.Kg(c.Kg), ReportFormat.Number(c.Akb)))
             .ToList();
         var caption = head;
         foreach (var line in lines)
@@ -109,8 +112,9 @@ public static class CategoryDayReport
 /// <summary>
 /// Итоги дня по категориям для области получателя — из «Продаж» месяца дня итога (строки продаж с этой датой, те же правила, что у страницы
 /// категории): РМ — регионы, СВ — ТП региона (и те, кто за день категорию не продал), ТП — только он. Категории — выбор «Карточек категорий»
-/// (по умолчанию или свой у получателя). На карточке только день итога; месяц нужен лишь для плана дня — как в «Дневном плане»: остаток
-/// плана категории на месяц ÷ рабочие дни (пн–сб без праздников) с дня итога по конец месяца.
+/// (по умолчанию или свой у получателя), у категории могут быть выбраны товары — тогда все цифры карточки только по ним. На карточке только
+/// день итога; месяц нужен лишь для плана дня всей категории — как в «Дневном плане»: остаток плана категории на месяц ÷ рабочие дни
+/// (пн–сб без праздников) с дня итога по конец месяца.
 /// </summary>
 public sealed class CategoryDayBuilder(IAppDbContext db, SalesDataLoader loader, IFileStorage storage, ILogger<CategoryDayBuilder> logger)
 {
@@ -119,34 +123,40 @@ public sealed class CategoryDayBuilder(IAppDbContext db, SalesDataLoader loader,
     private static readonly TimeSpan PhotoBudget = TimeSpan.FromSeconds(20);
 
     public async Task<ReportDocument> BuildAsync(ReportJobInfo info, ResolvedScope resolved, DateOnly date, DateTimeOffset now, string language,
-        IReadOnlyList<string>? chosen, TimeOnly jobTime, CancellationToken ct)
+        IReadOnlyList<CategoryCardPick>? chosen, TimeOnly jobTime, CancellationToken ct)
     {
         var day = info.IsMorning ? CategoryCardChoice.PreviousWorkDay(date) : date;
         var analytics = await loader.LoadAsync(day.Year, day.Month, ct);
         var holidays = await db.SalesHolidays.AsNoTracking().Where(h => h.Date >= day.AddDays(-45) && h.Date <= day.AddDays(45))
             .ToDictionaryAsync(h => h.Date, h => h.Name, ct);
-        var names = chosen is { Count: > 0 }
-            ? chosen
+        var picks = chosen is { Count: > 0 }
+            ? CategoryCardChoice.Normalize(chosen)
             : CategoryCardChoice.Parse(await db.TelegramReportSettings.AsNoTracking().Select(s => s.CategoryCards).FirstOrDefaultAsync(ct));
         var all = analytics.ReportCategoryGroups();
-        var picked = names.Count == 0
-            ? all
-            : names.Select(analytics.ReportCategoryGroup).OfType<long>().Distinct().Select(g => all.FirstOrDefault(x => x.Group == g)).Where(x => x.Name is not null);
+        var picked = picks.Count == 0
+            ? all.Select(x => (x.Group, x.Name, Products: (IReadOnlySet<long>?)null))
+            : picks
+                .Select(p => (Group: analytics.ReportCategoryGroup(p.Category), Products: p.Whole ? null : (IReadOnlySet<long>)p.Products!.ToHashSet()))
+                .Where(p => p.Group is not null)
+                .DistinctBy(p => p.Group)
+                .Select(p => (Group: p.Group!.Value, all.FirstOrDefault(x => x.Group == p.Group).Name, p.Products))
+                .Where(x => x.Name is not null);
         var groups = picked.Take(CategoryCardChoice.Max).ToList();
 
         var scope = ScopeOf(resolved);
         var byRegions = resolved.Scope.Role == TelegramReportRoles.Rm && (resolved.Regions.Count > 1 || scope.Regions is null);
         var cards = new List<CategoryDayCard>();
-        foreach (var (group, name) in groups)
+        foreach (var (group, name, products) in groups)
         {
-            var totals = analytics.CategoryDayOf(group, scope, day) ?? new CategoryDayTotals(0, 0, 0);
-            var plan = analytics.CategoryPlanOf(group, scope);
+            // Выбраны товары — цифры только по ним, а план месяца — на всю категорию: плана дня у такой карточки нет.
+            var totals = analytics.CategoryDayOf(group, scope, day, products) ?? new CategoryDayTotals(0, 0, 0);
+            var plan = products is null ? analytics.CategoryPlanOf(group, scope) : null;
             var shared = plan is { CategoryId: null } ? plan.Name : null;
             var exact = shared is null ? plan : null;
             var dayPlan = DayPlan(exact?.PlanKg, analytics.CategoryKgBefore(group, scope, day), day, holidays);
             IReadOnlyList<CategoryDayRow> breakdown = resolved.Scope.Role == TelegramReportRoles.Tp ? []
-                : byRegions ? Rows(analytics, group, day, holidays, resolved.Regions.Select(r => (r.Name, new AssortmentScope(null, r.Id, null, false))))
-                : Rows(analytics, group, day, holidays, resolved.Regions[0].Agents.Select(a => (a.Name, new AssortmentScope(null, null, a.Id, false))));
+                : byRegions ? Rows(analytics, group, products, day, holidays, resolved.Regions.Select(r => (r.Name, new AssortmentScope(null, r.Id, null, false))))
+                : Rows(analytics, group, products, day, holidays, resolved.Regions[0].Agents.Select(a => (a.Name, new AssortmentScope(null, null, a.Id, false))));
 
             // Метка ТОП — товар из списка ТОП (свойство товара, не продажи месяца).
             var top = (analytics.CachedCategory(group.ToString(CultureInfo.InvariantCulture), scope)?.Card?.Skus ?? []).Where(s => s.IsTop)
@@ -165,8 +175,9 @@ public sealed class CategoryDayBuilder(IAppDbContext db, SalesDataLoader loader,
                 dayPlan?.Status == DailyPlanMath.Done,
                 breakdown.Count == 0 ? null : byRegions ? CategoryDayCards.Regions : CategoryDayCards.Agents,
                 breakdown,
-                analytics.CategoryDaySkus(group, scope, day).Take(TopSkus)
-                    .Select(s => new CategoryDaySku(s.ProductId, s.Name, s.Code, s.Kg, s.Revenue, s.Akb, top.Contains(s.ProductId), null)).ToList()));
+                analytics.CategoryDaySkus(group, scope, day, products).Take(TopSkus)
+                    .Select(s => new CategoryDaySku(s.ProductId, s.Name, s.Code, s.Kg, s.Revenue, s.Akb, top.Contains(s.ProductId), null)).ToList(),
+                products?.Count));
         }
 
         cards = await WithPhotosAsync(cards, ct);
@@ -190,15 +201,15 @@ public sealed class CategoryDayBuilder(IAppDbContext db, SalesDataLoader loader,
 
     /// <summary>
     /// Строки разбивки: регионы или ТП — кг, план дня категории (их план месяца) и выполнение, сумма, АКБ, заказы. Без продаж за день и без
-    /// плана — не показываются; без продаж, но с планом — внизу (кто категорию за день не продал).
+    /// плана — не показываются; без продаж, но с планом — внизу (кто категорию за день не продал). Выбраны товары — только они и без плана.
     /// </summary>
-    private static List<CategoryDayRow> Rows(SalesAnalytics analytics, long group, DateOnly day, IReadOnlyDictionary<DateOnly, string> holidays,
-        IEnumerable<(string Name, AssortmentScope Scope)> items) =>
+    private static List<CategoryDayRow> Rows(SalesAnalytics analytics, long group, IReadOnlySet<long>? products, DateOnly day,
+        IReadOnlyDictionary<DateOnly, string> holidays, IEnumerable<(string Name, AssortmentScope Scope)> items) =>
         items
             .Select(x =>
             {
-                var totals = analytics.CategoryDayOf(group, x.Scope, day) ?? new CategoryDayTotals(0, 0, 0);
-                var plan = analytics.CategoryPlanOf(group, x.Scope);
+                var totals = analytics.CategoryDayOf(group, x.Scope, day, products) ?? new CategoryDayTotals(0, 0, 0);
+                var plan = products is null ? analytics.CategoryPlanOf(group, x.Scope) : null;
                 var exact = plan is { CategoryId: not null } ? plan : null;
                 var dayPlan = DayPlan(exact?.PlanKg, analytics.CategoryKgBefore(group, x.Scope, day), day, holidays)?.DailyPlan;
                 return new CategoryDayRow(x.Name, totals.Kg, dayPlan, dayPlan is > 0 ? totals.Kg / dayPlan.Value : null, totals.Revenue, totals.Akb, totals.Orders);

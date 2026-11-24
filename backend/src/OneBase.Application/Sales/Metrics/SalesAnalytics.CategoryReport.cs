@@ -47,16 +47,17 @@ public sealed partial class SalesAnalytics
 
     /// <summary>
     /// Продажи категории в охвате за день day (строки месяца с этой датой; день прошлого месяца — из его строк, раньше — нули); охвата нет —
-    /// null. Заказы — разные заказы (возвраты не заказы), артикулы — с чистым весом больше нуля.
+    /// null. Заказы — разные заказы (возвраты не заказы), артикулы — с чистым весом больше нуля. products — только эти товары категории
+    /// (null — вся категория).
     /// </summary>
-    public CategoryDayTotals? CategoryDayOf(long group, AssortmentScope s, DateOnly day)
+    public CategoryDayTotals? CategoryDayOf(long group, AssortmentScope s, DateOnly day, IReadOnlySet<long>? products = null)
     {
         if (ScopeOf(s) is not { } scope)
         {
             return null;
         }
 
-        var lines = DayLines(scope, group, day);
+        var lines = DayLines(scope, group, day, products);
         return new CategoryDayTotals(lines.Sum(l => l.Kg), lines.Sum(l => l.Revenue), SalesMath.Akb(lines),
             lines.Where(l => l.OrderId != null).Select(l => l.OrderId).Distinct().Count(),
             lines.Where(l => l.ProductId != null).GroupBy(l => l.ProductId).Count(g => g.Sum(l => l.Kg) > 0));
@@ -66,15 +67,18 @@ public sealed partial class SalesAnalytics
     public decimal CategoryKgBefore(long group, AssortmentScope s, DateOnly day) =>
         ScopeOf(s) is { } scope ? scope.Now.Where(l => l.Date < day && GroupOf(l.CategoryId) == group).Sum(l => l.Kg) : 0;
 
-    /// <summary>Артикулы категории, проданные в охвате за день, по убыванию кг (чистый вес больше нуля); охвата нет — пусто.</summary>
-    public IReadOnlyList<CategoryDaySkuSales> CategoryDaySkus(long group, AssortmentScope s, DateOnly day)
+    /// <summary>
+    /// Артикулы категории, проданные в охвате за день, по убыванию кг (чистый вес больше нуля); охвата нет — пусто. products — только эти
+    /// товары (null — вся категория).
+    /// </summary>
+    public IReadOnlyList<CategoryDaySkuSales> CategoryDaySkus(long group, AssortmentScope s, DateOnly day, IReadOnlySet<long>? products = null)
     {
         if (ScopeOf(s) is not { } scope)
         {
             return [];
         }
 
-        return DayLines(scope, group, day)
+        return DayLines(scope, group, day, products)
             .Where(l => l.ProductId != null)
             .GroupBy(l => l.ProductId!.Value)
             .Select(g => new CategoryDaySkuSales(g.Key, ProductName(g.Key), _d.Products.TryGetValue(g.Key, out var p) ? p.Code : null, g.Sum(l => l.Kg),
@@ -85,12 +89,15 @@ public sealed partial class SalesAnalytics
             .ToList();
     }
 
-    /// <summary>Строки категории охвата за день: этот месяц — его строки, прошлый — строки прошлого месяца, другие — пусто.</summary>
-    private List<SaleLine> DayLines(ScopeData scope, long group, DateOnly day)
+    /// <summary>
+    /// Строки категории охвата за день: этот месяц — его строки, прошлый — строки прошлого месяца, другие — пусто; products — только строки
+    /// этих товаров.
+    /// </summary>
+    private List<SaleLine> DayLines(ScopeData scope, long group, DateOnly day, IReadOnlySet<long>? products = null)
     {
         var source = (day.Year, day.Month) == (_d.Year, _d.Month) ? scope.Now
             : day.AddMonths(1) is var next && (next.Year, next.Month) == (_d.Year, _d.Month) ? scope.Before
             : [];
-        return source.Where(l => l.Date == day && GroupOf(l.CategoryId) == group).ToList();
+        return source.Where(l => l.Date == day && GroupOf(l.CategoryId) == group && (products is null || l.ProductId is { } id && products.Contains(id))).ToList();
     }
 }

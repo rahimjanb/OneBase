@@ -1,6 +1,6 @@
 import { tNow } from "@/i18n/client";
 import { bff } from "./bff";
-import type { CategoryCardsView } from "./telegram-category-cards";
+import type { CategoryCardsView, ProductChoice } from "./telegram-category-cards";
 
 /** Роль получателя: РМ — направление или вся страна, СВ — регион и супервайзер, ТП — торговый представитель. */
 export type ReportRole = "rm" | "sv" | "tp";
@@ -305,6 +305,8 @@ export type ReportPreviewInput = {
   language: ReportLanguage | null;
   /** «11. Итоги дня по категориям»: категории предпросмотра и теста; не задано — получателя или по умолчанию. */
   categories?: string[] | null;
+  /** Выбранные товары категорий предпросмотра (категория → id товаров; нет категории — вся). */
+  products?: ProductChoice | null;
 };
 
 export type ReportPreview = {
@@ -598,12 +600,16 @@ export const reportsApi = {
 
 // ---------- Карточки категорий (выбор категорий отчёта 11) ----------
 
-/** Выбор категорий: по умолчанию (пусто — все) и свой у получателя (null — по умолчанию). Предпросмотр и тест — reportsApi с categories. */
+/**
+ * Выбор категорий и их товаров: по умолчанию (пусто — все) и свой у получателя (null — по умолчанию). Предпросмотр и тест — reportsApi с
+ * categories и products.
+ */
 export const categoryCardsApi = {
   get: () => bff<CategoryCardsView>(`${base}/category-cards`),
-  saveDefaults: (categories: string[]) => bff<CategoryCardsView>(`${base}/category-cards`, { method: "PUT", body: json({ categories }) }),
-  saveRecipient: (id: string, categories: string[] | null) =>
-    bff<CategoryCardsView>(`${base}/category-cards/recipients/${id}`, { method: "PUT", body: json({ categories }) }),
+  saveDefaults: (categories: string[], products: ProductChoice = {}) =>
+    bff<CategoryCardsView>(`${base}/category-cards`, { method: "PUT", body: json({ categories, products }) }),
+  saveRecipient: (id: string, categories: string[] | null, products: ProductChoice | null = null) =>
+    bff<CategoryCardsView>(`${base}/category-cards/recipients/${id}`, { method: "PUT", body: json({ categories, products }) }),
 };
 
 // ---------- Накопительные акции (вкладка «Акции») ----------

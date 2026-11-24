@@ -246,6 +246,16 @@ OneBase работает от имени **пользовательских ак
 получателя на вкладке «Получатели» его не трогает. Подписка — как у остальных отчётов: отчёт 11 в панели получателя. Ни одной из
 выбранных категорий нет в настройке — отправка «пропущена» с причиной «Условие отчёта…».
 
+**Товары внутри категории (24.11.2026).** У выбранной категории можно оставить все товары или отметить только нужные («Выбрать товары»:
+флажки товаров справочника Linko этой категории — тип товара → категория, как в «Продажах»; поиск по названию и коду) — в выборе по
+умолчанию, у получателя и в предпросмотре. Тогда все цифры карточки — кг, сумма, точки, заказы, артикулы, регионы или ТП, артикулы дня —
+только по отмеченным товарам; плана дня у такой карточки нет («план — у всей категории»: план Linko — на категорию), в шапке —
+«выбрано товаров: N», в подписи — «Придзел (товаров: 3): …». Отмечены все — это снова вся категория (новые товары тоже попадут); товар
+не из категории — отказ. Хранение (`CategoryCardChoice`): только категории — как раньше, названия через запятую; с товарами — JSON
+`[{"category":"Придзел","products":[300,302]},{"category":"Помадка"}]` (колонки расширены до 4000 символов миграцией
+`TelegramCategoryCardProducts`, только расширение varchar). **Cripzel** (снеки на развес, «599 Cripzel Tuzli sneklar, 3-кг», с 18.11.2026)
+— отдельная категория «Продаж» (тип Linko «Снек кг», 53), а не часть «Придзел»: см. `docs/sales-linko.md`.
+
 **Отчёт 10 «Карточки категорий» убран (20.11.2026).** Он присылал месяц категории (факт и план месяца, прогноз, ряд по дням, ТОП месяца)
 с одной плиткой «За день»; теперь категории уходят только итогом дня (отчёт 11). Миграция `TelegramCategoryCardsRetired` переносит данные
 без изменения схемы: коды `category-cards.morning` / `category-cards.evening` в подписках получателей заменяются на `category-day.morning`
@@ -451,8 +461,10 @@ pdfLanguage, language, disabledReason, disabledUntil }` — у РМ `userId` и�
 действие одним сохранением, до 500, ошибка в любой строке — ни одной). В обзоре у получателя — `userId`, `disabledAt`, `disabledReason`,
 `disabledUntil`, `supervisor`, `lastSentAt`, `failedWeek`; `rmUsers` — пользователи с ролью «РМ» (`[{ id, name, regionIds, agents }]`); у чата —
 `linkedUserId`; в метриках — `skippedBy` (`[{ key, count }]`);
-`GET|PUT category-cards` (`{ categories }` — выбор по умолчанию, пусто — все), `PUT category-cards/recipients/{id}` (`{ categories }` — свой
-выбор получателя, пусто — по умолчанию); в `POST preview` и `POST test` — `categories` (итоги дня по категориям: какие показать).
+`GET|PUT category-cards` (`{ categories, products }` — выбор по умолчанию, пусто — все; `products` — `{ "Придзел": [300, 302] }`, нет
+категории — вся; в ответе у категорий — `products` справочника, `defaultProducts`, у получателей — `products`), `PUT
+category-cards/recipients/{id}` (`{ categories, products }` — свой выбор получателя, пусто — по умолчанию); в `POST preview` и `POST test` —
+`categories` и `products` (итоги дня по категориям: какие категории и товары показать).
 `POST recipients/{id}/send` (`{ job, force }` — во все чаты; уже отправлен сегодня — 409); `POST preview` (`{ job, role, userId, directionId,
 regionId, supervisorId, agentId, recipientId, date, time, language }`; `weekly/data`, `weekly/pdf`, `weekly/test` — тоже с `userId`); `POST test` (`{ report, chatId }`); `POST deliveries/{id}/retry?force=`;
 `GET history?from=&to=&report=&regionId=&status=&page=`. Без `sales.read` — 400 `{ error, forbidden: true }`, конфликт — 409.

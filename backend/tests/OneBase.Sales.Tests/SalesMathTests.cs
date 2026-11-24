@@ -245,4 +245,28 @@ public class SalesMathTests
         Assert.Equal([22L, 26L], OneBase.Application.Sales.SalesCategories.WithDescendants([22L], parents).Order());
         Assert.Equal([10L, 30L, 38L, 60L], OneBase.Application.Sales.SalesCategories.WithDescendants([10L], parents).Order());
     }
+
+    [Fact]
+    public void Subtype_with_its_own_category_is_counted_separately_from_its_parent()
+    {
+        // 24.11.2026: Cripzel — тип «Снек кг» (53) внутри «Снек» (22) — своя категория: не «Придзел» и не Twizos в акциях и «Поле боя».
+        var names = new Dictionary<long, string> { [22] = "Снек", [26] = "Снек шт", [53] = "Снек кг", [54] = "Снек кг · акция", [8] = "Помадка", [51] = "Помадка шт", [23] = "Оборудование", [55] = "Стеллаж" };
+        var parents = new Dictionary<long, long?> { [22] = null, [26] = 22, [53] = 22, [54] = 53, [8] = null, [51] = 8, [23] = null, [55] = 23 };
+        var cats = OneBase.Application.Sales.SalesCategories.Build(new Dictionary<string, string> { ["Придзел"] = "22", ["Помадка"] = "8", ["Cripzel"] = "53" },
+            new OneBase.Application.Sales.LinkoTypeTree(names, parents));
+        Assert.Equal("Cripzel", cats.NameOf(cats.GroupOf(53)));
+        Assert.Equal("Cripzel", cats.NameOf(cats.GroupOf(54)));
+        Assert.Equal("Придзел", cats.NameOf(cats.GroupOf(26)));
+
+        // Без настройки — как раньше: все подтипы; с настройкой — Cripzel и его подтипы отдельно, явно выбранный — входит.
+        Assert.Equal([22L, 26L, 53L, 54L], OneBase.Application.Sales.SalesCategories.WithDescendants([22L], parents).Order());
+        Assert.Equal([22L, 26L], OneBase.Application.Sales.SalesCategories.WithDescendants([22L], parents, cats).Order());
+        Assert.Equal([22L, 26L, 53L, 54L], OneBase.Application.Sales.SalesCategories.WithDescendants([22L, 53L], parents, cats).Order());
+        Assert.Equal([53L, 54L], OneBase.Application.Sales.SalesCategories.WithDescendants([53L], parents, cats).Order());
+        Assert.Equal([8L, 51L], OneBase.Application.Sales.SalesCategories.WithDescendants([8L], parents, cats).Order()); // подтип той же категории — входит
+        Assert.Equal([23L, 55L], OneBase.Application.Sales.SalesCategories.WithDescendants([23L], parents, cats).Order()); // типы вне настройки — как раньше
+        Assert.True(cats.SplitsFrom(53, 22));
+        Assert.False(cats.SplitsFrom(26, 22));
+        Assert.False(cats.SplitsFrom(55, 23));
+    }
 }

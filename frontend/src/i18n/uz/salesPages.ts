@@ -588,8 +588,8 @@ const dict: Dict = {
   "Старые филиалы Linko": "Linko'ning eski filiallari",
   "(«Жиззах (эски)», «Андижон (эски) 1», «Андижон (эски) 2») считаются в текущем регионе с тем же названием: точки перенесли в новый филиал, а продажи прошлых месяцев остались на старом.":
     "(«Жиззах (эски)», «Андижон (эски) 1», «Андижон (эски) 2») xuddi shu nomdagi joriy mintaqada hisoblanadi: nuqtalar yangi filialga ko'chirilgan, o'tgan oylar savdosi esa eskisida qolgan.",
-  "— по типу товара: Бамбук, Кекс, Трубочки, Печенье, Шоколад, Песочный, Придзел (в Linko — «Снек», Twizos) и Помадка (все фасовки одной категорией). Типы вне этого списка (импорт, бонус, оборудование) в итог входят, но в карточки категорий — нет; они видны в блоке «Качество данных».":
-    "— tovar turi bo'yicha: Бамбук, Кекс, Трубочки, Печенье, Шоколад, Песочный, Придзел (Linko'da — «Снек», Twizos) va Помадка (barcha qadoqlar bitta toifada). Bu ro'yxatdan tashqari turlar (import, bonus, uskunalar) jamiga kiradi, lekin toifa kartalariga — yo'q; ular «Ma'lumotlar sifati» blokida ko'rinadi.",
+  "— по типу товара: Бамбук, Кекс, Трубочки, Печенье, Шоколад, Песочный, Придзел (в Linko — «Снек», Twizos), Cripzel (в Linko — «Снек кг», снеки на развес — отдельно от Twizos) и Помадка (все фасовки одной категорией). Типы вне этого списка (импорт, бонус, оборудование) в итог входят, но в карточки категорий — нет; они видны в блоке «Качество данных».":
+    "— tovar turi bo'yicha: Бамбук, Кекс, Трубочки, Печенье, Шоколад, Песочный, Придзел (Linko'da — «Снек», Twizos), Cripzel (Linko'da — «Снек кг», vaznli sneklar — Twizos'dan alohida) va Помадка (barcha qadoqlar bitta toifada). Bu ro'yxatdan tashqari turlar (import, bonus, uskunalar) jamiga kiradi, lekin toifa kartalariga — yo'q; ular «Ma'lumotlar sifati» blokida ko'rinadi.",
 
   // Как считается: планы, оргструктура, вакансии
   "План — РОП (по умолчанию) или «Завод»": "Reja — ROP (standart) yoki «Zavod»",

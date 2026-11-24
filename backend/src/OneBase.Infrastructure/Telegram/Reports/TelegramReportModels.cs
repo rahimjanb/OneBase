@@ -157,7 +157,8 @@ public sealed record ReportFreshness(DateTimeOffset? Orders, DateTimeOffset? Vis
 
 /// <summary>
 /// Предпросмотр и тест: запуск, роль и область (или получатель), день и время формирования (по умолчанию — сейчас), язык (по умолчанию — из
-/// настроек), категории карточек (отчёт 11; пусто — получателя или по умолчанию).
+/// настроек), категории карточек (отчёт 11; пусто — получателя или по умолчанию) и выбранные товары категорий (название категории → id
+/// товаров Linko; нет категории — вся категория).
 /// </summary>
 public sealed record ReportPreviewInput(
     string? Job,
@@ -171,7 +172,8 @@ public sealed record ReportPreviewInput(
     string? Time,
     string? Language,
     Guid? UserId = null,
-    IReadOnlyList<string>? Categories = null);
+    IReadOnlyList<string>? Categories = null,
+    IReadOnlyDictionary<string, long[]>? Products = null);
 
 public sealed record ReportPreview(IReadOnlyList<string> Pages, string Title, string Scope, string Caption, string Summary, IReadOnlyList<string> Notes,
     IReadOnlyList<string> Problems, long Bytes, bool Applies, string? SkipReason, bool Incomplete);

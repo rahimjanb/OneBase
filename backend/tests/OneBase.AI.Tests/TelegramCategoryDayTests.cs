@@ -105,7 +105,8 @@ public class TelegramCategoryDayTests
     [Fact]
     public void Choice_keeps_order_drops_duplicates_and_morning_reports_the_previous_work_day()
     {
-        Assert.Equal(["Придзел", "помадка"], CategoryCardChoice.Parse(" Придзел, помадка ,Помадка,,")); // повтор в другом регистре — тот же
+        Assert.Equal(["Придзел", "помадка"], CategoryCardChoice.Parse(" Придзел, помадка ,Помадка,,").Select(p => p.Category)); // повтор в другом регистре — тот же
+        Assert.All(CategoryCardChoice.Parse("Придзел,Помадка"), p => Assert.True(p.Whole));
         Assert.Null(CategoryCardChoice.Format([" ", ""]));
         Assert.Equal("Придзел,Помадка", CategoryCardChoice.Format(["Придзел", "придзел", "Помадка"]));
         Assert.Equal("Могуль", CategoryCardChoice.AliasOf("помадка"));
@@ -113,6 +114,45 @@ public class TelegramCategoryDayTests
         Assert.Equal(new DateOnly(2026, 11, 14), CategoryCardChoice.PreviousWorkDay(new DateOnly(2026, 11, 16))); // понедельник → суббота
         Assert.Equal(new DateOnly(2026, 11, 17), CategoryCardChoice.PreviousWorkDay(new DateOnly(2026, 11, 18)));
         Assert.Equal(new DateOnly(2026, 10, 31), CategoryCardChoice.PreviousWorkDay(new DateOnly(2026, 11, 2)));
+    }
+
+    [Fact]
+    public void Choice_with_products_is_stored_as_json_and_old_lists_stay_plain()
+    {
+        // Без товаров — как раньше, названия через запятую (старые записи читаются без изменений); с товарами — JSON, товары по возрастанию, без повторов.
+        CategoryCardPick[] picks = [new("Придзел", [302, 300, 302, 0]), "Cripzel", new("Помадка", [])];
+        var stored = CategoryCardChoice.Format(picks);
+        Assert.Equal("""[{"category":"Придзел","products":[300,302]},{"category":"Cripzel"},{"category":"Помадка"}]""", stored);
+        var back = CategoryCardChoice.Parse(stored);
+        Assert.Equal(["Придзел", "Cripzel", "Помадка"], back.Select(p => p.Category));
+        Assert.Equal([300L, 302L], back[0].Products!);
+        Assert.True(back[1].Whole);
+        Assert.True(back[2].Whole); // пустой список товаров — вся категория
+        Assert.Equal("Cripzel,Помадка", CategoryCardChoice.Format(back.Skip(1)));
+
+        // Повтор категории в другом регистре — первое вхождение; испорченный JSON — пустой выбор (уйдёт выбор по умолчанию).
+        Assert.Single(CategoryCardChoice.Parse("""[{"category":"Кекс","products":[1]},{"category":"кекс"}]"""));
+        Assert.Empty(CategoryCardChoice.Parse("[{\"category\":"));
+        Assert.Empty(CategoryCardChoice.Parse("""[null,{"category":" "}]"""));
+    }
+
+    [Fact]
+    public void Card_with_picked_products_says_so_in_caption_and_on_the_picture_and_has_no_day_plan()
+    {
+        var sample = CategoryDaySamples.Cards("evening", Day, TelegramReportRoles.Sv);
+        var picked = sample with
+        {
+            Cards = [sample.Cards[0] with { Name = "Придзел", Picked = 3, DayPlanKg = null, DayExecution = null, Breakdown = sample.Cards[0].Breakdown.Select(r => r with { DayPlanKg = null, DayExecution = null }).ToList() }],
+        };
+        var doc = Document("category-day.evening", picked);
+        Assert.Contains($"Придзел (товаров: 3): {ReportFormat.Kg(640.5m)} кг за день; 96 ТТ", doc.Caption);
+        Assert.Equal("Придзел", doc.Kpis[0].Label);
+        var page = Assert.Single(Renderer.Render(doc));
+        var whole = Assert.Single(Renderer.Render(Document("category-day.evening", picked with { Cards = [picked.Cards[0] with { Picked = null }] })));
+        Assert.NotEqual(Convert.ToBase64String(whole), Convert.ToBase64String(page)); // «выбрано товаров: 3» и «план — у всей категории»
+
+        var uz = Document("category-day.evening", picked, "uz");
+        Assert.Contains("Придзел (3 ta tovar)", uz.Caption);
     }
 
     [Fact]
