@@ -133,8 +133,8 @@ public sealed class IncentiveSettingsService(IAppDbContext db, IncentiveService 
     }
 
     /// <summary>
-    /// Акции ноября акции (YM-01…03, TW-01…03, бюджеты): проверка и сохранение в PromosJson; раздел null — акции нет. Наборы и ступени — в основной
-    /// форме акции.
+    /// Акции ноября акции (YM-01…03, TW-01…03, бюджеты, «Цели на маршрут» v2): проверка и сохранение в PromosJson; раздел null — акции нет. Наборы и
+    /// ступени — в основной форме акции.
     /// </summary>
     public async Task<IncentiveProgramView> SavePromosAsync(string code, IncentivePromos input, Guid userId, CancellationToken ct)
     {
@@ -144,6 +144,12 @@ public sealed class IncentiveSettingsService(IAppDbContext db, IncentiveService 
         if (types.Length > 0 && await db.LinkoProductTypes.CountAsync(t => types.Contains(t.Id), ct) != types.Length)
         {
             throw new ReportValidationException("Типы товаров Yamelly и YM-03 — из справочника Linko.");
+        }
+
+        var stands = (promos.Goals?.StandProductIds ?? []).Distinct().ToArray();
+        if (stands.Length > 0 && await db.LinkoProducts.CountAsync(x => stands.Contains(x.Id), ct) != stands.Length)
+        {
+            throw new ReportValidationException("Товары стоек — ID товаров Linko («Стеллаж TWIZOS одинарный (7 полок)» — 315).");
         }
 
         var gifts = (promos.Twizos?.Gifts ?? []).SelectMany(g => g.ProductIds ?? []).Distinct().ToArray();
@@ -256,12 +262,79 @@ public sealed class IncentiveSettingsService(IAppDbContext db, IncentiveService 
             errors.Add("Бюджеты — не меньше нуля (0 — не задан).");
         }
 
+        var goals = p.Goals;
+        if (goals is not null)
+        {
+            goals = goals with
+            {
+                MogulName = string.IsNullOrWhiteSpace(goals.MogulName) ? "Могул" : goals.MogulName.Trim(),
+                MogulExcludedBranches = (goals.MogulExcludedBranches ?? []).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                Ladder = (goals.Ladder ?? []).Select(x => x.Replace(" ", "")).Where(x => x.Length > 0).ToList(),
+                SmallSet = goals.SmallSet.Replace(" ", ""), MediumSet = goals.MediumSet.Replace(" ", ""), StandSet = goals.StandSet.Replace(" ", ""),
+                BigSet = goals.BigSet.Replace(" ", ""), LadderTail = goals.LadderTail.Replace(" ", ""),
+            };
+            if (!Inside(goals.Start, goals.End))
+            {
+                errors.Add("Цели на маршрут: период внутри акции, начало не позже конца.");
+            }
+
+            if (goals.MogulGrowth is < 0 or > 5 || goals.TwizosGrowth is < 0 or > 5)
+            {
+                errors.Add("Цели на маршрут: прирост Могул и Twizos — от 0 до 500% (0,2 = +20%).");
+            }
+
+            if (goals.MogulBoxes is not { Count: > 0 } mogulBoxes || mogulBoxes.Any(b => b.UnitKg <= 0 || b.PerBox is < 1 or > 100 || b.Price <= 0 || string.IsNullOrWhiteSpace(b.Name)))
+            {
+                errors.Add("Цели на маршрут: коробки Могул — вес пачки и цена больше нуля, пачек в коробке 1–100, название.");
+            }
+
+            if (goals.MinCheck < 0 || goals.ThermosCheck < goals.MinCheck || goals.StandCheck < goals.ThermosCheck)
+            {
+                errors.Add("Цели на маршрут: пороги чека нового клиента по возрастанию — без цели до ≤ термос от ≤ стойка от.");
+            }
+
+            if (new[] { goals.ExistingPercent, goals.NewPercent, goals.StandPercent }.Any(x => x is < 0 or > 100))
+            {
+                errors.Add("Цели на маршрут: кешбек Twizos — 0–100%.");
+            }
+
+            var boxes = goals.Boxes ?? [];
+            if (boxes.Count == 0 || boxes.Any(b => string.IsNullOrWhiteSpace(b.Code) || b.Price <= 0 || b.Kg <= 0 || string.IsNullOrWhiteSpace(b.Name))
+                || boxes.Select(b => b.Code.Trim()).Distinct().Count() != boxes.Count || boxes.All(b => b.Code.Trim() != "140"))
+            {
+                errors.Add("Цели на маршрут: коробки Twizos — свой код, цена и кг больше нуля, название; коробка «140» обязательна (лестница).");
+            }
+            else
+            {
+                goals = goals with { Boxes = boxes.Select(b => b with { Code = b.Code.Trim(), Name = b.Name.Trim() }).ToList() };
+                bool BadSet(string set, bool allowEmpty = false) =>
+                    (!allowEmpty || set.Length > 0) && (IncentiveGoalRules.ParseSet(set) is not { Count: > 0 } parsed || parsed.Any(x => goals.Box(x.Box) is null)
+                                                        || IncentiveGoalRules.FormatSet(parsed) != set);
+                var sets = new[] { goals.SmallSet, goals.MediumSet, goals.StandSet, goals.BigSet };
+                if (sets.Any(x => BadSet(x)) || (goals.Ladder ?? []).Any(x => BadSet(x)) || BadSet(goals.LadderTail, true) || goals.Ladder is { Count: > 30 })
+                {
+                    errors.Add($"Цели на маршрут: наборы и лестница — вида «140x1+35x3» из коробок ({string.Join(", ", goals.Boxes!.Select(b => b.Code))}), ступеней — до 30.");
+                }
+            }
+
+            if (goals.LadderMode is not (IncentiveLadderMode.First or IncentiveLadderMode.Minimal))
+            {
+                errors.Add("Цели на маршрут: выбор набора — «first» (первая ступень) или «minimal» (самый дешёвый).");
+            }
+
+            if (goals.StandZeroTarget is < 0 or > 1000 || (goals.StandStock ?? new Dictionary<string, int>()).Values.Any(v => v < 0) || goals.CheckDays is < 7 or > 365
+                || (goals.StandProductIds ?? []).Any(id => id <= 0))
+            {
+                errors.Add("Цели на маршрут: цель стоек при нуле — 0–1000, ручной остаток — не меньше нуля, окно среднего чека — 7–365 дней, товары стоек — ID Linko.");
+            }
+        }
+
         if (errors.Count > 0)
         {
             throw new ReportValidationException(string.Join(" ", errors));
         }
 
-        return p with { Twizos = tw, Yamelly = ym, Territory = territory };
+        return p with { Twizos = tw, Yamelly = ym, Territory = territory, Goals = goals };
     }
 
     /// <summary>Накоплено сейчас (как в карточке 18:00): все ТП оргструктуры месяца, розница и опт — своими местами.</summary>

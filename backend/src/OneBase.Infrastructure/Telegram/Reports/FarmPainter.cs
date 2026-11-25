@@ -725,6 +725,7 @@ internal abstract class FarmPainter(SkiaReportRenderer.Typefaces faces, string l
             var current = "";
             var words = clean.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var used = 0;
+            var full = false;
             foreach (var word in words)
             {
                 var candidate = current.Length == 0 ? word : current + " " + word;
@@ -740,11 +741,14 @@ internal abstract class FarmPainter(SkiaReportRenderer.Typefaces faces, string l
                 used++;
                 if (lines.Count == maxLines - 1)
                 {
+                    full = true;
                     break;
                 }
             }
 
-            var rest = string.Join(' ', words.Skip(used - 1));
+            // Строки кончились раньше слов — остаток с первого не вошедшего слова; слова кончились — последняя набранная строка целиком
+            // (раньше бралось только последнее слово: «…коробках одной фасовки» → «…коробках / фасовки»).
+            var rest = full ? string.Join(' ', words.Skip(used - 1)) : current;
             lines.Add(font.MeasureText(rest) <= width ? rest : Ellipsis(rest, font, width));
             return lines.Where(l => l.Length > 0).Take(maxLines).ToList();
         }

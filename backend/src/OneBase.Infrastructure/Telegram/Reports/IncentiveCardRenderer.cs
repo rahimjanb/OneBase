@@ -48,9 +48,38 @@ internal static partial class IncentiveCardRenderer
             pages.AddRange(painter.Zone(zone));
         }
 
+        // «Цели на маршрут» v2 — семь карточек по образцам ТЗ v2; каждая — одна картинка.
+        if (cards.GoalTeam is { } goalTeam)
+        {
+            pages.Add(painter.GoalTeam(goalTeam));
+        }
+
+        if (cards.GoalZone is { } goalZone)
+        {
+            pages.Add(painter.GoalZone(goalZone));
+        }
+
         var copies = cards.Agents.Count > 1 || cards.Team is not null;
         foreach (var card in cards.Agents)
         {
+            if (card.Goals is { } goals)
+            {
+                if (goals.Day is { } day)
+                {
+                    pages.Add(painter.GoalDay(card, day, copies));
+                }
+                else if (goals.Week is { } week)
+                {
+                    pages.Add(painter.GoalWeek(card, week));
+                }
+                else if (goals.Month is { } month)
+                {
+                    pages.Add(painter.GoalMonth(card, month));
+                }
+
+                continue;
+            }
+
             switch (cards.Slot)
             {
                 // Акции ноября — новые блоки на тех же фигурах; без них — прежние карточки накопительной.

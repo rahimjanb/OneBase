@@ -123,15 +123,15 @@ public class IncentiveTests
         Assert.True(ReportCatalog.Order("battle.evening") < ReportCatalog.Order("incentive.evening")); // в 18:00 — сначала «Поле боя»
         Assert.Equal([TelegramReportRoles.Rm, TelegramReportRoles.Sv], ReportCatalog.Find("incentive.rating")!.Roles); // ТП чужих цифр не получает
         Assert.Equal(["incentive.morning", "incentive.evening"], ReportCatalog.ForRole(["incentive.morning", "incentive.rating", "incentive.evening"], TelegramReportRoles.Tp));
-        Assert.Equal(("9. Накопительная акция", "итог прошлого месяца"), (ReportCatalog.Title(ReportType.Incentive), ReportCatalog.SlotTitle(ReportType.Incentive, "month")));
+        Assert.Equal(("9. Накопительная акция", "итог месяца"), (ReportCatalog.Title(ReportType.Incentive), ReportCatalog.SlotTitle(ReportType.Incentive, "month")));
         Assert.True(ReportCatalog.Find("incentive.midday")!.IsMidday);
 
-        // Акции ноября: 16:00 — промежуточный срез для всех; СВР — итог команды 19:30; РМ — зона в субботу 19:00 и сводка в понедельник 09:00.
+        // Акции ноября: 16:00 — промежуточный срез для всех; СВР — итог команды 18:30 (ТЗ v2); РМ — зона в субботу 19:00 и сводка в понедельник 09:00.
         var afternoon = ReportCatalog.Find("incentive.afternoon")!;
         Assert.True(afternoon.IsMidday);
         Assert.Equal((new TimeOnly(16, 0), ReportSchedules.WorkDays), (afternoon.Time, afternoon.Days));
         Assert.Equal([TelegramReportRoles.Sv], ReportCatalog.Find("incentive.team")!.Roles);
-        Assert.Equal(new TimeOnly(19, 30), ReportCatalog.Find("incentive.team")!.Time);
+        Assert.Equal(new TimeOnly(18, 30), ReportCatalog.Find("incentive.team")!.Time);
         Assert.Equal([TelegramReportRoles.Rm], ReportCatalog.Find("incentive.zone")!.Roles);
         Assert.Equal(ReportSchedules.Saturday, ReportCatalog.Find("incentive.zone")!.Days);
         Assert.Equal([TelegramReportRoles.Rm], ReportCatalog.Find("incentive.summary")!.Roles);
@@ -148,14 +148,15 @@ public class IncentiveTests
         Assert.False(ReportSchedules.IsMonthEnd(new(2026, 5, 31)));
         var job = new TelegramReportJob
         {
-            Code = "incentive.month", Enabled = true, Time = new(9, 0), TimeZone = ReportSchedules.DefaultTimeZone, Days = ReportSchedules.Monday, CatchUpMinutes = 360,
+            Code = "incentive.month", Enabled = true, Time = new(18, 0), TimeZone = ReportSchedules.DefaultTimeZone, Days = ReportSchedules.Monday, CatchUpMinutes = 360,
             ArmedAt = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero),
         };
-        // Итог месяца — 1-го числа (ТЗ, раздел 6), дни недели не важны: следующий после 05.11 — 01.12 09:00 (вторник); 30.11 — нет.
-        Assert.True(ReportCatalog.Find("incentive.month")!.MonthStart);
-        Assert.Equal(new DateTimeOffset(2026, 12, 1, 9, 0, 0, TimeSpan.FromHours(5)), ReportSchedules.Next(job, new DateTimeOffset(2026, 11, 5, 5, 0, 0, TimeSpan.Zero)));
-        Assert.Null(ReportSchedules.Due(job, new DateTimeOffset(2026, 11, 30, 4, 5, 0, TimeSpan.Zero)));
-        Assert.Equal(new DateOnly(2026, 12, 1), ReportSchedules.Due(job, new DateTimeOffset(2026, 12, 1, 4, 5, 0, TimeSpan.Zero))!.Period);
+        // Итог месяца — 30.11 вечером (ТЗ v2, раздел 6): последний рабочий день месяца 18:00, дни недели не важны; 01.12 — нет.
+        Assert.True(ReportCatalog.Find("incentive.month")!.MonthEnd);
+        Assert.False(ReportCatalog.Find("incentive.month")!.MonthStart);
+        Assert.Equal(new DateTimeOffset(2026, 11, 30, 18, 0, 0, TimeSpan.FromHours(5)), ReportSchedules.Next(job, new DateTimeOffset(2026, 11, 5, 5, 0, 0, TimeSpan.Zero)));
+        Assert.Equal(new DateOnly(2026, 11, 30), ReportSchedules.Due(job, new DateTimeOffset(2026, 11, 30, 13, 5, 0, TimeSpan.Zero))!.Period);
+        Assert.Null(ReportSchedules.Due(job, new DateTimeOffset(2026, 12, 1, 13, 5, 0, TimeSpan.Zero)));
         // Обычный запуск — по дням недели, как раньше.
         Assert.NotNull(ReportSchedules.Due(new TelegramReportJob { Code = "incentive.evening", Enabled = true, Time = new(18, 0), TimeZone = ReportSchedules.DefaultTimeZone,
             Days = ReportSchedules.WorkDays, CatchUpMinutes = 180, ArmedAt = job.ArmedAt }, new DateTimeOffset(2026, 11, 28, 13, 5, 0, TimeSpan.Zero)));

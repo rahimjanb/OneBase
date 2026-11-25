@@ -235,6 +235,9 @@ public static class DependencyInjection
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveService>();
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentivePromoService>();
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveRouteService>();
+        services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveGoalService>();
+        services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveCashbackLedger>();
+        services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveGoalCardBuilder>();
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveCardBuilder>();
         // Итоги дня по категориям (отчёт 11): продажи дня категории в области получателя; выбор категорий — CategoryCardService.
         services.AddScoped<OneBase.Application.Telegram.Reports.CategoryDayBuilder>();
@@ -250,6 +253,7 @@ public static class DependencyInjection
         services.AddScoped<Telegram.Reports.IncentiveSettingsService>();
         services.AddScoped<Telegram.Reports.IncentiveSleepingService>();
         services.AddScoped<Telegram.Reports.IncentivePayoutsService>();
+        services.AddScoped<Telegram.Reports.IncentiveWebService>();
         services.AddScoped<OneBase.Application.Telegram.Incentive.IncentiveResultsService>();
         services.AddSingleton<Telegram.Reports.TelegramReportRunner>();
         if (isolation.AllowOutbound<Telegram.Reports.TelegramReportWorker>("Telegram: автоотчёты по расписанию"))

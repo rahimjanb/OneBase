@@ -115,6 +115,13 @@ public static class IncentivePromoRules
             .GroupBy(x => x.Packing!)
             .Any(g => Boxes(g.Sum(x => x.Units), g.Key.PerBox) >= p.MinBoxes);
 
+    /// <summary>Целых коробок в накладной: по каждой фасовке — пачек ÷ в коробке вниз, вместе (разные вкусы одной фасовки складываются).</summary>
+    public static int TotalBoxes(IncentiveYamellyPromo p, IEnumerable<(decimal UnitKg, decimal Units)> lines) =>
+        lines.Select(l => (Packing: Packing(p, l.UnitKg), l.Units))
+            .Where(x => x.Packing is not null)
+            .GroupBy(x => x.Packing!)
+            .Sum(g => Boxes(g.Sum(x => x.Units), g.Key.PerBox));
+
     /// <summary>Сумма Yamelly после скидки YM-01 (по прайсу): 283 200 → 263 376.</summary>
     public static decimal AfterDiscount(IncentiveYamellyPromo p, decimal listSum) =>
         Math.Round(listSum * (100 - p.DiscountPercent) / 100, 0, MidpointRounding.AwayFromZero);

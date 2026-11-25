@@ -196,6 +196,7 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.Incentive.IncentiveSleepingMarket> IncentiveSleepingMarkets { get; }
     DbSet<OneBase.Domain.Incentive.IncentiveDayResult> IncentiveDayResults { get; }
     DbSet<OneBase.Domain.Incentive.IncentivePayout> IncentivePayouts { get; }
+    DbSet<OneBase.Domain.Incentive.IncentiveCashbackAccrual> IncentiveCashbackAccruals { get; }
 
     // Источники данных: привязки Google Sheets определяют владельца полей OneBase; конфликты — журнал отказов и строк с ошибками.
     DbSet<OneBase.Domain.Integrations.DataSourceConnection> DataSourceConnections { get; }

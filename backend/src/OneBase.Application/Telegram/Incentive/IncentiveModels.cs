@@ -173,14 +173,21 @@ public sealed record IncentiveStore(
     string? TwizosStatus = null,
     string? YamellyStatus = null,
     decimal Cashback = 0,
-    bool HasOrder = false)
+    bool HasOrder = false,
+    IncentiveRouteGoal? Goal = null,
+    IncentiveGoalFact? Fact = null)
 {
-    /// <summary>Точка без предложений (серая: «обычный заказ ~N тыс.»).</summary>
-    public bool Plain => (Sets is null || Sets.Count == 0) && !Sleeping && Sub == IncentiveTargetSub.None;
+    /// <summary>Точка без предложений (серая: «обычный заказ ~N тыс.»). У целей v2 — нет ни цели Могул, ни цели Twizos.</summary>
+    public bool Plain => Goal is not null ? Goal.Mogul is null && Goal.Twizos is null
+        : (Sets is null || Sets.Count == 0) && !Sleeping && Sub == IncentiveTargetSub.None;
 }
 
-/// <summary>Продажа вне маршрута дня (ТЗ 4.4): точка, Twizos кг, сумма по прайсу и подарок, кэшбек за спящую (засчитывается в цель и накопительную).</summary>
-public sealed record IncentiveOutOfRouteSale(long MarketId, string Name, decimal Kg, decimal Sum, IReadOnlyList<string> Gifts, decimal Cashback);
+/// <summary>
+/// Продажа вне маршрута дня (ТЗ 4.4; v2 — 4.5): точка, Twizos кг, сумма по прайсу и подарок, кэшбек за спящую (засчитывается в цель и накопительную).
+/// У целей v2 — итог (Fact): коробки и кешбек Могул по YM-01, сумма, сегмент и кешбек Twizos.
+/// </summary>
+public sealed record IncentiveOutOfRouteSale(long MarketId, string Name, decimal Kg, decimal Sum, IReadOnlyList<string> Gifts, decimal Cashback,
+    IncentiveGoalFact? Fact = null);
 
 /// <summary>
 /// Маршрут дня ТП: магазины с целями (порядок маршрута), откуда маршрут, точек в плане визитов Linko на день (0 — плана нет). У акций ноября — ещё

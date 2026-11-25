@@ -161,7 +161,7 @@ public sealed record IncentivePromoView(
 /// <summary>
 /// Личная карточка ТП: накоплено (по месяцам — в Standing), ход к призам на момент карточки и на начало дня (норма дня — не меняется от
 /// заказов дня), маршрут дня (08:30, 13:00, 18:00), неделя (суббота), месяц (конец месяца), место в своей группе (розница или опт) и место
-/// неделю назад; акции ноября (Promo).
+/// неделю назад; акции ноября (Promo); «Цели на маршрут» v2 (Goals).
 /// </summary>
 public sealed record IncentiveAgentCard(
     IncentiveAgent Agent,
@@ -174,7 +174,8 @@ public sealed record IncentiveAgentCard(
     int? Rank,
     int? RankBefore,
     int Ranked,
-    IncentivePromoView? Promo = null)
+    IncentivePromoView? Promo = null,
+    IncentiveGoalAgent? Goals = null)
 {
     public decimal Total => Standing.Total;
     public decimal Today => Standing.Today;
@@ -241,7 +242,13 @@ public sealed record IncentiveCards(
     DateTimeOffset? DataAsOf,
     bool Stale,
     IncentiveTeamDay? TeamDay = null,
-    IncentiveZone? Zone = null);
+    IncentiveZone? Zone = null,
+    IncentiveGoalTeam? GoalTeam = null,
+    IncentiveGoalZone? GoalZone = null)
+{
+    /// <summary>Карточки «Целей на маршрут» v2 (ТЗ v2 от 24.11.2026): у ТП — Goals, у СВР — GoalTeam, у РМ — GoalZone.</summary>
+    public bool V2 => GoalTeam is not null || GoalZone is not null || Agents.Any(a => a.Goals is not null);
+}
 
 /// <summary>Регион для сводки команды: название, супервайзер, ТП.</summary>
 public sealed record IncentiveTeamRegionSpec(string Name, string? Supervisor, IReadOnlyList<IncentiveAgent> Agents);

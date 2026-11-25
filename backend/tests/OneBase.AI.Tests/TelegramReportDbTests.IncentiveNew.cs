@@ -66,7 +66,7 @@ public partial class TelegramReportDbTests
     public void Skip_reasons_written_in_uzbek_are_counted_by_their_russian_original()
     {
         const string none = "Накопительной акции в этот день нет: акция выключена или день вне её периода.";
-        const string nothing = "Этой роли в этот запуск ничего не положено: с акциями ноября прежняя сводка команды не отправляется — у СВ итог команды в 19:30, у РМ итог недели зоны (сб 19:00) и сводка (пн 09:00).";
+        const string nothing = "Этой роли в этот запуск ничего не положено: с акциями ноября прежняя сводка команды не отправляется — у СВ итог команды в 18:30, у РМ итог недели зоны (сб 19:00) и сводка (пн 09:00).";
         foreach (var language in new[] { "ru", "uz", "uz-Cyrl" })
         {
             Assert.Equal(ReportSkipReasons.Promo, ReportSkipReasons.Key(ReportTexts.Get(language, none)));

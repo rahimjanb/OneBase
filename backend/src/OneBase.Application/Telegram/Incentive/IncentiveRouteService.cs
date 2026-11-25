@@ -17,7 +17,7 @@ namespace OneBase.Application.Telegram.Incentive;
 /// ставятся) и хранятся в incentive.RouteTargets; статусы считаются заново по заказам и визитам дня. Только чтение Linko.
 /// </summary>
 public sealed class IncentiveRouteService(IAppDbContext db, SalesOptions sales, BattleOptions battle, IncentiveService incentive, IncentivePromoService promos,
-    TimeProvider time)
+    IncentiveGoalService goalData, TimeProvider time)
 {
     private static readonly string[] NotTaken = LinkoMirrorSalesProvider.NotTaken;
 
@@ -32,15 +32,25 @@ public sealed class IncentiveRouteService(IAppDbContext db, SalesOptions sales, 
     {
         var products = await incentive.ProductIdsAsync(s, ct);
         var targets = await TargetsAsync(s, agentId, date, ct);
-        if (targets.Count == 0 && date >= Today() && s.Covers(date))
+        var v2 = V2(s, date);
+        // Прошедший день задним числом не ставится; просмотр v2 (persist = false) считает цели на лету по истории до этого дня, без записи.
+        if (targets.Count == 0 && s.Covers(date) && (date >= Today() || (!persist && v2 is not null)))
         {
-            targets = s.Offers.Twizos is { } tw
+            targets = v2 is { } goals && s.Offers.Twizos is { } tw2
+                ? await EnsureGoalsAsync(s, goals, tw2, agentId, date, persist, ct)
+                : s.Offers.Twizos is { } tw
                 ? await EnsureNovemberAsync(s, tw, agentId, date, norm, persist, ct)
                 : await EnsureAsync(s, agentId, date, products, persist, ct);
         }
 
         var routePoints = await db.LinkoVisits.AsNoTracking()
             .Where(v => v.UserId == agentId && v.MarketId != null && v.IsInPlan && v.Day == date).Select(v => v.MarketId).Distinct().CountAsync(ct);
+        if (v2 is { } g2 && (targets.Count == 0 || targets.Any(t => t.Goals is not null)))
+        {
+            var (route, outside) = await EvaluateGoalsAsync(s, g2, targets, agentId, date, until, ct);
+            return new IncentiveRoute(agentId, date, targets.FirstOrDefault()?.RouteSource, route, routePoints, [], outside);
+        }
+
         if (s.Offers.Twizos is not null)
         {
             var (route, extra, outside) = await EvaluateNovemberAsync(s, targets, agentId, date, until, ct);
@@ -60,6 +70,13 @@ public sealed class IncentiveRouteService(IAppDbContext db, SalesOptions sales, 
         for (var d = from; d <= to; d = d.AddDays(1))
         {
             var own = all.Where(t => t.Date == d).ToList();
+            if (V2(s, d) is { } g2 && own.Any(t => t.Goals is not null))
+            {
+                var (route2, outside2) = await EvaluateGoalsAsync(s, g2, own, agentId, d, d == to ? until : null, ct);
+                result.Add(new IncentiveRoute(agentId, d, own.FirstOrDefault()?.RouteSource, route2, 0, [], outside2));
+                continue;
+            }
+
             if (s.Offers.Twizos is not null)
             {
                 var (route, extra, outside) = await EvaluateNovemberAsync(s, own, agentId, d, d == to ? until : null, ct);
@@ -74,6 +91,10 @@ public sealed class IncentiveRouteService(IAppDbContext db, SalesOptions sales, 
     }
 
     private DateOnly Today() => DateOnly.FromDateTime(ReportSchedules.Local(time.GetUtcNow(), ReportSchedules.DefaultTimeZone).DateTime);
+
+    /// <summary>Цели v2 «Цели на маршрут» на день: есть раздел goals и день в его периоде (и есть Twizos-акция ноября с подарками).</summary>
+    public static IncentiveGoalsPromo? V2(IncentiveSettings s, DateOnly date) =>
+        s.Offers.Goals is { } g && g.Covers(date) && s.Offers.Twizos is not null ? g : null;
 
     private Task<List<IncentiveRouteTarget>> TargetsAsync(IncentiveSettings s, long agentId, DateOnly date, CancellationToken ct) =>
         db.IncentiveRouteTargets.AsNoTracking().Where(t => t.ProgramId == s.Id && t.AgentId == agentId && t.Date == date).OrderBy(t => t.Order).ToListAsync(ct);
@@ -408,5 +429,172 @@ public sealed class IncentiveRouteService(IAppDbContext db, SalesOptions sales, 
                 yamelly.Where(o => o.MarketId == m && o.Qualifies && o.CashbackStatus != IncentiveCashbackStatus.Cancelled).Sum(o => o.Cashback));
         }).OrderByDescending(o => o.Kg).ThenBy(o => o.Name).ToList();
         return (route, extra, outside);
+    }
+
+    /// <summary>
+    /// Цели дня v2 (ТЗ v2, 4.1–4.4): все точки маршрута по коду ТТ; Могул — спящей точке своего списка (ещё не разбуженной, не в регионе YM-03):
+    /// средний закуп × 1,2 в коробках фасовки; Twizos — по сегменту и истории (лестница действующим, наборы новым по чеку, стойка — новым с чеком от
+    /// 600 тыс. по убыванию чека в квоте ТП). Вне маршрута целей нет. Ставятся один раз на день.
+    /// </summary>
+    private async Task<List<IncentiveRouteTarget>> EnsureGoalsAsync(IncentiveSettings s, IncentiveGoalsPromo g, IncentiveTwizosPromo tw, long agentId, DateOnly date,
+        bool persist, CancellationToken ct)
+    {
+        var (planned, source) = await RouteMarketsAsync(agentId, date, ct);
+        if (planned.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = planned.ToArray();
+        var route = (await db.LinkoMarkets.AsNoTracking().Where(m => ids.Contains(m.Id))
+                .Select(m => new MarketInfo(m.Id, m.Name, m.MarketTypeName, m.BranchName, m.Lat, m.Lon)).ToListAsync(ct))
+            .Where(Eligible).OrderBy(m => m.Id).ToList();
+        if (route.Count == 0)
+        {
+            return [];
+        }
+
+        var routeIds = route.Select(m => m.Id).ToList();
+        var checks = await promos.ChecksAsync(s, routeIds, date, g.CheckDays, ct);
+        var history = await goalData.TwizosHistoryAsync(s, g, routeIds, date, ct);
+        var sleeping = new HashSet<long>();
+        if (s.Offers.Yamelly is { } ym && ym.Covers(date))
+        {
+            sleeping = (await promos.SleepingAsync(s, [agentId], date, TimeOnly.MinValue, ct))[agentId]
+                .Where(p => p.WokenOn is null).Select(p => p.MarketId).ToHashSet();
+        }
+
+        var mogulIds = route.Where(m => sleeping.Contains(m.Id) && !g.MogulExcluded(m.Branch)).Select(m => m.Id).ToList();
+        var mogulHistory = await goalData.MogulHistoryAsync(s, g, mogulIds, ct);
+        var quota = await goalData.AgentQuotaAsync(g, agentId, date, ct);
+        var standOffers = IncentiveGoalRules.StandOffers(
+            route.Where(m => IncentiveGoalRules.StandCandidate(g, history.ContainsKey(m.Id), checks.GetValueOrDefault(m.Id).Check))
+                .Select(m => (m.Id, checks.GetValueOrDefault(m.Id).Check)),
+            quota?.PerAgent ?? 0);
+
+        var now = time.GetUtcNow();
+        var targets = route.Select((m, i) =>
+        {
+            var check = checks.GetValueOrDefault(m.Id).Check;
+            var bought = history.TryGetValue(m.Id, out var h);
+            IncentiveMogulGoal? mogul = null;
+            if (s.Offers.Yamelly is { } y && mogulIds.Contains(m.Id))
+            {
+                var (avg, months, box) = mogulHistory.TryGetValue(m.Id, out var mh) ? mh : (0m, 0, null);
+                if ((box ?? g.MogulBoxes?.FirstOrDefault()) is { } b)
+                {
+                    mogul = IncentiveGoalRules.MogulGoal(g, y, avg, months, b);
+                }
+            }
+
+            var twizos = IncentiveGoalRules.TwizosGoal(g, tw, bought, bought ? h.AvgInvoice : 0, check, standOffers.Contains(m.Id));
+            var goal = new IncentiveRouteGoal(mogul, twizos);
+            return new IncentiveRouteTarget
+            {
+                ProgramId = s.Id, AgentId = agentId, Date = date, MarketId = m.Id, MarketName = m.Name, Order = i + 1, RouteSource = source,
+                Sub = twizos is null ? IncentiveTargetSub.None : bought ? IncentiveTargetSub.Reorder : IncentiveTargetSub.Connect,
+                Set = twizos?.Set ?? "", TargetKg = twizos?.Kg ?? 0, Prize = twizos?.Gift, Sleeping = mogul is not null, Placement = IncentivePlacement.Route,
+                AvgCheck = check, AvgMonth = mogul?.AvgKg ?? 0, Goals = goal.ToJson(), CreatedAt = now,
+            };
+        }).ToList();
+
+        if (!persist)
+        {
+            return targets;
+        }
+
+        db.IncentiveRouteTargets.AddRange(targets);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            foreach (var entry in db.ChangeTracker.Entries<IncentiveRouteTarget>().Where(e => e.State == EntityState.Added).ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return await TargetsAsync(s, agentId, date, ct);
+        }
+
+        foreach (var entry in db.ChangeTracker.Entries<IncentiveRouteTarget>().ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
+
+        return targets;
+    }
+
+    /// <summary>
+    /// Итоги точек по целям v2 до until (ТЗ v2, 4.6): Могул — накладная по YM-01 с коробками ≥ цели ✓, YM-01 меньше цели ½, визит или заказ без
+    /// YM-01 ✗; Twizos — сумма в накладной ≥ рекомендованной ✓, меньше ½, без Twizos ✗; цвет точки — по всем целям. Вне маршрута (4.5) — точки без
+    /// цели дня, где ТП оформил Могул по YM-01 спящей точке своего списка или любой заказ Twizos; заказ без акции не показывается.
+    /// </summary>
+    private async Task<(List<IncentiveStore> Route, List<IncentiveOutOfRouteSale> Outside)> EvaluateGoalsAsync(IncentiveSettings s, IncentiveGoalsPromo g,
+        IReadOnlyList<IncentiveRouteTarget> targets, long agentId, DateOnly date, TimeOnly? until, CancellationToken ct)
+    {
+        var twizos = await promos.TwizosOrdersAsync(s, [agentId], date, date, until, ct);
+        var cashback = (await goalData.TwizosCashbackOrdersAsync(s, g, [agentId], date, date, until, ct)).ToDictionary(o => o.OrderId);
+        var yamelly = (await promos.YamellyOrdersAsync(s, [agentId], date, date, until, ct)).Where(o => o.CashbackStatus != IncentiveCashbackStatus.Cancelled || !o.Qualifies)
+            .ToList();
+        var targetIds = targets.Select(t => t.MarketId).ToHashSet();
+        var ordered = (await db.LinkoOrders.AsNoTracking()
+                .Where(o => o.AgentId == agentId && o.MarketId != null && targetIds.Contains(o.MarketId.Value) && o.CreatedDate == date && !NotTaken.Contains(o.Status))
+                .Select(o => new { MarketId = o.MarketId!.Value, o.CreatedAt }).ToListAsync(ct))
+            .Where(o => until is not { } u || TimeOnly.FromDateTime(o.CreatedAt) < u).Select(o => o.MarketId).ToHashSet();
+        var visits = (await db.LinkoVisits.AsNoTracking()
+                .Where(v => v.UserId == agentId && v.MarketId != null && targetIds.Contains(v.MarketId.Value) && v.Day == date && v.Status == "done")
+                .Select(v => new { MarketId = v.MarketId!.Value, v.Date }).ToListAsync(ct))
+            .Where(v => until is not { } u || TimeOnly.FromDateTime(v.Date) < u).Select(v => v.MarketId).ToHashSet();
+        var markets = await db.LinkoMarkets.AsNoTracking().Where(m => m.ResponsibleAgentId == agentId || targetIds.Contains(m.Id))
+            .Select(m => new { m.Id, m.BranchName }).ToDictionaryAsync(m => m.Id, m => m.BranchName, ct);
+
+        IncentiveGoalFact Fact(long market, IncentiveRouteGoal? goal, bool visited)
+        {
+            var tw = twizos.Where(o => o.MarketId == market).ToList();
+            var ym = yamelly.Where(o => o.MarketId == market && !g.MogulExcluded(markets.GetValueOrDefault(market))).ToList();
+            var woken = ym.Where(o => o.Qualifies && o.CashbackStatus != IncentiveCashbackStatus.Cancelled).ToList();
+            var cb = tw.Select(o => cashback.GetValueOrDefault(o.OrderId)).Where(o => o is not null).Select(o => o!).ToList();
+            var gifts = tw.Where(o => o.Gift is not null).Select(o => o.Gift!).ToList();
+            return new IncentiveGoalFact(
+                goal?.Mogul is { } m ? IncentiveGoalRules.MogulStatus(m, ym.Select(o => (o.Qualifies && o.CashbackStatus != IncentiveCashbackStatus.Cancelled, o.Boxes)), visited) : null,
+                woken.Count == 0 ? 0 : woken.Max(o => o.Boxes),
+                woken.Sum(o => o.Cashback),
+                goal?.Twizos is { } t ? IncentiveGoalRules.TwizosStatus(t, tw.Select(o => o.ListSum).ToList(), visited) : null,
+                tw.Count == 0 ? 0 : tw.Max(o => o.ListSum),
+                tw.Sum(o => o.Kg),
+                cb.Where(o => o.Status != IncentiveCashbackStatus.Cancelled).Sum(o => o.Cashback),
+                cb.FirstOrDefault()?.Segment,
+                gifts,
+                cb.Any(o => o.Stand));
+        }
+
+        IncentiveStore Store(IncentiveRouteTarget t)
+        {
+            var goal = IncentiveRouteGoal.Parse(t.Goals) ?? new IncentiveRouteGoal(null, null);
+            var hasOrder = ordered.Contains(t.MarketId);
+            var visited = hasOrder || visits.Contains(t.MarketId);
+            var fact = Fact(t.MarketId, goal, visited);
+            var offers = new[] { fact.MogulStatus, fact.TwizosStatus }.Where(x => x is not null).Select(x => x!).ToList();
+            var status = IncentiveGoalRules.StoreStatus(offers, hasOrder, visited);
+            return new IncentiveStore(t.MarketId, t.MarketName, t.Order, t.Sub, t.Set, t.TargetKg, t.Prize, null, status, fact.TwizosKg, visited, null, false,
+                goal.Mogul is not null, IncentivePlacement.Route, t.AvgCheck, fact.Gifts.Count, fact.Gifts, fact.TwizosStatus, fact.MogulStatus, fact.MogulCashback,
+                hasOrder, goal, fact);
+        }
+
+        var route = targets.OrderBy(t => t.Order).Select(Store).ToList();
+        var outsideIds = twizos.Select(o => o.MarketId)
+            .Concat(yamelly.Where(o => o.Qualifies && o.CashbackStatus != IncentiveCashbackStatus.Cancelled && !g.MogulExcluded(markets.GetValueOrDefault(o.MarketId)))
+                .Select(o => o.MarketId))
+            .Where(m => !targetIds.Contains(m)).Distinct().ToArray();
+        var names = await db.LinkoMarkets.AsNoTracking().Where(m => outsideIds.Contains(m.Id)).ToDictionaryAsync(m => m.Id, m => m.Name, ct);
+        var outside = outsideIds.Select(m =>
+        {
+            var fact = Fact(m, null, true);
+            return new IncentiveOutOfRouteSale(m, names.GetValueOrDefault(m, $"#{m}"), fact.TwizosKg, twizos.Where(o => o.MarketId == m).Sum(o => o.ListSum), fact.Gifts,
+                fact.MogulCashback, fact);
+        }).OrderByDescending(o => o.Fact!.Cashback).ThenBy(o => o.Name).ToList();
+        return (route, outside);
     }
 }

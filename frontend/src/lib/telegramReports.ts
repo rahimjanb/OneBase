@@ -704,12 +704,54 @@ export type IncentiveTerritoryPromo = {
 export type IncentiveBudget = { cashback: number; best: number; territory: number };
 
 /** Акции ноября вокруг накопительной: раздел null — акции нет. */
+/** Коробка Twizos v2: код («35», «140», «200»), название, цена коробки, кг. */
+export type IncentiveBox = { code: string; name: string; price: number; kg: number; nameUz: string | null };
+
+/** Коробка Могул: фасовка (вес пачки), пачек в коробке, цена коробки. */
+export type IncentiveMogulBox = { name: string; unitKg: number; perBox: number; price: number; nameUz: string | null };
+
+/**
+ * «Цели на маршрут» v2 (ТЗ v2 от 24.11.2026): цели Могул (средний закуп × прирост) и Twizos (сегменты, наборы, лестница), кешбек Twizos 5 / 8 / 10%,
+ * стойки (товары Linko, цель при нуле, ручной остаток региона). Наборы — строки «140x1+35x3».
+ */
+export type IncentiveGoalsPromo = {
+  start: string;
+  end: string;
+  mogulGrowth: number;
+  mogulBoxes: IncentiveMogulBox[] | null;
+  mogulExcludedBranches: string[] | null;
+  mogulName: string;
+  twizosGrowth: number;
+  minCheck: number;
+  thermosCheck: number;
+  standCheck: number;
+  existingPercent: number;
+  newPercent: number;
+  standPercent: number;
+  boxes: IncentiveBox[] | null;
+  smallSet: string;
+  mediumSet: string;
+  standSet: string;
+  bigSet: string;
+  ladder: string[] | null;
+  ladderTail: string;
+  ladderMode: "first" | "minimal";
+  standProductIds: number[] | null;
+  standZeroTarget: number;
+  standStock: Record<string, number> | null;
+  twizosSince: string | null;
+  checkDays: number;
+  standStockRegions: Record<string, string> | null;
+};
+
 export type IncentivePromos = {
   twizos: IncentiveTwizosPromo | null;
   yamelly: IncentiveYamellyPromo | null;
   best: IncentiveBestPromo | null;
   territory: IncentiveTerritoryPromo | null;
   budget: IncentiveBudget | null;
+  /** «Цели на маршрут» v2; null — карточки по правилам акций ноября v1. */
+  goals?: IncentiveGoalsPromo | null;
 };
 
 /** Список спящих: в списке, исключено, с какого дня, когда меняли, у активных ТП, правило Linko; computed — снимка ещё нет. */
@@ -740,6 +782,11 @@ export type IncentivePayoutWeek = {
   bestToPay: number;
   paidOn: string | null;
   note: string | null;
+  /** Кешбек Twizos (с 23.11, отдельный баланс): оформлено за неделю, доставлено, выплачено, к выплате. */
+  twizosIssued: number;
+  twizosConfirmed: number;
+  twizosPaid: number;
+  twizosToPay: number;
 };
 
 export type IncentivePayoutRow = {
@@ -759,11 +806,20 @@ export type IncentivePayoutRow = {
   bestPaid: number;
   bestToPay: number;
   weeks: IncentivePayoutWeek[];
+  /** Кешбек Twizos 5 / 8 / 10% — отдельно от Могула. */
+  twizosIssued: number;
+  twizosPending: number;
+  twizosConfirmed: number;
+  twizosPaid: number;
+  twizosToPay: number;
 };
 
 export type IncentivePayouts = { code: string; date: string; dataAsOf: string | null; bestPrize: number; rows: IncentivePayoutRow[] };
 
-export type IncentivePayoutInput = { agentId: number; weekStart: string; kind: "cashback" | "best"; amount: number; paidOn: string | null; note: string | null };
+/** Вид выплаты: cashback — кешбек Могул (YM-02), twizos — кешбек Twizos, best — призы TW-01. */
+export type IncentivePayoutKind = "cashback" | "twizos" | "best";
+
+export type IncentivePayoutInput = { agentId: number; weekStart: string; kind: IncentivePayoutKind; amount: number; paidOn: string | null; note: string | null };
 
 export type IncentiveState = "off" | "upcoming" | "running" | "finished";
 

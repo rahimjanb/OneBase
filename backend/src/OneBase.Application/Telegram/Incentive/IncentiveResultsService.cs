@@ -15,14 +15,15 @@ public sealed record IncentiveDayClose(string Program, DateOnly Date, int Writte
 /// подарки, спящие в маршруте и разбуженные, кэшбек дня, место и победа TW-01. Повторное закрытие того же дня перезаписывает итог (заказы дня
 /// могли догрузиться). Отметки выплат бухгалтерии — incentive.Payouts. Снимки списка спящих из Linko — incentive.SleepingMarkets.
 /// </summary>
-public sealed class IncentiveResultsService(IAppDbContext db, IncentiveService incentive, IncentivePromoService promos, TimeProvider time)
+public sealed class IncentiveResultsService(IAppDbContext db, IncentiveService incentive, IncentivePromoService promos, IncentiveCashbackLedger ledger,
+    TimeProvider time)
 {
     /// <summary>Закрытие дня (ТЗ, раздел 5): 19:00 по Ташкенту — после итога дня ТП 18:00 и до итога команды СВР 19:30.</summary>
     public static readonly TimeOnly CloseAt = new(19, 0);
 
     /// <summary>
     /// Закрыть день по расписанию (служба автоотчётов, с 19:00, пн–сб): действующая акция с акциями ноября, день ещё не закрыт после 19:00 —
-    /// итоги ТП за день и TW-01; в субботу — список спящих на следующую неделю (по Linko на воскресенье, изменения — с понедельника). Нет акции или
+    /// итоги ТП за день и TW-01, журнал кешбека Могул и Twizos; в субботу — список спящих на следующую неделю (по Linko на воскресенье, изменения — с понедельника). Нет акции или
     /// день уже закрыт (другой экземпляр, перезапуск) — null.
     /// </summary>
     public async Task<IncentiveDayClose?> CloseDueAsync(DateOnly date, IReadOnlyCollection<long> participants, CancellationToken ct)
@@ -39,6 +40,9 @@ public sealed class IncentiveResultsService(IAppDbContext db, IncentiveService i
         }
 
         var written = await CloseDayAsync(s, participants, date, ct);
+
+        // Журнал кешбека (Могул и Twizos) — по заказам и доставкам дня: итоги недели и выплаты читают его.
+        await ledger.RefreshAsync(s, date, ct);
         IncentiveSleepingRefresh? sleeping = null;
         if (date.DayOfWeek == DayOfWeek.Saturday && s.Offers.Yamelly is { } ym && date.AddDays(2) <= ym.End)
         {
@@ -187,15 +191,16 @@ public sealed class IncentiveResultsService(IAppDbContext db, IncentiveService i
     }
 
     /// <summary>
-    /// Отметить выплату ТП за неделю (понедельник weekStart): вид — кэшбек YM-02 или призы TW-01; сумма 0 — снять отметку. Повторная отметка той
-    /// же недели и вида — замена суммы.
+    /// Отметить выплату ТП за неделю (понедельник weekStart): вид — кешбек Могул YM-02 (cashback), кешбек Twizos (twizos) или призы TW-01 (best);
+    /// сумма 0 — снять отметку. Повторная отметка той же недели и вида — замена суммы. Кешбек Могул и Twizos отмечаются раздельно.
     /// </summary>
     public async Task SetPayoutAsync(IncentiveSettings s, long agentId, DateOnly weekStart, string kind, decimal amount, DateOnly paidOn, string? note, Guid? userId,
         CancellationToken ct)
     {
-        if (kind is not (IncentivePayoutKind.Cashback or IncentivePayoutKind.Best) || amount < 0 || weekStart != Battle.BattleRules.Monday(weekStart))
+        if (kind is not (IncentivePayoutKind.Cashback or IncentivePayoutKind.Twizos or IncentivePayoutKind.Best) || amount < 0
+            || weekStart != Battle.BattleRules.Monday(weekStart))
         {
-            throw new ArgumentException("Выплата: вид cashback или best, сумма не меньше нуля, неделя — с понедельника.");
+            throw new ArgumentException("Выплата: вид cashback, twizos или best, сумма не меньше нуля, неделя — с понедельника.");
         }
 
         var row = await db.IncentivePayouts.FirstOrDefaultAsync(p => p.ProgramId == s.Id && p.AgentId == agentId && p.WeekStart == weekStart && p.Kind == kind, ct);

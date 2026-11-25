@@ -8,7 +8,8 @@ namespace OneBase.Application.Telegram.Incentive;
 /// (утром и в 13:00 — с сегодняшнего дня, вечером, в субботу и в конце месяца — с завтрашнего), маршрут дня, неделя «6 полян», месяц «город
 /// героя», рейтинг, сводка команды. Только чтение Linko; цели магазинов на день ставит IncentiveRouteService (если Persist).
 /// </summary>
-public sealed class IncentiveCardBuilder(IncentiveService incentive, IncentiveRouteService routes, IncentivePromoService promos, IncentiveResultsService results)
+public sealed class IncentiveCardBuilder(IncentiveService incentive, IncentiveRouteService routes, IncentivePromoService promos, IncentiveResultsService results,
+    IncentiveGoalCardBuilder goalCards)
 {
     public static readonly TimeOnly DefaultDayStart = new(8, 30);
     public static readonly TimeOnly DefaultMidday = new(13, 0);
@@ -59,6 +60,14 @@ public sealed class IncentiveCardBuilder(IncentiveService incentive, IncentiveRo
             _ => r.Date,
         };
         var names = everyone.ToDictionary(a => a.Id, a => a.Name);
+
+        // «Цели на маршрут» v2 (ТЗ v2 от 24.11.2026): семь карточек с двумя кешбеками; журнал кешбека — перед карточками, не чаще раза в 3 минуты.
+        var goalsPromo = IncentiveGoalCardBuilder.Applies(s, slot, r.Date) ? s.Offers.Goals : null;
+        if (goalsPromo is not null)
+        {
+            await goalCards.RefreshAsync(s, r.Date, ct);
+        }
+
         var bestDays = promoted ? await promos.BestDaysAsync(s, names.Keys, periodFrom, r.Date, promoUntil, ct) : [];
         var topCache = new Dictionary<string, (IReadOnlyList<IncentiveTopSku>, IReadOnlyList<IncentiveTopSku>)>();
 
@@ -74,14 +83,33 @@ public sealed class IncentiveCardBuilder(IncentiveService incentive, IncentiveRo
             var promo = promoted
                 ? await PromoAsync(s, r, agent, standing, dayStart, route, week, periodFrom, promoUntil, bestDays, names, topCache, holidays, ct)
                 : null;
+            IncentiveGoalAgent? goals = null;
+            if (goalsPromo is { } g)
+            {
+                goals = slot switch
+                {
+                    _ when IncentiveSlot.IsDay(slot) && route is not null => new IncentiveGoalAgent(await goalCards.DayAsync(s, agent, route, slot, r.Date, topCache, ct), null, null),
+                    IncentiveSlot.Week => new IncentiveGoalAgent(null, await goalCards.WeekAsync(s, g, agent, r.Date, ct), null),
+                    IncentiveSlot.Month => new IncentiveGoalAgent(null, null, await goalCards.MonthAsync(s, g, agent, r.Date, promo?.Earnings, ct)),
+                    _ => null,
+                };
+            }
+
             cards.Add(new IncentiveAgentCard(agent, standing, progress, dayStart, route, week, month, standings.Rank(agent.Id), lastWeek?.Rank(agent.Id),
-                standings.Rating(standing.Wholesale).Count, promo));
+                standings.Rating(standing.Wholesale).Count, promo, goals));
         }
 
         // Карточки руководителей по акциям ноября (команда СВР, зона РМ, сводка) — вместо сводки команды накопительной.
         IncentiveTeamDay? teamDay = null;
         IncentiveZone? zone = null;
-        if (IncentiveSlot.IsManagers(slot) && r.Team is not null)
+        IncentiveGoalTeam? goalTeam = null;
+        IncentiveGoalZone? goalZone = null;
+        if (goalsPromo is { } gm && r.Team is not null && slot is IncentiveSlot.Team or IncentiveSlot.Zone)
+        {
+            goalTeam = slot == IncentiveSlot.Team ? await goalCards.TeamAsync(s, gm, r.Team, r.Date, ct) : null;
+            goalZone = slot == IncentiveSlot.Zone ? await goalCards.ZoneAsync(s, gm, r.Team, r.Date, ct) : null;
+        }
+        else if (IncentiveSlot.IsManagers(slot) && r.Team is not null)
         {
             if (slot == IncentiveSlot.Team)
             {
@@ -129,7 +157,7 @@ public sealed class IncentiveCardBuilder(IncentiveService incentive, IncentiveRo
         }
 
         var share = IncentiveRules.MiddayShare(r.DayStart ?? DefaultDayStart, until ?? DefaultMidday, r.DayEnd ?? DefaultDayEnd);
-        return new IncentiveCards(slot, r.Date, s, r.Language, cards, team, rating, share, standings.OrdersAsOf, r.Stale, teamDay, zone);
+        return new IncentiveCards(slot, r.Date, s, r.Language, cards, team, rating, share, standings.OrdersAsOf, r.Stale, teamDay, zone, goalTeam, goalZone);
     }
 
     /// <summary>

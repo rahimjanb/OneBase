@@ -29,7 +29,9 @@ public class IncentivePromoDbTests(DataManagerDb fixture) : IClassFixture<DataMa
         var s = await scope.ServiceProvider.GetRequiredService<IncentiveService>().ProgramAsync("twizos-2026q4", default);
         Assert.NotNull(s);
         Assert.False(s.Enabled);
-        Assert.Equal(IncentivePromos.November2026.ToJson(), s.Offers.ToJson());
+        // Incentive5_RouteGoalsV2: раздел goals и конец TW-01 — 21.11 (ТЗ v2).
+        var november = IncentivePromos.November2026;
+        Assert.Equal((november with { Best = november.Best! with { End = new(2026, 11, 21) } }).ToJson(), (s.Offers with { Goals = null }).ToJson());
         Assert.Equal(["K35", "K140", "T", "C"], s.StoreSets.Select(x => x.Code!));
         Assert.Equal([310_800m, 288_600m, 392_200m, 599_400m], s.StoreSets.Select(x => x.Sum));
         Assert.Equal([1500m, 2400m, 4000m], s.Tiers.Select(t => t.Kg));

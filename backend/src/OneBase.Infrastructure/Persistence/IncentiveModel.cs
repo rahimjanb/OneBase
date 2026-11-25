@@ -5,7 +5,7 @@ namespace OneBase.Infrastructure.Persistence;
 
 /// <summary>
 /// Схема "incentive": накопительные акции для ТП (Twizos), цели магазинов маршрута дня, список спящих Yamelly (Приложение 1), итоги дня по
-/// акциям и отметки выплат.
+/// акциям, журнал начислений кешбека (Могул и Twizos) и отметки выплат.
 /// </summary>
 internal static class IncentiveModel
 {
@@ -47,6 +47,7 @@ internal static class IncentiveModel
             e.Property(x => x.Sets).HasMaxLength(32);
             e.Property(x => x.Placement).HasMaxLength(16).HasDefaultValue(IncentivePlacement.Route);
             e.Property(x => x.AvgCheck).HasPrecision(18, 2);
+            e.Property(x => x.Goals).HasColumnType("jsonb");
         });
 
         b.Entity<IncentiveSleepingMarket>(e =>
@@ -80,6 +81,25 @@ internal static class IncentiveModel
             e.Property(x => x.Kind).HasMaxLength(16);
             e.Property(x => x.Amount).HasPrecision(18, 2);
             e.Property(x => x.Note).HasMaxLength(500);
+        });
+
+        b.Entity<IncentiveCashbackAccrual>(e =>
+        {
+            e.ToTable("CashbackAccruals", Schema);
+            e.HasKey(x => x.Id).HasName("PK_IncentiveCashbackAccruals");
+            e.HasIndex(x => new { x.ProgramId, x.Kind, x.OrderId }).IsUnique().HasDatabaseName("IX_IncentiveCashbackAccruals_Program_Kind_Order");
+            e.HasIndex(x => new { x.ProgramId, x.AgentId, x.OrderDate }).HasDatabaseName("IX_IncentiveCashbackAccruals_Program_Agent_Date");
+            e.HasOne<IncentiveProgram>().WithMany().HasForeignKey(x => x.ProgramId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.Kind).HasMaxLength(16);
+            e.Property(x => x.Segment).HasMaxLength(16);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.Percent).HasPrecision(9, 4);
+            e.Property(x => x.ListSum).HasPrecision(18, 2);
+            e.Property(x => x.BaseSum).HasPrecision(18, 2);
+            e.Property(x => x.NetSum).HasPrecision(18, 2);
+            e.Property(x => x.Issued).HasPrecision(18, 2);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.OrderCreatedAt).HasColumnType("timestamp without time zone");
         });
     }
 }

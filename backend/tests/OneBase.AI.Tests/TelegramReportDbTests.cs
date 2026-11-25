@@ -1204,9 +1204,9 @@ public partial class TelegramReportDbTests(DataManagerDb fixture) : IClassFixtur
         Assert.Null(standings.Rows[2].Place);
         await Assert.ThrowsAsync<ReportForbiddenException>(() => settings.StandingsAsync(test.Code, s.Today, canUseSales: false, default));
 
-        // В расписании итог месяца помечен «1-е число».
+        // В расписании итог месяца помечен «последний рабочий день месяца» (ТЗ v2: 30.11 вечером).
         var jobs = (await sp.GetRequiredService<TelegramReportService>().OverviewAsync(true, default)).Jobs;
-        Assert.True(jobs.Single(j => j.Code == "incentive.month").MonthStart);
+        Assert.True(jobs.Single(j => j.Code == "incentive.month").MonthEnd); // ТЗ v2: итог месяца — 30.11 вечером
         Assert.False(jobs.Single(j => j.Code == "incentive.evening").MonthStart);
     }
 

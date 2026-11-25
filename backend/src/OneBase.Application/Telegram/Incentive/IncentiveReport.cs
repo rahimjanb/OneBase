@@ -139,7 +139,7 @@ public static class IncentiveReport
         var applies = cards.Agents.Count > 0 || cards.Team is not null || cards.Rating is not null || cards.TeamDay is not null || cards.Zone is not null;
         var (caption, summary) = IncentiveTexts.Caption(cards);
         return ReportKit.Document(c, ReportKit.Title(c), period, kpis, tables, [], notes, caption, summary, cards.Stale, applies,
-            applies ? null : c.T("Карточек нет: в области нет ТП акции.")) with { Incentive = cards };
+            applies ? null : c.T("Карточек нет: в области нет ТП акции.")) with { Incentive = cards, AsFiles = cards.V2 };
     }
 
     private static string Status(ReportContext c, string status) => status switch

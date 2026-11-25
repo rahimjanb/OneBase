@@ -83,7 +83,8 @@ public sealed class TelegramReportSender(
 
             delivery.Pages = pages.Count;
             delivery.Bytes = pages.Sum(p => (long)p.Length);
-            var files = pages.Select((p, i) => new TelegramFile($"onebase-{report.Job.Replace('.', '-')}-{report.Date:yyyyMMdd}-{i + 1}.png", "image/png", p, Photo: true)).ToList();
+            var files = pages.Select((p, i) => new TelegramFile($"onebase-{report.Job.Replace('.', '-')}-{report.Date:yyyyMMdd}-{i + 1}.png", "image/png", p, Photo: !report.AsFiles))
+                .ToList();
             var text = pages.Count > 0 ? Trim(report.Caption, TelegramRules.MaxCaptionLength) : Trim(report.Plain(), TelegramRules.MaxMessageLength);
             var sent = await gateway.SendAsync(delivery.AccountId, new TelegramPeerRef(chat.PeerId, chat.Type, chat.IsChannelPeer, chat.AccessHash),
                 new TelegramOutgoing(text, false, files), ct);

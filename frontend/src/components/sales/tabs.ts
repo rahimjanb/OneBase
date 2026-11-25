@@ -1,6 +1,6 @@
-import { Activity, Archive, Award, BadgePercent, Box, Boxes, CalendarRange, Clock3, Contact, FileCheck, Gauge, Layers, LayoutGrid, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
+import { Activity, Archive, Award, BadgePercent, Box, Boxes, CalendarRange, Clock3, Contact, FileCheck, Flag, Gauge, Layers, LayoutGrid, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
 
-export type SalesTab = "analytics" | "assortment" | "skuSales" | "primary" | "stock" | "outstock" | "plans" | "kpi" | "promo" | "problems" | "pnl" | "akt" | "dso" | "dmp" | "system" | "agents" | "method";
+export type SalesTab = "analytics" | "assortment" | "skuSales" | "primary" | "stock" | "outstock" | "plans" | "kpi" | "promo" | "problems" | "pnl" | "akt" | "dso" | "dmp" | "battle" | "system" | "agents" | "method";
 
 /**
  * Разделы продаж — кнопки в верхней панели, каждая открывает свою страницу. Настройки продаж — в «Настройки».
@@ -17,6 +17,7 @@ export const salesTabs: { key: SalesTab; label: string; description: string; hre
   { key: "plans", label: "Планы", description: "планы РОП и «Завод»", href: "/sales/plans", icon: CalendarRange },
   { key: "promo", label: "Акции", description: "промо и скидки", href: "/sales/promo", icon: BadgePercent },
   { key: "dmp", label: "ДМП", description: "стеллажи в магазинах", href: "/sales/dmp", icon: Archive },
+  { key: "battle", label: "Поле боя", description: "цели на маршрут и кешбек", href: "/sales/battle", icon: Flag },
   { key: "kpi", label: "KPI", description: "показатели агентов", href: "/sales/kpi", icon: Award },
   { key: "problems", label: "Проблемные агенты", description: "отклонения от плана", href: "/sales/problems", icon: TriangleAlert },
   { key: "system", label: "Система", description: "маршрут, дистрибуция и деньги", href: "/sales/system", icon: Gauge },
@@ -38,7 +39,7 @@ export function usesPlan(pathname: string): boolean {
 export function activeSalesTab(pathname: string): SalesTab | null {
   if (!pathname.startsWith("/sales")) return null;
   if (pathname.startsWith("/sales/sku-sales")) return "skuSales";
-  for (const key of ["assortment", "primary", "stock", "outstock", "plans", "kpi", "promo", "problems", "pnl", "akt", "dso", "dmp", "system", "agents", "method"] as const) {
+  for (const key of ["assortment", "primary", "stock", "outstock", "plans", "kpi", "promo", "problems", "pnl", "akt", "dso", "dmp", "battle", "system", "agents", "method"] as const) {
     if (pathname.startsWith(`/sales/${key}`)) return key;
   }
   if (pathname.startsWith("/sales/setup")) return null;

@@ -64,6 +64,12 @@ public sealed record ReportDocument(
     /// <summary>Карточки накопительной акции (вертикальные 1080 px) — свой рисовальщик; null — не акция.</summary>
     public Incentive.IncentiveCards? Incentive { get; init; }
 
+    /// <summary>
+    /// Картинки — файлом (документом), без сжатия Telegram: длинные карточки «Целей на маршрут» v2 (~4 300 px, ТЗ v2, раздел 6). Фото Telegram ужимает
+    /// по длинной стороне — мелкий текст не читался бы.
+    /// </summary>
+    public bool AsFiles { get; init; }
+
     /// <summary>Итоги дня по категориям (вертикальные 1080 px, по картинке на категорию) — свой рисовальщик; null — другой отчёт.</summary>
     public CategoryDayCards? CategoryDay { get; init; }
 

@@ -101,6 +101,77 @@ public static class IncentiveTexts
     }
 
     /// <summary>Подпись под картинкой (по-русски и по-узбекски) и кратко для журнала.</summary>
+    /// <summary>Подпись карточек «Целей на маршрут» v2 (два кешбека): по-русски и по-узбекски; summary — коротко для истории.</summary>
+    private static (string Caption, string Summary) GoalsCaption(IncentiveCards cards)
+    {
+        static string N(decimal v) => ReportFormat.Number(v);
+        var date = $"{cards.Date:dd.MM}";
+        if (cards.GoalTeam is { } team)
+        {
+            var w = team.Rows.Sum(r => r.Totals.Woken);
+            var m = team.Rows.Sum(r => r.Totals.MogulGoals);
+            var c = team.Rows.Sum(r => r.Totals.TwizosClients);
+            var t = team.Rows.Sum(r => r.Totals.TwizosGoals);
+            var mc = team.Rows.Sum(r => r.Totals.MogulCashback);
+            var tc = team.Rows.Sum(r => r.Totals.TwizosCashback);
+            return ($"Итог дня команды {date}: разбужено спящих Могул {w} из {m}, клиентов Twizos {c} из {t}, кешбек Могул {N(mc)} + Twizos {N(tc)} сум.\n" +
+                    $"Jamoaning kun yakuni {date}: uyg‘otilgan uxlayotgan Mogul {m} dan {w}, Twizos mijozlari {t} dan {c}, keshbek Mogul {N(mc)} + Twizos {N(tc)} so‘m.",
+                $"Команда {date}: Могул {w}/{m}, Twizos {c}/{t}");
+        }
+
+        if (cards.GoalZone is { } zone)
+        {
+            var period = $"{zone.From:dd.MM}–{zone.To:dd.MM}";
+            var w = zone.Regions.Sum(r => r.Woken);
+            var l = zone.Regions.Sum(r => r.Listed);
+            var c = zone.Regions.Sum(r => r.TwizosClients);
+            var pay = zone.Balances.Mogul.ToPay + zone.Balances.Twizos.ToPay;
+            return ($"Итог недели зоны {period}: разбужено спящих Могул {N(w)} из {N(l)}, клиентов Twizos {N(c)}, к выплате ТП {N(pay)} сум.\n" +
+                    $"Zona hafta yakuni {period}: uyg‘otilgan uxlayotgan Mogul {N(l)} dan {N(w)}, Twizos mijozlari {N(c)}, TP larga to‘lov {N(pay)} so‘m.",
+                $"Зона {period}: Могул {N(w)}, Twizos {N(c)}");
+        }
+
+        if (cards.Agents.Count != 1)
+        {
+            var sum = cards.Agents.Sum(a => a.Goals?.Day?.Totals.Cashback ?? 0);
+            return ($"Цели на маршрут · {cards.Agents.Count} ТП · {date}: кешбек дня {N(sum)} сум.\nMarshrut maqsadlari · {cards.Agents.Count} ta TP · {date}: kun keshbegi {N(sum)} so‘m.",
+                $"{cards.Agents.Count} ТП: кешбек {N(sum)}");
+        }
+
+        var goals = cards.Agents[0].Goals!;
+        if (goals.Day is { } day)
+        {
+            var t = day.Totals;
+            if (cards.Slot == IncentiveSlot.Morning)
+            {
+                var can = t.MogulGoalCashback + t.TwizosGoalCashback;
+                return ($"Маршрут дня {date}: {t.Stores} ТТ, спящих Могул {t.MogulGoals}, целей Twizos {t.TwizosGoals} — можно заработать {N(can)} сум.\n" +
+                        $"Kun marshruti {date}: {t.Stores} ta SN, uxlayotgan Mogul {t.MogulGoals}, Twizos maqsadlari {t.TwizosGoals} — {N(can)} so‘m ishlab topish mumkin.",
+                    $"Маршрут {date}: можно {N(can)}");
+            }
+
+            return ($"Цели на маршрут {date}: разбужено спящих Могул {t.Woken} из {t.MogulGoals}, клиентов Twizos {t.TwizosClients} из {t.TwizosGoals}, кешбек дня {N(t.Cashback)} сум.\n" +
+                    $"Marshrut maqsadlari {date}: uyg‘otilgan uxlayotgan Mogul {t.MogulGoals} dan {t.Woken}, Twizos mijozlari {t.TwizosGoals} dan {t.TwizosClients}, kun keshbegi {N(t.Cashback)} so‘m.",
+                $"День {date}: кешбек {N(t.Cashback)}");
+        }
+
+        if (goals.Week is { } week)
+        {
+            var period = $"{week.Monday:dd.MM}–{week.Saturday:dd.MM}";
+            var pay = week.Balances.Mogul.ToPay + week.Balances.Twizos.ToPay;
+            return ($"Итог недели {period}: кешбек Могул {N(week.MogulWeek)} + Twizos {N(week.TwizosWeek)} сум; к выплате пн–вт {N(pay)} сум.\n" +
+                    $"Hafta yakuni {period}: keshbek Mogul {N(week.MogulWeek)} + Twizos {N(week.TwizosWeek)} so‘m; du–se to‘lovga {N(pay)} so‘m.",
+                $"Неделя {period}: кешбек {N(week.MogulWeek + week.TwizosWeek)}");
+        }
+
+        var month = goals.Month!;
+        var accrued = month.Mogul.Accrued + month.Twizos.Accrued + (month.Best?.Accrued ?? 0);
+        var left = month.Mogul.Left + month.Twizos.Left + (month.Best?.Left ?? 0);
+        return ($"Итог месяца: разбужено спящих Могул {month.Woken} из {month.Listed}, клиентов Twizos {month.TwizosClients}, заработок {N(accrued)} сум, остаток {N(left)} сум.\n" +
+                $"Oy yakuni: uyg‘otilgan uxlayotgan Mogul {month.Listed} dan {month.Woken}, Twizos mijozlari {month.TwizosClients}, daromad {N(accrued)} so‘m, qoldiq {N(left)} so‘m.",
+            $"Месяц: заработок {N(accrued)}, остаток {N(left)}");
+    }
+
     public static (string Caption, string Summary) Caption(IncentiveCards cards)
     {
         var s = cards.Program;
@@ -118,6 +189,11 @@ public static class IncentiveTexts
             return ($"Рейтинг акции {product} на {cards.Date:dd.MM}: 1 — {leader.Agent.Name}, {Kg(leader.Kg)} кг.{toRu}\n" +
                     $"{product} aksiyasi reytingi {cards.Date:dd.MM}: 1-o‘rin — {leader.Agent.Name}, {Kg(leader.Kg)} kg.{toUz}",
                 $"Рейтинг: 1 — {leader.Agent.Name}, {Kg(leader.Kg)} кг");
+        }
+
+        if (cards.V2)
+        {
+            return GoalsCaption(cards);
         }
 
         // Карточки руководителей по акциям ноября.

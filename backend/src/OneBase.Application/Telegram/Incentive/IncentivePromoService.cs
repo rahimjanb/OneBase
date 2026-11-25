@@ -28,7 +28,7 @@ public static class IncentiveCashbackStatus
 
 /// <summary>
 /// Заказ Yamelly спящей точке своего списка: сумма Yamelly по прайсу (до скидки) и после доставленных возвратов, выполнен ли порог YM-01, кэшбек
-/// при оформлении и после возвратов, статус кэшбека.
+/// при оформлении и после возвратов, статус кэшбека, целых коробок в заказе (по фасовкам, для отметки цели v2).
 /// </summary>
 public sealed record IncentiveYamellyOrder(
     long OrderId,
@@ -42,7 +42,8 @@ public sealed record IncentiveYamellyOrder(
     bool Qualifies,
     decimal Cashback,
     decimal NetCashback,
-    string CashbackStatus);
+    string CashbackStatus,
+    int Boxes = 0);
 
 /// <summary>Заказ ТП с Twizos: кг и сумма Twizos по прайсу, подарок по правилу TW-02 и выданные подарки (бонусные строки Linko по картинке подарка).</summary>
 public sealed record IncentiveTwizosOrder(
@@ -333,7 +334,8 @@ public sealed class IncentivePromoService(IAppDbContext db, SalesOptions sales, 
                 : sold.Contains(o.Status) ? netQualifies ? IncentiveCashbackStatus.Confirmed : IncentiveCashbackStatus.Cancelled
                 : IncentiveCashbackStatus.Issued;
             return new IncentiveYamellyOrder(o.Id, o.Agent, o.Market, o.CreatedDate, o.CreatedAt, o.AcceptedDate, listSum, netSum, qualifies,
-                qualifies ? IncentivePromoRules.Cashback(ym, listSum) : 0, netQualifies ? IncentivePromoRules.Cashback(ym, netSum) : 0, status);
+                qualifies ? IncentivePromoRules.Cashback(ym, listSum) : 0, netQualifies ? IncentivePromoRules.Cashback(ym, netSum) : 0, status,
+                IncentivePromoRules.TotalBoxes(ym, lines.Select(x => (x.Unit, x.Amount))));
         }).OrderBy(o => o.CreatedAt).ThenBy(o => o.OrderId).ToList();
     }
 
@@ -629,5 +631,6 @@ public sealed class IncentivePromoService(IAppDbContext db, SalesOptions sales, 
         }).ToList();
     }
 
-    private bool Counted(string? branch) => !sales.IsExcludedBranch(branch) && !sales.IsIgnoredBranch(branch);
+    /// <summary>Филиал в зачёт акции: без «Завода», «К К Мерч» и исключённых филиалов «Продаж».</summary>
+    public bool Counted(string? branch) => !sales.IsExcludedBranch(branch) && !sales.IsIgnoredBranch(branch);
 }

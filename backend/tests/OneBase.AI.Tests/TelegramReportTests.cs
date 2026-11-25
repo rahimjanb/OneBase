@@ -133,7 +133,7 @@ public class TelegramReportTests
         Assert.Equal("13:00 18:00", Times(ReportType.Promo));
         Assert.Equal("13:00 18:00", Times(ReportType.Categories));
         Assert.Equal("18:00 08:30", Times(ReportType.Weekly));
-        Assert.Equal("08:30 13:00 16:00 18:00 19:30 18:00 18:30 19:00 09:00 09:00", Times(ReportType.Incentive));
+        Assert.Equal("08:30 13:00 16:00 18:00 18:30 18:00 18:30 19:00 09:00 18:00", Times(ReportType.Incentive));
 
         // Напоминание 17:00 — только ТП; неделя — суббота 18:00 и понедельник 8:30; остальное — пн–сб.
         Assert.Equal([TelegramReportRoles.Tp], ReportCatalog.Find("no-orders.reminder")!.Roles);

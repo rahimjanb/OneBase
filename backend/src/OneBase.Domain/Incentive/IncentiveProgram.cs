@@ -155,6 +155,12 @@ public class IncentiveRouteTarget : Entity
 
     /// <summary>Средний чек ТТ (сумма дня с заказом до скидки, все категории), сум — по нему выбран набор.</summary>
     public decimal AvgCheck { get; set; }
+
+    /// <summary>
+    /// Цели v2 «Цели на маршрут» (ТЗ v2 от 24.11.2026), JSON: Могул — средний закуп в месяц, цель кг, фасовка, коробки, сумма, со скидкой,
+    /// кешбек; Twizos — сегмент и % кешбека, обычная накладная, набор, сумма, кг, подарок, кешбек, стойка. Пусто — цели v1 (Sets, Sleeping).
+    /// </summary>
+    public string? Goals { get; set; }
 }
 
 /// <summary>
@@ -226,11 +232,88 @@ public class IncentiveDayResult : Entity
     public DateTimeOffset ClosedAt { get; set; }
 }
 
-/// <summary>Выплата ТП: cashback — кэшбек YM-02, best — призы TW-01.</summary>
+/// <summary>Выплата ТП: cashback — кэшбек Могул (YM-02), twizos — кешбек Twizos (5 / 8 / 10% с 23.11), best — призы TW-01.</summary>
 public static class IncentivePayoutKind
 {
     public const string Cashback = "cashback";
+    public const string Twizos = "twizos";
     public const string Best = "best";
+}
+
+/// <summary>Вид кешбека в журнале начислений: Могул (YM-02) и Twizos — два отдельных баланса (ТЗ v2, раздел 5).</summary>
+public static class IncentiveCashbackKind
+{
+    public const string Mogul = "mogul";
+    public const string Twizos = "twizos";
+
+    /// <summary>Вид выплаты бухгалтерии для вида кешбека.</summary>
+    public static string PayoutKind(string kind) => kind == Twizos ? IncentivePayoutKind.Twizos : IncentivePayoutKind.Cashback;
+}
+
+/// <summary>Сегмент клиента Twizos на момент заказа (ТЗ v2, 4.3): действующий — 5%, новый — 8%, новый + стойка — 10%.</summary>
+public static class IncentiveTwizosSegment
+{
+    public const string Existing = "existing";
+    public const string New = "new";
+    public const string Stand = "stand";
+}
+
+/// <summary>
+/// Начисление кешбека ТП по заказу Linko (журнал; ТЗ v2, раздел 5): одна строка на «акция × вид × заказ» — повторная синхронизация обновляет её,
+/// а не начисляет второй раз. Могул (YM-02) — 10% от суммы Могула после скидки 7% у спящей точки своего списка; Twizos — % сегмента клиента,
+/// который фиксируется при первой записи (до заказа точка не брала Twizos — 8%, со стойкой от 600 000 — 10%, иначе 5%). Сумма и статус
+/// пересчитываются по заказу и доставленным возвратам: issued — оформлено, ждёт доставки; confirmed — доставлено; cancelled — отменено.
+/// «К выплате» и «выплачено» — по неделе доставки и отметкам бухгалтерии (incentive.Payouts).
+/// </summary>
+public class IncentiveCashbackAccrual : Entity
+{
+    public Guid ProgramId { get; set; }
+
+    /// <summary>mogul / twizos (<see cref="IncentiveCashbackKind"/>).</summary>
+    public required string Kind { get; set; }
+
+    /// <summary>Заказ Linko — источник начисления.</summary>
+    public long OrderId { get; set; }
+
+    /// <summary>ТП, оформивший заказ (Могул — закреплённый за спящей точкой).</summary>
+    public long AgentId { get; set; }
+
+    public long MarketId { get; set; }
+
+    /// <summary>День заказа (создание в Linko).</summary>
+    public DateOnly OrderDate { get; set; }
+
+    public DateTime OrderCreatedAt { get; set; }
+
+    /// <summary>Twizos — сегмент на момент заказа (existing / new / stand); Могул — sleeping.</summary>
+    public required string Segment { get; set; }
+
+    /// <summary>% кешбека на момент заказа.</summary>
+    public decimal Percent { get; set; }
+
+    /// <summary>Сумма товаров вида в заказе по прайсу.</summary>
+    public decimal ListSum { get; set; }
+
+    /// <summary>База кешбека при оформлении: Могул — после скидки 7%, Twizos — сумма по прайсу.</summary>
+    public decimal BaseSum { get; set; }
+
+    /// <summary>База после доставленных возвратов.</summary>
+    public decimal NetSum { get; set; }
+
+    /// <summary>Кешбек при оформлении.</summary>
+    public decimal Issued { get; set; }
+
+    /// <summary>Кешбек сейчас: после возвратов (отменено — 0).</summary>
+    public decimal Amount { get; set; }
+
+    /// <summary>issued / confirmed / cancelled.</summary>
+    public required string Status { get; set; }
+
+    /// <summary>День доставки (приёмки) — по нему неделя выплаты.</summary>
+    public DateOnly? DeliveredOn { get; set; }
+
+    /// <summary>В заказе есть стойка Twizos.</summary>
+    public bool Stand { get; set; }
 }
 
 /// <summary>Отметка бухгалтерии «выплачено» ТП за неделю пн–вс (кэшбек YM-02 или призы TW-01): сумма и день выплаты.</summary>
