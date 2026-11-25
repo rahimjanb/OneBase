@@ -1,41 +1,43 @@
 "use client";
 
 import {
-  Bot,
-  BrainCircuit,
-  Boxes,
-  Building2,
-  CalendarCheck,
-  ChevronRight,
+  CalendarDays,
+  ChartLine,
   CircleCheck,
-  Clock3,
-  Database,
-  Factory,
-  FileText,
+  CircleDot,
+  Flag,
   Gift,
-  LineChart,
-  MessagesSquare,
-  ScanBarcode,
-  Scale,
+  Image as ImageIcon,
+  Layers,
+  LayoutGrid,
+  Lock,
+  MapPin,
+  Maximize2,
+  Moon,
+  Quote,
+  Repeat,
+  Route,
+  ScanSearch,
   Send,
+  Shapes,
   ShieldCheck,
-  ShoppingBag,
-  Table2,
-  UserPlus,
-  Warehouse,
+  Store,
+  Target,
+  Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { useT } from "@/i18n/client";
 import type { WhatsNewColor, WhatsNewIcon } from "@/lib/whats-new";
 
 export const STEP_ICON: Record<WhatsNewIcon, LucideIcon> = {
-  analytik: BrainCircuit,
-  recruitment: UserPlus,
-  production: Factory,
-  twin: Boxes,
-  procurement: Warehouse,
-  agents: Bot,
-  incentives: Gift,
+  battle: Flag,
+  salesData: Layers,
+  agentDay: Route,
+  assortment: LayoutGrid,
+  forecast: ChartLine,
+  screening: ScanSearch,
+  recipients: Send,
 };
 
 /** Цвет шага: текст и мягкий фон метки, переменная для свечения превью. */
@@ -61,8 +63,6 @@ function Chip({ icon: Icon, children, tone = "text-ink-2" }: { icon?: LucideIcon
   );
 }
 
-const Arrow = () => <ChevronRight aria-hidden className="size-3.5 shrink-0 text-ink-4" />;
-
 function Card({ icon: Icon, color, title, badge, children }: { icon: LucideIcon; color: WhatsNewColor; title: string; badge?: string; children: React.ReactNode }) {
   const c = COLOR[color];
   return (
@@ -87,171 +87,178 @@ export function WhatsNewPreview({ icon, color }: { icon: WhatsNewIcon; color: Wh
   const t = useT();
   const c = COLOR[color];
   switch (icon) {
-    case "analytik":
+    case "battle":
       return (
-        <Card icon={BrainCircuit} color={color} title={t("Вопрос Аналитику")} badge={t("AI")}>
-          <div className={`rounded-[10px] border px-3 py-2.5 text-[13px] leading-snug text-ink max-md:text-[12px] ${c.border}`}>
-            {t("Сравни продажи по регионам за неделю и покажи, где план не выполняется")}
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Chip icon={Database} tone={c.text}>{t("Продажи")}</Chip>
-            <Arrow />
-            <Chip icon={Table2} tone={c.text}>{t("Срез")}</Chip>
-            <Arrow />
-            <Chip icon={LineChart} tone={c.text}>{t("Прогноз")}</Chip>
-          </div>
-          <span className="flex items-center gap-1.5 text-[12px] text-ink-3 max-md:text-[11px]">
-            <FileText aria-hidden className="size-3.5" />
-            {t("У каждой цифры — источник")}
-          </span>
-        </Card>
-      );
-    case "recruitment":
-      return (
-        <Card icon={MessagesSquare} color={color} title={t("Диалоги Telegram")}>
+        <Card icon={Flag} color={color} title={t("Маршрут дня")} badge="RU · UZ">
           {[
-            { label: t("AI ведёт"), dot: "bg-violet", w: "62%" },
-            { label: t("HR ведёт"), dot: "bg-accent", w: "48%" },
-            { label: t("Нужен HR"), dot: "bg-warn", w: "55%" },
+            { goal: t("Могул"), icon: Moon, w: "52%" },
+            { goal: "Twizos", icon: Gift, w: "40%" },
+            { goal: t("Стойка"), icon: Store, w: "60%" },
           ].map((row) => (
-            <div key={row.label} className="flex items-center gap-3 rounded-[10px] bg-muted px-3 py-2">
-              <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full bg-line-strong/70">
-                <UserPlus className="size-3.5 text-ink-3" />
+            <div key={row.goal} className="flex items-center gap-3 rounded-[10px] bg-muted px-3 py-1.5">
+              <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full bg-line-strong/70">
+                <MapPin className="size-3 text-ink-3" />
               </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-                <Line w="38%" />
-                <Line w={row.w} className="opacity-60" />
-              </span>
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-ink-2">
-                <span aria-hidden className={`size-1.5 rounded-full ${row.dot}`} />
-                {row.label}
+              <Line w={row.w} className="flex-1" />
+              <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.soft} ${c.text}`}>
+                <row.icon aria-hidden className="size-3" />
+                {row.goal}
               </span>
             </div>
           ))}
-          <span className="flex items-center gap-1.5 text-[12px] text-ink-3 max-md:text-[11px]">
-            <CalendarCheck aria-hidden className="size-3.5" />
-            {t("Собеседование — в календаре интервьюера")}
-          </span>
-        </Card>
-      );
-    case "production":
-      return (
-        <Card icon={Factory} color={color} title={t("Приезд сырья")}>
           <div className="flex flex-wrap items-center gap-1.5">
-            <Chip icon={ShieldCheck} tone="text-ok">{t("Качество")}</Chip>
-            <Arrow />
-            <Chip icon={Scale} tone="text-ok">{t("Вес")}</Chip>
-            <Arrow />
-            <Chip icon={Warehouse} tone={c.text}>{t("Склад")}</Chip>
-          </div>
-          <div className="rounded-[10px] bg-muted px-3 py-2.5">
-            <span className="text-[12px] font-medium text-ink-2">{t("Техкарта")}</span>
-            <div className="mt-2 grid grid-cols-3 gap-1.5">
-              {[t("Замес"), t("Выпечка"), t("Упаковка")].map((stage, i) => (
-                <span key={stage} className="flex flex-col gap-1.5">
-                  <span aria-hidden className={`h-1.5 rounded-full ${i === 0 ? c.dot : "bg-line-strong"}`} />
-                  <span className="truncate text-[11px] text-ink-3">{stage}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-          <span className="flex items-center gap-1.5 text-[12px] text-ink-3 max-md:text-[11px]">
-            <Clock3 aria-hidden className="size-3.5" />
-            {t("Партии — со сроками годности")}
-          </span>
-        </Card>
-      );
-    case "twin":
-      return (
-        <Card icon={Boxes} color={color} title={t("Цифровой двойник")} badge="3D">
-          <svg viewBox="30 20 250 92" className="h-[118px] w-full max-md:h-[96px]" role="presentation" aria-hidden>
-            {[
-              { x: 40, y: 58, w: 70, h: 34, glow: true },
-              { x: 120, y: 40, w: 60, h: 52, glow: false },
-              { x: 192, y: 62, w: 74, h: 28, glow: false },
-            ].map((b, i) => (
-              <g key={i}>
-                <polygon points={`${b.x},${b.y} ${b.x + b.w / 2},${b.y - 14} ${b.x + b.w},${b.y} ${b.x + b.w / 2},${b.y + 14}`} fill={b.glow ? c.glow : "var(--color-line-strong)"} opacity={b.glow ? 0.9 : 0.8} />
-                <polygon points={`${b.x},${b.y} ${b.x + b.w / 2},${b.y + 14} ${b.x + b.w / 2},${b.y + 14 + b.h} ${b.x},${b.y + b.h}`} fill={b.glow ? c.glow : "var(--color-line)"} opacity={b.glow ? 0.55 : 1} />
-                <polygon points={`${b.x + b.w},${b.y} ${b.x + b.w / 2},${b.y + 14} ${b.x + b.w / 2},${b.y + 14 + b.h} ${b.x + b.w},${b.y + b.h}`} fill={b.glow ? c.glow : "var(--color-muted)"} opacity={b.glow ? 0.35 : 1} />
-              </g>
-            ))}
-          </svg>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Chip icon={Building2} tone={c.text}>{t("Отделы")}</Chip>
-            <Chip icon={Warehouse} tone={c.text}>{t("Склады")}</Chip>
-            <Chip icon={LineChart} tone={c.text}>{t("Показатели")}</Chip>
+            <Chip icon={Wallet} tone={c.text}>{t("Кешбек Могул")}</Chip>
+            <Chip icon={Wallet} tone={c.text}>{t("Кешбек Twizos")}</Chip>
           </div>
         </Card>
       );
-    case "procurement":
+    case "salesData":
       return (
-        <Card icon={ShoppingBag} color={color} title={t("Заявка на закупку")}>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Chip icon={CircleCheck} tone="text-ok">{t("Руководитель")}</Chip>
-            <Arrow />
-            <Chip icon={CircleCheck} tone="text-ok">{t("Финансист")}</Chip>
-            <Arrow />
-            <Chip icon={ShoppingBag} tone={c.text}>{t("Куплено")}</Chip>
-          </div>
-          <div className="rounded-[10px] bg-muted px-3 py-2.5">
-            <div className="flex items-center justify-between gap-3">
-              <Line w="40%" />
-              <span className="text-[11px] text-ink-3">{t("минимум")}</span>
-            </div>
-            <div className="relative mt-2 h-1.5 rounded-full bg-line-strong">
-              <span aria-hidden className={`absolute inset-y-0 left-0 w-[34%] rounded-full ${c.dot}`} />
-              <span aria-hidden className="absolute -top-1 left-[46%] h-3.5 w-0.5 rounded-full bg-ink-3" />
-            </div>
-          </div>
-          <span className="flex items-center gap-1.5 text-[12px] text-ink-3 max-md:text-[11px]">
-            <ScanBarcode aria-hidden className="size-3.5" />
-            {t("Приёмка по штрихкоду камерой")}
-          </span>
-        </Card>
-      );
-    case "agents":
-      return (
-        <Card icon={Bot} color={color} title={t("ИИ-агенты отделов")}>
-          {[t("Продажи"), t("HR"), t("Снабжение")].map((name) => (
-            <div key={name} className="flex items-center gap-3 rounded-[10px] bg-muted px-3 py-2">
-              <span aria-hidden className={`grid size-7 shrink-0 place-items-center rounded-full ${c.soft}`}>
-                <Bot className={`size-3.5 ${c.text}`} />
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink max-md:text-[12px]">{name}</span>
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-ink-3">
-                <Send aria-hidden className="size-3.5 text-accent" />
-                {t("свой номер")}
-              </span>
-            </div>
-          ))}
-        </Card>
-      );
-    case "incentives":
-      return (
-        <Card icon={Gift} color={color} title={t("Карточка ТП")} badge="RU · UZ">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {["08:30", "13:00", "16:00", "18:00"].map((time) => (
-              <Chip key={time} icon={Clock3} tone={c.text}>
-                {time}
-              </Chip>
-            ))}
-          </div>
+        <Card icon={Layers} color={color} title={t("Из чего складывается объём")} badge="Linko">
           {[
-            { label: t("Цели маршрута"), w: "58%" },
-            { label: t("Спящие точки"), w: "34%" },
-            { label: t("Кэшбек"), w: "46%" },
+            { name: "Придзел", w: "72%" },
+            { name: "Помадка", w: "54%" },
+            { name: "Cripzel", w: "30%", own: true },
           ].map((row) => (
-            <div key={row.label} className="flex items-center gap-3">
-              <span className="w-[112px] shrink-0 truncate text-[12px] text-ink-2 max-md:w-[96px] max-md:text-[11px]">{row.label}</span>
+            <div key={row.name} className="flex items-center gap-3">
+              <span className="flex w-[112px] shrink-0 items-center gap-1.5 truncate text-[12px] text-ink-2 max-md:w-[96px] max-md:text-[11px]">
+                {row.name}
+                {row.own && <span className={`rounded-full px-1.5 text-[10px] font-semibold ${c.soft} ${c.text}`}>{t("отдельно")}</span>}
+              </span>
               <span className="relative h-1.5 flex-1 rounded-full bg-line-strong">
                 <span aria-hidden className={`absolute inset-y-0 left-0 rounded-full ${c.dot}`} style={{ width: row.w }} />
               </span>
             </div>
           ))}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Chip icon={Target} tone={c.text}>{t("План АКБ")}</Chip>
+            <Chip icon={Lock} tone={c.text}>{t("Бронь — подтверждённые")}</Chip>
+          </div>
+        </Card>
+      );
+    case "agentDay":
+      return (
+        <Card icon={Route} color={color} title={t("День ТП")}>
+          <ol className="flex flex-col">
+            {[
+              { status: t("визит"), tone: "bg-ok/15 text-ok", w: "50%" },
+              { status: t("визит"), tone: "bg-ok/15 text-ok", w: "38%" },
+              { status: t("не посетил"), tone: "bg-bad/15 text-bad", w: "56%" },
+              { status: t("заказ без визита"), tone: "bg-warn/15 text-warn", w: "44%" },
+            ].map((row, i, rows) => (
+              <li key={i} className="relative flex items-center gap-3 py-1.5">
+                {i < rows.length - 1 && <span aria-hidden className="absolute left-[11px] top-[calc(50%+12px)] h-[calc(100%-12px)] w-px bg-line-strong" />}
+                <span aria-hidden className={`grid size-6 shrink-0 place-items-center rounded-full border text-[11px] font-semibold ${i === 0 ? `${c.border} ${c.soft} ${c.text}` : "border-line-strong text-ink-3"}`}>
+                  {i + 1}
+                </span>
+                <Line w={row.w} className="flex-1" />
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${row.tone}`}>{row.status}</span>
+              </li>
+            ))}
+          </ol>
           <span className="flex items-center gap-1.5 text-[12px] text-ink-3 max-md:text-[11px]">
-            <Send aria-hidden className="size-3.5" />
-            {t("Каждому ТП — в Telegram")}
+            <Repeat aria-hidden className="size-3.5" />
+            {t("Какой визит после прошлого заказа")}
+          </span>
+        </Card>
+      );
+    case "assortment":
+      return (
+        <Card icon={LayoutGrid} color={color} title={t("Категория")}>
+          <div className="flex w-fit rounded-lg border border-line bg-muted p-0.5 text-[11px] font-medium">
+            <span className="rounded-md px-2.5 py-1 text-ink-3">{t("Таблица")}</span>
+            <span className={`rounded-md px-2.5 py-1 ${c.soft} ${c.text}`}>{t("Карточки")}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {["62%", "48%", "56%"].map((w, i) => (
+              <span key={i} className="flex flex-col gap-1.5 rounded-[10px] border border-line p-1.5">
+                <span aria-hidden className="grid h-14 place-items-center rounded-md bg-line-strong/50 max-md:h-12">
+                  <ImageIcon className="size-5 text-ink-3" />
+                </span>
+                <Line w={w} />
+                <Line w="34%" className="opacity-60" />
+              </span>
+            ))}
+          </div>
+          <span className="flex items-center gap-1.5 text-[12px] text-ink-3 max-md:text-[11px]">
+            <Maximize2 aria-hidden className="size-3.5" />
+            {t("Фото на весь экран по нажатию")}
+          </span>
+        </Card>
+      );
+    case "forecast":
+      return (
+        <Card icon={ChartLine} color={color} title={t("Прогноз")} badge="P10 · P50 · P90">
+          <svg viewBox="0 0 300 96" className="h-[104px] w-full max-md:h-[84px]" role="presentation" aria-hidden>
+            {[24, 48, 72].map((y) => (
+              <line key={y} x1="0" x2="300" y1={y} y2={y} stroke="var(--color-line)" strokeWidth="1" />
+            ))}
+            <path d="M170 52 L200 40 L230 44 L260 30 L300 34 L300 70 L260 66 L230 74 L200 66 L170 58 Z" fill={c.glow} opacity="0.2" />
+            <path d="M0 70 L30 62 L60 66 L90 54 L120 58 L150 48 L170 55" fill="none" stroke="var(--color-ink-3)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+            <path d="M170 55 L200 53 L230 59 L260 48 L300 52" fill="none" stroke={c.glow} strokeWidth="2" strokeDasharray="5 4" strokeLinejoin="round" strokeLinecap="round" />
+            <line x1="170" x2="170" y1="8" y2="92" stroke="var(--color-line-strong)" strokeWidth="1.5" />
+          </svg>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Chip icon={CalendarDays} tone={c.text}>{t("Сегодня")}</Chip>
+            <Chip icon={Target} tone={c.text}>{t("Точность прошлых месяцев")}</Chip>
+          </div>
+        </Card>
+      );
+    case "screening":
+      return (
+        <Card icon={ScanSearch} color={color} title={t("AI-скрининг")} badge={t("Подходит")}>
+          {[
+            { name: t("Опыт"), w: "78%", met: true },
+            { name: t("Навыки"), w: "56%", met: false },
+          ].map((row) => (
+            <div key={row.name} className="flex items-center gap-3">
+              <span className="w-[88px] shrink-0 truncate text-[12px] text-ink-2 max-md:w-[72px] max-md:text-[11px]">{row.name}</span>
+              <span className="relative h-1.5 flex-1 rounded-full bg-line-strong">
+                <span aria-hidden className={`absolute inset-y-0 left-0 rounded-full ${c.dot}`} style={{ width: row.w }} />
+              </span>
+              {row.met ? <CircleCheck aria-hidden className="size-4 shrink-0 text-ok" /> : <CircleDot aria-hidden className="size-4 shrink-0 text-warn" />}
+            </div>
+          ))}
+          <div className={`flex gap-2.5 rounded-[10px] border-l-2 bg-muted px-3 py-2.5 ${c.border}`}>
+            <Quote aria-hidden className={`size-3.5 shrink-0 ${c.text}`} />
+            <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <Line w="88%" />
+              <Line w="62%" className="opacity-60" />
+            </span>
+          </div>
+          <span className="flex items-center gap-1.5 text-[12px] text-ink-3 max-md:text-[11px]">
+            <ShieldCheck aria-hidden className="size-3.5" />
+            {t("Подтверждено фактами")}
+          </span>
+        </Card>
+      );
+    case "recipients":
+      return (
+        <Card icon={Send} color={color} title={t("Получатели")}>
+          {[
+            { on: [1, 1, 0, 1], off: false },
+            { on: [1, 0, 1, 1], off: false },
+            { on: [0, 0, 0, 0], off: true },
+          ].map((row, i) => (
+            <div key={i} className={`flex items-center gap-3 rounded-[10px] bg-muted px-3 py-2 ${row.off ? "opacity-70" : ""}`}>
+              <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full bg-line-strong/70">
+                <Users className="size-3.5 text-ink-3" />
+              </span>
+              <Line w="34%" className="flex-1" />
+              {row.off ? (
+                <span className="shrink-0 rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-semibold text-warn">{t("Нет чата")}</span>
+              ) : (
+                <span aria-hidden className="flex shrink-0 gap-1">
+                  {row.on.map((on, j) => (
+                    <span key={j} className={`size-3.5 rounded-[4px] ${on ? c.dot : "border border-line-strong"}`} />
+                  ))}
+                </span>
+              )}
+            </div>
+          ))}
+          <span className="flex items-center gap-1.5 text-[12px] text-ink-3 max-md:text-[11px]">
+            <Shapes aria-hidden className="size-3.5" />
+            {t("Итоги дня по категориям")}
           </span>
         </Card>
       );
