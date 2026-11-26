@@ -6,6 +6,20 @@ namespace OneBase.Application.Finance;
 /// <summary>Отбор отчёта: организация 1С (null — все организации, сводно) и период (даты по Ташкенту, включительно).</summary>
 public sealed record FinanceFilter(string? OrganizationId, DateOnly From, DateOnly To)
 {
+    /// <summary>Отбор по контрагенту: проводки, где он в Дт или Кт; документы с ним; строки ведомости по нему.</summary>
+    public string? CounterpartyId { get; init; }
+
+    /// <summary>Отбор по номенклатуре: проводки с ней в Дт или Кт; документы, где она есть в строках; строки ведомости.</summary>
+    public string? ItemId { get; init; }
+
+    /// <summary>Отбор по складу: проводки и строки ведомости по складу; документы со складом в шапке или строке.</summary>
+    public string? WarehouseId { get; init; }
+
+    /// <summary>Отбор по подразделению: проводки и документы подразделения (в ведомости подразделения нет — она не отбирается).</summary>
+    public string? DepartmentId { get; init; }
+
+    public bool HasDimensions => CounterpartyId is not null || ItemId is not null || WarehouseId is not null || DepartmentId is not null;
+
     /// <summary>Предыдущий период той же длины — для сравнения.</summary>
     public FinanceFilter Previous()
     {
@@ -32,7 +46,15 @@ public sealed record FinanceFilter(string? OrganizationId, DateOnly From, DateOn
 /// <summary>Происхождение цифр: всегда «факт 1С», с временем синхронизации и последней датой данных.</summary>
 public sealed record FinanceMeta(
     string Source, string Kind, bool Demo, DateTimeOffset? SyncedAt, string? Infobase, string? OrganizationId, string? OrganizationName,
-    DateOnly From, DateOnly To, DateOnly? DataThrough, bool HasData, string? Note);
+    DateOnly From, DateOnly To, DateOnly? DataThrough, bool HasData, string? Note, IReadOnlyList<FinanceDimension>? Dimensions = null);
+
+/// <summary>Применённый отбор отчёта: counterparty, item, warehouse, department — с названием из справочника 1С.</summary>
+public sealed record FinanceDimension(string Kind, string Id, string Name);
+
+/// <summary>Показатель за день, с начала месяца и с начала года — на дату AsOf (конец периода, не позже последних данных).</summary>
+public sealed record FinanceKpi(string Code, string Title, decimal Day, decimal Month, decimal Year);
+
+public sealed record FinanceKpis(DateOnly AsOf, IReadOnlyList<FinanceKpi> Items);
 
 public sealed record FinanceOrganization(string Id, string Name, string? Inn, string Currency);
 
@@ -45,7 +67,7 @@ public sealed record AmountRow(string Key, string Title, decimal Amount, decimal
 public sealed record FinanceOverview(
     FinanceMeta Meta, IReadOnlyList<PnlValue> Pnl, IReadOnlyList<MonthPoint> Months, decimal CashTotal, IReadOnlyList<AmountRow> Cash,
     decimal Receivables, decimal Payables, decimal AdvancesGiven, decimal AdvancesReceived, IReadOnlyList<AmountRow> Inventory,
-    DateOnly? BalancesMonth, IReadOnlyList<AmountRow> ExpenseGrowth);
+    DateOnly? BalancesMonth, IReadOnlyList<AmountRow> ExpenseGrowth, FinanceKpis? Kpis = null);
 
 public sealed record PnlLineView(string Code, string Title, string Kind, IReadOnlyList<decimal> Months, decimal Total, decimal? Previous);
 

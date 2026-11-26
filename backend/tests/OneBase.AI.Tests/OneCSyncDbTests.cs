@@ -59,6 +59,8 @@ public sealed class InProcessOneBaseApi(IServiceProvider services) : IOneBaseInt
 
     public Task<HeartbeatResponse> HeartbeatAsync(WorkerHeartbeat beat, CancellationToken ct) => Call("heartbeat", sp => Sync(sp).HeartbeatAsync(beat, ct));
 
+    public Task<WorkerConnection> ConnectionAsync(CancellationToken ct) => Call("connection", sp => Sync(sp).ConnectionAsync(ct));
+
     public Task CompleteCommandAsync(Guid id, CommandResult result, CancellationToken ct) => Call("complete", async sp => { await Sync(sp).CompleteCommandAsync(id, result, ct); return 0; });
 
     public Task<StartRunResponse> StartRunAsync(StartRunRequest request, CancellationToken ct) => Call("start", sp => Sync(sp).StartRunAsync(request, ct));
@@ -84,8 +86,14 @@ public sealed class InProcessOneBaseApi(IServiceProvider services) : IOneBaseInt
         return result;
     }
 
-    public Task<ImportedTotals> TotalsAsync(string stream, string organizationId, DateOnly from, DateOnly to, CancellationToken ct) =>
-        Call("totals", sp => sp.GetRequiredService<OneCImportService>().TotalsAsync(stream, organizationId, from, to, ct));
+    public Task<ImportedTotals> TotalsAsync(string stream, string organizationId, DateOnly from, DateOnly to, CancellationToken ct, IReadOnlyList<string>? types = null) =>
+        Call("totals", sp => sp.GetRequiredService<OneCImportService>().TotalsAsync(stream, organizationId, from, to, ct, types));
+
+    public Task<List<StoredVersion>> StoredVersionsAsync(string entityType, string? organizationId, DateOnly? from, DateOnly? to, CancellationToken ct) =>
+        Call("versions", sp => sp.GetRequiredService<OneCImportService>().StoredVersionsAsync(entityType, organizationId, from, to, ct));
+
+    public Task<List<StoredMonth>> StoredMonthsAsync(CancellationToken ct) =>
+        Call("versions/months", sp => sp.GetRequiredService<OneCImportService>().StoredMonthsAsync(ct));
 
     public Task<Guid> ReportFailureAsync(FailureReport report, CancellationToken ct) => Call("failure", sp => Sync(sp).ReportFailureAsync(report, ct));
 
@@ -111,12 +119,15 @@ public sealed class OneCSyncDbTests(DataManagerDb fixture) : IClassFixture<DataM
 
     private sealed record Stand(SyncEngine Engine, OneCMockDataProvider Mock, InProcessOneBaseApi Api, TestClock Clock);
 
-    private Stand Create(double volume = 1, int maxAttempts = 3)
+    private Stand Create(double volume = 1, int maxAttempts = 3, string changeTracking = "changes", int reconcileMonthsBack = 2)
     {
         var clock = new TestClock { Now = Now };
-        var mock = new OneCMockDataProvider(new MockOptions { StartDate = Start, Volume = volume }, clock);
+        var mock = new OneCMockDataProvider(new MockOptions { StartDate = Start, Volume = volume, ChangeTracking = changeTracking }, clock);
         var api = new InProcessOneBaseApi(fixture.Services);
-        var options = new IntegrationOptions { MaxAttempts = maxAttempts, WorkerId = "test-worker", BatchSize = 300, BalancesMonthsBack = 6 };
+        var options = new IntegrationOptions
+        {
+            MaxAttempts = maxAttempts, WorkerId = "test-worker", BatchSize = 300, BalancesMonthsBack = 6, ReconcileMonthsBack = reconcileMonthsBack,
+        };
         var retry = new RetryPolicy(options, NullLogger<RetryPolicy>.Instance) { Delay = (_, _) => Task.CompletedTask };
         return new Stand(new SyncEngine(mock, api, new OneCNormalizer(), retry, options, clock, NullLogger<SyncEngine>.Instance), mock, api, clock);
     }
@@ -326,6 +337,249 @@ public sealed class OneCSyncDbTests(DataManagerDb fixture) : IClassFixture<DataM
         var ours = await db.OneCBalances.Where(b => b.SourceOrganizationId == org.Id && b.Period == new DateOnly(2026, 2, 1) && b.Account == "4010" && !b.IsDeleted)
             .SumAsync(b => b.ClosingDebit - b.ClosingCredit);
         Assert.Equal(mockReceivables, ours);
+    }
+
+    [PostgresFact]
+    public async Task Read_only_version_check_finds_new_changed_cancelled_and_deleted_records_without_an_exchange_plan()
+    {
+        // 1С объявляет изменения только чтением (/versions + ids=): плана обмена нет, в 1С ничего не записывается.
+        await ResetAsync();
+        var s = Create(changeTracking: "versions");
+        Ok(await s.Engine.IncrementalAsync("auto", null, default));
+        Assert.Equal(0, s.Mock.Faults.Calls("changes"));
+
+        // Первая сверка загрузила документы текущего и двух прошлых месяцев вместе с проводками — как в 1С.
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = Get<OneBaseDbContext>(scope);
+            foreach (var o in MockCatalog.Organizations)
+            {
+                var docs = s.Mock.DocumentsOf(o.Id, Start, new DateOnly(2026, 3, 20));
+                Assert.Equal(docs.Count, await db.OneCDocuments.CountAsync(d => d.SourceOrganizationId == o.Id && !d.IsDeleted));
+                var expected = docs.Where(d => d.Posted).Sum(d => s.Mock.Set.Document(d.Id!).Entries.Sum(e => e.Amount));
+                Assert.Equal(expected, await db.OneCEntries.Where(e => e.SourceOrganizationId == o.Id && !e.IsDeleted).SumAsync(e => e.Amount));
+            }
+        }
+
+        // Повтор через 30 минут: справочники не менялись — ничего не записано; новые документы дня добавлены, прежние не тронуты и не задвоены.
+        s.Clock.Now = Now.AddMinutes(30);
+        var repeat = await s.Engine.IncrementalAsync("auto", null, default);
+        Ok(repeat);
+        Assert.All(repeat.Steps!.Where(x => x.Stream.StartsWith(OneCStreams.VersionsPrefix + OneCStreams.ReferencePrefix, StringComparison.Ordinal)), x => Assert.Equal(0, x.Rows));
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = Get<OneBaseDbContext>(scope);
+            foreach (var o in MockCatalog.Organizations)
+            {
+                Assert.Equal(s.Mock.DocumentsOf(o.Id, Start, new DateOnly(2026, 3, 20)).Count, await db.OneCDocuments.CountAsync(d => d.SourceOrganizationId == o.Id));
+            }
+
+            Assert.False(await db.OneCChanges.AnyAsync(c => c.Action == "updated" || c.Action == "deleted"));
+        }
+
+        // Правка, отмена проведения и физическое удаление документа февраля, переименование контрагента — находятся по версиям.
+        var org = MockCatalog.Organizations[0];
+        var sales = s.Mock.DocumentsOf(org.Id, new DateOnly(2026, 2, 1), new DateOnly(2026, 2, 28)).Where(d => d.Type == OneCDocumentTypes.Sale).Take(3).ToList();
+        var (edited, cancelled, removed) = (sales[0], sales[1], sales[2]);
+        var customer = edited.CounterpartyId!;
+        s.Clock.Now = Now.AddHours(1);
+        s.Mock.EditDocument(edited.Id!, 1.1m);
+        s.Mock.UnpostDocument(cancelled.Id!);
+        s.Mock.DeleteDocument(removed.Id!);
+        s.Mock.RenameCounterparty(customer, "ООО «Переименованный покупатель»");
+        Ok(await s.Engine.IncrementalAsync("auto", null, default));
+        Assert.Equal(0, s.Mock.Faults.Calls("changes"));
+
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = Get<OneBaseDbContext>(scope);
+            var doc = await db.OneCDocuments.SingleAsync(d => d.SourceEntityId == edited.Id);
+            Assert.Equal(Math.Round(edited.AmountAccounting!.Value * 1.1m, 2), doc.AmountAccounting);
+            Assert.Equal("v2", doc.SourceVersion);
+            Assert.Equal(s.Mock.Set.Document(edited.Id!).Entries.Sum(e => e.Amount),
+                await db.OneCEntries.Where(e => e.RegistrarSourceId == edited.Id && !e.IsDeleted).SumAsync(e => e.Amount));
+            Assert.False((await db.OneCDocuments.SingleAsync(d => d.SourceEntityId == cancelled.Id)).Posted);
+            Assert.True(await db.OneCEntries.Where(e => e.RegistrarSourceId == cancelled.Id).AllAsync(e => e.IsDeleted));
+            var gone = await db.OneCDocuments.SingleAsync(d => d.SourceEntityId == removed.Id);
+            Assert.True(gone.IsDeleted); // удалён в 1С — помечен, история осталась
+            Assert.True(await db.OneCEntries.Where(e => e.RegistrarSourceId == removed.Id).AllAsync(e => e.IsDeleted));
+            Assert.Contains(await db.OneCChanges.Where(c => c.SourceEntityId == removed.Id).Select(c => c.Action).ToListAsync(), a => a == "deleted");
+            Assert.Equal("ООО «Переименованный покупатель»", (await db.OneCCounterparties.SingleAsync(c => c.SourceEntityId == customer)).Name);
+
+            // Остатки февраля пересчитаны: дебиторка = ведомость 1С.
+            var mockReceivables = s.Mock.Set.Balances(0, new DateOnly(2026, 2, 1)).Where(b => b.Account == "4010").Sum(b => b.Closing!.Debit - b.Closing.Credit);
+            var ours = await db.OneCBalances.Where(b => b.SourceOrganizationId == org.Id && b.Period == new DateOnly(2026, 2, 1) && b.Account == "4010" && !b.IsDeleted)
+                .SumAsync(b => b.ClosingDebit - b.ClosingCredit);
+            Assert.Equal(mockReceivables, ours);
+        }
+    }
+
+    [PostgresFact]
+    public async Task Old_months_outside_the_window_are_checked_by_the_nightly_full_version_check()
+    {
+        // Каждые 30 минут сверяется только текущий месяц; январь — раз в сутки ночью (с 2:00 по Ташкенту).
+        await ResetAsync();
+        var s = Create(changeTracking: "versions", reconcileMonthsBack: 2);
+        Ok(await s.Engine.IncrementalAsync("auto", null, default)); // январь–март загружены
+        var narrow = Create(changeTracking: "versions", reconcileMonthsBack: 0);
+        var org = MockCatalog.Organizations[1];
+        narrow.Clock.Now = new DateTimeOffset(2026, 3, 21, 1, 0, 0, TimeSpan.FromHours(5));
+        var january = narrow.Mock.DocumentsOf(org.Id, new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 31)).First(d => d.Type == OneCDocumentTypes.Sale);
+        narrow.Mock.EditDocument(january.Id!, 2m);
+
+        // 01:00 — ночная сверка ещё не наступила: январь не сверяется, правка не видна.
+        Ok(await narrow.Engine.IncrementalAsync("auto", null, default));
+        using (var scope = fixture.Services.CreateScope())
+        {
+            Assert.Equal("v1", (await Get<OneBaseDbContext>(scope).OneCDocuments.SingleAsync(d => d.SourceEntityId == january.Id)).SourceVersion);
+        }
+
+        // 02:30 — первая синхронизация после 2:00: полная сверка находит правку января; повтор в тот же день полную сверку не повторяет.
+        narrow.Clock.Now = narrow.Clock.Now!.Value.AddHours(1.5);
+        var night = await narrow.Engine.IncrementalAsync("auto", null, default);
+        Ok(night);
+        Assert.Contains(night.Steps!, x => x.Stream == $"{OneCStreams.VersionsPrefix}{OneCEntityTypes.Document}:2026-01" && x.OrganizationId == org.Id && x.Rows > 0);
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var doc = await Get<OneBaseDbContext>(scope).OneCDocuments.SingleAsync(d => d.SourceEntityId == january.Id);
+            Assert.Equal("v2", doc.SourceVersion);
+            Assert.Equal(Math.Round(january.AmountAccounting!.Value * 2m, 2), doc.AmountAccounting);
+        }
+
+        narrow.Clock.Now = narrow.Clock.Now!.Value.AddMinutes(30);
+        var later = await narrow.Engine.IncrementalAsync("auto", null, default);
+        Ok(later);
+        Assert.DoesNotContain(later.Steps!, x => x.Stream.EndsWith(":2026-01", StringComparison.Ordinal));
+    }
+
+    [PostgresFact]
+    public async Task Connection_from_the_page_is_encrypted_and_only_the_worker_gets_the_secrets()
+    {
+        await ResetAsync();
+        using var scope = fixture.Services.CreateScope();
+        var store = Get<IOneCSettingsStore>(scope);
+        var db = Get<OneBaseDbContext>(scope);
+
+        // Адрес — только https и без логина в адресе; сертификат — без закрытого ключа.
+        Assert.Throws<ArgumentException>(() => OneBase.Infrastructure.OneC.OneCSettingsStore.Validate(new OneCSettingsChange(BaseUrl: "http://192.168.9.141/buh/hs/onebase/v1")));
+        Assert.Throws<ArgumentException>(() => OneBase.Infrastructure.OneC.OneCSettingsStore.Validate(new OneCSettingsChange(BaseUrl: "https://u:p@192.168.9.141/buh")));
+        Assert.Throws<ArgumentException>(() => OneBase.Infrastructure.OneC.OneCSettingsStore.Validate(new OneCSettingsChange(CaCertificatePem: "-----BEGIN PRIVATE KEY-----\nAAA\n-----END PRIVATE KEY-----")));
+        Assert.Throws<ArgumentException>(() => OneBase.Infrastructure.OneC.OneCSettingsStore.Validate(new OneCSettingsChange(CaCertificatePem: "не сертификат")));
+
+        var saved = await store.SaveAsync(new OneCSettingsChange(BaseUrl: "https://192.168.9.141/buh/hs/onebase/v1/", Username: "OneBase_ReadOnly",
+            Password: "Пароль-1С-секрет", ApiSecret: "api-secret-0123456789", OrganizationIds: ["org-b", "org-a", "org-a"], Modules: ["sales", "accounting", "нет такого"],
+            HistoryFrom: new DateOnly(2025, 1, 1)), fixture.AdminId);
+        Assert.Equal(("https://192.168.9.141/buh/hs/onebase/v1", "OneBase_ReadOnly", true, true, "••89"),
+            (saved.BaseUrl, saved.Username, saved.HasPassword, saved.HasApiSecret, saved.ApiSecretHint));
+        Assert.Equal(["org-b", "org-a"], saved.OrganizationIds);
+        Assert.Equal([OneCModules.Sales, OneCModules.Accounting], saved.Modules);
+        Assert.Equal(new DateOnly(2025, 1, 1), saved.HistoryFrom);
+        Assert.NotNull(saved.ConnectionVersion);
+
+        // В базе — ни пароля, ни секрета открытым текстом.
+        var json = await db.Integrations.AsNoTracking().Where(i => i.Code == OneCSettings.Code).Select(i => i.SettingsJson).SingleAsync();
+        Assert.DoesNotContain("Пароль-1С-секрет", json);
+        Assert.DoesNotContain("api-secret-0123456789", json);
+
+        // Служба получает подключение с секретами и версией из пульса; модули и организации — в настройках службы.
+        var sync = Get<OneCSyncService>(scope);
+        var beat = await sync.HeartbeatAsync(new WorkerHeartbeat { WorkerId = "w1", Provider = "http", StartedAt = DateTimeOffset.UtcNow }, default);
+        Assert.Equal(saved.ConnectionVersion, beat.Settings.ConnectionVersion);
+        Assert.Equal([OneCModules.Sales, OneCModules.Accounting], beat.Settings.Modules);
+        var connection = await sync.ConnectionAsync(default);
+        Assert.Equal(("Пароль-1С-секрет", "api-secret-0123456789", saved.ConnectionVersion), (connection.Password, connection.ApiSecret, connection.Version));
+
+        // Пароль null — прежний остаётся; другой пользователь — новая версия подключения; все модули — снова «все».
+        var renamed = await store.SaveAsync(new OneCSettingsChange(Username: "OneBase_RO2", Modules: OneCModules.All), fixture.AdminId);
+        Assert.True(renamed.HasPassword);
+        Assert.NotEqual(saved.ConnectionVersion, renamed.ConnectionVersion);
+        Assert.Empty((await sync.HeartbeatAsync(new WorkerHeartbeat { WorkerId = "w1", Provider = "http", StartedAt = DateTimeOffset.UtcNow }, default)).Settings.Modules);
+
+        // Адрес убран — подключение со страницы снято целиком (служба возьмёт свои переменные).
+        var cleared = await store.SaveAsync(new OneCSettingsChange(BaseUrl: ""), fixture.AdminId);
+        Assert.Equal((null, null, false, false, null), (cleared.BaseUrl, cleared.Username, cleared.HasPassword, cleared.HasApiSecret, cleared.ConnectionVersion));
+        Assert.Null((await sync.ConnectionAsync(default)).Password);
+        await store.SaveAsync(new OneCSettingsChange(OrganizationIds: [], ClearHistoryFrom: true), fixture.AdminId);
+    }
+
+    [PostgresFact]
+    public async Task Modules_and_organizations_chosen_on_the_page_limit_what_is_loaded()
+    {
+        await ResetAsync();
+        var org = MockCatalog.Organizations[0];
+        using (var scope = fixture.Services.CreateScope())
+        {
+            await Get<IOneCSettingsStore>(scope).SaveAsync(new OneCSettingsChange(OrganizationIds: [org.Id], Modules: [OneCModules.Sales]), fixture.AdminId);
+        }
+
+        try
+        {
+            var s = Create(changeTracking: "versions");
+            Ok(await s.Engine.IncrementalAsync("auto", null, default));
+            using (var scope = fixture.Services.CreateScope())
+            {
+                var db = Get<OneBaseDbContext>(scope);
+                var docs = await db.OneCDocuments.Select(d => new { d.SourceOrganizationId, d.Type }).ToListAsync();
+                Assert.NotEmpty(docs);
+                Assert.All(docs, d => Assert.Equal(org.Id, d.SourceOrganizationId)); // только выбранная организация
+                Assert.All(docs, d => Assert.Contains(d.Type, OneCModules.TypesOf(OneCModules.Sales))); // только продажи
+                Assert.Equal(0, await db.OneCEntries.CountAsync()); // «Бухгалтерия» выключена — без проводок
+                Assert.Equal(0, await db.OneCBalances.CountAsync()); // и без ведомости
+            }
+
+            // Включили «Деньги» и «Бухгалтерию» и синхронизировали только «Деньги»: касса и банк — с проводками, ведомость пересчитана.
+            using (var scope = fixture.Services.CreateScope())
+            {
+                await Get<IOneCSettingsStore>(scope).SaveAsync(new OneCSettingsChange(Modules: [OneCModules.Sales, OneCModules.Money, OneCModules.Accounting]), fixture.AdminId);
+            }
+
+            s.Clock.Now = Now.AddMinutes(30);
+            Ok(await s.Engine.IncrementalAsync("manual", null, default, [OneCModules.Money]));
+            using (var scope = fixture.Services.CreateScope())
+            {
+                var db = Get<OneBaseDbContext>(scope);
+                var types = await db.OneCDocuments.Select(d => d.Type).Distinct().ToListAsync();
+                Assert.Contains(types, OneCModules.TypesOf(OneCModules.Money).Contains);
+                Assert.DoesNotContain(types, OneCModules.TypesOf(OneCModules.Production).Contains); // производство выключено
+                Assert.True(await db.OneCBalances.AnyAsync()); // «Бухгалтерия» включена — ведомость за месяцы с изменениями
+                var moneyDocs = await db.OneCDocuments.Where(d => OneCModules.TypesOf(OneCModules.Money).Contains(d.Type)).Select(d => d.SourceEntityId).ToListAsync();
+                Assert.True(await db.OneCEntries.AnyAsync(e => moneyDocs.Contains(e.RegistrarSourceId))); // «Бухгалтерия» включена — с проводками
+            }
+        }
+        finally
+        {
+            using var scope = fixture.Services.CreateScope();
+            await Get<IOneCSettingsStore>(scope).SaveAsync(new OneCSettingsChange(OrganizationIds: [], Modules: OneCModules.All), fixture.AdminId);
+        }
+    }
+
+    [PostgresFact]
+    public async Task Balance_rows_with_hidden_people_and_the_same_key_are_summed_not_overwritten()
+    {
+        // Субконто сотрудников 1С скрывает (без id): несколько строк ведомости с одним ключом в пакете складываются.
+        await ResetAsync();
+        var s = Create();
+        Ok(await s.Engine.IncrementalAsync("auto", null, default));
+        using var scope = fixture.Services.CreateScope();
+        var org = MockCatalog.Organizations[0].Id;
+        var start = await Get<OneCSyncService>(scope).StartRunAsync(new StartRunRequest
+        {
+            Kind = RunKinds.Incremental, Trigger = "manual", Provider = "mock", WorkerId = "test-worker", InfobaseId = MockCatalog.InfobaseId,
+            InfobaseName = MockCatalog.InfobaseName,
+        }, default);
+        ImportBalance Row(decimal closing, decimal turnover) => new()
+        {
+            OrganizationId = org, Period = new DateOnly(2026, 3, 1), Account = "6799", Subconto = [new ImportSubconto { Index = 1, Type = "Сотрудники" }],
+            Turnover = new ImportBalanceAmounts { Credit = turnover }, Closing = new ImportBalanceAmounts { Credit = closing },
+        };
+        await Get<OneCImportService>(scope).ImportAsync(new ImportBatchRequest
+        {
+            RunId = start.RunId!.Value, BatchKey = "hidden-people-1", Stream = OneCStreams.Balances, OrganizationId = org, Balances = [Row(100, 40), Row(250, 60)],
+        }, false, default);
+        var stored = await Get<OneBaseDbContext>(scope).OneCBalances.Where(b => b.SourceOrganizationId == org && b.Account == "6799").ToListAsync();
+        var row = Assert.Single(stored);
+        Assert.Equal((350m, 100m), (row.ClosingCredit, row.TurnoverCredit));
+        await Get<OneCSyncService>(scope).FinishRunAsync(start.RunId.Value, new FinishRunRequest { Status = RunStatuses.Succeeded, Message = "тест" }, default);
     }
 
     [PostgresFact]
@@ -598,6 +852,51 @@ public sealed class OneCSyncDbTests(DataManagerDb fixture) : IClassFixture<DataM
         var doc = await reports.DocumentAsync(page.Items.First(i => i.DocumentId is not null).DocumentId!.Value, default);
         Assert.NotNull(doc);
         Assert.NotEmpty(doc.Entries);
+    }
+
+    [PostgresFact]
+    public async Task Finance_filters_and_day_month_year_figures_agree_with_1C()
+    {
+        var (s, _) = await LoadHistoryAsync();
+        var org = MockCatalog.Organizations[0];
+        var february = new FinanceFilter(org.Id, new DateOnly(2026, 2, 1), new DateOnly(2026, 2, 28));
+        var posted = s.Mock.Set.Documents.Where(d => d.Org == 0 && s.Mock.Set.Visible(d) && d.Doc.Posted).ToList();
+        List<OneCEntryDto> EntriesOf(DateOnly from, DateOnly to) => posted.SelectMany(d => d.Entries)
+            .Where(e => MockDataSet.DayOf(e.Period!.Value) is var day && day >= from && day <= to).ToList();
+        decimal Net(List<OneCEntryDto> list) => FinanceChart.Pnl(list.Select(e => new FinanceChart.Turnover(e.Debit!.Account!, e.Credit!.Account!, february.From, e.Amount)))["net_revenue"];
+        using var scope = fixture.Services.CreateScope();
+        var reports = Get<FinanceReportService>(scope);
+
+        // Показатели на конец февраля: день, с 1 февраля, с 1 января — как P&L по проводкам 1С.
+        var overview = await reports.OverviewAsync(february, default);
+        var kpis = overview.Kpis!;
+        Assert.Equal(new DateOnly(2026, 2, 28), kpis.AsOf);
+        var sales = kpis.Items.Single(k => k.Code == "sales");
+        Assert.Equal(Net(EntriesOf(kpis.AsOf, kpis.AsOf)), sales.Day);
+        Assert.Equal(Net(EntriesOf(new DateOnly(2026, 2, 1), kpis.AsOf)), sales.Month);
+        Assert.Equal(Net(EntriesOf(new DateOnly(2026, 1, 1), kpis.AsOf)), sales.Year);
+        Assert.True(sales.Year > sales.Month && sales.Month > 0);
+        var purchases = posted.Where(d => d.Doc.Type is OneCDocumentTypes.Purchase or OneCDocumentTypes.PurchaseReturn && MockDataSet.DayOf(d.Doc.Date!.Value) is var day
+            && day >= new DateOnly(2026, 2, 1) && day <= kpis.AsOf).Sum(d => d.Doc.Type == OneCDocumentTypes.Purchase ? d.Doc.AmountAccounting!.Value : -d.Doc.AmountAccounting!.Value);
+        Assert.Equal(purchases, kpis.Items.Single(k => k.Code == "purchases").Month);
+
+        // Отбор по покупателю: выручка — только его проводки; дебиторка — его строки ведомости; подпись отбора — с названием.
+        var customer = s.Mock.Set.Balances(0, february.From).Where(b => b.Account == "4010").GroupBy(b => b.Subconto[0].Id!)
+            .Select(g => (Id: g.Key, Balance: g.Sum(b => b.Closing!.Debit - b.Closing.Credit))).Where(x => x.Balance > 0).OrderByDescending(x => x.Balance).First();
+        var byCustomer = february with { CounterpartyId = customer.Id };
+        var filtered = await reports.OverviewAsync(byCustomer, default);
+        Assert.Equal(customer.Balance, filtered.Receivables);
+        Assert.Single(filtered.Meta.Dimensions!, d => d.Kind == "counterparty" && d.Id == customer.Id && d.Name != customer.Id);
+        var own = EntriesOf(february.From, february.To).Where(e => e.Debit!.Subconto!.Any(x => x.Id == customer.Id) || e.Credit!.Subconto!.Any(x => x.Id == customer.Id)).ToList();
+        Assert.Equal(Net(own), filtered.Pnl.Single(p => p.Code == "net_revenue").Value);
+        Assert.True(filtered.Pnl.Single(p => p.Code == "net_revenue").Value < overview.Pnl.Single(p => p.Code == "net_revenue").Value);
+
+        // Отбор по складу и подсказки значений для отборов.
+        var warehouse = (await reports.DimensionOptionsAsync(OneCEntityTypes.Warehouse, null, 5, default)).First();
+        var byWarehouse = await reports.OperationsAsync(february with { WarehouseId = warehouse.Id }, default);
+        Assert.Equal(warehouse.Name, byWarehouse.Meta.Dimensions!.Single().Name);
+        Assert.NotEmpty(await reports.DimensionOptionsAsync("counterparty", null, 3, default));
+        Assert.Empty(await reports.DimensionOptionsAsync("unknown", null, 3, default));
     }
 
     [PostgresFact]

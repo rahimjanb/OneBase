@@ -119,13 +119,20 @@ public sealed class OneCImportService(IAppDbContext db, TimeProvider clock)
     }
 
     /// <summary>Сколько записей потока организации за период лежит в OneBase — для сверки с итогами 1С.</summary>
-    public async Task<ImportedTotals> TotalsAsync(string stream, string organizationId, DateOnly from, DateOnly to, CancellationToken ct)
+    /// <summary>Сколько записей потока лежит в OneBase; types — только эти типы документов (включённые модули).</summary>
+    public async Task<ImportedTotals> TotalsAsync(string stream, string organizationId, DateOnly from, DateOnly to, CancellationToken ct,
+        IReadOnlyList<string>? types = null)
     {
         switch (stream)
         {
             case OneCStreams.HistoryDocuments:
             {
                 var q = db.OneCDocuments.AsNoTracking().Where(d => d.SourceOrganizationId == organizationId && !d.IsDeleted && d.DocumentDate >= from && d.DocumentDate <= to);
+                if (types is { Count: > 0 })
+                {
+                    q = q.Where(d => types.Contains(d.Type));
+                }
+
                 return new ImportedTotals(await q.CountAsync(ct), await q.SumAsync(d => (decimal?)d.AmountAccounting, ct) ?? 0);
             }
             case OneCStreams.HistoryEntries:
@@ -147,6 +154,48 @@ public sealed class OneCImportService(IAppDbContext db, TimeProvider clock)
             default:
                 throw new OneCImportException($"Неизвестный поток: {stream}.");
         }
+    }
+
+    /// <summary>
+    /// Записи 1С типа entityType, лежащие в OneBase (и помеченные удалёнными): идентификатор, версия 1С, пометка — для сверки с /versions 1С.
+    /// Документы — организации за период по дате документа; справочники — целиком (у прочих справочников «reference:&lt;вид&gt;»).
+    /// </summary>
+    public async Task<List<StoredVersion>> StoredVersionsAsync(string entityType, string? organizationId, DateOnly? from, DateOnly? to, CancellationToken ct)
+    {
+        static IQueryable<StoredVersion> Of<T>(IQueryable<T> q, string type) where T : OneCRecord =>
+            q.Where(x => x.SourceSystem == Source && x.SourceEntityType == type)
+                .Select(x => new StoredVersion(x.SourceEntityId, x.SourceVersion, x.IsDeleted, x.SourceOrganizationId));
+
+        var query = entityType switch
+        {
+            OneCEntityTypes.Organization => Of(db.OneCOrganizations.AsNoTracking(), entityType),
+            OneCEntityTypes.Account => Of(db.OneCAccounts.AsNoTracking(), entityType),
+            OneCEntityTypes.Counterparty => Of(db.OneCCounterparties.AsNoTracking(), entityType),
+            OneCEntityTypes.Contract => Of(db.OneCContracts.AsNoTracking(), entityType),
+            OneCEntityTypes.Currency => Of(db.OneCCurrencies.AsNoTracking(), entityType),
+            OneCEntityTypes.Item => Of(db.OneCItems.AsNoTracking(), entityType),
+            OneCEntityTypes.Warehouse or OneCEntityTypes.Department => Of(db.OneCReferences.AsNoTracking(), entityType),
+            _ when entityType.StartsWith(OneCEntityTypes.ReferencePrefix, StringComparison.Ordinal) => Of(db.OneCReferences.AsNoTracking(), entityType),
+            OneCEntityTypes.Document when !string.IsNullOrEmpty(organizationId) && from is { } f && to is { } t =>
+                db.OneCDocuments.AsNoTracking()
+                    .Where(d => d.SourceSystem == Source && d.SourceOrganizationId == organizationId && d.DocumentDate >= f && d.DocumentDate <= t)
+                    .Select(d => new StoredVersion(d.SourceEntityId, d.SourceVersion, d.IsDeleted, d.SourceOrganizationId, d.Type)),
+            OneCEntityTypes.Document => throw new OneCImportException("Версии документов — по организации и периоду (organizationId, from, to)."),
+            _ => throw new OneCImportException($"Неизвестный тип записи: {entityType}."),
+        };
+        return await query.ToListAsync(ct);
+    }
+
+    /// <summary>Месяцы, за которые в OneBase есть документы организаций (кроме помеченных удалёнными), — для ночной сверки версий.</summary>
+    public async Task<List<StoredMonth>> StoredMonthsAsync(CancellationToken ct)
+    {
+        var rows = await db.OneCDocuments.AsNoTracking()
+            .Where(d => d.SourceSystem == Source && !d.IsDeleted)
+            .GroupBy(d => new { d.SourceOrganizationId, d.DocumentDate.Year, d.DocumentDate.Month })
+            .Select(g => new { g.Key.SourceOrganizationId, g.Key.Year, g.Key.Month, Count = g.Count() })
+            .ToListAsync(ct);
+        return rows.Select(r => new StoredMonth(r.SourceOrganizationId, new DateOnly(r.Year, r.Month, 1), r.Count))
+            .OrderBy(r => r.OrganizationId, StringComparer.Ordinal).ThenBy(r => r.Month).ToList();
     }
 
     private static void Check(ImportBatchRequest request)
@@ -497,6 +546,14 @@ public sealed class OneCImportService(IAppDbContext db, TimeProvider clock)
     /// Строки оборотно-сальдовой ведомости за месяц. Снимок может идти несколькими пакетами: каждая строка получает идентификатор снимка,
     /// а последний пакет (Final) помечает удалёнными строки месяца, которых в новом снимке нет.
     /// </summary>
+    private static decimal? Sum(decimal? a, decimal? b) => a is null && b is null ? null : (a ?? 0) + (b ?? 0);
+
+    private static ImportBalanceAmounts Sum(ImportBalanceAmounts a, ImportBalanceAmounts b) => new()
+    {
+        Debit = a.Debit + b.Debit, Credit = a.Credit + b.Credit, CurrencyDebit = Sum(a.CurrencyDebit, b.CurrencyDebit),
+        CurrencyCredit = Sum(a.CurrencyCredit, b.CurrencyCredit), QuantityDebit = Sum(a.QuantityDebit, b.QuantityDebit), QuantityCredit = Sum(a.QuantityCredit, b.QuantityCredit),
+    };
+
     private async Task BalancesAsync(Counters c, List<ImportBalance>? records, BalanceSnapshot? snapshot, CancellationToken ct)
     {
         var rows = new List<(ImportBalance Record, string Key)>();
@@ -513,6 +570,14 @@ public sealed class OneCImportService(IAppDbContext db, TimeProvider clock)
 
             rows.Add((r, key));
         }
+
+        // Строки с одинаковым ключом в пакете (например, субконто сотрудников скрыто и без id) складываются, а не перезаписывают друг друга.
+        rows = rows.GroupBy(r => (r.Record.OrganizationId, r.Key))
+            .Select(g => g.Count() == 1 ? g.First() : (g.Skip(1).Aggregate(g.First().Record, (acc, x) => acc with
+            {
+                Opening = Sum(acc.Opening, x.Record.Opening), Turnover = Sum(acc.Turnover, x.Record.Turnover), Closing = Sum(acc.Closing, x.Record.Closing),
+            }), g.Key.Key))
+            .ToList();
 
         var snapshotId = snapshot?.SnapshotId ?? Guid.Empty;
         if (rows.Count > 0)

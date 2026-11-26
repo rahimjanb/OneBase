@@ -21,6 +21,7 @@ public sealed class HttpProviderTests : IAsyncLifetime
     private WebApplication _app = null!;
     private string _url = null!;
     private readonly ConcurrentQueue<(string Path, string Query, string? Auth)> _requests = new();
+    private readonly ConcurrentQueue<string?> _secrets = new();
     public Func<HttpContext, Task>? Handler { get; set; }
 
     public async Task InitializeAsync()
@@ -31,6 +32,7 @@ public sealed class HttpProviderTests : IAsyncLifetime
         _app.Run(async ctx =>
         {
             _requests.Enqueue((ctx.Request.Path.Value!, ctx.Request.QueryString.Value ?? "", ctx.Request.Headers.Authorization.ToString()));
+            _secrets.Enqueue(ctx.Request.Headers[OneCHttpDataProvider.SecretHeader].ToString());
             if (Handler is not null)
             {
                 await Handler(ctx);
@@ -95,6 +97,53 @@ public sealed class HttpProviderTests : IAsyncLifetime
         Assert.Equal(("1.1", "ib-1"), (ping.ApiVersion, ping.InfobaseId));
         Assert.True(_requests.TryDequeue(out var r));
         Assert.Equal(("/buh/hs/onebase/v1/status", "Bearer t0k3n"), (r.Path, r.Auth));
+    }
+
+    [Fact]
+    public async Task Versions_and_ids_are_read_only_requests_with_the_api_secret()
+    {
+        // v1.1: изменения только чтением — /versions и выборка по ids=; Basic пользователя 1С и API Secret вместе.
+        Handler = ctx => ctx.Request.Path.Value!.EndsWith("/ping", StringComparison.Ordinal)
+            ? Json(ctx, """{"apiVersion":"1.1","infobaseId":"ib-1","changeTracking":"versions","capabilities":["versions","ids"]}""")
+            : ctx.Request.Path.Value!.EndsWith("/versions", StringComparison.Ordinal)
+                ? Json(ctx, """{"apiVersion":"1.1","items":[{"id":"d1","version":"AAAABw==","deletionMark":false,"posted":true,"date":"2026-11-15T14:30:00+05:00","type":"sale"}],"page":{"limit":1000,"nextCursor":"n2","hasMore":true}}""")
+                : Json(ctx, """{"apiVersion":"1.1","items":[{"id":"d1","version":"AAAABw==","type":"sale","number":"1","organizationId":"o1","posted":true,"currency":"UZS","amount":5,"amountAccounting":5,"entries":[]}]}""");
+        using var provider = Provider(o => o.ApiSecret = "s3cr3t");
+
+        Assert.True((await provider.TestConnectionAsync(default)).TracksByVersions);
+        var versions = await provider.GetVersionsAsync(new OneCVersionQuery("document", "o1", new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30)), new(1000), default);
+        Assert.Equal(("d1", "AAAABw==", (bool?)true, "n2"), (versions.Items[0].Id, versions.Items[0].Version, versions.Items[0].Posted, versions.Page!.NextCursor));
+        await provider.GetVersionsAsync(new OneCVersionQuery("reference:cash_flow_items"), new(1000), default);
+        var docs = await provider.GetByIdsAsync("document", ["d1", "d2"], default);
+        Assert.Equal("d1", docs.Single().GetProperty("id").GetString());
+        await provider.GetByIdsAsync("reference:cost_items", ["r1"], default);
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GetByIdsAsync("document", Enumerable.Range(0, 101).Select(i => $"d{i}").ToList(), default));
+
+        var requests = _requests.ToList();
+        Assert.Equal("/buh/hs/onebase/v1/versions", requests[1].Path);
+        foreach (var part in new[] { "entityType=document", "organizationId=o1", "from=2026-11-01", "to=2026-11-30", "limit=1000" })
+        {
+            Assert.Contains(part, requests[1].Query);
+        }
+
+        Assert.Contains("entityType=reference", requests[2].Query);
+        Assert.Contains("kind=cash_flow_items", requests[2].Query);
+        Assert.Equal("/buh/hs/onebase/v1/documents", requests[3].Path);
+        Assert.Contains("ids=d1%2Cd2", requests[3].Query);
+        Assert.Contains("withEntries=true", requests[3].Query);
+        Assert.Equal("/buh/hs/onebase/v1/references", requests[4].Path);
+        Assert.Contains("kind=cost_items", requests[4].Query);
+        Assert.All(requests, r => Assert.StartsWith("Basic ", r.Auth));
+        Assert.All(_secrets, x => Assert.Equal("s3cr3t", x));
+    }
+
+    [Fact]
+    public void Ping_without_versions_keeps_the_exchange_plan()
+    {
+        Assert.False(new OneCPing { ApiVersion = "1.0" }.TracksByVersions);
+        Assert.False(new OneCPing { ChangeTracking = "changes", Capabilities = ["versions", "changes"] }.TracksByVersions);
+        Assert.True(new OneCPing { Capabilities = ["versions", "ids"] }.TracksByVersions);
+        Assert.True(new OneCPing { ChangeTracking = "VERSIONS" }.TracksByVersions);
     }
 
     [Theory]

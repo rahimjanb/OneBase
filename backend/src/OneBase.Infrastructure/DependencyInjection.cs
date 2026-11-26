@@ -364,6 +364,24 @@ public static class DependencyInjection
             services.AddHostedService<Sales.SalesProductPhotoSeedWorker>();
         }
         // 1С:Бухгалтерия → OneBase: данные пишет только внутренний API по пакетам от службы интеграции (отдельный контейнер), сам API в 1С не ходит.
+        // 1С Таджикистан → OneBase: продажи и остаток дилера (GET API дилера раз в 30 минут; адрес и ключ — на странице интеграции, ключ зашифрован).
+        // Ключ идёт в адресе запроса — журнал запросов у этого HttpClient выключен (RemoveAllLoggers), иначе адрес с ключом попал бы в логи.
+        var tajik = config.GetSection(Tajik.TajikSalesOptions.Section).Get<Tajik.TajikSalesOptions>() ?? new Tajik.TajikSalesOptions();
+        services.AddSingleton(tajik);
+        services.AddSingleton<OneBase.Application.Sales.Tajik.ITajikSettingsStore, Tajik.TajikSettingsStore>();
+        services.AddSingleton<OneBase.Application.Sales.Tajik.TajikDataVersion>();
+        services.AddSingleton<OneBase.Application.Sales.Tajik.TajikCatalogCache>();
+        services.AddScoped<OneBase.Application.Sales.Tajik.TajikDataLoader>();
+        services.AddScoped<OneBase.Application.Sales.Tajik.TajikSalesService>();
+        services.AddScoped<OneBase.Application.Sales.Tajik.TajikSetupService>();
+        services.AddHttpClient<Tajik.TajikApiClient>(http => http.Timeout = TimeSpan.FromSeconds(Math.Clamp(tajik.TimeoutSeconds, 10, 600))).RemoveAllLoggers();
+        services.AddScoped<Tajik.TajikSyncService>();
+        services.AddSingleton<Tajik.TajikSyncCoordinator>();
+        if (tajik.WorkerEnabled && isolation.AllowOutbound<Tajik.TajikSyncWorker>("1С Таджикистан: продажи и остаток дилера"))
+        {
+            services.AddHostedService<Tajik.TajikSyncWorker>();
+        }
+
         services.AddSingleton<OneBase.Application.Finance.IOneCSettingsStore, OneC.OneCSettingsStore>();
         services.AddScoped<OneBase.Application.Finance.OneCImportService>();
         services.AddScoped<OneBase.Application.Finance.OneCSyncService>();

@@ -1,8 +1,9 @@
 namespace OneBase.Application.Finance;
 
 /// <summary>
-/// Настройки интеграции 1С в OneBase (строка «onec» в Integrations, отдел «Финансы»). Учётные данные 1С здесь не хранятся — они только
-/// у службы интеграции (переменные окружения). Ключ службы — только SHA-256 хэш и последние символы для подсказки.
+/// Настройки интеграции 1С в OneBase (строка «onec» в Integrations, отдел «Финансы»). Подключение к 1С можно задать здесь (адрес, пользователь,
+/// сертификат; пароль и API Secret — зашифрованы, наружу только признак и подсказка) или переменными OneC__* службы — тогда они главнее.
+/// Ключ службы — только SHA-256 хэш и последние символы для подсказки.
 /// </summary>
 public sealed record OneCSettings
 {
@@ -42,13 +43,61 @@ public sealed record OneCSettings
     public DateTimeOffset? TokenCreatedAt { get; init; }
     public DateTimeOffset? UpdatedAt { get; init; }
 
+    /// <summary>Адрес HTTP API 1С (https://…/hs/onebase/v1); null — подключение задаётся переменными службы.</summary>
+    public string? BaseUrl { get; init; }
+
+    /// <summary>Пользователь 1С (только чтение).</summary>
+    public string? Username { get; init; }
+
+    public bool HasPassword { get; init; }
+    public bool HasApiSecret { get; init; }
+
+    /// <summary>Последние 2 символа API Secret — чтобы узнать, какой задан (сам секрет не показывается).</summary>
+    public string? ApiSecretHint { get; init; }
+
+    /// <summary>Сертификат публикации 1С или внутреннего ЦС (PEM, открытая часть).</summary>
+    public string? CaCertificatePem { get; init; }
+
+    public DateTimeOffset? ConnectionUpdatedAt { get; init; }
+
+    /// <summary>Меняется при каждом изменении подключения — служба перечитывает его (без секретов: хэш от времени изменения).</summary>
+    public string? ConnectionVersion { get; init; }
+
+    /// <summary>Организации 1С для загрузки; пусто — все.</summary>
+    public IReadOnlyList<string> OrganizationIds { get; init; } = [];
+
+    /// <summary>Включённые модули (OneCModules); по умолчанию — все.</summary>
+    public IReadOnlyList<string> Modules { get; init; } = [];
+
+    /// <summary>С какой даты загружать историю (подставляется в окно исторической загрузки); null — не задано.</summary>
+    public DateOnly? HistoryFrom { get; init; }
+
     public static int ClampInterval(int value) => Math.Clamp(value, MinInterval, MaxInterval);
 
     public static int ClampBatch(int value) => Math.Clamp(value, MinBatch, MaxBatch);
 }
 
-/// <summary>Изменение настроек: null — не менять.</summary>
-public sealed record OneCSettingsChange(bool? Paused = null, int? IntervalMinutes = null, int? BatchSize = null, bool? AiEnabled = null);
+/// <summary>
+/// Изменение настроек: null — не менять. Пароль и API Secret: null — оставить прежний, "" — убрать. Адрес "" — убрать подключение из
+/// OneBase (вместе с паролем и секретом). HistoryFrom — ClearHistoryFrom=true убирает дату.
+/// </summary>
+public sealed record OneCSettingsChange(
+    bool? Paused = null,
+    int? IntervalMinutes = null,
+    int? BatchSize = null,
+    bool? AiEnabled = null,
+    string? BaseUrl = null,
+    string? Username = null,
+    string? Password = null,
+    string? ApiSecret = null,
+    string? CaCertificatePem = null,
+    IReadOnlyList<string>? OrganizationIds = null,
+    IReadOnlyList<string>? Modules = null,
+    DateOnly? HistoryFrom = null,
+    bool ClearHistoryFrom = false);
+
+/// <summary>Подключение к 1С со страницы «1С» с секретами — только для службы интеграции (внутренний API по её ключу).</summary>
+public sealed record OneCConnectionSecrets(string? BaseUrl, string? Username, string? Password, string? ApiSecret, string? CaCertificatePem, string? Version);
 
 public interface IOneCSettingsStore
 {
@@ -61,6 +110,9 @@ public interface IOneCSettingsStore
 
     /// <summary>Сверка ключа службы (сравнение хэшей за постоянное время).</summary>
     Task<bool> VerifyTokenAsync(string? token, CancellationToken ct = default);
+
+    /// <summary>Подключение к 1С со страницы «1С» с расшифрованными секретами — только для службы интеграции.</summary>
+    Task<OneCConnectionSecrets> ConnectionAsync(CancellationToken ct = default);
 
     /// <summary>Принять базу 1С (первое подключение или после очистки данных прежней базы).</summary>
     Task AcceptInfobaseAsync(string? infobaseId, string? infobaseName, bool demo, CancellationToken ct = default);

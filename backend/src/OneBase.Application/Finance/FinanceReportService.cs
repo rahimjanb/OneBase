@@ -30,18 +30,85 @@ public sealed class FinanceReportService(IAppDbContext db, IOneCSettingsStore se
         var org = f.OrganizationId is null ? null : await db.OneCOrganizations.AsNoTracking()
             .Where(o => o.SourceEntityId == f.OrganizationId).Select(o => o.Name).FirstOrDefaultAsync(ct);
         var hasData = await db.OneCEntries.AnyAsync(ct) || await db.OneCDocuments.AnyAsync(ct);
+        var dimensions = await DimensionsAsync(f, ct);
+        var dimensionNote = f.ItemId is not null ? "Отбор по номенклатуре: проводки — по ней; документы — содержащие её (сумма документа целиком)."
+            : f.DepartmentId is not null ? "Отбор по подразделению: в оборотно-сальдовой ведомости подразделения нет — остатки показаны без него."
+            : null;
         return new FinanceMeta(s.DemoData ? SourceTitle + " — тестовый источник (демо-данные)" : SourceTitle, "fact", s.DemoData, synced,
             s.AcceptedInfobaseName, f.OrganizationId, org, f.From, f.To, through, hasData,
-            note ?? (hasData ? null : "Данных 1С в OneBase пока нет: подключение и загрузка — в «Настройки → Интеграции → Финансы → 1С»."));
+            note ?? (hasData ? dimensionNote : "Данных 1С в OneBase пока нет: подключение и загрузка — в «Настройки → Интеграции → Финансы → 1С»."),
+            dimensions);
+    }
+
+    /// <summary>Названия применённых отборов (контрагент, номенклатура, склад, подразделение) — для подписи отчёта.</summary>
+    private async Task<List<FinanceDimension>> DimensionsAsync(FinanceFilter f, CancellationToken ct)
+    {
+        var list = new List<FinanceDimension>();
+        if (f.CounterpartyId is { } c)
+        {
+            list.Add(new FinanceDimension("counterparty", c, await db.OneCCounterparties.AsNoTracking().Where(x => x.SourceEntityId == c).Select(x => x.Name).FirstOrDefaultAsync(ct) ?? c));
+        }
+
+        if (f.ItemId is { } i)
+        {
+            list.Add(new FinanceDimension("item", i, await db.OneCItems.AsNoTracking().Where(x => x.SourceEntityId == i).Select(x => x.Name).FirstOrDefaultAsync(ct) ?? i));
+        }
+
+        foreach (var (kind, id) in new[] { (OneCEntityTypes.Warehouse, f.WarehouseId), (OneCEntityTypes.Department, f.DepartmentId) })
+        {
+            if (id is not null)
+            {
+                list.Add(new FinanceDimension(kind, id, await db.OneCReferences.AsNoTracking().Where(x => x.SourceEntityType == kind && x.SourceEntityId == id)
+                    .Select(x => x.Name).FirstOrDefaultAsync(ct) ?? id));
+            }
+        }
+
+        return list;
+    }
+
+    /// <summary>Значения для отборов: контрагенты, номенклатура, склады, подразделения 1С по началу названия, кода или ИНН (до limit).</summary>
+    public async Task<IReadOnlyList<FinanceDimension>> DimensionOptionsAsync(string kind, string? query, int limit, CancellationToken ct)
+    {
+        var q = (query ?? "").Trim();
+        var lower = q.ToLowerInvariant();
+        limit = Math.Clamp(limit, 1, 50);
+        return kind switch
+        {
+            "counterparty" => await db.OneCCounterparties.AsNoTracking()
+                .Where(x => !x.IsDeleted && (q == "" || x.Name.ToLower().Contains(lower) || x.Inn == q || x.Code == q))
+                .OrderBy(x => x.Name).Take(limit).Select(x => new FinanceDimension(kind, x.SourceEntityId, x.Name)).ToListAsync(ct),
+            "item" => await db.OneCItems.AsNoTracking()
+                .Where(x => !x.IsDeleted && !x.IsGroup && (q == "" || x.Name.ToLower().Contains(lower) || x.Code == q || x.Article == q))
+                .OrderBy(x => x.Name).Take(limit).Select(x => new FinanceDimension(kind, x.SourceEntityId, x.Name)).ToListAsync(ct),
+            OneCEntityTypes.Warehouse or OneCEntityTypes.Department => await db.OneCReferences.AsNoTracking()
+                .Where(x => !x.IsDeleted && x.SourceEntityType == kind && !x.IsGroup && (q == "" || x.Name.ToLower().Contains(lower)))
+                .OrderBy(x => x.Name).Take(limit).Select(x => new FinanceDimension(kind, x.SourceEntityId, x.Name)).ToListAsync(ct),
+            _ => [],
+        };
     }
 
     private IQueryable<OneCEntry> Entries(FinanceFilter f) =>
         db.OneCEntries.AsNoTracking().Where(e => !e.IsDeleted && e.Active && e.PeriodDate >= f.From && e.PeriodDate <= f.To
-            && (f.OrganizationId == null || e.SourceOrganizationId == f.OrganizationId));
+            && (f.OrganizationId == null || e.SourceOrganizationId == f.OrganizationId)
+            && (f.CounterpartyId == null || e.DebitCounterpartyId == f.CounterpartyId || e.CreditCounterpartyId == f.CounterpartyId)
+            && (f.ItemId == null || e.DebitItemId == f.ItemId || e.CreditItemId == f.ItemId)
+            && (f.WarehouseId == null || e.DebitWarehouseId == f.WarehouseId || e.CreditWarehouseId == f.WarehouseId)
+            && (f.DepartmentId == null || e.DepartmentSourceId == f.DepartmentId));
 
     private IQueryable<OneCDocument> Documents(FinanceFilter f) =>
         db.OneCDocuments.AsNoTracking().Where(d => !d.IsDeleted && d.Posted && d.DocumentDate >= f.From && d.DocumentDate <= f.To
-            && (f.OrganizationId == null || d.SourceOrganizationId == f.OrganizationId));
+            && (f.OrganizationId == null || d.SourceOrganizationId == f.OrganizationId)
+            && (f.CounterpartyId == null || d.CounterpartySourceId == f.CounterpartyId)
+            && (f.DepartmentId == null || d.DepartmentSourceId == f.DepartmentId)
+            && (f.WarehouseId == null || d.WarehouseSourceId == f.WarehouseId || d.Lines.Any(l => l.WarehouseSourceId == f.WarehouseId))
+            && (f.ItemId == null || d.Lines.Any(l => l.ItemSourceId == f.ItemId)));
+
+    /// <summary>Строки ведомости с отбором по организации, контрагенту, номенклатуре и складу (подразделения в ведомости нет).</summary>
+    private IQueryable<OneCBalance> Balances(FinanceFilter f) =>
+        db.OneCBalances.AsNoTracking().Where(b => !b.IsDeleted && (f.OrganizationId == null || b.SourceOrganizationId == f.OrganizationId)
+            && (f.CounterpartyId == null || b.CounterpartyId == f.CounterpartyId)
+            && (f.ItemId == null || b.ItemId == f.ItemId)
+            && (f.WarehouseId == null || b.WarehouseId == f.WarehouseId));
 
     public static IReadOnlyList<DateOnly> MonthsOf(FinanceFilter f)
     {
@@ -107,12 +174,10 @@ public sealed class FinanceReportService(IAppDbContext db, IOneCSettingsStore se
     private async Task<DateOnly?> BalancesMonthAsync(FinanceFilter f, CancellationToken ct)
     {
         var limit = OneCFormat.MonthStart(f.To);
-        return await db.OneCBalances.AsNoTracking().Where(b => !b.IsDeleted && b.Period <= limit && (f.OrganizationId == null || b.SourceOrganizationId == f.OrganizationId))
-            .MaxAsync(b => (DateOnly?)b.Period, ct);
+        return await Balances(f).Where(b => b.Period <= limit).MaxAsync(b => (DateOnly?)b.Period, ct);
     }
 
-    private IQueryable<OneCBalance> BalancesOf(FinanceFilter f, DateOnly month) =>
-        db.OneCBalances.AsNoTracking().Where(b => !b.IsDeleted && b.Period == month && (f.OrganizationId == null || b.SourceOrganizationId == f.OrganizationId));
+    private IQueryable<OneCBalance> BalancesOf(FinanceFilter f, DateOnly month) => Balances(f).Where(b => b.Period == month);
 
     /// <summary>Сальдо на конец месяца по группам счетов: Дт − Кт.</summary>
     private async Task<decimal> ClosingAsync(FinanceFilter f, DateOnly? month, string[] prefixes, CancellationToken ct)
@@ -176,7 +241,33 @@ public sealed class FinanceReportService(IAppDbContext db, IOneCSettingsStore se
 
         var growth = await ExpenseChangesAsync(f, previous, 5, ct);
         return new FinanceOverview(meta, pnl, months, cash.Sum(c => c.Amount), cash, receivables, payables, advancesGiven, advancesReceived, inventory, month,
-            growth.Where(g => g.Amount > (g.Previous ?? 0)).ToList());
+            growth.Where(g => g.Amount > (g.Previous ?? 0)).ToList(), await KpisAsync(f, meta.DataThrough, ct));
+    }
+
+    /// <summary>
+    /// Показатели за день, с начала месяца и с начала года на дату конца периода (не позже последних проводок): чистая выручка и валовая
+    /// прибыль — по проводкам счетов доходов и расходов (как P&L), закупки — по документам поступления за вычетом возвратов поставщикам
+    /// (в валюте учёта), затраты на производство — Дт 20. С теми же отборами, что и отчёт.
+    /// </summary>
+    public async Task<FinanceKpis> KpisAsync(FinanceFilter f, DateOnly? dataThrough, CancellationToken ct)
+    {
+        var asOf = dataThrough is { } d && d < f.To ? d : f.To;
+        var periods = new[] { (From: asOf, To: asOf), (From: new DateOnly(asOf.Year, asOf.Month, 1), To: asOf), (From: new DateOnly(asOf.Year, 1, 1), To: asOf) };
+        var values = new Dictionary<string, decimal[]> { ["sales"] = new decimal[3], ["gross_profit"] = new decimal[3], ["purchases"] = new decimal[3], ["production"] = new decimal[3] };
+        for (var i = 0; i < periods.Length; i++)
+        {
+            var p = f with { From = periods[i].From, To = periods[i].To };
+            var pnl = FinanceChart.Pnl(await PnlTurnoversAsync(p, ct));
+            values["sales"][i] = pnl["net_revenue"];
+            values["gross_profit"][i] = pnl["gross_profit"];
+            values["purchases"][i] = await Documents(p).Where(x => x.Type == OneCDocumentTypes.Purchase || x.Type == OneCDocumentTypes.PurchaseReturn)
+                .SumAsync(x => x.Type == OneCDocumentTypes.Purchase ? x.AmountAccounting : -x.AmountAccounting, ct);
+            values["production"][i] = await Entries(p).Where(e => e.DebitAccount.StartsWith("20")).SumAsync(e => e.Amount, ct);
+        }
+
+        FinanceKpi KpiOf(string code, string title) => new(code, title, values[code][0], values[code][1], values[code][2]);
+        return new FinanceKpis(asOf, [KpiOf("sales", "Продажи (чистая выручка)"), KpiOf("gross_profit", "Валовая прибыль"), KpiOf("purchases", "Закупки"),
+            KpiOf("production", "Затраты на производство")]);
     }
 
     // ---------- Доходы и расходы ----------
@@ -401,8 +492,8 @@ public sealed class FinanceReportService(IAppDbContext db, IOneCSettingsStore se
         var names = await AccountNamesAsync(ct);
         var first = OneCFormat.MonthStart(f.From);
         var last = OneCFormat.MonthStart(f.To);
-        var rows = await db.OneCBalances.AsNoTracking()
-            .Where(b => !b.IsDeleted && b.Period >= first && b.Period <= last && (f.OrganizationId == null || b.SourceOrganizationId == f.OrganizationId))
+        var rows = await Balances(f)
+            .Where(b => b.Period >= first && b.Period <= last)
             .GroupBy(b => new { b.Account, b.Period })
             .Select(g => new
             {

@@ -9,6 +9,7 @@ import {
   agingLabel,
   date,
   docTypeLabel,
+  FINANCE_KEYS,
   full,
   money,
   monthShort,
@@ -32,7 +33,7 @@ function useLink() {
   const sp = useSearchParams();
   return (path: string, extra: Record<string, string | undefined> = {}) => {
     const next = new URLSearchParams();
-    for (const k of ["organization", "from", "to"]) {
+    for (const k of FINANCE_KEYS) {
       const v = sp.get(k);
       if (v) next.set(k, v);
     }
@@ -55,6 +56,31 @@ export function OverviewView({ data }: { data: FinanceOverview }) {
   return (
     <div className="space-y-4">
       <MetaBar meta={data.meta} settingsLink />
+      {data.kpis && data.kpis.items.length > 0 && (
+        <Section title="День, месяц, год" hint={`${t("на")} ${date(data.kpis.asOf)} · ${t("с начала месяца и с начала года")}`}>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {data.kpis.items.map((k) => (
+              <div key={k.code} className="rounded-lg border border-line p-3">
+                <div className="text-xs font-medium text-ink-3">{t(k.title)}</div>
+                <dl className="mt-1.5 space-y-0.5 text-sm">
+                  {(
+                    [
+                      ["за день", k.day],
+                      ["с начала месяца", k.month],
+                      ["с начала года", k.year],
+                    ] as const
+                  ).map(([label, v]) => (
+                    <div key={label} className="flex items-baseline justify-between gap-2">
+                      <dt className="text-ink-3">{t(label)}</dt>
+                      <dd className="tabular-nums font-semibold text-ink">{money(v)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Чистая выручка" value={value(data.pnl, "net_revenue")} previous={prev("net_revenue")} href={link("/finance/pnl")} />
         <Kpi label="Валовая прибыль" value={value(data.pnl, "gross_profit")} previous={prev("gross_profit")} href={link("/finance/pnl")} />

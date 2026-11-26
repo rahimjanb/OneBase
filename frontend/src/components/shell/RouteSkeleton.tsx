@@ -40,6 +40,7 @@ const DEPARTMENTS: Crumb = { label: "Отделы", href: "/departments" };
 const titles: Record<string, string> = {
   "/sales/republic": "Республика",
   "/sales/export": "Экспорт и опт",
+  "/sales/export/tajikistan": "Таджикистан",
   "/sales/setup": "Настройки продаж",
   "/sales/method": "Как считается",
   "/hr/employees": "Сотрудники",

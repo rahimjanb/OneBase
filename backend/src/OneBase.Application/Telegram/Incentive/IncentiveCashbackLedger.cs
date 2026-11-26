@@ -12,7 +12,8 @@ public sealed record IncentiveLedgerRefresh(int Added, int Updated, int Mogul, i
 /// Журнал начислений кешбека ТП (incentive.CashbackAccruals; ТЗ v2, раздел 5): Могул (YM-02) и Twizos — два отдельных баланса. Одна строка на
 /// «акция × вид × заказ Linko»: повторная синхронизация обновляет сумму и статус по заказу и возвратам, а не начисляет второй раз. Сегмент и %
 /// Twizos фиксируются при первой записи заказа. Строка, которую расчёт больше не возвращает (точку перезакрепили, список пересчитан), остаётся как
-/// была: начисление — за тем ТП, кто его заработал. Регионы без Могула (YM-03) в журнал Могула не попадают.
+/// была: начисление — за тем ТП, кто его заработал. Исключение — Могул по точке, которой в день заказа нет в списке спящих (список заменили
+/// «Приложением 1» ТЗ): по ТЗ кешбек только спящим из списка, строка отменяется. Регионы без Могула (YM-03) в журнал Могула не попадают.
 /// </summary>
 public sealed class IncentiveCashbackLedger(IAppDbContext db, IncentivePromoService promos, IncentiveGoalService goals, TimeProvider time)
 {
@@ -60,9 +61,11 @@ public sealed class IncentiveCashbackLedger(IAppDbContext db, IncentivePromoServ
     {
         var fresh = new List<IncentiveCashbackAccrual>();
         var g = s.Offers.Goals;
+        Dictionary<long, IncentivePromoService.SleepingEntry>? sleepingList = null;
         if (s.Offers.Yamelly is { } ym && today >= ym.Start)
         {
-            var listed = (await promos.SleepingListAsync(s, ct)).Select(x => x.MarketId).ToArray();
+            sleepingList = (await promos.SleepingListAsync(s, ct)).ToDictionary(x => x.MarketId);
+            var listed = sleepingList.Keys.ToArray();
             var agents = await db.LinkoMarkets.AsNoTracking().Where(m => m.ResponsibleAgentId != null && listed.Contains(m.Id))
                 .Select(m => m.ResponsibleAgentId!.Value).Distinct().ToListAsync(ct);
             var orders = (await promos.YamellyOrdersAsync(s, agents, ym.Start, today < ym.End ? today : ym.End, null, ct)).Where(o => o.Qualifies).ToList();
@@ -145,6 +148,19 @@ public sealed class IncentiveCashbackLedger(IAppDbContext db, IncentivePromoServ
             have.Stand = row.Stand;
             have.UpdatedAt = now;
             updated++;
+        }
+
+        if (sleepingList is not null)
+        {
+            var mogul = fresh.Where(r => r.Kind == IncentiveCashbackKind.Mogul).Select(r => r.OrderId).ToHashSet();
+            foreach (var have in existing.Values.Where(a => a.Kind == IncentiveCashbackKind.Mogul && !mogul.Contains(a.OrderId)
+                         && a.Status != IncentiveCashbackStatus.Cancelled && !(sleepingList.TryGetValue(a.MarketId, out var e) && e.On(a.OrderDate))))
+            {
+                have.Status = IncentiveCashbackStatus.Cancelled;
+                have.Amount = 0;
+                have.UpdatedAt = now;
+                updated++;
+            }
         }
 
         await db.SaveChangesAsync(ct);

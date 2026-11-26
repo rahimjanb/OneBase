@@ -44,7 +44,12 @@ public sealed record OneCStatusView
     public OneCHistoricalView? Historical { get; init; }
     public required OneCCounts Counts { get; init; }
     public IReadOnlyList<OneCCommandView> Commands { get; init; } = [];
+
+    /// <summary>Загруженные организации 1С — для выбора, какие загружать.</summary>
+    public IReadOnlyList<OneCOrganizationOption> Organizations { get; init; } = [];
 }
+
+public sealed record OneCOrganizationOption(string Id, string Name, string? Inn, bool Deleted);
 
 public sealed record OneCFailureView(
     Guid Id, string Kind, string Stream, string? OrganizationId, DateOnly? Period, string? EntityType, string? SourceId, string Error, int Attempts,
@@ -97,6 +102,8 @@ public sealed class OneCAdminService(IAppDbContext db, IOneCSettingsStore settin
             OpenFailures = await failures.CountAsync(f => f.Kind != FailureKinds.Record && f.Kind != FailureKinds.Validation, ct),
             RejectedRecords = await failures.CountAsync(f => f.Kind == FailureKinds.Record || f.Kind == FailureKinds.Validation, ct),
             Historical = job is null ? null : Historical(job), Counts = await CountsAsync(ct), Commands = commands,
+            Organizations = await db.OneCOrganizations.AsNoTracking().OrderBy(o => o.Name)
+                .Select(o => new OneCOrganizationOption(o.SourceEntityId, o.Name, o.Inn, o.IsDeleted)).ToListAsync(ct),
         };
     }
 
@@ -188,10 +195,34 @@ public sealed class OneCAdminService(IAppDbContext db, IOneCSettingsStore settin
         return true;
     }
 
-    public async Task<OneCPage<OneCRunView>> RunsAsync(int page, int pageSize, CancellationToken ct)
+    /// <summary>Журнал запусков с отбором: дни начала (по Ташкенту, включительно), статус, вид (incremental, historical, test, retry).</summary>
+    public async Task<OneCPage<OneCRunView>> RunsAsync(int page, int pageSize, CancellationToken ct, DateOnly? from = null, DateOnly? to = null,
+        string? status = null, string? kind = null)
     {
         (page, pageSize) = (Math.Max(1, page), Math.Clamp(pageSize, 10, 100));
         var q = db.OneCSyncRuns.AsNoTracking();
+        if (from is { } f)
+        {
+            var at = Tashkent(f);
+            q = q.Where(r => r.StartedAt >= at);
+        }
+
+        if (to is { } t)
+        {
+            var at = Tashkent(t.AddDays(1));
+            q = q.Where(r => r.StartedAt < at);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            q = q.Where(r => r.Status == status);
+        }
+
+        if (!string.IsNullOrWhiteSpace(kind))
+        {
+            q = q.Where(r => r.Kind == kind);
+        }
+
         var rows = await q.OrderByDescending(r => r.StartedAt).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
         return new OneCPage<OneCRunView>(rows.Select(Run).ToList(), await q.CountAsync(ct), page, pageSize);
     }
@@ -203,10 +234,32 @@ public sealed class OneCAdminService(IAppDbContext db, IOneCSettingsStore settin
             run.StepsJson is null ? [] : JsonSerializer.Deserialize<List<RunStep>>(run.StepsJson, OneCFormat.Json) ?? []);
     }
 
-    public async Task<OneCPage<OneCFailureView>> FailuresAsync(string? status, int page, int pageSize, CancellationToken ct)
+    /// <summary>Начало дня по Ташкенту.</summary>
+    private static DateTimeOffset Tashkent(DateOnly day) => new(day.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(5));
+
+    /// <summary>Ошибки с отбором: состояние (open / resolved), поток (начало имени: history:documents, versions:document, ref:…), дни.</summary>
+    public async Task<OneCPage<OneCFailureView>> FailuresAsync(string? status, int page, int pageSize, CancellationToken ct, string? stream = null,
+        DateOnly? from = null, DateOnly? to = null)
     {
         (page, pageSize) = (Math.Max(1, page), Math.Clamp(pageSize, 10, 100));
         var q = db.OneCSyncFailures.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(stream))
+        {
+            q = q.Where(x => x.Stream.StartsWith(stream));
+        }
+
+        if (from is { } f)
+        {
+            var at = Tashkent(f);
+            q = q.Where(x => x.LastAt >= at);
+        }
+
+        if (to is { } t)
+        {
+            var at = Tashkent(t.AddDays(1));
+            q = q.Where(x => x.LastAt < at);
+        }
+
         q = status switch
         {
             "open" => q.Where(f => f.Status == "Open" || f.Status == "Retrying"),

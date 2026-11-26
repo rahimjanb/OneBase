@@ -33,6 +33,8 @@ public sealed class IntegrationsController(
             "Заказы, возвраты, визиты, торговые точки и торговые представители — источник данных раздела «Продажи»."),
         new(VerifixSettingsStore.Code, VerifixSettingsStore.Department, VerifixController.Name, VerifixController.Description),
         new(OneBase.Application.Finance.OneCSettings.Code, OneBase.Application.Finance.OneCSettings.Department, OneCController.Name, OneCController.Description),
+        new(OneBase.Application.Sales.Tajik.TajikSettings.Code, OneBase.Application.Sales.Tajik.TajikSettings.Department, TajikIntegrationController.Name,
+            TajikIntegrationController.Description),
     ];
 
     public sealed record IntegrationSummary(string Code, string Name, string Description, string Status, DateTimeOffset? DataAsOf);
@@ -160,6 +162,9 @@ public sealed class IntegrationsController(
                 VerifixSettingsStore.Code => await VerifixController.StatusAsync(db, verifix, ct),
                 OneBase.Application.Finance.OneCSettings.Code => await OneCController.StatusAsync(
                     HttpContext.RequestServices.GetRequiredService<OneBase.Application.Finance.OneCAdminService>(), ct),
+                OneBase.Application.Sales.Tajik.TajikSettings.Code => await TajikIntegrationController.StatusAsync(
+                    HttpContext.RequestServices.GetRequiredService<OneBase.Application.Sales.Tajik.ITajikSettingsStore>(),
+                    HttpContext.RequestServices.GetRequiredService<OneBase.Infrastructure.Persistence.OneBaseDbContext>(), ct),
                 _ => ("not_configured", (DateTimeOffset?)null),
             };
             list.Add(new IntegrationSummary(item.Code, item.Name, item.Description, status, dataAsOf));

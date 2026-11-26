@@ -390,7 +390,15 @@ public sealed record MonthPlanFact(int Month, decimal? PlanKg, decimal? FactKg, 
 
 public sealed record CategoryShare(long? CategoryId, string Name, decimal Revenue, decimal? Share);
 
-public sealed record MonthCalendarRow(string Id, string Name, IReadOnlyList<decimal?> Days, decimal Total);
+/// <summary>
+/// Строка календаря месяца. У региона в календаре республики / РМ: Subtitle — супервайзер, Children — его ТП (как в «Команде ТП»)
+/// и строка «прочие» (Id = MonthCalendarRow.OtherId: продажи без ТП или не ТП — офис, каналы), чтобы кг и деньги детей сходились со строкой региона.
+/// </summary>
+public sealed record MonthCalendarRow(string Id, string Name, IReadOnlyList<decimal?> Days, decimal Total, string? Subtitle = null,
+    IReadOnlyList<MonthCalendarRow>? Children = null)
+{
+    public const string OtherId = "other";
+}
 
 public sealed record MonthCalendar(string Metric, long? CategoryId, IReadOnlyList<bool> Sundays, IReadOnlyList<MonthCalendarRow> Rows, IReadOnlyList<decimal?> TotalDays, decimal Total);
 

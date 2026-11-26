@@ -765,6 +765,8 @@ export type IncentiveSleepingSummary = {
   boughtFrom: string | null;
   notSince: string | null;
   computed: boolean;
+  /** Список — «Приложение 1» ТЗ (из файла): по Linko не пересчитывается. */
+  fromFile: boolean;
 };
 
 export type IncentiveSleepingRefresh = { added: number; removed: number; restored: number; kept: number; summary: IncentiveSleepingSummary };

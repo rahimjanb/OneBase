@@ -311,6 +311,13 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
     public DbSet<OneBase.Domain.OneC.OneCWorkerCommand> OneCWorkerCommands => Set<OneBase.Domain.OneC.OneCWorkerCommand>();
     public DbSet<OneBase.Domain.OneC.OneCWorkerState> OneCWorkerStates => Set<OneBase.Domain.OneC.OneCWorkerState>();
 
+    // 1С Таджикистан → OneBase (схема tajik): продажи и остаток дилера, регионы отчёта.
+    public DbSet<OneBase.Domain.Sales.TajikSaleLine> TajikSaleLines => Set<OneBase.Domain.Sales.TajikSaleLine>();
+    public DbSet<OneBase.Domain.Sales.TajikStockItem> TajikStockItems => Set<OneBase.Domain.Sales.TajikStockItem>();
+    public DbSet<OneBase.Domain.Sales.TajikRegion> TajikRegions => Set<OneBase.Domain.Sales.TajikRegion>();
+    public DbSet<OneBase.Domain.Sales.TajikRegionAssignment> TajikRegionAssignments => Set<OneBase.Domain.Sales.TajikRegionAssignment>();
+    public DbSet<OneBase.Domain.Sales.TajikSyncRun> TajikSyncRuns => Set<OneBase.Domain.Sales.TajikSyncRun>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         SalesModel.ConfigureLinko(b);
@@ -330,6 +337,7 @@ public sealed class OneBaseDbContext(DbContextOptions<OneBaseDbContext> options)
         DialogAgentModel.Configure(b);
         AnalytikModel.Configure(b);
         OneCModel.Configure(b);
+        TajikModel.Configure(b);
 
         // «Настройки → Источники данных»: таблицы Google, привязки разделов к листам и журнал синхронизаций.
         b.Entity<DataSourceConnection>(e =>

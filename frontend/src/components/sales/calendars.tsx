@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { Note, Section, levelClass } from "./bits";
 import { CopyButton, TableHead, nextSort, sortRows, toTsv, type Column } from "./DataTable";
 import { kg, money, num, pct } from "@/lib/sales/format";
-import type { MonthCalendar, VisitCalendarRow } from "@/lib/sales/types";
+import { withQuery } from "@/lib/sales/query";
+import type { MonthCalendar, MonthCalendarRow, VisitCalendarRow } from "@/lib/sales/types";
 
 /** Строка продаж без региона: её имя «Без региона» — подпись сервера (переводится), у остальных строк имя — данные. */
 const NO_REGION = "00000000-0000-0000-0000-000000000000";
@@ -247,6 +248,9 @@ const metrics = [
   { key: "akb", label: "АКБ" },
 ] as const;
 
+/** Строка «прочие» под регионом: продажи без ТП или не ТП (офис, каналы) — подпись переводится, у ТП имя — данные. */
+const OTHER = "other";
+
 export function MonthCalendarTable({
   calendar,
   year,
@@ -255,6 +259,7 @@ export function MonthCalendarTable({
   title = "Календарь месяца по ТП",
   rowLabel: rowText = "ТП",
   rowKind = "agent",
+  query = "",
 }: {
   calendar: MonthCalendar;
   year: number;
@@ -262,8 +267,10 @@ export function MonthCalendarTable({
   categories: { id: number; name: string }[];
   title?: string;
   rowLabel?: string;
-  /** Строки — ТП (с ID) или регионы. */
+  /** Строки — ТП (с ID) или регионы (раскрываются до ТП, → — страница региона). */
   rowKind?: "agent" | "region";
+  /** Период и охват для ссылки «→ открыть регион». */
+  query?: string;
 }) {
   const t = useT();
   const rowLabel = t(rowText);
@@ -271,6 +278,7 @@ export function MonthCalendarTable({
   const params = useSearchParams();
   const router = useRouter();
   const [sortByTotal, setSortByTotal] = useState(true);
+  const [open, setOpen] = useState<Set<string>>(new Set());
 
   const format = (v: number | null) => (v == null ? "·" : calendar.metric === "sum" ? money(v, t) : calendar.metric === "akb" ? num(v) : kg(v));
   const href = (metric: string, category?: number | null) => {
@@ -280,21 +288,52 @@ export function MonthCalendarTable({
     else next.delete("category");
     return `${pathname}?${next}`;
   };
+  const toggle = (id: string) =>
+    setOpen((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
-  const rows = sortByTotal ? [...calendar.rows].sort((a, b) => b.total - a.total) : [...calendar.rows].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  // У ТП Linko имя часто начинается с его же номера («476 Хиндол»): номер уже стоит строкой «ID 476» под именем.
+  const nameOf = (r: MonthCalendarRow) =>
+    r.id === NO_REGION || r.id === OTHER ? t(r.name) : r.name.startsWith(`${r.id} `) ? r.name.slice(r.id.length + 1).trim() || r.name : r.name;
+  // «Прочие» — всегда последней строкой под регионом.
+  const sortRowsOf = (list: MonthCalendarRow[]) =>
+    [...list].sort(
+      (a, b) =>
+        Number(a.id === OTHER) - Number(b.id === OTHER) || (sortByTotal ? b.total - a.total : nameOf(a).localeCompare(nameOf(b), "ru")),
+    );
+  const rows = sortRowsOf(calendar.rows);
+  const childrenOf = (r: MonthCalendarRow) => sortRowsOf(r.children ?? []);
+  const expandable = rowKind === "region" && rows.some((r) => (r.children?.length ?? 0) > 0);
   const days = calendar.sundays.map((_, i) => i + 1);
 
+  const cell = (v: number | null) => (v == null ? "" : String(v).replace(".", ","));
   const tsv = () =>
     [
       [rowLabel, ...days.map(String), t("Итого")].join("\t"),
-      ...rows.map((r) => [r.name, ...r.days.map((d) => (d == null ? "" : String(d).replace(".", ","))), String(r.total).replace(".", ",")].join("\t")),
-      [t("Итого"), ...calendar.totalDays.map((d) => (d == null ? "" : String(d).replace(".", ","))), String(calendar.total).replace(".", ",")].join("\t"),
+      ...rows.flatMap((r) => [
+        [nameOf(r), ...r.days.map(cell), cell(r.total)].join("\t"),
+        ...(open.has(r.id) ? childrenOf(r).map((c) => [`  ${nameOf(c)}`, ...c.days.map(cell), cell(c.total)].join("\t")) : []),
+      ]),
+      [t("Итого"), ...calendar.totalDays.map(cell), cell(calendar.total)].join("\t"),
     ].join("\n");
+
+  const dayCells = (r: MonthCalendarRow) =>
+    r.days.map((v, i) => (
+      <td key={i} className={`px-1.5 py-1.5 text-right tabular-nums ${calendar.sundays[i] ? "bg-muted" : ""} ${v == null ? "text-ink-3" : "text-ink"}`}>
+        {format(v)}
+      </td>
+    ));
 
   return (
     <Section
       title={t(title)}
-      hint={t("{period} · столбец = день месяца", { period: `${String(month).padStart(2, "0")}.${year}` })}
+      hint={`${t("{period} · столбец = день месяца", { period: `${String(month).padStart(2, "0")}.${year}` })}${
+        expandable ? ` · ${t("клик по региону — развернуть его ТП, → — открыть регион")}` : ""
+      }`}
       actions={
         <>
           <div className="flex overflow-hidden rounded-lg border border-line text-xs">
@@ -348,20 +387,64 @@ export function MonthCalendarTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b border-line">
-                <td className="sticky left-0 z-10 bg-surface-solid px-2 py-1.5">
-                  <span className="block whitespace-nowrap text-[13px] font-medium text-ink">{r.id === NO_REGION ? t(r.name) : r.name}</span>
-                  {rowKind === "agent" && <span className="block text-[11px] text-ink-3">ID {r.id}</span>}
-                </td>
-                {r.days.map((v, i) => (
-                  <td key={i} className={`px-1.5 py-1.5 text-right tabular-nums ${calendar.sundays[i] ? "bg-muted" : ""} ${v == null ? "text-ink-3" : "text-ink"}`}>
-                    {format(v)}
-                  </td>
-                ))}
-                <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{format(r.total)}</td>
-              </tr>
-            ))}
+            {rows.map((r) => {
+              const children = childrenOf(r);
+              const canOpen = expandable && children.length > 0;
+              const isOpen = canOpen && open.has(r.id);
+              const agents = children.filter((c) => c.id !== OTHER).length;
+              const sub = rowKind === "region" ? [r.subtitle, agents > 0 ? t("{n} ТП", { n: agents }) : null].filter(Boolean).join(" · ") : "";
+              return (
+                <Fragment key={r.id}>
+                  <tr
+                    onClick={canOpen ? () => toggle(r.id) : undefined}
+                    className={`group border-b border-line ${canOpen ? "cursor-pointer hover:bg-muted" : ""} ${isOpen ? "bg-muted/60" : ""}`}
+                  >
+                    <td className={`sticky left-0 z-10 px-2 py-1.5 ${isOpen ? "bg-muted-solid" : "bg-surface-solid"} ${canOpen ? "group-hover:bg-muted-solid" : ""}`}>
+                      <span className="flex items-start gap-1.5">
+                        {expandable && (
+                          <ChevronRight
+                            className={`mt-0.5 size-3.5 shrink-0 text-ink-3 transition-transform ${isOpen ? "rotate-90" : ""} ${canOpen ? "" : "invisible"}`}
+                          />
+                        )}
+                        <span className="min-w-0">
+                          <span className="flex items-center gap-1.5">
+                            <span className="whitespace-nowrap text-[13px] font-medium text-ink">{nameOf(r)}</span>
+                            {rowKind === "region" && r.id !== NO_REGION && (
+                              <Link
+                                href={withQuery(`/sales/regions/${r.id}`, query)}
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label={t("Открыть страницу региона")}
+                                title={t("Открыть страницу региона")}
+                                className="grid size-5 shrink-0 place-items-center rounded-md border border-line text-ink-3 hover:border-accent hover:text-accent"
+                              >
+                                <ArrowRight className="size-3" />
+                              </Link>
+                            )}
+                          </span>
+                          {rowKind === "agent" && <span className="block text-[11px] text-ink-3">ID {r.id}</span>}
+                          {sub && <span className="block whitespace-nowrap text-[11px] text-ink-3">{sub}</span>}
+                        </span>
+                      </span>
+                    </td>
+                    {dayCells(r)}
+                    <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{format(r.total)}</td>
+                  </tr>
+                  {isOpen &&
+                    children.map((c) => (
+                      <tr key={`${r.id}-${c.id}`} className="border-b border-line">
+                        <td className="sticky left-0 z-10 bg-surface-solid py-1.5 pl-7 pr-2">
+                          <span className="block whitespace-nowrap border-l-2 border-line pl-2.5">
+                            <span className="block text-[13px] text-ink">{nameOf(c)}</span>
+                            <span className="block text-[11px] text-ink-3">{c.id === OTHER ? t("без ТП и не ТП: офис, каналы") : `ID ${c.id}`}</span>
+                          </span>
+                        </td>
+                        {dayCells(c)}
+                        <td className="px-2 py-1.5 text-right tabular-nums text-ink">{format(c.total)}</td>
+                      </tr>
+                    ))}
+                </Fragment>
+              );
+            })}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-line bg-muted/60 font-semibold">
@@ -380,6 +463,10 @@ export function MonthCalendarTable({
         {t(
           "Воскресенья выделены серым столбцом, «·» — нет данных за день. Кг и деньги: сумма дней — итог месяца. АКБ в итогах — уникальные ТТ за период, а не сумма по дням.",
         )}
+        {expandable &&
+          t(
+            " Под регионом — его ТП (как в «Команде ТП» региона) и «Прочие продажи» — без ТП и не ТП: кг и деньги ТП в сумме равны строке региона, АКБ — нет: точку могут обслуживать двое.",
+          )}
       </Note>
     </Section>
   );

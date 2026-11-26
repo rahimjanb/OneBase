@@ -82,6 +82,7 @@ public sealed class SyncWorker(
                 }
 
                 status.Settings = response.Settings;
+                await ApplyConnectionAsync(response.Settings, ct);
                 status.LastHeartbeatOk = clock.GetUtcNow();
                 status.LastHeartbeatError = null;
                 foreach (var command in response.Commands.Where(c => _seen.Add(c.Id)))
@@ -107,6 +108,31 @@ public sealed class SyncWorker(
             await Delay(TimeSpan.FromSeconds(Math.Clamp(options.HeartbeatSeconds, 5, 300)), ct);
         }
     }
+
+    /// <summary>
+    /// Подключение со страницы «1С» сменилось (другая версия) — забрать его у OneBase и применить; у службы свои переменные OneC__BaseUrl —
+    /// они главнее, страница «1С» не применяется. После смены — сразу проверить подключение (диагностика уйдёт со следующим пульсом).
+    /// </summary>
+    private async Task ApplyConnectionAsync(WorkerSettings settings, CancellationToken ct)
+    {
+        if (provider is not SwitchableOneCDataProvider switchable || switchable.HasOwnConnection || settings.ConnectionVersion == switchable.Version)
+        {
+            return;
+        }
+
+        var connection = settings.ConnectionVersion is null ? new WorkerConnection() : await api.ConnectionAsync(ct);
+        if (switchable.Apply(connection))
+        {
+            logger.LogInformation("1С: подключение со страницы «1С» применено ({Url})", switchable.DisplayUrl ?? "не задано");
+            _nextCheck = DateTimeOffset.MinValue;
+        }
+    }
+
+    /// <summary>Модули из команды «Синхронизировать» (payload.modules); нет — все включённые.</summary>
+    private static IReadOnlyList<string>? Modules(JsonElement? payload) =>
+        payload is { ValueKind: JsonValueKind.Object } p && p.TryGetProperty("modules", out var m) && m.ValueKind == JsonValueKind.Array
+            ? m.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToList()
+            : null;
 
     private async Task WorkLoopAsync(CancellationToken ct)
     {
@@ -222,7 +248,7 @@ public sealed class SyncWorker(
                 WorkerCommandKinds.TestConnection => await TestConnectionAsync(ct),
                 WorkerCommandKinds.TestSync => Result(await Busy(() => engine.TestAsync(command.Id, ct))),
                 _ when !oneC.Enabled => new CommandResult(false, "Загрузка данных выключена у службы (OneC__Enabled=false). Проверка подключения и тестовая синхронизация доступны."),
-                WorkerCommandKinds.SyncNow => Result(await Busy(() => engine.IncrementalAsync("manual", command.Id, ct))),
+                WorkerCommandKinds.SyncNow => Result(await Busy(() => engine.IncrementalAsync("manual", command.Id, ct, Modules(command.Payload)))),
                 WorkerCommandKinds.RetryFailures => Result(await Busy(() => engine.RetryFailuresAsync(command.Id, ct))),
                 WorkerCommandKinds.Historical when command.Payload is { } p && p.TryGetProperty("importId", out var id) =>
                     Result(await Busy(() => engine.HistoricalAsync(id.GetGuid(), command.Id, ct))),

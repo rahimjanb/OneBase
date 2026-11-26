@@ -14,7 +14,21 @@ export type FinanceMeta = {
   dataThrough: string | null;
   hasData: boolean;
   note: string | null;
+  /** Применённые отборы: контрагент, номенклатура, склад, подразделение — с названиями из 1С. */
+  dimensions?: FinanceDimension[] | null;
 };
+
+export type FinanceDimension = { kind: string; id: string; name: string };
+
+/** Отборы отчётов «Финансов» (параметры адреса — те же ключи). */
+export const dimensionKinds: { key: string; label: string }[] = [
+  { key: "counterparty", label: "Контрагент" },
+  { key: "item", label: "Номенклатура" },
+  { key: "warehouse", label: "Склад" },
+  { key: "department", label: "Подразделение" },
+];
+
+export type FinanceKpi = { code: string; title: string; day: number; month: number; year: number };
 
 export type FinanceOrganization = { id: string; name: string; inn: string | null; currency: string };
 export type PnlValue = { code: string; title: string; kind: "income" | "expense" | "total"; value: number; previous: number | null };
@@ -34,6 +48,8 @@ export type FinanceOverview = {
   inventory: AmountRow[];
   balancesMonth: string | null;
   expenseGrowth: AmountRow[];
+  /** Продажи, валовая прибыль, закупки, производство — за день, с начала месяца и с начала года на дату asOf. */
+  kpis?: { asOf: string; items: FinanceKpi[] } | null;
 };
 
 export type PnlLineView = { code: string; title: string; kind: "income" | "expense" | "total"; months: number[]; total: number; previous: number | null };
@@ -177,6 +193,10 @@ export type ConnectionReport = {
   configuration: string | null;
   message: string | null;
   steps: DiagnosticStep[];
+  /** Откуда служба взяла подключение: env — переменные службы, onebase — эта страница, none — не задано, mock — тестовый источник. */
+  source?: string | null;
+  /** Как отслеживаются изменения 1С: versions — сверкой версий (только чтение), changes — по плану обмена. */
+  changeTracking?: string | null;
 };
 
 export type OneCSettings = {
@@ -193,6 +213,43 @@ export type OneCSettings = {
   tokenHint: string | null;
   tokenCreatedAt: string | null;
   updatedAt: string | null;
+  /** Подключение к 1С со страницы (пароль и API Secret — только признаки). */
+  baseUrl: string | null;
+  username: string | null;
+  hasPassword: boolean;
+  hasApiSecret: boolean;
+  apiSecretHint: string | null;
+  caCertificatePem: string | null;
+  connectionUpdatedAt: string | null;
+  connectionVersion: string | null;
+  /** Организации для загрузки; пусто — все. */
+  organizationIds: string[];
+  /** Включённые модули (все — по умолчанию). */
+  modules: string[];
+  historyFrom: string | null;
+};
+
+/** Модули загрузки 1С (как OneCModules на сервере): документы по типам; «Бухгалтерия» — проводки и ведомость. */
+export const oneCModules: { key: string; label: string; hint: string }[] = [
+  { key: "sales", label: "Продажи", hint: "реализация, возвраты от покупателей, счета-фактуры выданные, заказы покупателей" },
+  { key: "purchases", label: "Закупки", hint: "поступления, возвраты поставщикам, счета-фактуры полученные, заказы поставщикам" },
+  { key: "warehouse", label: "Склад", hint: "перемещения, списания, инвентаризации" },
+  { key: "money", label: "Деньги", hint: "касса и банк: поступления и списания" },
+  { key: "production", label: "Производство", hint: "выпуск продукции, передача материалов в производство" },
+  { key: "accounting", label: "Бухгалтерия", hint: "проводки всех документов, ручные операции и оборотно-сальдовая ведомость — из них строятся «Финансы»" },
+  { key: "other", label: "Прочие документы", hint: "документы других видов с проводками" },
+];
+
+export const connectionSourceLabel: Record<string, string> = {
+  env: "переменные службы на сервере",
+  onebase: "эта страница",
+  none: "не задано",
+  mock: "тестовый источник",
+};
+
+export const changeTrackingLabel: Record<string, string> = {
+  versions: "сверка версий — только чтение, в 1С ничего не пишется",
+  changes: "план обмена 1С (/changes)",
 };
 
 export type OneCRun = {
@@ -252,6 +309,7 @@ export type OneCStatus = {
   historical: OneCHistorical | null;
   counts: OneCCounts;
   commands: OneCCommand[];
+  organizations?: { id: string; name: string; inn: string | null; deleted: boolean }[];
 };
 
 export type OneCFailure = { id: string; kind: string; stream: string; organizationId: string | null; period: string | null; entityType: string | null; sourceId: string | null; error: string; attempts: number; status: string; firstAt: string; lastAt: string; resolvedAt: string | null; hasPayload: boolean };
@@ -349,6 +407,13 @@ export function streamLabel(stream: string): string {
   if (stream.startsWith("retry:")) return `Повтор · ${streamLabel(stream.slice(6))}`;
   if (stream.startsWith("balances")) return stream.includes(":") ? `Остатки ${stream.split(":")[1]}` : "Остатки";
   if (stream === "changes") return "Изменения 1С";
+  if (stream.startsWith("versions:")) {
+    const rest = stream.slice(9);
+    if (rest === "full") return "Сверка версий · ночная";
+    if (rest.startsWith("ref:")) return `Сверка версий · ${entityLabel[rest.slice(4)] ?? rest.slice(4)}`;
+    if (rest.startsWith("document")) return `Сверка версий · документы${rest.includes(":") ? ` ${rest.slice(rest.indexOf(":") + 1)}` : ""}`;
+    return `Сверка версий · ${entityLabel[rest] ?? rest}`;
+  }
   return stream;
 }
 
@@ -370,6 +435,8 @@ export const docTypeLabel: Record<string, string> = {
   inventory: "Инвентаризация",
   manual: "Операция",
   other: "Прочий документ",
+  order_customer: "Заказ покупателя",
+  order_supplier: "Заказ поставщику",
 };
 
 export const agingLabel: Record<string, string> = {
@@ -422,9 +489,12 @@ export const one = (sp: SearchParams, key: string): string | undefined => {
 };
 
 /** Организация и период из адреса страницы → строка запроса API. */
+/** Параметры отбора, которые переносятся между страницами «Финансов»: организация, период и отборы. */
+export const FINANCE_KEYS = ["organization", "from", "to", "counterparty", "item", "warehouse", "department"] as const;
+
 export function financeQuery(sp: SearchParams, extra: Record<string, string | undefined> = {}): string {
   const params = new URLSearchParams();
-  for (const key of ["organization", "from", "to"]) {
+  for (const key of FINANCE_KEYS) {
     const v = one(sp, key);
     if (v) params.set(key, v);
   }

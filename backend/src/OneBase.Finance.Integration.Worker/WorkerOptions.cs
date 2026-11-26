@@ -23,6 +23,12 @@ public sealed class OneCOptions
     /// <summary>Токен вместо логина и пароля (Authorization: Bearer), если VENKON выберет этот вариант.</summary>
     public string Token { get; set; } = string.Empty;
 
+    /// <summary>
+    /// API Secret — дополнительный ключ HTTP-сервиса 1С (заголовок X-OneBase-Secret), вместе с логином и паролем пользователя 1С или без них
+    /// (расширение «OneBaseExchange» хранит только его SHA-256). Как и пароль — только у службы, в журнал не пишется.
+    /// </summary>
+    public string ApiSecret { get; set; } = string.Empty;
+
     public int TimeoutSeconds { get; set; } = 60;
 
     /// <summary>
@@ -30,6 +36,9 @@ public sealed class OneCOptions
     /// цепочка строится до этого корня, имя сервера проверяется.
     /// </summary>
     public string CaCertificatePath { get; set; } = string.Empty;
+
+    /// <summary>Тот же сертификат текстом PEM — так его передаёт страница «1С» в OneBase (вместо файла).</summary>
+    public string CaCertificatePem { get; set; } = string.Empty;
 
     /// <summary>Разрешить http (только для проверки на этом компьютере). В production служба http не принимает.</summary>
     public bool AllowInsecureHttp { get; set; }
@@ -53,6 +62,12 @@ public sealed class MockOptions
     public double Volume { get; set; } = 1;
 
     public int Seed { get; set; } = 20261117;
+
+    /// <summary>
+    /// Как тестовый источник объявляет отслеживание изменений (v1.1): changes — план обмена (/changes, по умолчанию, как раньше),
+    /// versions — только чтением через /versions и ids= (как расширение 1С «OneBaseExchange»).
+    /// </summary>
+    public string ChangeTracking { get; set; } = "changes";
 }
 
 /// <summary>Внутренний API OneBase (раздел OneBase; OneBase__InternalApiUrl, OneBase__IntegrationToken).</summary>
@@ -96,6 +111,18 @@ public sealed class IntegrationOptions
 
     /// <summary>Остатки пересчитываются за месяцы, где были изменения, но не дальше этого числа месяцев назад.</summary>
     public int BalancesMonthsBack { get; set; } = 24;
+
+    /// <summary>
+    /// Как узнавать об изменениях в 1С: auto — как объявила 1С в /ping (changeTracking), versions — сверкой версий только чтением
+    /// (/versions + ids=, в 1С ничего не пишется), changes — по плану обмена (/changes).
+    /// </summary>
+    public string ChangeTracking { get; set; } = "auto";
+
+    /// <summary>Сверка версий при каждой синхронизации: текущий месяц и столько прошлых (документы, перепроведённые задним числом).</summary>
+    public int ReconcileMonthsBack { get; set; } = 2;
+
+    /// <summary>С этого часа (по Ташкенту) раз в сутки сверяются все месяцы, за которые в OneBase есть документы.</summary>
+    public int FullReconcileHour { get; set; } = 2;
 
     public string WorkerId { get; set; } = Environment.MachineName;
 }

@@ -834,7 +834,10 @@ export function PromosPanel({ program, overview, onSaved }: { program: Incentive
   );
 }
 
-/** Список спящих YM-01 — из Linko: сколько точек, правило, с какого дня действует; пересчёт вручную (по расписанию — по субботам). */
+/**
+ * Список спящих YM-01: «Приложение 1» ТЗ (из файла — без пересчёта) или из Linko (правило, пересчёт вручную и по субботам); сколько точек, с какого дня
+ * действует.
+ */
 export function SleepingPanel({ program }: { program: IncentiveProgram }) {
   const t = useT();
   const [data, setData] = useState<IncentiveSleepingSummary | null>(null);
@@ -871,10 +874,12 @@ export function SleepingPanel({ program }: { program: IncentiveProgram }) {
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-ink">{t("Спящие точки Yamelly")}</h3>
           <p className="text-xs text-ink-3">
-            {t("Из Linko: точка брала Yamelly, но давно не брала. Пересчёт — по субботам в 19:00 на следующую неделю; разбуженные остаются в списке.")}
+            {data?.fromFile
+              ? t("Официальный список — «Приложение 1» ТЗ. За ТП точки закреплены по Linko; по Linko список не пересчитывается, разбуженные остаются в списке.")
+              : t("Из Linko: точка брала Yamelly, но давно не брала. Пересчёт — по субботам в 19:00 на следующую неделю; разбуженные остаются в списке.")}
           </p>
         </div>
-        {!confirm ? (
+        {data?.fromFile ? null : !confirm ? (
           <button className={button} onClick={() => setConfirm(true)} disabled={busy || !data}>
             <RefreshCw className="size-4" />
             {t("Пересчитать из Linko")}
@@ -909,7 +914,9 @@ export function SleepingPanel({ program }: { program: IncentiveProgram }) {
               <Stat label="Действует с" value={day(data.listedFrom)} />
             </div>
             <p className="text-xs text-ink-3">
-              {t("Правило: брала Yamelly с {from}, не брала с {since}.", { from: day(data.boughtFrom), since: day(data.notSince) })}{" "}
+              {data.fromFile
+                ? t("Список — «Приложение 1» ТЗ на 04.11.")
+                : t("Правило: брала Yamelly с {from}, не брала с {since}.", { from: day(data.boughtFrom), since: day(data.notSince) })}{" "}
               {data.computed
                 ? t("Снимка ещё нет: список считается по Linko на начало акции, первая карточка по расписанию его запишет.")
                 : t("Снимок изменён {time}.", { time: when(data.changedAt) })}

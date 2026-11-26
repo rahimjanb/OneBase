@@ -121,8 +121,68 @@ public sealed class OneCMockDataProvider(MockOptions options, TimeProvider clock
             ApiVersion = "1.0", InfobaseId = MockCatalog.InfobaseId, InfobaseName = MockCatalog.InfobaseName,
             Configuration = new OneCConfiguration("БухгалтерияДляУзбекистана (демо)", "3.0"), ServerTime = clock.GetUtcNow().ToOffset(MockDataSet.Offset),
             AccountingCurrency = "UZS", User = "OneBase_ReadOnly", ReadOnly = true,
+            ChangeTracking = Versions ? "versions" : "changes",
+            Capabilities = Versions ? ["versions", "ids"] : ["versions", "ids", "changes"],
         };
     }
+
+    /// <summary>Источник объявляет изменения только чтением (/versions), без плана обмена.</summary>
+    private bool Versions => string.Equals(options.ChangeTracking, "versions", StringComparison.OrdinalIgnoreCase);
+
+    public async Task<OneCPage<OneCVersionDto>> GetVersionsAsync(OneCVersionQuery query, OneCPageRequest page, CancellationToken ct)
+    {
+        var set = Set;
+        List<OneCVersionDto> rows;
+        if (query.EntityType == OneCEntityTypes.Document)
+        {
+            if (query.OrganizationId is null || query.From is not { } from || query.To is not { } to)
+            {
+                throw new OneCException(OneCErrorKind.BadRequest, "1С /versions: для документов нужны organizationId, from и to");
+            }
+
+            rows = set.Documents.Where(d => set.Visible(d) && d.Doc.OrganizationId == query.OrganizationId && InRange(d.Doc.Date, from, to))
+                .OrderBy(d => d.Doc.Date).ThenBy(d => d.Doc.Id, StringComparer.Ordinal)
+                .Select(d => new OneCVersionDto { Id = d.Doc.Id, Version = d.Doc.Version, DeletionMark = d.Doc.DeletionMark, Posted = d.Doc.Posted, Date = d.Doc.Date, Type = d.Doc.Type })
+                .ToList();
+        }
+        else
+        {
+            rows = ObjectsOf(set, query.EntityType).Select(o => new OneCVersionDto { Id = o.Id, Version = o.Version, DeletionMark = o.DeletionMark }).ToList();
+        }
+
+        return await PageAsync("versions", rows, page, null, ct);
+    }
+
+    public async Task<IReadOnlyList<JsonElement>> GetByIdsAsync(string entityType, IReadOnlyList<string> ids, CancellationToken ct)
+    {
+        var (method, _) = OneCHttpDataProvider.MethodOf(entityType);
+        await Faults.CheckAsync(method, ct);
+        var wanted = ids.ToHashSet(StringComparer.Ordinal);
+        var set = Set;
+        if (entityType == OneCEntityTypes.Document)
+        {
+            return set.Documents.Where(d => set.Visible(d) && wanted.Contains(d.Doc.Id!))
+                .Select(d => JsonSerializer.SerializeToElement(d.Doc with { Entries = d.Doc.Posted ? d.Entries : [] }, Json)).ToList();
+        }
+
+        return ObjectsOf(set, entityType).Where(o => wanted.Contains(o.Id!)).Select(o => JsonSerializer.SerializeToElement((object)o, Json)).ToList();
+    }
+
+    /// <summary>Справочник тестового источника по типу записи OneBase.</summary>
+    private static IEnumerable<OneCObject> ObjectsOf(MockDataSet set, string entityType) => entityType switch
+    {
+        OneCEntityTypes.Organization => set.Organizations,
+        OneCEntityTypes.Account => set.Accounts,
+        OneCEntityTypes.Currency => set.Currencies,
+        OneCEntityTypes.Counterparty => set.Counterparties,
+        OneCEntityTypes.Contract => set.Contracts,
+        OneCEntityTypes.Warehouse => set.Warehouses,
+        OneCEntityTypes.Department => set.Departments,
+        OneCEntityTypes.Item => set.Items,
+        _ when entityType.StartsWith(OneCEntityTypes.ReferencePrefix, StringComparison.Ordinal) =>
+            set.References.GetValueOrDefault(entityType[OneCEntityTypes.ReferencePrefix.Length..]) ?? [],
+        _ => throw new OneCException(OneCErrorKind.BadRequest, $"1С /versions: неизвестный тип «{entityType}»"),
+    };
 
     public Task<OneCPage<OneCOrganizationDto>> GetOrganizationsAsync(OneCPageRequest page, CancellationToken ct) => PageAsync("organizations", Set.Organizations, page, null, ct);
 

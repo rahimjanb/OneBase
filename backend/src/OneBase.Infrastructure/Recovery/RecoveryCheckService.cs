@@ -160,6 +160,7 @@ public sealed class RecoveryCheckService(
             Check("linko", "Linko: токены API", Integration(LinkoSettingsStore.Code, ProtectionPurposes.LinkoToken)
                 .Concat(Integration(LinkoSettingsStore.Code, ProtectionPurposes.LinkoPlanToken, plan: true))),
             Check("verifix", "Verifix: client_secret", Integration(VerifixSettingsStore.Code, ProtectionPurposes.VerifixClientSecret)),
+            Check("tajik", "1С Таджикистан: ключ доступа", Integration(OneBase.Application.Sales.Tajik.TajikSettings.Code, ProtectionPurposes.TajikToken)),
             Check("telegram-api", "Telegram: api_hash", Integration(TelegramCredentialsStore.Code, ProtectionPurposes.TelegramApiHash)),
             Check("telegram-session", "Telegram: сессии аккаунтов", All(ProtectionPurposes.TelegramSession, accounts.Select(a => a.ProtectedSession)), binary: true),
             Check("telegram-phone", "Telegram: номера аккаунтов", All(ProtectionPurposes.TelegramPhone, accounts.Select(a => a.ProtectedPhone))),

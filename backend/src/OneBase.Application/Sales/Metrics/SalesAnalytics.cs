@@ -427,7 +427,30 @@ public sealed partial class SalesAnalytics
             NotBoughtTotal("Итого", notBought),
             CategoryPlanTotal(categoryPlans),
             Sum("total", "Итого", null, visitRows),
-            CalendarOf(Lines(set).ToList(), calendarRows, l => RegionOf(l).ToString(), calendarMetric, calendarCategory));
+            GroupCalendarOf(set, calendarRows, calendarMetric, calendarCategory));
+    }
+
+    /// <summary>
+    /// Календарь месяца республики / РМ: строка — регион (подпись — супервайзер), под ней его ТП — раскрываются на сайте по клику.
+    /// ТП — команда региона, как в его календаре («Команда ТП»), без строк из одних «·»; продажи без ТП или не ТП (офис, каналы) —
+    /// строкой «прочие», поэтому кг и деньги ТП в сумме равны строке региона. АКБ ТП не складываются: точку могут обслуживать двое.
+    /// </summary>
+    private MonthCalendar GroupCalendarOf(IReadOnlySet<Guid>? set, IReadOnlyList<(string Id, string Name)> calendarRows, string metric, long? category)
+    {
+        var calendar = CalendarOf(Lines(set).ToList(), calendarRows, l => RegionOf(l).ToString(), metric, category);
+        var rows = calendar.Rows.Select(row =>
+        {
+            var region = Guid.Parse(row.Id);
+            var team = TeamOf(region);
+            var inTeam = team.ToHashSet();
+            var keys = team.Select(a => (a.ToString(), AgentName(a))).Append((MonthCalendarRow.OtherId, "Прочие продажи")).ToList();
+            var children = CalendarOf(_currentByRegion[region].ToList(), keys,
+                    l => l.AgentId is { } a && inTeam.Contains(a) ? a.ToString() : MonthCalendarRow.OtherId, metric, category)
+                .Rows.Where(r => r.Days.Any(d => d != null))
+                .ToList();
+            return row with { Subtitle = _regions[region].Supervisor, Children = children };
+        }).ToList();
+        return calendar with { Rows = rows };
     }
 
     private KpiTiles Kpi(IReadOnlySet<Guid>? scope)

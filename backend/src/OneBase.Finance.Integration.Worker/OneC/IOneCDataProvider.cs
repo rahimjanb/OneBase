@@ -51,6 +51,18 @@ public interface IOneCDataProvider
     /// <summary>Изменения с прошлой выгрузки (план обмена). Без курсора — текущий курсор и пустой список.</summary>
     Task<OneCPage<OneCChangeDto>> GetModifiedRecordsAsync(string? cursor, int limit, CancellationToken ct);
 
+    /// <summary>
+    /// Версии объектов (v1.1, только чтение): справочник целиком или документы организации за период — идентификатор, ВерсияДанных,
+    /// пометка удаления (у документов — проведён, дата, тип).
+    /// </summary>
+    Task<OneCPage<OneCVersionDto>> GetVersionsAsync(OneCVersionQuery query, OneCPageRequest page, CancellationToken ct);
+
+    /// <summary>
+    /// Объекты по идентификаторам (v1.1, не больше 100): JSON в формате метода сущности; документы — вместе с проводками. Удалённых из базы
+    /// в ответе нет.
+    /// </summary>
+    Task<IReadOnlyList<System.Text.Json.JsonElement>> GetByIdsAsync(string entityType, IReadOnlyList<string> ids, CancellationToken ct);
+
     /// <summary>Обороты за период — те же строки оборотно-сальдовой ведомости по месяцам периода.</summary>
     async Task<List<OneCBalanceDto>> GetTurnoversAsync(string organizationId, DateOnly from, DateOnly to, int limit, CancellationToken ct)
     {

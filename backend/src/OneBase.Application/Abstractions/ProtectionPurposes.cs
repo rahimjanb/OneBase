@@ -10,6 +10,9 @@ public static class ProtectionPurposes
     public const string LinkoToken = "OneBase.Integrations.Linko.Token";
     public const string LinkoPlanToken = "OneBase.Integrations.Linko.PlanToken";
     public const string VerifixClientSecret = "OneBase.Integrations.Verifix.ClientSecret";
+    public const string OneCPassword = "OneBase.Integrations.OneC.Password";
+    public const string OneCApiSecret = "OneBase.Integrations.OneC.ApiSecret";
+    public const string TajikToken = "OneBase.Integrations.Tajik.Token";
     public const string TelegramApiHash = "OneBase.Telegram.ApiHash";
     public const string TelegramSession = "OneBase.Telegram.Session";
     public const string TelegramPhone = "OneBase.Telegram.Phone";

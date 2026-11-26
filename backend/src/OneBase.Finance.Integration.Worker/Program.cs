@@ -58,7 +58,9 @@ if (mock)
 }
 else
 {
-    builder.Services.AddSingleton<IOneCDataProvider, OneCHttpDataProvider>();
+    // Подключение — из переменных OneC__* или со страницы «1С» в OneBase (меняется без перезапуска службы).
+    builder.Services.AddSingleton<SwitchableOneCDataProvider>();
+    builder.Services.AddSingleton<IOneCDataProvider>(sp => sp.GetRequiredService<SwitchableOneCDataProvider>());
 }
 
 builder.Services.AddHttpClient<IOneBaseIntegrationApi, OneBaseIntegrationApi>(http =>

@@ -2,10 +2,119 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Database, FlaskConical, Info } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowDownRight, ArrowUpRight, Database, FlaskConical, Info, X } from "lucide-react";
 import { useT } from "@/i18n/client";
-import { change, date, full, moment, money, monthShort, ONEC_SETTINGS, periodPresets, type FinanceMeta, type FinanceOrganization } from "@/lib/finance";
+import { bff } from "@/lib/bff";
+import {
+  change,
+  date,
+  dimensionKinds,
+  full,
+  moment,
+  money,
+  monthShort,
+  ONEC_SETTINGS,
+  periodPresets,
+  type FinanceDimension,
+  type FinanceMeta,
+  type FinanceOrganization,
+} from "@/lib/finance";
+
+/** Сменить параметры адреса страницы (null — убрать); номер страницы сбрасывается. Данные пересчитывает сервер. */
+function useGo() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
+  return (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(sp.toString());
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+
+    next.delete("page");
+    router.push(`${pathname}?${next.toString()}`);
+  };
+}
+
+/** Применённые отборы — плашками с крестиком (убрать отбор). */
+function ActiveDimensions({ dimensions }: { dimensions: FinanceDimension[] }) {
+  const t = useT();
+  const go = useGo();
+  if (dimensions.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {dimensions.map((d) => (
+        <span key={d.kind} className="inline-flex max-w-full items-center gap-1 rounded-full border border-accent/30 bg-accent-soft px-2.5 py-1 text-xs text-accent-strong">
+          <span className="truncate">
+            {t(dimensionKinds.find((k) => k.key === d.kind)?.label ?? d.kind)}: {d.name}
+          </span>
+          <button type="button" aria-label={t("Убрать отбор")} className="shrink-0 rounded-full hover:bg-accent/10" onClick={() => go({ [d.kind]: null })}>
+            <X aria-hidden className="size-3.5" />
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Добавить отбор: вид (контрагент, номенклатура, склад, подразделение) и поиск по названию, коду или ИНН среди данных 1С. */
+function DimensionPicker() {
+  const t = useT();
+  const go = useGo();
+  const [kind, setKind] = useState(dimensionKinds[0].key);
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [options, setOptions] = useState<FinanceDimension[]>([]);
+  useEffect(() => {
+    if (!open) return;
+    const id = setTimeout(() => {
+      bff<FinanceDimension[]>(`finance/dimensions?kind=${kind}&q=${encodeURIComponent(q)}&limit=12`).then(setOptions).catch(() => setOptions([]));
+    }, 250);
+    return () => clearTimeout(id);
+  }, [kind, q, open]);
+  return (
+    <div className="relative flex items-center gap-1">
+      <select aria-label={t("Вид отбора")} value={kind} onChange={(e) => setKind(e.target.value)} className="h-8 rounded-full border border-line bg-surface px-2 text-xs font-medium text-ink">
+        {dimensionKinds.map((k) => (
+          <option key={k.key} value={k.key}>
+            {t(k.label)}
+          </option>
+        ))}
+      </select>
+      <input
+        aria-label={t("Отбор")}
+        value={q}
+        placeholder={t("название, код или ИНН")}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={(e) => setQ(e.target.value)}
+        className="h-8 w-44 rounded-full border border-line bg-surface px-3 text-xs"
+      />
+      {open && options.length > 0 && (
+        <ul className="absolute left-0 top-9 z-20 max-h-64 w-72 max-w-[80vw] overflow-y-auto rounded-lg border border-line bg-surface p-1 shadow-lg">
+          {options.map((o) => (
+            <li key={o.id}>
+              <button
+                type="button"
+                className="w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-ink hover:bg-muted"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setQ("");
+                  setOpen(false);
+                  go({ [kind]: o.id });
+                }}
+              >
+                {o.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 /**
  * Откуда цифры: «Факт · 1С:Бухгалтерия», период, организация, когда синхронизировано и по какую дату есть данные. Демо-данные тестового
@@ -18,7 +127,7 @@ export function MetaBar({ meta, settingsLink = false }: { meta: FinanceMeta; set
       {meta.demo && (
         <p className="flex items-start gap-2 rounded-lg border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
           <FlaskConical aria-hidden className="mt-0.5 size-4 shrink-0" />
-          {t("Демо-данные тестового источника 1С — не настоящая бухгалтерия. Настоящая 1С подключается после получения API от VENKON GROUP.")}
+          {t("Демо-данные тестового источника 1С — не настоящая бухгалтерия. Настоящая 1С подключается после установки в ней расширения OneBaseExchange (HTTP-сервис только для чтения).")}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-3">
@@ -39,6 +148,7 @@ export function MetaBar({ meta, settingsLink = false }: { meta: FinanceMeta; set
           </span>
         )}
       </div>
+      <ActiveDimensions dimensions={meta.dimensions ?? []} />
       {meta.note && (
         <p className="flex items-start gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink-2">
           <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-ink-3" />
@@ -198,21 +308,9 @@ export function ShareBars({ rows, href }: { rows: { key: string; title: string; 
 /** Отбор раздела: организация 1С и период (быстрые периоды и свои даты). Меняет адрес страницы — данные считает сервер. */
 export function FinanceFilters({ organizations, from, to, organization, single = false }: { organizations: FinanceOrganization[]; from: string; to: string; organization?: string; single?: boolean }) {
   const t = useT();
-  const router = useRouter();
-  const pathname = usePathname();
-  const sp = useSearchParams();
   const [custom, setCustom] = useState({ from, to });
   const presets = periodPresets();
-  const go = (patch: Record<string, string | null>) => {
-    const next = new URLSearchParams(sp.toString());
-    for (const [k, v] of Object.entries(patch)) {
-      if (v) next.set(k, v);
-      else next.delete(k);
-    }
-
-    next.delete("page");
-    router.push(`${pathname}?${next.toString()}`);
-  };
+  const go = useGo();
   const chip = (active: boolean) =>
     `h-8 rounded-full border px-3 text-xs font-medium whitespace-nowrap ${active ? "border-accent bg-accent-soft text-accent-strong" : "border-line bg-surface text-ink-2 hover:bg-muted"}`;
   return (
@@ -254,6 +352,7 @@ export function FinanceFilters({ organizations, from, to, organization, single =
           </div>
         </>
       )}
+      <DimensionPicker />
     </div>
   );
 }

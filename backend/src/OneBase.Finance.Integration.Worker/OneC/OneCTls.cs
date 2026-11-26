@@ -9,6 +9,29 @@ namespace OneBase.Finance.Integration.Worker.OneC;
 /// </summary>
 public static class OneCTls
 {
+    /// <summary>Доверенные корни: сертификат текстом PEM (со страницы «1С») или файлом (OneC__CaCertificatePath); нет ни того ни другого — null.</summary>
+    public static X509Certificate2Collection? LoadRoots(string? path, string? pem)
+    {
+        if (string.IsNullOrWhiteSpace(pem))
+        {
+            return LoadRoots(path);
+        }
+
+        var roots = new X509Certificate2Collection();
+        try
+        {
+            roots.ImportFromPem(pem);
+        }
+        catch (Exception)
+        {
+            throw new OneCException(OneCErrorKind.Configuration, "Сертификат 1С со страницы «1С» не читается (нужен PEM: -----BEGIN CERTIFICATE-----).");
+        }
+
+        return roots.Count == 0
+            ? throw new OneCException(OneCErrorKind.Configuration, "В сертификате 1С со страницы «1С» нет сертификата.")
+            : roots;
+    }
+
     public static X509Certificate2Collection? LoadRoots(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))

@@ -8,7 +8,7 @@ namespace OneBase.Api.Controllers;
 /// <summary>
 /// Раздел «Финансы» по данным 1С:Бухгалтерии — только чтение (право finance.read). Цифры — факт 1С, без пересчёта; в каждом ответе — источник,
 /// период и время синхронизации. Организация: id организации 1С или пусто — все организации сводно. Период: from–to (по Ташкенту), по умолчанию —
-/// текущий месяц.
+/// текущий месяц. Отборы во всех отчётах (необязательно): counterparty, item, warehouse, department — id 1С.
 /// </summary>
 [ApiController]
 [Route("api/finance")]
@@ -35,8 +35,17 @@ public sealed class FinanceController(FinanceReportService reports, TimeProvider
             return null;
         }
 
-        return new FinanceFilter(string.IsNullOrWhiteSpace(organization) ? null : organization.Trim(), start, end);
+        string? Query(string key) => Request.Query[key].ToString() is { Length: > 0 and <= 100 } value ? value.Trim() : null;
+        return new FinanceFilter(string.IsNullOrWhiteSpace(organization) ? null : organization.Trim(), start, end)
+        {
+            CounterpartyId = Query("counterparty"), ItemId = Query("item"), WarehouseId = Query("warehouse"), DepartmentId = Query("department"),
+        };
     }
+
+    /// <summary>Значения для отборов: kind — counterparty, item, warehouse, department; q — часть названия, код или ИНН.</summary>
+    [HttpGet("dimensions")]
+    public async Task<IActionResult> Dimensions(string kind, string? q, int limit = 20, CancellationToken ct = default) =>
+        Ok(await reports.DimensionOptionsAsync(kind, q, limit, ct));
 
     private async Task<IActionResult> Run<T>(string? organization, DateOnly? from, DateOnly? to, Func<FinanceFilter, Task<T>> query)
     {

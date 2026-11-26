@@ -10,21 +10,32 @@ namespace OneBase.Finance.Integration.Worker.OneC;
 /// Проверка подключения к 1С по шагам — понятная диагностика вместо «не работает»: настройки → сеть (TCP до порта) → TLS и сертификат →
 /// авторизация и ответ API (/ping). Ничего не меняет ни в сети, ни на сервере 1С. Пароль и токен в отчёт не попадают.
 /// </summary>
-public sealed class ConnectionDiagnostics(IOneCDataProvider provider, OneCOptions options, IHostEnvironment environment, TimeProvider clock)
+public sealed class ConnectionDiagnostics(IOneCDataProvider provider, OneCOptions serviceOptions, IHostEnvironment environment, TimeProvider clock)
 {
+    /// <summary>Действующее подключение: со страницы «1С», если служба его применила, иначе — переменные службы.</summary>
+    private OneCOptions Effective => provider is SwitchableOneCDataProvider s ? s.Options : serviceOptions;
+
+    /// <summary>Откуда подключение: env, onebase, none или mock.</summary>
+    private string Source => provider switch
+    {
+        SwitchableOneCDataProvider s => s.Source,
+        { Name: "mock" } => "mock",
+        _ => string.IsNullOrWhiteSpace(serviceOptions.BaseUrl) ? SwitchableOneCDataProvider.NotConfigured : SwitchableOneCDataProvider.FromEnvironment,
+    };
+
     public static readonly TimeSpan NetworkTimeout = TimeSpan.FromSeconds(10);
 
     public async Task<ConnectionReport> RunAsync(CancellationToken ct)
     {
         var steps = new List<DiagnosticStep>();
-        var report = new ConnectionReport { CheckedAt = clock.GetUtcNow(), BaseUrl = provider.DisplayUrl };
+        var report = new ConnectionReport { CheckedAt = clock.GetUtcNow(), BaseUrl = provider.DisplayUrl, Source = Source };
         if (provider.Name == "mock")
         {
             steps.Add(new DiagnosticStep("source", true, "Тестовый источник (демо-данные 1С): сеть и сервер 1С не используются.", 0));
             return await PingAsync(report with { Https = true }, steps, ct);
         }
 
-        var error = OneCHttpDataProvider.CheckConfiguration(options, environment.IsProduction(), out var uri);
+        var error = OneCHttpDataProvider.CheckConfiguration(Effective, environment.IsProduction(), out var uri);
         if (error is not null || uri is null)
         {
             steps.Add(new DiagnosticStep("config", false, error ?? "Адрес 1С не задан.", 0));
@@ -32,7 +43,7 @@ public sealed class ConnectionDiagnostics(IOneCDataProvider provider, OneCOption
         }
 
         report = report with { Host = uri.Host, Port = uri.Port, Https = uri.Scheme == "https" };
-        steps.Add(new DiagnosticStep("config", true, $"Адрес {provider.DisplayUrl}, вход — {(string.IsNullOrWhiteSpace(options.Token) ? "пользователь 1С" : "токен")}.", 0));
+        steps.Add(new DiagnosticStep("config", true, $"Адрес {provider.DisplayUrl}, вход — {Login(Effective)}.", 0));
 
         // 1. Сеть: TCP до порта публикации.
         var watch = Stopwatch.StartNew();
@@ -65,7 +76,7 @@ public sealed class ConnectionDiagnostics(IOneCDataProvider provider, OneCOption
             X509Certificate2Collection? roots;
             try
             {
-                roots = OneCTls.LoadRoots(options.CaCertificatePath);
+                roots = OneCTls.LoadRoots(Effective.CaCertificatePath, Effective.CaCertificatePem);
             }
             catch (OneCException e)
             {
@@ -133,6 +144,7 @@ public sealed class ConnectionDiagnostics(IOneCDataProvider provider, OneCOption
             return report with
             {
                 Ok = true, AuthOk = true, InfobaseId = ping.InfobaseId, InfobaseName = ping.InfobaseName, ApiVersion = ping.ApiVersion,
+                ChangeTracking = ping.TracksByVersions ? "versions" : "changes",
                 Configuration = ping.Configuration is null ? null : $"{ping.Configuration.Name} {ping.Configuration.Version}".Trim(),
                 Message = provider.Name == "mock" ? "Подключено к тестовому источнику." : "Подключено к 1С.", Steps = steps,
             };
@@ -144,5 +156,26 @@ public sealed class ConnectionDiagnostics(IOneCDataProvider provider, OneCOption
             steps.Add(new DiagnosticStep(auth == false ? "auth" : "api", false, e.Message, ms));
             return report with { Ok = false, AuthOk = auth, TlsValid = e.Kind == OneCErrorKind.Tls ? false : report.TlsValid, Message = e.Message, Steps = steps };
         }
+    }
+
+    /// <summary>Как служба входит в 1С (без логина и секретов): пользователь 1С, токен, API Secret.</summary>
+    public static string Login(OneCOptions o)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(o.Token))
+        {
+            parts.Add("токен");
+        }
+        else if (!string.IsNullOrWhiteSpace(o.Username))
+        {
+            parts.Add("пользователь 1С");
+        }
+
+        if (!string.IsNullOrWhiteSpace(o.ApiSecret))
+        {
+            parts.Add("API Secret");
+        }
+
+        return parts.Count == 0 ? "не задан" : string.Join(" + ", parts);
     }
 }

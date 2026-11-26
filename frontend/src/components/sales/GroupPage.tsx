@@ -96,6 +96,7 @@ export async function GroupPage({
           title={t("Календарь месяца по регионам")}
           rowLabel={t("Регион")}
           rowKind="region"
+          query={query}
         />
         <VisitCalendarTable
           rows={data.visitCalendar}

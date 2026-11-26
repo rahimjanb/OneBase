@@ -3,17 +3,20 @@ import { VerifixTabs } from "@/components/hr/HrBits";
 import { VerifixSettings } from "@/components/hr/VerifixSettings";
 import { LinkoSettings } from "@/components/integrations/LinkoSettings";
 import { OneCSettings } from "@/components/integrations/OneCSettings";
+import { TajikSettings } from "@/components/integrations/TajikSettings";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { getT } from "@/i18n/server";
 import type { VerifixDetails } from "@/lib/hr";
 import type { OneCStatus } from "@/lib/finance";
 import type { LinkoDetails } from "@/lib/integrations";
+import type { TajikIntegrationDetails } from "@/lib/sales/tajik";
 import { apiGet } from "@/lib/server-api";
 
-/** Интеграции: Linko — для продаж, Verifix — для HR (подключение и синхронизация; журнал — вкладкой рядом), 1С — для финансов. */
+/** Интеграции: Linko и 1С Таджикистан — для продаж, Verifix — для HR (подключение и синхронизация; журнал — вкладкой рядом), 1С — для финансов. */
 export default async function IntegrationPage({ params }: { params: Promise<{ dept: string; code: string }> }) {
   const { dept, code } = await params;
   if (code === "onec") return <OneCPage dept={dept} />;
+  if (code === "tj1c") return <TajikPage dept={dept} />;
   if (code !== "linko" && code !== "verifix") notFound();
 
   const path = `/settings/integrations/${dept}/${code}`;
@@ -68,6 +71,32 @@ async function OneCPage({ dept }: { dept: string }) {
       />
       <PageBody>
         <OneCSettings initial={status} />
+      </PageBody>
+    </>
+  );
+}
+
+/** «Продажи → 1С Таджикистан»: адрес API и ключ дилера, расписание, проверка, загрузка и журнал. */
+async function TajikPage({ dept }: { dept: string }) {
+  const path = `/settings/integrations/${dept}/tj1c`;
+  const details = await apiGet<TajikIntegrationDetails>("/api/integrations/tj1c", path);
+  if (details.departmentCode !== dept) notFound();
+  const t = await getT();
+  return (
+    <>
+      <PageHeader
+        title={t(details.name)}
+        subtitle={t(details.description)}
+        breadcrumbs={[
+          { label: "OneBase", href: "/" },
+          { label: t("Настройки"), href: "/settings" },
+          { label: t("Интеграции"), href: "/settings/integrations" },
+          { label: t(details.departmentName), href: `/settings/integrations/${dept}` },
+          { label: t(details.name) },
+        ]}
+      />
+      <PageBody>
+        <TajikSettings initial={details} />
       </PageBody>
     </>
   );

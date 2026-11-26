@@ -102,6 +102,12 @@ public sealed record ConnectionReport
     public string? Configuration { get; init; }
     public string? Message { get; init; }
     public List<DiagnosticStep> Steps { get; init; } = [];
+
+    /// <summary>Откуда служба взяла подключение: env — переменные OneC__* службы, onebase — настройки на странице «1С», none — не задано.</summary>
+    public string? Source { get; init; }
+
+    /// <summary>Как отслеживаются изменения 1С: versions (только чтение) или changes (план обмена) — по ответу /ping.</summary>
+    public string? ChangeTracking { get; init; }
 }
 
 public sealed record WorkerHeartbeat
@@ -139,6 +145,35 @@ public sealed record WorkerSettings
 
     /// <summary>Незавершённая историческая загрузка — служба продолжает её и после перезапуска.</summary>
     public Guid? ActiveHistoricalImportId { get; init; }
+
+    /// <summary>
+    /// Версия подключения к 1С, заданного на странице «1С» (адрес, вход, сертификат); null — не задано. Изменилась — служба забирает подключение
+    /// методом connection (если у неё нет своих переменных OneC__BaseUrl).
+    /// </summary>
+    public string? ConnectionVersion { get; init; }
+
+    /// <summary>Организации 1С, которые загружаются; пусто — все.</summary>
+    public IReadOnlyList<string> OrganizationIds { get; init; } = [];
+
+    /// <summary>Включённые модули (<see cref="OneCModules"/>); пусто — все.</summary>
+    public IReadOnlyList<string> Modules { get; init; } = [];
+}
+
+/// <summary>
+/// Подключение к 1С, заданное администратором на странице «1С» (секреты хранятся в OneBase зашифрованными и отдаются только службе по её
+/// ключу, во внутренней сети docker). Version — та же, что в <see cref="WorkerSettings.ConnectionVersion"/>.
+/// </summary>
+public sealed record WorkerConnection
+{
+    public string? BaseUrl { get; init; }
+    public string? Username { get; init; }
+    public string? Password { get; init; }
+    public string? ApiSecret { get; init; }
+
+    /// <summary>Сертификат публикации 1С или внутреннего центра сертификации (PEM) — доверенный корень для проверки TLS.</summary>
+    public string? CaCertificatePem { get; init; }
+
+    public string? Version { get; init; }
 }
 
 public static class WorkerCommandKinds
@@ -334,3 +369,12 @@ public sealed record HistoricalProgressRequest
 
 /// <summary>Сколько записей потока организации за период лежит в OneBase — для сверки с итогами 1С.</summary>
 public sealed record ImportedTotals(int Count, decimal Amount);
+
+/// <summary>
+/// Запись 1С, уже лежащая в OneBase: идентификатор, версия 1С и пометка удаления — для сверки с /versions 1С (изменения только чтением).
+/// Org — организация записи ("" — общий справочник).
+/// </summary>
+public sealed record StoredVersion(string Id, string? Version, bool Deleted, string Org, string? Type = null);
+
+/// <summary>Месяц с документами организации в OneBase — для ночной сверки всех загруженных месяцев.</summary>
+public sealed record StoredMonth(string OrganizationId, DateOnly Month, int Documents);

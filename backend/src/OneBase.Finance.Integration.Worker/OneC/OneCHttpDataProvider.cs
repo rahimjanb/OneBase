@@ -3,8 +3,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
+using OneBase.Finance.Integration.Contracts;
 
 namespace OneBase.Finance.Integration.Worker.OneC;
 
@@ -20,8 +22,11 @@ public sealed class OneCHttpDataProvider : IOneCDataProvider, IDisposable
         ["ping"] = "ping", ["organizations"] = "organizations", ["accounts"] = "accounts", ["counterparties"] = "counterparties",
         ["contracts"] = "contracts", ["currencies"] = "currencies", ["exchange-rates"] = "exchange-rates", ["warehouses"] = "warehouses",
         ["departments"] = "departments", ["references"] = "references", ["items"] = "items", ["documents"] = "documents",
-        ["entries"] = "entries", ["balances"] = "balances", ["changes"] = "changes",
+        ["entries"] = "entries", ["balances"] = "balances", ["changes"] = "changes", ["versions"] = "versions",
     };
+
+    /// <summary>Наибольшее число идентификаторов в одном запросе ids= (спецификация v1.1).</summary>
+    public const int MaxIds = 100;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -38,7 +43,17 @@ public sealed class OneCHttpDataProvider : IOneCDataProvider, IDisposable
             return;
         }
 
-        var roots = OneCTls.LoadRoots(options.CaCertificatePath);
+        X509Certificate2Collection? roots;
+        try
+        {
+            roots = OneCTls.LoadRoots(options.CaCertificatePath, options.CaCertificatePem);
+        }
+        catch (OneCException e)
+        {
+            _configError = e.Message;
+            return;
+        }
+
         _http = new HttpClient(OneCTls.CreateHandler(roots))
         {
             BaseAddress = baseUri,
@@ -55,7 +70,15 @@ public sealed class OneCHttpDataProvider : IOneCDataProvider, IDisposable
             var basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{options.Username}:{options.Password}"));
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", basic);
         }
+
+        if (!string.IsNullOrWhiteSpace(options.ApiSecret))
+        {
+            _http.DefaultRequestHeaders.Add(SecretHeader, options.ApiSecret.Trim());
+        }
     }
+
+    /// <summary>Заголовок API Secret HTTP-сервиса 1С (спецификация v1.1, расширение «OneBaseExchange»).</summary>
+    public const string SecretHeader = "X-OneBase-Secret";
 
     public string Name => "http";
 
@@ -89,9 +112,9 @@ public sealed class OneCHttpDataProvider : IOneCDataProvider, IDisposable
             return "Подключение к 1С — только по HTTPS. http разрешён лишь для проверки на этом компьютере.";
         }
 
-        if (string.IsNullOrWhiteSpace(options.Token) && string.IsNullOrWhiteSpace(options.Username))
+        if (string.IsNullOrWhiteSpace(options.Token) && string.IsNullOrWhiteSpace(options.Username) && string.IsNullOrWhiteSpace(options.ApiSecret))
         {
-            return "Не заданы учётные данные 1С (OneC__Username и OneC__Password или OneC__Token).";
+            return "Не заданы учётные данные 1С (логин и пароль пользователя 1С, API Secret или токен).";
         }
 
         baseUri = uri;
@@ -134,6 +157,52 @@ public sealed class OneCHttpDataProvider : IOneCDataProvider, IDisposable
 
     public Task<OneCPage<OneCChangeDto>> GetModifiedRecordsAsync(string? cursor, int limit, CancellationToken ct) =>
         PageAsync<OneCChangeDto>("changes", new OneCPageRequest(limit, cursor), [], ct);
+
+    public Task<OneCPage<OneCVersionDto>> GetVersionsAsync(OneCVersionQuery query, OneCPageRequest page, CancellationToken ct)
+    {
+        var (entityType, kind) = query.EntityType.StartsWith(OneCEntityTypes.ReferencePrefix, StringComparison.Ordinal)
+            ? ("reference", query.EntityType[OneCEntityTypes.ReferencePrefix.Length..])
+            : (query.EntityType, null);
+        return PageAsync<OneCVersionDto>("versions", page,
+            [("entityType", entityType), ("kind", kind), ("organizationId", query.OrganizationId),
+             ("from", query.From is { } f ? Date(f) : null), ("to", query.To is { } t ? Date(t) : null)], ct);
+    }
+
+    public async Task<IReadOnlyList<JsonElement>> GetByIdsAsync(string entityType, IReadOnlyList<string> ids, CancellationToken ct)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        if (ids.Count > MaxIds)
+        {
+            throw new ArgumentException($"Не больше {MaxIds} идентификаторов за запрос.", nameof(ids));
+        }
+
+        var (method, extra) = MethodOf(entityType);
+        var query = new List<(string Key, string? Value)> { ("ids", string.Join(",", ids)) };
+        query.AddRange(extra);
+        var page = await GetAsync<OneCPage<JsonElement>>(method, query, ct);
+        return page.Items;
+    }
+
+    /// <summary>Метод спецификации для типа записи OneBase (выборка по ids=).</summary>
+    public static (string Method, List<(string Key, string? Value)> Extra) MethodOf(string entityType) => entityType switch
+    {
+        OneCEntityTypes.Organization => ("organizations", []),
+        OneCEntityTypes.Account => ("accounts", []),
+        OneCEntityTypes.Counterparty => ("counterparties", []),
+        OneCEntityTypes.Contract => ("contracts", []),
+        OneCEntityTypes.Currency => ("currencies", []),
+        OneCEntityTypes.Warehouse => ("warehouses", []),
+        OneCEntityTypes.Department => ("departments", []),
+        OneCEntityTypes.Item => ("items", []),
+        OneCEntityTypes.Document => ("documents", [("withEntries", "true")]),
+        _ when entityType.StartsWith(OneCEntityTypes.ReferencePrefix, StringComparison.Ordinal) =>
+            ("references", [("kind", entityType[OneCEntityTypes.ReferencePrefix.Length..])]),
+        _ => throw new ArgumentException($"Неизвестный тип записи: {entityType}.", nameof(entityType)),
+    };
 
     private static string Date(DateOnly d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 

@@ -22,6 +22,10 @@ public sealed class OneCInternalController(OneCSyncService sync, OneCImportServi
     [HttpPost("heartbeat")]
     public Task<HeartbeatResponse> Heartbeat(WorkerHeartbeat beat, CancellationToken ct) => sync.HeartbeatAsync(beat, ct);
 
+    /// <summary>Подключение к 1С, заданное на странице «1С» (с секретами): служба забирает его, когда меняется версия подключения.</summary>
+    [HttpGet("connection")]
+    public Task<WorkerConnection> Connection(CancellationToken ct) => sync.ConnectionAsync(ct);
+
     [HttpPost("commands/{id:guid}/complete")]
     public Task<IActionResult> Complete(Guid id, CommandResult result, CancellationToken ct) =>
         Run(async () => { await sync.CompleteCommandAsync(id, result, ct); return NoContent(); });
@@ -44,8 +48,20 @@ public sealed class OneCInternalController(OneCSyncService sync, OneCImportServi
         Run(async () => Ok(await import.ImportAsync(request, dryRun, ct)));
 
     [HttpGet("totals")]
-    public Task<IActionResult> Totals([FromQuery] string stream, [FromQuery] string? organizationId, [FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct) =>
-        Run(async () => Ok(await import.TotalsAsync(stream, organizationId ?? string.Empty, from, to, ct)));
+    public Task<IActionResult> Totals([FromQuery] string stream, [FromQuery] string? organizationId, [FromQuery] DateOnly from, [FromQuery] DateOnly to,
+        [FromQuery] string? types, CancellationToken ct) =>
+        Run(async () => Ok(await import.TotalsAsync(stream, organizationId ?? string.Empty, from, to, ct,
+            types?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))));
+
+    /// <summary>Записи 1С в OneBase для сверки версий: справочник целиком или документы организации за период.</summary>
+    [HttpGet("versions")]
+    public Task<IActionResult> Versions([FromQuery] string entityType, [FromQuery] string? organizationId, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        CancellationToken ct) =>
+        Run(async () => Ok(await import.StoredVersionsAsync(entityType, organizationId, from, to, ct)));
+
+    /// <summary>Месяцы с документами организаций в OneBase — для ночной сверки версий.</summary>
+    [HttpGet("versions/months")]
+    public Task<IActionResult> Months(CancellationToken ct) => Run(async () => Ok(await import.StoredMonthsAsync(ct)));
 
     [HttpPost("failures")]
     public Task<IActionResult> Failure(FailureReport report, CancellationToken ct) =>

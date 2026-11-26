@@ -619,6 +619,8 @@ const telegramReports: Dict = {
   "Спящие точки Yamelly": "Yamelly uxlayotgan nuqtalari",
   "Из Linko: точка брала Yamelly, но давно не брала. Пересчёт — по субботам в 19:00 на следующую неделю; разбуженные остаются в списке.": "Linko dan: nuqta Yamelly olgan, lekin ancha vaqt olmagan. Qayta hisob — shanba kunlari 19:00 da keyingi hafta uchun; uyg‘otilganlar ro‘yxatda qoladi.",
   "Пересчитать из Linko": "Linko dan qayta hisoblash",
+  "Официальный список — «Приложение 1» ТЗ. За ТП точки закреплены по Linko; по Linko список не пересчитывается, разбуженные остаются в списке.": "Rasmiy ro‘yxat — texnik topshiriqning «1-ilova»si. Nuqtalar TP larga Linko bo‘yicha biriktirilgan; ro‘yxat Linko bo‘yicha qayta hisoblanmaydi, uyg‘otilganlar ro‘yxatda qoladi.",
+  "Список — «Приложение 1» ТЗ на 04.11.": "Ro‘yxat — texnik topshiriqning 04.11 holatidagi «1-ilova»si.",
   "Изменения — с сегодняшнего дня. Пересчитать?": "O‘zgarishlar — bugundan. Qayta hisoblansinmi?",
   "Пересчитать": "Qayta hisoblash",
   "В списке": "Ro‘yxatda",

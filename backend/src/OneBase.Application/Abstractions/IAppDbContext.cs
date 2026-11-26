@@ -297,6 +297,13 @@ public interface IAppDbContext
     DbSet<OneBase.Domain.OneC.OneCWorkerCommand> OneCWorkerCommands { get; }
     DbSet<OneBase.Domain.OneC.OneCWorkerState> OneCWorkerStates { get; }
 
+    // 1С Таджикистан → OneBase (схема tajik): продажи и остаток дилера, регионы отчёта.
+    DbSet<OneBase.Domain.Sales.TajikSaleLine> TajikSaleLines { get; }
+    DbSet<OneBase.Domain.Sales.TajikStockItem> TajikStockItems { get; }
+    DbSet<OneBase.Domain.Sales.TajikRegion> TajikRegions { get; }
+    DbSet<OneBase.Domain.Sales.TajikRegionAssignment> TajikRegionAssignments { get; }
+    DbSet<OneBase.Domain.Sales.TajikSyncRun> TajikSyncRuns { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Отслеживаемые сущности — чтобы отбросить несохранённые строки после конфликта уникального индекса (второй экземпляр службы).</summary>

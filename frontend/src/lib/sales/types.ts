@@ -400,11 +400,22 @@ export type TeamRow = {
   akbExecution?: number | null;
 };
 
+export type MonthCalendarRow = {
+  id: string;
+  name: string;
+  days: (number | null)[];
+  total: number;
+  /** У региона — супервайзер. */
+  subtitle?: string | null;
+  /** У региона в календаре республики / РМ — его ТП и строка «прочие» (id "other"); раскрываются по клику. */
+  children?: MonthCalendarRow[] | null;
+};
+
 export type MonthCalendar = {
   metric: "kg" | "sum" | "akb";
   categoryId: number | null;
   sundays: boolean[];
-  rows: { id: string; name: string; days: (number | null)[]; total: number }[];
+  rows: MonthCalendarRow[];
   totalDays: (number | null)[];
   total: number;
 };

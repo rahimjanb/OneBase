@@ -33,8 +33,8 @@ const dict: Dict = {
   "Показать": "Ko'rsatish",
   "на": "holatiga",
   "было {value}": "edi {value}",
-  "Демо-данные тестового источника 1С — не настоящая бухгалтерия. Настоящая 1С подключается после получения API от VENKON GROUP.":
-    "1C sinov manbasining demo ma'lumotlari — haqiqiy buxgalteriya emas. Haqiqiy 1C VENKON GROUP dan API olingandan keyin ulanadi.",
+  "Демо-данные тестового источника 1С — не настоящая бухгалтерия. Настоящая 1С подключается после установки в ней расширения OneBaseExchange (HTTP-сервис только для чтения).":
+    "1C sinov manbasining demo ma’lumotlari — haqiqiy buxgalteriya emas. Haqiqiy 1C unga OneBaseExchange kengaytmasi (faqat o‘qish uchun HTTP-xizmat) o‘rnatilgandan keyin ulanadi.",
   "Данных 1С в OneBase пока нет: подключение и загрузка — в «Настройки → Интеграции → Финансы → 1С».":
     "OneBase da hali 1C ma'lumotlari yo'q: ulanish va yuklash — «Sozlamalar → Integratsiyalar → Moliya → 1C» bo'limida.",
 
@@ -172,6 +172,96 @@ const dict: Dict = {
   "Остановлено": "To'xtatilgan",
   "Идёт": "Davom etmoqda",
   "AI-консультант может отвечать по данным 1С": "AI-maslahatchi 1C ma'lumotlari bo'yicha javob berishi mumkin",
+  // Интеграция 1С: подключение со страницы, модули, организации, сверка версий (26.11.2026).
+  "Подключение к 1С": "1C ga ulanish",
+  "адрес и вход HTTP-сервиса 1С (расширение «OneBaseExchange»)": "1C HTTP-xizmatining manzili va kirishi («OneBaseExchange» kengaytmasi)",
+  "Адрес HTTP API 1С": "1C HTTP API manzili",
+  "Только HTTPS во внутренней сети. Адрес публикации сообщает 1С-программист после установки расширения.":
+    "Faqat ichki tarmoqda HTTPS. Nashr manzilini kengaytma o‘rnatilgandan keyin 1C dasturchisi aytadi.",
+  "Пользователь 1С (только чтение)": "1C foydalanuvchisi (faqat o‘qish)",
+  "Пароль пользователя 1С": "1C foydalanuvchisi paroli",
+  "задан — оставьте пустым, чтобы не менять": "berilgan — o‘zgartirmaslik uchun bo‘sh qoldiring",
+  "задан ({hint}) — оставьте пустым, чтобы не менять": "berilgan ({hint}) — o‘zgartirmaslik uchun bo‘sh qoldiring",
+  "ключ, хэш которого записан в расширении 1С": "xeshi 1C kengaytmasida yozilgan kalit",
+  "Передаётся в заголовке X-OneBase-Secret вместе с пользователем 1С.":
+    "1C foydalanuvchisi bilan birga X-OneBase-Secret sarlavhasida yuboriladi.",
+  "Сертификат публикации 1С (PEM)": "1C nashrining sertifikati (PEM)",
+  "Нужен, если сертификат выдан внутренним центром сертификации или самоподписанный. Проверка сертификата не отключается.":
+    "Sertifikat ichki sertifikatlash markazi tomonidan berilgan yoki o‘zi imzolangan bo‘lsa kerak. Sertifikat tekshiruvi o‘chirilmaydi.",
+  "Загрузить .crt": ".crt yuklash",
+  "Файл сертификата слишком большой — нужен .crt (PEM).": "Sertifikat fayli juda katta — .crt (PEM) kerak.",
+  "Сохранить подключение": "Ulanishni saqlash",
+  "Убрать пароль": "Parolni olib tashlash",
+  "Убрать API Secret": "API Secret ni olib tashlash",
+  "Убрать подключение": "Ulanishni olib tashlash",
+  "Убрать подключение к 1С с этой страницы? Служба перестанет обращаться к 1С, если у неё нет своих переменных.":
+    "1C ga ulanish shu sahifadan olib tashlansinmi? Xizmatning o‘z o‘zgaruvchilari bo‘lmasa, u 1C ga murojaat qilmay qo‘yadi.",
+  "Подключение сохранено. Служба применит его в течение минуты и проверит соединение.":
+    "Ulanish saqlandi. Xizmat uni bir daqiqa ichida qo‘llaydi va aloqani tekshiradi.",
+  "Пароль убран.": "Parol olib tashlandi.",
+  "API Secret убран.": "API Secret olib tashlandi.",
+  "Подключение убрано.": "Ulanish olib tashlandi.",
+  "Пароль и API Secret хранятся в OneBase зашифрованными, обратно не показываются и в журнал не пишутся; службе интеграции они передаются по её ключу внутри сервера.":
+    "Parol va API Secret OneBase’da shifrlangan holda saqlanadi, qaytib ko‘rsatilmaydi va jurnalga yozilmaydi; integratsiya xizmatiga ular server ichida uning kaliti bo‘yicha uzatiladi.",
+  "Изменено {at}.": "O‘zgartirilgan: {at}.",
+  "У службы интеграции на сервере заданы свои переменные OneC__BaseUrl — они главнее этой страницы. Чтобы управлять подключением отсюда, уберите их из .env службы.":
+    "Serverdagi integratsiya xizmatida o‘z OneC__BaseUrl o‘zgaruvchilari berilgan — ular shu sahifadan ustun. Ulanishni shu yerdan boshqarish uchun ularni xizmatning .env faylidan olib tashlang.",
+  "Что загружать": "Nimani yuklash",
+  "организации, модули и начало истории": "tashkilotlar, modullar va tarix boshlanishi",
+  "Организации": "Tashkilotlar",
+  "Организации появятся после первой синхронизации справочников. Пока загружаются все.":
+    "Tashkilotlar ma’lumotnomalar birinchi sinxronlangandan keyin paydo bo‘ladi. Hozircha hammasi yuklanadi.",
+  "Модули": "Modullar",
+  "Справочники и курсы валют загружаются всегда. Уже загруженные документы выключенного модуля остаются, но больше не обновляются.":
+    "Ma’lumotnomalar va valyuta kurslari doim yuklanadi. O‘chirilgan modulning allaqachon yuklangan hujjatlari qoladi, lekin endi yangilanmaydi.",
+  "Начало исторической загрузки": "Tarixiy yuklash boshlanishi",
+  "Подставляется в окно «Историческая загрузка»; пусто — 1 января прошлого года.":
+    "«Tarixiy yuklash» oynasiga qo‘yiladi; bo‘sh bo‘lsa — o‘tgan yilning 1-yanvari.",
+  "Сохранено. Действует со следующей синхронизации.": "Saqlandi. Keyingi sinxronlashdan amal qiladi.",
+  "Синхронизировать модуль": "Modulni sinxronlash",
+  "Синхронизация модуля запущена.": "Modul sinxronlash boshlandi.",
+  "Подключение задано": "Ulanish qayerda berilgan",
+  "переменные службы на сервере": "serverdagi xizmat o‘zgaruvchilari",
+  "эта страница": "shu sahifa",
+  "не задано": "berilmagan",
+  "тестовый источник": "sinov manbasi",
+  "сверка версий — только чтение, в 1С ничего не пишется": "versiyalarni solishtirish — faqat o‘qish, 1C ga hech narsa yozilmaydi",
+  "план обмена 1С (/changes)": "1C almashinuv rejasi (/changes)",
+  "Прочие документы": "Boshqa hujjatlar",
+  "реализация, возвраты от покупателей, счета-фактуры выданные, заказы покупателей":
+    "sotish, xaridorlardan qaytarishlar, berilgan hisob-fakturalar, xaridor buyurtmalari",
+  "поступления, возвраты поставщикам, счета-фактуры полученные, заказы поставщикам":
+    "kirimlar, yetkazib beruvchilarga qaytarishlar, olingan hisob-fakturalar, yetkazib beruvchilarga buyurtmalar",
+  "перемещения, списания, инвентаризации": "ko‘chirishlar, hisobdan chiqarishlar, inventarizatsiyalar",
+  "касса и банк: поступления и списания": "kassa va bank: kirim va chiqimlar",
+  "выпуск продукции, передача материалов в производство": "mahsulot chiqarish, materiallarni ishlab chiqarishga berish",
+  "проводки всех документов, ручные операции и оборотно-сальдовая ведомость — из них строятся «Финансы»":
+    "barcha hujjatlarning provodkalari, qo‘lda kiritilgan operatsiyalar va aylanma-saldo qaydnomasi — «Moliya» ulardan quriladi",
+  "документы других видов с проводками": "provodkali boshqa turdagi hujjatlar",
+  "Все потоки": "Barcha oqimlar",
+  "Поток": "Oqim",
+  "Сверка версий": "Versiyalarni solishtirish",
+  "Изменения 1С": "1C o‘zgarishlari",
+  "По этому отбору запусков нет.": "Bu tanlov bo‘yicha ishga tushirishlar yo‘q.",
+  "Только чтение: OneBase ничего не записывает в 1С — изменения находятся сверкой версий объектов, без плана обмена. Пароль и API Secret 1С хранятся зашифрованными и обратно в браузер не передаются. Доступ AI к данным 1С включается отдельно, ниже в настройках.":
+    "Faqat o‘qish: OneBase 1C ga hech narsa yozmaydi — o‘zgarishlar almashinuv rejasisiz, obyekt versiyalarini solishtirib topiladi. 1C paroli va API Secret shifrlangan holda saqlanadi va brauzerga qaytarilmaydi. AI ning 1C ma’lumotlariga kirishi alohida, quyidagi sozlamalarda yoqiladi.",
+  // «Финансы»: отборы и показатели день/месяц/год (26.11.2026).
+  "День, месяц, год": "Kun, oy, yil",
+  "с начала месяца и с начала года": "oy boshidan va yil boshidan",
+  "за день": "kun uchun",
+  "с начала месяца": "oy boshidan",
+  "с начала года": "yil boshidan",
+  "Продажи (чистая выручка)": "Sotuvlar (sof tushum)",
+  "Затраты на производство": "Ishlab chiqarish xarajatlari",
+  "Убрать отбор": "Tanlovni olib tashlash",
+  "Вид отбора": "Tanlov turi",
+  "название, код или ИНН": "nomi, kodi yoki STIR",
+  "Отбор по номенклатуре: проводки — по ней; документы — содержащие её (сумма документа целиком).":
+    "Nomenklatura bo‘yicha tanlov: provodkalar — u bo‘yicha; hujjatlar — uni o‘z ichiga olganlar (hujjat summasi to‘liq).",
+  "Отбор по подразделению: в оборотно-сальдовой ведомости подразделения нет — остатки показаны без него.":
+    "Bo‘lim bo‘yicha tanlov: aylanma-saldo qaydnomasida bo‘lim yo‘q — qoldiqlar usiz ko‘rsatilgan.",
+  "Заказ покупателя": "Xaridor buyurtmasi",
+  "Заказ поставщику": "Yetkazib beruvchiga buyurtma",
 };
 
 export default dict;

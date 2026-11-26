@@ -125,7 +125,8 @@ public sealed class IncentivePromoService(IAppDbContext db, SalesOptions sales, 
 
     /// <summary>
     /// Спящие по Linko на день asOf: доставленные заказы Yamelly с ListFrom до ListSince были, с ListSince до asOf — нет (без «Завода» и «К К
-    /// Мерч»). Для точек, бравших Yamelly с ListSince, — день первой такой покупки.
+    /// Мерч»). День заказа — день принятия, как в «Продажах» и в «Приложении 1» ТЗ (заказ 30.09, принятый 01.10, — покупка октября); не принят —
+    /// день оформления. Для точек, бравших Yamelly с ListSince, — день первой такой покупки.
     /// </summary>
     public async Task<SleepingScan> ScanSleepingAsync(IncentiveSettings s, DateOnly asOf, CancellationToken ct)
     {
@@ -144,9 +145,10 @@ public sealed class IncentivePromoService(IAppDbContext db, SalesOptions sales, 
         var sold = sales.FieldSoldStatuses;
         var rows = await (from l in db.LinkoOrderLines.AsNoTracking()
                 join o in db.LinkoOrders.AsNoTracking() on l.OrderId equals o.Id
-                where o.MarketId != null && o.CreatedDate >= first && o.CreatedDate < asOf && sold.Contains(o.Status) && l.ProductId != null
+                let day = o.AcceptedDate ?? o.CreatedDate
+                where o.MarketId != null && day >= first && day < asOf && sold.Contains(o.Status) && l.ProductId != null
                       && yamelly.Contains(l.ProductId.Value)
-                group o.CreatedDate by new { Market = o.MarketId!.Value, o.BranchName } into g
+                group day by new { Market = o.MarketId!.Value, o.BranchName } into g
                 select new
                 {
                     g.Key.Market, g.Key.BranchName,
@@ -181,6 +183,13 @@ public sealed class IncentivePromoService(IAppDbContext db, SalesOptions sales, 
 
         return computed;
     }
+
+    /// <summary>
+    /// Список спящих акции загружен из «Приложения 1» ТЗ (строки с приоритетом из файла): он официальный — по Linko не пересчитывается, ни по
+    /// субботам, ни вручную; разбуженные в нём остаются.
+    /// </summary>
+    public Task<bool> SleepingFromFileAsync(IncentiveSettings s, CancellationToken ct) =>
+        db.IncentiveSleepingMarkets.AnyAsync(x => x.ProgramId == s.Id && x.FilePriority != null, ct);
 
     /// <summary>Забыть расчётный список (после записи снимка).</summary>
     public void ForgetSleepingList(Guid programId) => computedLists.Remove(programId);

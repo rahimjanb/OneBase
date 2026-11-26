@@ -10,12 +10,22 @@ namespace OneBase.Finance.Integration.Worker.Api;
 public interface IOneBaseIntegrationApi
 {
     Task<HeartbeatResponse> HeartbeatAsync(WorkerHeartbeat beat, CancellationToken ct);
+
+    /// <summary>Подключение к 1С со страницы «1С» (с секретами) — когда сменилась его версия.</summary>
+    Task<WorkerConnection> ConnectionAsync(CancellationToken ct);
     Task CompleteCommandAsync(Guid id, CommandResult result, CancellationToken ct);
     Task<StartRunResponse> StartRunAsync(StartRunRequest request, CancellationToken ct);
     Task<RunProgressResponse> ProgressAsync(Guid runId, RunProgress progress, CancellationToken ct);
     Task FinishRunAsync(Guid runId, FinishRunRequest request, CancellationToken ct);
     Task<ImportBatchResult> ImportAsync(ImportBatchRequest request, bool dryRun, CancellationToken ct);
-    Task<ImportedTotals> TotalsAsync(string stream, string organizationId, DateOnly from, DateOnly to, CancellationToken ct);
+    Task<ImportedTotals> TotalsAsync(string stream, string organizationId, DateOnly from, DateOnly to, CancellationToken ct, IReadOnlyList<string>? types = null);
+
+    /// <summary>Записи 1С в OneBase для сверки версий: справочник целиком или документы организации за период.</summary>
+    Task<List<StoredVersion>> StoredVersionsAsync(string entityType, string? organizationId, DateOnly? from, DateOnly? to, CancellationToken ct);
+
+    /// <summary>Месяцы с документами организаций в OneBase.</summary>
+    Task<List<StoredMonth>> StoredMonthsAsync(CancellationToken ct);
+
     Task<Guid> ReportFailureAsync(FailureReport report, CancellationToken ct);
     Task<List<FailureItem>> DueFailuresAsync(int limit, CancellationToken ct);
     Task FailureOutcomeAsync(Guid id, FailureOutcome outcome, CancellationToken ct);
@@ -41,6 +51,8 @@ public sealed class OneBaseIntegrationApi(HttpClient http) : IOneBaseIntegration
 
     public Task<HeartbeatResponse> HeartbeatAsync(WorkerHeartbeat beat, CancellationToken ct) => PostAsync<WorkerHeartbeat, HeartbeatResponse>("heartbeat", beat, ct);
 
+    public Task<WorkerConnection> ConnectionAsync(CancellationToken ct) => GetAsync<WorkerConnection>("connection", ct);
+
     public Task CompleteCommandAsync(Guid id, CommandResult result, CancellationToken ct) => PostAsync<CommandResult, object?>($"commands/{id}/complete", result, ct);
 
     public Task<StartRunResponse> StartRunAsync(StartRunRequest request, CancellationToken ct) => PostAsync<StartRunRequest, StartRunResponse>("runs", request, ct);
@@ -53,8 +65,17 @@ public sealed class OneBaseIntegrationApi(HttpClient http) : IOneBaseIntegration
     public Task<ImportBatchResult> ImportAsync(ImportBatchRequest request, bool dryRun, CancellationToken ct) =>
         PostAsync<ImportBatchRequest, ImportBatchResult>(dryRun ? "batches?dryRun=true" : "batches", request, ct);
 
-    public Task<ImportedTotals> TotalsAsync(string stream, string organizationId, DateOnly from, DateOnly to, CancellationToken ct) =>
-        GetAsync<ImportedTotals>($"totals?stream={Uri.EscapeDataString(stream)}&organizationId={Uri.EscapeDataString(organizationId)}&from={from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}&to={to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", ct);
+    public Task<ImportedTotals> TotalsAsync(string stream, string organizationId, DateOnly from, DateOnly to, CancellationToken ct, IReadOnlyList<string>? types = null) =>
+        GetAsync<ImportedTotals>($"totals?stream={Uri.EscapeDataString(stream)}&organizationId={Uri.EscapeDataString(organizationId)}&from={from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}&to={to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+            + (types is { Count: > 0 } ? "&types=" + Uri.EscapeDataString(string.Join(",", types)) : ""), ct);
+
+    public Task<List<StoredVersion>> StoredVersionsAsync(string entityType, string? organizationId, DateOnly? from, DateOnly? to, CancellationToken ct) =>
+        GetAsync<List<StoredVersion>>($"versions?entityType={Uri.EscapeDataString(entityType)}"
+            + (organizationId is null ? "" : $"&organizationId={Uri.EscapeDataString(organizationId)}")
+            + (from is { } f ? $"&from={f.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}" : "")
+            + (to is { } t ? $"&to={t.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}" : ""), ct);
+
+    public Task<List<StoredMonth>> StoredMonthsAsync(CancellationToken ct) => GetAsync<List<StoredMonth>>("versions/months", ct);
 
     public async Task<Guid> ReportFailureAsync(FailureReport report, CancellationToken ct) =>
         (await PostAsync<FailureReport, JsonElement>("failures", report, ct)).GetProperty("id").GetGuid();

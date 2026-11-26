@@ -1264,6 +1264,35 @@ public partial class SalesAnalyticsTests
     }
 
     [Fact]
+    public void Group_calendar_region_opens_to_its_agents_and_other_sales_that_add_up_to_the_region()
+    {
+        var regions = new[] { new RegionInfo(North, 101, "Север", Rm1, "Каримов", null), new RegionInfo(South, 102, "Юг", Rm1, null, null) };
+        var analytics = new SalesAnalytics(Data(regions: regions));
+        var north = analytics.Republic(Sep1, new DateOnly(2026, 9, 10), "kg", null).Calendar!.Rows.Single(r => r.Id == North.ToString());
+
+        Assert.Equal("Каримов", north.Subtitle);
+        // Агент 1 и 2 — команда «Севера», 25 кг без агента — «прочие»; дети в сумме = строка региона (по дням и за месяц).
+        Assert.Equal([("1", 100m), ("2", 50m), (MonthCalendarRow.OtherId, 25m)], north.Children!.Select(c => (c.Id, c.Total)));
+        Assert.Equal("Прочие продажи", north.Children!.Last().Name);
+        Assert.Equal(north.Total, north.Children!.Sum(c => c.Total));
+        Assert.Equal(north.Days, north.Days.Select((_, i) => north.Children!.Any(c => c.Days[i] != null) ? north.Children!.Sum(c => c.Days[i] ?? 0) : (decimal?)null));
+
+        // Строки из одних «·» не показываются: у «Юга» нет продаж без агента — «прочих» нет.
+        var south = analytics.Republic(Sep1, new DateOnly(2026, 9, 10), "kg", null).Calendar!.Rows.Single(r => r.Id == South.ToString());
+        Assert.Equal(["3"], south.Children!.Select(c => c.Id));
+        Assert.Equal(30m, south.Children!.Single().Total);
+
+        // Мера и категория — те же, что у строки региона.
+        var sum = analytics.Republic(Sep1, new DateOnly(2026, 9, 10), "sum", null).Calendar!.Rows.Single(r => r.Id == North.ToString());
+        Assert.Equal(1750m, sum.Children!.Sum(c => c.Total));
+        var akb = analytics.Republic(Sep1, new DateOnly(2026, 9, 10), "akb", null).Calendar!.Rows.Single(r => r.Id == North.ToString());
+        Assert.Equal([1m, 1m, 1m], akb.Children!.Select(c => c.Total));
+
+        // Календарь региона — строки ТП без вложенных строк.
+        Assert.All(analytics.Region(North, Sep1, new DateOnly(2026, 9, 10), "kg", null).Calendar.Rows, r => Assert.Null(r.Children));
+    }
+
+    [Fact]
     public void Akb_by_month_returns_kg_and_sum_series_averages_and_hides_configured_categories()
     {
         var types = new Dictionary<long, string> { [1] = "Бамбук", [2] = "Песочный" };

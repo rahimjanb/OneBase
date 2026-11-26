@@ -9,10 +9,11 @@ namespace OneBase.Infrastructure.Telegram.Reports;
 
 /// <summary>
 /// Список спящих во вкладке «Акции»: точек в списке, исключено, с какого дня действует, когда меняли, сколько закреплено за активными ТП, правило
-/// (брали Yamelly с from, не брали с since); Computed — снимка ещё нет, список посчитан по Linko на начало акции.
+/// (брали Yamelly с from, не брали с since); Computed — снимка ещё нет, список посчитан по Linko на начало акции; FromFile — список из «Приложения 1»
+/// ТЗ, по Linko не пересчитывается.
 /// </summary>
 public sealed record IncentiveSleepingSummary(string Code, int Active, int Removed, DateOnly? ListedFrom, DateTimeOffset? ChangedAt, int WithActiveAgent,
-    DateOnly? BoughtFrom, DateOnly? NotSince, bool Computed);
+    DateOnly? BoughtFrom, DateOnly? NotSince, bool Computed, bool FromFile);
 
 /// <summary>Итог пересчёта: добавлено, исключено, возвращено, осталось — и сводка после него.</summary>
 public sealed record IncentiveSleepingRefreshResult(int Added, int Removed, int Restored, int Kept, IncentiveSleepingSummary Summary);
@@ -34,6 +35,11 @@ public sealed class IncentiveSleepingService(IAppDbContext db, IncentiveService 
         if (s.Offers.Yamelly is not { } ym)
         {
             throw new ReportValidationException("В акции нет Yamelly спящим — список спящих не нужен.");
+        }
+
+        if (await promos.SleepingFromFileAsync(s, ct))
+        {
+            throw new ReportValidationException("Список спящих — «Приложение 1» из ТЗ: он официальный и по Linko не пересчитывается до конца акции.");
         }
 
         var today = Today();
@@ -59,6 +65,7 @@ public sealed class IncentiveSleepingService(IAppDbContext db, IncentiveService 
                 select m.Id).CountAsync(ct);
         var ym = s.Offers.Yamelly;
         return new IncentiveSleepingSummary(s.Code, active.Length, list.Count - active.Length, list.Count == 0 ? null : list.Min(x => x.ListedOn),
-            saved.Count == 0 ? null : saved.Max(x => x.Changed), agents, ym?.ListFrom, ym?.ListSince, saved.Count == 0 && list.Count > 0);
+            saved.Count == 0 ? null : saved.Max(x => x.Changed), agents, ym?.ListFrom, ym?.ListSince, saved.Count == 0 && list.Count > 0,
+            await promos.SleepingFromFileAsync(s, ct));
     }
 }

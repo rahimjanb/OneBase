@@ -9,8 +9,9 @@ using OneBase.Finance.Integration.Contracts;
 namespace OneBase.Api.Controllers;
 
 /// <summary>
-/// «Настройки → Интеграции → Финансы → 1С» — только у права «Интеграции». Учётных данных 1С здесь нет (они у службы интеграции); ключ службы
-/// показывается один раз при создании. Действия передаются службе командами и пишутся в аудит (integration.onec.*).
+/// «Настройки → Интеграции → Финансы → 1С» — только у права «Интеграции». Подключение к 1С задаётся здесь (пароль и API Secret — только запись:
+/// обратно не отдаются, в аудит не пишутся) или переменными службы; ключ службы показывается один раз при создании. Действия передаются службе
+/// командами и пишутся в аудит (integration.onec.*).
 /// </summary>
 [ApiController]
 [Route("api/integrations/onec")]
@@ -20,13 +21,19 @@ public sealed class OneCController(OneCAdminService admin, IOneCSettingsStore se
     public const string Name = "1С:Бухгалтерия";
     public const string Description = "Бухгалтерия для Узбекистана (VENKON GROUP): план счетов, проводки, остатки и обороты, контрагенты, документы, валюты — только чтение, 1С → OneBase.";
 
-    public sealed record SettingsInput(bool? Paused, int? IntervalMinutes, int? BatchSize, bool? AiEnabled);
+    /// <summary>Пароль и API Secret: null — не менять, "" — убрать. Адрес "" — убрать подключение со страницы (служба возьмёт своё).</summary>
+    public sealed record SettingsInput(bool? Paused, int? IntervalMinutes, int? BatchSize, bool? AiEnabled, string? BaseUrl = null, string? Username = null,
+        string? Password = null, string? ApiSecret = null, string? CaCertificatePem = null, List<string>? OrganizationIds = null, List<string>? Modules = null,
+        DateOnly? HistoryFrom = null, bool ClearHistoryFrom = false);
 
     public sealed record HistoricalInput(DateOnly From, DateOnly To, int? BatchSize, bool Confirm);
 
     public sealed record RetryInput(List<Guid>? Ids);
 
     public sealed record ClearInput(string? Confirmation);
+
+    /// <summary>Синхронизировать сейчас: modules — только эти модули (пусто — все включённые).</summary>
+    public sealed record SyncInput(List<string>? Modules);
 
     [HttpGet]
     public Task<OneCStatusView> Status(CancellationToken ct) => admin.StatusAsync(ct);
@@ -46,11 +53,30 @@ public sealed class OneCController(OneCAdminService admin, IOneCSettingsStore se
     }
 
     [HttpPut("settings")]
-    public async Task<OneCSettings> Save(SettingsInput input, CancellationToken ct)
+    public async Task<IActionResult> Save(SettingsInput input, CancellationToken ct)
     {
-        var saved = await settings.SaveAsync(new OneCSettingsChange(input.Paused, input.IntervalMinutes, input.BatchSize, input.AiEnabled), User.GetUserId(), ct);
-        await Audit("integration.onec.updated", new { input.Paused, input.IntervalMinutes, input.BatchSize, input.AiEnabled }, ct);
-        return saved;
+        OneCSettings saved;
+        try
+        {
+            saved = await settings.SaveAsync(new OneCSettingsChange(input.Paused, input.IntervalMinutes, input.BatchSize, input.AiEnabled, input.BaseUrl,
+                input.Username, input.Password, input.ApiSecret, input.CaCertificatePem, input.OrganizationIds, input.Modules, input.HistoryFrom,
+                input.ClearHistoryFrom), User.GetUserId(), ct);
+        }
+        catch (ArgumentException e)
+        {
+            return BadRequest(new { error = e.Message });
+        }
+
+        // В аудит — что изменилось, без пароля и секрета (только «задан / убран»).
+        await Audit("integration.onec.updated", new
+        {
+            input.Paused, input.IntervalMinutes, input.BatchSize, input.AiEnabled, input.BaseUrl, input.Username,
+            Password = input.Password is null ? null : input.Password.Length == 0 ? "убран" : "задан",
+            ApiSecret = input.ApiSecret is null ? null : input.ApiSecret.Length == 0 ? "убран" : "задан",
+            Certificate = input.CaCertificatePem is null ? null : input.CaCertificatePem.Length == 0 ? "убран" : "задан",
+            input.OrganizationIds, input.Modules, input.HistoryFrom, input.ClearHistoryFrom,
+        }, ct);
+        return Ok(saved);
     }
 
     /// <summary>Новый ключ службы интеграции — показывается один раз; прежний перестаёт действовать сразу.</summary>
@@ -70,7 +96,13 @@ public sealed class OneCController(OneCAdminService admin, IOneCSettingsStore se
     public Task<IActionResult> TestSync(CancellationToken ct) => Command(WorkerCommandKinds.TestSync, "integration.onec.test_sync", ct);
 
     [HttpPost("sync")]
-    public Task<IActionResult> Sync(CancellationToken ct) => Command(WorkerCommandKinds.SyncNow, "integration.onec.sync", ct);
+    public async Task<IActionResult> Sync([FromBody] SyncInput? input, CancellationToken ct)
+    {
+        var modules = input?.Modules is { Count: > 0 } list ? OneCModules.Normalize(list).ToList() : null;
+        var command = await admin.RequestAsync(WorkerCommandKinds.SyncNow, modules is null ? null : new { modules }, User.GetUserId(), ct);
+        await Audit("integration.onec.sync", new { command.Id, modules }, ct);
+        return Accepted(command);
+    }
 
     [HttpPost("pause")]
     public Task<OneCSettings> Pause(CancellationToken ct) => SetPausedAsync(true, ct);
@@ -116,15 +148,17 @@ public sealed class OneCController(OneCAdminService admin, IOneCSettingsStore se
     }
 
     [HttpGet("runs")]
-    public Task<OneCPage<OneCRunView>> Runs([FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default) =>
-        admin.RunsAsync(page, pageSize, ct);
+    public Task<OneCPage<OneCRunView>> Runs([FromQuery] int page = 1, [FromQuery] int pageSize = 30, [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null,
+        [FromQuery] string? status = null, [FromQuery] string? kind = null, CancellationToken ct = default) =>
+        admin.RunsAsync(page, pageSize, ct, from, to, status, kind);
 
     [HttpGet("runs/{id:guid}")]
     public async Task<IActionResult> Run(Guid id, CancellationToken ct) => await admin.RunAsync(id, ct) is { } run ? Ok(run) : NotFound();
 
     [HttpGet("failures")]
-    public Task<OneCPage<OneCFailureView>> Failures([FromQuery] string? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default) =>
-        admin.FailuresAsync(status, page, pageSize, ct);
+    public Task<OneCPage<OneCFailureView>> Failures([FromQuery] string? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 30, [FromQuery] string? stream = null,
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, CancellationToken ct = default) =>
+        admin.FailuresAsync(status, page, pageSize, ct, stream, from, to);
 
     [HttpPost("failures/retry")]
     public async Task<IActionResult> Retry(RetryInput input, CancellationToken ct)

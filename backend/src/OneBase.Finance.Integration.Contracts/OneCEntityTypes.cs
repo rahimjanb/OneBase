@@ -62,10 +62,14 @@ public static class OneCDocumentTypes
     public const string Manual = "manual";
     public const string Other = "other";
 
+    /// <summary>Заказ покупателя / заказ поставщику (v1.1): документы без проводок.</summary>
+    public const string OrderCustomer = "order_customer";
+    public const string OrderSupplier = "order_supplier";
+
     public static readonly IReadOnlyList<string> All =
     [
         Sale, SaleReturn, Purchase, PurchaseReturn, InvoiceOut, InvoiceIn, CashIn, CashOut, BankIn, BankOut,
-        Production, MaterialIssue, Transfer, WriteOff, Inventory, Manual, Other,
+        Production, MaterialIssue, Transfer, WriteOff, Inventory, Manual, Other, OrderCustomer, OrderSupplier,
     ];
 
     public static readonly IReadOnlyList<string> Sales = [Sale, SaleReturn];
@@ -77,11 +81,63 @@ public static class OneCDocumentTypes
     public static bool IsKnown(string? type) => type is not null && All.Contains(type);
 }
 
+/// <summary>
+/// Модули загрузки 1С: администратор включает и выключает их на странице «1С». Модуль документов — набор типов документов; «Бухгалтерия» —
+/// проводки и оборотно-сальдовая ведомость (из них строятся отчёты «Финансов»). Справочники и курсы загружаются всегда.
+/// </summary>
+public static class OneCModules
+{
+    public const string Sales = "sales";
+    public const string Purchases = "purchases";
+    public const string Warehouse = "warehouse";
+    public const string Money = "money";
+    public const string Production = "production";
+    public const string Accounting = "accounting";
+    public const string Other = "other";
+
+    public static readonly IReadOnlyList<string> All = [Sales, Purchases, Warehouse, Money, Production, Accounting, Other];
+
+    /// <summary>Типы документов модуля (у «Бухгалтерии» — ручные операции; проводки всех документов она включает отдельно).</summary>
+    public static IReadOnlyList<string> TypesOf(string module) => module switch
+    {
+        Sales => [OneCDocumentTypes.Sale, OneCDocumentTypes.SaleReturn, OneCDocumentTypes.InvoiceOut, OneCDocumentTypes.OrderCustomer],
+        Purchases => [OneCDocumentTypes.Purchase, OneCDocumentTypes.PurchaseReturn, OneCDocumentTypes.InvoiceIn, OneCDocumentTypes.OrderSupplier],
+        Warehouse => [OneCDocumentTypes.Transfer, OneCDocumentTypes.WriteOff, OneCDocumentTypes.Inventory],
+        Money => [OneCDocumentTypes.CashIn, OneCDocumentTypes.CashOut, OneCDocumentTypes.BankIn, OneCDocumentTypes.BankOut],
+        Production => [OneCDocumentTypes.Production, OneCDocumentTypes.MaterialIssue],
+        Accounting => [OneCDocumentTypes.Manual],
+        Other => [OneCDocumentTypes.Other],
+        _ => [],
+    };
+
+    /// <summary>Модуль типа документа (неизвестный тип — «Прочие»).</summary>
+    public static string Of(string? documentType) =>
+        All.FirstOrDefault(m => TypesOf(m).Contains(documentType ?? "")) ?? Other;
+
+    /// <summary>Включённые модули: пусто — все; неизвестные коды отбрасываются.</summary>
+    public static IReadOnlyList<string> Normalize(IEnumerable<string>? modules)
+    {
+        var list = (modules ?? []).Select(m => m.Trim().ToLowerInvariant()).Where(All.Contains).Distinct().ToList();
+        return list.Count == 0 ? All : All.Where(list.Contains).ToList();
+    }
+
+    /// <summary>Тип документа загружается при этих модулях.</summary>
+    public static bool Allows(IReadOnlyList<string> enabled, string? documentType) => enabled.Count == 0 || enabled.Contains(Of(documentType));
+}
+
 /// <summary>Потоки синхронизации: курсор каждого хранится в OneBase и сдвигается только вместе с записью пакета.</summary>
 public static class OneCStreams
 {
     /// <summary>Изменения 1С (план обмена): курсор — номер последнего сохранённого изменения.</summary>
     public const string Changes = "changes";
+
+    /// <summary>
+    /// Сверка версий (изменения только чтением, /versions): «versions:&lt;тип&gt;» — шаг журнала; курсор «versions:full» — день последней
+    /// полной ночной сверки (ГГГГ-ММ-ДД).
+    /// </summary>
+    public const string VersionsPrefix = "versions:";
+
+    public const string VersionsFull = "versions:full";
 
     /// <summary>Первичная загрузка справочника: «ref:&lt;тип&gt;», курсор — страница; по окончании — <see cref="Done"/>.</summary>
     public const string ReferencePrefix = "ref:";

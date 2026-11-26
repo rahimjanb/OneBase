@@ -15,7 +15,32 @@ public sealed record OneCPing
     public string? AccountingCurrency { get; init; }
     public string? User { get; init; }
     public bool? ReadOnly { get; init; }
+
+    /// <summary>Как отслеживаются изменения (v1.1): versions — только чтением через /versions, changes — план обмена (/changes).</summary>
+    public string? ChangeTracking { get; init; }
+
+    /// <summary>Возможности сервиса (v1.1): versions, ids, changes.</summary>
+    public List<string>? Capabilities { get; init; }
+
+    /// <summary>Изменения — сверкой версий: так объявила 1С (changeTracking или возможность versions без changes).</summary>
+    public bool TracksByVersions =>
+        string.Equals(ChangeTracking, "versions", StringComparison.OrdinalIgnoreCase)
+        || (ChangeTracking is null && Capabilities is { } c && c.Contains("versions", StringComparer.OrdinalIgnoreCase) && !c.Contains("changes", StringComparer.OrdinalIgnoreCase));
 }
+
+/// <summary>Версия объекта 1С из /versions (v1.1): что есть в 1С сейчас, без самих данных.</summary>
+public sealed record OneCVersionDto
+{
+    public string? Id { get; init; }
+    public string? Version { get; init; }
+    public bool DeletionMark { get; init; }
+    public bool? Posted { get; init; }
+    public DateTimeOffset? Date { get; init; }
+    public string? Type { get; init; }
+}
+
+/// <summary>Отбор /versions: тип записи OneBase (справочник целиком или документы организации за период).</summary>
+public sealed record OneCVersionQuery(string EntityType, string? OrganizationId = null, DateOnly? From = null, DateOnly? To = null);
 
 public sealed record OneCConfiguration(string? Name, string? Version);
 

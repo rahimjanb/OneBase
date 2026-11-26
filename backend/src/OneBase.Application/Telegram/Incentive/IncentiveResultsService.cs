@@ -67,13 +67,19 @@ public sealed class IncentiveResultsService(IAppDbContext db, IncentiveService i
     /// Пересчитать список спящих по Linko на день asOf, изменения — с listedOn. Новые спящие добавляются, исключённые и снова спящие —
     /// возвращаются. Точка списка, которая с дня включения брала Yamelly (разбужена или взяла меньше порога), остаётся: по ней кэшбек и счёт
     /// «разбужено». Точка, которая по данным Linko больше не спящая и Yamelly с включения не брала (заказ догрузился задним числом), исключается
-    /// с listedOn — история кэшбека сохраняется.
+    /// с listedOn — история кэшбека сохраняется. Список из «Приложения 1» ТЗ не пересчитывается: он официальный до конца акции.
     /// </summary>
     public async Task<IncentiveSleepingRefresh> RefreshSleepingAsync(IncentiveSettings s, DateOnly asOf, DateOnly listedOn, Guid? userId, CancellationToken ct)
     {
         if (s.Offers.Yamelly is not { } ym)
         {
             return new IncentiveSleepingRefresh(0, 0, 0, 0, 0);
+        }
+
+        if (await promos.SleepingFromFileAsync(s, ct))
+        {
+            var active = await db.IncentiveSleepingMarkets.CountAsync(x => x.ProgramId == s.Id && x.RemovedOn == null, ct);
+            return new IncentiveSleepingRefresh(0, 0, 0, active, active);
         }
 
         if (listedOn > ym.Start && !await db.IncentiveSleepingMarkets.AnyAsync(x => x.ProgramId == s.Id, ct))

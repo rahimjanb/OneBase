@@ -150,6 +150,8 @@ services:
       OneC__Username: ${ONEC_USERNAME:-}
       OneC__Password: ${ONEC_PASSWORD:-}
       OneC__Token: ${ONEC_TOKEN:-}
+      OneC__ApiSecret: ${ONEC_API_SECRET:-}
+      Integration__ChangeTracking: ${ONEC_CHANGE_TRACKING:-auto}
       OneC__TimeoutSeconds: ${ONEC_TIMEOUT_SECONDS:-60}
       OneC__CaCertificatePath: ${ONEC_CA_CERT_PATH:-}
       OneBase__InternalApiUrl: http://api:8080

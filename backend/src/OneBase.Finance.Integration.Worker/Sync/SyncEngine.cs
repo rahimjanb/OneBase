@@ -40,6 +40,26 @@ public sealed class SyncEngine(
         public int BatchSize { get; init; }
         public bool DryRun { get; init; }
         public Dictionary<(string Stream, string Org), string?> Checkpoints { get; } = [];
+
+        /// <summary>Изменения 1С — сверкой версий (/versions), а не планом обмена.</summary>
+        public bool ByVersions { get; init; }
+
+        /// <summary>Организации, выбранные на странице «1С»; пусто — все.</summary>
+        public IReadOnlyList<string> OrganizationFilter { get; init; } = [];
+
+        /// <summary>Модули запуска — какие типы документов загружаются (OneCModules); пусто — все.</summary>
+        public IReadOnlyList<string> Modules { get; init; } = [];
+
+        /// <summary>
+        /// Модуль «Бухгалтерия» включён на странице «1С»: проводки загружаемых документов и оборотно-сальдовая ведомость. Не зависит от
+        /// «синхронизировать модуль» — платежи без своих проводок не загружаются.
+        /// </summary>
+        public bool Accounting { get; init; } = true;
+
+        /// <summary>Типы документов включённых модулей; null — все.</summary>
+        public IReadOnlyList<string>? DocumentTypes => Modules.Count == 0 ? null : Modules.SelectMany(OneCModules.TypesOf).ToList();
+
+        public bool Allows(string? documentType) => OneCModules.Allows(Modules, documentType);
         public List<RunStep> Steps { get; } = [];
         public Dictionary<string, DateOnly> Earliest { get; } = [];
         public List<ImportRejection> Rejections { get; } = [];
@@ -55,7 +75,8 @@ public sealed class SyncEngine(
     // ---------- Запуск ----------
 
     /// <summary>Проверка 1С и начало запуска в OneBase. null — запуск не начат (outcome объясняет почему).</summary>
-    private async Task<(Run? Run, SyncOutcome? Outcome)> BeginAsync(string kind, string trigger, Guid? commandId, Guid? historicalId, CancellationToken ct, bool dryRun = false)
+    private async Task<(Run? Run, SyncOutcome? Outcome)> BeginAsync(string kind, string trigger, Guid? commandId, Guid? historicalId, CancellationToken ct, bool dryRun = false,
+        IReadOnlyList<string>? modules = null)
     {
         OneCPing ping;
         try
@@ -85,8 +106,11 @@ public sealed class SyncEngine(
 
         var run = new Run
         {
-            Id = start.RunId.Value, Kind = kind, DryRun = dryRun,
+            Id = start.RunId.Value, Kind = kind, DryRun = dryRun, ByVersions = ByVersions(ping),
             BatchSize = Math.Clamp(start.Settings?.BatchSize ?? options.BatchSize, 50, 1000),
+            OrganizationFilter = start.Settings?.OrganizationIds ?? [],
+            Modules = Restrict(start.Settings?.Modules ?? [], modules),
+            Accounting = start.Settings?.Modules is not { Count: > 0 } enabled || enabled.Contains(OneCModules.Accounting),
         };
         foreach (var c in start.Checkpoints)
         {
@@ -113,6 +137,19 @@ public sealed class SyncEngine(
 
         logger.LogInformation("1С: запуск {Kind} {RunId} — {Status}: {Message}", run.Kind, run.Id, status, message);
         return new SyncOutcome(status, message, run.Id, run.Steps, details);
+    }
+
+    /// <summary>Модули запуска: включённые на странице «1С», а для «синхронизировать модуль» — только выбранные из них. Пусто — все.</summary>
+    private static IReadOnlyList<string> Restrict(IReadOnlyList<string> enabled, IReadOnlyList<string>? only)
+    {
+        if (only is not { Count: > 0 })
+        {
+            return enabled;
+        }
+
+        var on = enabled.Count == 0 ? OneCModules.All : enabled;
+        var picked = OneCModules.Normalize(only).Where(on.Contains).ToList();
+        return picked.Count == 0 ? on : picked;
     }
 
     private static string Summary(Run run) =>
@@ -357,7 +394,14 @@ public sealed class SyncEngine(
             var batch = new NormalizedBatch();
             foreach (var change in page.Items)
             {
-                normalizer.Add(batch, change);
+                // Документы выключенных модулей пропускаются; без «Бухгалтерии» — без проводок.
+                if (change is { EntityType: OneCEntityTypes.Document, Deleted: false, Data: { ValueKind: JsonValueKind.Object } data }
+                    && data.TryGetProperty("type", out var t) && !run.Allows(t.GetString()))
+                {
+                    continue;
+                }
+
+                normalizer.Add(batch, change.EntityType == OneCEntityTypes.Document && change.Data is { } d ? change with { Data = WithoutEntries(run, OneCEntityTypes.Document, d) } : change);
             }
 
             var next = page.Page?.NextCursor ?? page.Items[^1].Seq.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -369,6 +413,176 @@ public sealed class SyncEngine(
                 return rows;
             }
         }
+    }
+
+    // ---------- Сверка версий (изменения только чтением) ----------
+
+    /// <summary>Изменения — сверкой версий: так задано в службе или так объявила 1С (changeTracking в /ping).</summary>
+    private bool ByVersions(OneCPing ping) => options.ChangeTracking.Trim().ToLowerInvariant() switch
+    {
+        "versions" => true,
+        "changes" => false,
+        _ => ping.TracksByVersions,
+    };
+
+    /// <summary>
+    /// Сверка версий при синхронизации: справочники целиком, документы организаций за текущий и ReconcileMonthsBack прошлых месяцев; раз в
+    /// сутки (с FullReconcileHour по Ташкенту) — ещё и все месяцы, за которые в OneBase есть документы. В 1С ничего не записывается.
+    /// </summary>
+    private async Task ReconcileAsync(Run run, CancellationToken ct)
+    {
+        foreach (var type in OneCStreams.ReferenceOrder)
+        {
+            await StepAsync(run, OneCStreams.VersionsPrefix + OneCStreams.Reference(type), null, () => ReconcileReferenceAsync(run, type, ct));
+        }
+
+        var current = new DateOnly(Today.Year, Today.Month, 1);
+        var recent = current.AddMonths(-Math.Clamp(options.ReconcileMonthsBack, 0, 24));
+        var organizations = await OrganizationsAsync(run, ct);
+        foreach (var org in organizations)
+        {
+            await StepAsync(run, $"{OneCStreams.VersionsPrefix}{OneCEntityTypes.Document}:{recent:yyyy-MM}..{current:yyyy-MM}", org,
+                () => ReconcileDocumentsAsync(run, org, recent, current.AddMonths(1).AddDays(-1), ct));
+        }
+
+        var now = clock.GetUtcNow().ToOffset(Tashkent);
+        var today = Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        if (run.DryRun || now.Hour < Math.Clamp(options.FullReconcileHour, 0, 23) || run.Cursor(OneCStreams.VersionsFull) == today)
+        {
+            return;
+        }
+
+        // Ночная полная сверка: все загруженные месяцы, кроме уже сверенных выше; день сохраняется, только если все месяцы сверены.
+        var errors = run.Errors;
+        var months = await retry.ExecuteAsync("OneBase: месяцы с документами", api.StoredMonthsAsync, ct);
+        foreach (var m in months.Where(m => organizations.Contains(m.OrganizationId) && m.Month < recent))
+        {
+            await StepAsync(run, $"{OneCStreams.VersionsPrefix}{OneCEntityTypes.Document}:{m.Month:yyyy-MM}", m.OrganizationId,
+                () => ReconcileDocumentsAsync(run, m.OrganizationId, m.Month, m.Month.AddMonths(1).AddDays(-1), ct));
+        }
+
+        if (run.Errors == errors)
+        {
+            await PostAsync(run, new NormalizedBatch(), OneCStreams.VersionsFull, OneCEntityTypes.Shared,
+                new ImportCheckpoint(OneCStreams.VersionsFull, OneCEntityTypes.Shared, today), ct: ct);
+        }
+    }
+
+    /// <summary>Справочник: версии 1С против записей OneBase.</summary>
+    private async Task<int> ReconcileReferenceAsync(Run run, string type, CancellationToken ct)
+    {
+        var source = await VersionsAsync(new OneCVersionQuery(type), ct);
+        var stored = await retry.ExecuteAsync($"OneBase: версии {type}", t => api.StoredVersionsAsync(type, null, null, null, t), ct);
+        return await ApplyVersionsAsync(run, type, OneCEntityTypes.Shared, source, stored, null, ct);
+    }
+
+    /// <summary>Документы организации за период (по дате документа): версии 1С против записей OneBase.</summary>
+    private async Task<int> ReconcileDocumentsAsync(Run run, string org, DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        var source = await VersionsAsync(new OneCVersionQuery(OneCEntityTypes.Document, org, from, to), ct);
+        var stored = await retry.ExecuteAsync("OneBase: версии документов", t => api.StoredVersionsAsync(OneCEntityTypes.Document, org, from, to, t), ct);
+        return await ApplyVersionsAsync(run, OneCEntityTypes.Document, org, source, stored, from, ct);
+    }
+
+    private async Task<List<OneCVersionDto>> VersionsAsync(OneCVersionQuery query, CancellationToken ct)
+    {
+        var list = new List<OneCVersionDto>();
+        string? cursor = null;
+        do
+        {
+            var page = await FetchAsync("версии " + query.EntityType, t => provider.GetVersionsAsync(query, new OneCPageRequest(1000, cursor), t), ct);
+            list.AddRange(page.Items.Where(v => !string.IsNullOrWhiteSpace(v.Id)));
+            cursor = page.HasMore ? page.Page!.NextCursor : null;
+        }
+        while (cursor is not null);
+
+        return list;
+    }
+
+    /// <summary>
+    /// Разница версий: новые, с другой версией и вернувшиеся после удаления — дочитываются по ids= и записываются как изменения; записи OneBase,
+    /// которых нет в 1С, сначала запрашиваются по ids= (документ мог «переехать» в другой месяц) — не вернулись — помечаются удалёнными.
+    /// Историю OneBase сохраняет: удалённое не стирается.
+    /// </summary>
+    private async Task<int> ApplyVersionsAsync(Run run, string type, string org, List<OneCVersionDto> source, List<StoredVersion> stored, DateOnly? month,
+        CancellationToken ct)
+    {
+        if (type == OneCEntityTypes.Document && run.Modules.Count > 0)
+        {
+            // Выключенные модули: их документы не загружаются, а уже загруженные не трогаются (ни правки, ни удаления).
+            source = source.Where(v => run.Allows(v.Type)).ToList();
+            stored = stored.Where(v => run.Allows(v.Type)).ToList();
+        }
+
+        var have = stored.GroupBy(s => s.Id, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.OrderBy(s => s.Deleted).First(), StringComparer.Ordinal);
+        var present = source.Select(v => v.Id!).ToHashSet(StringComparer.Ordinal);
+        var changed = source
+            .Where(v => !have.TryGetValue(v.Id!, out var s) || !string.Equals(s.Version, v.Version, StringComparison.Ordinal) || (s.Deleted && !v.DeletionMark))
+            .Select(v => v.Id!).Distinct(StringComparer.Ordinal).ToList();
+        var gone = have.Values.Where(s => !s.Deleted && !present.Contains(s.Id)).Select(s => s.Id).ToList();
+        if (changed.Count == 0 && gone.Count == 0)
+        {
+            return 0;
+        }
+
+        var stream = OneCStreams.VersionsPrefix + type;
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        var rows = 0;
+        foreach (var chunk in changed.Concat(gone).Chunk(run.DryRun ? 20 : OneCHttpDataProvider.MaxIds))
+        {
+            var items = await retry.ExecuteAsync($"1С: {type} по идентификаторам", t => provider.GetByIdsAsync(type, chunk, t), ct);
+            var batch = new NormalizedBatch();
+            foreach (var item in items)
+            {
+                var id = item.ValueKind == JsonValueKind.Object && item.TryGetProperty("id", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+                if (id is not null)
+                {
+                    found.Add(id);
+                }
+
+                normalizer.Add(batch, new OneCChangeDto { EntityType = type, Id = id, OrganizationId = org.Length == 0 ? null : org, Data = WithoutEntries(run, type, item) });
+            }
+
+            rows += await PostAsync(run, batch, stream, org, ct: ct);
+            if (run.DryRun)
+            {
+                return rows;
+            }
+        }
+
+        // В 1С объекта больше нет (физически удалён): запись помечается удалённой, история и проводки остаются в OneBase.
+        var deleted = changed.Concat(gone).Where(id => !found.Contains(id) && have.TryGetValue(id, out var s) && !s.Deleted).Distinct(StringComparer.Ordinal).ToList();
+        if (deleted.Count > 0)
+        {
+            var batch = new NormalizedBatch();
+            foreach (var id in deleted)
+            {
+                var s = have[id];
+                batch.Deletions.Add(new ImportDeletion { EntityType = type, SourceId = id, OrganizationId = s.Org.Length == 0 ? null : s.Org });
+            }
+
+            if (month is { } m && org.Length > 0 && (!run.Earliest.TryGetValue(org, out var earliest) || m < earliest))
+            {
+                run.Earliest[org] = m; // остатки пересчитать с месяца удалённого документа
+            }
+
+            rows += await PostAsync(run, batch, stream, org, ct: ct);
+        }
+
+        return rows;
+    }
+
+    /// <summary>Модуль «Бухгалтерия» выключен — документ приходит без проводок (сами проводки в OneBase не меняются).</summary>
+    private static JsonElement WithoutEntries(Run run, string type, JsonElement item)
+    {
+        if (run.Accounting || type != OneCEntityTypes.Document || item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("entries", out _))
+        {
+            return item;
+        }
+
+        var node = System.Text.Json.Nodes.JsonNode.Parse(item.GetRawText())!.AsObject();
+        node.Remove("entries");
+        return JsonSerializer.SerializeToElement(node);
     }
 
     // ---------- Курсы, остатки ----------
@@ -413,6 +627,10 @@ public sealed class SyncEngine(
         return (rows, totals);
     }
 
+    /// <summary>Организации 1С запуска: не помеченные на удаление и выбранные на странице «1С» (пусто — все).</summary>
+    private async Task<List<string>> OrganizationsAsync(Run run, CancellationToken ct) =>
+        (await OrganizationsAsync(ct)).Where(o => run.OrganizationFilter.Count == 0 || run.OrganizationFilter.Contains(o)).ToList();
+
     private async Task<List<string>> OrganizationsAsync(CancellationToken ct)
     {
         var list = new List<string>();
@@ -434,7 +652,12 @@ public sealed class SyncEngine(
         var today = Today;
         var current = new DateOnly(today.Year, today.Month, 1);
         var limit = current.AddMonths(-Math.Max(0, options.BalancesMonthsBack));
-        foreach (var org in await OrganizationsAsync(ct))
+        if (!run.Accounting)
+        {
+            return; // модуль «Бухгалтерия» выключен — ведомость не загружается
+        }
+
+        foreach (var org in await OrganizationsAsync(run, ct))
         {
             var from = run.Earliest.TryGetValue(org, out var earliest) ? new DateOnly(earliest.Year, earliest.Month, 1) : current;
             from = from < limit ? limit : from > current ? current : from;
@@ -448,9 +671,10 @@ public sealed class SyncEngine(
 
     // ---------- Синхронизация по расписанию ----------
 
-    public async Task<SyncOutcome> IncrementalAsync(string trigger, Guid? commandId, CancellationToken ct)
+    /// <summary>Синхронизация; modules — только эти модули (документы их типов; «Бухгалтерия» — ещё и ведомость), справочники и курсы — всегда.</summary>
+    public async Task<SyncOutcome> IncrementalAsync(string trigger, Guid? commandId, CancellationToken ct, IReadOnlyList<string>? modules = null)
     {
-        var (run, refused) = await BeginAsync(RunKinds.Incremental, trigger, commandId, null, ct);
+        var (run, refused) = await BeginAsync(RunKinds.Incremental, trigger, commandId, null, ct, modules: modules);
         if (run is null)
         {
             return refused!;
@@ -459,8 +683,17 @@ public sealed class SyncEngine(
         try
         {
             await ReferencesAsync(run, false, ct);
-            var historyMissing = run.Cursor(OneCStreams.Changes) is null;
-            await StepAsync(run, OneCStreams.Changes, null, () => ChangesAsync(run, ct));
+            var historyMissing = !run.ByVersions && run.Cursor(OneCStreams.Changes) is null;
+            if (run.ByVersions)
+            {
+                // Только чтение: что изменилось и что удалено — по версиям объектов 1С (в 1С ничего не записывается).
+                await ReconcileAsync(run, ct);
+            }
+            else
+            {
+                await StepAsync(run, OneCStreams.Changes, null, () => ChangesAsync(run, ct));
+            }
+
             await StepAsync(run, OneCStreams.HistoryPrefix + OneCStreams.HistoryRates, null, async () => (await RatesAsync(run, Today.AddDays(-7), Today, null, null, ct)).Rows);
             await BalancesAsync(run, ct);
             await RetryDueAsync(run, ct);
@@ -501,9 +734,22 @@ public sealed class SyncEngine(
                 await StepAsync(run, OneCStreams.Reference(type), null, () => ReferenceAsync(run, type, true, ct, maxPages: 1));
             }
 
-            await StepAsync(run, OneCStreams.Changes, null, () => ChangesAsync(run, ct, maxPages: 1));
-            var orgs = await OrganizationsAsync(ct);
+            var orgs = await OrganizationsAsync(run, ct);
             var month = new DateOnly(Today.Year, Today.Month, 1);
+            if (run.ByVersions)
+            {
+                // Сверка версий: /versions и ids= — по контрагентам и документам текущего месяца (без записи, до 20 объектов на шаг).
+                await StepAsync(run, OneCStreams.VersionsPrefix + OneCEntityTypes.Counterparty, null, () => ReconcileReferenceAsync(run, OneCEntityTypes.Counterparty, ct));
+                foreach (var org in orgs.Take(2))
+                {
+                    await StepAsync(run, OneCStreams.VersionsPrefix + OneCEntityTypes.Document, org, () => ReconcileDocumentsAsync(run, org, month, Today, ct));
+                }
+            }
+            else
+            {
+                await StepAsync(run, OneCStreams.Changes, null, () => ChangesAsync(run, ct, maxPages: 1));
+            }
+
             foreach (var org in orgs.Take(2))
             {
                 await StepAsync(run, OneCStreams.HistoryPrefix + OneCStreams.HistoryDocuments, org, async () =>
@@ -613,6 +859,11 @@ public sealed class SyncEngine(
                             continue; // курсы общие для базы — один раз на месяц
                         }
 
+                        if ((stream is OneCStreams.HistoryEntries or OneCStreams.HistoryBalances) && !run.Accounting)
+                        {
+                            continue; // модуль «Бухгалтерия» выключен на странице «1С»
+                        }
+
                         var (m, o, s) = (month, oi, stream);
                         HistoricalPosition At(string? next) => new(importId, m, o, s, next);
                         OneCTotals? totals = null;
@@ -637,7 +888,8 @@ public sealed class SyncEngine(
                         var nextPos = si + 1 < OneCStreams.HistoryOrder.Count ? new HistoricalPosition(importId, month, oi, OneCStreams.HistoryOrder[si + 1], null)
                             : oi + 1 < orgs.Count ? new HistoricalPosition(importId, month, oi + 1, OneCStreams.HistoryOrder[0], null)
                             : new HistoricalPosition(importId, month.AddMonths(1), 0, OneCStreams.HistoryOrder[0], null);
-                        var check = failed ? null : await CheckAsync(stream, stream == OneCStreams.HistoryRates ? OneCEntityTypes.Shared : org, month, from, to, totals, ct);
+                        var check = failed ? null : await CheckAsync(stream, stream == OneCStreams.HistoryRates ? OneCEntityTypes.Shared : org, month, from, to, totals, ct,
+                            stream == OneCStreams.HistoryDocuments ? run.DocumentTypes : null);
                         await retry.ExecuteAsync("OneBase: положение истории", t => api.HistoricalProgressAsync(importId, new HistoricalProgressRequest { Position = nextPos, Check = check }, t), ct);
                         if (clock.GetUtcNow() > deadline)
                         {
@@ -689,9 +941,9 @@ public sealed class SyncEngine(
             string? next;
             if (stream == OneCStreams.HistoryDocuments)
             {
-                var page = await FetchAsync("документы", t => provider.GetDocumentsAsync(org, null, from, to, new OneCPageRequest(run.BatchSize, cursor, totals is null), t), ct);
+                var page = await FetchAsync("документы", t => provider.GetDocumentsAsync(org, run.DocumentTypes, from, to, new OneCPageRequest(run.BatchSize, cursor, totals is null), t), ct);
                 totals ??= page.Totals ?? new OneCTotals(null, null);
-                page.Items.ForEach(d => normalizer.Add(batch, d with { Entries = null }));
+                page.Items.Where(d => run.Allows(d.Type)).ToList().ForEach(d => normalizer.Add(batch, d with { Entries = null }));
                 next = page.HasMore ? page.Page!.NextCursor : null;
             }
             else
@@ -711,9 +963,10 @@ public sealed class SyncEngine(
     }
 
     /// <summary>Сверка потока месяца: итоги 1С и записанное в OneBase.</summary>
-    private async Task<PeriodCheck> CheckAsync(string stream, string org, DateOnly month, DateOnly from, DateOnly to, OneCTotals? expected, CancellationToken ct)
+    private async Task<PeriodCheck> CheckAsync(string stream, string org, DateOnly month, DateOnly from, DateOnly to, OneCTotals? expected, CancellationToken ct,
+        IReadOnlyList<string>? types = null)
     {
-        var imported = await retry.ExecuteAsync("OneBase: сверка", t => api.TotalsAsync(stream, org, from, to, t), ct);
+        var imported = await retry.ExecuteAsync("OneBase: сверка", t => api.TotalsAsync(stream, org, from, to, t, types), ct);
         var countOk = expected?.Count is not { } count || count == imported.Count;
         var amountOk = expected?.Amount is not { } amount || Math.Abs(amount - imported.Amount) < 0.01m;
         return new PeriodCheck

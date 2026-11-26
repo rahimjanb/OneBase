@@ -88,6 +88,18 @@ public sealed class OneCSyncService(IAppDbContext db, IOneCSettingsStore setting
         return new WorkerSettings
         {
             Paused = s.Paused, IntervalMinutes = s.IntervalMinutes, BatchSize = s.BatchSize, AcceptedInfobaseId = s.AcceptedInfobaseId, ActiveHistoricalImportId = active,
+            ConnectionVersion = s.ConnectionVersion, OrganizationIds = s.OrganizationIds,
+            Modules = s.Modules.Count == OneCModules.All.Count ? [] : s.Modules,
+        };
+    }
+
+    /// <summary>Подключение к 1С со страницы «1С» с секретами — только службе (внутренний API, ключ службы).</summary>
+    public async Task<WorkerConnection> ConnectionAsync(CancellationToken ct)
+    {
+        var c = await settings.ConnectionAsync(ct);
+        return new WorkerConnection
+        {
+            BaseUrl = c.BaseUrl, Username = c.Username, Password = c.Password, ApiSecret = c.ApiSecret, CaCertificatePem = c.CaCertificatePem, Version = c.Version,
         };
     }
 
@@ -281,6 +293,13 @@ public sealed class OneCSyncService(IAppDbContext db, IOneCSettingsStore setting
     {
         var job = await db.OneCHistoricalImports.AsNoTracking().FirstOrDefaultAsync(j => j.Id == id, ct) ?? throw new OneCImportException("Историческая загрузка не найдена.");
         var organizations = await db.OneCOrganizations.AsNoTracking().Where(o => !o.IsDeleted).OrderBy(o => o.SourceEntityId).Select(o => o.SourceEntityId).ToListAsync(ct);
+        // Только выбранные на странице «1С» организации (пусто — все).
+        var chosen = (await settings.GetAsync(ct)).OrganizationIds;
+        if (chosen.Count > 0)
+        {
+            organizations = organizations.Where(chosen.Contains).ToList();
+        }
+
         return new HistoricalImportState
         {
             Id = job.Id, From = job.From, To = job.To, BatchSize = job.BatchSize, Status = job.Status, ReferencesDone = job.ReferencesDone,

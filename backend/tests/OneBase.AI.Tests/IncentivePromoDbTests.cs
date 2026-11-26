@@ -14,7 +14,7 @@ namespace OneBase.AI.Tests;
 /// по статусам (свой список, порог, возврат, выплата); цели маршрута по шагам 1–4 и итоги точек по наборам, подаркам и Yamelly; продажа вне
 /// маршрута; закрытие дня и TW-01 из итогов.
 /// </summary>
-public class IncentivePromoDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
+public partial class IncentivePromoDbTests(DataManagerDb fixture) : IClassFixture<DataManagerDb>
 {
     private static readonly DateOnly Today = new(2026, 11, 16); // понедельник
     private static readonly DateTimeOffset Morning = new(2026, 11, 16, 3, 30, 0, TimeSpan.Zero); // 08:30 Ташкент

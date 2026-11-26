@@ -159,6 +159,10 @@ const dict: Dict = {
   "Календарь месяца по регионам": "Oy kalendari — mintaqalar bo'yicha",
   "клик по региону — развернуть его ТП, → — открыть регион": "mintaqani bosing — TP larini ochish, → — mintaqa sahifasi",
   "Открыть страницу региона": "Mintaqa sahifasini ochish",
+  "Прочие продажи": "Boshqa sotuvlar",
+  "без ТП и не ТП: офис, каналы": "TPsiz va TP bo'lmaganlar: ofis, kanallar",
+  " Под регионом — его ТП (как в «Команде ТП» региона) и «Прочие продажи» — без ТП и не ТП: кг и деньги ТП в сумме равны строке региона, АКБ — нет: точку могут обслуживать двое.":
+    " Mintaqa ostida — uning TPlari (mintaqaning «TP jamoasi»dagidek) va «Boshqa sotuvlar» — TPsiz va TP bo'lmaganlar: TPlarning kg va puli yig'indisi mintaqa qatoriga teng, AKB esa yo'q: nuqtaga ikki kishi xizmat qilishi mumkin.",
   "АКБ Придзел": "AKB Pridzel",
   "Здесь считаются только точки, взявшие хотя бы один товар категории «Придзел» (Twizos).": "Bu yerda faqat «Придзел» (Twizos) toifasidan kamida bitta tovar olgan nuqtalar sanaladi.",
   "АКБ за день — точки с отгрузкой именно в этот день; по месяцу точка считается один раз, поэтому «Итого» меньше суммы дней.": "Kunlik AKB — aynan shu kuni jo'natma bo'lgan nuqtalar; oy bo'yicha nuqta bir marta sanaladi, shuning uchun «Jami» kunlar yig'indisidan kam.",
